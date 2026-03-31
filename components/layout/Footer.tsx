@@ -7,18 +7,24 @@ const shopLinks = [
   { href: '/so-funktionierts', label: "So funktioniert's" },
 ];
 
-const infoLinks = [
-  { href: '/ueber-uns', label: 'Über uns' },
-  { href: '/faq', label: 'FAQ' },
-  { href: '/kontakt', label: 'Kontakt' },
-  { href: '/blog', label: 'Blog' },
-];
-
 const legalLinks = [
   { href: '/impressum', label: 'Impressum' },
-  { href: '/datenschutz', label: 'Datenschutz' },
+  { href: '/datenschutz', label: 'Datenschutzerklärung' },
   { href: '/agb', label: 'AGB' },
-  { href: '/widerruf', label: 'Widerruf' },
+  { href: '/widerruf', label: 'Widerrufsbelehrung' },
+  { href: '/stornierung', label: 'Stornierungs- & Rückerstattungsbedingungen' },
+  { href: '/versand-zahlung', label: 'Versand & Zahlung' },
+  { href: '/cookie-richtlinie', label: 'Cookie-Richtlinie (EU)' },
+];
+
+const sonstigesLinks = [
+  { href: '/blog', label: 'Blog' },
+  { href: '/neuigkeiten', label: 'Neuigkeiten' },
+];
+
+const supportLinks = [
+  { href: '/faq', label: 'FAQ' },
+  { href: '/kontakt', label: 'Kontakt' },
 ];
 
 function InstagramIcon() {
@@ -57,8 +63,8 @@ export default function Footer() {
   return (
     <footer className="bg-brand-black text-white" role="contentinfo">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-16 pb-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-10 mb-12">
-          {/* Spalte 1: Logo + Text */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-10 mb-12">
+          {/* Spalte 1: Logo + Kontakt */}
           <div className="lg:col-span-1">
             <div className="mb-4">
               <span className="font-heading font-bold text-2xl tracking-tight">
@@ -77,6 +83,21 @@ export default function Footer() {
             <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-brand-dark rounded-md border border-white/10">
               <ShieldCheckIcon />
               <span className="text-xs font-body text-brand-muted">Daten in Deutschland</span>
+            </div>
+
+            {/* Kontakt-Infos */}
+            <div className="mt-5 space-y-1 text-sm font-body text-brand-muted">
+              <p className="font-semibold text-white">Cam2Rent</p>
+              <p>Lennart Schickel</p>
+              <p>Heimsbrunner Str. 12</p>
+              <p>12349 Berlin, Deutschland</p>
+              <p className="pt-2">
+                E-Mail:{' '}
+                <a href="mailto:kontakt@cam2rent.de" className="text-accent-blue hover:text-white transition-colors">
+                  kontakt@cam2rent.de
+                </a>
+              </p>
+              <p>Telefon: 0162 / 8367477</p>
             </div>
 
             {/* Social Icons */}
@@ -106,10 +127,7 @@ export default function Footer() {
             <ul className="space-y-2.5">
               {shopLinks.map((link) => (
                 <li key={link.href}>
-                  <Link
-                    href={link.href}
-                    className="text-sm font-body text-brand-muted hover:text-white transition-colors"
-                  >
+                  <Link href={link.href} className="text-sm font-body text-brand-muted hover:text-white transition-colors">
                     {link.label}
                   </Link>
                 </li>
@@ -117,26 +135,7 @@ export default function Footer() {
             </ul>
           </div>
 
-          {/* Spalte 3: Informationen */}
-          <div>
-            <h3 className="font-heading font-semibold text-sm text-white uppercase tracking-wider mb-4">
-              Informationen
-            </h3>
-            <ul className="space-y-2.5">
-              {infoLinks.map((link) => (
-                <li key={link.href}>
-                  <Link
-                    href={link.href}
-                    className="text-sm font-body text-brand-muted hover:text-white transition-colors"
-                  >
-                    {link.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Spalte 4: Rechtliches */}
+          {/* Spalte 3: Rechtliches */}
           <div>
             <h3 className="font-heading font-semibold text-sm text-white uppercase tracking-wider mb-4">
               Rechtliches
@@ -144,10 +143,45 @@ export default function Footer() {
             <ul className="space-y-2.5">
               {legalLinks.map((link) => (
                 <li key={link.href}>
-                  <Link
-                    href={link.href}
-                    className="text-sm font-body text-brand-muted hover:text-white transition-colors"
-                  >
+                  <Link href={link.href} className="text-sm font-body text-brand-muted hover:text-white transition-colors leading-snug">
+                    {link.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Spalte 4: Sonstiges */}
+          <div>
+            <h3 className="font-heading font-semibold text-sm text-white uppercase tracking-wider mb-4">
+              Sonstiges
+            </h3>
+            <ul className="space-y-2.5">
+              {sonstigesLinks.map((link) => (
+                <li key={link.href}>
+                  <Link href={link.href} className="text-sm font-body text-brand-muted hover:text-white transition-colors">
+                    {link.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+
+            {/* DSGVO Badge */}
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-brand-dark rounded-md border border-white/10 mt-6">
+              <ShieldCheckIcon />
+              <span className="text-xs font-body text-brand-muted">Daten in Deutschland</span>
+            </div>
+          </div>
+
+          {/* Spalte 5: Support */}
+          <div>
+            <h3 className="font-heading font-semibold text-sm text-white uppercase tracking-wider mb-4">
+              Support
+            </h3>
+            <ul className="space-y-2.5 mb-6">
+              {supportLinks.map((link) => (
+                <li key={link.href}>
+                  <Link href={link.href} className="text-sm font-body text-brand-muted hover:text-white transition-colors">
                     {link.label}
                   </Link>
                 </li>
@@ -155,26 +189,19 @@ export default function Footer() {
             </ul>
 
             {/* Payment Icons */}
-            <div className="mt-6">
-              <p className="text-xs font-body text-brand-muted mb-3 uppercase tracking-wider">
-                Zahlung
-              </p>
-              <div className="flex items-center gap-2">
-                {/* Visa */}
-                <div className="bg-white rounded px-2 py-1">
-                  <svg viewBox="0 0 50 16" className="h-4 w-auto" aria-label="Visa">
-                    <text x="0" y="13" fontFamily="Arial" fontWeight="bold" fontSize="14" fill="#1a1f71">VISA</text>
-                  </svg>
-                </div>
-                {/* Mastercard */}
-                <div className="bg-white rounded px-1 py-1 flex items-center gap-0.5">
-                  <div className="w-4 h-4 rounded-full bg-red-500 opacity-90" />
-                  <div className="w-4 h-4 rounded-full bg-yellow-400 -ml-2" />
-                </div>
-                {/* Klarna */}
-                <div className="bg-[#ffb3c7] rounded px-2 py-1">
-                  <span className="text-xs font-bold text-black font-body">klarna</span>
-                </div>
+            <p className="text-xs font-body text-brand-muted mb-3 uppercase tracking-wider">Zahlung</p>
+            <div className="flex items-center gap-2">
+              <div className="bg-white rounded px-2 py-1">
+                <svg viewBox="0 0 50 16" className="h-4 w-auto" aria-label="Visa">
+                  <text x="0" y="13" fontFamily="Arial" fontWeight="bold" fontSize="14" fill="#1a1f71">VISA</text>
+                </svg>
+              </div>
+              <div className="bg-white rounded px-1 py-1 flex items-center">
+                <div className="w-4 h-4 rounded-full bg-red-500 opacity-90" />
+                <div className="w-4 h-4 rounded-full bg-yellow-400 -ml-2" />
+              </div>
+              <div className="bg-[#ffb3c7] rounded px-2 py-1">
+                <span className="text-xs font-bold text-black font-body">klarna</span>
               </div>
             </div>
           </div>
