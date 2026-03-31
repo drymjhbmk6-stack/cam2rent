@@ -74,19 +74,8 @@ export default function Footer() {
                 clever mieten statt kaufen
               </p>
             </div>
-            <p className="text-sm text-brand-muted font-body leading-relaxed mb-5">
-              Dein Online-Shop für Action-Cam Vermietung. Hochwertige Kameras von GoPro, DJI
-              und Insta360 – vollversichert und schnell geliefert.
-            </p>
-
-            {/* DSGVO Badge */}
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-brand-dark rounded-md border border-white/10">
-              <ShieldCheckIcon />
-              <span className="text-xs font-body text-brand-muted">Daten in Deutschland</span>
-            </div>
-
             {/* Kontakt-Infos */}
-            <div className="mt-5 space-y-1 text-sm font-body text-brand-muted">
+            <div className="mt-1 space-y-1 text-sm font-body text-brand-muted">
               <p className="font-semibold text-white">Cam2Rent</p>
               <p>Lennart Schickel</p>
               <p>Heimsbrunner Str. 12</p>
@@ -98,6 +87,12 @@ export default function Footer() {
                 </a>
               </p>
               <p>Telefon: 0162 / 8367477</p>
+            </div>
+
+            {/* DSGVO Badge */}
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-brand-dark rounded-md border border-white/10 mt-4">
+              <ShieldCheckIcon />
+              <span className="text-xs font-body text-brand-muted">Daten in Deutschland</span>
             </div>
 
             {/* Social Icons */}
@@ -166,11 +161,6 @@ export default function Footer() {
               ))}
             </ul>
 
-            {/* DSGVO Badge */}
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-brand-dark rounded-md border border-white/10 mt-6">
-              <ShieldCheckIcon />
-              <span className="text-xs font-body text-brand-muted">Daten in Deutschland</span>
-            </div>
           </div>
 
           {/* Spalte 5: Support */}
