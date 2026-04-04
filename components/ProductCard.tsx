@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import type { Product } from '@/data/products';
 import NotifyModal from '@/components/NotifyModal';
+import { useFavorites } from '@/components/FavoritesProvider';
+import { useAuth } from '@/components/AuthProvider';
 
 interface ProductCardProps {
   product: Product;
@@ -77,10 +79,20 @@ function BellIcon() {
 }
 
 export default function ProductCard({ product }: ProductCardProps) {
-  const [wishlisted, setWishlisted] = useState(false);
+  const { user } = useAuth();
+  const { isFavorited, toggleFavorite } = useFavorites();
   const [notifyOpen, setNotifyOpen] = useState(false);
 
+  const wishlisted = isFavorited(product.id);
   const primaryTag = product.tags[0];
+
+  const handleFavorite = () => {
+    if (!user) {
+      window.location.href = '/login';
+      return;
+    }
+    toggleFavorite(product.id);
+  };
 
   return (
     <>
@@ -99,7 +111,7 @@ export default function ProductCard({ product }: ProductCardProps) {
           {/* Wishlist button */}
           <button
             type="button"
-            onClick={() => setWishlisted(!wishlisted)}
+            onClick={handleFavorite}
             className="absolute top-3 right-3 p-1.5 rounded-full bg-white/80 backdrop-blur-sm hover:bg-white text-brand-steel hover:text-brand-black transition-colors shadow-sm"
             aria-label={wishlisted ? 'Von Wunschliste entfernen' : 'Zur Wunschliste hinzufügen'}
             aria-pressed={wishlisted}

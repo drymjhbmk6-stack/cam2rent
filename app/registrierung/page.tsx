@@ -1,0 +1,224 @@
+'use client';
+
+import { useState } from 'react';
+import Link from 'next/link';
+import { createAuthBrowserClient } from '@/lib/supabase-auth';
+
+export default function RegistrierungPage() {
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [passwordConfirm, setPasswordConfirm] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+
+    if (password.length < 8) {
+      setError('Das Passwort muss mindestens 8 Zeichen lang sein.');
+      return;
+    }
+    if (password !== passwordConfirm) {
+      setError('Die Passwörter stimmen nicht überein.');
+      return;
+    }
+
+    setLoading(true);
+    const supabase = createAuthBrowserClient();
+
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { full_name: name },
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
+      },
+    });
+
+    setLoading(false);
+
+    if (error) {
+      if (error.message.includes('already registered')) {
+        setError('Diese E-Mail-Adresse ist bereits registriert.');
+      } else {
+        setError(`Fehler: ${error.message}`);
+      }
+    } else {
+      setSuccess(true);
+    }
+  };
+
+  if (success) {
+    return (
+      <div className="min-h-screen bg-brand-bg flex items-center justify-center px-4 py-16">
+        <div className="w-full max-w-md text-center">
+          <div className="bg-white rounded-card shadow-card p-8">
+            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg
+                className="w-8 h-8 text-status-success"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                />
+              </svg>
+            </div>
+            <h1 className="font-heading font-bold text-2xl text-brand-black mb-2">
+              Bestätigungs-E-Mail gesendet
+            </h1>
+            <p className="text-brand-text text-sm mb-6">
+              Wir haben eine E-Mail an <strong>{email}</strong> geschickt.
+              Bitte klicke auf den Link in der E-Mail, um dein Konto zu
+              aktivieren.
+            </p>
+            <p className="text-xs text-brand-muted">
+              Keine E-Mail erhalten? Schau auch im Spam-Ordner nach.
+            </p>
+          </div>
+          <p className="text-center text-sm text-brand-steel mt-4">
+            <Link
+              href="/login"
+              className="text-accent-blue hover:underline font-medium"
+            >
+              Zurück zur Anmeldung
+            </Link>
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-brand-bg flex items-center justify-center px-4 py-16">
+      <div className="w-full max-w-md">
+        {/* Logo */}
+        <div className="text-center mb-8">
+          <Link href="/" className="inline-block">
+            <span className="font-heading font-bold text-2xl text-brand-black">
+              Cam<span className="text-accent-blue">2</span>Rent
+            </span>
+          </Link>
+        </div>
+
+        {/* Card */}
+        <div className="bg-white rounded-card shadow-card p-8">
+          <h1 className="font-heading font-bold text-2xl text-brand-black mb-1">
+            Konto erstellen
+          </h1>
+          <p className="text-brand-text text-sm mb-6">
+            Verwalte deine Buchungen bequem an einem Ort.
+          </p>
+
+          {error && (
+            <div className="mb-4 p-4 rounded-[10px] bg-red-50 border border-red-200 text-status-error text-sm">
+              {error}
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-body font-medium text-brand-black mb-1">
+                Vollständiger Name
+              </label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full px-4 py-3 rounded-[10px] border border-brand-border bg-white text-brand-black placeholder-brand-muted focus:outline-none focus:ring-2 focus:ring-accent-blue focus:border-transparent transition-colors"
+                placeholder="Max Mustermann"
+                required
+                autoComplete="name"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-body font-medium text-brand-black mb-1">
+                E-Mail-Adresse
+              </label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full px-4 py-3 rounded-[10px] border border-brand-border bg-white text-brand-black placeholder-brand-muted focus:outline-none focus:ring-2 focus:ring-accent-blue focus:border-transparent transition-colors"
+                placeholder="deine@email.de"
+                required
+                autoComplete="email"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-body font-medium text-brand-black mb-1">
+                Passwort
+              </label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-4 py-3 rounded-[10px] border border-brand-border bg-white text-brand-black placeholder-brand-muted focus:outline-none focus:ring-2 focus:ring-accent-blue focus:border-transparent transition-colors"
+                placeholder="Mindestens 8 Zeichen"
+                required
+                autoComplete="new-password"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-body font-medium text-brand-black mb-1">
+                Passwort bestätigen
+              </label>
+              <input
+                type="password"
+                value={passwordConfirm}
+                onChange={(e) => setPasswordConfirm(e.target.value)}
+                className="w-full px-4 py-3 rounded-[10px] border border-brand-border bg-white text-brand-black placeholder-brand-muted focus:outline-none focus:ring-2 focus:ring-accent-blue focus:border-transparent transition-colors"
+                placeholder="Passwort wiederholen"
+                required
+                autoComplete="new-password"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-3 px-6 bg-brand-black text-white font-heading font-semibold rounded-btn hover:bg-brand-dark disabled:opacity-60 disabled:cursor-not-allowed transition-colors mt-2"
+            >
+              {loading ? 'Wird registriert…' : 'Konto erstellen'}
+            </button>
+          </form>
+
+          <p className="text-xs text-brand-muted text-center mt-4">
+            Mit der Registrierung stimmst du unseren{' '}
+            <Link href="/agb" className="underline hover:text-brand-text">
+              AGB
+            </Link>{' '}
+            und der{' '}
+            <Link
+              href="/datenschutz"
+              className="underline hover:text-brand-text"
+            >
+              Datenschutzerklärung
+            </Link>{' '}
+            zu.
+          </p>
+        </div>
+
+        <p className="text-center text-sm text-brand-steel mt-4">
+          Bereits ein Konto?{' '}
+          <Link
+            href="/login"
+            className="text-accent-blue hover:underline font-medium"
+          >
+            Jetzt anmelden
+          </Link>
+        </p>
+      </div>
+    </div>
+  );
+}

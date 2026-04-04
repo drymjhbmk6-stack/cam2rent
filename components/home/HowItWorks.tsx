@@ -28,7 +28,7 @@ const steps = [
     number: '3',
     title: 'Losfilmen!',
     description:
-      'Die Kamera wird zu dir geliefert – vollversichert und einsatzbereit. Film dein Abenteuer, sende die Kamera zurück und wir erledigen den Rest.',
+      'Die Kamera wird zu dir geliefert – mit optionalem Haftungsschutz und einsatzbereit. Film dein Abenteuer, sende die Kamera zurück und wir erledigen den Rest.',
     color: 'amber' as const,
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-7 h-7" aria-hidden="true">
@@ -72,7 +72,7 @@ export default function HowItWorks() {
             So funktioniert&apos;s
           </h2>
           <p className="font-body text-brand-steel text-lg max-w-xl mx-auto">
-            In drei einfachen Schritten zur Action-Cam – schnell, unkompliziert und vollversichert.
+            In drei einfachen Schritten zur Action-Cam – schnell, unkompliziert und abgesichert.
           </p>
         </div>
 

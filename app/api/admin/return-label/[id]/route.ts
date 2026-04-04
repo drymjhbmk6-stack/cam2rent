@@ -1,0 +1,48 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { createServiceClient } from '@/lib/supabase';
+import { cookies } from 'next/headers';
+
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id: bookingId } = await params;
+
+  // Admin auth check
+  const cookieStore = await cookies();
+  const adminAuth = cookieStore.get('admin_token')?.value;
+  if (!adminAuth) {
+    return NextResponse.json({ error: 'Nicht eingeloggt.' }, { status: 401 });
+  }
+
+  const supabase = createServiceClient();
+  const { data: booking, error } = await supabase
+    .from('bookings')
+    .select('id, return_label_url')
+    .eq('id', bookingId)
+    .single();
+
+  if (error || !booking?.return_label_url) {
+    return NextResponse.json({ error: 'Kein Rücksendeetikett vorhanden.' }, { status: 404 });
+  }
+
+  const pub = process.env.SENDCLOUD_PUBLIC_KEY!;
+  const sec = process.env.SENDCLOUD_SECRET_KEY!;
+  const auth = 'Basic ' + Buffer.from(`${pub}:${sec}`).toString('base64');
+
+  const labelRes = await fetch(booking.return_label_url, { headers: { Authorization: auth } });
+
+  if (!labelRes.ok) {
+    return NextResponse.json({ error: 'Etikett konnte nicht geladen werden.' }, { status: 502 });
+  }
+
+  const pdfBuffer = await labelRes.arrayBuffer();
+
+  return new NextResponse(pdfBuffer, {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="ruecksendeetikett-${bookingId}.pdf"`,
+    },
+  });
+}

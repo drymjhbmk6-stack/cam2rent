@@ -9,7 +9,7 @@ function CheckIcon() {
 }
 
 const trustBadges = [
-  'Vollversichert',
+  'Mit Haftungsschutz',
   'Kostenloser Versand',
   '24h Lieferung',
 ];
@@ -57,7 +57,7 @@ export default function Hero() {
           <p className="font-body text-lg sm:text-xl text-white/80 leading-relaxed mb-10 max-w-xl">
             Hochwertige Action-Kameras ab{' '}
             <span className="font-semibold text-white">9,90 €/Tag</span>.
-            Vollversichert, schnell geliefert, flexibel.
+            Mit Haftungsschutz, schnell geliefert, flexibel.
           </p>
 
           {/* CTA Buttons */}

@@ -13,6 +13,7 @@ const legalLinks = [
   { href: '/agb', label: 'AGB' },
   { href: '/widerruf', label: 'Widerrufsbelehrung' },
   { href: '/stornierung', label: 'Stornierungs- & Rückerstattungsbedingungen' },
+  { href: '/haftungsbedingungen', label: 'Haftungsbedingungen' },
   { href: '/versand-zahlung', label: 'Versand & Zahlung' },
   { href: '/cookie-richtlinie', label: 'Cookie-Richtlinie (EU)' },
 ];
@@ -98,13 +99,15 @@ export default function Footer() {
             {/* Social Icons */}
             <div className="flex items-center gap-3 mt-5">
               {[
-                { icon: <InstagramIcon />, label: 'Instagram', href: '#' },
-                { icon: <YouTubeIcon />, label: 'YouTube', href: '#' },
-                { icon: <TikTokIcon />, label: 'TikTok', href: '#' },
+                { icon: <InstagramIcon />, label: 'Instagram', href: 'https://instagram.com/cam2rent' },
+                { icon: <YouTubeIcon />, label: 'YouTube', href: 'https://youtube.com/@cam2rent' },
+                { icon: <TikTokIcon />, label: 'TikTok', href: 'https://tiktok.com/@cam2rent' },
               ].map(({ icon, label, href }) => (
                 <a
                   key={label}
                   href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   aria-label={label}
                   className="p-2 rounded-md bg-brand-dark text-brand-muted hover:text-white hover:bg-white/10 transition-colors"
                 >

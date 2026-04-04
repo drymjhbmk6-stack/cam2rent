@@ -1,3 +1,53 @@
+// ─── Pricing types ────────────────────────────────────────────────────────────
+
+/**
+ * Explicit price for an exact number of rental days.
+ */
+export interface PriceEntry {
+  days: number;
+  price: number;
+}
+
+/**
+ * Linear formula for long rentals (31+ days): price = base + perDay × days
+ */
+export interface PriceFormula {
+  base: number;
+  perDay: number;
+}
+
+/**
+ * Returns the total rental price for a given number of days.
+ * Uses the product's priceTable (exact lookup) first, then the
+ * priceFormula31plus for long rentals, then falls back to the
+ * simple pricePerDay / pricePerWeek model.
+ */
+export function getPriceForDays(product: Product, days: number): number {
+  if (days <= 0) return 0;
+
+  // 1. Exact table lookup
+  if (product.priceTable) {
+    const entry = product.priceTable.find((e) => e.days === days);
+    if (entry) return entry.price;
+  }
+
+  // 2. Formula for 31+ days
+  if (product.priceFormula31plus && days >= 31) {
+    const { base, perDay } = product.priceFormula31plus;
+    return base + perDay * days;
+  }
+
+  // 3. Simple fallback: week + remaining days, or daily
+  if (days >= 7) {
+    const fullWeeks = Math.floor(days / 7);
+    const remaining = days % 7;
+    return fullWeeks * product.pricePerWeek + remaining * product.pricePerDay;
+  }
+  return days * product.pricePerDay;
+}
+
+// ─── Product interface ────────────────────────────────────────────────────────
+
 export interface Product {
   id: string;
   name: string;
@@ -5,11 +55,26 @@ export interface Product {
   model: string;
   description: string;
   shortDescription: string;
+
+  /** Fallback prices (used when no priceTable is defined) */
   pricePerDay: number;
   pricePerWeekend: number;
   pricePerWeek: number;
+
+  /** Exact per-day-count price table */
+  priceTable?: PriceEntry[];
+  /** Formula for 31+ days: price = base + perDay × n */
+  priceFormula31plus?: PriceFormula;
+
   deposit: number;
-  insurancePerDay: number;
+
+  /**
+   * If true, the booking flow offers Haftungsoptionen (Standard 15 €, Premium 25 €).
+   * If false, only Kaution applies (full liability for the renter).
+   * Can be toggled per product in the admin area.
+   */
+  offersHaftungsoption: boolean;
+
   images: string[];
   specs: {
     resolution: string;
@@ -26,6 +91,8 @@ export interface Product {
   slug: string;
 }
 
+// ─── Products ─────────────────────────────────────────────────────────────────
+
 export const products: Product[] = [
   {
     id: '1',
@@ -35,11 +102,45 @@ export const products: Product[] = [
     description:
       'Die neueste GoPro mit verbessertem Sensor, erweitertem Zubehör-Ökosystem und langer Akkulaufzeit. Perfekt für Sport, Reisen und Abenteuer.',
     shortDescription: '5.3K60, 27MP, wasserdicht bis 10m',
-    pricePerDay: 12.9,
-    pricePerWeekend: 29.9,
-    pricePerWeek: 69.9,
+    pricePerDay: 13,
+    pricePerWeekend: 22,
+    pricePerWeek: 69,
+    // Full pricing table (from Cam2Rent pricing config)
+    priceTable: [
+      { days: 1, price: 13 },
+      { days: 2, price: 22 },
+      { days: 3, price: 31 },
+      { days: 4, price: 40 },
+      { days: 5, price: 50 },
+      { days: 6, price: 60 },
+      { days: 7, price: 69 },
+      { days: 8, price: 72 },
+      { days: 9, price: 76 },
+      { days: 10, price: 79 },
+      { days: 11, price: 83 },
+      { days: 12, price: 86 },
+      { days: 13, price: 90 },
+      { days: 14, price: 93 },
+      { days: 15, price: 97 },
+      { days: 16, price: 100 },
+      { days: 17, price: 104 },
+      { days: 18, price: 107 },
+      { days: 19, price: 111 },
+      { days: 20, price: 114 },
+      { days: 21, price: 118 },
+      { days: 22, price: 121 },
+      { days: 23, price: 125 },
+      { days: 24, price: 128 },
+      { days: 25, price: 132 },
+      { days: 26, price: 135 },
+      { days: 27, price: 139 },
+      { days: 28, price: 142 },
+      { days: 29, price: 146 },
+      { days: 30, price: 149 },
+    ],
+    priceFormula31plus: { base: 29, perDay: 4 },
     deposit: 150,
-    insurancePerDay: 2.5,
+    offersHaftungsoption: true,
     images: ['/images/gopro-hero13.png'],
     specs: {
       resolution: '5.3K',
@@ -63,11 +164,11 @@ export const products: Product[] = [
     description:
       'Bewährte Qualität zum günstigen Preis. Die Hero 12 bietet alle wichtigen Features für beeindruckende Videos und Fotos.',
     shortDescription: '5.3K60, 27MP, wasserdicht bis 10m',
-    pricePerDay: 9.9,
-    pricePerWeekend: 24.9,
-    pricePerWeek: 54.9,
+    pricePerDay: 10,
+    pricePerWeekend: 18,
+    pricePerWeek: 55,
     deposit: 120,
-    insurancePerDay: 2.0,
+    offersHaftungsoption: true,
     images: ['/images/gopro-hero12.png'],
     specs: {
       resolution: '5.3K',
@@ -91,11 +192,11 @@ export const products: Product[] = [
     description:
       "DJIs Flaggschiff-Actionkamera mit großem 1/1.3\"-Sensor für beeindruckende Low-Light-Aufnahmen. Dual-Screen und hervorragende Stabilisierung.",
     shortDescription: '4K120, großer Sensor, Dual-Screen',
-    pricePerDay: 11.9,
-    pricePerWeekend: 27.9,
-    pricePerWeek: 64.9,
+    pricePerDay: 12,
+    pricePerWeekend: 20,
+    pricePerWeek: 65,
     deposit: 140,
-    insurancePerDay: 2.5,
+    offersHaftungsoption: true,
     images: ['/images/dji-action4.png'],
     specs: {
       resolution: '4K',
@@ -119,11 +220,11 @@ export const products: Product[] = [
     description:
       'Die neueste DJI Action-Cam mit verbesserter Stabilisierung, noch längerem Akku und beeindruckender Wasserbeständigkeit bis 40m ohne Gehäuse.',
     shortDescription: '4K120, 40m wasserdicht, längere Akkulaufzeit',
-    pricePerDay: 13.9,
-    pricePerWeekend: 32.9,
-    pricePerWeek: 74.9,
+    pricePerDay: 14,
+    pricePerWeekend: 24,
+    pricePerWeek: 75,
     deposit: 160,
-    insurancePerDay: 3.0,
+    offersHaftungsoption: true,
     images: ['/images/dji-action5-pro.png'],
     specs: {
       resolution: '4K',
@@ -147,11 +248,11 @@ export const products: Product[] = [
     description:
       'Insta360s Premium-Actionkamera mit Leica-Optik und KI-gestützten Features. Brillante Bildqualität bei jedem Licht.',
     shortDescription: '8K30, Leica Objektiv, AI-Features',
-    pricePerDay: 14.9,
-    pricePerWeekend: 34.9,
-    pricePerWeek: 79.9,
+    pricePerDay: 15,
+    pricePerWeekend: 26,
+    pricePerWeek: 80,
     deposit: 180,
-    insurancePerDay: 3.0,
+    offersHaftungsoption: true,
     images: ['/images/insta360-ace-pro2.png'],
     specs: {
       resolution: '8K',
@@ -175,11 +276,11 @@ export const products: Product[] = [
     description:
       'Die beste 360°-Kamera auf dem Markt. Unsichtbarer Selfie-Stick-Effekt, Me-Modus und beeindruckende 8K-Qualität für immersive Videos.',
     shortDescription: '8K30 360°, unsichtbarer Selfie-Stick',
-    pricePerDay: 16.9,
-    pricePerWeekend: 39.9,
-    pricePerWeek: 89.9,
+    pricePerDay: 17,
+    pricePerWeekend: 29,
+    pricePerWeek: 90,
     deposit: 200,
-    insurancePerDay: 3.5,
+    offersHaftungsoption: true,
     images: ['/images/insta360-x4.png'],
     specs: {
       resolution: '8K 360°',

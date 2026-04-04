@@ -24,3 +24,208 @@
     text-wrap: balance;
   }
 }
+
+/* ── react-day-picker theming ───────────────────────────────────────────── */
+.rdp-cam2rent {
+  --rdp-cell-size: 40px;
+  --rdp-accent-color: #3b82f6;
+  --rdp-background-color: #dbeafe;
+  --rdp-accent-color-dark: #2563eb;
+  --rdp-background-color-dark: #1e40af;
+  --rdp-outline: 2px solid #3b82f6;
+  --rdp-outline-selected: 2px solid #2563eb;
+  --rdp-selected-color: #fff;
+  font-family: var(--font-dm-sans), sans-serif;
+}
+
+.rdp-cam2rent .rdp-caption_label {
+  font-family: var(--font-sora), sans-serif;
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: #1a1a1a;
+}
+
+.rdp-cam2rent .rdp-head_cell {
+  font-family: var(--font-dm-sans), sans-serif;
+  font-weight: 600;
+  font-size: 0.75rem;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.rdp-cam2rent .rdp-day {
+  font-size: 0.85rem;
+  font-weight: 500;
+  border-radius: 8px;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.rdp-cam2rent .rdp-day_selected:not(.rdp-day_range_middle) {
+  background-color: #3b82f6;
+  color: #fff;
+  font-weight: 700;
+}
+
+.rdp-cam2rent .rdp-day_range_middle {
+  background-color: #dbeafe;
+  color: #1d4ed8;
+  border-radius: 0;
+}
+
+.rdp-cam2rent .rdp-day_range_start,
+.rdp-cam2rent .rdp-day_range_end {
+  background-color: #3b82f6 !important;
+  color: #fff !important;
+  border-radius: 8px !important;
+}
+
+.rdp-cam2rent .rdp-day:hover:not(.rdp-day_selected):not(.rdp-day_disabled) {
+  background-color: #f1f5f9;
+  color: #1a1a1a;
+}
+
+.rdp-cam2rent .rdp-day_disabled {
+  color: #cbd5e1;
+  cursor: not-allowed;
+}
+
+.rdp-cam2rent .rdp-nav_button {
+  border-radius: 8px;
+  color: #64748b;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.rdp-cam2rent .rdp-nav_button:hover {
+  background-color: #f1f5f9;
+  color: #1a1a1a;
+}
+
+/* ── Animationen ──────────────────────────────────────────────────────────── */
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes pulseDot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.5; transform: scale(0.8); }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.35s ease-out both;
+}
+
+.animate-shimmer {
+  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+.animate-pulse-dot {
+  animation: pulseDot 2s ease-in-out infinite;
+}
+
+/* ── Admin Dark Theme Override ──────────────────────────────────────────────
+   Alle hellen Tailwind-Klassen innerhalb .admin-dark werden auf dunkel gesetzt.
+   So müssen die einzelnen Admin-Seiten nicht umgeschrieben werden.
+   ────────────────────────────────────────────────────────────────────────── */
+
+/* Seitenhintergrund neutralisieren */
+.admin-dark .min-h-screen { min-height: unset !important; }
+.admin-dark .bg-brand-bg  { background-color: transparent !important; }
+.admin-dark .bg-gray-50   { background-color: transparent !important; }
+
+/* Karten & Panels */
+.admin-dark .bg-white               { background-color: #111827 !important; }
+.admin-dark .shadow-card            { box-shadow: none !important; }
+.admin-dark .border-brand-border    { border-color: #1e293b !important; }
+.admin-dark .divide-brand-border > * + * { border-color: #1e293b !important; }
+
+/* Texte */
+.admin-dark .text-brand-black  { color: #e2e8f0 !important; }
+.admin-dark .text-brand-dark   { color: #e2e8f0 !important; }
+.admin-dark .text-brand-text   { color: #cbd5e1 !important; }
+.admin-dark .text-brand-steel  { color: #94a3b8 !important; }
+.admin-dark .text-brand-muted  { color: #64748b !important; }
+
+/* Tabellen */
+.admin-dark table               { border-color: #1e293b; }
+.admin-dark thead tr            { background-color: #0f172a !important; border-color: #1e293b !important; }
+.admin-dark tbody tr            { border-color: #1e293b !important; }
+.admin-dark .bg-brand-bg\/50   { background-color: rgba(30,41,59,0.5) !important; }
+
+/* Hover-States */
+.admin-dark .hover\:bg-brand-bg:hover     { background-color: #1e293b !important; }
+.admin-dark .hover\:bg-brand-bg\/50:hover { background-color: rgba(30,41,59,0.5) !important; }
+.admin-dark .hover\:border-brand-black:hover { border-color: #06b6d4 !important; }
+
+/* Formular-Elemente — höhere Spezifität um .border-brand-border und .bg-white zu überschreiben */
+.admin-dark input:not([type="checkbox"]):not([type="radio"]).bg-white,
+.admin-dark input:not([type="checkbox"]):not([type="radio"]).border-brand-border,
+.admin-dark input:not([type="checkbox"]):not([type="radio"]),
+.admin-dark select.bg-white,
+.admin-dark select.border-brand-border,
+.admin-dark select,
+.admin-dark textarea.bg-white,
+.admin-dark textarea.border-brand-border,
+.admin-dark textarea {
+  background-color: #0f172a !important;
+  border: 1px solid #475569 !important;
+  border-radius: 10px !important;
+  color: #e2e8f0 !important;
+}
+.admin-dark select.bg-white,
+.admin-dark select.border-brand-border,
+.admin-dark select {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 12px center !important;
+  padding-right: 36px !important;
+  cursor: pointer;
+}
+.admin-dark input::placeholder,
+.admin-dark textarea::placeholder { color: #475569 !important; }
+.admin-dark input:focus,
+.admin-dark select:focus,
+.admin-dark textarea:focus { border-color: #06b6d4 !important; }
+
+/* Buttons sekundär (weiß/grau → dunkel) */
+.admin-dark .border-brand-border.bg-white,
+.admin-dark .bg-white.border-brand-border {
+  background-color: #1e293b !important;
+  color: #e2e8f0 !important;
+}
+
+/* Status-Badges: Farben beibehalten, nur Hintergrund aufhellen */
+.admin-dark .bg-green-100  { background-color: rgba(16,185,129,0.15) !important; }
+.admin-dark .text-green-700 { color: #10b981 !important; }
+.admin-dark .bg-blue-100   { background-color: rgba(59,130,246,0.15) !important; }
+.admin-dark .text-blue-700  { color: #60a5fa !important; }
+.admin-dark .bg-amber-50   { background-color: rgba(245,158,11,0.12) !important; }
+.admin-dark .border-amber-200 { border-color: rgba(245,158,11,0.35) !important; }
+.admin-dark .text-amber-700 { color: #f59e0b !important; }
+.admin-dark .bg-red-50     { background-color: rgba(239,68,68,0.12) !important; }
+.admin-dark .border-red-200 { border-color: rgba(239,68,68,0.35) !important; }
+.admin-dark .text-red-700   { color: #ef4444 !important; }
+.admin-dark .bg-gray-100   { background-color: rgba(148,163,184,0.15) !important; }
+.admin-dark .text-gray-700  { color: #94a3b8 !important; }
+
+/* Modals / Overlays */
+.admin-dark .bg-white.rounded-2xl,
+.admin-dark .bg-white.rounded-xl { background-color: #1e293b !important; }
+
+/* Trennlinien */
+.admin-dark .border-b { border-color: #1e293b; }
+.admin-dark .border-t { border-color: #1e293b; }
+
+
+

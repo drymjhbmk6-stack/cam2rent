@@ -1,0 +1,289 @@
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = {
+  title: 'AGB',
+  description: 'Allgemeine Geschäftsbedingungen von Cam2Rent für die Vermietung von Action-Kameras.',
+};
+
+export default function AGBPage() {
+  return (
+    <div className="min-h-screen bg-white">
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+        <h1 className="font-heading font-bold text-3xl text-brand-black mb-2">
+          Allgemeine Geschäftsbedingungen (AGB)
+        </h1>
+        <p className="text-sm font-body text-brand-muted mb-10">Stand: Januar 2026</p>
+
+        <section className="mb-10">
+          <h2 className="font-heading font-semibold text-lg text-brand-black mb-4">
+            § 1 Geltungsbereich
+          </h2>
+          <p className="font-body text-brand-steel mb-3">
+            Diese Allgemeinen Geschäftsbedingungen (nachfolgend &quot;AGB&quot;) gelten für alle
+            Mietverträge über Kameraausrüstung, die zwischen
+          </p>
+          <div className="font-body text-brand-steel space-y-1 mb-3">
+            <p className="font-semibold text-brand-black">Cam2Rent – Lennart Schickel</p>
+            <p>Heimsbrunner Str. 12, 12349 Berlin</p>
+            <p>E-Mail: kontakt@cam2rent.de</p>
+            <p>Telefon: 0162 / 8367477</p>
+          </div>
+          <p className="font-body text-brand-steel">
+            (nachfolgend &quot;Vermieter&quot;) und dem Kunden (nachfolgend &quot;Mieter&quot;) über
+            die Website www.cam2rent.de geschlossen werden.
+          </p>
+        </section>
+
+        <section className="mb-10">
+          <h2 className="font-heading font-semibold text-lg text-brand-black mb-4">
+            § 2 Vertragsschluss
+          </h2>
+          <ol className="list-decimal list-inside font-body text-brand-steel space-y-2">
+            <li>
+              Die Darstellung der Produkte auf der Website stellt kein rechtlich bindendes Angebot dar,
+              sondern eine Aufforderung zur Abgabe einer Bestellung (invitatio ad offerendum).
+            </li>
+            <li>
+              Durch das Absenden einer Buchung über die Website gibt der Mieter ein verbindliches
+              Angebot zum Abschluss eines Mietvertrages ab.
+            </li>
+            <li>
+              Der Mietvertrag kommt mit der Buchungsbestätigung per E-Mail und der erfolgreichen
+              Zahlungsabwicklung zustande.
+            </li>
+            <li>
+              Mietverträge dürfen nur von volljährigen natürlichen Personen abgeschlossen werden.
+            </li>
+          </ol>
+        </section>
+
+        <section className="mb-10">
+          <h2 className="font-heading font-semibold text-lg text-brand-black mb-4">
+            § 3 Mietgegenstand & Zustand
+          </h2>
+          <ol className="list-decimal list-inside font-body text-brand-steel space-y-2">
+            <li>
+              Die Mietausrüstung wird in funktionstüchtigem und geprüftem Zustand übergeben.
+            </li>
+            <li>
+              Der Mieter ist verpflichtet, die Ausrüstung bei Erhalt unverzüglich auf erkennbare
+              Mängel oder Schäden zu überprüfen und diese innerhalb von 24 Stunden nach Erhalt dem
+              Vermieter schriftlich (per E-Mail) mitzuteilen.
+            </li>
+            <li>
+              Nicht beanstandete Mängel gelten als bei Übergabe nicht vorhanden.
+            </li>
+          </ol>
+        </section>
+
+        <section className="mb-10">
+          <h2 className="font-heading font-semibold text-lg text-brand-black mb-4">
+            § 4 Mietdauer
+          </h2>
+          <ol className="list-decimal list-inside font-body text-brand-steel space-y-2">
+            <li>
+              Die Mietdauer wird in Kalendertagen berechnet. Sie beginnt am vereinbarten Startdatum
+              und endet am vereinbarten Rückgabedatum.
+            </li>
+            <li>
+              Bei Versand wird die Ausrüstung in der Regel einen Werktag vor Mietbeginn versendet.
+              Die Rücksendung muss spätestens am Tag nach Mietende erfolgen.
+            </li>
+            <li>
+              Eine Verlängerung der Mietdauer ist nach Verfügbarkeitsprüfung über das Kundenkonto
+              möglich. Die Zusatzkosten werden automatisch berechnet und abgebucht.
+            </li>
+          </ol>
+        </section>
+
+        <section className="mb-10">
+          <h2 className="font-heading font-semibold text-lg text-brand-black mb-4">
+            § 5 Preise & Zahlung
+          </h2>
+          <ol className="list-decimal list-inside font-body text-brand-steel space-y-2">
+            <li>
+              Alle angegebenen Preise sind Endpreise. Gemäß § 19 UStG wird keine Umsatzsteuer
+              erhoben (Kleinunternehmerregelung).
+            </li>
+            <li>
+              Der Versand ist ab einem Bestellwert von 49 € kostenlos. Darunter fallen die jeweils
+              ausgewiesenen Versandkosten an.
+            </li>
+            <li>
+              Die Zahlung erfolgt über den Zahlungsdienstleister Stripe. Akzeptiert werden
+              Kreditkarte (Visa, Mastercard), Klarna und weitere von Stripe unterstützte
+              Zahlungsmethoden. Barzahlung ist nicht möglich.
+            </li>
+            <li>
+              Der Mietpreis ist bei Buchungsabschluss vollständig zu entrichten.
+            </li>
+          </ol>
+        </section>
+
+        <section className="mb-10">
+          <h2 className="font-heading font-semibold text-lg text-brand-black mb-4">
+            § 6 Kaution (Sicherheitsleistung)
+          </h2>
+          <ol className="list-decimal list-inside font-body text-brand-steel space-y-2">
+            <li>
+              Für jede Buchung wird eine Kaution als Vorautorisierung auf der Kreditkarte des Mieters
+              blockiert. Der Betrag wird nicht abgebucht, sondern nur reserviert.
+            </li>
+            <li>
+              Die Höhe der Kaution richtet sich nach dem Wert der gemieteten Ausrüstung und wird vor
+              Abschluss der Buchung transparent angezeigt.
+            </li>
+            <li>
+              Nach erfolgreicher Rückgabe und positiver Zustandsprüfung wird die Vorautorisierung
+              automatisch freigegeben.
+            </li>
+            <li>
+              Bei Beschädigungen, Verlust oder fehlenden Zubehörteilen kann die Kaution ganz oder
+              teilweise einbehalten werden.
+            </li>
+          </ol>
+        </section>
+
+        <section className="mb-10">
+          <h2 className="font-heading font-semibold text-lg text-brand-black mb-4">
+            § 7 Haftungsoptionen
+          </h2>
+          <ol className="list-decimal list-inside font-body text-brand-steel space-y-2">
+            <li>
+              Der Mieter kann bei der Buchung zwischen verschiedenen Haftungsoptionen wählen:
+              <ul className="list-disc list-inside ml-4 mt-2 space-y-1">
+                <li><strong>Standard-Haftung:</strong> Selbstbeteiligung im Schadensfall gemäß Preisliste</li>
+                <li><strong>Premium-Haftung:</strong> Reduzierte Selbstbeteiligung gegen Aufpreis</li>
+              </ul>
+            </li>
+            <li>
+              Schäden durch Vorsatz oder grobe Fahrlässigkeit sind von allen Haftungsoptionen
+              ausgeschlossen. In diesen Fällen haftet der Mieter in voller Höhe des
+              Wiederbeschaffungswerts.
+            </li>
+            <li>
+              Wird keine Haftungsoption gewählt, haftet der Mieter für den vollen Wiederbeschaffungswert
+              der Ausrüstung.
+            </li>
+          </ol>
+        </section>
+
+        <section className="mb-10">
+          <h2 className="font-heading font-semibold text-lg text-brand-black mb-4">
+            § 8 Pflichten des Mieters
+          </h2>
+          <ol className="list-decimal list-inside font-body text-brand-steel space-y-2">
+            <li>Der Mieter ist verpflichtet, die Mietausrüstung pfleglich und sachgemäß zu behandeln.</li>
+            <li>Die Ausrüstung darf nur für den persönlichen Gebrauch des Mieters verwendet werden. Eine Weitergabe an Dritte oder gewerbliche Nutzung ohne vorherige Zustimmung ist untersagt.</li>
+            <li>Der Mieter ist verpflichtet, die gesamte Ausrüstung einschließlich aller Zubehörteile vollständig zurückzugeben.</li>
+            <li>Eigenmächtige Reparaturen oder technische Veränderungen an der Ausrüstung sind nicht gestattet.</li>
+            <li>Schäden, Defekte oder Verlust sind dem Vermieter unverzüglich mitzuteilen.</li>
+          </ol>
+        </section>
+
+        <section className="mb-10">
+          <h2 className="font-heading font-semibold text-lg text-brand-black mb-4">
+            § 9 Stornierung & Rücktritt
+          </h2>
+          <ol className="list-decimal list-inside font-body text-brand-steel space-y-2">
+            <li>
+              Stornierungen sind nach folgender Staffelung möglich:
+              <ul className="list-disc list-inside ml-4 mt-2 space-y-1">
+                <li>Mehr als 7 Tage vor Mietbeginn: Kostenlose Stornierung</li>
+                <li>3–6 Tage vor Mietbeginn: 50 % des Mietpreises als Stornogebühr</li>
+                <li>Weniger als 2 Tage oder Nichtabholung: 100 % des Mietpreises</li>
+              </ul>
+            </li>
+            <li>
+              Stornierungen können über das Kundenkonto oder per E-Mail an kontakt@cam2rent.de
+              vorgenommen werden.
+            </li>
+            <li>Bereits bezahlte Beträge werden abzüglich eventueller Stornogebühren erstattet.</li>
+          </ol>
+        </section>
+
+        <section className="mb-10">
+          <h2 className="font-heading font-semibold text-lg text-brand-black mb-4">
+            § 10 Verspätete Rückgabe
+          </h2>
+          <p className="font-body text-brand-steel">
+            Wird die Ausrüstung nicht fristgerecht zurückgegeben, wird für jeden zusätzlichen Tag der
+            reguläre Tagespreis berechnet. Bei erheblicher Verspätung (mehr als 3 Tage ohne
+            Rückmeldung) behält sich der Vermieter die Einbehaltung der vollen Kaution sowie
+            weitere rechtliche Schritte vor.
+          </p>
+        </section>
+
+        <section className="mb-10">
+          <h2 className="font-heading font-semibold text-lg text-brand-black mb-4">
+            § 11 Ersatzgeräte
+          </h2>
+          <p className="font-body text-brand-steel">
+            Sollte das gebuchte Gerät nicht verfügbar sein (z.B. durch Defekt oder verspätete
+            Rückgabe eines Vormieters), behält sich der Vermieter das Recht vor, ein gleichwertiges
+            oder höherwertiges Ersatzgerät zu stellen. Alternativ kann der Mieter eine vollständige
+            Rückerstattung erhalten.
+          </p>
+        </section>
+
+        <section className="mb-10">
+          <h2 className="font-heading font-semibold text-lg text-brand-black mb-4">
+            § 12 Identitätsprüfung
+          </h2>
+          <p className="font-body text-brand-steel">
+            Vor der ersten Buchung kann eine Identitätsverifizierung mittels Personalausweis
+            erforderlich sein. Der Mieter lädt die Vorder- und Rückseite seines Ausweises über sein
+            Kundenkonto hoch. Die Verifizierung erfolgt durch den Vermieter. Ausweisdokumente werden
+            ausschließlich zur Verifizierung verwendet und nach erfolgreicher Prüfung nicht länger als
+            nötig aufbewahrt.
+          </p>
+        </section>
+
+        <section className="mb-10">
+          <h2 className="font-heading font-semibold text-lg text-brand-black mb-4">
+            § 13 Haftungsbeschränkung
+          </h2>
+          <ol className="list-decimal list-inside font-body text-brand-steel space-y-2">
+            <li>
+              Der Vermieter haftet unbeschränkt für Schäden aus der Verletzung des Lebens, des
+              Körpers oder der Gesundheit sowie bei Vorsatz und grober Fahrlässigkeit.
+            </li>
+            <li>
+              Im Übrigen haftet der Vermieter nur bei Verletzung wesentlicher Vertragspflichten
+              (Kardinalpflichten) und beschränkt auf den vertragstypischen, vorhersehbaren Schaden.
+            </li>
+          </ol>
+        </section>
+
+        <section className="mb-10">
+          <h2 className="font-heading font-semibold text-lg text-brand-black mb-4">
+            § 14 Anwendbares Recht & Gerichtsstand
+          </h2>
+          <ol className="list-decimal list-inside font-body text-brand-steel space-y-2">
+            <li>Es gilt das Recht der Bundesrepublik Deutschland unter Ausschluss des UN-Kaufrechts.</li>
+            <li>
+              Gerichtsstand für alle Streitigkeiten aus dem Vertragsverhältnis ist, soweit gesetzlich
+              zulässig, Berlin.
+            </li>
+          </ol>
+        </section>
+
+        <section>
+          <h2 className="font-heading font-semibold text-lg text-brand-black mb-4">
+            § 15 Schlussbestimmungen
+          </h2>
+          <ol className="list-decimal list-inside font-body text-brand-steel space-y-2">
+            <li>
+              Sollte eine Bestimmung dieser AGB unwirksam sein, bleibt die Wirksamkeit der übrigen
+              Bestimmungen hiervon unberührt.
+            </li>
+            <li>
+              Der Vermieter behält sich vor, diese AGB mit Wirkung für die Zukunft zu ändern.
+              Für bestehende Verträge gelten die zum Zeitpunkt der Buchung gültigen AGB.
+            </li>
+          </ol>
+        </section>
+      </div>
+    </div>
+  );
+}

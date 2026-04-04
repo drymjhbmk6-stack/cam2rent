@@ -1,0 +1,150 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { DEFAULT_HAFTUNG, DEFAULT_KAUTION_TIERS, type HaftungConfig, type KautionTiers } from '@/lib/price-config';
+
+function Field({ label, sub, value, onChange, step = '1' }: {
+  label: string; sub?: string; value: number; onChange: (v: number) => void; step?: string;
+}) {
+  return (
+    <div>
+      <label className="block text-sm font-heading font-semibold text-brand-black mb-1">{label}</label>
+      {sub && <p className="text-xs font-body text-brand-muted mb-2">{sub}</p>}
+      <div className="relative">
+        <input type="number" step={step} min="0" value={value}
+          onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
+          className="w-full pr-8 pl-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
+        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-brand-muted pointer-events-none">€</span>
+      </div>
+    </div>
+  );
+}
+
+function SaveBtn({ onClick, saving, saved }: { onClick: () => void; saving: boolean; saved: boolean }) {
+  return (
+    <button onClick={onClick} disabled={saving}
+      className={`px-5 py-2.5 text-sm font-heading font-semibold rounded-btn transition-colors disabled:opacity-40 ${saved ? 'bg-green-600 text-white' : 'bg-brand-black text-white hover:bg-brand-dark'}`}>
+      {saving ? 'Speichern…' : saved ? '✓ Gespeichert' : 'Speichern'}
+    </button>
+  );
+}
+
+export default function AdminHaftungPage() {
+  const [haftung, setHaftung] = useState<HaftungConfig>(DEFAULT_HAFTUNG);
+  const [kaution, setKaution] = useState<KautionTiers>(DEFAULT_KAUTION_TIERS);
+  const [hSaving, setHSaving] = useState(false);
+  const [hSaved, setHSaved] = useState(false);
+  const [kSaving, setKSaving] = useState(false);
+  const [kSaved, setKSaved] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/prices')
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.haftung) setHaftung({ ...DEFAULT_HAFTUNG, ...d.haftung });
+        if (d.kautionTiers) setKaution(d.kautionTiers);
+      })
+      .catch(() => {});
+  }, []);
+
+  async function save(key: string, value: unknown, setSaving: (v: boolean) => void, setSaved: (v: boolean) => void) {
+    setSaving(true);
+    try {
+      const res = await fetch('/api/admin/config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key, value }),
+      });
+      if (!res.ok) throw new Error();
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch {
+      alert('Fehler beim Speichern.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-brand-bg">
+      <div className="max-w-2xl mx-auto px-6 py-8">
+        <div className="flex items-center gap-2 mb-8">
+          <Link href="/admin/preise" className="text-sm font-body text-brand-muted hover:text-brand-black transition-colors">← Preise</Link>
+          <span className="text-brand-muted">/</span>
+          <h1 className="font-heading font-bold text-xl text-brand-black">Haftung & Kaution</h1>
+        </div>
+
+        <div className="space-y-6">
+
+          {/* Haftungsoptionen */}
+          <div className="bg-white rounded-2xl border border-brand-border p-6">
+            <h2 className="font-heading font-bold text-base text-brand-black mb-1">Haftungsoptionen</h2>
+            <p className="text-xs font-body text-brand-muted mb-5">
+              Pauschalpreis pro Buchung — nur für Kameras mit aktivierter Haftungsoption
+            </p>
+
+            <div className="space-y-5">
+              <div className="bg-brand-bg rounded-xl border border-brand-border p-4 space-y-4">
+                <p className="font-heading font-semibold text-sm text-brand-black">Standard-Haftungsschutz</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <Field label="Preis" value={haftung.standard} onChange={(v) => setHaftung((h) => ({ ...h, standard: v }))} />
+                  <Field label="Max. Eigenbeteiligung" sub="Höchstbetrag den der Kunde zahlt" value={haftung.standardEigenbeteiligung} onChange={(v) => setHaftung((h) => ({ ...h, standardEigenbeteiligung: v }))} />
+                </div>
+              </div>
+
+              <div className="bg-brand-bg rounded-xl border border-brand-border p-4 space-y-4">
+                <div className="flex items-center justify-between">
+                  <p className="font-heading font-semibold text-sm text-brand-black">Premium-Haftungsschutz</p>
+                  <span className="text-xs font-body text-brand-muted bg-white border border-brand-border px-2 py-0.5 rounded-full">Keine Eigenbeteiligung</span>
+                </div>
+                <Field label="Preis" value={haftung.premium} onChange={(v) => setHaftung((h) => ({ ...h, premium: v }))} />
+              </div>
+            </div>
+
+            <div className="mt-5 flex justify-end">
+              <SaveBtn onClick={() => save('haftung', haftung, setHSaving, setHSaved)} saving={hSaving} saved={hSaved} />
+            </div>
+          </div>
+
+          {/* Kaution Tiers */}
+          <div className="bg-white rounded-2xl border border-brand-border p-6">
+            <h2 className="font-heading font-bold text-base text-brand-black mb-1">Kaution-Stufen</h2>
+            <p className="text-xs font-body text-brand-muted mb-5">
+              3 Stufen — jede Kamera kann einer Stufe zugeordnet werden (statt Haftungsoption)
+            </p>
+
+            <div className="space-y-4">
+              {([1, 2, 3] as const).map((tier) => (
+                <div key={tier} className="bg-brand-bg rounded-xl border border-brand-border p-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Name</label>
+                      <input
+                        type="text"
+                        value={kaution[tier].name}
+                        onChange={(e) => setKaution((k) => ({ ...k, [tier]: { ...k[tier], name: e.target.value } }))}
+                        className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue"
+                      />
+                    </div>
+                    <Field
+                      label="Betrag"
+                      value={kaution[tier].amount}
+                      onChange={(v) => setKaution((k) => ({ ...k, [tier]: { ...k[tier], amount: v } }))}
+                      step="10"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-5 flex justify-end">
+              <SaveBtn onClick={() => save('kaution_tiers', kaution, setKSaving, setKSaved)} saving={kSaving} saved={kSaved} />
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  );
+}

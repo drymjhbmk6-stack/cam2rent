@@ -1,8 +1,15 @@
 import type { Metadata } from 'next';
 import { Sora, DM_Sans } from 'next/font/google';
 import './globals.css';
-import Navbar from '@/components/layout/Navbar';
-import Footer from '@/components/layout/Footer';
+import { AuthProvider } from '@/components/AuthProvider';
+import { CartProvider } from '@/components/CartProvider';
+import { FavoritesProvider } from '@/components/FavoritesProvider';
+import PageTracker from '@/components/PageTracker';
+import ShopShell from '@/components/ShopShell';
+import CookieBanner from '@/components/CookieBanner';
+import ServiceWorkerRegistration from '@/components/ServiceWorkerRegistration';
+import InstallPrompt from '@/components/InstallPrompt';
+import { Suspense } from 'react';
 
 const sora = Sora({
   subsets: ['latin'],
@@ -19,10 +26,31 @@ const dmSans = DM_Sans({
 });
 
 export const metadata: Metadata = {
-  title: 'Cam2Rent – Action-Cams mieten statt kaufen',
+  metadataBase: new URL('https://cam2rent.de'),
+  title: {
+    default: 'Cam2Rent – Action-Cams mieten statt kaufen',
+    template: '%s – Cam2Rent',
+  },
   description:
-    'Hochwertige Action-Kameras von GoPro, DJI und Insta360 mieten. Ab 9,90 €/Tag. Vollversichert, kostenloser Versand, 24h Lieferung.',
+    'Hochwertige Action-Kameras von GoPro, DJI und Insta360 mieten. Ab 9,90 €/Tag. Mit Haftungsschutz, kostenloser Versand, 24h Lieferung.',
   keywords: 'Action Cam mieten, GoPro mieten, DJI mieten, Insta360 mieten, Kamera mieten',
+  openGraph: {
+    title: 'Cam2Rent – Action-Cams mieten statt kaufen',
+    description: 'Hochwertige Action-Kameras von GoPro, DJI und Insta360 mieten. Ab 9,90 €/Tag.',
+    url: 'https://cam2rent.de',
+    siteName: 'Cam2Rent',
+    locale: 'de_DE',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Cam2Rent – Action-Cams mieten statt kaufen',
+    description: 'Hochwertige Action-Kameras von GoPro, DJI und Insta360 mieten. Ab 9,90 €/Tag.',
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
 };
 
 export default function RootLayout({
@@ -33,9 +61,19 @@ export default function RootLayout({
   return (
     <html lang="de" className={`${sora.variable} ${dmSans.variable}`}>
       <body className="font-body antialiased">
-        <Navbar />
-        <main>{children}</main>
-        <Footer />
+        <AuthProvider>
+          <FavoritesProvider>
+            <CartProvider>
+              <Suspense fallback={null}>
+                <PageTracker />
+              </Suspense>
+              <ShopShell>{children}</ShopShell>
+              <CookieBanner />
+              <ServiceWorkerRegistration />
+              <InstallPrompt />
+            </CartProvider>
+          </FavoritesProvider>
+        </AuthProvider>
       </body>
     </html>
   );
