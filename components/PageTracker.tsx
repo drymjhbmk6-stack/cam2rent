@@ -16,6 +16,7 @@ export default function PageTracker() {
     const timer = setTimeout(() => {
       try {
         if (localStorage.getItem('cam2rent_tracking_optout') === 'true') return;
+        if (pathname.startsWith('/admin')) return;
 
         let visitorId = localStorage.getItem('cam2rent_vid');
         if (!visitorId) {

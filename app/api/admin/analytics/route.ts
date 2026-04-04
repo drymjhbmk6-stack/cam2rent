@@ -8,7 +8,7 @@ async function checkAdminAuth(): Promise<boolean> {
   const token = jar.get('admin_token')?.value;
   if (!token) return false;
   const expected = createHash('sha256')
-    .update(process.env.ADMIN_PASSWORD ?? '')
+    .update((process.env.ADMIN_PASSWORD ?? '') + '_cam2rent_admin')
     .digest('hex');
   return token === expected;
 }
