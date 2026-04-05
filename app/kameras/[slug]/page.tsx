@@ -1,9 +1,13 @@
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import type { Metadata } from 'next';
-import type { ReactElement } from 'react';
-import { products, getPriceForDays, type Product } from '@/data/products';
+import { products, getPriceForDays, getMergedSpecs, type Product } from '@/data/products';
+import { accessories } from '@/data/accessories';
+import { RENTAL_SETS_STATIC } from '@/data/sets';
 import ProductReviews from '@/components/ProductReviews';
+import SpecIcon from '@/components/SpecIcon';
+import AvailabilityCalendar from '@/components/AvailabilityCalendar';
+import MarkdownContent from '@/components/MarkdownContent';
 
 // ─── Static generation ──────────────────────────────────────────────────────
 
@@ -117,102 +121,7 @@ function CameraPlaceholder({ brand, size = 'lg' }: { brand: Product['brand']; si
   );
 }
 
-// ─── Spec icons ───────────────────────────────────────────────────────────────
-
-function ResolutionIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-5 h-5" aria-hidden="true">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
-    </svg>
-  );
-}
-
-function FpsIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-5 h-5" aria-hidden="true">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V5.653z" />
-    </svg>
-  );
-}
-
-function WaterIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-5 h-5" aria-hidden="true">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 3c-4.444 5.333-6.667 9.111-6.667 11.333A6.667 6.667 0 0012 21a6.667 6.667 0 006.667-6.667C18.667 12.111 16.444 8.333 12 3z" />
-    </svg>
-  );
-}
-
-function BatteryIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-5 h-5" aria-hidden="true">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M21 10.5h.375a.375.375 0 01.375.375v2.25a.375.375 0 01-.375.375H21m-4.5 0h-9a2.25 2.25 0 01-2.25-2.25v-1.5a2.25 2.25 0 012.25-2.25h9a2.25 2.25 0 012.25 2.25v1.5a2.25 2.25 0 01-2.25 2.25z" />
-    </svg>
-  );
-}
-
-function WeightIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-5 h-5" aria-hidden="true">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v17.25m0 0c-1.472 0-2.882.265-4.185.75M12 20.25c1.472 0 2.882.265 4.185.75M18.75 4.97A48.416 48.416 0 0012 4.5c-2.291 0-4.545.16-6.75.47m13.5 0c1.01.143 2.01.317 3 .52m-3-.52l2.62 10.726c.122.499-.106 1.028-.589 1.202a5.988 5.988 0 01-2.031.352 5.988 5.988 0 01-2.031-.352c-.483-.174-.711-.703-.59-1.202L18.75 4.971zm-16.5.52c.99-.203 1.99-.377 3-.52m0 0l2.62 10.726c.122.499-.106 1.028-.589 1.202a5.989 5.989 0 01-2.031.352 5.989 5.989 0 01-2.031-.352c-.483-.174-.711-.703-.59-1.202L5.25 4.971z" />
-    </svg>
-  );
-}
-
-function StorageIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-5 h-5" aria-hidden="true">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125" />
-    </svg>
-  );
-}
-
-const specs: Array<{
-  key: keyof Product['specs'];
-  label: string;
-  Icon: () => ReactElement;
-}> = [
-  { key: 'resolution', label: 'Auflösung', Icon: ResolutionIcon },
-  { key: 'fps', label: 'Bildrate', Icon: FpsIcon },
-  { key: 'waterproof', label: 'Wasserdicht', Icon: WaterIcon },
-  { key: 'battery', label: 'Akku', Icon: BatteryIcon },
-  { key: 'weight', label: 'Gewicht', Icon: WeightIcon },
-  { key: 'storage', label: 'Speicher', Icon: StorageIcon },
-];
-
-// ─── Price card ───────────────────────────────────────────────────────────────
-
-function PriceCard({
-  label,
-  price,
-  sub,
-  highlight,
-}: {
-  label: string;
-  price: number;
-  sub: string;
-  highlight?: boolean;
-}) {
-  return (
-    <div
-      className={`flex-1 rounded-xl p-4 border-2 text-center transition-all ${
-        highlight
-          ? 'border-accent-blue bg-accent-blue-soft'
-          : 'border-brand-border bg-white'
-      }`}
-    >
-      <p className={`text-xs font-body font-semibold uppercase tracking-wider mb-1 ${highlight ? 'text-accent-blue' : 'text-brand-steel'}`}>
-        {label}
-      </p>
-      <p className={`font-heading font-bold text-xl ${highlight ? 'text-accent-blue' : 'text-brand-black'}`}>
-        {price.toFixed(2).replace('.', ',')} €
-      </p>
-      <p className={`text-xs font-body mt-0.5 ${highlight ? 'text-accent-blue/70' : 'text-brand-muted'}`}>
-        {sub}
-      </p>
-    </div>
-  );
-}
+// Spec-Icons und PriceCard wurden in SpecIcon-Komponente bzw. getMergedSpecs ausgelagert
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
@@ -229,14 +138,14 @@ export default async function KameraDetailPage({
   const brand = brandConfig[product.brand];
 
   return (
-    <div className="min-h-screen bg-brand-bg">
+    <div className="min-h-screen bg-brand-bg dark:bg-gray-950">
       {/* ── Breadcrumb ── */}
-      <div className="bg-white border-b border-brand-border">
+      <div className="bg-white dark:bg-gray-900 border-b border-brand-border dark:border-gray-700">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <nav aria-label="Brotkrume">
             <ol className="flex items-center gap-2 text-sm font-body flex-wrap">
               <li>
-                <Link href="/" className="text-brand-steel hover:text-accent-blue transition-colors">
+                <Link href="/" className="text-brand-steel dark:text-gray-400 hover:text-accent-blue transition-colors">
                   Startseite
                 </Link>
               </li>
@@ -246,7 +155,7 @@ export default async function KameraDetailPage({
                 </svg>
               </li>
               <li>
-                <Link href="/kameras" className="text-brand-steel hover:text-accent-blue transition-colors">
+                <Link href="/kameras" className="text-brand-steel dark:text-gray-400 hover:text-accent-blue transition-colors">
                   Kameras
                 </Link>
               </li>
@@ -256,7 +165,7 @@ export default async function KameraDetailPage({
                 </svg>
               </li>
               <li>
-                <span className="text-brand-black font-medium" aria-current="page">
+                <span className="text-brand-black dark:text-gray-100 font-medium" aria-current="page">
                   {product.name}
                 </span>
               </li>
@@ -311,32 +220,36 @@ export default async function KameraDetailPage({
           <div className="mt-8 lg:mt-0 lg:col-span-3">
             <div className="lg:sticky lg:top-24 space-y-6">
 
-              {/* Brand + name + availability */}
+              {/* Tags + Brand + Name */}
               <div>
-                <div className="flex items-center gap-3 mb-2">
-                  <span className={`inline-flex px-3 py-1 rounded-full text-xs font-heading font-semibold uppercase tracking-wider ${brand.pill}`}>
-                    {product.brand}
-                  </span>
-                  {product.tags.map((tag) => {
-                    const tagMap = {
-                      popular: { label: 'Beliebt', cls: 'bg-accent-blue text-white' },
-                      new: { label: 'Neu', cls: 'bg-accent-teal text-white' },
-                      deal: { label: 'Angebot', cls: 'bg-accent-amber text-white' },
-                    };
-                    return (
-                      <span key={tag} className={`px-2.5 py-1 rounded-full text-xs font-heading font-semibold ${tagMap[tag].cls}`}>
-                        {tagMap[tag].label}
-                      </span>
-                    );
-                  })}
-                </div>
+                {/* Tags zuerst */}
+                {product.tags.length > 0 && (
+                  <div className="flex items-center gap-2 mb-2">
+                    {product.tags.map((tag) => {
+                      const tagMap = {
+                        popular: { label: 'Beliebt', cls: 'bg-accent-blue text-white' },
+                        new: { label: 'Neu', cls: 'bg-accent-teal text-white' },
+                        deal: { label: 'Angebot', cls: 'bg-accent-amber text-white' },
+                      };
+                      return (
+                        <span key={tag} className={`px-2.5 py-1 rounded-full text-xs font-heading font-semibold ${tagMap[tag].cls}`}>
+                          {tagMap[tag].label}
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+                {/* Brand Badge */}
+                <span className={`inline-flex px-3 py-1 rounded-full text-xs font-heading font-semibold uppercase tracking-wider ${brand.pill} mb-2`}>
+                  {product.brand}
+                </span>
 
-                <h1 className="font-heading font-bold text-2xl sm:text-3xl text-brand-black leading-tight">
+                <h1 className="font-heading font-bold text-2xl sm:text-3xl text-brand-black dark:text-gray-100 leading-tight">
                   {product.name}
                 </h1>
-                <p className="mt-2 font-body text-brand-steel leading-relaxed">
-                  {product.description}
-                </p>
+                <div className="mt-2">
+                  <MarkdownContent>{product.description}</MarkdownContent>
+                </div>
               </div>
 
               {/* Availability + stock */}
@@ -354,78 +267,65 @@ export default async function KameraDetailPage({
                 </span>
               </div>
 
-              {/* Price cards – 1 Tag / 7 Tage / 30 Tage */}
-              <div>
-                <p className="text-xs font-body font-semibold text-brand-steel uppercase tracking-wider mb-3">
-                  Mietpreise
+              {/* Preis */}
+              <div className="rounded-xl bg-accent-blue-soft border border-accent-blue/20 p-5 text-center">
+                <p className="text-xs font-body font-semibold text-accent-blue uppercase tracking-wider mb-1">
+                  Mietpreis
                 </p>
-                <div className="flex gap-2.5">
-                  <PriceCard
-                    label="1 Tag"
-                    price={getPriceForDays(product, 1)}
-                    sub="Tagesmietpreis"
-                    highlight
-                  />
-                  <PriceCard
-                    label="7 Tage"
-                    price={getPriceForDays(product, 7)}
-                    sub="Wochenmietpreis"
-                  />
-                  <PriceCard
-                    label="30 Tage"
-                    price={getPriceForDays(product, 30)}
-                    sub="Monatsmietpreis"
-                  />
+                <div className="flex items-baseline justify-center gap-1">
+                  <span className="text-xs font-body text-accent-blue/70">ab</span>
+                  <span className="font-heading font-bold text-3xl text-accent-blue">
+                    {getPriceForDays(product, 1).toFixed(2).replace('.', ',')} €
+                  </span>
+                  <span className="text-sm font-body text-accent-blue/70">/ Tag</span>
                 </div>
-                <p className="text-xs font-body text-brand-muted mt-2">
-                  Exakter Preis wird bei der Buchung nach Zeitraum berechnet.
+                <p className="text-xs font-body text-accent-blue/60 mt-1">
+                  Genauer Preis wird bei der Buchung nach Zeitraum berechnet
                 </p>
               </div>
 
-              {/* Kaution + Haftungsschutz info */}
-              <div className="rounded-xl bg-brand-bg border border-brand-border p-4 space-y-3">
-                {/* Kaution */}
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-lg bg-white shadow-sm flex items-center justify-center flex-shrink-0">
+              {/* Kaution ODER Haftungsschutz (nie beides) */}
+              <div className="rounded-xl bg-brand-bg dark:bg-gray-800 border border-brand-border dark:border-gray-700 p-4">
+                {product.offersHaftungsoption ? (
+                  /* Haftungsschutz-Info */
+                  <div className="flex items-start gap-2.5">
+                    <div className="w-8 h-8 rounded-lg bg-white shadow-sm flex items-center justify-center flex-shrink-0 mt-0.5">
                       <svg viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth={1.75} className="w-4 h-4" aria-hidden="true">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
                       </svg>
                     </div>
-                    <div>
-                      <p className="text-sm font-body font-semibold text-brand-black">Kaution</p>
-                      <p className="text-xs font-body text-brand-steel">Vorläufige Reservierung, wird nach Rückgabe freigegeben</p>
-                    </div>
-                  </div>
-                  <span className="font-heading font-bold text-brand-black text-sm whitespace-nowrap">
-                    {product.deposit} €
-                  </span>
-                </div>
-
-                {/* Haftungsoptionen */}
-                {product.offersHaftungsoption && (
-                  <div className="border-t border-brand-border pt-3">
-                    <div className="flex items-start gap-2.5">
-                      <div className="w-8 h-8 rounded-lg bg-white shadow-sm flex items-center justify-center flex-shrink-0 mt-0.5">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth={1.75} className="w-4 h-4" aria-hidden="true">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
-                        </svg>
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-body font-semibold text-brand-black">Haftungsschutz (optional)</p>
-                        <p className="text-xs font-body text-brand-steel mb-2">Wählbar beim Buchungsabschluss</p>
-                        <div className="space-y-1">
-                          <div className="flex items-center justify-between text-xs font-body">
-                            <span className="text-brand-steel">Standard – max. 150 € Eigenbeteiligung</span>
-                            <span className="font-semibold text-brand-black">15 €</span>
-                          </div>
-                          <div className="flex items-center justify-between text-xs font-body">
-                            <span className="text-brand-steel">Premium – keine Eigenbeteiligung</span>
-                            <span className="font-semibold text-brand-black">25 €</span>
-                          </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-body font-semibold text-brand-black dark:text-gray-100">Haftungsschutz (optional)</p>
+                      <p className="text-xs font-body text-brand-steel dark:text-gray-400 mb-2">Wählbar beim Buchungsabschluss</p>
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-xs font-body">
+                          <span className="text-brand-steel">Standard – max. 150 € Eigenbeteiligung</span>
+                          <span className="font-semibold text-brand-black">15 €</span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs font-body">
+                          <span className="text-brand-steel">Premium – keine Eigenbeteiligung</span>
+                          <span className="font-semibold text-brand-black">25 €</span>
                         </div>
                       </div>
                     </div>
+                  </div>
+                ) : (
+                  /* Kaution-Info */
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-white shadow-sm flex items-center justify-center flex-shrink-0">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth={1.75} className="w-4 h-4" aria-hidden="true">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <p className="text-sm font-body font-semibold text-brand-black dark:text-gray-100">Kaution</p>
+                        <p className="text-xs font-body text-brand-steel dark:text-gray-400">Wird vorläufig reserviert und nach Rückgabe freigegeben</p>
+                      </div>
+                    </div>
+                    <span className="font-heading font-bold text-brand-black text-sm whitespace-nowrap">
+                      {product.deposit} €
+                    </span>
                   </div>
                 )}
               </div>
@@ -434,7 +334,7 @@ export default async function KameraDetailPage({
               {product.available ? (
                 <Link
                   href={`/kameras/${product.slug}/buchen`}
-                  className="block w-full text-center px-6 py-4 bg-brand-black text-white font-heading font-bold text-base rounded-[10px] hover:bg-brand-dark transition-colors shadow-md shadow-black/10"
+                  className="block w-full text-center px-6 py-4 bg-brand-black dark:bg-accent-blue text-white font-heading font-bold text-base rounded-[10px] hover:bg-brand-dark dark:hover:bg-blue-600 transition-colors shadow-md shadow-black/10"
                 >
                   Jetzt mieten
                 </Link>
@@ -465,10 +365,10 @@ export default async function KameraDetailPage({
                 ].map((item) => (
                   <div
                     key={item.text}
-                    className="flex flex-col items-center text-center gap-1 p-2.5 rounded-xl bg-white border border-brand-border"
+                    className="flex flex-col items-center text-center gap-1 p-2.5 rounded-xl bg-white dark:bg-gray-800 border border-brand-border dark:border-gray-700"
                   >
                     <span className="text-lg">{item.icon}</span>
-                    <span className="text-xs font-body text-brand-steel leading-tight">{item.text}</span>
+                    <span className="text-xs font-body text-brand-steel dark:text-gray-400 leading-tight">{item.text}</span>
                   </div>
                 ))}
               </div>
@@ -476,29 +376,29 @@ export default async function KameraDetailPage({
           </div>
         </div>
 
-        {/* ── Specs section ── */}
+        {/* ── Specs section (dynamisch) ── */}
         <div className="mt-14">
-          <h2 className="font-heading font-bold text-xl sm:text-2xl text-brand-black mb-6">
+          <h2 className="font-heading font-bold text-xl sm:text-2xl text-brand-black dark:text-gray-100 mb-6">
             Technische Daten
           </h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-            {specs.map(({ key, label, Icon }) => (
+            {getMergedSpecs(product).map((spec) => (
               <div
-                key={key}
-                className="bg-white rounded-card shadow-card p-5 flex items-center gap-4"
+                key={spec.id}
+                className="bg-white dark:bg-gray-800 rounded-card shadow-card dark:shadow-gray-900/50 p-5 flex items-center gap-4"
               >
                 <div
                   className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${brand.bg}`}
                   style={{ color: brand.color }}
                 >
-                  <Icon />
+                  <SpecIcon iconId={spec.icon} />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-xs font-body text-brand-muted uppercase tracking-wider mb-0.5">
-                    {label}
+                  <p className="text-xs font-body text-brand-muted dark:text-gray-500 uppercase tracking-wider mb-0.5">
+                    {spec.name}
                   </p>
-                  <p className="font-heading font-semibold text-brand-black text-sm truncate">
-                    {product.specs[key]}
+                  <p className="font-heading font-semibold text-brand-black dark:text-gray-100 text-sm truncate">
+                    {spec.value}
                   </p>
                 </div>
               </div>
@@ -506,8 +406,92 @@ export default async function KameraDetailPage({
           </div>
         </div>
 
+        {/* ── Zubehör & Sets ── */}
+        <div className="mt-14">
+          <h2 className="font-heading font-bold text-xl sm:text-2xl text-brand-black dark:text-gray-100 mb-6">
+            Passendes Zubehör & Sets
+          </h2>
+
+          {/* Zubehör */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+            {accessories.filter((a) => a.available).map((acc) => (
+              <div key={acc.id} className="bg-white dark:bg-gray-800 rounded-card shadow-card dark:shadow-gray-900/50 p-4 text-center">
+                <p className="font-heading font-semibold text-sm text-brand-black dark:text-gray-100 mb-1">{acc.name}</p>
+                <p className="text-xs text-brand-steel dark:text-gray-400 mb-2">{acc.description}</p>
+                <p className="text-sm font-heading font-bold text-accent-blue">
+                  {acc.price.toFixed(2).replace('.', ',')} € {acc.pricingMode === 'perDay' ? '/ Tag' : 'einmalig'}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          {/* Sets */}
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {RENTAL_SETS_STATIC.map((set) => (
+              <div key={set.id} className="bg-white dark:bg-gray-800 rounded-card shadow-card dark:shadow-gray-900/50 p-5">
+                <div className="flex items-center gap-2 mb-2">
+                  <h3 className="font-heading font-semibold text-brand-black dark:text-gray-100">{set.name}</h3>
+                  {set.badge && (
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold text-white ${set.badgeColor || 'bg-accent-blue'}`}>
+                      {set.badge}
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-brand-steel dark:text-gray-400 mb-3">{set.description}</p>
+                <ul className="text-xs text-brand-text dark:text-gray-300 space-y-0.5 mb-3">
+                  {set.includedItems.map((item, i) => (
+                    <li key={i} className="flex items-center gap-1.5">
+                      <span className="w-1 h-1 rounded-full bg-accent-blue flex-shrink-0" />
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+                <Link
+                  href={`/kameras/${product.slug}/buchen`}
+                  className="inline-flex items-center text-xs font-heading font-semibold text-accent-blue hover:underline"
+                >
+                  Zum Buchungsflow
+                </Link>
+              </div>
+            ))}
+          </div>
+
+          {/* Eigenes Set zusammenstellen */}
+          <div className="mt-6 p-5 bg-gradient-to-r from-accent-blue-soft/50 to-accent-teal-soft/50 dark:from-accent-blue/10 dark:to-accent-teal/10 rounded-card border border-brand-border dark:border-gray-700">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div>
+                <h3 className="font-heading font-semibold text-brand-black dark:text-gray-100 mb-1">
+                  Eigenes Set zusammenstellen
+                </h3>
+                <p className="text-sm font-body text-brand-steel dark:text-gray-400">
+                  Kombiniere Kamera und Zubehör frei und spare bis zu 15 % auf Zubehör.
+                </p>
+              </div>
+              <Link
+                href="/set-konfigurator"
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold text-sm rounded-[10px] hover:bg-brand-dark dark:hover:bg-blue-600 transition-colors whitespace-nowrap"
+              >
+                Zum Konfigurator
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                </svg>
+              </Link>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Verfügbarkeit ── */}
+        <div className="mt-14">
+          <h2 className="font-heading font-bold text-xl sm:text-2xl text-brand-black dark:text-gray-100 mb-6">
+            Verfügbarkeit
+          </h2>
+          <div className="max-w-md">
+            <AvailabilityCalendar productId={product.id} />
+          </div>
+        </div>
+
         {/* ── Back to overview ── */}
-        <div className="mt-10 pt-8 border-t border-brand-border">
+        <div className="mt-10 pt-8 border-t border-brand-border dark:border-gray-700">
           <Link
             href="/kameras"
             className="inline-flex items-center gap-2 text-sm font-body font-semibold text-accent-blue hover:text-blue-700 transition-colors"

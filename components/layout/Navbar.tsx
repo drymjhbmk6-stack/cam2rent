@@ -5,10 +5,12 @@ import Link from 'next/link';
 import { useAuth } from '@/components/AuthProvider';
 import { useCart } from '@/components/CartProvider';
 import SearchModal from '@/components/SearchModal';
+import ThemeToggle from '@/components/ThemeToggle';
 
 const navLinks = [
   { href: '/', label: 'Startseite' },
   { href: '/kameras', label: 'Kameras' },
+  { href: '/kamera-finder', label: 'Kamera-Finder' },
   { href: '/so-funktionierts', label: "So funktioniert's" },
   { href: '/blog', label: 'Blog' },
   { href: '/kontakt', label: 'Kontakt' },
@@ -45,16 +47,16 @@ export default function Navbar() {
     <header
       className={`sticky top-0 z-50 transition-shadow duration-200 ${
         scrolled ? 'shadow-md' : ''
-      } backdrop-blur-md bg-white/80 border-b border-brand-border`}
+      } backdrop-blur-md bg-white/80 dark:bg-gray-900/80 border-b border-brand-border dark:border-gray-700 transition-colors duration-200`}
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-[72px]">
           {/* Logo */}
           <Link href="/" className="flex flex-col leading-tight group">
-            <span className="font-heading font-bold text-2xl text-brand-black tracking-tight">
+            <span className="font-heading font-bold text-2xl text-brand-black dark:text-gray-100 tracking-tight">
               Cam<span className="text-accent-blue">2</span>Rent
             </span>
-            <span className="text-[11px] font-body text-brand-steel tracking-wide -mt-0.5">
+            <span className="text-[11px] font-body text-brand-steel dark:text-gray-400 tracking-wide -mt-0.5">
               clever mieten statt kaufen
             </span>
           </Link>
@@ -68,7 +70,7 @@ export default function Navbar() {
                 className={`relative px-3 py-2 font-body font-medium text-sm transition-colors duration-150 rounded-md group ${
                   activePath === link.href
                     ? 'text-accent-blue'
-                    : 'text-brand-text hover:text-brand-black'
+                    : 'text-brand-text dark:text-gray-300 hover:text-brand-black dark:hover:text-gray-100'
                 }`}
               >
                 {link.label}
@@ -94,7 +96,7 @@ export default function Navbar() {
                       className={`flex items-center gap-1.5 px-3 py-2 font-body font-medium text-sm rounded-md transition-colors duration-150 ${
                         activePath.startsWith('/konto')
                           ? 'text-accent-blue'
-                          : 'text-brand-text hover:text-brand-black'
+                          : 'text-brand-text dark:text-gray-300 hover:text-brand-black dark:hover:text-gray-100'
                       }`}
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -104,7 +106,7 @@ export default function Navbar() {
                     </Link>
                     <button
                       onClick={signOut}
-                      className="px-3 py-2 font-body font-medium text-sm text-brand-steel hover:text-brand-black rounded-md transition-colors duration-150"
+                      className="px-3 py-2 font-body font-medium text-sm text-brand-steel dark:text-gray-400 hover:text-brand-black dark:hover:text-gray-100 rounded-md transition-colors duration-150"
                     >
                       Abmelden
                     </button>
@@ -112,7 +114,7 @@ export default function Navbar() {
                 ) : (
                   <Link
                     href="/login"
-                    className="hidden md:inline-flex items-center gap-1.5 px-3 py-2 font-body font-medium text-sm text-brand-text hover:text-brand-black rounded-md transition-colors duration-150"
+                    className="hidden md:inline-flex items-center gap-1.5 px-3 py-2 font-body font-medium text-sm text-brand-text dark:text-gray-300 hover:text-brand-black dark:hover:text-gray-100 rounded-md transition-colors duration-150"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
@@ -126,7 +128,7 @@ export default function Navbar() {
             <button
               type="button"
               onClick={() => setSearchOpen(true)}
-              className="p-2 text-brand-text hover:text-brand-black transition-colors"
+              className="p-2 text-brand-text dark:text-gray-400 hover:text-brand-black dark:hover:text-gray-100 transition-colors"
               aria-label="Suche oeffnen (Ctrl+K)"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -134,10 +136,13 @@ export default function Navbar() {
               </svg>
             </button>
 
+            {/* Theme toggle */}
+            <ThemeToggle />
+
             {/* Cart icon */}
             <Link
               href="/warenkorb"
-              className="relative p-2 text-brand-text hover:text-brand-black transition-colors"
+              className="relative p-2 text-brand-text dark:text-gray-400 hover:text-brand-black dark:hover:text-gray-100 transition-colors"
               aria-label="Warenkorb"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -152,7 +157,7 @@ export default function Navbar() {
 
             <Link
               href="/kameras"
-              className="hidden md:inline-flex items-center px-4 py-2 bg-brand-black text-white font-heading font-semibold text-sm rounded-[10px] hover:bg-brand-dark transition-colors duration-150"
+              className="hidden md:inline-flex items-center px-4 py-2 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold text-sm rounded-[10px] hover:bg-brand-dark dark:hover:bg-blue-600 transition-colors duration-150"
             >
               Jetzt mieten
             </Link>
@@ -160,7 +165,7 @@ export default function Navbar() {
             {/* Hamburger */}
             <button
               type="button"
-              className="md:hidden p-2 rounded-md text-brand-text hover:text-brand-black hover:bg-brand-bg transition-colors"
+              className="md:hidden p-2 rounded-md text-brand-text dark:text-gray-400 hover:text-brand-black dark:hover:text-gray-100 hover:bg-brand-bg dark:hover:bg-gray-800 transition-colors"
               onClick={() => setMobileOpen(!mobileOpen)}
               aria-label={mobileOpen ? 'Menü schließen' : 'Menü öffnen'}
               aria-expanded={mobileOpen}
@@ -197,7 +202,7 @@ export default function Navbar() {
       <div
         className={`md:hidden overflow-hidden transition-all duration-300 ease-in-out ${
           mobileOpen ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
-        } bg-white border-t border-brand-border`}
+        } bg-white dark:bg-gray-900 border-t border-brand-border dark:border-gray-700`}
       >
         <nav className="px-4 py-4 flex flex-col gap-1" aria-label="Mobile Navigation">
           {navLinks.map((link) => (
@@ -207,8 +212,8 @@ export default function Navbar() {
               onClick={() => setMobileOpen(false)}
               className={`px-3 py-2.5 rounded-md font-body font-medium text-sm transition-colors ${
                 activePath === link.href
-                  ? 'text-accent-blue bg-accent-blue-soft'
-                  : 'text-brand-text hover:text-brand-black hover:bg-brand-bg'
+                  ? 'text-accent-blue bg-accent-blue-soft dark:bg-accent-blue/10'
+                  : 'text-brand-text dark:text-gray-300 hover:text-brand-black dark:hover:text-gray-100 hover:bg-brand-bg dark:hover:bg-gray-800'
               }`}
             >
               {link.label}
@@ -217,13 +222,13 @@ export default function Navbar() {
           <Link
             href="/kameras"
             onClick={() => setMobileOpen(false)}
-            className="mt-2 px-4 py-2.5 bg-brand-black text-white font-heading font-semibold text-sm rounded-[10px] text-center hover:bg-brand-dark transition-colors"
+            className="mt-2 px-4 py-2.5 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold text-sm rounded-[10px] text-center hover:bg-brand-dark dark:hover:bg-blue-600 transition-colors"
           >
             Jetzt mieten
           </Link>
 
           {/* Auth in mobile menu */}
-          <div className="mt-2 pt-2 border-t border-brand-border">
+          <div className="mt-2 pt-2 border-t border-brand-border dark:border-gray-700">
             {!loading && (
               <>
                 {user ? (
@@ -233,8 +238,8 @@ export default function Navbar() {
                       onClick={() => setMobileOpen(false)}
                       className={`flex items-center gap-2 px-3 py-2.5 rounded-md font-body font-medium text-sm transition-colors ${
                         activePath.startsWith('/konto')
-                          ? 'text-accent-blue bg-accent-blue-soft'
-                          : 'text-brand-text hover:text-brand-black hover:bg-brand-bg'
+                          ? 'text-accent-blue bg-accent-blue-soft dark:bg-accent-blue/10'
+                          : 'text-brand-text dark:text-gray-300 hover:text-brand-black dark:hover:text-gray-100 hover:bg-brand-bg dark:hover:bg-gray-800'
                       }`}
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -244,7 +249,7 @@ export default function Navbar() {
                     </Link>
                     <button
                       onClick={() => { setMobileOpen(false); signOut(); }}
-                      className="w-full text-left flex items-center gap-2 px-3 py-2.5 rounded-md font-body font-medium text-sm text-brand-steel hover:text-brand-black hover:bg-brand-bg transition-colors"
+                      className="w-full text-left flex items-center gap-2 px-3 py-2.5 rounded-md font-body font-medium text-sm text-brand-steel dark:text-gray-400 hover:text-brand-black dark:hover:text-gray-100 hover:bg-brand-bg dark:hover:bg-gray-800 transition-colors"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -256,7 +261,7 @@ export default function Navbar() {
                   <Link
                     href="/login"
                     onClick={() => setMobileOpen(false)}
-                    className="flex items-center gap-2 px-3 py-2.5 rounded-md font-body font-medium text-sm text-brand-text hover:text-brand-black hover:bg-brand-bg transition-colors"
+                    className="flex items-center gap-2 px-3 py-2.5 rounded-md font-body font-medium text-sm text-brand-text dark:text-gray-300 hover:text-brand-black dark:hover:text-gray-100 hover:bg-brand-bg dark:hover:bg-gray-800 transition-colors"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />

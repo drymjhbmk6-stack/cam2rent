@@ -1,152 +1,377 @@
 'use client';
 
-import Link from 'next/link';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import {
+  type WidgetLayoutItem,
+  type WidgetSize,
+  WIDGET_REGISTRY,
+  DEFAULT_LAYOUT,
+  getWidgetDef,
+  loadLayout,
+  saveLayout,
+} from '@/lib/admin-widgets';
+import {
+  WidgetRenderer,
+  WidgetEditOverlay,
+  WidgetAddPanel,
+} from '@/components/admin/DashboardWidgets';
+
+// ─── Theme ───────────────────────────────────────────────────────
 
 const C = {
   card: '#111827',
   border: '#1e293b',
   cyan: '#06b6d4',
-  cyanLight: '#22d3ee',
+  cyanDim: 'rgba(6,182,212,0.15)',
   green: '#10b981',
-  yellow: '#f59e0b',
   red: '#ef4444',
-  purple: '#8b5cf6',
   text: '#e2e8f0',
   textMuted: '#94a3b8',
   textDim: '#64748b',
 } as const;
 
-export default function AdminDashboardPage() {
+// ─── Size → grid column span ────────────────────────────────────
 
-  const GROUPS: Array<{
-    href: string;
-    label: string;
-    desc: string;
-    color: string;
-    bg: string;
-    borderColor: string;
-    badge: string | null;
-    links: Array<{ href: string; label: string }>;
-    icon: React.ReactNode;
-  }> = [
-    {
-      href: '/admin/preise',
-      label: 'Shop',
-      desc: 'Preise, Produkte, Sets & Zubehör verwalten. Versandkosten anpassen.',
-      color: C.cyan,
-      bg: `rgba(6,182,212,0.08)`,
-      borderColor: `rgba(6,182,212,0.25)`,
-      badge: null,
-      links: [
-        { href: '/admin/preise',      label: 'Preise' },
-        { href: '/admin/sets',        label: 'Sets' },
-        { href: '/admin/zubehoer',    label: 'Zubehör' },
-        { href: '/admin/gutscheine',  label: 'Gutscheine' },
-        { href: '/admin/rabatte',     label: 'Rabatte' },
-      ],
-      icon: (
-        <svg width="28" height="28" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-            d="M13.5 21v-7.5a.75.75 0 01.75-.75h3a.75.75 0 01.75.75V21m-4.5 0H2.36m11.14 0H18m0 0h3.64m-1.39 0V9.349m-16.5 11.65V9.35m0 0a3.001 3.001 0 003.75-.615A2.993 2.993 0 009.75 9.75c.896 0 1.7-.393 2.25-1.016a2.993 2.993 0 002.25 1.016c.896 0 1.7-.393 2.25-1.016a3.001 3.001 0 003.75.614m-16.5 0a3.004 3.004 0 01-.621-4.72L4.318 3.44A1.5 1.5 0 015.378 3h13.243a1.5 1.5 0 011.06.44l1.19 1.189a3 3 0 01-.621 4.72m-13.5 8.65h3.75a.75.75 0 00.75-.75V13.5a.75.75 0 00-.75-.75H6.75a.75.75 0 00-.75.75v3.75c0 .415.336.75.75.75z" />
-        </svg>
-      ),
-    },
-    {
-      href: '/admin/buchungen',
-      label: 'Bestellungen & Kunden',
-      desc: 'Buchungen abarbeiten, Versand erstellen, Kundenanfragen bearbeiten.',
-      color: C.green,
-      bg: `rgba(16,185,129,0.08)`,
-      borderColor: `rgba(16,185,129,0.25)`,
-      badge: null,
-      links: [
-        { href: '/admin/buchungen', label: 'Buchungen' },
-        { href: '/admin/versand',   label: 'Versand & Labels' },
-        { href: '/admin/bewertungen', label: 'Bewertungen' },
-      ],
-      icon: (
-        <svg width="28" height="28" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-            d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-        </svg>
-      ),
-    },
-    {
-      href: '/admin/blog',
-      label: 'Blog & Newsletter',
-      desc: 'Blogartikel schreiben, Themen verwalten, Newsletter versenden.',
-      color: C.purple,
-      bg: `rgba(139,92,246,0.08)`,
-      borderColor: `rgba(139,92,246,0.25)`,
-      badge: null,
-      links: [
-        { href: '/admin/blog', label: 'Artikel' },
-      ],
-      icon: (
-        <svg width="28" height="28" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-            d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
-        </svg>
-      ),
-    },
-    {
-      href: '/admin/analytics',
-      label: 'Analytics',
-      desc: 'Besucher, Traffic-Quellen, Conversion-Funnel und Kamera-Performance.',
-      color: C.yellow,
-      bg: `rgba(245,158,11,0.08)`,
-      badge: null,
-      borderColor: `rgba(245,158,11,0.25)`,
-      links: [
-        { href: '/admin/analytics', label: 'Dashboard öffnen' },
-      ],
-      icon: (
-        <svg width="28" height="28" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-            d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
-        </svg>
-      ),
-    },
-  ];
+function nextSize(current: WidgetSize): WidgetSize {
+  switch (current) {
+    case 'small': return 'medium';
+    case 'medium': return 'large';
+    case 'large': return 'small';
+  }
+}
+
+// ─── Dashboard Page ──────────────────────────────────────────────
+
+export default function AdminDashboardPage() {
+  const [layout, setLayout] = useState<WidgetLayoutItem[]>([]);
+  const [editMode, setEditMode] = useState(false);
+  const [editLayout, setEditLayout] = useState<WidgetLayoutItem[]>([]);
+  const [showAddPanel, setShowAddPanel] = useState(false);
+  const [data, setData] = useState<Record<string, unknown> | null>(null);
+  const [loading, setLoading] = useState(true);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Load layout from localStorage on mount
+  useEffect(() => {
+    setLayout(loadLayout());
+  }, []);
+
+  // Fetch dashboard data
+  const fetchData = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/dashboard-data');
+      if (res.ok) {
+        const json = await res.json();
+        setData(json);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Initial fetch + auto-refresh
+  useEffect(() => {
+    fetchData();
+    timerRef.current = setInterval(fetchData, 60_000);
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [fetchData]);
+
+  // ── Edit mode handlers ─────────────────────────────────────────
+
+  function enterEditMode() {
+    setEditLayout(JSON.parse(JSON.stringify(layout)));
+    setEditMode(true);
+    setShowAddPanel(false);
+  }
+
+  function cancelEdit() {
+    setEditMode(false);
+    setShowAddPanel(false);
+  }
+
+  function saveEdit() {
+    setLayout(editLayout);
+    saveLayout(editLayout);
+    setEditMode(false);
+    setShowAddPanel(false);
+  }
+
+  function resetToDefault() {
+    setEditLayout(JSON.parse(JSON.stringify(DEFAULT_LAYOUT)));
+  }
+
+  function toggleSize(idx: number) {
+    const newLayout = [...editLayout];
+    newLayout[idx] = { ...newLayout[idx], size: nextSize(newLayout[idx].size) };
+    setEditLayout(newLayout);
+  }
+
+  function removeWidget(idx: number) {
+    const newLayout = [...editLayout];
+    newLayout[idx] = { ...newLayout[idx], visible: false };
+    setEditLayout(newLayout);
+  }
+
+  function addWidget(widgetId: string) {
+    const def = getWidgetDef(widgetId);
+    if (!def) return;
+    // Check if it exists but is hidden
+    const existing = editLayout.findIndex((w) => w.widgetId === widgetId);
+    if (existing >= 0) {
+      const newLayout = [...editLayout];
+      newLayout[existing] = { ...newLayout[existing], visible: true };
+      setEditLayout(newLayout);
+    } else {
+      setEditLayout([...editLayout, { widgetId, size: def.defaultSize, visible: true }]);
+    }
+  }
+
+  // ── Render ─────────────────────────────────────────────────────
+
+  const activeLayout = editMode ? editLayout : layout;
+  const visibleWidgets = activeLayout.filter((w) => w.visible);
 
   return (
-    <div style={{ padding: '28px 24px', maxWidth: 1100, margin: '0 auto' }}>
-
+    <div style={{ padding: '28px 24px', maxWidth: 1200, margin: '0 auto' }}>
       {/* Header */}
-      <div style={{ marginBottom: 32 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: C.text, marginBottom: 4 }}>
-          cam<span style={{ color: C.cyan }}>2</span>rent Admin
-        </h1>
-        <p style={{ fontSize: 13, color: C.textDim }}>
-          {new Date().toLocaleDateString('de-DE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-        </p>
-      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28, flexWrap: 'wrap', gap: 12 }}>
+        <div>
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: C.text, marginBottom: 4, margin: 0 }}>
+            cam<span style={{ color: C.cyan }}>2</span>rent Admin
+          </h1>
+          <p style={{ fontSize: 13, color: C.textDim, margin: 0 }}>
+            {new Date().toLocaleDateString('de-DE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+          </p>
+        </div>
 
-      {/* 4 Group Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16, marginBottom: 36 }}>
-        {GROUPS.map((g) => (
-          <Link key={g.href} href={g.href} style={{ textDecoration: 'none' }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = g.color; }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = g.borderColor; }}
+        {!editMode ? (
+          <button
+            onClick={enterEditMode}
+            style={{
+              background: C.cyanDim,
+              border: `1px solid ${C.cyan}40`,
+              borderRadius: 8,
+              color: C.cyan,
+              padding: '8px 16px',
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'all 0.15s',
+            }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = `${C.cyan}30`; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = C.cyanDim; }}
           >
-            <div style={{ background: g.bg, border: `1px solid ${g.borderColor}`, borderRadius: 16, padding: 24, display: 'flex', flexDirection: 'column', gap: 12, cursor: 'pointer', transition: 'border-color 0.15s', height: '100%' }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-                <div style={{ color: g.color }}>{g.icon}</div>
-                {g.badge && (
-                  <span style={{ fontSize: 11, fontWeight: 600, color: g.color, background: `${g.color}22`, padding: '2px 8px', borderRadius: 20 }}>
-                    {g.badge}
-                  </span>
-                )}
-              </div>
-              <div>
-                <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 6 }}>{g.label}</div>
-                <div style={{ fontSize: 12, color: C.textDim, lineHeight: 1.6 }}>{g.desc}</div>
-              </div>
-            </div>
-          </Link>
-        ))}
+            Dashboard anpassen
+          </button>
+        ) : (
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button
+              onClick={() => setShowAddPanel(!showAddPanel)}
+              style={{
+                background: C.cyanDim,
+                border: `1px solid ${C.cyan}40`,
+                borderRadius: 8,
+                color: C.cyan,
+                padding: '8px 14px',
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              + Widget hinzufügen
+            </button>
+            <button
+              onClick={resetToDefault}
+              style={{
+                background: 'transparent',
+                border: `1px solid ${C.border}`,
+                borderRadius: 8,
+                color: C.textMuted,
+                padding: '8px 14px',
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              Standard wiederherstellen
+            </button>
+            <button
+              onClick={cancelEdit}
+              style={{
+                background: 'transparent',
+                border: `1px solid ${C.border}`,
+                borderRadius: 8,
+                color: C.textMuted,
+                padding: '8px 14px',
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              Abbrechen
+            </button>
+            <button
+              onClick={saveEdit}
+              style={{
+                background: C.cyan,
+                border: 'none',
+                borderRadius: 8,
+                color: '#0f172a',
+                padding: '8px 14px',
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              Layout speichern
+            </button>
+          </div>
+        )}
       </div>
 
+      {/* Edit mode banner */}
+      {editMode && (
+        <div style={{
+          background: C.cyanDim,
+          border: `1px solid ${C.cyan}30`,
+          borderRadius: 10,
+          padding: '10px 16px',
+          marginBottom: 20,
+          fontSize: 13,
+          color: C.cyan,
+          fontWeight: 500,
+        }}>
+          Bearbeitungsmodus: Verschiebe Widgets mit den Pfeilen, ändere die Größe (S/M/L) oder entferne sie.
+        </div>
+      )}
+
+      {/* Widget Grid */}
+      <div className="c2r-dash-grid">
+        {visibleWidgets.map((w, visIdx) => {
+          const def = getWidgetDef(w.widgetId);
+          if (!def) return null;
+
+          // Find real index in editLayout for edit operations
+          const realIdx = editMode
+            ? editLayout.findIndex((el) => el.widgetId === w.widgetId)
+            : -1;
+
+          const spanClass = w.size === 'large' ? 'c2r-span-4' : w.size === 'medium' ? 'c2r-span-2' : '';
+
+          return (
+            <div
+              key={w.widgetId}
+              className={spanClass}
+              style={{
+                position: 'relative',
+                minHeight: w.size === 'small' ? 140 : 200,
+              }}
+            >
+              <WidgetRenderer
+                widgetId={w.widgetId}
+                data={data as Record<string, unknown> | null}
+                loading={loading}
+              />
+
+              {editMode && (
+                <WidgetEditOverlay
+                  index={visIdx}
+                  total={visibleWidgets.length}
+                  size={w.size}
+                  onMoveUp={() => {
+                    if (realIdx < 0) return;
+                    let prevIdx = -1;
+                    for (let i = realIdx - 1; i >= 0; i--) {
+                      if (editLayout[i].visible) { prevIdx = i; break; }
+                    }
+                    if (prevIdx >= 0) {
+                      const nl = [...editLayout];
+                      [nl[realIdx], nl[prevIdx]] = [nl[prevIdx], nl[realIdx]];
+                      setEditLayout(nl);
+                    }
+                  }}
+                  onMoveDown={() => {
+                    if (realIdx < 0) return;
+                    let nxtIdx = -1;
+                    for (let i = realIdx + 1; i < editLayout.length; i++) {
+                      if (editLayout[i].visible) { nxtIdx = i; break; }
+                    }
+                    if (nxtIdx >= 0) {
+                      const nl = [...editLayout];
+                      [nl[realIdx], nl[nxtIdx]] = [nl[nxtIdx], nl[realIdx]];
+                      setEditLayout(nl);
+                    }
+                  }}
+                  onToggleSize={() => {
+                    if (realIdx >= 0) toggleSize(realIdx);
+                  }}
+                  onRemove={() => {
+                    if (realIdx >= 0) removeWidget(realIdx);
+                  }}
+                />
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Empty state */}
+      {visibleWidgets.length === 0 && (
+        <div style={{
+          textAlign: 'center', padding: 60, color: C.textDim, fontSize: 14,
+        }}>
+          Keine Widgets sichtbar.{' '}
+          {editMode ? (
+            <button
+              onClick={() => setShowAddPanel(true)}
+              style={{ background: 'none', border: 'none', color: C.cyan, cursor: 'pointer', fontSize: 14, fontWeight: 600 }}
+            >
+              Widget hinzufügen
+            </button>
+          ) : (
+            <button
+              onClick={enterEditMode}
+              style={{ background: 'none', border: 'none', color: C.cyan, cursor: 'pointer', fontSize: 14, fontWeight: 600 }}
+            >
+              Dashboard anpassen
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Add Widget Panel */}
+      {editMode && showAddPanel && (
+        <WidgetAddPanel
+          onAdd={addWidget}
+          existingIds={new Set(editLayout.filter((w) => w.visible).map((w) => w.widgetId))}
+          onClose={() => setShowAddPanel(false)}
+          registry={WIDGET_REGISTRY}
+        />
+      )}
+
+      {/* Responsive grid styles */}
+      <style>{`
+        .c2r-dash-grid {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 16px;
+        }
+        .c2r-span-2 { grid-column: span 2; }
+        .c2r-span-4 { grid-column: span 4; }
+        @media (max-width: 1024px) {
+          .c2r-dash-grid { grid-template-columns: repeat(2, 1fr); }
+          .c2r-span-4 { grid-column: span 2; }
+        }
+        @media (max-width: 640px) {
+          .c2r-dash-grid { grid-template-columns: 1fr; }
+          .c2r-span-2 { grid-column: span 1; }
+          .c2r-span-4 { grid-column: span 1; }
+        }
+      `}</style>
     </div>
   );
 }

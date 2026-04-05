@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import type React from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/components/AuthProvider';
 import { useCart } from '@/components/CartProvider';
 import Link from 'next/link';
@@ -192,12 +192,13 @@ function calcBreakdown(
 
 // ─── Step indicator ───────────────────────────────────────────────────────────
 
-function StepIndicator({ current }: { current: 1 | 2 | 3 | 4 }) {
+function StepIndicator({ current }: { current: 1 | 2 | 3 | 4 | 5 }) {
   const steps = [
-    { n: 1, label: 'Zeitraum' },
-    { n: 2, label: 'Zubehör & Schutz' },
-    { n: 3, label: 'Zusammenfassung' },
-    { n: 4, label: 'Zahlung' },
+    { n: 1, label: 'Versand' },
+    { n: 2, label: 'Zubehör' },
+    { n: 3, label: 'Haftung' },
+    { n: 4, label: 'Zusammenfassung' },
+    { n: 5, label: 'Zahlung' },
   ];
   return (
     <div className="flex items-center" aria-label="Buchungsschritte">
@@ -268,7 +269,7 @@ const DELIVERY_MODES: Array<{
   {
     id: 'versand',
     name: 'Versand',
-    sub: 'Wir liefern und du sendest zurück',
+    sub: 'Lieferung und Rücksendung per Post',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-6 h-6" aria-hidden="true">
         <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 00-3.213-9.193 2.056 2.056 0 00-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 00-10.026 0 1.106 1.106 0 00-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12" />
@@ -382,10 +383,18 @@ export default function BuchenPage() {
   const { addItem } = useCart();
   const product = products.find((p) => p.slug === slug);
 
-  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(1);
   const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>('versand');
   const [range, setRange] = useState<DateRange | undefined>();
-  const [accessories, setAccessories] = useState<string[]>([]);
+  const searchParams = useSearchParams();
+  const preselectedAccessories = searchParams.get('accessories');
+  const [accessories, setAccessories] = useState<string[]>(() => {
+    if (preselectedAccessories) {
+      const ids = preselectedAccessories.split(',').filter(Boolean);
+      return ids.filter((id) => ACCESSORIES.some((a) => a.id === id));
+    }
+    return [];
+  });
   const [haftung, setHaftung] = useState<HaftungId>('none');
   // Pflicht-Bestätigungen bei "Keine Haftungsbegrenzung"
   const [confirmLiability, setConfirmLiability] = useState(false);
@@ -490,7 +499,7 @@ export default function BuchenPage() {
         throw new Error(data.error ?? 'Unbekannter Fehler');
       }
       setClientSecret(data.clientSecret);
-      setStep(4);
+      setStep(5);
     } catch (err) {
       setIntentError(err instanceof Error ? err.message : 'Fehler beim Verbinden mit der Zahlungsseite.');
     } finally {
@@ -644,26 +653,6 @@ export default function BuchenPage() {
                   })}
                 </div>
 
-                {/* Info hint per mode */}
-                <div className={`flex items-start gap-2.5 p-3 rounded-xl mb-6 text-xs font-body ${
-                  deliveryMode === 'abholung'
-                    ? 'bg-accent-teal-soft text-accent-teal'
-                    : 'bg-accent-blue-soft text-accent-blue'
-                }`}>
-                  <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 flex-shrink-0 mt-0.5" aria-hidden="true">
-                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clipRule="evenodd" />
-                  </svg>
-                  {deliveryMode === 'abholung' ? (
-                    <span>
-                      Wähle unten deine <strong>reinen Miettage</strong>. Abholung und Rückgabe werden automatisch auf den Tag <strong>davor bzw. danach</strong> gesetzt.
-                    </span>
-                  ) : (
-                    <span>
-                      Wähle deine <strong>reinen Miettage</strong>. Versand und Rücksendung werden separat koordiniert.
-                    </span>
-                  )}
-                </div>
-
                 {/* ── Shipping method (nur bei Versand) ── */}
                 {deliveryMode === 'versand' && (
                   <div className="mb-6">
@@ -677,22 +666,12 @@ export default function BuchenPage() {
                           name: 'Standard',
                           sub: '3–5 Werktage',
                           price: dynPrices?.shipping?.standardPrice ?? shippingConfig.standardPrice,
-                          icon: (
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-5 h-5" aria-hidden="true">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 00-3.213-9.193 2.056 2.056 0 00-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 00-10.026 0 1.106 1.106 0 00-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12" />
-                            </svg>
-                          ),
                         },
                         {
                           id: 'express' as ShippingMethod,
                           name: 'Express',
                           sub: '24h an Werktagen',
                           price: dynPrices?.shipping?.expressPrice ?? shippingConfig.expressPrice,
-                          icon: (
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-5 h-5" aria-hidden="true">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
-                            </svg>
-                          ),
                         },
                       ] as const).map((method) => {
                         const selected = shippingMethod === method.id;
@@ -714,9 +693,6 @@ export default function BuchenPage() {
                               className="sr-only"
                               aria-label={method.name}
                             />
-                            <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${selected ? 'bg-accent-blue text-white' : 'bg-brand-bg text-brand-steel'}`} aria-hidden="true">
-                              {method.icon}
-                            </div>
                             <div>
                               <p className={`font-heading font-bold text-sm ${selected ? 'text-accent-blue' : 'text-brand-black'}`}>
                                 {method.name}
@@ -745,6 +721,26 @@ export default function BuchenPage() {
                     </p>
                   </div>
                 )}
+
+                {/* Info hint per mode */}
+                <div className={`flex items-start gap-2.5 p-3 rounded-xl mb-6 text-xs font-body ${
+                  deliveryMode === 'abholung'
+                    ? 'bg-accent-teal-soft text-accent-teal'
+                    : 'bg-accent-blue-soft text-accent-blue'
+                }`}>
+                  <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 flex-shrink-0 mt-0.5" aria-hidden="true">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clipRule="evenodd" />
+                  </svg>
+                  {deliveryMode === 'abholung' ? (
+                    <span>
+                      Wähle unten deine <strong>reinen Miettage</strong>. Abholung und Rückgabe werden automatisch auf den Tag <strong>davor bzw. danach</strong> gesetzt.
+                    </span>
+                  ) : (
+                    <span>
+                      Wähle deine <strong>reinen Miettage</strong>. Versand und Rücksendung werden separat koordiniert.
+                    </span>
+                  )}
+                </div>
 
                 {/* ── Date picker ── */}
                 <p className="text-xs font-body font-semibold text-brand-steel uppercase tracking-wider mb-3">
@@ -862,17 +858,17 @@ export default function BuchenPage() {
                     onClick={() => setStep(2)}
                     className="px-8 py-3 bg-brand-black text-white font-heading font-semibold text-sm rounded-[10px] hover:bg-brand-dark transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
-                    Weiter: Zubehör & Schutz
+                    Weiter: Zubehör
                   </button>
                 </div>
               </div>
             )}
 
-            {/* ════ STEP 2: Accessories + Haftungsoption ════ */}
+            {/* ════ STEP 2: Accessories only ════ */}
             {step === 2 && (
               <div>
                 <h2 className="font-heading font-bold text-lg text-brand-black mb-1">
-                  Zubehör & Haftungsschutz
+                  Zubehör
                 </h2>
                 <p className="text-sm font-body text-brand-steel mb-6">
                   Alles optional. Füge hinzu was du brauchst.
@@ -975,8 +971,66 @@ export default function BuchenPage() {
                   </div>
                 </div>
 
-                {/* Haftungsoptionen */}
-                {product.offersHaftungsoption && (
+                {/* "Im Set enthalten" aggregation box */}
+                {selectedSet && accessories.length > 0 && (
+                  <div className="mb-6 bg-accent-blue-soft/20 border border-accent-blue/20 rounded-xl p-4">
+                    <p className="text-xs font-body font-semibold text-accent-blue uppercase tracking-wider mb-2">
+                      Gesamtauswahl (Set + Einzelzubehör)
+                    </p>
+                    <div className="space-y-1">
+                      {(() => {
+                        // Aggregate: count items from set + individually selected accessories
+                        const counts: Record<string, number> = {};
+                        for (const item of selectedSet.includedItems) {
+                          counts[item] = (counts[item] ?? 0) + 1;
+                        }
+                        for (const accId of accessories) {
+                          const acc = ACCESSORIES.find((a) => a.id === accId);
+                          if (acc) counts[acc.name] = (counts[acc.name] ?? 0) + 1;
+                        }
+                        return Object.entries(counts).map(([name, qty]) => (
+                          <div key={name} className="flex items-center gap-2 text-sm font-body text-brand-black">
+                            <svg viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5 text-status-success flex-shrink-0" aria-hidden="true">
+                              <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
+                            </svg>
+                            <span>{qty > 1 ? `${qty}x ` : ''}{name}</span>
+                          </div>
+                        ));
+                      })()}
+                    </div>
+                  </div>
+                )}
+
+                <div className="mt-8 flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={() => setStep(1)}
+                    className="px-6 py-3 text-brand-steel font-heading font-semibold text-sm rounded-[10px] border border-brand-border hover:bg-brand-bg transition-colors"
+                  >
+                    Zurück
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStep(3)}
+                    className="px-8 py-3 bg-brand-black text-white font-heading font-semibold text-sm rounded-[10px] hover:bg-brand-dark transition-colors"
+                  >
+                    Weiter: Haftung
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* ════ STEP 3: Haftung only ════ */}
+            {step === 3 && (
+              <div>
+                <h2 className="font-heading font-bold text-lg text-brand-black mb-1">
+                  Haftungsschutz
+                </h2>
+                <p className="text-sm font-body text-brand-steel mb-6">
+                  Wähle deinen Haftungsschutz für die Mietdauer.
+                </p>
+
+                {product.offersHaftungsoption ? (
                   <div>
                     <div className="flex items-center gap-2 mb-3">
                       <p className="text-xs font-body font-semibold text-brand-steel uppercase tracking-wider">
@@ -1173,12 +1227,71 @@ export default function BuchenPage() {
                       anzeigen
                     </p>
                   </div>
+                ) : (
+                  /* Kaution-only: product does not offer Haftungsoption */
+                  <div className="rounded-xl border-2 border-accent-amber/50 bg-accent-amber-soft p-5">
+                    <div className="flex items-center gap-2.5 mb-3">
+                      <div className="w-8 h-8 rounded-full bg-accent-amber/20 flex items-center justify-center flex-shrink-0">
+                        <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-accent-amber" aria-hidden="true">
+                          <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                      <div>
+                        <p className="font-heading font-bold text-sm text-amber-900">
+                          Kaution erforderlich
+                        </p>
+                        <p className="text-xs font-body text-amber-800">
+                          Für dieses Produkt wird eine Kaution erhoben.
+                        </p>
+                      </div>
+                    </div>
+                    <p className="text-sm font-body text-amber-900 mb-4">
+                      Es wird eine Kaution in Höhe von{' '}
+                      <span className="font-heading font-bold">{product.deposit} €</span>{' '}
+                      auf deiner Zahlungsmethode reserviert. Die Kaution wird nach schadensfreier Rückgabe automatisch freigegeben.
+                    </p>
+                    <label className="flex items-start gap-3 cursor-pointer group">
+                      <input
+                        type="checkbox"
+                        checked={confirmLiability}
+                        onChange={() => setConfirmLiability(!confirmLiability)}
+                        className="sr-only"
+                        aria-label="Ich bestätige die Kaution"
+                      />
+                      <div
+                        className={`mt-0.5 w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-all ${
+                          confirmLiability
+                            ? 'border-accent-amber bg-accent-amber'
+                            : 'border-amber-600/50 bg-white group-hover:border-accent-amber'
+                        }`}
+                        aria-hidden="true"
+                      >
+                        {confirmLiability && (
+                          <svg viewBox="0 0 20 20" fill="white" className="w-3.5 h-3.5">
+                            <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
+                          </svg>
+                        )}
+                      </div>
+                      <p className="text-sm font-body text-amber-900 leading-snug">
+                        Ich akzeptiere die Kaution von <span className="font-semibold">{product.deposit} €</span> und habe die{' '}
+                        <Link
+                          href="/agb#haftung"
+                          target="_blank"
+                          className="font-semibold underline hover:text-accent-amber transition-colors"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          Haftungsbedingungen
+                        </Link>{' '}
+                        gelesen.
+                      </p>
+                    </label>
+                  </div>
                 )}
 
                 <div className="mt-8 flex items-center justify-between">
                   <button
                     type="button"
-                    onClick={() => setStep(1)}
+                    onClick={() => setStep(2)}
                     className="px-6 py-3 text-brand-steel font-heading font-semibold text-sm rounded-[10px] border border-brand-border hover:bg-brand-bg transition-colors"
                   >
                     Zurück
@@ -1186,11 +1299,11 @@ export default function BuchenPage() {
                   <button
                     type="button"
                     disabled={
-                      product.offersHaftungsoption &&
-                      haftung === 'none' &&
-                      (!confirmLiability || !confirmRead)
+                      product.offersHaftungsoption
+                        ? haftung === 'none' && (!confirmLiability || !confirmRead)
+                        : !confirmLiability
                     }
-                    onClick={() => setStep(3)}
+                    onClick={() => setStep(4)}
                     className="px-8 py-3 bg-brand-black text-white font-heading font-semibold text-sm rounded-[10px] hover:bg-brand-dark transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     Weiter: Zusammenfassung
@@ -1199,8 +1312,8 @@ export default function BuchenPage() {
               </div>
             )}
 
-            {/* ════ STEP 4: Stripe Payment ════ */}
-            {step === 4 && clientSecret && breakdown && (
+            {/* ════ STEP 5: Stripe Payment ════ */}
+            {step === 5 && clientSecret && breakdown && (
               <Elements
                 stripe={stripePromise}
                 options={{
@@ -1220,7 +1333,7 @@ export default function BuchenPage() {
                 <PaymentStep
                   total={effectiveTotal}
                   onBack={() => {
-                    setStep(3);
+                    setStep(4);
                     setClientSecret(null);
                     setIntentError(null);
                   }}
@@ -1228,8 +1341,8 @@ export default function BuchenPage() {
               </Elements>
             )}
 
-            {/* ════ STEP 3: Summary ════ */}
-            {step === 3 && breakdown && range?.from && (
+            {/* ════ STEP 4: Summary ════ */}
+            {step === 4 && breakdown && range?.from && (
               <div>
                 <h2 className="font-heading font-bold text-lg text-brand-black mb-1">
                   Zusammenfassung
@@ -1464,7 +1577,7 @@ export default function BuchenPage() {
                 <div className="mt-8 flex items-center justify-between gap-4 flex-wrap">
                   <button
                     type="button"
-                    onClick={() => setStep(2)}
+                    onClick={() => setStep(3)}
                     disabled={isCreatingIntent}
                     className="px-6 py-3 text-brand-steel font-heading font-semibold text-sm rounded-[10px] border border-brand-border hover:bg-brand-bg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
@@ -1678,7 +1791,7 @@ export default function BuchenPage() {
               </div>
 
               {/* Haftungsoption chip */}
-              {step >= 2 && (
+              {step >= 3 && (
                 <div className="mt-4 pt-4 border-t border-brand-border">
                   <p className="text-xs font-body text-brand-muted mb-1.5">Haftungsschutz</p>
                   <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-heading font-semibold ${

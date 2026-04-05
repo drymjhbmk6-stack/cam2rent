@@ -40,9 +40,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
+
+      // Nach Login/Registrierung: Gast-Buchungen dem Konto zuweisen
+      if (
+        session?.user &&
+        (event === 'SIGNED_IN' || event === 'USER_UPDATED')
+      ) {
+        fetch('/api/claim-guest-bookings', { method: 'POST' }).catch(() => {});
+      }
     });
 
     return () => subscription.unsubscribe();

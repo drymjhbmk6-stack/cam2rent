@@ -54,6 +54,16 @@ export const DEFAULT_KAUTION_TIERS: KautionTiers = {
   3: { name: 'Kaution 3', amount: 300 },
 };
 
+// ─── Admin Product Specs ──────────────────────────────────────────────────────
+
+export interface AdminProductSpec {
+  id: string;
+  name: string;
+  value: string;
+  icon: string; // 'resolution' | 'fps' | 'water' | 'battery' | 'weight' | 'storage' | 'custom'
+  priority: number;
+}
+
 // ─── Admin Product ────────────────────────────────────────────────────────────
 
 export interface AdminProduct {
@@ -79,6 +89,10 @@ export interface AdminProduct {
   available: boolean;
   stock: number;
   imageUrl?: string;
+  /** Frei verwaltbare Specs (Name, Wert, Icon, Priorität) */
+  specs?: AdminProductSpec[];
+  /** Ausführliche Produktbeschreibung (Admin-Editor) */
+  description?: string;
 }
 
 export type AdminProducts = Record<string, AdminProduct>;

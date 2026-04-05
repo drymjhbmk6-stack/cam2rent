@@ -1,9 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import type { Product } from '@/data/products';
+import { type Product, getMergedSpecs } from '@/data/products';
 import NotifyModal from '@/components/NotifyModal';
+import SpecIcon from '@/components/SpecIcon';
 import { useFavorites } from '@/components/FavoritesProvider';
+import { useCompare } from '@/components/CompareProvider';
 import { useAuth } from '@/components/AuthProvider';
 
 interface ProductCardProps {
@@ -78,12 +80,29 @@ function BellIcon() {
   );
 }
 
+function ScalesIcon({ active }: { active: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill={active ? '#3b82f6' : 'none'}
+      stroke={active ? '#3b82f6' : 'currentColor'}
+      strokeWidth={2}
+      className="w-4 h-4"
+      aria-hidden="true"
+    >
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v17.25m0-17.25c-1.326 0-2.598.088-3.842.261C6.895 3.675 6 4.738 6 5.952v.028c0 .504.151.997.433 1.418l.233.348a1.5 1.5 0 01-.092 1.768l-.914 1.097A2.25 2.25 0 005 12.36v.028c0 .596.235 1.169.654 1.591L7.5 15.825m4.5-12.575c1.326 0 2.598.088 3.842.261 1.263.214 2.158 1.277 2.158 2.491v.028c0 .504-.151.997-.433 1.418l-.233.348a1.5 1.5 0 00.092 1.768l.914 1.097A2.25 2.25 0 0119 12.36v.028c0 .596-.235 1.169-.654 1.591L16.5 15.825" />
+    </svg>
+  );
+}
+
 export default function ProductCard({ product }: ProductCardProps) {
   const { user } = useAuth();
   const { isFavorited, toggleFavorite } = useFavorites();
+  const { addToCompare, isInCompare } = useCompare();
   const [notifyOpen, setNotifyOpen] = useState(false);
 
   const wishlisted = isFavorited(product.id);
+  const comparing = isInCompare(product.id);
   const primaryTag = product.tags[0];
 
   const handleFavorite = () => {
@@ -96,7 +115,7 @@ export default function ProductCard({ product }: ProductCardProps) {
 
   return (
     <>
-      <article className="group bg-white rounded-card shadow-card hover:shadow-card-hover hover:-translate-y-1 transition-all duration-200 overflow-hidden flex flex-col">
+      <article className="group bg-white dark:bg-gray-800 rounded-card shadow-card dark:shadow-gray-900/50 hover:shadow-card-hover hover:-translate-y-1 transition-all duration-200 overflow-hidden flex flex-col">
         {/* Image area */}
         <div className={`relative ${brandBg[product.brand]} flex items-center justify-center py-8 px-4`}>
           {/* Tag badge */}
@@ -108,16 +127,32 @@ export default function ProductCard({ product }: ProductCardProps) {
             </span>
           )}
 
-          {/* Wishlist button */}
-          <button
-            type="button"
-            onClick={handleFavorite}
-            className="absolute top-3 right-3 p-1.5 rounded-full bg-white/80 backdrop-blur-sm hover:bg-white text-brand-steel hover:text-brand-black transition-colors shadow-sm"
-            aria-label={wishlisted ? 'Von Wunschliste entfernen' : 'Zur Wunschliste hinzufügen'}
-            aria-pressed={wishlisted}
-          >
-            <HeartIcon filled={wishlisted} />
-          </button>
+          {/* Wishlist + Compare buttons */}
+          <div className="absolute top-3 right-3 flex flex-col gap-1.5">
+            <button
+              type="button"
+              onClick={handleFavorite}
+              className="p-1.5 rounded-full bg-white/80 backdrop-blur-sm hover:bg-white text-brand-steel hover:text-brand-black transition-colors shadow-sm"
+              aria-label={wishlisted ? 'Von Wunschliste entfernen' : 'Zur Wunschliste hinzufügen'}
+              aria-pressed={wishlisted}
+            >
+              <HeartIcon filled={wishlisted} />
+            </button>
+            <button
+              type="button"
+              onClick={() => addToCompare(product.id)}
+              className={`p-1.5 rounded-full backdrop-blur-sm transition-colors shadow-sm ${
+                comparing
+                  ? 'bg-accent-blue text-white'
+                  : 'bg-white/80 hover:bg-white text-brand-steel hover:text-brand-black'
+              }`}
+              aria-label={comparing ? 'Aus Vergleich entfernen' : 'Zum Vergleich hinzufügen'}
+              aria-pressed={comparing}
+              title="Vergleichen"
+            >
+              <ScalesIcon active={comparing} />
+            </button>
+          </div>
 
           <CameraIcon brand={product.brand} />
         </div>
@@ -128,12 +163,22 @@ export default function ProductCard({ product }: ProductCardProps) {
             <p className="text-xs font-body font-semibold text-accent-blue uppercase tracking-wider mb-1">
               {product.brand}
             </p>
-            <h3 className="font-heading font-semibold text-base text-brand-black leading-snug mb-1">
+            <h3 className="font-heading font-semibold text-base text-brand-black dark:text-gray-100 leading-snug mb-1">
               {product.name}
             </h3>
-            <p className="text-sm font-body text-brand-steel line-clamp-2">
+            <p className="text-sm font-body text-brand-steel dark:text-gray-400 line-clamp-2">
               {product.shortDescription}
             </p>
+          </div>
+
+          {/* Top 3 Specs */}
+          <div className="flex flex-wrap gap-2 mb-3">
+            {getMergedSpecs(product).slice(0, 3).map((spec) => (
+              <span key={spec.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-brand-bg dark:bg-gray-700 text-xs font-body text-brand-text dark:text-gray-300">
+                <SpecIcon iconId={spec.icon} className="w-3 h-3 text-brand-muted" />
+                {spec.value}
+              </span>
+            ))}
           </div>
 
           {/* Availability */}
@@ -156,17 +201,17 @@ export default function ProductCard({ product }: ProductCardProps) {
           {/* Price + CTA */}
           <div className="mt-auto">
             <div className="flex items-baseline gap-1 mb-4">
-              <span className="text-xs font-body text-brand-steel">ab</span>
-              <span className="font-heading font-bold text-xl text-brand-black">
+              <span className="text-xs font-body text-brand-steel dark:text-gray-400">ab</span>
+              <span className="font-heading font-bold text-xl text-brand-black dark:text-gray-100">
                 {product.pricePerDay.toFixed(2).replace('.', ',')} €
               </span>
-              <span className="text-xs font-body text-brand-steel">/ Tag</span>
+              <span className="text-xs font-body text-brand-steel dark:text-gray-400">/ Tag</span>
             </div>
 
             {product.available ? (
               <a
                 href={`/kameras/${product.slug}`}
-                className="block w-full text-center px-4 py-2.5 bg-brand-black text-white font-heading font-semibold text-sm rounded-[10px] hover:bg-brand-dark transition-colors"
+                className="block w-full text-center px-4 py-2.5 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold text-sm rounded-[10px] hover:bg-brand-dark dark:hover:bg-blue-600 transition-colors"
               >
                 Jetzt mieten
               </a>

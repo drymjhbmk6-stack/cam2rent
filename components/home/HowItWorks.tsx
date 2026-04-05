@@ -61,17 +61,17 @@ const colorConfig = {
 
 export default function HowItWorks() {
   return (
-    <section className="py-20 bg-white" aria-labelledby="how-it-works-heading">
+    <section className="py-20 bg-white dark:bg-gray-900" aria-labelledby="how-it-works-heading">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="text-center mb-14">
           <h2
             id="how-it-works-heading"
-            className="font-heading font-bold text-3xl sm:text-4xl text-brand-black mb-4"
+            className="font-heading font-bold text-3xl sm:text-4xl text-brand-black dark:text-gray-100 mb-4"
           >
             So funktioniert&apos;s
           </h2>
-          <p className="font-body text-brand-steel text-lg max-w-xl mx-auto">
+          <p className="font-body text-brand-steel dark:text-gray-400 text-lg max-w-xl mx-auto">
             In drei einfachen Schritten zur Action-Cam – schnell, unkompliziert und abgesichert.
           </p>
         </div>
@@ -100,10 +100,10 @@ export default function HowItWorks() {
                   </span>
                 </div>
 
-                <h3 className="font-heading font-semibold text-xl text-brand-black mb-3">
+                <h3 className="font-heading font-semibold text-xl text-brand-black dark:text-gray-100 mb-3">
                   {step.title}
                 </h3>
-                <p className="font-body text-sm text-brand-steel leading-relaxed max-w-xs">
+                <p className="font-body text-sm text-brand-steel dark:text-gray-400 leading-relaxed max-w-xs">
                   {step.description}
                 </p>
               </div>

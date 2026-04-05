@@ -38,14 +38,16 @@ export async function GET() {
     return NextResponse.json({ error: 'Nicht angemeldet.' }, { status: 401 });
   }
 
-  // Use service role to query bookings by user_id
+  // Use service role to query bookings by user_id OR customer_email
   const supabase = createServiceClient();
+  const selectFields =
+    'id, product_id, product_name, rental_from, rental_to, days, price_total, status, delivery_mode, haftung, created_at, tracking_number, tracking_url, shipped_at, return_label_url, contract_signed, contract_signed_at, original_rental_to, extended_at';
+
+  // Suche per user_id UND per E-Mail (für noch nicht verknüpfte Gast-Buchungen)
   const { data: bookings, error } = await supabase
     .from('bookings')
-    .select(
-      'id, product_id, product_name, rental_from, rental_to, days, price_total, status, delivery_mode, haftung, created_at, tracking_number, tracking_url, shipped_at, return_label_url, contract_signed, contract_signed_at, original_rental_to, extended_at'
-    )
-    .eq('user_id', user.id)
+    .select(selectFields)
+    .or(`user_id.eq.${user.id},and(customer_email.eq.${user.email},user_id.is.null)`)
     .order('created_at', { ascending: false });
 
   if (error) {

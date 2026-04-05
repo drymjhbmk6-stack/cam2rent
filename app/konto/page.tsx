@@ -41,32 +41,16 @@ function ReferralSection({ userId }: { userId: string }) {
           </svg>
         </div>
         <div>
-          <h2 className="font-heading font-semibold text-brand-black">
-            Freunde einladen
-          </h2>
-          <p className="text-xs text-brand-steel">
-            Empfehle cam2rent weiter und erhalte {rewardValue} € Gutschein pro Buchung
-          </p>
+          <h2 className="font-heading font-semibold text-brand-black">Freunde einladen</h2>
+          <p className="text-xs text-brand-steel">Empfehle cam2rent weiter und erhalte {rewardValue} € Gutschein pro Buchung</p>
         </div>
       </div>
-
-      {/* Referral link */}
       <div className="flex gap-2 mb-4">
-        <input
-          type="text"
-          readOnly
-          value={referralUrl}
-          className="flex-1 px-3 py-2.5 rounded-[10px] border border-brand-border bg-brand-bg text-brand-black text-sm font-mono"
-        />
-        <button
-          onClick={handleCopy}
-          className="px-4 py-2.5 rounded-[10px] bg-brand-black text-white text-sm font-heading font-semibold hover:bg-brand-dark transition-colors flex-shrink-0"
-        >
+        <input type="text" readOnly value={referralUrl} className="flex-1 px-3 py-2.5 rounded-[10px] border border-brand-border bg-brand-bg text-brand-black text-sm font-mono" />
+        <button onClick={handleCopy} className="px-4 py-2.5 rounded-[10px] bg-brand-black text-white text-sm font-heading font-semibold hover:bg-brand-dark transition-colors flex-shrink-0">
           {copied ? 'Kopiert!' : 'Kopieren'}
         </button>
       </div>
-
-      {/* Stats */}
       {stats && (
         <div className="grid grid-cols-3 gap-3">
           <div className="text-center p-3 rounded-[10px] bg-brand-bg">
@@ -87,6 +71,81 @@ function ReferralSection({ userId }: { userId: string }) {
   );
 }
 
+const dashboardCards = [
+  {
+    href: '/konto/uebersicht',
+    title: 'Kontoübersicht',
+    description: 'Profil, E-Mail, Passwort und Verifizierung',
+    icon: (
+      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+      </svg>
+    ),
+    color: 'accent-blue',
+  },
+  {
+    href: '/konto/buchungen',
+    title: 'Meine Buchungen',
+    description: 'Aktive und vergangene Buchungen einsehen',
+    icon: (
+      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+      </svg>
+    ),
+    color: 'accent-teal',
+  },
+  {
+    href: '/konto/reklamation',
+    title: 'Schaden melden',
+    description: 'Schadensmeldung einreichen mit Fotos',
+    icon: (
+      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+      </svg>
+    ),
+    color: 'accent-amber',
+  },
+  {
+    href: '/konto/feedback',
+    title: 'Feedback',
+    description: 'Bewertungen und Rückmeldungen verwalten',
+    icon: (
+      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+      </svg>
+    ),
+    color: 'accent-blue',
+  },
+  {
+    href: '/konto/favoriten',
+    title: 'Favoriten',
+    description: 'Gemerkte Kameras und Zubehör',
+    icon: (
+      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
+      </svg>
+    ),
+    color: 'accent-teal',
+  },
+  {
+    href: '/konto/nachrichten',
+    title: 'Nachrichten',
+    description: 'Direkter Kontakt mit dem cam2rent-Team',
+    icon: (
+      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+      </svg>
+    ),
+    color: 'accent-amber',
+  },
+];
+
+const colorMap: Record<string, { bg: string; text: string; hoverBg: string }> = {
+  'accent-blue': { bg: 'bg-accent-blue-soft', text: 'text-accent-blue', hoverBg: 'group-hover:bg-accent-blue' },
+  'accent-teal': { bg: 'bg-accent-teal-soft', text: 'text-accent-teal', hoverBg: 'group-hover:bg-accent-teal' },
+  'accent-amber': { bg: 'bg-accent-amber-soft', text: 'text-accent-amber', hoverBg: 'group-hover:bg-accent-amber' },
+};
+
 function KontoOverview() {
   const { user } = useAuth();
   const searchParams = useSearchParams();
@@ -95,78 +154,9 @@ function KontoOverview() {
   const displayName =
     user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'dort';
 
-  const quickLinks = [
-    {
-      href: '/konto/buchungen',
-      icon: (
-        <svg
-          className="w-6 h-6"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
-          />
-        </svg>
-      ),
-      title: 'Meine Buchungen',
-      description: 'Aktive und vergangene Buchungen einsehen',
-    },
-    {
-      href: '/konto/profil',
-      icon: (
-        <svg
-          className="w-6 h-6"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-          />
-        </svg>
-      ),
-      title: 'Profil bearbeiten',
-      description: 'Name, Adresse und Telefonnummer anpassen',
-    },
-    {
-      href: '/kameras',
-      icon: (
-        <svg
-          className="w-6 h-6"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"
-          />
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"
-          />
-        </svg>
-      ),
-      title: 'Kamera mieten',
-      description: 'Alle Action-Cams entdecken und buchen',
-    },
-  ];
-
   return (
     <div className="space-y-6">
-      {/* Success message */}
+      {/* Success messages */}
       {successMsg === 'passwort-geaendert' && (
         <div className="p-4 rounded-[10px] bg-green-50 border border-green-200 text-status-success text-sm">
           Dein Passwort wurde erfolgreich geändert.
@@ -181,70 +171,33 @@ function KontoOverview() {
       {/* Welcome */}
       <div className="bg-white rounded-card shadow-card p-6">
         <h1 className="font-heading font-bold text-2xl text-brand-black mb-1">
-          Hallo, {displayName}!
+          Willkommen, {displayName}!
         </h1>
         <p className="text-brand-text text-sm">
-          Hier kannst du deine Buchungen verwalten und dein Profil bearbeiten.
+          Verwalte deine Buchungen, dein Profil und alles rund um dein Konto.
         </p>
       </div>
 
-      {/* Account info */}
-      <div className="bg-white rounded-card shadow-card p-6">
-        <h2 className="font-heading font-semibold text-brand-black mb-4">
-          Kontoinformationen
-        </h2>
-        <div className="space-y-3">
-          <div className="flex items-center justify-between py-2 border-b border-brand-border">
-            <span className="text-sm text-brand-steel">E-Mail</span>
-            <span className="text-sm font-medium text-brand-black">
-              {user?.email}
-            </span>
-          </div>
-          <div className="flex items-center justify-between py-2 border-b border-brand-border">
-            <span className="text-sm text-brand-steel">Name</span>
-            <span className="text-sm font-medium text-brand-black">
-              {user?.user_metadata?.full_name || (
-                <Link
-                  href="/konto/profil"
-                  className="text-accent-blue hover:underline"
-                >
-                  Jetzt eintragen
-                </Link>
-              )}
-            </span>
-          </div>
-          <div className="flex items-center justify-between py-2">
-            <span className="text-sm text-brand-steel">Konto erstellt</span>
-            <span className="text-sm font-medium text-brand-black">
-              {user?.created_at
-                ? new Date(user.created_at).toLocaleDateString('de-DE', {
-                    day: '2-digit',
-                    month: 'long',
-                    year: 'numeric',
-                  })
-                : '–'}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Quick links */}
-      <div className="grid sm:grid-cols-3 gap-4">
-        {quickLinks.map((link) => (
-          <Link
-            key={link.href}
-            href={link.href}
-            className="bg-white rounded-card shadow-card p-5 hover:shadow-card-hover transition-shadow group"
-          >
-            <div className="w-10 h-10 rounded-[10px] bg-accent-blue-soft flex items-center justify-center mb-3 text-accent-blue group-hover:bg-accent-blue group-hover:text-white transition-colors">
-              {link.icon}
-            </div>
-            <h3 className="font-heading font-semibold text-brand-black text-sm mb-1">
-              {link.title}
-            </h3>
-            <p className="text-xs text-brand-steel">{link.description}</p>
-          </Link>
-        ))}
+      {/* Navigation cards */}
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {dashboardCards.map((card) => {
+          const colors = colorMap[card.color] ?? colorMap['accent-blue'];
+          return (
+            <Link
+              key={card.href}
+              href={card.href}
+              className="bg-white rounded-card shadow-card p-5 hover:shadow-card-hover transition-shadow group"
+            >
+              <div className={`w-10 h-10 rounded-[10px] ${colors.bg} flex items-center justify-center mb-3 ${colors.text} ${colors.hoverBg} group-hover:text-white transition-colors`}>
+                {card.icon}
+              </div>
+              <h3 className="font-heading font-semibold text-brand-black text-sm mb-1">
+                {card.title}
+              </h3>
+              <p className="text-xs text-brand-steel">{card.description}</p>
+            </Link>
+          );
+        })}
       </div>
 
       {/* Referral program */}

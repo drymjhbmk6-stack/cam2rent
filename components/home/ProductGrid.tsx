@@ -19,13 +19,13 @@ export default function ProductGrid() {
   });
 
   return (
-    <section className="py-20 bg-brand-bg" aria-labelledby="products-heading">
+    <section className="py-20 bg-brand-bg dark:bg-gray-950" aria-labelledby="products-heading">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header row */}
         <div className="flex items-center justify-between mb-8">
           <h2
             id="products-heading"
-            className="font-heading font-bold text-3xl sm:text-4xl text-brand-black"
+            className="font-heading font-bold text-3xl sm:text-4xl text-brand-black dark:text-gray-100"
           >
             Unsere Kameras
           </h2>
@@ -51,8 +51,8 @@ export default function ProductGrid() {
                 onClick={() => setActiveBrand(brand)}
                 className={`px-4 py-2 rounded-full text-sm font-body font-medium transition-colors ${
                   activeBrand === brand
-                    ? 'bg-brand-black text-white shadow-sm'
-                    : 'bg-white text-brand-steel border border-brand-border hover:border-brand-muted hover:text-brand-text'
+                    ? 'bg-brand-black dark:bg-accent-blue text-white shadow-sm'
+                    : 'bg-white dark:bg-gray-800 text-brand-steel dark:text-gray-400 border border-brand-border dark:border-gray-600 hover:border-brand-muted dark:hover:border-gray-500 hover:text-brand-text dark:hover:text-gray-200'
                 }`}
                 aria-pressed={activeBrand === brand}
               >
@@ -65,7 +65,7 @@ export default function ProductGrid() {
           <div className="ml-auto flex items-center gap-2">
             <label
               htmlFor="available-toggle"
-              className="text-sm font-body text-brand-steel cursor-pointer select-none"
+              className="text-sm font-body text-brand-steel dark:text-gray-400 cursor-pointer select-none"
             >
               Nur Verfügbare
             </label>

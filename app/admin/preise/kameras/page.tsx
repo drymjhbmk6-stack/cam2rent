@@ -4,11 +4,21 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { DEFAULT_ADMIN_PRODUCTS, type AdminProduct } from '@/lib/price-config';
 
+interface UtilizationData {
+  id: string;
+  utilization: number;
+  bookedDays: number;
+  totalDays: number;
+  revenue: number;
+  bookingCount: number;
+}
+
 export default function AdminKameraListePage() {
   const [products, setProducts] = useState<AdminProduct[]>([]);
   const [allProducts, setAllProducts] = useState<Record<string, AdminProduct>>({});
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [utilization, setUtilization] = useState<Record<string, UtilizationData>>({});
 
   useEffect(() => {
     fetch('/api/admin/config?key=products')
@@ -23,6 +33,18 @@ export default function AdminKameraListePage() {
         setProducts(Object.values(DEFAULT_ADMIN_PRODUCTS));
       })
       .finally(() => setLoading(false));
+
+    // Auslastungsdaten laden
+    fetch('/api/admin/utilization?days=30')
+      .then((r) => r.json())
+      .then((data: { products: UtilizationData[] }) => {
+        const map: Record<string, UtilizationData> = {};
+        for (const p of data.products ?? []) {
+          map[p.id] = p;
+        }
+        setUtilization(map);
+      })
+      .catch(() => { /* Auslastung optional */ });
   }, []);
 
   async function handleDelete(product: AdminProduct) {
@@ -92,6 +114,36 @@ export default function AdminKameraListePage() {
                 </Link>
 
                 <div className="flex items-center gap-4 shrink-0">
+                  {/* Auslastung */}
+                  {utilization[p.id] != null && (
+                    <div className="hidden sm:flex flex-col items-end w-24">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <span className={`text-xs font-heading font-bold ${
+                          utilization[p.id].utilization >= 70
+                            ? 'text-green-600'
+                            : utilization[p.id].utilization >= 40
+                            ? 'text-yellow-600'
+                            : 'text-red-500'
+                        }`}>
+                          {utilization[p.id].utilization}%
+                        </span>
+                        <span className="text-[10px] font-body text-brand-muted">Auslastung</span>
+                      </div>
+                      <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${
+                            utilization[p.id].utilization >= 70
+                              ? 'bg-green-500'
+                              : utilization[p.id].utilization >= 40
+                              ? 'bg-yellow-500'
+                              : 'bg-red-500'
+                          }`}
+                          style={{ width: `${Math.min(100, utilization[p.id].utilization)}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
                   <div className="text-right hidden sm:block">
                     <p className="text-xs font-body text-brand-muted">Tag 1 / Tag 30</p>
                     <p className="text-sm font-heading font-semibold text-brand-black">

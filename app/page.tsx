@@ -1,5 +1,6 @@
 import Hero from '@/components/home/Hero';
 import ProductGrid from '@/components/home/ProductGrid';
+import KameraFinderCta from '@/components/home/KameraFinderCta';
 import TrustBanner from '@/components/home/TrustBanner';
 import HowItWorks from '@/components/home/HowItWorks';
 import CtaBanner from '@/components/home/CtaBanner';
@@ -9,6 +10,7 @@ export default function Home() {
     <>
       <Hero />
       <ProductGrid />
+      <KameraFinderCta />
       <TrustBanner />
       <HowItWorks />
       <CtaBanner />

@@ -140,9 +140,9 @@ export default function SearchModal({
 
       {/* Modal */}
       <div className="fixed inset-x-0 top-[15%] z-[101] flex justify-center px-4 animate-fadeIn">
-        <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-brand-border overflow-hidden">
+        <div className="w-full max-w-lg bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-brand-border dark:border-gray-700 overflow-hidden">
           {/* Search input */}
-          <div className="flex items-center gap-3 px-4 py-3 border-b border-brand-border">
+          <div className="flex items-center gap-3 px-4 py-3 border-b border-brand-border dark:border-gray-700">
             <svg
               className="w-5 h-5 text-brand-steel flex-shrink-0"
               fill="none"
@@ -163,10 +163,10 @@ export default function SearchModal({
               onChange={(e) => handleChange(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Kamera, Zubehoer oder Set suchen..."
-              className="flex-1 text-sm font-body text-brand-black placeholder:text-brand-muted outline-none bg-transparent"
+              className="flex-1 text-sm font-body text-brand-black dark:text-gray-100 placeholder:text-brand-muted dark:placeholder:text-gray-500 outline-none bg-transparent"
               autoComplete="off"
             />
-            <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-mono text-brand-muted bg-brand-bg border border-brand-border rounded">
+            <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-mono text-brand-muted dark:text-gray-500 bg-brand-bg dark:bg-gray-700 border border-brand-border dark:border-gray-600 rounded">
               ESC
             </kbd>
           </div>

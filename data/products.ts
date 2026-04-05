@@ -91,6 +91,35 @@ export interface Product {
   slug: string;
 }
 
+// ─── Specs helper ─────────────────────────────────────────────────────────────
+
+import type { AdminProductSpec } from '@/lib/price-config';
+
+const STATIC_SPEC_MAP: Record<string, { icon: string; label: string }> = {
+  resolution: { icon: 'resolution', label: 'Auflösung' },
+  fps: { icon: 'fps', label: 'FPS' },
+  waterproof: { icon: 'water', label: 'Wasserdicht' },
+  battery: { icon: 'battery', label: 'Akku' },
+  weight: { icon: 'weight', label: 'Gewicht' },
+  storage: { icon: 'storage', label: 'Speicher' },
+};
+
+/**
+ * Gibt Admin-Specs zurück wenn vorhanden, sonst konvertiert die
+ * statischen 6 Spec-Felder in das AdminProductSpec-Format.
+ */
+export function getMergedSpecs(product: Product, adminSpecs?: AdminProductSpec[]): AdminProductSpec[] {
+  if (adminSpecs?.length) return [...adminSpecs].sort((a, b) => a.priority - b.priority);
+
+  return Object.entries(product.specs).map(([key, value], i) => ({
+    id: key,
+    name: STATIC_SPEC_MAP[key]?.label ?? key,
+    value,
+    icon: STATIC_SPEC_MAP[key]?.icon ?? 'custom',
+    priority: i,
+  }));
+}
+
 // ─── Products ─────────────────────────────────────────────────────────────────
 
 export const products: Product[] = [

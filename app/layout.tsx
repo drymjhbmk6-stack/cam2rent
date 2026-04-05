@@ -4,12 +4,17 @@ import './globals.css';
 import { AuthProvider } from '@/components/AuthProvider';
 import { CartProvider } from '@/components/CartProvider';
 import { FavoritesProvider } from '@/components/FavoritesProvider';
+import { CompareProvider } from '@/components/CompareProvider';
 import PageTracker from '@/components/PageTracker';
 import ShopShell from '@/components/ShopShell';
 import CookieBanner from '@/components/CookieBanner';
 import ServiceWorkerRegistration from '@/components/ServiceWorkerRegistration';
 import InstallPrompt from '@/components/InstallPrompt';
+import ThemeProvider from '@/components/ThemeProvider';
 import { Suspense } from 'react';
+
+// Script das vor React-Hydration die dark-Klasse setzt (kein Flackern)
+const themeScript = `(function(){try{var t=localStorage.getItem('cam2rent_theme');if(t==='dark'||(t!=='light'&&window.matchMedia('(prefers-color-scheme:dark)').matches)){document.documentElement.classList.add('dark')}}catch(e){}})();`;
 
 const sora = Sora({
   subsets: ['latin'],
@@ -59,21 +64,28 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="de" className={`${sora.variable} ${dmSans.variable}`}>
-      <body className="font-body antialiased">
-        <AuthProvider>
-          <FavoritesProvider>
-            <CartProvider>
-              <Suspense fallback={null}>
-                <PageTracker />
-              </Suspense>
-              <ShopShell>{children}</ShopShell>
-              <CookieBanner />
-              <ServiceWorkerRegistration />
-              <InstallPrompt />
-            </CartProvider>
-          </FavoritesProvider>
-        </AuthProvider>
+    <html lang="de" className={`${sora.variable} ${dmSans.variable}`} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+      </head>
+      <body className="font-body antialiased bg-white dark:bg-gray-900 text-brand-text dark:text-gray-300 transition-colors duration-200">
+        <ThemeProvider>
+          <AuthProvider>
+            <FavoritesProvider>
+              <CompareProvider>
+                <CartProvider>
+                  <Suspense fallback={null}>
+                    <PageTracker />
+                  </Suspense>
+                  <ShopShell>{children}</ShopShell>
+                  <CookieBanner />
+                  <ServiceWorkerRegistration />
+                  <InstallPrompt />
+                </CartProvider>
+              </CompareProvider>
+            </FavoritesProvider>
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

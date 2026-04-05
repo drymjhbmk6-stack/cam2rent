@@ -7,9 +7,13 @@ import {
   DEFAULT_ADMIN_PRODUCTS,
   DEFAULT_KAUTION_TIERS,
   type AdminProduct,
+  type AdminProductSpec,
   type KautionTiers,
   calcPriceFromTable,
 } from '@/lib/price-config';
+import { SPEC_ICON_OPTIONS } from '@/components/SpecIcon';
+import ProductPreview from '@/components/ProductPreview';
+import MarkdownEditor from '@/components/MarkdownEditor';
 
 const BRANDS = ['GoPro', 'DJI', 'Insta360', 'Sonstige'];
 
@@ -64,6 +68,51 @@ export default function AdminKameraEditorPage() {
     });
   }
 
+  // ── Specs helpers ──────────────────────────────────────────────────────────
+  function addSpec() {
+    setProduct((p) => {
+      if (!p) return p;
+      const specs = p.specs ? [...p.specs] : [];
+      specs.push({
+        id: crypto.randomUUID(),
+        name: '',
+        value: '',
+        icon: 'custom',
+        priority: specs.length,
+      });
+      return { ...p, specs };
+    });
+  }
+
+  function updateSpec(index: number, patch: Partial<AdminProductSpec>) {
+    setProduct((p) => {
+      if (!p || !p.specs) return p;
+      const specs = [...p.specs];
+      specs[index] = { ...specs[index], ...patch };
+      return { ...p, specs };
+    });
+  }
+
+  function removeSpec(index: number) {
+    setProduct((p) => {
+      if (!p || !p.specs) return p;
+      const specs = p.specs.filter((_, i) => i !== index).map((s, i) => ({ ...s, priority: i }));
+      return { ...p, specs };
+    });
+  }
+
+  function moveSpec(index: number, direction: 'up' | 'down') {
+    setProduct((p) => {
+      if (!p || !p.specs) return p;
+      const specs = [...p.specs];
+      const target = direction === 'up' ? index - 1 : index + 1;
+      if (target < 0 || target >= specs.length) return p;
+      [specs[index], specs[target]] = [specs[target], specs[index]];
+      const reindexed = specs.map((s, i) => ({ ...s, priority: i }));
+      return { ...p, specs: reindexed };
+    });
+  }
+
   async function handleSave() {
     if (!product) return;
     setSaving(true);
@@ -104,10 +153,13 @@ export default function AdminKameraEditorPage() {
 
   const day30Price = product.priceTable[29] ?? 0;
   const day31Preview = day30Price + product.perDayAfter30;
+  const kautionAmount = !product.hasHaftungsoption && product.kautionTier
+    ? kautionTiers[product.kautionTier]?.amount
+    : undefined;
 
   return (
     <div className="min-h-screen bg-brand-bg">
-      <div className="max-w-4xl mx-auto px-6 py-8">
+      <div className="max-w-7xl mx-auto px-6 py-8">
         {/* Header */}
         <div className="flex items-center justify-between mb-8 flex-wrap gap-3">
           <div className="flex items-center gap-2">
@@ -134,172 +186,284 @@ export default function AdminKameraEditorPage() {
           </div>
         </div>
 
-        <div className="space-y-6">
+        {/* Two-column layout: Editor + Preview */}
+        <div className="flex flex-col xl:flex-row gap-6">
 
-          {/* Stammdaten */}
-          <div className="bg-white rounded-2xl border border-brand-border p-6">
-            <h2 className="font-heading font-bold text-sm text-brand-black mb-4">Stammdaten</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Name</label>
-                <input type="text" value={product.name}
-                  onChange={(e) => setProduct((p) => p && ({ ...p, name: e.target.value }))}
-                  className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
-              </div>
-              <div>
-                <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Marke</label>
-                <select value={product.brand}
-                  onChange={(e) => setProduct((p) => p && ({ ...p, brand: e.target.value }))}
-                  className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue">
-                  {BRANDS.map((b) => <option key={b} value={b}>{b}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Kurzbeschreibung</label>
-                <input type="text" value={product.shortDescription}
-                  onChange={(e) => setProduct((p) => p && ({ ...p, shortDescription: e.target.value }))}
-                  className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
-              </div>
-              <div>
-                <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">URL-Slug</label>
-                <input type="text" value={product.slug}
-                  onChange={(e) => setProduct((p) => p && ({ ...p, slug: e.target.value }))}
-                  placeholder="z.B. gopro-hero-13-black"
-                  className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
-              </div>
-              <div className="flex items-center gap-4">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={product.available}
-                    onChange={(e) => setProduct((p) => p && ({ ...p, available: e.target.checked }))}
-                    className="w-4 h-4 rounded border-brand-border" />
-                  <span className="text-sm font-body text-brand-black">Verfügbar</span>
-                </label>
-              </div>
-              <div>
-                <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Lagerbestand</label>
-                <input type="number" min="0" value={product.stock}
-                  onChange={(e) => setProduct((p) => p && ({ ...p, stock: parseInt(e.target.value) || 0 }))}
-                  className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
-              </div>
-            </div>
-          </div>
+          {/* Left: Editor form */}
+          <div className="flex-1 min-w-0 space-y-6">
 
-          {/* Haftung / Kaution */}
-          <div className="bg-white rounded-2xl border border-brand-border p-6">
-            <h2 className="font-heading font-bold text-sm text-brand-black mb-1">Haftung & Kaution</h2>
-            <p className="text-xs font-body text-brand-muted mb-4">Entweder Haftungsoption (Standard/Premium) oder eine Kaution-Stufe — nicht beides.</p>
-
-            <div className="space-y-3">
-              {/* Haftungsoption */}
-              <label className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-colors ${product.hasHaftungsoption ? 'border-accent-blue bg-accent-blue-soft/20' : 'border-brand-border hover:border-brand-muted'}`}>
-                <input type="radio" name="liability" checked={product.hasHaftungsoption}
-                  onChange={() => setProduct((p) => p && ({ ...p, hasHaftungsoption: true, kautionTier: null }))}
-                  className="sr-only" />
-                <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${product.hasHaftungsoption ? 'border-accent-blue' : 'border-brand-border'}`}>
-                  {product.hasHaftungsoption && <div className="w-2 h-2 rounded-full bg-accent-blue" />}
+            {/* Stammdaten */}
+            <div className="bg-white rounded-2xl border border-brand-border p-6">
+              <h2 className="font-heading font-bold text-sm text-brand-black mb-4">Stammdaten</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Name</label>
+                  <input type="text" value={product.name}
+                    onChange={(e) => setProduct((p) => p && ({ ...p, name: e.target.value }))}
+                    className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
                 </div>
                 <div>
-                  <p className="text-sm font-heading font-semibold text-brand-black">Haftungsoption (Standard / Premium)</p>
-                  <p className="text-xs font-body text-brand-muted">Kunden können Standard- oder Premium-Haftungsschutz wählen</p>
+                  <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Marke</label>
+                  <select value={product.brand}
+                    onChange={(e) => setProduct((p) => p && ({ ...p, brand: e.target.value }))}
+                    className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue">
+                    {BRANDS.map((b) => <option key={b} value={b}>{b}</option>)}
+                  </select>
                 </div>
-              </label>
+                <div>
+                  <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Kurzbeschreibung</label>
+                  <input type="text" value={product.shortDescription}
+                    onChange={(e) => setProduct((p) => p && ({ ...p, shortDescription: e.target.value }))}
+                    className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
+                </div>
+                <div>
+                  <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">URL-Slug</label>
+                  <input type="text" value={product.slug}
+                    onChange={(e) => setProduct((p) => p && ({ ...p, slug: e.target.value }))}
+                    placeholder="z.B. gopro-hero-13-black"
+                    className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Ausführliche Beschreibung (Markdown)</label>
+                  <MarkdownEditor
+                    value={product.description ?? ''}
+                    onChange={(v) => setProduct((p) => p && ({ ...p, description: v }))}
+                    placeholder="Detaillierte Produktbeschreibung für die Produktseite… (Markdown unterstützt)"
+                  />
+                </div>
+                <div className="flex items-center gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={product.available}
+                      onChange={(e) => setProduct((p) => p && ({ ...p, available: e.target.checked }))}
+                      className="w-4 h-4 rounded border-brand-border" />
+                    <span className="text-sm font-body text-brand-black">Verfügbar</span>
+                  </label>
+                </div>
+                <div>
+                  <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Lagerbestand</label>
+                  <input type="number" min="0" value={product.stock}
+                    onChange={(e) => setProduct((p) => p && ({ ...p, stock: parseInt(e.target.value) || 0 }))}
+                    className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
+                </div>
+              </div>
+            </div>
 
-              {/* Kaution Tiers */}
-              {([1, 2, 3] as const).map((tier) => (
-                <label key={tier} className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-colors ${!product.hasHaftungsoption && product.kautionTier === tier ? 'border-accent-blue bg-accent-blue-soft/20' : 'border-brand-border hover:border-brand-muted'}`}>
-                  <input type="radio" name="liability"
-                    checked={!product.hasHaftungsoption && product.kautionTier === tier}
-                    onChange={() => setProduct((p) => p && ({ ...p, hasHaftungsoption: false, kautionTier: tier }))}
+            {/* Haftung / Kaution */}
+            <div className="bg-white rounded-2xl border border-brand-border p-6">
+              <h2 className="font-heading font-bold text-sm text-brand-black mb-1">Haftung & Kaution</h2>
+              <p className="text-xs font-body text-brand-muted mb-4">Entweder Haftungsoption (Standard/Premium) oder eine Kaution-Stufe — nicht beides.</p>
+
+              <div className="space-y-3">
+                {/* Haftungsoption */}
+                <label className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-colors ${product.hasHaftungsoption ? 'border-accent-blue bg-accent-blue-soft/20' : 'border-brand-border hover:border-brand-muted'}`}>
+                  <input type="radio" name="liability" checked={product.hasHaftungsoption}
+                    onChange={() => setProduct((p) => p && ({ ...p, hasHaftungsoption: true, kautionTier: null }))}
                     className="sr-only" />
-                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${!product.hasHaftungsoption && product.kautionTier === tier ? 'border-accent-blue' : 'border-brand-border'}`}>
-                    {!product.hasHaftungsoption && product.kautionTier === tier && <div className="w-2 h-2 rounded-full bg-accent-blue" />}
+                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${product.hasHaftungsoption ? 'border-accent-blue' : 'border-brand-border'}`}>
+                    {product.hasHaftungsoption && <div className="w-2 h-2 rounded-full bg-accent-blue" />}
                   </div>
                   <div>
-                    <p className="text-sm font-heading font-semibold text-brand-black">
-                      {kautionTiers[tier].name} — {kautionTiers[tier].amount} €
-                    </p>
-                    <p className="text-xs font-body text-brand-muted">Kaution-Stufe {tier}</p>
+                    <p className="text-sm font-heading font-semibold text-brand-black">Haftungsoption (Standard / Premium)</p>
+                    <p className="text-xs font-body text-brand-muted">Kunden können Standard- oder Premium-Haftungsschutz wählen</p>
                   </div>
                 </label>
-              ))}
+
+                {/* Kaution Tiers */}
+                {([1, 2, 3] as const).map((tier) => (
+                  <label key={tier} className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-colors ${!product.hasHaftungsoption && product.kautionTier === tier ? 'border-accent-blue bg-accent-blue-soft/20' : 'border-brand-border hover:border-brand-muted'}`}>
+                    <input type="radio" name="liability"
+                      checked={!product.hasHaftungsoption && product.kautionTier === tier}
+                      onChange={() => setProduct((p) => p && ({ ...p, hasHaftungsoption: false, kautionTier: tier }))}
+                      className="sr-only" />
+                    <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${!product.hasHaftungsoption && product.kautionTier === tier ? 'border-accent-blue' : 'border-brand-border'}`}>
+                      {!product.hasHaftungsoption && product.kautionTier === tier && <div className="w-2 h-2 rounded-full bg-accent-blue" />}
+                    </div>
+                    <div>
+                      <p className="text-sm font-heading font-semibold text-brand-black">
+                        {kautionTiers[tier].name} — {kautionTiers[tier].amount} €
+                      </p>
+                      <p className="text-xs font-body text-brand-muted">Kaution-Stufe {tier}</p>
+                    </div>
+                  </label>
+                ))}
+              </div>
             </div>
-          </div>
 
-          {/* Preistabelle Tag 1–30 */}
-          <div className="bg-white rounded-2xl border border-brand-border p-6">
-            <h2 className="font-heading font-bold text-sm text-brand-black mb-1">Preistabelle: Tag 1–30</h2>
-            <p className="text-xs font-body text-brand-muted mb-5">Jeden Tag einzeln festlegen (Gesamtpreis in €)</p>
+            {/* Technische Daten (Specs Editor) */}
+            <div className="bg-white rounded-2xl border border-brand-border p-6">
+              <h2 className="font-heading font-bold text-sm text-brand-black mb-1">Technische Daten</h2>
+              <p className="text-xs font-body text-brand-muted mb-4">Specs die auf der Produktseite angezeigt werden. Reihenfolge per Pfeiltasten ändern.</p>
 
-            <div className="grid grid-cols-5 sm:grid-cols-6 gap-2">
-              {Array.from({ length: 30 }, (_, i) => {
-                const day = i + 1;
-                const price = product.priceTable[i] ?? 0;
-                return (
-                  <div key={day}>
-                    <label className="block text-xs font-heading font-semibold text-brand-muted mb-1 text-center">
-                      {day}T
-                    </label>
+              <div className="space-y-2">
+                {(product.specs ?? []).map((spec, index) => (
+                  <div key={spec.id} className="flex items-center gap-2 p-2.5 rounded-xl border border-brand-border bg-brand-bg">
+                    {/* Reorder buttons */}
+                    <div className="flex flex-col gap-0.5">
+                      <button
+                        type="button"
+                        onClick={() => moveSpec(index, 'up')}
+                        disabled={index === 0}
+                        className="px-1 py-0.5 text-[10px] text-brand-muted hover:text-brand-black disabled:opacity-30 transition-colors"
+                        title="Nach oben"
+                      >
+                        &#9650;
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => moveSpec(index, 'down')}
+                        disabled={index === (product.specs?.length ?? 0) - 1}
+                        className="px-1 py-0.5 text-[10px] text-brand-muted hover:text-brand-black disabled:opacity-30 transition-colors"
+                        title="Nach unten"
+                      >
+                        &#9660;
+                      </button>
+                    </div>
+
+                    {/* Icon dropdown */}
+                    <select
+                      value={spec.icon}
+                      onChange={(e) => updateSpec(index, { icon: e.target.value })}
+                      className="w-28 px-2 py-1.5 border border-brand-border rounded-[8px] text-xs font-body bg-white focus:outline-none focus:ring-2 focus:ring-accent-blue"
+                    >
+                      {SPEC_ICON_OPTIONS.map((opt) => (
+                        <option key={opt.id} value={opt.id}>{opt.label}</option>
+                      ))}
+                    </select>
+
+                    {/* Name input */}
                     <input
-                      type="number"
-                      min="0"
-                      step="1"
-                      value={price}
-                      onChange={(e) => setTableDay(day, parseFloat(e.target.value) || 0)}
-                      className="w-full px-1.5 py-2 border border-brand-border rounded-[8px] text-sm font-body text-center focus:outline-none focus:ring-2 focus:ring-accent-blue"
+                      type="text"
+                      value={spec.name}
+                      onChange={(e) => updateSpec(index, { name: e.target.value })}
+                      placeholder="Name"
+                      className="flex-1 min-w-0 px-2 py-1.5 border border-brand-border rounded-[8px] text-xs font-body focus:outline-none focus:ring-2 focus:ring-accent-blue"
                     />
-                  </div>
-                );
-              })}
-            </div>
-          </div>
 
-          {/* 31+ Tage Formel */}
-          <div className="bg-white rounded-2xl border border-brand-border p-6">
-            <h2 className="font-heading font-bold text-sm text-brand-black mb-1">31+ Tage</h2>
-            <p className="text-xs font-body text-brand-muted mb-4">
-              Preis = Tag-30-Preis + (Tage − 30) × Preis pro Zusatztag
-            </p>
-            <div className="flex items-end gap-4">
-              <div className="w-40">
-                <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Preis pro Zusatztag</label>
-                <div className="relative">
-                  <input type="number" min="0" step="0.50" value={product.perDayAfter30}
-                    onChange={(e) => setProduct((p) => p && ({ ...p, perDayAfter30: parseFloat(e.target.value) || 0 }))}
-                    className="w-full pr-8 pl-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-brand-muted pointer-events-none">€</span>
+                    {/* Value input */}
+                    <input
+                      type="text"
+                      value={spec.value}
+                      onChange={(e) => updateSpec(index, { value: e.target.value })}
+                      placeholder="Wert"
+                      className="flex-1 min-w-0 px-2 py-1.5 border border-brand-border rounded-[8px] text-xs font-body focus:outline-none focus:ring-2 focus:ring-accent-blue"
+                    />
+
+                    {/* Delete button */}
+                    <button
+                      type="button"
+                      onClick={() => removeSpec(index)}
+                      className="px-2 py-1.5 text-xs text-red-500 hover:text-red-700 hover:bg-red-50 rounded-[8px] transition-colors"
+                      title="Spec entfernen"
+                    >
+                      &#10005;
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                onClick={addSpec}
+                className="mt-3 px-4 py-2 text-xs font-heading font-semibold text-accent-blue border border-accent-blue/30 rounded-btn hover:bg-accent-blue-soft/20 transition-colors"
+              >
+                + Spec hinzufügen
+              </button>
+            </div>
+
+            {/* Preistabelle Tag 1-30 */}
+            <div className="bg-white rounded-2xl border border-brand-border p-6">
+              <h2 className="font-heading font-bold text-sm text-brand-black mb-1">Preistabelle: Tag 1–30</h2>
+              <p className="text-xs font-body text-brand-muted mb-5">Jeden Tag einzeln festlegen (Gesamtpreis in €)</p>
+
+              <div className="grid grid-cols-5 sm:grid-cols-6 gap-2">
+                {Array.from({ length: 30 }, (_, i) => {
+                  const day = i + 1;
+                  const price = product.priceTable[i] ?? 0;
+                  return (
+                    <div key={day}>
+                      <label className="block text-xs font-heading font-semibold text-brand-muted mb-1 text-center">
+                        {day}T
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={price}
+                        onChange={(e) => setTableDay(day, parseFloat(e.target.value) || 0)}
+                        className="w-full px-1.5 py-2 border border-brand-border rounded-[8px] text-sm font-body text-center focus:outline-none focus:ring-2 focus:ring-accent-blue"
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 31+ Tage Formel */}
+            <div className="bg-white rounded-2xl border border-brand-border p-6">
+              <h2 className="font-heading font-bold text-sm text-brand-black mb-1">31+ Tage</h2>
+              <p className="text-xs font-body text-brand-muted mb-4">
+                Preis = Tag-30-Preis + (Tage − 30) × Preis pro Zusatztag
+              </p>
+              <div className="flex items-end gap-4">
+                <div className="w-40">
+                  <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Preis pro Zusatztag</label>
+                  <div className="relative">
+                    <input type="number" min="0" step="0.50" value={product.perDayAfter30}
+                      onChange={(e) => setProduct((p) => p && ({ ...p, perDayAfter30: parseFloat(e.target.value) || 0 }))}
+                      className="w-full pr-8 pl-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-brand-muted pointer-events-none">€</span>
+                  </div>
+                </div>
+                <div className="pb-2.5">
+                  <p className="text-xs font-body text-brand-muted">Beispiel:</p>
+                  <p className="text-sm font-heading font-semibold text-brand-black">
+                    31 Tage = {day30Price} € + {product.perDayAfter30} € = {day31Preview} €
+                  </p>
                 </div>
               </div>
-              <div className="pb-2.5">
-                <p className="text-xs font-body text-brand-muted">Beispiel:</p>
-                <p className="text-sm font-heading font-semibold text-brand-black">
-                  31 Tage = {day30Price} € + {product.perDayAfter30} € = {day31Preview} €
-                </p>
+            </div>
+
+            {/* Vorschau */}
+            <div className="bg-brand-bg rounded-2xl border border-brand-border p-5">
+              <p className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider mb-3">Vorschau ausgewählter Tage</p>
+              <div className="flex flex-wrap gap-x-5 gap-y-2">
+                {[1, 2, 3, 7, 14, 30, 31, 45].map((d) => (
+                  <span key={d} className="text-sm font-body">
+                    <span className="text-brand-muted">{d}T: </span>
+                    <span className="font-semibold text-brand-black">{calcPriceFromTable(product, d)} €</span>
+                  </span>
+                ))}
               </div>
             </div>
-          </div>
 
-          {/* Vorschau */}
-          <div className="bg-brand-bg rounded-2xl border border-brand-border p-5">
-            <p className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider mb-3">Vorschau ausgewählter Tage</p>
-            <div className="flex flex-wrap gap-x-5 gap-y-2">
-              {[1, 2, 3, 7, 14, 30, 31, 45].map((d) => (
-                <span key={d} className="text-sm font-body">
-                  <span className="text-brand-muted">{d}T: </span>
-                  <span className="font-semibold text-brand-black">{calcPriceFromTable(product, d)} €</span>
-                </span>
-              ))}
+            {/* Speichern */}
+            <div className="flex justify-end">
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className={`px-8 py-3 text-sm font-heading font-semibold rounded-btn transition-colors disabled:opacity-40 ${saved ? 'bg-green-600 text-white' : 'bg-brand-black text-white hover:bg-brand-dark'}`}
+              >
+                {saving ? 'Speichern…' : saved ? '✓ Gespeichert' : 'Änderungen speichern'}
+              </button>
             </div>
+
           </div>
 
-          {/* Speichern */}
-          <div className="flex justify-end">
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className={`px-8 py-3 text-sm font-heading font-semibold rounded-btn transition-colors disabled:opacity-40 ${saved ? 'bg-green-600 text-white' : 'bg-brand-black text-white hover:bg-brand-dark'}`}
-            >
-              {saving ? 'Speichern…' : saved ? '✓ Gespeichert' : 'Änderungen speichern'}
-            </button>
+          {/* Right: Live Preview (sticky) */}
+          <div className="hidden xl:block w-80 flex-shrink-0">
+            <div className="sticky top-8">
+              <ProductPreview
+                name={product.name}
+                brand={product.brand}
+                shortDescription={product.shortDescription}
+                description={product.description}
+                specs={product.specs}
+                product={product}
+                hasHaftungsoption={product.hasHaftungsoption}
+                kautionTier={product.kautionTier}
+                kautionAmount={kautionAmount}
+              />
+            </div>
           </div>
 
         </div>

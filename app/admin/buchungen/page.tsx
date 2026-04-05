@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 interface Booking {
   id: string;
@@ -18,6 +19,7 @@ interface Booking {
   customer_email: string | null;
   tracking_number: string | null;
   created_at: string;
+  user_id: string | null;
   deposit_intent_id: string | null;
   deposit_status: string;
   suspicious: boolean;
@@ -30,13 +32,14 @@ interface Booking {
 }
 
 type StatusFilter = 'all' | 'confirmed' | 'shipped' | 'completed' | 'cancelled' | 'damaged';
+type DateFilter = 'all' | 'today' | 'week' | 'month';
 
-const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
-  confirmed: { label: 'Bestätigt', className: 'bg-amber-100 text-amber-700' },
-  shipped: { label: 'Versendet', className: 'bg-blue-100 text-blue-700' },
-  completed: { label: 'Abgeschlossen', className: 'bg-green-100 text-green-700' },
-  cancelled: { label: 'Storniert', className: 'bg-red-100 text-red-700' },
-  damaged: { label: 'Beschädigt', className: 'bg-orange-100 text-orange-700' },
+const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
+  confirmed: { label: 'Bestätigt', color: '#06b6d4', bg: '#06b6d414' },
+  shipped: { label: 'Versendet', color: '#10b981', bg: '#10b98114' },
+  completed: { label: 'Abgeschlossen', color: '#64748b', bg: '#64748b14' },
+  cancelled: { label: 'Storniert', color: '#ef4444', bg: '#ef444414' },
+  damaged: { label: 'Beschädigt', color: '#f97316', bg: '#f9731614' },
 };
 
 function fmtDate(iso: string) {
@@ -55,11 +58,28 @@ function fmtEuro(n: number) {
   return n.toFixed(2).replace('.', ',') + ' €';
 }
 
+function startOfDay(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+function startOfWeek(d: Date) {
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Monday
+  return new Date(d.getFullYear(), d.getMonth(), diff);
+}
+
+function startOfMonth(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth(), 1);
+}
+
 export default function AdminBuchungenPage() {
+  const router = useRouter();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [filter, setFilter] = useState<StatusFilter>('all');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [dateFilter, setDateFilter] = useState<DateFilter>('all');
+  const [search, setSearch] = useState('');
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [confirmModal, setConfirmModal] = useState<{
     open: boolean;
@@ -75,7 +95,7 @@ export default function AdminBuchungenPage() {
   async function fetchBookings() {
     setLoading(true);
     try {
-      const res = await fetch('/api/admin/alle-buchungen?limit=200');
+      const res = await fetch('/api/admin/alle-buchungen?limit=500');
       if (!res.ok) throw new Error();
       const data = await res.json();
       setBookings(data.bookings ?? []);
@@ -141,6 +161,43 @@ export default function AdminBuchungenPage() {
     }
   }
 
+  // Filtered bookings
+  const filtered = useMemo(() => {
+    let result = bookings;
+
+    // Status filter
+    if (statusFilter !== 'all') {
+      result = result.filter((b) => b.status === statusFilter);
+    }
+
+    // Date filter
+    if (dateFilter !== 'all') {
+      const now = new Date();
+      let cutoff: Date;
+      switch (dateFilter) {
+        case 'today': cutoff = startOfDay(now); break;
+        case 'week': cutoff = startOfWeek(now); break;
+        case 'month': cutoff = startOfMonth(now); break;
+        default: cutoff = new Date(0);
+      }
+      result = result.filter((b) => new Date(b.created_at) >= cutoff);
+    }
+
+    // Search
+    if (search.trim()) {
+      const q = search.toLowerCase().trim();
+      result = result.filter(
+        (b) =>
+          b.id.toLowerCase().includes(q) ||
+          (b.customer_name?.toLowerCase().includes(q) ?? false) ||
+          (b.customer_email?.toLowerCase().includes(q) ?? false) ||
+          (b.product_name?.toLowerCase().includes(q) ?? false)
+      );
+    }
+
+    return result;
+  }, [bookings, statusFilter, dateFilter, search]);
+
   const counts = {
     all: bookings.length,
     confirmed: bookings.filter((b) => b.status === 'confirmed').length,
@@ -150,16 +207,20 @@ export default function AdminBuchungenPage() {
     damaged: bookings.filter((b) => b.status === 'damaged').length,
   };
 
-  const filtered =
-    filter === 'all' ? bookings : bookings.filter((b) => b.status === filter);
-
-  const TABS: { value: StatusFilter; label: string }[] = [
+  const STATUS_TABS: { value: StatusFilter; label: string }[] = [
     { value: 'all', label: `Alle (${counts.all})` },
     { value: 'confirmed', label: `Bestätigt (${counts.confirmed})` },
     { value: 'shipped', label: `Versendet (${counts.shipped})` },
     { value: 'completed', label: `Abgeschlossen (${counts.completed})` },
     { value: 'damaged', label: `Beschädigt (${counts.damaged})` },
     { value: 'cancelled', label: `Storniert (${counts.cancelled})` },
+  ];
+
+  const DATE_TABS: { value: DateFilter; label: string }[] = [
+    { value: 'all', label: 'Alle' },
+    { value: 'today', label: 'Heute' },
+    { value: 'week', label: 'Diese Woche' },
+    { value: 'month', label: 'Dieser Monat' },
   ];
 
   return (
@@ -173,47 +234,97 @@ export default function AdminBuchungenPage() {
           </p>
         </div>
 
-        {/* Filter Tabs */}
-        <div className="flex flex-wrap gap-2 mb-6">
-          {TABS.map((tab) => (
-            <button
-              key={tab.value}
-              onClick={() => setFilter(tab.value)}
-              className={`px-4 py-2 text-sm font-heading font-semibold rounded-btn transition-colors ${
-                filter === tab.value
-                  ? 'bg-brand-black text-white'
-                  : 'bg-white text-brand-steel border border-brand-border hover:bg-brand-bg'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+        {/* Filters */}
+        <div className="bg-white rounded-xl border border-brand-border p-4 mb-6 space-y-4">
+          {/* Status tabs */}
+          <div className="flex flex-wrap gap-2">
+            {STATUS_TABS.map((tab) => {
+              const sc = STATUS_CONFIG[tab.value];
+              const isActive = statusFilter === tab.value;
+              return (
+                <button
+                  key={tab.value}
+                  onClick={() => setStatusFilter(tab.value)}
+                  className="px-4 py-2 text-sm font-heading font-semibold rounded-btn transition-colors"
+                  style={
+                    isActive
+                      ? sc
+                        ? { backgroundColor: sc.bg, color: sc.color, border: `1px solid ${sc.color}40` }
+                        : { backgroundColor: '#0f172a', color: '#fff' }
+                      : { backgroundColor: 'transparent', color: '#64748b', border: '1px solid #e2e8f0' }
+                  }
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Date filter + Search */}
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="flex gap-2">
+              {DATE_TABS.map((tab) => (
+                <button
+                  key={tab.value}
+                  onClick={() => setDateFilter(tab.value)}
+                  className={`px-3 py-1.5 text-xs font-heading font-semibold rounded-btn transition-colors ${
+                    dateFilter === tab.value
+                      ? 'bg-brand-black text-white'
+                      : 'bg-brand-bg text-brand-muted hover:bg-gray-200'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+            <div className="flex-1 sm:max-w-xs">
+              <div className="relative">
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input
+                  type="text"
+                  placeholder="Buchungsnr., Kunde, Produkt..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 text-sm font-body border border-brand-border rounded-btn bg-white text-brand-black placeholder-brand-muted focus:outline-none focus:ring-2 focus:ring-accent-blue"
+                />
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Content */}
         {loading ? (
-          <div className="text-center py-16 text-brand-muted font-body">Lädt…</div>
+          <div className="text-center py-16 text-brand-muted font-body">Lädt...</div>
         ) : error ? (
           <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700 font-body">
             {error}
           </div>
         ) : filtered.length === 0 ? (
           <div className="bg-white rounded-xl border border-brand-border p-12 text-center">
-            <p className="text-brand-muted font-body">Keine Buchungen in dieser Kategorie.</p>
+            <p className="text-brand-muted font-body">
+              {search ? 'Keine Buchungen gefunden.' : 'Keine Buchungen in dieser Kategorie.'}
+            </p>
           </div>
         ) : (
           <div className="bg-white rounded-xl border border-brand-border overflow-hidden">
+            <div className="px-5 py-3 border-b border-brand-border bg-brand-bg">
+              <p className="text-xs font-heading font-semibold text-brand-muted">
+                {filtered.length} Buchung{filtered.length !== 1 ? 'en' : ''}
+              </p>
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-brand-border bg-brand-bg">
-                    <th className="text-left px-5 py-3 text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider">Buchung</th>
-                    <th className="text-left px-5 py-3 text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider">Kamera</th>
-                    <th className="text-left px-5 py-3 text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider">Zeitraum</th>
+                    <th className="text-left px-5 py-3 text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider">Buchungsnr.</th>
                     <th className="text-left px-5 py-3 text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider">Kunde</th>
-                    <th className="text-left px-5 py-3 text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider">Betrag</th>
-                    <th className="text-left px-5 py-3 text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider">Lieferung</th>
+                    <th className="text-left px-5 py-3 text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider">Produkt</th>
+                    <th className="text-left px-5 py-3 text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider">Zeitraum</th>
                     <th className="text-left px-5 py-3 text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider">Status</th>
+                    <th className="text-left px-5 py-3 text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider">Betrag</th>
+                    <th className="text-left px-5 py-3 text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider">Erstellt am</th>
                     <th className="px-5 py-3" />
                   </tr>
                 </thead>
@@ -221,34 +332,13 @@ export default function AdminBuchungenPage() {
                   {filtered.map((booking) => (
                     <tr
                       key={booking.id}
-                      className={`border-b border-brand-border last:border-0 transition-colors ${
+                      onClick={() => router.push(`/admin/buchungen/${booking.id}`)}
+                      className={`border-b border-brand-border last:border-0 transition-colors cursor-pointer ${
                         updatingId === booking.id ? 'opacity-50' : 'hover:bg-brand-bg/50'
                       }`}
                     >
                       <td className="px-5 py-4">
-                        <p className="font-heading font-semibold text-sm text-brand-black">{booking.id}</p>
-                        <p className="text-xs font-body text-brand-muted mt-0.5">
-                          {fmtDateTime(booking.created_at)}
-                        </p>
-                      </td>
-                      <td className="px-5 py-4">
-                        <p className="font-body text-sm text-brand-black">{booking.product_name}</p>
-                        <p className="text-xs font-body text-brand-muted">{booking.days} Tag{booking.days !== 1 ? 'e' : ''}</p>
-                      </td>
-                      <td className="px-5 py-4">
-                        <p className="font-body text-sm text-brand-black whitespace-nowrap">
-                          {fmtDate(booking.rental_from)} – {fmtDate(booking.rental_to)}
-                        </p>
-                        {booking.extended_at && (
-                          <p className="text-[10px] font-semibold mt-0.5" style={{ color: '#3b82f6' }}>
-                            VERLÄNGERT{booking.original_rental_to ? ` (orig. bis ${fmtDate(booking.original_rental_to)})` : ''}
-                          </p>
-                        )}
-                        {booking.contract_signed && (
-                          <p className="text-[10px] font-semibold mt-0.5" style={{ color: '#10b981' }}>
-                            VERTRAG UNTERSCHRIEBEN
-                          </p>
-                        )}
+                        <p className="font-heading font-semibold text-sm text-accent-blue">{booking.id}</p>
                       </td>
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-1.5">
@@ -270,13 +360,27 @@ export default function AdminBuchungenPage() {
                           )}
                         </div>
                         {booking.customer_email && (
-                          <a
-                            href={`mailto:${booking.customer_email}`}
-                            className="text-xs font-body text-accent-blue hover:underline"
-                          >
+                          <p className="text-xs font-body text-brand-muted mt-0.5 truncate max-w-[180px]">
                             {booking.customer_email}
-                          </a>
+                          </p>
                         )}
+                      </td>
+                      <td className="px-5 py-4">
+                        <p className="font-body text-sm text-brand-black">{booking.product_name}</p>
+                        <p className="text-xs font-body text-brand-muted">{booking.days} Tag{booking.days !== 1 ? 'e' : ''}</p>
+                      </td>
+                      <td className="px-5 py-4">
+                        <p className="font-body text-sm text-brand-black whitespace-nowrap">
+                          {fmtDate(booking.rental_from)} – {fmtDate(booking.rental_to)}
+                        </p>
+                        {booking.extended_at && (
+                          <p className="text-[10px] font-semibold mt-0.5" style={{ color: '#3b82f6' }}>
+                            VERLÄNGERT
+                          </p>
+                        )}
+                      </td>
+                      <td className="px-5 py-4">
+                        <StatusBadge status={booking.status} />
                       </td>
                       <td className="px-5 py-4">
                         <p className="font-heading font-semibold text-sm text-brand-black whitespace-nowrap">
@@ -286,36 +390,23 @@ export default function AdminBuchungenPage() {
                           <p className="text-xs font-body text-brand-muted">
                             +{fmtEuro(booking.deposit)} Kaution
                             {booking.deposit_status === 'held' && (
-                              <span className="ml-1 text-amber-600" title="Kaution gehalten">⏳</span>
+                              <span className="ml-1 text-amber-600" title="Kaution gehalten">&#x23F3;</span>
                             )}
                             {booking.deposit_status === 'released' && (
-                              <span className="ml-1 text-green-600" title="Kaution freigegeben">✓</span>
+                              <span className="ml-1 text-green-600" title="Kaution freigegeben">&#x2713;</span>
                             )}
                             {booking.deposit_status === 'captured' && (
-                              <span className="ml-1 text-red-600" title="Kaution eingezogen">✗</span>
+                              <span className="ml-1 text-red-600" title="Kaution eingezogen">&#x2717;</span>
                             )}
                           </p>
                         )}
                       </td>
                       <td className="px-5 py-4">
-                        <p className="font-body text-sm text-brand-black">
-                          {booking.delivery_mode === 'versand' ? 'Versand' : 'Abholung'}
+                        <p className="font-body text-sm text-brand-muted whitespace-nowrap">
+                          {fmtDateTime(booking.created_at)}
                         </p>
-                        {booking.shipping_method && (
-                          <p className="text-xs font-body text-brand-muted">
-                            {booking.shipping_method === 'express' ? 'Express' : 'Standard'}
-                          </p>
-                        )}
-                        {booking.tracking_number && (
-                          <p className="text-xs font-body text-brand-muted mt-0.5">
-                            #{booking.tracking_number}
-                          </p>
-                        )}
                       </td>
-                      <td className="px-5 py-4">
-                        <StatusBadge status={booking.status} />
-                      </td>
-                      <td className="px-5 py-4 text-right">
+                      <td className="px-5 py-4 text-right" onClick={(e) => e.stopPropagation()}>
                         <ActionButtons
                           booking={booking}
                           onAction={openConfirm}
@@ -369,10 +460,13 @@ export default function AdminBuchungenPage() {
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const s = STATUS_CONFIG[status] ?? { label: status, className: 'bg-gray-100 text-gray-700' };
+  const sc = STATUS_CONFIG[status] ?? { label: status, color: '#94a3b8', bg: '#94a3b814' };
   return (
-    <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-heading font-semibold ${s.className}`}>
-      {s.label}
+    <span
+      className="inline-flex px-2.5 py-1 rounded-full text-xs font-heading font-semibold"
+      style={{ color: sc.color, backgroundColor: sc.bg, border: `1px solid ${sc.color}30` }}
+    >
+      {sc.label}
     </span>
   );
 }
@@ -395,7 +489,7 @@ function ActionButtons({
         href="/admin/retouren"
         className="px-3 py-1.5 bg-green-600 text-white text-xs font-heading font-semibold rounded-btn hover:bg-green-700 transition-colors whitespace-nowrap"
       >
-        Rückgabe prüfen
+        Rückgabe
       </Link>
     );
   }
@@ -407,7 +501,7 @@ function ActionButtons({
         href="/admin/retouren"
         className="px-3 py-1.5 bg-green-600 text-white text-xs font-heading font-semibold rounded-btn hover:bg-green-700 transition-colors whitespace-nowrap"
       >
-        Rückgabe prüfen
+        Rückgabe
       </Link>
     );
   }
@@ -419,7 +513,7 @@ function ActionButtons({
         href="/admin/schaeden"
         className="px-3 py-1.5 bg-orange-500 text-white text-xs font-heading font-semibold rounded-btn hover:bg-orange-600 transition-colors whitespace-nowrap"
       >
-        Schaden ansehen
+        Schaden
       </Link>
     );
   }
@@ -431,12 +525,11 @@ function ActionButtons({
         href="/admin/versand"
         className="px-3 py-1.5 bg-brand-black text-white text-xs font-heading font-semibold rounded-btn hover:bg-brand-dark transition-colors whitespace-nowrap"
       >
-        → Versand
+        Versand
       </Link>
     );
   }
 
-  // Kaution freigeben bei completed Buchungen mit aktivem Hold
   if (booking.status === 'completed' && booking.deposit_status === 'held' && booking.deposit_intent_id && onReleaseDeposit) {
     buttons.push(
       <button

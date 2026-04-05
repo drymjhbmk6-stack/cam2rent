@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/components/AuthProvider';
 import { getCancellationInfo } from '@/data/cancellation';
+import { products as allProducts } from '@/data/products';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 
@@ -770,13 +771,17 @@ export default function BuchungenPage() {
                         </button>
                       )}
 
-                      {/* Rebook */}
-                      {booking.status === 'cancelled' && booking.product_id && (
-                        <Link href={`/kameras/${booking.product_id}`} className="flex items-center gap-1.5 text-xs font-heading font-semibold text-brand-black hover:underline">
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-                          Erneut buchen
-                        </Link>
-                      )}
+                      {/* Rebook — für abgeschlossene und stornierte Buchungen */}
+                      {(booking.status === 'completed' || booking.status === 'cancelled') && booking.product_id && (() => {
+                        const prod = allProducts.find((p) => p.id === booking.product_id);
+                        const slug = prod?.slug ?? booking.product_id;
+                        return (
+                          <Link href={`/kameras/${slug}/buchen`} className="flex items-center gap-1.5 text-xs font-heading font-semibold text-accent-blue hover:underline">
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                            Erneut buchen
+                          </Link>
+                        );
+                      })()}
 
                       {/* Damage report */}
                       {(booking.status === 'shipped' || booking.status === 'completed') && (

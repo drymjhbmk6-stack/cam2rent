@@ -49,6 +49,30 @@ interface ProductsData { products: { slug: string; views: number; bookings: numb
 
 type Tab = 'live' | 'bookings' | 'traffic' | 'customers';
 
+type TimeRange = 'heute' | '7tage' | '30tage' | 'monat' | 'jahr' | 'custom';
+type StatusFilter = 'alle' | 'aktiv' | 'abgeschlossen' | 'storniert';
+
+interface FilterState {
+  timeRange: TimeRange;
+  customFrom: string;
+  customTo: string;
+  product: string;
+  status: StatusFilter;
+}
+
+interface FilterPreset {
+  name: string;
+  filters: FilterState;
+}
+
+const DEFAULT_FILTERS: FilterState = {
+  timeRange: '30tage',
+  customFrom: '',
+  customTo: '',
+  product: 'alle',
+  status: 'alle',
+};
+
 // ─── Helper Components ────────────────────────────────────────────────────────
 function Card({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
   return (
@@ -58,10 +82,39 @@ function Card({ children, style }: { children: React.ReactNode; style?: React.CS
   );
 }
 
-function StatCard({ label, value, sub, color = C.text }: { label: string; value: string | number; sub?: string; color?: string }) {
+function InfoTooltip({ text }: { text: string }) {
+  return (
+    <span
+      title={text}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: 16,
+        height: 16,
+        borderRadius: '50%',
+        background: `${C.cyan}22`,
+        color: C.cyanLight,
+        fontSize: 10,
+        cursor: 'help',
+        marginLeft: 6,
+        verticalAlign: 'middle',
+        fontStyle: 'normal',
+        lineHeight: 1,
+      }}
+    >
+      i
+    </span>
+  );
+}
+
+function StatCard({ label, value, sub, color = C.text, tooltip }: { label: string; value: string | number; sub?: string; color?: string; tooltip?: string }) {
   return (
     <Card>
-      <div style={{ fontSize: 11, color: C.textDim, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>{label}</div>
+      <div style={{ fontSize: 11, color: C.textDim, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>
+        {label}
+        {tooltip && <InfoTooltip text={tooltip} />}
+      </div>
       <div style={{ fontSize: 28, fontWeight: 700, color, letterSpacing: '-1px', lineHeight: 1 }}>{value}</div>
       {sub && <div style={{ fontSize: 12, color: C.textDim, marginTop: 6 }}>{sub}</div>}
     </Card>
@@ -160,6 +213,201 @@ function utilizationColor(pct: number): string {
   return C.red;
 }
 
+// ─── Filter Helpers ──────────────────────────────────────────────────────────
+function getTimeRangeLabel(tr: TimeRange): string {
+  const labels: Record<TimeRange, string> = {
+    heute: 'Heute',
+    '7tage': '7 Tage',
+    '30tage': '30 Tage',
+    monat: 'Dieser Monat',
+    jahr: 'Dieses Jahr',
+    custom: 'Benutzerdefiniert',
+  };
+  return labels[tr];
+}
+
+function getStatusLabel(s: StatusFilter): string {
+  const labels: Record<StatusFilter, string> = {
+    alle: 'Alle',
+    aktiv: 'Aktiv',
+    abgeschlossen: 'Abgeschlossen',
+    storniert: 'Storniert',
+  };
+  return labels[s];
+}
+
+function loadPresets(): FilterPreset[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem('cam2rent_analytics_presets');
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function savePresets(presets: FilterPreset[]) {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem('cam2rent_analytics_presets', JSON.stringify(presets));
+}
+
+function filtersAreDefault(f: FilterState): boolean {
+  return f.timeRange === DEFAULT_FILTERS.timeRange
+    && f.product === DEFAULT_FILTERS.product
+    && f.status === DEFAULT_FILTERS.status
+    && f.customFrom === DEFAULT_FILTERS.customFrom
+    && f.customTo === DEFAULT_FILTERS.customTo;
+}
+
+function getActiveFilterChips(f: FilterState): { key: string; label: string }[] {
+  const chips: { key: string; label: string }[] = [];
+  if (f.timeRange !== DEFAULT_FILTERS.timeRange) {
+    let label = getTimeRangeLabel(f.timeRange);
+    if (f.timeRange === 'custom' && f.customFrom && f.customTo) {
+      label = `${f.customFrom} – ${f.customTo}`;
+    }
+    chips.push({ key: 'timeRange', label: `Zeitraum: ${label}` });
+  }
+  if (f.product !== 'alle') {
+    chips.push({ key: 'product', label: `Produkt: ${f.product}` });
+  }
+  if (f.status !== 'alle') {
+    chips.push({ key: 'status', label: `Status: ${getStatusLabel(f.status)}` });
+  }
+  return chips;
+}
+
+// ─── CSV Export ──────────────────────────────────────────────────────────────
+function generateCSV(
+  activeTab: Tab,
+  liveData: LiveData | null,
+  todayData: TodayData | null,
+  historyData: HistoryData | null,
+  bookingsData: BookingsData | null,
+  productsData: ProductsData | null,
+  trafficData: TrafficData | null,
+  funnelData: FunnelData | null,
+): string {
+  const rows: string[][] = [];
+
+  if (activeTab === 'live') {
+    rows.push(['Metrik', 'Wert']);
+    rows.push(['Gerade online', String(liveData?.active_count ?? 0)]);
+    rows.push(['Seitenaufrufe heute', String(liveData?.total_views ?? todayData?.total_views ?? 0)]);
+    rows.push(['Einzelne Besucher heute', String(liveData?.unique_visitors ?? todayData?.unique_visitors ?? 0)]);
+    rows.push(['Seiten pro Besuch', String(liveData?.avg_pages_per_session ?? 0)]);
+    if (liveData?.visitors?.length) {
+      rows.push([]);
+      rows.push(['Besucher-ID', 'Aktuelle Seite', 'Geraet', 'Browser', 'Herkunft', 'Seiten', 'Zuletzt gesehen']);
+      for (const v of liveData.visitors) {
+        rows.push([v.visitor_id, v.current_page, v.device, v.browser, v.referrer, String(v.page_count), v.last_seen]);
+      }
+    }
+    if (todayData?.hourly) {
+      rows.push([]);
+      rows.push(['Stunde', 'Aufrufe']);
+      todayData.hourly.forEach((val, i) => rows.push([String(i), String(val)]));
+    }
+  }
+
+  if (activeTab === 'bookings') {
+    rows.push(['Metrik', 'Wert']);
+    rows.push(['Buchungen heute', String(bookingsData?.today_bookings ?? 0)]);
+    rows.push(['Umsatz heute', String(bookingsData?.today_revenue ?? 0)]);
+    rows.push(['Abschlussquote', `${bookingsData?.conversion_rate ?? 0}%`]);
+    rows.push(['Durchschnittlicher Buchungswert', String(bookingsData?.avg_booking_value ?? 0)]);
+    if (funnelData?.funnel?.length) {
+      rows.push([]);
+      rows.push(['Funnel-Schritt', 'Anzahl', 'Prozent']);
+      for (const s of funnelData.funnel) {
+        rows.push([s.step, String(s.count), `${s.pct}%`]);
+      }
+    }
+    if (bookingsData?.trend?.length) {
+      rows.push([]);
+      rows.push(['Datum', 'Buchungen', 'Umsatz']);
+      for (const t of bookingsData.trend) {
+        rows.push([t.date, String(t.count), String(t.revenue)]);
+      }
+    }
+    if (productsData?.products?.length) {
+      rows.push([]);
+      rows.push(['Kamera', 'Seitenaufrufe', 'Buchungen', 'Umsatz', 'Auslastung']);
+      for (const p of productsData.products) {
+        rows.push([p.slug, String(p.views), String(p.bookings), String(p.revenue), `${p.utilization}%`]);
+      }
+    }
+  }
+
+  if (activeTab === 'traffic') {
+    if (trafficData?.sources?.length) {
+      rows.push(['Quelle', 'Aufrufe', 'Prozent']);
+      for (const s of trafficData.sources) {
+        rows.push([s.source, String(s.count), `${s.pct}%`]);
+      }
+    }
+    if (todayData?.top_pages?.length) {
+      rows.push([]);
+      rows.push(['Seite', 'Aufrufe']);
+      for (const p of todayData.top_pages) {
+        rows.push([p.path, String(p.views)]);
+      }
+    }
+    if (historyData?.history?.length) {
+      rows.push([]);
+      rows.push(['Datum', 'Seitenaufrufe', 'Einzelne Besucher', 'Besuche']);
+      for (const h of historyData.history) {
+        rows.push([h.date, String(h.views), String(h.unique_visitors), String(h.sessions)]);
+      }
+    }
+  }
+
+  if (activeTab === 'customers') {
+    rows.push(['Metrik', 'Wert']);
+    rows.push(['Neue Besucher', String(trafficData?.new_visitors ?? 0)]);
+    rows.push(['Wiederkehrende Besucher', String(trafficData?.returning_visitors ?? 0)]);
+    rows.push(['Absprungrate', `${trafficData?.bounce_rate ?? 0}%`]);
+    rows.push(['Besuche (30 Tage)', String(trafficData?.total_sessions ?? 0)]);
+    rows.push(['Einzelne Besucher (heute)', String(todayData?.unique_visitors ?? 0)]);
+    if (trafficData?.devices) {
+      rows.push([]);
+      rows.push(['Geraet', 'Prozent']);
+      rows.push(['Desktop', `${trafficData.devices.desktop}%`]);
+      rows.push(['Mobile', `${trafficData.devices.mobile}%`]);
+      rows.push(['Tablet', `${trafficData.devices.tablet}%`]);
+    }
+    if (trafficData?.browsers?.length) {
+      rows.push([]);
+      rows.push(['Browser', 'Aufrufe', 'Prozent']);
+      for (const b of trafficData.browsers) {
+        rows.push([b.browser, String(b.count), `${b.pct}%`]);
+      }
+    }
+  }
+
+  if (rows.length === 0) {
+    rows.push(['Keine Daten verfuegbar']);
+  }
+
+  return rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(';')).join('\n');
+}
+
+function downloadCSV(csv: string) {
+  const now = new Date();
+  const dateStr = now.toISOString().slice(0, 10);
+  const filename = `cam2rent-analytics-${dateStr}.csv`;
+  const bom = '\uFEFF';
+  const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function AnalyticsPage() {
   const [activeTab, setActiveTab] = useState<Tab>('live');
@@ -172,6 +420,18 @@ export default function AnalyticsPage() {
   const [bookingsData, setBookingsData] = useState<BookingsData | null>(null);
   const [productsData, setProductsData] = useState<ProductsData | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Filters
+  const [filters, setFilters] = useState<FilterState>({ ...DEFAULT_FILTERS });
+  const [presets, setPresets] = useState<FilterPreset[]>([]);
+  const [showPresetModal, setShowPresetModal] = useState(false);
+  const [presetName, setPresetName] = useState('');
+  const [showExportDropdown, setShowExportDropdown] = useState(false);
+
+  // Load presets on mount
+  useEffect(() => {
+    setPresets(loadPresets());
+  }, []);
 
   // Clock
   useEffect(() => {
@@ -235,6 +495,56 @@ export default function AnalyticsPage() {
     }
   }, [activeTab, fetchBookings, fetchTraffic, fetchHistory]);
 
+  // ─── Filter logic (client-side filtering of history/trend data) ───────────
+  const getFilteredHistory = useCallback(() => {
+    if (!historyData?.history) return [];
+    return filterByTimeRange(historyData.history, filters);
+  }, [historyData, filters]);
+
+  const getFilteredTrend = useCallback(() => {
+    if (!bookingsData?.trend) return [];
+    return filterByTimeRange(bookingsData.trend, filters);
+  }, [bookingsData, filters]);
+
+  // Preset actions
+  const handleSavePreset = () => {
+    if (!presetName.trim()) return;
+    const newPresets = [...presets, { name: presetName.trim(), filters: { ...filters } }];
+    setPresets(newPresets);
+    savePresets(newPresets);
+    setPresetName('');
+    setShowPresetModal(false);
+  };
+
+  const handleDeletePreset = (idx: number) => {
+    const newPresets = presets.filter((_, i) => i !== idx);
+    setPresets(newPresets);
+    savePresets(newPresets);
+  };
+
+  const handleApplyPreset = (preset: FilterPreset) => {
+    setFilters({ ...preset.filters });
+  };
+
+  const removeFilterChip = (key: string) => {
+    setFilters(prev => {
+      const next = { ...prev };
+      if (key === 'timeRange') { next.timeRange = DEFAULT_FILTERS.timeRange; next.customFrom = ''; next.customTo = ''; }
+      if (key === 'product') next.product = 'alle';
+      if (key === 'status') next.status = 'alle';
+      return next;
+    });
+  };
+
+  const handleExportCSV = () => {
+    const csv = generateCSV(activeTab, liveData, todayData, historyData, bookingsData, productsData, trafficData, funnelData);
+    downloadCSV(csv);
+    setShowExportDropdown(false);
+  };
+
+  // Get unique product slugs for filter dropdown
+  const productSlugs = productsData?.products?.map(p => p.slug) ?? [];
+
   const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
     {
       id: 'live', label: 'Live', icon: (
@@ -266,6 +576,43 @@ export default function AnalyticsPage() {
     },
   ];
 
+  const activeFilterChips = getActiveFilterChips(filters);
+
+  const pillStyle = (active: boolean): React.CSSProperties => ({
+    padding: '6px 14px',
+    borderRadius: 8,
+    border: 'none',
+    cursor: 'pointer',
+    fontSize: 12,
+    fontWeight: active ? 600 : 400,
+    background: active ? C.cyan : C.border,
+    color: active ? '#0f172a' : C.textMuted,
+    transition: 'all 0.15s',
+    whiteSpace: 'nowrap',
+  });
+
+  const selectStyle: React.CSSProperties = {
+    padding: '6px 12px',
+    borderRadius: 8,
+    border: `1px solid ${C.border}`,
+    background: C.card,
+    color: C.text,
+    fontSize: 12,
+    cursor: 'pointer',
+    outline: 'none',
+  };
+
+  const dateInputStyle: React.CSSProperties = {
+    padding: '5px 10px',
+    borderRadius: 8,
+    border: `1px solid ${C.border}`,
+    background: C.card,
+    color: C.text,
+    fontSize: 12,
+    outline: 'none',
+    colorScheme: 'dark',
+  };
+
   return (
     <div style={{ color: C.text, fontFamily: 'Inter, system-ui, sans-serif', padding: '20px 16px' }}>
       <style>{`
@@ -273,6 +620,10 @@ export default function AnalyticsPage() {
         @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
         .tab-content { animation: fadeIn 0.3s ease; }
         .row-fade { animation: fadeIn 0.3s ease both; }
+        .preset-modal-overlay {
+          position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+          background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 1000;
+        }
       `}</style>
 
       {/* Header */}
@@ -286,14 +637,62 @@ export default function AnalyticsPage() {
           </span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {/* CSV Export */}
+          <div style={{ position: 'relative' }}>
+            <button
+              onClick={() => setShowExportDropdown(!showExportDropdown)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '7px 14px', borderRadius: 8, border: `1px solid ${C.border}`,
+                background: C.card, color: C.textMuted, fontSize: 12, cursor: 'pointer',
+                transition: 'all 0.15s',
+              }}
+            >
+              <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              Export
+            </button>
+            {showExportDropdown && (
+              <div style={{
+                position: 'absolute', right: 0, top: '100%', marginTop: 4,
+                background: C.card, border: `1px solid ${C.border}`, borderRadius: 8,
+                boxShadow: '0 8px 24px rgba(0,0,0,0.4)', zIndex: 100, minWidth: 180, overflow: 'hidden',
+              }}>
+                <button
+                  onClick={handleExportCSV}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+                    padding: '10px 14px', border: 'none', background: 'transparent',
+                    color: C.text, fontSize: 12, cursor: 'pointer', textAlign: 'left',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.background = C.border)}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                >
+                  <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Als CSV exportieren
+                </button>
+              </div>
+            )}
+          </div>
           <PulseDot />
           <span style={{ fontSize: 12, color: C.cyanLight, fontWeight: 600 }}>LIVE</span>
           <span style={{ fontSize: 12, color: C.textDim, fontFamily: 'monospace' }}>{clock}</span>
         </div>
       </div>
 
+      {/* Close export dropdown on outside click */}
+      {showExportDropdown && (
+        <div
+          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 50 }}
+          onClick={() => setShowExportDropdown(false)}
+        />
+      )}
+
       {/* Tab Navigation */}
-      <div style={{ background: C.card, borderRadius: 12, padding: 4, display: 'flex', gap: 2, marginBottom: 20, overflowX: 'auto' }}>
+      <div style={{ background: C.card, borderRadius: 12, padding: 4, display: 'flex', gap: 2, marginBottom: 16, overflowX: 'auto' }}>
         {TABS.map((tab) => (
           <button
             key={tab.id}
@@ -312,15 +711,239 @@ export default function AnalyticsPage() {
         ))}
       </div>
 
+      {/* ── FILTER BAR ─────────────────────────────────────────────────────── */}
+      <Card style={{ marginBottom: 16, padding: '16px 20px' }}>
+        {/* Presets */}
+        {presets.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 11, color: C.textDim, marginRight: 4 }}>Vorlagen:</span>
+            {presets.map((p, idx) => (
+              <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
+                <button
+                  onClick={() => handleApplyPreset(p)}
+                  style={{
+                    padding: '4px 10px', borderRadius: '6px 0 0 6px', border: `1px solid ${C.cyan}44`,
+                    background: `${C.cyan}15`, color: C.cyanLight, fontSize: 11, cursor: 'pointer',
+                  }}
+                >
+                  {p.name}
+                </button>
+                <button
+                  onClick={() => handleDeletePreset(idx)}
+                  style={{
+                    padding: '4px 6px', borderRadius: '0 6px 6px 0', border: `1px solid ${C.cyan}44`, borderLeft: 'none',
+                    background: `${C.red}15`, color: C.red, fontSize: 11, cursor: 'pointer', lineHeight: 1,
+                  }}
+                >
+                  x
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Filter row */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          {/* Time range pills */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ fontSize: 11, color: C.textDim, marginRight: 4 }}>Zeitraum:</span>
+            {(['heute', '7tage', '30tage', 'monat', 'jahr', 'custom'] as TimeRange[]).map(tr => (
+              <button
+                key={tr}
+                onClick={() => setFilters(f => ({ ...f, timeRange: tr }))}
+                style={pillStyle(filters.timeRange === tr)}
+              >
+                {getTimeRangeLabel(tr)}
+              </button>
+            ))}
+          </div>
+
+          {/* Custom date inputs */}
+          {filters.timeRange === 'custom' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input
+                type="date"
+                value={filters.customFrom}
+                onChange={e => setFilters(f => ({ ...f, customFrom: e.target.value }))}
+                style={dateInputStyle}
+              />
+              <span style={{ color: C.textDim, fontSize: 12 }}>bis</span>
+              <input
+                type="date"
+                value={filters.customTo}
+                onChange={e => setFilters(f => ({ ...f, customTo: e.target.value }))}
+                style={dateInputStyle}
+              />
+            </div>
+          )}
+
+          {/* Product filter */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 11, color: C.textDim }}>Produkt:</span>
+            <select
+              value={filters.product}
+              onChange={e => setFilters(f => ({ ...f, product: e.target.value }))}
+              style={selectStyle}
+            >
+              <option value="alle">Alle Produkte</option>
+              {productSlugs.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+
+          {/* Status filter */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 11, color: C.textDim }}>Status:</span>
+            <select
+              value={filters.status}
+              onChange={e => setFilters(f => ({ ...f, status: e.target.value as StatusFilter }))}
+              style={selectStyle}
+            >
+              <option value="alle">Alle</option>
+              <option value="aktiv">Aktiv</option>
+              <option value="abgeschlossen">Abgeschlossen</option>
+              <option value="storniert">Storniert</option>
+            </select>
+          </div>
+
+          {/* Save preset */}
+          <button
+            onClick={() => setShowPresetModal(true)}
+            style={{
+              padding: '6px 12px', borderRadius: 8, border: `1px solid ${C.border}`,
+              background: 'transparent', color: C.textMuted, fontSize: 11, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 4,
+            }}
+          >
+            <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+            </svg>
+            Filter speichern
+          </button>
+        </div>
+
+        {/* Active filter chips */}
+        {activeFilterChips.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 12, flexWrap: 'wrap' }}>
+            {activeFilterChips.map(chip => (
+              <span
+                key={chip.key}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  padding: '4px 10px', borderRadius: 20,
+                  background: `${C.cyan}18`, color: C.cyanLight, fontSize: 11,
+                }}
+              >
+                {chip.label}
+                <button
+                  onClick={() => removeFilterChip(chip.key)}
+                  style={{
+                    background: 'transparent', border: 'none', color: C.cyanLight,
+                    cursor: 'pointer', fontSize: 12, padding: 0, lineHeight: 1, fontWeight: 700,
+                  }}
+                >
+                  x
+                </button>
+              </span>
+            ))}
+            {!filtersAreDefault(filters) && (
+              <button
+                onClick={() => setFilters({ ...DEFAULT_FILTERS })}
+                style={{
+                  background: 'transparent', border: 'none', color: C.red,
+                  cursor: 'pointer', fontSize: 11, textDecoration: 'underline', padding: '4px 0',
+                }}
+              >
+                Alle Filter zurücksetzen
+              </button>
+            )}
+          </div>
+        )}
+      </Card>
+
+      {/* Preset Save Modal */}
+      {showPresetModal && (
+        <div className="preset-modal-overlay" onClick={() => setShowPresetModal(false)}>
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: C.card, border: `1px solid ${C.border}`, borderRadius: 16,
+              padding: 24, width: 360, maxWidth: '90vw',
+              boxShadow: '0 12px 40px rgba(0,0,0,0.5)',
+            }}
+          >
+            <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 16, color: C.text }}>
+              Filter-Vorlage speichern
+            </div>
+            <input
+              type="text"
+              placeholder="Name der Vorlage..."
+              value={presetName}
+              onChange={e => setPresetName(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleSavePreset()}
+              autoFocus
+              style={{
+                width: '100%', padding: '10px 14px', borderRadius: 8,
+                border: `1px solid ${C.border}`, background: C.bg, color: C.text,
+                fontSize: 13, outline: 'none', boxSizing: 'border-box',
+              }}
+            />
+            <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setShowPresetModal(false)}
+                style={{
+                  padding: '8px 16px', borderRadius: 8, border: `1px solid ${C.border}`,
+                  background: 'transparent', color: C.textMuted, fontSize: 12, cursor: 'pointer',
+                }}
+              >
+                Abbrechen
+              </button>
+              <button
+                onClick={handleSavePreset}
+                disabled={!presetName.trim()}
+                style={{
+                  padding: '8px 16px', borderRadius: 8, border: 'none',
+                  background: presetName.trim() ? C.cyan : C.border,
+                  color: presetName.trim() ? '#0f172a' : C.textDim,
+                  fontSize: 12, fontWeight: 600, cursor: presetName.trim() ? 'pointer' : 'not-allowed',
+                }}
+              >
+                Speichern
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── TAB 1: LIVE ─────────────────────────────────────────────────────── */}
       {activeTab === 'live' && (
         <div className="tab-content">
           {/* Stat Cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 20 }}>
-            <StatCard label="Gerade online" value={liveData?.active_count ?? '–'} sub="aktive Besucher" color={C.cyanLight} />
-            <StatCard label="Heute" value={liveData?.total_views ?? todayData?.total_views ?? '–'} sub="Seitenaufrufe" />
-            <StatCard label="Besucher heute" value={liveData?.unique_visitors ?? todayData?.unique_visitors ?? '–'} sub="Unique Visitors" />
-            <StatCard label="Seiten / Session" value={liveData?.avg_pages_per_session ?? '–'} sub="Durchschnitt" />
+            <StatCard
+              label="Gerade online"
+              value={liveData?.active_count ?? '–'}
+              sub="aktive Besucher"
+              color={C.cyanLight}
+              tooltip="Anzahl der Besucher, die in den letzten 5 Minuten aktiv auf der Seite waren."
+            />
+            <StatCard
+              label="Seitenaufrufe heute"
+              value={liveData?.total_views ?? todayData?.total_views ?? '–'}
+              sub="Seitenaufrufe"
+              tooltip="Gesamtanzahl aller aufgerufenen Seiten seit Mitternacht. Jeder Klick auf eine Seite zaehlt als ein Aufruf."
+            />
+            <StatCard
+              label="Einzelne Besucher heute"
+              value={liveData?.unique_visitors ?? todayData?.unique_visitors ?? '–'}
+              sub="Einzelne Besucher"
+              tooltip="Anzahl verschiedener Personen, die heute die Seite besucht haben. Mehrfachbesuche derselben Person werden nur einmal gezaehlt."
+            />
+            <StatCard
+              label="Seiten pro Besuch"
+              value={liveData?.avg_pages_per_session ?? '–'}
+              sub="Durchschnitt"
+              tooltip="Durchschnittliche Anzahl der Seiten, die ein Besucher pro Sitzung aufruft. Je hoeher, desto interessierter sind die Besucher."
+            />
           </div>
 
           {/* Active Visitors Table */}
@@ -338,7 +961,7 @@ export default function AnalyticsPage() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                   <thead>
                     <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                      {['Besucher', 'Aktuelle Seite', 'Gerät', 'Herkunft', 'Seiten', 'Zuletzt'].map((h) => (
+                      {['Besucher', 'Aktuelle Seite', 'Geraet', 'Herkunft', 'Seiten', 'Zuletzt'].map((h) => (
                         <th key={h} style={{ padding: '8px 12px', textAlign: 'left', color: C.textDim, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 600 }}>{h}</th>
                       ))}
                     </tr>
@@ -374,7 +997,7 @@ export default function AnalyticsPage() {
           <Card>
             <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16 }}>Aufrufe heute nach Stunde</div>
             {todayData ? <HourlyChart data={todayData.hourly ?? Array(24).fill(0)} /> : (
-              <div style={{ height: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.textDim }}>Laden…</div>
+              <div style={{ height: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.textDim }}>Laden...</div>
             )}
           </Card>
         </div>
@@ -384,15 +1007,37 @@ export default function AnalyticsPage() {
       {activeTab === 'bookings' && (
         <div className="tab-content">
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 20 }}>
-            <StatCard label="Buchungen heute" value={bookingsData?.today_bookings ?? '–'} color={C.green} />
-            <StatCard label="Umsatz heute" value={bookingsData ? fmtEur(bookingsData.today_revenue) : '–'} color={C.cyanLight} />
-            <StatCard label="Conversion Rate" value={bookingsData ? `${bookingsData.conversion_rate}%` : '–'} color={C.yellow} />
-            <StatCard label="Ø Buchungswert" value={bookingsData ? fmtEur(bookingsData.avg_booking_value) : '–'} />
+            <StatCard
+              label="Buchungen heute"
+              value={bookingsData?.today_bookings ?? '–'}
+              color={C.green}
+              tooltip="Anzahl der heute eingegangenen Buchungen (ohne stornierte)."
+            />
+            <StatCard
+              label="Umsatz heute"
+              value={bookingsData ? fmtEur(bookingsData.today_revenue) : '–'}
+              color={C.cyanLight}
+              tooltip="Gesamtumsatz aller heutigen Buchungen in Euro."
+            />
+            <StatCard
+              label="Abschlussquote"
+              value={bookingsData ? `${bookingsData.conversion_rate}%` : '–'}
+              color={C.yellow}
+              tooltip="Anteil der Besucher, die tatsaechlich eine Buchung abgeschlossen haben. Berechnet als Buchungen geteilt durch Besuche."
+            />
+            <StatCard
+              label="Durchschnittl. Buchungswert"
+              value={bookingsData ? fmtEur(bookingsData.avg_booking_value) : '–'}
+              tooltip="Durchschnittlicher Betrag pro Buchung. Berechnet als Gesamtumsatz geteilt durch Anzahl der Buchungen."
+            />
           </div>
 
           {/* Conversion Funnel */}
           <Card style={{ marginBottom: 20 }}>
-            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16 }}>Conversion Funnel — Letzte 30 Tage</div>
+            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16 }}>
+              Buchungstrichter — Letzte 30 Tage
+              <InfoTooltip text="Zeigt, wie viele Besucher jeden Schritt des Buchungsprozesses erreichen. So siehst du, wo Besucher abspringen." />
+            </div>
             {funnelData ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {(funnelData.funnel ?? []).map((step, i) => (
@@ -414,32 +1059,41 @@ export default function AnalyticsPage() {
                   </div>
                 ))}
               </div>
-            ) : <div style={{ color: C.textDim, padding: '20px 0' }}>Laden…</div>}
+            ) : <div style={{ color: C.textDim, padding: '20px 0' }}>Laden...</div>}
           </Card>
 
           {/* Booking Trend Chart */}
           <Card style={{ marginBottom: 20 }}>
-            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16 }}>Buchungstrend — 30 Tage</div>
+            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16 }}>
+              Buchungstrend — {getTimeRangeLabel(filters.timeRange)}
+              <InfoTooltip text="Anzahl der Buchungen pro Tag im gewaehlten Zeitraum." />
+            </div>
             {bookingsData ? (
-              <BarChart data={(bookingsData.trend ?? []).map((d) => d.count)} color={C.green} height={100} />
-            ) : <div style={{ color: C.textDim }}>Laden…</div>}
+              <BarChart data={getFilteredTrend().map((d) => d.count)} color={C.green} height={100} />
+            ) : <div style={{ color: C.textDim }}>Laden...</div>}
           </Card>
 
           {/* Camera Performance */}
           <Card>
-            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16 }}>Kamera-Performance — 30 Tage</div>
+            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16 }}>
+              Kamera-Performance — 30 Tage
+              <InfoTooltip text="Uebersicht ueber Aufrufe, Buchungen, Umsatz und Auslastung je Kamera." />
+            </div>
             {productsData ? (
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                   <thead>
                     <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                      {['Kamera', 'Views', 'Buchungen', 'Umsatz', 'Auslastung'].map((h) => (
+                      {['Kamera', 'Seitenaufrufe', 'Buchungen', 'Umsatz', 'Auslastung'].map((h) => (
                         <th key={h} style={{ padding: '8px 12px', textAlign: 'left', color: C.textDim, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 600 }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {(productsData.products ?? []).map((p, i) => (
+                    {(filters.product !== 'alle'
+                      ? (productsData.products ?? []).filter(p => p.slug === filters.product)
+                      : productsData.products ?? []
+                    ).map((p, i) => (
                       <tr key={i} className="row-fade" style={{ borderBottom: `1px solid ${C.border}22`, animationDelay: `${i * 40}ms` }}>
                         <td style={{ padding: '10px 12px', fontWeight: 600, color: C.text }}>{p.slug}</td>
                         <td style={{ padding: '10px 12px', color: C.textMuted }}>{p.views}</td>
@@ -458,7 +1112,7 @@ export default function AnalyticsPage() {
                   </tbody>
                 </table>
               </div>
-            ) : <div style={{ color: C.textDim }}>Laden…</div>}
+            ) : <div style={{ color: C.textDim }}>Laden...</div>}
           </Card>
         </div>
       )}
@@ -469,7 +1123,10 @@ export default function AnalyticsPage() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16, marginBottom: 20 }}>
             {/* Traffic Sources */}
             <Card>
-              <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16 }}>Traffic-Quellen — 30 Tage</div>
+              <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16 }}>
+                Traffic-Quellen — 30 Tage
+                <InfoTooltip text="Zeigt, woher deine Besucher kommen (z.B. Google, Instagram, direkte Eingabe)." />
+              </div>
               {trafficData ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {(trafficData.sources ?? []).map((s, i) => (
@@ -489,12 +1146,15 @@ export default function AnalyticsPage() {
                     </div>
                   ))}
                 </div>
-              ) : <div style={{ color: C.textDim }}>Laden…</div>}
+              ) : <div style={{ color: C.textDim }}>Laden...</div>}
             </Card>
 
             {/* Top Pages */}
             <Card>
-              <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16 }}>Top Seiten — 30 Tage</div>
+              <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16 }}>
+                Top Seiten — Heute
+                <InfoTooltip text="Die meistbesuchten Seiten deines Shops heute." />
+              </div>
               {todayData ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {(todayData.top_pages ?? []).map((p, i) => (
@@ -504,23 +1164,26 @@ export default function AnalyticsPage() {
                     </div>
                   ))}
                 </div>
-              ) : <div style={{ color: C.textDim }}>Laden…</div>}
+              ) : <div style={{ color: C.textDim }}>Laden...</div>}
             </Card>
           </div>
 
           {/* Visitor History */}
           <Card style={{ marginBottom: 20 }}>
-            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16 }}>Besucher-Verlauf — 30 Tage</div>
+            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16 }}>
+              Besucher-Verlauf — {getTimeRangeLabel(filters.timeRange)}
+              <InfoTooltip text="Seitenaufrufe pro Tag im gewaehlten Zeitraum." />
+            </div>
             {historyData ? (
-              <BarChart data={(historyData.history ?? []).map((d) => d.views)} color={C.cyan} height={100} />
-            ) : <div style={{ color: C.textDim }}>Laden…</div>}
+              <BarChart data={getFilteredHistory().map((d) => d.views)} color={C.cyan} height={100} />
+            ) : <div style={{ color: C.textDim }}>Laden...</div>}
           </Card>
 
           {/* UTM Info */}
           <Card style={{ background: `${C.cyan}08`, border: `1px solid ${C.cyan}33` }}>
             <div style={{ fontWeight: 600, fontSize: 13, color: C.cyanLight, marginBottom: 8 }}>UTM-Tracking einrichten</div>
             <p style={{ fontSize: 12, color: C.textMuted, marginBottom: 10, lineHeight: 1.6 }}>
-              Füge UTM-Parameter zu deinen Links hinzu, um Traffic-Quellen genau zuzuordnen.
+              Fuege UTM-Parameter zu deinen Links hinzu, um Traffic-Quellen genau zuzuordnen.
             </p>
             <code style={{ display: 'block', background: C.border, borderRadius: 8, padding: '8px 12px', fontSize: 11, color: C.cyanLight, fontFamily: 'monospace', wordBreak: 'break-all' }}>
               {'https://cam2rent.de/?utm_source=instagram&utm_medium=social&utm_campaign=hero13-launch'}
@@ -536,7 +1199,10 @@ export default function AnalyticsPage() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginBottom: 20 }}>
             {/* New vs Returning */}
             <Card>
-              <div style={{ fontSize: 11, color: C.textDim, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>Neu vs. Wiederkehrend</div>
+              <div style={{ fontSize: 11, color: C.textDim, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>
+                Neu vs. Wiederkehrend
+                <InfoTooltip text="Verhaeltnis zwischen Erstbesuchern und wiederkehrenden Besuchern in den letzten 30 Tagen." />
+              </div>
               {trafficData ? (
                 <>
                   <div style={{ background: C.border, borderRadius: 6, height: 8, overflow: 'hidden', display: 'flex', marginBottom: 8 }}>
@@ -551,15 +1217,33 @@ export default function AnalyticsPage() {
               ) : <div style={{ color: C.textDim }}>–</div>}
             </Card>
 
-            <StatCard label="Absprungrate" value={trafficData ? `${trafficData.bounce_rate}%` : '–'} color={C.yellow} />
-            <StatCard label="Sessions (30 Tage)" value={trafficData?.total_sessions ?? '–'} color={C.text} />
-            <StatCard label="Unique Visitors (heute)" value={todayData?.unique_visitors ?? '–'} color={C.cyanLight} />
+            <StatCard
+              label="Absprungrate"
+              value={trafficData ? `${trafficData.bounce_rate}%` : '–'}
+              color={C.yellow}
+              tooltip="Anteil der Besucher, die nur eine einzige Seite aufrufen und dann die Website verlassen. Ein niedriger Wert ist besser."
+            />
+            <StatCard
+              label="Besuche (30 Tage)"
+              value={trafficData?.total_sessions ?? '–'}
+              color={C.text}
+              tooltip="Gesamtanzahl aller Sitzungen in den letzten 30 Tagen. Eine Sitzung ist ein zusammenhaengender Besuch auf der Website."
+            />
+            <StatCard
+              label="Einzelne Besucher (heute)"
+              value={todayData?.unique_visitors ?? '–'}
+              color={C.cyanLight}
+              tooltip="Anzahl verschiedener Besucher heute. Jede Person wird nur einmal gezaehlt, auch bei mehreren Besuchen."
+            />
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
             {/* Device Distribution */}
             <Card>
-              <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16 }}>Geräte-Verteilung — 30 Tage</div>
+              <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16 }}>
+                Geraete-Verteilung — 30 Tage
+                <InfoTooltip text="Zeigt, mit welchen Geraeten deine Besucher die Website aufrufen." />
+              </div>
               {trafficData ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   {[
@@ -575,12 +1259,15 @@ export default function AnalyticsPage() {
                     </div>
                   ))}
                 </div>
-              ) : <div style={{ color: C.textDim }}>Laden…</div>}
+              ) : <div style={{ color: C.textDim }}>Laden...</div>}
             </Card>
 
             {/* Browser Distribution */}
             <Card>
-              <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16 }}>Browser — 30 Tage</div>
+              <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16 }}>
+                Browser — 30 Tage
+                <InfoTooltip text="Welche Browser deine Besucher verwenden." />
+              </div>
               {trafficData ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   {(trafficData.browsers ?? []).slice(0, 5).map((b, i) => {
@@ -595,7 +1282,7 @@ export default function AnalyticsPage() {
                     );
                   })}
                 </div>
-              ) : <div style={{ color: C.textDim }}>Laden…</div>}
+              ) : <div style={{ color: C.textDim }}>Laden...</div>}
             </Card>
           </div>
         </div>
@@ -607,4 +1294,44 @@ export default function AnalyticsPage() {
       </div>
     </div>
   );
+}
+
+// ─── Client-side filter helper for date-based arrays ─────────────────────────
+function filterByTimeRange<T extends { date: string }>(data: T[], filters: FilterState): T[] {
+  const now = new Date();
+  let fromDate: Date;
+  let toDate: Date = now;
+
+  switch (filters.timeRange) {
+    case 'heute':
+      fromDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      break;
+    case '7tage':
+      fromDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      break;
+    case '30tage':
+      fromDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      break;
+    case 'monat':
+      fromDate = new Date(now.getFullYear(), now.getMonth(), 1);
+      break;
+    case 'jahr':
+      fromDate = new Date(now.getFullYear(), 0, 1);
+      break;
+    case 'custom':
+      if (filters.customFrom && filters.customTo) {
+        fromDate = new Date(filters.customFrom);
+        toDate = new Date(filters.customTo + 'T23:59:59');
+      } else {
+        return data;
+      }
+      break;
+    default:
+      fromDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  }
+
+  const fromStr = fromDate.toISOString().slice(0, 10);
+  const toStr = toDate.toISOString().slice(0, 10);
+
+  return data.filter(item => item.date >= fromStr && item.date <= toStr);
 }
