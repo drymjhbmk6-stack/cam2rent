@@ -63,4 +63,4 @@ Steuer-Modus umschaltbar im Admin (/admin/einstellungen):
 - **Dark/Light Mode:** ThemeProvider mit localStorage Persistenz, Tailwind `darkMode: 'class'`, Toggle in Navbar
 
 ## Build
-~155 Seiten, 0 Fehler (Stand 2026-04-06)
+143 Seiten, 0 Fehler (Stand 2026-04-06, Commit 27fe79e)

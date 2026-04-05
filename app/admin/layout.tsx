@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import NotificationDropdown from '@/components/admin/NotificationDropdown';
+import AdminPWAHead from '@/components/admin/AdminPWAHead';
 
 type NavItem = { href: string; label: string; exact?: boolean; icon: React.ReactNode };
 
@@ -274,6 +275,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   return (
     <div className="min-h-screen flex" style={{ background: '#0a0f1e' }}>
+      <AdminPWAHead />
       {/* Mobile header with hamburger */}
       <div className="lg:hidden fixed top-0 left-0 right-0 z-50 flex items-center h-14 px-4" style={{ background: '#0f172a', borderBottom: '1px solid #1e293b' }}>
         <button
