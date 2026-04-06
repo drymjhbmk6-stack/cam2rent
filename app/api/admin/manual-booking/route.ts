@@ -30,7 +30,6 @@ export async function POST(req: NextRequest) {
       customer_name,
       customer_email,
       shipping_address,
-      notes,
     } = body;
 
     // Pflichtfelder pruefen

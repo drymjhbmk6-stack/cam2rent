@@ -358,6 +358,7 @@ export function ContractPDF({ data }: { data: ContractData }) {
             <>
               <Text style={s.signatureName}>{data.signerName}</Text>
               <Text style={s.signatureDate}>Unterschrieben am {data.signedAt}</Text>
+              {/* eslint-disable-next-line jsx-a11y/alt-text */}
               <Image src={data.signatureDataUrl} style={s.signatureImage} />
             </>
           ) : (
