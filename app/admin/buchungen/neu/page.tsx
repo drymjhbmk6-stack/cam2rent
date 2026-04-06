@@ -126,7 +126,8 @@ export default function ManualBookingPage() {
   const [street, setStreet] = useState('');
   const [zip, setZip] = useState('');
   const [city, setCity] = useState('');
-  const [productId, setProductId] = useState('');
+  const [selectedProducts, setSelectedProducts] = useState<{ id: string; qty: number }[]>([]);
+  const [addProductId, setAddProductId] = useState('');
   const [rentalFrom, setRentalFrom] = useState('');
   const [rentalTo, setRentalTo] = useState('');
   const [selectedAccessories, setSelectedAccessories] = useState<string[]>([]);
@@ -150,8 +151,8 @@ export default function ManualBookingPage() {
         setStaticProducts(prods);
         setAccessories(accData.accessories ?? []);
         setSets(setData.sets ?? []);
-        // Set default product
-        if (prods.length > 0) setProductId(prods[0].id);
+        // Set default for add-dropdown
+        if (prods.length > 0) setAddProductId(prods[0].id);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -175,7 +176,22 @@ export default function ManualBookingPage() {
   }, [staticProducts, dynPrices]);
 
   const days = calcDays(rentalFrom, rentalTo);
-  const selectedProduct = productList.find((p) => p.id === productId);
+
+  function addProduct() {
+    if (!addProductId) return;
+    setSelectedProducts((prev) => {
+      const existing = prev.find((p) => p.id === addProductId);
+      if (existing) return prev.map((p) => p.id === addProductId ? { ...p, qty: p.qty + 1 } : p);
+      return [...prev, { id: addProductId, qty: 1 }];
+    });
+  }
+  function removeProduct(id: string) {
+    setSelectedProducts((prev) => prev.filter((p) => p.id !== id));
+  }
+  function updateProductQty(id: string, qty: number) {
+    if (qty < 1) return removeProduct(id);
+    setSelectedProducts((prev) => prev.map((p) => p.id === id ? { ...p, qty } : p));
+  }
 
   const haftungPrice = useMemo(() => {
     if (haftung === 'none') return 0;
@@ -184,9 +200,18 @@ export default function ManualBookingPage() {
   }, [haftung, dynPrices]);
 
   const rentalPrice = useMemo(() => {
-    if (!productId || !days) return 0;
-    return getRentalPrice(productId, days, dynPrices, staticProducts);
-  }, [productId, days, dynPrices, staticProducts]);
+    if (!days) return 0;
+    return selectedProducts.reduce((sum, sp) => {
+      return sum + getRentalPrice(sp.id, days, dynPrices, staticProducts) * sp.qty;
+    }, 0);
+  }, [selectedProducts, days, dynPrices, staticProducts]);
+
+  const totalDeposit = useMemo(() => {
+    return selectedProducts.reduce((sum, sp) => {
+      const p = productList.find((pl) => pl.id === sp.id);
+      return sum + (p?.deposit ?? 0) * sp.qty;
+    }, 0);
+  }, [selectedProducts, productList]);
 
   const accessoryPrice = useMemo(() => {
     return selectedAccessories.reduce((sum, id) => {
@@ -208,7 +233,7 @@ export default function ManualBookingPage() {
     : shippingMethod === 'express' ? (sp?.expressPrice ?? 12.99)
     : subtotal >= (sp?.freeShippingThreshold ?? 50) ? 0 : (sp?.standardPrice ?? 5.99);
   const total = subtotal + shippingPrice;
-  const deposit = selectedProduct?.deposit ?? 0;
+  const deposit = totalDeposit;
 
   function toggleAccessory(id: string) {
     setSelectedAccessories((prev) => prev.includes(id) ? prev.filter((a) => a !== id) : [...prev, id]);
@@ -222,20 +247,26 @@ export default function ManualBookingPage() {
     setError('');
     setSuccess('');
     if (!customerName.trim()) { setError('Name ist ein Pflichtfeld.'); return; }
-    if (!rentalFrom || !rentalTo || days <= 0) { setError('Gueltiger Mietzeitraum noetig.'); return; }
+    if (selectedProducts.length === 0) { setError('Mindestens ein Produkt auswählen.'); return; }
+    if (!rentalFrom || !rentalTo || days <= 0) { setError('Gültiger Mietzeitraum nötig.'); return; }
 
     setSaving(true);
     try {
       const shippingAddress = street ? `${street}, ${zip} ${city}` : '';
       const accNames = selectedAccessories.map((id) => accessories.find((a) => a.id === id)?.name ?? id);
       const setNames = selectedSets.map((id) => sets.find((s) => s.id === id)?.name ?? id);
+      const productNames = selectedProducts.map((sp) => {
+        const p = productList.find((pl) => pl.id === sp.id);
+        return sp.qty > 1 ? `${sp.qty}x ${p?.name ?? sp.id}` : (p?.name ?? sp.id);
+      });
+      const mainProduct = selectedProducts[0];
 
       const res = await fetch('/api/admin/manual-booking', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          product_id: productId,
-          product_name: selectedProduct?.name ?? '',
+          product_id: mainProduct.id,
+          product_name: productNames.join(', '),
           rental_from: rentalFrom,
           rental_to: rentalTo,
           days,
@@ -283,7 +314,7 @@ export default function ManualBookingPage() {
   const availableSets = sets.filter((s) => s.available);
   const stdShippingLabel = subtotal >= (sp?.freeShippingThreshold ?? 50)
     ? 'Standard (3-5 Tage) — Gratis'
-    : `Standard (3-5 Tage) — ${(sp?.standardPrice ?? 5.99).toFixed(2)} \u20ac`;
+    : `Standard (3-5 Tage) — ${(sp?.standardPrice ?? 5.99).toFixed(2)} €`;
 
   return (
     <div style={{ padding: '20px 16px', maxWidth: 800 }}>
@@ -329,23 +360,59 @@ export default function ManualBookingPage() {
           </div>
         </div>
 
-        {/* ─── Produkt & Zeitraum ─── */}
+        {/* ─── Produkte ─── */}
         <div style={sectionStyle}>
-          <h2 className="font-heading font-semibold text-sm mb-4" style={headingStyle}>Produkt & Zeitraum</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="sm:col-span-2">
-              <label style={labelStyle}>Kamera *</label>
-              <select style={selectStyle} value={productId} onChange={(e) => setProductId(e.target.value)}>
-                {productList.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.brand} {p.name} {!p.available ? '(nicht verfuegbar)' : ''}
-                  </option>
-                ))}
-              </select>
-              {selectedProduct && !selectedProduct.available && (
-                <p className="text-xs mt-1" style={{ color: '#f59e0b' }}>Achtung: Dieses Produkt ist aktuell als nicht verfuegbar markiert.</p>
-              )}
+          <h2 className="font-heading font-semibold text-sm mb-4" style={headingStyle}>Produkte</h2>
+
+          {/* Hinzufügen */}
+          <div className="flex gap-2 mb-4">
+            <select style={{ ...selectStyle, flex: 1 }} value={addProductId} onChange={(e) => setAddProductId(e.target.value)}>
+              {productList.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} ({p.brand}) {!p.available ? '— nicht verfügbar' : ''}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={addProduct}
+              className="px-4 py-2 rounded-lg text-sm font-semibold flex-shrink-0"
+              style={{ background: '#06b6d4', color: 'white' }}
+            >
+              + Hinzufügen
+            </button>
+          </div>
+
+          {/* Liste */}
+          {selectedProducts.length > 0 && (
+            <div className="space-y-2 mb-4">
+              {selectedProducts.map((sp) => {
+                const p = productList.find((pl) => pl.id === sp.id);
+                const price = days > 0 ? getRentalPrice(sp.id, days, dynPrices, staticProducts) * sp.qty : 0;
+                return (
+                  <div key={sp.id} className="flex items-center gap-3 p-3 rounded-lg" style={{ background: '#06b6d40a', border: '1px solid #06b6d433' }}>
+                    <div className="flex-1">
+                      <span className="text-sm font-semibold" style={{ color: '#e2e8f0' }}>{p?.name ?? sp.id}</span>
+                      {!p?.available && <span className="text-xs ml-2" style={{ color: '#f59e0b' }}>(nicht verfügbar)</span>}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button type="button" onClick={() => updateProductQty(sp.id, sp.qty - 1)} className="w-7 h-7 rounded flex items-center justify-center text-sm" style={{ background: '#1e293b', color: '#94a3b8' }}>−</button>
+                      <span className="text-sm font-semibold w-6 text-center" style={{ color: '#e2e8f0' }}>{sp.qty}</span>
+                      <button type="button" onClick={() => updateProductQty(sp.id, sp.qty + 1)} className="w-7 h-7 rounded flex items-center justify-center text-sm" style={{ background: '#1e293b', color: '#94a3b8' }}>+</button>
+                    </div>
+                    {days > 0 && <span className="text-xs font-semibold ml-2" style={{ color: '#06b6d4' }}>{price.toFixed(2)} €</span>}
+                    <button type="button" onClick={() => removeProduct(sp.id)} className="text-xs p-1" style={{ color: '#ef4444' }}>✕</button>
+                  </div>
+                );
+              })}
             </div>
+          )}
+          {selectedProducts.length === 0 && (
+            <p className="text-xs mb-4" style={{ color: '#64748b' }}>Noch kein Produkt ausgewählt.</p>
+          )}
+
+          {/* Zeitraum */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label style={labelStyle}>Mietbeginn *</label>
               <input style={inputStyle} type="date" value={rentalFrom} onChange={(e) => setRentalFrom(e.target.value)} required />
@@ -355,9 +422,9 @@ export default function ManualBookingPage() {
               <input style={inputStyle} type="date" value={rentalTo} onChange={(e) => setRentalTo(e.target.value)} required />
             </div>
           </div>
-          {days > 0 && (
+          {days > 0 && selectedProducts.length > 0 && (
             <p className="mt-3 text-sm" style={{ color: '#06b6d4' }}>
-              {days} {days === 1 ? 'Tag' : 'Tage'} · Mietpreis: {rentalPrice.toFixed(2)} \u20ac
+              {days} {days === 1 ? 'Tag' : 'Tage'} · Mietpreis gesamt: {rentalPrice.toFixed(2)} €
             </p>
           )}
         </div>
@@ -376,11 +443,11 @@ export default function ManualBookingPage() {
                     <div className="flex-1">
                       <span className="text-sm" style={{ color: '#e2e8f0' }}>{set.name}</span>
                       <span className="text-xs ml-2" style={{ color: '#64748b' }}>
-                        {set.price.toFixed(2)} \u20ac{set.pricing_mode === 'perDay' ? '/Tag' : ' pauschal'}
+                        {set.price.toFixed(2)} €{set.pricing_mode === 'perDay' ? '/Tag' : ' pauschal'}
                       </span>
                     </div>
                     {checked && days > 0 && (
-                      <span className="text-xs font-semibold" style={{ color: '#06b6d4' }}>{price.toFixed(2)} \u20ac</span>
+                      <span className="text-xs font-semibold" style={{ color: '#06b6d4' }}>{price.toFixed(2)} €</span>
                     )}
                   </label>
                 );
@@ -403,11 +470,11 @@ export default function ManualBookingPage() {
                     <div className="flex-1">
                       <span className="text-sm" style={{ color: '#e2e8f0' }}>{acc.name}</span>
                       <span className="text-xs ml-2" style={{ color: '#64748b' }}>
-                        {acc.price.toFixed(2)} \u20ac{acc.pricing_mode === 'perDay' ? '/Tag' : ' pauschal'}
+                        {acc.price.toFixed(2)} €{acc.pricing_mode === 'perDay' ? '/Tag' : ' pauschal'}
                       </span>
                     </div>
                     {checked && days > 0 && (
-                      <span className="text-xs font-semibold" style={{ color: '#06b6d4' }}>{price.toFixed(2)} \u20ac</span>
+                      <span className="text-xs font-semibold" style={{ color: '#06b6d4' }}>{price.toFixed(2)} €</span>
                     )}
                   </label>
                 );
@@ -432,7 +499,7 @@ export default function ManualBookingPage() {
                 <label style={labelStyle}>Versandart</label>
                 <select style={selectStyle} value={shippingMethod} onChange={(e) => setShippingMethod(e.target.value as 'standard' | 'express')}>
                   <option value="standard">{stdShippingLabel}</option>
-                  <option value="express">Express (24h) — {(sp?.expressPrice ?? 12.99).toFixed(2)} \u20ac</option>
+                  <option value="express">Express (24h) — {(sp?.expressPrice ?? 12.99).toFixed(2)} €</option>
                 </select>
               </div>
             )}
@@ -446,7 +513,7 @@ export default function ManualBookingPage() {
                   <input type="radio" name="haftung" value={opt.value} checked={haftung === opt.value} onChange={() => setHaftung(opt.value)} className="accent-cyan-400" />
                   <span className="text-sm flex-1" style={{ color: '#e2e8f0' }}>{opt.label}</span>
                   <span className="text-xs font-semibold" style={{ color: price > 0 ? '#06b6d4' : '#64748b' }}>
-                    {price > 0 ? `${price.toFixed(2)} \u20ac` : 'Kostenlos'}
+                    {price > 0 ? `${price.toFixed(2)} €` : 'Kostenlos'}
                   </span>
                 </label>
               );
@@ -484,41 +551,41 @@ export default function ManualBookingPage() {
           <div className="space-y-2 text-sm">
             <div className="flex justify-between" style={{ color: '#e2e8f0' }}>
               <span>Kamera-Miete ({days || 0} {days === 1 ? 'Tag' : 'Tage'})</span>
-              <span>{rentalPrice.toFixed(2)} \u20ac</span>
+              <span>{rentalPrice.toFixed(2)} €</span>
             </div>
             {setPrice > 0 && (
               <div className="flex justify-between" style={{ color: '#e2e8f0' }}>
                 <span>Sets ({selectedSets.length}x)</span>
-                <span>{setPrice.toFixed(2)} \u20ac</span>
+                <span>{setPrice.toFixed(2)} €</span>
               </div>
             )}
             {accessoryPrice > 0 && (
               <div className="flex justify-between" style={{ color: '#e2e8f0' }}>
                 <span>Zubehoer ({selectedAccessories.length}x)</span>
-                <span>{accessoryPrice.toFixed(2)} \u20ac</span>
+                <span>{accessoryPrice.toFixed(2)} €</span>
               </div>
             )}
             {haftungPrice > 0 && (
               <div className="flex justify-between" style={{ color: '#e2e8f0' }}>
                 <span>Haftungsschutz</span>
-                <span>{haftungPrice.toFixed(2)} \u20ac</span>
+                <span>{haftungPrice.toFixed(2)} €</span>
               </div>
             )}
             {shippingPrice > 0 && (
               <div className="flex justify-between" style={{ color: '#e2e8f0' }}>
                 <span>Versand</span>
-                <span>{shippingPrice.toFixed(2)} \u20ac</span>
+                <span>{shippingPrice.toFixed(2)} €</span>
               </div>
             )}
             <div style={{ height: 1, background: '#1e293b', margin: '8px 0' }} />
             <div className="flex justify-between font-heading font-bold text-base" style={{ color: '#06b6d4' }}>
               <span>Gesamt</span>
-              <span>{total.toFixed(2)} \u20ac</span>
+              <span>{total.toFixed(2)} €</span>
             </div>
             {deposit > 0 && (
               <div className="flex justify-between text-xs" style={{ color: '#64748b' }}>
                 <span>Kaution (vorgemerkt)</span>
-                <span>{deposit.toFixed(2)} \u20ac</span>
+                <span>{deposit.toFixed(2)} €</span>
               </div>
             )}
           </div>
