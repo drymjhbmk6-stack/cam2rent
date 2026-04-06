@@ -85,12 +85,6 @@ export default function Hero() {
 
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 md:py-28 lg:py-32">
         <div className="max-w-3xl">
-          {/* Badge */}
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/15 backdrop-blur-sm border border-white/20 text-sm font-body font-medium mb-8">
-            <span className="w-2 h-2 rounded-full bg-status-success animate-pulse flex-shrink-0" aria-hidden="true" />
-            Neu: GoPro Hero 13 verfügbar
-          </div>
-
           {/* Headline */}
           <h1
             id="hero-heading"
