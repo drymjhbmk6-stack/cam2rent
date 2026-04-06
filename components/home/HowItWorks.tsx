@@ -59,11 +59,12 @@ const colorConfig = {
   },
 };
 
-export default function HowItWorks() {
+export default function HowItWorks({ hideHeader = false }: { hideHeader?: boolean }) {
   return (
     <section className="py-20 bg-white dark:bg-gray-900" aria-labelledby="how-it-works-heading">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
+        {!hideHeader && (
         <div className="text-center mb-14">
           <h2
             id="how-it-works-heading"
@@ -75,6 +76,7 @@ export default function HowItWorks() {
             In drei einfachen Schritten zur Action-Cam – schnell, unkompliziert und abgesichert.
           </p>
         </div>
+        )}
 
         {/* Steps */}
         <div className="relative grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-6">

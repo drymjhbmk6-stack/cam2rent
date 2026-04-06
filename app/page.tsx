@@ -5,6 +5,7 @@ import TrustBanner from '@/components/home/TrustBanner';
 import HowItWorks from '@/components/home/HowItWorks';
 import CtaBanner from '@/components/home/CtaBanner';
 import HomeReviews from '@/components/home/HomeReviews';
+import GoogleReviews from '@/components/home/GoogleReviews';
 import AppInstallBanner from '@/components/home/AppInstallBanner';
 
 export default function Home() {
@@ -16,6 +17,7 @@ export default function Home() {
       <KameraFinderCta />
       <HowItWorks />
       <HomeReviews />
+      <GoogleReviews />
       <AppInstallBanner />
       <CtaBanner />
     </>

@@ -18,19 +18,6 @@ const FALLBACK: HeroData = {
   cta_link: '/kameras',
 };
 
-function CheckIcon() {
-  return (
-    <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 flex-shrink-0" aria-hidden="true">
-      <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
-    </svg>
-  );
-}
-
-const trustBadges = [
-  'Mit Haftungsschutz',
-  'Kostenloser Versand',
-  '24h Lieferung',
-];
 
 export default function Hero() {
   const [data, setData] = useState<HeroData>(FALLBACK);
@@ -105,7 +92,7 @@ export default function Hero() {
           </p>
 
           {/* CTA Buttons */}
-          <div className="flex flex-col sm:flex-row gap-4 mb-12">
+          <div className="flex flex-col sm:flex-row gap-4">
             <Link
               href={data.cta_link}
               className="inline-flex items-center justify-center px-8 py-3.5 bg-white text-brand-black font-heading font-semibold text-base rounded-[10px] hover:bg-blue-50 transition-colors shadow-lg shadow-black/10"
@@ -118,18 +105,6 @@ export default function Hero() {
             >
               So funktioniert&apos;s
             </Link>
-          </div>
-
-          {/* Trust Badges */}
-          <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
-            {trustBadges.map((badge) => (
-              <div key={badge} className="flex items-center gap-2 text-white/90">
-                <span className="flex-shrink-0 w-5 h-5 rounded-full bg-white/20 flex items-center justify-center">
-                  <CheckIcon />
-                </span>
-                <span className="text-sm font-body font-medium">{badge}</span>
-              </div>
-            ))}
           </div>
         </div>
       </div>

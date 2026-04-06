@@ -24,8 +24,8 @@ export default function SoFunktionierts() {
         </div>
       </section>
 
-      {/* Steps (wiederverwendete Komponente) */}
-      <HowItWorks />
+      {/* Steps (wiederverwendete Komponente, ohne doppelte Ueberschrift) */}
+      <HowItWorks hideHeader />
 
       {/* Detail-Abschnitte */}
       <section className="py-16 bg-gray-50 dark:bg-gray-800">
