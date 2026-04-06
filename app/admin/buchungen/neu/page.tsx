@@ -2,87 +2,108 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { products } from '@/data/products';
 
 /* ─── Types ─────────────────────────────────────────────────────────────────── */
 
-interface Accessory {
+interface DynProduct {
   id: string;
   name: string;
-  pricePerDay: number;
+  brand: string;
+  priceTable?: number[];
+  perDayAfter30?: number;
+  deposit?: number;
+  available?: boolean;
+  stock?: number;
+  hasHaftungsoption?: boolean;
+}
+
+interface DynAccessory {
+  id: string;
+  name: string;
+  category?: string;
+  pricing_mode: 'perDay' | 'flat';
+  price: number;
+  available: boolean;
+}
+
+interface DynSet {
+  id: string;
+  name: string;
+  description?: string;
+  pricing_mode: 'perDay' | 'flat';
+  price: number;
+  available: boolean;
 }
 
 interface DynPrices {
-  haftung?: { standard: number; premium: number };
+  haftung?: { standard: number; standardEigenbeteiligung?: number; premium: number };
   shipping?: { standardPrice: number; expressPrice: number; freeShippingThreshold: number };
-  products?: Record<string, { priceTable?: { days: number; price: number }[] }>;
+  adminProducts?: Record<string, DynProduct>;
 }
 
-const ACCESSORIES: Accessory[] = [
-  { id: 'tripod', name: 'Mini-Stativ', pricePerDay: 1.5 },
-  { id: 'sd64', name: 'SD-Karte 64GB', pricePerDay: 1 },
-  { id: 'sd128', name: 'SD-Karte 128GB', pricePerDay: 1.5 },
-  { id: 'extra-akku', name: 'Extra-Akku', pricePerDay: 2 },
-];
+interface StaticProduct {
+  id: string;
+  name: string;
+  brand: string;
+  pricePerDay: number;
+  deposit: number;
+  priceTable?: { days: number; price: number }[];
+  priceFormula31plus?: { base: number; perDay: number };
+}
 
 const HAFTUNG_OPTIONS = [
-  { value: 'none', label: 'Keine Haftungsbegrenzung', price: 0 },
-  { value: 'standard', label: 'Standard-Haftungsschutz', price: 15 },
-  { value: 'premium', label: 'Premium-Haftungsschutz', price: 25 },
+  { value: 'none', label: 'Keine Haftungsbegrenzung' },
+  { value: 'standard', label: 'Standard-Haftungsschutz' },
+  { value: 'premium', label: 'Premium-Haftungsschutz' },
 ];
 
 /* ─── Helpers ───────────────────────────────────────────────────────────────── */
 
 function calcDays(from: string, to: string): number {
   if (!from || !to) return 0;
-  const a = new Date(from);
-  const b = new Date(to);
-  const diff = Math.round((b.getTime() - a.getTime()) / 86400000) + 1;
+  const diff = Math.round((new Date(to).getTime() - new Date(from).getTime()) / 86400000) + 1;
   return diff > 0 ? diff : 0;
 }
 
-function getRentalPrice(product: typeof products[0], days: number, dynPrices?: DynPrices): number {
-  const dynProduct = dynPrices?.products?.[product.id];
-  const table = dynProduct?.priceTable ?? product.priceTable ?? [];
-  const entry = table.find((e) => e.days === days);
-  if (entry) return entry.price;
-  if (days > 30 && product.priceFormula31plus) {
-    return product.priceFormula31plus.base + product.priceFormula31plus.perDay * days;
+function getRentalPrice(
+  productId: string,
+  days: number,
+  dynPrices: DynPrices | null,
+  staticProducts: StaticProduct[]
+): number {
+  if (!days) return 0;
+  const ap = dynPrices?.adminProducts?.[productId];
+  if (ap?.priceTable?.length) {
+    if (days <= ap.priceTable.length) return ap.priceTable[days - 1];
+    if (ap.perDayAfter30) return ap.priceTable[ap.priceTable.length - 1] + ap.perDayAfter30 * (days - ap.priceTable.length);
   }
-  return product.pricePerDay * days;
+  const sp = staticProducts.find((p) => p.id === productId);
+  if (sp?.priceTable) {
+    const entry = sp.priceTable.find((e) => e.days === days);
+    if (entry) return entry.price;
+    if (days > 30 && sp.priceFormula31plus) return sp.priceFormula31plus.base + sp.priceFormula31plus.perDay * days;
+  }
+  return (sp?.pricePerDay ?? 10) * days;
 }
 
-function getShippingPrice(subtotal: number, method: string, mode: string, dynPrices?: DynPrices): number {
-  if (mode === 'abholung') return 0;
-  const sp = dynPrices?.shipping;
-  const expressPrice = sp?.expressPrice ?? 12.99;
-  const standardPrice = sp?.standardPrice ?? 5.99;
-  const threshold = sp?.freeShippingThreshold ?? 50;
-  if (method === 'express') return expressPrice;
-  return subtotal >= threshold ? 0 : standardPrice;
+function getAccessoryPrice(acc: DynAccessory, days: number): number {
+  return acc.pricing_mode === 'flat' ? acc.price : acc.price * days;
+}
+
+function getSetPrice(set: DynSet, days: number): number {
+  return set.pricing_mode === 'flat' ? set.price : set.price * days;
 }
 
 /* ─── Styles ────────────────────────────────────────────────────────────────── */
 
 const inputStyle: React.CSSProperties = {
-  width: '100%',
-  background: '#0f172a',
-  border: '1px solid #334155',
-  borderRadius: 8,
-  padding: '10px 12px',
-  color: '#e2e8f0',
-  fontSize: 14,
+  width: '100%', background: '#0f172a', border: '1px solid #334155',
+  borderRadius: 8, padding: '10px 12px', color: '#e2e8f0', fontSize: 14,
 };
-
 const selectStyle: React.CSSProperties = { ...inputStyle };
-
-const labelStyle: React.CSSProperties = {
-  display: 'block',
-  fontSize: 12,
-  color: '#64748b',
-  marginBottom: 4,
-  fontWeight: 600,
-};
+const labelStyle: React.CSSProperties = { display: 'block', fontSize: 12, color: '#64748b', marginBottom: 4, fontWeight: 600 };
+const sectionStyle: React.CSSProperties = { background: '#111827', borderRadius: 12, border: '1px solid #1e293b', padding: 20, marginBottom: 16 };
+const headingStyle: React.CSSProperties = { color: '#94a3b8', textTransform: 'uppercase' as const, letterSpacing: 0.8 };
 
 /* ─── Component ─────────────────────────────────────────────────────────────── */
 
@@ -91,7 +112,13 @@ export default function ManualBookingPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  // Dynamic data
   const [dynPrices, setDynPrices] = useState<DynPrices | null>(null);
+  const [staticProducts, setStaticProducts] = useState<StaticProduct[]>([]);
+  const [accessories, setAccessories] = useState<DynAccessory[]>([]);
+  const [sets, setSets] = useState<DynSet[]>([]);
+  const [loading, setLoading] = useState(true);
 
   // Form state
   const [customerName, setCustomerName] = useState('');
@@ -99,75 +126,116 @@ export default function ManualBookingPage() {
   const [street, setStreet] = useState('');
   const [zip, setZip] = useState('');
   const [city, setCity] = useState('');
-  const [productId, setProductId] = useState(products[0].id);
+  const [productId, setProductId] = useState('');
   const [rentalFrom, setRentalFrom] = useState('');
   const [rentalTo, setRentalTo] = useState('');
   const [selectedAccessories, setSelectedAccessories] = useState<string[]>([]);
+  const [selectedSets, setSelectedSets] = useState<string[]>([]);
   const [haftung, setHaftung] = useState('none');
   const [deliveryMode, setDeliveryMode] = useState<'versand' | 'abholung'>('versand');
   const [shippingMethod, setShippingMethod] = useState<'standard' | 'express'>('standard');
   const [notes, setNotes] = useState('');
   const [source, setSource] = useState('kleinanzeigen');
 
-  // Preise laden
+  // Load all data on mount
   useEffect(() => {
-    fetch('/api/prices')
-      .then((r) => r.json())
-      .then((d) => setDynPrices(d))
-      .catch(() => {});
+    Promise.all([
+      fetch('/api/prices').then((r) => r.json()),
+      import('@/data/products').then((m) => m.products),
+      fetch('/api/admin/accessories').then((r) => r.ok ? r.json() : { accessories: [] }),
+      fetch('/api/sets?available=true').then((r) => r.ok ? r.json() : { sets: [] }),
+    ])
+      .then(([prices, prods, accData, setData]) => {
+        setDynPrices(prices);
+        setStaticProducts(prods);
+        setAccessories(accData.accessories ?? []);
+        setSets(setData.sets ?? []);
+        // Set default product
+        if (prods.length > 0) setProductId(prods[0].id);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, []);
 
-  const selectedProduct = products.find((p) => p.id === productId)!;
+  // Merged product list: static + dynamic overrides
+  const productList = useMemo(() => {
+    const ap = dynPrices?.adminProducts;
+    return staticProducts
+      .filter((p) => p.id) // only valid
+      .map((sp) => {
+        const dyn = ap?.[sp.id];
+        return {
+          id: sp.id,
+          name: dyn?.name ?? sp.name,
+          brand: dyn?.brand ?? sp.brand,
+          available: dyn?.available ?? true,
+          deposit: dyn?.deposit ?? sp.deposit ?? 0,
+        };
+      });
+  }, [staticProducts, dynPrices]);
+
   const days = calcDays(rentalFrom, rentalTo);
+  const selectedProduct = productList.find((p) => p.id === productId);
 
   const haftungPrice = useMemo(() => {
     if (haftung === 'none') return 0;
     const h = dynPrices?.haftung;
-    if (haftung === 'standard') return h?.standard ?? 15;
-    return h?.premium ?? 25;
+    return haftung === 'standard' ? (h?.standard ?? 15) : (h?.premium ?? 25);
   }, [haftung, dynPrices]);
 
   const rentalPrice = useMemo(() => {
-    if (!days || !selectedProduct) return 0;
-    return getRentalPrice(selectedProduct, days, dynPrices ?? undefined);
-  }, [selectedProduct, days, dynPrices]);
+    if (!productId || !days) return 0;
+    return getRentalPrice(productId, days, dynPrices, staticProducts);
+  }, [productId, days, dynPrices, staticProducts]);
 
   const accessoryPrice = useMemo(() => {
     return selectedAccessories.reduce((sum, id) => {
-      const acc = ACCESSORIES.find((a) => a.id === id);
-      return sum + (acc ? acc.pricePerDay * days : 0);
+      const acc = accessories.find((a) => a.id === id);
+      return sum + (acc ? getAccessoryPrice(acc, days) : 0);
     }, 0);
-  }, [selectedAccessories, days]);
+  }, [selectedAccessories, accessories, days]);
 
-  const subtotal = rentalPrice + accessoryPrice + haftungPrice;
-  const shippingPrice = getShippingPrice(subtotal, shippingMethod, deliveryMode, dynPrices ?? undefined);
+  const setPrice = useMemo(() => {
+    return selectedSets.reduce((sum, id) => {
+      const s = sets.find((st) => st.id === id);
+      return sum + (s ? getSetPrice(s, days) : 0);
+    }, 0);
+  }, [selectedSets, sets, days]);
+
+  const subtotal = rentalPrice + accessoryPrice + setPrice + haftungPrice;
+  const sp = dynPrices?.shipping;
+  const shippingPrice = deliveryMode === 'abholung' ? 0
+    : shippingMethod === 'express' ? (sp?.expressPrice ?? 12.99)
+    : subtotal >= (sp?.freeShippingThreshold ?? 50) ? 0 : (sp?.standardPrice ?? 5.99);
   const total = subtotal + shippingPrice;
   const deposit = selectedProduct?.deposit ?? 0;
 
   function toggleAccessory(id: string) {
-    setSelectedAccessories((prev) =>
-      prev.includes(id) ? prev.filter((a) => a !== id) : [...prev, id]
-    );
+    setSelectedAccessories((prev) => prev.includes(id) ? prev.filter((a) => a !== id) : [...prev, id]);
+  }
+  function toggleSet(id: string) {
+    setSelectedSets((prev) => prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]);
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
     setSuccess('');
-
     if (!customerName.trim()) { setError('Name ist ein Pflichtfeld.'); return; }
-    if (!rentalFrom || !rentalTo) { setError('Mietzeitraum ist ein Pflichtfeld.'); return; }
-    if (days <= 0) { setError('Ungültiger Mietzeitraum.'); return; }
+    if (!rentalFrom || !rentalTo || days <= 0) { setError('Gueltiger Mietzeitraum noetig.'); return; }
 
     setSaving(true);
     try {
       const shippingAddress = street ? `${street}, ${zip} ${city}` : '';
+      const accNames = selectedAccessories.map((id) => accessories.find((a) => a.id === id)?.name ?? id);
+      const setNames = selectedSets.map((id) => sets.find((s) => s.id === id)?.name ?? id);
+
       const res = await fetch('/api/admin/manual-booking', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           product_id: productId,
-          product_name: selectedProduct.name,
+          product_name: selectedProduct?.name ?? '',
           rental_from: rentalFrom,
           rental_to: rentalTo,
           days,
@@ -175,17 +243,21 @@ export default function ManualBookingPage() {
           shipping_method: deliveryMode === 'versand' ? shippingMethod : null,
           shipping_price: shippingPrice,
           haftung,
-          accessories: selectedAccessories,
+          accessories: [...selectedAccessories, ...selectedSets],
           price_rental: rentalPrice,
-          price_accessories: accessoryPrice,
+          price_accessories: accessoryPrice + setPrice,
           price_haftung: haftungPrice,
           price_total: total,
           deposit,
           customer_name: customerName.trim(),
           customer_email: customerEmail.trim() || null,
           shipping_address: shippingAddress || null,
-          notes,
-          source,
+          notes: [
+            source ? `Quelle: ${source}` : '',
+            setNames.length ? `Sets: ${setNames.join(', ')}` : '',
+            accNames.length ? `Zubehoer: ${accNames.join(', ')}` : '',
+            notes,
+          ].filter(Boolean).join(' | '),
         }),
       });
       const data = await res.json();
@@ -199,6 +271,20 @@ export default function ManualBookingPage() {
     }
   }
 
+  if (loading) {
+    return (
+      <div style={{ padding: '20px 16px', maxWidth: 800 }}>
+        <p style={{ color: '#64748b' }}>Daten werden geladen...</p>
+      </div>
+    );
+  }
+
+  const availableAccessories = accessories.filter((a) => a.available);
+  const availableSets = sets.filter((s) => s.available);
+  const stdShippingLabel = subtotal >= (sp?.freeShippingThreshold ?? 50)
+    ? 'Standard (3-5 Tage) — Gratis'
+    : `Standard (3-5 Tage) — ${(sp?.standardPrice ?? 5.99).toFixed(2)} \u20ac`;
+
   return (
     <div style={{ padding: '20px 16px', maxWidth: 800 }}>
       <h1 className="font-heading font-bold text-xl mb-1" style={{ color: '#e2e8f0' }}>
@@ -209,22 +295,16 @@ export default function ManualBookingPage() {
       </p>
 
       {error && (
-        <div className="mb-4 p-3 rounded-lg text-sm" style={{ background: '#ef444420', color: '#ef4444', border: '1px solid #ef444440' }}>
-          {error}
-        </div>
+        <div className="mb-4 p-3 rounded-lg text-sm" style={{ background: '#ef444420', color: '#ef4444', border: '1px solid #ef444440' }}>{error}</div>
       )}
       {success && (
-        <div className="mb-4 p-3 rounded-lg text-sm" style={{ background: '#10b98120', color: '#10b981', border: '1px solid #10b98140' }}>
-          {success}
-        </div>
+        <div className="mb-4 p-3 rounded-lg text-sm" style={{ background: '#10b98120', color: '#10b981', border: '1px solid #10b98140' }}>{success}</div>
       )}
 
       <form onSubmit={handleSubmit}>
         {/* ─── Kundendaten ─── */}
-        <div style={{ background: '#111827', borderRadius: 12, border: '1px solid #1e293b', padding: 20, marginBottom: 16 }}>
-          <h2 className="font-heading font-semibold text-sm mb-4" style={{ color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.8 }}>
-            Kundendaten
-          </h2>
+        <div style={sectionStyle}>
+          <h2 className="font-heading font-semibold text-sm mb-4" style={headingStyle}>Kundendaten</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label style={labelStyle}>Name *</label>
@@ -250,18 +330,21 @@ export default function ManualBookingPage() {
         </div>
 
         {/* ─── Produkt & Zeitraum ─── */}
-        <div style={{ background: '#111827', borderRadius: 12, border: '1px solid #1e293b', padding: 20, marginBottom: 16 }}>
-          <h2 className="font-heading font-semibold text-sm mb-4" style={{ color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.8 }}>
-            Produkt & Zeitraum
-          </h2>
+        <div style={sectionStyle}>
+          <h2 className="font-heading font-semibold text-sm mb-4" style={headingStyle}>Produkt & Zeitraum</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="sm:col-span-2">
               <label style={labelStyle}>Kamera *</label>
               <select style={selectStyle} value={productId} onChange={(e) => setProductId(e.target.value)}>
-                {products.filter((p) => p.category === 'action-cam' || p.category === '360-cam').map((p) => (
-                  <option key={p.id} value={p.id}>{p.brand} {p.name} — ab {p.pricePerDay.toFixed(2)} €/Tag</option>
+                {productList.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.brand} {p.name} {!p.available ? '(nicht verfuegbar)' : ''}
+                  </option>
                 ))}
               </select>
+              {selectedProduct && !selectedProduct.available && (
+                <p className="text-xs mt-1" style={{ color: '#f59e0b' }}>Achtung: Dieses Produkt ist aktuell als nicht verfuegbar markiert.</p>
+              )}
             </div>
             <div>
               <label style={labelStyle}>Mietbeginn *</label>
@@ -274,49 +357,68 @@ export default function ManualBookingPage() {
           </div>
           {days > 0 && (
             <p className="mt-3 text-sm" style={{ color: '#06b6d4' }}>
-              {days} {days === 1 ? 'Tag' : 'Tage'} · Mietpreis: {rentalPrice.toFixed(2)} €
+              {days} {days === 1 ? 'Tag' : 'Tage'} · Mietpreis: {rentalPrice.toFixed(2)} \u20ac
             </p>
           )}
         </div>
 
-        {/* ─── Zubehoer ─── */}
-        <div style={{ background: '#111827', borderRadius: 12, border: '1px solid #1e293b', padding: 20, marginBottom: 16 }}>
-          <h2 className="font-heading font-semibold text-sm mb-4" style={{ color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.8 }}>
-            Zubehoer
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {ACCESSORIES.map((acc) => {
-              const checked = selectedAccessories.includes(acc.id);
-              return (
-                <label
-                  key={acc.id}
-                  className="flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors"
-                  style={{
-                    background: checked ? '#06b6d40a' : 'transparent',
-                    border: `1px solid ${checked ? '#06b6d433' : '#1e293b'}`,
-                  }}
-                >
-                  <input type="checkbox" checked={checked} onChange={() => toggleAccessory(acc.id)} className="accent-cyan-400" />
-                  <div className="flex-1">
-                    <span className="text-sm" style={{ color: '#e2e8f0' }}>{acc.name}</span>
-                    <span className="text-xs ml-2" style={{ color: '#64748b' }}>{acc.pricePerDay.toFixed(2)} €/Tag</span>
-                  </div>
-                  {checked && days > 0 && (
-                    <span className="text-xs font-semibold" style={{ color: '#06b6d4' }}>
-                      {(acc.pricePerDay * days).toFixed(2)} €
-                    </span>
-                  )}
-                </label>
-              );
-            })}
+        {/* ─── Sets ─── */}
+        {availableSets.length > 0 && (
+          <div style={sectionStyle}>
+            <h2 className="font-heading font-semibold text-sm mb-4" style={headingStyle}>Sets</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {availableSets.map((set) => {
+                const checked = selectedSets.includes(set.id);
+                const price = days > 0 ? getSetPrice(set, days) : set.price;
+                return (
+                  <label key={set.id} className="flex items-center gap-3 p-3 rounded-lg cursor-pointer" style={{ background: checked ? '#06b6d40a' : 'transparent', border: `1px solid ${checked ? '#06b6d433' : '#1e293b'}` }}>
+                    <input type="checkbox" checked={checked} onChange={() => toggleSet(set.id)} className="accent-cyan-400" />
+                    <div className="flex-1">
+                      <span className="text-sm" style={{ color: '#e2e8f0' }}>{set.name}</span>
+                      <span className="text-xs ml-2" style={{ color: '#64748b' }}>
+                        {set.price.toFixed(2)} \u20ac{set.pricing_mode === 'perDay' ? '/Tag' : ' pauschal'}
+                      </span>
+                    </div>
+                    {checked && days > 0 && (
+                      <span className="text-xs font-semibold" style={{ color: '#06b6d4' }}>{price.toFixed(2)} \u20ac</span>
+                    )}
+                  </label>
+                );
+              })}
+            </div>
           </div>
-        </div>
+        )}
+
+        {/* ─── Zubehoer ─── */}
+        {availableAccessories.length > 0 && (
+          <div style={sectionStyle}>
+            <h2 className="font-heading font-semibold text-sm mb-4" style={headingStyle}>Zubehoer</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {availableAccessories.map((acc) => {
+                const checked = selectedAccessories.includes(acc.id);
+                const price = days > 0 ? getAccessoryPrice(acc, days) : acc.price;
+                return (
+                  <label key={acc.id} className="flex items-center gap-3 p-3 rounded-lg cursor-pointer" style={{ background: checked ? '#06b6d40a' : 'transparent', border: `1px solid ${checked ? '#06b6d433' : '#1e293b'}` }}>
+                    <input type="checkbox" checked={checked} onChange={() => toggleAccessory(acc.id)} className="accent-cyan-400" />
+                    <div className="flex-1">
+                      <span className="text-sm" style={{ color: '#e2e8f0' }}>{acc.name}</span>
+                      <span className="text-xs ml-2" style={{ color: '#64748b' }}>
+                        {acc.price.toFixed(2)} \u20ac{acc.pricing_mode === 'perDay' ? '/Tag' : ' pauschal'}
+                      </span>
+                    </div>
+                    {checked && days > 0 && (
+                      <span className="text-xs font-semibold" style={{ color: '#06b6d4' }}>{price.toFixed(2)} \u20ac</span>
+                    )}
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* ─── Versand & Haftung ─── */}
-        <div style={{ background: '#111827', borderRadius: 12, border: '1px solid #1e293b', padding: 20, marginBottom: 16 }}>
-          <h2 className="font-heading font-semibold text-sm mb-4" style={{ color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.8 }}>
-            Versand & Haftungsschutz
-          </h2>
+        <div style={sectionStyle}>
+          <h2 className="font-heading font-semibold text-sm mb-4" style={headingStyle}>Versand & Haftungsschutz</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
             <div>
               <label style={labelStyle}>Lieferung</label>
@@ -329,30 +431,22 @@ export default function ManualBookingPage() {
               <div>
                 <label style={labelStyle}>Versandart</label>
                 <select style={selectStyle} value={shippingMethod} onChange={(e) => setShippingMethod(e.target.value as 'standard' | 'express')}>
-                  <option value="standard">Standard (3-5 Tage) — {shippingPrice === 0 && subtotal >= (dynPrices?.shipping?.freeShippingThreshold ?? 50) ? 'Gratis' : (dynPrices?.shipping?.standardPrice ?? 5.99).toFixed(2) + ' €'}</option>
-                  <option value="express">Express (24h) — {(dynPrices?.shipping?.expressPrice ?? 12.99).toFixed(2)} €</option>
+                  <option value="standard">{stdShippingLabel}</option>
+                  <option value="express">Express (24h) — {(sp?.expressPrice ?? 12.99).toFixed(2)} \u20ac</option>
                 </select>
               </div>
             )}
           </div>
-
           <label style={labelStyle}>Haftungsschutz</label>
           <div className="space-y-2">
             {HAFTUNG_OPTIONS.map((opt) => {
-              const dynPrice = opt.value === 'standard' ? (dynPrices?.haftung?.standard ?? opt.price) : opt.value === 'premium' ? (dynPrices?.haftung?.premium ?? opt.price) : 0;
+              const price = opt.value === 'standard' ? (dynPrices?.haftung?.standard ?? 15) : opt.value === 'premium' ? (dynPrices?.haftung?.premium ?? 25) : 0;
               return (
-                <label
-                  key={opt.value}
-                  className="flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors"
-                  style={{
-                    background: haftung === opt.value ? '#06b6d40a' : 'transparent',
-                    border: `1px solid ${haftung === opt.value ? '#06b6d433' : '#1e293b'}`,
-                  }}
-                >
+                <label key={opt.value} className="flex items-center gap-3 p-3 rounded-lg cursor-pointer" style={{ background: haftung === opt.value ? '#06b6d40a' : 'transparent', border: `1px solid ${haftung === opt.value ? '#06b6d433' : '#1e293b'}` }}>
                   <input type="radio" name="haftung" value={opt.value} checked={haftung === opt.value} onChange={() => setHaftung(opt.value)} className="accent-cyan-400" />
                   <span className="text-sm flex-1" style={{ color: '#e2e8f0' }}>{opt.label}</span>
-                  <span className="text-xs font-semibold" style={{ color: dynPrice > 0 ? '#06b6d4' : '#64748b' }}>
-                    {dynPrice > 0 ? `${dynPrice.toFixed(2)} €` : 'Kostenlos'}
+                  <span className="text-xs font-semibold" style={{ color: price > 0 ? '#06b6d4' : '#64748b' }}>
+                    {price > 0 ? `${price.toFixed(2)} \u20ac` : 'Kostenlos'}
                   </span>
                 </label>
               );
@@ -361,10 +455,8 @@ export default function ManualBookingPage() {
         </div>
 
         {/* ─── Quelle & Notizen ─── */}
-        <div style={{ background: '#111827', borderRadius: 12, border: '1px solid #1e293b', padding: 20, marginBottom: 16 }}>
-          <h2 className="font-heading font-semibold text-sm mb-4" style={{ color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.8 }}>
-            Herkunft & Notizen
-          </h2>
+        <div style={sectionStyle}>
+          <h2 className="font-heading font-semibold text-sm mb-4" style={headingStyle}>Herkunft & Notizen</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label style={labelStyle}>Bestellquelle</label>
@@ -379,12 +471,7 @@ export default function ManualBookingPage() {
             </div>
             <div className="sm:col-span-2">
               <label style={labelStyle}>Interne Notizen</label>
-              <textarea
-                style={{ ...inputStyle, minHeight: 70, resize: 'vertical' }}
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="z.B. Kleinanzeigen-Nachricht-ID, Absprachen etc."
-              />
+              <textarea style={{ ...inputStyle, minHeight: 70, resize: 'vertical' }} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="z.B. Kleinanzeigen-Nachricht-ID, Absprachen etc." />
             </div>
           </div>
         </div>
@@ -396,36 +483,42 @@ export default function ManualBookingPage() {
           </h2>
           <div className="space-y-2 text-sm">
             <div className="flex justify-between" style={{ color: '#e2e8f0' }}>
-              <span>Kamera-Miete ({days} {days === 1 ? 'Tag' : 'Tage'})</span>
-              <span>{rentalPrice.toFixed(2)} €</span>
+              <span>Kamera-Miete ({days || 0} {days === 1 ? 'Tag' : 'Tage'})</span>
+              <span>{rentalPrice.toFixed(2)} \u20ac</span>
             </div>
+            {setPrice > 0 && (
+              <div className="flex justify-between" style={{ color: '#e2e8f0' }}>
+                <span>Sets ({selectedSets.length}x)</span>
+                <span>{setPrice.toFixed(2)} \u20ac</span>
+              </div>
+            )}
             {accessoryPrice > 0 && (
               <div className="flex justify-between" style={{ color: '#e2e8f0' }}>
                 <span>Zubehoer ({selectedAccessories.length}x)</span>
-                <span>{accessoryPrice.toFixed(2)} €</span>
+                <span>{accessoryPrice.toFixed(2)} \u20ac</span>
               </div>
             )}
             {haftungPrice > 0 && (
               <div className="flex justify-between" style={{ color: '#e2e8f0' }}>
                 <span>Haftungsschutz</span>
-                <span>{haftungPrice.toFixed(2)} €</span>
+                <span>{haftungPrice.toFixed(2)} \u20ac</span>
               </div>
             )}
             {shippingPrice > 0 && (
               <div className="flex justify-between" style={{ color: '#e2e8f0' }}>
                 <span>Versand</span>
-                <span>{shippingPrice.toFixed(2)} €</span>
+                <span>{shippingPrice.toFixed(2)} \u20ac</span>
               </div>
             )}
             <div style={{ height: 1, background: '#1e293b', margin: '8px 0' }} />
             <div className="flex justify-between font-heading font-bold text-base" style={{ color: '#06b6d4' }}>
               <span>Gesamt</span>
-              <span>{total.toFixed(2)} €</span>
+              <span>{total.toFixed(2)} \u20ac</span>
             </div>
             {deposit > 0 && (
               <div className="flex justify-between text-xs" style={{ color: '#64748b' }}>
                 <span>Kaution (vorgemerkt)</span>
-                <span>{deposit.toFixed(2)} €</span>
+                <span>{deposit.toFixed(2)} \u20ac</span>
               </div>
             )}
           </div>
@@ -433,20 +526,10 @@ export default function ManualBookingPage() {
 
         {/* ─── Submit ─── */}
         <div className="flex items-center gap-4">
-          <button
-            type="submit"
-            disabled={saving || !days}
-            className="px-6 py-3 rounded-lg font-heading font-semibold text-sm transition-colors disabled:opacity-50"
-            style={{ background: '#06b6d4', color: 'white' }}
-          >
+          <button type="submit" disabled={saving || !days} className="px-6 py-3 rounded-lg font-heading font-semibold text-sm transition-colors disabled:opacity-50" style={{ background: '#06b6d4', color: 'white' }}>
             {saving ? 'Wird erstellt...' : 'Buchung erstellen'}
           </button>
-          <button
-            type="button"
-            onClick={() => router.push('/admin/buchungen')}
-            className="px-5 py-3 rounded-lg font-heading font-semibold text-sm transition-colors"
-            style={{ background: '#1e293b', color: '#94a3b8' }}
-          >
+          <button type="button" onClick={() => router.push('/admin/buchungen')} className="px-5 py-3 rounded-lg font-heading font-semibold text-sm" style={{ background: '#1e293b', color: '#94a3b8' }}>
             Abbrechen
           </button>
         </div>
