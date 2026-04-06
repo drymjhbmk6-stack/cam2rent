@@ -89,6 +89,8 @@ export interface AdminProduct {
   available: boolean;
   stock: number;
   imageUrl?: string;
+  /** Produktbilder (Supabase Storage URLs). Erstes Bild = Hauptbild. */
+  images?: string[];
   /** Frei verwaltbare Specs (Name, Wert, Icon, Priorität) */
   specs?: AdminProductSpec[];
   /** Ausführliche Produktbeschreibung (Admin-Editor) */

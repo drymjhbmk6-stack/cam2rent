@@ -6,6 +6,7 @@ import ProductReviews from '@/components/ProductReviews';
 import SpecIcon from '@/components/SpecIcon';
 import ProductBookingCalendar from '@/components/ProductBookingCalendar';
 import ProductAccessorySets from '@/components/ProductAccessorySets';
+import ProductImageGallery from '@/components/ProductImageGallery';
 import MarkdownContent from '@/components/MarkdownContent';
 
 // ─── Static generation ──────────────────────────────────────────────────────
@@ -50,77 +51,6 @@ const brandConfig: Record<
     pill: 'bg-accent-amber-soft text-accent-amber',
   },
 };
-
-// ─── Camera SVG placeholder ──────────────────────────────────────────────────
-
-function CameraPlaceholder({ brand, size = 'lg' }: { brand: Product['brand']; size?: 'lg' | 'sm' }) {
-  const color = brandConfig[brand].color;
-  const dim = size === 'lg' ? { w: 160, h: 120, vw: '0 0 160 120' } : { w: 48, h: 36, vw: '0 0 48 36' };
-
-  return (
-    <svg
-      viewBox={dim.vw}
-      fill="none"
-      style={{ width: size === 'lg' ? 160 : 48, height: size === 'lg' ? 120 : 36 }}
-      aria-hidden="true"
-    >
-      <rect
-        x={size === 'lg' ? 12 : 3}
-        y={size === 'lg' ? 20 : 7}
-        width={size === 'lg' ? 136 : 42}
-        height={size === 'lg' ? 82 : 22}
-        rx={size === 'lg' ? 10 : 3}
-        fill={color}
-        fillOpacity="0.12"
-        stroke={color}
-        strokeWidth={size === 'lg' ? 2.5 : 1.5}
-      />
-      <circle
-        cx={size === 'lg' ? 80 : 24}
-        cy={size === 'lg' ? 61 : 18}
-        r={size === 'lg' ? 26 : 8}
-        fill={color}
-        fillOpacity="0.18"
-        stroke={color}
-        strokeWidth={size === 'lg' ? 2.5 : 1.5}
-      />
-      <circle
-        cx={size === 'lg' ? 80 : 24}
-        cy={size === 'lg' ? 61 : 18}
-        r={size === 'lg' ? 16 : 5}
-        fill={color}
-        fillOpacity="0.35"
-      />
-      <circle
-        cx={size === 'lg' ? 80 : 24}
-        cy={size === 'lg' ? 61 : 18}
-        r={size === 'lg' ? 8 : 2.5}
-        fill={color}
-        fillOpacity="0.65"
-      />
-      <rect
-        x={size === 'lg' ? 56 : 16}
-        y={size === 'lg' ? 8 : 2}
-        width={size === 'lg' ? 32 : 10}
-        height={size === 'lg' ? 14 : 6}
-        rx={size === 'lg' ? 4 : 1.5}
-        fill={color}
-        fillOpacity="0.12"
-        stroke={color}
-        strokeWidth={size === 'lg' ? 2.5 : 1.5}
-      />
-      <circle
-        cx={size === 'lg' ? 128 : 38}
-        cy={size === 'lg' ? 32 : 11}
-        r={size === 'lg' ? 5 : 1.5}
-        fill={color}
-        fillOpacity="0.5"
-      />
-    </svg>
-  );
-}
-
-// Spec-Icons und PriceCard wurden in SpecIcon-Komponente bzw. getMergedSpecs ausgelagert
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
@@ -179,40 +109,11 @@ export default async function KameraDetailPage({
 
           {/* ── Left: Images ── */}
           <div className="lg:col-span-4">
-            {/* Main image */}
-            <div
-              className={`relative rounded-card overflow-hidden ${brand.bg} flex items-center justify-center`}
-              style={{ aspectRatio: '4/3' }}
-            >
-              {/* Availability overlay if unavailable */}
-              {!product.available && (
-                <div className="absolute inset-0 bg-white/60 backdrop-blur-sm flex items-center justify-center z-10">
-                  <span className="px-4 py-2 bg-status-error text-white font-heading font-bold text-sm rounded-full shadow-lg">
-                    Aktuell ausgebucht
-                  </span>
-                </div>
-              )}
-              <CameraPlaceholder brand={product.brand} size="lg" />
-              <p className="absolute bottom-4 left-0 right-0 text-center text-xs font-body text-brand-muted/60 select-none">
-                Foto folgt
-              </p>
-            </div>
-
-            {/* Thumbnail row (prepared for real images) */}
-            <div className="mt-3 grid grid-cols-4 gap-3">
-              {[0, 1, 2, 3].map((i) => (
-                <button
-                  key={i}
-                  type="button"
-                  className={`aspect-square rounded-xl overflow-hidden ${brand.bg} flex items-center justify-center border-2 transition-colors ${
-                    i === 0 ? 'border-accent-blue' : 'border-transparent hover:border-brand-border'
-                  }`}
-                  aria-label={`Bild ${i + 1} anzeigen`}
-                >
-                  <CameraPlaceholder brand={product.brand} size="sm" />
-                </button>
-              ))}
-            </div>
+            <ProductImageGallery
+              productId={product.id}
+              brand={product.brand}
+              available={product.available}
+            />
           </div>
 
           {/* ── Right: Product info (sticky) ── */}

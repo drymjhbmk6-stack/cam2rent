@@ -26,6 +26,7 @@ export default function AdminKameraEditorPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [allProducts, setAllProducts] = useState<Record<string, AdminProduct>>({});
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     // Load kaution tiers
@@ -113,6 +114,46 @@ export default function AdminKameraEditorPage() {
     });
   }
 
+  // ── Image helpers ────────────────────────────────────────────────────────
+  async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0 || !product) return;
+    setUploading(true);
+    try {
+      const newImages = [...(product.images ?? [])];
+      for (const file of files) {
+        const formData = new FormData();
+        formData.append('productId', product.id);
+        formData.append('file', file);
+        const res = await fetch('/api/product-images', { method: 'POST', body: formData });
+        const data = await res.json();
+        if (data.url) newImages.push(data.url);
+      }
+      setProduct((p) => p && ({ ...p, images: newImages }));
+    } catch { /* ignore */ }
+    finally { setUploading(false); e.target.value = ''; }
+  }
+
+  function removeImage(index: number) {
+    setProduct((p) => {
+      if (!p) return p;
+      const images = [...(p.images ?? [])];
+      images.splice(index, 1);
+      return { ...p, images };
+    });
+  }
+
+  function moveImage(index: number, direction: 'left' | 'right') {
+    setProduct((p) => {
+      if (!p || !p.images) return p;
+      const images = [...p.images];
+      const target = direction === 'left' ? index - 1 : index + 1;
+      if (target < 0 || target >= images.length) return p;
+      [images[index], images[target]] = [images[target], images[index]];
+      return { ...p, images };
+    });
+  }
+
   async function handleSave() {
     if (!product) return;
     setSaving(true);
@@ -191,6 +232,57 @@ export default function AdminKameraEditorPage() {
 
           {/* Left: Editor form */}
           <div className="flex-1 min-w-0 space-y-6">
+
+            {/* Produktbilder */}
+            <div className="bg-white rounded-2xl border border-brand-border p-6">
+              <h2 className="font-heading font-bold text-sm text-brand-black mb-1">Produktbilder</h2>
+              <p className="text-xs font-body text-brand-muted mb-4">Erstes Bild = Hauptbild. Bilder per Pfeiltasten sortieren.</p>
+
+              {(product.images && product.images.length > 0) ? (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                  {product.images.map((url, i) => (
+                    <div key={`${url}-${i}`} className="relative group aspect-square rounded-xl overflow-hidden border-2 border-brand-border bg-brand-bg">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={url} alt={`Bild ${i + 1}`} className="w-full h-full object-cover" />
+                      {i === 0 && (
+                        <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 bg-accent-blue text-white text-[9px] font-heading font-bold rounded-full">
+                          Hauptbild
+                        </span>
+                      )}
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100">
+                        <button type="button" onClick={() => moveImage(i, 'left')} disabled={i === 0}
+                          className="p-1.5 bg-white/90 rounded-lg text-xs disabled:opacity-30 hover:bg-white" title="Nach links">
+                          ←
+                        </button>
+                        <button type="button" onClick={() => removeImage(i)}
+                          className="p-1.5 bg-red-500 text-white rounded-lg text-xs hover:bg-red-600" title="Löschen">
+                          ✕
+                        </button>
+                        <button type="button" onClick={() => moveImage(i, 'right')} disabled={i === (product.images?.length ?? 0) - 1}
+                          className="p-1.5 bg-white/90 rounded-lg text-xs disabled:opacity-30 hover:bg-white" title="Nach rechts">
+                          →
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="mb-4 p-6 border-2 border-dashed border-brand-border rounded-xl text-center">
+                  <svg className="w-8 h-8 text-brand-muted mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  <p className="text-xs text-brand-muted">Noch keine Bilder hochgeladen</p>
+                </div>
+              )}
+
+              <label className={`inline-flex items-center gap-2 px-4 py-2.5 text-xs font-heading font-semibold rounded-btn cursor-pointer transition-colors ${uploading ? 'bg-brand-bg text-brand-muted' : 'bg-accent-blue text-white hover:bg-blue-600'}`}>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                {uploading ? 'Wird hochgeladen…' : 'Bilder hinzufügen'}
+                <input type="file" accept="image/jpeg,image/png,image/webp" multiple className="hidden" onChange={handleImageUpload} disabled={uploading} />
+              </label>
+            </div>
 
             {/* Stammdaten */}
             <div className="bg-white rounded-2xl border border-brand-border p-6">
@@ -462,6 +554,8 @@ export default function AdminKameraEditorPage() {
                 hasHaftungsoption={product.hasHaftungsoption}
                 kautionTier={product.kautionTier}
                 kautionAmount={kautionAmount}
+                images={product.images}
+                available={product.available}
               />
             </div>
           </div>

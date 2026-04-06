@@ -17,6 +17,7 @@ interface PriceConfigExtended extends PriceConfig {
   durationDiscounts: DurationDiscount[];
   loyaltyDiscounts: LoyaltyDiscount[];
   productDiscounts: ProductDiscount[];
+  adminProducts?: Record<string, unknown>;
 }
 
 /**
@@ -33,7 +34,7 @@ export async function GET() {
     const { data, error } = await supabase
       .from('admin_config')
       .select('key, value')
-      .in('key', ['shipping', 'haftung', 'product_prices', 'duration_discounts', 'loyalty_discounts', 'product_discounts']);
+      .in('key', ['shipping', 'haftung', 'product_prices', 'duration_discounts', 'loyalty_discounts', 'product_discounts', 'products']);
 
     if (error || !data) {
       return NextResponse.json(defaultConfig());
@@ -48,6 +49,7 @@ export async function GET() {
       durationDiscounts: map.duration_discounts ?? DEFAULT_DURATION_DISCOUNTS,
       loyaltyDiscounts: map.loyalty_discounts ?? DEFAULT_LOYALTY_DISCOUNTS,
       productDiscounts: map.product_discounts ?? DEFAULT_PRODUCT_DISCOUNTS,
+      adminProducts: map.products ?? undefined,
     };
 
     return NextResponse.json(config, {
