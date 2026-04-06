@@ -69,7 +69,7 @@ export default function ProductImageGallery({ productId, brand, available }: Pro
           <img
             src={images[activeIndex]}
             alt="Produktbild"
-            className="w-full h-full object-cover"
+            className="w-full h-full object-contain p-2"
           />
         ) : (
           <>
@@ -89,13 +89,13 @@ export default function ProductImageGallery({ productId, brand, available }: Pro
               key={i}
               type="button"
               onClick={() => setActiveIndex(i)}
-              className={`aspect-square rounded-xl overflow-hidden border-2 transition-colors ${
+              className={`aspect-square rounded-xl overflow-hidden bg-white dark:bg-gray-700 border-2 transition-colors ${
                 activeIndex === i ? 'border-accent-blue' : 'border-transparent hover:border-brand-border dark:hover:border-gray-600'
               }`}
               aria-label={`Bild ${i + 1} anzeigen`}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={url} alt={`Bild ${i + 1}`} className="w-full h-full object-cover" />
+              <img src={url} alt={`Bild ${i + 1}`} className="w-full h-full object-contain p-1" />
             </button>
           ))
         ) : (
