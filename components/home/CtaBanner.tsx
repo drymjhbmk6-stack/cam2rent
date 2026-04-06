@@ -14,7 +14,7 @@ export default function CtaBanner() {
           Bereit für dein nächstes Abenteuer?
         </h2>
         <p className="font-body text-brand-steel dark:text-gray-400 text-lg mb-8 max-w-lg mx-auto">
-          Wähle aus über 50 Action-Cams und starte noch heute. Lieferung schon morgen möglich.
+          Wähle deine Wunsch-Kamera und starte noch heute. Lieferung schon morgen möglich.
         </p>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
           <Link

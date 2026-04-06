@@ -2,14 +2,15 @@ import { Resend } from 'resend';
 import { renderToBuffer, type DocumentProps } from '@react-pdf/renderer';
 import { createElement, type ReactElement } from 'react';
 import { InvoicePDF, type InvoiceData } from '@/lib/invoice-pdf';
+import { BUSINESS } from '@/lib/business-config';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 export const FROM_EMAIL =
-  process.env.FROM_EMAIL ?? 'buchungen@cam2rent.de';
+  process.env.FROM_EMAIL ?? BUSINESS.email;
 
 export const ADMIN_EMAIL =
-  process.env.ADMIN_EMAIL ?? 'kontakt@cam2rent.de';
+  process.env.ADMIN_EMAIL ?? BUSINESS.emailKontakt;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -74,7 +75,7 @@ export async function sendBookingConfirmation(data: BookingEmailData) {
   const invoiceNumber = data.bookingId.replace('BK-', 'RE-');
 
   await resend.emails.send({
-    from: `cam2rent <${FROM_EMAIL}>`,
+    from: `${BUSINESS.name} <${FROM_EMAIL}>`,
     to: data.customerEmail,
     subject,
     html,
@@ -106,7 +107,7 @@ export interface CancellationEmailData {
 export async function sendCancellationConfirmation(data: CancellationEmailData) {
   const { html, subject } = buildCancellationCustomerEmail(data);
   await resend.emails.send({
-    from: `cam2rent <${FROM_EMAIL}>`,
+    from: `${BUSINESS.name} <${FROM_EMAIL}>`,
     to: data.customerEmail,
     subject,
     html,
@@ -116,7 +117,7 @@ export async function sendCancellationConfirmation(data: CancellationEmailData) 
 export async function sendAdminCancellationNotification(data: CancellationEmailData) {
   const { html, subject } = buildCancellationAdminEmail(data);
   await resend.emails.send({
-    from: `cam2rent <${FROM_EMAIL}>`,
+    from: `${BUSINESS.name} <${FROM_EMAIL}>`,
     to: ADMIN_EMAIL,
     subject,
     html,
@@ -126,7 +127,7 @@ export async function sendAdminCancellationNotification(data: CancellationEmailD
 export async function sendAdminNotification(data: BookingEmailData) {
   const { html, subject } = buildAdminEmail(data);
   await resend.emails.send({
-    from: `cam2rent <${FROM_EMAIL}>`,
+    from: `${BUSINESS.name} <${FROM_EMAIL}>`,
     to: ADMIN_EMAIL,
     subject,
     html,
@@ -159,7 +160,7 @@ function shippingLabel(method: string | undefined, mode: string) {
 // ─── Customer email template ───────────────────────────────────────────────────
 
 function buildCustomerEmail(d: BookingEmailData): { html: string; subject: string } {
-  const subject = `Buchungsbestätigung ${d.bookingId} – cam2rent`;
+  const subject = `Buchungsbestätigung ${d.bookingId} – ${BUSINESS.name}`;
 
   const accessoriesRow = d.accessories.length > 0
     ? `<tr><td style="padding:6px 0;color:#6b7280;font-size:14px;">Zubehör</td><td style="padding:6px 0;text-align:right;font-size:14px;">${fmt(d.priceAccessories)}</td></tr>`
@@ -188,7 +189,7 @@ function buildCustomerEmail(d: BookingEmailData): { html: string; subject: strin
 
         <!-- Header -->
         <tr><td style="background:#0a0a0a;border-radius:12px 12px 0 0;padding:28px 32px;">
-          <p style="margin:0;font-family:Arial,sans-serif;font-size:22px;font-weight:700;color:#ffffff;letter-spacing:-0.5px;">cam2rent</p>
+          <p style="margin:0;font-family:Arial,sans-serif;font-size:22px;font-weight:700;color:#ffffff;letter-spacing:-0.5px;">${BUSINESS.name}</p>
           <p style="margin:4px 0 0;font-size:13px;color:#9ca3af;">Action-Cam Verleih</p>
         </td></tr>
 
@@ -196,7 +197,7 @@ function buildCustomerEmail(d: BookingEmailData): { html: string; subject: strin
         <tr><td style="background:#ffffff;padding:32px;">
 
           <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#0a0a0a;">Deine Buchung ist bestätigt!</h1>
-          <p style="margin:0 0 24px;font-size:15px;color:#4b5563;">Hallo ${d.customerName || 'Kunde'},<br>vielen Dank für deine Buchung bei cam2rent. Hier sind alle Details:</p>
+          <p style="margin:0 0 24px;font-size:15px;color:#4b5563;">Hallo ${d.customerName || 'Kunde'},<br>vielen Dank für deine Buchung bei ${BUSINESS.name}. Hier sind alle Details:</p>
 
           <!-- Booking ID -->
           <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f0;border-radius:10px;margin-bottom:24px;">
@@ -271,7 +272,7 @@ function buildCustomerEmail(d: BookingEmailData): { html: string; subject: strin
 
         <!-- Footer -->
         <tr><td style="background:#f5f5f0;border-radius:0 0 12px 12px;padding:20px 32px;text-align:center;">
-          <p style="margin:0;font-size:12px;color:#9ca3af;">cam2rent · Action-Cam Verleih · <a href="https://cam2rent.de" style="color:#9ca3af;">cam2rent.de</a></p>
+          <p style="margin:0;font-size:12px;color:#9ca3af;">${BUSINESS.name} · ${BUSINESS.slogan} · <a href="${BUSINESS.url}" style="color:#9ca3af;">${BUSINESS.domain}</a></p>
         </td></tr>
 
       </table>
@@ -346,7 +347,7 @@ function buildAdminEmail(d: BookingEmailData): { html: string; subject: string }
         </td></tr>
 
         <tr><td style="background:#f5f5f0;border-radius:0 0 12px 12px;padding:16px 32px;text-align:center;">
-          <p style="margin:0;font-size:12px;color:#9ca3af;">cam2rent Admin-Benachrichtigung</p>
+          <p style="margin:0;font-size:12px;color:#9ca3af;">${BUSINESS.name} Admin-Benachrichtigung</p>
         </td></tr>
 
       </table>
@@ -361,7 +362,7 @@ function buildAdminEmail(d: BookingEmailData): { html: string; subject: string }
 // ─── Cancellation customer email ───────────────────────────────────────────────
 
 function buildCancellationCustomerEmail(d: CancellationEmailData): { html: string; subject: string } {
-  const subject = `Stornierungsbestätigung ${d.bookingId} – cam2rent`;
+  const subject = `Stornierungsbestätigung ${d.bookingId} – ${BUSINESS.name}`;
 
   const refundRow = d.refundAmount > 0
     ? `<tr>
@@ -372,7 +373,7 @@ function buildCancellationCustomerEmail(d: CancellationEmailData): { html: strin
         <td colspan="2" style="padding:8px 0;font-size:14px;color:#dc2626;">Keine Rückerstattung (Stornierung < 7 Tage vor Mietstart)</td>
        </tr>`;
 
-  const rebookUrl = `https://cam2rent.de/kameras/${d.productId}`;
+  const rebookUrl = `${BUSINESS.url}/kameras/${d.productId}`;
 
   const html = `
 <!DOCTYPE html>
@@ -385,7 +386,7 @@ function buildCancellationCustomerEmail(d: CancellationEmailData): { html: strin
 
         <!-- Header -->
         <tr><td style="background:#0a0a0a;border-radius:12px 12px 0 0;padding:28px 32px;">
-          <p style="margin:0;font-size:22px;font-weight:700;color:#ffffff;letter-spacing:-0.5px;">cam2rent</p>
+          <p style="margin:0;font-size:22px;font-weight:700;color:#ffffff;letter-spacing:-0.5px;">${BUSINESS.name}</p>
           <p style="margin:4px 0 0;font-size:13px;color:#9ca3af;">Action-Cam Verleih</p>
         </td></tr>
 
@@ -446,7 +447,7 @@ function buildCancellationCustomerEmail(d: CancellationEmailData): { html: strin
 
         <!-- Footer -->
         <tr><td style="background:#f5f5f0;border-radius:0 0 12px 12px;padding:20px 32px;text-align:center;">
-          <p style="margin:0;font-size:12px;color:#9ca3af;">cam2rent · Action-Cam Verleih · <a href="https://cam2rent.de" style="color:#9ca3af;">cam2rent.de</a></p>
+          <p style="margin:0;font-size:12px;color:#9ca3af;">${BUSINESS.name} · ${BUSINESS.slogan} · <a href="${BUSINESS.url}" style="color:#9ca3af;">${BUSINESS.domain}</a></p>
         </td></tr>
 
       </table>
@@ -511,7 +512,7 @@ function buildCancellationAdminEmail(d: CancellationEmailData): { html: string; 
         </td></tr>
 
         <tr><td style="background:#f5f5f0;border-radius:0 0 12px 12px;padding:16px 32px;text-align:center;">
-          <p style="margin:0;font-size:12px;color:#9ca3af;">cam2rent Admin-Benachrichtigung</p>
+          <p style="margin:0;font-size:12px;color:#9ca3af;">${BUSINESS.name} Admin-Benachrichtigung</p>
         </td></tr>
 
       </table>
@@ -540,7 +541,7 @@ export interface ShippingEmailData {
 export async function sendShippingConfirmation(data: ShippingEmailData) {
   const { html, subject } = buildShippingEmail(data);
   await resend.emails.send({
-    from: `cam2rent <${FROM_EMAIL}>`,
+    from: `${BUSINESS.name} <${FROM_EMAIL}>`,
     to: data.customerEmail,
     subject,
     html,
@@ -581,7 +582,7 @@ export async function sendDamageReportConfirmation(data: DamageEmailData) {
     <tr><td align="center">
       <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
         <tr><td style="background:#0a0a0a;border-radius:12px 12px 0 0;padding:28px 32px;">
-          <p style="margin:0;font-size:22px;font-weight:700;color:#ffffff;letter-spacing:-0.5px;">cam2rent</p>
+          <p style="margin:0;font-size:22px;font-weight:700;color:#ffffff;letter-spacing:-0.5px;">${BUSINESS.name}</p>
           <p style="margin:4px 0 0;font-size:13px;color:#9ca3af;">Action-Cam Verleih</p>
         </td></tr>
         <tr><td style="background:#ffffff;padding:32px;">
@@ -615,14 +616,14 @@ export async function sendDamageReportConfirmation(data: DamageEmailData) {
           <p style="margin:0;font-size:14px;color:#6b7280;">Fragen? Schreib uns:<br><a href="mailto:${ADMIN_EMAIL}" style="color:#3b82f6;">${ADMIN_EMAIL}</a></p>
         </td></tr>
         <tr><td style="background:#f5f5f0;border-radius:0 0 12px 12px;padding:20px 32px;text-align:center;">
-          <p style="margin:0;font-size:12px;color:#9ca3af;">cam2rent · Action-Cam Verleih · <a href="https://cam2rent.de" style="color:#9ca3af;">cam2rent.de</a></p>
+          <p style="margin:0;font-size:12px;color:#9ca3af;">${BUSINESS.name} · ${BUSINESS.slogan} · <a href="${BUSINESS.url}" style="color:#9ca3af;">${BUSINESS.domain}</a></p>
         </td></tr>
       </table>
     </td></tr>
   </table>
 </body>
 </html>`;
-  await resend.emails.send({ from: `cam2rent <${FROM_EMAIL}>`, to: data.customerEmail, subject, html });
+  await resend.emails.send({ from: `${BUSINESS.name} <${FROM_EMAIL}>`, to: data.customerEmail, subject, html });
 }
 
 // ─── Damage report notification (to admin) ───────────────────────────────────
@@ -651,18 +652,18 @@ export async function sendAdminDamageNotification(data: DamageEmailData) {
             <tr><td style="padding:8px 0;font-size:14px;color:#6b7280;">Beschreibung</td><td style="padding:8px 0;font-size:14px;color:#0a0a0a;">${data.description}</td></tr>
           </table>
           <div style="margin-top:24px;">
-            <a href="https://cam2rent.de/admin/schaeden" style="display:inline-block;padding:10px 24px;background:#0a0a0a;color:#ffffff;font-size:14px;font-weight:600;text-decoration:none;border-radius:8px;">Im Dashboard ansehen</a>
+            <a href="${BUSINESS.url}/admin/schaeden" style="display:inline-block;padding:10px 24px;background:#0a0a0a;color:#ffffff;font-size:14px;font-weight:600;text-decoration:none;border-radius:8px;">Im Dashboard ansehen</a>
           </div>
         </td></tr>
         <tr><td style="background:#f5f5f0;border-radius:0 0 12px 12px;padding:16px 32px;text-align:center;">
-          <p style="margin:0;font-size:12px;color:#9ca3af;">cam2rent Admin-Benachrichtigung</p>
+          <p style="margin:0;font-size:12px;color:#9ca3af;">${BUSINESS.name} Admin-Benachrichtigung</p>
         </td></tr>
       </table>
     </td></tr>
   </table>
 </body>
 </html>`;
-  await resend.emails.send({ from: `cam2rent <${FROM_EMAIL}>`, to: ADMIN_EMAIL, subject, html });
+  await resend.emails.send({ from: `${BUSINESS.name} <${FROM_EMAIL}>`, to: ADMIN_EMAIL, subject, html });
 }
 
 // ─── Damage resolution notification (to customer) ────────────────────────────
@@ -693,7 +694,7 @@ export async function sendDamageResolution(data: DamageResolutionEmailData) {
     <tr><td align="center">
       <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
         <tr><td style="background:#0a0a0a;border-radius:12px 12px 0 0;padding:28px 32px;">
-          <p style="margin:0;font-size:22px;font-weight:700;color:#ffffff;letter-spacing:-0.5px;">cam2rent</p>
+          <p style="margin:0;font-size:22px;font-weight:700;color:#ffffff;letter-spacing:-0.5px;">${BUSINESS.name}</p>
           <p style="margin:4px 0 0;font-size:13px;color:#9ca3af;">Action-Cam Verleih</p>
         </td></tr>
         <tr><td style="background:#ffffff;padding:32px;">
@@ -717,14 +718,14 @@ export async function sendDamageResolution(data: DamageResolutionEmailData) {
           <p style="margin:0;font-size:14px;color:#6b7280;">Bei Rückfragen kontaktiere uns gerne:<br><a href="mailto:${ADMIN_EMAIL}" style="color:#3b82f6;">${ADMIN_EMAIL}</a></p>
         </td></tr>
         <tr><td style="background:#f5f5f0;border-radius:0 0 12px 12px;padding:20px 32px;text-align:center;">
-          <p style="margin:0;font-size:12px;color:#9ca3af;">cam2rent · Action-Cam Verleih · <a href="https://cam2rent.de" style="color:#9ca3af;">cam2rent.de</a></p>
+          <p style="margin:0;font-size:12px;color:#9ca3af;">${BUSINESS.name} · ${BUSINESS.slogan} · <a href="${BUSINESS.url}" style="color:#9ca3af;">${BUSINESS.domain}</a></p>
         </td></tr>
       </table>
     </td></tr>
   </table>
 </body>
 </html>`;
-  await resend.emails.send({ from: `cam2rent <${FROM_EMAIL}>`, to: data.customerEmail, subject, html });
+  await resend.emails.send({ from: `${BUSINESS.name} <${FROM_EMAIL}>`, to: data.customerEmail, subject, html });
 }
 
 // ─── Shipping confirmation ─────────────────────────────────────────────────────
@@ -793,16 +794,16 @@ function buildShippingEmail(d: ShippingEmailData): { html: string; subject: stri
             <p style="margin:6px 0 0;font-size:13px;color:#78350f;">
               Ein Rücksende-Etikett liegt deinem Paket bei. Bitte verpacke die Kamera sorgfältig und
               gib das Paket spätestens am <strong>\${fmtDate(d.rentalTo)}</strong> auf.
-              Bei Fragen: <a href="mailto:kontakt@cam2rent.de" style="color:#3b82f6;">kontakt@cam2rent.de</a>
+              Bei Fragen: <a href="mailto:${BUSINESS.emailKontakt}" style="color:#3b82f6;">${BUSINESS.emailKontakt}</a>
             </p>
           </div>
         </td></tr>
 
         <tr><td style="background:#f5f5f0;border-radius:0 0 12px 12px;padding:20px 32px;text-align:center;">
           <p style="margin:0 0 8px;font-size:13px;color:#6b7280;">
-            Fragen? <a href="mailto:kontakt@cam2rent.de" style="color:#3b82f6;">kontakt@cam2rent.de</a>
+            Fragen? <a href="mailto:${BUSINESS.emailKontakt}" style="color:#3b82f6;">${BUSINESS.emailKontakt}</a>
           </p>
-          <p style="margin:0;font-size:11px;color:#9ca3af;">cam2rent · Lennart Schickel · Heimsbrunner Str. 12 · 12349 Berlin</p>
+          <p style="margin:0;font-size:11px;color:#9ca3af;">${BUSINESS.addressLine}</p>
         </td></tr>
 
       </table>
@@ -859,7 +860,7 @@ export async function sendReferralReward(data: ReferralRewardEmailData) {
           </p>
         </td></tr>
         <tr><td style="background:#f5f5f0;border-radius:0 0 12px 12px;padding:20px 32px;text-align:center;">
-          <p style="margin:0;font-size:11px;color:#9ca3af;">cam2rent &middot; Action-Cam Verleih &middot; <a href="https://cam2rent.de" style="color:#9ca3af;">cam2rent.de</a></p>
+          <p style="margin:0;font-size:11px;color:#9ca3af;">${BUSINESS.name} &middot; ${BUSINESS.slogan} &middot; <a href="${BUSINESS.url}" style="color:#9ca3af;">${BUSINESS.domain}</a></p>
         </td></tr>
       </table>
     </td></tr>
@@ -868,7 +869,7 @@ export async function sendReferralReward(data: ReferralRewardEmailData) {
 </html>`;
 
   await resend.emails.send({
-    from: `cam2rent <${FROM_EMAIL}>`,
+    from: `${BUSINESS.name} <${FROM_EMAIL}>`,
     to: data.referrerEmail,
     subject,
     html,
@@ -911,7 +912,7 @@ export async function sendNewMessageNotificationToAdmin(data: MessageNotificatio
               <p style="margin:0;font-size:14px;color:#6b7280;">${data.messagePreview}</p>
             </td></tr>
           </table>
-          <a href="https://cam2rent.de/admin/nachrichten" style="display:inline-block;padding:12px 24px;background:#0a0a0a;color:#ffffff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">Im Admin antworten</a>
+          <a href="${BUSINESS.url}/admin/nachrichten" style="display:inline-block;padding:12px 24px;background:#0a0a0a;color:#ffffff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">Im Admin antworten</a>
         </td></tr>
         <tr><td style="background:#f5f5f0;border-radius:0 0 12px 12px;padding:20px 32px;text-align:center;">
           <p style="margin:0;font-size:11px;color:#9ca3af;">cam2rent &middot; Action-Cam Verleih</p>
@@ -922,7 +923,7 @@ export async function sendNewMessageNotificationToAdmin(data: MessageNotificatio
 </body>
 </html>`;
 
-  await resend.emails.send({ from: `cam2rent <${FROM_EMAIL}>`, to: ADMIN_EMAIL, subject, html });
+  await resend.emails.send({ from: `${BUSINESS.name} <${FROM_EMAIL}>`, to: ADMIN_EMAIL, subject, html });
 }
 
 export async function sendNewMessageNotificationToCustomer(data: MessageNotificationData) {
@@ -953,10 +954,10 @@ export async function sendNewMessageNotificationToCustomer(data: MessageNotifica
               <p style="margin:0;font-size:14px;color:#6b7280;">${data.messagePreview}</p>
             </td></tr>
           </table>
-          <a href="https://cam2rent.de/konto/nachrichten" style="display:inline-block;padding:12px 24px;background:#0a0a0a;color:#ffffff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">Zur Nachricht</a>
+          <a href="${BUSINESS.url}/konto/nachrichten" style="display:inline-block;padding:12px 24px;background:#0a0a0a;color:#ffffff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">Zur Nachricht</a>
         </td></tr>
         <tr><td style="background:#f5f5f0;border-radius:0 0 12px 12px;padding:20px 32px;text-align:center;">
-          <p style="margin:0;font-size:11px;color:#9ca3af;">cam2rent &middot; Action-Cam Verleih &middot; <a href="https://cam2rent.de" style="color:#9ca3af;">cam2rent.de</a></p>
+          <p style="margin:0;font-size:11px;color:#9ca3af;">${BUSINESS.name} &middot; ${BUSINESS.slogan} &middot; <a href="${BUSINESS.url}" style="color:#9ca3af;">${BUSINESS.domain}</a></p>
         </td></tr>
       </table>
     </td></tr>
@@ -964,7 +965,7 @@ export async function sendNewMessageNotificationToCustomer(data: MessageNotifica
 </body>
 </html>`;
 
-  await resend.emails.send({ from: `cam2rent <${FROM_EMAIL}>`, to: data.customerEmail, subject, html });
+  await resend.emails.send({ from: `${BUSINESS.name} <${FROM_EMAIL}>`, to: data.customerEmail, subject, html });
 }
 
 // ─── Extension confirmation ────────────────────────────────────────────────
@@ -1016,10 +1017,10 @@ export async function sendExtensionConfirmation(data: ExtensionEmailData) {
               </table>
             </td></tr>
           </table>
-          <a href="https://cam2rent.de/konto/buchungen" style="display:inline-block;padding:12px 24px;background:#0a0a0a;color:#ffffff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">Meine Buchungen</a>
+          <a href="${BUSINESS.url}/konto/buchungen" style="display:inline-block;padding:12px 24px;background:#0a0a0a;color:#ffffff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">Meine Buchungen</a>
         </td></tr>
         <tr><td style="background:#f5f5f0;border-radius:0 0 12px 12px;padding:20px 32px;text-align:center;">
-          <p style="margin:0;font-size:11px;color:#9ca3af;">cam2rent &middot; Action-Cam Verleih &middot; <a href="https://cam2rent.de" style="color:#9ca3af;">cam2rent.de</a></p>
+          <p style="margin:0;font-size:11px;color:#9ca3af;">${BUSINESS.name} &middot; ${BUSINESS.slogan} &middot; <a href="${BUSINESS.url}" style="color:#9ca3af;">${BUSINESS.domain}</a></p>
         </td></tr>
       </table>
     </td></tr>
@@ -1027,7 +1028,7 @@ export async function sendExtensionConfirmation(data: ExtensionEmailData) {
 </body>
 </html>`;
 
-  await resend.emails.send({ from: `cam2rent <${FROM_EMAIL}>`, to: data.customerEmail, subject, html });
+  await resend.emails.send({ from: `${BUSINESS.name} <${FROM_EMAIL}>`, to: data.customerEmail, subject, html });
 }
 
 // ─── Review Request ──────────────────────────────────────────────────────────
@@ -1038,7 +1039,7 @@ export async function sendReviewRequest(data: {
   customerEmail: string;
   productName: string;
 }) {
-  const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://cam2rent.de';
+  const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? BUSINESS.url;
   const reviewUrl = `${BASE_URL}/konto/bewertung/${data.bookingId}`;
 
   const subject = `Wie war deine Erfahrung mit der ${data.productName}?`;
@@ -1065,14 +1066,14 @@ export async function sendReviewRequest(data: {
           </p>
         </td></tr>
         <tr><td style="background:#f5f5f0;border-radius:0 0 12px 12px;padding:20px 32px;text-align:center;">
-          <p style="margin:0;font-size:11px;color:#9ca3af;">cam2rent &middot; Action-Cam Verleih &middot; <a href="https://cam2rent.de" style="color:#9ca3af;">cam2rent.de</a></p>
+          <p style="margin:0;font-size:11px;color:#9ca3af;">${BUSINESS.name} &middot; ${BUSINESS.slogan} &middot; <a href="${BUSINESS.url}" style="color:#9ca3af;">${BUSINESS.domain}</a></p>
         </td></tr>
       </table>
     </td></tr>
   </table>
 </body></html>`;
 
-  await resend.emails.send({ from: `cam2rent <${FROM_EMAIL}>`, to: data.customerEmail, subject, html });
+  await resend.emails.send({ from: `${BUSINESS.name} <${FROM_EMAIL}>`, to: data.customerEmail, subject, html });
 }
 
 // ─── Abandoned Cart Reminder ─────────────────────────────────────────────────
@@ -1085,7 +1086,7 @@ export async function sendAbandonedCartReminder(data: {
   couponCode?: string;
   discountPercent?: number;
 }) {
-  const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://cam2rent.de';
+  const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? BUSINESS.url;
 
   const subject = 'Du hast noch etwas im Warenkorb';
 
@@ -1140,12 +1141,12 @@ export async function sendAbandonedCartReminder(data: {
           </a>
         </td></tr>
         <tr><td style="background:#f5f5f0;border-radius:0 0 12px 12px;padding:20px 32px;text-align:center;">
-          <p style="margin:0;font-size:11px;color:#9ca3af;">cam2rent &middot; Action-Cam Verleih &middot; <a href="https://cam2rent.de" style="color:#9ca3af;">cam2rent.de</a></p>
+          <p style="margin:0;font-size:11px;color:#9ca3af;">${BUSINESS.name} &middot; ${BUSINESS.slogan} &middot; <a href="${BUSINESS.url}" style="color:#9ca3af;">${BUSINESS.domain}</a></p>
         </td></tr>
       </table>
     </td></tr>
   </table>
 </body></html>`;
 
-  await resend.emails.send({ from: `cam2rent <${FROM_EMAIL}>`, to: data.customerEmail, subject, html });
+  await resend.emails.send({ from: `${BUSINESS.name} <${FROM_EMAIL}>`, to: data.customerEmail, subject, html });
 }

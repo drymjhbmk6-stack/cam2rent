@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { BUSINESS } from '@/lib/business-config';
 
 export const metadata: Metadata = {
   title: 'Haftungsbedingungen',
@@ -20,7 +21,7 @@ export default function HaftungsbedingungenPage() {
           </h2>
           <p className="font-body text-brand-steel">
             Diese Haftungsbedingungen gelten für alle Mietverträge über Kamera-, Audio- und
-            Video-Ausrüstung, die über www.cam2rent.de gebucht werden. Sie werden mit der Auswahl
+            Video-Ausrüstung, die über www.{BUSINESS.domain} gebucht werden. Sie werden mit der Auswahl
             und Bestätigung einer Haftungsoption Bestandteil des Mietvertrages.
           </p>
         </section>
@@ -151,8 +152,8 @@ export default function HaftungsbedingungenPage() {
               Kundenkonto
             </a>{' '}
             oder per E-Mail an{' '}
-            <a href="mailto:kontakt@cam2rent.de" className="text-accent-blue hover:underline">
-              kontakt@cam2rent.de
+            <a href={`mailto:${BUSINESS.emailKontakt}`} className="text-accent-blue hover:underline">
+              {BUSINESS.emailKontakt}
             </a>{' '}
             eingereicht werden.
           </p>
@@ -227,12 +228,12 @@ export default function HaftungsbedingungenPage() {
             Kontakt
           </h2>
           <div className="font-body text-brand-steel space-y-1">
-            <p className="font-semibold text-brand-black">Cam2Rent – Lennart Schickel</p>
-            <p>Heimsbrunner Str. 12, 12349 Berlin</p>
+            <p className="font-semibold text-brand-black">{BUSINESS.name} – {BUSINESS.owner}</p>
+            <p>{BUSINESS.fullAddress}</p>
             <p>
               E-Mail:{' '}
-              <a href="mailto:kontakt@cam2rent.de" className="text-accent-blue hover:underline">
-                kontakt@cam2rent.de
+              <a href={`mailto:${BUSINESS.emailKontakt}`} className="text-accent-blue hover:underline">
+                {BUSINESS.emailKontakt}
               </a>
             </p>
           </div>

@@ -6,6 +6,7 @@ import {
   Image,
   StyleSheet,
 } from '@react-pdf/renderer';
+import { BUSINESS } from '@/lib/business-config';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -44,7 +45,7 @@ function fmtDate(iso: string) {
 function haftungLabel(h: string) {
   if (h === 'standard') return 'Standard-Haftungsschutz';
   if (h === 'premium') return 'Premium-Haftungsschutz (Vollschutz)';
-  return 'Basis (ohne zusaetzlichen Schutz)';
+  return 'Basis (ohne zusätzlichen Schutz)';
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
@@ -198,23 +199,23 @@ const s = StyleSheet.create({
 const CONTRACT_TERMS = [
   {
     title: '1. Mietgegenstand',
-    text: 'Der Vermieter ueberlasst dem Mieter das oben genannte Mietobjekt fuer den vereinbarten Zeitraum zur bestimmungsgemaessen Nutzung.',
+    text: 'Der Vermieter überlässt dem Mieter das oben genannte Mietobjekt für den vereinbarten Zeitraum zur bestimmungsgemäßen Nutzung.',
   },
   {
     title: '2. Mietdauer und Rueckgabe',
-    text: 'Die Mietdauer beginnt und endet zu den oben angegebenen Daten. Die Rueckgabe muss spaetestens am letzten Miettag erfolgen. Bei verspaeteter Rueckgabe werden zusaetzliche Mietgebuehren pro angefangenem Tag berechnet.',
+    text: 'Die Mietdauer beginnt und endet zu den oben angegebenen Daten. Die Rückgabe muss spätestens am letzten Miettag erfolgen. Bei verspäteter Rückgabe werden zusätzliche Mietgebühren pro angefangenem Tag berechnet.',
   },
   {
     title: '3. Sorgfaltspflicht',
-    text: 'Der Mieter verpflichtet sich, das Mietobjekt pfleglich zu behandeln und vor Beschaedigungen, Diebstahl und Verlust zu schuetzen. Die Nutzung erfolgt auf eigene Gefahr.',
+    text: 'Der Mieter verpflichtet sich, das Mietobjekt pfleglich zu behandeln und vor Beschädigungen, Diebstahl und Verlust zu schützen. Die Nutzung erfolgt auf eigene Gefahr.',
   },
   {
     title: '4. Haftung und Kaution',
-    text: 'Der Mieter haftet fuer Schaeden am Mietobjekt, die waehrend der Mietzeit entstehen. Die hinterlegte Kaution dient als Sicherheit und wird nach Pruefung des Mietobjekts bei ordnungsgemaesser Rueckgabe freigegeben.',
+    text: 'Der Mieter haftet für Schäden am Mietobjekt, die während der Mietzeit entstehen. Die hinterlegte Kaution dient als Sicherheit und wird nach Prüfung des Mietobjekts bei ordnungsgemäßer Rückgabe freigegeben.',
   },
   {
     title: '5. Stornierung',
-    text: 'Stornierungen richten sich nach den auf cam2rent.de veroeffentlichten Stornierungsbedingungen.',
+    text: `Stornierungen richten sich nach den auf ${BUSINESS.domain} veröffentlichten Stornierungsbedingungen.`,
   },
   {
     title: '6. Gerichtsstand',
@@ -234,16 +235,16 @@ export function ContractPDF({ data }: { data: ContractData }) {
         {/* Header */}
         <View style={s.header}>
           <View>
-            <Text style={s.brand}>cam2rent</Text>
-            <Text style={s.brandSub}>Action-Cam Verleih</Text>
+            <Text style={s.brand}>{BUSINESS.name}</Text>
+            <Text style={s.brandSub}>{BUSINESS.slogan}</Text>
           </View>
           <View>
             <Text style={s.senderBlock}>
-              Lennart Schickel{'\n'}
-              Heimsbrunner Str. 12{'\n'}
-              12349 Berlin{'\n'}
-              buchung@cam2rent.de{'\n'}
-              cam2rent.de
+              {BUSINESS.owner}{'\n'}
+              {BUSINESS.street}{'\n'}
+              {`${BUSINESS.zip} ${BUSINESS.city}`}{'\n'}
+              {BUSINESS.email}{'\n'}
+              {BUSINESS.domain}
             </Text>
           </View>
         </View>
@@ -256,7 +257,7 @@ export function ContractPDF({ data }: { data: ContractData }) {
         <Text style={s.sectionHeading}>Vertragsparteien</Text>
         <View style={s.detailRow}>
           <Text style={s.detailLabel}>Vermieter</Text>
-          <Text style={s.detailValue}>cam2rent · Lennart Schickel · Heimsbrunner Str. 12 · 12349 Berlin</Text>
+          <Text style={s.detailValue}>{BUSINESS.addressLine}</Text>
         </View>
         <View style={s.detailRow}>
           <Text style={s.detailLabel}>Mieter</Text>
@@ -314,7 +315,7 @@ export function ContractPDF({ data }: { data: ContractData }) {
 
         {/* Footer */}
         <View style={s.footer}>
-          <Text style={s.footerText}>cam2rent · Lennart Schickel · Heimsbrunner Str. 12 · 12349 Berlin</Text>
+          <Text style={s.footerText}>{BUSINESS.addressLine}</Text>
           <Text style={s.footerText}>Seite 1 von 2</Text>
         </View>
       </Page>
@@ -324,7 +325,7 @@ export function ContractPDF({ data }: { data: ContractData }) {
         {/* Mini-Header */}
         <View style={[s.header, { marginBottom: 20 }]}>
           <View>
-            <Text style={[s.brand, { fontSize: 14 }]}>cam2rent</Text>
+            <Text style={[s.brand, { fontSize: 14 }]}>{BUSINESS.name}</Text>
             <Text style={s.brandSub}>Mietvertrag {contractNumber}</Text>
           </View>
           <View>
@@ -367,14 +368,14 @@ export function ContractPDF({ data }: { data: ContractData }) {
         {/* Confirmation text */}
         <View style={{ marginTop: 16, padding: 10, backgroundColor: '#f9f9f7', borderRadius: 6 }}>
           <Text style={{ fontSize: 9, color: '#4a5568', lineHeight: 1.6 }}>
-            Mit der Unterschrift bestaetigt der Mieter, die oben genannten Mietbedingungen gelesen und akzeptiert zu haben.
+            Mit der Unterschrift bestätigt der Mieter, die oben genannten Mietbedingungen gelesen und akzeptiert zu haben.
             Beide Vertragsparteien erkennen diesen Mietvertrag als verbindlich an.
           </Text>
         </View>
 
         {/* Footer */}
         <View style={s.footer}>
-          <Text style={s.footerText}>cam2rent · Lennart Schickel · Heimsbrunner Str. 12 · 12349 Berlin</Text>
+          <Text style={s.footerText}>{BUSINESS.addressLine}</Text>
           <Text style={s.footerText}>Seite 2 von 2</Text>
         </View>
       </Page>

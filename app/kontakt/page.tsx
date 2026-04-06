@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { BUSINESS } from '@/lib/business-config';
 
 export const metadata: Metadata = {
   title: 'Kontakt',
@@ -23,10 +24,10 @@ export default function KontaktPage() {
               <h2 className="font-heading font-semibold text-brand-black">E-Mail</h2>
             </div>
             <a
-              href="mailto:kontakt@cam2rent.de"
+              href={`mailto:${BUSINESS.emailKontakt}`}
               className="font-body text-accent-blue hover:underline text-sm"
             >
-              kontakt@cam2rent.de
+              {BUSINESS.emailKontakt}
             </a>
             <p className="font-body text-brand-muted text-xs mt-1">
               Für Anfragen, Angebote und Verfügbarkeiten
@@ -39,10 +40,10 @@ export default function KontaktPage() {
               <h2 className="font-heading font-semibold text-brand-black">Telefon</h2>
             </div>
             <a
-              href="tel:+491628367477"
+              href={`tel:+${BUSINESS.phoneRaw}`}
               className="font-body text-accent-blue hover:underline text-sm"
             >
-              +49 162 / 836 7477
+              {BUSINESS.phone}
             </a>
             <p className="font-body text-brand-muted text-xs mt-1">
               Mo–Fr: 10:00 – 17:00 Uhr · Bitte Bestellnummer bereithalten
@@ -56,13 +57,13 @@ export default function KontaktPage() {
           </h2>
           <div className="bg-brand-bg rounded-card p-5">
             <div className="font-body text-brand-steel space-y-1">
-              <p className="font-semibold text-brand-black">Cam2Rent – Lennart Schickel</p>
-              <p>Heimsbrunner Str. 12</p>
-              <p>12349 Berlin</p>
-              <p>Deutschland</p>
+              <p className="font-semibold text-brand-black">{BUSINESS.legalName} – {BUSINESS.owner}</p>
+              <p>{BUSINESS.street}</p>
+              <p>{BUSINESS.zip} {BUSINESS.city}</p>
+              <p>{BUSINESS.country}</p>
             </div>
             <p className="font-body text-brand-muted text-xs mt-3">
-              Abholung nach Terminvereinbarung möglich (Berlin Alt-Buckow)
+              Abholung nach Terminvereinbarung möglich ({BUSINESS.pickupLocation})
             </p>
           </div>
         </section>
@@ -131,13 +132,13 @@ export default function KontaktPage() {
 function ContactForm() {
   return (
     <form
-      action="https://formsubmit.co/kontakt@cam2rent.de"
+      action={`https://formsubmit.co/${BUSINESS.emailKontakt}`}
       method="POST"
       className="space-y-4"
     >
-      <input type="hidden" name="_subject" value="Neue Kontaktanfrage über cam2rent.de" />
+      <input type="hidden" name="_subject" value={`Neue Kontaktanfrage über ${BUSINESS.domain}`} />
       <input type="hidden" name="_captcha" value="false" />
-      <input type="hidden" name="_next" value="https://cam2rent.de/kontakt?sent=true" />
+      <input type="hidden" name="_next" value={`${BUSINESS.url}/kontakt?sent=true`} />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>

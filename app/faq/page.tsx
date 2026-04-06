@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { BUSINESS } from '@/lib/business-config';
 
 export const metadata: Metadata = {
   title: 'FAQ – Häufige Fragen',
@@ -61,7 +62,7 @@ const faqSections: { title: string; items: FaqItem[] }[] = [
       {
         question: 'Kann ich die Ausrüstung auch abholen?',
         answer:
-          'Ja! Selbstabholung ist in Berlin (Alt-Buckow) kostenlos möglich. Die Abholung erfolgt in der Regel einen Tag vor Mietbeginn. Den genauen Termin vereinbarst du bei der Buchung.',
+          `Ja! Selbstabholung ist in ${BUSINESS.pickupLocation} kostenlos möglich. Die Abholung erfolgt in der Regel einen Tag vor Mietbeginn. Den genauen Termin vereinbarst du bei der Buchung.`,
       },
     ],
   },

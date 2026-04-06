@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { BUSINESS } from '@/lib/business-config';
 
 const shopLinks = [
   { href: '/kameras', label: 'Alle Kameras' },
@@ -77,17 +78,17 @@ export default function Footer() {
             </div>
             {/* Kontakt-Infos */}
             <div className="mt-1 space-y-1 text-sm font-body text-brand-muted">
-              <p className="font-semibold text-white">Cam2Rent</p>
-              <p>Lennart Schickel</p>
-              <p>Heimsbrunner Str. 12</p>
-              <p>12349 Berlin, Deutschland</p>
+              <p className="font-semibold text-white">{BUSINESS.legalName}</p>
+              <p>{BUSINESS.owner}</p>
+              <p>{BUSINESS.street}</p>
+              <p>{BUSINESS.zip} {BUSINESS.city}, {BUSINESS.country}</p>
               <p className="pt-2">
                 E-Mail:{' '}
-                <a href="mailto:kontakt@cam2rent.de" className="text-accent-blue hover:text-white transition-colors">
-                  kontakt@cam2rent.de
+                <a href={`mailto:${BUSINESS.emailKontakt}`} className="text-accent-blue hover:text-white transition-colors">
+                  {BUSINESS.emailKontakt}
                 </a>
               </p>
-              <p>Telefon: 0162 / 8367477</p>
+              <p>Telefon: {BUSINESS.phone}</p>
             </div>
 
             {/* DSGVO Badge */}
@@ -99,7 +100,7 @@ export default function Footer() {
             {/* Social Icons */}
             <div className="flex items-center gap-3 mt-5">
               {[
-                { icon: <InstagramIcon />, label: 'Instagram', href: 'https://instagram.com/cam2rent' },
+                { icon: <InstagramIcon />, label: 'Instagram', href: BUSINESS.instagram },
                 { icon: <YouTubeIcon />, label: 'YouTube', href: 'https://youtube.com/@cam2rent' },
                 { icon: <TikTokIcon />, label: 'TikTok', href: 'https://tiktok.com/@cam2rent' },
               ].map(({ icon, label, href }) => (

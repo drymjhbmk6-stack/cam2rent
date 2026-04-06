@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { BUSINESS } from '@/lib/business-config';
 
 export const metadata: Metadata = {
   title: 'Widerrufsbelehrung',
@@ -33,16 +34,16 @@ export default function WiderrufPage() {
             Kontakt für den Widerruf
           </h2>
           <div className="font-body text-brand-steel space-y-1">
-            <p className="font-semibold text-brand-black">Cam2Rent – Lennart Schickel</p>
-            <p>Heimsbrunner Str. 12</p>
-            <p>12349 Berlin</p>
+            <p className="font-semibold text-brand-black">{BUSINESS.name} – {BUSINESS.owner}</p>
+            <p>{BUSINESS.street}</p>
+            <p>{BUSINESS.zip} {BUSINESS.city}</p>
             <p>
               E-Mail:{' '}
-              <a href="mailto:kontakt@cam2rent.de" className="text-accent-blue hover:underline">
-                kontakt@cam2rent.de
+              <a href={`mailto:${BUSINESS.emailKontakt}`} className="text-accent-blue hover:underline">
+                {BUSINESS.emailKontakt}
               </a>
             </p>
-            <p>Website: www.cam2rent.de</p>
+            <p>Website: www.{BUSINESS.domain}</p>
           </div>
         </section>
 
@@ -104,7 +105,7 @@ export default function WiderrufPage() {
             (nicht vorgeschrieben):
           </p>
           <div className="bg-brand-bg rounded-card p-5 font-body text-brand-steel space-y-3">
-            <p>An: Cam2Rent – Lennart Schickel, Heimsbrunner Str. 12, 12349 Berlin, kontakt@cam2rent.de</p>
+            <p>An: {BUSINESS.name} – {BUSINESS.owner}, {BUSINESS.fullAddress}, {BUSINESS.emailKontakt}</p>
             <p>
               Hiermit widerrufe(n) ich/wir (*) den von mir/uns (*) abgeschlossenen Vertrag über die
               Erbringung der folgenden Dienstleistung (*)

@@ -1,9 +1,11 @@
 'use client';
 
+import { BUSINESS } from '@/lib/business-config';
+
 export default function WhatsAppButton() {
   return (
     <a
-      href="https://wa.me/491628367477?text=Hallo%2C%20ich%20habe%20eine%20Frage%20zu%20cam2rent"
+      href={`${BUSINESS.whatsappUrl}?text=Hallo%2C%20ich%20habe%20eine%20Frage%20zu%20${BUSINESS.name}`}
       target="_blank"
       rel="noopener noreferrer"
       aria-label="WhatsApp Chat starten"

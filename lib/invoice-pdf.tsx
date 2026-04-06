@@ -5,6 +5,7 @@ import {
   View,
   StyleSheet,
 } from '@react-pdf/renderer';
+import { BUSINESS } from '@/lib/business-config';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -294,16 +295,16 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
         {/* ── Header ── */}
         <View style={s.header}>
           <View>
-            <Text style={s.brand}>cam2rent</Text>
-            <Text style={s.brandSub}>Action-Cam Verleih</Text>
+            <Text style={s.brand}>{BUSINESS.name}</Text>
+            <Text style={s.brandSub}>{BUSINESS.slogan}</Text>
           </View>
           <View>
             <Text style={s.senderBlock}>
-              Lennart Schickel{'\n'}
-              Heimsbrunner Str. 12{'\n'}
-              12349 Berlin{'\n'}
-              buchung@cam2rent.de{'\n'}
-              cam2rent.de
+              {BUSINESS.owner}{'\n'}
+              {BUSINESS.street}{'\n'}
+              {`${BUSINESS.zip} ${BUSINESS.city}`}{'\n'}
+              {BUSINESS.email}{'\n'}
+              {BUSINESS.domain}
             </Text>
           </View>
         </View>
@@ -405,8 +406,8 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
 
         {/* ── Footer ── */}
         <View style={s.footer}>
-          <Text style={s.footerText}>cam2rent · Lennart Schickel · Heimsbrunner Str. 12 · 12349 Berlin</Text>
-          <Text style={s.footerText}>cam2rent.de · buchung@cam2rent.de</Text>
+          <Text style={s.footerText}>{BUSINESS.addressLine}</Text>
+          <Text style={s.footerText}>{`${BUSINESS.domain} · ${BUSINESS.email}`}</Text>
         </View>
 
       </Page>

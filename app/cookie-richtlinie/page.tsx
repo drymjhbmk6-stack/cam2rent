@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import ResetConsentButton from '@/components/ResetConsentButton';
+import { BUSINESS } from '@/lib/business-config';
 
 export const metadata: Metadata = {
   title: 'Cookie-Richtlinie (EU)',
@@ -23,7 +24,7 @@ export default function CookieRichtliniePage() {
             1. Verwendung von Cookies
           </h2>
           <p className="font-body text-brand-steel mb-3">
-            Unsere Website www.cam2rent.de setzt <strong>keine Tracking-Cookies</strong>. Wir
+            Unsere Website www.{BUSINESS.domain} setzt <strong>keine Tracking-Cookies</strong>. Wir
             verwenden ausschließlich technisch notwendige Speichermechanismen (Cookies und
             localStorage), die für den Betrieb der Website erforderlich sind.
           </p>
@@ -193,15 +194,15 @@ export default function CookieRichtliniePage() {
             7. Kontakt
           </h2>
           <div className="font-body text-brand-steel space-y-1">
-            <p className="font-semibold text-brand-black">Cam2Rent – Lennart Schickel</p>
-            <p>Heimsbrunner Str. 12, 12349 Berlin</p>
+            <p className="font-semibold text-brand-black">{BUSINESS.name} – {BUSINESS.owner}</p>
+            <p>{BUSINESS.fullAddress}</p>
             <p>
               E-Mail:{' '}
-              <a href="mailto:kontakt@cam2rent.de" className="text-accent-blue hover:underline">
-                kontakt@cam2rent.de
+              <a href={`mailto:${BUSINESS.emailKontakt}`} className="text-accent-blue hover:underline">
+                {BUSINESS.emailKontakt}
               </a>
             </p>
-            <p>Telefon: 0162 / 8367477</p>
+            <p>Telefon: {BUSINESS.phone}</p>
           </div>
         </section>
       </div>

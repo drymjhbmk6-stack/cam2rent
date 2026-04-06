@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { BUSINESS } from '@/lib/business-config';
 
 export const metadata: Metadata = {
   title: 'Datenschutzerklärung',
@@ -18,17 +19,17 @@ export default function DatenschutzPage() {
             1. Verantwortlicher
           </h2>
           <div className="font-body text-brand-steel space-y-1">
-            <p className="font-semibold text-brand-black">Cam2Rent – Lennart Schickel</p>
-            <p>Heimsbrunner Str. 12</p>
-            <p>12349 Berlin, Deutschland</p>
+            <p className="font-semibold text-brand-black">{BUSINESS.name} – {BUSINESS.owner}</p>
+            <p>{BUSINESS.street}</p>
+            <p>{BUSINESS.zip} {BUSINESS.city}, {BUSINESS.country}</p>
             <p>
               E-Mail:{' '}
-              <a href="mailto:kontakt@cam2rent.de" className="text-accent-blue hover:underline">
-                kontakt@cam2rent.de
+              <a href={`mailto:${BUSINESS.emailKontakt}`} className="text-accent-blue hover:underline">
+                {BUSINESS.emailKontakt}
               </a>
             </p>
-            <p>Telefon: 0162 / 8367477</p>
-            <p>Website: www.cam2rent.de</p>
+            <p>Telefon: {BUSINESS.phone}</p>
+            <p>Website: www.{BUSINESS.domain}</p>
           </div>
         </section>
 
@@ -225,8 +226,8 @@ export default function DatenschutzPage() {
           </ul>
           <p className="font-body text-brand-steel mt-3">
             Zur Ausübung Ihrer Rechte wenden Sie sich bitte an{' '}
-            <a href="mailto:kontakt@cam2rent.de" className="text-accent-blue hover:underline">
-              kontakt@cam2rent.de
+            <a href={`mailto:${BUSINESS.emailKontakt}`} className="text-accent-blue hover:underline">
+              {BUSINESS.emailKontakt}
             </a>
             .
           </p>

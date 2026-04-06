@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { BUSINESS } from '@/lib/business-config';
 
 export const metadata: Metadata = {
   title: 'Versand & Zahlung',
@@ -45,7 +46,7 @@ export default function VersandZahlungPage() {
                 <h3 className="font-heading font-semibold text-brand-black">Selbstabholung</h3>
               </div>
               <p className="font-body text-brand-steel text-sm">
-                Kostenlose Abholung in Berlin (Alt-Buckow). Die Abholung ist in der Regel einen Tag
+                Kostenlose Abholung in {BUSINESS.pickupLocation}. Die Abholung ist in der Regel einen Tag
                 vor Mietbeginn möglich. Termin wird bei der Buchung vereinbart.
               </p>
             </div>

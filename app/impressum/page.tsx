@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { BUSINESS } from '@/lib/business-config';
 
 export const metadata: Metadata = {
   title: 'Impressum – Cam2Rent',
@@ -15,25 +16,25 @@ export default function ImpressumPage() {
         <section className="mb-10">
           <h2 className="font-heading font-semibold text-lg text-brand-black mb-4">Anbieter</h2>
           <div className="font-body text-brand-steel space-y-1">
-            <p className="font-semibold text-brand-black">Cam2Rent</p>
-            <p>Lennart Schickel</p>
-            <p>Heimsbrunner Str. 12</p>
-            <p>12349 Berlin</p>
-            <p>Deutschland</p>
+            <p className="font-semibold text-brand-black">{BUSINESS.legalName}</p>
+            <p>{BUSINESS.owner}</p>
+            <p>{BUSINESS.street}</p>
+            <p>{BUSINESS.zip} {BUSINESS.city}</p>
+            <p>{BUSINESS.country}</p>
           </div>
         </section>
 
         <section className="mb-10">
           <h2 className="font-heading font-semibold text-lg text-brand-black mb-4">Kontakt</h2>
           <div className="font-body text-brand-steel space-y-1">
-            <p>Telefon: 0162 / 8367477</p>
+            <p>Telefon: {BUSINESS.phone}</p>
             <p>
               E-Mail:{' '}
               <a
-                href="mailto:kontakt@cam2rent.de"
+                href={`mailto:${BUSINESS.emailKontakt}`}
                 className="text-accent-blue hover:underline"
               >
-                kontakt@cam2rent.de
+                {BUSINESS.emailKontakt}
               </a>
             </p>
           </div>
@@ -44,7 +45,7 @@ export default function ImpressumPage() {
             Umsatzsteuer
           </h2>
           <p className="font-body text-brand-steel">
-            Lennart Schickel ist Kleinunternehmer im Sinne von § 19 UStG. Es wird daher keine
+            {BUSINESS.owner} ist Kleinunternehmer im Sinne von § 19 UStG. Es wird daher keine
             Umsatzsteuer berechnet und keine Umsatzsteuer-Identifikationsnummer ausgewiesen.
           </p>
         </section>
@@ -76,9 +77,9 @@ export default function ImpressumPage() {
             Verantwortlich für den Inhalt nach § 55 Abs. 2 RStV
           </h2>
           <div className="font-body text-brand-steel space-y-1">
-            <p>Lennart Schickel</p>
-            <p>Heimsbrunner Str. 12</p>
-            <p>12349 Berlin</p>
+            <p>{BUSINESS.owner}</p>
+            <p>{BUSINESS.street}</p>
+            <p>{BUSINESS.zip} {BUSINESS.city}</p>
           </div>
         </section>
 

@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { BUSINESS } from '@/lib/business-config';
 
 export const metadata: Metadata = {
   title: 'AGB',
@@ -23,14 +24,14 @@ export default function AGBPage() {
             Mietverträge über Kameraausrüstung, die zwischen
           </p>
           <div className="font-body text-brand-steel space-y-1 mb-3">
-            <p className="font-semibold text-brand-black">Cam2Rent – Lennart Schickel</p>
-            <p>Heimsbrunner Str. 12, 12349 Berlin</p>
-            <p>E-Mail: kontakt@cam2rent.de</p>
-            <p>Telefon: 0162 / 8367477</p>
+            <p className="font-semibold text-brand-black">{BUSINESS.name} – {BUSINESS.owner}</p>
+            <p>{BUSINESS.fullAddress}</p>
+            <p>E-Mail: {BUSINESS.emailKontakt}</p>
+            <p>Telefon: {BUSINESS.phone}</p>
           </div>
           <p className="font-body text-brand-steel">
             (nachfolgend &quot;Vermieter&quot;) und dem Kunden (nachfolgend &quot;Mieter&quot;) über
-            die Website www.cam2rent.de geschlossen werden.
+            die Website www.{BUSINESS.domain} geschlossen werden.
           </p>
         </section>
 
@@ -195,7 +196,7 @@ export default function AGBPage() {
               </ul>
             </li>
             <li>
-              Stornierungen können über das Kundenkonto oder per E-Mail an kontakt@cam2rent.de
+              Stornierungen können über das Kundenkonto oder per E-Mail an {BUSINESS.emailKontakt}
               vorgenommen werden.
             </li>
             <li>Bereits bezahlte Beträge werden abzüglich eventueller Stornogebühren erstattet.</li>

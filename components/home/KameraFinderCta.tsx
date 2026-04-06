@@ -19,7 +19,7 @@ export default function KameraFinderCta() {
             </h2>
             <p className="font-body text-brand-steel dark:text-gray-400 text-sm sm:text-base mb-5 max-w-lg">
               Beantworte 5 kurze Fragen und wir empfehlen dir die perfekte Action-Cam
-              fuer dein Vorhaben.
+              für dein Vorhaben.
             </p>
             <Link
               href="/kamera-finder"
