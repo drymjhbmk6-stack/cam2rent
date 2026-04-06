@@ -1,4 +1,22 @@
+'use client';
+
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
+
+interface HeroData {
+  ueberschrift: string;
+  untertitel: string;
+  cta_text: string;
+  cta_link: string;
+  is_active?: boolean;
+}
+
+const FALLBACK: HeroData = {
+  ueberschrift: 'Action-Cams mieten statt kaufen',
+  untertitel: 'Hochwertige Action-Kameras ab 9,90 €/Tag. Mit Haftungsschutz, schnell geliefert, flexibel.',
+  cta_text: 'Kameras entdecken',
+  cta_link: '/kameras',
+};
 
 function CheckIcon() {
   return (
@@ -15,6 +33,36 @@ const trustBadges = [
 ];
 
 export default function Hero() {
+  const [data, setData] = useState<HeroData>(FALLBACK);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/shop-content?section=hero')
+      .then((r) => r.json())
+      .then((d) => {
+        if (d && d.ueberschrift) {
+          setData({
+            ueberschrift: d.ueberschrift || FALLBACK.ueberschrift,
+            untertitel: d.untertitel || FALLBACK.untertitel,
+            cta_text: d.cta_text || FALLBACK.cta_text,
+            cta_link: d.cta_link || FALLBACK.cta_link,
+            is_active: d.is_active !== false,
+          });
+        }
+        setLoaded(true);
+      })
+      .catch(() => setLoaded(true));
+  }, []);
+
+  // Nicht anzeigen wenn im Admin deaktiviert
+  if (loaded && data.is_active === false) return null;
+
+  // Überschrift in zwei Zeilen aufteilen (am letzten Leerzeichen)
+  const words = data.ueberschrift.split(' ');
+  const midPoint = Math.ceil(words.length / 2);
+  const line1 = words.slice(0, midPoint).join(' ');
+  const line2 = words.slice(midPoint).join(' ');
+
   return (
     <section
       className="relative overflow-hidden bg-gradient-to-br from-accent-blue via-blue-600 to-blue-800 text-white"
@@ -48,25 +96,27 @@ export default function Hero() {
             id="hero-heading"
             className="font-heading font-bold text-4xl sm:text-5xl lg:text-6xl leading-tight text-white mb-6 text-balance"
           >
-            Action-Cams mieten
-            <br />
-            <span className="text-white/90">statt kaufen</span>
+            {line1}
+            {line2 && (
+              <>
+                <br />
+                <span className="text-white/90">{line2}</span>
+              </>
+            )}
           </h1>
 
           {/* Subline */}
           <p className="font-body text-lg sm:text-xl text-white/80 leading-relaxed mb-10 max-w-xl">
-            Hochwertige Action-Kameras ab{' '}
-            <span className="font-semibold text-white">9,90 €/Tag</span>.
-            Mit Haftungsschutz, schnell geliefert, flexibel.
+            {data.untertitel}
           </p>
 
           {/* CTA Buttons */}
           <div className="flex flex-col sm:flex-row gap-4 mb-12">
             <Link
-              href="/kameras"
+              href={data.cta_link}
               className="inline-flex items-center justify-center px-8 py-3.5 bg-white text-brand-black font-heading font-semibold text-base rounded-[10px] hover:bg-blue-50 transition-colors shadow-lg shadow-black/10"
             >
-              Kameras entdecken
+              {data.cta_text}
             </Link>
             <Link
               href="/so-funktionierts"
