@@ -32,8 +32,14 @@ const dmSans = DM_Sans({
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://cam2rent.de'),
+  manifest: '/manifest.json',
   icons: {
     apple: '/icon-192.png',
+  },
+  other: {
+    'apple-mobile-web-app-capable': 'yes',
+    'apple-mobile-web-app-status-bar-style': 'default',
+    'apple-mobile-web-app-title': 'cam2rent',
   },
   title: {
     default: 'Cam2Rent – Action-Cams mieten statt kaufen',

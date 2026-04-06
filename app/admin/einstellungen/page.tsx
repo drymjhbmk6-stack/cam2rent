@@ -758,6 +758,141 @@ export default function EinstellungenPage() {
           </div>
         )}
       </div>
+
+      {/* Sektion 5: Admin-App installieren */}
+      <AdminInstallSection />
     </div>
   );
+}
+
+/* ─── Admin-App Install Sektion ──────────────────────────────────────────── */
+
+function AdminInstallSection() {
+  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [isIOS, setIsIOS] = useState(false);
+  const [isStandalone, setIsStandalone] = useState(false);
+  const [installed, setInstalled] = useState(false);
+
+  useEffect(() => {
+    const standalone = window.matchMedia('(display-mode: standalone)').matches
+      || ('standalone' in window.navigator && (window.navigator as unknown as { standalone: boolean }).standalone);
+    setIsStandalone(!!standalone);
+
+    const ua = window.navigator.userAgent;
+    setIsIOS(/iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
+
+    const handler = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e as BeforeInstallPromptEvent);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  const handleInstall = async () => {
+    if (!deferredPrompt) return;
+    await deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') setInstalled(true);
+    setDeferredPrompt(null);
+  };
+
+  return (
+    <div style={{ background: '#111827', borderRadius: 12, border: '1px solid #1e293b', padding: 24, marginTop: 24 }}>
+      <div className="flex items-center gap-3 mb-4">
+        <div style={{ width: 40, height: 40, borderRadius: 10, background: '#3b82f614', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <svg className="w-5 h-5" style={{ color: '#3b82f6' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+          </svg>
+        </div>
+        <div>
+          <h2 className="font-heading font-semibold text-base" style={{ color: '#e2e8f0' }}>
+            Admin-App installieren
+          </h2>
+          <p className="text-xs" style={{ color: '#64748b' }}>
+            Admin-Dashboard als App auf dem Handy speichern
+          </p>
+        </div>
+        {isStandalone && (
+          <span className="ml-auto text-xs font-semibold px-3 py-1 rounded-full" style={{ background: '#10b98114', color: '#10b981' }}>
+            Installiert
+          </span>
+        )}
+      </div>
+
+      {isStandalone || installed ? (
+        <div className="flex items-center gap-3 p-4 rounded-lg" style={{ background: '#10b9810a', border: '1px solid #10b98133' }}>
+          <svg className="w-6 h-6 flex-shrink-0" style={{ color: '#10b981' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <p className="text-sm" style={{ color: '#94a3b8' }}>
+            Die Admin-App ist bereits installiert. Du kannst sie ueber dein Home-Bildschirm oeffnen.
+          </p>
+        </div>
+      ) : isIOS ? (
+        <div className="space-y-4">
+          <p className="text-sm" style={{ color: '#94a3b8' }}>
+            So installierst du die Admin-App auf deinem iPhone/iPad:
+          </p>
+          <div className="space-y-3">
+            <div className="flex items-start gap-3 p-3 rounded-lg" style={{ background: '#0a0f1e', border: '1px solid #1e293b' }}>
+              <span className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: '#3b82f620', color: '#3b82f6' }}>1</span>
+              <p className="text-sm" style={{ color: '#e2e8f0' }}>
+                Tippe unten auf das <strong>Teilen-Symbol</strong>{' '}
+                <svg className="w-4 h-4 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                </svg>
+              </p>
+            </div>
+            <div className="flex items-start gap-3 p-3 rounded-lg" style={{ background: '#0a0f1e', border: '1px solid #1e293b' }}>
+              <span className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: '#3b82f620', color: '#3b82f6' }}>2</span>
+              <p className="text-sm" style={{ color: '#e2e8f0' }}>
+                Scrolle und tippe auf <strong>&quot;Zum Home-Bildschirm&quot;</strong>
+              </p>
+            </div>
+            <div className="flex items-start gap-3 p-3 rounded-lg" style={{ background: '#0a0f1e', border: '1px solid #1e293b' }}>
+              <span className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: '#3b82f620', color: '#3b82f6' }}>3</span>
+              <p className="text-sm" style={{ color: '#e2e8f0' }}>
+                Tippe auf <strong>&quot;Hinzufuegen&quot;</strong> — fertig!
+              </p>
+            </div>
+          </div>
+          <div className="p-3 rounded-lg text-xs" style={{ background: '#3b82f608', border: '1px solid #3b82f620', color: '#94a3b8' }}>
+            <strong style={{ color: '#60a5fa' }}>Tipp:</strong> Stelle sicher, dass du diese Seite in <strong>Safari</strong> geoeffnet hast.
+            In Chrome/Firefox fuer iOS funktioniert &quot;Zum Home-Bildschirm&quot; leider nicht.
+          </div>
+        </div>
+      ) : deferredPrompt ? (
+        <div className="space-y-4">
+          <p className="text-sm" style={{ color: '#94a3b8' }}>
+            Installiere die Admin-App fuer schnellen Zugriff direkt vom Home-Bildschirm.
+          </p>
+          <button
+            onClick={handleInstall}
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors"
+            style={{ background: '#3b82f6', color: 'white' }}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            App installieren
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <p className="text-sm" style={{ color: '#94a3b8' }}>
+            Oeffne diese Seite in deinem mobilen Browser und verwende die &quot;Zum Home-Bildschirm hinzufuegen&quot;-Funktion deines Browsers.
+          </p>
+          <div className="p-3 rounded-lg text-xs" style={{ background: '#3b82f608', border: '1px solid #3b82f620', color: '#94a3b8' }}>
+            <strong style={{ color: '#60a5fa' }}>Tipp:</strong> Auf Android: Tippe auf die drei Punkte oben rechts im Browser und waehle &quot;App installieren&quot; oder &quot;Zum Startbildschirm hinzufuegen&quot;.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
 }
