@@ -1,9 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import NotificationDropdown from '@/components/admin/NotificationDropdown';
+import { useAutoLogout } from '@/hooks/useAutoLogout';
+
+// 30 Minuten Inaktivitaet fuer Admin
+const ADMIN_TIMEOUT_MS = 30 * 60 * 1000;
 
 type NavItem = { href: string; label: string; exact?: boolean; icon: React.ReactNode };
 
@@ -261,13 +265,21 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  if (pathname === '/admin/login') return <>{children}</>;
-  if (pathname.startsWith('/admin/blog')) return <>{children}</>;
-
-  async function handleLogout() {
+  const handleLogout = useCallback(async () => {
     await fetch('/api/admin/logout', { method: 'POST' });
     router.push('/admin/login');
-  }
+  }, [router]);
+
+  const isLoginOrBlog = pathname === '/admin/login' || pathname.startsWith('/admin/blog');
+
+  // Auto-Logout nach Inaktivitaet (nicht auf Login-Seite)
+  useAutoLogout({
+    timeoutMs: ADMIN_TIMEOUT_MS,
+    onLogout: handleLogout,
+    enabled: !isLoginOrBlog,
+  });
+
+  if (isLoginOrBlog) return <>{children}</>;
 
   const isDashboard = pathname === '/admin';
   const closeSidebar = () => setSidebarOpen(false);

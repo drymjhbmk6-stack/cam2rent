@@ -9,6 +9,10 @@ import {
 } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { createAuthBrowserClient } from '@/lib/supabase-auth';
+import { useAutoLogout } from '@/hooks/useAutoLogout';
+
+// 60 Minuten Inaktivitaet fuer Shop-Kunden
+const SHOP_TIMEOUT_MS = 60 * 60 * 1000;
 
 interface AuthContextType {
   user: User | null;
@@ -61,6 +65,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await supabase.auth.signOut();
     window.location.href = '/';
   }, []);
+
+  // Auto-Logout nach Inaktivitaet (nur wenn eingeloggt)
+  useAutoLogout({
+    timeoutMs: SHOP_TIMEOUT_MS,
+    onLogout: signOut,
+    enabled: !!user,
+  });
 
   return (
     <AuthContext.Provider value={{ user, session, loading, signOut }}>
