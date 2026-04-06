@@ -835,8 +835,18 @@ function AdminInstallSection() {
             So installierst du die Admin-App auf deinem iPhone/iPad:
           </p>
           <div className="space-y-3">
-            <div className="flex items-start gap-3 p-3 rounded-lg" style={{ background: '#0a0f1e', border: '1px solid #1e293b' }}>
+            <a
+              href="/admin"
+              className="flex items-start gap-3 p-3 rounded-lg no-underline"
+              style={{ background: '#3b82f60f', border: '1px solid #3b82f633' }}
+            >
               <span className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: '#3b82f620', color: '#3b82f6' }}>1</span>
+              <p className="text-sm" style={{ color: '#e2e8f0' }}>
+                <strong style={{ color: '#60a5fa' }}>Gehe zuerst zum Dashboard</strong> — tippe hier um zu <strong>/admin</strong> zu navigieren
+              </p>
+            </a>
+            <div className="flex items-start gap-3 p-3 rounded-lg" style={{ background: '#0a0f1e', border: '1px solid #1e293b' }}>
+              <span className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: '#3b82f620', color: '#3b82f6' }}>2</span>
               <p className="text-sm" style={{ color: '#e2e8f0' }}>
                 Tippe unten auf das <strong>Teilen-Symbol</strong>{' '}
                 <svg className="w-4 h-4 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -845,21 +855,20 @@ function AdminInstallSection() {
               </p>
             </div>
             <div className="flex items-start gap-3 p-3 rounded-lg" style={{ background: '#0a0f1e', border: '1px solid #1e293b' }}>
-              <span className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: '#3b82f620', color: '#3b82f6' }}>2</span>
+              <span className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: '#3b82f620', color: '#3b82f6' }}>3</span>
               <p className="text-sm" style={{ color: '#e2e8f0' }}>
-                Scrolle und tippe auf <strong>&quot;Zum Home-Bildschirm&quot;</strong>
+                Tippe auf <strong>&quot;Zum Home-Bildschirm&quot;</strong>
               </p>
             </div>
             <div className="flex items-start gap-3 p-3 rounded-lg" style={{ background: '#0a0f1e', border: '1px solid #1e293b' }}>
-              <span className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: '#3b82f620', color: '#3b82f6' }}>3</span>
+              <span className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: '#3b82f620', color: '#3b82f6' }}>4</span>
               <p className="text-sm" style={{ color: '#e2e8f0' }}>
                 Tippe auf <strong>&quot;Hinzufuegen&quot;</strong> — fertig!
               </p>
             </div>
           </div>
           <div className="p-3 rounded-lg text-xs" style={{ background: '#3b82f608', border: '1px solid #3b82f620', color: '#94a3b8' }}>
-            <strong style={{ color: '#60a5fa' }}>Tipp:</strong> Stelle sicher, dass du diese Seite in <strong>Safari</strong> geoeffnet hast.
-            In Chrome/Firefox fuer iOS funktioniert &quot;Zum Home-Bildschirm&quot; leider nicht.
+            <strong style={{ color: '#60a5fa' }}>Wichtig:</strong> Oeffne zuerst <strong>/admin</strong> (Schritt 1), damit die App beim Oeffnen das Dashboard zeigt und nicht die Einstellungen. Stelle sicher, dass du <strong>Safari</strong> verwendest.
           </div>
         </div>
       ) : deferredPrompt ? (
