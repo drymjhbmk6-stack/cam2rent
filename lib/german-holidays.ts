@@ -69,19 +69,11 @@ export function isSundayOrHoliday(date: Date): boolean {
 /**
  * Prüft ob ein Datum als Mietbeginn oder Mietende im Versandmodus gesperrt ist.
  *
- * Gesperrt wenn: Das Datum UND der Folgetag beide Sonn-/Feiertage sind.
- * Grund: Der Kunde kann die Kamera nicht am Sonntag/Feiertag zum Versandshop bringen,
- * wenn auch der nächste Tag kein Werktag ist.
- *
- * Beispiel: Samstag als Mietende ist OK (Sonntag → Montag Werktag).
- * Aber: Samstag vor Feiertags-Montag ist gesperrt (So+Mo keine Abgabe möglich).
+ * Gesperrt wenn: Das Datum ein Sonntag oder Feiertag ist.
+ * Grund: Der Kunde kann die Kamera nicht am Sonntag/Feiertag zum Versandshop bringen.
  */
 export function isBlockedForShipping(date: Date): boolean {
-  // Der Tag selbst muss ein Sonn-/Feiertag sein
-  if (!isSundayOrHoliday(date)) return false;
-  // Und der Folgetag auch
-  const nextDay = addDays(date, 1);
-  return isSundayOrHoliday(nextDay);
+  return isSundayOrHoliday(date);
 }
 
 /**

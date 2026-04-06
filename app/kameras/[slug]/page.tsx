@@ -318,7 +318,7 @@ export default async function KameraDetailPage({
 
         {/* ── Zubehör & Sets ── */}
         <div className="mt-14">
-          <ProductAccessorySets productSlug={product.slug} />
+          <ProductAccessorySets />
         </div>
 
         {/* ── Back to overview ── */}

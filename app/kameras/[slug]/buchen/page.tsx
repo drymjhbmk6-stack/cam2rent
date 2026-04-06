@@ -383,10 +383,24 @@ export default function BuchenPage() {
   const { addItem } = useCart();
   const product = products.find((p) => p.slug === slug);
 
-  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(1);
-  const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>('versand');
-  const [range, setRange] = useState<DateRange | undefined>();
   const searchParams = useSearchParams();
+  const preFrom = searchParams.get('from');
+  const preTo = searchParams.get('to');
+  const preDelivery = searchParams.get('delivery');
+  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(1);
+  const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>(
+    preDelivery === 'abholung' ? 'abholung' : 'versand'
+  );
+  const [range, setRange] = useState<DateRange | undefined>(() => {
+    if (preFrom && preTo) {
+      const [fy, fm, fd] = preFrom.split('-').map(Number);
+      const [ty, tm, td] = preTo.split('-').map(Number);
+      if (fy && fm && fd && ty && tm && td) {
+        return { from: new Date(fy, fm - 1, fd), to: new Date(ty, tm - 1, td) };
+      }
+    }
+    return undefined;
+  });
   const preselectedAccessories = searchParams.get('accessories');
   const [accessories, setAccessories] = useState<string[]>(() => {
     if (preselectedAccessories) {

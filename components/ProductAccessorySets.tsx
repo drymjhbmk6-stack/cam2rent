@@ -7,7 +7,7 @@ import type { RentalSet } from '@/data/sets';
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export default function ProductAccessorySets({ productSlug }: { productSlug: string }) {
+export default function ProductAccessorySets() {
   const [sets, setSets] = useState<RentalSet[]>([]);
   const [openSetId, setOpenSetId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -102,12 +102,6 @@ export default function ProductAccessorySets({ productSlug }: { productSlug: str
                       ) : (
                         <p className="text-xs text-brand-muted dark:text-gray-500">Keine Details verfügbar</p>
                       )}
-                      <Link
-                        href={`/kameras/${productSlug}/buchen`}
-                        className="inline-flex items-center text-xs font-heading font-semibold text-accent-blue hover:underline mt-2"
-                      >
-                        Set buchen →
-                      </Link>
                     </div>
                   )}
                 </div>
