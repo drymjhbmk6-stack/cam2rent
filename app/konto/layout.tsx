@@ -12,6 +12,7 @@ const navItems = [
   { href: '/konto/feedback', label: 'Feedback' },
   { href: '/konto/favoriten', label: 'Favoriten' },
   { href: '/konto/nachrichten', label: 'Nachrichten' },
+  { href: '/konto/sets', label: 'Eigene Sets' },
 ];
 
 export default function KontoLayout({

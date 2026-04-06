@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '@/components/AuthProvider';
 import { products, getPriceForDays, type Product } from '@/data/products';
 import { accessories as ALL_ACCESSORIES, getAccessoryPrice, type Accessory } from '@/data/accessories';
 
@@ -154,11 +155,36 @@ function fmt(n: number) {
 
 export default function SetKonfiguratorPage() {
   const router = useRouter();
+  const { user } = useAuth();
 
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [selectedCamera, setSelectedCamera] = useState<Product | null>(null);
   const [selectedAccessoryIds, setSelectedAccessoryIds] = useState<string[]>([]);
   const [days, setDays] = useState(3);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const handleSaveSet = useCallback(async () => {
+    if (!user || !selectedCamera) return;
+    setSaving(true);
+    try {
+      const res = await fetch('/api/custom-sets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          cameraId: selectedCamera.id,
+          accessoryIds: selectedAccessoryIds,
+          name: `${selectedCamera.name} + ${selectedAccessoryIds.length} Zubehör`,
+        }),
+      });
+      if (res.ok) {
+        setSaved(true);
+        setTimeout(() => setSaved(false), 3000);
+      }
+    } catch { /* ignore */ }
+    finally { setSaving(false); }
+  }, [user, selectedCamera, selectedAccessoryIds]);
 
   const dayOptions = [1, 3, 7, 14, 30];
 
@@ -194,13 +220,11 @@ export default function SetKonfiguratorPage() {
     );
 
     const accCount = selectedAccessories.length;
-    let discountPercent = 0;
-    if (accCount >= 3) discountPercent = 15;
-    else if (accCount >= 2) discountPercent = 10;
+    const discountPercent = 0;
 
     const subtotal = cameraPrice + accessoryTotal;
-    const discountAmount = discountPercent > 0 ? accessoryTotal * (discountPercent / 100) : 0;
-    const total = subtotal - discountAmount;
+    const discountAmount = 0;
+    const total = subtotal;
 
     return {
       cameraPrice,
@@ -245,7 +269,7 @@ export default function SetKonfiguratorPage() {
             Set-Konfigurator
           </h1>
           <p className="font-body text-brand-steel text-lg mt-2">
-            Stelle dein individuelles Kamera-Set zusammen und spare bei mehreren Zubehörteilen.
+            Stelle dein individuelles Kamera-Set zusammen. Dein Set wird im Kundenkonto gespeichert.
           </p>
         </div>
       </section>
@@ -324,7 +348,7 @@ export default function SetKonfiguratorPage() {
                   Schritt 2: Zubehör hinzufügen
                 </h2>
                 <p className="font-body text-sm text-brand-steel mb-6">
-                  Ab 2 Zubehörteilen: 10 % Rabatt. Ab 3 Teilen: 15 % Rabatt auf das Zubehör.
+                  Wähle das Zubehör, das du zu deinem Set hinzufügen möchtest.
                 </p>
                 <div className="space-y-3">
                   {availableAccessories.map((acc) => {
@@ -637,13 +661,25 @@ export default function SetKonfiguratorPage() {
                   Weiter
                 </button>
               ) : (
-                <button
-                  type="button"
-                  onClick={handleBook}
-                  className="px-5 py-2.5 bg-brand-black text-white rounded-[10px] font-heading font-semibold text-sm hover:bg-brand-dark transition-colors"
-                >
-                  Set buchen
-                </button>
+                <div className="flex gap-2">
+                  {user && (
+                    <button
+                      type="button"
+                      onClick={handleSaveSet}
+                      disabled={saving || saved}
+                      className="px-4 py-2.5 border border-brand-border text-brand-text rounded-[10px] font-heading font-semibold text-sm hover:border-brand-black hover:text-brand-black transition-colors disabled:opacity-50"
+                    >
+                      {saved ? 'Gespeichert!' : saving ? 'Speichern…' : 'Set speichern'}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleBook}
+                    className="px-5 py-2.5 bg-brand-black text-white rounded-[10px] font-heading font-semibold text-sm hover:bg-brand-dark transition-colors"
+                  >
+                    Set buchen
+                  </button>
+                </div>
               )}
             </div>
           </div>

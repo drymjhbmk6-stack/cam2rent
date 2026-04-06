@@ -235,7 +235,96 @@ function ProfilEdit() {
   );
 }
 
-// ─── Sektion 3: Verifizierung ──────────────────────────────────────────────
+// ─── Sektion 3: Darstellung ───────────────────────────────────────────────
+
+function Darstellung() {
+  // Dynamic import to avoid SSR issues
+  const [theme, setThemeState] = useState<'light' | 'dark' | 'system'>('system');
+
+  useEffect(() => {
+    const stored = localStorage.getItem('cam2rent_theme') as 'light' | 'dark' | 'system' | null;
+    if (stored && ['light', 'dark', 'system'].includes(stored)) {
+      setThemeState(stored);
+    }
+  }, []);
+
+  function handleChange(newTheme: 'light' | 'dark' | 'system') {
+    setThemeState(newTheme);
+    localStorage.setItem('cam2rent_theme', newTheme);
+    // Apply theme
+    const resolved = newTheme === 'system'
+      ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+      : newTheme;
+    if (resolved === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }
+
+  const options: { id: 'light' | 'dark' | 'system'; label: string; icon: React.ReactNode }[] = [
+    {
+      id: 'light',
+      label: 'Hell',
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+        </svg>
+      ),
+    },
+    {
+      id: 'dark',
+      label: 'Dunkel',
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+        </svg>
+      ),
+    },
+    {
+      id: 'system',
+      label: 'Automatisch',
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+        </svg>
+      ),
+    },
+  ];
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-brand-text dark:text-gray-300 mb-2">
+        Wähle dein bevorzugtes Erscheinungsbild für cam2rent.
+      </p>
+      <div className="grid grid-cols-3 gap-3">
+        {options.map((opt) => (
+          <button
+            key={opt.id}
+            type="button"
+            onClick={() => handleChange(opt.id)}
+            className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all ${
+              theme === opt.id
+                ? 'border-accent-blue bg-accent-blue-soft dark:bg-accent-blue/10'
+                : 'border-brand-border dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-brand-steel dark:hover:border-gray-600'
+            }`}
+          >
+            <span className={theme === opt.id ? 'text-accent-blue' : 'text-brand-steel dark:text-gray-400'}>
+              {opt.icon}
+            </span>
+            <span className={`text-xs font-heading font-semibold ${
+              theme === opt.id ? 'text-accent-blue' : 'text-brand-text dark:text-gray-300'
+            }`}>
+              {opt.label}
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Sektion 4: Verifizierung ──────────────────────────────────────────────
 
 function Verifizierung() {
   const { user } = useAuth();
@@ -386,7 +475,7 @@ function Verifizierung() {
   );
 }
 
-// ─── Sektion 4: Konto löschen ─────────────────────────────────────────────
+// ─── Sektion 5: Konto löschen ─────────────────────────────────────────────
 
 function KontoLoeschen() {
   const router = useRouter();
@@ -581,6 +670,10 @@ export default function UebersichtPage() {
 
       <SectionToggle title="Profil bearbeiten" defaultOpen>
         <ProfilEdit />
+      </SectionToggle>
+
+      <SectionToggle title="Darstellung">
+        <Darstellung />
       </SectionToggle>
 
       <SectionToggle title="Verifizierung">

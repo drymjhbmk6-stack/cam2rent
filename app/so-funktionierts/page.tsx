@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import HowItWorks from '@/components/home/HowItWorks';
 
 export const metadata: Metadata = {
@@ -139,12 +140,12 @@ export default function SoFunktionierts() {
             Finde jetzt die passende Action-Cam und buche in wenigen Minuten.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <a
-              href="/kameras"
+            <Link
+              href="/kameras/"
               className="inline-flex items-center justify-center px-8 py-3 rounded-lg bg-brand-orange text-white font-heading font-semibold hover:bg-brand-orange/90 transition-colors"
             >
               Kameras ansehen
-            </a>
+            </Link>
             <a
               href="/kamera-finder"
               className="inline-flex items-center justify-center px-8 py-3 rounded-lg border-2 border-brand-orange text-brand-orange font-heading font-semibold hover:bg-brand-orange/10 transition-colors"

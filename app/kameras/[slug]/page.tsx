@@ -2,11 +2,10 @@ import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import type { Metadata } from 'next';
 import { products, getPriceForDays, getMergedSpecs, type Product } from '@/data/products';
-import { accessories } from '@/data/accessories';
-import { RENTAL_SETS_STATIC } from '@/data/sets';
 import ProductReviews from '@/components/ProductReviews';
 import SpecIcon from '@/components/SpecIcon';
-import AvailabilityCalendar from '@/components/AvailabilityCalendar';
+import ProductBookingCalendar from '@/components/ProductBookingCalendar';
+import ProductAccessorySets from '@/components/ProductAccessorySets';
 import MarkdownContent from '@/components/MarkdownContent';
 
 // ─── Static generation ──────────────────────────────────────────────────────
@@ -252,7 +251,7 @@ export default async function KameraDetailPage({
                 </div>
               </div>
 
-              {/* Availability + stock */}
+              {/* Availability */}
               <div className="flex items-center gap-2">
                 <span
                   className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
@@ -261,117 +260,28 @@ export default async function KameraDetailPage({
                   aria-hidden="true"
                 />
                 <span className={`text-sm font-body font-semibold ${product.available ? 'text-status-success' : 'text-status-error'}`}>
-                  {product.available
-                    ? `Verfügbar – noch ${product.stock} ${product.stock === 1 ? 'Exemplar' : 'Exemplare'}`
-                    : 'Aktuell ausgebucht'}
+                  {product.available ? 'Verfügbar' : 'Aktuell ausgebucht'}
                 </span>
               </div>
 
               {/* Preis */}
-              <div className="rounded-xl bg-accent-blue-soft border border-accent-blue/20 p-5 text-center">
-                <p className="text-xs font-body font-semibold text-accent-blue uppercase tracking-wider mb-1">
-                  Mietpreis
-                </p>
-                <div className="flex items-baseline justify-center gap-1">
-                  <span className="text-xs font-body text-accent-blue/70">ab</span>
-                  <span className="font-heading font-bold text-3xl text-accent-blue">
+              <div className="rounded-xl bg-accent-blue-soft dark:bg-accent-blue/10 border border-accent-blue/20 px-4 py-3 flex items-center justify-between">
+                <span className="text-xs font-body font-semibold text-accent-blue uppercase tracking-wider">Mietpreis</span>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-xs font-body text-accent-blue/70 dark:text-blue-300/70">ab</span>
+                  <span className="font-heading font-bold text-lg text-accent-blue dark:text-blue-300">
                     {getPriceForDays(product, 1).toFixed(2).replace('.', ',')} €
                   </span>
-                  <span className="text-sm font-body text-accent-blue/70">/ Tag</span>
+                  <span className="text-xs font-body text-accent-blue/70 dark:text-blue-300/70">/ Tag</span>
                 </div>
-                <p className="text-xs font-body text-accent-blue/60 mt-1">
-                  Genauer Preis wird bei der Buchung nach Zeitraum berechnet
-                </p>
               </div>
 
-              {/* Kaution ODER Haftungsschutz (nie beides) */}
-              <div className="rounded-xl bg-brand-bg dark:bg-gray-800 border border-brand-border dark:border-gray-700 p-4">
-                {product.offersHaftungsoption ? (
-                  /* Haftungsschutz-Info */
-                  <div className="flex items-start gap-2.5">
-                    <div className="w-8 h-8 rounded-lg bg-white shadow-sm flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth={1.75} className="w-4 h-4" aria-hidden="true">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
-                      </svg>
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-body font-semibold text-brand-black dark:text-gray-100">Haftungsschutz (optional)</p>
-                      <p className="text-xs font-body text-brand-steel dark:text-gray-400 mb-2">Wählbar beim Buchungsabschluss</p>
-                      <div className="space-y-1">
-                        <div className="flex items-center justify-between text-xs font-body">
-                          <span className="text-brand-steel">Standard – max. 150 € Eigenbeteiligung</span>
-                          <span className="font-semibold text-brand-black">15 €</span>
-                        </div>
-                        <div className="flex items-center justify-between text-xs font-body">
-                          <span className="text-brand-steel">Premium – keine Eigenbeteiligung</span>
-                          <span className="font-semibold text-brand-black">25 €</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  /* Kaution-Info */
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-lg bg-white shadow-sm flex items-center justify-center flex-shrink-0">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth={1.75} className="w-4 h-4" aria-hidden="true">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" />
-                        </svg>
-                      </div>
-                      <div>
-                        <p className="text-sm font-body font-semibold text-brand-black dark:text-gray-100">Kaution</p>
-                        <p className="text-xs font-body text-brand-steel dark:text-gray-400">Wird vorläufig reserviert und nach Rückgabe freigegeben</p>
-                      </div>
-                    </div>
-                    <span className="font-heading font-bold text-brand-black text-sm whitespace-nowrap">
-                      {product.deposit} €
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              {/* CTA */}
-              {product.available ? (
-                <Link
-                  href={`/kameras/${product.slug}/buchen`}
-                  className="block w-full text-center px-6 py-4 bg-brand-black dark:bg-accent-blue text-white font-heading font-bold text-base rounded-[10px] hover:bg-brand-dark dark:hover:bg-blue-600 transition-colors shadow-md shadow-black/10"
-                >
-                  Jetzt mieten
-                </Link>
-              ) : (
-                <div className="space-y-3">
-                  <button
-                    type="button"
-                    disabled
-                    className="block w-full text-center px-6 py-4 bg-brand-border text-brand-muted font-heading font-bold text-base rounded-[10px] cursor-not-allowed"
-                  >
-                    Aktuell nicht verfügbar
-                  </button>
-                  <p className="text-center text-xs font-body text-brand-muted">
-                    Möchtest du benachrichtigt werden?{' '}
-                    <Link href={`/kameras`} className="text-accent-blue hover:underline">
-                      Andere Kameras ansehen
-                    </Link>
-                  </p>
-                </div>
-              )}
-
-              {/* Trust items */}
-              <div className="grid grid-cols-3 gap-2 pt-1">
-                {[
-                  { icon: '🚚', text: 'Kostenloser Versand' },
-                  { icon: '🔒', text: 'Sichere Zahlung' },
-                  { icon: '↩️', text: 'Einfache Rückgabe' },
-                ].map((item) => (
-                  <div
-                    key={item.text}
-                    className="flex flex-col items-center text-center gap-1 p-2.5 rounded-xl bg-white dark:bg-gray-800 border border-brand-border dark:border-gray-700"
-                  >
-                    <span className="text-lg">{item.icon}</span>
-                    <span className="text-xs font-body text-brand-steel dark:text-gray-400 leading-tight">{item.text}</span>
-                  </div>
-                ))}
-              </div>
+              {/* Kalender + Versand/Abholung */}
+              <ProductBookingCalendar
+                productId={product.id}
+                productSlug={product.slug}
+                available={product.available}
+              />
             </div>
           </div>
         </div>
@@ -408,86 +318,7 @@ export default async function KameraDetailPage({
 
         {/* ── Zubehör & Sets ── */}
         <div className="mt-14">
-          <h2 className="font-heading font-bold text-xl sm:text-2xl text-brand-black dark:text-gray-100 mb-6">
-            Passendes Zubehör & Sets
-          </h2>
-
-          {/* Zubehör */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-            {accessories.filter((a) => a.available).map((acc) => (
-              <div key={acc.id} className="bg-white dark:bg-gray-800 rounded-card shadow-card dark:shadow-gray-900/50 p-4 text-center">
-                <p className="font-heading font-semibold text-sm text-brand-black dark:text-gray-100 mb-1">{acc.name}</p>
-                <p className="text-xs text-brand-steel dark:text-gray-400 mb-2">{acc.description}</p>
-                <p className="text-sm font-heading font-bold text-accent-blue">
-                  {acc.price.toFixed(2).replace('.', ',')} € {acc.pricingMode === 'perDay' ? '/ Tag' : 'einmalig'}
-                </p>
-              </div>
-            ))}
-          </div>
-
-          {/* Sets */}
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {RENTAL_SETS_STATIC.map((set) => (
-              <div key={set.id} className="bg-white dark:bg-gray-800 rounded-card shadow-card dark:shadow-gray-900/50 p-5">
-                <div className="flex items-center gap-2 mb-2">
-                  <h3 className="font-heading font-semibold text-brand-black dark:text-gray-100">{set.name}</h3>
-                  {set.badge && (
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold text-white ${set.badgeColor || 'bg-accent-blue'}`}>
-                      {set.badge}
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs text-brand-steel dark:text-gray-400 mb-3">{set.description}</p>
-                <ul className="text-xs text-brand-text dark:text-gray-300 space-y-0.5 mb-3">
-                  {set.includedItems.map((item, i) => (
-                    <li key={i} className="flex items-center gap-1.5">
-                      <span className="w-1 h-1 rounded-full bg-accent-blue flex-shrink-0" />
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-                <Link
-                  href={`/kameras/${product.slug}/buchen`}
-                  className="inline-flex items-center text-xs font-heading font-semibold text-accent-blue hover:underline"
-                >
-                  Zum Buchungsflow
-                </Link>
-              </div>
-            ))}
-          </div>
-
-          {/* Eigenes Set zusammenstellen */}
-          <div className="mt-6 p-5 bg-gradient-to-r from-accent-blue-soft/50 to-accent-teal-soft/50 dark:from-accent-blue/10 dark:to-accent-teal/10 rounded-card border border-brand-border dark:border-gray-700">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <div>
-                <h3 className="font-heading font-semibold text-brand-black dark:text-gray-100 mb-1">
-                  Eigenes Set zusammenstellen
-                </h3>
-                <p className="text-sm font-body text-brand-steel dark:text-gray-400">
-                  Kombiniere Kamera und Zubehör frei und spare bis zu 15 % auf Zubehör.
-                </p>
-              </div>
-              <Link
-                href="/set-konfigurator"
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold text-sm rounded-[10px] hover:bg-brand-dark dark:hover:bg-blue-600 transition-colors whitespace-nowrap"
-              >
-                Zum Konfigurator
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                </svg>
-              </Link>
-            </div>
-          </div>
-        </div>
-
-        {/* ── Verfügbarkeit ── */}
-        <div className="mt-14">
-          <h2 className="font-heading font-bold text-xl sm:text-2xl text-brand-black dark:text-gray-100 mb-6">
-            Verfügbarkeit
-          </h2>
-          <div className="max-w-md">
-            <AvailabilityCalendar productId={product.id} />
-          </div>
+          <ProductAccessorySets productSlug={product.slug} />
         </div>
 
         {/* ── Back to overview ── */}
