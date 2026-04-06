@@ -10,6 +10,7 @@ import { useAuth } from '@/components/AuthProvider';
 
 interface ProductCardProps {
   product: Product;
+  imageUrl?: string;
 }
 
 const tagConfig = {
@@ -95,7 +96,7 @@ function ScalesIcon({ active }: { active: boolean }) {
   );
 }
 
-export default function ProductCard({ product }: ProductCardProps) {
+export default function ProductCard({ product, imageUrl }: ProductCardProps) {
   const { user } = useAuth();
   const { isFavorited, toggleFavorite } = useFavorites();
   const { addToCompare, isInCompare } = useCompare();
@@ -117,22 +118,22 @@ export default function ProductCard({ product }: ProductCardProps) {
     <>
       <article className="group bg-white dark:bg-gray-800 rounded-card shadow-card dark:shadow-gray-900/50 hover:shadow-card-hover hover:-translate-y-1 transition-all duration-200 overflow-hidden flex flex-col">
         {/* Image area */}
-        <div className={`relative ${brandBg[product.brand]} flex items-center justify-center py-8 px-4`}>
+        <div className={`relative ${imageUrl ? 'bg-white dark:bg-gray-700' : brandBg[product.brand]} flex items-center justify-center overflow-hidden`} style={{ aspectRatio: '4/3' }}>
           {/* Tag badge */}
           {primaryTag && (
             <span
-              className={`absolute top-3 left-3 px-2.5 py-1 rounded-full text-xs font-heading font-semibold ${tagConfig[primaryTag].className}`}
+              className={`absolute top-3 left-3 z-10 px-2.5 py-1 rounded-full text-xs font-heading font-semibold ${tagConfig[primaryTag].className}`}
             >
               {tagConfig[primaryTag].label}
             </span>
           )}
 
           {/* Wishlist + Compare buttons */}
-          <div className="absolute top-3 right-3 flex flex-col gap-1.5">
+          <div className="absolute top-3 right-3 z-10 flex flex-col gap-1.5">
             <button
               type="button"
               onClick={handleFavorite}
-              className="p-1.5 rounded-full bg-white/80 backdrop-blur-sm hover:bg-white text-brand-steel hover:text-brand-black transition-colors shadow-sm"
+              className="p-1.5 rounded-full bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm hover:bg-white dark:hover:bg-gray-800 text-brand-steel hover:text-brand-black dark:hover:text-gray-100 transition-colors shadow-sm"
               aria-label={wishlisted ? 'Von Wunschliste entfernen' : 'Zur Wunschliste hinzufügen'}
               aria-pressed={wishlisted}
             >
@@ -144,7 +145,7 @@ export default function ProductCard({ product }: ProductCardProps) {
               className={`p-1.5 rounded-full backdrop-blur-sm transition-colors shadow-sm ${
                 comparing
                   ? 'bg-accent-blue text-white'
-                  : 'bg-white/80 hover:bg-white text-brand-steel hover:text-brand-black'
+                  : 'bg-white/80 dark:bg-gray-800/80 hover:bg-white dark:hover:bg-gray-800 text-brand-steel hover:text-brand-black dark:hover:text-gray-100'
               }`}
               aria-label={comparing ? 'Aus Vergleich entfernen' : 'Zum Vergleich hinzufügen'}
               aria-pressed={comparing}
@@ -154,7 +155,16 @@ export default function ProductCard({ product }: ProductCardProps) {
             </button>
           </div>
 
-          <CameraIcon brand={product.brand} />
+          {imageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={imageUrl}
+              alt={product.name}
+              className="w-full h-full object-contain p-2"
+            />
+          ) : (
+            <CameraIcon brand={product.brand} />
+          )}
         </div>
 
         {/* Content */}

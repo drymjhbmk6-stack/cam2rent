@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { products, type Product } from '@/data/products';
 import ProductCard from '@/components/ProductCard';
@@ -11,6 +11,25 @@ const filters: FilterBrand[] = ['Alle', 'GoPro', 'DJI', 'Insta360'];
 export default function ProductGrid() {
   const [activeBrand, setActiveBrand] = useState<FilterBrand>('Alle');
   const [onlyAvailable, setOnlyAvailable] = useState(false);
+  const [productImages, setProductImages] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    fetch('/api/prices')
+      .then((r) => r.json())
+      .then((d) => {
+        const imgs: Record<string, string> = {};
+        const ap = d.adminProducts;
+        if (ap) {
+          Object.keys(ap).forEach((id) => {
+            if (ap[id]?.images?.length > 0) {
+              imgs[id] = ap[id].images[0];
+            }
+          });
+        }
+        setProductImages(imgs);
+      })
+      .catch(() => {});
+  }, []);
 
   const filtered = products.filter((p) => {
     const brandMatch = activeBrand === 'Alle' || p.brand === activeBrand;
@@ -93,7 +112,7 @@ export default function ProductGrid() {
         {filtered.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {filtered.map((product) => (
-              <ProductCard key={product.id} product={product} />
+              <ProductCard key={product.id} product={product} imageUrl={productImages[product.id]} />
             ))}
           </div>
         ) : (

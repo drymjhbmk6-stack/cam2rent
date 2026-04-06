@@ -56,7 +56,7 @@ export default function ProductImageGallery({ productId, brand, available }: Pro
   return (
     <div>
       {/* Main image */}
-      <div className={`relative rounded-card overflow-hidden ${bg} flex items-center justify-center`} style={{ aspectRatio: '4/3' }}>
+      <div className={`relative rounded-card overflow-hidden ${hasImages ? 'bg-white dark:bg-gray-700' : bg} flex items-center justify-center`} style={{ aspectRatio: '4/3' }}>
         {!available && (
           <div className="absolute inset-0 bg-white/60 backdrop-blur-sm flex items-center justify-center z-10">
             <span className="px-4 py-2 bg-status-error text-white font-heading font-bold text-sm rounded-full shadow-lg">
