@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useProductImageAll } from '@/components/ProductImagesProvider';
 
 interface ProductImageGalleryProps {
   productId: string;
@@ -35,21 +36,9 @@ function CameraPlaceholder({ brand, size = 'lg' }: { brand: string; size?: 'lg' 
 }
 
 export default function ProductImageGallery({ productId, brand, available }: ProductImageGalleryProps) {
-  const [images, setImages] = useState<string[]>([]);
+  const images = useProductImageAll(productId);
   const [activeIndex, setActiveIndex] = useState(0);
   const bg = brandBg[brand] ?? 'bg-gray-100';
-
-  useEffect(() => {
-    fetch('/api/prices')
-      .then((r) => r.json())
-      .then((d) => {
-        const adminProducts = d.adminProducts;
-        if (adminProducts?.[productId]?.images?.length > 0) {
-          setImages(adminProducts[productId].images);
-        }
-      })
-      .catch(() => {});
-  }, [productId]);
 
   const hasImages = images.length > 0;
 

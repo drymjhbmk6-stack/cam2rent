@@ -5,6 +5,7 @@ import { AuthProvider } from '@/components/AuthProvider';
 import { CartProvider } from '@/components/CartProvider';
 import { FavoritesProvider } from '@/components/FavoritesProvider';
 import { CompareProvider } from '@/components/CompareProvider';
+import { ProductImagesProvider } from '@/components/ProductImagesProvider';
 import PageTracker from '@/components/PageTracker';
 import ShopShell from '@/components/ShopShell';
 import CookieBanner from '@/components/CookieBanner';
@@ -82,6 +83,7 @@ export default function RootLayout({
           <AuthProvider>
             <FavoritesProvider>
               <CompareProvider>
+                <ProductImagesProvider>
                 <CartProvider>
                   <Suspense fallback={null}>
                     <PageTracker />
@@ -91,6 +93,7 @@ export default function RootLayout({
                   <ServiceWorkerRegistration />
                   <InstallPrompt />
                 </CartProvider>
+                </ProductImagesProvider>
               </CompareProvider>
             </FavoritesProvider>
           </AuthProvider>

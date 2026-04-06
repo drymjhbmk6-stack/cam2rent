@@ -1,9 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { products, type Product } from '@/data/products';
 import ProductCard from '@/components/ProductCard';
+import { useProductImage } from '@/components/ProductImagesProvider';
+
+function ProductCardWithImage({ product }: { product: Product }) {
+  const imageUrl = useProductImage(product.id);
+  return <ProductCard product={product} imageUrl={imageUrl} />;
+}
 
 type FilterBrand = 'Alle' | Product['brand'];
 const BRANDS: FilterBrand[] = ['Alle', 'GoPro', 'DJI', 'Insta360'];
@@ -24,25 +30,6 @@ export default function KamerasPage() {
   const [activeBrand, setActiveBrand] = useState<FilterBrand>('Alle');
   const [onlyAvailable, setOnlyAvailable] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [productImages, setProductImages] = useState<Record<string, string>>({});
-
-  useEffect(() => {
-    fetch('/api/prices')
-      .then((r) => r.json())
-      .then((d) => {
-        const imgs: Record<string, string> = {};
-        const ap = d.adminProducts;
-        if (ap) {
-          Object.keys(ap).forEach((id) => {
-            if (ap[id]?.images?.length > 0) {
-              imgs[id] = ap[id].images[0];
-            }
-          });
-        }
-        setProductImages(imgs);
-      })
-      .catch(() => {});
-  }, []);
   const [waterproofMin, setWaterproofMin] = useState<string>('');
   const [resolutionMin, setResolutionMin] = useState<string>('');
   const [fpsMin, setFpsMin] = useState<string>('');
@@ -303,7 +290,7 @@ export default function KamerasPage() {
         {filtered.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {filtered.map((product) => (
-              <ProductCard key={product.id} product={product} imageUrl={productImages[product.id]} />
+              <ProductCardWithImage key={product.id} product={product} />
             ))}
           </div>
         ) : (
