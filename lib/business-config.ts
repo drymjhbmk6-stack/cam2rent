@@ -98,7 +98,7 @@ export const BUSINESS = new Proxy({} as BusinessConfig & {
         partialDaysBefore: 3, partialRefundPercent: 50,
         lateFee: 'Keine Erstattung',
       };
-      default: return (c as Record<string, unknown>)[prop];
+      default: return (c as unknown as Record<string, unknown>)[prop];
     }
   },
 });
