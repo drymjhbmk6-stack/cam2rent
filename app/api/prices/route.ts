@@ -11,14 +11,15 @@ import {
   type DurationDiscount,
   type LoyaltyDiscount,
   type ProductDiscount,
+  type AdminProducts,
 } from '@/lib/price-config';
 
-interface PriceConfigExtended extends PriceConfig {
+type PriceConfigExtended = PriceConfig & {
   durationDiscounts: DurationDiscount[];
   loyaltyDiscounts: LoyaltyDiscount[];
   productDiscounts: ProductDiscount[];
-  adminProducts?: Record<string, unknown>;
-}
+  adminProducts?: AdminProducts;
+};
 
 /**
  * GET /api/prices
