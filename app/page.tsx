@@ -4,6 +4,7 @@ import KameraFinderCta from '@/components/home/KameraFinderCta';
 import TrustBanner from '@/components/home/TrustBanner';
 import HowItWorks from '@/components/home/HowItWorks';
 import CtaBanner from '@/components/home/CtaBanner';
+import HomeReviews from '@/components/home/HomeReviews';
 
 export default function Home() {
   return (
@@ -13,6 +14,7 @@ export default function Home() {
       <KameraFinderCta />
       <TrustBanner />
       <HowItWorks />
+      <HomeReviews />
       <CtaBanner />
     </>
   );
