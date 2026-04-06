@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { createServiceClient } from '@/lib/supabase';
 import { detectSuspicious } from '@/lib/suspicious';
+import { ensureBusinessConfig } from '@/lib/load-business-config';
 import {
   sendBookingConfirmation,
   sendAdminNotification,
@@ -21,6 +22,7 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
  * Returns { success: true, booking_id: "BK-2026-00042" }
  */
 export async function POST(req: NextRequest) {
+  await ensureBusinessConfig();
   try {
     const { payment_intent_id, deposit_intent_id } = (await req.json()) as {
       payment_intent_id: string;

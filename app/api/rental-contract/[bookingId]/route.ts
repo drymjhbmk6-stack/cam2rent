@@ -5,6 +5,7 @@ import { createServiceClient } from '@/lib/supabase';
 import { renderToBuffer, type DocumentProps } from '@react-pdf/renderer';
 import { createElement, type ReactElement } from 'react';
 import { ContractPDF, type ContractData } from '@/lib/contract-pdf';
+import { ensureBusinessConfig } from '@/lib/load-business-config';
 
 /**
  * GET /api/rental-contract/[bookingId]
@@ -15,6 +16,7 @@ export async function GET(
   { params }: { params: Promise<{ bookingId: string }> }
 ) {
   const { bookingId } = await params;
+  await ensureBusinessConfig();
 
   // Auth check
   const cookieStore = await cookies();

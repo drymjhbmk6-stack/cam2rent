@@ -759,8 +759,145 @@ export default function EinstellungenPage() {
         )}
       </div>
 
-      {/* Sektion 5: Admin-App installieren */}
+      {/* Sektion 5: Geschaeftsdaten */}
+      <BusinessDataSection />
+
+      {/* Sektion 6: Admin-App installieren */}
       <AdminInstallSection />
+    </div>
+  );
+}
+
+/* ─── Geschaeftsdaten Sektion ────────────────────────────────────────────── */
+
+const BUSINESS_FIELDS: { key: string; label: string; placeholder: string; span?: 2 }[] = [
+  { key: 'owner', label: 'Inhaber / Geschäftsführer', placeholder: 'Vorname Nachname' },
+  { key: 'name', label: 'Firmenname', placeholder: 'cam2rent' },
+  { key: 'street', label: 'Straße + Hausnummer', placeholder: 'Musterstr. 12', span: 2 },
+  { key: 'zip', label: 'PLZ', placeholder: '12345' },
+  { key: 'city', label: 'Stadt', placeholder: 'Berlin' },
+  { key: 'country', label: 'Land', placeholder: 'Deutschland' },
+  { key: 'email', label: 'E-Mail (Buchungen)', placeholder: 'buchung@example.de' },
+  { key: 'emailKontakt', label: 'E-Mail (Kontakt)', placeholder: 'kontakt@example.de' },
+  { key: 'phone', label: 'Telefon (Anzeige)', placeholder: '0162 / 1234567' },
+  { key: 'phoneRaw', label: 'Telefon (international, ohne +)', placeholder: '491621234567' },
+  { key: 'domain', label: 'Domain', placeholder: 'cam2rent.de' },
+  { key: 'url', label: 'Webseite URL', placeholder: 'https://cam2rent.de' },
+  { key: 'instagram', label: 'Instagram URL', placeholder: 'https://instagram.com/cam2rent' },
+  { key: 'pickupLocation', label: 'Abholort', placeholder: 'Alt-Buckow, Berlin' },
+];
+
+function BusinessDataSection() {
+  const [fields, setFields] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [success, setSuccess] = useState('');
+
+  useEffect(() => {
+    fetch('/api/admin/business-config')
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.config && typeof d.config === 'object') {
+          setFields(d.config);
+        }
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, []);
+
+  function updateField(key: string, value: string) {
+    setFields((prev) => ({ ...prev, [key]: value }));
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    setSuccess('');
+    try {
+      // Leere Werte entfernen (Fallback greift dann)
+      const clean: Record<string, string> = {};
+      Object.entries(fields).forEach(([k, v]) => {
+        if (v.trim()) clean[k] = v.trim();
+      });
+      await fetch('/api/admin/business-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ config: clean }),
+      });
+      setSuccess('Gespeichert! Änderungen werden beim nächsten Seitenaufruf wirksam.');
+      setTimeout(() => setSuccess(''), 5000);
+    } catch {
+      // Fehler
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const inputStyle: React.CSSProperties = {
+    width: '100%',
+    background: '#0a0f1e',
+    border: '1px solid #1e293b',
+    borderRadius: 8,
+    padding: '8px 12px',
+    color: '#e2e8f0',
+    fontSize: 14,
+  };
+
+  return (
+    <div style={{ background: '#111827', borderRadius: 12, border: '1px solid #1e293b', padding: 24, marginTop: 24 }}>
+      <div className="flex items-center gap-3 mb-4">
+        <div style={{ width: 40, height: 40, borderRadius: 10, background: '#3b82f614', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <svg className="w-5 h-5" style={{ color: '#3b82f6' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+          </svg>
+        </div>
+        <div>
+          <h2 className="font-heading font-semibold text-base" style={{ color: '#e2e8f0' }}>
+            Geschäftsdaten
+          </h2>
+          <p className="text-xs" style={{ color: '#64748b' }}>
+            Adresse, Kontakt und Firmendaten — wirkt auf Footer, Impressum, PDFs, E-Mails
+          </p>
+        </div>
+      </div>
+
+      {loading ? (
+        <div style={{ color: '#64748b', fontSize: 14 }}>Laden...</div>
+      ) : (
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {BUSINESS_FIELDS.map((f) => (
+              <div key={f.key} className={f.span === 2 ? 'sm:col-span-2' : ''}>
+                <label className="block text-xs mb-1" style={{ color: '#64748b' }}>{f.label}</label>
+                <input
+                  style={inputStyle}
+                  value={fields[f.key] ?? ''}
+                  onChange={(e) => updateField(f.key, e.target.value)}
+                  placeholder={f.placeholder}
+                />
+              </div>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-3 pt-2">
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
+              style={{ background: '#3b82f6', color: 'white' }}
+            >
+              {saving ? 'Speichern...' : 'Speichern'}
+            </button>
+            {success && (
+              <span className="text-sm" style={{ color: '#10b981' }}>{success}</span>
+            )}
+          </div>
+
+          <div className="mt-3 p-3 rounded-lg text-xs" style={{ background: '#3b82f608', border: '1px solid #3b82f620', color: '#94a3b8' }}>
+            <strong style={{ color: '#60a5fa' }}>Hinweis:</strong> Leere Felder verwenden automatisch die Standardwerte aus der Konfiguration.
+            Änderungen wirken sich auf Footer, Impressum, AGB, Datenschutz, PDFs (Rechnung & Mietvertrag), E-Mails und alle weiteren Seiten aus.
+          </div>
+        </div>
+      )}
     </div>
   );
 }

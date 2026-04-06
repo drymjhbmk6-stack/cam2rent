@@ -3,12 +3,14 @@ import { renderToBuffer, type DocumentProps } from '@react-pdf/renderer';
 import { createElement, type ReactElement } from 'react';
 import { createServiceClient } from '@/lib/supabase';
 import { InvoicePDF, type InvoiceData } from '@/lib/invoice-pdf';
+import { ensureBusinessConfig } from '@/lib/load-business-config';
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ bookingId: string }> }
 ) {
   const { bookingId } = await params;
+  await ensureBusinessConfig();
 
   if (!bookingId) {
     return NextResponse.json({ error: 'Fehlende Buchungsnummer.' }, { status: 400 });
