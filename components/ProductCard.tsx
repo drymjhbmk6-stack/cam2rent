@@ -118,7 +118,7 @@ export default function ProductCard({ product, imageUrl }: ProductCardProps) {
     <>
       <article className="group bg-white dark:bg-gray-800 rounded-card shadow-card dark:shadow-gray-900/50 hover:shadow-card-hover hover:-translate-y-1 transition-all duration-200 overflow-hidden flex flex-col">
         {/* Image area */}
-        <div className={`relative ${imageUrl ? 'bg-white dark:bg-gray-700' : brandBg[product.brand]} flex items-center justify-center overflow-hidden`} style={{ aspectRatio: '4/3' }}>
+        <div className={`relative ${imageUrl ? 'bg-white' : brandBg[product.brand]} flex items-center justify-center overflow-hidden`} style={{ aspectRatio: '4/3' }}>
           {/* Tag badge */}
           {primaryTag && (
             <span
