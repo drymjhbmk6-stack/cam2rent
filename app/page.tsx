@@ -10,9 +10,9 @@ export default function Home() {
   return (
     <>
       <Hero />
+      <TrustBanner />
       <ProductGrid />
       <KameraFinderCta />
-      <TrustBanner />
       <HowItWorks />
       <HomeReviews />
       <CtaBanner />
