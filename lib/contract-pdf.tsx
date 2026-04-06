@@ -33,7 +33,7 @@ export interface ContractData {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function fmt(n: number) {
-  return n.toFixed(2).replace('.', ',') + ' €';
+  return n.toFixed(2).replace('.', ',') + ' \u20ac';
 }
 
 function fmtDate(iso: string) {
@@ -44,7 +44,7 @@ function fmtDate(iso: string) {
 function haftungLabel(h: string) {
   if (h === 'standard') return 'Standard-Haftungsschutz';
   if (h === 'premium') return 'Premium-Haftungsschutz (Vollschutz)';
-  return 'Basis (ohne zusätzlichen Schutz)';
+  return 'Basis (ohne zusaetzlichen Schutz)';
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
@@ -125,12 +125,6 @@ const s = StyleSheet.create({
     padding: 14,
     marginBottom: 16,
   },
-  termsTitle: {
-    fontSize: 10,
-    fontFamily: 'Helvetica-Bold',
-    color: '#0a0a0a',
-    marginBottom: 8,
-  },
   termsText: {
     fontSize: 9,
     color: '#4a5568',
@@ -188,27 +182,45 @@ const s = StyleSheet.create({
     fontSize: 8,
     color: '#9ca3af',
   },
+  pageNumber: {
+    position: 'absolute',
+    bottom: 30,
+    left: 0,
+    right: 0,
+    textAlign: 'center',
+    fontSize: 8,
+    color: '#9ca3af',
+  },
 });
 
 // ─── Contract terms ───────────────────────────────────────────────────────────
 
-const CONTRACT_TERMS = `1. Mietgegenstand
-Der Vermieter überlässt dem Mieter das oben genannte Mietobjekt für den vereinbarten Zeitraum zur bestimmungsgemäßen Nutzung.
-
-2. Mietdauer und Rückgabe
-Die Mietdauer beginnt und endet zu den oben angegebenen Daten. Die Rückgabe muss spätestens am letzten Miettag erfolgen. Bei verspäteter Rückgabe werden zusätzliche Mietgebühren pro angefangenem Tag berechnet.
-
-3. Sorgfaltspflicht
-Der Mieter verpflichtet sich, das Mietobjekt pfleglich zu behandeln und vor Beschädigungen, Diebstahl und Verlust zu schützen. Die Nutzung erfolgt auf eigene Gefahr.
-
-4. Haftung und Kaution
-Der Mieter haftet für Schäden am Mietobjekt, die während der Mietzeit entstehen. Die hinterlegte Kaution dient als Sicherheit und wird nach Prüfung des Mietobjekts bei ordnungsgemäßer Rückgabe freigegeben.
-
-5. Stornierung
-Stornierungen richten sich nach den auf cam2rent.de veröffentlichten Stornierungsbedingungen.
-
-6. Gerichtsstand
-Es gilt deutsches Recht. Gerichtsstand ist Berlin.`;
+const CONTRACT_TERMS = [
+  {
+    title: '1. Mietgegenstand',
+    text: 'Der Vermieter ueberlasst dem Mieter das oben genannte Mietobjekt fuer den vereinbarten Zeitraum zur bestimmungsgemaessen Nutzung.',
+  },
+  {
+    title: '2. Mietdauer und Rueckgabe',
+    text: 'Die Mietdauer beginnt und endet zu den oben angegebenen Daten. Die Rueckgabe muss spaetestens am letzten Miettag erfolgen. Bei verspaeteter Rueckgabe werden zusaetzliche Mietgebuehren pro angefangenem Tag berechnet.',
+  },
+  {
+    title: '3. Sorgfaltspflicht',
+    text: 'Der Mieter verpflichtet sich, das Mietobjekt pfleglich zu behandeln und vor Beschaedigungen, Diebstahl und Verlust zu schuetzen. Die Nutzung erfolgt auf eigene Gefahr.',
+  },
+  {
+    title: '4. Haftung und Kaution',
+    text: 'Der Mieter haftet fuer Schaeden am Mietobjekt, die waehrend der Mietzeit entstehen. Die hinterlegte Kaution dient als Sicherheit und wird nach Pruefung des Mietobjekts bei ordnungsgemaesser Rueckgabe freigegeben.',
+  },
+  {
+    title: '5. Stornierung',
+    text: 'Stornierungen richten sich nach den auf cam2rent.de veroeffentlichten Stornierungsbedingungen.',
+  },
+  {
+    title: '6. Gerichtsstand',
+    text: 'Es gilt deutsches Recht. Gerichtsstand ist Berlin.',
+  },
+];
 
 // ─── PDF Document ─────────────────────────────────────────────────────────────
 
@@ -217,8 +229,8 @@ export function ContractPDF({ data }: { data: ContractData }) {
 
   return (
     <Document>
+      {/* ═══════ SEITE 1: Vertragsdetails ═══════ */}
       <Page size="A4" style={s.page}>
-
         {/* Header */}
         <View style={s.header}>
           <View>
@@ -284,15 +296,63 @@ export function ContractPDF({ data }: { data: ContractData }) {
 
         <View style={s.divider} />
 
-        {/* Terms */}
-        <Text style={s.sectionHeading}>Mietbedingungen</Text>
-        <View style={s.termsBlock}>
-          <Text style={s.termsText}>{CONTRACT_TERMS}</Text>
+        {/* Tax note on page 1 */}
+        <View style={{ padding: 10, backgroundColor: '#f9f9f7', borderRadius: 6, marginTop: 8 }}>
+          <Text style={{ fontSize: 9, color: '#6b7280', lineHeight: 1.5 }}>
+            {data.taxMode === 'regelbesteuerung'
+              ? `Alle Betraege verstehen sich inkl. ${data.taxRate || 19}% MwSt.${data.ustId ? ` USt-IdNr.: ${data.ustId}` : ''}`
+              : 'Gemaess §19 UStG wird keine Umsatzsteuer berechnet.'}
+          </Text>
         </View>
 
+        {/* Page hint */}
+        <View style={{ marginTop: 'auto', paddingTop: 20 }}>
+          <Text style={{ fontSize: 9, color: '#9ca3af', textAlign: 'center', fontStyle: 'italic' }}>
+            Mietbedingungen und Unterschrift auf Seite 2
+          </Text>
+        </View>
+
+        {/* Footer */}
+        <View style={s.footer}>
+          <Text style={s.footerText}>cam2rent · Lennart Schickel · Heimsbrunner Str. 12 · 12349 Berlin</Text>
+          <Text style={s.footerText}>Seite 1 von 2</Text>
+        </View>
+      </Page>
+
+      {/* ═══════ SEITE 2: Mietbedingungen & Unterschrift ═══════ */}
+      <Page size="A4" style={s.page}>
+        {/* Mini-Header */}
+        <View style={[s.header, { marginBottom: 20 }]}>
+          <View>
+            <Text style={[s.brand, { fontSize: 14 }]}>cam2rent</Text>
+            <Text style={s.brandSub}>Mietvertrag {contractNumber}</Text>
+          </View>
+          <View>
+            <Text style={{ fontSize: 9, color: '#6b7280', textAlign: 'right' }}>
+              {data.customerName}{'\n'}
+              {data.contractDate}
+            </Text>
+          </View>
+        </View>
+
+        {/* Terms */}
+        <Text style={[s.sectionHeading, { marginTop: 0 }]}>Mietbedingungen</Text>
+        <View style={s.termsBlock}>
+          {CONTRACT_TERMS.map((clause, i) => (
+            <View key={i} style={{ marginBottom: i < CONTRACT_TERMS.length - 1 ? 10 : 0 }}>
+              <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold', color: '#1a1a1a', marginBottom: 2 }}>
+                {clause.title}
+              </Text>
+              <Text style={s.termsText}>{clause.text}</Text>
+            </View>
+          ))}
+        </View>
+
+        <View style={s.divider} />
+
         {/* Signature */}
+        <Text style={s.sectionHeading}>Unterschrift des Mieters</Text>
         <View style={s.signatureSection}>
-          <Text style={s.signatureLabel}>Unterschrift des Mieters</Text>
           {data.signatureDataUrl ? (
             <>
               <Text style={s.signatureName}>{data.signerName}</Text>
@@ -304,21 +364,19 @@ export function ContractPDF({ data }: { data: ContractData }) {
           )}
         </View>
 
-        {/* Tax note */}
+        {/* Confirmation text */}
         <View style={{ marginTop: 16, padding: 10, backgroundColor: '#f9f9f7', borderRadius: 6 }}>
-          <Text style={{ fontSize: 9, color: '#6b7280', lineHeight: 1.5 }}>
-            {data.taxMode === 'regelbesteuerung'
-              ? `Alle Beträge verstehen sich inkl. ${data.taxRate || 19}% MwSt.${data.ustId ? ` USt-IdNr.: ${data.ustId}` : ''}`
-              : 'Gemäß §19 UStG wird keine Umsatzsteuer berechnet.'}
+          <Text style={{ fontSize: 9, color: '#4a5568', lineHeight: 1.6 }}>
+            Mit der Unterschrift bestaetigt der Mieter, die oben genannten Mietbedingungen gelesen und akzeptiert zu haben.
+            Beide Vertragsparteien erkennen diesen Mietvertrag als verbindlich an.
           </Text>
         </View>
 
         {/* Footer */}
         <View style={s.footer}>
           <Text style={s.footerText}>cam2rent · Lennart Schickel · Heimsbrunner Str. 12 · 12349 Berlin</Text>
-          <Text style={s.footerText}>cam2rent.de · buchung@cam2rent.de</Text>
+          <Text style={s.footerText}>Seite 2 von 2</Text>
         </View>
-
       </Page>
     </Document>
   );
