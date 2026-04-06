@@ -227,11 +227,23 @@ export default function AdminBuchungenPage() {
     <div className="min-h-screen bg-brand-bg">
       <div className="max-w-7xl mx-auto px-6 py-8">
         {/* Header */}
-        <div className="mb-6">
-          <h1 className="font-heading font-bold text-2xl text-brand-black">Buchungsübersicht</h1>
-          <p className="text-sm font-body text-brand-muted mt-1">
-            Alle Buchungen verwalten und Status aktualisieren
-          </p>
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <h1 className="font-heading font-bold text-2xl text-brand-black">Buchungsübersicht</h1>
+            <p className="text-sm font-body text-brand-muted mt-1">
+              Alle Buchungen verwalten und Status aktualisieren
+            </p>
+          </div>
+          <Link
+            href="/admin/buchungen/neu"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-heading font-semibold transition-colors"
+            style={{ background: '#06b6d4', color: 'white' }}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Neue Buchung
+          </Link>
         </div>
 
         {/* Filters */}
