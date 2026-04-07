@@ -754,16 +754,16 @@ function buildShippingEmail(d: ShippingEmailData): { html: string; subject: stri
 
         <tr><td style="background:#ffffff;padding:32px;">
           <p style="margin:0 0 20px;font-size:15px;color:#374151;">
-            Hallo \${d.customerName || 'dort'},<br><br>
-            deine <strong>\${d.productName}</strong> ist unterwegs zu dir.
+            Hallo ${d.customerName || 'dort'},<br><br>
+            deine <strong>${d.productName}</strong> ist unterwegs zu dir.
             Mit der Tracking-Nummer unten kannst du dein Paket jederzeit verfolgen.
           </p>
 
           <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;border:2px solid #e5e7eb;border-radius:10px;margin-bottom:24px;">
             <tr><td style="padding:20px 24px;">
-              <p style="margin:0 0 4px;font-size:12px;color:#9ca3af;text-transform:uppercase;letter-spacing:1px;">Tracking-Nummer (\${d.carrier})</p>
-              <p style="margin:0 0 16px;font-size:20px;font-weight:700;color:#0a0a0a;letter-spacing:2px;">\${d.trackingNumber}</p>
-              <a href="\${d.trackingUrl}"
+              <p style="margin:0 0 4px;font-size:12px;color:#9ca3af;text-transform:uppercase;letter-spacing:1px;">Tracking-Nummer (${d.carrier})</p>
+              <p style="margin:0 0 16px;font-size:20px;font-weight:700;color:#0a0a0a;letter-spacing:2px;">${d.trackingNumber}</p>
+              <a href="${d.trackingUrl}"
                  style="display:inline-block;background:#3b82f6;color:#ffffff;font-size:14px;font-weight:600;padding:10px 24px;border-radius:8px;text-decoration:none;">
                 Sendung verfolgen →
               </a>
@@ -773,19 +773,19 @@ function buildShippingEmail(d: ShippingEmailData): { html: string; subject: stri
           <table width="100%" cellpadding="0" cellspacing="0">
             <tr>
               <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#6b7280;width:45%;">Buchungsnummer</td>
-              <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;font-weight:600;color:#0a0a0a;">\${d.bookingId}</td>
+              <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;font-weight:600;color:#0a0a0a;">${d.bookingId}</td>
             </tr>
             <tr>
               <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#6b7280;">Kamera</td>
-              <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#0a0a0a;">\${d.productName}</td>
+              <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#0a0a0a;">${d.productName}</td>
             </tr>
             <tr>
               <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#6b7280;">Mietbeginn</td>
-              <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#0a0a0a;">\${fmtDate(d.rentalFrom)}</td>
+              <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#0a0a0a;">${fmtDate(d.rentalFrom)}</td>
             </tr>
             <tr>
               <td style="padding:8px 0;font-size:14px;color:#6b7280;">Mietende</td>
-              <td style="padding:8px 0;font-size:14px;color:#0a0a0a;">\${fmtDate(d.rentalTo)}</td>
+              <td style="padding:8px 0;font-size:14px;color:#0a0a0a;">${fmtDate(d.rentalTo)}</td>
             </tr>
           </table>
 
@@ -793,7 +793,7 @@ function buildShippingEmail(d: ShippingEmailData): { html: string; subject: stri
             <p style="margin:0;font-size:13px;color:#92400e;font-weight:600;">Rücksendung</p>
             <p style="margin:6px 0 0;font-size:13px;color:#78350f;">
               Ein Rücksende-Etikett liegt deinem Paket bei. Bitte verpacke die Kamera sorgfältig und
-              gib das Paket spätestens am <strong>\${fmtDate(d.rentalTo)}</strong> auf.
+              gib das Paket spätestens am <strong>${fmtDate(d.rentalTo)}</strong> auf.
               Bei Fragen: <a href="mailto:${BUSINESS.emailKontakt}" style="color:#3b82f6;">${BUSINESS.emailKontakt}</a>
             </p>
           </div>
