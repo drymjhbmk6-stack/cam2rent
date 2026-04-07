@@ -198,7 +198,7 @@ export default function Navbar() {
       {/* Mobile Menu */}
       <div
         className={`md:hidden overflow-hidden transition-all duration-300 ease-in-out ${
-          mobileOpen ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
+          mobileOpen ? 'max-h-[600px] opacity-100' : 'max-h-0 opacity-0'
         } bg-white dark:bg-gray-900 border-t border-brand-border dark:border-gray-700`}
       >
         <nav className="px-4 py-4 flex flex-col gap-1" aria-label="Mobile Navigation">
