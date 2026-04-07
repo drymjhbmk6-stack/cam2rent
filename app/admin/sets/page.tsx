@@ -60,8 +60,6 @@ export default function AdminSetsPage() {
   const [sets, setSets] = useState<AdminSet[]>([]);
   const [accessories, setAccessories] = useState<Accessory[]>([]);
   const [BADGE_OPTIONS, setBadgeOptions] = useState(DEFAULT_BADGE_OPTIONS);
-  const [showNewBadge, setShowNewBadge] = useState(false);
-  const [newBadgeName, setNewBadgeName] = useState('');
   const [products, setProducts] = useState<Record<string, AdminProduct>>({});
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
