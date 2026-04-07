@@ -243,6 +243,31 @@ export default function AdminVersandPage() {
     finally { setReturning(false); }
   }
 
+  // ── Packliste / Übergabeprotokoll öffnen ──────────────────────────────────
+  function openPackliste(b: Booking) {
+    const today = new Date();
+    const dateStr = `${today.getDate().toString().padStart(2, '0')}.${(today.getMonth() + 1).toString().padStart(2, '0')}.${today.getFullYear()}`;
+    const zubehoerRows = b.accessories && b.accessories.length > 0
+      ? b.accessories.map((a, i) => `<tr><td style="padding:4px 8px;border:1px solid #ccc;width:40px">${i + 1}</td><td style="padding:4px 8px;border:1px solid #ccc">${accName(a)}</td><td style="padding:4px 8px;border:1px solid #ccc;width:50px"></td></tr>`).join('')
+      : Array.from({ length: 4 }, (_, i) => `<tr><td style="padding:4px 8px;border:1px solid #ccc;width:40px">${i + 1}</td><td style="padding:4px 8px;border:1px solid #ccc"></td><td style="padding:4px 8px;border:1px solid #ccc;width:50px"></td></tr>`).join('');
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Versand-Packliste – ${b.id}</title>
+<style>@page{size:A4 portrait;margin:20mm}*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:11pt;color:#1a1a1a;padding:40px 48px;max-width:210mm;min-height:297mm}h1{font-size:20pt;color:#1e3a5f;margin-bottom:6px;border-bottom:3px solid #1e3a5f;padding-bottom:8px}.sub{font-size:9pt;color:#6b7280;margin-bottom:20px}h2{font-size:12pt;color:#1e3a5f;margin:18px 0 8px}.ig{display:grid;grid-template-columns:150px 1fr;gap:4px 12px;margin-bottom:14px}.il{font-size:10pt;color:#6b7280}.iv{font-size:11pt;font-weight:600}table{width:100%;border-collapse:collapse;margin-bottom:14px}th{background:#eef2f7;padding:5px 8px;text-align:left;font-size:10pt;color:#4a5568;border:1px solid #ccc}.cr{display:flex;gap:28px;margin-bottom:8px;flex-wrap:wrap}.ci{display:flex;align-items:center;gap:6px;font-size:10.5pt}.cb{width:14px;height:14px;border:2px solid #4a5568;display:inline-block;border-radius:2px}.ln{border-bottom:1px solid #333;width:180px;display:inline-block;margin-left:4px}.ls{width:120px}.ct{font-size:10pt;color:#4a5568;line-height:1.5;margin:10px 0}.sr{display:flex;justify-content:space-between;margin-top:36px}.sb{text-align:center}.sl{border-top:1px solid #333;width:200px;margin-bottom:4px;padding-top:4px}.slb{font-size:9pt;color:#6b7280}.tb{position:fixed;top:0;left:0;right:0;background:#111827;padding:12px 24px;display:flex;gap:12px;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.3)}.tb button{padding:8px 20px;border-radius:8px;font-size:13px;font-weight:600;border:none;cursor:pointer}.bp{background:#06b6d4;color:#fff}.bc{background:#374151;color:#e5e7eb}.ts{height:52px}@media print{.tb,.ts{display:none!important}body{padding:0}}</style></head><body>
+<div class="tb"><button class="bp" onclick="window.print()">Als PDF speichern / Drucken</button><button class="bc" onclick="window.close()">Schließen</button></div><div class="ts"></div>
+<h1>Versand-Packliste</h1><div class="sub">cam2rent – ${b.id}</div>
+<div class="ig"><span class="il">Buchungsnummer:</span><span class="iv">${b.id}</span><span class="il">Kundenname:</span><span class="iv">${b.customer_name || '–'}</span><span class="il">Mietzeitraum:</span><span class="iv">${fmtDate(b.rental_from)} – ${fmtDate(b.rental_to)}</span><span class="il">Versandart:</span><span class="iv">${b.shipping_method === 'express' ? 'Express-Versand' : 'Standard-Versand'}</span><span class="il">Lieferadresse:</span><span class="iv">${b.shipping_address || '–'}</span></div>
+<h2>1. Versanddatum</h2><p style="margin-bottom:12px">Datum: <strong>${dateStr}</strong></p>
+<h2>2. Versandgegenstand</h2><div class="ig" style="margin-bottom:4px"><span class="il">Kamera / Gerät:</span><span class="iv">${b.product_name}</span></div><p style="margin-bottom:8px">Seriennummer: <span class="ln ls"></span></p>
+<p style="margin-bottom:4px;font-weight:600">Zubehör:</p><table><thead><tr><th style="width:40px">Nr.</th><th>Bezeichnung</th><th style="width:50px">OK</th></tr></thead><tbody>${zubehoerRows}</tbody></table>
+<h2>3. Zustand bei Verpackung</h2><div style="margin:12px 0"><div class="cr"><div class="ci"><span class="cb"></span> Gerät funktionsfähig getestet</div><div class="ci"><span class="cb"></span> Keine sichtbaren Schäden</div></div><div class="cr"><div class="ci"><span class="cb"></span> Sonstiges: <span class="ln"></span></div></div></div>
+<h2>4. Verpackungskontrolle</h2><div style="margin:12px 0"><div class="cr"><div class="ci"><span class="cb"></span> Gerät sicher verpackt</div><div class="ci"><span class="cb"></span> Zubehör vollständig</div></div><div class="cr"><div class="ci"><span class="cb"></span> Paketinhalt dokumentiert (Foto/Video)</div><div class="ci"><span class="cb"></span> Paketnummer: <span class="ln ls"></span></div></div></div>
+<h2>5. Bestätigung</h2><p class="ct">Der Unterzeichner bestätigt die vollständige und ordnungsgemäße Verpackung des oben genannten Equipments.<br>Die Kontrolle wurde durch eine zweite Person gegengezeichnet.</p>
+<div class="sr"><div class="sb"><div class="sl"></div><div class="slb">(Packer, Ort/Datum)</div></div><div class="sb"><div class="sl"></div><div class="slb">(Kontrolleur, Ort/Datum)</div></div></div>
+</body></html>`;
+    const w = window.open('', '_blank', 'width=800,height=1100');
+    if (w) { w.document.write(html); w.document.close(); }
+  }
+
   const tabs = [
     { key: 'versenden', label: 'Zu versenden', count: zuVersenden.length, warn: zuVersenden.some((b) => shipStatus(b.rental_from, b.shipping_method).urgency === 'overdue' || shipStatus(b.rental_from, b.shipping_method).urgency === 'urgent') },
     { key: 'unterwegs', label: 'Unterwegs', count: unterwegs.length, warn: false },
@@ -352,8 +377,12 @@ export default function AdminVersandPage() {
                             <div className="flex flex-wrap gap-2">
                               <a href={`/admin/versand/${b.id}/drucken`} target="_blank" rel="noopener noreferrer"
                                 className="flex items-center gap-1.5 px-4 py-2 bg-white border border-brand-border rounded-btn text-sm font-heading font-semibold text-brand-black hover:bg-brand-bg transition-colors">
-                                🖨 Lieferschein drucken
+                                🖨 Lieferschein
                               </a>
+                              <button onClick={() => openPackliste(b)}
+                                className="flex items-center gap-1.5 px-4 py-2 bg-cyan-50 border border-cyan-300 rounded-btn text-sm font-heading font-semibold text-cyan-700 hover:bg-cyan-100 transition-colors">
+                                📋 Packliste
+                              </button>
                               {b.label_url ? (
                                 <a href={`/api/admin/label/${b.id}`} target="_blank" rel="noopener noreferrer"
                                   className="flex items-center gap-1.5 px-4 py-2 bg-green-50 border border-green-300 rounded-btn text-sm font-heading font-semibold text-green-700 hover:bg-green-100 transition-colors">
