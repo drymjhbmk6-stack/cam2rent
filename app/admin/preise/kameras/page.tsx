@@ -79,10 +79,8 @@ export default function AdminKameraListePage() {
     <div className="min-h-screen bg-brand-bg">
       <div className="max-w-3xl mx-auto px-6 py-8">
         <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center gap-2">
-            <Link href="/admin/preise" className="text-sm font-body text-brand-muted hover:text-brand-black transition-colors">← Preise</Link>
-            <span className="text-brand-muted">/</span>
-            <h1 className="font-heading font-bold text-xl text-brand-black">Kamera-Preise</h1>
+          <div>
+            <h1 className="font-heading font-bold text-xl text-brand-black">Kameras</h1>
           </div>
           <Link
             href="/admin/preise/kameras/neu"
@@ -94,6 +92,10 @@ export default function AdminKameraListePage() {
 
         {loading ? (
           <div className="text-center py-16 text-brand-muted font-body">Lädt…</div>
+        ) : products.length === 0 ? (
+          <div className="text-center py-16 text-brand-muted font-body">
+            Noch keine Kamera angelegt. Klicke auf „+ Neue Kamera".
+          </div>
         ) : (
           <div className="space-y-3">
             {products.map((p) => (

@@ -333,6 +333,10 @@ export default function AdminSetsPage() {
           <div className="flex justify-center py-20">
             <span className="w-8 h-8 border-4 border-accent-blue border-t-transparent rounded-full animate-spin" />
           </div>
+        ) : sets.length === 0 ? (
+          <div className="text-center py-16 text-brand-muted font-body">
+            Noch kein Set angelegt. Klicke auf „+ Neues Set".
+          </div>
         ) : (
           <div className="space-y-3">
             {sets.map((set) => {
