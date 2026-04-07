@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { isBlockedForShipping, isBlockedEndDateForShipping } from '@/lib/german-holidays';
+import { isBlockedForShipping, isBlockedEndDateForShipping, getShippingBlockReason } from '@/lib/german-holidays';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -309,25 +309,34 @@ export default function ProductBookingCalendar({
               textClass = 'text-gray-400 dark:text-gray-500';
             }
 
+            const blockReason = deliveryMode === 'versand'
+              ? getShippingBlockReason(dayDate, isChoosingEnd)
+              : null;
+            const tooltip = blockReason
+              ?? (displayStatus === 'available' ? 'Verfügbar' : cfg.label);
+
             return (
-              <button
-                key={dayNum}
-                type="button"
-                disabled={!selectable}
-                onClick={() => selectable && handleDayClick(dateStr)}
-                onMouseEnter={() => {
-                  if (selectable && rangeFrom && !rangeTo) setHoverDate(dateStr);
-                }}
-                onMouseLeave={() => setHoverDate(null)}
-                className={`aspect-square rounded-md ${bgClass} ${textClass} ${cursor} ${ringClass} flex items-center justify-center transition-all disabled:cursor-default`}
-                title={
-                  shippingBlocked
-                    ? 'Kein Versand an Sonn-/Feiertagen möglich'
-                    : displayStatus === 'available' ? 'Verfügbar' : cfg.label
-                }
-              >
-                <span className="text-[11px] font-heading font-semibold">{dayNum}</span>
-              </button>
+              <div key={dayNum} className="relative group">
+                <button
+                  type="button"
+                  disabled={!selectable || endDateBlocked}
+                  onClick={() => selectable && !endDateBlocked && handleDayClick(dateStr)}
+                  onMouseEnter={() => {
+                    if (selectable && !endDateBlocked && rangeFrom && !rangeTo) setHoverDate(dateStr);
+                  }}
+                  onMouseLeave={() => setHoverDate(null)}
+                  className={`w-full aspect-square rounded-md ${bgClass} ${textClass} ${cursor} ${ringClass} flex items-center justify-center transition-all disabled:cursor-default`}
+                  title={tooltip}
+                >
+                  <span className="text-[11px] font-heading font-semibold">{dayNum}</span>
+                </button>
+                {blockReason && (
+                  <div className="hidden group-hover:block absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 rounded-md text-[10px] font-body whitespace-nowrap z-50 pointer-events-none"
+                    style={{ background: '#0f172a', color: '#f1f5f9', border: '1px solid #334155' }}>
+                    {blockReason}
+                  </div>
+                )}
+              </div>
             );
           })}
         </div>

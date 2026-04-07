@@ -92,6 +92,28 @@ export function isBlockedEndDateForShipping(date: Date): boolean {
 }
 
 /**
+ * Gibt den Sperrgrund für ein Datum im Versand-Modus zurück.
+ * null = nicht gesperrt.
+ */
+export function getShippingBlockReason(date: Date, isEndDate: boolean): string | null {
+  const fmt = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  const holidays = getGermanHolidays(date.getFullYear());
+
+  if (holidays.has(fmt)) return 'Feiertag — kein Versand möglich';
+  if (isSunday(date)) return 'Sonntag — kein Versand möglich';
+
+  if (isEndDate) {
+    if (date.getDay() === 6) return 'Samstag — Rücksendung am Sonntag nicht möglich';
+    const nextDay = addDays(date, 1);
+    const nextFmt = `${nextDay.getFullYear()}-${String(nextDay.getMonth() + 1).padStart(2, '0')}-${String(nextDay.getDate()).padStart(2, '0')}`;
+    if (holidays.has(nextFmt)) return 'Tag vor Feiertag — Rücksendung am Feiertag nicht möglich';
+    if (isSunday(nextDay)) return 'Tag vor Sonntag — Rücksendung am Sonntag nicht möglich';
+  }
+
+  return null;
+}
+
+/**
  * Gibt ein Set aller gesperrten Daten (als "YYYY-MM-DD") für einen Monat zurück.
  * Nützlich für den Kalender um gesperrte Tage visuell zu markieren.
  */
