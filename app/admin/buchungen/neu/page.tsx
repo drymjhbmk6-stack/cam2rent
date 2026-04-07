@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 
 /* ─── Types ─────────────────────────────────────────────────────────────────── */
@@ -292,6 +292,131 @@ export default function ManualBookingPage() {
   const total = subtotal + shippingPrice;
   const deposit = totalDeposit;
 
+  // ─── Rechnungs-Vorschau ───
+  const openInvoicePreview = useCallback(() => {
+    const today = new Date();
+    const dateStr = `${today.getDate().toString().padStart(2, '0')}.${(today.getMonth() + 1).toString().padStart(2, '0')}.${today.getFullYear()}`;
+    const fmtD = (iso: string) => { const [y, m, d] = iso.split('-'); return `${d}.${m}.${y}`; };
+    const fmtP = (n: number) => n.toFixed(2).replace('.', ',') + ' €';
+
+    // Positionen sammeln (alle Produkte)
+    const items: { description: string; amount: number }[] = [];
+    for (const prod of selectedProducts) {
+      const p = productList.find((pl) => pl.id === prod.id);
+      const custom = parseFloat(prod.customPrice);
+      const price = (prod.customPrice !== '' && !isNaN(custom)) ? custom : (days > 0 ? getRentalPrice(prod.id, days, dynPrices, staticProducts) : 0);
+      items.push({
+        description: `Kamera-Miete: ${p?.name ?? prod.id} (${days} ${days === 1 ? 'Tag' : 'Tage'}${rentalFrom ? ', ' + fmtD(rentalFrom) + ' – ' + fmtD(rentalTo) : ''})${prod.qty > 1 ? ` × ${prod.qty}` : ''}`,
+        amount: price * prod.qty,
+      });
+      // Zubehör
+      for (const accId of prod.accessories) {
+        const acc = accessories.find((a) => a.id === accId);
+        if (acc) items.push({ description: acc.name, amount: getAccessoryPrice(acc, days) * prod.qty });
+      }
+      // Sets
+      for (const setId of prod.sets) {
+        const s = sets.find((st) => st.id === setId);
+        if (s) items.push({ description: `Set: ${s.name}`, amount: getSetPrice(s, days) * prod.qty });
+      }
+      // Haftung
+      const hp = getHaftungPrice(prod.haftung);
+      if (hp > 0) {
+        const label = prod.haftung === 'standard' ? 'Standard-Haftungsoption' : 'Premium-Haftungsoption';
+        items.push({ description: `${label} (${p?.name ?? prod.id})`, amount: hp * prod.qty });
+      }
+      // Notiz
+      if (prod.note) {
+        items.push({ description: `inkl. ${prod.note}`, amount: 0 });
+      }
+    }
+    if (shippingPrice > 0) {
+      items.push({ description: shippingMethod === 'express' ? 'Express-Versand' : 'Standard-Versand', amount: shippingPrice });
+    }
+
+    const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Rechnungsvorschau</title>
+<style>
+  @page { size: A4 portrait; margin: 0; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 10pt; color: #1a1a1a; width: 210mm; min-height: 297mm; padding: 48px 52px 60px; position: relative; }
+  .header { display: flex; justify-content: space-between; margin-bottom: 36px; }
+  .brand { font-size: 20pt; font-weight: 700; color: #0a0a0a; letter-spacing: 0.5px; }
+  .brand-sub { font-size: 9pt; color: #9ca3af; margin-top: 2px; }
+  .sender { font-size: 9pt; color: #6b7280; text-align: right; line-height: 1.6; }
+  .meta { display: flex; justify-content: space-between; margin-bottom: 28px; }
+  .meta-title { font-size: 18pt; font-weight: 700; color: #0a0a0a; }
+  .meta-sub { font-size: 9pt; color: #6b7280; }
+  .meta-right { text-align: right; }
+  .meta-label { font-size: 9pt; color: #9ca3af; margin-bottom: 2px; }
+  .meta-value { font-size: 10pt; font-weight: 700; color: #0a0a0a; }
+  .meta-gap { margin-top: 8px; }
+  .addr { margin-bottom: 24px; padding: 14px; background: #f9f9f7; border-radius: 6px; }
+  .addr-label { font-size: 8pt; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 4px; }
+  .addr-name { font-size: 11pt; font-weight: 700; margin-bottom: 2px; }
+  .addr-email { font-size: 9pt; color: #6b7280; }
+  .section { font-size: 9pt; font-weight: 700; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 10px; }
+  .detail { display: flex; margin-bottom: 5px; }
+  .detail-label { width: 35%; font-size: 9pt; color: #6b7280; }
+  .detail-value { width: 65%; font-size: 10pt; }
+  .divider { border-bottom: 1px solid #e5e7eb; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; }
+  th { background: #f5f5f0; padding: 8px 10px; font-size: 9pt; font-weight: 700; color: #6b7280; text-align: left; }
+  th:last-child { text-align: right; }
+  td { padding: 7px 10px; border-bottom: 1px solid #f3f4f6; font-size: 10pt; }
+  td:last-child { text-align: right; }
+  .total-row { background: #0a0a0a; color: #fff; }
+  .total-row td { font-size: 11pt; font-weight: 700; color: #fff; border: none; padding: 10px; border-radius: 4px; }
+  .note { margin-top: 28px; padding: 12px; background: #f9f9f7; border-radius: 6px; font-size: 9pt; color: #6b7280; line-height: 1.5; }
+  .footer { position: absolute; bottom: 30px; left: 52px; right: 52px; border-top: 1px solid #e5e7eb; padding-top: 10px; display: flex; justify-content: space-between; font-size: 8pt; color: #9ca3af; }
+  .status-paid { color: #16a34a; font-weight: 700; }
+  .status-unpaid { color: #d97706; font-weight: 700; }
+  .zero-amount { color: #9ca3af; font-style: italic; }
+  @media print { body { padding: 48px 52px 60px; } }
+</style></head><body>
+  <div class="header">
+    <div><div class="brand">cam2rent</div><div class="brand-sub">Action-Cam Verleih</div></div>
+    <div class="sender">Lennart Schickel<br>Heimsbrunner Str. 12<br>12349 Berlin<br>buchung@cam2rent.de<br>cam2rent.de</div>
+  </div>
+  <div class="meta">
+    <div><div class="meta-title">Rechnung</div><div class="meta-sub">Buchungsbestätigung & Beleg</div></div>
+    <div class="meta-right">
+      <div class="meta-label">Rechnungsdatum</div><div class="meta-value">${dateStr}</div>
+      <div class="meta-label meta-gap">Mietzeitraum</div><div class="meta-value">${rentalFrom ? fmtD(rentalFrom) + ' – ' + fmtD(rentalTo) : '–'}</div>
+    </div>
+  </div>
+  <div class="addr">
+    <div class="addr-label">Rechnungsempfänger</div>
+    <div class="addr-name">${customerName || 'Kunde'}</div>
+    ${customerEmail ? `<div class="addr-email">${customerEmail}</div>` : ''}
+    ${street ? `<div class="addr-email">${street}, ${zip} ${city}</div>` : ''}
+  </div>
+  <div class="section">Buchungsdetails</div>
+  <div class="detail"><div class="detail-label">Lieferung</div><div class="detail-value">${deliveryMode === 'abholung' ? 'Selbstabholung' : shippingMethod === 'express' ? 'Express-Versand' : 'Standard-Versand'}</div></div>
+  <div class="detail"><div class="detail-label">Zahlungsstatus</div><div class="detail-value ${paymentStatus === 'paid' ? 'status-paid' : 'status-unpaid'}">${paymentStatus === 'paid' ? 'Bezahlt' : 'Nicht bezahlt'}</div></div>
+  <div class="divider"></div>
+  <div class="section">Leistungen</div>
+  <table>
+    <thead><tr><th>Beschreibung</th><th>Betrag</th></tr></thead>
+    <tbody>
+      ${items.map(item => `<tr><td>${item.description}</td><td${item.amount === 0 ? ' class="zero-amount"' : ''}>${item.amount > 0 ? fmtP(item.amount) : '–'}</td></tr>`).join('\n      ')}
+    </tbody>
+  </table>
+  <table style="margin-top:4px"><tbody><tr class="total-row"><td>Gesamtbetrag</td><td>${fmtP(total)}</td></tr></tbody></table>
+  ${(depositMode === 'kaution' || depositMode === 'both') && deposit > 0 ? `<div style="font-size:8pt;color:#6b7280;margin-top:6px;text-align:right">* Enthält Kaution ${fmtP(deposit)} – wird nach Rückgabe erstattet</div>` : ''}
+  <div class="note">Gemäß §19 UStG wird keine Umsatzsteuer berechnet.</div>
+  ${paymentStatus === 'unpaid' ? `<div class="note" style="margin-top:12px;border:1px solid #d97706;background:#fffbeb"><strong style="color:#d97706">Überweisungsdaten:</strong><br>Kontoinhaber: Lennart Schickel<br>IBAN: DE77 2022 0800 0027 7841 43<br>BIC: SXPYDEHHXXX<br>Verwendungszweck: ${customerName || 'Kunde'} – Kameraleihe</div>` : ''}
+  <div class="footer"><span>cam2rent · Lennart Schickel · Heimsbrunner Str. 12 · 12349 Berlin</span><span>cam2rent.de · buchung@cam2rent.de</span></div>
+</body></html>`;
+
+    const w = window.open('', '_blank', 'width=800,height=1100');
+    if (w) {
+      w.document.write(html);
+      w.document.close();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedProducts, productList, days, rentalFrom, rentalTo, dynPrices, staticProducts, accessories, sets, shippingPrice, shippingMethod, deliveryMode, customerName, customerEmail, street, zip, city, paymentStatus, total, deposit, depositMode]);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
@@ -529,11 +654,6 @@ export default function ManualBookingPage() {
                           >
                             Zurücksetzen
                           </button>
-                        )}
-                        {hasCustomPrice && days > 0 && (
-                          <span className="text-xs" style={{ color: '#f59e0b' }}>
-                            statt {autoPrice.toFixed(2)} €
-                          </span>
                         )}
                       </div>
                     </div>
@@ -808,7 +928,16 @@ export default function ManualBookingPage() {
         </div>
 
         {/* ─── Submit ─── */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 flex-wrap">
+          <button
+            type="button"
+            onClick={openInvoicePreview}
+            disabled={selectedProducts.length === 0 || !days}
+            className="px-5 py-3 rounded-lg font-heading font-semibold text-sm transition-colors disabled:opacity-50"
+            style={{ background: '#1e293b', color: '#e2e8f0', border: '1px solid #334155' }}
+          >
+            Rechnungsvorschau
+          </button>
           <button type="submit" disabled={saving || !days} className="px-6 py-3 rounded-lg font-heading font-semibold text-sm transition-colors disabled:opacity-50" style={{ background: '#06b6d4', color: 'white' }}>
             {saving ? 'Wird erstellt...' : 'Buchung erstellen'}
           </button>
