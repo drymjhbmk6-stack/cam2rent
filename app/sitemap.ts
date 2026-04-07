@@ -1,9 +1,28 @@
 import type { MetadataRoute } from 'next';
 import { getProducts } from '@/lib/get-products';
+import { createServiceClient } from '@/lib/supabase';
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const products = await getProducts();
   const baseUrl = 'https://cam2rent.de';
+
+  // Blog-Posts laden
+  let blogPages: MetadataRoute.Sitemap = [];
+  try {
+    const supabase = createServiceClient();
+    const { data: posts } = await supabase
+      .from('blog_posts')
+      .select('slug, updated_at, published_at')
+      .eq('status', 'published')
+      .order('published_at', { ascending: false });
+
+    blogPages = (posts ?? []).map((post) => ({
+      url: `${baseUrl}/blog/${post.slug}`,
+      lastModified: new Date(post.updated_at || post.published_at),
+      changeFrequency: 'monthly' as const,
+      priority: 0.7,
+    }));
+  } catch { /* DB nicht erreichbar */ }
 
   const staticPages: MetadataRoute.Sitemap = [
     {
@@ -93,5 +112,5 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.8,
   }));
 
-  return [...staticPages, ...productPages];
+  return [...staticPages, ...productPages, ...blogPages];
 }

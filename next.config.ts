@@ -22,6 +22,11 @@ const nextConfig: NextConfig = {
         protocol: 'https' as const,
         hostname: 'cam2rent.de',
       },
+      // Unsplash Bilder (Blog-Vorschau)
+      {
+        protocol: 'https' as const,
+        hostname: 'images.unsplash.com',
+      },
     ],
   },
 };

@@ -1,0 +1,70 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { createServiceClient } from '@/lib/supabase';
+
+type Ctx = { params: Promise<{ id: string }> };
+
+/** GET /api/admin/blog/posts/[id] */
+export async function GET(_req: NextRequest, ctx: Ctx) {
+  const { id } = await ctx.params;
+  const supabase = createServiceClient();
+  const { data, error } = await supabase
+    .from('blog_posts')
+    .select('*, blog_categories(id, name, slug, color)')
+    .eq('id', id)
+    .single();
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 404 });
+  return NextResponse.json({ post: data });
+}
+
+/** PUT /api/admin/blog/posts/[id] */
+export async function PUT(req: NextRequest, ctx: Ctx) {
+  const { id } = await ctx.params;
+  const body = await req.json();
+  const supabase = createServiceClient();
+
+  const now = new Date().toISOString();
+  const updates: Record<string, unknown> = { updated_at: now };
+
+  const fields = [
+    'title', 'slug', 'content', 'excerpt', 'featured_image', 'featured_image_alt',
+    'category_id', 'tags', 'status', 'seo_title', 'seo_description', 'author',
+    'ai_generated', 'ai_prompt', 'ai_model', 'reading_time_min', 'scheduled_at',
+  ];
+
+  for (const f of fields) {
+    if (f in body) updates[f] = body[f];
+  }
+
+  // published_at setzen wenn Status auf published wechselt
+  if (body.status === 'published' && !body.keep_published_at) {
+    // Aktuellen Status pruefen
+    const { data: current } = await supabase
+      .from('blog_posts')
+      .select('status, published_at')
+      .eq('id', id)
+      .single();
+    if (current && current.status !== 'published') {
+      updates.published_at = now;
+    }
+  }
+
+  const { data, error } = await supabase
+    .from('blog_posts')
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ post: data });
+}
+
+/** DELETE /api/admin/blog/posts/[id] */
+export async function DELETE(_req: NextRequest, ctx: Ctx) {
+  const { id } = await ctx.params;
+  const supabase = createServiceClient();
+  const { error } = await supabase.from('blog_posts').delete().eq('id', id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ success: true });
+}
