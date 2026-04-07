@@ -608,7 +608,7 @@ export default function ManualBookingPage() {
             </div>
             {setPrice > 0 && (
               <div className="flex justify-between" style={{ color: '#e2e8f0' }}>
-                <span>Sets ({selectedSets.length}x)</span>
+                <span>Sets ({selectedProducts.reduce((n, sp) => n + sp.sets.length, 0)}x)</span>
                 <span>{setPrice.toFixed(2)} €</span>
               </div>
             )}
