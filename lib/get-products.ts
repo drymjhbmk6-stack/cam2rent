@@ -1,11 +1,10 @@
 /**
- * Zentrale Produktliste: DB-first, statischer Fallback.
+ * Zentrale Produktliste: Nur aus DB.
  * Wird von API-Routen und Server-Komponenten genutzt.
  */
 import { createServiceClient } from '@/lib/supabase';
-import { products as staticProducts, type Product } from '@/data/products';
+import { type Product } from '@/data/products';
 import {
-  DEFAULT_ADMIN_PRODUCTS,
   DEFAULT_PRODUCT_PRICES,
   DEFAULT_KAUTION_TIERS,
   type AdminProduct,
@@ -83,12 +82,11 @@ function adminToProduct(
 }
 
 /**
- * Lädt alle Produkte: zuerst aus der DB, dann statische Fallbacks.
- * DB-Produkte überschreiben statische mit gleicher ID.
- * Neue DB-Produkte (ohne statisches Gegenstück) werden vollständig aus DB erstellt.
+ * Lädt alle Produkte aus der DB.
+ * Gibt leeres Array zurück wenn DB nicht erreichbar.
  */
 export async function getProducts(): Promise<Product[]> {
-  let adminProducts: AdminProducts = DEFAULT_ADMIN_PRODUCTS;
+  let adminProducts: AdminProducts = {};
   let kautionTiers: KautionTiers = DEFAULT_KAUTION_TIERS;
 
   try {
@@ -101,8 +99,7 @@ export async function getProducts(): Promise<Product[]> {
     if (data) {
       for (const row of data) {
         if (row.key === 'products' && row.value && typeof row.value === 'object') {
-          const val = row.value as Record<string, AdminProduct>;
-          if (Object.keys(val).length > 0) adminProducts = val;
+          adminProducts = row.value as Record<string, AdminProduct>;
         }
         if (row.key === 'kautionTiers' && row.value) {
           kautionTiers = row.value as unknown as KautionTiers;
@@ -110,15 +107,12 @@ export async function getProducts(): Promise<Product[]> {
       }
     }
   } catch {
-    // DB nicht erreichbar → Fallback
+    return [];
   }
-
-  // Statische Produkte als Lookup
-  const staticMap = new Map(staticProducts.map((p) => [p.id, p]));
 
   // AdminProducts → Product konvertieren
   const result: Product[] = Object.values(adminProducts).map((admin) =>
-    adminToProduct(admin, staticMap.get(admin.id), kautionTiers),
+    adminToProduct(admin, undefined, kautionTiers),
   );
 
   return result;

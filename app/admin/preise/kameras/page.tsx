@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { DEFAULT_ADMIN_PRODUCTS, type AdminProduct } from '@/lib/price-config';
+import { type AdminProduct } from '@/lib/price-config';
 
 interface UtilizationData {
   id: string;
@@ -24,13 +24,13 @@ export default function AdminKameraListePage() {
     fetch('/api/admin/config?key=products')
       .then((r) => r.json())
       .then((data: Record<string, AdminProduct> | null) => {
-        const source = data && Object.keys(data).length > 0 ? data : DEFAULT_ADMIN_PRODUCTS;
+        const source = data && Object.keys(data).length > 0 ? data : {};
         setAllProducts(source);
         setProducts(Object.values(source).sort((a, b) => parseInt(a.id) - parseInt(b.id)));
       })
       .catch(() => {
-        setAllProducts(DEFAULT_ADMIN_PRODUCTS);
-        setProducts(Object.values(DEFAULT_ADMIN_PRODUCTS));
+        setAllProducts({});
+        setProducts([]);
       })
       .finally(() => setLoading(false));
 

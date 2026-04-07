@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import DynamicSelect from '@/components/admin/DynamicSelect';
-import { DEFAULT_ADMIN_PRODUCTS, type AdminProduct } from '@/lib/price-config';
+import { type AdminProduct } from '@/lib/price-config';
 
 interface Accessory {
   id: string;
@@ -53,11 +53,11 @@ export default function AdminZubehoerPage() {
     fetch('/api/admin/config?key=products')
       .then((r) => r.json())
       .then((data: Record<string, AdminProduct> | null) => {
-        const source = data && Object.keys(data).length > 0 ? data : DEFAULT_ADMIN_PRODUCTS;
+        const source = data && Object.keys(data).length > 0 ? data : {};
         setProductList(Object.entries(source).map(([id, p]) => ({ id, name: p.name })));
       })
       .catch(() => {
-        setProductList(Object.entries(DEFAULT_ADMIN_PRODUCTS).map(([id, p]) => ({ id, name: p.name })));
+        setProductList([]);
       });
   }, []);
 

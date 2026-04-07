@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { cookies } from 'next/headers';
-import { DEFAULT_ADMIN_PRODUCTS, type AdminProduct } from '@/lib/price-config';
+import { type AdminProduct } from '@/lib/price-config';
 
 /**
  * GET /api/admin/utilization?days=30
@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
     const productsMap: Record<string, AdminProduct> =
       configData?.value && typeof configData.value === 'object' && Object.keys(configData.value).length > 0
         ? (configData.value as Record<string, AdminProduct>)
-        : DEFAULT_ADMIN_PRODUCTS;
+        : {};
 
     // Buchungen im Zeitraum laden (nur relevante Status)
     const { data: bookings } = await supabase

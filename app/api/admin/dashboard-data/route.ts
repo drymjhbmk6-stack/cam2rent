@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
-import { DEFAULT_ADMIN_PRODUCTS, type AdminProduct } from '@/lib/price-config';
+import { type AdminProduct } from '@/lib/price-config';
 
 /**
  * GET /api/admin/dashboard-data
@@ -240,7 +240,7 @@ export async function GET() {
     const utilProductsMap: Record<string, AdminProduct> =
       utilConfigData?.value && typeof utilConfigData.value === 'object' && Object.keys(utilConfigData.value as object).length > 0
         ? (utilConfigData.value as Record<string, AdminProduct>)
-        : DEFAULT_ADMIN_PRODUCTS;
+        : {};
 
     const { data: utilBookings } = await supabase
       .from('bookings')

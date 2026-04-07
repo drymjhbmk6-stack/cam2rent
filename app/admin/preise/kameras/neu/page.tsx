@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
-  DEFAULT_ADMIN_PRODUCTS,
   DEFAULT_KAUTION_TIERS,
   type AdminProduct,
   type AdminProductSpec,
@@ -60,10 +59,10 @@ export default function AdminNeueKameraPage() {
     fetch('/api/admin/config?key=products')
       .then((r) => r.json())
       .then((data: Record<string, AdminProduct> | null) => {
-        const source = data && Object.keys(data).length > 0 ? data : DEFAULT_ADMIN_PRODUCTS;
+        const source = data && Object.keys(data).length > 0 ? data : {};
         setAllProducts(source);
       })
-      .catch(() => setAllProducts(DEFAULT_ADMIN_PRODUCTS));
+      .catch(() => setAllProducts({}));
   }, []);
 
   function setTableDay(day: number, value: number) {

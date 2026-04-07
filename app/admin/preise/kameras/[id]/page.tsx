@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
-  DEFAULT_ADMIN_PRODUCTS,
   DEFAULT_KAUTION_TIERS,
   type AdminProduct,
   type AdminProductSpec,
@@ -45,15 +44,15 @@ export default function AdminKameraEditorPage() {
       .then((r) => r.json())
       .then((data: Record<string, AdminProduct> | null) => {
         const source: Record<string, AdminProduct> = data && Object.keys(data).length > 0
-          ? data : DEFAULT_ADMIN_PRODUCTS;
+          ? data : {};
         setAllProducts(source);
         const found = source[id];
         if (found) setProduct({ ...found });
-        else setProduct({ ...DEFAULT_ADMIN_PRODUCTS[id] ?? createEmpty(id) });
+        else setProduct({ ...createEmpty(id) });
       })
       .catch(() => {
-        setAllProducts(DEFAULT_ADMIN_PRODUCTS);
-        setProduct({ ...DEFAULT_ADMIN_PRODUCTS[id] ?? createEmpty(id) });
+        setAllProducts({});
+        setProduct({ ...createEmpty(id) });
       });
   }, [id]);
 

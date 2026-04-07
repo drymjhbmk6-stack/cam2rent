@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import type { AdminProduct } from '@/lib/price-config';
-import { DEFAULT_ADMIN_PRODUCTS } from '@/lib/price-config';
 
 interface AccessoryItem { accessory_id: string; qty: number; }
 
@@ -85,7 +84,7 @@ export default function AdminSetsPage() {
     ]).then(([setsData, accData, prodData]) => {
       setSets(setsData.sets ?? []);
       setAccessories(accData.accessories ?? []);
-      const src = prodData && Object.keys(prodData).length > 0 ? prodData : DEFAULT_ADMIN_PRODUCTS;
+      const src = prodData && Object.keys(prodData).length > 0 ? prodData : {};
       setProducts(src);
     }).catch(() => {}).finally(() => setLoading(false));
   }, []);

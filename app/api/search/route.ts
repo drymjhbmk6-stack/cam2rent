@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getProducts } from '@/lib/get-products';
 import { getAccessories } from '@/lib/get-accessories';
-import { RENTAL_SETS_STATIC } from '@/data/sets';
+import { createServiceClient } from '@/lib/supabase';
 
 export async function GET(req: NextRequest) {
   const products = await getProducts();
@@ -49,18 +49,17 @@ export async function GET(req: NextRequest) {
       description: a.description,
     }));
 
-  // Search sets
-  const sets = RENTAL_SETS_STATIC.filter(
-    (s) =>
-      matches(s.name) ||
-      matches(s.description) ||
-      s.includedItems.some((item) => matches(item))
+  // Search sets (aus DB)
+  const supabase = createServiceClient();
+  const { data: dbSets } = await supabase.from('sets').select('id, name, description');
+  const sets = (dbSets ?? []).filter(
+    (s) => matches(s.name ?? '') || matches(s.description ?? '')
   )
     .slice(0, 4)
     .map((s) => ({
       id: s.id,
       name: s.name,
-      description: s.description,
+      description: s.description ?? '',
     }));
 
   return NextResponse.json({ kameras, zubehoer, sets });

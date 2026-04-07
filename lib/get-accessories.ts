@@ -1,8 +1,8 @@
 /**
- * Zentrale Zubehör-Liste: DB-first, statischer Fallback.
+ * Zentrale Zubehör-Liste: Nur aus DB.
  */
 import { createServiceClient } from '@/lib/supabase';
-import { accessories as staticAccessories, type Accessory } from '@/data/accessories';
+import { type Accessory } from '@/data/accessories';
 
 interface DbAccessory {
   id: string;
@@ -39,12 +39,9 @@ export async function getAccessories(): Promise<Accessory[]> {
       .select('*')
       .order('sort_order', { ascending: true });
 
-    if (error || !data || data.length === 0) {
-      return staticAccessories;
-    }
-
+    if (error || !data) return [];
     return data.map(dbToAccessory);
   } catch {
-    return staticAccessories;
+    return [];
   }
 }

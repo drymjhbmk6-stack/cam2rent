@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import { products as staticProducts, type Product } from '@/data/products';
+import { type Product } from '@/data/products';
 
 interface ProductsContextType {
   products: Product[];
@@ -11,14 +11,14 @@ interface ProductsContextType {
 }
 
 const ProductsContext = createContext<ProductsContextType>({
-  products: staticProducts,
+  products: [],
   loading: true,
-  getById: (id) => staticProducts.find((p) => p.id === id),
-  getBySlug: (slug) => staticProducts.find((p) => p.slug === slug),
+  getById: () => undefined,
+  getBySlug: () => undefined,
 });
 
 export function ProductsProvider({ children }: { children: ReactNode }) {
-  const [products, setProducts] = useState<Product[]>(staticProducts);
+  const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
