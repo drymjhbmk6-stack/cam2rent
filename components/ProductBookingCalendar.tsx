@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { isBlockedForShipping, isBlockedEndDateForShipping, getShippingBlockReason } from '@/lib/german-holidays';
+import { isBlockedEndDateForShipping, getShippingBlockReason } from '@/lib/german-holidays';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -140,14 +140,9 @@ export default function ProductBookingCalendar({
     const minDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + minDaysAhead);
     const dayDate = parseDate(dateStr);
     if (dayDate < minDate) return false;
-    if (deliveryMode === 'versand') {
-      if (isChoosingEnd) {
-        // Enddatum: nur gesperrt wenn Folgetag Sonn-/Feiertag
-        if (isBlockedEndDateForShipping(dayDate)) return false;
-      } else {
-        // Startdatum: gesperrt wenn Sonntag/Feiertag
-        if (isBlockedForShipping(dayDate)) return false;
-      }
+    // Versand-Enddatum: gesperrt wenn Folgetag Sonn-/Feiertag
+    if (deliveryMode === 'versand' && isChoosingEnd) {
+      if (isBlockedEndDateForShipping(dayDate)) return false;
     }
     return true;
   }
@@ -280,8 +275,8 @@ export default function ProductBookingCalendar({
             const cfg = STATUS_CONFIG[displayStatus];
 
             const dayDate = parseDate(dateStr);
-            const blockReason = deliveryMode === 'versand' && !selectable
-              ? getShippingBlockReason(dayDate, isChoosingEnd)
+            const blockReason = deliveryMode === 'versand' && isChoosingEnd && !selectable
+              ? getShippingBlockReason(dayDate, true)
               : null;
 
             let bgClass = cfg.bg;
