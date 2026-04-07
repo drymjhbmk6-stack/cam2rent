@@ -3,6 +3,7 @@ import { renderToBuffer, type DocumentProps } from '@react-pdf/renderer';
 import { createElement, type ReactElement } from 'react';
 import { InvoicePDF, type InvoiceData } from '@/lib/invoice-pdf';
 import { BUSINESS } from '@/lib/business-config';
+import { createServiceClient } from '@/lib/supabase';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -11,6 +12,71 @@ export const FROM_EMAIL =
 
 export const ADMIN_EMAIL =
   process.env.ADMIN_EMAIL ?? BUSINESS.emailKontakt;
+
+// ─── Email Log Helper ────────────────────────────────────────────────────────
+
+async function logEmail(params: {
+  bookingId?: string | null;
+  customerEmail: string;
+  emailType: string;
+  subject: string;
+  status: 'sent' | 'failed';
+  resendMessageId?: string | null;
+  errorMessage?: string | null;
+}) {
+  try {
+    const supabase = createServiceClient();
+    await supabase.from('email_log').insert({
+      booking_id: params.bookingId || null,
+      customer_email: params.customerEmail,
+      email_type: params.emailType,
+      subject: params.subject,
+      status: params.status,
+      resend_message_id: params.resendMessageId || null,
+      error_message: params.errorMessage || null,
+    });
+  } catch {
+    // Fire-and-forget — kein Fehler soll die Email blockieren
+  }
+}
+
+/** Sendet eine Email via Resend und loggt das Ergebnis */
+async function sendAndLog(opts: {
+  to: string;
+  subject: string;
+  html: string;
+  bookingId?: string | null;
+  emailType: string;
+  attachments?: { filename: string; content: Buffer }[];
+}) {
+  try {
+    const result = await resend.emails.send({
+      from: `${BUSINESS.name} <${FROM_EMAIL}>`,
+      to: opts.to,
+      subject: opts.subject,
+      html: opts.html,
+      attachments: opts.attachments,
+    });
+    await logEmail({
+      bookingId: opts.bookingId,
+      customerEmail: opts.to,
+      emailType: opts.emailType,
+      subject: opts.subject,
+      status: 'sent',
+      resendMessageId: result.data?.id,
+    });
+  } catch (err) {
+    await logEmail({
+      bookingId: opts.bookingId,
+      customerEmail: opts.to,
+      emailType: opts.emailType,
+      subject: opts.subject,
+      status: 'failed',
+      errorMessage: err instanceof Error ? err.message : 'Unbekannt',
+    });
+    throw err;
+  }
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -74,17 +140,9 @@ export async function sendBookingConfirmation(data: BookingEmailData) {
   );
   const invoiceNumber = data.bookingId.replace('BK-', 'RE-');
 
-  await resend.emails.send({
-    from: `${BUSINESS.name} <${FROM_EMAIL}>`,
-    to: data.customerEmail,
-    subject,
-    html,
-    attachments: [
-      {
-        filename: `Rechnung-${invoiceNumber}.pdf`,
-        content: pdfBuffer,
-      },
-    ],
+  await sendAndLog({
+    to: data.customerEmail, subject, html, bookingId: data.bookingId, emailType: 'booking_confirmation',
+    attachments: [{ filename: `Rechnung-${invoiceNumber}.pdf`, content: pdfBuffer }],
   });
 }
 
@@ -106,32 +164,17 @@ export interface CancellationEmailData {
 
 export async function sendCancellationConfirmation(data: CancellationEmailData) {
   const { html, subject } = buildCancellationCustomerEmail(data);
-  await resend.emails.send({
-    from: `${BUSINESS.name} <${FROM_EMAIL}>`,
-    to: data.customerEmail,
-    subject,
-    html,
-  });
+  await sendAndLog({ to: data.customerEmail, subject, html, bookingId: data.bookingId, emailType: 'cancellation_customer' });
 }
 
 export async function sendAdminCancellationNotification(data: CancellationEmailData) {
   const { html, subject } = buildCancellationAdminEmail(data);
-  await resend.emails.send({
-    from: `${BUSINESS.name} <${FROM_EMAIL}>`,
-    to: ADMIN_EMAIL,
-    subject,
-    html,
-  });
+  await sendAndLog({ to: ADMIN_EMAIL, subject, html, bookingId: data.bookingId, emailType: 'cancellation_admin' });
 }
 
 export async function sendAdminNotification(data: BookingEmailData) {
   const { html, subject } = buildAdminEmail(data);
-  await resend.emails.send({
-    from: `${BUSINESS.name} <${FROM_EMAIL}>`,
-    to: ADMIN_EMAIL,
-    subject,
-    html,
-  });
+  await sendAndLog({ to: ADMIN_EMAIL, subject, html, bookingId: data.bookingId, emailType: 'booking_admin' });
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -540,12 +583,7 @@ export interface ShippingEmailData {
 
 export async function sendShippingConfirmation(data: ShippingEmailData) {
   const { html, subject } = buildShippingEmail(data);
-  await resend.emails.send({
-    from: `${BUSINESS.name} <${FROM_EMAIL}>`,
-    to: data.customerEmail,
-    subject,
-    html,
-  });
+  await sendAndLog({ to: data.customerEmail, subject, html, bookingId: data.bookingId, emailType: 'shipping_confirmation' });
 }
 
 // ─── Damage report types ──────────────────────────────────────────────────────
@@ -623,7 +661,7 @@ export async function sendDamageReportConfirmation(data: DamageEmailData) {
   </table>
 </body>
 </html>`;
-  await resend.emails.send({ from: `${BUSINESS.name} <${FROM_EMAIL}>`, to: data.customerEmail, subject, html });
+  await sendAndLog({ to: data.customerEmail, subject, html, bookingId: data.bookingId, emailType: 'damage_report_customer' });
 }
 
 // ─── Damage report notification (to admin) ───────────────────────────────────
@@ -663,7 +701,7 @@ export async function sendAdminDamageNotification(data: DamageEmailData) {
   </table>
 </body>
 </html>`;
-  await resend.emails.send({ from: `${BUSINESS.name} <${FROM_EMAIL}>`, to: ADMIN_EMAIL, subject, html });
+  await sendAndLog({ to: ADMIN_EMAIL, subject, html, bookingId: data.bookingId, emailType: 'damage_report_admin' });
 }
 
 // ─── Damage resolution notification (to customer) ────────────────────────────
@@ -725,7 +763,7 @@ export async function sendDamageResolution(data: DamageResolutionEmailData) {
   </table>
 </body>
 </html>`;
-  await resend.emails.send({ from: `${BUSINESS.name} <${FROM_EMAIL}>`, to: data.customerEmail, subject, html });
+  await sendAndLog({ to: data.customerEmail, subject, html, bookingId: data.bookingId, emailType: 'damage_resolution' });
 }
 
 // ─── Shipping confirmation ─────────────────────────────────────────────────────
@@ -868,12 +906,7 @@ export async function sendReferralReward(data: ReferralRewardEmailData) {
 </body>
 </html>`;
 
-  await resend.emails.send({
-    from: `${BUSINESS.name} <${FROM_EMAIL}>`,
-    to: data.referrerEmail,
-    subject,
-    html,
-  });
+  await sendAndLog({ to: data.referrerEmail, subject, html, emailType: 'referral_reward' });
 }
 
 // ─── Message notifications ─────────────────────────────────────────────────
@@ -923,7 +956,7 @@ export async function sendNewMessageNotificationToAdmin(data: MessageNotificatio
 </body>
 </html>`;
 
-  await resend.emails.send({ from: `${BUSINESS.name} <${FROM_EMAIL}>`, to: ADMIN_EMAIL, subject, html });
+  await sendAndLog({ to: ADMIN_EMAIL, subject, html, emailType: 'message_admin' });
 }
 
 export async function sendNewMessageNotificationToCustomer(data: MessageNotificationData) {
@@ -965,7 +998,7 @@ export async function sendNewMessageNotificationToCustomer(data: MessageNotifica
 </body>
 </html>`;
 
-  await resend.emails.send({ from: `${BUSINESS.name} <${FROM_EMAIL}>`, to: data.customerEmail, subject, html });
+  await sendAndLog({ to: data.customerEmail, subject, html, emailType: 'message_customer' });
 }
 
 // ─── Extension confirmation ────────────────────────────────────────────────
@@ -1028,7 +1061,7 @@ export async function sendExtensionConfirmation(data: ExtensionEmailData) {
 </body>
 </html>`;
 
-  await resend.emails.send({ from: `${BUSINESS.name} <${FROM_EMAIL}>`, to: data.customerEmail, subject, html });
+  await sendAndLog({ to: data.customerEmail, subject, html, bookingId: data.bookingId, emailType: 'extension_confirmation' });
 }
 
 // ─── Review Request ──────────────────────────────────────────────────────────
@@ -1073,7 +1106,7 @@ export async function sendReviewRequest(data: {
   </table>
 </body></html>`;
 
-  await resend.emails.send({ from: `${BUSINESS.name} <${FROM_EMAIL}>`, to: data.customerEmail, subject, html });
+  await sendAndLog({ to: data.customerEmail, subject, html, bookingId: data.bookingId, emailType: 'review_request' });
 }
 
 // ─── Abandoned Cart Reminder ─────────────────────────────────────────────────
@@ -1148,5 +1181,5 @@ export async function sendAbandonedCartReminder(data: {
   </table>
 </body></html>`;
 
-  await resend.emails.send({ from: `${BUSINESS.name} <${FROM_EMAIL}>`, to: data.customerEmail, subject, html });
+  await sendAndLog({ to: data.customerEmail, subject, html, emailType: 'abandoned_cart' });
 }
