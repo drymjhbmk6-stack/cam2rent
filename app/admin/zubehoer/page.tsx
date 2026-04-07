@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { products } from '@/data/products';
+import DynamicSelect from '@/components/admin/DynamicSelect';
 
 interface Accessory {
   id: string;
@@ -173,11 +174,14 @@ export default function AdminZubehoerPage() {
               </div>
               <div>
                 <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Kategorie *</label>
-                <select value={newForm.category}
-                  onChange={(e) => setNewForm((f) => ({ ...f, category: e.target.value }))}
-                  className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue">
-                  {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
+                <DynamicSelect
+                  value={newForm.category}
+                  onChange={(cat) => setNewForm((f) => ({ ...f, category: cat }))}
+                  settingsKey="accessory_categories"
+                  defaults={CATEGORIES}
+                  addLabel="+ Neue Kategorie..."
+                  placeholder="Kategoriename"
+                />
               </div>
               <div className="sm:col-span-2">
                 <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Beschreibung</label>
@@ -323,11 +327,14 @@ export default function AdminZubehoerPage() {
                       </div>
                       <div>
                         <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Kategorie</label>
-                        <select value={editForm.category ?? 'Sonstiges'}
-                          onChange={(e) => setEditForm((f) => ({ ...f, category: e.target.value }))}
-                          className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue">
-                          {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-                        </select>
+                        <DynamicSelect
+                          value={editForm.category ?? 'Sonstiges'}
+                          onChange={(cat) => setEditForm((f) => ({ ...f, category: cat }))}
+                          settingsKey="accessory_categories"
+                          defaults={CATEGORIES}
+                          addLabel="+ Neue Kategorie..."
+                          placeholder="Kategoriename"
+                        />
                       </div>
                       <div className="sm:col-span-2">
                         <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Beschreibung</label>
