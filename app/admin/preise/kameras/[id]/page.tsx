@@ -14,8 +14,7 @@ import {
 import { SPEC_ICON_OPTIONS } from '@/components/SpecIcon';
 import ProductPreview from '@/components/ProductPreview';
 import MarkdownEditor from '@/components/MarkdownEditor';
-
-const BRANDS = ['GoPro', 'DJI', 'Insta360', 'Sonstige'];
+import BrandSelect from '@/components/admin/BrandSelect';
 
 export default function AdminKameraEditorPage() {
   const { id } = useParams<{ id: string }>();
@@ -296,11 +295,7 @@ export default function AdminKameraEditorPage() {
                 </div>
                 <div>
                   <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Marke</label>
-                  <select value={product.brand}
-                    onChange={(e) => setProduct((p) => p && ({ ...p, brand: e.target.value }))}
-                    className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue">
-                    {BRANDS.map((b) => <option key={b} value={b}>{b}</option>)}
-                  </select>
+                  <BrandSelect value={product.brand} onChange={(brand) => setProduct((p) => p && ({ ...p, brand }))} />
                 </div>
                 <div>
                   <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Kurzbeschreibung</label>
