@@ -52,10 +52,22 @@ export function SpecDefinitionsManager() {
   const [items, setItems] = useState<SpecDefinition[]>([]);
   const [showNew, setShowNew] = useState(false);
   const [newSpec, setNewSpec] = useState({ name: '', icon: 'custom', unit: '' });
+  const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     if (!loading) setItems(specs);
   }, [specs, loading]);
+
+  async function handleSave() {
+    setSaving(true);
+    await save(items);
+    setDirty(false);
+    setSaving(false);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 3000);
+  }
 
   async function handleAdd() {
     if (!newSpec.name.trim()) return;
@@ -64,21 +76,19 @@ export function SpecDefinitionsManager() {
       .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
     const updated = [...items, { ...newSpec, id, name: newSpec.name.trim(), unit: newSpec.unit.trim() }];
     setItems(updated);
-    await save(updated);
+    setDirty(true);
     setNewSpec({ name: '', icon: 'custom', unit: '' });
     setShowNew(false);
   }
 
-  async function handleDelete(id: string) {
-    const updated = items.filter((s) => s.id !== id);
-    setItems(updated);
-    await save(updated);
+  function handleDelete(id: string) {
+    setItems((prev) => prev.filter((s) => s.id !== id));
+    setDirty(true);
   }
 
-  async function handleUpdate(id: string, patch: Partial<SpecDefinition>) {
-    const updated = items.map((s) => s.id === id ? { ...s, ...patch } : s);
-    setItems(updated);
-    await save(updated);
+  function handleUpdate(id: string, patch: Partial<SpecDefinition>) {
+    setItems((prev) => prev.map((s) => s.id === id ? { ...s, ...patch } : s));
+    setDirty(true);
   }
 
   if (loading) return <div className="text-sm text-brand-muted py-4">Lädt...</div>;
@@ -175,6 +185,20 @@ export function SpecDefinitionsManager() {
           + Neue Spec-Definition
         </button>
       )}
+
+      {/* Speichern Button */}
+      <div className="mt-4 flex items-center gap-3">
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={!dirty || saving}
+          className="px-5 py-2 text-sm font-heading font-semibold rounded-btn bg-accent-blue text-white hover:bg-accent-blue/80 transition-colors disabled:opacity-40"
+        >
+          {saving ? 'Speichert...' : 'Speichern'}
+        </button>
+        {saved && <span className="text-xs text-emerald-500 font-semibold">Gespeichert!</span>}
+        {dirty && !saved && <span className="text-xs text-amber-500">Ungespeicherte Änderungen</span>}
+      </div>
     </div>
   );
 }
