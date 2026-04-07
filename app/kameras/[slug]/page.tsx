@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import type { Metadata } from 'next';
-import { products as staticProducts, getPriceForDays, getMergedSpecs, type Product } from '@/data/products';
+import { getPriceForDays, getMergedSpecs } from '@/data/products';
 import { getProducts } from '@/lib/get-products';
 import ProductReviews from '@/components/ProductReviews';
 import SpecIcon from '@/components/SpecIcon';
