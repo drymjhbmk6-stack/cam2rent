@@ -195,6 +195,7 @@ export default async function KameraDetailPage({
         </div>
 
         {/* ── Specs section (dynamisch) ── */}
+        {getMergedSpecs(product).length > 0 && (
         <div className="mt-14">
           <h2 className="font-heading font-bold text-xl sm:text-2xl text-brand-black dark:text-gray-100 mb-6">
             Technische Daten
@@ -223,6 +224,7 @@ export default async function KameraDetailPage({
             ))}
           </div>
         </div>
+        )}
 
         {/* ── Zubehör & Sets ── */}
         <div className="mt-14">

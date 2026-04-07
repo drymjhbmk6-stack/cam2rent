@@ -114,7 +114,9 @@ export function getMergedSpecs(product: Product, adminSpecs?: AdminProductSpec[]
   const specs = adminSpecs ?? product.adminSpecs;
   if (specs?.length) return [...specs].sort((a, b) => a.priority - b.priority);
 
-  return Object.entries(product.specs).map(([key, value], i) => ({
+  return Object.entries(product.specs)
+    .filter(([, value]) => value !== '')
+    .map(([key, value], i) => ({
     id: key,
     name: STATIC_SPEC_MAP[key]?.label ?? key,
     value,
