@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Image from 'next/image';
 import { type Product, getMergedSpecs } from '@/data/products';
 import NotifyModal from '@/components/NotifyModal';
 import SpecIcon from '@/components/SpecIcon';
@@ -156,11 +157,13 @@ export default function ProductCard({ product, imageUrl }: ProductCardProps) {
           </div>
 
           {imageUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
+            <Image
               src={imageUrl}
               alt={product.name}
-              className="w-full h-full object-contain p-2"
+              fill
+              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+              className="object-contain p-2"
+              priority={false}
             />
           ) : (
             <CameraIcon brand={product.brand} />

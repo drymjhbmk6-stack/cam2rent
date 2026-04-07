@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Image from 'next/image';
 import { useProductImageAll } from '@/components/ProductImagesProvider';
 
 interface ProductImageGalleryProps {
@@ -54,11 +55,13 @@ export default function ProductImageGallery({ productId, brand, available }: Pro
           </div>
         )}
         {hasImages ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <Image
             src={images[activeIndex]}
             alt="Produktbild"
-            className="w-full h-full object-contain p-2"
+            fill
+            sizes="(max-width: 768px) 100vw, 50vw"
+            className="object-contain p-2"
+            priority
           />
         ) : (
           <>
@@ -78,13 +81,12 @@ export default function ProductImageGallery({ productId, brand, available }: Pro
               key={i}
               type="button"
               onClick={() => setActiveIndex(i)}
-              className={`aspect-square rounded-xl overflow-hidden bg-white border-2 transition-colors ${
+              className={`relative aspect-square rounded-xl overflow-hidden bg-white border-2 transition-colors ${
                 activeIndex === i ? 'border-accent-blue' : 'border-transparent hover:border-brand-border dark:hover:border-gray-600'
               }`}
               aria-label={`Bild ${i + 1} anzeigen`}
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={url} alt={`Bild ${i + 1}`} className="w-full h-full object-contain p-1" />
+              <Image src={url} alt={`Bild ${i + 1}`} fill sizes="25vw" className="object-contain p-1" />
             </button>
           ))
         ) : (

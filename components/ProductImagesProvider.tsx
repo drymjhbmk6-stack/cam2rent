@@ -1,59 +1,24 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useContext, useMemo, type ReactNode } from 'react';
+import { useProducts } from '@/components/ProductsProvider';
 
 type ProductImagesMap = Record<string, string[]>;
 
 const ProductImagesContext = createContext<ProductImagesMap>({});
 
-let cachedImages: ProductImagesMap | null = null;
-let fetchPromise: Promise<ProductImagesMap> | null = null;
-
-function fetchProductImages(): Promise<ProductImagesMap> {
-  if (cachedImages) return Promise.resolve(cachedImages);
-  if (fetchPromise) return fetchPromise;
-
-  fetchPromise = fetch('/api/prices')
-    .then((r) => r.json())
-    .then((d) => {
-      const imgs: ProductImagesMap = {};
-      const ap = d.adminProducts;
-      if (ap) {
-        Object.keys(ap).forEach((id) => {
-          if (ap[id]?.images?.length > 0) {
-            imgs[id] = ap[id].images;
-          }
-        });
-      }
-      cachedImages = imgs;
-      return imgs;
-    })
-    .catch(() => {
-      fetchPromise = null;
-      return {};
-    });
-
-  return fetchPromise;
-}
-
 export function ProductImagesProvider({ children }: { children: ReactNode }) {
-  const [images, setImages] = useState<ProductImagesMap>(cachedImages ?? {});
+  const { products } = useProducts();
 
-  useEffect(() => {
-    fetchProductImages().then((imgs) => {
-      setImages(imgs);
-      // Erste Bilder vorausladen
-      Object.values(imgs).forEach((urls) => {
-        if (urls[0]) {
-          const link = document.createElement('link');
-          link.rel = 'preload';
-          link.as = 'image';
-          link.href = urls[0];
-          document.head.appendChild(link);
-        }
-      });
-    });
-  }, []);
+  const images = useMemo(() => {
+    const map: ProductImagesMap = {};
+    for (const p of products) {
+      if (p.images?.length > 0) {
+        map[p.id] = p.images;
+      }
+    }
+    return map;
+  }, [products]);
 
   return (
     <ProductImagesContext.Provider value={images}>
