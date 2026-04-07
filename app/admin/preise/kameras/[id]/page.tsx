@@ -26,12 +26,19 @@ export default function AdminKameraEditorPage() {
   const [saved, setSaved] = useState(false);
   const [allProducts, setAllProducts] = useState<Record<string, AdminProduct>>({});
   const [uploading, setUploading] = useState(false);
+  const [depositMode, setDepositMode] = useState<'kaution' | 'haftung' | 'both'>('both');
 
   useEffect(() => {
     // Load kaution tiers
     fetch('/api/prices').then((r) => r.json()).then((d) => {
       if (d.kautionTiers) setKautionTiers(d.kautionTiers);
     }).catch(() => {});
+
+    // Load deposit mode
+    fetch('/api/admin/settings?key=deposit_mode')
+      .then((r) => r.json())
+      .then((d) => { if (d.value) setDepositMode(d.value); })
+      .catch(() => {});
 
     // Load all products, find this one
     fetch('/api/admin/config?key=products')
@@ -377,28 +384,32 @@ export default function AdminKameraEditorPage() {
               </div>
             </div>
 
-            {/* Haftung / Kaution */}
+            {/* Haftung / Kaution — abhängig von globaler Einstellung */}
             <div className="bg-white rounded-2xl border border-brand-border p-6">
               <h2 className="font-heading font-bold text-sm text-brand-black mb-1">Haftung & Kaution</h2>
-              <p className="text-xs font-body text-brand-muted mb-4">Entweder Haftungsoption (Standard/Premium) oder eine Kaution-Stufe — nicht beides.</p>
+              <p className="text-xs font-body text-brand-muted mb-4">
+                {depositMode === 'kaution' && 'Globaler Modus: Nur Kaution. Kaution-Stufe für dieses Produkt wählen.'}
+                {depositMode === 'haftung' && 'Globaler Modus: Nur Haftungsschutz. Kunden können Standard/Premium wählen.'}
+                {depositMode === 'both' && 'Globaler Modus: Beides. Haftungsoption oder Kaution-Stufe wählen.'}
+              </p>
 
               <div className="space-y-3">
-                {/* Haftungsoption */}
-                <label className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-colors ${product.hasHaftungsoption ? 'border-accent-blue bg-accent-blue-soft/20' : 'border-brand-border hover:border-brand-muted'}`}>
-                  <input type="radio" name="liability" checked={product.hasHaftungsoption}
-                    onChange={() => setProduct((p) => p && ({ ...p, hasHaftungsoption: true, kautionTier: null }))}
-                    className="sr-only" />
-                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${product.hasHaftungsoption ? 'border-accent-blue' : 'border-brand-border'}`}>
-                    {product.hasHaftungsoption && <div className="w-2 h-2 rounded-full bg-accent-blue" />}
-                  </div>
-                  <div>
-                    <p className="text-sm font-heading font-semibold text-brand-black">Haftungsoption (Standard / Premium)</p>
-                    <p className="text-xs font-body text-brand-muted">Kunden können Standard- oder Premium-Haftungsschutz wählen</p>
-                  </div>
-                </label>
+                {(depositMode === 'haftung' || depositMode === 'both') && (
+                  <label className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-colors ${product.hasHaftungsoption ? 'border-accent-blue bg-accent-blue-soft/20' : 'border-brand-border hover:border-brand-muted'}`}>
+                    <input type="radio" name="liability" checked={product.hasHaftungsoption}
+                      onChange={() => setProduct((p) => p && ({ ...p, hasHaftungsoption: true, kautionTier: null }))}
+                      className="sr-only" />
+                    <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${product.hasHaftungsoption ? 'border-accent-blue' : 'border-brand-border'}`}>
+                      {product.hasHaftungsoption && <div className="w-2 h-2 rounded-full bg-accent-blue" />}
+                    </div>
+                    <div>
+                      <p className="text-sm font-heading font-semibold text-brand-black">Haftungsoption (Standard / Premium)</p>
+                      <p className="text-xs font-body text-brand-muted">Kunden können Standard- oder Premium-Haftungsschutz wählen</p>
+                    </div>
+                  </label>
+                )}
 
-                {/* Kaution Tiers */}
-                {([1, 2, 3] as const).map((tier) => (
+                {(depositMode === 'kaution' || depositMode === 'both') && ([1, 2, 3] as const).map((tier) => (
                   <label key={tier} className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-colors ${!product.hasHaftungsoption && product.kautionTier === tier ? 'border-accent-blue bg-accent-blue-soft/20' : 'border-brand-border hover:border-brand-muted'}`}>
                     <input type="radio" name="liability"
                       checked={!product.hasHaftungsoption && product.kautionTier === tier}
