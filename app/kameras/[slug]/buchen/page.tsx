@@ -498,7 +498,6 @@ export default function BuchenPage() {
         }
       })
       .catch(() => {});
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [range, deliveryMode, product.id]);
 
   const toggleAccessory = useCallback((id: string) => {

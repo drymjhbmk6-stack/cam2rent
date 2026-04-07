@@ -452,12 +452,7 @@ export default function ManualBookingPage() {
                 const p = productList.find((pl) => pl.id === sp.id);
                 const productPrice = days > 0 ? getRentalPrice(sp.id, days, dynPrices, staticProducts) * sp.qty : 0;
                 // Kompatible Zubehörteile für dieses Produkt
-                const compatAccessories = accessories.filter((acc) => {
-                  const avail = accAvailability[acc.id];
-                  // Kompatibilitätsprüfung: API gibt compatible per product_id zurück
-                  // Hier: manuell über compatible_product_ids prüfen
-                  return acc.available;
-                });
+                const compatAccessories = accessories.filter((acc) => acc.available);
                 const compatSets = sets.filter((s) => s.available);
 
                 return (
