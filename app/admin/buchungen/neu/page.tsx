@@ -340,11 +340,16 @@ export default function ManualBookingPage() {
     }
 
     const html = `<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>Rechnungsvorschau</title>
+<html><head><meta charset="utf-8"><title>Rechnungsvorschau – cam2rent</title>
 <style>
   @page { size: A4 portrait; margin: 0; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 10pt; color: #1a1a1a; width: 210mm; min-height: 297mm; padding: 48px 52px 60px; position: relative; }
+  .toolbar { position: fixed; top: 0; left: 0; right: 0; background: #111827; padding: 12px 24px; display: flex; gap: 12px; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,.3); }
+  .toolbar button { padding: 8px 20px; border-radius: 8px; font-size: 13px; font-weight: 600; border: none; cursor: pointer; }
+  .btn-pdf { background: #06b6d4; color: #fff; }
+  .btn-print { background: #374151; color: #e5e7eb; }
+  .toolbar-spacer { height: 52px; }
   .header { display: flex; justify-content: space-between; margin-bottom: 36px; }
   .brand { font-size: 20pt; font-weight: 700; color: #0a0a0a; letter-spacing: 0.5px; }
   .brand-sub { font-size: 9pt; color: #9ca3af; margin-top: 2px; }
@@ -377,8 +382,13 @@ export default function ManualBookingPage() {
   .status-paid { color: #16a34a; font-weight: 700; }
   .status-unpaid { color: #d97706; font-weight: 700; }
   .zero-amount { color: #9ca3af; font-style: italic; }
-  @media print { body { padding: 48px 52px 60px; } }
+  @media print { .toolbar, .toolbar-spacer { display: none !important; } body { padding: 48px 52px 60px; } }
 </style></head><body>
+  <div class="toolbar">
+    <button class="btn-pdf" onclick="window.print()">Als PDF speichern</button>
+    <button class="btn-print" onclick="window.print()">Drucken</button>
+  </div>
+  <div class="toolbar-spacer"></div>
   <div class="header">
     <div><div class="brand">cam2rent</div><div class="brand-sub">Action-Cam Verleih</div></div>
     <div class="sender">Lennart Schickel<br>Heimsbrunner Str. 12<br>12349 Berlin<br>buchung@cam2rent.de<br>cam2rent.de</div>
@@ -434,14 +444,21 @@ export default function ManualBookingPage() {
     setSaving(true);
     try {
       const shippingAddress = street ? `${street}, ${zip} ${city}` : '';
-      const bookingIds: string[] = [];
 
-      // Pro Produkt eine eigene Buchung erstellen
+      // Alle Produkte zusammenfassen als EINE Buchung
+      const productNames: string[] = [];
+      const allAccessories: string[] = [];
+      const allNotes: string[] = [];
+      let totalRental = 0;
+      let totalAcc = 0;
+      let totalHaftung = 0;
+      let totalDep = 0;
+      let haftungValue = 'none';
+
       for (const sp of selectedProducts) {
         const p = productList.find((pl) => pl.id === sp.id);
-        const autoRentalPrice = days > 0 ? getRentalPrice(sp.id, days, dynPrices, staticProducts) : 0;
         const customParsed = parseFloat(sp.customPrice);
-        const pPrice = (sp.customPrice !== '' && !isNaN(customParsed)) ? customParsed : autoRentalPrice;
+        const pPrice = (sp.customPrice !== '' && !isNaN(customParsed)) ? customParsed : (days > 0 ? getRentalPrice(sp.id, days, dynPrices, staticProducts) : 0);
         const pAccPrice = sp.accessories.reduce((sum, id) => {
           const acc = accessories.find((a) => a.id === id);
           return sum + (acc ? getAccessoryPrice(acc, days) : 0);
@@ -451,64 +468,68 @@ export default function ManualBookingPage() {
           return sum + (s ? getSetPrice(s, days) : 0);
         }, 0);
         const pHaftungPrice = getHaftungPrice(sp.haftung);
-        const pSubtotal = pPrice + pAccPrice + pSetPrice + pHaftungPrice;
-        const pShipping = shippingPrice; // Versand nur einmal bei erster Buchung
-        const pTotal = pSubtotal + (bookingIds.length === 0 ? pShipping : 0);
         const pDeposit = (depositMode === 'kaution' || depositMode === 'both') ? (p?.deposit ?? 0) : 0;
+
+        for (let q = 0; q < sp.qty; q++) {
+          productNames.push(p?.name ?? sp.id);
+        }
+        totalRental += pPrice * sp.qty;
+        totalAcc += (pAccPrice + pSetPrice) * sp.qty;
+        totalHaftung += pHaftungPrice * sp.qty;
+        totalDep += pDeposit * sp.qty;
+        allAccessories.push(...sp.accessories, ...sp.sets);
+        if (sp.haftung !== 'none') haftungValue = sp.haftung;
 
         const accNames = sp.accessories.map((id) => accessories.find((a) => a.id === id)?.name ?? id);
         const setNames = sp.sets.map((id) => sets.find((s) => s.id === id)?.name ?? id);
 
-        // Überweisungsdaten bei "nicht bezahlt"
-        const bankInfo = paymentStatus === 'unpaid'
-          ? `Überweisung ausstehend | Kontoinhaber: Lennart Schickel | IBAN: DE77 2022 0800 0027 7841 43 | BIC: SXPYDEHHXXX | Verwendungszweck: ${customerName.trim() || 'Kunde'} – Kameraleihe`
-          : '';
-
-        // Für qty > 1: mehrere Buchungen erstellen
-        for (let q = 0; q < sp.qty; q++) {
-          const res = await fetch('/api/admin/manual-booking', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              product_id: sp.id,
-              product_name: p?.name ?? sp.id,
-              rental_from: rentalFrom,
-              rental_to: rentalTo,
-              days,
-              delivery_mode: deliveryMode,
-              shipping_method: deliveryMode === 'versand' ? shippingMethod : null,
-              shipping_price: bookingIds.length === 0 ? pShipping : 0,
-              haftung: sp.haftung,
-              accessories: [...sp.accessories, ...sp.sets],
-              price_rental: pPrice,
-              price_accessories: pAccPrice + pSetPrice,
-              price_haftung: pHaftungPrice,
-              price_total: bookingIds.length === 0 ? pTotal : pSubtotal,
-              deposit: pDeposit,
-              customer_name: customerName.trim(),
-              customer_email: customerEmail.trim() || null,
-              shipping_address: shippingAddress || null,
-              payment_status: paymentStatus,
-              notes: [
-                source ? `Quelle: ${source}` : '',
-                paymentStatus === 'paid' ? 'Bezahlt' : '',
-                (sp.customPrice !== '' && !isNaN(customParsed)) ? `Manueller Preis (${p?.name ?? sp.id}): ${customParsed.toFixed(2)} €` : '',
-                sp.note ? `Produkt-Notiz (${p?.name ?? sp.id}): ${sp.note}` : '',
-                setNames.length ? `Sets: ${setNames.join(', ')}` : '',
-                accNames.length ? `Zubehör: ${accNames.join(', ')}` : '',
-                bankInfo,
-                remark ? `Bemerkung: ${remark}` : '',
-                notes,
-              ].filter(Boolean).join(' | '),
-            }),
-          });
-          const data = await res.json();
-          if (!res.ok) throw new Error(data.error || 'Fehler');
-          bookingIds.push(data.bookingId);
-        }
+        if (sp.customPrice !== '' && !isNaN(customParsed)) allNotes.push(`Manueller Preis (${p?.name ?? sp.id}): ${customParsed.toFixed(2)} €`);
+        if (sp.note) allNotes.push(`Produkt-Notiz (${p?.name ?? sp.id}): ${sp.note}`);
+        if (setNames.length) allNotes.push(`Sets: ${setNames.join(', ')}`);
+        if (accNames.length) allNotes.push(`Zubehör: ${accNames.join(', ')}`);
       }
 
-      setSuccess(`${bookingIds.length} Buchung${bookingIds.length > 1 ? 'en' : ''} erstellt: ${bookingIds.join(', ')}`);
+      const bankInfo = paymentStatus === 'unpaid'
+        ? `Überweisung ausstehend | Kontoinhaber: Lennart Schickel | IBAN: DE77 2022 0800 0027 7841 43 | BIC: SXPYDEHHXXX | Verwendungszweck: ${customerName.trim() || 'Kunde'} – Kameraleihe`
+        : '';
+
+      const res = await fetch('/api/admin/manual-booking', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          product_id: selectedProducts[0].id,
+          product_name: productNames.join(', '),
+          rental_from: rentalFrom,
+          rental_to: rentalTo,
+          days,
+          delivery_mode: deliveryMode,
+          shipping_method: deliveryMode === 'versand' ? shippingMethod : null,
+          shipping_price: shippingPrice,
+          haftung: haftungValue,
+          accessories: allAccessories,
+          price_rental: totalRental,
+          price_accessories: totalAcc,
+          price_haftung: totalHaftung,
+          price_total: total,
+          deposit: totalDep,
+          customer_name: customerName.trim(),
+          customer_email: customerEmail.trim() || null,
+          shipping_address: shippingAddress || null,
+          payment_status: paymentStatus,
+          notes: [
+            source ? `Quelle: ${source}` : '',
+            paymentStatus === 'paid' ? 'Bezahlt' : '',
+            ...allNotes,
+            bankInfo,
+            remark ? `Bemerkung: ${remark}` : '',
+            notes,
+          ].filter(Boolean).join(' | '),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Fehler');
+
+      setSuccess(`Buchung erstellt: ${data.bookingId}`);
       setTimeout(() => router.push('/admin/buchungen'), 2000);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unbekannter Fehler');
