@@ -329,7 +329,7 @@ function ProgressBar({ current, total }: { current: number; total: number }) {
           {Math.round(pct)}%
         </span>
       </div>
-      <div className="w-full h-2 bg-brand-bg dark:bg-gray-700 rounded-full overflow-hidden">
+      <div className="w-full h-2 bg-brand-bg dark:bg-brand-black rounded-full overflow-hidden">
         <div
           className="h-full bg-accent-blue rounded-full transition-all duration-500 ease-out"
           style={{ width: `${pct}%` }}
@@ -354,12 +354,12 @@ function ResultsView({
   return (
     <div className="animate-fade-in">
       <div className="text-center mb-10">
-        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-accent-blue-soft text-accent-blue mb-4">
+        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-accent-blue-soft dark:bg-accent-blue/10 text-accent-blue mb-4">
           <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
         </div>
-        <h2 className="font-heading font-bold text-2xl sm:text-3xl text-brand-black dark:text-gray-100 mb-2">
+        <h2 className="font-heading font-bold text-2xl sm:text-3xl text-brand-black dark:text-white mb-2">
           {hasResults ? 'Unsere Empfehlung fuer dich' : 'Keine passende Kamera gefunden'}
         </h2>
         <p className="font-body text-brand-steel dark:text-gray-400 max-w-lg mx-auto">
@@ -381,8 +381,8 @@ function ResultsView({
             return (
               <div
                 key={product.id}
-                className={`relative flex flex-col rounded-card border bg-white dark:bg-gray-800 overflow-hidden transition-shadow hover:shadow-card ${
-                  isTop ? 'border-accent-blue shadow-card ring-1 ring-accent-blue/20' : 'border-brand-border dark:border-gray-700'
+                className={`relative flex flex-col rounded-card border bg-white dark:bg-brand-dark overflow-hidden transition-shadow hover:shadow-card ${
+                  isTop ? 'border-accent-blue shadow-card ring-1 ring-accent-blue/20' : 'border-brand-border dark:border-white/10'
                 }`}
               >
                 {isTop && (
@@ -391,18 +391,18 @@ function ResultsView({
                   </div>
                 )}
                 {isBestAlt && (
-                  <div className="bg-brand-bg dark:bg-gray-700 text-brand-steel dark:text-gray-400 text-xs font-heading font-semibold text-center py-1.5">
+                  <div className="bg-brand-bg dark:bg-brand-black text-brand-steel dark:text-gray-400 text-xs font-heading font-semibold text-center py-1.5">
                     Beste Alternative
                   </div>
                 )}
 
                 <div className="p-5 flex flex-col flex-1">
                   {/* Brand badge */}
-                  <span className="inline-flex self-start items-center px-2.5 py-0.5 rounded-full text-xs font-body font-medium bg-brand-bg dark:bg-gray-700 text-brand-steel dark:text-gray-400 mb-3">
+                  <span className="inline-flex self-start items-center px-2.5 py-0.5 rounded-full text-xs font-body font-medium bg-brand-bg dark:bg-brand-black text-brand-steel dark:text-gray-400 mb-3">
                     {product.brand}
                   </span>
 
-                  <h3 className="font-heading font-bold text-lg text-brand-black dark:text-gray-100 mb-2">
+                  <h3 className="font-heading font-bold text-lg text-brand-black dark:text-white mb-2">
                     {product.name}
                   </h3>
 
@@ -421,7 +421,7 @@ function ResultsView({
                   {/* Price & availability */}
                   <div className="flex items-center justify-between mb-4">
                     <div>
-                      <span className="text-xl font-heading font-bold text-brand-black dark:text-gray-100">
+                      <span className="text-xl font-heading font-bold text-brand-black dark:text-white">
                         {product.pricePerDay} \u20ac
                       </span>
                       <span className="text-sm text-brand-steel dark:text-gray-400 font-body"> / Tag</span>
@@ -454,7 +454,7 @@ function ResultsView({
                     )}
                     <Link
                       href={`/kameras/${product.slug}`}
-                      className="w-full inline-flex items-center justify-center px-4 py-2.5 bg-brand-bg dark:bg-gray-700 text-brand-black dark:text-gray-100 font-heading font-semibold text-sm rounded-[10px] hover:bg-brand-border dark:hover:bg-gray-600 transition-colors"
+                      className="w-full inline-flex items-center justify-center px-4 py-2.5 bg-brand-bg dark:bg-brand-black text-brand-black dark:text-white font-heading font-semibold text-sm rounded-[10px] hover:bg-brand-border dark:hover:bg-white/10 transition-colors"
                     >
                       Details ansehen
                     </Link>
@@ -469,7 +469,7 @@ function ResultsView({
       <div className="text-center">
         <button
           onClick={onRestart}
-          className="inline-flex items-center gap-2 px-6 py-3 bg-brand-bg dark:bg-gray-700 text-brand-black dark:text-gray-100 font-heading font-semibold text-sm rounded-[10px] hover:bg-brand-border dark:hover:bg-gray-600 transition-colors"
+          className="inline-flex items-center gap-2 px-6 py-3 bg-brand-bg dark:bg-brand-black text-brand-black dark:text-white font-heading font-semibold text-sm rounded-[10px] hover:bg-brand-border dark:hover:bg-white/10 transition-colors"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182" />
@@ -524,7 +524,7 @@ export default function KameraFinderPage() {
   const results = showResults ? computeRecommendations(answers as Answers, products) : [];
 
   return (
-    <main className="min-h-screen bg-white dark:bg-gray-900">
+    <main className="min-h-screen bg-white dark:bg-brand-black">
       {/* Header */}
       <section className="bg-gradient-to-br from-accent-blue via-blue-600 to-blue-800 text-white py-12 sm:py-16">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 text-center">
@@ -547,7 +547,7 @@ export default function KameraFinderPage() {
             {step > 0 && (
               <button
                 onClick={handleBack}
-                className="inline-flex items-center gap-1.5 mb-6 text-sm font-body font-medium text-brand-steel dark:text-gray-400 hover:text-brand-black dark:hover:text-gray-100 transition-colors"
+                className="inline-flex items-center gap-1.5 mb-6 text-sm font-body font-medium text-brand-steel dark:text-gray-400 hover:text-brand-black dark:hover:text-white transition-colors"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.75 19.5L8.25 12l7.5-7.5" />
@@ -557,7 +557,7 @@ export default function KameraFinderPage() {
             )}
 
             {/* Question */}
-            <h2 className="font-heading font-bold text-xl sm:text-2xl text-brand-black dark:text-gray-100 mb-6">
+            <h2 className="font-heading font-bold text-xl sm:text-2xl text-brand-black dark:text-white mb-6">
               {questions[step].title}
             </h2>
 
@@ -573,12 +573,12 @@ export default function KameraFinderPage() {
                 <button
                   key={opt.value}
                   onClick={() => handleSelect(opt.value)}
-                  className="group flex flex-col items-center gap-3 p-5 sm:p-6 rounded-card border border-brand-border dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-accent-blue hover:shadow-card transition-all duration-200 text-center cursor-pointer"
+                  className="group flex flex-col items-center gap-3 p-5 sm:p-6 rounded-card border border-brand-border dark:border-white/10 bg-white dark:bg-brand-dark hover:border-accent-blue hover:shadow-card transition-all duration-200 text-center cursor-pointer"
                 >
-                  <span className="flex items-center justify-center w-14 h-14 rounded-full bg-brand-bg dark:bg-gray-700 text-brand-steel dark:text-gray-400 group-hover:bg-accent-blue-soft dark:group-hover:bg-accent-blue/20 group-hover:text-accent-blue transition-colors">
+                  <span className="flex items-center justify-center w-14 h-14 rounded-full bg-brand-bg dark:bg-brand-black text-brand-steel dark:text-gray-400 group-hover:bg-accent-blue-soft dark:group-hover:bg-accent-blue/10 group-hover:text-accent-blue transition-colors">
                     {opt.icon}
                   </span>
-                  <span className="font-heading font-semibold text-sm text-brand-black dark:text-gray-100">
+                  <span className="font-heading font-semibold text-sm text-brand-black dark:text-white">
                     {opt.label}
                   </span>
                 </button>

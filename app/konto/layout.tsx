@@ -24,10 +24,10 @@ export default function KontoLayout({
   const { signOut } = useAuth();
 
   return (
-    <div className="min-h-screen bg-brand-bg">
+    <div className="min-h-screen bg-brand-bg dark:bg-brand-black">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {/* Horizontale Menüleiste */}
-        <nav className="bg-white rounded-card shadow-card mb-6 overflow-hidden">
+        <nav className="bg-white dark:bg-brand-dark rounded-card shadow-card mb-6 overflow-hidden">
           <div className="flex items-center overflow-x-auto scrollbar-hide">
             <div className="flex items-center gap-1 p-2 min-w-0">
               {navItems.map((item) => {
@@ -40,8 +40,8 @@ export default function KontoLayout({
                     href={item.href}
                     className={`whitespace-nowrap px-3.5 py-2 rounded-[8px] text-sm font-body font-medium transition-colors ${
                       isActive
-                        ? 'bg-accent-blue-soft text-accent-blue'
-                        : 'text-brand-text hover:text-brand-black hover:bg-brand-bg'
+                        ? 'bg-accent-blue-soft dark:bg-accent-blue/10 text-accent-blue'
+                        : 'text-brand-text dark:text-gray-400 hover:text-brand-black dark:hover:text-white hover:bg-brand-bg dark:hover:bg-white/5'
                     }`}
                   >
                     {item.label}
@@ -52,7 +52,7 @@ export default function KontoLayout({
             <div className="ml-auto pr-2 flex-shrink-0">
               <button
                 onClick={signOut}
-                className="whitespace-nowrap px-3.5 py-2 rounded-[8px] text-sm font-body font-medium text-brand-steel hover:text-brand-black hover:bg-brand-bg transition-colors"
+                className="whitespace-nowrap px-3.5 py-2 rounded-[8px] text-sm font-body font-medium text-brand-steel dark:text-gray-400 hover:text-brand-black dark:hover:text-white hover:bg-brand-bg dark:hover:bg-white/5 transition-colors"
               >
                 Abmelden
               </button>

@@ -85,7 +85,7 @@ function CameraPlaceholder({ brand }: { brand: string }) {
 
 function ChevronIcon() {
   return (
-    <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 text-brand-muted" aria-hidden="true">
+    <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 text-brand-muted dark:text-gray-500" aria-hidden="true">
       <path fillRule="evenodd" d="M6.22 3.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 010-1.06z" clipRule="evenodd" />
     </svg>
   );
@@ -112,35 +112,35 @@ function CompareContent() {
 
   if (selectedProducts.length === 0) {
     return (
-      <div className="min-h-screen bg-brand-bg">
-        <div className="bg-white border-b border-brand-border">
+      <div className="min-h-screen bg-brand-bg dark:bg-brand-black">
+        <div className="bg-white dark:bg-brand-dark border-b border-brand-border dark:border-white/10">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
             <nav aria-label="Brotkrume" className="mb-4">
               <ol className="flex items-center gap-2 text-sm font-body">
-                <li><Link href="/" className="text-brand-steel hover:text-accent-blue transition-colors">Startseite</Link></li>
+                <li><Link href="/" className="text-brand-steel dark:text-gray-400 hover:text-accent-blue transition-colors">Startseite</Link></li>
                 <li><ChevronIcon /></li>
-                <li><Link href="/kameras" className="text-brand-steel hover:text-accent-blue transition-colors">Kameras</Link></li>
+                <li><Link href="/kameras" className="text-brand-steel dark:text-gray-400 hover:text-accent-blue transition-colors">Kameras</Link></li>
                 <li><ChevronIcon /></li>
-                <li><span className="text-brand-black font-medium" aria-current="page">Vergleich</span></li>
+                <li><span className="text-brand-black dark:text-white font-medium" aria-current="page">Vergleich</span></li>
               </ol>
             </nav>
-            <h1 className="font-heading font-bold text-3xl sm:text-4xl text-brand-black">Kameravergleich</h1>
+            <h1 className="font-heading font-bold text-3xl sm:text-4xl text-brand-black dark:text-white">Kameravergleich</h1>
           </div>
         </div>
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 text-center">
-          <div className="w-16 h-16 rounded-full bg-white shadow-card flex items-center justify-center mx-auto mb-5">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-8 h-8 text-brand-muted" aria-hidden="true">
+          <div className="w-16 h-16 rounded-full bg-white dark:bg-brand-dark shadow-card flex items-center justify-center mx-auto mb-5">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-8 h-8 text-brand-muted dark:text-gray-500" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
             </svg>
           </div>
-          <p className="font-heading font-semibold text-brand-black text-lg">Keine Kameras zum Vergleichen</p>
-          <p className="font-body text-brand-muted text-sm mt-1">
+          <p className="font-heading font-semibold text-brand-black dark:text-white text-lg">Keine Kameras zum Vergleichen</p>
+          <p className="font-body text-brand-muted dark:text-gray-500 text-sm mt-1">
             Gehe zur Kameraübersicht und wähle bis zu 3 Kameras zum Vergleichen aus.
           </p>
           <Link
             href="/kameras"
-            className="inline-block mt-5 px-5 py-2 bg-brand-black text-white font-heading font-semibold text-sm rounded-[10px] hover:bg-brand-dark transition-colors"
+            className="inline-block mt-5 px-5 py-2 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold text-sm rounded-[10px] hover:bg-brand-dark dark:hover:bg-accent-blue/90 transition-colors"
           >
             Zu den Kameras
           </Link>
@@ -152,29 +152,29 @@ function CompareContent() {
   const colCount = selectedProducts.length;
 
   return (
-    <div className="min-h-screen bg-brand-bg">
+    <div className="min-h-screen bg-brand-bg dark:bg-brand-black">
       {/* Header */}
-      <div className="bg-white border-b border-brand-border">
+      <div className="bg-white dark:bg-brand-dark border-b border-brand-border dark:border-white/10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <nav aria-label="Brotkrume" className="mb-4">
             <ol className="flex items-center gap-2 text-sm font-body">
-              <li><Link href="/" className="text-brand-steel hover:text-accent-blue transition-colors">Startseite</Link></li>
+              <li><Link href="/" className="text-brand-steel dark:text-gray-400 hover:text-accent-blue transition-colors">Startseite</Link></li>
               <li><ChevronIcon /></li>
-              <li><Link href="/kameras" className="text-brand-steel hover:text-accent-blue transition-colors">Kameras</Link></li>
+              <li><Link href="/kameras" className="text-brand-steel dark:text-gray-400 hover:text-accent-blue transition-colors">Kameras</Link></li>
               <li><ChevronIcon /></li>
-              <li><span className="text-brand-black font-medium" aria-current="page">Vergleich</span></li>
+              <li><span className="text-brand-black dark:text-white font-medium" aria-current="page">Vergleich</span></li>
             </ol>
           </nav>
 
           <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
             <div>
-              <h1 className="font-heading font-bold text-3xl sm:text-4xl text-brand-black">Kameravergleich</h1>
-              <p className="mt-1.5 font-body text-brand-steel">{colCount} {colCount === 1 ? 'Kamera' : 'Kameras'} im Vergleich</p>
+              <h1 className="font-heading font-bold text-3xl sm:text-4xl text-brand-black dark:text-white">Kameravergleich</h1>
+              <p className="mt-1.5 font-body text-brand-steel dark:text-gray-400">{colCount} {colCount === 1 ? 'Kamera' : 'Kameras'} im Vergleich</p>
             </div>
 
             {/* Toggle: Nur Unterschiede */}
             <div className="flex items-center gap-2.5">
-              <label htmlFor="diff-toggle" className="text-sm font-body text-brand-steel cursor-pointer select-none">
+              <label htmlFor="diff-toggle" className="text-sm font-body text-brand-steel dark:text-gray-400 cursor-pointer select-none">
                 Nur Unterschiede
               </label>
               <button
@@ -184,7 +184,7 @@ function CompareContent() {
                 aria-checked={onlyDifferences}
                 onClick={() => setOnlyDifferences(!onlyDifferences)}
                 className={`relative inline-flex h-6 w-11 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-accent-blue focus:ring-offset-2 ${
-                  onlyDifferences ? 'bg-accent-blue' : 'bg-brand-border'
+                  onlyDifferences ? 'bg-accent-blue' : 'bg-brand-border dark:border-white/10'
                 }`}
               >
                 <span
@@ -206,15 +206,15 @@ function CompareContent() {
             {/* Produktbilder + Namen (sticky Header auf Mobile) */}
             <thead>
               <tr>
-                <th className="sticky left-0 z-10 bg-brand-bg w-[140px] sm:w-[180px]" />
+                <th className="sticky left-0 z-10 bg-brand-bg dark:bg-brand-black w-[140px] sm:w-[180px]" />
                 {selectedProducts.map((product) => (
                   <th key={product.id} className="p-3 align-top w-1/3 max-w-[260px]">
-                    <div className="bg-white rounded-card shadow-card p-4">
+                    <div className="bg-white dark:bg-brand-dark rounded-card shadow-card p-4">
                       <CameraPlaceholder brand={product.brand} />
                       <p className="text-xs font-body font-semibold text-accent-blue uppercase tracking-wider mt-3 mb-0.5">
                         {product.brand}
                       </p>
-                      <h2 className="font-heading font-semibold text-base text-brand-black leading-snug">
+                      <h2 className="font-heading font-semibold text-base text-brand-black dark:text-white leading-snug">
                         {product.name}
                       </h2>
                     </div>
@@ -227,9 +227,9 @@ function CompareContent() {
               {visibleRows.map((row, rowIdx) => {
                 const bestIndices = findBestIndices(selectedProducts, row);
                 return (
-                  <tr key={row.key} className={rowIdx % 2 === 0 ? 'bg-white' : 'bg-brand-bg'}>
-                    <td className="sticky left-0 z-10 px-4 py-3 text-sm font-body font-semibold text-brand-steel whitespace-nowrap"
-                      style={{ backgroundColor: rowIdx % 2 === 0 ? 'white' : undefined }}
+                  <tr key={row.key} className={rowIdx % 2 === 0 ? 'bg-white dark:bg-brand-dark' : 'bg-brand-bg dark:bg-brand-black'}>
+                    <td className="sticky left-0 z-10 px-4 py-3 text-sm font-body font-semibold text-brand-steel dark:text-gray-400 whitespace-nowrap"
+                      style={{ backgroundColor: rowIdx % 2 === 0 ? undefined : undefined }}
                     >
                       {row.label}
                     </td>
@@ -258,7 +258,7 @@ function CompareContent() {
                         <td
                           key={product.id}
                           className={`px-4 py-3 text-sm font-body text-center ${
-                            isBest ? 'text-accent-blue font-bold' : 'text-brand-black'
+                            isBest ? 'text-accent-blue font-bold' : 'text-brand-black dark:text-white'
                           }`}
                         >
                           {value}
@@ -271,18 +271,18 @@ function CompareContent() {
 
               {/* CTA-Zeile */}
               <tr>
-                <td className="sticky left-0 z-10 px-4 py-4 bg-brand-bg" />
+                <td className="sticky left-0 z-10 px-4 py-4 bg-brand-bg dark:bg-brand-black" />
                 {selectedProducts.map((product) => (
                   <td key={product.id} className="px-4 py-4 text-center">
                     {product.available ? (
                       <Link
                         href={`/kameras/${product.slug}/buchen`}
-                        className="inline-block px-5 py-2.5 bg-brand-black text-white font-heading font-semibold text-sm rounded-[10px] hover:bg-brand-dark transition-colors"
+                        className="inline-block px-5 py-2.5 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold text-sm rounded-[10px] hover:bg-brand-dark dark:hover:bg-accent-blue/90 transition-colors"
                       >
                         Jetzt buchen
                       </Link>
                     ) : (
-                      <span className="inline-block px-5 py-2.5 bg-brand-bg text-brand-muted font-heading font-semibold text-sm rounded-[10px] border border-brand-border cursor-not-allowed">
+                      <span className="inline-block px-5 py-2.5 bg-brand-bg dark:bg-brand-black text-brand-muted dark:text-gray-500 font-heading font-semibold text-sm rounded-[10px] border border-brand-border dark:border-white/10 cursor-not-allowed">
                         Nicht verfügbar
                       </span>
                     )}
@@ -310,8 +310,8 @@ function CompareContent() {
 export default function VergleichPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen bg-brand-bg flex items-center justify-center">
-        <p className="font-body text-brand-steel">Vergleich wird geladen...</p>
+      <div className="min-h-screen bg-brand-bg dark:bg-brand-black flex items-center justify-center">
+        <p className="font-body text-brand-steel dark:text-gray-400">Vergleich wird geladen...</p>
       </div>
     }>
       <CompareContent />

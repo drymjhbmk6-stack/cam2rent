@@ -36,7 +36,7 @@ interface Booking {
 const statusConfig: Record<string, { label: string; className: string }> = {
   confirmed: { label: 'Aktiv', className: 'bg-green-100 text-green-700' },
   shipped: { label: 'Unterwegs', className: 'bg-blue-100 text-blue-700' },
-  completed: { label: 'Abgeschlossen', className: 'bg-brand-bg text-brand-steel' },
+  completed: { label: 'Abgeschlossen', className: 'bg-brand-bg dark:bg-brand-black text-brand-steel dark:text-gray-400' },
   cancelled: { label: 'Storniert', className: 'bg-red-100 text-red-600' },
   damaged: { label: 'Schaden gemeldet', className: 'bg-orange-100 text-orange-700' },
 };
@@ -64,19 +64,19 @@ function CancelModal({ booking, onConfirm, onClose, loading }: CancelModalProps)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-      <div className="bg-white rounded-card shadow-2xl w-full max-w-md p-6">
-        <h2 className="font-heading font-bold text-lg text-brand-black mb-1">Buchung stornieren?</h2>
-        <p className="text-sm text-brand-text mb-4">
+      <div className="bg-white dark:bg-brand-dark rounded-card shadow-2xl w-full max-w-md p-6">
+        <h2 className="font-heading font-bold text-lg text-brand-black dark:text-white mb-1">Buchung stornieren?</h2>
+        <p className="text-sm text-brand-text dark:text-gray-300 mb-4">
           {booking.product_name} · {formatDate(booking.rental_from)} – {formatDate(booking.rental_to)}
         </p>
         <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-5">
           <p className="text-sm font-semibold mb-1 text-green-700">{cancelInfo.label}</p>
-          <p className="text-xs text-brand-text mb-2">{cancelInfo.description}</p>
+          <p className="text-xs text-brand-text dark:text-gray-300 mb-2">{cancelInfo.description}</p>
           <p className="text-sm font-bold text-green-700">Rückerstattung: {formatCurrency(refundAmount)}</p>
         </div>
-        <p className="text-xs text-brand-muted mb-5">Diese Aktion kann nicht rückgängig gemacht werden. Du erhältst eine Bestätigungsmail.</p>
+        <p className="text-xs text-brand-muted dark:text-gray-500 mb-5">Diese Aktion kann nicht rückgängig gemacht werden. Du erhältst eine Bestätigungsmail.</p>
         <div className="flex gap-3">
-          <button onClick={onClose} disabled={loading} className="flex-1 px-4 py-2.5 border border-brand-border rounded-btn text-sm font-heading font-semibold text-brand-black hover:bg-brand-bg transition-colors disabled:opacity-50">
+          <button onClick={onClose} disabled={loading} className="flex-1 px-4 py-2.5 border border-brand-border dark:border-white/10 rounded-btn text-sm font-heading font-semibold text-brand-black dark:text-white hover:bg-brand-bg dark:hover:bg-white/5 dark:bg-brand-black transition-colors disabled:opacity-50">
             Abbrechen
           </button>
           <button onClick={onConfirm} disabled={loading} className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-btn text-sm font-heading font-semibold hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
@@ -204,9 +204,9 @@ function ExtendModal({ booking, onClose }: Omit<ExtendModalProps, 'onSuccess'>) 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-      <div className="bg-white rounded-card shadow-2xl w-full max-w-md p-6">
-        <h2 className="font-heading font-bold text-lg text-brand-black mb-1">Buchung verlängern</h2>
-        <p className="text-sm text-brand-text mb-4">
+      <div className="bg-white dark:bg-brand-dark rounded-card shadow-2xl w-full max-w-md p-6">
+        <h2 className="font-heading font-bold text-lg text-brand-black dark:text-white mb-1">Buchung verlängern</h2>
+        <p className="text-sm text-brand-text dark:text-gray-300 mb-4">
           {booking.product_name} · Aktuell bis {formatDate(booking.rental_to)}
         </p>
 
@@ -215,7 +215,7 @@ function ExtendModal({ booking, onClose }: Omit<ExtendModalProps, 'onSuccess'>) 
         )}
 
         <div className="mb-4">
-          <label className="text-xs font-heading font-semibold text-brand-black mb-1.5 block">
+          <label className="text-xs font-heading font-semibold text-brand-black dark:text-white mb-1.5 block">
             Neues Rückgabedatum
           </label>
           <input
@@ -223,7 +223,7 @@ function ExtendModal({ booking, onClose }: Omit<ExtendModalProps, 'onSuccess'>) 
             min={minDate}
             value={newDate}
             onChange={(e) => { setNewDate(e.target.value); setPriceInfo(null); }}
-            className="w-full px-4 py-3 rounded-[10px] border border-brand-border bg-white text-brand-black focus:outline-none focus:ring-2 focus:ring-accent-blue focus:border-transparent transition-colors text-sm"
+            className="w-full px-4 py-3 rounded-[10px] border border-brand-border dark:border-white/10 bg-white dark:bg-brand-dark text-brand-black dark:text-white focus:outline-none focus:ring-2 focus:ring-accent-blue focus:border-transparent transition-colors text-sm"
           />
         </div>
 
@@ -239,18 +239,18 @@ function ExtendModal({ booking, onClose }: Omit<ExtendModalProps, 'onSuccess'>) 
 
         {priceInfo && (
           <div className="mb-4">
-            <div className="bg-accent-blue-soft border border-blue-200 rounded-lg p-4 mb-4">
+            <div className="bg-accent-blue-soft dark:bg-accent-blue/10 border border-blue-200 rounded-lg p-4 mb-4">
               <div className="flex justify-between text-sm mb-1">
-                <span className="text-brand-text">Zusätzliche Tage</span>
-                <span className="font-semibold text-brand-black">+{priceInfo.additionalDays} Tag{priceInfo.additionalDays !== 1 ? 'e' : ''}</span>
+                <span className="text-brand-text dark:text-gray-300">Zusätzliche Tage</span>
+                <span className="font-semibold text-brand-black dark:text-white">+{priceInfo.additionalDays} Tag{priceInfo.additionalDays !== 1 ? 'e' : ''}</span>
               </div>
               <div className="flex justify-between text-sm mb-1">
-                <span className="text-brand-text">Neue Gesamtdauer</span>
-                <span className="font-semibold text-brand-black">{priceInfo.newDays} Tage</span>
+                <span className="text-brand-text dark:text-gray-300">Neue Gesamtdauer</span>
+                <span className="font-semibold text-brand-black dark:text-white">{priceInfo.newDays} Tage</span>
               </div>
               <div className="border-t border-blue-200 my-2" />
               <div className="flex justify-between text-sm">
-                <span className="font-heading font-semibold text-brand-black">Aufpreis</span>
+                <span className="font-heading font-semibold text-brand-black dark:text-white">Aufpreis</span>
                 <span className="font-heading font-bold text-accent-blue">{formatCurrency(priceInfo.priceDifference)}</span>
               </div>
             </div>
@@ -270,7 +270,7 @@ function ExtendModal({ booking, onClose }: Omit<ExtendModalProps, 'onSuccess'>) 
 
         <button
           onClick={onClose}
-          className="w-full py-2 text-sm text-brand-steel hover:text-brand-black transition-colors mt-2"
+          className="w-full py-2 text-sm text-brand-steel dark:text-gray-400 hover:text-brand-black dark:text-white transition-colors mt-2"
         >
           Abbrechen
         </button>
@@ -374,13 +374,13 @@ function SignContractModal({ booking, onClose, onSuccess }: SignModalProps) {
   if (success) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-        <div className="bg-white rounded-card shadow-2xl w-full max-w-md p-6 text-center">
+        <div className="bg-white dark:bg-brand-dark rounded-card shadow-2xl w-full max-w-md p-6 text-center">
           <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-3">
             <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
             </svg>
           </div>
-          <p className="font-heading font-semibold text-brand-black">Mietvertrag unterschrieben!</p>
+          <p className="font-heading font-semibold text-brand-black dark:text-white">Mietvertrag unterschrieben!</p>
         </div>
       </div>
     );
@@ -388,9 +388,9 @@ function SignContractModal({ booking, onClose, onSuccess }: SignModalProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-      <div className="bg-white rounded-card shadow-2xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
-        <h2 className="font-heading font-bold text-lg text-brand-black mb-1">Mietvertrag unterschreiben</h2>
-        <p className="text-sm text-brand-text mb-4">
+      <div className="bg-white dark:bg-brand-dark rounded-card shadow-2xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
+        <h2 className="font-heading font-bold text-lg text-brand-black dark:text-white mb-1">Mietvertrag unterschreiben</h2>
+        <p className="text-sm text-brand-text dark:text-gray-300 mb-4">
           {booking.product_name} · {formatDate(booking.rental_from)} – {formatDate(booking.rental_to)}
         </p>
 
@@ -399,8 +399,8 @@ function SignContractModal({ booking, onClose, onSuccess }: SignModalProps) {
         )}
 
         {/* Contract summary */}
-        <div className="bg-brand-bg rounded-lg p-4 mb-4 text-xs text-brand-text space-y-1.5">
-          <p className="font-heading font-semibold text-brand-black text-sm mb-2">Mietbedingungen (Zusammenfassung)</p>
+        <div className="bg-brand-bg dark:bg-brand-black rounded-lg p-4 mb-4 text-xs text-brand-text dark:text-gray-300 space-y-1.5">
+          <p className="font-heading font-semibold text-brand-black dark:text-white text-sm mb-2">Mietbedingungen (Zusammenfassung)</p>
           <p>• Die Kamera ist pfleglich zu behandeln und bestimmungsgemäß zu nutzen.</p>
           <p>• Der Mieter haftet für Schäden, die während der Mietzeit entstehen.</p>
           <p>• Die Rückgabe muss spätestens am vereinbarten Rückgabedatum erfolgen.</p>
@@ -411,20 +411,20 @@ function SignContractModal({ booking, onClose, onSuccess }: SignModalProps) {
 
         {/* Signer name */}
         <div className="mb-3">
-          <label className="text-xs font-heading font-semibold text-brand-black mb-1.5 block">Vollständiger Name</label>
+          <label className="text-xs font-heading font-semibold text-brand-black dark:text-white mb-1.5 block">Vollständiger Name</label>
           <input
             type="text"
             value={signerName}
             onChange={(e) => setSignerName(e.target.value)}
             placeholder="Vor- und Nachname"
-            className="w-full px-4 py-3 rounded-[10px] border border-brand-border bg-white text-brand-black placeholder-brand-muted focus:outline-none focus:ring-2 focus:ring-accent-blue focus:border-transparent transition-colors text-sm"
+            className="w-full px-4 py-3 rounded-[10px] border border-brand-border dark:border-white/10 bg-white dark:bg-brand-dark text-brand-black dark:text-white placeholder-brand-muted dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent-blue focus:border-transparent transition-colors text-sm"
           />
         </div>
 
         {/* Signature pad */}
         <div className="mb-3">
           <div className="flex items-center justify-between mb-1.5">
-            <label className="text-xs font-heading font-semibold text-brand-black">Unterschrift</label>
+            <label className="text-xs font-heading font-semibold text-brand-black dark:text-white">Unterschrift</label>
             {hasDrawn && (
               <button onClick={clearCanvas} className="text-xs text-accent-blue hover:underline">Löschen</button>
             )}
@@ -433,7 +433,7 @@ function SignContractModal({ booking, onClose, onSuccess }: SignModalProps) {
             ref={canvasRef}
             width={400}
             height={150}
-            className="w-full border border-brand-border rounded-[10px] bg-white cursor-crosshair touch-none"
+            className="w-full border border-brand-border dark:border-white/10 rounded-[10px] bg-white dark:bg-brand-dark cursor-crosshair touch-none"
             style={{ height: 120 }}
             onMouseDown={startDraw}
             onMouseMove={draw}
@@ -444,7 +444,7 @@ function SignContractModal({ booking, onClose, onSuccess }: SignModalProps) {
             onTouchEnd={endDraw}
           />
           {!hasDrawn && (
-            <p className="text-xs text-brand-muted mt-1">Unterschreibe hier mit der Maus oder dem Finger.</p>
+            <p className="text-xs text-brand-muted dark:text-gray-500 mt-1">Unterschreibe hier mit der Maus oder dem Finger.</p>
           )}
         </div>
 
@@ -454,9 +454,9 @@ function SignContractModal({ booking, onClose, onSuccess }: SignModalProps) {
             type="checkbox"
             checked={accepted}
             onChange={(e) => setAccepted(e.target.checked)}
-            className="mt-0.5 w-4 h-4 rounded border-brand-border text-accent-blue focus:ring-accent-blue"
+            className="mt-0.5 w-4 h-4 rounded border-brand-border dark:border-white/10 text-accent-blue focus:ring-accent-blue"
           />
-          <span className="text-xs text-brand-text">
+          <span className="text-xs text-brand-text dark:text-gray-300">
             Ich akzeptiere die Mietbedingungen und bestätige die Richtigkeit meiner Angaben.
           </span>
         </label>
@@ -464,7 +464,7 @@ function SignContractModal({ booking, onClose, onSuccess }: SignModalProps) {
         <div className="flex gap-3">
           <button
             onClick={onClose}
-            className="flex-1 px-4 py-2.5 border border-brand-border rounded-btn text-sm font-heading font-semibold text-brand-black hover:bg-brand-bg transition-colors"
+            className="flex-1 px-4 py-2.5 border border-brand-border dark:border-white/10 rounded-btn text-sm font-heading font-semibold text-brand-black dark:text-white hover:bg-brand-bg dark:hover:bg-white/5 dark:bg-brand-black transition-colors"
           >
             Abbrechen
           </button>
@@ -585,7 +585,7 @@ export default function BuchungenPage() {
 
   if (loading) {
     return (
-      <div className="bg-white rounded-card shadow-card p-12 flex justify-center">
+      <div className="bg-white dark:bg-brand-dark rounded-card shadow-card p-12 flex justify-center">
         <div className="w-8 h-8 border-2 border-accent-blue border-t-transparent rounded-full animate-spin" />
       </div>
     );
@@ -604,9 +604,9 @@ export default function BuchungenPage() {
       )}
 
       <div className="space-y-6">
-        <div className="bg-white rounded-card shadow-card p-6">
-          <h1 className="font-heading font-bold text-xl text-brand-black mb-1">Meine Buchungen</h1>
-          <p className="text-brand-text text-sm">Alle deine Buchungen auf einen Blick.</p>
+        <div className="bg-white dark:bg-brand-dark rounded-card shadow-card p-6">
+          <h1 className="font-heading font-bold text-xl text-brand-black dark:text-white mb-1">Meine Buchungen</h1>
+          <p className="text-brand-text dark:text-gray-300 text-sm">Alle deine Buchungen auf einen Blick.</p>
         </div>
 
         {extensionSuccess && (
@@ -620,14 +620,14 @@ export default function BuchungenPage() {
         )}
 
         {bookings.length === 0 ? (
-          <div className="bg-white rounded-card shadow-card p-10 text-center">
-            <div className="w-16 h-16 bg-brand-bg rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg className="w-8 h-8 text-brand-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="bg-white dark:bg-brand-dark rounded-card shadow-card p-10 text-center">
+            <div className="w-16 h-16 bg-brand-bg dark:bg-brand-black rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-brand-muted dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
               </svg>
             </div>
-            <h2 className="font-heading font-semibold text-brand-black mb-2">Noch keine Buchungen</h2>
-            <p className="text-brand-text text-sm mb-6 max-w-sm mx-auto">Deine zukünftigen Buchungen erscheinen hier automatisch, sobald du eingeloggt buchst.</p>
+            <h2 className="font-heading font-semibold text-brand-black dark:text-white mb-2">Noch keine Buchungen</h2>
+            <p className="text-brand-text dark:text-gray-300 text-sm mb-6 max-w-sm mx-auto">Deine zukünftigen Buchungen erscheinen hier automatisch, sobald du eingeloggt buchst.</p>
             <Link href="/kameras" className="inline-flex items-center gap-2 px-5 py-2.5 bg-brand-black text-white font-heading font-semibold text-sm rounded-btn hover:bg-brand-dark transition-colors">
               Kameras entdecken
             </Link>
@@ -639,11 +639,11 @@ export default function BuchungenPage() {
               const cancelInfo = getCancellationInfo(booking.rental_from, booking.status);
 
               return (
-                <div key={booking.id} className="bg-white rounded-card shadow-card p-5">
+                <div key={booking.id} className="bg-white dark:bg-brand-dark rounded-card shadow-card p-5">
                   <div className="flex items-start justify-between gap-4 mb-3">
                     <div>
-                      <h3 className="font-heading font-semibold text-brand-black">{booking.product_name}</h3>
-                      <p className="text-xs text-brand-muted mt-0.5">
+                      <h3 className="font-heading font-semibold text-brand-black dark:text-white">{booking.product_name}</h3>
+                      <p className="text-xs text-brand-muted dark:text-gray-500 mt-0.5">
                         Buchung {booking.id}
                         {booking.extended_at && (
                           <span className="ml-2 text-accent-blue">· Verlängert</span>
@@ -657,20 +657,20 @@ export default function BuchungenPage() {
 
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
                     <div>
-                      <p className="text-xs text-brand-muted mb-0.5">Mietstart</p>
-                      <p className="text-sm font-medium text-brand-black">{formatDate(booking.rental_from)}</p>
+                      <p className="text-xs text-brand-muted dark:text-gray-500 mb-0.5">Mietstart</p>
+                      <p className="text-sm font-medium text-brand-black dark:text-white">{formatDate(booking.rental_from)}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-brand-muted mb-0.5">Rückgabe</p>
-                      <p className="text-sm font-medium text-brand-black">{formatDate(booking.rental_to)}</p>
+                      <p className="text-xs text-brand-muted dark:text-gray-500 mb-0.5">Rückgabe</p>
+                      <p className="text-sm font-medium text-brand-black dark:text-white">{formatDate(booking.rental_to)}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-brand-muted mb-0.5">Miettage</p>
-                      <p className="text-sm font-medium text-brand-black">{booking.days} {booking.days === 1 ? 'Tag' : 'Tage'}</p>
+                      <p className="text-xs text-brand-muted dark:text-gray-500 mb-0.5">Miettage</p>
+                      <p className="text-sm font-medium text-brand-black dark:text-white">{booking.days} {booking.days === 1 ? 'Tag' : 'Tage'}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-brand-muted mb-0.5">Gesamt</p>
-                      <p className="text-sm font-bold text-brand-black">{formatCurrency(booking.price_total)}</p>
+                      <p className="text-xs text-brand-muted dark:text-gray-500 mb-0.5">Gesamt</p>
+                      <p className="text-sm font-bold text-brand-black dark:text-white">{formatCurrency(booking.price_total)}</p>
                     </div>
                   </div>
 
@@ -708,7 +708,7 @@ export default function BuchungenPage() {
                       <div className="min-w-0 flex-1">
                         <p className="text-xs font-heading font-semibold text-amber-800 mb-0.5">Rücksendeetikett verfügbar</p>
                         <p className="text-xs text-amber-700 mb-1.5">Lege das Etikett beim Rückversand ins Paket oder klebe es außen drauf.</p>
-                        <a href={`/api/konto/return-label/${booking.id}`} download className="inline-flex items-center gap-1.5 text-xs font-heading font-semibold text-amber-800 bg-white border border-amber-300 px-3 py-1.5 rounded-btn hover:bg-amber-50 transition-colors">
+                        <a href={`/api/konto/return-label/${booking.id}`} download className="inline-flex items-center gap-1.5 text-xs font-heading font-semibold text-amber-800 bg-white dark:bg-brand-dark border border-amber-300 px-3 py-1.5 rounded-btn hover:bg-amber-50 transition-colors">
                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" /></svg>
                           Rücksendeetikett herunterladen (PDF)
                         </a>
@@ -732,11 +732,11 @@ export default function BuchungenPage() {
                     </div>
                   )}
 
-                  <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-brand-border">
+                  <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-brand-border dark:border-white/10">
                     <div className="flex items-center gap-3">
-                      <span className="text-xs text-brand-muted">{booking.delivery_mode === 'versand' ? '📦 Versand' : '🤝 Abholung'}</span>
+                      <span className="text-xs text-brand-muted dark:text-gray-500">{booking.delivery_mode === 'versand' ? '📦 Versand' : '🤝 Abholung'}</span>
                       <span className="text-brand-border">·</span>
-                      <span className="text-xs text-brand-muted capitalize">
+                      <span className="text-xs text-brand-muted dark:text-gray-500 capitalize">
                         Haftung: {booking.haftung === 'none' ? 'Basis' : booking.haftung === 'standard' ? 'Standard' : 'Premium'}
                       </span>
                     </div>
@@ -750,7 +750,7 @@ export default function BuchungenPage() {
 
                       {/* Contract download */}
                       {['confirmed', 'shipped', 'completed'].includes(booking.status) && (
-                        <a href={`/api/rental-contract/${booking.id}`} download className="flex items-center gap-1.5 text-xs font-heading font-semibold text-brand-black hover:underline">
+                        <a href={`/api/rental-contract/${booking.id}`} download className="flex items-center gap-1.5 text-xs font-heading font-semibold text-brand-black dark:text-white hover:underline">
                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                           Mietvertrag
                         </a>

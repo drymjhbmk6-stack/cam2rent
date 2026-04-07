@@ -6,7 +6,7 @@ export const metadata = {
 
 export default function WartungPage() {
   return (
-    <div className="min-h-screen bg-white flex items-center justify-center px-4">
+    <div className="min-h-screen bg-white dark:bg-brand-black flex items-center justify-center px-4">
       <div className="text-center max-w-md animate-fadeIn">
         {/* Gear/wrench icon */}
         <div className="mx-auto mb-6 w-20 h-20 rounded-full bg-accent-blue-soft flex items-center justify-center">
@@ -25,23 +25,23 @@ export default function WartungPage() {
           </svg>
         </div>
 
-        <h1 className="font-heading font-bold text-2xl text-brand-black mb-3">
+        <h1 className="font-heading font-bold text-2xl text-brand-black dark:text-white mb-3">
           Wir sind gleich zurueck!
         </h1>
 
-        <p className="font-body text-brand-text mb-6 leading-relaxed">
+        <p className="font-body text-brand-text dark:text-gray-300 mb-6 leading-relaxed">
           cam2rent wird gerade aktualisiert, damit alles noch besser laeuft.
           Normalerweise dauert das nur wenige Minuten.
         </p>
 
         <div className="inline-flex items-center gap-2 px-4 py-2.5 bg-brand-bg rounded-btn border border-brand-border">
           <div className="w-2 h-2 rounded-full bg-accent-amber animate-pulse-dot" />
-          <span className="text-sm font-body text-brand-text">
+          <span className="text-sm font-body text-brand-text dark:text-gray-300">
             Wartung laeuft...
           </span>
         </div>
 
-        <p className="mt-8 text-xs font-body text-brand-muted">
+        <p className="mt-8 text-xs font-body text-brand-muted dark:text-gray-500">
           Bei dringenden Fragen:{' '}
           <a
             href="mailto:kontakt@cam2rent.de"
@@ -53,7 +53,7 @@ export default function WartungPage() {
 
         {/* Logo */}
         <div className="mt-10">
-          <span className="font-heading font-bold text-lg text-brand-black tracking-tight">
+          <span className="font-heading font-bold text-lg text-brand-black dark:text-white tracking-tight">
             Cam<span className="text-accent-blue">2</span>Rent
           </span>
         </div>

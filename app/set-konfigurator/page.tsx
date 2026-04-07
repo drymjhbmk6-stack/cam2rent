@@ -115,7 +115,7 @@ function StepIndicator({ current }: { current: 1 | 2 | 3 }) {
                   ? 'bg-accent-blue text-white'
                   : s.num < current
                   ? 'bg-accent-blue/20 text-accent-blue'
-                  : 'bg-brand-bg text-brand-muted'
+                  : 'bg-brand-bg dark:bg-brand-black text-brand-muted dark:text-gray-500'
               }`}
             >
               {s.num < current ? (
@@ -128,7 +128,7 @@ function StepIndicator({ current }: { current: 1 | 2 | 3 }) {
             </div>
             <span
               className={`text-sm font-body hidden sm:inline ${
-                s.num === current ? 'text-brand-black font-semibold' : 'text-brand-muted'
+                s.num === current ? 'text-brand-black dark:text-white font-semibold' : 'text-brand-muted dark:text-gray-500'
               }`}
             >
               {s.label}
@@ -137,7 +137,7 @@ function StepIndicator({ current }: { current: 1 | 2 | 3 }) {
           {i < steps.length - 1 && (
             <div
               className={`w-8 sm:w-16 h-0.5 rounded-full ${
-                s.num < current ? 'bg-accent-blue/40' : 'bg-brand-border'
+                s.num < current ? 'bg-accent-blue/40' : 'bg-brand-border dark:border-white/10'
               }`}
             />
           )}
@@ -258,23 +258,23 @@ export default function SetKonfiguratorPage() {
   const canNext = step === 1 ? !!selectedCamera : true;
 
   return (
-    <main className="min-h-screen bg-brand-bg">
+    <main className="min-h-screen bg-brand-bg dark:bg-brand-black">
       {/* Header */}
-      <section className="bg-white border-b border-brand-border">
+      <section className="bg-white dark:bg-brand-dark border-b border-brand-border dark:border-white/10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <Link
             href="/kameras"
-            className="inline-flex items-center gap-1 text-sm font-body text-brand-steel hover:text-brand-black transition-colors mb-4"
+            className="inline-flex items-center gap-1 text-sm font-body text-brand-steel dark:text-gray-400 hover:text-brand-black dark:hover:text-white transition-colors mb-4"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
             Zurück zu Kameras
           </Link>
-          <h1 className="font-heading font-bold text-3xl sm:text-4xl text-brand-black">
+          <h1 className="font-heading font-bold text-3xl sm:text-4xl text-brand-black dark:text-white">
             Set-Konfigurator
           </h1>
-          <p className="font-body text-brand-steel text-lg mt-2">
+          <p className="font-body text-brand-steel dark:text-gray-400 text-lg mt-2">
             Stelle dein individuelles Kamera-Set zusammen. Dein Set wird im Kundenkonto gespeichert.
           </p>
         </div>
@@ -289,7 +289,7 @@ export default function SetKonfiguratorPage() {
             {/* Step 1: Kamera wählen */}
             {step === 1 && (
               <div>
-                <h2 className="font-heading font-bold text-xl text-brand-black mb-6">
+                <h2 className="font-heading font-bold text-xl text-brand-black dark:text-white mb-6">
                   Schritt 1: Kamera wählen
                 </h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -304,7 +304,7 @@ export default function SetKonfiguratorPage() {
                         className={`text-left rounded-card border-2 overflow-hidden transition-all duration-200 hover:shadow-card ${
                           isSelected
                             ? 'border-accent-blue shadow-card ring-2 ring-accent-blue/20'
-                            : 'border-brand-border hover:border-brand-steel/30'
+                            : 'border-brand-border dark:border-white/10 hover:border-brand-steel/30'
                         }`}
                       >
                         {/* Brand color bar */}
@@ -321,22 +321,22 @@ export default function SetKonfiguratorPage() {
                           )}
                         </div>
                         {/* Content */}
-                        <div className="p-4 bg-white">
+                        <div className="p-4 bg-white dark:bg-brand-dark">
                           <div className="flex items-center gap-3">
                             <CameraIcon brand={cam.brand} />
                             <div className="flex-1 min-w-0">
-                              <h3 className="font-heading font-semibold text-base text-brand-black truncate">
+                              <h3 className="font-heading font-semibold text-base text-brand-black dark:text-white truncate">
                                 {cam.name}
                               </h3>
-                              <p className="text-sm font-body text-brand-steel mt-0.5">
+                              <p className="text-sm font-body text-brand-steel dark:text-gray-400 mt-0.5">
                                 {cam.shortDescription}
                               </p>
                             </div>
                           </div>
-                          <div className="mt-3 pt-3 border-t border-brand-border flex items-center justify-between">
-                            <span className="text-sm font-body text-brand-steel">ab</span>
-                            <span className="font-heading font-bold text-lg text-brand-black">
-                              {fmt(cam.pricePerDay)} <span className="text-sm font-normal text-brand-steel">€/Tag</span>
+                          <div className="mt-3 pt-3 border-t border-brand-border dark:border-white/10 flex items-center justify-between">
+                            <span className="text-sm font-body text-brand-steel dark:text-gray-400">ab</span>
+                            <span className="font-heading font-bold text-lg text-brand-black dark:text-white">
+                              {fmt(cam.pricePerDay)} <span className="text-sm font-normal text-brand-steel dark:text-gray-400">€/Tag</span>
                             </span>
                           </div>
                         </div>
@@ -350,10 +350,10 @@ export default function SetKonfiguratorPage() {
             {/* Step 2: Zubehör hinzufügen */}
             {step === 2 && (
               <div>
-                <h2 className="font-heading font-bold text-xl text-brand-black mb-2">
+                <h2 className="font-heading font-bold text-xl text-brand-black dark:text-white mb-2">
                   Schritt 2: Zubehör hinzufügen
                 </h2>
-                <p className="font-body text-sm text-brand-steel mb-6">
+                <p className="font-body text-sm text-brand-steel dark:text-gray-400 mb-6">
                   Wähle das Zubehör, das du zu deinem Set hinzufügen möchtest.
                 </p>
                 <div className="space-y-3">
@@ -362,10 +362,10 @@ export default function SetKonfiguratorPage() {
                     return (
                       <label
                         key={acc.id}
-                        className={`flex items-center gap-4 p-4 rounded-card border-2 cursor-pointer transition-all duration-200 bg-white ${
+                        className={`flex items-center gap-4 p-4 rounded-card border-2 cursor-pointer transition-all duration-200 bg-white dark:bg-brand-dark ${
                           isSelected
                             ? 'border-accent-blue ring-2 ring-accent-blue/20'
-                            : 'border-brand-border hover:border-brand-steel/30'
+                            : 'border-brand-border dark:border-white/10 hover:border-brand-steel/30'
                         }`}
                       >
                         {/* Checkbox */}
@@ -373,7 +373,7 @@ export default function SetKonfiguratorPage() {
                           className={`w-5 h-5 rounded flex-shrink-0 border-2 flex items-center justify-center transition-colors ${
                             isSelected
                               ? 'bg-accent-blue border-accent-blue'
-                              : 'border-brand-border'
+                              : 'border-brand-border dark:border-white/10'
                           }`}
                         >
                           {isSelected && (
@@ -389,24 +389,24 @@ export default function SetKonfiguratorPage() {
                           onChange={() => toggleAccessory(acc.id)}
                         />
                         {/* Icon */}
-                        <div className="w-10 h-10 rounded-lg bg-brand-bg flex items-center justify-center text-brand-steel flex-shrink-0">
+                        <div className="w-10 h-10 rounded-lg bg-brand-bg dark:bg-brand-black flex items-center justify-center text-brand-steel dark:text-gray-400 flex-shrink-0">
                           <AccessoryIcon iconId={acc.iconId} />
                         </div>
                         {/* Text */}
                         <div className="flex-1 min-w-0">
-                          <p className="font-heading font-semibold text-sm text-brand-black">
+                          <p className="font-heading font-semibold text-sm text-brand-black dark:text-white">
                             {acc.name}
                           </p>
-                          <p className="text-xs font-body text-brand-steel mt-0.5">
+                          <p className="text-xs font-body text-brand-steel dark:text-gray-400 mt-0.5">
                             {acc.description}
                           </p>
                         </div>
                         {/* Price */}
                         <div className="text-right flex-shrink-0">
-                          <p className="font-heading font-semibold text-sm text-brand-black">
+                          <p className="font-heading font-semibold text-sm text-brand-black dark:text-white">
                             {fmt(acc.price)} €
                           </p>
-                          <p className="text-xs font-body text-brand-muted">
+                          <p className="text-xs font-body text-brand-muted dark:text-gray-500">
                             {acc.pricingMode === 'perDay' ? 'pro Tag' : 'einmalig'}
                           </p>
                         </div>
@@ -420,41 +420,41 @@ export default function SetKonfiguratorPage() {
             {/* Step 3: Zusammenfassung */}
             {step === 3 && (
               <div>
-                <h2 className="font-heading font-bold text-xl text-brand-black mb-6">
+                <h2 className="font-heading font-bold text-xl text-brand-black dark:text-white mb-6">
                   Schritt 3: Zusammenfassung
                 </h2>
 
                 {/* Selected camera */}
                 {selectedCamera && (
-                  <div className="bg-white rounded-card border border-brand-border p-5 mb-4">
+                  <div className="bg-white dark:bg-brand-dark rounded-card border border-brand-border dark:border-white/10 p-5 mb-4">
                     <div className="flex items-center gap-3 mb-3">
                       <div className={`px-2 py-0.5 rounded-full text-xs font-heading font-semibold ${(brandConfig[selectedCamera.brand] ?? defaultBrand).pill}`}>
                         {selectedCamera.brand}
                       </div>
-                      <h3 className="font-heading font-semibold text-base text-brand-black">
+                      <h3 className="font-heading font-semibold text-base text-brand-black dark:text-white">
                         {selectedCamera.name}
                       </h3>
                     </div>
                     <div className="flex items-center justify-between text-sm font-body">
-                      <span className="text-brand-steel">Kamera-Mietpreis ({days} {days === 1 ? 'Tag' : 'Tage'})</span>
-                      <span className="font-semibold text-brand-black">{fmt(pricing.cameraPrice)} €</span>
+                      <span className="text-brand-steel dark:text-gray-400">Kamera-Mietpreis ({days} {days === 1 ? 'Tag' : 'Tage'})</span>
+                      <span className="font-semibold text-brand-black dark:text-white">{fmt(pricing.cameraPrice)} €</span>
                     </div>
                   </div>
                 )}
 
                 {/* Selected accessories */}
                 {selectedAccessories.length > 0 && (
-                  <div className="bg-white rounded-card border border-brand-border p-5 mb-4">
-                    <h3 className="font-heading font-semibold text-sm text-brand-black mb-3">
+                  <div className="bg-white dark:bg-brand-dark rounded-card border border-brand-border dark:border-white/10 p-5 mb-4">
+                    <h3 className="font-heading font-semibold text-sm text-brand-black dark:text-white mb-3">
                       Zubehör ({selectedAccessories.length} {selectedAccessories.length === 1 ? 'Teil' : 'Teile'})
                     </h3>
                     <div className="space-y-2">
                       {selectedAccessories.map((acc) => (
                         <div key={acc.id} className="flex items-center justify-between text-sm font-body">
-                          <span className="text-brand-steel">{acc.name}</span>
-                          <span className="text-brand-black">
+                          <span className="text-brand-steel dark:text-gray-400">{acc.name}</span>
+                          <span className="text-brand-black dark:text-white">
                             {fmt(getAccessoryPrice(acc, days))} €
-                            <span className="text-brand-muted text-xs ml-1">
+                            <span className="text-brand-muted dark:text-gray-500 text-xs ml-1">
                               ({acc.pricingMode === 'perDay' ? `${fmt(acc.price)} €/Tag` : 'einmalig'})
                             </span>
                           </span>
@@ -465,8 +465,8 @@ export default function SetKonfiguratorPage() {
                 )}
 
                 {/* Duration selector */}
-                <div className="bg-white rounded-card border border-brand-border p-5 mb-4">
-                  <h3 className="font-heading font-semibold text-sm text-brand-black mb-3">
+                <div className="bg-white dark:bg-brand-dark rounded-card border border-brand-border dark:border-white/10 p-5 mb-4">
+                  <h3 className="font-heading font-semibold text-sm text-brand-black dark:text-white mb-3">
                     Mietdauer wählen
                   </h3>
                   <div className="flex flex-wrap gap-2">
@@ -478,7 +478,7 @@ export default function SetKonfiguratorPage() {
                         className={`px-4 py-2 rounded-lg text-sm font-heading font-semibold transition-colors ${
                           days === d
                             ? 'bg-accent-blue text-white'
-                            : 'bg-brand-bg text-brand-steel hover:bg-brand-border'
+                            : 'bg-brand-bg dark:bg-brand-black text-brand-steel dark:text-gray-400 hover:bg-brand-border'
                         }`}
                       >
                         {d} {d === 1 ? 'Tag' : 'Tage'}
@@ -488,19 +488,19 @@ export default function SetKonfiguratorPage() {
                 </div>
 
                 {/* Price breakdown */}
-                <div className="bg-white rounded-card border border-brand-border p-5">
-                  <h3 className="font-heading font-semibold text-sm text-brand-black mb-3">
+                <div className="bg-white dark:bg-brand-dark rounded-card border border-brand-border dark:border-white/10 p-5">
+                  <h3 className="font-heading font-semibold text-sm text-brand-black dark:text-white mb-3">
                     Preisberechnung
                   </h3>
                   <div className="space-y-2 text-sm font-body">
                     <div className="flex justify-between">
-                      <span className="text-brand-steel">Kamera</span>
-                      <span className="text-brand-black">{fmt(pricing.cameraPrice)} €</span>
+                      <span className="text-brand-steel dark:text-gray-400">Kamera</span>
+                      <span className="text-brand-black dark:text-white">{fmt(pricing.cameraPrice)} €</span>
                     </div>
                     {selectedAccessories.length > 0 && (
                       <div className="flex justify-between">
-                        <span className="text-brand-steel">Zubehör</span>
-                        <span className="text-brand-black">{fmt(pricing.accessoryTotal)} €</span>
+                        <span className="text-brand-steel dark:text-gray-400">Zubehör</span>
+                        <span className="text-brand-black dark:text-white">{fmt(pricing.accessoryTotal)} €</span>
                       </div>
                     )}
                     {pricing.discountPercent > 0 && (
@@ -509,9 +509,9 @@ export default function SetKonfiguratorPage() {
                         <span className="font-semibold">-{fmt(pricing.discountAmount)} €</span>
                       </div>
                     )}
-                    <div className="pt-2 border-t border-brand-border flex justify-between">
-                      <span className="font-heading font-bold text-brand-black">Gesamt ({days} {days === 1 ? 'Tag' : 'Tage'})</span>
-                      <span className="font-heading font-bold text-lg text-brand-black">{fmt(pricing.total)} €</span>
+                    <div className="pt-2 border-t border-brand-border dark:border-white/10 flex justify-between">
+                      <span className="font-heading font-bold text-brand-black dark:text-white">Gesamt ({days} {days === 1 ? 'Tag' : 'Tage'})</span>
+                      <span className="font-heading font-bold text-lg text-brand-black dark:text-white">{fmt(pricing.total)} €</span>
                     </div>
                   </div>
 
@@ -519,14 +519,14 @@ export default function SetKonfiguratorPage() {
                   <button
                     type="button"
                     onClick={handleBook}
-                    className="mt-6 w-full py-3.5 bg-brand-black text-white font-heading font-semibold text-base rounded-[10px] hover:bg-brand-dark transition-colors shadow-lg shadow-brand-black/10 flex items-center justify-center gap-2"
+                    className="mt-6 w-full py-3.5 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold text-base rounded-[10px] hover:bg-brand-dark dark:hover:bg-accent-blue/90 transition-colors shadow-lg shadow-brand-black/10 flex items-center justify-center gap-2"
                   >
                     Set buchen
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                     </svg>
                   </button>
-                  <p className="text-xs font-body text-brand-muted text-center mt-3">
+                  <p className="text-xs font-body text-brand-muted dark:text-gray-500 text-center mt-3">
                     Du wirst zur Buchungsseite der Kamera weitergeleitet. Dein Zubehör ist vorausgewählt.
                   </p>
                 </div>
@@ -539,7 +539,7 @@ export default function SetKonfiguratorPage() {
                 <button
                   type="button"
                   onClick={() => setStep((s) => (s - 1) as 1 | 2 | 3)}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 border border-brand-border rounded-[10px] font-heading font-semibold text-sm text-brand-steel hover:text-brand-black hover:border-brand-steel/50 transition-colors"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 border border-brand-border dark:border-white/10 rounded-[10px] font-heading font-semibold text-sm text-brand-steel dark:text-gray-400 hover:text-brand-black dark:hover:text-white hover:border-brand-steel/50 transition-colors"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -567,8 +567,8 @@ export default function SetKonfiguratorPage() {
 
           {/* Sidebar summary (desktop) / bottom bar (mobile) */}
           <aside className="hidden lg:block w-80 flex-shrink-0">
-            <div className="sticky top-24 bg-white rounded-card border border-brand-border p-5 shadow-card">
-              <h3 className="font-heading font-bold text-sm text-brand-black mb-4 flex items-center gap-2">
+            <div className="sticky top-24 bg-white dark:bg-brand-dark rounded-card border border-brand-border dark:border-white/10 p-5 shadow-card">
+              <h3 className="font-heading font-bold text-sm text-brand-black dark:text-white mb-4 flex items-center gap-2">
                 <svg className="w-4 h-4 text-accent-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                 </svg>
@@ -576,7 +576,7 @@ export default function SetKonfiguratorPage() {
               </h3>
 
               {!selectedCamera && !selectedAccessories.length && (
-                <p className="text-sm font-body text-brand-muted">
+                <p className="text-sm font-body text-brand-muted dark:text-gray-500">
                   Wähle eine Kamera, um zu starten.
                 </p>
               )}
@@ -585,25 +585,25 @@ export default function SetKonfiguratorPage() {
                 <div className="mb-3">
                   <div className="flex items-center gap-2 mb-1">
                     <div className={`w-2 h-2 rounded-full`} style={{ backgroundColor: (brandConfig[selectedCamera.brand] ?? defaultBrand).color }} />
-                    <p className="text-sm font-heading font-semibold text-brand-black truncate">
+                    <p className="text-sm font-heading font-semibold text-brand-black dark:text-white truncate">
                       {selectedCamera.name}
                     </p>
                   </div>
-                  <p className="text-xs font-body text-brand-muted ml-4">
+                  <p className="text-xs font-body text-brand-muted dark:text-gray-500 ml-4">
                     {fmt(selectedCamera.pricePerDay)} €/Tag
                   </p>
                 </div>
               )}
 
               {selectedAccessories.length > 0 && (
-                <div className="border-t border-brand-border pt-3 mb-3">
-                  <p className="text-xs font-heading font-semibold text-brand-steel uppercase tracking-wider mb-2">
+                <div className="border-t border-brand-border dark:border-white/10 pt-3 mb-3">
+                  <p className="text-xs font-heading font-semibold text-brand-steel dark:text-gray-400 uppercase tracking-wider mb-2">
                     Zubehör
                   </p>
                   {selectedAccessories.map((acc) => (
                     <div key={acc.id} className="flex items-center justify-between text-xs font-body mb-1.5">
-                      <span className="text-brand-steel truncate mr-2">{acc.name}</span>
-                      <span className="text-brand-black whitespace-nowrap">
+                      <span className="text-brand-steel dark:text-gray-400 truncate mr-2">{acc.name}</span>
+                      <span className="text-brand-black dark:text-white whitespace-nowrap">
                         {fmt(acc.price)} €{acc.pricingMode === 'perDay' ? '/Tag' : ''}
                       </span>
                     </div>
@@ -620,10 +620,10 @@ export default function SetKonfiguratorPage() {
               )}
 
               {(selectedCamera || selectedAccessories.length > 0) && (
-                <div className="border-t border-brand-border pt-3">
+                <div className="border-t border-brand-border dark:border-white/10 pt-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-body text-brand-steel">pro Tag ca.</span>
-                    <span className="font-heading font-bold text-brand-black">
+                    <span className="text-xs font-body text-brand-steel dark:text-gray-400">pro Tag ca.</span>
+                    <span className="font-heading font-bold text-brand-black dark:text-white">
                       {fmt(
                         pricing.cameraPricePerDay +
                           pricing.accessoryPerDay * (1 - pricing.discountPercent / 100)
@@ -637,16 +637,16 @@ export default function SetKonfiguratorPage() {
           </aside>
 
           {/* Mobile bottom bar */}
-          <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-brand-border px-4 py-3 z-40 shadow-[0_-4px_12px_rgba(0,0,0,0.08)]">
+          <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-brand-dark border-t border-brand-border dark:border-white/10 px-4 py-3 z-40 shadow-[0_-4px_12px_rgba(0,0,0,0.08)]">
             <div className="max-w-7xl mx-auto flex items-center justify-between">
               <div>
                 {selectedCamera ? (
                   <>
-                    <p className="text-xs font-body text-brand-steel">
+                    <p className="text-xs font-body text-brand-steel dark:text-gray-400">
                       {selectedCamera.name}
                       {selectedAccessories.length > 0 && ` + ${selectedAccessories.length} Zubehör`}
                     </p>
-                    <p className="font-heading font-bold text-brand-black">
+                    <p className="font-heading font-bold text-brand-black dark:text-white">
                       ab {fmt(
                         pricing.cameraPricePerDay +
                           pricing.accessoryPerDay * (1 - pricing.discountPercent / 100)
@@ -654,7 +654,7 @@ export default function SetKonfiguratorPage() {
                     </p>
                   </>
                 ) : (
-                  <p className="text-sm font-body text-brand-muted">Kamera wählen</p>
+                  <p className="text-sm font-body text-brand-muted dark:text-gray-500">Kamera wählen</p>
                 )}
               </div>
               {step < 3 ? (
@@ -673,7 +673,7 @@ export default function SetKonfiguratorPage() {
                       type="button"
                       onClick={handleSaveSet}
                       disabled={saving || saved}
-                      className="px-4 py-2.5 border border-brand-border text-brand-text rounded-[10px] font-heading font-semibold text-sm hover:border-brand-black hover:text-brand-black transition-colors disabled:opacity-50"
+                      className="px-4 py-2.5 border border-brand-border dark:border-white/10 text-brand-text dark:text-gray-300 rounded-[10px] font-heading font-semibold text-sm hover:border-brand-black dark:hover:border-white hover:text-brand-black dark:hover:text-white transition-colors disabled:opacity-50"
                     >
                       {saved ? 'Gespeichert!' : saving ? 'Speichern…' : 'Set speichern'}
                     </button>
@@ -681,7 +681,7 @@ export default function SetKonfiguratorPage() {
                   <button
                     type="button"
                     onClick={handleBook}
-                    className="px-5 py-2.5 bg-brand-black text-white rounded-[10px] font-heading font-semibold text-sm hover:bg-brand-dark transition-colors"
+                    className="px-5 py-2.5 bg-brand-black dark:bg-accent-blue text-white rounded-[10px] font-heading font-semibold text-sm hover:bg-brand-dark dark:hover:bg-accent-blue/90 transition-colors"
                   >
                     Set buchen
                   </button>

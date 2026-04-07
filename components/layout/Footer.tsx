@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { BUSINESS } from '@/lib/business-config';
+import ThemeToggle from '@/components/ThemeToggle';
 
 const shopLinks = [
   { href: '/kameras', label: 'Alle Kameras' },
@@ -202,10 +203,14 @@ export default function Footer() {
         </div>
 
         {/* Bottom Bar */}
-        <div className="border-t border-white/10 pt-6 text-center">
+        <div className="border-t border-white/10 pt-6 flex items-center justify-between">
           <p className="text-xs font-body text-brand-muted">
             © 2026 Cam2Rent. Alle Rechte vorbehalten.
           </p>
+          <div className="flex items-center gap-2 text-brand-muted">
+            <span className="text-xs font-body hidden sm:inline">Design</span>
+            <ThemeToggle />
+          </div>
         </div>
       </div>
     </footer>

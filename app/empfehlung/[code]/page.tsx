@@ -15,22 +15,22 @@ export default function ReferralLandingPage() {
   }, [code]);
 
   return (
-    <div className="min-h-screen bg-brand-bg flex items-center justify-center px-4">
+    <div className="min-h-screen bg-brand-bg dark:bg-brand-black flex items-center justify-center px-4">
       <div className="max-w-lg w-full text-center">
         {/* Logo */}
         <div className="mb-8">
-          <span className="font-heading font-black text-3xl tracking-tight text-brand-black">
+          <span className="font-heading font-black text-3xl tracking-tight text-brand-black dark:text-white">
             cam<span className="text-accent-blue">2</span>rent
           </span>
         </div>
 
         {/* Card */}
-        <div className="bg-white rounded-card shadow-card p-8 mb-6">
+        <div className="bg-white dark:bg-brand-dark rounded-card shadow-card p-8 mb-6">
           <div className="text-5xl mb-4">🎁</div>
-          <h1 className="font-heading font-bold text-2xl text-brand-black mb-3">
+          <h1 className="font-heading font-bold text-2xl text-brand-black dark:text-white mb-3">
             Du wurdest eingeladen!
           </h1>
-          <p className="text-brand-steel text-sm leading-relaxed mb-6">
+          <p className="text-brand-steel dark:text-gray-400 text-sm leading-relaxed mb-6">
             Jemand hat dir cam2rent empfohlen. Miete deine erste Action-Cam und
             dein Freund bekommt einen Gutschein als Dankeschön.
           </p>
@@ -46,7 +46,7 @@ export default function ReferralLandingPage() {
           </Link>
         </div>
 
-        <p className="text-xs text-brand-muted">
+        <p className="text-xs text-brand-muted dark:text-gray-500">
           Dein Empfehlungscode <strong className="font-mono">{code}</strong> wurde gespeichert
           und wird automatisch bei deiner ersten Buchung angewendet.
         </p>

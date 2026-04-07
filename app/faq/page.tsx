@@ -49,6 +49,19 @@ const faqSections: { title: string; items: FaqItem[] }[] = [
           </>
         ),
       },
+      {
+        question: 'Wie läuft die Buchung Schritt für Schritt ab?',
+        answer: (
+          <>
+            Die Buchung ist in 5 einfache Schritte aufgeteilt:{' '}
+            <strong>1. Versand</strong> — Wähle, ob du die Ausrüstung per DHL geliefert bekommen oder selbst abholen möchtest. Wähle dein Wunschdatum im Kalender (grüne Tage = verfügbar).{' '}
+            <strong>2. Zubehör</strong> — Optional kannst du passendes Zubehör wie Speicherkarten, Akkus oder Stative dazubuchen.{' '}
+            <strong>3. Haftungsschutz</strong> — Entscheide dich für eine Haftungsoption: Standard (reduzierte Selbstbeteiligung) oder Premium (keine Selbstbeteiligung). So bist du im Schadensfall abgesichert.{' '}
+            <strong>4. Zusammenfassung</strong> — Prüfe alle Details deiner Buchung: Zeitraum, Zubehör, Haftungsschutz und Gesamtpreis.{' '}
+            <strong>5. Zahlung</strong> — Bezahle sicher über Stripe mit Kreditkarte, Klarna, Apple Pay, Google Pay oder SEPA-Lastschrift. Fertig! Du bekommst eine Bestätigung per E-Mail.
+          </>
+        ),
+      },
     ],
   },
   {
@@ -150,7 +163,7 @@ const faqSections: { title: string; items: FaqItem[] }[] = [
 
 export default function FAQPage() {
   return (
-    <div className="min-h-screen bg-white dark:bg-[#0A0A0A]">
+    <div className="min-h-screen bg-white dark:bg-brand-black">
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <h1 className="font-heading font-bold text-3xl text-brand-black dark:text-white mb-2">
           Häufige Fragen (FAQ)
@@ -167,11 +180,11 @@ export default function FAQPage() {
               </h2>
               <div className="space-y-4">
                 {section.items.map((item) => (
-                  <div key={item.question} className="bg-brand-bg dark:bg-white/5 rounded-card p-5">
+                  <div key={item.question} className="bg-brand-bg dark:bg-brand-dark rounded-card p-5">
                     <h3 className="font-heading font-semibold text-brand-black dark:text-white text-sm mb-2">
                       {item.question}
                     </h3>
-                    <p className="font-body text-brand-steel dark:text-gray-400 text-sm leading-relaxed">
+                    <p className="font-body text-brand-steel dark:text-gray-300 text-sm leading-relaxed">
                       {item.answer}
                     </p>
                   </div>
@@ -185,7 +198,7 @@ export default function FAQPage() {
           <p className="font-heading font-semibold text-brand-black dark:text-white mb-2">
             Deine Frage war nicht dabei?
           </p>
-          <p className="font-body text-brand-steel dark:text-gray-400 text-sm mb-4">
+          <p className="font-body text-brand-steel dark:text-gray-300 text-sm mb-4">
             Schreib uns gerne — wir antworten in der Regel innerhalb von 24 Stunden.
           </p>
           <Link

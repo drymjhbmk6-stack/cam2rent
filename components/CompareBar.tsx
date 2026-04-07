@@ -45,7 +45,7 @@ export default function CompareBar() {
         }
       `}</style>
 
-      <div className="bg-white border-t border-brand-border shadow-[0_-4px_24px_rgba(0,0,0,0.1)]">
+      <div className="bg-white dark:bg-brand-dark border-t border-brand-border dark:border-white/10 shadow-[0_-4px_24px_rgba(0,0,0,0.1)]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
           <div className="flex items-center gap-4">
             {/* Produkt-Thumbnails */}
@@ -66,16 +66,16 @@ export default function CompareBar() {
                         <circle cx="12" cy="10.5" r="2" fill={color} fillOpacity="0.7" />
                       </svg>
                     </div>
-                    <span className="text-sm font-body font-medium text-brand-black hidden sm:block whitespace-nowrap max-w-[120px] truncate">
+                    <span className="text-sm font-body font-medium text-brand-black dark:text-white hidden sm:block whitespace-nowrap max-w-[120px] truncate">
                       {product.name}
                     </span>
-                    <span className="text-sm font-body font-medium text-brand-black sm:hidden whitespace-nowrap max-w-[80px] truncate">
+                    <span className="text-sm font-body font-medium text-brand-black dark:text-white sm:hidden whitespace-nowrap max-w-[80px] truncate">
                       {product.model}
                     </span>
                     <button
                       type="button"
                       onClick={() => removeFromCompare(product.id)}
-                      className="p-0.5 rounded-full hover:bg-brand-bg text-brand-muted hover:text-brand-black transition-colors"
+                      className="p-0.5 rounded-full hover:bg-brand-bg dark:hover:bg-white/10 text-brand-muted dark:text-gray-400 hover:text-brand-black dark:hover:text-white transition-colors"
                       aria-label={`${product.name} aus Vergleich entfernen`}
                     >
                       <XIcon />
@@ -88,7 +88,7 @@ export default function CompareBar() {
               {Array.from({ length: 3 - compareIds.length }).map((_, i) => (
                 <div
                   key={`empty-${i}`}
-                  className="w-10 h-10 rounded-lg border-2 border-dashed border-brand-border flex-shrink-0 hidden sm:block"
+                  className="w-10 h-10 rounded-lg border-2 border-dashed border-brand-border dark:border-white/10 flex-shrink-0 hidden sm:block"
                 />
               ))}
             </div>
@@ -98,14 +98,14 @@ export default function CompareBar() {
               <button
                 type="button"
                 onClick={clearCompare}
-                className="text-xs font-body text-brand-muted hover:text-brand-steel transition-colors whitespace-nowrap hidden sm:block"
+                className="text-xs font-body text-brand-muted dark:text-gray-400 hover:text-brand-steel dark:hover:text-gray-300 transition-colors whitespace-nowrap hidden sm:block"
               >
                 Alle entfernen
               </button>
               <button
                 type="button"
                 onClick={clearCompare}
-                className="p-1.5 rounded-full hover:bg-brand-bg text-brand-muted hover:text-brand-black transition-colors sm:hidden"
+                className="p-1.5 rounded-full hover:bg-brand-bg dark:hover:bg-white/10 text-brand-muted dark:text-gray-400 hover:text-brand-black dark:hover:text-white transition-colors sm:hidden"
                 aria-label="Alle entfernen"
               >
                 <XIcon />

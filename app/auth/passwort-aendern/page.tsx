@@ -39,42 +39,42 @@ export default function PasswortAendernPage() {
   };
 
   return (
-    <div className="min-h-screen bg-brand-bg flex items-center justify-center px-4 py-16">
+    <div className="min-h-screen bg-brand-bg dark:bg-brand-black flex items-center justify-center px-4 py-16">
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
           <Link href="/" className="inline-block">
-            <span className="font-heading font-bold text-2xl text-brand-black">
+            <span className="font-heading font-bold text-2xl text-brand-black dark:text-white">
               Cam<span className="text-accent-blue">2</span>Rent
             </span>
           </Link>
         </div>
 
         {/* Card */}
-        <div className="bg-white rounded-card shadow-card p-8">
-          <h1 className="font-heading font-bold text-2xl text-brand-black mb-1">
+        <div className="bg-white dark:bg-brand-dark rounded-card shadow-card p-8">
+          <h1 className="font-heading font-bold text-2xl text-brand-black dark:text-white mb-1">
             Neues Passwort setzen
           </h1>
-          <p className="text-brand-text text-sm mb-6">
+          <p className="text-brand-text dark:text-gray-300 text-sm mb-6">
             Wähle ein neues, sicheres Passwort für dein Konto.
           </p>
 
           {error && (
-            <div className="mb-4 p-4 rounded-[10px] bg-red-50 border border-red-200 text-status-error text-sm">
+            <div className="mb-4 p-4 rounded-[10px] bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-status-error text-sm">
               {error}
             </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-body font-medium text-brand-black mb-1">
+              <label className="block text-sm font-body font-medium text-brand-black dark:text-white mb-1">
                 Neues Passwort
               </label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-3 rounded-[10px] border border-brand-border bg-white text-brand-black placeholder-brand-muted focus:outline-none focus:ring-2 focus:ring-accent-blue focus:border-transparent transition-colors"
+                className="w-full px-4 py-3 rounded-[10px] border border-brand-border dark:border-white/10 bg-white dark:bg-brand-black text-brand-black dark:text-white placeholder-brand-muted dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent-blue focus:border-transparent transition-colors"
                 placeholder="Mindestens 8 Zeichen"
                 required
                 autoComplete="new-password"
@@ -83,14 +83,14 @@ export default function PasswortAendernPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-body font-medium text-brand-black mb-1">
+              <label className="block text-sm font-body font-medium text-brand-black dark:text-white mb-1">
                 Passwort bestätigen
               </label>
               <input
                 type="password"
                 value={passwordConfirm}
                 onChange={(e) => setPasswordConfirm(e.target.value)}
-                className="w-full px-4 py-3 rounded-[10px] border border-brand-border bg-white text-brand-black placeholder-brand-muted focus:outline-none focus:ring-2 focus:ring-accent-blue focus:border-transparent transition-colors"
+                className="w-full px-4 py-3 rounded-[10px] border border-brand-border dark:border-white/10 bg-white dark:bg-brand-black text-brand-black dark:text-white placeholder-brand-muted dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent-blue focus:border-transparent transition-colors"
                 placeholder="Passwort wiederholen"
                 required
                 autoComplete="new-password"
@@ -100,7 +100,7 @@ export default function PasswortAendernPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 px-6 bg-brand-black text-white font-heading font-semibold rounded-btn hover:bg-brand-dark disabled:opacity-60 disabled:cursor-not-allowed transition-colors mt-2"
+              className="w-full py-3 px-6 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold rounded-btn hover:bg-brand-dark dark:hover:bg-accent-blue/90 disabled:opacity-60 disabled:cursor-not-allowed transition-colors mt-2"
             >
               {loading ? 'Wird gespeichert…' : 'Passwort speichern'}
             </button>
