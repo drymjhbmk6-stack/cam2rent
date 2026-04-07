@@ -323,7 +323,7 @@ export default function ManualBookingPage() {
         const pSubtotal = pPrice + pAccPrice + pSetPrice + pHaftungPrice;
         const pShipping = shippingPrice; // Versand nur einmal bei erster Buchung
         const pTotal = pSubtotal + (bookingIds.length === 0 ? pShipping : 0);
-        const pDeposit = p?.deposit ?? 0;
+        const pDeposit = (depositMode === 'kaution' || depositMode === 'both') ? (p?.deposit ?? 0) : 0;
 
         const accNames = sp.accessories.map((id) => accessories.find((a) => a.id === id)?.name ?? id);
         const setNames = sp.sets.map((id) => sets.find((s) => s.id === id)?.name ?? id);
@@ -794,7 +794,7 @@ export default function ManualBookingPage() {
               <span>Gesamt</span>
               <span>{total.toFixed(2)} €</span>
             </div>
-            {deposit > 0 && (
+            {deposit > 0 && (depositMode === 'kaution' || depositMode === 'both') && (
               <div className="flex justify-between text-xs" style={{ color: '#64748b' }}>
                 <span>Kaution (vorgemerkt)</span>
                 <span>{deposit.toFixed(2)} €</span>
