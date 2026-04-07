@@ -295,6 +295,11 @@ export default function ProductBookingCalendar({
                 textClass = 'text-white';
                 ringClass = 'ring-2 ring-accent-blue ring-offset-1 dark:ring-offset-gray-800';
               }
+            } else if (isStart) {
+              // Startdatum immer blau hervorheben, auch wenn beim Enddatum-Waehlen nicht selectable
+              bgClass = 'bg-accent-blue';
+              textClass = 'text-white';
+              ringClass = 'ring-2 ring-accent-blue ring-offset-1 dark:ring-offset-gray-800';
             } else if (blockReason) {
               bgClass = 'bg-gray-100 dark:bg-gray-700';
               textClass = 'text-gray-400 dark:text-gray-500';
@@ -397,6 +402,21 @@ export default function ProductBookingCalendar({
           >
             Jetzt mieten
           </Link>
+        </div>
+      )}
+
+      {/* Startdatum gewählt, Enddatum noch offen */}
+      {rangeFrom && !rangeTo && (
+        <div className="bg-accent-blue-soft/50 dark:bg-accent-blue/5 border border-accent-blue/10 rounded-[10px] p-3">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs font-body text-accent-blue/70 dark:text-blue-300/70">Startdatum</span>
+            <span className="text-xs font-heading font-bold text-accent-blue dark:text-blue-300">
+              {parseDate(rangeFrom).toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })}
+            </span>
+          </div>
+          <p className="text-[10px] font-body text-accent-blue/50 dark:text-blue-300/50">
+            Wähle jetzt das Enddatum im Kalender
+          </p>
         </div>
       )}
 
