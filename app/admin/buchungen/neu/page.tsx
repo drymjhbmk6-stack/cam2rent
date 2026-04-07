@@ -126,7 +126,7 @@ export default function ManualBookingPage() {
   const [street, setStreet] = useState('');
   const [zip, setZip] = useState('');
   const [city, setCity] = useState('');
-  const [selectedProducts, setSelectedProducts] = useState<{ id: string; qty: number; accessories: string[]; sets: string[]; note: string; customPrice: string; haftung: string }[]>([]);
+  const [selectedProducts, setSelectedProducts] = useState<{ id: string; qty: number; accessories: string[]; sets: string[]; note: string; customPrice: string; haftung: string; serial: string }[]>([]);
   const [addProductId, setAddProductId] = useState('');
   const [rentalFrom, setRentalFrom] = useState('');
   const [rentalTo, setRentalTo] = useState('');
@@ -186,7 +186,7 @@ export default function ManualBookingPage() {
     setSelectedProducts((prev) => {
       const existing = prev.find((p) => p.id === addProductId);
       if (existing) return prev.map((p) => p.id === addProductId ? { ...p, qty: p.qty + 1 } : p);
-      return [...prev, { id: addProductId, qty: 1, accessories: [], sets: [], note: '', customPrice: '', haftung: 'none' }];
+      return [...prev, { id: addProductId, qty: 1, accessories: [], sets: [], note: '', customPrice: '', haftung: 'none', serial: '' }];
     });
   }
   function removeProduct(id: string) {
@@ -204,6 +204,9 @@ export default function ManualBookingPage() {
   }
   function updateProductHaftung(id: string, haftung: string) {
     setSelectedProducts((prev) => prev.map((p) => p.id === id ? { ...p, haftung } : p));
+  }
+  function updateProductSerial(id: string, serial: string) {
+    setSelectedProducts((prev) => prev.map((p) => p.id === id ? { ...p, serial } : p));
   }
   function toggleProductAccessory(productId: string, accId: string) {
     setSelectedProducts((prev) => prev.map((p) => {
@@ -307,7 +310,7 @@ export default function ManualBookingPage() {
       const custom = parseFloat(prod.customPrice);
       const price = (prod.customPrice !== '' && !isNaN(custom)) ? custom : (days > 0 ? getRentalPrice(prod.id, days, dynPrices, staticProducts) : 0);
       items.push({
-        description: `Kamera-Miete: ${p?.name ?? prod.id} (${days} ${days === 1 ? 'Tag' : 'Tage'}${rentalFrom ? ', ' + fmtD(rentalFrom) + ' – ' + fmtD(rentalTo) : ''})${prod.qty > 1 ? ` × ${prod.qty}` : ''}`,
+        description: `Kamera-Miete: ${p?.name ?? prod.id}${prod.serial ? ' (SN: ' + prod.serial + ')' : ''} (${days} ${days === 1 ? 'Tag' : 'Tage'}${rentalFrom ? ', ' + fmtD(rentalFrom) + ' – ' + fmtD(rentalTo) : ''})${prod.qty > 1 ? ` × ${prod.qty}` : ''}`,
         amount: price * prod.qty,
       });
       // Zubehör
@@ -484,6 +487,7 @@ export default function ManualBookingPage() {
         const setNames = sp.sets.map((id) => sets.find((s) => s.id === id)?.name ?? id);
 
         if (sp.customPrice !== '' && !isNaN(customParsed)) allNotes.push(`Manueller Preis (${p?.name ?? sp.id}): ${customParsed.toFixed(2)} €`);
+        if (sp.serial) allNotes.push(`SN (${p?.name ?? sp.id}): ${sp.serial}`);
         if (sp.note) allNotes.push(`Produkt-Notiz (${p?.name ?? sp.id}): ${sp.note}`);
         if (setNames.length) allNotes.push(`Sets: ${setNames.join(', ')}`);
         if (accNames.length) allNotes.push(`Zubehör: ${accNames.join(', ')}`);
@@ -660,29 +664,35 @@ export default function ManualBookingPage() {
                       <button type="button" onClick={() => removeProduct(sp.id)} className="text-xs p-1" style={{ color: '#ef4444' }}>✕</button>
                     </div>
 
-                    {/* Manueller Preis pro Kamera */}
+                    {/* Preis + Seriennummer */}
                     <div className="mb-3">
-                      <p className="text-xs font-semibold mb-1" style={{ color: '#64748b' }}>PREIS (PRO STÜCK)</p>
-                      <div className="flex items-center gap-3">
-                        <input
-                          style={{ ...inputStyle, width: 160, fontSize: 13 }}
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={sp.customPrice}
-                          onChange={(e) => updateProductCustomPrice(sp.id, e.target.value)}
-                          placeholder={days > 0 ? `${autoPrice.toFixed(2)} € (auto)` : 'Preis eingeben'}
-                        />
-                        {hasCustomPrice && (
-                          <button
-                            type="button"
-                            onClick={() => updateProductCustomPrice(sp.id, '')}
-                            className="text-xs"
-                            style={{ color: '#94a3b8' }}
-                          >
-                            Zurücksetzen
-                          </button>
-                        )}
+                      <div className="flex gap-3 items-end">
+                        <div>
+                          <p className="text-xs font-semibold mb-1" style={{ color: '#64748b' }}>PREIS (PRO STÜCK)</p>
+                          <div className="flex items-center gap-2">
+                            <input
+                              style={{ ...inputStyle, width: 140, fontSize: 13 }}
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={sp.customPrice}
+                              onChange={(e) => updateProductCustomPrice(sp.id, e.target.value)}
+                              placeholder={days > 0 ? `${autoPrice.toFixed(2)} € (auto)` : 'Preis'}
+                            />
+                            {hasCustomPrice && (
+                              <button type="button" onClick={() => updateProductCustomPrice(sp.id, '')} className="text-xs" style={{ color: '#94a3b8' }}>✕</button>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-xs font-semibold mb-1" style={{ color: '#64748b' }}>SERIENNUMMER</p>
+                          <input
+                            style={{ ...inputStyle, fontSize: 13 }}
+                            value={sp.serial}
+                            onChange={(e) => updateProductSerial(sp.id, e.target.value)}
+                            placeholder="z.B. C3531350615214"
+                          />
+                        </div>
                       </div>
                     </div>
 

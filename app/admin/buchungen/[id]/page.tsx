@@ -181,9 +181,9 @@ export default function BuchungDetailPage() {
     const kundenName = booking.customer_name || customer?.full_name || '';
     const produktName = booking.product_name || '';
     const zeitraum = `${fmtDate(booking.rental_from)} – ${fmtDate(booking.rental_to)}`;
-    const zubehoerRows = booking.accessories && booking.accessories.length > 0
-      ? booking.accessories.map((a, i) => `<tr><td style="width:40px">${i + 1}</td><td>${a}</td><td style="width:50px"></td></tr>`).join('')
-      : Array.from({ length: 4 }, (_, i) => `<tr><td style="width:40px">${i + 1}</td><td></td><td style="width:50px"></td></tr>`).join('');
+    const accRows = booking.accessories?.map((a, i) => `<tr><td style="width:40px">${i + 1}</td><td>${a}</td><td style="width:50px"></td></tr>`) ?? [];
+    const emptyCount = Math.max(0, 10 - accRows.length);
+    const zubehoerRows = accRows.join('') + Array.from({ length: emptyCount }, (_, i) => `<tr><td style="width:40px">${accRows.length + i + 1}</td><td></td><td style="width:50px"></td></tr>`).join('');
     const adresse = booking.shipping_address || (customer ? `${customer.address_street || ''}, ${customer.address_zip || ''} ${customer.address_city || ''}` : '');
 
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Versand-Packliste – ${booking.id}</title><style>${docStyles}</style></head><body>
@@ -230,9 +230,9 @@ export default function BuchungDetailPage() {
     const kundenAdresse = booking.shipping_address || (customer ? `${customer.address_street || ''}, ${customer.address_zip || ''} ${customer.address_city || ''}` : '');
     const produktName = booking.product_name || '';
     const zeitraum = `${fmtDate(booking.rental_from)} – ${fmtDate(booking.rental_to)}`;
-    const zubehoerRows = booking.accessories && booking.accessories.length > 0
-      ? booking.accessories.map((a, i) => `<tr><td style="width:40px">${i + 1}</td><td>${a}</td><td style="width:50px"></td></tr>`).join('')
-      : Array.from({ length: 4 }, (_, i) => `<tr><td style="width:40px">${i + 1}</td><td></td><td style="width:50px"></td></tr>`).join('');
+    const accRows2 = booking.accessories?.map((a, i) => `<tr><td style="width:40px">${i + 1}</td><td>${a}</td><td style="width:50px"></td></tr>`) ?? [];
+    const emptyCount2 = Math.max(0, 10 - accRows2.length);
+    const zubehoerRows = accRows2.join('') + Array.from({ length: emptyCount2 }, (_, i) => `<tr><td style="width:40px">${accRows2.length + i + 1}</td><td></td><td style="width:50px"></td></tr>`).join('');
 
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Übergabeprotokoll – ${booking.id}</title><style>${docStyles}</style></head><body>
   ${toolbarHtml}
