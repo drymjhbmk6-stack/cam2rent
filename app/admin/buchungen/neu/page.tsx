@@ -126,12 +126,11 @@ export default function ManualBookingPage() {
   const [street, setStreet] = useState('');
   const [zip, setZip] = useState('');
   const [city, setCity] = useState('');
-  const [selectedProducts, setSelectedProducts] = useState<{ id: string; qty: number }[]>([]);
+  const [selectedProducts, setSelectedProducts] = useState<{ id: string; qty: number; accessories: string[]; sets: string[] }[]>([]);
   const [addProductId, setAddProductId] = useState('');
   const [rentalFrom, setRentalFrom] = useState('');
   const [rentalTo, setRentalTo] = useState('');
-  const [selectedAccessories, setSelectedAccessories] = useState<string[]>([]);
-  const [selectedSets, setSelectedSets] = useState<string[]>([]);
+  const [accAvailability, setAccAvailability] = useState<Record<string, { remaining: number; compatible: boolean; total: number }>>({});
   const [haftung, setHaftung] = useState('none');
   const [deliveryMode, setDeliveryMode] = useState<'versand' | 'abholung'>('versand');
   const [shippingMethod, setShippingMethod] = useState<'standard' | 'express'>('standard');
@@ -182,7 +181,7 @@ export default function ManualBookingPage() {
     setSelectedProducts((prev) => {
       const existing = prev.find((p) => p.id === addProductId);
       if (existing) return prev.map((p) => p.id === addProductId ? { ...p, qty: p.qty + 1 } : p);
-      return [...prev, { id: addProductId, qty: 1 }];
+      return [...prev, { id: addProductId, qty: 1, accessories: [], sets: [] }];
     });
   }
   function removeProduct(id: string) {
@@ -192,6 +191,37 @@ export default function ManualBookingPage() {
     if (qty < 1) return removeProduct(id);
     setSelectedProducts((prev) => prev.map((p) => p.id === id ? { ...p, qty } : p));
   }
+  function toggleProductAccessory(productId: string, accId: string) {
+    setSelectedProducts((prev) => prev.map((p) => {
+      if (p.id !== productId) return p;
+      const has = p.accessories.includes(accId);
+      return { ...p, accessories: has ? p.accessories.filter((a) => a !== accId) : [...p.accessories, accId] };
+    }));
+  }
+  function toggleProductSet(productId: string, setId: string) {
+    setSelectedProducts((prev) => prev.map((p) => {
+      if (p.id !== productId) return p;
+      const has = p.sets.includes(setId);
+      return { ...p, sets: has ? p.sets.filter((s) => s !== setId) : [...p.sets, setId] };
+    }));
+  }
+
+  // Verfügbarkeit laden wenn Zeitraum oder Liefermodus sich ändert
+  useEffect(() => {
+    if (!rentalFrom || !rentalTo) return;
+    fetch(`/api/accessory-availability?from=${rentalFrom}&to=${rentalTo}&delivery_mode=${deliveryMode}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.accessories) {
+          const map: Record<string, { remaining: number; compatible: boolean; total: number }> = {};
+          for (const a of data.accessories) {
+            map[a.id] = { remaining: a.available_qty_remaining, compatible: a.compatible, total: a.total_qty };
+          }
+          setAccAvailability(map);
+        }
+      })
+      .catch(() => {});
+  }, [rentalFrom, rentalTo, deliveryMode]);
 
   const haftungPrice = useMemo(() => {
     if (haftung === 'none') return 0;
@@ -214,18 +244,22 @@ export default function ManualBookingPage() {
   }, [selectedProducts, productList]);
 
   const accessoryPrice = useMemo(() => {
-    return selectedAccessories.reduce((sum, id) => {
-      const acc = accessories.find((a) => a.id === id);
-      return sum + (acc ? getAccessoryPrice(acc, days) : 0);
+    return selectedProducts.reduce((sum, sp) => {
+      return sum + sp.accessories.reduce((s2, id) => {
+        const acc = accessories.find((a) => a.id === id);
+        return s2 + (acc ? getAccessoryPrice(acc, days) : 0);
+      }, 0) * sp.qty;
     }, 0);
-  }, [selectedAccessories, accessories, days]);
+  }, [selectedProducts, accessories, days]);
 
   const setPrice = useMemo(() => {
-    return selectedSets.reduce((sum, id) => {
-      const s = sets.find((st) => st.id === id);
-      return sum + (s ? getSetPrice(s, days) : 0);
+    return selectedProducts.reduce((sum, sp) => {
+      return sum + sp.sets.reduce((s2, id) => {
+        const s = sets.find((st) => st.id === id);
+        return s2 + (s ? getSetPrice(s, days) : 0);
+      }, 0) * sp.qty;
     }, 0);
-  }, [selectedSets, sets, days]);
+  }, [selectedProducts, sets, days]);
 
   const subtotal = rentalPrice + accessoryPrice + setPrice + haftungPrice;
   const sp = dynPrices?.shipping;
@@ -234,13 +268,6 @@ export default function ManualBookingPage() {
     : subtotal >= (sp?.freeShippingThreshold ?? 50) ? 0 : (sp?.standardPrice ?? 5.99);
   const total = subtotal + shippingPrice;
   const deposit = totalDeposit;
-
-  function toggleAccessory(id: string) {
-    setSelectedAccessories((prev) => prev.includes(id) ? prev.filter((a) => a !== id) : [...prev, id]);
-  }
-  function toggleSet(id: string) {
-    setSelectedSets((prev) => prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]);
-  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -253,48 +280,68 @@ export default function ManualBookingPage() {
     setSaving(true);
     try {
       const shippingAddress = street ? `${street}, ${zip} ${city}` : '';
-      const accNames = selectedAccessories.map((id) => accessories.find((a) => a.id === id)?.name ?? id);
-      const setNames = selectedSets.map((id) => sets.find((s) => s.id === id)?.name ?? id);
-      const productNames = selectedProducts.map((sp) => {
-        const p = productList.find((pl) => pl.id === sp.id);
-        return sp.qty > 1 ? `${sp.qty}x ${p?.name ?? sp.id}` : (p?.name ?? sp.id);
-      });
-      const mainProduct = selectedProducts[0];
+      const bookingIds: string[] = [];
 
-      const res = await fetch('/api/admin/manual-booking', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          product_id: mainProduct.id,
-          product_name: productNames.join(', '),
-          rental_from: rentalFrom,
-          rental_to: rentalTo,
-          days,
-          delivery_mode: deliveryMode,
-          shipping_method: deliveryMode === 'versand' ? shippingMethod : null,
-          shipping_price: shippingPrice,
-          haftung,
-          accessories: [...selectedAccessories, ...selectedSets],
-          price_rental: rentalPrice,
-          price_accessories: accessoryPrice + setPrice,
-          price_haftung: haftungPrice,
-          price_total: total,
-          deposit,
-          customer_name: customerName.trim(),
-          customer_email: customerEmail.trim() || null,
-          shipping_address: shippingAddress || null,
-          notes: [
-            source ? `Quelle: ${source}` : '',
-            setNames.length ? `Sets: ${setNames.join(', ')}` : '',
-            accNames.length ? `Zubehoer: ${accNames.join(', ')}` : '',
-            notes,
-          ].filter(Boolean).join(' | '),
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Fehler');
-      setSuccess(`Buchung ${data.bookingId} erfolgreich erstellt!`);
-      setTimeout(() => router.push('/admin/buchungen'), 1500);
+      // Pro Produkt eine eigene Buchung erstellen
+      for (const sp of selectedProducts) {
+        const p = productList.find((pl) => pl.id === sp.id);
+        const pPrice = days > 0 ? getRentalPrice(sp.id, days, dynPrices, staticProducts) : 0;
+        const pAccPrice = sp.accessories.reduce((sum, id) => {
+          const acc = accessories.find((a) => a.id === id);
+          return sum + (acc ? getAccessoryPrice(acc, days) : 0);
+        }, 0);
+        const pSetPrice = sp.sets.reduce((sum, id) => {
+          const s = sets.find((st) => st.id === id);
+          return sum + (s ? getSetPrice(s, days) : 0);
+        }, 0);
+        const pSubtotal = pPrice + pAccPrice + pSetPrice + haftungPrice;
+        const pShipping = shippingPrice; // Versand nur einmal bei erster Buchung
+        const pTotal = pSubtotal + (bookingIds.length === 0 ? pShipping : 0);
+        const pDeposit = p?.deposit ?? 0;
+
+        const accNames = sp.accessories.map((id) => accessories.find((a) => a.id === id)?.name ?? id);
+        const setNames = sp.sets.map((id) => sets.find((s) => s.id === id)?.name ?? id);
+
+        // Für qty > 1: mehrere Buchungen erstellen
+        for (let q = 0; q < sp.qty; q++) {
+          const res = await fetch('/api/admin/manual-booking', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              product_id: sp.id,
+              product_name: p?.name ?? sp.id,
+              rental_from: rentalFrom,
+              rental_to: rentalTo,
+              days,
+              delivery_mode: deliveryMode,
+              shipping_method: deliveryMode === 'versand' ? shippingMethod : null,
+              shipping_price: bookingIds.length === 0 ? pShipping : 0,
+              haftung,
+              accessories: [...sp.accessories, ...sp.sets],
+              price_rental: pPrice,
+              price_accessories: pAccPrice + pSetPrice,
+              price_haftung: haftungPrice,
+              price_total: bookingIds.length === 0 ? pTotal : pSubtotal,
+              deposit: pDeposit,
+              customer_name: customerName.trim(),
+              customer_email: customerEmail.trim() || null,
+              shipping_address: shippingAddress || null,
+              notes: [
+                source ? `Quelle: ${source}` : '',
+                setNames.length ? `Sets: ${setNames.join(', ')}` : '',
+                accNames.length ? `Zubehör: ${accNames.join(', ')}` : '',
+                notes,
+              ].filter(Boolean).join(' | '),
+            }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || 'Fehler');
+          bookingIds.push(data.bookingId);
+        }
+      }
+
+      setSuccess(`${bookingIds.length} Buchung${bookingIds.length > 1 ? 'en' : ''} erstellt: ${bookingIds.join(', ')}`);
+      setTimeout(() => router.push('/admin/buchungen'), 2000);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unbekannter Fehler');
     } finally {
@@ -310,8 +357,6 @@ export default function ManualBookingPage() {
     );
   }
 
-  const availableAccessories = accessories.filter((a) => a.available);
-  const availableSets = sets.filter((s) => s.available);
   const stdShippingLabel = subtotal >= (sp?.freeShippingThreshold ?? 50)
     ? 'Standard (3-5 Tage) — Gratis'
     : `Standard (3-5 Tage) — ${(sp?.standardPrice ?? 5.99).toFixed(2)} €`;
@@ -383,36 +428,8 @@ export default function ManualBookingPage() {
             </button>
           </div>
 
-          {/* Liste */}
-          {selectedProducts.length > 0 && (
-            <div className="space-y-2 mb-4">
-              {selectedProducts.map((sp) => {
-                const p = productList.find((pl) => pl.id === sp.id);
-                const price = days > 0 ? getRentalPrice(sp.id, days, dynPrices, staticProducts) * sp.qty : 0;
-                return (
-                  <div key={sp.id} className="flex items-center gap-3 p-3 rounded-lg" style={{ background: '#06b6d40a', border: '1px solid #06b6d433' }}>
-                    <div className="flex-1">
-                      <span className="text-sm font-semibold" style={{ color: '#e2e8f0' }}>{p?.name ?? sp.id}</span>
-                      {!p?.available && <span className="text-xs ml-2" style={{ color: '#f59e0b' }}>(nicht verfügbar)</span>}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button type="button" onClick={() => updateProductQty(sp.id, sp.qty - 1)} className="w-7 h-7 rounded flex items-center justify-center text-sm" style={{ background: '#1e293b', color: '#94a3b8' }}>−</button>
-                      <span className="text-sm font-semibold w-6 text-center" style={{ color: '#e2e8f0' }}>{sp.qty}</span>
-                      <button type="button" onClick={() => updateProductQty(sp.id, sp.qty + 1)} className="w-7 h-7 rounded flex items-center justify-center text-sm" style={{ background: '#1e293b', color: '#94a3b8' }}>+</button>
-                    </div>
-                    {days > 0 && <span className="text-xs font-semibold ml-2" style={{ color: '#06b6d4' }}>{price.toFixed(2)} €</span>}
-                    <button type="button" onClick={() => removeProduct(sp.id)} className="text-xs p-1" style={{ color: '#ef4444' }}>✕</button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-          {selectedProducts.length === 0 && (
-            <p className="text-xs mb-4" style={{ color: '#64748b' }}>Noch kein Produkt ausgewählt.</p>
-          )}
-
           {/* Zeitraum */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
             <div>
               <label style={labelStyle}>Mietbeginn *</label>
               <input style={inputStyle} type="date" value={rentalFrom} onChange={(e) => setRentalFrom(e.target.value)} required />
@@ -422,66 +439,107 @@ export default function ManualBookingPage() {
               <input style={inputStyle} type="date" value={rentalTo} onChange={(e) => setRentalTo(e.target.value)} required />
             </div>
           </div>
-          {days > 0 && selectedProducts.length > 0 && (
-            <p className="mt-3 text-sm" style={{ color: '#06b6d4' }}>
-              {days} {days === 1 ? 'Tag' : 'Tage'} · Mietpreis gesamt: {rentalPrice.toFixed(2)} €
+          {days > 0 && (
+            <p className="text-sm mb-4" style={{ color: '#06b6d4' }}>
+              {days} {days === 1 ? 'Tag' : 'Tage'}
             </p>
           )}
+
+          {/* Pro-Produkt Blöcke */}
+          {selectedProducts.length > 0 && (
+            <div className="space-y-4">
+              {selectedProducts.map((sp) => {
+                const p = productList.find((pl) => pl.id === sp.id);
+                const productPrice = days > 0 ? getRentalPrice(sp.id, days, dynPrices, staticProducts) * sp.qty : 0;
+                // Kompatible Zubehörteile für dieses Produkt
+                const compatAccessories = accessories.filter((acc) => {
+                  const avail = accAvailability[acc.id];
+                  // Kompatibilitätsprüfung: API gibt compatible per product_id zurück
+                  // Hier: manuell über compatible_product_ids prüfen
+                  return acc.available;
+                });
+                const compatSets = sets.filter((s) => s.available);
+
+                return (
+                  <div key={sp.id} style={{ background: '#0f172a', borderRadius: 10, border: '1px solid #1e293b', padding: 16 }}>
+                    {/* Produkt-Header */}
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="flex-1">
+                        <span className="text-sm font-semibold" style={{ color: '#e2e8f0' }}>{p?.name ?? sp.id}</span>
+                        {!p?.available && <span className="text-xs ml-2" style={{ color: '#f59e0b' }}>(nicht verfügbar)</span>}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button type="button" onClick={() => updateProductQty(sp.id, sp.qty - 1)} className="w-7 h-7 rounded flex items-center justify-center text-sm" style={{ background: '#1e293b', color: '#94a3b8' }}>−</button>
+                        <span className="text-sm font-semibold w-6 text-center" style={{ color: '#e2e8f0' }}>{sp.qty}</span>
+                        <button type="button" onClick={() => updateProductQty(sp.id, sp.qty + 1)} className="w-7 h-7 rounded flex items-center justify-center text-sm" style={{ background: '#1e293b', color: '#94a3b8' }}>+</button>
+                      </div>
+                      {days > 0 && <span className="text-xs font-semibold" style={{ color: '#06b6d4' }}>{productPrice.toFixed(2)} €</span>}
+                      <button type="button" onClick={() => removeProduct(sp.id)} className="text-xs p-1" style={{ color: '#ef4444' }}>✕</button>
+                    </div>
+
+                    {/* Sets für dieses Produkt */}
+                    {compatSets.length > 0 && (
+                      <div className="mb-3">
+                        <p className="text-xs font-semibold mb-2" style={{ color: '#64748b' }}>SETS</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+                          {compatSets.map((set) => {
+                            const checked = sp.sets.includes(set.id);
+                            const setItems: { accessory_id: string; qty: number }[] = (set as unknown as { accessory_items?: { accessory_id: string; qty: number }[] }).accessory_items ?? [];
+                            const unavail = setItems.length > 0 && setItems.some((item) => {
+                              const av = accAvailability[item.accessory_id];
+                              return av && av.remaining < item.qty;
+                            });
+                            const price = days > 0 ? getSetPrice(set, days) : set.price;
+                            return (
+                              <label key={set.id} className={`flex items-center gap-2 p-2 rounded-lg text-xs ${unavail ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`} style={{ border: `1px solid ${checked ? '#06b6d433' : '#1e293b'}`, background: checked ? '#06b6d40a' : 'transparent' }}>
+                                <input type="checkbox" checked={checked} disabled={unavail} onChange={() => !unavail && toggleProductSet(sp.id, set.id)} className="accent-cyan-400" />
+                                <span style={{ color: '#e2e8f0' }}>{set.name}</span>
+                                {unavail ? (
+                                  <span className="ml-auto text-xs" style={{ color: '#ef4444' }}>nicht verfügbar</span>
+                                ) : (
+                                  <span className="ml-auto" style={{ color: '#06b6d4' }}>{price.toFixed(2)} €</span>
+                                )}
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Zubehör für dieses Produkt */}
+                    {compatAccessories.length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold mb-2" style={{ color: '#64748b' }}>ZUBEHÖR</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+                          {compatAccessories.map((acc) => {
+                            const checked = sp.accessories.includes(acc.id);
+                            const avail = accAvailability[acc.id];
+                            const unavail = avail && avail.remaining <= 0;
+                            const price = days > 0 ? getAccessoryPrice(acc, days) : acc.price;
+                            return (
+                              <label key={acc.id} className={`flex items-center gap-2 p-2 rounded-lg text-xs ${unavail ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`} style={{ border: `1px solid ${checked ? '#06b6d433' : '#1e293b'}`, background: checked ? '#06b6d40a' : 'transparent' }}>
+                                <input type="checkbox" checked={checked} disabled={unavail} onChange={() => !unavail && toggleProductAccessory(sp.id, acc.id)} className="accent-cyan-400" />
+                                <span style={{ color: '#e2e8f0' }}>{acc.name}</span>
+                                {unavail ? (
+                                  <span className="ml-auto" style={{ color: '#ef4444' }}>nicht verfügbar</span>
+                                ) : (
+                                  <span className="ml-auto" style={{ color: '#06b6d4' }}>{price.toFixed(2)} €</span>
+                                )}
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {selectedProducts.length === 0 && (
+            <p className="text-xs" style={{ color: '#64748b' }}>Noch kein Produkt ausgewählt.</p>
+          )}
         </div>
-
-        {/* ─── Sets ─── */}
-        {availableSets.length > 0 && (
-          <div style={sectionStyle}>
-            <h2 className="font-heading font-semibold text-sm mb-4" style={headingStyle}>Sets</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {availableSets.map((set) => {
-                const checked = selectedSets.includes(set.id);
-                const price = days > 0 ? getSetPrice(set, days) : set.price;
-                return (
-                  <label key={set.id} className="flex items-center gap-3 p-3 rounded-lg cursor-pointer" style={{ background: checked ? '#06b6d40a' : 'transparent', border: `1px solid ${checked ? '#06b6d433' : '#1e293b'}` }}>
-                    <input type="checkbox" checked={checked} onChange={() => toggleSet(set.id)} className="accent-cyan-400" />
-                    <div className="flex-1">
-                      <span className="text-sm" style={{ color: '#e2e8f0' }}>{set.name}</span>
-                      <span className="text-xs ml-2" style={{ color: '#64748b' }}>
-                        {set.price.toFixed(2)} €{set.pricing_mode === 'perDay' ? '/Tag' : ' pauschal'}
-                      </span>
-                    </div>
-                    {checked && days > 0 && (
-                      <span className="text-xs font-semibold" style={{ color: '#06b6d4' }}>{price.toFixed(2)} €</span>
-                    )}
-                  </label>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* ─── Zubehoer ─── */}
-        {availableAccessories.length > 0 && (
-          <div style={sectionStyle}>
-            <h2 className="font-heading font-semibold text-sm mb-4" style={headingStyle}>Zubehoer</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {availableAccessories.map((acc) => {
-                const checked = selectedAccessories.includes(acc.id);
-                const price = days > 0 ? getAccessoryPrice(acc, days) : acc.price;
-                return (
-                  <label key={acc.id} className="flex items-center gap-3 p-3 rounded-lg cursor-pointer" style={{ background: checked ? '#06b6d40a' : 'transparent', border: `1px solid ${checked ? '#06b6d433' : '#1e293b'}` }}>
-                    <input type="checkbox" checked={checked} onChange={() => toggleAccessory(acc.id)} className="accent-cyan-400" />
-                    <div className="flex-1">
-                      <span className="text-sm" style={{ color: '#e2e8f0' }}>{acc.name}</span>
-                      <span className="text-xs ml-2" style={{ color: '#64748b' }}>
-                        {acc.price.toFixed(2)} €{acc.pricing_mode === 'perDay' ? '/Tag' : ' pauschal'}
-                      </span>
-                    </div>
-                    {checked && days > 0 && (
-                      <span className="text-xs font-semibold" style={{ color: '#06b6d4' }}>{price.toFixed(2)} €</span>
-                    )}
-                  </label>
-                );
-              })}
-            </div>
-          </div>
-        )}
 
         {/* ─── Versand & Haftung ─── */}
         <div style={sectionStyle}>
