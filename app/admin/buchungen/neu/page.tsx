@@ -614,7 +614,7 @@ export default function ManualBookingPage() {
             )}
             {accessoryPrice > 0 && (
               <div className="flex justify-between" style={{ color: '#e2e8f0' }}>
-                <span>Zubehoer ({selectedAccessories.length}x)</span>
+                <span>Zubehoer ({selectedProducts.reduce((n, sp) => n + sp.accessories.length, 0)}x)</span>
                 <span>{accessoryPrice.toFixed(2)} €</span>
               </div>
             )}
