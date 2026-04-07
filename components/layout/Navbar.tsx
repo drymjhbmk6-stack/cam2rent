@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useAuth } from '@/components/AuthProvider';
 import { useCart } from '@/components/CartProvider';
 import SearchModal from '@/components/SearchModal';
+import ThemeToggle from '@/components/ThemeToggle';
 
 const navLinks = [
   { href: '/', label: 'Startseite' },
@@ -135,6 +136,9 @@ export default function Navbar() {
               </svg>
             </button>
 
+            {/* Dark/Light Mode Toggle */}
+            <ThemeToggle />
+
             {/* Cart icon */}
             <Link
               href="/warenkorb"
@@ -222,6 +226,12 @@ export default function Navbar() {
           >
             Jetzt mieten
           </Link>
+
+          {/* Dark/Light Mode im Mobile-Menü */}
+          <div className="flex items-center justify-between px-3 py-2.5 rounded-md font-body font-medium text-sm text-brand-text dark:text-gray-300">
+            <span>Darstellung</span>
+            <ThemeToggle />
+          </div>
 
           {/* Auth in mobile menu */}
           <div className="mt-2 pt-2 border-t border-brand-border dark:border-gray-700">
