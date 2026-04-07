@@ -228,8 +228,7 @@ export default function AdminZubehoerPage() {
               <div className="sm:col-span-2">
                 <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Kompatible Kameras</label>
                 <div className="flex flex-wrap gap-2 mb-2">
-                  <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-body cursor-pointer"
-                    style={{ borderColor: newForm.compatible_product_ids.length === 0 ? '#3b82f6' : '#e2e8f0', background: newForm.compatible_product_ids.length === 0 ? '#dbeafe' : 'transparent' }}>
+                  <label className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-body cursor-pointer ${newForm.compatible_product_ids.length === 0 ? 'border-blue-500 bg-blue-500/20 text-blue-700 dark:text-blue-300 font-semibold' : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300'}`}>
                     <input type="radio" name="new-compat" checked={newForm.compatible_product_ids.length === 0}
                       onChange={() => setNewForm((f) => ({ ...f, compatible_product_ids: [] }))} className="sr-only" />
                     Alle Kameras
@@ -237,8 +236,7 @@ export default function AdminZubehoerPage() {
                   {PRODUCT_LIST.map((p) => {
                     const checked = newForm.compatible_product_ids.includes(p.id);
                     return (
-                      <label key={p.id} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-body cursor-pointer"
-                        style={{ borderColor: checked ? '#3b82f6' : '#e2e8f0', background: checked ? '#dbeafe' : 'transparent' }}>
+                      <label key={p.id} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-body cursor-pointer ${checked ? 'border-blue-500 bg-blue-500/20 text-blue-700 dark:text-blue-300 font-semibold' : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300'}`}>
                         <input type="checkbox" checked={checked} className="sr-only"
                           onChange={() => setNewForm((f) => {
                             const ids = checked ? f.compatible_product_ids.filter((id) => id !== p.id) : [...f.compatible_product_ids, p.id];
@@ -378,8 +376,7 @@ export default function AdminZubehoerPage() {
                       <div className="sm:col-span-2">
                         <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Kompatible Kameras</label>
                         <div className="flex flex-wrap gap-2 mb-2">
-                          <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-body cursor-pointer"
-                            style={{ borderColor: (editForm.compatible_product_ids ?? []).length === 0 ? '#3b82f6' : '#e2e8f0', background: (editForm.compatible_product_ids ?? []).length === 0 ? '#dbeafe' : 'transparent' }}>
+                          <label className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-body cursor-pointer ${(editForm.compatible_product_ids ?? []).length === 0 ? 'border-blue-500 bg-blue-500/20 text-blue-700 dark:text-blue-300 font-semibold' : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300'}`}>
                             <input type="radio" name="edit-compat" checked={(editForm.compatible_product_ids ?? []).length === 0}
                               onChange={() => setEditForm((f) => ({ ...f, compatible_product_ids: [] }))} className="sr-only" />
                             Alle Kameras
@@ -387,8 +384,7 @@ export default function AdminZubehoerPage() {
                           {PRODUCT_LIST.map((p) => {
                             const checked = (editForm.compatible_product_ids ?? []).includes(p.id);
                             return (
-                              <label key={p.id} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-body cursor-pointer"
-                                style={{ borderColor: checked ? '#3b82f6' : '#e2e8f0', background: checked ? '#dbeafe' : 'transparent' }}>
+                              <label key={p.id} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-body cursor-pointer ${checked ? 'border-blue-500 bg-blue-500/20 text-blue-700 dark:text-blue-300 font-semibold' : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300'}`}>
                                 <input type="checkbox" checked={checked} className="sr-only"
                                   onChange={() => setEditForm((f) => {
                                     const cur = f.compatible_product_ids ?? [];
