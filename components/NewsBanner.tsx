@@ -57,7 +57,15 @@ export default function NewsBanner() {
   if (activeMessages.length === 0) return null;
 
   const separator = ' \u00b7 ';
-  const text = activeMessages.map((m) => m.text).join(separator) + separator;
+  const colors = ['#e2e8f0', '#06b6d4'];
+
+  const renderMessages = () =>
+    activeMessages.map((m, i) => (
+      <span key={m.id}>
+        <span style={{ color: colors[i % 2] }}>{m.text}</span>
+        <span className="text-[#475569]">{separator}</span>
+      </span>
+    ));
 
   return (
     <div
@@ -84,9 +92,8 @@ export default function NewsBanner() {
           animationPlayState: paused ? 'paused' : 'running',
         }}
       >
-        {/* Duplicate content for seamless loop */}
-        <span className="inline-block text-sm text-[#94a3b8]">{text}</span>
-        <span className="inline-block text-sm text-[#94a3b8]">{text}</span>
+        <span className="inline-block text-sm">{renderMessages()}</span>
+        <span className="inline-block text-sm">{renderMessages()}</span>
       </div>
 
       <style jsx>{`
