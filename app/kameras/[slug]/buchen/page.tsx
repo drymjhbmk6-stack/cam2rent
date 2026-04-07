@@ -11,7 +11,7 @@ import type { DateRange } from 'react-day-picker';
 import { de } from 'date-fns/locale';
 import { differenceInCalendarDays, format, addDays, subDays } from 'date-fns';
 import { products, getPriceForDays, type Product } from '@/data/products';
-import { accessories as ALL_ACCESSORIES, getAccessoryPrice, type Accessory } from '@/data/accessories';
+import { getAccessoryPrice, type Accessory } from '@/data/accessories';
 import type { RentalSet } from '@/data/sets';
 import 'react-day-picker/dist/style.css';
 import { loadStripe } from '@stripe/stripe-js';
@@ -68,7 +68,7 @@ const HAFTUNGSOPTIONEN: Array<{
 // Data lives in data/accessories.ts — add / remove items there.
 // Only available accessories are shown in the booking flow.
 
-const ACCESSORIES: Accessory[] = ALL_ACCESSORIES.filter((a) => a.available);
+// Zubehör wird dynamisch aus DB geladen (siehe useEffect weiter unten)
 
 /** SVG icons keyed by iconId. Add new entries when you add new iconIds. */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -165,7 +165,7 @@ function calcBreakdown(
     : getPriceForDays(product, days);
 
   const accessoryPrice = accessories.reduce((sum, id) => {
-    const acc = ACCESSORIES.find((a) => a.id === id);
+    const acc = dbAccessories.find((a) => a.id === id);
     return sum + (acc ? getAccessoryPrice(acc, days) : 0);
   }, 0);
 
@@ -405,7 +405,7 @@ export default function BuchenPage() {
   const [accessories, setAccessories] = useState<string[]>(() => {
     if (preselectedAccessories) {
       const ids = preselectedAccessories.split(',').filter(Boolean);
-      return ids.filter((id) => ACCESSORIES.some((a) => a.id === id));
+      return ids.filter((id) => dbAccessories.some((a) => a.id === id));
     }
     return [];
   });
@@ -427,6 +427,10 @@ export default function BuchenPage() {
   const [selectedSet, setSelectedSet] = useState<RentalSet | null>(null);
   const [expandedSetId, setExpandedSetId] = useState<string | null>(null);
 
+  // Dynamisches Zubehör aus DB + Verfügbarkeit
+  const [dbAccessories, setDbAccessories] = useState<Accessory[]>([]);
+  const [accAvailability, setAccAvailability] = useState<Record<string, { remaining: number; compatible: boolean }>>({});
+
   // Tax config
   const [taxMode, setTaxMode] = useState<'kleinunternehmer' | 'regelbesteuerung'>('kleinunternehmer');
   const [taxRate, setTaxRate] = useState(19);
@@ -445,8 +449,57 @@ export default function BuchenPage() {
       .then((data) => {
         if (Array.isArray(data?.sets)) setAvailableSets(data.sets);
       })
-      .catch(() => {}); // Sets sind optional — bei Fehler einfach keine anzeigen
+      .catch(() => {});
   }, []);
+
+  // Zubehör aus DB laden
+  useEffect(() => {
+    fetch('/api/admin/accessories')
+      .then((r) => r.json())
+      .then(({ accessories: data }) => {
+        if (data) {
+          const mapped: Accessory[] = data
+            .filter((a: { available: boolean }) => a.available)
+            .map((a: { id: string; name: string; pricing_mode: string; price: number; description?: string; category?: string }) => ({
+              id: a.id,
+              name: a.name,
+              pricingMode: a.pricing_mode as 'perDay' | 'flat',
+              price: a.price,
+              description: a.description ?? '',
+              available: true,
+              iconId: 'custom' as const,
+            }));
+          setDbAccessories(mapped);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // Verfügbarkeit prüfen wenn Datum oder Liefermodus sich ändert
+  useEffect(() => {
+    if (!range?.from) return;
+    const rentalFrom = format(range.from, 'yyyy-MM-dd');
+    const rentalTo = format(range.to ?? range.from, 'yyyy-MM-dd');
+
+    fetch(`/api/accessory-availability?from=${rentalFrom}&to=${rentalTo}&product_id=${product.id}&delivery_mode=${deliveryMode}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.accessories) {
+          const map: Record<string, { remaining: number; compatible: boolean }> = {};
+          for (const a of data.accessories) {
+            map[a.id] = { remaining: a.available_qty_remaining, compatible: a.compatible };
+          }
+          setAccAvailability(map);
+          // Nicht mehr verfügbare Auswahlen entfernen
+          setAccessories((prev) => prev.filter((id) => {
+            const a = map[id];
+            return !a || (a.remaining > 0 && a.compatible);
+          }));
+        }
+      })
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [range, deliveryMode, product.id]);
 
   const toggleAccessory = useCallback((id: string) => {
     setAccessories((prev) =>
@@ -911,12 +964,19 @@ export default function BuchenPage() {
                         const price = breakdown
                           ? set.pricingMode === 'perDay' ? set.price * breakdown.days : set.price
                           : set.price;
+                        // Verfügbarkeit: Alle Zubehör-Items im Set müssen verfügbar sein
+                        const setItems: { accessory_id: string; qty: number }[] = (set as unknown as { accessory_items?: { accessory_id: string; qty: number }[] }).accessory_items ?? [];
+                        const setUnavailable = setItems.length > 0 && setItems.some((item) => {
+                          const av = accAvailability[item.accessory_id];
+                          return av && (av.remaining < item.qty || !av.compatible);
+                        });
+                        const setDisabled = setUnavailable;
                         return (
-                          <div key={set.id} className={`transition-colors ${isSelected ? 'bg-accent-blue-soft/30' : 'bg-white'}`}>
+                          <div key={set.id} className={`transition-colors ${setDisabled ? 'opacity-50' : isSelected ? 'bg-accent-blue-soft/30' : 'bg-white dark:bg-gray-900'}`}>
                             <div className="flex items-center gap-3 px-4 py-3">
                               {/* Radio select */}
-                              <label className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer">
-                                <input type="radio" name="rentalSet" checked={isSelected} onChange={() => { setSelectedSet(set); setAccessories([]); }} className="sr-only" />
+                              <label className={`flex items-center gap-3 flex-1 min-w-0 ${setDisabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
+                                <input type="radio" name="rentalSet" checked={isSelected} disabled={setDisabled} onChange={() => { if (!setDisabled) { setSelectedSet(set); setAccessories([]); } }} className="sr-only" />
                                 <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${isSelected ? 'border-accent-blue' : 'border-brand-border'}`}>
                                   {isSelected && <div className="w-2 h-2 rounded-full bg-accent-blue" />}
                                 </div>
@@ -926,7 +986,11 @@ export default function BuchenPage() {
                                 )}
                               </label>
                               {/* Price + expand toggle */}
-                              <span className="font-heading font-semibold text-sm text-accent-blue">+{fmt(price)} €</span>
+                              {setDisabled ? (
+                                <span className="text-xs text-status-error">Für diesen Zeitraum nicht verfügbar</span>
+                              ) : (
+                                <span className="font-heading font-semibold text-sm text-accent-blue">+{fmt(price)} €</span>
+                              )}
                               <button
                                 type="button"
                                 onClick={() => setExpandedSetId(isExpanded ? null : set.id)}
@@ -958,27 +1022,44 @@ export default function BuchenPage() {
                   <p className="text-xs font-body font-semibold text-brand-steel uppercase tracking-wider mb-2">
                     {selectedSet ? 'Zusätzliches Zubehör' : 'Zubehör'}
                   </p>
-                  <div className="rounded-xl border border-brand-border overflow-hidden divide-y divide-brand-border">
-                    {ACCESSORIES.map((acc) => {
+                  <div className="rounded-xl border border-brand-border dark:border-gray-700 overflow-hidden divide-y divide-brand-border dark:divide-gray-700">
+                    {dbAccessories.map((acc) => {
                       const checked = accessories.includes(acc.id);
                       const days = breakdown?.days ?? 0;
+                      const avail = accAvailability[acc.id];
+                      const isAvailable = !avail || (avail.remaining > 0 && avail.compatible);
+                      const isIncompatible = avail && !avail.compatible;
+                      const isBookedOut = avail && avail.remaining <= 0 && avail.compatible;
+                      const disabled = !isAvailable;
                       return (
-                        <label key={acc.id} className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer transition-colors ${checked ? 'bg-accent-blue-soft/30' : 'bg-white hover:bg-brand-bg'}`}>
-                          <input type="checkbox" checked={checked} onChange={() => toggleAccessory(acc.id)} className="sr-only" />
-                          <div className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 ${checked ? 'border-accent-blue bg-accent-blue' : 'border-brand-border bg-white'}`}>
-                            {checked && (
-                              <svg viewBox="0 0 20 20" fill="white" className="w-3 h-3">
-                                <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
-                              </svg>
+                        <label key={acc.id} className={`flex flex-col px-4 py-2.5 transition-colors ${disabled ? 'opacity-50 cursor-not-allowed bg-brand-bg dark:bg-gray-800' : checked ? 'bg-accent-blue-soft/30 cursor-pointer' : 'bg-white dark:bg-gray-900 hover:bg-brand-bg dark:hover:bg-gray-800 cursor-pointer'}`}>
+                          <div className="flex items-center gap-3">
+                            <input type="checkbox" checked={checked} onChange={() => !disabled && toggleAccessory(acc.id)} disabled={disabled} className="sr-only" />
+                            <div className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 ${disabled ? 'border-brand-muted bg-brand-bg' : checked ? 'border-accent-blue bg-accent-blue' : 'border-brand-border bg-white'}`}>
+                              {checked && !disabled && (
+                                <svg viewBox="0 0 20 20" fill="white" className="w-3 h-3">
+                                  <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
+                                </svg>
+                              )}
+                            </div>
+                            <span className={`font-heading font-semibold text-sm flex-1 ${disabled ? 'text-brand-muted' : 'text-brand-black dark:text-gray-100'}`}>{acc.name}</span>
+                            {!disabled && (
+                              <>
+                                <span className="text-xs font-body text-brand-muted">
+                                  {acc.pricingMode === 'flat' ? `${fmt(acc.price)} € einmalig` : `${fmt(acc.price)} € / Tag`}
+                                </span>
+                                <span className="font-heading font-semibold text-sm text-accent-blue w-16 text-right">
+                                  +{fmt(getAccessoryPrice(acc, days))} €
+                                </span>
+                              </>
                             )}
                           </div>
-                          <span className="font-heading font-semibold text-sm text-brand-black flex-1">{acc.name}</span>
-                          <span className="text-xs font-body text-brand-muted">
-                            {acc.pricingMode === 'flat' ? `${fmt(acc.price)} € einmalig` : `${fmt(acc.price)} € / Tag`}
-                          </span>
-                          <span className="font-heading font-semibold text-sm text-accent-blue w-16 text-right">
-                            +{fmt(getAccessoryPrice(acc, days))} €
-                          </span>
+                          {isBookedOut && (
+                            <span className="text-xs text-status-error mt-1 ml-7">Für diesen Zeitraum nicht verfügbar</span>
+                          )}
+                          {isIncompatible && (
+                            <span className="text-xs text-brand-muted mt-1 ml-7">Nicht kompatibel mit diesem Kameramodell</span>
+                          )}
                         </label>
                       );
                     })}
@@ -999,7 +1080,7 @@ export default function BuchenPage() {
                           counts[item] = (counts[item] ?? 0) + 1;
                         }
                         for (const accId of accessories) {
-                          const acc = ACCESSORIES.find((a) => a.id === accId);
+                          const acc = dbAccessories.find((a) => a.id === accId);
                           if (acc) counts[acc.name] = (counts[acc.name] ?? 0) + 1;
                         }
                         return Object.entries(counts).map(([name, qty]) => (
@@ -1565,7 +1646,7 @@ export default function BuchenPage() {
                     </p>
                     <ul className="space-y-2">
                       {accessories.map((id) => {
-                        const acc = ACCESSORIES.find((a) => a.id === id)!;
+                        const acc = dbAccessories.find((a) => a.id === id)!;
                         const accPrice = getAccessoryPrice(acc, breakdown.days);
                         return (
                           <li key={id} className="flex items-center justify-between gap-2 text-sm font-body">
