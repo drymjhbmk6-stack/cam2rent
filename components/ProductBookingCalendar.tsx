@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { isBlockedForShipping } from '@/lib/german-holidays';
+import { isBlockedForShipping, isBlockedEndDateForShipping } from '@/lib/german-holidays';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -145,6 +145,12 @@ export default function ProductBookingCalendar({
     return true;
   }
 
+  // Prüft ob ein Tag als Enddatum blockiert ist (Versand: Sa + Tag vor Feiertag)
+  function isEndDateBlocked(dateStr: string): boolean {
+    if (deliveryMode !== 'versand') return false;
+    return isBlockedEndDateForShipping(parseDate(dateStr));
+  }
+
   // Handle day click
   function handleDayClick(dateStr: string) {
     if (!rangeFrom || rangeTo) {
@@ -156,9 +162,9 @@ export default function ProductBookingCalendar({
       if (dateStr < rangeFrom) {
         setRangeFrom(dateStr);
         setRangeTo(null);
-      } else if (dateStr === rangeFrom) {
-        // Single day = start and end same
-        setRangeTo(dateStr);
+      } else if (isEndDateBlocked(dateStr)) {
+        // Enddatum blockiert → ignorieren
+        return;
       } else {
         setRangeTo(dateStr);
       }
@@ -278,13 +284,16 @@ export default function ProductBookingCalendar({
             // Shipping-blocked styling
             const dayDate = parseDate(dateStr);
             const shippingBlocked = deliveryMode === 'versand' && displayStatus === 'available' && isBlockedForShipping(dayDate);
+            // Enddatum blockiert: Samstag oder Tag vor Feiertag (nur wenn User gerade Enddatum wählt)
+            const isChoosingEnd = !!rangeFrom && !rangeTo;
+            const endDateBlocked = isChoosingEnd && selectable && isEndDateBlocked(dateStr);
 
             let bgClass = cfg.bg;
             let textClass = cfg.text;
             let cursor = 'cursor-default';
             let ringClass = '';
 
-            if (selectable) {
+            if (selectable && !endDateBlocked) {
               cursor = 'cursor-pointer';
               if (inRange) {
                 bgClass = 'bg-accent-blue/20 dark:bg-accent-blue/30';
@@ -295,7 +304,7 @@ export default function ProductBookingCalendar({
                 textClass = 'text-white';
                 ringClass = 'ring-2 ring-accent-blue ring-offset-1 dark:ring-offset-gray-800';
               }
-            } else if (shippingBlocked) {
+            } else if (shippingBlocked || endDateBlocked) {
               bgClass = 'bg-gray-100 dark:bg-gray-700';
               textClass = 'text-gray-400 dark:text-gray-500';
             }

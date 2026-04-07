@@ -18,6 +18,7 @@ import 'react-day-picker/dist/style.css';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { shippingConfig, calcShipping, type ShippingMethod } from '@/data/shipping';
+import { isBlockedForShipping, isBlockedEndDateForShipping } from '@/lib/german-holidays';
 import { calcPriceFromKeyDays, type PriceConfig } from '@/lib/price-config';
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
@@ -824,6 +825,12 @@ export default function BuchenPage() {
                     numberOfMonths={2}
                     showOutsideDays={false}
                     className="rdp-cam2rent"
+                    disabled={(day) => {
+                      if (deliveryMode !== 'versand') return false;
+                      if (isBlockedForShipping(day)) return true;
+                      if (range?.from && !range?.to && isBlockedEndDateForShipping(day)) return true;
+                      return false;
+                    }}
                   />
                 </div>
 
