@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { type Product, getMergedSpecs } from '@/data/products';
 import { useProducts } from '@/components/ProductsProvider';
 import ProductCard from '@/components/ProductCard';
 import { useProductImage } from '@/components/ProductImagesProvider';
-import { useSpecDefinitions, type SpecDefinition } from '@/components/admin/SpecDefinitions';
+import { useSpecDefinitions } from '@/components/admin/SpecDefinitions';
 
 function ProductCardWithImage({ product }: { product: Product }) {
   const imageUrl = useProductImage(product.id);

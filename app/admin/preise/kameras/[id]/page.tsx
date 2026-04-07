@@ -10,7 +10,6 @@ import {
   type KautionTiers,
   calcPriceFromTable,
 } from '@/lib/price-config';
-import { SPEC_ICON_OPTIONS } from '@/components/SpecIcon';
 import ProductPreview from '@/components/ProductPreview';
 import MarkdownEditor from '@/components/MarkdownEditor';
 import BrandSelect from '@/components/admin/BrandSelect';
