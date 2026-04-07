@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useAuth } from '@/components/AuthProvider';
 import { useCart } from '@/components/CartProvider';
 import SearchModal from '@/components/SearchModal';
+import ThemeToggle from '@/components/ThemeToggle';
 
 const navLinks = [
   { href: '/', label: 'Startseite' },
@@ -223,8 +224,14 @@ export default function Navbar() {
             Jetzt mieten
           </Link>
 
+          {/* Dark Mode Toggle */}
+          <div className="mt-2 pt-2 border-t border-brand-border dark:border-gray-700 flex items-center justify-between px-3 py-2">
+            <span className="font-body font-medium text-sm text-brand-text dark:text-gray-300">Design</span>
+            <ThemeToggle />
+          </div>
+
           {/* Auth in mobile menu */}
-          <div className="mt-2 pt-2 border-t border-brand-border dark:border-gray-700">
+          <div className="pt-2 border-t border-brand-border dark:border-gray-700">
             {!loading && (
               <>
                 {user ? (
