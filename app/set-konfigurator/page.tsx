@@ -6,7 +6,8 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/components/AuthProvider';
 import { getPriceForDays, type Product } from '@/data/products';
 import { useProducts } from '@/components/ProductsProvider';
-import { accessories as ALL_ACCESSORIES, getAccessoryPrice, type Accessory } from '@/data/accessories';
+import { useAccessories } from '@/components/AccessoriesProvider';
+import { getAccessoryPrice, type Accessory } from '@/data/accessories';
 
 // ─── Brand config ────────────────────────────────────────────────────────────
 
@@ -19,7 +20,7 @@ const defaultBrand = { bg: 'bg-gray-100', color: '#6b7280', border: 'border-gray
 
 // ─── Available items ─────────────────────────────────────────────────────────
 
-const availableAccessories = ALL_ACCESSORIES.filter((a) => a.available);
+// availableAccessories wird im Component berechnet (useAccessories Hook)
 
 // ─── Camera placeholder SVG ──────────────────────────────────────────────────
 
@@ -155,10 +156,12 @@ function fmt(n: number) {
 // ─── Page component ──────────────────────────────────────────────────────────
 
 export default function SetKonfiguratorPage() {
+  const { accessories: ALL_ACCESSORIES } = useAccessories();
   const { products } = useProducts();
   const router = useRouter();
   const { user } = useAuth();
 
+  const availableAccessories = ALL_ACCESSORIES.filter((a) => a.available);
   const availableCameras = products.filter((p) => p.available);
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [selectedCamera, setSelectedCamera] = useState<Product | null>(null);

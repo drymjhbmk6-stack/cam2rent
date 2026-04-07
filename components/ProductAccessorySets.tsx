@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { accessories } from '@/data/accessories';
+import { useAccessories } from '@/components/AccessoriesProvider';
 import type { RentalSet } from '@/data/sets';
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function ProductAccessorySets() {
+  const { accessories } = useAccessories();
   const [sets, setSets] = useState<RentalSet[]>([]);
   const [openSetId, setOpenSetId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);

@@ -18,7 +18,8 @@ import { calcShipping, shippingConfig } from '@/data/shipping';
 import type { ShippingMethod } from '@/data/shipping';
 import type { ShippingPriceConfig, DurationDiscount, LoyaltyDiscount, ProductDiscount } from '@/lib/price-config';
 import { calcDurationDiscount, calcLoyaltyDiscount, getActiveProductDiscount } from '@/lib/price-config';
-import { accessories as ALL_ACCESSORIES, getAccessoryPrice } from '@/data/accessories';
+import { useAccessories } from '@/components/AccessoriesProvider';
+import { getAccessoryPrice } from '@/data/accessories';
 
 const stripePromise = loadStripe(
   process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!
@@ -205,6 +206,7 @@ function PaymentForm({
 // ─── Main checkout page ────────────────────────────────────────────────────────
 
 export default function CheckoutPage() {
+  const { accessories: ALL_ACCESSORIES } = useAccessories();
   const router = useRouter();
   const { items, cartTotal, itemCount } = useCart();
   const { user } = useAuth();

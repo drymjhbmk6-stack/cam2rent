@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { use } from 'react';
-import { accessories as STATIC_ACC } from '@/data/accessories';
+import { useAccessories } from '@/components/AccessoriesProvider';
 
 interface Booking {
   id: string;
@@ -26,12 +26,14 @@ function fmtDate(iso: string) {
   return `${d}.${m}.${y}`;
 }
 
-function accName(id: string): string {
-  return STATIC_ACC.find((a) => a.id === id)?.name ?? id;
-}
-
 export default function DruckenPage({ params }: { params: Promise<{ id: string }> }) {
+  const { accessories: STATIC_ACC } = useAccessories();
   const { id } = use(params);
+
+  function accName(id: string): string {
+    return STATIC_ACC.find((a) => a.id === id)?.name ?? id;
+  }
+
   const [booking, setBooking] = useState<Booking | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');

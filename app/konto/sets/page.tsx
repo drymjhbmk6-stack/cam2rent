@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useAuth } from '@/components/AuthProvider';
 import { type Product } from '@/data/products';
 import { useProducts } from '@/components/ProductsProvider';
-import { accessories } from '@/data/accessories';
+import { useAccessories } from '@/components/AccessoriesProvider';
 
 interface CustomSet {
   id: string;
@@ -17,6 +17,7 @@ interface CustomSet {
 }
 
 export default function KontoSetsPage() {
+  const { accessories } = useAccessories();
   const { products } = useProducts();
   const { user } = useAuth();
   const [sets, setSets] = useState<CustomSet[]>([]);

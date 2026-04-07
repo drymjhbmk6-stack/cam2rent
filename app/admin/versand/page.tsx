@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { accessories as STATIC_ACC } from '@/data/accessories';
+import { useAccessories } from '@/components/AccessoriesProvider';
 
 interface Booking {
   id: string;
@@ -81,13 +81,15 @@ const URGENCY_CHIP: Record<Urgency, string> = {
   ok: 'bg-green-50 text-green-700 border border-green-100',
 };
 
-function accName(id: string): string {
-  return STATIC_ACC.find((a) => a.id === id)?.name ?? id;
-}
-
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function AdminVersandPage() {
+  const { accessories: STATIC_ACC } = useAccessories();
+
+  function accName(id: string): string {
+    return STATIC_ACC.find((a) => a.id === id)?.name ?? id;
+  }
+
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<'versenden' | 'unterwegs' | 'rueckgabe'>('versenden');
