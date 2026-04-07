@@ -126,18 +126,18 @@ export default function ManualBookingPage() {
   const [street, setStreet] = useState('');
   const [zip, setZip] = useState('');
   const [city, setCity] = useState('');
-  const [selectedProducts, setSelectedProducts] = useState<{ id: string; qty: number; accessories: string[]; sets: string[]; note: string; customPrice: string }[]>([]);
+  const [selectedProducts, setSelectedProducts] = useState<{ id: string; qty: number; accessories: string[]; sets: string[]; note: string; customPrice: string; haftung: string }[]>([]);
   const [addProductId, setAddProductId] = useState('');
   const [rentalFrom, setRentalFrom] = useState('');
   const [rentalTo, setRentalTo] = useState('');
   const [accAvailability, setAccAvailability] = useState<Record<string, { remaining: number; compatible: boolean; total: number }>>({});
-  const [haftung, setHaftung] = useState('none');
+  const [depositMode, setDepositMode] = useState<'kaution' | 'haftung' | 'both'>('haftung');
   const [deliveryMode, setDeliveryMode] = useState<'versand' | 'abholung'>('versand');
   const [shippingMethod, setShippingMethod] = useState<'standard' | 'express'>('standard');
   const [notes, setNotes] = useState('');
   const [source, setSource] = useState('kleinanzeigen');
   const [paymentStatus, setPaymentStatus] = useState<'paid' | 'unpaid'>('unpaid');
-  const [freeShipping, setFreeShipping] = useState(true);
+  const [customShippingPrice, setCustomShippingPrice] = useState('');
 
   // Load all data on mount
   useEffect(() => {
@@ -146,12 +146,14 @@ export default function ManualBookingPage() {
       import('@/data/products').then((m) => m.products),
       fetch('/api/admin/accessories').then((r) => r.ok ? r.json() : { accessories: [] }),
       fetch('/api/sets?available=true').then((r) => r.ok ? r.json() : { sets: [] }),
+      fetch('/api/admin/settings?key=deposit_mode').then((r) => r.ok ? r.json() : null),
     ])
-      .then(([prices, prods, accData, setData]) => {
+      .then(([prices, prods, accData, setData, depositSetting]) => {
         setDynPrices(prices);
         setStaticProducts(prods);
         setAccessories(accData.accessories ?? []);
         setSets(setData.sets ?? []);
+        if (depositSetting?.value) setDepositMode(depositSetting.value);
         // Set default for add-dropdown
         if (prods.length > 0) setAddProductId(prods[0].id);
       })
@@ -183,7 +185,7 @@ export default function ManualBookingPage() {
     setSelectedProducts((prev) => {
       const existing = prev.find((p) => p.id === addProductId);
       if (existing) return prev.map((p) => p.id === addProductId ? { ...p, qty: p.qty + 1 } : p);
-      return [...prev, { id: addProductId, qty: 1, accessories: [], sets: [], note: '', customPrice: '' }];
+      return [...prev, { id: addProductId, qty: 1, accessories: [], sets: [], note: '', customPrice: '', haftung: 'none' }];
     });
   }
   function removeProduct(id: string) {
@@ -198,6 +200,9 @@ export default function ManualBookingPage() {
   }
   function updateProductCustomPrice(id: string, customPrice: string) {
     setSelectedProducts((prev) => prev.map((p) => p.id === id ? { ...p, customPrice } : p));
+  }
+  function updateProductHaftung(id: string, haftung: string) {
+    setSelectedProducts((prev) => prev.map((p) => p.id === id ? { ...p, haftung } : p));
   }
   function toggleProductAccessory(productId: string, accId: string) {
     setSelectedProducts((prev) => prev.map((p) => {
@@ -231,11 +236,16 @@ export default function ManualBookingPage() {
       .catch(() => {});
   }, [rentalFrom, rentalTo, deliveryMode]);
 
-  const haftungPrice = useMemo(() => {
-    if (haftung === 'none') return 0;
+  function getHaftungPrice(haftungValue: string): number {
+    if (haftungValue === 'none') return 0;
     const h = dynPrices?.haftung;
-    return haftung === 'standard' ? (h?.standard ?? 15) : (h?.premium ?? 25);
-  }, [haftung, dynPrices]);
+    return haftungValue === 'standard' ? (h?.standard ?? 15) : (h?.premium ?? 25);
+  }
+
+  const haftungPrice = useMemo(() => {
+    return selectedProducts.reduce((sum, sp) => sum + getHaftungPrice(sp.haftung) * sp.qty, 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedProducts, dynPrices]);
 
   const rentalPrice = useMemo(() => {
     if (!days) return 0;
@@ -272,11 +282,13 @@ export default function ManualBookingPage() {
   }, [selectedProducts, sets, days]);
 
   const subtotal = rentalPrice + accessoryPrice + setPrice + haftungPrice;
-  const sp = dynPrices?.shipping;
-  const shippingPrice = deliveryMode === 'abholung' ? 0
-    : freeShipping ? 0
-    : shippingMethod === 'express' ? (sp?.expressPrice ?? 12.99)
-    : subtotal >= (sp?.freeShippingThreshold ?? 50) ? 0 : (sp?.standardPrice ?? 5.99);
+  const shippingPriceCalc = (() => {
+    if (deliveryMode === 'abholung') return 0;
+    const customParsed = parseFloat(customShippingPrice);
+    if (customShippingPrice !== '' && !isNaN(customParsed)) return customParsed;
+    return 0; // Standard: kostenlos bei manuellen Buchungen
+  })();
+  const shippingPrice = shippingPriceCalc;
   const total = subtotal + shippingPrice;
   const deposit = totalDeposit;
 
@@ -307,7 +319,8 @@ export default function ManualBookingPage() {
           const s = sets.find((st) => st.id === id);
           return sum + (s ? getSetPrice(s, days) : 0);
         }, 0);
-        const pSubtotal = pPrice + pAccPrice + pSetPrice + haftungPrice;
+        const pHaftungPrice = getHaftungPrice(sp.haftung);
+        const pSubtotal = pPrice + pAccPrice + pSetPrice + pHaftungPrice;
         const pShipping = shippingPrice; // Versand nur einmal bei erster Buchung
         const pTotal = pSubtotal + (bookingIds.length === 0 ? pShipping : 0);
         const pDeposit = p?.deposit ?? 0;
@@ -334,11 +347,11 @@ export default function ManualBookingPage() {
               delivery_mode: deliveryMode,
               shipping_method: deliveryMode === 'versand' ? shippingMethod : null,
               shipping_price: bookingIds.length === 0 ? pShipping : 0,
-              haftung,
+              haftung: sp.haftung,
               accessories: [...sp.accessories, ...sp.sets],
               price_rental: pPrice,
               price_accessories: pAccPrice + pSetPrice,
-              price_haftung: haftungPrice,
+              price_haftung: pHaftungPrice,
               price_total: bookingIds.length === 0 ? pTotal : pSubtotal,
               deposit: pDeposit,
               customer_name: customerName.trim(),
@@ -580,6 +593,27 @@ export default function ManualBookingPage() {
                       </div>
                     )}
 
+                    {/* Haftungsschutz pro Kamera (je nach deposit_mode) */}
+                    {(depositMode === 'haftung' || depositMode === 'both') && (
+                      <div className="mt-3">
+                        <p className="text-xs font-semibold mb-2" style={{ color: '#64748b' }}>HAFTUNGSSCHUTZ</p>
+                        <div className="space-y-1">
+                          {HAFTUNG_OPTIONS.map((opt) => {
+                            const price = getHaftungPrice(opt.value);
+                            return (
+                              <label key={opt.value} className="flex items-center gap-2 p-2 rounded-lg text-xs cursor-pointer" style={{ background: sp.haftung === opt.value ? '#06b6d40a' : 'transparent', border: `1px solid ${sp.haftung === opt.value ? '#06b6d433' : '#1e293b'}` }}>
+                                <input type="radio" name={`haftung-${sp.id}`} value={opt.value} checked={sp.haftung === opt.value} onChange={() => updateProductHaftung(sp.id, opt.value)} className="accent-cyan-400" />
+                                <span className="flex-1" style={{ color: '#e2e8f0' }}>{opt.label}</span>
+                                <span style={{ color: price > 0 ? '#06b6d4' : '#64748b' }}>
+                                  {price > 0 ? `${price.toFixed(2)} €` : 'Kostenlos'}
+                                </span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
                     {/* Notiz zu diesem Produkt */}
                     <div className="mt-3">
                       <p className="text-xs font-semibold mb-1" style={{ color: '#64748b' }}>NOTIZ ZU DIESEM PRODUKT</p>
@@ -600,10 +634,10 @@ export default function ManualBookingPage() {
           )}
         </div>
 
-        {/* ─── Versand & Haftung ─── */}
+        {/* ─── Versand ─── */}
         <div style={sectionStyle}>
-          <h2 className="font-heading font-semibold text-sm mb-4" style={headingStyle}>Versand & Haftungsschutz</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+          <h2 className="font-heading font-semibold text-sm mb-4" style={headingStyle}>Versand</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <label style={labelStyle}>Lieferung</label>
               <select style={selectStyle} value={deliveryMode} onChange={(e) => setDeliveryMode(e.target.value as 'versand' | 'abholung')}>
@@ -621,37 +655,19 @@ export default function ManualBookingPage() {
                   </select>
                 </div>
                 <div>
-                  <label style={labelStyle}>Versandkosten</label>
-                  <button
-                    type="button"
-                    onClick={() => setFreeShipping(!freeShipping)}
-                    className="w-full py-2.5 rounded-lg text-sm font-semibold transition-colors"
-                    style={{
-                      background: freeShipping ? '#10b98125' : '#0f172a',
-                      border: `1px solid ${freeShipping ? '#10b981' : '#334155'}`,
-                      color: freeShipping ? '#10b981' : '#94a3b8',
-                    }}
-                  >
-                    {freeShipping ? 'Kostenlos' : `${shippingMethod === 'express' ? (sp?.expressPrice ?? 12.99).toFixed(2) : (sp?.standardPrice ?? 5.99).toFixed(2)} €`}
-                  </button>
+                  <label style={labelStyle}>Versandkosten (€)</label>
+                  <input
+                    style={inputStyle}
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={customShippingPrice}
+                    onChange={(e) => setCustomShippingPrice(e.target.value)}
+                    placeholder="0.00 (kostenlos)"
+                  />
                 </div>
               </>
             )}
-          </div>
-          <label style={labelStyle}>Haftungsschutz</label>
-          <div className="space-y-2">
-            {HAFTUNG_OPTIONS.map((opt) => {
-              const price = opt.value === 'standard' ? (dynPrices?.haftung?.standard ?? 15) : opt.value === 'premium' ? (dynPrices?.haftung?.premium ?? 25) : 0;
-              return (
-                <label key={opt.value} className="flex items-center gap-3 p-3 rounded-lg cursor-pointer" style={{ background: haftung === opt.value ? '#06b6d40a' : 'transparent', border: `1px solid ${haftung === opt.value ? '#06b6d433' : '#1e293b'}` }}>
-                  <input type="radio" name="haftung" value={opt.value} checked={haftung === opt.value} onChange={() => setHaftung(opt.value)} className="accent-cyan-400" />
-                  <span className="text-sm flex-1" style={{ color: '#e2e8f0' }}>{opt.label}</span>
-                  <span className="text-xs font-semibold" style={{ color: price > 0 ? '#06b6d4' : '#64748b' }}>
-                    {price > 0 ? `${price.toFixed(2)} €` : 'Kostenlos'}
-                  </span>
-                </label>
-              );
-            })}
           </div>
         </div>
 
