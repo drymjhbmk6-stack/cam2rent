@@ -79,15 +79,24 @@ export async function POST(req: NextRequest) {
       customer_name,
       customer_email: customer_email || null,
       shipping_address: shipping_address || null,
-      notes: bookingNotes,
     };
 
-    // payment_status Feld nur setzen wenn die Spalte existiert (Fallback: wird in notes gespeichert)
-    if (payment_status) {
-      insertData.payment_status = payment_status;
+    // Optionale Felder nur setzen wenn vorhanden (Spalten könnten fehlen)
+    // Erster Versuch mit allen Feldern, bei Fehler ohne optionale Felder
+    if (bookingNotes) insertData.notes = bookingNotes;
+    if (payment_status) insertData.payment_status = payment_status;
+
+    let result = await supabase.from('bookings').insert(insertData);
+
+    // Falls Fehler (z.B. unbekannte Spalte), nochmal ohne optionale Felder versuchen
+    if (result.error) {
+      console.warn('Insert with optional fields failed, retrying without:', result.error.message);
+      delete insertData.notes;
+      delete insertData.payment_status;
+      result = await supabase.from('bookings').insert(insertData);
     }
 
-    const { error } = await supabase.from('bookings').insert(insertData);
+    const { error } = result;
 
     if (error) {
       console.error('Manual booking insert error:', error);
