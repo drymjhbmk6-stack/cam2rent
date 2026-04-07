@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { products } from '@/data/products';
 
+interface BufferDays {
+  versand_before: number;
+  versand_after: number;
+  abholung_before: number;
+  abholung_after: number;
+}
+
 /**
  * GET /api/availability/[productId]?month=2026-04
  *
@@ -39,14 +46,31 @@ export async function GET(
 
   const supabase = createServiceClient();
 
-  // ── Buchungen abfragen (überlappend mit dem Monat) ─────────────────────────
+  // ── Puffer-Tage laden ─────────────────────────────────────────────────────
+  const { data: bufferSetting } = await supabase
+    .from('admin_settings')
+    .select('value')
+    .eq('key', 'booking_buffer_days')
+    .maybeSingle();
+
+  const buf: BufferDays = bufferSetting?.value
+    ? (typeof bufferSetting.value === 'string' ? JSON.parse(bufferSetting.value) : bufferSetting.value)
+    : { versand_before: 2, versand_after: 2, abholung_before: 0, abholung_after: 1 };
+
+  const maxBuffer = Math.max(buf.versand_before, buf.versand_after, buf.abholung_before, buf.abholung_after);
+
+  // Erweiterten Zeitraum abfragen (Monat + maxBuffer auf beiden Seiten)
+  const extFirst = new Date(year, mon - 1, 1 - maxBuffer).toISOString().split('T')[0];
+  const extLast = new Date(year, mon - 1, daysInMonth + maxBuffer).toISOString().split('T')[0];
+
+  // ── Buchungen abfragen (erweitert um Puffer) ──────────────────────────────
   const { data: bookings, error: bookErr } = await supabase
     .from('bookings')
-    .select('rental_from, rental_to')
+    .select('rental_from, rental_to, delivery_mode')
     .eq('product_id', productId)
     .in('status', ['confirmed', 'shipped', 'active'])
-    .lte('rental_from', lastDay)
-    .gte('rental_to', firstDay);
+    .lte('rental_from', extLast)
+    .gte('rental_to', extFirst);
 
   if (bookErr) {
     console.error('Availability bookings query error:', bookErr);
@@ -90,11 +114,23 @@ export async function GET(
       continue;
     }
 
-    // Buchungen zählen die diesen Tag überlappen
+    // Buchungen zählen die diesen Tag überlappen (inkl. Puffer)
     let bookedCount = 0;
     if (bookings) {
       for (const b of bookings) {
-        if (b.rental_from <= dateStr && b.rental_to >= dateStr) {
+        const bMode = b.delivery_mode ?? 'versand';
+        const bBefore = bMode === 'abholung' ? buf.abholung_before : buf.versand_before;
+        const bAfter = bMode === 'abholung' ? buf.abholung_after : buf.versand_after;
+
+        // Effektiver Zeitraum dieser Buchung inkl. Puffer
+        const bFrom = new Date(b.rental_from);
+        const bTo = new Date(b.rental_to);
+        bFrom.setDate(bFrom.getDate() - bBefore);
+        bTo.setDate(bTo.getDate() + bAfter);
+        const effFrom = bFrom.toISOString().split('T')[0];
+        const effTo = bTo.toISOString().split('T')[0];
+
+        if (effFrom <= dateStr && effTo >= dateStr) {
           bookedCount++;
         }
       }

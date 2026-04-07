@@ -18,7 +18,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { name, category, description, pricing_mode, price, available_qty, available, image_url } = body;
+  const { name, category, description, pricing_mode, price, available_qty, available, image_url, compatible_product_ids } = body;
 
   if (!name || !category) {
     return NextResponse.json({ error: 'name und category erforderlich.' }, { status: 400 });
@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
 
   const { data, error } = await supabase
     .from('accessories')
-    .insert({ id, name, category, description: description ?? null, pricing_mode: pricing_mode ?? 'perDay', price: parseFloat(price) || 0, available_qty: parseInt(available_qty) || 1, available: available ?? true, image_url: image_url ?? null, sort_order })
+    .insert({ id, name, category, description: description ?? null, pricing_mode: pricing_mode ?? 'perDay', price: parseFloat(price) || 0, available_qty: parseInt(available_qty) || 1, available: available ?? true, image_url: image_url ?? null, sort_order, compatible_product_ids: compatible_product_ids ?? [] })
     .select()
     .single();
 

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { products } from '@/data/products';
 
 interface Accessory {
   id: string;
@@ -13,9 +14,12 @@ interface Accessory {
   available: boolean;
   image_url: string | null;
   sort_order: number;
+  compatible_product_ids: string[];
 }
 
 const CATEGORIES = ['Akku', 'Speicher', 'Halterung', 'Schutz', 'Audio', 'Stativ', 'Sonstiges'];
+
+const PRODUCT_LIST = products.filter((p) => p.category === 'action-cam' || p.category === '360-cam');
 
 function emptyForm() {
   return {
@@ -27,6 +31,7 @@ function emptyForm() {
     available_qty: 1,
     available: true,
     image_url: '',
+    compatible_product_ids: [] as string[],
   };
 }
 
@@ -94,6 +99,7 @@ export default function AdminZubehoerPage() {
       available_qty: acc.available_qty,
       available: acc.available,
       image_url: acc.image_url ?? '',
+      compatible_product_ids: acc.compatible_product_ids ?? [],
     });
   }
 
@@ -218,6 +224,33 @@ export default function AdminZubehoerPage() {
                   <span className="text-sm font-body text-brand-black">Verfügbar</span>
                 </label>
               </div>
+              {/* Produkt-Zuordnung */}
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Kompatible Kameras</label>
+                <div className="flex flex-wrap gap-2 mb-2">
+                  <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-body cursor-pointer"
+                    style={{ borderColor: newForm.compatible_product_ids.length === 0 ? '#3b82f6' : '#e2e8f0', background: newForm.compatible_product_ids.length === 0 ? '#dbeafe' : 'transparent' }}>
+                    <input type="radio" name="new-compat" checked={newForm.compatible_product_ids.length === 0}
+                      onChange={() => setNewForm((f) => ({ ...f, compatible_product_ids: [] }))} className="sr-only" />
+                    Alle Kameras
+                  </label>
+                  {PRODUCT_LIST.map((p) => {
+                    const checked = newForm.compatible_product_ids.includes(p.id);
+                    return (
+                      <label key={p.id} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-body cursor-pointer"
+                        style={{ borderColor: checked ? '#3b82f6' : '#e2e8f0', background: checked ? '#dbeafe' : 'transparent' }}>
+                        <input type="checkbox" checked={checked} className="sr-only"
+                          onChange={() => setNewForm((f) => {
+                            const ids = checked ? f.compatible_product_ids.filter((id) => id !== p.id) : [...f.compatible_product_ids, p.id];
+                            return { ...f, compatible_product_ids: ids };
+                          })} />
+                        {p.name}
+                      </label>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-brand-muted">Leer = passt zu allen Kameras. Auswahl = nur für diese Modelle.</p>
+              </div>
             </div>
             <div className="flex justify-end mt-5 gap-2">
               <button onClick={() => setShowNew(false)}
@@ -340,6 +373,34 @@ export default function AdminZubehoerPage() {
                             className="w-4 h-4 rounded border-brand-border" />
                           <span className="text-sm font-body text-brand-black">Verfügbar</span>
                         </label>
+                      </div>
+                      {/* Produkt-Zuordnung */}
+                      <div className="sm:col-span-2">
+                        <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Kompatible Kameras</label>
+                        <div className="flex flex-wrap gap-2 mb-2">
+                          <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-body cursor-pointer"
+                            style={{ borderColor: (editForm.compatible_product_ids ?? []).length === 0 ? '#3b82f6' : '#e2e8f0', background: (editForm.compatible_product_ids ?? []).length === 0 ? '#dbeafe' : 'transparent' }}>
+                            <input type="radio" name="edit-compat" checked={(editForm.compatible_product_ids ?? []).length === 0}
+                              onChange={() => setEditForm((f) => ({ ...f, compatible_product_ids: [] }))} className="sr-only" />
+                            Alle Kameras
+                          </label>
+                          {PRODUCT_LIST.map((p) => {
+                            const checked = (editForm.compatible_product_ids ?? []).includes(p.id);
+                            return (
+                              <label key={p.id} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-body cursor-pointer"
+                                style={{ borderColor: checked ? '#3b82f6' : '#e2e8f0', background: checked ? '#dbeafe' : 'transparent' }}>
+                                <input type="checkbox" checked={checked} className="sr-only"
+                                  onChange={() => setEditForm((f) => {
+                                    const cur = f.compatible_product_ids ?? [];
+                                    const ids = checked ? cur.filter((id: string) => id !== p.id) : [...cur, p.id];
+                                    return { ...f, compatible_product_ids: ids };
+                                  })} />
+                                {p.name}
+                              </label>
+                            );
+                          })}
+                        </div>
+                        <p className="text-xs text-brand-muted">Leer = passt zu allen Kameras.</p>
                       </div>
                     </div>
                     <div className="flex justify-end mt-4 gap-2">

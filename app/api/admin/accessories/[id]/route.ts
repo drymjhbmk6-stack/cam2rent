@@ -25,6 +25,7 @@ export async function PUT(
       available_qty: parseInt(body.available_qty) || 1,
       available: body.available,
       image_url: body.image_url ?? null,
+      compatible_product_ids: body.compatible_product_ids ?? [],
     })
     .eq('id', id);
 
