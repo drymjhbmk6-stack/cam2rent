@@ -335,7 +335,7 @@ export default function AdminSetsPage() {
           </div>
         ) : sets.length === 0 ? (
           <div className="text-center py-16 text-brand-muted font-body">
-            Noch kein Set angelegt. Klicke auf „+ Neues Set".
+            Noch kein Set angelegt. Klicke auf &bdquo;+ Neues Set&ldquo;.
           </div>
         ) : (
           <div className="space-y-3">

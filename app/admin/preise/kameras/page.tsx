@@ -94,7 +94,7 @@ export default function AdminKameraListePage() {
           <div className="text-center py-16 text-brand-muted font-body">Lädt…</div>
         ) : products.length === 0 ? (
           <div className="text-center py-16 text-brand-muted font-body">
-            Noch keine Kamera angelegt. Klicke auf „+ Neue Kamera".
+            Noch keine Kamera angelegt. Klicke auf &bdquo;+ Neue Kamera&ldquo;.
           </div>
         ) : (
           <div className="space-y-3">
