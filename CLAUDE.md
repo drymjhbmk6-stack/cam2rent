@@ -9,6 +9,9 @@ Server: Hetzner CX23 (178.104.117.135) + Coolify → test.cam2rent.de
 ## Sprache
 Alle UI-Texte, Kommentare und Kommunikation auf **Deutsch**.
 
+## Git-Workflow
+Immer direkt auf **`master`** committen und pushen. Keine Feature-Branches verwenden.
+
 ## Wichtige Regeln
 
 ### Haftungsschutz — NIEMALS "Versicherung" sagen
