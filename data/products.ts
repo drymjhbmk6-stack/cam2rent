@@ -84,6 +84,8 @@ export interface Product {
     weight: string;
     storage: string;
   };
+  /** Admin-Specs (flexibel, aus DB). Wenn vorhanden, haben diese Vorrang. */
+  adminSpecs?: AdminProductSpec[];
   category: string;
   tags: ('popular' | 'new' | 'deal')[];
   available: boolean;
@@ -109,7 +111,8 @@ const STATIC_SPEC_MAP: Record<string, { icon: string; label: string }> = {
  * statischen 6 Spec-Felder in das AdminProductSpec-Format.
  */
 export function getMergedSpecs(product: Product, adminSpecs?: AdminProductSpec[]): AdminProductSpec[] {
-  if (adminSpecs?.length) return [...adminSpecs].sort((a, b) => a.priority - b.priority);
+  const specs = adminSpecs ?? product.adminSpecs;
+  if (specs?.length) return [...specs].sort((a, b) => a.priority - b.priority);
 
   return Object.entries(product.specs).map(([key, value], i) => ({
     id: key,

@@ -73,6 +73,7 @@ function adminToProduct(
         ? [admin.imageUrl]
         : staticFallback?.images ?? ['/images/placeholder-cam.svg'],
     specs,
+    adminSpecs: admin.specs?.length ? admin.specs : undefined,
     category: admin.category ?? staticFallback?.category ?? 'action-cam',
     tags: (admin.tags ?? staticFallback?.tags ?? []) as Product['tags'],
     available: admin.available,
