@@ -310,6 +310,48 @@ export default function AdminKameraEditorPage() {
                     placeholder="z.B. gopro-hero-13-black"
                     className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
                 </div>
+                <div>
+                  <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Modell</label>
+                  <input type="text" value={product.model ?? ''}
+                    onChange={(e) => setProduct((p) => p && ({ ...p, model: e.target.value }))}
+                    placeholder="z.B. Hero 13"
+                    className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
+                </div>
+                <div>
+                  <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Kategorie</label>
+                  <select value={product.category ?? 'action-cam'}
+                    onChange={(e) => setProduct((p) => p && ({ ...p, category: e.target.value }))}
+                    className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue">
+                    <option value="action-cam">Action-Cam</option>
+                    <option value="360-cam">360°-Cam</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Tags</label>
+                  <div className="flex flex-wrap gap-2">
+                    {['popular', 'new', 'deal'].map((tag) => {
+                      const active = (product.tags ?? []).includes(tag);
+                      return (
+                        <button key={tag} type="button"
+                          onClick={() => setProduct((p) => {
+                            if (!p) return p;
+                            const cur = p.tags ?? [];
+                            return { ...p, tags: active ? cur.filter((t) => t !== tag) : [...cur, tag] };
+                          })}
+                          className={`px-3 py-1.5 rounded-lg border text-xs font-body cursor-pointer transition-colors ${active ? 'border-blue-500 bg-blue-500/20 text-blue-700 dark:text-blue-300 font-semibold' : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300'}`}>
+                          {tag === 'popular' ? 'Beliebt' : tag === 'new' ? 'Neu' : 'Angebot'}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Kaution (€)</label>
+                  <input type="number" min="0" step="10" value={product.deposit ?? 0}
+                    onChange={(e) => setProduct((p) => p && ({ ...p, deposit: parseFloat(e.target.value) || 0 }))}
+                    placeholder="z.B. 150"
+                    className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
+                </div>
                 <div className="sm:col-span-2">
                   <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Ausführliche Beschreibung (Markdown)</label>
                   <MarkdownEditor
