@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useAuth } from '@/components/AuthProvider';
 import { useCart } from '@/components/CartProvider';
 import SearchModal from '@/components/SearchModal';
+import ThemeToggle from '@/components/ThemeToggle';
 
 const navLinks = [
   { href: '/', label: 'Startseite' },
@@ -134,6 +135,9 @@ export default function Navbar() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </button>
+
+            {/* Theme Toggle */}
+            <ThemeToggle />
 
             {/* Cart icon */}
             <Link
