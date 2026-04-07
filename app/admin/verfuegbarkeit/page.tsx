@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { products } from '@/data/products';
+import { useProducts } from '@/components/ProductsProvider';
 
 interface DayInfo {
   date: string;
@@ -26,6 +26,7 @@ const STATUS_CONFIG: Record<string, { label: string; cls: string }> = {
 };
 
 export default function AdminVerfuegbarkeitPage() {
+  const { products } = useProducts();
   const [items, setItems] = useState<ProductAvailability[]>([]);
   const [loading, setLoading] = useState(true);
 

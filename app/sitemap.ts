@@ -1,7 +1,8 @@
 import type { MetadataRoute } from 'next';
-import { products } from '@/data/products';
+import { getProducts } from '@/lib/get-products';
 
-export default function sitemap(): MetadataRoute.Sitemap {
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  const products = await getProducts();
   const baseUrl = 'https://cam2rent.de';
 
   const staticPages: MetadataRoute.Sitemap = [

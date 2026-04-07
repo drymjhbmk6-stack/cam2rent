@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { products, type Product } from '@/data/products';
+import { type Product } from '@/data/products';
+import { useProducts } from '@/components/ProductsProvider';
 import ProductCard from '@/components/ProductCard';
 import { useProductImage } from '@/components/ProductImagesProvider';
 
@@ -11,8 +12,7 @@ function ProductCardWithImage({ product }: { product: Product }) {
   return <ProductCard product={product} imageUrl={imageUrl} />;
 }
 
-type FilterBrand = 'Alle' | Product['brand'];
-const BRANDS: FilterBrand[] = ['Alle', 'GoPro', 'DJI', 'Insta360'];
+type FilterBrand = string;
 
 function ChevronIcon() {
   return (
@@ -27,6 +27,8 @@ function ChevronIcon() {
 }
 
 export default function KamerasPage() {
+  const { products } = useProducts();
+  const brands: FilterBrand[] = ['Alle', ...Array.from(new Set(products.map((p) => p.brand)))];
   const [activeBrand, setActiveBrand] = useState<FilterBrand>('Alle');
   const [onlyAvailable, setOnlyAvailable] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -237,7 +239,7 @@ export default function KamerasPage() {
             role="group"
             aria-label="Nach Marke filtern"
           >
-            {BRANDS.map((brand) => (
+            {brands.map((brand) => (
               <button
                 key={brand}
                 type="button"

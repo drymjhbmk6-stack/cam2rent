@@ -1,7 +1,8 @@
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import type { Metadata } from 'next';
-import { products, getPriceForDays, getMergedSpecs, type Product } from '@/data/products';
+import { products as staticProducts, getPriceForDays, getMergedSpecs, type Product } from '@/data/products';
+import { getProducts } from '@/lib/get-products';
 import ProductReviews from '@/components/ProductReviews';
 import SpecIcon from '@/components/SpecIcon';
 import ProductBookingCalendar from '@/components/ProductBookingCalendar';
@@ -11,7 +12,8 @@ import MarkdownContent from '@/components/MarkdownContent';
 
 // ─── Static generation ──────────────────────────────────────────────────────
 
-export function generateStaticParams() {
+export async function generateStaticParams() {
+  const products = await getProducts();
   return products.map((p) => ({ slug: p.slug }));
 }
 
@@ -21,6 +23,7 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
+  const products = await getProducts();
   const product = products.find((p) => p.slug === slug);
   if (!product) return {};
   return {
@@ -32,7 +35,7 @@ export async function generateMetadata({
 // ─── Brand config ────────────────────────────────────────────────────────────
 
 const brandConfig: Record<
-  Product['brand'],
+  string,
   { bg: string; color: string; pill: string }
 > = {
   GoPro: {
@@ -60,11 +63,12 @@ export default async function KameraDetailPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
+  const products = await getProducts();
   const product = products.find((p) => p.slug === slug);
 
   if (!product) notFound();
 
-  const brand = brandConfig[product.brand];
+  const brand = brandConfig[product.brand] ?? { bg: 'bg-gray-100', color: '#6b7280', pill: 'bg-gray-100 text-gray-600' };
 
   return (
     <div className="min-h-screen bg-brand-bg dark:bg-gray-950">

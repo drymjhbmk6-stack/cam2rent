@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
-import { products } from '@/data/products';
+import { getProducts } from '@/lib/get-products';
 
 interface BufferDays {
   versand_before: number;
@@ -19,6 +19,7 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ productId: string }> }
 ) {
+  const products = await getProducts();
   const { productId } = await params;
   const month = new URL(req.url).searchParams.get('month');
 

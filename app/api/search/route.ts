@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { products } from '@/data/products';
+import { getProducts } from '@/lib/get-products';
 import { accessories } from '@/data/accessories';
 import { RENTAL_SETS_STATIC } from '@/data/sets';
 
 export async function GET(req: NextRequest) {
+  const products = await getProducts();
   const q = req.nextUrl.searchParams.get('q')?.trim().toLowerCase();
   if (!q || q.length < 2) {
     return NextResponse.json({ kameras: [], zubehoer: [], sets: [] });

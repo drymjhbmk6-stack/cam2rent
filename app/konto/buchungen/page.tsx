@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/components/AuthProvider';
 import { getCancellationInfo } from '@/data/cancellation';
-import { products as allProducts } from '@/data/products';
+import { useProducts } from '@/components/ProductsProvider';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 
@@ -485,6 +485,7 @@ function SignContractModal({ booking, onClose, onSuccess }: SignModalProps) {
 // ─── Main page ─────────────────────────────────────────────────────────────────
 
 export default function BuchungenPage() {
+  const { products: allProducts } = useProducts();
   const { user } = useAuth();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);

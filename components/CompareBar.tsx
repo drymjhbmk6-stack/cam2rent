@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useCompare } from '@/components/CompareProvider';
-import { products } from '@/data/products';
+import { useProducts } from '@/components/ProductsProvider';
 
 const brandColor: Record<string, string> = {
   GoPro: '#3b82f6',
@@ -19,6 +19,7 @@ function XIcon() {
 }
 
 export default function CompareBar() {
+  const { products } = useProducts();
   const router = useRouter();
   const { compareIds, removeFromCompare, clearCompare } = useCompare();
 

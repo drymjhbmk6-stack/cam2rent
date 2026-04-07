@@ -4,7 +4,8 @@ import { useState, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/components/AuthProvider';
-import { products, getPriceForDays, type Product } from '@/data/products';
+import { getPriceForDays, type Product } from '@/data/products';
+import { useProducts } from '@/components/ProductsProvider';
 import { accessories as ALL_ACCESSORIES, getAccessoryPrice, type Accessory } from '@/data/accessories';
 
 // ─── Brand config ────────────────────────────────────────────────────────────
@@ -17,7 +18,6 @@ const brandConfig: Record<Product['brand'], { bg: string; color: string; border:
 
 // ─── Available items ─────────────────────────────────────────────────────────
 
-const availableCameras = products.filter((p) => p.available);
 const availableAccessories = ALL_ACCESSORIES.filter((a) => a.available);
 
 // ─── Camera placeholder SVG ──────────────────────────────────────────────────
@@ -154,9 +154,11 @@ function fmt(n: number) {
 // ─── Page component ──────────────────────────────────────────────────────────
 
 export default function SetKonfiguratorPage() {
+  const { products } = useProducts();
   const router = useRouter();
   const { user } = useAuth();
 
+  const availableCameras = products.filter((p) => p.available);
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [selectedCamera, setSelectedCamera] = useState<Product | null>(null);
   const [selectedAccessoryIds, setSelectedAccessoryIds] = useState<string[]>([]);

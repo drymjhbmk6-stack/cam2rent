@@ -95,6 +95,14 @@ export interface AdminProduct {
   specs?: AdminProductSpec[];
   /** Ausführliche Produktbeschreibung (Admin-Editor) */
   description?: string;
+  /** Modellname z.B. "Hero 13" */
+  model?: string;
+  /** Produktkategorie z.B. "action-cam", "360-cam" */
+  category?: string;
+  /** Tags z.B. ["popular","new","deal"] */
+  tags?: string[];
+  /** Kaution in Euro (direkt, unabhängig von kautionTier) */
+  deposit?: number;
 }
 
 export type AdminProducts = Record<string, AdminProduct>;

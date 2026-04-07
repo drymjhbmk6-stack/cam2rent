@@ -6,6 +6,7 @@ import { CartProvider } from '@/components/CartProvider';
 import { FavoritesProvider } from '@/components/FavoritesProvider';
 import { CompareProvider } from '@/components/CompareProvider';
 import { ProductImagesProvider } from '@/components/ProductImagesProvider';
+import { ProductsProvider } from '@/components/ProductsProvider';
 import PageTracker from '@/components/PageTracker';
 import ShopShell from '@/components/ShopShell';
 import CookieBanner from '@/components/CookieBanner';
@@ -83,6 +84,7 @@ export default function RootLayout({
           <AuthProvider>
             <FavoritesProvider>
               <CompareProvider>
+                <ProductsProvider>
                 <ProductImagesProvider>
                 <CartProvider>
                   <Suspense fallback={null}>
@@ -94,6 +96,7 @@ export default function RootLayout({
                   <InstallPrompt />
                 </CartProvider>
                 </ProductImagesProvider>
+                </ProductsProvider>
               </CompareProvider>
             </FavoritesProvider>
           </AuthProvider>

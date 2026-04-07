@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { createServiceClient } from '@/lib/supabase';
-import { products, getPriceForDays } from '@/data/products';
+import { getPriceForDays } from '@/data/products';
+import { getProducts } from '@/lib/get-products';
 import { sendExtensionConfirmation } from '@/lib/email';
 import Stripe from 'stripe';
 
@@ -14,6 +15,7 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
  * Body: { bookingId: string, paymentIntentId: string, newRentalTo: string }
  */
 export async function POST(req: NextRequest) {
+  const products = await getProducts();
   // Auth check
   const cookieStore = await cookies();
   const supabaseAuth = createServerClient(

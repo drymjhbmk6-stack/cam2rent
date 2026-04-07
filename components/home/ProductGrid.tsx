@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { products, type Product } from '@/data/products';
+import { type Product } from '@/data/products';
+import { useProducts } from '@/components/ProductsProvider';
 import ProductCard from '@/components/ProductCard';
 import { useProductImage } from '@/components/ProductImagesProvider';
 
@@ -15,6 +16,7 @@ function ProductCardWithImage({ product }: { product: Product }) {
 }
 
 export default function ProductGrid() {
+  const { products } = useProducts();
   const [activeBrand, setActiveBrand] = useState<FilterBrand>('Alle');
   const [onlyAvailable, setOnlyAvailable] = useState(false);
 

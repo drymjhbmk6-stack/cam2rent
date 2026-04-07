@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { products, type Product } from '@/data/products';
+import { type Product } from '@/data/products';
+import { useProducts } from '@/components/ProductsProvider';
 import { Suspense } from 'react';
 
 const brandColor: Record<string, string> = {
@@ -91,6 +92,7 @@ function ChevronIcon() {
 }
 
 function CompareContent() {
+  const { products } = useProducts();
   const searchParams = useSearchParams();
   const idsParam = searchParams.get('ids') || '';
   const ids = idsParam.split(',').filter(Boolean);

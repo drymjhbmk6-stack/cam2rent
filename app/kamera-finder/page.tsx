@@ -2,7 +2,8 @@
 
 import { useState, useCallback } from 'react';
 import Link from 'next/link';
-import { products, type Product } from '@/data/products';
+import { type Product } from '@/data/products';
+import { useProducts } from '@/components/ProductsProvider';
 
 /* ───────────────────────── Types ─────────────────────────────────────────── */
 
@@ -209,7 +210,7 @@ interface ScoredProduct {
   reasons: string[];
 }
 
-function computeRecommendations(answers: Answers): ScoredProduct[] {
+function computeRecommendations(answers: Answers, products: Product[]): ScoredProduct[] {
   const scored: ScoredProduct[] = products
     .filter((p) => p.category === 'action-cam' || p.category === '360-cam')
     .map((product) => {
@@ -483,6 +484,7 @@ function ResultsView({
 /* ───────────────────────── Main Component ────────────────────────────────── */
 
 export default function KameraFinderPage() {
+  const { products } = useProducts();
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState<Partial<Answers>>({});
   const [showResults, setShowResults] = useState(false);
@@ -519,7 +521,7 @@ export default function KameraFinderPage() {
     setShowResults(false);
   }, []);
 
-  const results = showResults ? computeRecommendations(answers as Answers) : [];
+  const results = showResults ? computeRecommendations(answers as Answers, products) : [];
 
   return (
     <main className="min-h-screen bg-white dark:bg-gray-900">

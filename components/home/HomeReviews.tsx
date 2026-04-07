@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { products } from '@/data/products';
+import { useProducts } from '@/components/ProductsProvider';
 
 interface Review {
   id: string;
@@ -35,11 +35,9 @@ function timeAgo(dateStr: string): string {
   return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
-function getProductName(productId: string): string {
-  return products.find((p) => p.id === productId)?.name ?? 'Kamera';
-}
-
 export default function HomeReviews() {
+  const { products } = useProducts();
+  const getProductName = (productId: string) => products.find((p) => p.id === productId)?.name ?? 'Kamera';
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
   const [show, setShow] = useState(true);

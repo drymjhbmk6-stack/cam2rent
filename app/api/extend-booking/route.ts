@@ -3,7 +3,8 @@ import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { createServiceClient } from '@/lib/supabase';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
-import { products, getPriceForDays } from '@/data/products';
+import { getPriceForDays } from '@/data/products';
+import { getProducts } from '@/lib/get-products';
 import Stripe from 'stripe';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
@@ -15,6 +16,7 @@ const limiter = rateLimit({ maxAttempts: 5, windowMs: 60_000 });
  * Body: { bookingId: string, newRentalTo: string }
  */
 export async function POST(req: NextRequest) {
+  const products = await getProducts();
   const ip = getClientIp(req);
   const { success } = limiter.check(ip);
   if (!success) {

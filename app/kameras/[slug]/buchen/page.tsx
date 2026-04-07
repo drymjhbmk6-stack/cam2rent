@@ -10,7 +10,8 @@ import { DayPicker } from 'react-day-picker';
 import type { DateRange } from 'react-day-picker';
 import { de } from 'date-fns/locale';
 import { differenceInCalendarDays, format, addDays, subDays } from 'date-fns';
-import { products, getPriceForDays, type Product } from '@/data/products';
+import { getPriceForDays, type Product } from '@/data/products';
+import { useProducts } from '@/components/ProductsProvider';
 import { getAccessoryPrice, type Accessory } from '@/data/accessories';
 import type { RentalSet } from '@/data/sets';
 import 'react-day-picker/dist/style.css';
@@ -382,6 +383,7 @@ export default function BuchenPage() {
   const router = useRouter();
   const { user } = useAuth();
   const { addItem } = useCart();
+  const { products } = useProducts();
   const product = products.find((p) => p.slug === slug);
 
   const searchParams = useSearchParams();

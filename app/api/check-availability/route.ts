@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
-import { products } from '@/data/products';
+import { getProducts } from '@/lib/get-products';
 
 /**
  * GET /api/check-availability?product_id=1&from=2026-04-10&to=2026-04-14
@@ -11,6 +11,7 @@ import { products } from '@/data/products';
  * Two date ranges overlap when: A.start <= B.end AND A.end >= B.start
  */
 export async function GET(req: NextRequest) {
+  const products = await getProducts();
   const { searchParams } = new URL(req.url);
   const productId = searchParams.get('product_id');
   const from = searchParams.get('from');

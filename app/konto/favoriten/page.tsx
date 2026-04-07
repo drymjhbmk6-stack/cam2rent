@@ -3,10 +3,12 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import { useFavorites } from '@/components/FavoritesProvider';
-import { products, type Product } from '@/data/products';
+import { type Product } from '@/data/products';
+import { useProducts } from '@/components/ProductsProvider';
 import Link from 'next/link';
 
 export default function FavoritenPage() {
+  const { products } = useProducts();
   const { user } = useAuth();
   const { favorites, loading, toggleFavorite } = useFavorites();
   const [favProducts, setFavProducts] = useState<Product[]>([]);

@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/components/AuthProvider';
-import { products, type Product } from '@/data/products';
+import { type Product } from '@/data/products';
+import { useProducts } from '@/components/ProductsProvider';
 import { accessories } from '@/data/accessories';
 
 interface CustomSet {
@@ -16,6 +17,7 @@ interface CustomSet {
 }
 
 export default function KontoSetsPage() {
+  const { products } = useProducts();
   const { user } = useAuth();
   const [sets, setSets] = useState<CustomSet[]>([]);
   const [loading, setLoading] = useState(true);
