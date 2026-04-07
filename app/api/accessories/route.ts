@@ -5,7 +5,7 @@ export async function GET() {
   const accessories = await getAccessories();
   return NextResponse.json(accessories, {
     headers: {
-      'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
+      'Cache-Control': 'public, max-age=0, s-maxage=0, stale-while-revalidate=60',
     },
   });
 }

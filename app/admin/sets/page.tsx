@@ -28,7 +28,7 @@ interface Accessory {
   available_qty: number;
 }
 
-const BADGE_OPTIONS = [
+const DEFAULT_BADGE_OPTIONS = [
   { label: 'Keins', value: '', color: '' },
   { label: 'Beliebt', value: 'Beliebt', color: 'bg-accent-blue text-white' },
   { label: 'Neu', value: 'Neu', color: 'bg-accent-teal text-white' },
@@ -59,6 +59,9 @@ function computeAvailFromItems(
 export default function AdminSetsPage() {
   const [sets, setSets] = useState<AdminSet[]>([]);
   const [accessories, setAccessories] = useState<Accessory[]>([]);
+  const [BADGE_OPTIONS, setBadgeOptions] = useState(DEFAULT_BADGE_OPTIONS);
+  const [showNewBadge, setShowNewBadge] = useState(false);
+  const [newBadgeName, setNewBadgeName] = useState('');
   const [products, setProducts] = useState<Record<string, AdminProduct>>({});
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -81,11 +84,15 @@ export default function AdminSetsPage() {
       fetch('/api/sets').then((r) => r.json()),
       fetch('/api/admin/accessories').then((r) => r.json()),
       fetch('/api/admin/config?key=products').then((r) => r.json()),
-    ]).then(([setsData, accData, prodData]) => {
+      fetch('/api/admin/settings?key=set_badges').then((r) => r.json()),
+    ]).then(([setsData, accData, prodData, badgeData]) => {
       setSets(setsData.sets ?? []);
       setAccessories(accData.accessories ?? []);
       const src = prodData && Object.keys(prodData).length > 0 ? prodData : {};
       setProducts(src);
+      if (badgeData?.value && Array.isArray(badgeData.value) && badgeData.value.length > 0) {
+        setBadgeOptions(badgeData.value);
+      }
     }).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
@@ -314,6 +321,7 @@ export default function AdminSetsPage() {
               accessories={accessories} products={products} accMap={accMap}
               addItem={addNewItem} updateItem={updateNewItem} removeItem={removeNewItem}
               toggleProduct={toggleNewProduct}
+              badgeOptions={BADGE_OPTIONS} setBadgeOptions={setBadgeOptions}
             />
             <div className="flex justify-end mt-5 gap-2">
               <button onClick={() => setShowNew(false)}
@@ -532,6 +540,7 @@ export default function AdminSetsPage() {
 function NewSetForm({
   newSet, setNewSet, accessories, products, accMap,
   addItem, updateItem, removeItem, toggleProduct,
+  badgeOptions, setBadgeOptions,
 }: {
   newSet: ReturnType<typeof emptyNew>;
   setNewSet: React.Dispatch<React.SetStateAction<ReturnType<typeof emptyNew>>>;
@@ -542,7 +551,12 @@ function NewSetForm({
   updateItem: (idx: number, field: 'accessory_id' | 'qty', val: string | number) => void;
   removeItem: (idx: number) => void;
   toggleProduct: (id: string) => void;
+  badgeOptions: typeof DEFAULT_BADGE_OPTIONS;
+  setBadgeOptions: React.Dispatch<React.SetStateAction<typeof DEFAULT_BADGE_OPTIONS>>;
 }) {
+  const [showNewBadge, setShowNewBadge] = useState(false);
+  const [newBadgeName, setNewBadgeName] = useState('');
+  const BADGE_OPTIONS = badgeOptions;
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -555,11 +569,46 @@ function NewSetForm({
         </div>
         <div>
           <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Badge</label>
-          <select value={newSet.badge}
-            onChange={(e) => setNewSet((f) => ({ ...f, badge: e.target.value }))}
-            className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue">
-            {BADGE_OPTIONS.map((b) => <option key={b.value} value={b.value}>{b.label}</option>)}
-          </select>
+          <div className="flex gap-2">
+            <select value={showNewBadge ? '__new__' : newSet.badge}
+              onChange={(e) => {
+                if (e.target.value === '__new__') { setShowNewBadge(true); }
+                else { setShowNewBadge(false); setNewSet((f) => ({ ...f, badge: e.target.value })); }
+              }}
+              className="flex-1 px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue">
+              {BADGE_OPTIONS.map((b) => <option key={b.value} value={b.value}>{b.label}</option>)}
+              <option value="__new__">+ Neues Badge...</option>
+            </select>
+            {showNewBadge && (
+              <div className="flex gap-1">
+                <input type="text" value={newBadgeName} onChange={(e) => setNewBadgeName(e.target.value)}
+                  placeholder="Badge-Name" autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && newBadgeName.trim()) {
+                      const name = newBadgeName.trim();
+                      const updated = [...BADGE_OPTIONS, { label: name, value: name, color: 'bg-accent-blue text-white' }];
+                      setBadgeOptions(updated);
+                      setNewSet((f) => ({ ...f, badge: name }));
+                      setNewBadgeName(''); setShowNewBadge(false);
+                      fetch('/api/admin/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ key: 'set_badges', value: updated }) }).catch(() => {});
+                    }
+                    if (e.key === 'Escape') { setShowNewBadge(false); setNewBadgeName(''); }
+                  }}
+                  className="w-28 px-2 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
+                <button type="button" onClick={() => {
+                  if (!newBadgeName.trim()) return;
+                  const name = newBadgeName.trim();
+                  const updated = [...BADGE_OPTIONS, { label: name, value: name, color: 'bg-accent-blue text-white' }];
+                  setBadgeOptions(updated);
+                  setNewSet((f) => ({ ...f, badge: name }));
+                  setNewBadgeName(''); setShowNewBadge(false);
+                  fetch('/api/admin/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ key: 'set_badges', value: updated }) }).catch(() => {});
+                }} className="px-3 py-2.5 bg-brand-black text-white text-sm font-heading font-semibold rounded-[10px]">+</button>
+              </div>
+            )}
+          </div>
         </div>
         <div className="sm:col-span-2">
           <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Beschreibung</label>
