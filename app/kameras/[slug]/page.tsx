@@ -12,6 +12,9 @@ import MarkdownContent from '@/components/MarkdownContent';
 
 // ─── Static generation ──────────────────────────────────────────────────────
 
+// Neue Produkte aus DB sollen auch ohne Rebuild erreichbar sein
+export const dynamicParams = true;
+
 export async function generateStaticParams() {
   const products = await getProducts();
   return products.map((p) => ({ slug: p.slug }));

@@ -16,6 +16,12 @@ import ProductPreview from '@/components/ProductPreview';
 import MarkdownEditor from '@/components/MarkdownEditor';
 import BrandSelect from '@/components/admin/BrandSelect';
 
+function toSlug(name: string): string {
+  return name.toLowerCase()
+    .replace(/[äÄ]/g, 'ae').replace(/[öÖ]/g, 'oe').replace(/[üÜ]/g, 'ue').replace(/ß/g, 'ss')
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
 function createEmpty(): AdminProduct {
   return {
     id: '', name: '', brand: 'GoPro', slug: '', shortDescription: '',
@@ -38,6 +44,7 @@ export default function AdminNeueKameraPage() {
   const [kautionTiers, setKautionTiers] = useState<KautionTiers>(DEFAULT_KAUTION_TIERS);
   const [allProducts, setAllProducts] = useState<Record<string, AdminProduct>>({});
   const [saving, setSaving] = useState(false);
+  const [autoSlug, setAutoSlug] = useState(true);
 
   useEffect(() => {
     fetch('/api/prices').then((r) => r.json()).then((d) => {
@@ -166,7 +173,10 @@ export default function AdminNeueKameraPage() {
                 <div>
                   <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Name</label>
                   <input type="text" value={product.name}
-                    onChange={(e) => setProduct((p) => ({ ...p, name: e.target.value }))}
+                    onChange={(e) => {
+                      const name = e.target.value;
+                      setProduct((p) => ({ ...p, name, ...(autoSlug ? { slug: toSlug(name) } : {}) }));
+                    }}
                     placeholder="z.B. GoPro Hero 13 Black"
                     className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
                 </div>
@@ -184,8 +194,8 @@ export default function AdminNeueKameraPage() {
                 <div>
                   <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">URL-Slug</label>
                   <input type="text" value={product.slug}
-                    onChange={(e) => setProduct((p) => ({ ...p, slug: e.target.value }))}
-                    placeholder="z.B. gopro-hero-13-black"
+                    onChange={(e) => { setAutoSlug(false); setProduct((p) => ({ ...p, slug: e.target.value })); }}
+                    placeholder="Wird automatisch aus dem Namen generiert"
                     className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
                 </div>
                 <div>
