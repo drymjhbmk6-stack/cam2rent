@@ -22,6 +22,7 @@ export async function GET(
   const products = await getProducts();
   const { productId } = await params;
   const month = new URL(req.url).searchParams.get('month');
+  const viewerMode = new URL(req.url).searchParams.get('delivery_mode') ?? 'versand';
 
   if (!month || !/^\d{4}-\d{2}$/.test(month)) {
     return NextResponse.json(
@@ -115,7 +116,12 @@ export async function GET(
       continue;
     }
 
-    // Buchungen zählen die diesen Tag überlappen (inkl. Puffer)
+    // Buchungen zählen die diesen Tag überlappen (inkl. Puffer der Buchung + Puffer einer neuen Buchung)
+    // Der Viewer-Puffer wird zusätzlich berücksichtigt: Wenn eine neue Buchung an diesem Tag
+    // starten/enden würde, braucht sie ebenfalls Puffertage — diese müssen frei sein.
+    const viewerBefore = viewerMode === 'abholung' ? buf.abholung_before : buf.versand_before;
+    const viewerAfter = viewerMode === 'abholung' ? buf.abholung_after : buf.versand_after;
+
     let bookedCount = 0;
     if (bookings) {
       for (const b of bookings) {
@@ -123,11 +129,11 @@ export async function GET(
         const bBefore = bMode === 'abholung' ? buf.abholung_before : buf.versand_before;
         const bAfter = bMode === 'abholung' ? buf.abholung_after : buf.versand_after;
 
-        // Effektiver Zeitraum dieser Buchung inkl. Puffer
+        // Effektiver Zeitraum: Puffer der bestehenden Buchung + Puffer der neuen Buchung
         const bFrom = new Date(b.rental_from);
         const bTo = new Date(b.rental_to);
-        bFrom.setDate(bFrom.getDate() - bBefore);
-        bTo.setDate(bTo.getDate() + bAfter);
+        bFrom.setDate(bFrom.getDate() - bBefore - viewerAfter);
+        bTo.setDate(bTo.getDate() + bAfter + viewerBefore);
         const effFrom = bFrom.toISOString().split('T')[0];
         const effTo = bTo.toISOString().split('T')[0];
 

@@ -70,19 +70,24 @@ export default function ProductBookingCalendar({
   const [rangeTo, setRangeTo] = useState<string | null>(null);
   const [hoverDate, setHoverDate] = useState<string | null>(null);
 
-  // Fetch month data
+  // Fetch month data (mit delivery_mode für Puffertage)
   const fetchMonth = useCallback(
     async (y: number, m: number) => {
-      const key = formatMonth(y, m);
+      const key = `${formatMonth(y, m)}_${deliveryMode}`;
       if (cache.current[key]) return cache.current[key];
-      const res = await fetch(`/api/availability/${productId}?month=${key}`);
+      const res = await fetch(`/api/availability/${productId}?month=${formatMonth(y, m)}&delivery_mode=${deliveryMode}`);
       if (!res.ok) return null;
       const json: AvailabilityData = await res.json();
       cache.current[key] = json;
       return json;
     },
-    [productId]
+    [productId, deliveryMode]
   );
+
+  // Cache leeren wenn delivery_mode wechselt
+  useEffect(() => {
+    cache.current = {};
+  }, [deliveryMode]);
 
   useEffect(() => {
     let cancelled = false;
