@@ -56,7 +56,7 @@ export default function NewsBanner() {
   const activeMessages = data.messages.filter((m) => m.active);
   if (activeMessages.length === 0) return null;
 
-  const separator = ' \u00b7 ';
+  const separator = '  \u2014  ';
   const colors = ['#e2e8f0', '#06b6d4'];
 
   const renderMessages = () =>
