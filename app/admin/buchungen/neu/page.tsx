@@ -126,7 +126,7 @@ export default function ManualBookingPage() {
   const [street, setStreet] = useState('');
   const [zip, setZip] = useState('');
   const [city, setCity] = useState('');
-  const [selectedProducts, setSelectedProducts] = useState<{ id: string; qty: number; accessories: string[]; sets: string[]; note: string }[]>([]);
+  const [selectedProducts, setSelectedProducts] = useState<{ id: string; qty: number; accessories: string[]; sets: string[]; note: string; customPrice: string }[]>([]);
   const [addProductId, setAddProductId] = useState('');
   const [rentalFrom, setRentalFrom] = useState('');
   const [rentalTo, setRentalTo] = useState('');
@@ -136,8 +136,8 @@ export default function ManualBookingPage() {
   const [shippingMethod, setShippingMethod] = useState<'standard' | 'express'>('standard');
   const [notes, setNotes] = useState('');
   const [source, setSource] = useState('kleinanzeigen');
-  const [manualPrice, setManualPrice] = useState('');
   const [paymentStatus, setPaymentStatus] = useState<'paid' | 'unpaid'>('unpaid');
+  const [freeShipping, setFreeShipping] = useState(true);
 
   // Load all data on mount
   useEffect(() => {
@@ -183,7 +183,7 @@ export default function ManualBookingPage() {
     setSelectedProducts((prev) => {
       const existing = prev.find((p) => p.id === addProductId);
       if (existing) return prev.map((p) => p.id === addProductId ? { ...p, qty: p.qty + 1 } : p);
-      return [...prev, { id: addProductId, qty: 1, accessories: [], sets: [], note: '' }];
+      return [...prev, { id: addProductId, qty: 1, accessories: [], sets: [], note: '', customPrice: '' }];
     });
   }
   function removeProduct(id: string) {
@@ -195,6 +195,9 @@ export default function ManualBookingPage() {
   }
   function updateProductNote(id: string, note: string) {
     setSelectedProducts((prev) => prev.map((p) => p.id === id ? { ...p, note } : p));
+  }
+  function updateProductCustomPrice(id: string, customPrice: string) {
+    setSelectedProducts((prev) => prev.map((p) => p.id === id ? { ...p, customPrice } : p));
   }
   function toggleProductAccessory(productId: string, accId: string) {
     setSelectedProducts((prev) => prev.map((p) => {
@@ -237,6 +240,8 @@ export default function ManualBookingPage() {
   const rentalPrice = useMemo(() => {
     if (!days) return 0;
     return selectedProducts.reduce((sum, sp) => {
+      const custom = parseFloat(sp.customPrice);
+      if (!isNaN(custom) && sp.customPrice !== '') return sum + custom * sp.qty;
       return sum + getRentalPrice(sp.id, days, dynPrices, staticProducts) * sp.qty;
     }, 0);
   }, [selectedProducts, days, dynPrices, staticProducts]);
@@ -269,10 +274,10 @@ export default function ManualBookingPage() {
   const subtotal = rentalPrice + accessoryPrice + setPrice + haftungPrice;
   const sp = dynPrices?.shipping;
   const shippingPrice = deliveryMode === 'abholung' ? 0
+    : freeShipping ? 0
     : shippingMethod === 'express' ? (sp?.expressPrice ?? 12.99)
     : subtotal >= (sp?.freeShippingThreshold ?? 50) ? 0 : (sp?.standardPrice ?? 5.99);
   const total = subtotal + shippingPrice;
-  const finalTotal = manualPrice ? parseFloat(manualPrice) || 0 : total;
   const deposit = totalDeposit;
 
   async function handleSubmit(e: React.FormEvent) {
@@ -291,7 +296,9 @@ export default function ManualBookingPage() {
       // Pro Produkt eine eigene Buchung erstellen
       for (const sp of selectedProducts) {
         const p = productList.find((pl) => pl.id === sp.id);
-        const pPrice = days > 0 ? getRentalPrice(sp.id, days, dynPrices, staticProducts) : 0;
+        const autoRentalPrice = days > 0 ? getRentalPrice(sp.id, days, dynPrices, staticProducts) : 0;
+        const customParsed = parseFloat(sp.customPrice);
+        const pPrice = (sp.customPrice !== '' && !isNaN(customParsed)) ? customParsed : autoRentalPrice;
         const pAccPrice = sp.accessories.reduce((sum, id) => {
           const acc = accessories.find((a) => a.id === id);
           return sum + (acc ? getAccessoryPrice(acc, days) : 0);
@@ -303,10 +310,6 @@ export default function ManualBookingPage() {
         const pSubtotal = pPrice + pAccPrice + pSetPrice + haftungPrice;
         const pShipping = shippingPrice; // Versand nur einmal bei erster Buchung
         const pTotal = pSubtotal + (bookingIds.length === 0 ? pShipping : 0);
-        // Bei manuellem Preis: anteilig auf Produkte verteilen
-        const pFinalTotal = manualPrice
-          ? (parseFloat(manualPrice) || 0) / selectedProducts.reduce((s, x) => s + x.qty, 0)
-          : (bookingIds.length === 0 ? pTotal : pSubtotal);
         const pDeposit = p?.deposit ?? 0;
 
         const accNames = sp.accessories.map((id) => accessories.find((a) => a.id === id)?.name ?? id);
@@ -336,7 +339,7 @@ export default function ManualBookingPage() {
               price_rental: pPrice,
               price_accessories: pAccPrice + pSetPrice,
               price_haftung: haftungPrice,
-              price_total: pFinalTotal,
+              price_total: bookingIds.length === 0 ? pTotal : pSubtotal,
               deposit: pDeposit,
               customer_name: customerName.trim(),
               customer_email: customerEmail.trim() || null,
@@ -345,7 +348,7 @@ export default function ManualBookingPage() {
               notes: [
                 source ? `Quelle: ${source}` : '',
                 paymentStatus === 'paid' ? 'Bezahlt' : '',
-                manualPrice ? `Manueller Preis: ${parseFloat(manualPrice).toFixed(2)} €` : '',
+                (sp.customPrice !== '' && !isNaN(customParsed)) ? `Manueller Preis (${p?.name ?? sp.id}): ${customParsed.toFixed(2)} €` : '',
                 sp.note ? `Produkt-Notiz (${p?.name ?? sp.id}): ${sp.note}` : '',
                 setNames.length ? `Sets: ${setNames.join(', ')}` : '',
                 accNames.length ? `Zubehör: ${accNames.join(', ')}` : '',
@@ -376,10 +379,6 @@ export default function ManualBookingPage() {
       </div>
     );
   }
-
-  const stdShippingLabel = subtotal >= (sp?.freeShippingThreshold ?? 50)
-    ? 'Standard (3-5 Tage) — Gratis'
-    : `Standard (3-5 Tage) — ${(sp?.standardPrice ?? 5.99).toFixed(2)} €`;
 
   return (
     <div style={{ padding: '20px 16px', maxWidth: 800 }}>
@@ -470,7 +469,10 @@ export default function ManualBookingPage() {
             <div className="space-y-4">
               {selectedProducts.map((sp) => {
                 const p = productList.find((pl) => pl.id === sp.id);
-                const productPrice = days > 0 ? getRentalPrice(sp.id, days, dynPrices, staticProducts) * sp.qty : 0;
+                const autoPrice = days > 0 ? getRentalPrice(sp.id, days, dynPrices, staticProducts) : 0;
+                const customParsed = parseFloat(sp.customPrice);
+                const hasCustomPrice = sp.customPrice !== '' && !isNaN(customParsed);
+                const displayPrice = hasCustomPrice ? customParsed * sp.qty : autoPrice * sp.qty;
                 // Kompatible Zubehörteile für dieses Produkt
                 const compatAccessories = accessories.filter((acc) => acc.available);
                 const compatSets = sets.filter((s) => s.available);
@@ -488,8 +490,39 @@ export default function ManualBookingPage() {
                         <span className="text-sm font-semibold w-6 text-center" style={{ color: '#e2e8f0' }}>{sp.qty}</span>
                         <button type="button" onClick={() => updateProductQty(sp.id, sp.qty + 1)} className="w-7 h-7 rounded flex items-center justify-center text-sm" style={{ background: '#1e293b', color: '#94a3b8' }}>+</button>
                       </div>
-                      {days > 0 && <span className="text-xs font-semibold" style={{ color: '#06b6d4' }}>{productPrice.toFixed(2)} €</span>}
+                      {days > 0 && <span className="text-xs font-semibold" style={{ color: '#06b6d4' }}>{displayPrice.toFixed(2)} €</span>}
                       <button type="button" onClick={() => removeProduct(sp.id)} className="text-xs p-1" style={{ color: '#ef4444' }}>✕</button>
+                    </div>
+
+                    {/* Manueller Preis pro Kamera */}
+                    <div className="mb-3">
+                      <p className="text-xs font-semibold mb-1" style={{ color: '#64748b' }}>PREIS (PRO STÜCK)</p>
+                      <div className="flex items-center gap-3">
+                        <input
+                          style={{ ...inputStyle, width: 160, fontSize: 13 }}
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={sp.customPrice}
+                          onChange={(e) => updateProductCustomPrice(sp.id, e.target.value)}
+                          placeholder={days > 0 ? `${autoPrice.toFixed(2)} € (auto)` : 'Preis eingeben'}
+                        />
+                        {hasCustomPrice && (
+                          <button
+                            type="button"
+                            onClick={() => updateProductCustomPrice(sp.id, '')}
+                            className="text-xs"
+                            style={{ color: '#94a3b8' }}
+                          >
+                            Zurücksetzen
+                          </button>
+                        )}
+                        {hasCustomPrice && days > 0 && (
+                          <span className="text-xs" style={{ color: '#f59e0b' }}>
+                            statt {autoPrice.toFixed(2)} €
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     {/* Sets für dieses Produkt */}
@@ -570,7 +603,7 @@ export default function ManualBookingPage() {
         {/* ─── Versand & Haftung ─── */}
         <div style={sectionStyle}>
           <h2 className="font-heading font-semibold text-sm mb-4" style={headingStyle}>Versand & Haftungsschutz</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
             <div>
               <label style={labelStyle}>Lieferung</label>
               <select style={selectStyle} value={deliveryMode} onChange={(e) => setDeliveryMode(e.target.value as 'versand' | 'abholung')}>
@@ -579,13 +612,30 @@ export default function ManualBookingPage() {
               </select>
             </div>
             {deliveryMode === 'versand' && (
-              <div>
-                <label style={labelStyle}>Versandart</label>
-                <select style={selectStyle} value={shippingMethod} onChange={(e) => setShippingMethod(e.target.value as 'standard' | 'express')}>
-                  <option value="standard">{stdShippingLabel}</option>
-                  <option value="express">Express (24h) — {(sp?.expressPrice ?? 12.99).toFixed(2)} €</option>
-                </select>
-              </div>
+              <>
+                <div>
+                  <label style={labelStyle}>Versandart</label>
+                  <select style={selectStyle} value={shippingMethod} onChange={(e) => setShippingMethod(e.target.value as 'standard' | 'express')}>
+                    <option value="standard">Standard (3-5 Tage)</option>
+                    <option value="express">Express (24h)</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={labelStyle}>Versandkosten</label>
+                  <button
+                    type="button"
+                    onClick={() => setFreeShipping(!freeShipping)}
+                    className="w-full py-2.5 rounded-lg text-sm font-semibold transition-colors"
+                    style={{
+                      background: freeShipping ? '#10b98125' : '#0f172a',
+                      border: `1px solid ${freeShipping ? '#10b981' : '#334155'}`,
+                      color: freeShipping ? '#10b981' : '#94a3b8',
+                    }}
+                  >
+                    {freeShipping ? 'Kostenlos' : `${shippingMethod === 'express' ? (sp?.expressPrice ?? 12.99).toFixed(2) : (sp?.standardPrice ?? 5.99).toFixed(2)} €`}
+                  </button>
+                </div>
+              </>
             )}
           </div>
           <label style={labelStyle}>Haftungsschutz</label>
@@ -627,74 +677,43 @@ export default function ManualBookingPage() {
           </div>
         </div>
 
-        {/* ─── Preis & Zahlung ─── */}
+        {/* ─── Bezahlstatus ─── */}
         <div style={sectionStyle}>
-          <h2 className="font-heading font-semibold text-sm mb-4" style={headingStyle}>Preis & Zahlung</h2>
+          <h2 className="font-heading font-semibold text-sm mb-4" style={headingStyle}>Zahlung</h2>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-            <div>
-              <label style={labelStyle}>Manueller Gesamtpreis (optional)</label>
-              <div className="relative">
-                <input
-                  style={inputStyle}
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={manualPrice}
-                  onChange={(e) => setManualPrice(e.target.value)}
-                  placeholder={`Berechnet: ${total.toFixed(2)} €`}
-                />
-                {manualPrice && (
-                  <button
-                    type="button"
-                    onClick={() => setManualPrice('')}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-xs"
-                    style={{ color: '#94a3b8' }}
-                  >
-                    ✕ Zurücksetzen
-                  </button>
-                )}
-              </div>
-              {manualPrice && (
-                <p className="text-xs mt-1" style={{ color: '#f59e0b' }}>
-                  Manueller Preis überschreibt den berechneten Preis ({total.toFixed(2)} €)
-                </p>
-              )}
-            </div>
-            <div>
-              <label style={labelStyle}>Bezahlstatus</label>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setPaymentStatus('paid')}
-                  className="flex-1 py-2.5 rounded-lg text-sm font-semibold transition-colors"
-                  style={{
-                    background: paymentStatus === 'paid' ? '#10b98125' : '#0f172a',
-                    border: `1px solid ${paymentStatus === 'paid' ? '#10b981' : '#334155'}`,
-                    color: paymentStatus === 'paid' ? '#10b981' : '#94a3b8',
-                  }}
-                >
-                  Bezahlt
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPaymentStatus('unpaid')}
-                  className="flex-1 py-2.5 rounded-lg text-sm font-semibold transition-colors"
-                  style={{
-                    background: paymentStatus === 'unpaid' ? '#f59e0b25' : '#0f172a',
-                    border: `1px solid ${paymentStatus === 'unpaid' ? '#f59e0b' : '#334155'}`,
-                    color: paymentStatus === 'unpaid' ? '#f59e0b' : '#94a3b8',
-                  }}
-                >
-                  Nicht bezahlt
-                </button>
-              </div>
+          <div className="mb-4">
+            <label style={labelStyle}>Bezahlstatus</label>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setPaymentStatus('paid')}
+                className="flex-1 py-2.5 rounded-lg text-sm font-semibold transition-colors"
+                style={{
+                  background: paymentStatus === 'paid' ? '#10b98125' : '#0f172a',
+                  border: `1px solid ${paymentStatus === 'paid' ? '#10b981' : '#334155'}`,
+                  color: paymentStatus === 'paid' ? '#10b981' : '#94a3b8',
+                }}
+              >
+                Bezahlt
+              </button>
+              <button
+                type="button"
+                onClick={() => setPaymentStatus('unpaid')}
+                className="flex-1 py-2.5 rounded-lg text-sm font-semibold transition-colors"
+                style={{
+                  background: paymentStatus === 'unpaid' ? '#f59e0b25' : '#0f172a',
+                  border: `1px solid ${paymentStatus === 'unpaid' ? '#f59e0b' : '#334155'}`,
+                  color: paymentStatus === 'unpaid' ? '#f59e0b' : '#94a3b8',
+                }}
+              >
+                Nicht bezahlt
+              </button>
             </div>
           </div>
 
           {/* Kontodaten bei "nicht bezahlt" */}
           {paymentStatus === 'unpaid' && (
-            <div className="rounded-lg p-4 mb-2" style={{ background: '#f59e0b0a', border: '1px solid #f59e0b33' }}>
+            <div className="rounded-lg p-4" style={{ background: '#f59e0b0a', border: '1px solid #f59e0b33' }}>
               <p className="text-xs font-semibold mb-2" style={{ color: '#f59e0b' }}>
                 ÜBERWEISUNGSDATEN (werden in Notizen gespeichert)
               </p>
@@ -755,15 +774,9 @@ export default function ManualBookingPage() {
               </div>
             )}
             <div style={{ height: 1, background: '#1e293b', margin: '8px 0' }} />
-            {manualPrice && (
-              <div className="flex justify-between text-xs line-through" style={{ color: '#64748b' }}>
-                <span>Berechneter Preis</span>
-                <span>{total.toFixed(2)} €</span>
-              </div>
-            )}
             <div className="flex justify-between font-heading font-bold text-base" style={{ color: '#06b6d4' }}>
-              <span>Gesamt {manualPrice ? '(manuell)' : ''}</span>
-              <span>{finalTotal.toFixed(2)} €</span>
+              <span>Gesamt</span>
+              <span>{total.toFixed(2)} €</span>
             </div>
             {deposit > 0 && (
               <div className="flex justify-between text-xs" style={{ color: '#64748b' }}>
