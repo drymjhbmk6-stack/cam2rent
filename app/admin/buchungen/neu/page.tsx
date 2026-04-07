@@ -138,6 +138,7 @@ export default function ManualBookingPage() {
   const [source, setSource] = useState('kleinanzeigen');
   const [paymentStatus, setPaymentStatus] = useState<'paid' | 'unpaid'>('unpaid');
   const [customShippingPrice, setCustomShippingPrice] = useState('');
+  const [remark, setRemark] = useState('');
 
   // Load all data on mount
   useEffect(() => {
@@ -330,8 +331,12 @@ export default function ManualBookingPage() {
         items.push({ description: `inkl. ${prod.note}`, amount: 0 });
       }
     }
-    if (shippingPrice > 0) {
-      items.push({ description: shippingMethod === 'express' ? 'Express-Versand' : 'Standard-Versand', amount: shippingPrice });
+    // Versand immer als Position zeigen
+    if (deliveryMode === 'versand') {
+      const versandLabel = shippingMethod === 'express' ? 'Express-Versand (1–2 Werktage)' : 'Standard-Versand (3–5 Werktage)';
+      items.push({ description: versandLabel, amount: shippingPrice });
+    } else {
+      items.push({ description: 'Selbstabholung', amount: 0 });
     }
 
     const html = `<!DOCTYPE html>
@@ -404,7 +409,8 @@ export default function ManualBookingPage() {
   </table>
   <table style="margin-top:4px"><tbody><tr class="total-row"><td>Gesamtbetrag</td><td>${fmtP(total)}</td></tr></tbody></table>
   ${(depositMode === 'kaution' || depositMode === 'both') && deposit > 0 ? `<div style="font-size:8pt;color:#6b7280;margin-top:6px;text-align:right">* Enthält Kaution ${fmtP(deposit)} – wird nach Rückgabe erstattet</div>` : ''}
-  <div class="note">Gemäß §19 UStG wird keine Umsatzsteuer berechnet.</div>
+  ${remark ? `<div class="note" style="margin-top:16px"><strong>Bemerkung:</strong><br>${remark.replace(/\n/g, '<br>')}</div>` : ''}
+  <div class="note"${remark ? ' style="margin-top:8px"' : ''}>Gemäß §19 UStG wird keine Umsatzsteuer berechnet.</div>
   ${paymentStatus === 'unpaid' ? `<div class="note" style="margin-top:12px;border:1px solid #d97706;background:#fffbeb"><strong style="color:#d97706">Überweisungsdaten:</strong><br>Kontoinhaber: Lennart Schickel<br>IBAN: DE77 2022 0800 0027 7841 43<br>BIC: SXPYDEHHXXX<br>Verwendungszweck: ${customerName || 'Kunde'} – Kameraleihe</div>` : ''}
   <div class="footer"><span>cam2rent · Lennart Schickel · Heimsbrunner Str. 12 · 12349 Berlin</span><span>cam2rent.de · buchung@cam2rent.de</span></div>
 </body></html>`;
@@ -415,7 +421,7 @@ export default function ManualBookingPage() {
       w.document.close();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedProducts, productList, days, rentalFrom, rentalTo, dynPrices, staticProducts, accessories, sets, shippingPrice, shippingMethod, deliveryMode, customerName, customerEmail, street, zip, city, paymentStatus, total, deposit, depositMode]);
+  }, [selectedProducts, productList, days, rentalFrom, rentalTo, dynPrices, staticProducts, accessories, sets, shippingPrice, shippingMethod, deliveryMode, customerName, customerEmail, street, zip, city, paymentStatus, total, deposit, depositMode, remark]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -491,6 +497,7 @@ export default function ManualBookingPage() {
                 setNames.length ? `Sets: ${setNames.join(', ')}` : '',
                 accNames.length ? `Zubehör: ${accNames.join(', ')}` : '',
                 bankInfo,
+                remark ? `Bemerkung: ${remark}` : '',
                 notes,
               ].filter(Boolean).join(' | '),
             }),
@@ -809,6 +816,10 @@ export default function ManualBookingPage() {
             <div className="sm:col-span-2">
               <label style={labelStyle}>Interne Notizen</label>
               <textarea style={{ ...inputStyle, minHeight: 70, resize: 'vertical' }} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="z.B. Kleinanzeigen-Nachricht-ID, Absprachen etc." />
+            </div>
+            <div className="sm:col-span-2">
+              <label style={labelStyle}>Bemerkung (erscheint auf der Rechnung)</label>
+              <textarea style={{ ...inputStyle, minHeight: 60, resize: 'vertical' }} value={remark} onChange={(e) => setRemark(e.target.value)} placeholder="z.B. Rückgabe am nächsten Tag per DHL, Sondervereinbarung etc." />
             </div>
           </div>
         </div>
