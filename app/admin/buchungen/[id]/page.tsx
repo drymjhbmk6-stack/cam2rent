@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 
@@ -138,6 +138,152 @@ export default function BuchungDetailPage() {
       setStatusUpdating(false);
     }
   }
+
+  // ─── Gemeinsame Styles für A4-Dokumente ───
+  const docStyles = `
+    @page { size: A4 portrait; margin: 20mm; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 11pt; color: #1a1a1a; padding: 40px 48px; max-width: 210mm; min-height: 297mm; }
+    h1 { font-size: 20pt; color: #1e3a5f; margin-bottom: 6px; border-bottom: 3px solid #1e3a5f; padding-bottom: 8px; }
+    .subtitle { font-size: 9pt; color: #6b7280; margin-bottom: 20px; }
+    h2 { font-size: 12pt; color: #1e3a5f; margin: 18px 0 8px; }
+    .info-grid { display: grid; grid-template-columns: 150px 1fr; gap: 4px 12px; margin-bottom: 14px; }
+    .info-label { font-size: 10pt; color: #6b7280; }
+    .info-value { font-size: 11pt; font-weight: 600; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
+    th { background: #eef2f7; padding: 5px 8px; text-align: left; font-size: 10pt; color: #4a5568; border: 1px solid #ccc; }
+    td { padding: 4px 8px; border: 1px solid #ccc; }
+    .check-section { margin: 12px 0; }
+    .check-row { display: flex; gap: 28px; margin-bottom: 8px; flex-wrap: wrap; }
+    .check-item { display: flex; align-items: center; gap: 6px; font-size: 10.5pt; }
+    .checkbox { width: 14px; height: 14px; border: 2px solid #4a5568; display: inline-block; border-radius: 2px; flex-shrink: 0; }
+    .line { border-bottom: 1px solid #333; width: 180px; display: inline-block; margin-left: 4px; }
+    .line-short { width: 120px; }
+    .line-long { width: 280px; }
+    .confirm-text { font-size: 10pt; color: #4a5568; line-height: 1.5; margin: 10px 0; }
+    .sig-row { display: flex; justify-content: space-between; margin-top: 36px; }
+    .sig-block { text-align: center; }
+    .sig-line { border-top: 1px solid #333; width: 200px; margin-bottom: 4px; padding-top: 4px; }
+    .sig-label { font-size: 9pt; color: #6b7280; }
+    .toolbar { position: fixed; top: 0; left: 0; right: 0; background: #111827; padding: 12px 24px; display: flex; gap: 12px; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,.3); }
+    .toolbar button { padding: 8px 20px; border-radius: 8px; font-size: 13px; font-weight: 600; border: none; cursor: pointer; }
+    .btn-pdf { background: #06b6d4; color: #fff; }
+    .btn-close { background: #374151; color: #e5e7eb; }
+    .toolbar-spacer { height: 52px; }
+    @media print { .toolbar, .toolbar-spacer { display: none !important; } body { padding: 0; } }`;
+
+  const toolbarHtml = `<div class="toolbar"><button class="btn-pdf" onclick="window.print()">Als PDF speichern / Drucken</button><button class="btn-close" onclick="window.close()">Schließen</button></div><div class="toolbar-spacer"></div>`;
+
+  const openPackliste = useCallback(() => {
+    if (!booking) return;
+    const today = new Date();
+    const dateStr = `${today.getDate().toString().padStart(2, '0')}.${(today.getMonth() + 1).toString().padStart(2, '0')}.${today.getFullYear()}`;
+    const kundenName = booking.customer_name || customer?.full_name || '';
+    const produktName = booking.product_name || '';
+    const zeitraum = `${fmtDate(booking.rental_from)} – ${fmtDate(booking.rental_to)}`;
+    const zubehoerRows = booking.accessories && booking.accessories.length > 0
+      ? booking.accessories.map((a, i) => `<tr><td style="width:40px">${i + 1}</td><td>${a}</td><td style="width:50px"></td></tr>`).join('')
+      : Array.from({ length: 4 }, (_, i) => `<tr><td style="width:40px">${i + 1}</td><td></td><td style="width:50px"></td></tr>`).join('');
+    const adresse = booking.shipping_address || (customer ? `${customer.address_street || ''}, ${customer.address_zip || ''} ${customer.address_city || ''}` : '');
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Versand-Packliste – ${booking.id}</title><style>${docStyles}</style></head><body>
+  ${toolbarHtml}
+  <h1>Versand-Packliste</h1>
+  <div class="subtitle">cam2rent – internes Versanddokument</div>
+  <div class="info-grid">
+    <span class="info-label">Buchungsnummer:</span><span class="info-value">${booking.id}</span>
+    <span class="info-label">Kundenname:</span><span class="info-value">${kundenName}</span>
+    <span class="info-label">Mietzeitraum:</span><span class="info-value">${zeitraum}</span>
+    <span class="info-label">Versandart:</span><span class="info-value">${booking.shipping_method === 'express' ? 'Express-Versand' : 'Standard-Versand'}</span>
+    <span class="info-label">Lieferadresse:</span><span class="info-value">${adresse}</span>
+  </div>
+  <h2>1. Versanddatum</h2>
+  <p style="margin-bottom:12px">Datum: <strong>${dateStr}</strong></p>
+  <h2>2. Versandgegenstand</h2>
+  <div class="info-grid" style="margin-bottom:4px"><span class="info-label">Kamera / Gerät:</span><span class="info-value">${produktName}</span></div>
+  <p style="margin-bottom:8px">Seriennummer: <span class="line line-short"></span></p>
+  <p style="margin-bottom:4px;font-weight:600">Zubehör:</p>
+  <table><thead><tr><th style="width:40px">Nr.</th><th>Bezeichnung</th><th style="width:50px">OK</th></tr></thead><tbody>${zubehoerRows}</tbody></table>
+  <h2>3. Zustand bei Verpackung</h2>
+  <div class="check-section">
+    <div class="check-row"><div class="check-item"><span class="checkbox"></span> Gerät funktionsfähig getestet</div><div class="check-item"><span class="checkbox"></span> Keine sichtbaren Schäden</div></div>
+    <div class="check-row"><div class="check-item"><span class="checkbox"></span> Sonstiges: <span class="line"></span></div></div>
+  </div>
+  <h2>4. Verpackungskontrolle</h2>
+  <div class="check-section">
+    <div class="check-row"><div class="check-item"><span class="checkbox"></span> Gerät sicher verpackt</div><div class="check-item"><span class="checkbox"></span> Zubehör vollständig</div></div>
+    <div class="check-row"><div class="check-item"><span class="checkbox"></span> Paketinhalt dokumentiert (Foto/Video)</div><div class="check-item"><span class="checkbox"></span> Paketnummer: <span class="line line-short"></span></div></div>
+  </div>
+  <h2>5. Bestätigung</h2>
+  <p class="confirm-text">Der Unterzeichner bestätigt die vollständige und ordnungsgemäße Verpackung des oben genannten Equipments.<br>Die Kontrolle wurde durch eine zweite Person gegengezeichnet.</p>
+  <div class="sig-row"><div class="sig-block"><div class="sig-line"></div><div class="sig-label">(Packer, Ort/Datum)</div></div><div class="sig-block"><div class="sig-line"></div><div class="sig-label">(Kontrolleur, Ort/Datum)</div></div></div>
+</body></html>`;
+
+    const w = window.open('', '_blank', 'width=800,height=1100');
+    if (w) { w.document.write(html); w.document.close(); }
+  }, [booking, customer]);
+
+  const openUebergabeprotokoll = useCallback(() => {
+    if (!booking) return;
+    const kundenName = booking.customer_name || customer?.full_name || '';
+    const kundenEmail = booking.customer_email || customer?.email || '';
+    const kundenAdresse = booking.shipping_address || (customer ? `${customer.address_street || ''}, ${customer.address_zip || ''} ${customer.address_city || ''}` : '');
+    const produktName = booking.product_name || '';
+    const zeitraum = `${fmtDate(booking.rental_from)} – ${fmtDate(booking.rental_to)}`;
+    const zubehoerRows = booking.accessories && booking.accessories.length > 0
+      ? booking.accessories.map((a, i) => `<tr><td style="width:40px">${i + 1}</td><td>${a}</td><td style="width:50px"></td></tr>`).join('')
+      : Array.from({ length: 4 }, (_, i) => `<tr><td style="width:40px">${i + 1}</td><td></td><td style="width:50px"></td></tr>`).join('');
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Übergabeprotokoll – ${booking.id}</title><style>${docStyles}</style></head><body>
+  ${toolbarHtml}
+  <h1>Übergabeprotokoll – Kameraequipment</h1>
+  <div class="subtitle">cam2rent – Buchung ${booking.id}</div>
+
+  <div style="margin-bottom:16px">
+    <p style="font-weight:700;margin-bottom:2px">Vermieter (Cam2Rent):</p>
+    <p>Name: Lennart Schickel</p>
+    <p>Adresse: Heimsbrunner Str. 12, 12349 Berlin</p>
+  </div>
+
+  <div style="margin-bottom:16px">
+    <p style="font-weight:700;color:#1e3a5f;margin-bottom:4px">Mieter:</p>
+    <div class="info-grid">
+      <span class="info-label">Name:</span><span class="info-value">${kundenName || '<span class="line-long" style="display:inline-block;border-bottom:1px solid #333;width:250px"></span>'}</span>
+      <span class="info-label">Adresse:</span><span class="info-value">${kundenAdresse || '<span class="line-long" style="display:inline-block;border-bottom:1px solid #333;width:250px"></span>'}</span>
+      <span class="info-label">Ausweisnummer:</span><span class="info-value"><span class="line" style="width:220px"></span></span>
+      <span class="info-label">Telefon / E-Mail:</span><span class="info-value">${kundenEmail || '<span class="line" style="width:220px"></span>'}</span>
+    </div>
+  </div>
+
+  <h2>1. Übergabedatum & Ort</h2>
+  <p style="margin-bottom:4px">Datum: <span class="line line-short"></span> &nbsp;&nbsp; Uhrzeit: <span class="line line-short"></span></p>
+  <p style="margin-bottom:14px">Ort: <span class="line"></span></p>
+
+  <h2>2. Mietgegenstand</h2>
+  <div class="info-grid" style="margin-bottom:4px"><span class="info-label">Kamera / Gerät:</span><span class="info-value">${produktName}</span></div>
+  <p style="margin-bottom:4px">Bezeichnung: <span class="line"></span> &nbsp; Seriennummer: <span class="line"></span></p>
+  <p style="margin-bottom:6px;margin-top:8px;font-weight:600">Zubehör:</p>
+  <table><thead><tr><th style="width:40px">Nr.</th><th>Bezeichnung</th><th style="width:50px">OK</th></tr></thead><tbody>${zubehoerRows}</tbody></table>
+
+  <h2>3. Zustand bei Übergabe</h2>
+  <div class="check-section">
+    <div class="check-row"><div class="check-item"><span class="checkbox"></span> Gerät funktionsfähig getestet</div></div>
+    <div class="check-row"><div class="check-item"><span class="checkbox"></span> Keine sichtbaren Schäden</div></div>
+    <div class="check-row"><div class="check-item"><span class="checkbox"></span> Sonstiges: <span class="line"></span></div></div>
+  </div>
+  <p style="margin-top:8px">Fotos / Videos zur Dokumentation erstellt:</p>
+  <div class="check-row" style="margin-top:6px"><div class="check-item"><span class="checkbox"></span> Ja</div><div class="check-item"><span class="checkbox"></span> Nein</div></div>
+
+  <h2>4. Bestätigung der Übergabe</h2>
+  <p class="confirm-text">Der Mieter bestätigt den ordnungsgemäßen Erhalt des oben genannten Equipments in beschriebenem Zustand.<br>Etwaige Schäden oder fehlendes Zubehör sind auf diesem Protokoll vermerkt.</p>
+  <p class="confirm-text" style="font-size:9pt">Mietzeitraum: <strong>${zeitraum}</strong> &nbsp;|&nbsp; Buchung: <strong>${booking.id}</strong></p>
+
+  <div class="sig-row"><div class="sig-block"><div class="sig-line"></div><div class="sig-label">(Vermieter, Ort/Datum)</div></div><div class="sig-block"><div class="sig-line"></div><div class="sig-label">(Mieter, Ort/Datum)</div></div></div>
+</body></html>`;
+
+    const w = window.open('', '_blank', 'width=800,height=1100');
+    if (w) { w.document.write(html); w.document.close(); }
+  }, [booking, customer]);
 
   if (loading) {
     return (
@@ -481,6 +627,22 @@ export default function BuchungDetailPage() {
                 </div>
 
                 <div className="pt-3 border-t border-brand-border space-y-2">
+                  {booking.delivery_mode === 'versand' && (
+                    <button
+                      onClick={openPackliste}
+                      className="block w-full text-center px-4 py-2 text-sm font-heading font-semibold bg-cyan-600 text-white rounded-btn hover:bg-cyan-700 transition-colors"
+                    >
+                      Versand-Packliste
+                    </button>
+                  )}
+                  {booking.delivery_mode === 'abholung' && (
+                    <button
+                      onClick={openUebergabeprotokoll}
+                      className="block w-full text-center px-4 py-2 text-sm font-heading font-semibold bg-cyan-600 text-white rounded-btn hover:bg-cyan-700 transition-colors"
+                    >
+                      Übergabeprotokoll
+                    </button>
+                  )}
                   {booking.delivery_mode === 'versand' && booking.status === 'confirmed' && (
                     <Link
                       href="/admin/versand"
