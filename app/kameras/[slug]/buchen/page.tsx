@@ -149,6 +149,7 @@ function calcBreakdown(
   from: Date,
   to: Date | undefined, // undefined = single day
   accessories: string[],
+  dbAccessories: Accessory[],
   haftung: HaftungId,
   shippingMethod: ShippingMethod,
   deliveryMode: DeliveryMode,
@@ -404,8 +405,7 @@ export default function BuchenPage() {
   const preselectedAccessories = searchParams.get('accessories');
   const [accessories, setAccessories] = useState<string[]>(() => {
     if (preselectedAccessories) {
-      const ids = preselectedAccessories.split(',').filter(Boolean);
-      return ids.filter((id) => dbAccessories.some((a) => a.id === id));
+      return preselectedAccessories.split(',').filter(Boolean);
     }
     return [];
   });
@@ -422,14 +422,14 @@ export default function BuchenPage() {
   // Dynamische Preise aus Supabase (Fallback: statische Dateiwerte)
   const [dynPrices, setDynPrices] = useState<PriceConfig | null>(null);
 
+  // Dynamisches Zubehör aus DB + Verfügbarkeit (muss vor accessories State stehen)
+  const [dbAccessories, setDbAccessories] = useState<Accessory[]>([]);
+  const [accAvailability, setAccAvailability] = useState<Record<string, { remaining: number; compatible: boolean }>>({});
+
   // Sets
   const [availableSets, setAvailableSets] = useState<RentalSet[]>([]);
   const [selectedSet, setSelectedSet] = useState<RentalSet | null>(null);
   const [expandedSetId, setExpandedSetId] = useState<string | null>(null);
-
-  // Dynamisches Zubehör aus DB + Verfügbarkeit
-  const [dbAccessories, setDbAccessories] = useState<Accessory[]>([]);
-  const [accAvailability, setAccAvailability] = useState<Record<string, { remaining: number; compatible: boolean }>>({});
 
   // Tax config
   const [taxMode, setTaxMode] = useState<'kleinunternehmer' | 'regelbesteuerung'>('kleinunternehmer');
@@ -481,7 +481,7 @@ export default function BuchenPage() {
     const rentalFrom = format(range.from, 'yyyy-MM-dd');
     const rentalTo = format(range.to ?? range.from, 'yyyy-MM-dd');
 
-    fetch(`/api/accessory-availability?from=${rentalFrom}&to=${rentalTo}&product_id=${product.id}&delivery_mode=${deliveryMode}`)
+    fetch(`/api/accessory-availability?from=${rentalFrom}&to=${rentalTo}&product_id=${product?.id}&delivery_mode=${deliveryMode}`)
       .then((r) => r.json())
       .then((data) => {
         if (data.accessories) {
@@ -498,7 +498,7 @@ export default function BuchenPage() {
         }
       })
       .catch(() => {});
-  }, [range, deliveryMode, product.id]);
+  }, [range, deliveryMode, product?.id]);
 
   const toggleAccessory = useCallback((id: string) => {
     setAccessories((prev) =>
@@ -588,7 +588,7 @@ export default function BuchenPage() {
 
   // breakdown exists as soon as a start date is picked (to=undefined → 1 Tag)
   const breakdown = range?.from
-    ? calcBreakdown(product, range.from, range.to, accessories, haftung, shippingMethod, deliveryMode, dynPrices)
+    ? calcBreakdown(product, range.from, range.to, accessories, dbAccessories, haftung, shippingMethod, deliveryMode, dynPrices)
     : null;
 
   // Set price is calculated separately and added on top of the base breakdown
