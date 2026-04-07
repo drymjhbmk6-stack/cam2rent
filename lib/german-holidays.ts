@@ -76,19 +76,24 @@ export function isBlockedForShipping(date: Date): boolean {
 
 /**
  * Prüft ob ein Datum als Mietende im Versandmodus gesperrt ist.
- * Gesperrt wenn:
- * - Sonntag oder Feiertag (Kunde kann nicht zurückschicken)
- * - Samstag (nächster Tag ist Sonntag)
- * - Tag vor einem Feiertag (Kunde kann am Folgetag nicht zurückschicken)
+ *
+ * Der Kunde hat nach dem Enddatum 2 Tage (Puffer) Zeit, das Paket abzugeben.
+ * Gesperrt nur wenn innerhalb dieser 2 Tage KEIN Werktag liegt.
+ *
+ * Beispiele:
+ * - Enddatum Freitag → Sa (Werktag, Paketshops offen) → OK
+ * - Enddatum Samstag → So (kein Werktag), Mo (Werktag) → OK
+ * - Enddatum 30.04. → 01.05. (Feiertag), 02.05. (Werktag) → OK
+ * - Enddatum So vor Feiertag Mo → Mo (Feiertag), Di (Werktag) → OK
  */
 export function isBlockedEndDateForShipping(date: Date): boolean {
-  if (isSundayOrHoliday(date)) return true;
-  // Samstag: nächster Tag ist Sonntag
-  if (date.getDay() === 6) return true;
-  // Nächster Tag ist Feiertag?
-  const nextDay = new Date(date);
-  nextDay.setDate(nextDay.getDate() + 1);
-  return isSundayOrHoliday(nextDay);
+  // Prüfe ob innerhalb der nächsten 2 Tage ein Werktag liegt
+  for (let i = 1; i <= 2; i++) {
+    const checkDay = addDays(date, i);
+    if (!isSundayOrHoliday(checkDay)) return false; // Werktag gefunden → OK
+  }
+  // Kein Werktag in den nächsten 2 Tagen → gesperrt
+  return true;
 }
 
 /**
@@ -99,15 +104,13 @@ export function getShippingBlockReason(date: Date, isEndDate: boolean): string |
   const fmt = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
   const holidays = getGermanHolidays(date.getFullYear());
 
+  // Startdatum: Sonntag/Feiertag gesperrt
   if (holidays.has(fmt)) return 'Feiertag — kein Versand möglich';
   if (isSunday(date)) return 'Sonntag — kein Versand möglich';
 
-  if (isEndDate) {
-    if (date.getDay() === 6) return 'Samstag — Rücksendung am Sonntag nicht möglich';
-    const nextDay = addDays(date, 1);
-    const nextFmt = `${nextDay.getFullYear()}-${String(nextDay.getMonth() + 1).padStart(2, '0')}-${String(nextDay.getDate()).padStart(2, '0')}`;
-    if (holidays.has(nextFmt)) return 'Tag vor Feiertag — Rücksendung am Feiertag nicht möglich';
-    if (isSunday(nextDay)) return 'Tag vor Sonntag — Rücksendung am Sonntag nicht möglich';
+  // Enddatum: Nur gesperrt wenn kein Werktag in den nächsten 2 Tagen
+  if (isEndDate && isBlockedEndDateForShipping(date)) {
+    return 'Kein Werktag innerhalb von 2 Tagen — Rücksendung nicht möglich';
   }
 
   return null;
