@@ -154,7 +154,7 @@ export default function AdminKameraListePage() {
 
                   {/* Löschen */}
                   <button
-                    onClick={() => handleDelete(p)}
+                    onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleDelete(p); }}
                     disabled={deletingId === p.id}
                     className="px-3 py-1.5 text-xs font-heading font-semibold text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-40"
                   >
