@@ -49,6 +49,19 @@ const faqSections: { title: string; items: FaqItem[] }[] = [
           </>
         ),
       },
+      {
+        question: 'Wie läuft die Buchung Schritt für Schritt ab?',
+        answer: (
+          <>
+            Die Buchung ist in 5 einfache Schritte aufgeteilt:{' '}
+            <strong>1. Versand</strong> — Wähle, ob du die Ausrüstung per DHL geliefert bekommen oder selbst abholen möchtest. Wähle dein Wunschdatum im Kalender (grüne Tage = verfügbar).{' '}
+            <strong>2. Zubehör</strong> — Optional kannst du passendes Zubehör wie Speicherkarten, Akkus oder Stative dazubuchen.{' '}
+            <strong>3. Haftungsschutz</strong> — Entscheide dich für eine Haftungsoption: Standard (reduzierte Selbstbeteiligung) oder Premium (keine Selbstbeteiligung). So bist du im Schadensfall abgesichert.{' '}
+            <strong>4. Zusammenfassung</strong> — Prüfe alle Details deiner Buchung: Zeitraum, Zubehör, Haftungsschutz und Gesamtpreis.{' '}
+            <strong>5. Zahlung</strong> — Bezahle sicher über Stripe mit Kreditkarte, Klarna, Apple Pay, Google Pay oder SEPA-Lastschrift. Fertig! Du bekommst eine Bestätigung per E-Mail.
+          </>
+        ),
+      },
     ],
   },
   {
