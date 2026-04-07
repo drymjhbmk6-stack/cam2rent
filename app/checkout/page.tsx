@@ -147,7 +147,7 @@ function PaymentForm({
           type="button"
           onClick={onBack}
           disabled={isLoading}
-          className="px-6 py-3 text-brand-steel font-heading font-semibold text-sm rounded-btn border border-brand-border hover:bg-brand-bg transition-colors disabled:opacity-40"
+          className="px-6 py-3 text-brand-steel dark:text-gray-400 font-heading font-semibold text-sm rounded-btn border border-brand-border dark:border-white/10 hover:bg-brand-bg dark:hover:bg-white/5 dark:bg-brand-black transition-colors disabled:opacity-40"
         >
           Zurück
         </button>
@@ -180,7 +180,7 @@ function PaymentForm({
         </button>
       </div>
 
-      <p className="text-xs text-brand-muted mt-4 flex items-center gap-1.5 justify-center">
+      <p className="text-xs text-brand-muted dark:text-gray-500 mt-4 flex items-center gap-1.5 justify-center">
         <svg
           viewBox="0 0 20 20"
           fill="currentColor"
@@ -195,8 +195,8 @@ function PaymentForm({
         Sichere Zahlung über Stripe – SSL-verschlüsselt
       </p>
 
-      <div className="mt-5 p-4 bg-brand-bg rounded-[10px] text-xs text-brand-muted space-y-1">
-        <p><strong className="text-brand-steel">Stornierung:</strong> Kostenlos bis 7 Tage vor Mietstart · 50 % Gebühr 3–6 Tage vorher (nur per E-Mail) · keine Erstattung ≤ 2 Tage vorher.</p>
+      <div className="mt-5 p-4 bg-brand-bg dark:bg-brand-black rounded-[10px] text-xs text-brand-muted dark:text-gray-500 space-y-1">
+        <p><strong className="text-brand-steel dark:text-gray-400">Stornierung:</strong> Kostenlos bis 7 Tage vor Mietstart · 50 % Gebühr 3–6 Tage vorher (nur per E-Mail) · keine Erstattung ≤ 2 Tage vorher.</p>
         <p>Gemäß § 312g Abs. 2 Nr. 9 BGB besteht für zeitgebundene Mietverträge kein gesetzliches Widerrufsrecht.</p>
       </div>
     </form>
@@ -471,26 +471,26 @@ export default function CheckoutPage() {
   };
 
   const inputClass =
-    'w-full px-4 py-3 rounded-[10px] border border-brand-border bg-white text-brand-black placeholder-brand-muted focus:outline-none focus:ring-2 focus:ring-accent-blue focus:border-transparent transition-colors text-sm';
-  const labelClass = 'block text-sm font-body font-medium text-brand-black mb-1';
+    'w-full px-4 py-3 rounded-[10px] border border-brand-border dark:border-white/10 bg-white dark:bg-brand-dark text-brand-black dark:text-white placeholder-brand-muted dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent-blue focus:border-transparent transition-colors text-sm';
+  const labelClass = 'block text-sm font-body font-medium text-brand-black dark:text-white mb-1';
 
   if (itemCount === 0) return null;
 
   return (
-    <div className="min-h-screen bg-brand-bg py-8">
+    <div className="min-h-screen bg-brand-bg dark:bg-brand-black py-8">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="mb-6">
           <Link
             href="/warenkorb"
-            className="inline-flex items-center gap-1.5 text-sm text-brand-steel hover:text-brand-black mb-3 transition-colors"
+            className="inline-flex items-center gap-1.5 text-sm text-brand-steel dark:text-gray-400 hover:text-brand-black dark:text-white mb-3 transition-colors"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
             Zurück zum Warenkorb
           </Link>
-          <h1 className="font-heading font-bold text-2xl text-brand-black">Checkout</h1>
+          <h1 className="font-heading font-bold text-2xl text-brand-black dark:text-white">Checkout</h1>
         </div>
 
         <div className="grid lg:grid-cols-3 gap-6">
@@ -499,8 +499,8 @@ export default function CheckoutPage() {
             {step === 'details' ? (
               <>
                 {/* Customer data */}
-                <div className="bg-white rounded-card shadow-card p-6">
-                  <h2 className="font-heading font-semibold text-brand-black mb-4">
+                <div className="bg-white dark:bg-brand-dark rounded-card shadow-card p-6">
+                  <h2 className="font-heading font-semibold text-brand-black dark:text-white mb-4">
                     Kontaktdaten
                   </h2>
                   <div className="grid sm:grid-cols-2 gap-4">
@@ -554,8 +554,8 @@ export default function CheckoutPage() {
                 </div>
 
                 {/* Shipping */}
-                <div className="bg-white rounded-card shadow-card p-6">
-                  <h2 className="font-heading font-semibold text-brand-black mb-4">
+                <div className="bg-white dark:bg-brand-dark rounded-card shadow-card p-6">
+                  <h2 className="font-heading font-semibold text-brand-black dark:text-white mb-4">
                     Lieferung
                   </h2>
 
@@ -578,8 +578,8 @@ export default function CheckoutPage() {
                         key={opt.id}
                         className={`flex items-start gap-3 p-4 rounded-[10px] border-2 cursor-pointer transition-colors ${
                           deliveryMode === opt.id
-                            ? 'border-accent-blue bg-accent-blue-soft'
-                            : 'border-brand-border hover:border-brand-steel'
+                            ? 'border-accent-blue bg-accent-blue-soft dark:bg-accent-blue/10'
+                            : 'border-brand-border dark:border-white/10 hover:border-brand-steel'
                         }`}
                       >
                         <input
@@ -591,10 +591,10 @@ export default function CheckoutPage() {
                           className="mt-0.5 accent-accent-blue"
                         />
                         <div>
-                          <p className="font-body font-semibold text-brand-black text-sm">
+                          <p className="font-body font-semibold text-brand-black dark:text-white text-sm">
                             {opt.label}
                           </p>
-                          <p className="text-xs text-brand-steel mt-0.5">{opt.sub}</p>
+                          <p className="text-xs text-brand-steel dark:text-gray-400 mt-0.5">{opt.sub}</p>
                         </div>
                       </label>
                     ))}
@@ -628,8 +628,8 @@ export default function CheckoutPage() {
                               key={opt.id}
                               className={`flex items-start justify-between gap-3 p-4 rounded-[10px] border-2 cursor-pointer transition-colors ${
                                 shippingMethod === opt.id
-                                  ? 'border-accent-blue bg-accent-blue-soft'
-                                  : 'border-brand-border hover:border-brand-steel'
+                                  ? 'border-accent-blue bg-accent-blue-soft dark:bg-accent-blue/10'
+                                  : 'border-brand-border dark:border-white/10 hover:border-brand-steel'
                               }`}
                             >
                               <div className="flex items-start gap-3">
@@ -642,12 +642,12 @@ export default function CheckoutPage() {
                                   className="mt-0.5 accent-accent-blue"
                                 />
                                 <div>
-                                  <p className="font-body font-semibold text-brand-black text-sm">
+                                  <p className="font-body font-semibold text-brand-black dark:text-white text-sm">
                                     {opt.label}
                                   </p>
-                                  <p className="text-xs text-brand-steel">{opt.sub}</p>
+                                  <p className="text-xs text-brand-steel dark:text-gray-400">{opt.sub}</p>
                                   {opt.id === 'express' && (
-                                    <p className="text-xs text-brand-muted mt-0.5">Immer kostenpflichtig</p>
+                                    <p className="text-xs text-brand-muted dark:text-gray-500 mt-0.5">Immer kostenpflichtig</p>
                                   )}
                                 </div>
                               </div>
@@ -655,7 +655,7 @@ export default function CheckoutPage() {
                                 {isFreeStandard ? (
                                   <span className="text-status-success">Gratis</span>
                                 ) : (
-                                  <span className="text-brand-black">{fmt(opt.price)}</span>
+                                  <span className="text-brand-black dark:text-white">{fmt(opt.price)}</span>
                                 )}
                               </span>
                             </label>
@@ -707,8 +707,8 @@ export default function CheckoutPage() {
                 </div>
 
                 {/* Coupon */}
-                <div className="bg-white rounded-card shadow-card p-6">
-                  <h2 className="font-heading font-semibold text-brand-black mb-4">
+                <div className="bg-white dark:bg-brand-dark rounded-card shadow-card p-6">
+                  <h2 className="font-heading font-semibold text-brand-black dark:text-white mb-4">
                     Gutschein-Code
                   </h2>
 
@@ -747,7 +747,7 @@ export default function CheckoutPage() {
                             <p className="text-sm font-semibold text-status-success">
                               {appliedCoupon.code} angewendet
                             </p>
-                            <p className="text-xs text-brand-steel mt-0.5">
+                            <p className="text-xs text-brand-steel dark:text-gray-400 mt-0.5">
                               {appliedCoupon.description}
                               {appliedCoupon.target_type === 'accessory' && (
                                 <span> auf {appliedCoupon.target_name}</span>
@@ -757,7 +757,7 @@ export default function CheckoutPage() {
                           </div>
                           <button
                             onClick={() => setAppliedCoupon(null)}
-                            className="text-brand-muted hover:text-status-error transition-colors text-sm ml-3 flex-shrink-0"
+                            className="text-brand-muted dark:text-gray-500 hover:text-status-error transition-colors text-sm ml-3 flex-shrink-0"
                           >
                             Entfernen
                           </button>
@@ -777,7 +777,7 @@ export default function CheckoutPage() {
                       <button
                         onClick={handleApplyCoupon}
                         disabled={couponLoading}
-                        className="px-4 py-3 border border-brand-border text-brand-black font-body font-medium text-sm rounded-[10px] hover:bg-brand-bg transition-colors flex-shrink-0 disabled:opacity-50"
+                        className="px-4 py-3 border border-brand-border dark:border-white/10 text-brand-black dark:text-white font-body font-medium text-sm rounded-[10px] hover:bg-brand-bg dark:hover:bg-white/5 dark:bg-brand-black transition-colors flex-shrink-0 disabled:opacity-50"
                       >
                         {couponLoading ? '…' : 'Einlösen'}
                       </button>
@@ -812,11 +812,11 @@ export default function CheckoutPage() {
               </>
             ) : (
               /* Payment step */
-              <div className="bg-white rounded-card shadow-card p-6">
-                <h2 className="font-heading font-semibold text-brand-black mb-1">
+              <div className="bg-white dark:bg-brand-dark rounded-card shadow-card p-6">
+                <h2 className="font-heading font-semibold text-brand-black dark:text-white mb-1">
                   Zahlung
                 </h2>
-                <p className="text-sm text-brand-steel mb-6">
+                <p className="text-sm text-brand-steel dark:text-gray-400 mb-6">
                   Gib deine Zahlungsdaten ein. Deine Verbindung ist
                   SSL-verschlüsselt.
                 </p>
@@ -864,8 +864,8 @@ export default function CheckoutPage() {
 
           {/* Right: Order summary */}
           <div className="lg:col-span-1">
-            <div className="bg-white rounded-card shadow-card p-5 sticky top-24">
-              <h2 className="font-heading font-semibold text-brand-black mb-4">
+            <div className="bg-white dark:bg-brand-dark rounded-card shadow-card p-5 sticky top-24">
+              <h2 className="font-heading font-semibold text-brand-black dark:text-white mb-4">
                 Bestellung
               </h2>
 
@@ -874,12 +874,12 @@ export default function CheckoutPage() {
                 {items.map((item) => (
                   <div key={item.id} className="flex justify-between text-sm">
                     <div>
-                      <p className="font-medium text-brand-black">{item.productName}</p>
-                      <p className="text-xs text-brand-muted">
+                      <p className="font-medium text-brand-black dark:text-white">{item.productName}</p>
+                      <p className="text-xs text-brand-muted dark:text-gray-500">
                         {item.days} {item.days === 1 ? 'Tag' : 'Tage'}
                       </p>
                     </div>
-                    <span className="font-medium text-brand-black flex-shrink-0 ml-2">
+                    <span className="font-medium text-brand-black dark:text-white flex-shrink-0 ml-2">
                       {fmt(item.subtotal)}
                     </span>
                   </div>
@@ -887,8 +887,8 @@ export default function CheckoutPage() {
               </div>
 
               {/* Price breakdown */}
-              <div className="border-t border-brand-border pt-3 space-y-2 text-sm">
-                <div className="flex justify-between text-brand-text">
+              <div className="border-t border-brand-border dark:border-white/10 pt-3 space-y-2 text-sm">
+                <div className="flex justify-between text-brand-text dark:text-gray-300">
                   <span>Zwischensumme</span>
                   <span>{fmt(cartTotal)}</span>
                 </div>
@@ -915,7 +915,7 @@ export default function CheckoutPage() {
                 )}
 
                 {isNotCombinable && (durationDiscountAmount > 0 || loyaltyDiscountAmount > 0) && (
-                  <p className="text-xs text-brand-muted italic">
+                  <p className="text-xs text-brand-muted dark:text-gray-500 italic">
                     Gutschein nicht mit anderen Rabatten kombinierbar
                   </p>
                 )}
@@ -927,7 +927,7 @@ export default function CheckoutPage() {
                   </div>
                 )}
 
-                <div className="flex justify-between text-brand-text">
+                <div className="flex justify-between text-brand-text dark:text-gray-300">
                   <span>
                     {deliveryMode === 'abholung'
                       ? 'Abholung'
@@ -944,8 +944,8 @@ export default function CheckoutPage() {
                   </span>
                 </div>
 
-                <div className="border-t border-brand-border pt-2 mt-2">
-                  <div className="flex justify-between font-heading font-bold text-brand-black text-base">
+                <div className="border-t border-brand-border dark:border-white/10 pt-2 mt-2">
+                  <div className="flex justify-between font-heading font-bold text-brand-black dark:text-white text-base">
                     <span>Gesamt</span>
                     <span>{fmt(total)}</span>
                   </div>
@@ -953,18 +953,18 @@ export default function CheckoutPage() {
                   {/* MwSt. */}
                   {taxMode === 'regelbesteuerung' ? (
                     <div className="mt-1.5 space-y-0.5">
-                      <div className="flex justify-between text-xs text-brand-muted">
+                      <div className="flex justify-between text-xs text-brand-muted dark:text-gray-500">
                         <span>darin Nettobetrag</span>
                         <span>{fmt(net)}</span>
                       </div>
-                      <div className="flex justify-between text-xs text-brand-muted">
+                      <div className="flex justify-between text-xs text-brand-muted dark:text-gray-500">
                         <span>darin MwSt. ({taxRate}%)</span>
                         <span>{fmt(vat)}</span>
                       </div>
                     </div>
                   ) : (
                     <div className="mt-1.5">
-                      <span className="text-xs text-brand-muted">Gem. §19 UStG keine MwSt.</span>
+                      <span className="text-xs text-brand-muted dark:text-gray-500">Gem. §19 UStG keine MwSt.</span>
                     </div>
                   )}
                 </div>
