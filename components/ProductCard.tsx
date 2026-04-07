@@ -19,19 +19,19 @@ const tagConfig = {
   deal: { label: 'Angebot', className: 'bg-accent-amber text-white' },
 };
 
-const brandBg = {
+const brandBg: Record<string, string> = {
   GoPro: 'bg-accent-blue-soft',
   DJI: 'bg-accent-teal-soft',
   Insta360: 'bg-accent-amber-soft',
 };
 
-function CameraIcon({ brand }: { brand: Product['brand'] }) {
-  const colorMap = {
+function CameraIcon({ brand }: { brand: string }) {
+  const colorMap: Record<string, string> = {
     GoPro: '#3b82f6',
     DJI: '#0d9488',
     Insta360: '#f59e0b',
   };
-  const color = colorMap[brand];
+  const color = colorMap[brand] ?? '#6b7280';
 
   return (
     <svg
@@ -118,7 +118,7 @@ export default function ProductCard({ product, imageUrl }: ProductCardProps) {
     <>
       <article className="group bg-white dark:bg-gray-800 rounded-card shadow-card dark:shadow-gray-900/50 hover:shadow-card-hover hover:-translate-y-1 transition-all duration-200 overflow-hidden flex flex-col">
         {/* Image area */}
-        <div className={`relative ${imageUrl ? 'bg-white' : brandBg[product.brand]} flex items-center justify-center overflow-hidden`} style={{ aspectRatio: '4/3' }}>
+        <div className={`relative ${imageUrl ? 'bg-white' : brandBg[product.brand] ?? 'bg-gray-100'} flex items-center justify-center overflow-hidden`} style={{ aspectRatio: '4/3' }}>
           {/* Tag badge */}
           {primaryTag && (
             <span

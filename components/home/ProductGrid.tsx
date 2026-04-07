@@ -7,8 +7,7 @@ import { useProducts } from '@/components/ProductsProvider';
 import ProductCard from '@/components/ProductCard';
 import { useProductImage } from '@/components/ProductImagesProvider';
 
-type FilterBrand = 'Alle' | Product['brand'];
-const filters: FilterBrand[] = ['Alle', 'GoPro', 'DJI', 'Insta360'];
+type FilterBrand = string;
 
 function ProductCardWithImage({ product }: { product: Product }) {
   const imageUrl = useProductImage(product.id);
@@ -17,6 +16,7 @@ function ProductCardWithImage({ product }: { product: Product }) {
 
 export default function ProductGrid() {
   const { products } = useProducts();
+  const filters: FilterBrand[] = ['Alle', ...Array.from(new Set(products.map((p) => p.brand)))];
   const [activeBrand, setActiveBrand] = useState<FilterBrand>('Alle');
   const [onlyAvailable, setOnlyAvailable] = useState(false);
 

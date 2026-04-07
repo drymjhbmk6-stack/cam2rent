@@ -71,7 +71,8 @@ export default function AdminKameraListePage() {
   const brandColor = (brand: string) => {
     if (brand === 'GoPro') return 'bg-accent-blue-soft text-accent-blue';
     if (brand === 'DJI') return 'bg-accent-teal-soft text-accent-teal';
-    return 'bg-accent-amber-soft text-accent-amber';
+    if (brand === 'Insta360') return 'bg-accent-amber-soft text-accent-amber';
+    return 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300';
   };
 
   return (

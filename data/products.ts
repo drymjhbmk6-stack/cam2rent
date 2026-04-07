@@ -51,7 +51,7 @@ export function getPriceForDays(product: Product, days: number): number {
 export interface Product {
   id: string;
   name: string;
-  brand: 'GoPro' | 'DJI' | 'Insta360';
+  brand: string;
   model: string;
   description: string;
   shortDescription: string;

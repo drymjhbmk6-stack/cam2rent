@@ -53,7 +53,7 @@ function adminToProduct(
   return {
     id: admin.id,
     name: admin.name,
-    brand: admin.brand as Product['brand'],
+    brand: admin.brand,
     model: admin.model ?? staticFallback?.model ?? admin.name.replace(admin.brand, '').trim(),
     description: admin.description ?? staticFallback?.description ?? admin.shortDescription,
     shortDescription: admin.shortDescription,
