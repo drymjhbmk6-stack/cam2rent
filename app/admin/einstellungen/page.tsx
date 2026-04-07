@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { SpecDefinitionsManager } from '@/components/admin/SpecDefinitions';
 
 type DepositMode = 'kaution' | 'haftung' | 'both';
 
@@ -759,7 +760,21 @@ export default function EinstellungenPage() {
         )}
       </div>
 
-      {/* Sektion 5: Puffer-Tage */}
+      {/* Sektion 5: Technische Daten Definitionen */}
+      <div className="rounded-2xl p-6" style={{ background: '#0f172a', border: '1px solid #1e293b' }}>
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: '#06b6d4', color: 'white' }}>
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+          </div>
+          <div>
+            <h2 className="font-heading font-bold text-base" style={{ color: 'white' }}>Technische Daten</h2>
+            <p className="text-xs font-body" style={{ color: '#64748b' }}>Spec-Typen die im Kamera-Editor verfügbar sind. Name, Icon und Einheit festlegen.</p>
+          </div>
+        </div>
+        <SpecDefinitionsManager />
+      </div>
+
+      {/* Sektion 6: Puffer-Tage */}
       <BufferDaysSection />
 
       {/* Sektion 6: Geschaeftsdaten */}

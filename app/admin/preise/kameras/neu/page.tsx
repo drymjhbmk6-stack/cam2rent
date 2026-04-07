@@ -14,6 +14,7 @@ import { SPEC_ICON_OPTIONS } from '@/components/SpecIcon';
 import ProductPreview from '@/components/ProductPreview';
 import MarkdownEditor from '@/components/MarkdownEditor';
 import BrandSelect from '@/components/admin/BrandSelect';
+import { useSpecDefinitions, type SpecDefinition } from '@/components/admin/SpecDefinitions';
 
 function toSlug(name: string): string {
   return name.toLowerCase()
@@ -46,6 +47,8 @@ export default function AdminNeueKameraPage() {
   const [autoSlug, setAutoSlug] = useState(true);
   const [depositMode, setDepositMode] = useState<'kaution' | 'haftung' | 'both'>('both');
 
+  const { specs: specDefs } = useSpecDefinitions();
+
   useEffect(() => {
     fetch('/api/prices').then((r) => r.json()).then((d) => {
       if (d.kautionTiers) setKautionTiers(d.kautionTiers);
@@ -77,11 +80,13 @@ export default function AdminNeueKameraPage() {
   function addSpec() {
     setProduct((p) => {
       const specs = p.specs ? [...p.specs] : [];
+      const usedIds = new Set(specs.map((s) => s.id));
+      const nextDef = specDefs.find((d) => !usedIds.has(d.id)) ?? specDefs[0];
       specs.push({
-        id: crypto.randomUUID(),
-        name: '',
+        id: nextDef?.id ?? crypto.randomUUID(),
+        name: nextDef?.name ?? '',
         value: '',
-        icon: 'custom',
+        icon: nextDef?.icon ?? 'custom',
         priority: specs.length,
       });
       return { ...p, specs };
@@ -320,70 +325,51 @@ export default function AdminNeueKameraPage() {
               <p className="text-xs font-body text-brand-muted mb-4">Specs die auf der Produktseite angezeigt werden. Reihenfolge per Pfeiltasten ändern.</p>
 
               <div className="space-y-2">
-                {(product.specs ?? []).map((spec, index) => (
-                  <div key={spec.id} className="flex items-center gap-2 p-2.5 rounded-xl border border-brand-border bg-brand-bg">
-                    {/* Reorder buttons */}
-                    <div className="flex flex-col gap-0.5">
-                      <button
-                        type="button"
-                        onClick={() => moveSpec(index, 'up')}
-                        disabled={index === 0}
-                        className="px-1 py-0.5 text-[10px] text-brand-muted hover:text-brand-black disabled:opacity-30 transition-colors"
-                        title="Nach oben"
+                {(product.specs ?? []).map((spec, index) => {
+                  const def = specDefs.find((d) => d.id === spec.id);
+                  const unit = def?.unit ?? '';
+                  return (
+                    <div key={`${spec.id}-${index}`} className="flex items-center gap-2 p-2.5 rounded-xl border border-brand-border bg-brand-bg">
+                      <div className="flex flex-col gap-0.5">
+                        <button type="button" onClick={() => moveSpec(index, 'up')} disabled={index === 0}
+                          className="px-1 py-0.5 text-[10px] text-brand-muted hover:text-brand-black disabled:opacity-30 transition-colors" title="Nach oben">&#9650;</button>
+                        <button type="button" onClick={() => moveSpec(index, 'down')} disabled={index === (product.specs?.length ?? 0) - 1}
+                          className="px-1 py-0.5 text-[10px] text-brand-muted hover:text-brand-black disabled:opacity-30 transition-colors" title="Nach unten">&#9660;</button>
+                      </div>
+
+                      {/* Spec-Definition Dropdown */}
+                      <select
+                        value={spec.id}
+                        onChange={(e) => {
+                          const d = specDefs.find((s) => s.id === e.target.value);
+                          if (d) updateSpec(index, { id: d.id, name: d.name, icon: d.icon });
+                        }}
+                        className="w-32 px-2 py-1.5 border border-brand-border rounded-[8px] text-xs font-body bg-white focus:outline-none focus:ring-2 focus:ring-accent-blue"
                       >
-                        &#9650;
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => moveSpec(index, 'down')}
-                        disabled={index === (product.specs?.length ?? 0) - 1}
-                        className="px-1 py-0.5 text-[10px] text-brand-muted hover:text-brand-black disabled:opacity-30 transition-colors"
-                        title="Nach unten"
-                      >
-                        &#9660;
-                      </button>
+                        {specDefs.map((d) => (
+                          <option key={d.id} value={d.id}>{d.name}</option>
+                        ))}
+                      </select>
+
+                      {/* Wert + Einheit */}
+                      <div className="flex-1 min-w-0 relative">
+                        <input
+                          type="text"
+                          value={spec.value}
+                          onChange={(e) => updateSpec(index, { value: e.target.value })}
+                          placeholder={unit ? `Wert (${unit})` : 'Wert'}
+                          className="w-full px-2 py-1.5 border border-brand-border rounded-[8px] text-xs font-body focus:outline-none focus:ring-2 focus:ring-accent-blue pr-12"
+                        />
+                        {unit && (
+                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-brand-muted pointer-events-none">{unit}</span>
+                        )}
+                      </div>
+
+                      <button type="button" onClick={() => removeSpec(index)}
+                        className="px-2 py-1.5 text-xs text-red-500 hover:text-red-700 hover:bg-red-50 rounded-[8px] transition-colors" title="Spec entfernen">&#10005;</button>
                     </div>
-
-                    {/* Icon dropdown */}
-                    <select
-                      value={spec.icon}
-                      onChange={(e) => updateSpec(index, { icon: e.target.value })}
-                      className="w-28 px-2 py-1.5 border border-brand-border rounded-[8px] text-xs font-body bg-white focus:outline-none focus:ring-2 focus:ring-accent-blue"
-                    >
-                      {SPEC_ICON_OPTIONS.map((opt) => (
-                        <option key={opt.id} value={opt.id}>{opt.label}</option>
-                      ))}
-                    </select>
-
-                    {/* Name input */}
-                    <input
-                      type="text"
-                      value={spec.name}
-                      onChange={(e) => updateSpec(index, { name: e.target.value })}
-                      placeholder="Name"
-                      className="flex-1 min-w-0 px-2 py-1.5 border border-brand-border rounded-[8px] text-xs font-body focus:outline-none focus:ring-2 focus:ring-accent-blue"
-                    />
-
-                    {/* Value input */}
-                    <input
-                      type="text"
-                      value={spec.value}
-                      onChange={(e) => updateSpec(index, { value: e.target.value })}
-                      placeholder="Wert"
-                      className="flex-1 min-w-0 px-2 py-1.5 border border-brand-border rounded-[8px] text-xs font-body focus:outline-none focus:ring-2 focus:ring-accent-blue"
-                    />
-
-                    {/* Delete button */}
-                    <button
-                      type="button"
-                      onClick={() => removeSpec(index)}
-                      className="px-2 py-1.5 text-xs text-red-500 hover:text-red-700 hover:bg-red-50 rounded-[8px] transition-colors"
-                      title="Spec entfernen"
-                    >
-                      &#10005;
-                    </button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               <button

@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
-import { type Product } from '@/data/products';
+import { type Product, getMergedSpecs } from '@/data/products';
 import { useProducts } from '@/components/ProductsProvider';
 import ProductCard from '@/components/ProductCard';
 import { useProductImage } from '@/components/ProductImagesProvider';
+import { useSpecDefinitions, type SpecDefinition } from '@/components/admin/SpecDefinitions';
 
 function ProductCardWithImage({ product }: { product: Product }) {
   const imageUrl = useProductImage(product.id);
@@ -28,60 +29,57 @@ function ChevronIcon() {
 
 export default function KamerasPage() {
   const { products } = useProducts();
+  const { specs: specDefs } = useSpecDefinitions();
   const brands: FilterBrand[] = ['Alle', ...Array.from(new Set(products.map((p) => p.brand)))];
   const [activeBrand, setActiveBrand] = useState<FilterBrand>('Alle');
   const [onlyAvailable, setOnlyAvailable] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [waterproofMin, setWaterproofMin] = useState<string>('');
-  const [resolutionMin, setResolutionMin] = useState<string>('');
-  const [fpsMin, setFpsMin] = useState<string>('');
-  const [batteryMin, setBatteryMin] = useState<string>('');
-  const [weightMax, setWeightMax] = useState<string>('');
+  const [showFilters, setShowFilters] = useState(false);
+
+  // Dynamische Spec-Filter: { specId: filterValue }
+  const [specFilters, setSpecFilters] = useState<Record<string, string>>({});
 
   function extractNum(str: string): number {
     const m = str.match(/(\d+(?:\.\d+)?)/);
     return m ? parseFloat(m[1]) : 0;
   }
 
-  const hasActiveSpecFilter = !!(waterproofMin || resolutionMin || fpsMin || batteryMin || weightMax);
+  // Sammle alle vorhandenen Werte pro Spec aus den Produkten
+  const specFilterOptions = useMemo(() => {
+    const map: Record<string, Set<string>> = {};
+    for (const p of products) {
+      const specs = getMergedSpecs(p);
+      for (const s of specs) {
+        if (!map[s.id]) map[s.id] = new Set();
+        if (s.value) map[s.id].add(s.value);
+      }
+    }
+    return map;
+  }, [products]);
+
+  const hasActiveSpecFilter = Object.values(specFilters).some((v) => v !== '');
 
   const filtered = products.filter((p) => {
     const brandMatch = activeBrand === 'Alle' || p.brand === activeBrand;
     const availMatch = !onlyAvailable || p.available;
 
-    // Textsuche
     const q = searchQuery.toLowerCase().trim();
     const searchMatch = !q || p.name.toLowerCase().includes(q) || p.model.toLowerCase().includes(q) || p.shortDescription.toLowerCase().includes(q);
 
-    // Spezifikationsfilter
-    let waterMatch = true;
-    if (waterproofMin) {
-      waterMatch = extractNum(p.specs.waterproof) >= parseInt(waterproofMin, 10);
+    // Dynamische Spec-Filter
+    let specMatch = true;
+    const pSpecs = getMergedSpecs(p);
+    for (const [specId, filterVal] of Object.entries(specFilters)) {
+      if (!filterVal) continue;
+      const pSpec = pSpecs.find((s) => s.id === specId);
+      if (!pSpec) { specMatch = false; break; }
+      // Numerischer Vergleich: Filterwert als Minimum
+      const pNum = extractNum(pSpec.value);
+      const fNum = parseFloat(filterVal);
+      if (!isNaN(fNum) && pNum < fNum) { specMatch = false; break; }
     }
 
-    let resMatch = true;
-    if (resolutionMin) {
-      // Auflösung: "5.3K" → 5.3, "4K" → 4, "8K" → 8
-      const resValue = extractNum(p.specs.resolution);
-      resMatch = resValue >= parseFloat(resolutionMin);
-    }
-
-    let fpsMatch = true;
-    if (fpsMin) {
-      fpsMatch = extractNum(p.specs.fps) >= parseInt(fpsMin, 10);
-    }
-
-    let battMatch = true;
-    if (batteryMin) {
-      battMatch = extractNum(p.specs.battery) >= parseInt(batteryMin, 10);
-    }
-
-    let weightMatch = true;
-    if (weightMax) {
-      weightMatch = extractNum(p.specs.weight) <= parseInt(weightMax, 10);
-    }
-
-    return brandMatch && availMatch && searchMatch && waterMatch && resMatch && fpsMatch && battMatch && weightMatch;
+    return brandMatch && availMatch && searchMatch && specMatch;
   });
 
   const availableCount = products.filter((p) => p.available).length;
@@ -129,107 +127,76 @@ export default function KamerasPage() {
 
       {/* Main content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-        {/* Search + Spec filter */}
-        <div className="bg-white dark:bg-gray-800 rounded-card shadow-card dark:shadow-gray-900/50 p-4 mb-4 flex flex-wrap items-center gap-3">
-          <div className="flex-1 min-w-[200px]">
-            <div className="relative">
-              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+        {/* Ausklappbarer Filter-Bereich */}
+        <div className="bg-white dark:bg-gray-800 rounded-card shadow-card dark:shadow-gray-900/50 mb-4 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setShowFilters(!showFilters)}
+            className="w-full flex items-center justify-between p-4 text-left"
+          >
+            <div className="flex items-center gap-2">
+              <svg className="w-4 h-4 text-brand-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
               </svg>
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Kamera suchen…"
-                className="w-full pl-10 pr-4 py-2 rounded-full text-sm font-body border border-brand-border dark:border-gray-600 bg-brand-bg dark:bg-gray-700 text-brand-black dark:text-gray-100 placeholder-brand-muted dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent-blue focus:border-transparent"
-              />
+              <span className="text-sm font-heading font-semibold text-brand-black dark:text-gray-100">Suche & Filter</span>
+              {(searchQuery || hasActiveSpecFilter) && (
+                <span className="px-2 py-0.5 rounded-full bg-accent-blue/20 text-accent-blue text-xs font-semibold">aktiv</span>
+              )}
             </div>
-          </div>
-          {hasActiveSpecFilter && (
-            <button
-              type="button"
-              onClick={() => { setWaterproofMin(''); setResolutionMin(''); setFpsMin(''); setBatteryMin(''); setWeightMax(''); }}
-              className="px-3 py-2 rounded-full text-xs font-body font-medium text-accent-blue hover:bg-accent-blue-soft transition-colors whitespace-nowrap"
-            >
-              Filter zurücksetzen
-            </button>
-          )}
-        </div>
+            <svg className={`w-4 h-4 text-brand-muted transition-transform ${showFilters ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
 
-        {/* Spezifikationsfilter */}
-        <div className="bg-white dark:bg-gray-800 rounded-card shadow-card dark:shadow-gray-900/50 p-4 mb-4 flex flex-wrap items-center gap-3">
-          <span className="text-xs font-heading font-semibold text-brand-muted dark:text-gray-500 uppercase tracking-wider mr-1">Specs</span>
-          <div className="flex items-center gap-2">
-            <label htmlFor="waterproof-filter" className="text-sm font-body text-brand-steel dark:text-gray-400 whitespace-nowrap">Wasserdicht</label>
-            <select
-              id="waterproof-filter"
-              value={waterproofMin}
-              onChange={(e) => setWaterproofMin(e.target.value)}
-              className="px-3 py-2 rounded-full text-sm font-body border border-brand-border dark:border-gray-600 bg-brand-bg dark:bg-gray-700 text-brand-black dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-accent-blue"
-            >
-              <option value="">Alle</option>
-              <option value="5">5m+</option>
-              <option value="10">10m+</option>
-              <option value="20">20m+</option>
-              <option value="40">40m+</option>
-            </select>
-          </div>
-          <div className="flex items-center gap-2">
-            <label htmlFor="resolution-filter" className="text-sm font-body text-brand-steel dark:text-gray-400 whitespace-nowrap">Auflösung</label>
-            <select
-              id="resolution-filter"
-              value={resolutionMin}
-              onChange={(e) => setResolutionMin(e.target.value)}
-              className="px-3 py-2 rounded-full text-sm font-body border border-brand-border dark:border-gray-600 bg-brand-bg dark:bg-gray-700 text-brand-black dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-accent-blue"
-            >
-              <option value="">Alle</option>
-              <option value="4">4K+</option>
-              <option value="5.3">5.3K+</option>
-              <option value="8">8K+</option>
-            </select>
-          </div>
-          <div className="flex items-center gap-2">
-            <label htmlFor="fps-filter" className="text-sm font-body text-brand-steel dark:text-gray-400 whitespace-nowrap">FPS</label>
-            <select
-              id="fps-filter"
-              value={fpsMin}
-              onChange={(e) => setFpsMin(e.target.value)}
-              className="px-3 py-2 rounded-full text-sm font-body border border-brand-border dark:border-gray-600 bg-brand-bg dark:bg-gray-700 text-brand-black dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-accent-blue"
-            >
-              <option value="">Alle</option>
-              <option value="60">60fps+</option>
-              <option value="120">120fps+</option>
-              <option value="240">240fps+</option>
-            </select>
-          </div>
-          <div className="flex items-center gap-2">
-            <label htmlFor="battery-filter" className="text-sm font-body text-brand-steel dark:text-gray-400 whitespace-nowrap">Akku</label>
-            <select
-              id="battery-filter"
-              value={batteryMin}
-              onChange={(e) => setBatteryMin(e.target.value)}
-              className="px-3 py-2 rounded-full text-sm font-body border border-brand-border dark:border-gray-600 bg-brand-bg dark:bg-gray-700 text-brand-black dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-accent-blue"
-            >
-              <option value="">Alle</option>
-              <option value="60">60min+</option>
-              <option value="90">90min+</option>
-              <option value="120">120min+</option>
-            </select>
-          </div>
-          <div className="flex items-center gap-2">
-            <label htmlFor="weight-filter" className="text-sm font-body text-brand-steel dark:text-gray-400 whitespace-nowrap">Gewicht</label>
-            <select
-              id="weight-filter"
-              value={weightMax}
-              onChange={(e) => setWeightMax(e.target.value)}
-              className="px-3 py-2 rounded-full text-sm font-body border border-brand-border dark:border-gray-600 bg-brand-bg dark:bg-gray-700 text-brand-black dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-accent-blue"
-            >
-              <option value="">Alle</option>
-              <option value="150">&lt;150g</option>
-              <option value="200">&lt;200g</option>
-              <option value="300">&lt;300g</option>
-            </select>
-          </div>
+          {showFilters && (
+            <div className="px-4 pb-4 space-y-3 border-t border-brand-border dark:border-gray-700 pt-3">
+              {/* Suche */}
+              <div className="relative">
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Kamera suchen…"
+                  className="w-full pl-10 pr-4 py-2 rounded-full text-sm font-body border border-brand-border dark:border-gray-600 bg-brand-bg dark:bg-gray-700 text-brand-black dark:text-gray-100 placeholder-brand-muted dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent-blue focus:border-transparent"
+                />
+              </div>
+
+              {/* Dynamische Spec-Filter */}
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-xs font-heading font-semibold text-brand-muted dark:text-gray-500 uppercase tracking-wider">Specs</span>
+                {specDefs.filter((d) => specFilterOptions[d.id]?.size > 0).map((def) => {
+                  const values = Array.from(specFilterOptions[def.id] ?? []).sort((a, b) => extractNum(a) - extractNum(b));
+                  return (
+                    <div key={def.id} className="flex items-center gap-1.5">
+                      <label className="text-sm font-body text-brand-steel dark:text-gray-400 whitespace-nowrap">{def.name}</label>
+                      <select
+                        value={specFilters[def.id] ?? ''}
+                        onChange={(e) => setSpecFilters((f) => ({ ...f, [def.id]: e.target.value }))}
+                        className="px-3 py-1.5 rounded-full text-sm font-body border border-brand-border dark:border-gray-600 bg-brand-bg dark:bg-gray-700 text-brand-black dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-accent-blue"
+                      >
+                        <option value="">Alle</option>
+                        {values.map((v) => (
+                          <option key={v} value={String(extractNum(v))}>{v}+</option>
+                        ))}
+                      </select>
+                    </div>
+                  );
+                })}
+                {hasActiveSpecFilter && (
+                  <button
+                    type="button"
+                    onClick={() => setSpecFilters({})}
+                    className="px-3 py-1.5 rounded-full text-xs font-body font-medium text-accent-blue hover:bg-accent-blue-soft transition-colors whitespace-nowrap"
+                  >
+                    Filter zurücksetzen
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Brand filter bar */}
