@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
  * Body: { key: string, value: string }
  */
 export async function POST(req: NextRequest) {
-  const { key, value } = (await req.json()) as { key?: string; value?: string };
+  const { key, value } = (await req.json()) as { key?: string; value?: unknown };
 
   if (!key || value === undefined) {
     return NextResponse.json({ error: 'Key und Value erforderlich.' }, { status: 400 });

@@ -21,8 +21,16 @@ export default function DynamicSelect({ value, onChange, settingsKey, defaults, 
     fetch(`/api/admin/settings?key=${settingsKey}`)
       .then((r) => r.json())
       .then((data) => {
-        if (data?.value && Array.isArray(data.value)) {
-          setOptions(data.value);
+        if (data?.value) {
+          const val = data.value;
+          if (Array.isArray(val) && val.length > 0) {
+            setOptions(val);
+          } else if (typeof val === 'string') {
+            try {
+              const parsed = JSON.parse(val);
+              if (Array.isArray(parsed) && parsed.length > 0) setOptions(parsed);
+            } catch { /* not JSON */ }
+          }
         }
       })
       .catch(() => {});
