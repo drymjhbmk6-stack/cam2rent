@@ -124,8 +124,8 @@ function CartBookingConfirmed({
 
 function SuccessCard({ bookingIds }: { bookingIds: string[] | null }) {
   return (
-    <div className="min-h-screen bg-brand-bg flex items-center justify-center px-4">
-      <div className="bg-white rounded-card shadow-card p-8 sm:p-12 max-w-lg w-full text-center">
+    <div className="min-h-screen bg-brand-bg dark:bg-brand-black flex items-center justify-center px-4">
+      <div className="bg-white dark:bg-brand-dark rounded-card shadow-card p-8 sm:p-12 max-w-lg w-full text-center">
         {/* Success icon */}
         <div className="w-20 h-20 rounded-full bg-status-success/10 flex items-center justify-center mx-auto mb-6">
           <svg
@@ -143,23 +143,23 @@ function SuccessCard({ bookingIds }: { bookingIds: string[] | null }) {
           </svg>
         </div>
 
-        <h1 className="font-heading font-bold text-2xl text-brand-black mb-2">
+        <h1 className="font-heading font-bold text-2xl text-brand-black dark:text-white mb-2">
           Buchung bestätigt!
         </h1>
-        <p className="font-body text-brand-steel mb-8">
+        <p className="font-body text-brand-steel dark:text-gray-400 mb-8">
           Deine Zahlung war erfolgreich. Du erhältst in Kürze eine
           Bestätigungs-E-Mail mit allen Details.
         </p>
 
         {/* Booking IDs */}
-        <div className="bg-brand-bg rounded-xl p-4 mb-8">
-          <p className="text-xs font-body text-brand-muted mb-1">
+        <div className="bg-brand-bg dark:bg-brand-black rounded-xl p-4 mb-8">
+          <p className="text-xs font-body text-brand-muted dark:text-gray-500 mb-1">
             Buchungsnummer{bookingIds && bookingIds.length > 1 ? 'n' : ''}
           </p>
           {bookingIds ? (
             <div className="space-y-1">
               {bookingIds.map((id) => (
-                <p key={id} className="font-heading font-bold text-lg text-brand-black">
+                <p key={id} className="font-heading font-bold text-lg text-brand-black dark:text-white">
                   {id}
                 </p>
               ))}
@@ -167,7 +167,7 @@ function SuccessCard({ bookingIds }: { bookingIds: string[] | null }) {
           ) : (
             <div className="flex items-center gap-2 justify-center">
               <div className="w-4 h-4 border-2 border-accent-blue border-t-transparent rounded-full animate-spin" />
-              <p className="font-heading font-semibold text-sm text-brand-steel">
+              <p className="font-heading font-semibold text-sm text-brand-steel dark:text-gray-400">
                 Wird vergeben…
               </p>
             </div>
@@ -175,7 +175,7 @@ function SuccessCard({ bookingIds }: { bookingIds: string[] | null }) {
         </div>
 
         {/* What happens next */}
-        <div className="text-left bg-accent-blue-soft/30 rounded-xl p-4 mb-8">
+        <div className="text-left bg-accent-blue-soft/30 dark:bg-accent-blue/10 rounded-xl p-4 mb-8">
           <p className="text-xs font-heading font-semibold text-accent-blue uppercase tracking-wider mb-3">
             Wie geht es weiter?
           </p>
@@ -188,7 +188,7 @@ function SuccessCard({ bookingIds }: { bookingIds: string[] | null }) {
             ].map((item, i) => (
               <li
                 key={i}
-                className="flex items-start gap-2.5 text-sm font-body text-brand-steel"
+                className="flex items-start gap-2.5 text-sm font-body text-brand-steel dark:text-gray-400"
               >
                 <span className="w-5 h-5 rounded-full bg-accent-blue text-white text-xs flex items-center justify-center flex-shrink-0 mt-0.5 font-heading font-bold">
                   {i + 1}
@@ -202,13 +202,13 @@ function SuccessCard({ bookingIds }: { bookingIds: string[] | null }) {
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
           <Link
             href="/konto/buchungen"
-            className="px-6 py-3 border border-brand-border text-brand-black font-heading font-semibold text-sm rounded-[10px] hover:bg-brand-bg transition-colors"
+            className="px-6 py-3 border border-brand-border dark:border-white/10 text-brand-black dark:text-white font-heading font-semibold text-sm rounded-[10px] hover:bg-brand-bg dark:hover:bg-brand-black transition-colors"
           >
             Meine Buchungen
           </Link>
           <Link
             href="/kameras"
-            className="px-6 py-3 bg-brand-black text-white font-heading font-semibold text-sm rounded-[10px] hover:bg-brand-dark transition-colors"
+            className="px-6 py-3 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold text-sm rounded-[10px] hover:bg-brand-dark transition-colors"
           >
             Weitere Kameras ansehen
           </Link>
@@ -222,8 +222,8 @@ function SuccessCard({ bookingIds }: { bookingIds: string[] | null }) {
 
 function PaymentFailed() {
   return (
-    <div className="min-h-screen bg-brand-bg flex items-center justify-center px-4">
-      <div className="bg-white rounded-card shadow-card p-8 sm:p-12 max-w-lg w-full text-center">
+    <div className="min-h-screen bg-brand-bg dark:bg-brand-black flex items-center justify-center px-4">
+      <div className="bg-white dark:bg-brand-dark rounded-card shadow-card p-8 sm:p-12 max-w-lg w-full text-center">
         <div className="w-20 h-20 rounded-full bg-status-error/10 flex items-center justify-center mx-auto mb-6">
           <svg
             viewBox="0 0 24 24"
@@ -239,23 +239,23 @@ function PaymentFailed() {
             />
           </svg>
         </div>
-        <h1 className="font-heading font-bold text-2xl text-brand-black mb-2">
+        <h1 className="font-heading font-bold text-2xl text-brand-black dark:text-white mb-2">
           Zahlung nicht abgeschlossen
         </h1>
-        <p className="font-body text-brand-steel mb-8">
+        <p className="font-body text-brand-steel dark:text-gray-400 mb-8">
           Die Zahlung wurde abgebrochen oder ist fehlgeschlagen. Es wurde nichts
           abgebucht.
         </p>
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
           <Link
             href="/warenkorb"
-            className="px-6 py-3 border border-brand-border text-brand-black font-heading font-semibold text-sm rounded-[10px] hover:bg-brand-bg transition-colors"
+            className="px-6 py-3 border border-brand-border dark:border-white/10 text-brand-black dark:text-white font-heading font-semibold text-sm rounded-[10px] hover:bg-brand-bg dark:hover:bg-brand-black transition-colors"
           >
             Zurück zum Warenkorb
           </Link>
           <Link
             href="/kameras"
-            className="px-6 py-3 bg-brand-black text-white font-heading font-semibold text-sm rounded-[10px] hover:bg-brand-dark transition-colors"
+            className="px-6 py-3 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold text-sm rounded-[10px] hover:bg-brand-dark transition-colors"
           >
             Kameras ansehen
           </Link>
@@ -288,7 +288,7 @@ export default function BookingConfirmedPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-brand-bg flex items-center justify-center">
+        <div className="min-h-screen bg-brand-bg dark:bg-brand-black flex items-center justify-center">
           <div className="w-8 h-8 border-2 border-accent-blue border-t-transparent rounded-full animate-spin" />
         </div>
       }

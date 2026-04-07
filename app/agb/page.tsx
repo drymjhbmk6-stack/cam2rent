@@ -8,38 +8,38 @@ export const metadata: Metadata = {
 
 export default function AGBPage() {
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-white dark:bg-brand-black">
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-        <h1 className="font-heading font-bold text-3xl text-brand-black mb-2">
+        <h1 className="font-heading font-bold text-3xl text-brand-black dark:text-white mb-2">
           Allgemeine Geschäftsbedingungen (AGB)
         </h1>
-        <p className="text-sm font-body text-brand-muted mb-10">Stand: Januar 2026</p>
+        <p className="text-sm font-body text-brand-muted dark:text-gray-400 mb-10">Stand: Januar 2026</p>
 
         <section className="mb-10">
-          <h2 className="font-heading font-semibold text-lg text-brand-black mb-4">
+          <h2 className="font-heading font-semibold text-lg text-brand-black dark:text-white mb-4">
             § 1 Geltungsbereich
           </h2>
-          <p className="font-body text-brand-steel mb-3">
+          <p className="font-body text-brand-steel dark:text-gray-300 mb-3">
             Diese Allgemeinen Geschäftsbedingungen (nachfolgend &quot;AGB&quot;) gelten für alle
             Mietverträge über Kameraausrüstung, die zwischen
           </p>
-          <div className="font-body text-brand-steel space-y-1 mb-3">
-            <p className="font-semibold text-brand-black">{BUSINESS.name} – {BUSINESS.owner}</p>
+          <div className="font-body text-brand-steel dark:text-gray-300 space-y-1 mb-3">
+            <p className="font-semibold text-brand-black dark:text-white">{BUSINESS.name} – {BUSINESS.owner}</p>
             <p>{BUSINESS.fullAddress}</p>
             <p>E-Mail: {BUSINESS.emailKontakt}</p>
             <p>Telefon: {BUSINESS.phone}</p>
           </div>
-          <p className="font-body text-brand-steel">
+          <p className="font-body text-brand-steel dark:text-gray-300">
             (nachfolgend &quot;Vermieter&quot;) und dem Kunden (nachfolgend &quot;Mieter&quot;) über
             die Website www.{BUSINESS.domain} geschlossen werden.
           </p>
         </section>
 
         <section className="mb-10">
-          <h2 className="font-heading font-semibold text-lg text-brand-black mb-4">
+          <h2 className="font-heading font-semibold text-lg text-brand-black dark:text-white mb-4">
             § 2 Vertragsschluss
           </h2>
-          <ol className="list-decimal list-inside font-body text-brand-steel space-y-2">
+          <ol className="list-decimal list-inside font-body text-brand-steel dark:text-gray-300 space-y-2">
             <li>
               Die Darstellung der Produkte auf der Website stellt kein rechtlich bindendes Angebot dar,
               sondern eine Aufforderung zur Abgabe einer Bestellung (invitatio ad offerendum).
@@ -59,10 +59,10 @@ export default function AGBPage() {
         </section>
 
         <section className="mb-10">
-          <h2 className="font-heading font-semibold text-lg text-brand-black mb-4">
+          <h2 className="font-heading font-semibold text-lg text-brand-black dark:text-white mb-4">
             § 3 Mietgegenstand & Zustand
           </h2>
-          <ol className="list-decimal list-inside font-body text-brand-steel space-y-2">
+          <ol className="list-decimal list-inside font-body text-brand-steel dark:text-gray-300 space-y-2">
             <li>
               Die Mietausrüstung wird in funktionstüchtigem und geprüftem Zustand übergeben.
             </li>
@@ -78,10 +78,10 @@ export default function AGBPage() {
         </section>
 
         <section className="mb-10">
-          <h2 className="font-heading font-semibold text-lg text-brand-black mb-4">
+          <h2 className="font-heading font-semibold text-lg text-brand-black dark:text-white mb-4">
             § 4 Mietdauer
           </h2>
-          <ol className="list-decimal list-inside font-body text-brand-steel space-y-2">
+          <ol className="list-decimal list-inside font-body text-brand-steel dark:text-gray-300 space-y-2">
             <li>
               Die Mietdauer wird in Kalendertagen berechnet. Sie beginnt am vereinbarten Startdatum
               und endet am vereinbarten Rückgabedatum.
@@ -98,10 +98,10 @@ export default function AGBPage() {
         </section>
 
         <section className="mb-10">
-          <h2 className="font-heading font-semibold text-lg text-brand-black mb-4">
+          <h2 className="font-heading font-semibold text-lg text-brand-black dark:text-white mb-4">
             § 5 Preise & Zahlung
           </h2>
-          <ol className="list-decimal list-inside font-body text-brand-steel space-y-2">
+          <ol className="list-decimal list-inside font-body text-brand-steel dark:text-gray-300 space-y-2">
             <li>
               Alle angegebenen Preise sind Endpreise. Gemäß § 19 UStG wird keine Umsatzsteuer
               erhoben (Kleinunternehmerregelung).
@@ -122,10 +122,10 @@ export default function AGBPage() {
         </section>
 
         <section className="mb-10">
-          <h2 className="font-heading font-semibold text-lg text-brand-black mb-4">
+          <h2 className="font-heading font-semibold text-lg text-brand-black dark:text-white mb-4">
             § 6 Kaution (Sicherheitsleistung)
           </h2>
-          <ol className="list-decimal list-inside font-body text-brand-steel space-y-2">
+          <ol className="list-decimal list-inside font-body text-brand-steel dark:text-gray-300 space-y-2">
             <li>
               Für jede Buchung wird eine Kaution als Vorautorisierung auf der Kreditkarte des Mieters
               blockiert. Der Betrag wird nicht abgebucht, sondern nur reserviert.
@@ -146,10 +146,10 @@ export default function AGBPage() {
         </section>
 
         <section className="mb-10">
-          <h2 className="font-heading font-semibold text-lg text-brand-black mb-4">
+          <h2 className="font-heading font-semibold text-lg text-brand-black dark:text-white mb-4">
             § 7 Haftungsoptionen
           </h2>
-          <ol className="list-decimal list-inside font-body text-brand-steel space-y-2">
+          <ol className="list-decimal list-inside font-body text-brand-steel dark:text-gray-300 space-y-2">
             <li>
               Der Mieter kann bei der Buchung zwischen verschiedenen Haftungsoptionen wählen:
               <ul className="list-disc list-inside ml-4 mt-2 space-y-1">
@@ -170,10 +170,10 @@ export default function AGBPage() {
         </section>
 
         <section className="mb-10">
-          <h2 className="font-heading font-semibold text-lg text-brand-black mb-4">
+          <h2 className="font-heading font-semibold text-lg text-brand-black dark:text-white mb-4">
             § 8 Pflichten des Mieters
           </h2>
-          <ol className="list-decimal list-inside font-body text-brand-steel space-y-2">
+          <ol className="list-decimal list-inside font-body text-brand-steel dark:text-gray-300 space-y-2">
             <li>Der Mieter ist verpflichtet, die Mietausrüstung pfleglich und sachgemäß zu behandeln.</li>
             <li>Die Ausrüstung darf nur für den persönlichen Gebrauch des Mieters verwendet werden. Eine Weitergabe an Dritte oder gewerbliche Nutzung ohne vorherige Zustimmung ist untersagt.</li>
             <li>Der Mieter ist verpflichtet, die gesamte Ausrüstung einschließlich aller Zubehörteile vollständig zurückzugeben.</li>
@@ -183,10 +183,10 @@ export default function AGBPage() {
         </section>
 
         <section className="mb-10">
-          <h2 className="font-heading font-semibold text-lg text-brand-black mb-4">
+          <h2 className="font-heading font-semibold text-lg text-brand-black dark:text-white mb-4">
             § 9 Stornierung & Rücktritt
           </h2>
-          <ol className="list-decimal list-inside font-body text-brand-steel space-y-2">
+          <ol className="list-decimal list-inside font-body text-brand-steel dark:text-gray-300 space-y-2">
             <li>
               Stornierungen sind nach folgender Staffelung möglich:
               <ul className="list-disc list-inside ml-4 mt-2 space-y-1">
@@ -204,10 +204,10 @@ export default function AGBPage() {
         </section>
 
         <section className="mb-10">
-          <h2 className="font-heading font-semibold text-lg text-brand-black mb-4">
+          <h2 className="font-heading font-semibold text-lg text-brand-black dark:text-white mb-4">
             § 10 Verspätete Rückgabe
           </h2>
-          <p className="font-body text-brand-steel">
+          <p className="font-body text-brand-steel dark:text-gray-300">
             Wird die Ausrüstung nicht fristgerecht zurückgegeben, wird für jeden zusätzlichen Tag der
             reguläre Tagespreis berechnet. Bei erheblicher Verspätung (mehr als 3 Tage ohne
             Rückmeldung) behält sich der Vermieter die Einbehaltung der vollen Kaution sowie
@@ -216,10 +216,10 @@ export default function AGBPage() {
         </section>
 
         <section className="mb-10">
-          <h2 className="font-heading font-semibold text-lg text-brand-black mb-4">
+          <h2 className="font-heading font-semibold text-lg text-brand-black dark:text-white mb-4">
             § 11 Ersatzgeräte
           </h2>
-          <p className="font-body text-brand-steel">
+          <p className="font-body text-brand-steel dark:text-gray-300">
             Sollte das gebuchte Gerät nicht verfügbar sein (z.B. durch Defekt oder verspätete
             Rückgabe eines Vormieters), behält sich der Vermieter das Recht vor, ein gleichwertiges
             oder höherwertiges Ersatzgerät zu stellen. Alternativ kann der Mieter eine vollständige
@@ -228,10 +228,10 @@ export default function AGBPage() {
         </section>
 
         <section className="mb-10">
-          <h2 className="font-heading font-semibold text-lg text-brand-black mb-4">
+          <h2 className="font-heading font-semibold text-lg text-brand-black dark:text-white mb-4">
             § 12 Identitätsprüfung
           </h2>
-          <p className="font-body text-brand-steel">
+          <p className="font-body text-brand-steel dark:text-gray-300">
             Vor der ersten Buchung kann eine Identitätsverifizierung mittels Personalausweis
             erforderlich sein. Der Mieter lädt die Vorder- und Rückseite seines Ausweises über sein
             Kundenkonto hoch. Die Verifizierung erfolgt durch den Vermieter. Ausweisdokumente werden
@@ -241,10 +241,10 @@ export default function AGBPage() {
         </section>
 
         <section className="mb-10">
-          <h2 className="font-heading font-semibold text-lg text-brand-black mb-4">
+          <h2 className="font-heading font-semibold text-lg text-brand-black dark:text-white mb-4">
             § 13 Haftungsbeschränkung
           </h2>
-          <ol className="list-decimal list-inside font-body text-brand-steel space-y-2">
+          <ol className="list-decimal list-inside font-body text-brand-steel dark:text-gray-300 space-y-2">
             <li>
               Der Vermieter haftet unbeschränkt für Schäden aus der Verletzung des Lebens, des
               Körpers oder der Gesundheit sowie bei Vorsatz und grober Fahrlässigkeit.
@@ -257,10 +257,10 @@ export default function AGBPage() {
         </section>
 
         <section className="mb-10">
-          <h2 className="font-heading font-semibold text-lg text-brand-black mb-4">
+          <h2 className="font-heading font-semibold text-lg text-brand-black dark:text-white mb-4">
             § 14 Anwendbares Recht & Gerichtsstand
           </h2>
-          <ol className="list-decimal list-inside font-body text-brand-steel space-y-2">
+          <ol className="list-decimal list-inside font-body text-brand-steel dark:text-gray-300 space-y-2">
             <li>Es gilt das Recht der Bundesrepublik Deutschland unter Ausschluss des UN-Kaufrechts.</li>
             <li>
               Gerichtsstand für alle Streitigkeiten aus dem Vertragsverhältnis ist, soweit gesetzlich
@@ -270,10 +270,10 @@ export default function AGBPage() {
         </section>
 
         <section>
-          <h2 className="font-heading font-semibold text-lg text-brand-black mb-4">
+          <h2 className="font-heading font-semibold text-lg text-brand-black dark:text-white mb-4">
             § 15 Schlussbestimmungen
           </h2>
-          <ol className="list-decimal list-inside font-body text-brand-steel space-y-2">
+          <ol className="list-decimal list-inside font-body text-brand-steel dark:text-gray-300 space-y-2">
             <li>
               Sollte eine Bestimmung dieser AGB unwirksam sein, bleibt die Wirksamkeit der übrigen
               Bestimmungen hiervon unberührt.

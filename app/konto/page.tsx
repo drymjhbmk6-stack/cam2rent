@@ -33,37 +33,37 @@ function ReferralSection({ userId }: { userId: string }) {
   }
 
   return (
-    <div className="bg-white rounded-card shadow-card p-6">
+    <div className="bg-white dark:bg-brand-dark rounded-card shadow-card p-6">
       <div className="flex items-center gap-3 mb-4">
-        <div className="w-10 h-10 rounded-[10px] bg-accent-blue-soft flex items-center justify-center text-accent-blue">
+        <div className="w-10 h-10 rounded-[10px] bg-accent-blue-soft dark:bg-accent-blue/10 flex items-center justify-center text-accent-blue">
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
           </svg>
         </div>
         <div>
-          <h2 className="font-heading font-semibold text-brand-black">Freunde einladen</h2>
-          <p className="text-xs text-brand-steel">Empfehle cam2rent weiter und erhalte {rewardValue} € Gutschein pro Buchung</p>
+          <h2 className="font-heading font-semibold text-brand-black dark:text-white">Freunde einladen</h2>
+          <p className="text-xs text-brand-steel dark:text-gray-400">Empfehle cam2rent weiter und erhalte {rewardValue} € Gutschein pro Buchung</p>
         </div>
       </div>
       <div className="flex gap-2 mb-4">
-        <input type="text" readOnly value={referralUrl} className="flex-1 px-3 py-2.5 rounded-[10px] border border-brand-border bg-brand-bg text-brand-black text-sm font-mono" />
-        <button onClick={handleCopy} className="px-4 py-2.5 rounded-[10px] bg-brand-black text-white text-sm font-heading font-semibold hover:bg-brand-dark transition-colors flex-shrink-0">
+        <input type="text" readOnly value={referralUrl} className="flex-1 px-3 py-2.5 rounded-[10px] border border-brand-border dark:border-white/10 bg-brand-bg dark:bg-brand-black text-brand-black dark:text-white text-sm font-mono" />
+        <button onClick={handleCopy} className="px-4 py-2.5 rounded-[10px] bg-brand-black dark:bg-accent-blue text-white text-sm font-heading font-semibold hover:bg-brand-dark dark:hover:bg-accent-blue/90 transition-colors flex-shrink-0">
           {copied ? 'Kopiert!' : 'Kopieren'}
         </button>
       </div>
       {stats && (
         <div className="grid grid-cols-3 gap-3">
-          <div className="text-center p-3 rounded-[10px] bg-brand-bg">
-            <div className="text-lg font-heading font-bold text-brand-black">{stats.total}</div>
-            <div className="text-xs text-brand-steel">Einladungen</div>
+          <div className="text-center p-3 rounded-[10px] bg-brand-bg dark:bg-brand-black">
+            <div className="text-lg font-heading font-bold text-brand-black dark:text-white">{stats.total}</div>
+            <div className="text-xs text-brand-steel dark:text-gray-400">Einladungen</div>
           </div>
-          <div className="text-center p-3 rounded-[10px] bg-brand-bg">
-            <div className="text-lg font-heading font-bold text-brand-black">{stats.completed}</div>
-            <div className="text-xs text-brand-steel">Buchungen</div>
+          <div className="text-center p-3 rounded-[10px] bg-brand-bg dark:bg-brand-black">
+            <div className="text-lg font-heading font-bold text-brand-black dark:text-white">{stats.completed}</div>
+            <div className="text-xs text-brand-steel dark:text-gray-400">Buchungen</div>
           </div>
-          <div className="text-center p-3 rounded-[10px] bg-brand-bg">
+          <div className="text-center p-3 rounded-[10px] bg-brand-bg dark:bg-brand-black">
             <div className="text-lg font-heading font-bold text-accent-blue">{stats.rewarded * rewardValue} €</div>
-            <div className="text-xs text-brand-steel">Verdient</div>
+            <div className="text-xs text-brand-steel dark:text-gray-400">Verdient</div>
           </div>
         </div>
       )}
@@ -152,9 +152,9 @@ const dashboardCards = [
 ];
 
 const colorMap: Record<string, { bg: string; text: string; hoverBg: string }> = {
-  'accent-blue': { bg: 'bg-accent-blue-soft', text: 'text-accent-blue', hoverBg: 'group-hover:bg-accent-blue' },
-  'accent-teal': { bg: 'bg-accent-teal-soft', text: 'text-accent-teal', hoverBg: 'group-hover:bg-accent-teal' },
-  'accent-amber': { bg: 'bg-accent-amber-soft', text: 'text-accent-amber', hoverBg: 'group-hover:bg-accent-amber' },
+  'accent-blue': { bg: 'bg-accent-blue-soft dark:bg-accent-blue/10', text: 'text-accent-blue', hoverBg: 'group-hover:bg-accent-blue' },
+  'accent-teal': { bg: 'bg-accent-teal-soft dark:bg-accent-teal/10', text: 'text-accent-teal', hoverBg: 'group-hover:bg-accent-teal' },
+  'accent-amber': { bg: 'bg-accent-amber-soft dark:bg-accent-amber/10', text: 'text-accent-amber', hoverBg: 'group-hover:bg-accent-amber' },
 };
 
 function KontoOverview() {
@@ -169,22 +169,22 @@ function KontoOverview() {
     <div className="space-y-6">
       {/* Success messages */}
       {successMsg === 'passwort-geaendert' && (
-        <div className="p-4 rounded-[10px] bg-green-50 border border-green-200 text-status-success text-sm">
+        <div className="p-4 rounded-[10px] bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-status-success text-sm">
           Dein Passwort wurde erfolgreich geändert.
         </div>
       )}
       {successMsg === 'profil-gespeichert' && (
-        <div className="p-4 rounded-[10px] bg-green-50 border border-green-200 text-status-success text-sm">
+        <div className="p-4 rounded-[10px] bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-status-success text-sm">
           Dein Profil wurde erfolgreich gespeichert.
         </div>
       )}
 
       {/* Welcome */}
-      <div className="bg-white rounded-card shadow-card p-6">
-        <h1 className="font-heading font-bold text-2xl text-brand-black mb-1">
+      <div className="bg-white dark:bg-brand-dark rounded-card shadow-card p-6">
+        <h1 className="font-heading font-bold text-2xl text-brand-black dark:text-white mb-1">
           Willkommen, {displayName}!
         </h1>
-        <p className="text-brand-text text-sm">
+        <p className="text-brand-text dark:text-gray-300 text-sm">
           Verwalte deine Buchungen, dein Profil und alles rund um dein Konto.
         </p>
       </div>
@@ -197,15 +197,15 @@ function KontoOverview() {
             <Link
               key={card.href}
               href={card.href}
-              className="bg-white rounded-card shadow-card p-5 hover:shadow-card-hover transition-shadow group"
+              className="bg-white dark:bg-brand-dark rounded-card shadow-card p-5 hover:shadow-card-hover transition-shadow group"
             >
               <div className={`w-10 h-10 rounded-[10px] ${colors.bg} flex items-center justify-center mb-3 ${colors.text} ${colors.hoverBg} group-hover:text-white transition-colors`}>
                 {card.icon}
               </div>
-              <h3 className="font-heading font-semibold text-brand-black text-sm mb-1">
+              <h3 className="font-heading font-semibold text-brand-black dark:text-white text-sm mb-1">
                 {card.title}
               </h3>
-              <p className="text-xs text-brand-steel">{card.description}</p>
+              <p className="text-xs text-brand-steel dark:text-gray-400">{card.description}</p>
             </Link>
           );
         })}

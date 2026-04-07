@@ -7,7 +7,7 @@ export default function OfflinePage() {
         {/* Wifi off icon */}
         <div className="mx-auto mb-6 w-20 h-20 rounded-full bg-brand-bg flex items-center justify-center">
           <svg
-            className="w-10 h-10 text-brand-steel"
+            className="w-10 h-10 text-brand-steel dark:text-gray-400"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -31,11 +31,11 @@ export default function OfflinePage() {
           </svg>
         </div>
 
-        <h1 className="font-heading font-bold text-2xl text-brand-black mb-3">
+        <h1 className="font-heading font-bold text-2xl text-brand-black dark:text-white mb-3">
           Keine Internetverbindung
         </h1>
 
-        <p className="font-body text-brand-text mb-6 leading-relaxed">
+        <p className="font-body text-brand-text dark:text-gray-300 mb-6 leading-relaxed">
           Du bist gerade offline. Pruefe deine Internetverbindung und versuche
           es erneut.
         </p>
@@ -57,7 +57,7 @@ export default function OfflinePage() {
 
         {/* Logo */}
         <div className="mt-10">
-          <span className="font-heading font-bold text-lg text-brand-black tracking-tight">
+          <span className="font-heading font-bold text-lg text-brand-black dark:text-white tracking-tight">
             Cam<span className="text-accent-blue">2</span>Rent
           </span>
         </div>

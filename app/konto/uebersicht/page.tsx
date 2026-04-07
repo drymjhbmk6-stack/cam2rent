@@ -28,14 +28,14 @@ function SectionToggle({
 }) {
   const [open, setOpen] = useState(defaultOpen ?? false);
   return (
-    <div className={`bg-white rounded-card shadow-card overflow-hidden ${danger ? 'border border-red-200' : ''}`}>
+    <div className={`bg-white dark:bg-brand-dark rounded-card shadow-card overflow-hidden ${danger ? 'border border-red-200' : ''}`}>
       <button
         onClick={() => setOpen(!open)}
-        className={`w-full flex items-center justify-between px-6 py-4 text-left transition-colors ${danger ? 'hover:bg-red-50/50' : 'hover:bg-brand-bg/50'}`}
+        className={`w-full flex items-center justify-between px-6 py-4 text-left transition-colors ${danger ? 'hover:bg-red-50/50' : 'hover:bg-brand-bg/50 dark:hover:bg-white/5'}`}
       >
-        <h2 className={`font-heading font-semibold ${danger ? 'text-red-600' : 'text-brand-black'}`}>{title}</h2>
+        <h2 className={`font-heading font-semibold ${danger ? 'text-red-600' : 'text-brand-black dark:text-white'}`}>{title}</h2>
         <svg
-          className={`w-5 h-5 transition-transform ${open ? 'rotate-180' : ''} ${danger ? 'text-red-400' : 'text-brand-steel'}`}
+          className={`w-5 h-5 transition-transform ${open ? 'rotate-180' : ''} ${danger ? 'text-red-400' : 'text-brand-steel dark:text-gray-400'}`}
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -43,7 +43,7 @@ function SectionToggle({
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
         </svg>
       </button>
-      {open && <div className={`px-6 pb-6 pt-4 ${danger ? 'border-t border-red-200' : 'border-t border-brand-border'}`}>{children}</div>}
+      {open && <div className={`px-6 pb-6 pt-4 ${danger ? 'border-t border-red-200' : 'border-t border-brand-border dark:border-white/10'}`}>{children}</div>}
     </div>
   );
 }
@@ -54,19 +54,19 @@ function KontoInfo() {
   const { user } = useAuth();
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between py-2 border-b border-brand-border">
-        <span className="text-sm text-brand-steel">E-Mail</span>
-        <span className="text-sm font-medium text-brand-black">{user?.email}</span>
+      <div className="flex items-center justify-between py-2 border-b border-brand-border dark:border-white/10">
+        <span className="text-sm text-brand-steel dark:text-gray-400">E-Mail</span>
+        <span className="text-sm font-medium text-brand-black dark:text-white">{user?.email}</span>
       </div>
-      <div className="flex items-center justify-between py-2 border-b border-brand-border">
-        <span className="text-sm text-brand-steel">Name</span>
-        <span className="text-sm font-medium text-brand-black">
+      <div className="flex items-center justify-between py-2 border-b border-brand-border dark:border-white/10">
+        <span className="text-sm text-brand-steel dark:text-gray-400">Name</span>
+        <span className="text-sm font-medium text-brand-black dark:text-white">
           {user?.user_metadata?.full_name || '–'}
         </span>
       </div>
       <div className="flex items-center justify-between py-2">
-        <span className="text-sm text-brand-steel">Konto erstellt</span>
-        <span className="text-sm font-medium text-brand-black">
+        <span className="text-sm text-brand-steel dark:text-gray-400">Konto erstellt</span>
+        <span className="text-sm font-medium text-brand-black dark:text-white">
           {user?.created_at
             ? new Date(user.created_at).toLocaleDateString('de-DE', {
                 day: '2-digit',
@@ -159,7 +159,7 @@ function ProfilEdit() {
   };
 
   const inputCls =
-    'w-full px-4 py-3 rounded-[10px] border border-brand-border bg-white text-brand-black placeholder-brand-muted focus:outline-none focus:ring-2 focus:ring-accent-blue focus:border-transparent transition-colors';
+    'w-full px-4 py-3 rounded-[10px] border border-brand-border dark:border-white/10 bg-white dark:bg-brand-black text-brand-black dark:text-white placeholder-brand-muted dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent-blue focus:border-transparent transition-colors';
 
   if (loading) {
     return <div className="w-8 h-8 border-2 border-accent-blue border-t-transparent rounded-full animate-spin mx-auto" />;
@@ -178,33 +178,33 @@ function ProfilEdit() {
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="block text-sm font-body font-medium text-brand-black mb-1">Vollständiger Name</label>
+          <label className="block text-sm font-body font-medium text-brand-black dark:text-white mb-1">Vollständiger Name</label>
           <input type="text" value={profile.full_name} onChange={handleChange('full_name')} className={inputCls} placeholder="Max Mustermann" autoComplete="name" />
         </div>
 
         <div>
-          <label className="block text-sm font-body font-medium text-brand-black mb-1">E-Mail-Adresse</label>
-          <input type="email" value={user?.email ?? ''} disabled className="w-full px-4 py-3 rounded-[10px] border border-brand-border bg-brand-bg text-brand-steel cursor-not-allowed" />
-          <p className="text-xs text-brand-muted mt-1">E-Mail-Adresse kann derzeit nicht geändert werden.</p>
+          <label className="block text-sm font-body font-medium text-brand-black dark:text-white mb-1">E-Mail-Adresse</label>
+          <input type="email" value={user?.email ?? ''} disabled className="w-full px-4 py-3 rounded-[10px] border border-brand-border dark:border-white/10 bg-brand-bg dark:bg-brand-black text-brand-steel dark:text-gray-400 cursor-not-allowed" />
+          <p className="text-xs text-brand-muted dark:text-gray-500 mt-1">E-Mail-Adresse kann derzeit nicht geändert werden.</p>
         </div>
 
         <div>
-          <label className="block text-sm font-body font-medium text-brand-black mb-1">Telefonnummer</label>
+          <label className="block text-sm font-body font-medium text-brand-black dark:text-white mb-1">Telefonnummer</label>
           <input type="tel" value={profile.phone} onChange={handleChange('phone')} className={inputCls} placeholder="+49 170 1234567" autoComplete="tel" />
         </div>
 
         <div>
-          <label className="block text-sm font-body font-medium text-brand-black mb-1">Straße und Hausnummer</label>
+          <label className="block text-sm font-body font-medium text-brand-black dark:text-white mb-1">Straße und Hausnummer</label>
           <input type="text" value={profile.address_street} onChange={handleChange('address_street')} className={inputCls} placeholder="Musterstraße 42" autoComplete="street-address" />
         </div>
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-body font-medium text-brand-black mb-1">PLZ</label>
+            <label className="block text-sm font-body font-medium text-brand-black dark:text-white mb-1">PLZ</label>
             <input type="text" value={profile.address_zip} onChange={handleChange('address_zip')} className={inputCls} placeholder="12345" autoComplete="postal-code" maxLength={5} />
           </div>
           <div>
-            <label className="block text-sm font-body font-medium text-brand-black mb-1">Stadt</label>
+            <label className="block text-sm font-body font-medium text-brand-black dark:text-white mb-1">Stadt</label>
             <input type="text" value={profile.address_city} onChange={handleChange('address_city')} className={inputCls} placeholder="Berlin" autoComplete="address-level2" />
           </div>
         </div>
@@ -221,12 +221,12 @@ function ProfilEdit() {
       </form>
 
       {/* Passwort */}
-      <div className="mt-6 pt-6 border-t border-brand-border">
-        <h3 className="font-heading font-semibold text-brand-black mb-1 text-sm">Passwort ändern</h3>
-        <p className="text-sm text-brand-text mb-3">Fordere einen Passwort-Reset-Link per E-Mail an.</p>
+      <div className="mt-6 pt-6 border-t border-brand-border dark:border-white/10">
+        <h3 className="font-heading font-semibold text-brand-black dark:text-white mb-1 text-sm">Passwort ändern</h3>
+        <p className="text-sm text-brand-text dark:text-gray-300 mb-3">Fordere einen Passwort-Reset-Link per E-Mail an.</p>
         <a
           href="/passwort-vergessen"
-          className="inline-flex items-center gap-2 px-4 py-2.5 border border-brand-border text-brand-text font-body font-medium text-sm rounded-btn hover:border-brand-black hover:text-brand-black transition-colors"
+          className="inline-flex items-center gap-2 px-4 py-2.5 border border-brand-border dark:border-white/10 text-brand-text dark:text-gray-300 font-body font-medium text-sm rounded-btn hover:border-brand-black dark:hover:border-white hover:text-brand-black dark:hover:text-white transition-colors"
         >
           Passwort-Reset anfordern
         </a>
@@ -444,11 +444,11 @@ function Verifizierung() {
         {previews.length === 2 ? (
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <p className="text-xs font-heading font-semibold text-brand-steel mb-2">Vorderseite</p>
+              <p className="text-xs font-heading font-semibold text-brand-steel dark:text-gray-400 mb-2">Vorderseite</p>
               <img src={previews[0]} alt="Vorderseite" className="max-h-32 mx-auto rounded-lg" />
             </div>
             <div>
-              <p className="text-xs font-heading font-semibold text-brand-steel mb-2">Rückseite</p>
+              <p className="text-xs font-heading font-semibold text-brand-steel dark:text-gray-400 mb-2">Rückseite</p>
               <img src={previews[1]} alt="Rückseite" className="max-h-32 mx-auto rounded-lg" />
             </div>
           </div>
@@ -457,8 +457,8 @@ function Verifizierung() {
             <svg className="w-10 h-10 text-gray-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
-            <p className="text-sm font-heading font-semibold text-brand-black mb-1">2 Bilder auswählen</p>
-            <p className="text-xs text-brand-muted">JPG, PNG oder WebP (je max 5 MB)</p>
+            <p className="text-sm font-heading font-semibold text-brand-black dark:text-white mb-1">2 Bilder auswählen</p>
+            <p className="text-xs text-brand-muted dark:text-gray-500">JPG, PNG oder WebP (je max 5 MB)</p>
           </>
         )}
       </div>
@@ -545,7 +545,7 @@ function KontoLoeschen() {
 
   return (
     <div>
-      <p className="text-sm text-brand-text mb-4">
+      <p className="text-sm text-brand-text dark:text-gray-300 mb-4">
         Wenn du dein Konto löschst, werden deine persönlichen Daten anonymisiert und dein Zugang
         dauerhaft deaktiviert. Diese Aktion kann nicht rückgängig gemacht werden.
       </p>
@@ -559,11 +559,11 @@ function KontoLoeschen() {
       {/* ── Erste Bestätigung ───────────────────────────────────────── */}
       {showFirstModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-          <div className="bg-white rounded-card shadow-xl max-w-md w-full p-6">
-            <h3 className="font-heading font-bold text-lg text-brand-black mb-4">
+          <div className="bg-white dark:bg-brand-dark rounded-card shadow-xl max-w-md w-full p-6">
+            <h3 className="font-heading font-bold text-lg text-brand-black dark:text-white mb-4">
               Möchtest du dein Konto wirklich löschen?
             </h3>
-            <ul className="space-y-2 mb-6 text-sm text-brand-text">
+            <ul className="space-y-2 mb-6 text-sm text-brand-text dark:text-gray-300">
               <li className="flex items-start gap-2">
                 <span className="text-red-500 mt-0.5">&#10005;</span>
                 Dein Konto wird dauerhaft deaktiviert
@@ -573,14 +573,14 @@ function KontoLoeschen() {
                 Deine persönlichen Daten werden anonymisiert
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-brand-steel mt-0.5">&#8226;</span>
+                <span className="text-brand-steel dark:text-gray-400 mt-0.5">&#8226;</span>
                 Buchungsdaten bleiben aus steuerlichen Gründen 10 Jahre gespeichert
               </li>
             </ul>
             <div className="flex gap-3 justify-end">
               <button
                 onClick={closeAll}
-                className="px-5 py-2.5 border border-brand-border text-brand-text font-heading font-medium rounded-btn hover:border-brand-black hover:text-brand-black transition-colors"
+                className="px-5 py-2.5 border border-brand-border dark:border-white/10 text-brand-text dark:text-gray-300 font-heading font-medium rounded-btn hover:border-brand-black dark:hover:border-white hover:text-brand-black dark:hover:text-white transition-colors"
               >
                 Abbrechen
               </button>
@@ -598,8 +598,8 @@ function KontoLoeschen() {
       {/* ── Zweite Bestätigung mit Passwort ────────────────────────── */}
       {showSecondModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-          <div className="bg-white rounded-card shadow-xl max-w-md w-full p-6">
-            <h3 className="font-heading font-bold text-lg text-brand-black mb-4">
+          <div className="bg-white dark:bg-brand-dark rounded-card shadow-xl max-w-md w-full p-6">
+            <h3 className="font-heading font-bold text-lg text-brand-black dark:text-white mb-4">
               Letzte Chance &ndash; Bist du dir sicher?
             </h3>
 
@@ -610,14 +610,14 @@ function KontoLoeschen() {
             )}
 
             <div className="mb-4">
-              <label className="block text-sm font-body font-medium text-brand-black mb-1">
+              <label className="block text-sm font-body font-medium text-brand-black dark:text-white mb-1">
                 Passwort bestätigen
               </label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-3 rounded-[10px] border border-brand-border bg-white text-brand-black placeholder-brand-muted focus:outline-none focus:ring-2 focus:ring-red-400 focus:border-transparent transition-colors"
+                className="w-full px-4 py-3 rounded-[10px] border border-brand-border dark:border-white/10 bg-white dark:bg-brand-black text-brand-black dark:text-white placeholder-brand-muted dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-red-400 focus:border-transparent transition-colors"
                 placeholder="Dein Passwort eingeben"
                 autoComplete="current-password"
               />
@@ -630,7 +630,7 @@ function KontoLoeschen() {
                 onChange={(e) => setConfirmed(e.target.checked)}
                 className="mt-0.5 w-4 h-4 rounded border-brand-border text-red-600 focus:ring-red-400"
               />
-              <span className="text-sm text-brand-text">
+              <span className="text-sm text-brand-text dark:text-gray-300">
                 Ich verstehe, dass diese Aktion nicht rückgängig gemacht werden kann
               </span>
             </label>
@@ -638,7 +638,7 @@ function KontoLoeschen() {
             <div className="flex gap-3 justify-end">
               <button
                 onClick={closeAll}
-                className="px-5 py-2.5 border border-brand-border text-brand-text font-heading font-medium rounded-btn hover:border-brand-black hover:text-brand-black transition-colors"
+                className="px-5 py-2.5 border border-brand-border dark:border-white/10 text-brand-text dark:text-gray-300 font-heading font-medium rounded-btn hover:border-brand-black dark:hover:border-white hover:text-brand-black dark:hover:text-white transition-colors"
               >
                 Abbrechen
               </button>
@@ -662,7 +662,7 @@ function KontoLoeschen() {
 export default function UebersichtPage() {
   return (
     <div className="space-y-4">
-      <h1 className="font-heading font-bold text-xl text-brand-black">Kontoübersicht</h1>
+      <h1 className="font-heading font-bold text-xl text-brand-black dark:text-white">Kontoübersicht</h1>
 
       <SectionToggle title="Kontoinformationen" defaultOpen>
         <KontoInfo />

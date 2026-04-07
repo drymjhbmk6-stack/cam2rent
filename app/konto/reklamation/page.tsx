@@ -99,8 +99,8 @@ export default function ReklamationPage() {
   if (!user) {
     return (
       <div className="max-w-2xl mx-auto px-4 py-16 text-center">
-        <p className="text-brand-muted font-body">Bitte melde dich an, um eine Schadensmeldung einzureichen.</p>
-        <Link href="/login" className="inline-block mt-4 px-6 py-2 bg-brand-black text-white rounded-btn font-heading font-semibold">
+        <p className="text-brand-muted dark:text-gray-500 font-body">Bitte melde dich an, um eine Schadensmeldung einzureichen.</p>
+        <Link href="/login" className="inline-block mt-4 px-6 py-2 bg-brand-black dark:bg-accent-blue text-white rounded-btn font-heading font-semibold">
           Anmelden
         </Link>
       </div>
@@ -110,14 +110,14 @@ export default function ReklamationPage() {
   if (success) {
     return (
       <div className="max-w-2xl mx-auto px-4 py-16">
-        <div className="bg-green-50 border border-green-200 rounded-xl p-8 text-center">
+        <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl p-8 text-center">
           <div className="text-4xl mb-4">&#10003;</div>
-          <h1 className="font-heading font-bold text-xl text-green-800 mb-2">Schadensmeldung eingereicht</h1>
-          <p className="text-sm font-body text-green-700 mb-6">
+          <h1 className="font-heading font-bold text-xl text-green-800 dark:text-green-300 mb-2">Schadensmeldung eingereicht</h1>
+          <p className="text-sm font-body text-green-700 dark:text-green-400 mb-6">
             Wir haben deine Meldung erhalten und prüfen sie innerhalb von 1–2 Werktagen.
             Du bekommst eine Bestätigung per E-Mail.
           </p>
-          <Link href="/konto/buchungen" className="inline-block px-6 py-2.5 bg-brand-black text-white rounded-btn font-heading font-semibold text-sm">
+          <Link href="/konto/buchungen" className="inline-block px-6 py-2.5 bg-brand-black dark:bg-accent-blue text-white rounded-btn font-heading font-semibold text-sm">
             Zu meinen Buchungen
           </Link>
         </div>
@@ -128,20 +128,20 @@ export default function ReklamationPage() {
   return (
     <div className="max-w-2xl mx-auto px-4 py-8">
       {/* Breadcrumb */}
-      <div className="flex items-center gap-2 text-sm font-body text-brand-muted mb-6">
-        <Link href="/konto" className="hover:text-brand-black transition-colors">Mein Konto</Link>
+      <div className="flex items-center gap-2 text-sm font-body text-brand-muted dark:text-gray-500 mb-6">
+        <Link href="/konto" className="hover:text-brand-black dark:hover:text-white transition-colors">Mein Konto</Link>
         <span>/</span>
-        <span className="text-brand-black">Schadensmeldung</span>
+        <span className="text-brand-black dark:text-white">Schadensmeldung</span>
       </div>
 
-      <h1 className="font-heading font-bold text-2xl text-brand-black mb-2">Schaden melden</h1>
-      <p className="text-sm font-body text-brand-muted mb-8">
+      <h1 className="font-heading font-bold text-2xl text-brand-black dark:text-white mb-2">Schaden melden</h1>
+      <p className="text-sm font-body text-brand-muted dark:text-gray-500 mb-8">
         Wenn ein Gerät beschädigt wurde, kannst du hier eine Schadensmeldung einreichen.
         Bitte beschreibe den Schaden möglichst genau und lade Fotos hoch.
       </p>
 
       {error && (
-        <div className="p-3 mb-6 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700 font-body">
+        <div className="p-3 mb-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl text-sm text-red-700 dark:text-red-400 font-body">
           {error}
         </div>
       )}
@@ -149,20 +149,20 @@ export default function ReklamationPage() {
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Buchung auswählen */}
         <div>
-          <label className="block text-sm font-heading font-semibold text-brand-black mb-2">
+          <label className="block text-sm font-heading font-semibold text-brand-black dark:text-white mb-2">
             Buchung auswählen
           </label>
           {loading ? (
-            <p className="text-sm text-brand-muted font-body">Lädt Buchungen...</p>
+            <p className="text-sm text-brand-muted dark:text-gray-500 font-body">Lädt Buchungen...</p>
           ) : bookings.length === 0 ? (
-            <p className="text-sm text-brand-muted font-body">
+            <p className="text-sm text-brand-muted dark:text-gray-500 font-body">
               Keine Buchungen vorhanden, für die eine Schadensmeldung möglich ist.
             </p>
           ) : (
             <select
               value={selectedBooking}
               onChange={(e) => setSelectedBooking(e.target.value)}
-              className="w-full px-4 py-3 border border-brand-border rounded-xl text-sm font-body text-brand-black bg-white focus:ring-2 focus:ring-brand-black focus:border-transparent outline-none"
+              className="w-full px-4 py-3 border border-brand-border dark:border-white/10 rounded-xl text-sm font-body text-brand-black dark:text-white bg-white dark:bg-brand-dark focus:ring-2 focus:ring-brand-black focus:border-transparent outline-none"
               required
             >
               <option value="">Bitte wählen...</option>
@@ -177,7 +177,7 @@ export default function ReklamationPage() {
 
         {/* Beschreibung */}
         <div>
-          <label className="block text-sm font-heading font-semibold text-brand-black mb-2">
+          <label className="block text-sm font-heading font-semibold text-brand-black dark:text-white mb-2">
             Schadensbeschreibung
           </label>
           <textarea
@@ -186,25 +186,25 @@ export default function ReklamationPage() {
             placeholder="Beschreibe den Schaden möglichst genau..."
             rows={5}
             maxLength={2000}
-            className="w-full px-4 py-3 border border-brand-border rounded-xl text-sm font-body text-brand-black resize-none focus:ring-2 focus:ring-brand-black focus:border-transparent outline-none"
+            className="w-full px-4 py-3 border border-brand-border dark:border-white/10 rounded-xl text-sm font-body text-brand-black dark:text-white bg-white dark:bg-brand-black resize-none focus:ring-2 focus:ring-brand-black focus:border-transparent outline-none"
             required
           />
-          <p className="text-xs text-brand-muted mt-1 text-right">
+          <p className="text-xs text-brand-muted dark:text-gray-500 mt-1 text-right">
             {description.length}/2000
           </p>
         </div>
 
         {/* Foto-Upload */}
         <div>
-          <label className="block text-sm font-heading font-semibold text-brand-black mb-2">
-            Fotos hochladen <span className="font-normal text-brand-muted">(max. 5 Bilder, je max. 5 MB)</span>
+          <label className="block text-sm font-heading font-semibold text-brand-black dark:text-white mb-2">
+            Fotos hochladen <span className="font-normal text-brand-muted dark:text-gray-500">(max. 5 Bilder, je max. 5 MB)</span>
           </label>
 
           {photos.length > 0 && (
             <div className="flex flex-wrap gap-3 mb-3">
               {photos.map((photo, idx) => (
                 <div key={idx} className="relative group">
-                  <div className="w-20 h-20 rounded-lg overflow-hidden border border-brand-border bg-brand-bg">
+                  <div className="w-20 h-20 rounded-lg overflow-hidden border border-brand-border dark:border-white/10 bg-brand-bg dark:bg-brand-black">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={URL.createObjectURL(photo)}
@@ -225,11 +225,11 @@ export default function ReklamationPage() {
           )}
 
           {photos.length < 5 && (
-            <label className="flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-brand-border rounded-xl cursor-pointer hover:border-brand-black hover:bg-brand-bg transition-colors">
-              <svg className="w-5 h-5 text-brand-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <label className="flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-brand-border dark:border-white/10 rounded-xl cursor-pointer hover:border-brand-black dark:hover:border-white hover:bg-brand-bg dark:hover:bg-white/5 transition-colors">
+              <svg className="w-5 h-5 text-brand-muted dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
-              <span className="text-sm font-body text-brand-muted">Fotos hinzufügen</span>
+              <span className="text-sm font-body text-brand-muted dark:text-gray-500">Fotos hinzufügen</span>
               <input
                 type="file"
                 accept="image/*"
@@ -245,7 +245,7 @@ export default function ReklamationPage() {
         <button
           type="submit"
           disabled={submitting || !selectedBooking || !description.trim()}
-          className="w-full py-3 bg-brand-black text-white rounded-btn font-heading font-semibold text-sm hover:bg-brand-dark transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          className="w-full py-3 bg-brand-black dark:bg-accent-blue text-white rounded-btn font-heading font-semibold text-sm hover:bg-brand-dark dark:hover:bg-accent-blue/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {submitting ? 'Wird eingereicht...' : 'Schadensmeldung einreichen'}
         </button>

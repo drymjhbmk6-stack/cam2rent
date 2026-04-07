@@ -159,8 +159,8 @@ export default function NachrichtenPage() {
 
   if (!user) {
     return (
-      <div className="bg-white rounded-card shadow-card p-8 text-center">
-        <p className="text-brand-steel text-sm">Bitte melde dich an.</p>
+      <div className="bg-white dark:bg-brand-dark rounded-card shadow-card p-8 text-center">
+        <p className="text-brand-steel dark:text-gray-400 text-sm">Bitte melde dich an.</p>
       </div>
     );
   }
@@ -169,33 +169,33 @@ export default function NachrichtenPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-heading font-bold text-xl text-brand-black">Nachrichten</h1>
-          <p className="text-sm text-brand-steel mt-1">Schreibe uns eine Nachricht</p>
+          <h1 className="font-heading font-bold text-xl text-brand-black dark:text-white">Nachrichten</h1>
+          <p className="text-sm text-brand-steel dark:text-gray-400 mt-1">Schreibe uns eine Nachricht</p>
         </div>
         <button
           onClick={() => { setShowNew(true); setSelectedId(null); }}
-          className="px-4 py-2 bg-brand-black text-white font-heading font-semibold text-sm rounded-btn hover:bg-brand-dark transition-colors"
+          className="px-4 py-2 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold text-sm rounded-btn hover:bg-brand-dark dark:hover:bg-accent-blue/90 transition-colors"
         >
           Neue Nachricht
         </button>
       </div>
 
       {error && (
-        <div className="p-3 rounded-[10px] bg-red-50 border border-red-200 text-status-error text-sm">
+        <div className="p-3 rounded-[10px] bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-status-error text-sm">
           {error}
         </div>
       )}
 
-      <div className="bg-white rounded-card shadow-card overflow-hidden" style={{ minHeight: 480 }}>
+      <div className="bg-white dark:bg-brand-dark rounded-card shadow-card overflow-hidden" style={{ minHeight: 480 }}>
         <div className="flex" style={{ minHeight: 480 }}>
           {/* Conversation list */}
-          <div className="w-full sm:w-72 flex-shrink-0 border-r border-brand-border overflow-y-auto" style={{ maxHeight: 560 }}>
+          <div className="w-full sm:w-72 flex-shrink-0 border-r border-brand-border dark:border-white/10 overflow-y-auto" style={{ maxHeight: 560 }}>
             {loading ? (
               <div className="p-6 text-center">
                 <div className="w-5 h-5 border-2 border-accent-blue border-t-transparent rounded-full animate-spin mx-auto" />
               </div>
             ) : conversations.length === 0 && !showNew ? (
-              <div className="p-6 text-center text-sm text-brand-steel">
+              <div className="p-6 text-center text-sm text-brand-steel dark:text-gray-400">
                 Noch keine Nachrichten.
               </div>
             ) : (
@@ -203,12 +203,12 @@ export default function NachrichtenPage() {
                 <button
                   key={conv.id}
                   onClick={() => { setSelectedId(conv.id); setShowNew(false); }}
-                  className={`w-full text-left px-4 py-3 border-b border-brand-border transition-colors ${
-                    selectedId === conv.id ? 'bg-accent-blue-soft' : 'hover:bg-brand-bg'
+                  className={`w-full text-left px-4 py-3 border-b border-brand-border dark:border-white/10 transition-colors ${
+                    selectedId === conv.id ? 'bg-accent-blue-soft dark:bg-accent-blue/10' : 'hover:bg-brand-bg dark:hover:bg-white/5'
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <p className="font-heading font-semibold text-sm text-brand-black truncate flex-1">
+                    <p className="font-heading font-semibold text-sm text-brand-black dark:text-white truncate flex-1">
                       {conv.subject}
                     </p>
                     {conv.unread_count > 0 && (
@@ -218,15 +218,15 @@ export default function NachrichtenPage() {
                     )}
                   </div>
                   {conv.last_message && (
-                    <p className="text-xs text-brand-steel line-clamp-1 mt-1">
+                    <p className="text-xs text-brand-steel dark:text-gray-400 line-clamp-1 mt-1">
                       {conv.last_message.sender_type === 'admin' ? 'cam2rent: ' : 'Du: '}
                       {conv.last_message.body}
                     </p>
                   )}
                   <div className="flex items-center gap-2 mt-1">
-                    <span className="text-xs text-brand-muted">{timeAgo(conv.last_message_at)}</span>
+                    <span className="text-xs text-brand-muted dark:text-gray-500">{timeAgo(conv.last_message_at)}</span>
                     {conv.closed && (
-                      <span className="text-xs text-brand-muted bg-brand-bg px-1.5 py-0.5 rounded">Geschlossen</span>
+                      <span className="text-xs text-brand-muted dark:text-gray-500 bg-brand-bg dark:bg-brand-black px-1.5 py-0.5 rounded">Geschlossen</span>
                     )}
                   </div>
                 </button>
@@ -239,13 +239,13 @@ export default function NachrichtenPage() {
             {showNew ? (
               /* New conversation form */
               <div className="flex-1 p-6 space-y-4">
-                <h2 className="font-heading font-semibold text-brand-black">Neue Nachricht</h2>
+                <h2 className="font-heading font-semibold text-brand-black dark:text-white">Neue Nachricht</h2>
                 <input
                   type="text"
                   placeholder="Betreff..."
                   value={newSubject}
                   onChange={(e) => setNewSubject(e.target.value)}
-                  className="w-full px-4 py-3 rounded-[10px] border border-brand-border bg-white text-brand-black placeholder-brand-muted focus:outline-none focus:ring-2 focus:ring-accent-blue focus:border-transparent transition-colors text-sm"
+                  className="w-full px-4 py-3 rounded-[10px] border border-brand-border dark:border-white/10 bg-white dark:bg-brand-black text-brand-black dark:text-white placeholder-brand-muted dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent-blue focus:border-transparent transition-colors text-sm"
                   maxLength={200}
                 />
                 <textarea
@@ -253,13 +253,13 @@ export default function NachrichtenPage() {
                   value={newBody}
                   onChange={(e) => setNewBody(e.target.value)}
                   rows={6}
-                  className="w-full px-4 py-3 rounded-[10px] border border-brand-border bg-white text-brand-black placeholder-brand-muted focus:outline-none focus:ring-2 focus:ring-accent-blue focus:border-transparent transition-colors text-sm resize-none"
+                  className="w-full px-4 py-3 rounded-[10px] border border-brand-border dark:border-white/10 bg-white dark:bg-brand-black text-brand-black dark:text-white placeholder-brand-muted dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent-blue focus:border-transparent transition-colors text-sm resize-none"
                   maxLength={5000}
                 />
                 <button
                   onClick={handleNewConversation}
                   disabled={!newSubject.trim() || !newBody.trim() || newSending}
-                  className="px-6 py-2.5 bg-brand-black text-white font-heading font-semibold text-sm rounded-btn hover:bg-brand-dark transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="px-6 py-2.5 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold text-sm rounded-btn hover:bg-brand-dark dark:hover:bg-accent-blue/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {newSending ? 'Wird gesendet...' : 'Absenden'}
                 </button>
@@ -268,11 +268,11 @@ export default function NachrichtenPage() {
               /* Message thread */
               <>
                 {/* Header */}
-                <div className="px-5 py-3 border-b border-brand-border flex items-center justify-between">
+                <div className="px-5 py-3 border-b border-brand-border dark:border-white/10 flex items-center justify-between">
                   <div>
-                    <h2 className="font-heading font-semibold text-sm text-brand-black">{convInfo.subject}</h2>
+                    <h2 className="font-heading font-semibold text-sm text-brand-black dark:text-white">{convInfo.subject}</h2>
                     {convInfo.closed && (
-                      <span className="text-xs text-brand-muted">Geschlossen</span>
+                      <span className="text-xs text-brand-muted dark:text-gray-500">Geschlossen</span>
                     )}
                   </div>
                 </div>
@@ -293,11 +293,11 @@ export default function NachrichtenPage() {
                           className={`max-w-[75%] rounded-2xl px-4 py-2.5 ${
                             msg.sender_type === 'customer'
                               ? 'bg-accent-blue text-white rounded-br-md'
-                              : 'bg-brand-bg text-brand-black rounded-bl-md'
+                              : 'bg-brand-bg dark:bg-brand-black text-brand-black dark:text-white rounded-bl-md'
                           }`}
                         >
                           <p className="text-sm whitespace-pre-wrap break-words">{msg.body}</p>
-                          <p className={`text-xs mt-1 ${msg.sender_type === 'customer' ? 'text-blue-200' : 'text-brand-muted'}`}>
+                          <p className={`text-xs mt-1 ${msg.sender_type === 'customer' ? 'text-blue-200' : 'text-brand-muted dark:text-gray-500'}`}>
                             {new Date(msg.created_at).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                           </p>
                         </div>
@@ -309,20 +309,20 @@ export default function NachrichtenPage() {
 
                 {/* Reply input */}
                 {!convInfo.closed && (
-                  <div className="px-5 py-3 border-t border-brand-border flex gap-2">
+                  <div className="px-5 py-3 border-t border-brand-border dark:border-white/10 flex gap-2">
                     <input
                       type="text"
                       placeholder="Nachricht schreiben..."
                       value={replyText}
                       onChange={(e) => setReplyText(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendReply()}
-                      className="flex-1 px-4 py-2.5 rounded-[10px] border border-brand-border bg-white text-brand-black placeholder-brand-muted focus:outline-none focus:ring-2 focus:ring-accent-blue focus:border-transparent transition-colors text-sm"
+                      className="flex-1 px-4 py-2.5 rounded-[10px] border border-brand-border dark:border-white/10 bg-white dark:bg-brand-black text-brand-black dark:text-white placeholder-brand-muted dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent-blue focus:border-transparent transition-colors text-sm"
                       maxLength={5000}
                     />
                     <button
                       onClick={handleSendReply}
                       disabled={!replyText.trim() || sending}
-                      className="px-4 py-2.5 bg-brand-black text-white font-heading font-semibold text-sm rounded-btn hover:bg-brand-dark transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
+                      className="px-4 py-2.5 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold text-sm rounded-btn hover:bg-brand-dark dark:hover:bg-accent-blue/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
@@ -333,7 +333,7 @@ export default function NachrichtenPage() {
               </>
             ) : (
               /* No selection */
-              <div className="flex-1 flex items-center justify-center text-brand-muted text-sm">
+              <div className="flex-1 flex items-center justify-center text-brand-muted dark:text-gray-500 text-sm">
                 Wähle eine Konversation aus oder starte eine neue Nachricht.
               </div>
             )}

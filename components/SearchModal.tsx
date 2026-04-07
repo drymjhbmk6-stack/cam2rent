@@ -144,7 +144,7 @@ export default function SearchModal({
           {/* Search input */}
           <div className="flex items-center gap-3 px-4 py-3 border-b border-brand-border dark:border-gray-700">
             <svg
-              className="w-5 h-5 text-brand-steel flex-shrink-0"
+              className="w-5 h-5 text-brand-steel dark:text-gray-400 flex-shrink-0"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -181,10 +181,10 @@ export default function SearchModal({
 
             {noResults && !loading && (
               <div className="px-4 py-8 text-center">
-                <p className="text-sm font-body text-brand-steel">
+                <p className="text-sm font-body text-brand-steel dark:text-gray-400">
                   Keine Ergebnisse fuer &quot;{query}&quot;
                 </p>
-                <p className="text-xs font-body text-brand-muted mt-1">
+                <p className="text-xs font-body text-brand-muted dark:text-gray-500 mt-1">
                   Versuch es mit einem anderen Suchbegriff
                 </p>
               </div>
@@ -206,13 +206,13 @@ export default function SearchModal({
                           onClick={() => navigate(`/kameras/${k.slug}`)}
                           className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
                             idx === activeIndex
-                              ? 'bg-accent-blue-soft'
-                              : 'hover:bg-brand-bg'
+                              ? 'bg-accent-blue-soft dark:bg-accent-blue/10'
+                              : 'hover:bg-brand-bg dark:hover:bg-white/5'
                           }`}
                         >
-                          <div className="w-10 h-10 rounded-lg bg-brand-bg flex items-center justify-center flex-shrink-0">
+                          <div className="w-10 h-10 rounded-lg bg-brand-bg dark:bg-brand-black flex items-center justify-center flex-shrink-0">
                             <svg
-                              className="w-5 h-5 text-brand-steel"
+                              className="w-5 h-5 text-brand-steel dark:text-gray-400"
                               fill="none"
                               stroke="currentColor"
                               viewBox="0 0 24 24"
@@ -232,10 +232,10 @@ export default function SearchModal({
                             </svg>
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-body font-medium text-brand-black truncate">
+                            <p className="text-sm font-body font-medium text-brand-black dark:text-white truncate">
                               {k.name}
                             </p>
-                            <p className="text-xs font-body text-brand-steel">
+                            <p className="text-xs font-body text-brand-steel dark:text-gray-400">
                               {k.brand} &middot; ab {k.pricePerDay.toFixed(2).replace('.', ',')} &euro;/Tag
                               {!k.available && (
                                 <span className="ml-1.5 text-status-error">
@@ -277,13 +277,13 @@ export default function SearchModal({
                           onClick={() => navigate('/kameras')}
                           className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
                             idx === activeIndex
-                              ? 'bg-accent-blue-soft'
-                              : 'hover:bg-brand-bg'
+                              ? 'bg-accent-blue-soft dark:bg-accent-blue/10'
+                              : 'hover:bg-brand-bg dark:hover:bg-white/5'
                           }`}
                         >
-                          <div className="w-10 h-10 rounded-lg bg-brand-bg flex items-center justify-center flex-shrink-0">
+                          <div className="w-10 h-10 rounded-lg bg-brand-bg dark:bg-brand-black flex items-center justify-center flex-shrink-0">
                             <svg
-                              className="w-5 h-5 text-brand-steel"
+                              className="w-5 h-5 text-brand-steel dark:text-gray-400"
                               fill="none"
                               stroke="currentColor"
                               viewBox="0 0 24 24"
@@ -297,10 +297,10 @@ export default function SearchModal({
                             </svg>
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-body font-medium text-brand-black truncate">
+                            <p className="text-sm font-body font-medium text-brand-black dark:text-white truncate">
                               {z.name}
                             </p>
-                            <p className="text-xs font-body text-brand-steel truncate">
+                            <p className="text-xs font-body text-brand-steel dark:text-gray-400 truncate">
                               {z.description}
                             </p>
                           </div>
@@ -324,13 +324,13 @@ export default function SearchModal({
                           onClick={() => navigate('/kameras')}
                           className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
                             idx === activeIndex
-                              ? 'bg-accent-blue-soft'
-                              : 'hover:bg-brand-bg'
+                              ? 'bg-accent-blue-soft dark:bg-accent-blue/10'
+                              : 'hover:bg-brand-bg dark:hover:bg-white/5'
                           }`}
                         >
-                          <div className="w-10 h-10 rounded-lg bg-brand-bg flex items-center justify-center flex-shrink-0">
+                          <div className="w-10 h-10 rounded-lg bg-brand-bg dark:bg-brand-black flex items-center justify-center flex-shrink-0">
                             <svg
-                              className="w-5 h-5 text-brand-steel"
+                              className="w-5 h-5 text-brand-steel dark:text-gray-400"
                               fill="none"
                               stroke="currentColor"
                               viewBox="0 0 24 24"
@@ -344,10 +344,10 @@ export default function SearchModal({
                             </svg>
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-body font-medium text-brand-black truncate">
+                            <p className="text-sm font-body font-medium text-brand-black dark:text-white truncate">
                               {s.name}
                             </p>
-                            <p className="text-xs font-body text-brand-steel truncate">
+                            <p className="text-xs font-body text-brand-steel dark:text-gray-400 truncate">
                               {s.description}
                             </p>
                           </div>
@@ -370,20 +370,20 @@ export default function SearchModal({
           </div>
 
           {/* Footer */}
-          <div className="px-4 py-2 border-t border-brand-border bg-brand-bg/50 flex items-center justify-between">
-            <div className="flex items-center gap-2 text-[10px] font-body text-brand-muted">
-              <kbd className="px-1 py-0.5 bg-white border border-brand-border rounded text-[9px] font-mono">
+          <div className="px-4 py-2 border-t border-brand-border dark:border-gray-700 bg-brand-bg/50 dark:bg-gray-900/50 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-[10px] font-body text-brand-muted dark:text-gray-500">
+              <kbd className="px-1 py-0.5 bg-white dark:bg-gray-700 border border-brand-border dark:border-gray-600 rounded text-[9px] font-mono">
                 &uarr;&darr;
               </kbd>
               <span>navigieren</span>
-              <kbd className="px-1 py-0.5 bg-white border border-brand-border rounded text-[9px] font-mono">
+              <kbd className="px-1 py-0.5 bg-white dark:bg-gray-700 border border-brand-border dark:border-gray-600 rounded text-[9px] font-mono">
                 &crarr;
               </kbd>
               <span>oeffnen</span>
             </div>
             <button
               onClick={onClose}
-              className="text-[10px] font-body text-brand-muted hover:text-brand-text transition-colors"
+              className="text-[10px] font-body text-brand-muted dark:text-gray-500 hover:text-brand-text dark:hover:text-gray-300 transition-colors"
             >
               Schliessen
             </button>
