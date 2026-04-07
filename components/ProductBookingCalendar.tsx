@@ -130,25 +130,26 @@ export default function ProductBookingCalendar({
   }
 
   // Check if a day is selectable
+  const isChoosingEnd = !!rangeFrom && !rangeTo;
+
   function isDaySelectable(dateStr: string, info: DayInfo | undefined): boolean {
     if (!info) return false;
-    // partial counts as available
     const effectiveStatus = info.status === 'partial' ? 'available' : info.status;
     if (effectiveStatus !== 'available') return false;
-    // Minimum days ahead
     const minDaysAhead = deliveryMode === 'abholung' ? 2 : 3;
     const minDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + minDaysAhead);
     const dayDate = parseDate(dateStr);
     if (dayDate < minDate) return false;
-    // Shipping: block Sundays/holidays where next day is also Sunday/holiday
-    if (deliveryMode === 'versand' && isBlockedForShipping(dayDate)) return false;
+    if (deliveryMode === 'versand') {
+      if (isChoosingEnd) {
+        // Enddatum: nur gesperrt wenn Folgetag Sonn-/Feiertag
+        if (isBlockedEndDateForShipping(dayDate)) return false;
+      } else {
+        // Startdatum: gesperrt wenn Sonntag/Feiertag
+        if (isBlockedForShipping(dayDate)) return false;
+      }
+    }
     return true;
-  }
-
-  // Prüft ob ein Tag als Enddatum blockiert ist (Versand: Sa + Tag vor Feiertag)
-  function isEndDateBlocked(dateStr: string): boolean {
-    if (deliveryMode !== 'versand') return false;
-    return isBlockedEndDateForShipping(parseDate(dateStr));
   }
 
   // Handle day click
@@ -162,9 +163,6 @@ export default function ProductBookingCalendar({
       if (dateStr < rangeFrom) {
         setRangeFrom(dateStr);
         setRangeTo(null);
-      } else if (isEndDateBlocked(dateStr)) {
-        // Enddatum blockiert → ignorieren
-        return;
       } else {
         setRangeTo(dateStr);
       }
@@ -281,19 +279,17 @@ export default function ProductBookingCalendar({
             const isEnd = isRangeEnd(dateStr);
             const cfg = STATUS_CONFIG[displayStatus];
 
-            // Shipping-blocked styling
             const dayDate = parseDate(dateStr);
-            const shippingBlocked = deliveryMode === 'versand' && displayStatus === 'available' && isBlockedForShipping(dayDate);
-            // Enddatum blockiert: Samstag oder Tag vor Feiertag (nur wenn User gerade Enddatum wählt)
-            const isChoosingEnd = !!rangeFrom && !rangeTo;
-            const endDateBlocked = isChoosingEnd && selectable && isEndDateBlocked(dateStr);
+            const blockReason = deliveryMode === 'versand' && !selectable
+              ? getShippingBlockReason(dayDate, isChoosingEnd)
+              : null;
 
             let bgClass = cfg.bg;
             let textClass = cfg.text;
             let cursor = 'cursor-default';
             let ringClass = '';
 
-            if (selectable && !endDateBlocked) {
+            if (selectable) {
               cursor = 'cursor-pointer';
               if (inRange) {
                 bgClass = 'bg-accent-blue/20 dark:bg-accent-blue/30';
@@ -304,14 +300,11 @@ export default function ProductBookingCalendar({
                 textClass = 'text-white';
                 ringClass = 'ring-2 ring-accent-blue ring-offset-1 dark:ring-offset-gray-800';
               }
-            } else if (shippingBlocked || endDateBlocked) {
+            } else if (blockReason) {
               bgClass = 'bg-gray-100 dark:bg-gray-700';
               textClass = 'text-gray-400 dark:text-gray-500';
             }
 
-            const blockReason = deliveryMode === 'versand'
-              ? getShippingBlockReason(dayDate, isChoosingEnd)
-              : null;
             const tooltip = blockReason
               ?? (displayStatus === 'available' ? 'Verfügbar' : cfg.label);
 
@@ -319,10 +312,10 @@ export default function ProductBookingCalendar({
               <div key={dayNum} className="relative group">
                 <button
                   type="button"
-                  disabled={!selectable || endDateBlocked}
-                  onClick={() => selectable && !endDateBlocked && handleDayClick(dateStr)}
+                  disabled={!selectable}
+                  onClick={() => selectable && handleDayClick(dateStr)}
                   onMouseEnter={() => {
-                    if (selectable && !endDateBlocked && rangeFrom && !rangeTo) setHoverDate(dateStr);
+                    if (selectable && rangeFrom && !rangeTo) setHoverDate(dateStr);
                   }}
                   onMouseLeave={() => setHoverDate(null)}
                   className={`w-full aspect-square rounded-md ${bgClass} ${textClass} ${cursor} ${ringClass} flex items-center justify-center transition-all disabled:cursor-default`}
