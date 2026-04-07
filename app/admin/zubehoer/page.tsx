@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { products } from '@/data/products';
 import DynamicSelect from '@/components/admin/DynamicSelect';
+import { DEFAULT_ADMIN_PRODUCTS, type AdminProduct } from '@/lib/price-config';
 
 interface Accessory {
   id: string;
@@ -19,8 +19,6 @@ interface Accessory {
 }
 
 const CATEGORIES = ['Akku', 'Speicher', 'Halterung', 'Schutz', 'Audio', 'Stativ', 'Sonstiges'];
-
-const PRODUCT_LIST = products.filter((p) => p.category === 'action-cam' || p.category === '360-cam');
 
 function emptyForm() {
   return {
@@ -47,9 +45,20 @@ export default function AdminZubehoerPage() {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [savedId, setSavedId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [productList, setProductList] = useState<{ id: string; name: string }[]>([]);
 
   useEffect(() => {
     loadAccessories();
+    // Kamera-Liste aus DB laden (gleiche Quelle wie /admin/preise/kameras)
+    fetch('/api/admin/config?key=products')
+      .then((r) => r.json())
+      .then((data: Record<string, AdminProduct> | null) => {
+        const source = data && Object.keys(data).length > 0 ? data : DEFAULT_ADMIN_PRODUCTS;
+        setProductList(Object.entries(source).map(([id, p]) => ({ id, name: p.name })));
+      })
+      .catch(() => {
+        setProductList(Object.entries(DEFAULT_ADMIN_PRODUCTS).map(([id, p]) => ({ id, name: p.name })));
+      });
   }, []);
 
   function loadAccessories() {
@@ -237,7 +246,7 @@ export default function AdminZubehoerPage() {
                       onChange={() => setNewForm((f) => ({ ...f, compatible_product_ids: [] }))} className="sr-only" />
                     Alle Kameras
                   </label>
-                  {PRODUCT_LIST.map((p) => {
+                  {productList.map((p) => {
                     const checked = newForm.compatible_product_ids.includes(p.id);
                     return (
                       <label key={p.id} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-body cursor-pointer ${checked ? 'border-blue-500 bg-blue-500/20 text-blue-700 dark:text-blue-300 font-semibold' : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300'}`}>
@@ -388,7 +397,7 @@ export default function AdminZubehoerPage() {
                               onChange={() => setEditForm((f) => ({ ...f, compatible_product_ids: [] }))} className="sr-only" />
                             Alle Kameras
                           </label>
-                          {PRODUCT_LIST.map((p) => {
+                          {productList.map((p) => {
                             const checked = (editForm.compatible_product_ids ?? []).includes(p.id);
                             return (
                               <label key={p.id} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-body cursor-pointer ${checked ? 'border-blue-500 bg-blue-500/20 text-blue-700 dark:text-blue-300 font-semibold' : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300'}`}>
