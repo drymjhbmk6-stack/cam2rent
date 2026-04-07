@@ -11,11 +11,11 @@ const ADMIN_TIMEOUT_MS = 30 * 60 * 1000;
 
 type NavItem = { href: string; label: string; exact?: boolean; icon: React.ReactNode };
 
-const SHOP_ITEMS: NavItem[] = [
+const CATALOG_ITEMS: NavItem[] = [
   {
-    href: '/admin/preise',
-    label: 'Preise',
-    icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" /></svg>,
+    href: '/admin/preise/kameras',
+    label: 'Kameras',
+    icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>,
   },
   {
     href: '/admin/sets',
@@ -26,21 +26,6 @@ const SHOP_ITEMS: NavItem[] = [
     href: '/admin/zubehoer',
     label: 'Zubehoer',
     icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 00-1-1H4a2 2 0 110-4h1a1 1 0 001-1V7a1 1 0 011-1h3a1 1 0 001-1V4z" /></svg>,
-  },
-  {
-    href: '/admin/gutscheine',
-    label: 'Gutscheine',
-    icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" /></svg>,
-  },
-  {
-    href: '/admin/rabatte',
-    label: 'Rabatte',
-    icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2v16z" /></svg>,
-  },
-  {
-    href: '/admin/shop-updater',
-    label: 'Shop Updater',
-    icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>,
   },
   {
     href: '/admin/verfuegbarkeit',
@@ -56,9 +41,10 @@ const ORDERS_ITEMS: NavItem[] = [
     icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>,
   },
   {
-    href: '/admin/kunden',
-    label: 'Kunden',
-    icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>,
+    href: '/admin/buchungen/neu',
+    label: 'Neue Buchung',
+    exact: true,
+    icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>,
   },
   {
     href: '/admin/versand',
@@ -75,6 +61,14 @@ const ORDERS_ITEMS: NavItem[] = [
     label: 'Schaeden',
     icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" /></svg>,
   },
+];
+
+const CUSTOMERS_ITEMS: NavItem[] = [
+  {
+    href: '/admin/kunden',
+    label: 'Kundenliste',
+    icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>,
+  },
   {
     href: '/admin/nachrichten',
     label: 'Nachrichten',
@@ -87,7 +81,22 @@ const ORDERS_ITEMS: NavItem[] = [
   },
 ];
 
-const CONTENT_ITEMS: NavItem[] = [
+const MARKETING_ITEMS: NavItem[] = [
+  {
+    href: '/admin/gutscheine',
+    label: 'Gutscheine',
+    icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" /></svg>,
+  },
+  {
+    href: '/admin/rabatte',
+    label: 'Rabatte',
+    icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2v16z" /></svg>,
+  },
+  {
+    href: '/admin/shop-updater',
+    label: 'Shop Updater',
+    icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>,
+  },
   {
     href: '/admin/blog',
     label: 'Blog',
@@ -95,15 +104,12 @@ const CONTENT_ITEMS: NavItem[] = [
   },
 ];
 
-const PURCHASE_ITEMS: NavItem[] = [
-  {
-    href: '/admin/einkauf',
-    label: 'Einkauf',
-    icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>,
-  },
-];
-
 const DATA_ITEMS: NavItem[] = [
+  {
+    href: '/admin/buchhaltung',
+    label: 'Buchhaltung',
+    icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.121 15.536c-1.171 1.952-3.07 1.952-4.242 0-1.172-1.953-1.172-5.119 0-7.072 1.171-1.952 3.07-1.952 4.242 0M8 10.5h4m-4 3h4m9-1.5a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
+  },
   {
     href: '/admin/analytics',
     label: 'Analytics',
@@ -115,9 +121,9 @@ const DATA_ITEMS: NavItem[] = [
     icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
   },
   {
-    href: '/admin/buchhaltung',
-    label: 'Buchhaltung',
-    icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.121 15.536c-1.171 1.952-3.07 1.952-4.242 0-1.172-1.953-1.172-5.119 0-7.072 1.171-1.952 3.07-1.952 4.242 0M8 10.5h4m-4 3h4m9-1.5a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
+    href: '/admin/einkauf',
+    label: 'Einkauf',
+    icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>,
   },
 ];
 
@@ -199,15 +205,15 @@ function SidebarContent({ pathname, isDashboard, onNavClick, handleLogout }: {
 
       {/* Navigation groups */}
       <nav className="flex-1 py-2 overflow-y-auto">
-        <NavSection label="Shop" items={SHOP_ITEMS} pathname={pathname} onNavClick={onNavClick} />
+        <NavSection label="Produkte & Katalog" items={CATALOG_ITEMS} pathname={pathname} onNavClick={onNavClick} />
         <div style={{ height: 1, background: '#1e293b', margin: '6px 12px' }} />
-        <NavSection label="Bestellungen & Kunden" items={ORDERS_ITEMS} pathname={pathname} onNavClick={onNavClick} />
+        <NavSection label="Bestellungen" items={ORDERS_ITEMS} pathname={pathname} onNavClick={onNavClick} />
         <div style={{ height: 1, background: '#1e293b', margin: '6px 12px' }} />
-        <NavSection label="Inhalte" items={CONTENT_ITEMS} pathname={pathname} onNavClick={onNavClick} />
+        <NavSection label="Kunden" items={CUSTOMERS_ITEMS} pathname={pathname} onNavClick={onNavClick} />
         <div style={{ height: 1, background: '#1e293b', margin: '6px 12px' }} />
-        <NavSection label="Einkauf" items={PURCHASE_ITEMS} pathname={pathname} onNavClick={onNavClick} />
+        <NavSection label="Marketing & Preise" items={MARKETING_ITEMS} pathname={pathname} onNavClick={onNavClick} />
         <div style={{ height: 1, background: '#1e293b', margin: '6px 12px' }} />
-        <NavSection label="Daten" items={DATA_ITEMS} pathname={pathname} onNavClick={onNavClick} />
+        <NavSection label="Finanzen & Daten" items={DATA_ITEMS} pathname={pathname} onNavClick={onNavClick} />
       </nav>
 
       {/* Footer */}
