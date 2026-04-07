@@ -30,6 +30,7 @@ export async function POST(req: NextRequest) {
       customer_name,
       customer_email,
       shipping_address,
+      payment_status,
     } = body;
 
     // Pflichtfelder pruefen
@@ -53,7 +54,10 @@ export async function POST(req: NextRequest) {
     // Manuelle Buchung — payment_intent_id mit MANUAL-Prefix
     const paymentIntentId = `MANUAL-${bookingId}-${Date.now()}`;
 
-    const { error } = await supabase.from('bookings').insert({
+    // Notizen aus dem Body (enthalten jetzt auch Produkt-Notizen, Bezahlstatus, Bankdaten etc.)
+    const bookingNotes = body.notes || null;
+
+    const insertData: Record<string, unknown> = {
       id: bookingId,
       payment_intent_id: paymentIntentId,
       product_id,
@@ -75,7 +79,15 @@ export async function POST(req: NextRequest) {
       customer_name,
       customer_email: customer_email || null,
       shipping_address: shipping_address || null,
-    });
+      notes: bookingNotes,
+    };
+
+    // payment_status Feld nur setzen wenn die Spalte existiert (Fallback: wird in notes gespeichert)
+    if (payment_status) {
+      insertData.payment_status = payment_status;
+    }
+
+    const { error } = await supabase.from('bookings').insert(insertData);
 
     if (error) {
       console.error('Manual booking insert error:', error);

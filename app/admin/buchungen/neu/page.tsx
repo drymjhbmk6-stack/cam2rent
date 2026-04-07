@@ -126,7 +126,7 @@ export default function ManualBookingPage() {
   const [street, setStreet] = useState('');
   const [zip, setZip] = useState('');
   const [city, setCity] = useState('');
-  const [selectedProducts, setSelectedProducts] = useState<{ id: string; qty: number; accessories: string[]; sets: string[] }[]>([]);
+  const [selectedProducts, setSelectedProducts] = useState<{ id: string; qty: number; accessories: string[]; sets: string[]; note: string }[]>([]);
   const [addProductId, setAddProductId] = useState('');
   const [rentalFrom, setRentalFrom] = useState('');
   const [rentalTo, setRentalTo] = useState('');
@@ -136,6 +136,8 @@ export default function ManualBookingPage() {
   const [shippingMethod, setShippingMethod] = useState<'standard' | 'express'>('standard');
   const [notes, setNotes] = useState('');
   const [source, setSource] = useState('kleinanzeigen');
+  const [manualPrice, setManualPrice] = useState('');
+  const [paymentStatus, setPaymentStatus] = useState<'paid' | 'unpaid'>('unpaid');
 
   // Load all data on mount
   useEffect(() => {
@@ -181,7 +183,7 @@ export default function ManualBookingPage() {
     setSelectedProducts((prev) => {
       const existing = prev.find((p) => p.id === addProductId);
       if (existing) return prev.map((p) => p.id === addProductId ? { ...p, qty: p.qty + 1 } : p);
-      return [...prev, { id: addProductId, qty: 1, accessories: [], sets: [] }];
+      return [...prev, { id: addProductId, qty: 1, accessories: [], sets: [], note: '' }];
     });
   }
   function removeProduct(id: string) {
@@ -190,6 +192,9 @@ export default function ManualBookingPage() {
   function updateProductQty(id: string, qty: number) {
     if (qty < 1) return removeProduct(id);
     setSelectedProducts((prev) => prev.map((p) => p.id === id ? { ...p, qty } : p));
+  }
+  function updateProductNote(id: string, note: string) {
+    setSelectedProducts((prev) => prev.map((p) => p.id === id ? { ...p, note } : p));
   }
   function toggleProductAccessory(productId: string, accId: string) {
     setSelectedProducts((prev) => prev.map((p) => {
@@ -267,6 +272,7 @@ export default function ManualBookingPage() {
     : shippingMethod === 'express' ? (sp?.expressPrice ?? 12.99)
     : subtotal >= (sp?.freeShippingThreshold ?? 50) ? 0 : (sp?.standardPrice ?? 5.99);
   const total = subtotal + shippingPrice;
+  const finalTotal = manualPrice ? parseFloat(manualPrice) || 0 : total;
   const deposit = totalDeposit;
 
   async function handleSubmit(e: React.FormEvent) {
@@ -297,10 +303,19 @@ export default function ManualBookingPage() {
         const pSubtotal = pPrice + pAccPrice + pSetPrice + haftungPrice;
         const pShipping = shippingPrice; // Versand nur einmal bei erster Buchung
         const pTotal = pSubtotal + (bookingIds.length === 0 ? pShipping : 0);
+        // Bei manuellem Preis: anteilig auf Produkte verteilen
+        const pFinalTotal = manualPrice
+          ? (parseFloat(manualPrice) || 0) / selectedProducts.reduce((s, x) => s + x.qty, 0)
+          : (bookingIds.length === 0 ? pTotal : pSubtotal);
         const pDeposit = p?.deposit ?? 0;
 
         const accNames = sp.accessories.map((id) => accessories.find((a) => a.id === id)?.name ?? id);
         const setNames = sp.sets.map((id) => sets.find((s) => s.id === id)?.name ?? id);
+
+        // Überweisungsdaten bei "nicht bezahlt"
+        const bankInfo = paymentStatus === 'unpaid'
+          ? `Überweisung ausstehend | Kontoinhaber: Lennart Schickel | IBAN: DE77 2022 0800 0027 7841 43 | BIC: SXPYDEHHXXX | Verwendungszweck: ${customerName.trim() || 'Kunde'} – Kameraleihe`
+          : '';
 
         // Für qty > 1: mehrere Buchungen erstellen
         for (let q = 0; q < sp.qty; q++) {
@@ -321,15 +336,20 @@ export default function ManualBookingPage() {
               price_rental: pPrice,
               price_accessories: pAccPrice + pSetPrice,
               price_haftung: haftungPrice,
-              price_total: bookingIds.length === 0 ? pTotal : pSubtotal,
+              price_total: pFinalTotal,
               deposit: pDeposit,
               customer_name: customerName.trim(),
               customer_email: customerEmail.trim() || null,
               shipping_address: shippingAddress || null,
+              payment_status: paymentStatus,
               notes: [
                 source ? `Quelle: ${source}` : '',
+                paymentStatus === 'paid' ? 'Bezahlt' : '',
+                manualPrice ? `Manueller Preis: ${parseFloat(manualPrice).toFixed(2)} €` : '',
+                sp.note ? `Produkt-Notiz (${p?.name ?? sp.id}): ${sp.note}` : '',
                 setNames.length ? `Sets: ${setNames.join(', ')}` : '',
                 accNames.length ? `Zubehör: ${accNames.join(', ')}` : '',
+                bankInfo,
                 notes,
               ].filter(Boolean).join(' | '),
             }),
@@ -526,6 +546,17 @@ export default function ManualBookingPage() {
                         </div>
                       </div>
                     )}
+
+                    {/* Notiz zu diesem Produkt */}
+                    <div className="mt-3">
+                      <p className="text-xs font-semibold mb-1" style={{ color: '#64748b' }}>NOTIZ ZU DIESEM PRODUKT</p>
+                      <textarea
+                        style={{ ...inputStyle, minHeight: 50, resize: 'vertical', fontSize: 12 }}
+                        value={sp.note}
+                        onChange={(e) => updateProductNote(sp.id, e.target.value)}
+                        placeholder="z.B. Zustand, Seriennummer, Absprachen..."
+                      />
+                    </div>
                   </div>
                 );
               })}
@@ -596,6 +627,99 @@ export default function ManualBookingPage() {
           </div>
         </div>
 
+        {/* ─── Preis & Zahlung ─── */}
+        <div style={sectionStyle}>
+          <h2 className="font-heading font-semibold text-sm mb-4" style={headingStyle}>Preis & Zahlung</h2>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+            <div>
+              <label style={labelStyle}>Manueller Gesamtpreis (optional)</label>
+              <div className="relative">
+                <input
+                  style={inputStyle}
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={manualPrice}
+                  onChange={(e) => setManualPrice(e.target.value)}
+                  placeholder={`Berechnet: ${total.toFixed(2)} €`}
+                />
+                {manualPrice && (
+                  <button
+                    type="button"
+                    onClick={() => setManualPrice('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-xs"
+                    style={{ color: '#94a3b8' }}
+                  >
+                    ✕ Zurücksetzen
+                  </button>
+                )}
+              </div>
+              {manualPrice && (
+                <p className="text-xs mt-1" style={{ color: '#f59e0b' }}>
+                  Manueller Preis überschreibt den berechneten Preis ({total.toFixed(2)} €)
+                </p>
+              )}
+            </div>
+            <div>
+              <label style={labelStyle}>Bezahlstatus</label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPaymentStatus('paid')}
+                  className="flex-1 py-2.5 rounded-lg text-sm font-semibold transition-colors"
+                  style={{
+                    background: paymentStatus === 'paid' ? '#10b98125' : '#0f172a',
+                    border: `1px solid ${paymentStatus === 'paid' ? '#10b981' : '#334155'}`,
+                    color: paymentStatus === 'paid' ? '#10b981' : '#94a3b8',
+                  }}
+                >
+                  Bezahlt
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPaymentStatus('unpaid')}
+                  className="flex-1 py-2.5 rounded-lg text-sm font-semibold transition-colors"
+                  style={{
+                    background: paymentStatus === 'unpaid' ? '#f59e0b25' : '#0f172a',
+                    border: `1px solid ${paymentStatus === 'unpaid' ? '#f59e0b' : '#334155'}`,
+                    color: paymentStatus === 'unpaid' ? '#f59e0b' : '#94a3b8',
+                  }}
+                >
+                  Nicht bezahlt
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Kontodaten bei "nicht bezahlt" */}
+          {paymentStatus === 'unpaid' && (
+            <div className="rounded-lg p-4 mb-2" style={{ background: '#f59e0b0a', border: '1px solid #f59e0b33' }}>
+              <p className="text-xs font-semibold mb-2" style={{ color: '#f59e0b' }}>
+                ÜBERWEISUNGSDATEN (werden in Notizen gespeichert)
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm" style={{ color: '#e2e8f0' }}>
+                <div>
+                  <span className="text-xs" style={{ color: '#64748b' }}>Kontoinhaber</span>
+                  <p>Lennart Schickel</p>
+                </div>
+                <div>
+                  <span className="text-xs" style={{ color: '#64748b' }}>IBAN</span>
+                  <p style={{ fontFamily: 'monospace', letterSpacing: 1 }}>DE77 2022 0800 0027 7841 43</p>
+                </div>
+                <div>
+                  <span className="text-xs" style={{ color: '#64748b' }}>BIC</span>
+                  <p style={{ fontFamily: 'monospace' }}>SXPYDEHHXXX</p>
+                </div>
+                <div>
+                  <span className="text-xs" style={{ color: '#64748b' }}>Verwendungszweck</span>
+                  <p style={{ color: '#06b6d4' }}>{customerName.trim() || 'Kundenname'} – Kameraleihe</p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* ─── Zusammenfassung ─── */}
         <div style={{ background: '#0f172a', borderRadius: 12, border: '1px solid #06b6d433', padding: 20, marginBottom: 24 }}>
           <h2 className="font-heading font-semibold text-sm mb-4" style={{ color: '#06b6d4', textTransform: 'uppercase', letterSpacing: 0.8 }}>
@@ -631,9 +755,15 @@ export default function ManualBookingPage() {
               </div>
             )}
             <div style={{ height: 1, background: '#1e293b', margin: '8px 0' }} />
+            {manualPrice && (
+              <div className="flex justify-between text-xs line-through" style={{ color: '#64748b' }}>
+                <span>Berechneter Preis</span>
+                <span>{total.toFixed(2)} €</span>
+              </div>
+            )}
             <div className="flex justify-between font-heading font-bold text-base" style={{ color: '#06b6d4' }}>
-              <span>Gesamt</span>
-              <span>{total.toFixed(2)} €</span>
+              <span>Gesamt {manualPrice ? '(manuell)' : ''}</span>
+              <span>{finalTotal.toFixed(2)} €</span>
             </div>
             {deposit > 0 && (
               <div className="flex justify-between text-xs" style={{ color: '#64748b' }}>
@@ -641,6 +771,10 @@ export default function ManualBookingPage() {
                 <span>{deposit.toFixed(2)} €</span>
               </div>
             )}
+            <div className="flex justify-between text-xs" style={{ color: paymentStatus === 'paid' ? '#10b981' : '#f59e0b' }}>
+              <span>Status</span>
+              <span>{paymentStatus === 'paid' ? 'Bezahlt' : 'Nicht bezahlt – Überweisung ausstehend'}</span>
+            </div>
           </div>
         </div>
 
