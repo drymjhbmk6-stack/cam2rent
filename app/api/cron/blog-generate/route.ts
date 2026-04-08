@@ -114,6 +114,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Kein Anthropic API Key konfiguriert.' }, { status: 400 });
   }
 
+  // Status-Flag: Generierung laeuft
+  async function setGenerationStatus(status: 'generating' | 'idle', topic?: string) {
+    await supabase.from('admin_settings').upsert({
+      key: 'blog_generation_status',
+      value: JSON.stringify({ status, topic: topic ?? '', started_at: status === 'generating' ? new Date().toISOString() : null, finished_at: status === 'idle' ? new Date().toISOString() : null }),
+      updated_at: new Date().toISOString(),
+    });
+  }
+
   // Naechstes ungenutztes Thema holen — erst Serien, dann normale Themen
   // 1. Pruefen ob eine aktive Serie einen offenen Teil hat
   const { data: seriesPart } = await supabase
@@ -209,6 +218,7 @@ Antworte AUSSCHLIESSLICH im folgenden JSON-Format (kein Markdown-Codeblock, nur 
 }`;
 
   try {
+    await setGenerationStatus('generating', topicData.topic);
     const client = new Anthropic({ apiKey });
     const message = await client.messages.create({
       model: 'claude-sonnet-4-20250514',
@@ -326,9 +336,11 @@ Antworte AUSSCHLIESSLICH im folgenden JSON-Format (kein Markdown-Codeblock, nur 
         .eq('id', topicData.id);
     }
 
+    await setGenerationStatus('idle', topicData.topic);
     return NextResponse.json({ success: true, post, series: seriesContext ? { id: seriesContext.id, part: seriesContext.part_number } : null });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unbekannter Fehler';
+    await setGenerationStatus('idle');
     return NextResponse.json({ error: `Auto-Generierung fehlgeschlagen: ${message}` }, { status: 500 });
   }
 }
