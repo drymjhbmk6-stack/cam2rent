@@ -209,12 +209,16 @@ STIL-REGELN:
 FORMATIERUNGS-REGELN (Markdown):
 - ## fuer Hauptueberschriften, ### fuer Unterueberschriften
 - **Fett** fuer Produktnamen und wichtige Begriffe
-- Nutze Blockquotes (>) fuer Tipps und Hinweise, z.B.: > **Unser Tipp:** Text hier
-- Nutze Blockquotes auch fuer Fazit-Boxen: > **Fazit:** Text hier
-- Erstelle Info-Boxen mit > **Gut zu wissen:** oder > **Wichtig:**
+- Nutze Blockquotes fuer farbige Info-Boxen im Artikel (werden automatisch gestylt):
+  - > **Tipp:** Text — fuer Miet-Hinweise und praktische Tipps (z.B. cam2rent erwaehnen)
+  - > **Fazit:** Text — fuer Zwischen-Fazits nach wichtigen Abschnitten
+  - > **Wichtig:** Text — fuer Warnungen oder wichtige Hinweise
+  - > **Gut zu wissen:** Text — fuer interessante Zusatzinfos
+- Nutze MINDESTENS 2-3 Blockquote-Boxen pro Artikel fuer visuelle Abwechslung
 - Nutze Listen (- oder 1.) fuer Aufzaehlungen, aber nicht fuer alles
-- Tabellen NUR bei direkten Vergleichen von 2+ Produkten mit mehreren Specs
+- Tabellen bei direkten Vergleichen von 2+ Produkten mit Specs — Feature in Spalte 1, Produkte in weiteren Spalten
 - Lockere den Text auf mit Zwischenfragen an den Leser
+- Beginne den Artikel mit einem kurzen Lead-Absatz (2-3 Saetze, der das Thema auf den Punkt bringt)
 
 INHALTLICHE REGELN:
 - Schreibe SEO-freundlich mit natuerlicher Keyword-Integration

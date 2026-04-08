@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import MarkdownContent from '@/components/MarkdownContent';
+import { BlogCTA } from '@/components/blog';
 
 interface Post {
   id: string; title: string; slug: string; content: string; excerpt: string;
@@ -40,7 +41,6 @@ export default function BlogArticleClient({ post, related }: { post: Post; relat
     if (!name.trim() || !email.trim() || !commentText.trim()) return;
     setSubmitting(true);
     setCommentMsg('');
-
     const res = await fetch('/api/blog/comments', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -48,7 +48,6 @@ export default function BlogArticleClient({ post, related }: { post: Post; relat
     });
     const data = await res.json();
     setSubmitting(false);
-
     if (res.ok) {
       setCommentMsg(data.message || 'Kommentar eingereicht!');
       setName(''); setEmail(''); setCommentText('');
@@ -58,24 +57,23 @@ export default function BlogArticleClient({ post, related }: { post: Post; relat
   }
 
   const formattedDate = new Date(post.published_at).toLocaleDateString('de-DE', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
+    day: 'numeric', month: 'long', year: 'numeric',
   });
+  const authorInitials = post.author.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2);
 
   return (
-    <>
+    <div style={{ background: '#0f172a' }}>
       {/* Breadcrumb */}
-      <div className="bg-white dark:bg-gray-900 border-b border-brand-border dark:border-gray-800">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
-          <nav className="flex items-center gap-2 text-sm font-body text-brand-muted dark:text-gray-500">
-            <Link href="/" className="hover:text-accent-blue transition-colors">Home</Link>
+      <div style={{ background: '#0f172a', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+        <div className="max-w-[760px] mx-auto px-4 sm:px-6 py-3">
+          <nav className="flex items-center gap-2 text-xs font-body" style={{ color: '#64748b' }}>
+            <Link href="/" className="hover:text-white transition-colors">Home</Link>
             <span>/</span>
-            <Link href="/blog" className="hover:text-accent-blue transition-colors">Blog</Link>
+            <Link href="/blog" className="hover:text-white transition-colors">Blog</Link>
             {post.blog_categories && (
               <>
                 <span>/</span>
-                <Link href={`/blog?category=${post.blog_categories.slug}`} className="hover:text-accent-blue transition-colors">
+                <Link href={`/blog?category=${post.blog_categories.slug}`} className="hover:text-white transition-colors">
                   {post.blog_categories.name}
                 </Link>
               </>
@@ -84,49 +82,53 @@ export default function BlogArticleClient({ post, related }: { post: Post; relat
         </div>
       </div>
 
-      {/* Hero-Header */}
-      <header className="bg-white dark:bg-gray-900 pt-10 pb-8 sm:pt-14 sm:pb-10">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-          {/* Kategorie-Badge */}
+      {/* Hero */}
+      <header style={{ background: '#0f172a' }}>
+        <div className="max-w-[760px] mx-auto px-4 sm:px-6 pt-10 sm:pt-14 pb-8">
+          {/* Badge */}
           {post.blog_categories && (
-            <Link
-              href={`/blog?category=${post.blog_categories.slug}`}
-              className="inline-block px-3 py-1 rounded-full text-xs font-heading font-semibold text-white mb-5 hover:opacity-90 transition-opacity"
-              style={{ background: post.blog_categories.color }}
-            >
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-heading font-semibold mb-5" style={{ border: '1px solid rgba(6,182,212,0.3)', color: '#06b6d4' }}>
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#06b6d4' }} />
               {post.blog_categories.name}
-            </Link>
+            </span>
           )}
 
           {/* Titel */}
-          <h1 className="font-heading font-bold text-3xl sm:text-4xl lg:text-[42px] text-brand-black dark:text-white leading-tight mb-6">
+          <h1 className="font-heading font-extrabold text-[1.7rem] sm:text-4xl lg:text-[2.6rem] leading-tight mb-5" style={{ color: '#f8fafc' }}>
             {post.title}
           </h1>
 
-          {/* Author-Zeile */}
-          <div className="flex items-center gap-4">
-            <div className="w-10 h-10 rounded-full bg-brand-black dark:bg-accent-blue flex items-center justify-center flex-shrink-0">
-              <span className="text-white font-heading font-bold text-sm">
-                {post.author.charAt(0).toUpperCase()}
-              </span>
+          {/* Untertitel / Excerpt */}
+          {post.excerpt && (
+            <p className="text-base sm:text-lg font-body mb-6" style={{ color: '#94a3b8', fontWeight: 300 }}>
+              {post.excerpt}
+            </p>
+          )}
+
+          {/* Meta-Zeile */}
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 font-heading font-bold text-xs" style={{ background: '#1e293b', color: '#06b6d4', border: '1px solid rgba(6,182,212,0.2)' }}>
+              {authorInitials}
             </div>
-            <div>
-              <p className="text-sm font-heading font-semibold text-brand-black dark:text-white">{post.author}</p>
-              <div className="flex items-center gap-3 text-xs text-brand-muted dark:text-gray-500">
-                <span>{formattedDate}</span>
-                <span className="w-1 h-1 rounded-full bg-brand-muted dark:bg-gray-600" />
-                <span>{post.reading_time_min} Min. Lesezeit</span>
-              </div>
+            <div className="flex items-center gap-2 text-xs font-body" style={{ color: '#64748b' }}>
+              <span style={{ color: '#94a3b8' }}>{post.author}</span>
+              <span>·</span>
+              <span>{formattedDate}</span>
+              <span>·</span>
+              <span>{post.reading_time_min} Min. Lesezeit</span>
             </div>
           </div>
         </div>
+
+        {/* Gradient Divider */}
+        <div className="h-1" style={{ background: 'linear-gradient(90deg, #06b6d4 0%, #8b5cf6 50%, #06b6d4 100%)', opacity: 0.6 }} />
       </header>
 
       {/* Featured Image */}
       {post.featured_image && (
-        <div className="bg-white dark:bg-gray-900 pb-10">
-          <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="relative w-full aspect-[2/1] rounded-card overflow-hidden shadow-card dark:shadow-gray-900/50">
+        <div style={{ background: '#0f172a' }} className="pb-8">
+          <div className="max-w-4xl mx-auto px-4 sm:px-6 pt-8">
+            <div className="relative w-full aspect-[2/1] rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.06)' }}>
               <Image
                 src={post.featured_image}
                 alt={post.featured_image_alt || post.title}
@@ -141,82 +143,55 @@ export default function BlogArticleClient({ post, related }: { post: Post; relat
       )}
 
       {/* Artikel-Inhalt */}
-      <article className="bg-white dark:bg-gray-900 pb-16">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+      <article style={{ background: '#0f172a' }} className="pb-12">
+        <div className="max-w-[760px] mx-auto px-4 sm:px-6">
           <MarkdownContent>{post.content}</MarkdownContent>
         </div>
       </article>
 
-      {/* Tags + Teilen */}
+      {/* CTA */}
+      <div style={{ background: '#0f172a' }} className="pb-8">
+        <div className="max-w-[760px] mx-auto px-4 sm:px-6">
+          <BlogCTA />
+        </div>
+      </div>
+
+      {/* Tags */}
       {post.tags?.length > 0 && (
-        <div className="bg-white dark:bg-gray-900 pb-10">
-          <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="border-t border-brand-border dark:border-gray-800 pt-8">
-              <div className="flex flex-wrap gap-2">
-                {post.tags.map((tag, i) => (
-                  <span
-                    key={i}
-                    className="px-3.5 py-1.5 rounded-full text-xs font-heading font-medium bg-brand-bg dark:bg-white/[0.06] text-brand-steel dark:text-gray-400 border border-brand-border/60 dark:border-white/10"
-                  >
-                    {tag}
-                  </span>
-                ))}
-              </div>
+        <div style={{ background: '#0f172a' }} className="pb-10">
+          <div className="max-w-[760px] mx-auto px-4 sm:px-6">
+            <div className="flex flex-wrap gap-2 pt-6" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+              {post.tags.map((tag, i) => (
+                <span key={i} className="px-3 py-1.5 rounded-full text-xs font-heading" style={{ background: '#1e293b', color: '#64748b' }}>
+                  {tag}
+                </span>
+              ))}
             </div>
           </div>
         </div>
       )}
 
-      {/* CTA-Bereich */}
-      <section className="bg-brand-bg dark:bg-gray-800/40 py-14">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="font-heading font-bold text-2xl text-brand-black dark:text-white mb-3">
-            Bereit fuer dein Abenteuer?
-          </h2>
-          <p className="font-body text-brand-steel dark:text-gray-400 mb-6 max-w-lg mx-auto">
-            Miete die passende Action-Kamera fuer deinen naechsten Trip &mdash; flexibel, guenstig und ohne Risiko.
-          </p>
-          <Link
-            href="/kameras"
-            className="inline-flex items-center gap-2 px-7 py-3 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold text-sm rounded-btn hover:opacity-90 transition-opacity"
-          >
-            Kameras entdecken
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-            </svg>
-          </Link>
-        </div>
-      </section>
-
       {/* Verwandte Artikel */}
       {related.length > 0 && (
-        <section className="bg-white dark:bg-gray-900 py-16">
-          <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-            <h2 className="font-heading font-bold text-2xl text-brand-black dark:text-white mb-8">
-              Das koennte dich auch interessieren
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <section style={{ background: '#111827', borderTop: '1px solid rgba(255,255,255,0.06)' }} className="py-14">
+          <div className="max-w-5xl mx-auto px-4 sm:px-6">
+            <h2 className="font-heading font-bold text-xl mb-8" style={{ color: '#e2e8f0' }}>Das koennte dich auch interessieren</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
               {related.map((r) => (
                 <Link key={r.id} href={`/blog/${r.slug}`} className="group">
-                  <article className="bg-white dark:bg-gray-800/50 rounded-card overflow-hidden shadow-card dark:shadow-gray-900/50 border border-brand-border/40 dark:border-white/5 hover:shadow-card-hover transition-shadow">
-                    <div className="relative h-40 bg-brand-bg dark:bg-gray-800 overflow-hidden">
+                  <article className="rounded-xl overflow-hidden transition-all hover:translate-y-[-2px]" style={{ background: '#1e293b', border: '1px solid rgba(255,255,255,0.06)' }}>
+                    <div className="relative h-36 overflow-hidden" style={{ background: '#0f172a' }}>
                       {r.featured_image ? (
                         <Image src={r.featured_image} alt={r.title} fill className="object-cover group-hover:scale-105 transition-transform duration-300" />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center">
-                          <span className="font-heading font-black text-xl text-brand-muted dark:text-gray-600">
-                            cam<span className="text-accent-blue">2</span>rent
-                          </span>
+                          <span className="font-heading font-black text-lg" style={{ color: '#334155' }}>cam<span style={{ color: '#06b6d4' }}>2</span>rent</span>
                         </div>
                       )}
                     </div>
-                    <div className="p-5">
-                      <h3 className="font-heading font-semibold text-sm text-brand-black dark:text-white group-hover:text-accent-blue transition-colors line-clamp-2 mb-2">
-                        {r.title}
-                      </h3>
-                      {r.excerpt && (
-                        <p className="text-xs text-brand-steel dark:text-gray-400 line-clamp-2">{r.excerpt}</p>
-                      )}
+                    <div className="p-4">
+                      <h3 className="font-heading font-semibold text-sm mb-1 group-hover:text-cyan-400 transition-colors line-clamp-2" style={{ color: '#e2e8f0' }}>{r.title}</h3>
+                      <span className="text-[11px] font-body" style={{ color: '#64748b' }}>{new Date(r.published_at).toLocaleDateString('de-DE', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
                     </div>
                   </article>
                 </Link>
@@ -227,85 +202,46 @@ export default function BlogArticleClient({ post, related }: { post: Post; relat
       )}
 
       {/* Kommentare */}
-      <section className="bg-brand-bg dark:bg-gray-950 py-16">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="font-heading font-bold text-2xl text-brand-black dark:text-white mb-8">
+      <section style={{ background: '#0f172a', borderTop: '1px solid rgba(255,255,255,0.06)' }} className="py-14">
+        <div className="max-w-[760px] mx-auto px-4 sm:px-6">
+          <h2 className="font-heading font-bold text-xl mb-8" style={{ color: '#e2e8f0' }}>
             Kommentare {comments.length > 0 && `(${comments.length})`}
           </h2>
 
-          {/* Kommentar-Liste */}
           {comments.length > 0 && (
             <div className="space-y-4 mb-10">
               {comments.map((c) => (
-                <div key={c.id} className="bg-white dark:bg-gray-900 rounded-card p-5 border border-brand-border/40 dark:border-white/5">
+                <div key={c.id} className="rounded-xl p-5" style={{ background: '#1e293b' }}>
                   <div className="flex items-center gap-3 mb-3">
-                    <div className="w-8 h-8 rounded-full bg-accent-blue/10 dark:bg-accent-blue/20 flex items-center justify-center flex-shrink-0">
-                      <span className="text-accent-blue text-xs font-heading font-bold">{c.author_name.charAt(0).toUpperCase()}</span>
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 font-heading font-bold text-[11px]" style={{ background: 'rgba(6,182,212,0.15)', color: '#06b6d4' }}>
+                      {c.author_name.charAt(0).toUpperCase()}
                     </div>
                     <div>
-                      <span className="font-heading font-semibold text-sm text-brand-black dark:text-white">{c.author_name}</span>
-                      <span className="text-xs text-brand-muted dark:text-gray-500 ml-2">{new Date(c.created_at).toLocaleDateString('de-DE')}</span>
+                      <span className="font-heading font-semibold text-sm" style={{ color: '#e2e8f0' }}>{c.author_name}</span>
+                      <span className="text-xs ml-2" style={{ color: '#64748b' }}>{new Date(c.created_at).toLocaleDateString('de-DE')}</span>
                     </div>
                   </div>
-                  <p className="text-sm font-body text-brand-text dark:text-gray-300 leading-relaxed pl-11">{c.content}</p>
+                  <p className="text-sm font-body pl-11" style={{ color: '#94a3b8' }}>{c.content}</p>
                 </div>
               ))}
             </div>
           )}
 
           {/* Kommentar-Formular */}
-          <form onSubmit={submitComment} className="bg-white dark:bg-gray-900 rounded-card p-6 sm:p-8 border border-brand-border/40 dark:border-white/5 shadow-card dark:shadow-gray-900/50">
-            <h3 className="font-heading font-semibold text-lg text-brand-black dark:text-white mb-5">Deine Meinung ist gefragt</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-              <div>
-                <label className="text-xs font-body font-medium text-brand-steel dark:text-gray-400 mb-1 block">Name</label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Dein Name"
-                  required
-                  className="w-full px-4 py-2.5 rounded-btn border border-brand-border dark:border-white/10 bg-white dark:bg-brand-black text-sm font-body text-brand-black dark:text-white placeholder:text-brand-muted dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent-blue/30 focus:border-accent-blue"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-body font-medium text-brand-steel dark:text-gray-400 mb-1 block">E-Mail</label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Wird nicht angezeigt"
-                  required
-                  className="w-full px-4 py-2.5 rounded-btn border border-brand-border dark:border-white/10 bg-white dark:bg-brand-black text-sm font-body text-brand-black dark:text-white placeholder:text-brand-muted dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent-blue/30 focus:border-accent-blue"
-                />
-              </div>
+          <form onSubmit={submitComment} className="rounded-xl p-6 sm:p-8" style={{ background: '#1e293b', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <h3 className="font-heading font-semibold text-lg mb-5" style={{ color: '#e2e8f0' }}>Deine Meinung</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+              <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Dein Name" required className="w-full px-4 py-2.5 rounded-lg text-sm font-body focus:outline-none focus:ring-1" style={{ background: '#0f172a', border: '1px solid #334155', color: '#e2e8f0', focusRingColor: '#06b6d4' } as React.CSSProperties} />
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="E-Mail (nicht sichtbar)" required className="w-full px-4 py-2.5 rounded-lg text-sm font-body focus:outline-none focus:ring-1" style={{ background: '#0f172a', border: '1px solid #334155', color: '#e2e8f0' }} />
             </div>
-            <div>
-              <label className="text-xs font-body font-medium text-brand-steel dark:text-gray-400 mb-1 block">Kommentar</label>
-              <textarea
-                value={commentText}
-                onChange={(e) => setCommentText(e.target.value)}
-                placeholder="Was denkst du dazu?"
-                required
-                rows={4}
-                className="w-full px-4 py-2.5 rounded-btn border border-brand-border dark:border-white/10 bg-white dark:bg-brand-black text-sm font-body text-brand-black dark:text-white placeholder:text-brand-muted dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent-blue/30 focus:border-accent-blue resize-y mb-4"
-              />
-            </div>
-            {commentMsg && (
-              <p className="text-sm font-body mb-3" style={{ color: commentMsg.includes('Fehler') ? '#ef4444' : '#22c55e' }}>
-                {commentMsg}
-              </p>
-            )}
-            <button
-              type="submit"
-              disabled={submitting}
-              className="px-6 py-2.5 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold text-sm rounded-btn hover:opacity-90 transition-opacity disabled:opacity-50"
-            >
+            <textarea value={commentText} onChange={(e) => setCommentText(e.target.value)} placeholder="Was denkst du?" required rows={4} className="w-full px-4 py-2.5 rounded-lg text-sm font-body focus:outline-none focus:ring-1 resize-y mb-4" style={{ background: '#0f172a', border: '1px solid #334155', color: '#e2e8f0' }} />
+            {commentMsg && <p className="text-sm font-body mb-3" style={{ color: commentMsg.includes('Fehler') ? '#ef4444' : '#22c55e' }}>{commentMsg}</p>}
+            <button type="submit" disabled={submitting} className="px-6 py-2.5 rounded-lg font-heading font-semibold text-sm transition-colors disabled:opacity-50" style={{ background: '#06b6d4', color: '#0f172a' }}>
               {submitting ? 'Wird gesendet...' : 'Kommentar absenden'}
             </button>
           </form>
         </div>
       </section>
-    </>
+    </div>
   );
 }

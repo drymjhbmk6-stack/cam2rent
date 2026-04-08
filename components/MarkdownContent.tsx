@@ -4,34 +4,27 @@ import Markdown from 'react-markdown';
 import type { ComponentPropsWithoutRef } from 'react';
 
 function Blockquote({ children }: ComponentPropsWithoutRef<'blockquote'>) {
-  // Inhalt als String extrahieren fuer Typ-Erkennung
   const text = String(children ?? '');
 
-  // Typ basierend auf Inhalt erkennen
-  let borderColor = '#3b82f6';
-  let bgColor = 'rgba(59,130,246,0.06)';
-  let darkBgColor = 'rgba(59,130,246,0.08)';
-  let icon = 'ℹ️';
+  let borderColor = '#06b6d4';
+  let bgColor = 'rgba(6,182,212,0.07)';
+  let label = 'INFO';
 
   if (text.includes('Tipp') || text.includes('tipp')) {
-    borderColor = '#22c55e'; bgColor = 'rgba(34,197,94,0.06)'; darkBgColor = 'rgba(34,197,94,0.08)'; icon = '💡';
+    borderColor = '#06b6d4'; bgColor = 'rgba(6,182,212,0.07)'; label = 'TIPP';
   } else if (text.includes('Wichtig') || text.includes('Achtung') || text.includes('wichtig')) {
-    borderColor = '#f59e0b'; bgColor = 'rgba(245,158,11,0.06)'; darkBgColor = 'rgba(245,158,11,0.08)'; icon = '⚠️';
-  } else if (text.includes('Fazit') || text.includes('fazit')) {
-    borderColor = '#8b5cf6'; bgColor = 'rgba(139,92,246,0.06)'; darkBgColor = 'rgba(139,92,246,0.08)'; icon = '✅';
+    borderColor = '#f59e0b'; bgColor = 'rgba(245,158,11,0.07)'; label = 'WICHTIG';
+  } else if (text.includes('Fazit') || text.includes('fazit') || text.includes('Urteil')) {
+    borderColor = '#8b5cf6'; bgColor = 'rgba(139,92,246,0.07)'; label = 'FAZIT';
   } else if (text.includes('Gut zu wissen') || text.includes('Info')) {
-    borderColor = '#06b6d4'; bgColor = 'rgba(6,182,212,0.06)'; darkBgColor = 'rgba(6,182,212,0.08)'; icon = '📌';
+    borderColor = '#3b82f6'; bgColor = 'rgba(59,130,246,0.07)'; label = 'GUT ZU WISSEN';
   }
 
   return (
-    <div
-      className="my-6 rounded-xl border-l-4 px-5 py-4 not-prose"
-      style={{ borderColor, background: bgColor }}
-    >
-      <style>{`@media (prefers-color-scheme: dark) { .bq-dark { background: ${darkBgColor} !important; } }`}</style>
-      <div className="flex gap-3">
-        <span className="text-lg shrink-0 mt-0.5">{icon}</span>
-        <div className="text-sm leading-relaxed text-gray-700 dark:text-gray-300 [&_strong]:text-gray-900 [&_strong]:dark:text-white [&_p]:mb-2 [&_p:last-child]:mb-0">
+    <div className="my-8 rounded-xl overflow-hidden not-prose" style={{ borderLeft: `3px solid ${borderColor}`, background: bgColor }}>
+      <div className="px-5 py-4">
+        <span className="text-[10px] font-heading font-bold uppercase tracking-widest block mb-2" style={{ color: borderColor }}>{label}</span>
+        <div className="text-sm font-body leading-relaxed [&_p]:mb-2 [&_p:last-child]:mb-0" style={{ color: '#cbd5e1' }}>
           {children}
         </div>
       </div>
@@ -39,27 +32,120 @@ function Blockquote({ children }: ComponentPropsWithoutRef<'blockquote'>) {
   );
 }
 
+function Heading2({ children }: ComponentPropsWithoutRef<'h2'>) {
+  return (
+    <h2 className="not-prose relative font-heading font-bold text-xl sm:text-2xl mt-12 mb-5 pt-2" style={{ color: '#f8fafc' }}>
+      <span className="absolute top-0 left-0 w-8 h-1 rounded-full" style={{ background: '#06b6d4' }} />
+      {children}
+    </h2>
+  );
+}
+
+function Heading3({ children }: ComponentPropsWithoutRef<'h3'>) {
+  return (
+    <h3 className="not-prose font-heading font-bold text-lg mt-8 mb-3" style={{ color: '#e2e8f0' }}>
+      {children}
+    </h3>
+  );
+}
+
+function Table({ children }: ComponentPropsWithoutRef<'table'>) {
+  return (
+    <div className="my-8 rounded-xl overflow-hidden not-prose" style={{ background: '#1e293b', border: '1px solid rgba(6,182,212,0.12)' }}>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">{children}</table>
+      </div>
+    </div>
+  );
+}
+
+function Thead({ children }: ComponentPropsWithoutRef<'thead'>) {
+  return <thead style={{ background: '#111827' }}>{children}</thead>;
+}
+
+function Th({ children }: ComponentPropsWithoutRef<'th'>) {
+  return (
+    <th className="px-4 py-3 text-left font-heading font-semibold text-xs uppercase tracking-wider" style={{ color: '#94a3b8' }}>
+      {children}
+    </th>
+  );
+}
+
+function Td({ children }: ComponentPropsWithoutRef<'td'>) {
+  const text = String(children ?? '');
+  // Fettgedruckte Werte oder Gewinner-Markierungen erkennen
+  const isHighlight = text.includes('✓') || text.includes('★');
+  return (
+    <td className="px-4 py-3 font-body" style={{ color: isHighlight ? '#06b6d4' : '#e2e8f0', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+      {children}
+    </td>
+  );
+}
+
+function Tr({ children }: ComponentPropsWithoutRef<'tr'>) {
+  return <tr className="transition-colors hover:bg-white/[0.03]">{children}</tr>;
+}
+
+function Paragraph({ children }: ComponentPropsWithoutRef<'p'>) {
+  return (
+    <p className="not-prose text-[15px] sm:text-base font-body leading-relaxed mb-5" style={{ color: '#cbd5e1', fontWeight: 300 }}>
+      {children}
+    </p>
+  );
+}
+
+function Strong({ children }: ComponentPropsWithoutRef<'strong'>) {
+  return <strong className="font-semibold" style={{ color: '#f8fafc' }}>{children}</strong>;
+}
+
+function Anchor({ href, children }: ComponentPropsWithoutRef<'a'>) {
+  return (
+    <a href={href} className="font-medium transition-colors" style={{ color: '#06b6d4', textDecoration: 'none' }}>
+      {children}
+    </a>
+  );
+}
+
+function UnorderedList({ children }: ComponentPropsWithoutRef<'ul'>) {
+  return <ul className="not-prose my-4 space-y-2 ml-1">{children}</ul>;
+}
+
+function OrderedList({ children }: ComponentPropsWithoutRef<'ol'>) {
+  return <ol className="not-prose my-4 space-y-2 ml-1 list-none counter-reset-item">{children}</ol>;
+}
+
+function ListItem({ children }: ComponentPropsWithoutRef<'li'>) {
+  return (
+    <li className="flex items-start gap-3 text-[15px] font-body" style={{ color: '#cbd5e1', fontWeight: 300 }}>
+      <span className="w-1.5 h-1.5 rounded-full mt-2 shrink-0" style={{ background: '#06b6d4' }} />
+      <span className="[&_strong]:font-semibold [&_strong]:text-white">{children}</span>
+    </li>
+  );
+}
+
 export default function MarkdownContent({ children }: { children: string }) {
   return (
-    <div className="prose prose-lg max-w-none font-body
-      prose-headings:font-heading prose-headings:text-brand-black prose-headings:dark:text-white prose-headings:font-bold
-      prose-h2:text-2xl prose-h2:mt-10 prose-h2:mb-4
-      prose-h3:text-xl prose-h3:mt-8 prose-h3:mb-3
-      prose-p:text-brand-text prose-p:dark:text-gray-300 prose-p:leading-relaxed prose-p:text-[16px]
-      prose-li:text-brand-text prose-li:dark:text-gray-300 prose-li:text-[16px]
-      prose-a:text-accent-blue prose-a:no-underline prose-a:hover:underline
-      prose-strong:text-brand-black prose-strong:dark:text-white prose-strong:font-semibold
-      prose-code:text-accent-blue prose-code:bg-accent-blue/10 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm
-      prose-ul:my-4 prose-ol:my-4 prose-li:my-1
-      prose-img:rounded-card prose-img:shadow-card
-      prose-table:w-full prose-table:text-sm prose-table:border-collapse
-      prose-thead:bg-brand-bg prose-thead:dark:bg-white/5
-      prose-th:font-heading prose-th:font-semibold prose-th:text-brand-black prose-th:dark:text-white prose-th:px-4 prose-th:py-3 prose-th:text-left prose-th:border prose-th:border-brand-border prose-th:dark:border-gray-700
-      prose-td:px-4 prose-td:py-2.5 prose-td:border prose-td:border-brand-border prose-td:dark:border-gray-700 prose-td:text-brand-text prose-td:dark:text-gray-300
-      [&_tbody_tr:nth-child(even)]:bg-brand-bg/30 [&_tbody_tr:nth-child(even)]:dark:bg-white/[0.02]
-      [&_table]:rounded-xl [&_table]:overflow-hidden [&_table]:shadow-card [&_table]:dark:shadow-gray-900/50
-    ">
-      <Markdown components={{ blockquote: Blockquote }}>{children}</Markdown>
+    <div className="max-w-none">
+      <Markdown
+        components={{
+          blockquote: Blockquote,
+          h2: Heading2,
+          h3: Heading3,
+          table: Table,
+          thead: Thead,
+          th: Th,
+          td: Td,
+          tr: Tr,
+          p: Paragraph,
+          strong: Strong,
+          a: Anchor,
+          ul: UnorderedList,
+          ol: OrderedList,
+          li: ListItem,
+        }}
+      >
+        {children}
+      </Markdown>
     </div>
   );
 }
