@@ -335,7 +335,8 @@ Antworte AUSSCHLIESSLICH im folgenden JSON-Format (kein Markdown-Codeblock, nur 
     if (scheduleId && scheduleEntry) {
       // Zeitplan: Artikel als "scheduled" mit dem geplanten Veroeffentlichungsdatum
       postStatus = 'scheduled';
-      scheduledAt = `${scheduleEntry.scheduled_date}T${scheduleEntry.scheduled_time || '09:00'}:00`;
+      const time = (scheduleEntry.scheduled_time || '09:00').slice(0, 5); // HH:MM
+      scheduledAt = `${scheduleEntry.scheduled_date}T${time}:00`;
     } else if (autoMode === 'voll') {
       postStatus = 'published';
       publishedAt = now;
