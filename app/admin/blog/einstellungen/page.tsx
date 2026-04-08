@@ -34,6 +34,7 @@ interface BlogSettings {
   auto_generate_time_from: string;
   auto_generate_time_to: string;
   auto_generate_topic: string;
+  schedule_days_before: number;
   ki_context: string;
 }
 
@@ -51,6 +52,7 @@ const DEFAULTS: BlogSettings = {
   auto_generate_time_from: '09:00',
   auto_generate_time_to: '18:00',
   auto_generate_topic: '',
+  schedule_days_before: 3,
   ki_context: '',
 };
 
@@ -305,6 +307,21 @@ export default function BlogEinstellungenPage() {
                 </p>
               </div>
 
+              {/* Vorlaufzeit */}
+              <div>
+                <label style={labelStyle}>Vorlaufzeit (Tage vorher generieren)</label>
+                <select style={selectStyle} value={String(settings.schedule_days_before ?? 3)} onChange={(e) => update('schedule_days_before', parseInt(e.target.value))}>
+                  <option value={1}>1 Tag vorher</option>
+                  <option value={2}>2 Tage vorher</option>
+                  <option value={3}>3 Tage vorher</option>
+                  <option value={5}>5 Tage vorher</option>
+                  <option value={7}>1 Woche vorher</option>
+                </select>
+                <p className="text-[11px] mt-1.5" style={{ color: '#475569' }}>
+                  Artikel aus dem Zeitplan werden X Tage vor dem Veroeffentlichungsdatum generiert. So hast du Zeit sie zu pruefen. Am geplanten Tag wird automatisch veroeffentlicht.
+                </p>
+              </div>
+
               {/* Thema / Bereich */}
               <div>
                 <label style={labelStyle}>Standard-Themenbereich (optional)</label>
@@ -326,17 +343,25 @@ export default function BlogEinstellungenPage() {
               )}
 
               {/* Cron-Info */}
-              <div style={{ background: '#0f172a', borderRadius: 8, padding: 16 }}>
-                <p style={{ color: '#94a3b8' }} className="text-xs font-heading font-semibold uppercase mb-2">Cron-URL</p>
-                <code className="text-xs break-all" style={{ color: '#06b6d4' }}>
-                  {baseUrl}/api/cron/blog-generate?secret=DEIN_CRON_SECRET
-                </code>
-                <p className="text-[11px] mt-2" style={{ color: '#475569' }}>
-                  Richte diesen Cron-Job auf deinem Server ein.
-                  {settings.auto_generate_interval === 'daily' && ` Empfehlung: Taeglich um ${settings.auto_generate_time_from || '09:00'}.`}
-                  {settings.auto_generate_interval === 'weekly' && ` Empfehlung: ${(settings.auto_generate_weekdays ?? []).map((d) => WEEKDAYS.find((w) => w.key === d)?.label).filter(Boolean).join(', ')} um ${settings.auto_generate_time_from || '09:00'}.`}
-                  {' '}Env-Variable: CRON_SECRET
-                </p>
+              <div className="space-y-3">
+                <div style={{ background: '#0f172a', borderRadius: 8, padding: 16 }}>
+                  <p style={{ color: '#94a3b8' }} className="text-xs font-heading font-semibold uppercase mb-2">Cron 1: Artikel generieren (stuendlich)</p>
+                  <code className="text-xs break-all" style={{ color: '#06b6d4' }}>
+                    {baseUrl}/api/cron/blog-generate?secret=DEIN_CRON_SECRET
+                  </code>
+                  <p className="text-[11px] mt-2" style={{ color: '#475569' }}>
+                    Generiert Artikel {settings.schedule_days_before || 3} Tage vor dem Veroeffentlichungsdatum.
+                  </p>
+                </div>
+                <div style={{ background: '#0f172a', borderRadius: 8, padding: 16 }}>
+                  <p style={{ color: '#94a3b8' }} className="text-xs font-heading font-semibold uppercase mb-2">Cron 2: Geplante veroeffentlichen (stuendlich)</p>
+                  <code className="text-xs break-all" style={{ color: '#06b6d4' }}>
+                    {baseUrl}/api/cron/blog-publish?secret=DEIN_CRON_SECRET
+                  </code>
+                  <p className="text-[11px] mt-2" style={{ color: '#475569' }}>
+                    Veroeffentlicht Artikel automatisch wenn ihr geplantes Datum erreicht ist — egal ob du sie gesehen hast oder nicht.
+                  </p>
+                </div>
               </div>
             </>
           )}

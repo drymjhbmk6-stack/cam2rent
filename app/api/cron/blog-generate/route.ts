@@ -124,7 +124,14 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Prioritaet 0: Redaktionsplan pruefen ────────────────────────
-  const today = new Date().toISOString().split('T')[0];
+  // Artikel werden X Tage VOR dem Veroeffentlichungsdatum generiert,
+  // damit der Admin sie vorher pruefen kann
+  const daysBeforeGenerate = parseInt(String(blogSettings.schedule_days_before ?? '3')) || 3;
+  const todayDate = new Date();
+  const generateBeforeDate = new Date(todayDate);
+  generateBeforeDate.setDate(generateBeforeDate.getDate() + daysBeforeGenerate);
+  const generateBeforeDateStr = generateBeforeDate.toISOString().split('T')[0];
+
   let scheduleQuery = supabase
     .from('blog_schedule')
     .select('*')
@@ -133,10 +140,10 @@ export async function POST(req: NextRequest) {
     .order('sort_order', { ascending: true })
     .limit(1);
 
-  // Bei force=true: naechsten Eintrag nehmen, egal ob faellig oder nicht
-  // Ohne force: nur faellige Eintraege (Datum <= heute)
+  // Bei force=true: naechsten Eintrag nehmen, egal welches Datum
+  // Sonst: Eintraege deren Veroeffentlichungsdatum innerhalb der naechsten X Tage liegt
   if (!forceGenerate) {
-    scheduleQuery = scheduleQuery.lte('scheduled_date', today);
+    scheduleQuery = scheduleQuery.lte('scheduled_date', generateBeforeDateStr);
   }
 
   const { data: scheduleEntry } = await scheduleQuery.maybeSingle();
@@ -317,9 +324,24 @@ Antworte AUSSCHLIESSLICH im folgenden JSON-Format (kein Markdown-Codeblock, nur 
     const wordCount = (parsed.content || '').split(/\s+/).length;
     const readingTime = Math.max(1, Math.ceil(wordCount / 200));
 
-    // Semi = Entwurf, Voll = direkt veroeffentlichen
-    const shouldPublish = autoMode === 'voll';
+    // Status bestimmen:
+    // - Zeitplan-Artikel: immer als "scheduled" mit geplantem Datum (Admin prueft vorher)
+    // - Andere Artikel: Semi = draft, Voll = published
     const now = new Date().toISOString();
+    let postStatus: string;
+    let publishedAt: string | null = null;
+    let scheduledAt: string | null = null;
+
+    if (scheduleId && scheduleEntry) {
+      // Zeitplan: Artikel als "scheduled" mit dem geplanten Veroeffentlichungsdatum
+      postStatus = 'scheduled';
+      scheduledAt = `${scheduleEntry.scheduled_date}T${scheduleEntry.scheduled_time || '09:00'}:00`;
+    } else if (autoMode === 'voll') {
+      postStatus = 'published';
+      publishedAt = now;
+    } else {
+      postStatus = 'draft';
+    }
 
     // Artikel speichern
     const { data: post, error: postError } = await supabase
@@ -331,7 +353,7 @@ Antworte AUSSCHLIESSLICH im folgenden JSON-Format (kein Markdown-Codeblock, nur 
         excerpt: parsed.excerpt,
         category_id: topicData.category_id || null,
         tags: parsed.suggestedTags ?? [],
-        status: shouldPublish ? 'published' : 'draft',
+        status: postStatus,
         seo_title: parsed.seoTitle,
         seo_description: parsed.seoDescription,
         author: 'cam2rent',
@@ -339,7 +361,8 @@ Antworte AUSSCHLIESSLICH im folgenden JSON-Format (kein Markdown-Codeblock, nur 
         ai_prompt: topicData.topic,
         ai_model: 'claude-sonnet-4-20250514',
         reading_time_min: readingTime,
-        published_at: shouldPublish ? now : null,
+        published_at: publishedAt,
+        scheduled_at: scheduledAt,
         series_id: seriesContext?.id || null,
         series_part: seriesContext?.part_number || null,
         created_at: now,
