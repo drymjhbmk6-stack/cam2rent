@@ -18,10 +18,14 @@ const TONE_MAP: Record<string, string> = {
 /** POST /api/cron/blog-generate - Automatische Artikel-Generierung */
 export async function POST(req: NextRequest) {
   // Absicherung via Secret
-  const secret = req.headers.get('x-cron-secret') ?? new URL(req.url).searchParams.get('secret');
+  const url = new URL(req.url);
+  const secret = req.headers.get('x-cron-secret') ?? url.searchParams.get('secret');
   if (secret !== process.env.CRON_SECRET) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+
+  // force=true ueberspringt den Scheduler (fuer manuelle Tests)
+  const forceGenerate = url.searchParams.get('force') === 'true';
 
   const supabase = createServiceClient();
 
@@ -46,7 +50,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ message: 'Auto-Generierung ist deaktiviert.' });
   }
 
-  // ── Intelligenter Scheduler ──────────────────────────────────────
+  // ── Intelligenter Scheduler (wird bei force=true uebersprungen) ──
+  if (!forceGenerate) {
   // Prueft: richtiger Wochentag? Richtige Uhrzeit? Heute schon generiert?
   // Zufaellige Minute pro Stunde fuer natuerliches Timing
   const now = new Date();
@@ -99,7 +104,7 @@ export async function POST(req: NextRequest) {
   if ((todayCount ?? 0) >= 1) {
     return NextResponse.json({ message: 'Heute wurde bereits ein Artikel generiert.' });
   }
-  // ── Ende Scheduler ───────────────────────────────────────────────
+  } // ── Ende Scheduler ─────────────────────────────────────────────
 
   // Modus: semi = Entwurf, voll/true = veroeffentlichen
   const autoMode = (blogSettings.auto_generate_mode as string) ?? 'semi';
