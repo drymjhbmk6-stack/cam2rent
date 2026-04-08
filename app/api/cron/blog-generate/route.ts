@@ -46,6 +46,61 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ message: 'Auto-Generierung ist deaktiviert.' });
   }
 
+  // ── Intelligenter Scheduler ──────────────────────────────────────
+  // Prueft: richtiger Wochentag? Richtige Uhrzeit? Heute schon generiert?
+  // Zufaellige Minute pro Stunde fuer natuerliches Timing
+  const now = new Date();
+  const berlinTime = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Berlin' }));
+  const currentHour = berlinTime.getHours();
+  const currentMinute = berlinTime.getMinutes();
+
+  const interval = (blogSettings.auto_generate_interval as string) ?? 'weekly';
+  const weekdays = (blogSettings.auto_generate_weekdays as string[]) ?? ['mo', 'do'];
+  const timeFrom = (blogSettings.auto_generate_time_from as string) ?? '09:00';
+  const timeTo = (blogSettings.auto_generate_time_to as string) ?? '18:00';
+
+  const dayMap = ['so', 'mo', 'di', 'mi', 'do', 'fr', 'sa'];
+  const todayKey = dayMap[berlinTime.getDay()];
+
+  // Wochentag-Check (bei weekly/biweekly)
+  if (interval === 'weekly' || interval === 'biweekly') {
+    if (!weekdays.includes(todayKey)) {
+      return NextResponse.json({ message: `Heute (${todayKey.toUpperCase()}) ist kein geplanter Tag.` });
+    }
+  }
+
+  // Uhrzeit-Check: Liegt die aktuelle Stunde im Zeitfenster?
+  const fromHour = parseInt(timeFrom.split(':')[0]) || 9;
+  const toHour = parseInt(timeTo.split(':')[0]) || 18;
+  if (currentHour < fromHour || currentHour >= toHour) {
+    return NextResponse.json({ message: `Aktuelle Uhrzeit (${currentHour}:${String(currentMinute).padStart(2, '0')}) liegt ausserhalb des Zeitfensters ${timeFrom}-${timeTo}.` });
+  }
+
+  // Zufaellige Minute: Generiere nur wenn die aktuelle Minute
+  // in einen zufaelligen 10-Minuten-Slot faellt (basierend auf Datum als Seed)
+  // So wird pro Stunde nur einmal generiert, aber zu einer "zufaelligen" Minute
+  const dateSeed = berlinTime.getFullYear() * 10000 + (berlinTime.getMonth() + 1) * 100 + berlinTime.getDate();
+  const randomSlotStart = ((dateSeed * 7 + currentHour * 13) % 50); // 0-49, laesst 10 Min Puffer
+  const randomSlotEnd = randomSlotStart + 10;
+  if (currentMinute < randomSlotStart || currentMinute >= randomSlotEnd) {
+    return NextResponse.json({ message: `Warte auf Zufallsminute (Slot ${randomSlotStart}-${randomSlotEnd}, jetzt ${currentMinute}).` });
+  }
+
+  // Duplikat-Check: Wurde heute schon ein Artikel generiert?
+  const todayStart = new Date(berlinTime);
+  todayStart.setHours(0, 0, 0, 0);
+  const { count: todayCount } = await supabase
+    .from('blog_posts')
+    .select('id', { count: 'exact', head: true })
+    .eq('ai_generated', true)
+    .gte('created_at', todayStart.toISOString());
+
+  // Bei daily: max 1 pro Tag. Bei weekly: auch max 1 pro Tag (aber nur an geplanten Tagen)
+  if ((todayCount ?? 0) >= 1) {
+    return NextResponse.json({ message: 'Heute wurde bereits ein Artikel generiert.' });
+  }
+  // ── Ende Scheduler ───────────────────────────────────────────────
+
   // Modus: semi = Entwurf, voll/true = veroeffentlichen
   const autoMode = (blogSettings.auto_generate_mode as string) ?? 'semi';
 
