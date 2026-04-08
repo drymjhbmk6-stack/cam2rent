@@ -125,15 +125,21 @@ export async function POST(req: NextRequest) {
 
   // ── Prioritaet 0: Redaktionsplan pruefen ────────────────────────
   const today = new Date().toISOString().split('T')[0];
-  const { data: scheduleEntry } = await supabase
+  let scheduleQuery = supabase
     .from('blog_schedule')
     .select('*')
     .eq('status', 'planned')
-    .lte('scheduled_date', today)
     .order('scheduled_date', { ascending: true })
     .order('sort_order', { ascending: true })
-    .limit(1)
-    .maybeSingle();
+    .limit(1);
+
+  // Bei force=true: naechsten Eintrag nehmen, egal ob faellig oder nicht
+  // Ohne force: nur faellige Eintraege (Datum <= heute)
+  if (!forceGenerate) {
+    scheduleQuery = scheduleQuery.lte('scheduled_date', today);
+  }
+
+  const { data: scheduleEntry } = await scheduleQuery.maybeSingle();
 
   // ── Prioritaet 1+2: Serien, dann Themenpool ───────────────────
   // Naechstes ungenutztes Thema holen — erst Serien, dann normale Themen
