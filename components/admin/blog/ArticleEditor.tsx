@@ -256,11 +256,11 @@ export default function ArticleEditor({ postId }: { postId?: string }) {
   }
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 lg:p-8">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
         <div>
-          <h1 className="font-heading font-bold text-2xl" style={{ color: 'white' }}>
+          <h1 className="font-heading font-bold text-xl sm:text-2xl" style={{ color: 'white' }}>
             {postId ? 'Artikel bearbeiten' : 'Neuer Artikel'}
           </h1>
           {post.ai_generated && (
@@ -272,7 +272,7 @@ export default function ArticleEditor({ postId }: { postId?: string }) {
         <div className="flex gap-2">
           <button
             onClick={() => setShowAI(!showAI)}
-            className="px-4 py-2 rounded-lg text-sm font-heading font-semibold transition-colors"
+            className="px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-heading font-semibold transition-colors"
             style={{ background: '#8b5cf6', color: 'white' }}
           >
             {showAI ? 'KI schliessen' : 'Mit KI generieren'}
@@ -280,7 +280,7 @@ export default function ArticleEditor({ postId }: { postId?: string }) {
           <button
             onClick={save}
             disabled={saving}
-            className="px-5 py-2 rounded-lg text-sm font-heading font-semibold"
+            className="px-4 sm:px-5 py-2 rounded-lg text-xs sm:text-sm font-heading font-semibold"
             style={{ background: '#06b6d4', color: 'white', opacity: saving ? 0.5 : 1 }}
           >
             {saving ? 'Speichern...' : 'Speichern'}
@@ -303,7 +303,7 @@ export default function ArticleEditor({ postId }: { postId?: string }) {
               <label style={labelStyle} className="block">Thema / Artikelidee</label>
               <input style={inputStyle} value={aiTopic} onChange={(e) => setAiTopic(e.target.value)} placeholder="z.B. GoPro Hero 13 vs DJI Osmo Action 5 Pro Vergleich" />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label style={labelStyle} className="block">Ton</label>
                 <select style={inputStyle} value={aiTone} onChange={(e) => setAiTone(e.target.value)}>
@@ -324,13 +324,16 @@ export default function ArticleEditor({ postId }: { postId?: string }) {
             <button
               onClick={generateWithAI}
               disabled={aiGenerating || !aiTopic.trim()}
-              className="px-5 py-2 rounded-lg text-sm font-heading font-semibold"
-              style={{ background: '#8b5cf6', color: 'white', opacity: aiGenerating ? 0.5 : 1 }}
+              className="w-full sm:w-auto px-5 py-2.5 rounded-lg text-sm font-heading font-semibold flex items-center justify-center gap-2"
+              style={{ background: '#8b5cf6', color: 'white', opacity: aiGenerating ? 0.6 : 1 }}
             >
-              {aiGenerating ? 'Generiere Artikel...' : 'Artikel generieren'}
+              {aiGenerating && (
+                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              )}
+              {aiGenerating ? 'Generiere Text + Bild...' : 'Artikel + Bild generieren'}
             </button>
             {aiGenerating && (
-              <p className="text-xs" style={{ color: '#94a3b8' }}>Dies kann 15-30 Sekunden dauern...</p>
+              <p className="text-xs" style={{ color: '#94a3b8' }}>Text wird geschrieben, danach wird das Titelbild generiert. Dies kann bis zu 60 Sekunden dauern...</p>
             )}
           </div>
         </div>
