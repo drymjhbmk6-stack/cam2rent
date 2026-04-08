@@ -13,12 +13,36 @@ export async function GET() {
   const supabase = createServiceClient();
   const { data, error } = await supabase
     .from('blog_schedule')
-    .select('*, blog_categories(id, name, slug, color), blog_posts(id, title, slug, status, featured_image)')
+    .select('*')
     .order('scheduled_date', { ascending: true })
     .order('sort_order', { ascending: true });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ schedule: data ?? [] });
+
+  // Kategorien und Posts separat laden fuer robustere Abfrage
+  const entries = data ?? [];
+  const catIds = [...new Set(entries.map((e) => e.category_id).filter(Boolean))];
+  const postIds = [...new Set(entries.map((e) => e.post_id).filter(Boolean))];
+
+  let cats: Record<string, { id: string; name: string; slug: string; color: string }> = {};
+  let posts: Record<string, { id: string; title: string; slug: string; status: string }> = {};
+
+  if (catIds.length > 0) {
+    const { data: catData } = await supabase.from('blog_categories').select('id, name, slug, color').in('id', catIds);
+    for (const c of catData ?? []) cats[c.id] = c;
+  }
+  if (postIds.length > 0) {
+    const { data: postData } = await supabase.from('blog_posts').select('id, title, slug, status').in('id', postIds);
+    for (const p of postData ?? []) posts[p.id] = p;
+  }
+
+  const enriched = entries.map((e) => ({
+    ...e,
+    blog_categories: e.category_id ? cats[e.category_id] ?? null : null,
+    blog_posts: e.post_id ? posts[e.post_id] ?? null : null,
+  }));
+
+  return NextResponse.json({ schedule: enriched });
 }
 
 export async function POST(req: NextRequest) {
