@@ -92,39 +92,65 @@ Antworte NUR als JSON-Array (kein Markdown-Codeblock):
       else return NextResponse.json({ error: 'KI-Antwort konnte nicht geparst werden.' }, { status: 500 });
     }
 
-    // Zeitplan erstellen — Themen auf Tage verteilen
+    // Blog-Einstellungen laden (Wochentage + Uhrzeit)
+    const { data: blogSettingsData } = await supabase
+      .from('admin_settings').select('value').eq('key', 'blog_settings').single();
+
+    let blogSettings: Record<string, unknown> = {};
+    if (blogSettingsData?.value) {
+      try {
+        blogSettings = typeof blogSettingsData.value === 'string'
+          ? JSON.parse(blogSettingsData.value) : blogSettingsData.value;
+      } catch { /* leer */ }
+    }
+
+    // Einstellungen fuer Zeitplan
+    const dayMap: Record<string, number> = { so: 0, mo: 1, di: 2, mi: 3, do: 4, fr: 5, sa: 6 };
+    const allowedWeekdays = (blogSettings.auto_generate_weekdays as string[]) ?? ['mo', 'do'];
+    const allowedDayNumbers = allowedWeekdays.map((d) => dayMap[d]).filter((n) => n !== undefined);
+    const timeFrom = (blogSettings.auto_generate_time_from as string) ?? '09:00';
+    const timeTo = (blogSettings.auto_generate_time_to as string) ?? '18:00';
+
+    // Zufaellige Uhrzeit innerhalb des Zeitfensters generieren
+    function randomTime(): string {
+      const fromH = parseInt(timeFrom.split(':')[0]) || 9;
+      const toH = parseInt(timeTo.split(':')[0]) || 18;
+      const h = fromH + Math.floor(Math.random() * (toH - fromH));
+      const m = Math.floor(Math.random() * 60);
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    }
+
+    // Zeitplan erstellen — Themen auf konfigurierte Wochentage verteilen
     const start = startDate ? new Date(startDate) : new Date();
+    start.setDate(start.getDate() + 1); // Ab morgen
     const scheduleEntries = [];
-    let dayOffset = 0;
-    const daysPerPost = Math.floor((weeks * 7) / totalPosts);
+    const currentDate = new Date(start);
+    let topicIndex = 0;
 
-    for (let i = 0; i < topics.length; i++) {
-      const t = topics[i];
-      const date = new Date(start);
-      date.setDate(date.getDate() + dayOffset);
+    // Durch die Wochen iterieren und Themen auf erlaubte Tage setzen
+    while (topicIndex < topics.length) {
+      const dayOfWeek = currentDate.getDay();
 
-      // Wochenende ueberspringen
-      while (date.getDay() === 0 || date.getDay() === 6) {
-        date.setDate(date.getDate() + 1);
-        dayOffset++;
+      if (allowedDayNumbers.includes(dayOfWeek)) {
+        const t = topics[topicIndex];
+        const cat = categories?.find((c) => c.name.toLowerCase() === (t.category || '').toLowerCase());
+
+        scheduleEntries.push({
+          topic: t.topic,
+          keywords: t.keywords ?? [],
+          category_id: cat?.id || null,
+          tone: t.tone || 'informativ',
+          target_length: t.length || 'mittel',
+          scheduled_date: currentDate.toISOString().split('T')[0],
+          scheduled_time: randomTime(),
+          sort_order: topicIndex,
+          status: 'planned',
+        });
+
+        topicIndex++;
       }
 
-      // Kategorie-ID finden
-      const cat = categories?.find((c) => c.name.toLowerCase() === (t.category || '').toLowerCase());
-
-      scheduleEntries.push({
-        topic: t.topic,
-        keywords: t.keywords ?? [],
-        category_id: cat?.id || null,
-        tone: t.tone || 'informativ',
-        target_length: t.length || 'mittel',
-        scheduled_date: date.toISOString().split('T')[0],
-        scheduled_time: '09:00',
-        sort_order: i,
-        status: 'planned',
-      });
-
-      dayOffset += daysPerPost;
+      currentDate.setDate(currentDate.getDate() + 1);
     }
 
     const { data: inserted, error: insertError } = await supabase
