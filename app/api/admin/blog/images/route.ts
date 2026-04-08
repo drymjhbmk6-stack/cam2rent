@@ -6,9 +6,15 @@ async function getUnsplashKey(): Promise<string | null> {
   const { data } = await supabase
     .from('admin_settings')
     .select('value')
-    .eq('key', 'blog_unsplash_access_key')
+    .eq('key', 'blog_settings')
     .single();
-  return data?.value as string | null;
+  if (!data?.value) return null;
+  try {
+    const settings = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
+    return settings?.unsplash_access_key || null;
+  } catch {
+    return null;
+  }
 }
 
 /** GET /api/admin/blog/images?query=... - Unsplash-Bilder suchen */

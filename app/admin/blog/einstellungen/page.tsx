@@ -17,6 +17,7 @@ interface BlogSettings {
   default_length: string;
   default_author: string;
   auto_generate: boolean;
+  auto_generate_mode: string;
   auto_generate_interval: string;
   auto_generate_topic: string;
 }
@@ -28,6 +29,7 @@ const DEFAULTS: BlogSettings = {
   default_length: 'mittel',
   default_author: 'cam2rent',
   auto_generate: false,
+  auto_generate_mode: 'semi',
   auto_generate_interval: 'weekly',
   auto_generate_topic: '',
 };
@@ -180,26 +182,71 @@ export default function BlogEinstellungenPage() {
           </label>
 
           {settings.auto_generate && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-              <div>
-                <label style={labelStyle}>Intervall</label>
-                <select style={selectStyle} value={settings.auto_generate_interval} onChange={(e) => update('auto_generate_interval', e.target.value)}>
-                  <option value="daily">Taeglich</option>
-                  <option value="weekly">Woechentlich</option>
-                  <option value="biweekly">Alle 2 Wochen</option>
-                  <option value="monthly">Monatlich</option>
-                </select>
+            <>
+              {/* Modus-Auswahl */}
+              <div className="pt-2">
+                <label style={labelStyle}>Modus</label>
+                <div className="grid grid-cols-2 gap-2 mt-1">
+                  {[
+                    { value: 'semi', label: 'Semi-Automatisch', desc: 'KI generiert als Entwurf — du gibst frei', color: '#f59e0b' },
+                    { value: 'voll', label: 'Voll-Automatisch', desc: 'KI generiert und veroeffentlicht sofort', color: '#22c55e' },
+                  ].map((m) => {
+                    const active = (settings.auto_generate_mode || 'semi') === m.value;
+                    return (
+                      <button
+                        key={m.value}
+                        type="button"
+                        onClick={() => update('auto_generate_mode', m.value)}
+                        className="text-left p-3 rounded-lg border transition-colors"
+                        style={{
+                          background: active ? m.color + '15' : '#0f172a',
+                          borderColor: active ? m.color : '#334155',
+                        }}
+                      >
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="w-2.5 h-2.5 rounded-full" style={{ background: active ? m.color : '#475569' }} />
+                          <span className="text-xs font-heading font-semibold" style={{ color: active ? m.color : '#94a3b8' }}>
+                            {m.label}
+                          </span>
+                        </div>
+                        <p className="text-[11px]" style={{ color: '#475569' }}>{m.desc}</p>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-              <div>
-                <label style={labelStyle}>Thema / Bereich</label>
-                <input
-                  style={inputStyle}
-                  value={settings.auto_generate_topic}
-                  onChange={(e) => update('auto_generate_topic', e.target.value)}
-                  placeholder="z.B. Action-Cam Tipps, Reisen..."
-                />
+
+              {/* Hinweis Semi */}
+              {(settings.auto_generate_mode || 'semi') === 'semi' && (
+                <div className="flex items-start gap-3 p-3 rounded-lg" style={{ background: '#f59e0b10', border: '1px solid #f59e0b30' }}>
+                  <span className="text-base mt-0.5">&#9888;</span>
+                  <p className="text-xs" style={{ color: '#94a3b8' }}>
+                    Artikel werden als <strong style={{ color: '#f59e0b' }}>Entwurf</strong> gespeichert. Du findest sie unter Artikel und kannst sie pruefen, bearbeiten und manuell veroeffentlichen.
+                  </p>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label style={labelStyle}>Intervall</label>
+                  <select style={selectStyle} value={settings.auto_generate_interval} onChange={(e) => update('auto_generate_interval', e.target.value)}>
+                    <option value="daily">Taeglich</option>
+                    <option value="weekly">Woechentlich</option>
+                    <option value="biweekly">Alle 2 Wochen</option>
+                    <option value="monthly">Monatlich</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={labelStyle}>Thema / Bereich</label>
+                  <input
+                    style={inputStyle}
+                    value={settings.auto_generate_topic}
+                    onChange={(e) => update('auto_generate_topic', e.target.value)}
+                    placeholder="z.B. Action-Cam Tipps, Reisen..."
+                  />
+                </div>
               </div>
-            </div>
+            </>
           )}
         </div>
       </div>

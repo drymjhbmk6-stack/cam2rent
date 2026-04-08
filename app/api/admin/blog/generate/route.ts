@@ -14,14 +14,24 @@ const TONE_MAP: Record<string, string> = {
   professionell: 'professionell und vertrauenswuerdig, Experten-Ton',
 };
 
-async function getApiKey(): Promise<string | null> {
+async function getBlogSettings(): Promise<Record<string, string> | null> {
   const supabase = createServiceClient();
   const { data } = await supabase
     .from('admin_settings')
     .select('value')
-    .eq('key', 'blog_anthropic_api_key')
+    .eq('key', 'blog_settings')
     .single();
-  return data?.value as string | null;
+  if (!data?.value) return null;
+  try {
+    return typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
+  } catch {
+    return null;
+  }
+}
+
+async function getApiKey(): Promise<string | null> {
+  const settings = await getBlogSettings();
+  return settings?.anthropic_api_key || null;
 }
 
 /** POST /api/admin/blog/generate - Artikel mit KI generieren */

@@ -24,25 +24,31 @@ export async function POST(req: NextRequest) {
 
   const supabase = createServiceClient();
 
-  // Pruefen ob Auto-Generierung aktiv
-  const { data: enabledSetting } = await supabase
+  // Blog-Settings laden (ein JSON-Objekt unter key 'blog_settings')
+  const { data: settingsData } = await supabase
     .from('admin_settings')
     .select('value')
-    .eq('key', 'blog_auto_enabled')
+    .eq('key', 'blog_settings')
     .single();
 
-  if (!enabledSetting?.value) {
+  let blogSettings: Record<string, unknown> = {};
+  if (settingsData?.value) {
+    try {
+      blogSettings = typeof settingsData.value === 'string'
+        ? JSON.parse(settingsData.value)
+        : settingsData.value;
+    } catch { /* leer */ }
+  }
+
+  // Pruefen ob Auto-Generierung aktiv
+  if (!blogSettings.auto_generate) {
     return NextResponse.json({ message: 'Auto-Generierung ist deaktiviert.' });
   }
 
-  // API-Key laden
-  const { data: keySetting } = await supabase
-    .from('admin_settings')
-    .select('value')
-    .eq('key', 'blog_anthropic_api_key')
-    .single();
+  // Modus: semi = Entwurf, voll/true = veroeffentlichen
+  const autoMode = (blogSettings.auto_generate_mode as string) ?? 'semi';
 
-  const apiKey = keySetting?.value as string | null;
+  const apiKey = (blogSettings.anthropic_api_key as string) || null;
   if (!apiKey) {
     return NextResponse.json({ error: 'Kein Anthropic API Key konfiguriert.' }, { status: 400 });
   }
@@ -111,14 +117,8 @@ Antworte AUSSCHLIESSLICH im folgenden JSON-Format (kein Markdown-Codeblock, nur 
     const wordCount = (parsed.content || '').split(/\s+/).length;
     const readingTime = Math.max(1, Math.ceil(wordCount / 200));
 
-    // Auto-Publish Einstellung pruefen
-    const { data: autoPublish } = await supabase
-      .from('admin_settings')
-      .select('value')
-      .eq('key', 'blog_auto_publish')
-      .single();
-
-    const shouldPublish = autoPublish?.value === true || autoPublish?.value === 'true';
+    // Semi = Entwurf, Voll = direkt veroeffentlichen
+    const shouldPublish = autoMode === 'voll';
     const now = new Date().toISOString();
 
     // Artikel speichern
