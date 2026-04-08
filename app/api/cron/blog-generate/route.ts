@@ -54,23 +54,73 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Kein Anthropic API Key konfiguriert.' }, { status: 400 });
   }
 
-  // Naechstes ungenutztes Thema holen
-  const { data: topicData } = await supabase
-    .from('blog_auto_topics')
-    .select('*, blog_categories(id, name, slug)')
+  // Naechstes ungenutztes Thema holen — erst Serien, dann normale Themen
+  // 1. Pruefen ob eine aktive Serie einen offenen Teil hat
+  const { data: seriesPart } = await supabase
+    .from('blog_series_parts')
+    .select('*, blog_series!inner(id, title, slug, description, category_id, tone, target_length, status, total_parts, generated_parts, blog_categories(id, name, slug))')
     .eq('used', false)
-    .order('created_at', { ascending: true })
+    .eq('blog_series.status', 'active')
+    .order('part_number', { ascending: true })
     .limit(1)
-    .single();
+    .maybeSingle();
+
+  let topicData: { topic: string; keywords?: string[]; category_id?: string | null; tone: string; target_length: string; id: string } | null = null;
+  let seriesContext: { id: string; title: string; part_number: number; total_parts: number; description: string; partId: string } | null = null;
+
+  if (seriesPart?.blog_series) {
+    const s = seriesPart.blog_series as { id: string; title: string; total_parts: number; description: string; category_id: string | null; tone: string; target_length: string };
+    topicData = {
+      id: seriesPart.id,
+      topic: seriesPart.topic,
+      keywords: seriesPart.keywords,
+      category_id: s.category_id,
+      tone: s.tone,
+      target_length: s.target_length,
+    };
+    seriesContext = {
+      id: s.id,
+      title: s.title,
+      part_number: seriesPart.part_number,
+      total_parts: s.total_parts,
+      description: s.description,
+      partId: seriesPart.id,
+    };
+  }
+
+  // 2. Wenn keine Serie offen, normales Thema nehmen
+  if (!topicData) {
+    const { data: normalTopic } = await supabase
+      .from('blog_auto_topics')
+      .select('*, blog_categories(id, name, slug)')
+      .eq('used', false)
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .single();
+
+    if (normalTopic) {
+      topicData = normalTopic;
+    }
+  }
 
   if (!topicData) {
-    return NextResponse.json({ message: 'Keine ungenutzten Themen im Pool.' });
+    return NextResponse.json({ message: 'Keine ungenutzten Themen im Pool und keine offenen Serien.' });
   }
 
   const length = LENGTH_MAP[topicData.target_length] ?? LENGTH_MAP.mittel;
   const toneDesc = TONE_MAP[topicData.tone] ?? TONE_MAP.informativ;
   const keywordHint = topicData.keywords?.length
     ? `\nWichtige Keywords fuer SEO: ${topicData.keywords.join(', ')}`
+    : '';
+
+  const seriesHint = seriesContext
+    ? `\n\nDIESER ARTIKEL IST TEIL EINER SERIE:
+- Serientitel: "${seriesContext.title}"
+- Teil ${seriesContext.part_number} von ${seriesContext.total_parts}
+- Serienbeschreibung: ${seriesContext.description}
+- Erwaehne am Anfang kurz die Serie und welcher Teil das ist
+- Verweise am Ende auf die weiteren Teile der Serie
+- Der Titel sollte den Serientitel und die Teilnummer enthalten (z.B. "Serientitel — Teil ${seriesContext.part_number}")`
     : '';
 
   const systemPrompt = `Du bist ein erfahrener Content-Writer fuer cam2rent.de, einen deutschen Online-Verleih fuer Action-Kameras (GoPro, DJI, Insta360 etc.).
@@ -83,7 +133,7 @@ Regeln:
 - Beginne NICHT mit dem Titel im Content (der wird separat gesetzt)
 - Nutze Zwischenueberschriften (## und ###) fuer gute Lesbarkeit
 - WICHTIG: Nenne Haftungsoptionen NIEMALS "Versicherung" — verwende "Haftungsschutz" oder "Haftungsbegrenzung"
-- Erwaehne cam2rent.de als Verleih-Service wo passend, aber nicht aufdringlich${keywordHint}
+- Erwaehne cam2rent.de als Verleih-Service wo passend, aber nicht aufdringlich${keywordHint}${seriesHint}
 
 Antworte AUSSCHLIESSLICH im folgenden JSON-Format (kein Markdown-Codeblock, nur reines JSON):
 {
@@ -142,6 +192,8 @@ Antworte AUSSCHLIESSLICH im folgenden JSON-Format (kein Markdown-Codeblock, nur 
         ai_model: 'claude-sonnet-4-20250514',
         reading_time_min: readingTime,
         published_at: shouldPublish ? now : null,
+        series_id: seriesContext?.id || null,
+        series_part: seriesContext?.part_number || null,
         created_at: now,
         updated_at: now,
       })
@@ -185,12 +237,35 @@ Antworte AUSSCHLIESSLICH im folgenden JSON-Format (kein Markdown-Codeblock, nur 
     }
 
     // Thema als verwendet markieren
-    await supabase
-      .from('blog_auto_topics')
-      .update({ used: true, used_at: now })
-      .eq('id', topicData.id);
+    if (seriesContext) {
+      // Serien-Teil als verwendet markieren + post_id setzen
+      await supabase
+        .from('blog_series_parts')
+        .update({ used: true, used_at: now, post_id: post.id })
+        .eq('id', seriesContext.partId);
 
-    return NextResponse.json({ success: true, post });
+      // generated_parts zaehler erhoehen
+      await supabase
+        .from('blog_series')
+        .update({ generated_parts: seriesContext.part_number })
+        .eq('id', seriesContext.id);
+
+      // Serie als completed markieren wenn alle Teile generiert
+      if (seriesContext.part_number >= seriesContext.total_parts) {
+        await supabase
+          .from('blog_series')
+          .update({ status: 'completed' })
+          .eq('id', seriesContext.id);
+      }
+    } else {
+      // Normales Thema als verwendet markieren
+      await supabase
+        .from('blog_auto_topics')
+        .update({ used: true, used_at: now })
+        .eq('id', topicData.id);
+    }
+
+    return NextResponse.json({ success: true, post, series: seriesContext ? { id: seriesContext.id, part: seriesContext.part_number } : null });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unbekannter Fehler';
     return NextResponse.json({ error: `Auto-Generierung fehlgeschlagen: ${message}` }, { status: 500 });
