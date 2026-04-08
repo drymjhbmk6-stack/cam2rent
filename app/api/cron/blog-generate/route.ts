@@ -295,7 +295,13 @@ Antworte AUSSCHLIESSLICH im folgenden JSON-Format (kein Markdown-Codeblock, nur 
 
     // Titelbild generieren wenn OpenAI Key vorhanden und imagePrompt existiert
     const openaiKey = (blogSettings.openai_api_key as string) || null;
-    if (openaiKey && parsed.imagePrompt && post) {
+    let imageError: string | null = null;
+
+    if (!openaiKey) {
+      imageError = 'OpenAI API Key nicht konfiguriert';
+    } else if (!parsed.imagePrompt) {
+      imageError = 'Kein imagePrompt von Claude erhalten';
+    } else if (post) {
       try {
         const openai = new OpenAI({ apiKey: openaiKey });
         const imgResponse = await openai.images.generate({
@@ -320,9 +326,15 @@ Antworte AUSSCHLIESSLICH im folgenden JSON-Format (kein Markdown-Codeblock, nur 
               featured_image: imgUrlData.publicUrl,
               featured_image_alt: parsed.title,
             }).eq('id', post.id);
+          } else {
+            imageError = `Upload fehlgeschlagen: ${uploadErr.message}`;
           }
+        } else {
+          imageError = 'DALL-E hat kein Bild zurueckgegeben';
         }
-      } catch { /* Bild-Generierung fehlgeschlagen — Artikel bleibt ohne Bild */ }
+      } catch (imgErr: unknown) {
+        imageError = imgErr instanceof Error ? imgErr.message : 'Unbekannter Bild-Fehler';
+      }
     }
 
     // Thema als verwendet markieren
@@ -355,7 +367,7 @@ Antworte AUSSCHLIESSLICH im folgenden JSON-Format (kein Markdown-Codeblock, nur 
     }
 
     await setGenerationStatus('idle', topicData.topic);
-    return NextResponse.json({ success: true, post, series: seriesContext ? { id: seriesContext.id, part: seriesContext.part_number } : null });
+    return NextResponse.json({ success: true, post, imageError, series: seriesContext ? { id: seriesContext.id, part: seriesContext.part_number } : null });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unbekannter Fehler';
     await setGenerationStatus('idle');
