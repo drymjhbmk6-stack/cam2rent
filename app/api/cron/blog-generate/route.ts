@@ -324,6 +324,33 @@ Antworte AUSSCHLIESSLICH im folgenden JSON-Format (kein Markdown-Codeblock, nur 
     const wordCount = (parsed.content || '').split(/\s+/).length;
     const readingTime = Math.max(1, Math.ceil(wordCount / 200));
 
+    // ── Automatischer 3-stufiger Faktencheck ──────────────────────
+    const REVIEW_PASSES = [
+      { role: 'Faktenpruefer', instruction: 'Pruefe auf erfundene Specs, Preise, Features, Technologien. Korrigiere alles was nicht belegbar ist. Entferne konkrete Zahlen wenn du dir nicht sicher bist und ersetze sie durch allgemeine Formulierungen.' },
+      { role: 'Qualitaetsredakteur', instruction: 'Pruefe auf uebertriebene Superlative, Marketing-Luegen, Widersprueche, KI-typische Floskeln. Korrigiere den Ton auf ehrlich und nachvollziehbar.' },
+      { role: 'Chefredakteur', instruction: 'Letzte Pruefung: Wuerdest du das mit deinem Namen veroeffentlichen? Korrigiere letzte Details. Stelle sicher dass "Versicherung" nirgends vorkommt — nur "Haftungsschutz".' },
+    ];
+
+    let checkedContent = parsed.content;
+    for (const pass of REVIEW_PASSES) {
+      try {
+        const reviewMsg = await client.messages.create({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 4096,
+          system: `Du bist ${pass.role} bei cam2rent.de. ${pass.instruction}
+
+Antworte NUR mit dem korrigierten Artikel-Text in Markdown. Keine Erklaerungen, keine Kommentare — nur der fertige Text.`,
+          messages: [{ role: 'user', content: checkedContent }],
+        });
+        const reviewText = reviewMsg.content[0].type === 'text' ? reviewMsg.content[0].text : '';
+        if (reviewText.trim().length > 100) {
+          checkedContent = reviewText;
+        }
+      } catch { /* Faktencheck-Durchgang fehlgeschlagen — weiter */ }
+    }
+    parsed.content = checkedContent;
+    // ── Ende Faktencheck ──────────────────────────────────────────
+
     // Status bestimmen:
     // - Zeitplan-Artikel: immer als "scheduled" mit geplantem Datum (Admin prueft vorher)
     // - Andere Artikel: Semi = draft, Voll = published

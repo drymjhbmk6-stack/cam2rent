@@ -76,6 +76,10 @@ export default function ArticleEditor({ postId }: { postId?: string }) {
   const [unsplashLoading, setUnsplashLoading] = useState(false);
   const [regeneratingImage, setRegeneratingImage] = useState(false);
 
+  // Faktencheck
+  const [factchecking, setFactchecking] = useState(false);
+  const [factcheckResult, setFactcheckResult] = useState<{ approved: boolean; quality: number; issues: string[]; reviewLog: { pass: number; role: string; changes: string }[] } | null>(null);
+
   // Bild-Upload
   const [uploading, setUploading] = useState(false);
 
@@ -194,15 +198,34 @@ export default function ArticleEditor({ postId }: { postId?: string }) {
               featured_image: imgData.url,
               featured_image_alt: imgData.alt || generatedTitle,
             }));
-            setMsg('Artikel + Titelbild generiert! Bitte pruefen und anpassen.');
+            setMsg('Text + Bild generiert! Faktencheck laeuft...');
           } else {
-            setMsg('Artikel generiert! Titelbild konnte nicht erstellt werden: ' + (imgData.error || 'Unbekannter Fehler'));
+            setMsg('Text generiert! Bild fehlgeschlagen. Faktencheck laeuft...');
           }
         } catch {
-          setMsg('Artikel generiert! Titelbild-Generierung fehlgeschlagen.');
+          setMsg('Text generiert! Bild fehlgeschlagen. Faktencheck laeuft...');
         }
       } else {
-        setMsg('Artikel generiert! Bitte pruefen und anpassen.');
+        setMsg('Text generiert! Faktencheck laeuft...');
+      }
+
+      // Automatischer Faktencheck nach Generierung
+      try {
+        const fcRes = await fetch('/api/admin/blog/factcheck', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: data.content, title: data.title }),
+        });
+        const fcData = await fcRes.json();
+        if (fcRes.ok && fcData.content) {
+          setPost((prev) => ({ ...prev, content: fcData.content }));
+          setFactcheckResult({ approved: fcData.approved, quality: fcData.quality, issues: fcData.issues ?? [], reviewLog: fcData.reviewLog ?? [] });
+          setMsg(fcData.approved
+            ? `Fertig! Faktencheck bestanden (${fcData.quality}/10)`
+            : `Fertig! Faktencheck: Korrekturen vorgenommen (${fcData.quality}/10)`);
+        }
+      } catch {
+        setMsg('Artikel generiert! Faktencheck konnte nicht durchgefuehrt werden.');
       }
     } else {
       setMsg(data.error || 'KI-Generierung fehlgeschlagen.');
@@ -222,6 +245,36 @@ export default function ArticleEditor({ postId }: { postId?: string }) {
     update('featured_image_alt', post.title || img.name);
     setShowMediathek(false);
     setMsg('Bild aus Mediathek uebernommen!');
+  }
+
+  async function runFactcheck() {
+    if (!post.content.trim()) return;
+    setFactchecking(true);
+    setFactcheckResult(null);
+    setMsg('Faktencheck laeuft — 3 Durchgaenge...');
+    try {
+      const res = await fetch('/api/admin/blog/factcheck', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: post.content, title: post.title }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        // Korrigierten Text uebernehmen
+        if (data.content && data.content !== post.content) {
+          update('content', data.content);
+        }
+        setFactcheckResult({ approved: data.approved, quality: data.quality, issues: data.issues ?? [], reviewLog: data.reviewLog ?? [] });
+        setMsg(data.approved
+          ? `Faktencheck bestanden! Qualitaet: ${data.quality}/10`
+          : `Faktencheck: Korrekturen vorgenommen. Qualitaet: ${data.quality}/10`);
+      } else {
+        setMsg(data.error || 'Faktencheck fehlgeschlagen.');
+      }
+    } catch {
+      setMsg('Faktencheck fehlgeschlagen.');
+    }
+    setFactchecking(false);
   }
 
   async function regenerateImage() {
@@ -338,6 +391,18 @@ export default function ArticleEditor({ postId }: { postId?: string }) {
           >
             {showAI ? 'KI schliessen' : 'Mit KI generieren'}
           </button>
+          <button
+            onClick={runFactcheck}
+            disabled={factchecking || !post.content.trim()}
+            className="px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-heading font-semibold transition-colors flex items-center gap-1.5"
+            style={{ background: '#f59e0b20', color: '#f59e0b', border: '1px solid #f59e0b40', opacity: factchecking ? 0.6 : 1 }}
+          >
+            {factchecking ? (
+              <><span className="w-3 h-3 border-2 border-amber-400/30 border-t-amber-400 rounded-full animate-spin" /> Pruefe...</>
+            ) : (
+              <><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> Faktencheck</>
+            )}
+          </button>
           {postId && (
             <a
               href={`/blog/preview/${postId}`}
@@ -364,6 +429,44 @@ export default function ArticleEditor({ postId }: { postId?: string }) {
       {msg && (
         <div className="mb-4 px-4 py-2 rounded-lg text-sm font-heading" style={{ background: '#0f172a', color: msg.includes('Fehler') || msg.includes('fehlgeschlagen') ? '#ef4444' : '#22c55e' }}>
           {msg}
+        </div>
+      )}
+
+      {/* Faktencheck-Ergebnis */}
+      {factcheckResult && (
+        <div className="mb-4 rounded-xl p-4" style={{ background: factcheckResult.approved ? '#22c55e10' : '#f59e0b10', border: `1px solid ${factcheckResult.approved ? '#22c55e30' : '#f59e0b30'}` }}>
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 rounded-full flex items-center justify-center font-heading font-bold text-lg" style={{ background: factcheckResult.approved ? '#22c55e20' : '#f59e0b20', color: factcheckResult.approved ? '#22c55e' : '#f59e0b' }}>
+              {factcheckResult.quality}
+            </div>
+            <div>
+              <p className="font-heading font-semibold text-sm" style={{ color: factcheckResult.approved ? '#22c55e' : '#f59e0b' }}>
+                {factcheckResult.approved ? 'Faktencheck bestanden' : 'Korrekturen vorgenommen'}
+              </p>
+              <p className="text-xs" style={{ color: '#94a3b8' }}>Qualitaet: {factcheckResult.quality}/10 — 3 Durchgaenge abgeschlossen</p>
+            </div>
+          </div>
+          {factcheckResult.issues.length > 0 && (
+            <div className="mb-3">
+              <p className="text-xs font-heading font-semibold mb-1" style={{ color: '#f59e0b' }}>Gefundene Probleme (korrigiert):</p>
+              <ul className="space-y-1">
+                {factcheckResult.issues.map((issue, i) => (
+                  <li key={i} className="text-xs flex items-start gap-1.5" style={{ color: '#94a3b8' }}>
+                    <span style={{ color: '#f59e0b' }}>•</span> {issue}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <div className="space-y-1">
+            {factcheckResult.reviewLog.map((log) => (
+              <div key={log.pass} className="flex items-start gap-2 text-[11px]" style={{ color: '#64748b' }}>
+                <span className="font-heading font-bold shrink-0" style={{ color: '#94a3b8' }}>#{log.pass} {log.role}:</span>
+                <span>{log.changes}</span>
+              </div>
+            ))}
+          </div>
+          <button onClick={() => setFactcheckResult(null)} className="mt-2 text-[11px] font-heading" style={{ color: '#475569' }}>Ergebnis ausblenden</button>
         </div>
       )}
 
