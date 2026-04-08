@@ -92,7 +92,7 @@ Antworte AUSSCHLIESSLICH im folgenden JSON-Format (kein Markdown-Codeblock, nur 
   "seoTitle": "SEO-Titel (max 60 Zeichen)",
   "seoDescription": "Meta-Description (max 155 Zeichen)",
   "suggestedTags": ["tag1", "tag2", "tag3"],
-  "imagePrompt": "Ein detaillierter englischer Prompt fuer DALL-E 3 zur Generierung eines passenden Blog-Titelbilds. Beschreibe eine fotorealistische Szene die zum Artikel passt. Keine Texte oder Logos im Bild. Landscape-Format."
+  "imagePrompt": "Write a detailed DALL-E 3 image prompt IN ENGLISH for a photorealistic blog header image. Requirements: Landscape format (16:9), photorealistic photography style, natural lighting, vibrant but not oversaturated colors, no text/logos/watermarks, no people's faces (use back views or hands only), focus on the action camera or the activity/scenery described in the article. The image should feel like a professional editorial photo from a travel or tech magazine. Be specific about camera angle, lighting, environment and mood."
 }`;
 
   try {

@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
       prompt,
       n: 1,
       size: '1792x1024', // Landscape fuer Blog-Header
-      quality: 'standard',
+      quality: 'hd',
       style: 'natural', // Fotorealistisch statt kuenstlerisch
     });
 
