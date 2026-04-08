@@ -184,8 +184,8 @@ Deine Aufgabe: Schreibe einen SEO-optimierten Blog-Artikel auf Deutsch.
 
 Regeln:
 - Schreibe ${length} in ${toneDesc}m Stil
-- Verwende Markdown-Formatierung (## fuer Ueberschriften, **fett**, Listen, Tabellen etc.)
-- Nutze Markdown-Tabellen (| Spalte1 | Spalte2 |) bei Vergleichen, technischen Daten, Vor-/Nachteilen oder wenn mehrere Produkte/Optionen gegenueber gestellt werden. Tabellen machen Vergleiche uebersichtlicher als Fliesstext.
+- Verwende Markdown-Formatierung (## fuer Ueberschriften, **fett**, Listen etc.)
+- Nutze Markdown-Tabellen NUR wenn es wirklich sinnvoll ist — z.B. bei direkten Produkt-Vergleichen mit mehreren Specs oder einer Gegenuberstellung von 3+ Optionen. Nicht jeder Artikel braucht eine Tabelle. Im Zweifel lieber Fliesstext oder Listen verwenden.
 - Beginne NICHT mit dem Titel im Content (der wird separat gesetzt)
 - Nutze Zwischenueberschriften (## und ###) fuer gute Lesbarkeit
 - WICHTIG: Nenne Haftungsoptionen NIEMALS "Versicherung" — verwende "Haftungsschutz" oder "Haftungsbegrenzung"
