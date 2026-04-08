@@ -1,6 +1,7 @@
 'use client';
 
 import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import type { ComponentPropsWithoutRef } from 'react';
 
 function Blockquote({ children }: ComponentPropsWithoutRef<'blockquote'>) {
@@ -127,6 +128,7 @@ export default function MarkdownContent({ children }: { children: string }) {
   return (
     <div className="max-w-none">
       <Markdown
+        remarkPlugins={[remarkGfm]}
         components={{
           blockquote: Blockquote,
           h2: Heading2,
