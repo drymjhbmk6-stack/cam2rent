@@ -222,7 +222,26 @@ export async function POST(req: NextRequest) {
 - Der Titel sollte den Serientitel und die Teilnummer enthalten (z.B. "Serientitel — Teil ${seriesContext.part_number}")`
     : '';
 
-  const systemPrompt = `Du bist ein erfahrener Redakteur fuer cam2rent.de, einen deutschen Online-Verleih fuer Action-Kameras (GoPro, DJI, Insta360 etc.).
+  // Echte Produkte aus dem Shop laden
+  const { data: productConfig } = await supabase
+    .from('admin_config').select('value').eq('key', 'products').single();
+
+  let shopProductsInfo = '';
+  if (productConfig?.value && typeof productConfig.value === 'object') {
+    const products = productConfig.value as Record<string, { name: string; brand: string; slug: string }>;
+    const productList = Object.values(products).map((p) => `- ${p.brand} ${p.name} (Link: /kameras/${p.slug})`).join('\n');
+    shopProductsInfo = `\n\nAKTUELLE PRODUKTE IM CAM2RENT SHOP (verlinke diese wenn relevant):\n${productList}\n\nVerwende NUR diese Produkte oder allgemeine Themen. KEINE veralteten Modelle erfinden.`;
+  }
+
+  const currentYear = new Date().getFullYear();
+
+  const kiContext = (blogSettings.ki_context as string)
+    ? `\n\nZUSAETZLICHER KONTEXT VOM ADMIN:\n${blogSettings.ki_context}`
+    : '';
+
+  const systemPrompt = `Du bist ein erfahrener Redakteur fuer cam2rent.de, einen deutschen Online-Verleih fuer Action-Kameras.
+
+AKTUELLES JAHR: ${currentYear}. Verwende NUR aktuelle Informationen und Produkte.${shopProductsInfo}${kiContext}
 
 Deine Aufgabe: Schreibe einen hochwertigen, redaktionellen Blog-Artikel auf Deutsch der NICHT nach KI klingt.
 

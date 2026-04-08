@@ -24,8 +24,8 @@ export async function GET() {
   const catIds = [...new Set(entries.map((e) => e.category_id).filter(Boolean))];
   const postIds = [...new Set(entries.map((e) => e.post_id).filter(Boolean))];
 
-  let cats: Record<string, { id: string; name: string; slug: string; color: string }> = {};
-  let posts: Record<string, { id: string; title: string; slug: string; status: string }> = {};
+  const cats: Record<string, { id: string; name: string; slug: string; color: string }> = {};
+  const posts: Record<string, { id: string; title: string; slug: string; status: string }> = {};
 
   if (catIds.length > 0) {
     const { data: catData } = await supabase.from('blog_categories').select('id, name, slug, color').in('id', catIds);
@@ -70,10 +70,28 @@ export async function POST(req: NextRequest) {
     const { data: categories } = await supabase
       .from('blog_categories').select('id, name').order('sort_order');
 
+    // Echte Produkte aus dem Shop laden
+    const { data: productConfig } = await supabase
+      .from('admin_config').select('value').eq('key', 'products').single();
+
+    let productNames: string[] = [];
+    if (productConfig?.value && typeof productConfig.value === 'object') {
+      const products = productConfig.value as Record<string, { name: string; brand: string }>;
+      productNames = Object.values(products).map((p) => `${p.brand} ${p.name}`);
+    }
+
+    const productInfo = productNames.length > 0
+      ? `\n\nAKTUELLE PRODUKTE IM SHOP (NUR diese Kameras fuer Vergleiche/Tests verwenden!):\n${productNames.map((n) => `- ${n}`).join('\n')}`
+      : '';
+
     const catInfo = (categories ?? []).map((c) => c.name).join(', ');
     const catFilterInfo = categoryIds?.length
       ? `\nBeschraenke die Themen auf diese Kategorien: ${categoryIds.map((id: string) => categories?.find((c) => c.id === id)?.name).filter(Boolean).join(', ')}`
       : '';
+
+    const today = new Date();
+    const currentMonth = today.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' });
+    const currentYear = today.getFullYear();
 
     const totalPosts = weeks * postsPerWeek;
 
@@ -82,16 +100,28 @@ export async function POST(req: NextRequest) {
       model: 'claude-sonnet-4-20250514',
       max_tokens: 4096,
       system: `Du bist Redaktionsplaner fuer cam2rent.de, einen deutschen Action-Cam Verleih.
+
+AKTUELLES DATUM: ${currentMonth}
+AKTUELLES JAHR: ${currentYear}
+
 Erstelle einen Redaktionsplan mit ${totalPosts} Blog-Themen fuer die naechsten ${weeks} Wochen.
 
-Vorhandene Kategorien: ${catInfo}${catFilterInfo}
+Vorhandene Kategorien: ${catInfo}${catFilterInfo}${productInfo}
 
-Regeln:
-- Abwechslungsreiche Themen (Vergleiche, Tipps, Guides, News, Tutorials)
-- SEO-relevante Themen die Leute wirklich suchen
+WICHTIGE REGELN:
+- Verwende NUR aktuelle Produkte (${currentYear}). KEINE veralteten Modelle wie GoPro Hero 12, DJI Action 4, Insta360 X3 etc.
+- Wenn du Produkte erwaehst, nutze NUR die oben gelisteten Shop-Produkte oder allgemeine Themen ohne spezifische Modellnamen
+- Abwechslungsreiche Themen: Vergleiche, Tipps, Guides, Tutorials, Saisonale Themen, Anwendungsfaelle
+- SEO-relevante Themen die Leute im Jahr ${currentYear} wirklich suchen
 - Jedes Thema mit 3-5 Keywords
 - NIEMALS "Versicherung" — nur "Haftungsschutz"
-- Themen die zum Saisonkalender passen (Fruehling/Sommer = Outdoor, Reisen, Wassersport)
+- Saisonale Themen passend zum aktuellen Monat (${currentMonth}):
+  - Fruehling: Wandern, Radfahren, erste Outdoor-Abenteuer
+  - Sommer: Wassersport, Urlaub, Tauchen, Festivals
+  - Herbst: Herbstwanderungen, Indoor-Sport, Drohnen
+  - Winter: Skifahren, Snowboard, Winterlandschaften
+- Mische spezifische Produktthemen mit allgemeinen Ratgeber-Themen
+- Duplikate vermeiden: Jedes Thema muss einzigartig sein
 
 Antworte NUR als JSON-Array (kein Markdown-Codeblock):
 [
@@ -103,7 +133,7 @@ Antworte NUR als JSON-Array (kein Markdown-Codeblock):
     "length": "kurz|mittel|lang"
   }
 ]`,
-      messages: [{ role: 'user', content: `Erstelle ${totalPosts} Blog-Themen fuer die naechsten ${weeks} Wochen.` }],
+      messages: [{ role: 'user', content: `Erstelle ${totalPosts} Blog-Themen fuer die naechsten ${weeks} Wochen ab ${currentMonth}.` }],
     });
 
     const text = message.content[0].type === 'text' ? message.content[0].text : '';

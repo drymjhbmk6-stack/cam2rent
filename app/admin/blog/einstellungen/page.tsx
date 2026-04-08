@@ -34,6 +34,7 @@ interface BlogSettings {
   auto_generate_time_from: string;
   auto_generate_time_to: string;
   auto_generate_topic: string;
+  ki_context: string;
 }
 
 const DEFAULTS: BlogSettings = {
@@ -50,6 +51,7 @@ const DEFAULTS: BlogSettings = {
   auto_generate_time_from: '09:00',
   auto_generate_time_to: '18:00',
   auto_generate_topic: '',
+  ki_context: '',
 };
 
 export default function BlogEinstellungenPage() {
@@ -166,6 +168,25 @@ export default function BlogEinstellungenPage() {
           <div className="sm:col-span-2">
             <label style={labelStyle}>Standard-Autor</label>
             <input style={inputStyle} value={settings.default_author} onChange={(e) => update('default_author', e.target.value)} placeholder="cam2rent" />
+          </div>
+          <div className="sm:col-span-2">
+            <label style={labelStyle}>Zusatz-Kontext fuer die KI</label>
+            <textarea
+              style={{ ...inputStyle, minHeight: 120 }}
+              value={settings.ki_context}
+              onChange={(e) => update('ki_context', e.target.value)}
+              placeholder={`Hier kannst du der KI zusaetzliche Infos geben, z.B.:
+
+- Aktuelle Kamera-Modelle: GoPro Hero 14 Black, DJI Osmo Action 6, Insta360 X5
+- Neue Features: 8K Video, KI-Stabilisierung, magnetisches Mount
+- Preise: GoPro ab 12€/Tag, DJI ab 10€/Tag
+- Aktionen: 10% Rabatt im Sommer auf alle Kameras
+- Eigene Erfahrungen oder USPs die erwaehnt werden sollen`}
+            />
+            <p className="text-[11px] mt-1" style={{ color: '#475569' }}>
+              Dieser Text wird der KI bei jeder Generierung mitgegeben — fuer aktuelle Produkte, Preise, Aktionen etc.
+              Die Produkte aus deinem Shop werden automatisch geladen.
+            </p>
           </div>
         </div>
       </div>

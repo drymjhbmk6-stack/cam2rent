@@ -49,6 +49,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Thema ist erforderlich.' }, { status: 400 });
   }
 
+  const supabase = createServiceClient();
   const apiKey = await getApiKey();
   if (!apiKey) {
     return NextResponse.json(
@@ -60,6 +61,18 @@ export async function POST(req: NextRequest) {
   const length = LENGTH_MAP[targetLength] ?? LENGTH_MAP.mittel;
   const toneDesc = TONE_MAP[tone] ?? TONE_MAP.informativ;
 
+  // Echte Produkte aus dem Shop laden
+  const { data: productConfig } = await supabase
+    .from('admin_config').select('value').eq('key', 'products').single();
+
+  let shopProducts: string[] = [];
+  if (productConfig?.value && typeof productConfig.value === 'object') {
+    const products = productConfig.value as Record<string, { name: string; brand: string; slug: string }>;
+    shopProducts = Object.values(products).map((p) => `${p.brand} ${p.name} (Link: /kameras/${p.slug})`);
+  }
+
+  const currentYear = new Date().getFullYear();
+
   let productContext = '';
   if (referenceProducts?.length) {
     productContext = `\n\nReferenz-Produkte aus dem Shop (erwaehne diese natuerlich im Artikel):\n${referenceProducts.map((p: string) => `- ${p}`).join('\n')}`;
@@ -69,7 +82,19 @@ export async function POST(req: NextRequest) {
     ? `\nWichtige Keywords fuer SEO: ${keywords.join(', ')}`
     : '';
 
-  const systemPrompt = `Du bist ein erfahrener Redakteur fuer cam2rent.de, einen deutschen Online-Verleih fuer Action-Kameras (GoPro, DJI, Insta360 etc.).
+  const shopProductsInfo = shopProducts.length > 0
+    ? `\n\nAKTUELLE PRODUKTE IM CAM2RENT SHOP (verlinke diese wenn relevant):\n${shopProducts.map((p) => `- ${p}`).join('\n')}\n\nVerwende NUR diese Produkte oder allgemeine Themen. KEINE veralteten Modelle erfinden.`
+    : '';
+
+  // Zusaetzlicher Admin-Kontext aus Einstellungen
+  const allSettings = await getBlogSettings();
+  const kiContext = allSettings?.ki_context
+    ? `\n\nZUSAETZLICHER KONTEXT VOM ADMIN:\n${allSettings.ki_context}`
+    : '';
+
+  const systemPrompt = `Du bist ein erfahrener Redakteur fuer cam2rent.de, einen deutschen Online-Verleih fuer Action-Kameras.
+
+AKTUELLES JAHR: ${currentYear}. Verwende NUR aktuelle Informationen und Produkte.${shopProductsInfo}${kiContext}
 
 Deine Aufgabe: Schreibe einen hochwertigen, redaktionellen Blog-Artikel auf Deutsch der NICHT nach KI klingt.
 
