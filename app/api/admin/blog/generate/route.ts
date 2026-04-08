@@ -113,7 +113,7 @@ Antworte AUSSCHLIESSLICH im folgenden JSON-Format (kein Markdown-Codeblock, nur 
   "seoTitle": "SEO-Titel (max 60 Zeichen)",
   "seoDescription": "Meta-Description (max 155 Zeichen)",
   "suggestedTags": ["tag1", "tag2", "tag3"],
-  "imagePrompt": "Write a detailed DALL-E 3 image prompt IN ENGLISH for a photorealistic blog header image. Requirements: Landscape format (16:9), photorealistic photography style, natural lighting, vibrant but not oversaturated colors, no text/logos/watermarks, no people's faces (use back views or hands only), focus on the action camera or the activity/scenery described in the article. The image should feel like a professional editorial photo from a travel or tech magazine. Be specific about camera angle, lighting, environment and mood."
+  "imagePrompt": "Write a detailed DALL-E 3 prompt IN ENGLISH for a stunning photorealistic blog header. CRITICAL RULES: Do NOT render any cameras, electronics, gadgets or tech products — they always look fake. Instead, show the ACTIVITY or SCENERY the article is about (e.g. surfing, mountain biking, underwater diving, travel landscapes, skiing, hiking). Style: Shot on Sony A7IV, 35mm lens, f/2.8, golden hour lighting, shallow depth of field. No text, no logos, no UI elements, no hands holding devices. Think National Geographic or Red Bull magazine photo. The scene should evoke adventure, freedom and excitement."
 }`;
 
   try {

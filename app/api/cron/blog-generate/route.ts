@@ -123,6 +123,19 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  // ── Prioritaet 0: Redaktionsplan pruefen ────────────────────────
+  const today = new Date().toISOString().split('T')[0];
+  const { data: scheduleEntry } = await supabase
+    .from('blog_schedule')
+    .select('*')
+    .eq('status', 'planned')
+    .lte('scheduled_date', today)
+    .order('scheduled_date', { ascending: true })
+    .order('sort_order', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  // ── Prioritaet 1+2: Serien, dann Themenpool ───────────────────
   // Naechstes ungenutztes Thema holen — erst Serien, dann normale Themen
   // 1. Pruefen ob eine aktive Serie einen offenen Teil hat
   const { data: seriesPart } = await supabase
@@ -135,9 +148,26 @@ export async function POST(req: NextRequest) {
     .maybeSingle();
 
   let topicData: { topic: string; keywords?: string[]; category_id?: string | null; tone: string; target_length: string; id: string } | null = null;
+  let scheduleId: string | null = null;
+
+  // Redaktionsplan hat hoechste Prio
+  if (scheduleEntry) {
+    topicData = {
+      id: scheduleEntry.id,
+      topic: scheduleEntry.topic,
+      keywords: scheduleEntry.keywords,
+      category_id: scheduleEntry.category_id,
+      tone: scheduleEntry.tone ?? 'informativ',
+      target_length: scheduleEntry.target_length ?? 'mittel',
+    };
+    scheduleId = scheduleEntry.id;
+    await supabase.from('blog_schedule').update({ status: 'generating' }).eq('id', scheduleEntry.id);
+  }
   let seriesContext: { id: string; title: string; part_number: number; total_parts: number; description: string; partId: string } | null = null;
 
-  if (seriesPart?.blog_series) {
+  if (topicData) {
+    // topicData kommt vom Redaktionsplan — Serien/Pool ueberspringen
+  } else if (seriesPart?.blog_series) {
     const s = seriesPart.blog_series as { id: string; title: string; total_parts: number; description: string; category_id: string | null; tone: string; target_length: string };
     topicData = {
       id: seriesPart.id,
@@ -236,7 +266,7 @@ Antworte AUSSCHLIESSLICH im folgenden JSON-Format (kein Markdown-Codeblock, nur 
   "seoTitle": "SEO-Titel (max 60 Zeichen)",
   "seoDescription": "Meta-Description (max 155 Zeichen)",
   "suggestedTags": ["tag1", "tag2", "tag3"],
-  "imagePrompt": "Write a detailed DALL-E 3 image prompt IN ENGLISH for a photorealistic blog header image. Requirements: Landscape format (16:9), photorealistic photography style, natural lighting, vibrant but not oversaturated colors, no text/logos/watermarks, no people's faces (use back views or hands only), focus on the action camera or the activity/scenery described in the article. The image should feel like a professional editorial photo from a travel or tech magazine. Be specific about camera angle, lighting, environment and mood."
+  "imagePrompt": "Write a detailed DALL-E 3 prompt IN ENGLISH for a stunning photorealistic blog header. CRITICAL RULES: Do NOT render any cameras, electronics, gadgets or tech products — they always look fake. Instead, show the ACTIVITY or SCENERY the article is about (e.g. surfing, mountain biking, underwater diving, travel landscapes, skiing, hiking). Style: Shot on Sony A7IV, 35mm lens, f/2.8, golden hour lighting, shallow depth of field. No text, no logos, no UI elements, no hands holding devices. Think National Geographic or Red Bull magazine photo. The scene should evoke adventure, freedom and excitement."
 }`;
 
   try {
@@ -362,6 +392,15 @@ Antworte AUSSCHLIESSLICH im folgenden JSON-Format (kein Markdown-Codeblock, nur 
           .update({ status: 'completed' })
           .eq('id', seriesContext.id);
       }
+    } else if (scheduleId) {
+      // Redaktionsplan-Eintrag aktualisieren
+      await supabase.from('blog_schedule').update({
+        status: 'generated',
+        post_id: post.id,
+        generated_at: now,
+      }).eq('id', scheduleId);
+      // Post mit schedule_id verknuepfen
+      await supabase.from('blog_posts').update({ schedule_id: scheduleId }).eq('id', post.id);
     } else {
       // Normales Thema als verwendet markieren
       await supabase

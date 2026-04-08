@@ -69,6 +69,7 @@ export default function ArticleEditor({ postId }: { postId?: string }) {
   const [unsplashQuery, setUnsplashQuery] = useState('');
   const [unsplashImages, setUnsplashImages] = useState<UnsplashImage[]>([]);
   const [unsplashLoading, setUnsplashLoading] = useState(false);
+  const [regeneratingImage, setRegeneratingImage] = useState(false);
 
   // Bild-Upload
   const [uploading, setUploading] = useState(false);
@@ -201,6 +202,45 @@ export default function ArticleEditor({ postId }: { postId?: string }) {
     } else {
       setMsg(data.error || 'KI-Generierung fehlgeschlagen.');
     }
+  }
+
+  async function regenerateImage() {
+    if (!post.title) return;
+    setRegeneratingImage(true);
+    setMsg('Titelbild wird generiert...');
+    try {
+      // Erst einen Bild-Prompt von Claude generieren lassen
+      const promptRes = await fetch('/api/admin/blog/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic: post.title, tone: 'informativ', targetLength: 'kurz' }),
+      });
+      const promptData = await promptRes.json();
+      const imagePrompt = promptData.imagePrompt;
+
+      if (!imagePrompt) {
+        setMsg('Kein Bild-Prompt erhalten.');
+        setRegeneratingImage(false);
+        return;
+      }
+
+      const imgRes = await fetch('/api/admin/blog/generate-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: imagePrompt, title: post.title }),
+      });
+      const imgData = await imgRes.json();
+      if (imgRes.ok && imgData.url) {
+        update('featured_image', imgData.url);
+        update('featured_image_alt', post.title);
+        setMsg('Neues Titelbild generiert!');
+      } else {
+        setMsg(imgData.error || 'Bild-Generierung fehlgeschlagen.');
+      }
+    } catch {
+      setMsg('Bild-Generierung fehlgeschlagen.');
+    }
+    setRegeneratingImage(false);
   }
 
   async function searchUnsplash() {
@@ -458,17 +498,31 @@ export default function ArticleEditor({ postId }: { postId?: string }) {
                 </button>
               </div>
             )}
-            <div className="flex gap-2">
-              <label className="flex-1 px-3 py-2 rounded-lg text-sm font-heading font-semibold text-center cursor-pointer transition-colors" style={{ background: '#334155', color: '#e2e8f0' }}>
-                {uploading ? 'Laden...' : 'Bild hochladen'}
-                <input type="file" accept="image/*" onChange={uploadImage} className="hidden" />
-              </label>
+            <div className="flex flex-col gap-2">
+              <div className="flex gap-2">
+                <label className="flex-1 px-3 py-2 rounded-lg text-xs font-heading font-semibold text-center cursor-pointer transition-colors" style={{ background: '#334155', color: '#e2e8f0' }}>
+                  {uploading ? 'Laden...' : 'Hochladen'}
+                  <input type="file" accept="image/*" onChange={uploadImage} className="hidden" />
+                </label>
+                <button
+                  onClick={() => setShowUnsplash(!showUnsplash)}
+                  className="flex-1 px-3 py-2 rounded-lg text-xs font-heading font-semibold"
+                  style={{ background: '#334155', color: '#e2e8f0' }}
+                >
+                  Unsplash
+                </button>
+              </div>
               <button
-                onClick={() => setShowUnsplash(!showUnsplash)}
-                className="flex-1 px-3 py-2 rounded-lg text-sm font-heading font-semibold"
-                style={{ background: '#334155', color: '#e2e8f0' }}
+                onClick={regenerateImage}
+                disabled={regeneratingImage || !post.title}
+                className="w-full px-3 py-2 rounded-lg text-xs font-heading font-semibold flex items-center justify-center gap-1.5 transition-colors"
+                style={{ background: '#8b5cf620', color: '#a78bfa', opacity: regeneratingImage ? 0.6 : 1 }}
               >
-                Unsplash
+                {regeneratingImage ? (
+                  <><span className="w-3 h-3 border-2 border-purple-400/30 border-t-purple-400 rounded-full animate-spin" /> Generiere Bild...</>
+                ) : (
+                  <><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg> KI-Bild generieren</>
+                )}
               </button>
             </div>
             {post.featured_image && (
