@@ -12,6 +12,7 @@ const sectionStyle: React.CSSProperties = { background: '#111827', borderRadius:
 
 interface BlogSettings {
   anthropic_api_key: string;
+  openai_api_key: string;
   unsplash_access_key: string;
   default_tone: string;
   default_length: string;
@@ -24,6 +25,7 @@ interface BlogSettings {
 
 const DEFAULTS: BlogSettings = {
   anthropic_api_key: '',
+  openai_api_key: '',
   unsplash_access_key: '',
   default_tone: 'informativ',
   default_length: 'mittel',
@@ -111,7 +113,18 @@ export default function BlogEinstellungenPage() {
               onChange={(e) => update('anthropic_api_key', e.target.value)}
               placeholder="sk-ant-..."
             />
-            <p className="text-xs mt-1" style={{ color: '#475569' }}>Fuer die KI-Generierung von Blog-Artikeln</p>
+            <p className="text-xs mt-1" style={{ color: '#475569' }}>Fuer die KI-Generierung von Blog-Artikeln (Text)</p>
+          </div>
+          <div>
+            <label style={labelStyle}>OpenAI API Key (DALL-E 3)</label>
+            <input
+              style={inputStyle}
+              type="password"
+              value={settings.openai_api_key}
+              onChange={(e) => update('openai_api_key', e.target.value)}
+              placeholder="sk-..."
+            />
+            <p className="text-xs mt-1" style={{ color: '#475569' }}>Fuer die automatische Titelbild-Generierung mit DALL-E 3</p>
           </div>
           <div>
             <label style={labelStyle}>Unsplash Access Key</label>

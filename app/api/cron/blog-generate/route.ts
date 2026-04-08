@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 
 const LENGTH_MAP: Record<string, string> = {
   kurz: 'ca. 500 Woerter',
@@ -92,7 +93,8 @@ Antworte AUSSCHLIESSLICH im folgenden JSON-Format (kein Markdown-Codeblock, nur 
   "excerpt": "Kurzbeschreibung (max 160 Zeichen)",
   "seoTitle": "SEO-Titel (max 60 Zeichen)",
   "seoDescription": "Meta-Description (max 155 Zeichen)",
-  "suggestedTags": ["tag1", "tag2", "tag3"]
+  "suggestedTags": ["tag1", "tag2", "tag3"],
+  "imagePrompt": "Detaillierter englischer DALL-E 3 Prompt fuer ein fotorealistisches Blog-Titelbild passend zum Artikel. Keine Texte oder Logos. Landscape."
 }`;
 
   try {
@@ -148,6 +150,38 @@ Antworte AUSSCHLIESSLICH im folgenden JSON-Format (kein Markdown-Codeblock, nur 
 
     if (postError) {
       return NextResponse.json({ error: postError.message }, { status: 500 });
+    }
+
+    // Titelbild generieren wenn OpenAI Key vorhanden und imagePrompt existiert
+    const openaiKey = (blogSettings.openai_api_key as string) || null;
+    if (openaiKey && parsed.imagePrompt && post) {
+      try {
+        const openai = new OpenAI({ apiKey: openaiKey });
+        const imgResponse = await openai.images.generate({
+          model: 'dall-e-3',
+          prompt: parsed.imagePrompt,
+          n: 1,
+          size: '1792x1024',
+          quality: 'standard',
+          style: 'natural',
+        });
+        const imgUrl = imgResponse.data?.[0]?.url;
+        if (imgUrl) {
+          const imgFetch = await fetch(imgUrl);
+          const imgBuffer = Buffer.from(await imgFetch.arrayBuffer());
+          const imgFilename = `blog-ai-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.png`;
+          const { error: uploadErr } = await supabase.storage
+            .from('blog-images')
+            .upload(imgFilename, imgBuffer, { contentType: 'image/png' });
+          if (!uploadErr) {
+            const { data: imgUrlData } = supabase.storage.from('blog-images').getPublicUrl(imgFilename);
+            await supabase.from('blog_posts').update({
+              featured_image: imgUrlData.publicUrl,
+              featured_image_alt: parsed.title,
+            }).eq('id', post.id);
+          }
+        }
+      } catch { /* Bild-Generierung fehlgeschlagen — Artikel bleibt ohne Bild */ }
     }
 
     // Thema als verwendet markieren

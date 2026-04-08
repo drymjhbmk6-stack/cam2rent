@@ -91,7 +91,8 @@ Antworte AUSSCHLIESSLICH im folgenden JSON-Format (kein Markdown-Codeblock, nur 
   "excerpt": "Kurzbeschreibung (max 160 Zeichen)",
   "seoTitle": "SEO-Titel (max 60 Zeichen)",
   "seoDescription": "Meta-Description (max 155 Zeichen)",
-  "suggestedTags": ["tag1", "tag2", "tag3"]
+  "suggestedTags": ["tag1", "tag2", "tag3"],
+  "imagePrompt": "Ein detaillierter englischer Prompt fuer DALL-E 3 zur Generierung eines passenden Blog-Titelbilds. Beschreibe eine fotorealistische Szene die zum Artikel passt. Keine Texte oder Logos im Bild. Landscape-Format."
 }`;
 
   try {

@@ -154,6 +154,7 @@ export default function ArticleEditor({ postId }: { postId?: string }) {
     setAiGenerating(false);
 
     if (res.ok) {
+      const generatedTitle = data.title ?? '';
       setPost((prev) => ({
         ...prev,
         title: data.title ?? prev.title,
@@ -169,7 +170,33 @@ export default function ArticleEditor({ postId }: { postId?: string }) {
       }));
       setTagsInput((data.suggestedTags ?? []).join(', '));
       setShowAI(false);
-      setMsg('Artikel generiert! Bitte pruefen und anpassen.');
+
+      // Automatisch Titelbild generieren wenn Bild-Prompt vorhanden
+      if (data.imagePrompt) {
+        setMsg('Text generiert! Titelbild wird erstellt...');
+        try {
+          const imgRes = await fetch('/api/admin/blog/generate-image', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompt: data.imagePrompt, title: generatedTitle }),
+          });
+          const imgData = await imgRes.json();
+          if (imgRes.ok && imgData.url) {
+            setPost((prev) => ({
+              ...prev,
+              featured_image: imgData.url,
+              featured_image_alt: imgData.alt || generatedTitle,
+            }));
+            setMsg('Artikel + Titelbild generiert! Bitte pruefen und anpassen.');
+          } else {
+            setMsg('Artikel generiert! Titelbild konnte nicht erstellt werden: ' + (imgData.error || 'Unbekannter Fehler'));
+          }
+        } catch {
+          setMsg('Artikel generiert! Titelbild-Generierung fehlgeschlagen.');
+        }
+      } else {
+        setMsg('Artikel generiert! Bitte pruefen und anpassen.');
+      }
     } else {
       setMsg(data.error || 'KI-Generierung fehlgeschlagen.');
     }
