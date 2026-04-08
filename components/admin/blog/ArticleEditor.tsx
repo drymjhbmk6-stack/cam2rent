@@ -64,6 +64,11 @@ export default function ArticleEditor({ postId }: { postId?: string }) {
   const [aiLength, setAiLength] = useState('mittel');
   const [aiGenerating, setAiGenerating] = useState(false);
 
+  // Mediathek
+  const [showMediathek, setShowMediathek] = useState(false);
+  const [mediathekImages, setMediathekImages] = useState<{ name: string; url: string }[]>([]);
+  const [mediathekLoading, setMediathekLoading] = useState(false);
+
   // Unsplash
   const [showUnsplash, setShowUnsplash] = useState(false);
   const [unsplashQuery, setUnsplashQuery] = useState('');
@@ -202,6 +207,21 @@ export default function ArticleEditor({ postId }: { postId?: string }) {
     } else {
       setMsg(data.error || 'KI-Generierung fehlgeschlagen.');
     }
+  }
+
+  async function loadMediathek() {
+    setMediathekLoading(true);
+    const res = await fetch('/api/admin/blog/media');
+    const data = await res.json();
+    setMediathekImages(data.images ?? []);
+    setMediathekLoading(false);
+  }
+
+  function selectMediathekImage(img: { name: string; url: string }) {
+    update('featured_image', img.url);
+    update('featured_image_alt', post.title || img.name);
+    setShowMediathek(false);
+    setMsg('Bild aus Mediathek uebernommen!');
   }
 
   async function regenerateImage() {
@@ -513,6 +533,14 @@ export default function ArticleEditor({ postId }: { postId?: string }) {
                 </button>
               </div>
               <button
+                onClick={() => { setShowMediathek(!showMediathek); if (!showMediathek && mediathekImages.length === 0) loadMediathek(); }}
+                className="w-full px-3 py-2 rounded-lg text-xs font-heading font-semibold flex items-center justify-center gap-1.5"
+                style={{ background: '#334155', color: '#e2e8f0' }}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                Aus Mediathek waehlen
+              </button>
+              <button
                 onClick={regenerateImage}
                 disabled={regeneratingImage || !post.title}
                 className="w-full px-3 py-2 rounded-lg text-xs font-heading font-semibold flex items-center justify-center gap-1.5 transition-colors"
@@ -550,6 +578,26 @@ export default function ArticleEditor({ postId }: { postId?: string }) {
                     </button>
                   ))}
                 </div>
+              </div>
+            )}
+          {/* Mediathek */}
+            {showMediathek && (
+              <div className="mt-3 p-3 rounded-lg" style={{ background: '#0f172a' }}>
+                <p className="text-xs font-heading font-semibold mb-2" style={{ color: '#94a3b8' }}>Aus Mediathek waehlen</p>
+                {mediathekLoading ? (
+                  <p className="text-xs py-4 text-center" style={{ color: '#475569' }}>Laden...</p>
+                ) : mediathekImages.length === 0 ? (
+                  <p className="text-xs py-4 text-center" style={{ color: '#475569' }}>Keine Bilder vorhanden.</p>
+                ) : (
+                  <div className="grid grid-cols-3 gap-1.5 max-h-48 overflow-y-auto">
+                    {mediathekImages.map((img) => (
+                      <button key={img.name} onClick={() => selectMediathekImage(img)} className="relative rounded overflow-hidden hover:opacity-80 transition-opacity">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={img.url} alt={img.name} className="w-full h-16 object-cover" />
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
