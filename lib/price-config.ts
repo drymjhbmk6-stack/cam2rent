@@ -219,10 +219,7 @@ export interface LoyaltyDiscount {
   label: string;
 }
 
-export const DEFAULT_LOYALTY_DISCOUNTS: LoyaltyDiscount[] = [
-  { min_bookings: 3, discount_percent: 5, label: 'Stammkunde: 5% Rabatt' },
-  { min_bookings: 10, discount_percent: 10, label: 'Treue-Rabatt: 10%' },
-];
+export const DEFAULT_LOYALTY_DISCOUNTS: LoyaltyDiscount[] = [];
 
 /** Gibt den höchsten passenden Treuerabatt zurück (oder null) */
 export function calcLoyaltyDiscount(
