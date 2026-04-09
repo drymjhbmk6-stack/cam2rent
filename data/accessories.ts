@@ -58,6 +58,9 @@ export interface Accessory {
   /** If false, the item is hidden in the booking flow. */
   available: boolean;
 
+  /** Internes Zubehoer — nur im Admin und in Sets sichtbar, Kunde kann es nicht einzeln buchen. */
+  internal?: boolean;
+
   /** Maps to an SVG icon in the booking page. */
   iconId: AccessoryIconId;
 

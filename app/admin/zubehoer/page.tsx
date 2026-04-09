@@ -16,6 +16,7 @@ interface Accessory {
   image_url: string | null;
   sort_order: number;
   compatible_product_ids: string[];
+  internal: boolean;
 }
 
 const CATEGORIES = ['Akku', 'Speicher', 'Halterung', 'Schutz', 'Audio', 'Stativ', 'Sonstiges'];
@@ -31,6 +32,7 @@ function emptyForm() {
     available: true,
     image_url: '',
     compatible_product_ids: [] as string[],
+    internal: false,
   };
 }
 
@@ -110,6 +112,7 @@ export default function AdminZubehoerPage() {
       available: acc.available,
       image_url: acc.image_url ?? '',
       compatible_product_ids: acc.compatible_product_ids ?? [],
+      internal: acc.internal ?? false,
     });
   }
 
@@ -229,12 +232,19 @@ export default function AdminZubehoerPage() {
                   placeholder="https://…"
                   className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
               </div>
-              <div className="flex items-center">
+              <div className="flex items-center gap-6">
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input type="checkbox" checked={newForm.available}
                     onChange={(e) => setNewForm((f) => ({ ...f, available: e.target.checked }))}
                     className="w-4 h-4 rounded border-brand-border" />
-                  <span className="text-sm font-body text-brand-black">Verfügbar</span>
+                  <span className="text-sm font-body text-brand-black">Verfuegbar</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={newForm.internal}
+                    onChange={(e) => setNewForm((f) => ({ ...f, internal: e.target.checked }))}
+                    className="w-4 h-4 rounded border-brand-border accent-amber-500" />
+                  <span className="text-sm font-body text-brand-black">Nur intern</span>
+                  <span className="text-[10px] text-brand-muted">(Kunde sieht es nicht)</span>
                 </label>
               </div>
               {/* Produkt-Zuordnung */}
@@ -276,57 +286,109 @@ export default function AdminZubehoerPage() {
           </div>
         )}
 
-        {/* Liste */}
+        {/* Liste — Zwei Spalten: Buchbar + Intern */}
         {loading ? (
-          <div className="text-center py-16 text-brand-muted font-body">Lädt…</div>
+          <div className="text-center py-16 text-brand-muted font-body">Laedt…</div>
         ) : accessories.length === 0 ? (
           <div className="text-center py-16 text-brand-muted font-body">
-            Noch kein Zubehör angelegt. Klicke auf &bdquo;+ Neues Zubehör&ldquo;.
+            Noch kein Zubehoer angelegt. Klicke auf &bdquo;+ Neues Zubehoer&ldquo;.
           </div>
         ) : (
-          <div className="space-y-3">
-            {accessories.map((acc) => (
-              <div key={acc.id} className="bg-white rounded-xl border border-brand-border overflow-hidden">
-                {/* Row */}
-                <div className="flex items-center justify-between px-5 py-4">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <span className="px-2 py-0.5 rounded-full text-xs font-heading font-semibold bg-brand-bg text-brand-steel shrink-0">
-                      {acc.category}
-                    </span>
-                    <span className="font-heading font-semibold text-sm text-brand-black truncate">{acc.name}</span>
-                    {!acc.available && (
-                      <span className="text-xs font-body text-brand-muted bg-brand-bg px-2 py-0.5 rounded-full shrink-0">nicht verfügbar</span>
-                    )}
-                    {savedId === acc.id && (
-                      <span className="text-xs font-body text-green-600 shrink-0">✓ Gespeichert</span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-3 shrink-0">
-                    <div className="text-right hidden sm:block">
-                      <p className="text-xs font-body text-brand-muted">Preis / Menge</p>
-                      <p className="text-sm font-heading font-semibold text-brand-black">
-                        {acc.price} € {acc.pricing_mode === 'perDay' ? '/Tag' : 'einmalig'} · {acc.available_qty} St.
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => handleDelete(acc.id, acc.name)}
-                      disabled={deletingId === acc.id}
-                      className="px-3 py-1.5 text-xs font-heading font-semibold text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-40"
-                    >
-                      {deletingId === acc.id ? '…' : 'Löschen'}
-                    </button>
-                    <button
-                      onClick={() => editId === acc.id ? setEditId(null) : startEdit(acc)}
-                      className="text-sm font-heading font-semibold text-brand-muted hover:text-brand-black transition-colors px-2"
-                    >
-                      {editId === acc.id ? '▲' : '▼'}
-                    </button>
-                  </div>
-                </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Linke Spalte: Buchbar */}
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <span className="w-2 h-2 rounded-full bg-status-success" />
+                <h2 className="font-heading font-bold text-sm text-brand-black">Buchbar fuer Kunden</h2>
+                <span className="text-xs text-brand-muted font-body">({accessories.filter((a) => !a.internal).length})</span>
+              </div>
+              <div className="space-y-3">
+                {accessories.filter((a) => !a.internal).map((acc) => (
+                  <AccessoryCard key={acc.id} acc={acc} editId={editId} editForm={editForm} setEditForm={setEditForm}
+                    savedId={savedId} savingId={savingId} deletingId={deletingId} productList={productList}
+                    onStartEdit={startEdit} onSetEditId={setEditId} onSave={handleSave} onDelete={handleDelete} />
+                ))}
+                {accessories.filter((a) => !a.internal).length === 0 && (
+                  <p className="text-sm text-brand-muted font-body py-4 text-center">Kein buchbares Zubehoer.</p>
+                )}
+              </div>
+            </div>
 
-                {/* Edit Panel */}
-                {editId === acc.id && (
-                  <div className="border-t border-brand-border px-5 py-5 bg-brand-bg">
+            {/* Rechte Spalte: Intern */}
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <span className="w-2 h-2 rounded-full bg-amber-500" />
+                <h2 className="font-heading font-bold text-sm text-brand-black">Intern (Kunde sieht es nicht)</h2>
+                <span className="text-xs text-brand-muted font-body">({accessories.filter((a) => a.internal).length})</span>
+              </div>
+              <div className="space-y-3">
+                {accessories.filter((a) => a.internal).map((acc) => (
+                  <AccessoryCard key={acc.id} acc={acc} editId={editId} editForm={editForm} setEditForm={setEditForm}
+                    savedId={savedId} savingId={savingId} deletingId={deletingId} productList={productList}
+                    onStartEdit={startEdit} onSetEditId={setEditId} onSave={handleSave} onDelete={handleDelete} />
+                ))}
+                {accessories.filter((a) => a.internal).length === 0 && (
+                  <p className="text-sm text-brand-muted font-body py-4 text-center">Kein internes Zubehoer. Erstelle welches mit &bdquo;Nur intern&ldquo;.</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── AccessoryCard Komponente ──────────────────────────────────────────────── */
+
+function AccessoryCard({ acc, editId, editForm, setEditForm, savedId, savingId, deletingId, productList, onStartEdit, onSetEditId, onSave, onDelete }: {
+  acc: Accessory;
+  editId: string | null;
+  editForm: Partial<Accessory>;
+  setEditForm: React.Dispatch<React.SetStateAction<Partial<Accessory>>>;
+  savedId: string | null;
+  savingId: string | null;
+  deletingId: string | null;
+  productList: { id: string; name: string }[];
+  onStartEdit: (acc: Accessory) => void;
+  onSetEditId: (id: string | null) => void;
+  onSave: (id: string) => void;
+  onDelete: (id: string, name: string) => void;
+}) {
+  return (
+    <div className={`bg-white rounded-xl border overflow-hidden ${acc.internal ? 'border-amber-300' : 'border-brand-border'}`}>
+      {/* Row */}
+      <div className="flex items-center justify-between px-4 py-3">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-heading font-semibold bg-brand-bg text-brand-steel shrink-0">
+            {acc.category}
+          </span>
+          <span className="font-heading font-semibold text-sm text-brand-black truncate">{acc.name}</span>
+          {!acc.available && (
+            <span className="text-[10px] font-body text-brand-muted bg-brand-bg px-1.5 py-0.5 rounded-full shrink-0">nicht verfuegbar</span>
+          )}
+          {savedId === acc.id && (
+            <span className="text-[10px] font-body text-green-600 shrink-0">Gespeichert</span>
+          )}
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-xs font-heading font-semibold text-brand-black hidden sm:block">
+            {acc.price} € {acc.pricing_mode === 'perDay' ? '/Tag' : 'einm.'}
+          </span>
+          <button onClick={() => onDelete(acc.id, acc.name)} disabled={deletingId === acc.id}
+            className="px-2 py-1 text-[10px] font-heading font-semibold text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-40">
+            {deletingId === acc.id ? '…' : 'X'}
+          </button>
+          <button onClick={() => editId === acc.id ? onSetEditId(null) : onStartEdit(acc)}
+            className="text-xs font-heading font-semibold text-brand-muted hover:text-brand-black transition-colors px-1">
+            {editId === acc.id ? '▲' : '▼'}
+          </button>
+        </div>
+      </div>
+
+      {/* Edit Panel */}
+      {editId === acc.id && (
+        <div className="border-t border-brand-border px-5 py-5 bg-brand-bg">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Name</label>
@@ -380,12 +442,19 @@ export default function AdminZubehoerPage() {
                           onChange={(e) => setEditForm((f) => ({ ...f, image_url: e.target.value }))}
                           className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body bg-white focus:outline-none focus:ring-2 focus:ring-accent-blue" />
                       </div>
-                      <div className="flex items-center">
+                      <div className="flex items-center gap-6">
                         <label className="flex items-center gap-2 cursor-pointer">
                           <input type="checkbox" checked={editForm.available ?? true}
                             onChange={(e) => setEditForm((f) => ({ ...f, available: e.target.checked }))}
                             className="w-4 h-4 rounded border-brand-border" />
-                          <span className="text-sm font-body text-brand-black">Verfügbar</span>
+                          <span className="text-sm font-body text-brand-black">Verfuegbar</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="checkbox" checked={(editForm as Record<string, unknown>).internal as boolean ?? false}
+                            onChange={(e) => setEditForm((f) => ({ ...f, internal: e.target.checked }))}
+                            className="w-4 h-4 rounded border-brand-border accent-amber-500" />
+                          <span className="text-sm font-body text-brand-black">Nur intern</span>
+                          <span className="text-[10px] text-brand-muted">(Kunde sieht es nicht)</span>
                         </label>
                       </div>
                       {/* Produkt-Zuordnung */}
@@ -416,22 +485,17 @@ export default function AdminZubehoerPage() {
                       </div>
                     </div>
                     <div className="flex justify-end mt-4 gap-2">
-                      <button onClick={() => setEditId(null)}
+                      <button onClick={() => onSetEditId(null)}
                         className="px-4 py-2 text-sm font-heading font-semibold text-brand-muted border border-brand-border rounded-btn hover:bg-white transition-colors">
                         Abbrechen
                       </button>
-                      <button onClick={() => handleSave(acc.id)} disabled={savingId === acc.id}
+                      <button onClick={() => onSave(acc.id)} disabled={savingId === acc.id}
                         className="px-5 py-2 text-sm font-heading font-semibold rounded-btn bg-brand-black text-white hover:bg-brand-dark transition-colors disabled:opacity-40">
                         {savingId === acc.id ? 'Speichern…' : 'Speichern'}
                       </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

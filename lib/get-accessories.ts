@@ -16,6 +16,7 @@ interface DbAccessory {
   image_url: string | null;
   sort_order: number;
   compatible_product_ids: string[];
+  internal: boolean;
 }
 
 function dbToAccessory(db: DbAccessory): Accessory {
@@ -28,10 +29,29 @@ function dbToAccessory(db: DbAccessory): Accessory {
     available: db.available,
     iconId: 'mount',
     group: db.category?.toLowerCase() ?? undefined,
+    internal: db.internal ?? false,
   };
 }
 
+/** Nur buchbares Zubehoer (fuer Kunden sichtbar) */
 export async function getAccessories(): Promise<Accessory[]> {
+  try {
+    const supabase = createServiceClient();
+    const { data, error } = await supabase
+      .from('accessories')
+      .select('*')
+      .or('internal.is.null,internal.eq.false')
+      .order('sort_order', { ascending: true });
+
+    if (error || !data) return [];
+    return data.map(dbToAccessory);
+  } catch {
+    return [];
+  }
+}
+
+/** Alle Zubehoer inkl. internes (fuer Admin + Sets) */
+export async function getAllAccessories(): Promise<Accessory[]> {
   try {
     const supabase = createServiceClient();
     const { data, error } = await supabase
