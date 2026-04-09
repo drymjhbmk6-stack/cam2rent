@@ -388,32 +388,56 @@ function AccessoryCard({ acc, editId, editForm, setEditForm, savedId, savingId, 
   return (
     <div className={`bg-white rounded-xl border overflow-hidden ${acc.internal ? 'border-amber-300' : 'border-brand-border'}`}>
       {/* Row */}
-      <div className="flex items-center justify-between px-4 py-3">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="px-2 py-0.5 rounded-full text-[10px] font-heading font-semibold bg-brand-bg text-brand-steel shrink-0">
-            {acc.category}
-          </span>
-          <span className="font-heading font-semibold text-sm text-brand-black truncate">{acc.name}</span>
-          {!acc.available && (
-            <span className="text-[10px] font-body text-brand-muted bg-brand-bg px-1.5 py-0.5 rounded-full shrink-0">nicht verfuegbar</span>
-          )}
-          {savedId === acc.id && (
-            <span className="text-[10px] font-body text-green-600 shrink-0">Gespeichert</span>
-          )}
+      <div className="px-4 py-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-heading font-semibold bg-brand-bg text-brand-steel shrink-0">
+              {acc.category}
+            </span>
+            <span className="font-heading font-semibold text-sm text-brand-black truncate">{acc.name}</span>
+            {acc.upgrade_group && (
+              <span className="text-[10px] font-body text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded-full shrink-0">
+                {acc.upgrade_group}{acc.is_upgrade_base ? ' (Standard)' : ''}
+              </span>
+            )}
+            {!acc.available && (
+              <span className="text-[10px] font-body text-brand-muted bg-brand-bg px-1.5 py-0.5 rounded-full shrink-0">nicht verfuegbar</span>
+            )}
+            {savedId === acc.id && (
+              <span className="text-[10px] font-body text-green-600 shrink-0">Gespeichert</span>
+            )}
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-xs font-heading font-semibold text-brand-black hidden sm:block">
+              {acc.price} € {acc.pricing_mode === 'perDay' ? '/Tag' : 'einm.'}
+            </span>
+            <button onClick={() => onDelete(acc.id, acc.name)} disabled={deletingId === acc.id}
+              className="px-2 py-1 text-[10px] font-heading font-semibold text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-40">
+              {deletingId === acc.id ? '…' : 'X'}
+            </button>
+            <button onClick={() => editId === acc.id ? onSetEditId(null) : onStartEdit(acc)}
+              className="text-xs font-heading font-semibold text-brand-muted hover:text-brand-black transition-colors px-1">
+              {editId === acc.id ? '▲' : '▼'}
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <span className="text-xs font-heading font-semibold text-brand-black hidden sm:block">
-            {acc.price} € {acc.pricing_mode === 'perDay' ? '/Tag' : 'einm.'}
-          </span>
-          <button onClick={() => onDelete(acc.id, acc.name)} disabled={deletingId === acc.id}
-            className="px-2 py-1 text-[10px] font-heading font-semibold text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-40">
-            {deletingId === acc.id ? '…' : 'X'}
-          </button>
-          <button onClick={() => editId === acc.id ? onSetEditId(null) : onStartEdit(acc)}
-            className="text-xs font-heading font-semibold text-brand-muted hover:text-brand-black transition-colors px-1">
-            {editId === acc.id ? '▲' : '▼'}
-          </button>
-        </div>
+        {/* Kompatible Kameras Tags */}
+        {(acc.compatible_product_ids?.length ?? 0) > 0 ? (
+          <div className="flex flex-wrap gap-1 mt-2">
+            {acc.compatible_product_ids.map((pid) => {
+              const p = productList.find((pr) => pr.id === pid);
+              return (
+                <span key={pid} className="px-2 py-0.5 rounded-full text-[10px] font-body bg-blue-50 text-blue-700 border border-blue-200">
+                  {p?.name ?? pid}
+                </span>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="mt-1.5">
+            <span className="text-[10px] font-body text-brand-muted">Alle Kameras</span>
+          </div>
+        )}
       </div>
 
       {/* Edit Panel */}
