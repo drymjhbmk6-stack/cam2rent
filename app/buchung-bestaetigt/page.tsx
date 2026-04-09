@@ -79,8 +79,7 @@ function CartBookingConfirmed({
     const cartItems =
       (context?.items as typeof items) ?? items;
 
-    if (!cartItems.length) return;
-
+    // Auch ohne Items fortfahren — Server hat den Kontext in der DB
     setConfirmed(true);
 
     confirm().then((shippingAddress) => {
@@ -89,7 +88,7 @@ function CartBookingConfirmed({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           payment_intent_id: paymentIntentId,
-          items: cartItems,
+          items: cartItems.length ? cartItems : [],
           customerName: context?.customerName ?? '',
           customerEmail: context?.customerEmail ?? '',
           userId: context?.userId ?? null,

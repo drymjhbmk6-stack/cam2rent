@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
       shippingAddress?: string | null;
     };
 
-    if (!payment_intent_id || !items?.length) {
+    if (!payment_intent_id) {
       return NextResponse.json(
         { error: 'Fehlende Pflichtfelder.' },
         { status: 400 }
@@ -97,7 +97,71 @@ export async function POST(req: NextRequest) {
       .maybeSingle();
 
     if (existing) {
-      return NextResponse.json({ success: true, already_confirmed: true });
+      // Bereits bestaetigte Buchung: IDs zurueckgeben
+      const { data: existingBookings } = await supabase
+        .from('bookings')
+        .select('id')
+        .like('payment_intent_id', `${payment_intent_id}%`);
+      return NextResponse.json({
+        success: true,
+        already_confirmed: true,
+        booking_ids: existingBookings?.map((b) => b.id) ?? [],
+      });
+    }
+
+    // 2b. Fallback: Checkout-Kontext aus DB laden falls items leer (sessionStorage verloren nach Stripe-Redirect)
+    let resolvedItems = items;
+    let resolvedCustomerName = customerName;
+    let resolvedCustomerEmail = customerEmail;
+    let resolvedUserId = userId;
+    let resolvedDeliveryMode = deliveryMode;
+    let resolvedShippingMethod = shippingMethod;
+    let resolvedShippingPrice = shippingPrice;
+    let resolvedDiscountAmount = discountAmount;
+    let resolvedCouponCode = couponCode;
+    let resolvedProductDiscount = productDiscount;
+    let resolvedDurationDiscount = durationDiscount;
+    let resolvedLoyaltyDiscount = loyaltyDiscount;
+    let resolvedReferralCode = referralCode;
+    let resolvedShippingAddress = shippingAddress;
+
+    if (!resolvedItems?.length) {
+      const { data: ctxRow } = await supabase
+        .from('admin_settings')
+        .select('value')
+        .eq('key', `checkout_${payment_intent_id}`)
+        .maybeSingle();
+
+      if (ctxRow?.value) {
+        try {
+          const ctx = typeof ctxRow.value === 'string' ? JSON.parse(ctxRow.value) : ctxRow.value;
+          resolvedItems = ctx.items ?? [];
+          resolvedCustomerName = ctx.customerName ?? resolvedCustomerName;
+          resolvedCustomerEmail = ctx.customerEmail ?? resolvedCustomerEmail;
+          resolvedUserId = ctx.userId ?? resolvedUserId;
+          resolvedDeliveryMode = ctx.deliveryMode ?? resolvedDeliveryMode;
+          resolvedShippingMethod = ctx.shippingMethod ?? resolvedShippingMethod;
+          resolvedShippingPrice = ctx.shippingPrice ?? resolvedShippingPrice;
+          resolvedDiscountAmount = ctx.discountAmount ?? resolvedDiscountAmount;
+          resolvedCouponCode = ctx.couponCode ?? resolvedCouponCode;
+          resolvedProductDiscount = ctx.productDiscount ?? resolvedProductDiscount;
+          resolvedDurationDiscount = ctx.durationDiscount ?? resolvedDurationDiscount;
+          resolvedLoyaltyDiscount = ctx.loyaltyDiscount ?? resolvedLoyaltyDiscount;
+          resolvedReferralCode = ctx.referralCode ?? resolvedReferralCode;
+          if (ctx.street) {
+            resolvedShippingAddress = [ctx.street, [ctx.zip, ctx.city].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+          }
+        } catch {
+          // JSON parse error - ignore
+        }
+      }
+    }
+
+    if (!resolvedItems?.length) {
+      return NextResponse.json(
+        { error: 'Keine Artikel gefunden. Bitte versuche es erneut.' },
+        { status: 400 }
+      );
     }
 
     // 3. Get current booking count for sequential IDs
@@ -129,11 +193,11 @@ export async function POST(req: NextRequest) {
 
     // Lieferadresse aus Kundenprofil holen (wenn eingeloggt + Versand)
     let profileAddress: string | null = null;
-    if (userId && deliveryMode === 'versand') {
+    if (resolvedUserId && resolvedDeliveryMode === 'versand') {
       const { data: profile } = await supabase
         .from('profiles')
         .select('address_street, address_zip, address_city')
-        .eq('id', userId)
+        .eq('id', resolvedUserId)
         .maybeSingle();
       if (profile?.address_street) {
         profileAddress = [
@@ -144,21 +208,21 @@ export async function POST(req: NextRequest) {
     }
 
     // Calculate total discount for proportional split
-    const totalDiscountAll = (discountAmount ?? 0) + (productDiscount ?? 0) + (durationDiscount ?? 0) + (loyaltyDiscount ?? 0);
+    const totalDiscountAll = (resolvedDiscountAmount ?? 0) + (resolvedProductDiscount ?? 0) + (resolvedDurationDiscount ?? 0) + (resolvedLoyaltyDiscount ?? 0);
 
     // 4. Create one booking per cart item
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
+    for (let i = 0; i < resolvedItems.length; i++) {
+      const item = resolvedItems[i];
       const bookingId = `BK-${year}-${String(seq).padStart(5, '0')}`;
       seq++;
 
       // For multi-item: split discount proportionally by subtotal
-      const itemShare = items.length > 1 ? item.subtotal / items.reduce((s, it) => s + it.subtotal, 0) : 1;
-      const itemCouponDiscount = Math.round((discountAmount ?? 0) * itemShare * 100) / 100;
-      const itemDurationDiscount = Math.round((durationDiscount ?? 0) * itemShare * 100) / 100;
-      const itemLoyaltyDiscount = Math.round((loyaltyDiscount ?? 0) * itemShare * 100) / 100;
+      const itemShare = resolvedItems.length > 1 ? item.subtotal / resolvedItems.reduce((s, it) => s + it.subtotal, 0) : 1;
+      const itemCouponDiscount = Math.round((resolvedDiscountAmount ?? 0) * itemShare * 100) / 100;
+      const itemDurationDiscount = Math.round((resolvedDurationDiscount ?? 0) * itemShare * 100) / 100;
+      const itemLoyaltyDiscount = Math.round((resolvedLoyaltyDiscount ?? 0) * itemShare * 100) / 100;
       const itemTotalDiscount = Math.round(totalDiscountAll * itemShare * 100) / 100;
-      const itemShipping = i === 0 ? shippingPrice : 0;
+      const itemShipping = i === 0 ? resolvedShippingPrice : 0;
       const itemTotal = item.subtotal - itemTotalDiscount + itemShipping;
 
       const { error } = await supabase.from('bookings').insert({
@@ -169,9 +233,9 @@ export async function POST(req: NextRequest) {
         rental_from: item.rentalFrom,
         rental_to: item.rentalTo,
         days: item.days,
-        delivery_mode: deliveryMode,
-        shipping_method: deliveryMode === 'versand' ? shippingMethod : null,
-        shipping_price: i === 0 ? shippingPrice : 0,
+        delivery_mode: resolvedDeliveryMode,
+        shipping_method: resolvedDeliveryMode === 'versand' ? resolvedShippingMethod : null,
+        shipping_price: i === 0 ? resolvedShippingPrice : 0,
         haftung: item.haftung,
         accessories: item.accessories,
         price_rental: item.priceRental,
@@ -182,11 +246,11 @@ export async function POST(req: NextRequest) {
         deposit_intent_id: i === 0 ? confirmedDepositIntentId : null,
         deposit_status: i === 0 ? depositStatus : 'none',
         status: 'confirmed',
-        user_id: userId ?? null,
-        customer_email: customerEmail,
-        customer_name: customerName,
-        shipping_address: profileAddress ?? shippingAddress ?? null,
-        coupon_code: couponCode || null,
+        user_id: resolvedUserId ?? null,
+        customer_email: resolvedCustomerEmail,
+        customer_name: resolvedCustomerName,
+        shipping_address: profileAddress ?? resolvedShippingAddress ?? null,
+        coupon_code: resolvedCouponCode || null,
         discount_amount: itemCouponDiscount,
         duration_discount: itemDurationDiscount,
         loyalty_discount: itemLoyaltyDiscount,
@@ -200,11 +264,11 @@ export async function POST(req: NextRequest) {
     }
 
     // 4b. Increment coupon used_count
-    if (couponCode && bookingIds.length > 0) {
+    if (resolvedCouponCode && bookingIds.length > 0) {
       const { data: couponRow } = await supabase
         .from('coupons')
         .select('id, used_count')
-        .ilike('code', couponCode)
+        .ilike('code', resolvedCouponCode)
         .maybeSingle();
       if (couponRow) {
         await supabase
@@ -215,27 +279,27 @@ export async function POST(req: NextRequest) {
     }
 
     // 4c. Increment user booking_count
-    if (userId && bookingIds.length > 0) {
+    if (resolvedUserId && bookingIds.length > 0) {
       const { data: profile } = await supabase
         .from('profiles')
         .select('booking_count')
-        .eq('id', userId)
+        .eq('id', resolvedUserId)
         .maybeSingle();
       if (profile) {
         await supabase
           .from('profiles')
           .update({ booking_count: (profile.booking_count ?? 0) + bookingIds.length })
-          .eq('id', userId);
+          .eq('id', resolvedUserId);
       }
     }
 
     // 4d. Process referral (if first booking for this user)
-    if (referralCode && userId && bookingIds.length > 0) {
+    if (resolvedReferralCode && resolvedUserId && bookingIds.length > 0) {
       try {
         const { data: profile } = await supabase
           .from('profiles')
           .select('booking_count')
-          .eq('id', userId)
+          .eq('id', resolvedUserId)
           .maybeSingle();
 
         // First booking: booking_count was just set to 1 (or the count of items)
@@ -246,10 +310,10 @@ export async function POST(req: NextRequest) {
           const { data: referrer } = await supabase
             .from('profiles')
             .select('id, full_name')
-            .eq('referral_code', referralCode)
+            .eq('referral_code', resolvedReferralCode)
             .maybeSingle();
 
-          if (referrer && referrer.id !== userId) {
+          if (referrer && referrer.id !== resolvedUserId) {
             // Get reward value from config
             const { data: rewardConfig } = await supabase
               .from('admin_config')
@@ -277,8 +341,8 @@ export async function POST(req: NextRequest) {
             // Create referral record
             await supabase.from('referrals').insert({
               referrer_user_id: referrer.id,
-              referral_code: referralCode,
-              referred_email: customerEmail,
+              referral_code: resolvedReferralCode,
+              referred_email: resolvedCustomerEmail,
               referred_booking_id: bookingIds[0],
               reward_coupon_id: rewardCoupon?.id ?? null,
               status: 'rewarded',
@@ -291,7 +355,7 @@ export async function POST(req: NextRequest) {
                 sendReferralReward({
                   referrerName: referrer.full_name ?? 'dort',
                   referrerEmail: referrerAuth.user.email,
-                  referredName: customerName,
+                  referredName: resolvedCustomerName,
                   rewardCode,
                   rewardValue,
                 }).catch((err: unknown) => console.error('Referral email error:', err));
@@ -305,21 +369,21 @@ export async function POST(req: NextRequest) {
     }
 
     // 5. Abandoned Cart als recovered markieren (non-blocking)
-    if (userId) {
+    if (resolvedUserId) {
       Promise.resolve(
         supabase
           .from('abandoned_carts')
           .update({ recovered: true })
-          .eq('user_id', userId)
+          .eq('user_id', resolvedUserId)
           .eq('recovered', false)
       ).catch((err: unknown) => console.error('Abandoned cart recovery error:', err));
     }
 
     // 6. Suspicious Detection (non-blocking)
     if (bookingIds.length > 0) {
-      const firstItem = items[0];
+      const firstItem = resolvedItems[0];
       detectSuspicious(supabase, {
-        userId: userId || null,
+        userId: resolvedUserId || null,
         priceTotal: intent.amount / 100,
         rentalFrom: firstItem.rentalFrom,
         days: firstItem.days,
@@ -344,29 +408,28 @@ export async function POST(req: NextRequest) {
     for (const s of taxSettings ?? []) txMap[s.key] = s.value;
 
     // 7. Send confirmation email (one summary email for all items in cart)
-    if (customerEmail && bookingIds.length > 0) {
-      // Use the first item as the primary booking for the email
-      const firstItem = items[0];
+    if (resolvedCustomerEmail && bookingIds.length > 0) {
+      const firstItem = resolvedItems[0];
       const emailData: BookingEmailData = {
         bookingId: bookingIds.join(', '),
-        customerName,
-        customerEmail,
-        productName: items.length === 1
+        customerName: resolvedCustomerName,
+        customerEmail: resolvedCustomerEmail,
+        productName: resolvedItems.length === 1
           ? firstItem.productName
-          : `${firstItem.productName} + ${items.length - 1} weiteres${items.length > 2 ? 'e' : ''} Produkt${items.length > 2 ? 'e' : ''}`,
+          : `${firstItem.productName} + ${resolvedItems.length - 1} weiteres${resolvedItems.length > 2 ? 'e' : ''} Produkt${resolvedItems.length > 2 ? 'e' : ''}`,
         rentalFrom: firstItem.rentalFrom,
         rentalTo: firstItem.rentalTo,
         days: firstItem.days,
-        deliveryMode: deliveryMode as 'versand' | 'abholung',
-        shippingMethod,
+        deliveryMode: resolvedDeliveryMode as 'versand' | 'abholung',
+        shippingMethod: resolvedShippingMethod,
         haftung: firstItem.haftung,
         accessories: firstItem.accessories,
-        priceRental: items.reduce((s, it) => s + it.priceRental, 0),
-        priceAccessories: items.reduce((s, it) => s + it.priceAccessories, 0),
-        priceHaftung: items.reduce((s, it) => s + it.priceHaftung, 0),
+        priceRental: resolvedItems.reduce((s, it) => s + it.priceRental, 0),
+        priceAccessories: resolvedItems.reduce((s, it) => s + it.priceAccessories, 0),
+        priceHaftung: resolvedItems.reduce((s, it) => s + it.priceHaftung, 0),
         priceTotal: intent.amount / 100,
-        deposit: items.reduce((s, it) => s + it.deposit, 0),
-        shippingPrice,
+        deposit: resolvedItems.reduce((s, it) => s + it.deposit, 0),
+        shippingPrice: resolvedShippingPrice,
         taxMode: (txMap['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer',
         taxRate: parseFloat(txMap['tax_rate'] || '19'),
         ustId: txMap['ust_id'] || '',
@@ -377,6 +440,14 @@ export async function POST(req: NextRequest) {
         sendAdminNotification(emailData),
       ]).catch((err) => console.error('Email send error:', err));
     }
+
+    // 8. Checkout-Kontext aus DB aufraumen (non-blocking)
+    supabase
+      .from('admin_settings')
+      .delete()
+      .eq('key', `checkout_${payment_intent_id}`)
+      .then(() => {})
+      .catch(() => {});
 
     return NextResponse.json({ success: true, booking_ids: bookingIds });
   } catch (err) {

@@ -21,12 +21,13 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { amountCents, depositCents, customerName, customerEmail, userId } = body as {
+    const { amountCents, depositCents, customerName, customerEmail, userId, checkoutContext } = body as {
       amountCents: number;
       depositCents?: number;
       customerName: string;
       customerEmail: string;
       userId?: string;
+      checkoutContext?: Record<string, unknown>;
     };
 
     if (!amountCents || amountCents < 50) {
@@ -95,6 +96,17 @@ export async function POST(req: NextRequest) {
         });
         depositIntentId = depositIntent.id;
       }
+    }
+
+    // Checkout-Kontext serverseitig speichern (sessionStorage ist nach Stripe-Redirect unzuverlaessig)
+    if (checkoutContext) {
+      await supabase
+        .from('admin_settings')
+        .upsert({
+          key: `checkout_${paymentIntent.id}`,
+          value: JSON.stringify(checkoutContext),
+          updated_at: new Date().toISOString(),
+        });
     }
 
     return NextResponse.json({
