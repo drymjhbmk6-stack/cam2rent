@@ -442,12 +442,12 @@ export async function POST(req: NextRequest) {
     }
 
     // 8. Checkout-Kontext aus DB aufraumen (non-blocking)
-    supabase
-      .from('admin_settings')
-      .delete()
-      .eq('key', `checkout_${payment_intent_id}`)
-      .then(() => {})
-      .catch(() => {});
+    Promise.resolve(
+      supabase
+        .from('admin_settings')
+        .delete()
+        .eq('key', `checkout_${payment_intent_id}`)
+    ).catch(() => {});
 
     return NextResponse.json({ success: true, booking_ids: bookingIds });
   } catch (err) {
