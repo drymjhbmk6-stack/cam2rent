@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import type { SeasonalImage } from '@/lib/seasonal-themes';
 
 interface Post {
   id: string; title: string; slug: string; excerpt: string;
@@ -23,9 +24,14 @@ export default function BlogOverview() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [seasonalImage, setSeasonalImage] = useState<SeasonalImage | null>(null);
 
   useEffect(() => {
     fetch('/api/admin/blog/categories').then((r) => r.json()).then((d) => setCategories(d.categories ?? []));
+    fetch('/api/seasonal-images?zone=blog')
+      .then((r) => r.json())
+      .then((d) => { if (d.image) setSeasonalImage(d.image); })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -51,15 +57,34 @@ export default function BlogOverview() {
 
   return (
     <>
-      {/* Hero */}
-      <section className="bg-brand-black dark:bg-gray-950 text-white py-16 sm:py-20">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+      {/* Hero mit optionalem saisonalem Hintergrundbild */}
+      <section className="relative bg-brand-black dark:bg-gray-950 text-white py-16 sm:py-20 overflow-hidden">
+        {seasonalImage && (
+          <>
+            <Image
+              src={seasonalImage.url}
+              alt={seasonalImage.alt || 'Blog Header'}
+              fill
+              className="object-cover"
+              priority
+            />
+            <div className="absolute inset-0 bg-black/60" />
+          </>
+        )}
+        <div className="relative max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h1 className="font-heading font-bold text-4xl sm:text-5xl mb-4">
             Blog
           </h1>
-          <p className="font-body text-gray-400 text-lg max-w-xl mx-auto">
+          <p className="font-body text-gray-300 text-lg max-w-xl mx-auto">
             Tipps, Vergleiche und Neuigkeiten rund um Action-Kameras &mdash; von Experten fuer Abenteurer.
           </p>
+          {seasonalImage?.source === 'unsplash' && seasonalImage.photographer && (
+            <div className="absolute bottom-3 right-4 px-2 py-1 rounded bg-black/40 backdrop-blur-sm">
+              <span className="text-[10px] text-white/50 font-body">
+                Foto: {seasonalImage.photographer}
+              </span>
+            </div>
+          )}
         </div>
       </section>
 
