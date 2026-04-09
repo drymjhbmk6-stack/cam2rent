@@ -17,6 +17,8 @@ interface DbAccessory {
   sort_order: number;
   compatible_product_ids: string[];
   internal: boolean;
+  upgrade_group: string | null;
+  is_upgrade_base: boolean;
 }
 
 function dbToAccessory(db: DbAccessory): Accessory {
@@ -30,6 +32,8 @@ function dbToAccessory(db: DbAccessory): Accessory {
     iconId: 'mount',
     group: db.category?.toLowerCase() ?? undefined,
     internal: db.internal ?? false,
+    upgradeGroup: db.upgrade_group ?? undefined,
+    isUpgradeBase: db.is_upgrade_base ?? false,
   };
 }
 

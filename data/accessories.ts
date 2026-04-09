@@ -61,6 +61,12 @@ export interface Accessory {
   /** Internes Zubehoer — nur im Admin und in Sets sichtbar, Kunde kann es nicht einzeln buchen. */
   internal?: boolean;
 
+  /** Upgrade-Gruppe (z.B. "speicherkarte") — Zubehoer in der gleichen Gruppe wird als Radio-Button statt Checkbox angezeigt. */
+  upgradeGroup?: string;
+
+  /** Ist die Standard-/Inklusive-Option in der Upgrade-Gruppe (vorausgewaehlt, 0 € Aufpreis). */
+  isUpgradeBase?: boolean;
+
   /** Maps to an SVG icon in the booking page. */
   iconId: AccessoryIconId;
 

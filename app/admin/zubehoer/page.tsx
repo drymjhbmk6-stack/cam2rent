@@ -17,9 +17,12 @@ interface Accessory {
   sort_order: number;
   compatible_product_ids: string[];
   internal: boolean;
+  upgrade_group: string | null;
+  is_upgrade_base: boolean;
 }
 
 const CATEGORIES = ['Akku', 'Speicher', 'Halterung', 'Schutz', 'Audio', 'Stativ', 'Sonstiges'];
+const UPGRADE_GROUPS = ['', 'Speicherkarte', 'Akku'];
 
 function emptyForm() {
   return {
@@ -33,6 +36,8 @@ function emptyForm() {
     image_url: '',
     compatible_product_ids: [] as string[],
     internal: false,
+    upgrade_group: '',
+    is_upgrade_base: false,
   };
 }
 
@@ -113,6 +118,8 @@ export default function AdminZubehoerPage() {
       image_url: acc.image_url ?? '',
       compatible_product_ids: acc.compatible_product_ids ?? [],
       internal: acc.internal ?? false,
+      upgrade_group: acc.upgrade_group ?? '',
+      is_upgrade_base: acc.is_upgrade_base ?? false,
     });
   }
 
@@ -246,6 +253,29 @@ export default function AdminZubehoerPage() {
                   <span className="text-sm font-body text-brand-black">Nur intern</span>
                   <span className="text-[10px] text-brand-muted">(Kunde sieht es nicht)</span>
                 </label>
+              </div>
+              {/* Upgrade-Gruppe */}
+              <div>
+                <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Upgrade-Gruppe</label>
+                <div className="flex gap-2">
+                  <select value={newForm.upgrade_group}
+                    onChange={(e) => setNewForm((f) => ({ ...f, upgrade_group: e.target.value, is_upgrade_base: e.target.value ? f.is_upgrade_base : false }))}
+                    className="flex-1 px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue">
+                    <option value="">Keine (normales Zubehoer)</option>
+                    {UPGRADE_GROUPS.filter(Boolean).map((g) => (
+                      <option key={g} value={g}>{g}</option>
+                    ))}
+                  </select>
+                  {newForm.upgrade_group && (
+                    <label className="flex items-center gap-2 px-3 py-2 border border-brand-border rounded-[10px] cursor-pointer bg-white">
+                      <input type="checkbox" checked={newForm.is_upgrade_base}
+                        onChange={(e) => setNewForm((f) => ({ ...f, is_upgrade_base: e.target.checked }))}
+                        className="w-4 h-4 rounded border-brand-border accent-green-500" />
+                      <span className="text-xs font-body text-brand-black whitespace-nowrap">Standard (inklusive)</span>
+                    </label>
+                  )}
+                </div>
+                <p className="text-xs text-brand-muted mt-1">Upgrade-Gruppen werden als Radio-Buttons im Buchungsflow angezeigt.</p>
               </div>
               {/* Produkt-Zuordnung */}
               <div className="sm:col-span-2">
@@ -456,6 +486,28 @@ function AccessoryCard({ acc, editId, editForm, setEditForm, savedId, savingId, 
                           <span className="text-sm font-body text-brand-black">Nur intern</span>
                           <span className="text-[10px] text-brand-muted">(Kunde sieht es nicht)</span>
                         </label>
+                      </div>
+                      {/* Upgrade-Gruppe */}
+                      <div>
+                        <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Upgrade-Gruppe</label>
+                        <div className="flex gap-2">
+                          <select value={(editForm as Record<string, unknown>).upgrade_group as string ?? ''}
+                            onChange={(e) => setEditForm((f) => ({ ...f, upgrade_group: e.target.value || null, is_upgrade_base: e.target.value ? (f as Record<string, unknown>).is_upgrade_base as boolean : false }))}
+                            className="flex-1 px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body bg-white focus:outline-none focus:ring-2 focus:ring-accent-blue">
+                            <option value="">Keine (normales Zubehoer)</option>
+                            {UPGRADE_GROUPS.filter(Boolean).map((g) => (
+                              <option key={g} value={g}>{g}</option>
+                            ))}
+                          </select>
+                          {(editForm as Record<string, unknown>).upgrade_group && (
+                            <label className="flex items-center gap-2 px-3 py-2 border border-brand-border rounded-[10px] cursor-pointer bg-white">
+                              <input type="checkbox" checked={(editForm as Record<string, unknown>).is_upgrade_base as boolean ?? false}
+                                onChange={(e) => setEditForm((f) => ({ ...f, is_upgrade_base: e.target.checked }))}
+                                className="w-4 h-4 rounded border-brand-border accent-green-500" />
+                              <span className="text-xs font-body text-brand-black whitespace-nowrap">Standard</span>
+                            </label>
+                          )}
+                        </div>
                       </div>
                       {/* Produkt-Zuordnung */}
                       <div className="sm:col-span-2">

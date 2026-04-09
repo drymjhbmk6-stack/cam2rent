@@ -509,6 +509,18 @@ export default function BuchenPage() {
     );
   }, []);
 
+  // Upgrade-Gruppe: Waehlt eine Option aus und entfernt andere aus der gleichen Gruppe
+  const selectUpgrade = useCallback((accId: string, group: string) => {
+    setAccessories((prev) => {
+      const groupIds = dbAccessories.filter((a) => a.upgradeGroup === group).map((a) => a.id);
+      const without = prev.filter((id) => !groupIds.includes(id));
+      // Base-Option = abwaehlen (inklusive), Upgrade-Option = hinzufuegen
+      const acc = dbAccessories.find((a) => a.id === accId);
+      if (acc?.isUpgradeBase) return without;
+      return [...without, accId];
+    });
+  }, [dbAccessories]);
+
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleProceedToPayment = async () => {
     if (!breakdown || !range?.from) return;
@@ -1025,13 +1037,58 @@ export default function BuchenPage() {
                   </div>
                 )}
 
-                {/* Accessory list — always visible */}
+                {/* Upgrade-Gruppen (Radio-Buttons) */}
+                {(() => {
+                  const upgradeGroups = [...new Set(dbAccessories.filter((a) => a.upgradeGroup).map((a) => a.upgradeGroup!))];
+                  const days = breakdown?.days ?? 0;
+                  return upgradeGroups.map((group) => {
+                    const groupAccs = dbAccessories.filter((a) => a.upgradeGroup === group);
+                    if (groupAccs.length === 0) return null;
+                    const baseAcc = groupAccs.find((a) => a.isUpgradeBase);
+                    const basePrice = baseAcc ? getAccessoryPrice(baseAcc, days) : 0;
+                    // Welche Option ist gewaehlt? Schaue ob eine Upgrade-Option in accessories ist
+                    const selectedId = groupAccs.find((a) => accessories.includes(a.id))?.id ?? baseAcc?.id ?? null;
+                    return (
+                      <div key={group} className="mb-6">
+                        <p className="text-xs font-body font-semibold text-brand-steel uppercase tracking-wider mb-2">{group}</p>
+                        <div className="rounded-xl border border-brand-border dark:border-gray-700 overflow-hidden divide-y divide-brand-border dark:divide-gray-700">
+                          {groupAccs.map((acc) => {
+                            const isSelected = selectedId === acc.id || (acc.isUpgradeBase && !groupAccs.some((a) => !a.isUpgradeBase && accessories.includes(a.id)));
+                            const avail = accAvailability[acc.id];
+                            const isAvailable = !avail || (avail.remaining > 0 && avail.compatible);
+                            const disabled = !isAvailable && !acc.isUpgradeBase;
+                            const upgradePrice = getAccessoryPrice(acc, days) - basePrice;
+                            return (
+                              <label key={acc.id} className={`flex items-center gap-3 px-4 py-3 transition-colors ${disabled ? 'opacity-50 cursor-not-allowed bg-brand-bg dark:bg-gray-800' : isSelected ? 'bg-accent-blue-soft/30 cursor-pointer' : 'bg-white dark:bg-gray-900 hover:bg-brand-bg dark:hover:bg-gray-800 cursor-pointer'}`}>
+                                <input type="radio" name={`upgrade-${group}`} checked={isSelected} disabled={disabled}
+                                  onChange={() => !disabled && selectUpgrade(acc.id, group)} className="sr-only" />
+                                <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${isSelected ? 'border-accent-blue' : 'border-brand-border'}`}>
+                                  {isSelected && <div className="w-2 h-2 rounded-full bg-accent-blue" />}
+                                </div>
+                                <span className={`font-heading font-semibold text-sm flex-1 ${disabled ? 'text-brand-muted' : 'text-brand-black dark:text-gray-100'}`}>{acc.name}</span>
+                                {acc.isUpgradeBase ? (
+                                  <span className="text-xs font-heading font-semibold text-status-success">inklusive</span>
+                                ) : !disabled ? (
+                                  <span className="font-heading font-semibold text-sm text-accent-blue">
+                                    +{fmt(upgradePrice)} €
+                                  </span>
+                                ) : null}
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  });
+                })()}
+
+                {/* Normales Zubehoer (Checkboxen) — ohne Upgrade-Gruppen */}
                 <div className="mb-6">
                   <p className="text-xs font-body font-semibold text-brand-steel uppercase tracking-wider mb-2">
                     {selectedSet ? 'Zusätzliches Zubehör' : 'Zubehör'}
                   </p>
                   <div className="rounded-xl border border-brand-border dark:border-gray-700 overflow-hidden divide-y divide-brand-border dark:divide-gray-700">
-                    {dbAccessories.map((acc) => {
+                    {dbAccessories.filter((acc) => !acc.upgradeGroup).map((acc) => {
                       const checked = accessories.includes(acc.id);
                       const days = breakdown?.days ?? 0;
                       const avail = accAvailability[acc.id];
