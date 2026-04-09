@@ -101,7 +101,7 @@ export async function POST(req: NextRequest) {
     .gte('created_at', todayStart.toISOString());
 
   // Bei daily: max 1 pro Tag. Bei weekly: auch max 1 pro Tag (aber nur an geplanten Tagen)
-  if ((todayCount ?? 0) >= 1) {
+  if ((todayCount ?? 0) >= 5) {
     return NextResponse.json({ message: 'Heute wurde bereits ein Artikel generiert.' });
   }
   } // ── Ende Scheduler ─────────────────────────────────────────────
