@@ -363,7 +363,11 @@ Antworte NUR mit dem korrigierten Artikel-Text in Markdown. Keine Erklaerungen, 
       // Zeitplan: Artikel als "scheduled" mit dem geplanten Veroeffentlichungsdatum
       postStatus = 'scheduled';
       const time = (scheduleEntry.scheduled_time || '09:00').slice(0, 5); // HH:MM
-      scheduledAt = `${scheduleEntry.scheduled_date}T${time}:00`;
+      // Timezone-korrekt: Deutsche Zeit (CET/CEST) in UTC umrechnen
+      const localDate = new Date(`${scheduleEntry.scheduled_date}T${time}:00`);
+      const berlinOffset = new Date(localDate.toLocaleString('en-US', { timeZone: 'Europe/Berlin' })).getTime() - new Date(localDate.toLocaleString('en-US', { timeZone: 'UTC' })).getTime();
+      const utcDate = new Date(localDate.getTime() - berlinOffset);
+      scheduledAt = utcDate.toISOString();
     } else if (autoMode === 'voll') {
       postStatus = 'published';
       publishedAt = now;
