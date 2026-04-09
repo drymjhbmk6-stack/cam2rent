@@ -294,6 +294,11 @@ export default function SaisonaleBilderPage() {
               onUnsplash={openUnsplash}
               onUpload={openUpload}
               onRemove={removeImage}
+              onActivateNow={async (z, ym) => {
+                const img = getImage(z, ym);
+                if (!img) return;
+                await saveImage(z, current.key, img);
+              }}
               saving={saving}
               layoutHint={zone.id === 'hero' ? (isImageLeftMonth(next.month) ? 'Bild links' : 'Bild rechts') : undefined}
             />
@@ -459,6 +464,7 @@ function ImageSlot({
   onUnsplash,
   onUpload,
   onRemove,
+  onActivateNow,
   saving,
   layoutHint,
 }: {
@@ -471,6 +477,7 @@ function ImageSlot({
   onUnsplash: (zone: SeasonalZone, ym: string) => void;
   onUpload: (zone: SeasonalZone, ym: string) => void;
   onRemove: (zone: string, ym: string) => void;
+  onActivateNow?: (zone: SeasonalZone, ym: string) => void;
   saving: boolean;
   layoutHint?: string;
 }) {
@@ -563,6 +570,19 @@ function ImageSlot({
           </svg>
           Hochladen
         </button>
+        {image && onActivateNow && (
+          <button
+            onClick={() => onActivateNow(zone, yearMonth)}
+            disabled={saving}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-heading font-semibold transition-colors hover:bg-emerald-500/10 disabled:opacity-50"
+            style={{ color: '#10b981', border: '1px solid rgba(16,185,129,0.3)' }}
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            Sofort aktivieren
+          </button>
+        )}
         {image && (
           <button
             onClick={() => onRemove(zone, yearMonth)}
