@@ -523,7 +523,7 @@ function AccessoryCard({ acc, editId, editForm, setEditForm, savedId, savingId, 
                               <option key={g} value={g}>{g}</option>
                             ))}
                           </select>
-                          {(editForm as Record<string, unknown>).upgrade_group && (
+                          {Boolean((editForm as Record<string, unknown>).upgrade_group) && (
                             <label className="flex items-center gap-2 px-3 py-2 border border-brand-border rounded-[10px] cursor-pointer bg-white">
                               <input type="checkbox" checked={(editForm as Record<string, unknown>).is_upgrade_base as boolean ?? false}
                                 onChange={(e) => setEditForm((f) => ({ ...f, is_upgrade_base: e.target.checked }))}
