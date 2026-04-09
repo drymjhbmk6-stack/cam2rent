@@ -75,19 +75,20 @@ export default function BlogArtikelPage() {
       </div>
 
       {/* Filter */}
-      <div className="flex gap-3 mb-6">
+      <div className="flex flex-col sm:flex-row gap-3 mb-6">
         <input
-          style={{ ...inputStyle, width: 280 }}
+          style={{ ...inputStyle, width: '100%' }}
+          className="sm:!w-[280px]"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Artikel suchen..."
         />
-        <div className="flex gap-1">
+        <div className="flex gap-1 overflow-x-auto">
           {['all', 'draft', 'published', 'scheduled'].map((s) => (
             <button
               key={s}
               onClick={() => setFilter(s)}
-              className="px-3 py-2 rounded-lg text-xs font-heading font-semibold transition-colors"
+              className="px-3 py-2 rounded-lg text-xs font-heading font-semibold transition-colors whitespace-nowrap"
               style={filter === s ? { background: '#06b6d4', color: 'white' } : { background: '#1e293b', color: '#94a3b8' }}
             >
               {s === 'all' ? 'Alle' : STATUS_LABELS[s]?.label ?? s}
@@ -111,35 +112,40 @@ export default function BlogArtikelPage() {
           {posts.map((post) => {
             const s = STATUS_LABELS[post.status] ?? STATUS_LABELS.draft;
             return (
-              <div key={post.id} className="flex items-center justify-between px-4 py-3 rounded-lg" style={{ background: '#1e293b' }}>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <Link href={`/admin/blog/artikel/${post.id}`} className="font-heading font-semibold text-sm truncate hover:underline" style={{ color: '#e2e8f0' }}>
-                      {post.title}
-                    </Link>
-                    <span className="px-2 py-0.5 rounded text-xs font-heading shrink-0" style={{ background: s.bg, color: s.color }}>
+              <div key={post.id} className="rounded-lg p-4" style={{ background: '#1e293b' }}>
+                {/* Titel + Badges */}
+                <div className="mb-2">
+                  <Link href={`/admin/blog/artikel/${post.id}`} className="font-heading font-semibold text-sm hover:underline block mb-1.5" style={{ color: '#e2e8f0' }}>
+                    {post.title}
+                  </Link>
+                  <div className="flex flex-wrap gap-1.5">
+                    <span className="px-2 py-0.5 rounded text-[11px] font-heading" style={{ background: s.bg, color: s.color }}>
                       {s.label}
                     </span>
                     {post.ai_generated && (
-                      <span className="px-2 py-0.5 rounded text-xs font-heading shrink-0" style={{ background: '#8b5cf620', color: '#a78bfa' }}>KI</span>
+                      <span className="px-2 py-0.5 rounded text-[11px] font-heading" style={{ background: '#8b5cf620', color: '#a78bfa' }}>KI</span>
                     )}
-                  </div>
-                  <div className="flex gap-3 mt-1">
                     {post.blog_categories && (
-                      <span className="text-xs" style={{ color: post.blog_categories.color }}>{post.blog_categories.name}</span>
+                      <span className="text-[11px] px-2 py-0.5 rounded" style={{ background: post.blog_categories.color + '20', color: post.blog_categories.color }}>{post.blog_categories.name}</span>
                     )}
-                    <span className="text-xs" style={{ color: '#475569' }}>
-                      {post.published_at
-                        ? new Date(post.published_at).toLocaleDateString('de-DE')
-                        : new Date(post.created_at).toLocaleDateString('de-DE')}
-                    </span>
-                    <span className="text-xs" style={{ color: '#475569' }}>{post.view_count} Views</span>
                   </div>
                 </div>
-                <div className="flex gap-2 ml-4 shrink-0">
+
+                {/* Meta */}
+                <div className="flex gap-3 mb-3 text-xs" style={{ color: '#475569' }}>
+                  <span>
+                    {post.published_at
+                      ? new Date(post.published_at).toLocaleDateString('de-DE')
+                      : new Date(post.created_at).toLocaleDateString('de-DE')}
+                  </span>
+                  <span>{post.view_count} Views</span>
+                </div>
+
+                {/* Buttons */}
+                <div className="flex flex-wrap gap-2">
                   <button
                     onClick={() => togglePublish(post)}
-                    className="px-3 py-1 rounded text-xs font-heading font-semibold"
+                    className="px-3 py-1.5 rounded text-xs font-heading font-semibold"
                     style={post.status === 'published'
                       ? { background: '#f59e0b20', color: '#f59e0b' }
                       : { background: '#22c55e20', color: '#22c55e' }}
@@ -148,14 +154,14 @@ export default function BlogArtikelPage() {
                   </button>
                   <Link
                     href={`/admin/blog/artikel/${post.id}`}
-                    className="px-3 py-1 rounded text-xs font-heading font-semibold"
+                    className="px-3 py-1.5 rounded text-xs font-heading font-semibold"
                     style={{ background: '#334155', color: '#e2e8f0' }}
                   >
                     Bearbeiten
                   </Link>
                   <button
                     onClick={() => deletePost(post.id)}
-                    className="px-3 py-1 rounded text-xs font-heading font-semibold"
+                    className="px-3 py-1.5 rounded text-xs font-heading font-semibold"
                     style={{ background: '#ef444420', color: '#ef4444' }}
                   >
                     Loeschen
