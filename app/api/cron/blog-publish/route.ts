@@ -23,12 +23,37 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // Zugehoerige Schedule-Eintraege als "published" markieren
+  // Zugehoerige Schedule-Eintraege: loggen + loeschen
   const scheduleIds = (data ?? []).map((p) => p.schedule_id).filter(Boolean);
   if (scheduleIds.length > 0) {
+    // Eintraege laden fuer das Log
+    const { data: scheduleEntries } = await supabase
+      .from('blog_schedule')
+      .select('*')
+      .in('id', scheduleIds);
+
+    // In Aktivitaetsprotokoll loggen
+    for (const entry of scheduleEntries ?? []) {
+      const post = (data ?? []).find((p) => p.schedule_id === entry.id);
+      await supabase.from('admin_audit_log').insert({
+        action: 'blog_published',
+        entity_type: 'blog_post',
+        entity_id: post?.id ?? entry.id,
+        details: JSON.stringify({
+          topic: entry.topic,
+          scheduled_date: entry.scheduled_date,
+          scheduled_time: entry.scheduled_time,
+          post_title: post?.title,
+          post_slug: post?.slug,
+          published_at: now,
+        }),
+      });
+    }
+
+    // Schedule-Eintraege loeschen
     await supabase
       .from('blog_schedule')
-      .update({ status: 'published' })
+      .delete()
       .in('id', scheduleIds);
   }
 
