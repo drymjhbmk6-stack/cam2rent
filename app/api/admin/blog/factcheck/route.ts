@@ -14,73 +14,62 @@ async function getApiKey(): Promise<string | null> {
 const REVIEW_PASSES = [
   {
     role: 'Faktenpruefer',
-    instruction: `Du bist ein investigativer Faktenpruefer. Pruefe den Artikel KRITISCH auf:
+    instruction: `Du bist ein investigativer Faktenpruefer. Pruefe den Artikel KRITISCH:
 
-1. ERFUNDENE FAKTEN: Gibt es konkrete Zahlen, Specs, Preise oder Aussagen die nicht stimmen koennten?
-   - Erfundene Kamera-Specs (Aufloesungen, Akkulaufzeiten, Sensoren die es nicht gibt)
-   - Falsche Preisangaben
-   - Nicht existierende Features oder Technologien
-   - Erfundene Vergleichsergebnisse oder Testergebnisse
+- Erfundene Kamera-Specs (Aufloesungen, Akkulaufzeiten, Sensoren)? ENTFERNEN oder durch allgemeine Formulierungen ersetzen.
+- Falsche Preisangaben? ENTFERNEN.
+- Nicht existierende Features oder Technologien? ENTFERNEN.
+- "Laut Tests", "Studien zeigen" ohne Quelle? ENTFERNEN.
+- Veraltete Informationen? AKTUALISIEREN oder ENTFERNEN.
 
-2. UNBELEGBARE BEHAUPTUNGEN: Gibt es Aussagen wie "laut Tests", "Studien zeigen", "Experten sagen" ohne Quelle?
-
-3. VERALTETE INFORMATIONEN: Werden Produkte oder Features erwaehnt die es nicht mehr gibt oder die veraltet sind?
-
-Fuer JEDES Problem: Beschreibe es und schlage eine korrigierte Version vor.
-Falls keine Probleme: Bestatige dass der Artikel faktisch korrekt ist.`,
+Gib den KOMPLETTEN korrigierten Artikel zurueck. Nur den Artikeltext, keine Erklaerungen.
+Schreibe am ENDE nach einer Leerzeile "---CHANGES---" und dann eine kurze Liste der Aenderungen.`,
   },
   {
     role: 'Qualitaetsredakteur',
-    instruction: `Du bist ein erfahrener Qualitaetsredakteur. Pruefe den Artikel auf:
+    instruction: `Du bist Qualitaetsredakteur. Pruefe und korrigiere:
 
-1. MARKETING-LUEGEN: Uebertriebene Superlative ("die beste Kamera aller Zeiten", "revolutionaer", "perfekt")
-2. FALSCHE VERSPRECHEN: Werden Dinge versprochen die cam2rent nicht halten kann?
-3. WIDERSPRUECHE: Widerspricht sich der Artikel an irgendeiner Stelle selbst?
-4. TONE: Klingt der Text an einer Stelle zu werblich, zu KI-haft oder unnatuerlich?
-5. HAFTUNG: Wird irgendwo "Versicherung" statt "Haftungsschutz" verwendet?
+- Uebertriebene Superlative ("die beste aller Zeiten", "revolutionaer", "perfekt") → ehrliche Formulierungen
+- Falsche Versprechen → entfernen
+- Widersprueche im Text → aufloesen
+- KI-typische Floskeln ("tauchen wir ein", "am Ende des Tages") → natuerliche Sprache
+- "Versicherung" → "Haftungsschutz" (IMMER!)
 
-Korrigiere alle Probleme direkt im Text. Kuerze uebertriebene Aussagen auf ehrliche, nachvollziehbare Formulierungen.`,
+Gib den KOMPLETTEN korrigierten Artikel zurueck. Nur den Artikeltext, keine Erklaerungen.
+Schreibe am ENDE nach einer Leerzeile "---CHANGES---" und dann eine kurze Liste der Aenderungen.`,
   },
   {
     role: 'Chefredakteur',
-    instruction: `Du bist der Chefredakteur und gibst die finale Freigabe. Letzter Check:
+    instruction: `Du bist der Chefredakteur und gibst die finale Freigabe.
 
-1. Wuerdest du diesen Artikel mit deinem Namen veroeffentlichen?
-2. Gibt es IRGENDEINE Stelle die peinlich sein koennte oder Vertrauen zerstoert?
-3. Sind alle Empfehlungen ehrlich und nachvollziehbar?
-4. Stimmt die Struktur? Ist der Artikel rund?
+- Wuerdest du diesen Artikel mit deinem Namen veroeffentlichen?
+- Gibt es peinliche Stellen oder Vertrauenskiller?
+- Sind Empfehlungen ehrlich und nachvollziehbar?
+- Letzter Feinschliff an Formulierungen.
 
-Wenn alles passt, gib den finalen Text zurueck ohne Aenderungen.
-Wenn nicht, korrigiere die letzten Details.
-
-WICHTIG: Gib am Ende eine kurze Bewertung ab:
-- FREIGABE: JA oder NEIN
-- AENDERUNGEN: Kurze Liste was geaendert wurde (oder "Keine")
-- QUALITAET: 1-10 (10 = perfekt)`,
+Gib den KOMPLETTEN finalen Artikel zurueck. Nur den Artikeltext, keine Erklaerungen.
+Schreibe am ENDE nach einer Leerzeile "---CHANGES---" und dann:
+FREIGABE: JA oder NEIN
+QUALITAET: 1-10
+AENDERUNGEN: Kurze Liste`,
   },
 ];
 
-/**
- * POST /api/admin/blog/factcheck
- * Body: { content: string, title: string }
- * Fuehrt 3 Review-Durchgaenge durch und gibt den bereinigten Text zurueck
- */
 export async function POST(req: NextRequest) {
   const body = await req.json();
   const { content, title } = body;
 
-  if (!content) {
-    return NextResponse.json({ error: 'Content ist erforderlich.' }, { status: 400 });
-  }
+  if (!content) return NextResponse.json({ error: 'Content ist erforderlich.' }, { status: 400 });
 
   const apiKey = await getApiKey();
-  if (!apiKey) {
-    return NextResponse.json({ error: 'Anthropic API Key nicht konfiguriert.' }, { status: 400 });
-  }
+  if (!apiKey) return NextResponse.json({ error: 'Anthropic API Key nicht konfiguriert.' }, { status: 400 });
 
   const client = new Anthropic({ apiKey });
+  const originalContent = content;
   let currentContent = content;
   const reviewLog: { pass: number; role: string; changes: string }[] = [];
+  let finalQuality = 0;
+  let finalApproved = true;
 
   for (let i = 0; i < REVIEW_PASSES.length; i++) {
     const pass = REVIEW_PASSES[i];
@@ -88,72 +77,62 @@ export async function POST(req: NextRequest) {
     try {
       const message = await client.messages.create({
         model: 'claude-sonnet-4-20250514',
-        max_tokens: 4096,
-        system: `${pass.instruction}
-
-WICHTIG: Antworte im JSON-Format:
-{
-  "correctedContent": "Der korrigierte Artikel in Markdown (oder der unveraenderte Text wenn keine Korrekturen noetig)",
-  "changes": "Kurze Beschreibung was geaendert wurde (oder 'Keine Aenderungen noetig')",
-  "issues": ["Problem 1", "Problem 2"] oder [],
-  "approved": true/false,
-  "quality": 8
-}`,
+        max_tokens: 8192,
+        system: pass.instruction,
         messages: [{
           role: 'user',
-          content: `Pruefe diesen Blog-Artikel fuer cam2rent.de (Action-Cam Verleih):
-
-TITEL: ${title}
-
-INHALT:
-${currentContent}`,
+          content: `Pruefe und korrigiere diesen Blog-Artikel fuer cam2rent.de:\n\nTITEL: ${title}\n\n${currentContent}`,
         }],
       });
 
       const text = message.content[0].type === 'text' ? message.content[0].text : '';
-      let parsed;
-      try {
-        parsed = JSON.parse(text);
-      } catch {
-        const match = text.match(/\{[\s\S]*\}/);
-        if (match) parsed = JSON.parse(match[0]);
-        else {
-          reviewLog.push({ pass: i + 1, role: pass.role, changes: 'Antwort konnte nicht geparst werden' });
-          continue;
-        }
+
+      // Text und Aenderungen trennen
+      const parts = text.split('---CHANGES---');
+      const correctedText = parts[0].trim();
+      const changesText = parts[1]?.trim() || 'Keine Details';
+
+      if (correctedText.length > 100) {
+        currentContent = correctedText;
       }
 
-      if (parsed.correctedContent) {
-        currentContent = parsed.correctedContent;
-      }
-
-      reviewLog.push({
-        pass: i + 1,
-        role: pass.role,
-        changes: parsed.changes || 'Keine Details',
-      });
-
-      // Bei letztem Durchgang: Qualitaetsbewertung zurueckgeben
+      // Qualitaet aus letztem Durchgang extrahieren
       if (i === REVIEW_PASSES.length - 1) {
-        return NextResponse.json({
-          content: currentContent,
-          approved: parsed.approved ?? true,
-          quality: parsed.quality ?? 0,
-          issues: parsed.issues ?? [],
-          reviewLog,
-        });
+        const qualityMatch = changesText.match(/QUALITAET:\s*(\d+)/i);
+        if (qualityMatch) finalQuality = parseInt(qualityMatch[1]);
+        const approvedMatch = changesText.match(/FREIGABE:\s*(JA|NEIN)/i);
+        if (approvedMatch) finalApproved = approvedMatch[1].toUpperCase() === 'JA';
       }
+
+      reviewLog.push({ pass: i + 1, role: pass.role, changes: changesText.split('\n').filter((l) => l.trim()).slice(0, 5).join('. ') });
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : 'Unbekannter Fehler';
       reviewLog.push({ pass: i + 1, role: pass.role, changes: `Fehler: ${errMsg}` });
     }
   }
 
+  // Aenderungen finden (einfacher Vergleich)
+  const originalLines = originalContent.split('\n').filter((l: string) => l.trim());
+  const correctedLines = currentContent.split('\n').filter((l: string) => l.trim());
+  const changes: { type: 'removed' | 'added'; text: string }[] = [];
+
+  for (const line of originalLines) {
+    if (!correctedLines.includes(line) && line.trim().length > 20) {
+      changes.push({ type: 'removed', text: line.trim().slice(0, 120) });
+    }
+  }
+  for (const line of correctedLines) {
+    if (!originalLines.includes(line) && line.trim().length > 20) {
+      changes.push({ type: 'added', text: line.trim().slice(0, 120) });
+    }
+  }
+
   return NextResponse.json({
     content: currentContent,
-    approved: true,
-    quality: 0,
-    issues: [],
+    originalContent,
+    approved: finalApproved,
+    quality: finalQuality,
+    changes: changes.slice(0, 20),
     reviewLog,
   });
 }

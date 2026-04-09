@@ -78,7 +78,11 @@ export default function ArticleEditor({ postId }: { postId?: string }) {
 
   // Faktencheck
   const [factchecking, setFactchecking] = useState(false);
-  const [factcheckResult, setFactcheckResult] = useState<{ approved: boolean; quality: number; issues: string[]; reviewLog: { pass: number; role: string; changes: string }[] } | null>(null);
+  const [factcheckResult, setFactcheckResult] = useState<{
+    approved: boolean; quality: number;
+    changes: { type: 'removed' | 'added'; text: string }[];
+    reviewLog: { pass: number; role: string; changes: string }[];
+  } | null>(null);
 
   // Bild-Upload
   const [uploading, setUploading] = useState(false);
@@ -219,9 +223,9 @@ export default function ArticleEditor({ postId }: { postId?: string }) {
         const fcData = await fcRes.json();
         if (fcRes.ok && fcData.content) {
           setPost((prev) => ({ ...prev, content: fcData.content }));
-          setFactcheckResult({ approved: fcData.approved, quality: fcData.quality, issues: fcData.issues ?? [], reviewLog: fcData.reviewLog ?? [] });
+          setFactcheckResult({ approved: fcData.approved, quality: fcData.quality, changes: fcData.changes ?? [], reviewLog: fcData.reviewLog ?? [] });
           setMsg(fcData.approved
-            ? `Fertig! Faktencheck bestanden (${fcData.quality}/10)`
+            ? `Fertig! Faktencheck bestanden (${fcData.quality}/10) — ${fcData.changes?.length ?? 0} Aenderungen`
             : `Fertig! Faktencheck: Korrekturen vorgenommen (${fcData.quality}/10)`);
         }
       } catch {
@@ -264,9 +268,9 @@ export default function ArticleEditor({ postId }: { postId?: string }) {
         if (data.content && data.content !== post.content) {
           update('content', data.content);
         }
-        setFactcheckResult({ approved: data.approved, quality: data.quality, issues: data.issues ?? [], reviewLog: data.reviewLog ?? [] });
+        setFactcheckResult({ approved: data.approved, quality: data.quality, changes: data.changes ?? [], reviewLog: data.reviewLog ?? [] });
         setMsg(data.approved
-          ? `Faktencheck bestanden! Qualitaet: ${data.quality}/10`
+          ? `Faktencheck bestanden! Qualitaet: ${data.quality}/10 — ${data.changes?.length ?? 0} Aenderungen`
           : `Faktencheck: Korrekturen vorgenommen. Qualitaet: ${data.quality}/10`);
       } else {
         setMsg(data.error || 'Faktencheck fehlgeschlagen.');
@@ -443,22 +447,31 @@ export default function ArticleEditor({ postId }: { postId?: string }) {
               <p className="font-heading font-semibold text-sm" style={{ color: factcheckResult.approved ? '#22c55e' : '#f59e0b' }}>
                 {factcheckResult.approved ? 'Faktencheck bestanden' : 'Korrekturen vorgenommen'}
               </p>
-              <p className="text-xs" style={{ color: '#94a3b8' }}>Qualitaet: {factcheckResult.quality}/10 — 3 Durchgaenge abgeschlossen</p>
+              <p className="text-xs" style={{ color: '#94a3b8' }}>Qualitaet: {factcheckResult.quality}/10 — {factcheckResult.changes.length} Aenderungen</p>
             </div>
           </div>
-          {factcheckResult.issues.length > 0 && (
+
+          {/* Vorher/Nachher Aenderungen */}
+          {factcheckResult.changes.length > 0 && (
             <div className="mb-3">
-              <p className="text-xs font-heading font-semibold mb-1" style={{ color: '#f59e0b' }}>Gefundene Probleme (korrigiert):</p>
-              <ul className="space-y-1">
-                {factcheckResult.issues.map((issue, i) => (
-                  <li key={i} className="text-xs flex items-start gap-1.5" style={{ color: '#94a3b8' }}>
-                    <span style={{ color: '#f59e0b' }}>•</span> {issue}
-                  </li>
+              <p className="text-xs font-heading font-semibold mb-2" style={{ color: '#e2e8f0' }}>Aenderungen im Detail:</p>
+              <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                {factcheckResult.changes.map((c, i) => (
+                  <div key={i} className="flex items-start gap-2 text-[11px] px-2 py-1.5 rounded" style={{ background: c.type === 'removed' ? '#ef444410' : '#22c55e10' }}>
+                    <span className="shrink-0 font-heading font-bold mt-0.5" style={{ color: c.type === 'removed' ? '#ef4444' : '#22c55e' }}>
+                      {c.type === 'removed' ? '−' : '+'}
+                    </span>
+                    <span style={{ color: c.type === 'removed' ? '#f87171' : '#86efac', textDecoration: c.type === 'removed' ? 'line-through' : 'none' }}>
+                      {c.text}
+                    </span>
+                  </div>
                 ))}
-              </ul>
+              </div>
             </div>
           )}
-          <div className="space-y-1">
+
+          {/* Review-Log */}
+          <div className="space-y-1 pt-2" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
             {factcheckResult.reviewLog.map((log) => (
               <div key={log.pass} className="flex items-start gap-2 text-[11px]" style={{ color: '#64748b' }}>
                 <span className="font-heading font-bold shrink-0" style={{ color: '#94a3b8' }}>#{log.pass} {log.role}:</span>
