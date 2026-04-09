@@ -75,8 +75,8 @@ export async function POST(req: NextRequest) {
   }
 
   // Uhrzeit-Check: Liegt die aktuelle Stunde im Zeitfenster?
-  const fromHour = parseInt(timeFrom.split(':')[0]) || 9;
-  const toHour = parseInt(timeTo.split(':')[0]) || 18;
+  const fromHour = timeFrom ? parseInt(timeFrom.split(':')[0]) : 9;
+  const toHour = timeTo ? parseInt(timeTo.split(':')[0]) + 1 : 24; // +1 damit 23:59 auch 23 Uhr einschliesst
   if (currentHour < fromHour || currentHour >= toHour) {
     return NextResponse.json({ message: `Aktuelle Uhrzeit (${currentHour}:${String(currentMinute).padStart(2, '0')}) liegt ausserhalb des Zeitfensters ${timeFrom}-${timeTo}.` });
   }
