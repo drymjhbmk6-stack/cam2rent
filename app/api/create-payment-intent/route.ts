@@ -28,27 +28,33 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Verifizierungs- und Blacklist-Check
-    if (metadata.user_id) {
-      const supabase = createServiceClient();
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('verification_status, blacklisted')
-        .eq('id', metadata.user_id)
-        .maybeSingle();
+    // Konto ist Pflicht — kein Gast-Checkout
+    if (!metadata.user_id) {
+      return NextResponse.json(
+        { error: 'Bitte erstelle ein Konto, um eine Buchung durchzuführen.', code: 'LOGIN_REQUIRED' },
+        { status: 403 }
+      );
+    }
 
-      if (profile?.blacklisted) {
-        return NextResponse.json(
-          { error: 'Buchung nicht möglich.', code: 'BLACKLISTED' },
-          { status: 403 }
-        );
-      }
-      if (profile && profile.verification_status !== 'verified') {
-        return NextResponse.json(
-          { error: 'Bitte verifiziere zuerst dein Konto.', code: 'NOT_VERIFIED' },
-          { status: 403 }
-        );
-      }
+    // Verifizierungs- und Blacklist-Check
+    const supabase = createServiceClient();
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('verification_status, blacklisted')
+      .eq('id', metadata.user_id)
+      .maybeSingle();
+
+    if (profile?.blacklisted) {
+      return NextResponse.json(
+        { error: 'Buchung nicht möglich.', code: 'BLACKLISTED' },
+        { status: 403 }
+      );
+    }
+    if (!profile || profile.verification_status !== 'verified') {
+      return NextResponse.json(
+        { error: 'Dein Konto muss zuerst verifiziert werden. Bitte lade deinen Ausweis unter "Mein Konto" hoch.', code: 'NOT_VERIFIED' },
+        { status: 403 }
+      );
     }
 
     // Haupt-PaymentIntent
