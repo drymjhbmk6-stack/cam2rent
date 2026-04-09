@@ -373,10 +373,10 @@ async function handleCartBooking(
   }
 
   // Checkout-Kontext aufraeumen
-  supabase
-    .from('admin_settings')
-    .delete()
-    .eq('key', `checkout_${intent.id}`)
-    .then(() => {})
-    .catch(() => {});
+  Promise.resolve(
+    supabase
+      .from('admin_settings')
+      .delete()
+      .eq('key', `checkout_${intent.id}`)
+  ).catch(() => {});
 }
