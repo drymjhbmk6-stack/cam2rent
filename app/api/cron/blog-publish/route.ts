@@ -11,20 +11,70 @@ export async function POST(req: NextRequest) {
   const supabase = createServiceClient();
   const now = new Date().toISOString();
 
-  // 1. Alle geplanten Artikel veroeffentlichen deren scheduled_at erreicht ist
-  const { data, error } = await supabase
-    .from('blog_posts')
-    .update({ status: 'published', published_at: now, updated_at: now })
-    .eq('status', 'scheduled')
-    .lte('scheduled_at', now)
-    .select('id, title, slug, schedule_id');
+  // Blog-Settings laden (Semi/Voll Modus)
+  const { data: settingsData } = await supabase
+    .from('admin_settings').select('value').eq('key', 'blog_settings').single();
 
-  // 2. Fix: Artikel die als 'draft' gespeichert wurden aber einen schedule_id haben
-  // und deren Zeitplan-Datum faellig ist — auf published setzen
+  let autoMode = 'semi';
+  if (settingsData?.value) {
+    try {
+      const parsed = typeof settingsData.value === 'string' ? JSON.parse(settingsData.value) : settingsData.value;
+      autoMode = parsed.auto_generate_mode ?? 'semi';
+    } catch { /* leer */ }
+  }
+
+  // 1. Geplante Artikel veroeffentlichen deren scheduled_at erreicht ist
+  const publishQuery = supabase
+    .from('blog_posts')
+    .select('id, title, slug, schedule_id')
+    .eq('status', 'scheduled')
+    .lte('scheduled_at', now);
+
+  // Im Semi-Modus: nur Artikel veroeffentlichen deren Zeitplan-Eintrag als "gesehen" markiert ist
+  // oder die keinen Zeitplan-Eintrag haben (manuell geplante)
+  const { data: scheduledPosts } = await publishQuery;
+
+  const postsToPublish: string[] = [];
+  for (const post of scheduledPosts ?? []) {
+    if (!post.schedule_id) {
+      // Kein Zeitplan-Eintrag — immer veroeffentlichen
+      postsToPublish.push(post.id);
+    } else if (autoMode === 'voll') {
+      // Voll-Modus — immer veroeffentlichen
+      postsToPublish.push(post.id);
+    } else {
+      // Semi-Modus — nur wenn "gesehen"
+      const { data: schedEntry } = await supabase
+        .from('blog_schedule').select('reviewed').eq('id', post.schedule_id).single();
+      if (schedEntry?.reviewed) {
+        postsToPublish.push(post.id);
+      }
+    }
+  }
+
+  let data: { id: string; title: string; slug: string; schedule_id: string | null }[] = [];
+  let error = null;
+  if (postsToPublish.length > 0) {
+    const result = await supabase
+      .from('blog_posts')
+      .update({ status: 'published', published_at: now, updated_at: now })
+      .in('id', postsToPublish)
+      .select('id, title, slug, schedule_id');
+    data = result.data ?? [];
+    error = result.error;
+  }
+
+  // 2. Artikel aus dem Zeitplan veroeffentlichen
+  // Semi-Modus: NUR wenn "gesehen" (reviewed = true)
+  // Voll-Modus: Immer wenn Datum faellig
+  const allowedStatuses = autoMode === 'semi'
+    ? ['reviewed']  // Semi: nur gesehene
+    : ['generated', 'reviewed'];  // Voll: alle fertigen
+
   const { data: draftFixes } = await supabase
     .from('blog_schedule')
-    .select('id, post_id, scheduled_date, scheduled_time')
-    .in('status', ['generated', 'reviewed'])
+    .select('id, post_id, scheduled_date, scheduled_time, reviewed')
+    .in('status', allowedStatuses)
     .not('post_id', 'is', null)
     .lte('scheduled_date', now.split('T')[0]);
 
