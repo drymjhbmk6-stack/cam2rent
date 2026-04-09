@@ -106,28 +106,6 @@ export default function Hero() {
     </div>
   );
 
-  // Bild-Block
-  const imageBlock = hasImage ? (
-    <div className="relative w-full h-64 sm:h-80 lg:h-full min-h-[280px] rounded-2xl overflow-hidden shadow-2xl shadow-black/30">
-      <Image
-        src={seasonalImage.url}
-        alt={seasonalImage.alt || 'Saisonales Bild'}
-        fill
-        className="object-cover"
-        priority
-        sizes="(max-width: 768px) 100vw, 50vw"
-      />
-      {/* Photographer credit */}
-      {seasonalImage.source === 'unsplash' && seasonalImage.photographer && (
-        <div className="absolute bottom-2 right-2 px-2 py-1 rounded bg-black/50 backdrop-blur-sm">
-          <span className="text-[10px] text-white/70 font-body">
-            Foto: {seasonalImage.photographer}
-          </span>
-        </div>
-      )}
-    </div>
-  ) : null;
-
   // Layout OHNE Bild: Original-Design
   if (!hasImage) {
     return (
@@ -175,15 +153,52 @@ export default function Hero() {
       <div className="absolute -top-24 -right-24 w-96 h-96 rounded-full bg-white/5 blur-3xl" aria-hidden="true" />
       <div className="absolute -bottom-24 -left-24 w-96 h-96 rounded-full bg-black/10 blur-3xl" aria-hidden="true" />
 
-      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-20 lg:py-24">
-        <div className={`grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-center ${imageLeft ? '' : 'lg:[direction:rtl]'}`}>
-          {/* Bild-Spalte — auf Mobile immer oben */}
-          <div className={`${imageLeft ? '' : 'lg:[direction:ltr]'}`}>
-            {imageBlock}
-          </div>
+      {/* Desktop: Bild absolut positioniert, fuellt halbe Sektion */}
+      <div className="relative">
+        {/* Bild-Haelfte — auf Desktop absolut, fuellt die ganze Hoehe */}
+        <div className={`hidden lg:block absolute inset-y-0 w-1/2 ${imageLeft ? 'left-0' : 'right-0'}`}>
+          <Image
+            src={seasonalImage.url}
+            alt={seasonalImage.alt || 'Saisonales Bild'}
+            fill
+            className="object-cover"
+            priority
+            sizes="50vw"
+          />
+          {/* Gradient-Uebergang zum blauen Hintergrund */}
+          <div className={`absolute inset-y-0 w-32 ${imageLeft ? 'right-0 bg-gradient-to-l' : 'left-0 bg-gradient-to-r'} from-blue-700/80 to-transparent`} />
+          {seasonalImage.source === 'unsplash' && seasonalImage.photographer && (
+            <div className={`absolute bottom-4 ${imageLeft ? 'left-4' : 'right-4'} px-2 py-1 rounded bg-black/50 backdrop-blur-sm`}>
+              <span className="text-[10px] text-white/70 font-body">
+                Foto: {seasonalImage.photographer}
+              </span>
+            </div>
+          )}
+        </div>
 
-          {/* Text-Spalte */}
-          <div className={`${imageLeft ? '' : 'lg:[direction:ltr]'}`}>
+        {/* Mobile: Bild oben, volle Breite */}
+        <div className="lg:hidden relative w-full h-56 sm:h-72">
+          <Image
+            src={seasonalImage.url}
+            alt={seasonalImage.alt || 'Saisonales Bild'}
+            fill
+            className="object-cover"
+            priority
+            sizes="100vw"
+          />
+          <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-blue-700 to-transparent" />
+          {seasonalImage.source === 'unsplash' && seasonalImage.photographer && (
+            <div className="absolute bottom-2 right-3 px-2 py-1 rounded bg-black/50 backdrop-blur-sm">
+              <span className="text-[10px] text-white/70 font-body">
+                Foto: {seasonalImage.photographer}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Text-Spalte */}
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 md:py-20 lg:py-28">
+          <div className={`lg:w-1/2 ${imageLeft ? 'lg:ml-auto lg:pl-12' : 'lg:mr-auto lg:pr-12'}`}>
             {textBlock}
           </div>
         </div>
