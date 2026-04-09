@@ -391,6 +391,7 @@ Antworte NUR mit dem korrigierten Artikel-Text in Markdown. Keine Erklaerungen, 
         reading_time_min: readingTime,
         published_at: publishedAt,
         scheduled_at: scheduledAt,
+        schedule_id: scheduleId || null,
         series_id: seriesContext?.id || null,
         series_part: seriesContext?.part_number || null,
         created_at: now,
@@ -468,16 +469,19 @@ Antworte NUR mit dem korrigierten Artikel-Text in Markdown. Keine Erklaerungen, 
           .update({ status: 'completed' })
           .eq('id', seriesContext.id);
       }
-    } else if (scheduleId) {
-      // Redaktionsplan-Eintrag aktualisieren
+    }
+
+    // Redaktionsplan-Eintrag aktualisieren (unabhaengig von Series/Themenpool)
+    if (scheduleId) {
       await supabase.from('blog_schedule').update({
         status: 'generated',
         post_id: post.id,
         generated_at: now,
       }).eq('id', scheduleId);
-      // Post mit schedule_id verknuepfen
-      await supabase.from('blog_posts').update({ schedule_id: scheduleId }).eq('id', post.id);
-    } else {
+    }
+
+    // Thema als verwendet markieren (nur wenn KEIN Zeitplan-Eintrag)
+    if (!scheduleId && !seriesContext) {
       // Normales Thema als verwendet markieren
       await supabase
         .from('blog_auto_topics')
