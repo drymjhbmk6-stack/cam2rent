@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 
-const BUCKET = 'seasonal-images';
+// Gleicher Bucket wie Blog-Bilder — kein extra Bucket noetig
+const BUCKET = 'blog-images';
 
 async function getUnsplashKey(): Promise<string | null> {
   const supabase = createServiceClient();
@@ -19,14 +20,6 @@ async function getUnsplashKey(): Promise<string | null> {
   }
 }
 
-async function ensureBucket(supabase: ReturnType<typeof createServiceClient>) {
-  const { data: buckets } = await supabase.storage.listBuckets();
-  const exists = buckets?.some((b) => b.name === BUCKET);
-  if (!exists) {
-    await supabase.storage.createBucket(BUCKET, { public: true });
-  }
-}
-
 /**
  * POST /api/admin/seasonal-images/upload
  * Laedt ein Bild hoch — entweder von Unsplash-URL oder als Base64.
@@ -37,8 +30,6 @@ async function ensureBucket(supabase: ReturnType<typeof createServiceClient>) {
 export async function POST(req: NextRequest) {
   const body = await req.json();
   const supabase = createServiceClient();
-
-  await ensureBucket(supabase);
 
   let buffer: Buffer;
   let contentType = 'image/jpeg';
