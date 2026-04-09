@@ -126,8 +126,9 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     console.error('Checkout PaymentIntent error:', error);
+    const message = error instanceof Error ? error.message : 'Unbekannter Fehler';
     return NextResponse.json(
-      { error: 'Zahlung konnte nicht initialisiert werden.' },
+      { error: `Zahlung konnte nicht initialisiert werden: ${message}` },
       { status: 500 }
     );
   }
