@@ -251,6 +251,22 @@ export async function PUT(req: NextRequest) {
     .from('blog_schedule').update(updates).eq('id', id).select().single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Wenn Datum oder Uhrzeit geaendert wurde: auch blog_posts.scheduled_at aktualisieren
+  if (data?.post_id && ('scheduled_date' in updates || 'scheduled_time' in updates)) {
+    const date = data.scheduled_date;
+    const time = (data.scheduled_time || '09:00').slice(0, 5);
+    // Deutsche Zeit nach UTC umrechnen
+    const localDate = new Date(`${date}T${time}:00`);
+    const berlinOffset = new Date(localDate.toLocaleString('en-US', { timeZone: 'Europe/Berlin' })).getTime() - new Date(localDate.toLocaleString('en-US', { timeZone: 'UTC' })).getTime();
+    const utcDate = new Date(localDate.getTime() - berlinOffset);
+
+    await supabase.from('blog_posts').update({
+      scheduled_at: utcDate.toISOString(),
+      updated_at: new Date().toISOString(),
+    }).eq('id', data.post_id);
+  }
+
   return NextResponse.json({ entry: data });
 }
 
