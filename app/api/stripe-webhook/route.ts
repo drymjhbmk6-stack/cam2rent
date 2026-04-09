@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { createServiceClient } from '@/lib/supabase';
+import { generateBookingId } from '@/lib/booking-id';
 import type { CartItem } from '@/components/CartProvider';
 import {
   sendBookingConfirmation,
@@ -94,12 +95,7 @@ async function handleSingleBooking(
   meta: Stripe.Metadata,
   tax: { taxMode: string; taxRate: number; ustId: string },
 ) {
-  const year = new Date().getFullYear();
-  const { count } = await supabase
-    .from('bookings')
-    .select('*', { count: 'exact', head: true });
-  const seq = String((count ?? 0) + 1).padStart(5, '0');
-  const bookingId = `BK-${year}-${seq}`;
+  const bookingId = await generateBookingId();
 
   const accessories = meta.accessories
     ? meta.accessories.split(',').filter(Boolean)
@@ -227,7 +223,6 @@ async function handleCartBooking(
   const shippingPrice = (ctx.shippingPrice as number) ?? 0;
   const discountAmount = (ctx.discountAmount as number) ?? 0;
   const couponCode = (ctx.couponCode as string) ?? '';
-  const productDiscount = (ctx.productDiscount as number) ?? 0;
   const durationDiscount = (ctx.durationDiscount as number) ?? 0;
   const loyaltyDiscount = (ctx.loyaltyDiscount as number) ?? 0;
 
@@ -250,64 +245,49 @@ async function handleCartBooking(
     }
   }
 
-  const year = new Date().getFullYear();
-  const { count } = await supabase
-    .from('bookings')
-    .select('*', { count: 'exact', head: true });
-  let seq = (count ?? 0) + 1;
-  const bookingIds: string[] = [];
+  // EINE Buchung fuer den gesamten Warenkorb
+  const bookingId = await generateBookingId();
+  const firstItem = items[0];
+  const productName = items.length === 1
+    ? firstItem.productName
+    : items.map((it) => it.productName).join(', ');
+  const allAccessories = [...new Set(items.flatMap((it) => it.accessories))];
 
-  const totalDiscountAll = discountAmount + productDiscount + durationDiscount + loyaltyDiscount;
+  const { error } = await supabase.from('bookings').insert({
+    id: bookingId,
+    payment_intent_id: intent.id,
+    product_id: firstItem.productId,
+    product_name: productName,
+    rental_from: firstItem.rentalFrom,
+    rental_to: firstItem.rentalTo,
+    days: firstItem.days,
+    delivery_mode: deliveryMode,
+    shipping_method: deliveryMode === 'versand' ? shippingMethod : null,
+    shipping_price: shippingPrice,
+    haftung: firstItem.haftung,
+    accessories: allAccessories,
+    price_rental: items.reduce((s, it) => s + it.priceRental, 0),
+    price_accessories: items.reduce((s, it) => s + it.priceAccessories, 0),
+    price_haftung: items.reduce((s, it) => s + it.priceHaftung, 0),
+    price_total: intent.amount / 100,
+    deposit: items.reduce((s, it) => s + it.deposit, 0),
+    status: 'confirmed',
+    user_id: userId,
+    customer_email: customerEmail,
+    customer_name: customerName,
+    shipping_address: shippingAddress,
+    coupon_code: couponCode || null,
+    discount_amount: discountAmount,
+    duration_discount: durationDiscount,
+    loyalty_discount: loyaltyDiscount,
+  });
 
-  for (let i = 0; i < items.length; i++) {
-    const item = items[i];
-    const bookingId = `BK-${year}-${String(seq).padStart(5, '0')}`;
-    seq++;
-
-    const itemShare = items.length > 1 ? item.subtotal / items.reduce((s, it) => s + it.subtotal, 0) : 1;
-    const itemTotalDiscount = Math.round(totalDiscountAll * itemShare * 100) / 100;
-    const itemShipping = i === 0 ? shippingPrice : 0;
-    const itemTotal = item.subtotal - itemTotalDiscount + itemShipping;
-
-    const { error } = await supabase.from('bookings').insert({
-      id: bookingId,
-      payment_intent_id: `${intent.id}_${i}`,
-      product_id: item.productId,
-      product_name: item.productName,
-      rental_from: item.rentalFrom,
-      rental_to: item.rentalTo,
-      days: item.days,
-      delivery_mode: deliveryMode,
-      shipping_method: deliveryMode === 'versand' ? shippingMethod : null,
-      shipping_price: i === 0 ? shippingPrice : 0,
-      haftung: item.haftung,
-      accessories: item.accessories,
-      price_rental: item.priceRental,
-      price_accessories: item.priceAccessories,
-      price_haftung: item.priceHaftung,
-      price_total: Math.max(0, itemTotal),
-      deposit: item.deposit,
-      status: 'confirmed',
-      user_id: userId,
-      customer_email: customerEmail,
-      customer_name: customerName,
-      shipping_address: shippingAddress,
-      coupon_code: couponCode || null,
-      discount_amount: Math.round((discountAmount) * itemShare * 100) / 100,
-      duration_discount: Math.round((durationDiscount) * itemShare * 100) / 100,
-      loyalty_discount: Math.round((loyaltyDiscount) * itemShare * 100) / 100,
-    });
-
-    if (error) {
-      console.error(`[Webhook] Cart-Buchung ${bookingId} Fehler:`, error);
-    } else {
-      bookingIds.push(bookingId);
-    }
+  if (error) {
+    console.error(`[Webhook] Cart-Buchung ${bookingId} Fehler:`, error);
+    return;
   }
 
-  if (bookingIds.length === 0) return;
-
-  console.log(`[Webhook] ${bookingIds.length} Cart-Buchung(en) nachgeholt: ${bookingIds.join(', ')}`);
+  console.log(`[Webhook] Cart-Buchung ${bookingId} nachgeholt.`);
 
   // Coupon used_count erhoehen
   if (couponCode) {
@@ -334,28 +314,25 @@ async function handleCartBooking(
     if (profile) {
       await supabase
         .from('profiles')
-        .update({ booking_count: (profile.booking_count ?? 0) + bookingIds.length })
+        .update({ booking_count: (profile.booking_count ?? 0) + 1 })
         .eq('id', userId);
     }
   }
 
   // Email senden
   if (customerEmail) {
-    const firstItem = items[0];
     const emailData: BookingEmailData = {
-      bookingId: bookingIds.join(', '),
+      bookingId,
       customerName,
       customerEmail,
-      productName: items.length === 1
-        ? firstItem.productName
-        : `${firstItem.productName} + ${items.length - 1} weitere${items.length > 2 ? 's' : ''} Produkt${items.length > 2 ? 'e' : ''}`,
+      productName,
       rentalFrom: firstItem.rentalFrom,
       rentalTo: firstItem.rentalTo,
       days: firstItem.days,
       deliveryMode: deliveryMode as 'versand' | 'abholung',
       shippingMethod,
       haftung: firstItem.haftung,
-      accessories: firstItem.accessories,
+      accessories: allAccessories,
       priceRental: items.reduce((s, it) => s + it.priceRental, 0),
       priceAccessories: items.reduce((s, it) => s + it.priceAccessories, 0),
       priceHaftung: items.reduce((s, it) => s + it.priceHaftung, 0),

@@ -150,15 +150,15 @@ function SuccessCard({ bookingIds }: { bookingIds: string[] | null }) {
           Bestätigungs-E-Mail mit allen Details.
         </p>
 
-        {/* Booking IDs */}
+        {/* Buchungsnummer */}
         <div className="bg-brand-bg dark:bg-brand-black rounded-xl p-4 mb-8">
           <p className="text-xs font-body text-brand-muted dark:text-gray-500 mb-1">
-            Buchungsnummer{bookingIds && bookingIds.length > 1 ? 'n' : ''}
+            Deine Buchungsnummer
           </p>
           {bookingIds ? (
             <div className="space-y-1">
               {bookingIds.map((id) => (
-                <p key={id} className="font-heading font-bold text-lg text-brand-black dark:text-white">
+                <p key={id} className="font-heading font-bold text-lg text-brand-black dark:text-white tracking-wide">
                   {id}
                 </p>
               ))}
@@ -173,23 +173,23 @@ function SuccessCard({ bookingIds }: { bookingIds: string[] | null }) {
           )}
         </div>
 
-        {/* What happens next */}
-        <div className="text-left bg-accent-blue-soft/30 dark:bg-accent-blue/10 rounded-xl p-4 mb-8">
-          <p className="text-xs font-heading font-semibold text-accent-blue uppercase tracking-wider mb-3">
-            Wie geht es weiter?
+        {/* Deine Kamera ist bald unterwegs */}
+        <div className="text-left bg-accent-blue-soft/30 dark:bg-accent-blue/10 rounded-xl p-5 mb-8">
+          <p className="text-sm font-heading font-bold text-accent-blue mb-4">
+            Deine Kamera ist bald unterwegs!
           </p>
-          <ul className="space-y-2.5">
+          <ul className="space-y-3">
             {[
-              'Du erhältst eine Bestätigungs-E-Mail',
-              'Wir bereiten deine Kamera vor',
-              'Du wirst über Versand oder Abholtermin informiert',
-              'Viel Spaß mit deiner Action-Cam!',
+              'Check dein Postfach — deine Bestätigung ist schon unterwegs',
+              'Wir packen deine Kamera sorgfältig ein',
+              'Du erhältst eine Versandbestätigung mit Tracking-Link',
+              'Kamera auspacken und Abenteuer starten!',
             ].map((item, i) => (
               <li
                 key={i}
-                className="flex items-start gap-2.5 text-sm font-body text-brand-steel dark:text-gray-400"
+                className="flex items-start gap-3 text-sm font-body text-brand-black/80 dark:text-gray-300"
               >
-                <span className="w-5 h-5 rounded-full bg-accent-blue text-white text-xs flex items-center justify-center flex-shrink-0 mt-0.5 font-heading font-bold">
+                <span className="w-6 h-6 rounded-full bg-accent-blue text-white text-xs flex items-center justify-center flex-shrink-0 mt-0.5 font-heading font-bold">
                   {i + 1}
                 </span>
                 {item}

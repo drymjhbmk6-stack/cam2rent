@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { generateBookingId } from '@/lib/booking-id';
 
 /**
  * POST /api/admin/manual-booking
@@ -43,13 +44,8 @@ export async function POST(req: NextRequest) {
 
     const supabase = createServiceClient();
 
-    // Buchungs-ID generieren: BK-YYYY-NNNNN
-    const year = new Date().getFullYear();
-    const { count } = await supabase
-      .from('bookings')
-      .select('id', { count: 'exact', head: true });
-    const seq = ((count ?? 0) + 1).toString().padStart(5, '0');
-    const bookingId = `BK-${year}-${seq}`;
+    // Buchungsnummer generieren
+    const bookingId = await generateBookingId();
 
     // Manuelle Buchung — payment_intent_id mit MANUAL-Prefix
     const paymentIntentId = `MANUAL-${bookingId}-${Date.now()}`;

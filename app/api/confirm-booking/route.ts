@@ -3,6 +3,7 @@ import Stripe from 'stripe';
 import { createServiceClient } from '@/lib/supabase';
 import { detectSuspicious } from '@/lib/suspicious';
 import { ensureBusinessConfig } from '@/lib/load-business-config';
+import { generateBookingId } from '@/lib/booking-id';
 import {
   sendBookingConfirmation,
   sendAdminNotification,
@@ -58,13 +59,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, booking_id: existing.id });
     }
 
-    // 3. Generate booking ID: BK-YYYY-NNNNN
-    const year = new Date().getFullYear();
-    const { count } = await supabase
-      .from('bookings')
-      .select('*', { count: 'exact', head: true });
-    const seq = String((count ?? 0) + 1).padStart(5, '0');
-    const bookingId = `BK-${year}-${seq}`;
+    // 3. Buchungsnummer generieren
+    const bookingId = await generateBookingId();
 
     // 4. Parse Stripe metadata
     const meta = intent.metadata;

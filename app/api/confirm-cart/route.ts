@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { createServiceClient } from '@/lib/supabase';
+import { generateBookingId } from '@/lib/booking-id';
 import { detectSuspicious } from '@/lib/suspicious';
 import type { CartItem } from '@/components/CartProvider';
 import {
@@ -15,21 +16,8 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 /**
  * POST /api/confirm-cart
  *
- * Bestätigt einen Warenkorb-Checkout nach erfolgreicher Stripe-Zahlung.
- * Verifiziert die Zahlung und speichert alle Buchungen in Supabase.
- *
- * Body: {
- *   payment_intent_id: string
- *   items: CartItem[]
- *   customerName: string
- *   customerEmail: string
- *   userId?: string
- *   deliveryMode: 'versand' | 'abholung'
- *   shippingMethod: string
- *   shippingPrice: number
- *   discountAmount: number
- *   couponCode?: string
- * }
+ * Bestaetigt einen Warenkorb-Checkout nach erfolgreicher Stripe-Zahlung.
+ * Erstellt EINE Buchung fuer den gesamten Warenkorb.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -46,7 +34,6 @@ export async function POST(req: NextRequest) {
       shippingPrice,
       discountAmount,
       couponCode,
-      productDiscount,
       durationDiscount,
       loyaltyDiscount,
       referralCode,
@@ -63,7 +50,6 @@ export async function POST(req: NextRequest) {
       shippingPrice: number;
       discountAmount: number;
       couponCode?: string;
-      productDiscount?: number;
       durationDiscount?: number;
       loyaltyDiscount?: number;
       referralCode?: string;
@@ -92,40 +78,33 @@ export async function POST(req: NextRequest) {
     const { data: existing } = await supabase
       .from('bookings')
       .select('id')
-      .like('payment_intent_id', `${payment_intent_id}%`)
-      .limit(1)
+      .eq('payment_intent_id', payment_intent_id)
       .maybeSingle();
 
     if (existing) {
-      // Bereits bestaetigte Buchung: IDs zurueckgeben
-      const { data: existingBookings } = await supabase
-        .from('bookings')
-        .select('id')
-        .like('payment_intent_id', `${payment_intent_id}%`);
       return NextResponse.json({
         success: true,
         already_confirmed: true,
-        booking_ids: existingBookings?.map((b) => b.id) ?? [],
+        booking_ids: [existing.id],
       });
     }
 
-    // 2b. Fallback: Checkout-Kontext aus DB laden falls items leer (sessionStorage verloren nach Stripe-Redirect)
-    let resolvedItems = items;
-    let resolvedCustomerName = customerName;
-    let resolvedCustomerEmail = customerEmail;
-    let resolvedUserId = userId;
-    let resolvedDeliveryMode = deliveryMode;
-    let resolvedShippingMethod = shippingMethod;
-    let resolvedShippingPrice = shippingPrice;
-    let resolvedDiscountAmount = discountAmount;
-    let resolvedCouponCode = couponCode;
-    let resolvedProductDiscount = productDiscount;
-    let resolvedDurationDiscount = durationDiscount;
-    let resolvedLoyaltyDiscount = loyaltyDiscount;
-    let resolvedReferralCode = referralCode;
-    let resolvedShippingAddress = shippingAddress;
+    // 2b. Fallback: Checkout-Kontext aus DB laden falls items leer
+    let r_items = items;
+    let r_name = customerName;
+    let r_email = customerEmail;
+    let r_userId = userId;
+    let r_deliveryMode = deliveryMode;
+    let r_shippingMethod = shippingMethod;
+    let r_shippingPrice = shippingPrice;
+    let r_discountAmount = discountAmount;
+    let r_couponCode = couponCode;
+    let r_durationDiscount = durationDiscount;
+    let r_loyaltyDiscount = loyaltyDiscount;
+    let r_referralCode = referralCode;
+    let r_shippingAddress = shippingAddress;
 
-    if (!resolvedItems?.length) {
+    if (!r_items?.length) {
       const { data: ctxRow } = await supabase
         .from('admin_settings')
         .select('value')
@@ -135,45 +114,38 @@ export async function POST(req: NextRequest) {
       if (ctxRow?.value) {
         try {
           const ctx = typeof ctxRow.value === 'string' ? JSON.parse(ctxRow.value) : ctxRow.value;
-          resolvedItems = ctx.items ?? [];
-          resolvedCustomerName = ctx.customerName ?? resolvedCustomerName;
-          resolvedCustomerEmail = ctx.customerEmail ?? resolvedCustomerEmail;
-          resolvedUserId = ctx.userId ?? resolvedUserId;
-          resolvedDeliveryMode = ctx.deliveryMode ?? resolvedDeliveryMode;
-          resolvedShippingMethod = ctx.shippingMethod ?? resolvedShippingMethod;
-          resolvedShippingPrice = ctx.shippingPrice ?? resolvedShippingPrice;
-          resolvedDiscountAmount = ctx.discountAmount ?? resolvedDiscountAmount;
-          resolvedCouponCode = ctx.couponCode ?? resolvedCouponCode;
-          resolvedProductDiscount = ctx.productDiscount ?? resolvedProductDiscount;
-          resolvedDurationDiscount = ctx.durationDiscount ?? resolvedDurationDiscount;
-          resolvedLoyaltyDiscount = ctx.loyaltyDiscount ?? resolvedLoyaltyDiscount;
-          resolvedReferralCode = ctx.referralCode ?? resolvedReferralCode;
+          r_items = ctx.items ?? [];
+          r_name = ctx.customerName ?? r_name;
+          r_email = ctx.customerEmail ?? r_email;
+          r_userId = ctx.userId ?? r_userId;
+          r_deliveryMode = ctx.deliveryMode ?? r_deliveryMode;
+          r_shippingMethod = ctx.shippingMethod ?? r_shippingMethod;
+          r_shippingPrice = ctx.shippingPrice ?? r_shippingPrice;
+          r_discountAmount = ctx.discountAmount ?? r_discountAmount;
+          r_couponCode = ctx.couponCode ?? r_couponCode;
+          r_durationDiscount = ctx.durationDiscount ?? r_durationDiscount;
+          r_loyaltyDiscount = ctx.loyaltyDiscount ?? r_loyaltyDiscount;
+          r_referralCode = ctx.referralCode ?? r_referralCode;
           if (ctx.street) {
-            resolvedShippingAddress = [ctx.street, [ctx.zip, ctx.city].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+            r_shippingAddress = [ctx.street, [ctx.zip, ctx.city].filter(Boolean).join(' ')].filter(Boolean).join(', ');
           }
         } catch {
-          // JSON parse error - ignore
+          // ignore
         }
       }
     }
 
-    if (!resolvedItems?.length) {
+    if (!r_items?.length) {
       return NextResponse.json(
         { error: 'Keine Artikel gefunden. Bitte versuche es erneut.' },
         { status: 400 }
       );
     }
 
-    // 3. Get current booking count for sequential IDs
-    const year = new Date().getFullYear();
-    const { count } = await supabase
-      .from('bookings')
-      .select('*', { count: 'exact', head: true });
+    // 3. Buchungsnummer generieren
+    const bookingId = await generateBookingId();
 
-    let seq = (count ?? 0) + 1;
-    const bookingIds: string[] = [];
-
-    // Deposit-Vorautorisierung bestätigen
+    // Deposit-Vorautorisierung bestaetigen
     let confirmedDepositIntentId: string | null = null;
     let depositStatus = 'none';
     if (deposit_intent_id) {
@@ -191,13 +163,13 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Lieferadresse aus Kundenprofil holen (wenn eingeloggt + Versand)
+    // Lieferadresse aus Kundenprofil
     let profileAddress: string | null = null;
-    if (resolvedUserId && resolvedDeliveryMode === 'versand') {
+    if (r_userId && r_deliveryMode === 'versand') {
       const { data: profile } = await supabase
         .from('profiles')
         .select('address_street, address_zip, address_city')
-        .eq('id', resolvedUserId)
+        .eq('id', r_userId)
         .maybeSingle();
       if (profile?.address_street) {
         profileAddress = [
@@ -207,68 +179,59 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Calculate total discount for proportional split
-    const totalDiscountAll = (resolvedDiscountAmount ?? 0) + (resolvedProductDiscount ?? 0) + (resolvedDurationDiscount ?? 0) + (resolvedLoyaltyDiscount ?? 0);
+    // Preise zusammenrechnen
+    const firstItem = r_items[0];
+    const productName = r_items.length === 1
+      ? firstItem.productName
+      : r_items.map((it) => it.productName).join(', ');
+    const allAccessories = [...new Set(r_items.flatMap((it) => it.accessories))];
 
-    // 4. Create one booking per cart item
-    for (let i = 0; i < resolvedItems.length; i++) {
-      const item = resolvedItems[i];
-      const bookingId = `BK-${year}-${String(seq).padStart(5, '0')}`;
-      seq++;
+    // 4. EINE Buchung fuer den gesamten Warenkorb
+    const { error } = await supabase.from('bookings').insert({
+      id: bookingId,
+      payment_intent_id,
+      product_id: firstItem.productId,
+      product_name: productName,
+      rental_from: firstItem.rentalFrom,
+      rental_to: firstItem.rentalTo,
+      days: firstItem.days,
+      delivery_mode: r_deliveryMode,
+      shipping_method: r_deliveryMode === 'versand' ? r_shippingMethod : null,
+      shipping_price: r_shippingPrice,
+      haftung: firstItem.haftung,
+      accessories: allAccessories,
+      price_rental: r_items.reduce((s, it) => s + it.priceRental, 0),
+      price_accessories: r_items.reduce((s, it) => s + it.priceAccessories, 0),
+      price_haftung: r_items.reduce((s, it) => s + it.priceHaftung, 0),
+      price_total: intent.amount / 100,
+      deposit: r_items.reduce((s, it) => s + it.deposit, 0),
+      deposit_intent_id: confirmedDepositIntentId,
+      deposit_status: depositStatus,
+      status: 'confirmed',
+      user_id: r_userId ?? null,
+      customer_email: r_email,
+      customer_name: r_name,
+      shipping_address: profileAddress ?? r_shippingAddress ?? null,
+      coupon_code: r_couponCode || null,
+      discount_amount: r_discountAmount ?? 0,
+      duration_discount: r_durationDiscount ?? 0,
+      loyalty_discount: r_loyaltyDiscount ?? 0,
+    });
 
-      // For multi-item: split discount proportionally by subtotal
-      const itemShare = resolvedItems.length > 1 ? item.subtotal / resolvedItems.reduce((s, it) => s + it.subtotal, 0) : 1;
-      const itemCouponDiscount = Math.round((resolvedDiscountAmount ?? 0) * itemShare * 100) / 100;
-      const itemDurationDiscount = Math.round((resolvedDurationDiscount ?? 0) * itemShare * 100) / 100;
-      const itemLoyaltyDiscount = Math.round((resolvedLoyaltyDiscount ?? 0) * itemShare * 100) / 100;
-      const itemTotalDiscount = Math.round(totalDiscountAll * itemShare * 100) / 100;
-      const itemShipping = i === 0 ? resolvedShippingPrice : 0;
-      const itemTotal = item.subtotal - itemTotalDiscount + itemShipping;
-
-      const { error } = await supabase.from('bookings').insert({
-        id: bookingId,
-        payment_intent_id: `${payment_intent_id}_${i}`,
-        product_id: item.productId,
-        product_name: item.productName,
-        rental_from: item.rentalFrom,
-        rental_to: item.rentalTo,
-        days: item.days,
-        delivery_mode: resolvedDeliveryMode,
-        shipping_method: resolvedDeliveryMode === 'versand' ? resolvedShippingMethod : null,
-        shipping_price: i === 0 ? resolvedShippingPrice : 0,
-        haftung: item.haftung,
-        accessories: item.accessories,
-        price_rental: item.priceRental,
-        price_accessories: item.priceAccessories,
-        price_haftung: item.priceHaftung,
-        price_total: Math.max(0, itemTotal),
-        deposit: item.deposit,
-        deposit_intent_id: i === 0 ? confirmedDepositIntentId : null,
-        deposit_status: i === 0 ? depositStatus : 'none',
-        status: 'confirmed',
-        user_id: resolvedUserId ?? null,
-        customer_email: resolvedCustomerEmail,
-        customer_name: resolvedCustomerName,
-        shipping_address: profileAddress ?? resolvedShippingAddress ?? null,
-        coupon_code: resolvedCouponCode || null,
-        discount_amount: itemCouponDiscount,
-        duration_discount: itemDurationDiscount,
-        loyalty_discount: itemLoyaltyDiscount,
-      });
-
-      if (error) {
-        console.error(`Error saving booking ${bookingId}:`, error);
-      } else {
-        bookingIds.push(bookingId);
-      }
+    if (error) {
+      console.error(`Error saving booking ${bookingId}:`, error);
+      return NextResponse.json(
+        { error: 'Buchung konnte nicht gespeichert werden.' },
+        { status: 500 }
+      );
     }
 
-    // 4b. Increment coupon used_count
-    if (resolvedCouponCode && bookingIds.length > 0) {
+    // 5. Coupon used_count erhoehen
+    if (r_couponCode) {
       const { data: couponRow } = await supabase
         .from('coupons')
         .select('id, used_count')
-        .ilike('code', resolvedCouponCode)
+        .ilike('code', r_couponCode)
         .maybeSingle();
       if (couponRow) {
         await supabase
@@ -278,43 +241,39 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 4c. Increment user booking_count
-    if (resolvedUserId && bookingIds.length > 0) {
+    // 6. User booking_count erhoehen
+    if (r_userId) {
       const { data: profile } = await supabase
         .from('profiles')
         .select('booking_count')
-        .eq('id', resolvedUserId)
+        .eq('id', r_userId)
         .maybeSingle();
       if (profile) {
         await supabase
           .from('profiles')
-          .update({ booking_count: (profile.booking_count ?? 0) + bookingIds.length })
-          .eq('id', resolvedUserId);
+          .update({ booking_count: (profile.booking_count ?? 0) + 1 })
+          .eq('id', r_userId);
       }
     }
 
-    // 4d. Process referral (if first booking for this user)
-    if (resolvedReferralCode && resolvedUserId && bookingIds.length > 0) {
+    // 7. Referral verarbeiten
+    if (r_referralCode && r_userId) {
       try {
         const { data: profile } = await supabase
           .from('profiles')
           .select('booking_count')
-          .eq('id', resolvedUserId)
+          .eq('id', r_userId)
           .maybeSingle();
 
-        // First booking: booking_count was just set to 1 (or the count of items)
-        const isFirstBooking = (profile?.booking_count ?? 0) <= bookingIds.length;
-
+        const isFirstBooking = (profile?.booking_count ?? 0) <= 1;
         if (isFirstBooking) {
-          // Find the referrer by referral_code
           const { data: referrer } = await supabase
             .from('profiles')
             .select('id, full_name')
-            .eq('referral_code', resolvedReferralCode)
+            .eq('referral_code', r_referralCode)
             .maybeSingle();
 
-          if (referrer && referrer.id !== resolvedUserId) {
-            // Get reward value from config
+          if (referrer && referrer.id !== r_userId) {
             const { data: rewardConfig } = await supabase
               .from('admin_config')
               .select('value')
@@ -322,7 +281,6 @@ export async function POST(req: NextRequest) {
               .maybeSingle();
             const rewardValue = (rewardConfig?.value as number) ?? 10;
 
-            // Create reward coupon for referrer
             const rewardCode = `REF-${Date.now().toString(36).toUpperCase()}`;
             const { data: rewardCoupon } = await supabase
               .from('coupons')
@@ -338,24 +296,22 @@ export async function POST(req: NextRequest) {
               .select('id')
               .single();
 
-            // Create referral record
             await supabase.from('referrals').insert({
               referrer_user_id: referrer.id,
-              referral_code: resolvedReferralCode,
-              referred_email: resolvedCustomerEmail,
-              referred_booking_id: bookingIds[0],
+              referral_code: r_referralCode,
+              referred_email: r_email,
+              referred_booking_id: bookingId,
               reward_coupon_id: rewardCoupon?.id ?? null,
               status: 'rewarded',
             });
 
-            // Send reward email to referrer (non-blocking)
             if (rewardCoupon) {
               const { data: referrerAuth } = await supabase.auth.admin.getUserById(referrer.id);
               if (referrerAuth?.user?.email) {
                 sendReferralReward({
                   referrerName: referrer.full_name ?? 'dort',
                   referrerEmail: referrerAuth.user.email,
-                  referredName: resolvedCustomerName,
+                  referredName: r_name,
                   rewardCode,
                   rewardValue,
                 }).catch((err: unknown) => console.error('Referral email error:', err));
@@ -368,38 +324,33 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 5. Abandoned Cart als recovered markieren (non-blocking)
-    if (resolvedUserId) {
+    // 8. Abandoned Cart als recovered markieren
+    if (r_userId) {
       Promise.resolve(
         supabase
           .from('abandoned_carts')
           .update({ recovered: true })
-          .eq('user_id', resolvedUserId)
+          .eq('user_id', r_userId)
           .eq('recovered', false)
       ).catch((err: unknown) => console.error('Abandoned cart recovery error:', err));
     }
 
-    // 6. Suspicious Detection (non-blocking)
-    if (bookingIds.length > 0) {
-      const firstItem = resolvedItems[0];
-      detectSuspicious(supabase, {
-        userId: resolvedUserId || null,
-        priceTotal: intent.amount / 100,
-        rentalFrom: firstItem.rentalFrom,
-        days: firstItem.days,
-      }).then(async (result) => {
-        if (result.suspicious) {
-          for (const bid of bookingIds) {
-            await supabase
-              .from('bookings')
-              .update({ suspicious: true, suspicious_reasons: result.reasons })
-              .eq('id', bid);
-          }
-        }
-      }).catch((err) => console.error('Suspicious detection error:', err));
-    }
+    // 9. Suspicious Detection
+    detectSuspicious(supabase, {
+      userId: r_userId || null,
+      priceTotal: intent.amount / 100,
+      rentalFrom: firstItem.rentalFrom,
+      days: firstItem.days,
+    }).then(async (result) => {
+      if (result.suspicious) {
+        await supabase
+          .from('bookings')
+          .update({ suspicious: true, suspicious_reasons: result.reasons })
+          .eq('id', bookingId);
+      }
+    }).catch((err) => console.error('Suspicious detection error:', err));
 
-    // 6. Fetch tax config for emails/PDFs
+    // 10. Steuer-Config + Email senden
     const { data: taxSettings } = await supabase
       .from('admin_settings')
       .select('key, value')
@@ -407,29 +358,25 @@ export async function POST(req: NextRequest) {
     const txMap: Record<string, string> = {};
     for (const s of taxSettings ?? []) txMap[s.key] = s.value;
 
-    // 7. Send confirmation email (one summary email for all items in cart)
-    if (resolvedCustomerEmail && bookingIds.length > 0) {
-      const firstItem = resolvedItems[0];
+    if (r_email) {
       const emailData: BookingEmailData = {
-        bookingId: bookingIds.join(', '),
-        customerName: resolvedCustomerName,
-        customerEmail: resolvedCustomerEmail,
-        productName: resolvedItems.length === 1
-          ? firstItem.productName
-          : `${firstItem.productName} + ${resolvedItems.length - 1} weiteres${resolvedItems.length > 2 ? 'e' : ''} Produkt${resolvedItems.length > 2 ? 'e' : ''}`,
+        bookingId,
+        customerName: r_name,
+        customerEmail: r_email,
+        productName,
         rentalFrom: firstItem.rentalFrom,
         rentalTo: firstItem.rentalTo,
         days: firstItem.days,
-        deliveryMode: resolvedDeliveryMode as 'versand' | 'abholung',
-        shippingMethod: resolvedShippingMethod,
+        deliveryMode: r_deliveryMode as 'versand' | 'abholung',
+        shippingMethod: r_shippingMethod,
         haftung: firstItem.haftung,
-        accessories: firstItem.accessories,
-        priceRental: resolvedItems.reduce((s, it) => s + it.priceRental, 0),
-        priceAccessories: resolvedItems.reduce((s, it) => s + it.priceAccessories, 0),
-        priceHaftung: resolvedItems.reduce((s, it) => s + it.priceHaftung, 0),
+        accessories: allAccessories,
+        priceRental: r_items.reduce((s, it) => s + it.priceRental, 0),
+        priceAccessories: r_items.reduce((s, it) => s + it.priceAccessories, 0),
+        priceHaftung: r_items.reduce((s, it) => s + it.priceHaftung, 0),
         priceTotal: intent.amount / 100,
-        deposit: resolvedItems.reduce((s, it) => s + it.deposit, 0),
-        shippingPrice: resolvedShippingPrice,
+        deposit: r_items.reduce((s, it) => s + it.deposit, 0),
+        shippingPrice: r_shippingPrice,
         taxMode: (txMap['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer',
         taxRate: parseFloat(txMap['tax_rate'] || '19'),
         ustId: txMap['ust_id'] || '',
@@ -441,7 +388,7 @@ export async function POST(req: NextRequest) {
       ]).catch((err) => console.error('Email send error:', err));
     }
 
-    // 8. Checkout-Kontext aus DB aufraumen (non-blocking)
+    // 11. Checkout-Kontext aufraeumen
     Promise.resolve(
       supabase
         .from('admin_settings')
@@ -449,11 +396,11 @@ export async function POST(req: NextRequest) {
         .eq('key', `checkout_${payment_intent_id}`)
     ).catch(() => {});
 
-    return NextResponse.json({ success: true, booking_ids: bookingIds });
+    return NextResponse.json({ success: true, booking_ids: [bookingId] });
   } catch (err) {
     console.error('Confirm cart error:', err);
     return NextResponse.json(
-      { error: 'Buchungen konnten nicht gespeichert werden.' },
+      { error: 'Buchung konnte nicht gespeichert werden.' },
       { status: 500 }
     );
   }
