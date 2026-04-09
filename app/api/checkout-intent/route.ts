@@ -100,13 +100,18 @@ export async function POST(req: NextRequest) {
 
     // Checkout-Kontext serverseitig speichern (sessionStorage ist nach Stripe-Redirect unzuverlaessig)
     if (checkoutContext) {
-      await supabase
-        .from('admin_settings')
-        .upsert({
-          key: `checkout_${paymentIntent.id}`,
-          value: JSON.stringify(checkoutContext),
-          updated_at: new Date().toISOString(),
-        });
+      try {
+        await supabase
+          .from('admin_settings')
+          .upsert({
+            key: `checkout_${paymentIntent.id}`,
+            value: JSON.stringify(checkoutContext),
+            updated_at: new Date().toISOString(),
+          });
+      } catch (ctxErr) {
+        console.error('Checkout-Kontext speichern fehlgeschlagen:', ctxErr);
+        // Nicht abbrechen — sessionStorage ist noch als Fallback da
+      }
     }
 
     return NextResponse.json({
