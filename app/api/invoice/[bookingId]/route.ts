@@ -70,6 +70,28 @@ export async function GET(
     ustId: taxMap['ust_id'] || '',
   };
 
+  // EPC QR-Code fuer Banking generieren
+  const invoiceNumber = booking.id.replace(/^(C2R|BK)-/, 'RE-');
+  try {
+    const QRCode = (await import('qrcode')).default;
+    const epcData = [
+      'BCD',           // Service Tag
+      '002',           // Version
+      '1',             // Character set (UTF-8)
+      'SCT',           // Identification
+      'SXPYDEHHXXX',   // BIC
+      'Lennart Schickel', // Empfaenger
+      'DE77202208000027784143', // IBAN (ohne Leerzeichen)
+      `EUR${data.priceTotal.toFixed(2)}`, // Betrag
+      '',              // Purpose Code
+      '',              // Structured Reference
+      `${invoiceNumber} ${data.customerName}`, // Verwendungszweck
+    ].join('\n');
+    data.qrCodeDataUrl = await QRCode.toDataURL(epcData, { width: 200, margin: 1 });
+  } catch {
+    // QR-Code Fehler ignorieren — Rechnung wird ohne generiert
+  }
+
   const pdfBuffer = await renderToBuffer(
     createElement(InvoicePDF, { data }) as ReactElement<DocumentProps>
   );

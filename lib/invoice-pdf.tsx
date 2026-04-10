@@ -3,6 +3,7 @@ import {
   Page,
   Text,
   View,
+  Image,
   StyleSheet,
 } from '@react-pdf/renderer';
 import { BUSINESS } from '@/lib/business-config';
@@ -31,6 +32,7 @@ export interface InvoiceData {
   taxMode?: 'kleinunternehmer' | 'regelbesteuerung';
   taxRate?: number;
   ustId?: string;
+  qrCodeDataUrl?: string;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -402,6 +404,23 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
           <Text style={s.kleinNote}>
             Gemäß §19 UStG wird keine Umsatzsteuer berechnet.
           </Text>
+        )}
+
+        {/* ── QR-Code fuer Banking ── */}
+        {data.qrCodeDataUrl && (
+          <View style={{ marginTop: 20, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <Image src={data.qrCodeDataUrl} style={{ width: 80, height: 80 }} />
+            <View>
+              <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold', color: '#0a0a0a', marginBottom: 3 }}>
+                QR-Code fuer Ueberweisung
+              </Text>
+              <Text style={{ fontSize: 8, color: '#6b7280', lineHeight: 1.5 }}>
+                Scanne den Code mit deiner Banking-App.{'\n'}
+                IBAN, Betrag und Verwendungszweck{'\n'}
+                werden automatisch ausgefuellt.
+              </Text>
+            </View>
+          </View>
         )}
 
         {/* ── Footer ── */}
