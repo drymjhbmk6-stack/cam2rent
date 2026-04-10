@@ -437,7 +437,7 @@ export default function BuchenPage() {
   // Sets
   const [availableSets, setAvailableSets] = useState<RentalSet[]>([]);
   const [selectedSet, setSelectedSet] = useState<RentalSet | null>(null);
-  const [expandedSetId, setExpandedSetId] = useState<string | null>(null);
+
 
   // Tax config
   const [taxMode, setTaxMode] = useState<'kleinunternehmer' | 'regelbesteuerung'>('kleinunternehmer');
@@ -973,13 +973,12 @@ export default function BuchenPage() {
                 {availableSets.length > 0 && (
                   <div className="mb-6">
                     <p className="text-xs font-body font-semibold text-brand-steel uppercase tracking-wider mb-2">
-                      Zubehör-Pakete (optional)
+                      Waehle dein Set (Pflicht)
                     </p>
                     <div className="rounded-xl border border-brand-border overflow-hidden divide-y divide-brand-border">
 
                       {availableSets.map((set) => {
                         const isSelected = selectedSet?.id === set.id;
-                        const isExpanded = expandedSetId === set.id;
                         const price = breakdown
                           ? set.pricingMode === 'perDay' ? set.price * breakdown.days : set.price
                           : set.price;
@@ -992,43 +991,28 @@ export default function BuchenPage() {
                         const setDisabled = setUnavailable;
                         return (
                           <div key={set.id} className={`transition-colors ${setDisabled ? 'opacity-50' : isSelected ? 'bg-accent-blue-soft/30' : 'bg-white dark:bg-gray-900'}`}>
-                            <div className="flex items-center gap-3 px-4 py-3">
-                              {/* Radio select */}
-                              <label className={`flex items-center gap-3 flex-1 min-w-0 ${setDisabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
-                                <input type="radio" name="rentalSet" checked={isSelected} disabled={setDisabled} onChange={() => { if (!setDisabled) { setSelectedSet(set); setAccessories([]); } }} className="sr-only" />
-                                <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${isSelected ? 'border-accent-blue' : 'border-brand-border'}`}>
-                                  {isSelected && <div className="w-2 h-2 rounded-full bg-accent-blue" />}
-                                </div>
-                                <span className="font-heading font-semibold text-sm text-brand-black">{set.name}</span>
-                                {set.badge && (
-                                  <span className={`px-1.5 py-0.5 rounded-full text-xs font-heading font-semibold ${set.badgeColor}`}>{set.badge}</span>
-                                )}
-                              </label>
-                              {/* Price + expand toggle */}
-                              {setDisabled ? (
-                                <span className="text-xs text-status-error">Für diesen Zeitraum nicht verfügbar</span>
-                              ) : (
-                                <span className="font-heading font-semibold text-sm text-accent-blue">+{fmt(price)} €</span>
-                              )}
-                              <button
-                                type="button"
-                                onClick={() => setExpandedSetId(isExpanded ? null : set.id)}
-                                className="ml-1 text-brand-muted hover:text-brand-steel transition-colors"
-                                aria-label={isExpanded ? 'Zuklappen' : 'Inhalt anzeigen'}
-                              >
-                                <svg viewBox="0 0 20 20" fill="currentColor" className={`w-4 h-4 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}>
-                                  <path fillRule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06z" clipRule="evenodd" />
-                                </svg>
-                              </button>
-                            </div>
-                            {/* Expandable items */}
-                            {isExpanded && (
-                              <div className="px-4 pb-3 flex flex-wrap gap-1 border-t border-brand-border/50 pt-2">
-                                {set.includedItems.map((item) => (
-                                  <span key={item} className="text-xs font-body px-1.5 py-0.5 bg-brand-bg text-brand-steel rounded-full">{item}</span>
-                                ))}
+                            <label className={`flex items-center gap-3 px-4 py-3 ${setDisabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
+                              <input type="radio" name="rentalSet" checked={isSelected} disabled={setDisabled} onChange={() => { if (!setDisabled) { setSelectedSet(set); setAccessories([]); } }} className="sr-only" />
+                              <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${isSelected ? 'border-accent-blue' : 'border-brand-border'}`}>
+                                {isSelected && <div className="w-2 h-2 rounded-full bg-accent-blue" />}
                               </div>
-                            )}
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-heading font-semibold text-sm text-brand-black">{set.name}</span>
+                                  {set.badge && (
+                                    <span className={`px-1.5 py-0.5 rounded-full text-xs font-heading font-semibold ${set.badgeColor}`}>{set.badge}</span>
+                                  )}
+                                </div>
+                                {set.includedItems.length > 0 && (
+                                  <p className="text-xs text-brand-muted mt-0.5">{set.includedItems.join(' · ')}</p>
+                                )}
+                              </div>
+                              {setDisabled ? (
+                                <span className="text-xs text-status-error flex-shrink-0">Nicht verfuegbar</span>
+                              ) : (
+                                <span className="font-heading font-semibold text-sm text-accent-blue flex-shrink-0">+{fmt(price)} €</span>
+                              )}
+                            </label>
                           </div>
                         );
                       })}
@@ -1146,26 +1130,27 @@ export default function BuchenPage() {
                   ));
                 })()}
 
-                {/* "Im Set enthalten" aggregation box */}
-                {selectedSet && accessories.length > 0 && (
+                {/* "Im Paket enthalten" — komplette Auflistung mit Zusammenfassung */}
+                {selectedSet && (
                   <div className="mb-6 bg-accent-blue-soft/20 border border-accent-blue/20 rounded-xl p-4">
-                    <p className="text-xs font-body font-semibold text-accent-blue uppercase tracking-wider mb-2">
-                      Gesamtauswahl (Set + Einzelzubehör)
+                    <p className="text-xs font-body font-semibold text-accent-blue uppercase tracking-wider mb-3">
+                      Im Paket enthalten
                     </p>
-                    <div className="space-y-1">
+                    <div className="space-y-1.5">
                       {(() => {
-                        // Aggregate: count items from set + individually selected accessories
                         const counts: Record<string, number> = {};
+                        // Set-Inhalt
                         for (const item of selectedSet.includedItems) {
                           counts[item] = (counts[item] ?? 0) + 1;
                         }
+                        // Einzeln gewaehltes Zubehoer
                         for (const accId of accessories) {
                           const acc = dbAccessories.find((a) => a.id === accId);
                           if (acc) counts[acc.name] = (counts[acc.name] ?? 0) + 1;
                         }
                         return Object.entries(counts).map(([name, qty]) => (
-                          <div key={name} className="flex items-center gap-2 text-sm font-body text-brand-black">
-                            <svg viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5 text-status-success flex-shrink-0" aria-hidden="true">
+                          <div key={name} className="flex items-center gap-2 text-sm font-body text-brand-black dark:text-gray-200">
+                            <svg viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5 text-status-success flex-shrink-0">
                               <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
                             </svg>
                             <span>{qty > 1 ? `${qty}x ` : ''}{name}</span>
@@ -1173,6 +1158,9 @@ export default function BuchenPage() {
                         ));
                       })()}
                     </div>
+                    <p className="text-[10px] text-brand-muted mt-2">
+                      {selectedSet.name}{accessories.length > 0 ? ` + ${accessories.length} zusaetzliche${accessories.length > 1 ? 's' : ''} Zubehoer` : ''}
+                    </p>
                   </div>
                 )}
 
@@ -1986,22 +1974,30 @@ export default function BuchenPage() {
               )}
             </div>
 
-            {/* Im Set enthalten — shown below "Deine Buchung" card */}
+            {/* Im Paket enthalten — Sidebar */}
             {selectedSet && step >= 2 && (
               <div className="mt-4 bg-white rounded-card shadow-card p-5">
                 <p className="text-xs font-body font-semibold text-brand-steel uppercase tracking-wider mb-3">
-                  Im Set enthalten
+                  Im Paket enthalten
                 </p>
                 <p className="text-sm font-heading font-semibold text-brand-black mb-3">{selectedSet.name}</p>
                 <div className="space-y-1.5">
-                  {selectedSet.includedItems.map((item) => (
-                    <div key={item} className="flex items-center gap-2">
-                      <svg viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5 text-status-success flex-shrink-0">
-                        <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
-                      </svg>
-                      <span className="text-sm font-body text-brand-black">{item}</span>
-                    </div>
-                  ))}
+                  {(() => {
+                    const counts: Record<string, number> = {};
+                    for (const item of selectedSet.includedItems) counts[item] = (counts[item] ?? 0) + 1;
+                    for (const accId of accessories) {
+                      const acc = dbAccessories.find((a) => a.id === accId);
+                      if (acc) counts[acc.name] = (counts[acc.name] ?? 0) + 1;
+                    }
+                    return Object.entries(counts).map(([name, qty]) => (
+                      <div key={name} className="flex items-center gap-2">
+                        <svg viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5 text-status-success flex-shrink-0">
+                          <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
+                        </svg>
+                        <span className="text-sm font-body text-brand-black">{qty > 1 ? `${qty}x ` : ''}{name}</span>
+                      </div>
+                    ));
+                  })()}
                 </div>
               </div>
             )}
