@@ -74,7 +74,7 @@ export default function DruckenPage({ params }: { params: Promise<{ id: string }
       </div>
 
       {/* Printable Document */}
-      <div className="max-w-[210mm] mx-auto p-8 bg-white min-h-screen print:p-6 print:max-w-none font-sans text-gray-900">
+      <div className="max-w-[210mm] mx-auto p-8 bg-white min-h-screen print:p-10 print:max-w-none print:text-[12pt] font-sans text-gray-900">
 
         {/* Header */}
         <div className="flex items-start justify-between mb-8 pb-6 border-b-2 border-gray-900">

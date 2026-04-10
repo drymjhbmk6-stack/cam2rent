@@ -61,11 +61,11 @@ function shippingLabel(method: string | undefined, mode: string) {
 const s = StyleSheet.create({
   page: {
     fontFamily: 'Helvetica',
-    fontSize: 10,
+    fontSize: 11,
     color: '#1a1a1a',
-    paddingTop: 48,
-    paddingBottom: 60,
-    paddingHorizontal: 52,
+    paddingTop: 50,
+    paddingBottom: 65,
+    paddingHorizontal: 56,
   },
 
   // Header
@@ -285,8 +285,8 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
     });
   }
 
-  // Invoice number: RE-YYYY-NNNNN (derived from BK- id)
-  const invoiceNumber = data.bookingId.replace('BK-', 'RE-');
+  // Rechnungsnummer: RE- Prefix + Rest der Buchungsnummer
+  const invoiceNumber = data.bookingId.replace(/^(C2R|BK)-/, 'RE-');
 
   return (
     <Document>
