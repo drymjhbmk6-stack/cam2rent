@@ -1053,7 +1053,10 @@ export default function BuchenPage() {
                       <div key={group} className="mb-6">
                         <p className="text-xs font-body font-semibold text-brand-steel uppercase tracking-wider mb-2">{group}</p>
                         <div className="rounded-xl border border-brand-border dark:border-gray-700 overflow-hidden divide-y divide-brand-border dark:divide-gray-700">
-                          {groupAccs.map((acc) => {
+                          {groupAccs.filter((acc) => {
+                            const avail = accAvailability[acc.id];
+                            return !avail || avail.compatible;
+                          }).map((acc) => {
                             const isSelected = selectedId === acc.id || (acc.isUpgradeBase && !groupAccs.some((a) => !a.isUpgradeBase && accessories.includes(a.id)));
                             const avail = accAvailability[acc.id];
                             const isAvailable = !avail || (avail.remaining > 0 && avail.compatible);
@@ -1089,14 +1092,17 @@ export default function BuchenPage() {
                     {selectedSet ? 'Zusätzliches Zubehör' : 'Zubehör'}
                   </p>
                   <div className="rounded-xl border border-brand-border dark:border-gray-700 overflow-hidden divide-y divide-brand-border dark:divide-gray-700">
-                    {dbAccessories.filter((acc) => !acc.upgradeGroup).map((acc) => {
+                    {dbAccessories.filter((acc) => {
+                      if (acc.upgradeGroup) return false; // Upgrade-Gruppen separat
+                      const avail = accAvailability[acc.id];
+                      if (avail && !avail.compatible) return false; // Inkompatibel ausblenden
+                      return true;
+                    }).map((acc) => {
                       const checked = accessories.includes(acc.id);
                       const days = breakdown?.days ?? 0;
                       const avail = accAvailability[acc.id];
-                      const isAvailable = !avail || (avail.remaining > 0 && avail.compatible);
-                      const isIncompatible = avail && !avail.compatible;
-                      const isBookedOut = avail && avail.remaining <= 0 && avail.compatible;
-                      const disabled = !isAvailable;
+                      const isBookedOut = avail && avail.remaining <= 0;
+                      const disabled = isBookedOut;
                       return (
                         <label key={acc.id} className={`flex flex-col px-4 py-2.5 transition-colors ${disabled ? 'opacity-50 cursor-not-allowed bg-brand-bg dark:bg-gray-800' : checked ? 'bg-accent-blue-soft/30 cursor-pointer' : 'bg-white dark:bg-gray-900 hover:bg-brand-bg dark:hover:bg-gray-800 cursor-pointer'}`}>
                           <div className="flex items-center gap-3">
@@ -1121,10 +1127,7 @@ export default function BuchenPage() {
                             )}
                           </div>
                           {isBookedOut && (
-                            <span className="text-xs text-status-error mt-1 ml-7">Für diesen Zeitraum nicht verfügbar</span>
-                          )}
-                          {isIncompatible && (
-                            <span className="text-xs text-brand-muted mt-1 ml-7">Nicht kompatibel mit diesem Kameramodell</span>
+                            <span className="text-xs text-status-error mt-1 ml-7">Fuer diesen Zeitraum nicht verfuegbar</span>
                           )}
                         </label>
                       );
