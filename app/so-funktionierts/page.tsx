@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import HowItWorks from '@/components/home/HowItWorks';
+import SeasonalPageHeader from '@/components/SeasonalPageHeader';
 
 export const metadata: Metadata = {
   title: "So funktioniert's | Cam2Rent",
@@ -12,17 +13,11 @@ export default function SoFunktionierts() {
   return (
     <main className="min-h-screen">
       {/* Hero */}
-      <section className="bg-brand-black dark:bg-gray-950 text-white py-20">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h1 className="font-heading font-bold text-4xl sm:text-5xl mb-4">
-            So funktioniert&apos;s
-          </h1>
-          <p className="font-body text-lg text-gray-300 max-w-2xl mx-auto">
-            Action-Cam mieten in drei einfachen Schritten – ohne Kompliziertes,
-            ohne Kleingedrucktes.
-          </p>
-        </div>
-      </section>
+      <SeasonalPageHeader
+        zone="so-funktionierts"
+        title="So funktioniert's"
+        subtitle="Action-Cam mieten in drei einfachen Schritten — ohne Kompliziertes, ohne Kleingedrucktes."
+      />
 
       {/* Steps (wiederverwendete Komponente, ohne doppelte Ueberschrift) */}
       <HowItWorks hideHeader />

@@ -6,6 +6,7 @@
 export const SEASONAL_ZONES = [
   { id: 'hero', label: 'Startseite Hero' },
   { id: 'blog', label: 'Blog Header' },
+  { id: 'so-funktionierts', label: 'So funktioniert\'s Header' },
 ] as const;
 
 export type SeasonalZone = (typeof SEASONAL_ZONES)[number]['id'];
