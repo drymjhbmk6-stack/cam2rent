@@ -549,6 +549,39 @@ export default function CheckoutPage() {
 
   if (itemCount === 0) return null;
 
+  // Nicht eingeloggt: Eigene Seite mit Login/Registrierung
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-brand-bg dark:bg-brand-black flex items-center justify-center px-4">
+        <div className="bg-white dark:bg-brand-dark rounded-card shadow-card p-8 sm:p-12 max-w-md w-full text-center">
+          <div className="w-16 h-16 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center mx-auto mb-5">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-8 h-8 text-amber-500">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+            </svg>
+          </div>
+          <h1 className="font-heading font-bold text-xl text-brand-black dark:text-white mb-2">
+            Konto erforderlich
+          </h1>
+          <p className="font-body text-sm text-brand-steel dark:text-gray-400 mb-6">
+            Um eine Buchung durchzufuehren, benoetigen wir ein Kundenkonto.
+            So koennen wir deinen Ausweis pruefen und dir deine Buchungen zuordnen.
+          </p>
+          <div className="flex flex-col gap-3">
+            <a href="/login?redirect=/checkout" className="w-full py-3 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold text-sm rounded-btn text-center hover:bg-brand-dark dark:hover:bg-blue-700 transition-colors">
+              Anmelden
+            </a>
+            <a href="/registrierung" className="w-full py-3 border-2 border-brand-black dark:border-white text-brand-black dark:text-white font-heading font-semibold text-sm rounded-btn text-center hover:bg-brand-bg dark:hover:bg-white/5 transition-colors">
+              Neues Konto erstellen
+            </a>
+          </div>
+          <p className="text-xs text-brand-muted dark:text-gray-500 mt-6">
+            Dein Warenkorb bleibt gespeichert.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-brand-bg dark:bg-brand-black py-8">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -882,22 +915,6 @@ export default function CheckoutPage() {
                   </div>
                 )}
 
-                {/* Nicht eingeloggt */}
-                {!pendingSuccess && !user && (
-                  <div className="p-5 rounded-[10px] bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-300 dark:border-amber-700 text-sm">
-                    <p className="font-heading font-bold text-amber-800 dark:text-amber-300 mb-2 text-base">Konto erforderlich</p>
-                    <p className="text-amber-700 dark:text-amber-400 font-body mb-4">Um eine Buchung durchzufuehren, benoetigen wir ein Kundenkonto. So koennen wir deinen Ausweis pruefen und dir deine Buchungen zuordnen.</p>
-                    <div className="flex flex-col sm:flex-row gap-3">
-                      <a href={`/login?redirect=/checkout`} className="inline-flex items-center justify-center px-6 py-2.5 bg-brand-black text-white font-heading font-semibold text-sm rounded-btn">
-                        Anmelden
-                      </a>
-                      <a href={`/registrierung`} className="inline-flex items-center justify-center px-6 py-2.5 border-2 border-brand-black dark:border-white text-brand-black dark:text-white font-heading font-semibold text-sm rounded-btn">
-                        Neues Konto erstellen
-                      </a>
-                    </div>
-                  </div>
-                )}
-
                 {/* Error */}
                 {intentError && (
                   <div className="p-4 rounded-[10px] bg-red-50 border border-red-200 text-status-error text-sm">
@@ -906,7 +923,7 @@ export default function CheckoutPage() {
                 )}
 
                 {/* Verifiziert: Normale Zahlung */}
-                {!pendingSuccess && user && isVerified && (
+                {!pendingSuccess && isVerified && (
                   <button
                     onClick={handleProceedToPayment}
                     disabled={isCreatingIntent}
@@ -924,7 +941,7 @@ export default function CheckoutPage() {
                 )}
 
                 {/* Nicht verifiziert: Buchung anfragen */}
-                {!pendingSuccess && user && isVerified === false && (
+                {!pendingSuccess && isVerified === false && (
                   <div>
                     <div className="p-3 rounded-[10px] bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-xs font-body text-blue-700 dark:text-blue-300 mb-3">
                       Da dies deine erste Buchung ist, pruefen wir kurz deinen Ausweis. Du erhaeltst danach einen Zahlungslink per Email.
