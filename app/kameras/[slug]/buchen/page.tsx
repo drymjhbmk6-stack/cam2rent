@@ -455,7 +455,10 @@ export default function BuchenPage() {
     fetch('/api/sets?available=true')
       .then((r) => r.json())
       .then((data) => {
-        if (Array.isArray(data?.sets)) setAvailableSets(data.sets);
+        if (Array.isArray(data?.sets)) {
+          setAvailableSets(data.sets);
+          if (data.sets.length > 0 && !selectedSet) setSelectedSet(data.sets[0]);
+        }
       })
       .catch(() => {});
   }, []);
