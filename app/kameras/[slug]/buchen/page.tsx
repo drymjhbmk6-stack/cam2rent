@@ -1091,18 +1091,29 @@ export default function BuchenPage() {
                   });
                 })()}
 
-                {/* Normales Zubehoer (Checkboxen) — ohne Upgrade-Gruppen */}
-                <div className="mb-6">
+                {/* Normales Zubehoer (Checkboxen) — nach Kategorie gruppiert */}
+                {(() => {
+                  const filtered = dbAccessories.filter((acc) => {
+                    if (acc.upgradeGroup) return false;
+                    const avail = accAvailability[acc.id];
+                    if (avail && !avail.compatible) return false;
+                    return true;
+                  });
+                  const catMap = new Map<string, typeof filtered>();
+                  for (const acc of filtered) {
+                    const cat = acc.group || 'sonstiges';
+                    if (!catMap.has(cat)) catMap.set(cat, []);
+                    catMap.get(cat)!.push(acc);
+                  }
+                  const categories = [...catMap.entries()];
+                  if (categories.length === 0) return null;
+                  return categories.map(([cat, catAccs]) => (
+                <div key={cat} className="mb-6">
                   <p className="text-xs font-body font-semibold text-brand-steel uppercase tracking-wider mb-2">
-                    {selectedSet ? 'Zusätzliches Zubehör' : 'Zubehör'}
+                    {cat}
                   </p>
                   <div className="rounded-xl border border-brand-border dark:border-gray-700 overflow-hidden divide-y divide-brand-border dark:divide-gray-700">
-                    {dbAccessories.filter((acc) => {
-                      if (acc.upgradeGroup) return false; // Upgrade-Gruppen separat
-                      const avail = accAvailability[acc.id];
-                      if (avail && !avail.compatible) return false; // Inkompatibel ausblenden
-                      return true;
-                    }).map((acc) => {
+                    {catAccs.map((acc) => {
                       const checked = accessories.includes(acc.id);
                       const days = breakdown?.days ?? 0;
                       const avail = accAvailability[acc.id];
@@ -1139,6 +1150,8 @@ export default function BuchenPage() {
                     })}
                   </div>
                 </div>
+                  ));
+                })()}
 
                 {/* "Im Set enthalten" aggregation box */}
                 {selectedSet && accessories.length > 0 && (

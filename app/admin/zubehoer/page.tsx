@@ -325,18 +325,23 @@ export default function AdminZubehoerPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Linke Spalte: Buchbar */}
+            {/* Linke Spalte: Buchbar — nach Kategorie gruppiert */}
             <div>
               <div className="flex items-center gap-2 mb-3">
                 <span className="w-2 h-2 rounded-full bg-status-success" />
                 <h2 className="font-heading font-bold text-sm text-brand-black">Buchbar fuer Kunden</h2>
                 <span className="text-xs text-brand-muted font-body">({accessories.filter((a) => !a.internal).length})</span>
               </div>
-              <div className="space-y-3">
-                {accessories.filter((a) => !a.internal).map((acc) => (
-                  <AccessoryCard key={acc.id} acc={acc} editId={editId} editForm={editForm} setEditForm={setEditForm}
-                    savedId={savedId} savingId={savingId} deletingId={deletingId} productList={productList}
-                    onStartEdit={startEdit} onSetEditId={setEditId} onSave={handleSave} onDelete={handleDelete} />
+              <div className="space-y-1">
+                {groupByCategory(accessories.filter((a) => !a.internal)).map(({ category, items }) => (
+                  <div key={category}>
+                    <p className="text-[10px] font-heading font-bold text-brand-muted uppercase tracking-wider mt-3 mb-1 px-1">{category}</p>
+                    {items.map((acc) => (
+                      <AccessoryCard key={acc.id} acc={acc} editId={editId} editForm={editForm} setEditForm={setEditForm}
+                        savedId={savedId} savingId={savingId} deletingId={deletingId} productList={productList}
+                        onStartEdit={startEdit} onSetEditId={setEditId} onSave={handleSave} onDelete={handleDelete} />
+                    ))}
+                  </div>
                 ))}
                 {accessories.filter((a) => !a.internal).length === 0 && (
                   <p className="text-sm text-brand-muted font-body py-4 text-center">Kein buchbares Zubehoer.</p>
@@ -344,18 +349,23 @@ export default function AdminZubehoerPage() {
               </div>
             </div>
 
-            {/* Rechte Spalte: Intern */}
+            {/* Rechte Spalte: Intern — nach Kategorie gruppiert */}
             <div>
               <div className="flex items-center gap-2 mb-3">
                 <span className="w-2 h-2 rounded-full bg-amber-500" />
                 <h2 className="font-heading font-bold text-sm text-brand-black">Intern (Kunde sieht es nicht)</h2>
                 <span className="text-xs text-brand-muted font-body">({accessories.filter((a) => a.internal).length})</span>
               </div>
-              <div className="space-y-3">
-                {accessories.filter((a) => a.internal).map((acc) => (
-                  <AccessoryCard key={acc.id} acc={acc} editId={editId} editForm={editForm} setEditForm={setEditForm}
-                    savedId={savedId} savingId={savingId} deletingId={deletingId} productList={productList}
-                    onStartEdit={startEdit} onSetEditId={setEditId} onSave={handleSave} onDelete={handleDelete} />
+              <div className="space-y-1">
+                {groupByCategory(accessories.filter((a) => a.internal)).map(({ category, items }) => (
+                  <div key={category}>
+                    <p className="text-[10px] font-heading font-bold text-brand-muted uppercase tracking-wider mt-3 mb-1 px-1">{category}</p>
+                    {items.map((acc) => (
+                      <AccessoryCard key={acc.id} acc={acc} editId={editId} editForm={editForm} setEditForm={setEditForm}
+                        savedId={savedId} savingId={savingId} deletingId={deletingId} productList={productList}
+                        onStartEdit={startEdit} onSetEditId={setEditId} onSave={handleSave} onDelete={handleDelete} />
+                    ))}
+                  </div>
                 ))}
                 {accessories.filter((a) => a.internal).length === 0 && (
                   <p className="text-sm text-brand-muted font-body py-4 text-center">Kein internes Zubehoer. Erstelle welches mit &bdquo;Nur intern&ldquo;.</p>
@@ -367,6 +377,18 @@ export default function AdminZubehoerPage() {
       </div>
     </div>
   );
+}
+
+/* ── Gruppierung nach Kategorie ────────────────────────────────────────────── */
+
+function groupByCategory(accs: Accessory[]): { category: string; items: Accessory[] }[] {
+  const map = new Map<string, Accessory[]>();
+  for (const acc of accs) {
+    const cat = acc.category || 'Sonstiges';
+    if (!map.has(cat)) map.set(cat, []);
+    map.get(cat)!.push(acc);
+  }
+  return [...map.entries()].map(([category, items]) => ({ category, items }));
 }
 
 /* ── AccessoryCard Komponente ──────────────────────────────────────────────── */
