@@ -257,17 +257,19 @@ export default function CheckoutPage() {
       .catch(() => {});
   }, []);
 
-  // Fetch user booking count for loyalty discounts
+  // Fetch user booking count + verification status
+  const [isVerified, setIsVerified] = useState<boolean | null>(null);
   useEffect(() => {
-    if (!user) return;
+    if (!user) { setIsVerified(null); return; }
     const supabase = createAuthBrowserClient();
     supabase
       .from('profiles')
-      .select('booking_count')
+      .select('booking_count, verification_status')
       .eq('id', user.id)
       .maybeSingle()
       .then(({ data }) => {
         if (data?.booking_count) setUserBookingCount(data.booking_count);
+        setIsVerified(data?.verification_status === 'verified');
       });
   }, [user]);
 
@@ -482,6 +484,59 @@ export default function CheckoutPage() {
     } catch (err) {
       setIntentError(
         err instanceof Error ? err.message : 'Zahlung konnte nicht gestartet werden.'
+      );
+    } finally {
+      setIsCreatingIntent(false);
+    }
+  };
+
+  // Unverified: Buchung ohne Zahlung anlegen
+  const [pendingSuccess, setPendingSuccess] = useState<string | null>(null);
+  const handlePendingBooking = async () => {
+    if (!user) {
+      setIntentError('Bitte melde dich an, um eine Buchung anzufragen.');
+      return;
+    }
+    if (!firstName || !email) {
+      setIntentError('Bitte fuelle alle Pflichtfelder aus.');
+      return;
+    }
+    if (deliveryMode === 'versand' && (!street || !zip || !city)) {
+      setIntentError('Bitte gib deine Lieferadresse ein.');
+      return;
+    }
+
+    setIsCreatingIntent(true);
+    setIntentError('');
+
+    try {
+      const customerName = `${firstName} ${lastName}`.trim();
+      const res = await fetch('/api/create-pending-booking', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items,
+          customerName,
+          customerEmail: email,
+          userId: user.id,
+          deliveryMode,
+          shippingMethod,
+          shippingPrice: finalShipping,
+          discountAmount: couponDiscountAmount,
+          couponCode: appliedCoupon?.code ?? '',
+          durationDiscount: effectiveDurationDiscount,
+          loyaltyDiscount: effectiveLoyaltyDiscount,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error ?? 'Buchung konnte nicht erstellt werden.');
+      }
+      setPendingSuccess(data.booking_id);
+      clearCart();
+    } catch (err) {
+      setIntentError(
+        err instanceof Error ? err.message : 'Buchung konnte nicht erstellt werden.'
       );
     } finally {
       setIsCreatingIntent(false);
@@ -806,6 +861,38 @@ export default function CheckoutPage() {
                   )}
                 </div>
 
+                {/* Pending Booking Erfolg */}
+                {pendingSuccess && (
+                  <div className="p-5 rounded-[10px] bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-center">
+                    <div className="w-12 h-12 rounded-full bg-status-success/10 flex items-center justify-center mx-auto mb-3">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-6 h-6 text-status-success">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <h3 className="font-heading font-bold text-lg text-brand-black dark:text-white mb-1">Buchung eingereicht!</h3>
+                    <p className="text-sm font-body text-brand-steel dark:text-gray-400 mb-2">
+                      Deine Buchung <strong>{pendingSuccess}</strong> wartet auf Freigabe.
+                    </p>
+                    <p className="text-xs font-body text-brand-muted dark:text-gray-500">
+                      Wir pruefen deinen Ausweis und senden dir einen Zahlungslink per Email.
+                    </p>
+                    <a href="/konto/buchungen" className="inline-block mt-4 px-6 py-2.5 bg-brand-black text-white font-heading font-semibold text-sm rounded-btn">
+                      Meine Buchungen
+                    </a>
+                  </div>
+                )}
+
+                {/* Nicht eingeloggt */}
+                {!pendingSuccess && !user && (
+                  <div className="p-4 rounded-[10px] bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-sm">
+                    <p className="font-heading font-semibold text-amber-800 dark:text-amber-300 mb-1">Konto erforderlich</p>
+                    <p className="text-amber-700 dark:text-amber-400 font-body mb-3">Bitte melde dich an oder erstelle ein Konto, um zu buchen.</p>
+                    <a href={`/login?redirect=/checkout`} className="inline-block px-5 py-2 bg-brand-black text-white font-heading font-semibold text-sm rounded-btn">
+                      Anmelden
+                    </a>
+                  </div>
+                )}
+
                 {/* Error */}
                 {intentError && (
                   <div className="p-4 rounded-[10px] bg-red-50 border border-red-200 text-status-error text-sm">
@@ -813,20 +900,46 @@ export default function CheckoutPage() {
                   </div>
                 )}
 
-                <button
-                  onClick={handleProceedToPayment}
-                  disabled={isCreatingIntent}
-                  className="w-full py-4 bg-brand-black text-white font-heading font-semibold rounded-btn hover:bg-brand-dark disabled:opacity-60 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
-                >
-                  {isCreatingIntent ? (
-                    <>
-                      <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      Wird geladen…
-                    </>
-                  ) : (
-                    `Weiter zur Zahlung → ${fmt(total)}`
-                  )}
-                </button>
+                {/* Verifiziert: Normale Zahlung */}
+                {!pendingSuccess && user && isVerified && (
+                  <button
+                    onClick={handleProceedToPayment}
+                    disabled={isCreatingIntent}
+                    className="w-full py-4 bg-brand-black text-white font-heading font-semibold rounded-btn hover:bg-brand-dark disabled:opacity-60 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                  >
+                    {isCreatingIntent ? (
+                      <>
+                        <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Wird geladen…
+                      </>
+                    ) : (
+                      `Weiter zur Zahlung → ${fmt(total)}`
+                    )}
+                  </button>
+                )}
+
+                {/* Nicht verifiziert: Buchung anfragen */}
+                {!pendingSuccess && user && isVerified === false && (
+                  <div>
+                    <div className="p-3 rounded-[10px] bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-xs font-body text-blue-700 dark:text-blue-300 mb-3">
+                      Da dies deine erste Buchung ist, pruefen wir kurz deinen Ausweis. Du erhaeltst danach einen Zahlungslink per Email.
+                    </div>
+                    <button
+                      onClick={handlePendingBooking}
+                      disabled={isCreatingIntent}
+                      className="w-full py-4 bg-accent-blue text-white font-heading font-semibold rounded-btn hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                    >
+                      {isCreatingIntent ? (
+                        <>
+                          <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          Wird erstellt…
+                        </>
+                      ) : (
+                        `Buchung anfragen → ${fmt(total)}`
+                      )}
+                    </button>
+                  </div>
+                )}
               </>
             ) : (
               /* Payment step */

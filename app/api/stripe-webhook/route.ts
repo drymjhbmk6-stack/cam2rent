@@ -84,6 +84,72 @@ export async function POST(req: NextRequest) {
     // Andere PaymentIntents (z.B. ohne booking metadata) ignorieren
   }
 
+  // Zahlungslink-Flow: Kunde bezahlt ueber genehmigten Link
+  if (event.type === 'checkout.session.completed') {
+    const session = event.data.object as Stripe.Checkout.Session;
+    const meta = session.metadata ?? {};
+
+    if (meta.booking_type === 'pending_approval' && meta.booking_id) {
+      const supabase = createServiceClient();
+
+      // Buchung auf "confirmed" setzen
+      const { data: booking } = await supabase
+        .from('bookings')
+        .select('*')
+        .eq('id', meta.booking_id)
+        .single();
+
+      if (booking && (booking.status === 'awaiting_payment' || booking.status === 'pending_verification')) {
+        await supabase
+          .from('bookings')
+          .update({
+            status: 'confirmed',
+            payment_intent_id: session.payment_intent as string ?? session.id,
+          })
+          .eq('id', meta.booking_id);
+
+        console.log(`[Webhook] Pending-Buchung ${meta.booking_id} nach Zahlung bestaetigt.`);
+
+        // Bestaetigungs-Email senden
+        if (booking.customer_email) {
+          const { data: taxSettings } = await supabase
+            .from('admin_settings')
+            .select('key, value')
+            .in('key', ['tax_mode', 'tax_rate', 'ust_id']);
+          const txMap: Record<string, string> = {};
+          for (const s of taxSettings ?? []) txMap[s.key] = s.value;
+
+          const emailData: BookingEmailData = {
+            bookingId: meta.booking_id,
+            customerName: booking.customer_name ?? '',
+            customerEmail: booking.customer_email,
+            productName: booking.product_name,
+            rentalFrom: booking.rental_from,
+            rentalTo: booking.rental_to,
+            days: booking.days,
+            deliveryMode: booking.delivery_mode ?? 'versand',
+            shippingMethod: booking.shipping_method ?? 'standard',
+            haftung: booking.haftung,
+            accessories: booking.accessories ?? [],
+            priceRental: booking.price_rental,
+            priceAccessories: booking.price_accessories,
+            priceHaftung: booking.price_haftung,
+            priceTotal: booking.price_total,
+            deposit: booking.deposit ?? 0,
+            shippingPrice: booking.shipping_price ?? 0,
+            taxMode: (txMap['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer',
+            taxRate: parseFloat(txMap['tax_rate'] || '19'),
+            ustId: txMap['ust_id'] || '',
+          };
+          Promise.all([
+            sendBookingConfirmation(emailData),
+            sendAdminNotification(emailData),
+          ]).catch((err) => console.error('[Webhook] Email-Fehler:', err));
+        }
+      }
+    }
+  }
+
   return NextResponse.json({ received: true });
 }
 

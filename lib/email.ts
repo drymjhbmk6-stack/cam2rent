@@ -41,7 +41,7 @@ async function logEmail(params: {
 }
 
 /** Sendet eine Email via Resend und loggt das Ergebnis */
-async function sendAndLog(opts: {
+export async function sendAndLog(opts: {
   to: string;
   subject: string;
   html: string;
