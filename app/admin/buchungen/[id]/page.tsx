@@ -41,6 +41,7 @@ interface BookingDetail {
   contract_signed_at: string | null;
   suspicious: boolean;
   suspicious_reasons: string[];
+  notes: string | null;
 }
 
 interface CustomerProfile {
