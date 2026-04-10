@@ -474,8 +474,13 @@ function AccessoryCard({ acc, editId, editForm, setEditForm, savedId, savingId, 
           <div className="flex flex-wrap gap-1 mt-2">
             {acc.compatible_product_ids.map((pid) => {
               const p = productList.find((pr) => pr.id === pid);
+              const brandName = p?.name?.toLowerCase() ?? '';
+              const colors = brandName.includes('gopro') ? 'bg-blue-50 text-blue-700 border-blue-200'
+                : brandName.includes('dji') || brandName.includes('osmo') ? 'bg-gray-100 text-gray-800 border-gray-300'
+                : brandName.includes('insta') ? 'bg-amber-50 text-amber-700 border-amber-200'
+                : 'bg-brand-bg text-brand-steel border-brand-border';
               return (
-                <span key={pid} className="px-2 py-0.5 rounded-full text-[10px] font-body bg-blue-50 text-blue-700 border border-blue-200">
+                <span key={pid} className={`px-2 py-0.5 rounded-full text-[10px] font-body border ${colors}`}>
                   {p?.name ?? pid}
                 </span>
               );

@@ -988,11 +988,12 @@ export default function BuchenPage() {
                           const av = accAvailability[item.accessory_id];
                           return av && (av.remaining < item.qty || !av.compatible);
                         });
-                        const setDisabled = setUnavailable;
+                        // Nicht kompatible Sets komplett ausblenden
+                        if (setUnavailable) return null;
                         return (
-                          <div key={set.id} className={`transition-colors ${setDisabled ? 'opacity-50' : isSelected ? 'bg-accent-blue-soft/30' : 'bg-white dark:bg-gray-900'}`}>
-                            <label className={`flex items-center gap-3 px-4 py-3 ${setDisabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
-                              <input type="radio" name="rentalSet" checked={isSelected} disabled={setDisabled} onChange={() => { if (!setDisabled) { setSelectedSet(set); setAccessories([]); } }} className="sr-only" />
+                          <div key={set.id} className={`transition-colors ${isSelected ? 'bg-accent-blue-soft/30' : 'bg-white dark:bg-gray-900'}`}>
+                            <label className="flex items-center gap-3 px-4 py-3 cursor-pointer">
+                              <input type="radio" name="rentalSet" checked={isSelected} onChange={() => { setSelectedSet(set); setAccessories([]); }} className="sr-only" />
                               <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${isSelected ? 'border-accent-blue' : 'border-brand-border'}`}>
                                 {isSelected && <div className="w-2 h-2 rounded-full bg-accent-blue" />}
                               </div>
@@ -1007,11 +1008,7 @@ export default function BuchenPage() {
                                   <p className="text-xs text-brand-muted mt-0.5">{set.includedItems.join(' · ')}</p>
                                 )}
                               </div>
-                              {setDisabled ? (
-                                <span className="text-xs text-status-error flex-shrink-0">Nicht verfuegbar</span>
-                              ) : (
-                                <span className="font-heading font-semibold text-sm text-accent-blue flex-shrink-0">+{fmt(price)} €</span>
-                              )}
+                              <span className="font-heading font-semibold text-sm text-accent-blue flex-shrink-0">+{fmt(price)} €</span>
                             </label>
                           </div>
                         );

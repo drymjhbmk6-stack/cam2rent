@@ -363,7 +363,25 @@ export default function AdminSetsPage() {
                         </span>
                       )}
                       <AvailBadge set={set} />
-                      {savedId === set.id && <span className="text-xs text-green-600 font-body">✓ Gespeichert</span>}
+                      {/* Kompatible Kameras */}
+                      {set.product_ids?.length > 0 ? (
+                        set.product_ids.map((pid) => {
+                          const p = products[pid];
+                          const brand = p?.brand?.toLowerCase() ?? '';
+                          const colors = brand.includes('gopro') ? 'bg-blue-50 text-blue-700 border-blue-200'
+                            : brand.includes('dji') || brand.includes('osmo') ? 'bg-gray-100 text-gray-800 border-gray-300'
+                            : brand.includes('insta') ? 'bg-amber-50 text-amber-700 border-amber-200'
+                            : 'bg-brand-bg text-brand-steel border-brand-border';
+                          return (
+                            <span key={pid} className={`px-2 py-0.5 rounded-full text-[10px] font-body border ${colors}`}>
+                              {p?.name ?? pid}
+                            </span>
+                          );
+                        })
+                      ) : (
+                        <span className="text-[10px] font-body text-brand-muted">Alle Kameras</span>
+                      )}
+                      {savedId === set.id && <span className="text-xs text-green-600 font-body">Gespeichert</span>}
                     </div>
                     <div className="flex items-center gap-3 shrink-0">
                       <span className="text-sm font-heading font-semibold text-brand-black hidden sm:block">
