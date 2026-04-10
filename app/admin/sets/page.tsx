@@ -659,7 +659,14 @@ function NewSetForm({
                     <select value={item.accessory_id}
                       onChange={(e) => updateItem(idx, 'accessory_id', e.target.value)}
                       className="flex-1 px-3 py-2 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue">
-                      {accessories.map((a) => <option key={a.id} value={a.id}>{a.name} ({a.available_qty} verf.)</option>)}
+                      {accessories.map((a) => {
+                        const compat = a.compatible_product_ids?.length
+                          ? a.compatible_product_ids.map((pid) => products[pid]?.name ?? pid).join(', ')
+                          : 'Alle';
+                        return (
+                          <option key={a.id} value={a.id}>{a.name} ({a.available_qty} St.) [{compat}]</option>
+                        );
+                      })}
                     </select>
                     <span className="text-xs text-brand-muted">×</span>
                     <input type="number" min="1" value={item.qty}
