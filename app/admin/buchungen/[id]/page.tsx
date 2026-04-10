@@ -56,6 +56,8 @@ interface CustomerProfile {
 }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
+  pending_verification: { label: 'Warte auf Freigabe', color: '#f59e0b', bg: '#f59e0b14' },
+  awaiting_payment: { label: 'Warte auf Zahlung', color: '#8b5cf6', bg: '#8b5cf614' },
   confirmed: { label: 'Bestätigt', color: '#06b6d4', bg: '#06b6d414' },
   shipped: { label: 'Versendet', color: '#10b981', bg: '#10b98114' },
   completed: { label: 'Abgeschlossen', color: '#64748b', bg: '#64748b14' },
@@ -63,7 +65,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }
   damaged: { label: 'Beschädigt', color: '#f97316', bg: '#f9731614' },
 };
 
-const ALL_STATUSES = ['confirmed', 'shipped', 'completed', 'cancelled', 'damaged'];
+const ALL_STATUSES = ['pending_verification', 'awaiting_payment', 'confirmed', 'shipped', 'completed', 'cancelled', 'damaged'];
 
 function fmtDate(iso: string) {
   if (!iso) return '–';
@@ -600,6 +602,47 @@ export default function BuchungDetailPage() {
             {/* Aktionen */}
             <Section title="Aktionen">
               <div className="space-y-4">
+                {/* Freigeben-Button fuer pending Buchungen */}
+                {(booking.status === 'pending_verification' || booking.status === 'awaiting_payment') && (
+                  <div className="p-4 rounded-xl" style={{ background: '#f59e0b14', border: '1px solid #f59e0b40' }}>
+                    <p className="text-xs font-heading font-semibold text-amber-600 uppercase tracking-wider mb-2">
+                      {booking.status === 'pending_verification' ? 'Warte auf Freigabe' : 'Warte auf Zahlung'}
+                    </p>
+                    {booking.status === 'pending_verification' && (
+                      <button
+                        onClick={async () => {
+                          if (!confirm('Buchung freigeben und Zahlungslink an den Kunden senden?')) return;
+                          setStatusUpdating(true);
+                          try {
+                            const res = await fetch('/api/admin/approve-booking', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ bookingId: booking.id }),
+                            });
+                            const data = await res.json();
+                            if (!res.ok) throw new Error(data.error);
+                            alert('Zahlungslink wurde an den Kunden gesendet!');
+                            window.location.reload();
+                          } catch (err) {
+                            alert(`Fehler: ${err instanceof Error ? err.message : 'Unbekannt'}`);
+                          } finally {
+                            setStatusUpdating(false);
+                          }
+                        }}
+                        disabled={statusUpdating}
+                        className="w-full px-4 py-2.5 text-sm font-heading font-semibold bg-amber-500 text-white rounded-btn hover:bg-amber-600 transition-colors disabled:opacity-40"
+                      >
+                        {statusUpdating ? 'Wird gesendet...' : 'Freigeben + Zahlungslink senden'}
+                      </button>
+                    )}
+                    {booking.status === 'awaiting_payment' && booking.notes && (
+                      <p className="text-xs font-body text-brand-steel mt-1">
+                        {booking.notes}
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 <div>
                   <label className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider block mb-2">
                     Status ändern

@@ -35,6 +35,8 @@ type StatusFilter = 'all' | 'confirmed' | 'shipped' | 'completed' | 'cancelled' 
 type DateFilter = 'all' | 'today' | 'week' | 'month';
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
+  pending_verification: { label: 'Warte auf Freigabe', color: '#f59e0b', bg: '#f59e0b14' },
+  awaiting_payment: { label: 'Warte auf Zahlung', color: '#8b5cf6', bg: '#8b5cf614' },
   confirmed: { label: 'Bestätigt', color: '#06b6d4', bg: '#06b6d414' },
   shipped: { label: 'Versendet', color: '#10b981', bg: '#10b98114' },
   completed: { label: 'Abgeschlossen', color: '#64748b', bg: '#64748b14' },

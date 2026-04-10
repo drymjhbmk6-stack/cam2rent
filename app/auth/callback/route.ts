@@ -48,6 +48,19 @@ export async function GET(request: NextRequest) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
 
     if (!error) {
+      // Pruefen ob Profil verifiziert ist — wenn nicht, zur Ausweis-Upload-Seite
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user && next === '/konto') {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('verification_status')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        if (!profile || profile.verification_status === 'none' || !profile.verification_status) {
+          return NextResponse.redirect(`${origin}/konto/verifizierung`);
+        }
+      }
       return NextResponse.redirect(`${origin}${next}`);
     }
   }
