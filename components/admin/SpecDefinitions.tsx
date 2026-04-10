@@ -27,8 +27,11 @@ export function useSpecDefinitions() {
     fetch('/api/admin/settings?key=spec_definitions')
       .then((r) => r.json())
       .then((data) => {
-        if (data?.value && Array.isArray(data.value) && data.value.length > 0) {
-          setSpecs(data.value);
+        if (data?.value) {
+          const parsed = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setSpecs(parsed);
+          }
         }
       })
       .catch(() => {})
@@ -37,11 +40,15 @@ export function useSpecDefinitions() {
 
   async function save(updated: SpecDefinition[]) {
     setSpecs(updated);
-    await fetch('/api/admin/settings', {
+    const res = await fetch('/api/admin/settings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key: 'spec_definitions', value: updated }),
-    }).catch(() => {});
+      body: JSON.stringify({ key: 'spec_definitions', value: JSON.stringify(updated) }),
+    });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      throw new Error(d.error ?? 'Speichern fehlgeschlagen');
+    }
   }
 
   return { specs, loading, save };
@@ -62,11 +69,16 @@ export function SpecDefinitionsManager() {
 
   async function handleSave() {
     setSaving(true);
-    await save(items);
-    setDirty(false);
-    setSaving(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
+    try {
+      await save(items);
+      setDirty(false);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (err) {
+      alert(`Fehler beim Speichern: ${err instanceof Error ? err.message : 'Unbekannt'}`);
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function handleAdd() {
