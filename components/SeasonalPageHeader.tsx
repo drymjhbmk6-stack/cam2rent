@@ -49,14 +49,14 @@ export default function SeasonalPageHeader({
             {subtitle}
           </p>
         )}
-        {image?.source === 'unsplash' && image.photographer && (
-          <div className="absolute bottom-3 right-4 px-2 py-1 rounded bg-black/40 backdrop-blur-sm">
-            <span className="text-[10px] text-white/50 font-body">
-              Foto: {image.photographer}
-            </span>
-          </div>
-        )}
       </div>
+      {image?.source === 'unsplash' && image.photographer && (
+        <div className="absolute bottom-2 right-4 px-2 py-1 rounded bg-black/40 backdrop-blur-sm">
+          <span className="text-[10px] text-white/40 font-body">
+            Foto: {image.photographer}
+          </span>
+        </div>
+      )}
     </section>
   );
 }
