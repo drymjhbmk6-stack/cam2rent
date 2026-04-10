@@ -21,14 +21,23 @@ const FALLBACK: HeroData = {
 };
 
 
-export default function Hero() {
-  const [data, setData] = useState<HeroData>(FALLBACK);
-  const [loaded, setLoaded] = useState(false);
-  const [seasonalImage, setSeasonalImage] = useState<SeasonalImage | null>(null);
-  const [currentMonth, setCurrentMonth] = useState<number>(new Date().getMonth() + 1);
+export default function Hero({
+  serverData,
+  serverImage,
+  serverMonth,
+}: {
+  serverData?: HeroData;
+  serverImage?: SeasonalImage | null;
+  serverMonth?: number;
+}) {
+  const [data, setData] = useState<HeroData>(serverData ?? FALLBACK);
+  const [loaded, setLoaded] = useState(!!serverData);
+  const [seasonalImage, setSeasonalImage] = useState<SeasonalImage | null>(serverImage ?? null);
+  const [currentMonth, setCurrentMonth] = useState<number>(serverMonth ?? new Date().getMonth() + 1);
 
   useEffect(() => {
-    // Hero-Texte laden
+    // Nur Client-Fetch wenn keine Server-Daten vorhanden
+    if (serverData) return;
     fetch('/api/shop-content?section=hero')
       .then((r) => r.json())
       .then((d) => {
@@ -45,7 +54,8 @@ export default function Hero() {
       })
       .catch(() => setLoaded(true));
 
-    // Saisonales Bild laden
+    // Saisonales Bild laden (nur wenn keine Server-Daten)
+    if (serverImage !== undefined) return;
     fetch('/api/seasonal-images?zone=hero')
       .then((r) => r.json())
       .then((d) => {

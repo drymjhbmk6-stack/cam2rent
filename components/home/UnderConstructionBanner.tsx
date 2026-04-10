@@ -7,18 +7,18 @@ import { useEffect, useState } from 'react';
  * noch nicht live ist. Kann im Admin unter Einstellungen deaktiviert werden
  * (admin_settings key: 'show_construction_banner').
  */
-export default function UnderConstructionBanner() {
-  const [visible, setVisible] = useState(false);
+export default function UnderConstructionBanner({ serverVisible }: { serverVisible?: boolean }) {
+  const [visible, setVisible] = useState(serverVisible ?? false);
 
   useEffect(() => {
+    if (serverVisible !== undefined) return;
     fetch('/api/admin/settings?key=show_construction_banner')
       .then((r) => r.json())
       .then((d) => {
-        // Standardmaessig sichtbar wenn kein Eintrag oder 'true'
         setVisible(d.value === null || d.value === 'true' || d.value === true);
       })
       .catch(() => setVisible(true));
-  }, []);
+  }, [serverVisible]);
 
   if (!visible) return null;
 

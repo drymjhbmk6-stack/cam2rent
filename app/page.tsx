@@ -8,12 +8,15 @@ import HomeReviews from '@/components/home/HomeReviews';
 import GoogleReviews from '@/components/home/GoogleReviews';
 import AppInstallBanner from '@/components/home/AppInstallBanner';
 import UnderConstructionBanner from '@/components/home/UnderConstructionBanner';
+import { getHomePageData } from '@/lib/get-homepage-data';
 
-export default function Home() {
+export default async function Home() {
+  const data = await getHomePageData();
+
   return (
     <>
-      <UnderConstructionBanner />
-      <Hero />
+      {data.showConstructionBanner && <UnderConstructionBanner serverVisible />}
+      <Hero serverData={data.hero} serverImage={data.seasonalImage} serverMonth={data.seasonalMonth} />
       <TrustBanner />
       <ProductGrid />
       <KameraFinderCta />
