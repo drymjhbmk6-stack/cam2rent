@@ -456,8 +456,7 @@ export default function BuchenPage() {
       .then((r) => r.json())
       .then((data) => {
         if (Array.isArray(data?.sets)) {
-          setAvailableSets(data.sets);
-          if (data.sets.length > 0 && !selectedSet) setSelectedSet(data.sets[0]);
+          setAvailableSets([...data.sets].sort((a: RentalSet, b: RentalSet) => a.price - b.price));
         }
       })
       .catch(() => {});
@@ -1188,10 +1187,14 @@ export default function BuchenPage() {
                   <button
                     type="button"
                     onClick={() => setStep(3)}
-                    className="px-8 py-3 bg-brand-black text-white font-heading font-semibold text-sm rounded-[10px] hover:bg-brand-dark transition-colors"
+                    disabled={availableSets.length > 0 && !selectedSet}
+                    className="px-8 py-3 bg-brand-black text-white font-heading font-semibold text-sm rounded-[10px] hover:bg-brand-dark transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     Weiter: Haftung
                   </button>
+                  {availableSets.length > 0 && !selectedSet && (
+                    <p className="text-xs text-status-error mt-2 text-right">Bitte waehle ein Set aus.</p>
+                  )}
                 </div>
               </div>
             )}
