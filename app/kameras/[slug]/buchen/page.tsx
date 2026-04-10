@@ -1109,14 +1109,9 @@ export default function BuchenPage() {
                             </div>
                             <span className={`font-heading font-semibold text-sm flex-1 ${disabled ? 'text-brand-muted' : 'text-brand-black dark:text-gray-100'}`}>{acc.name}</span>
                             {!disabled && (
-                              <>
-                                <span className="text-xs font-body text-brand-muted">
-                                  {acc.pricingMode === 'flat' ? `${fmt(acc.price)} € einmalig` : `${fmt(acc.price)} € / Tag`}
-                                </span>
-                                <span className="font-heading font-semibold text-sm text-accent-blue w-16 text-right">
-                                  +{fmt(getAccessoryPrice(acc, days))} €
-                                </span>
-                              </>
+                              <span className="font-heading font-semibold text-sm text-accent-blue flex-shrink-0">
+                                +{fmt(getAccessoryPrice(acc, days))} € {acc.pricingMode === 'flat' ? 'einmalig' : 'pro Tag'}
+                              </span>
                             )}
                           </div>
                           {isBookedOut && (
