@@ -37,6 +37,7 @@ interface DynSet {
   pricing_mode: 'perDay' | 'flat';
   price: number;
   available: boolean;
+  product_ids?: string[];
 }
 
 interface DynPrices {
@@ -676,7 +677,11 @@ export default function ManualBookingPage() {
                 });
                 const regularAccessories = compatAccessories.filter((a) => !a.upgrade_group);
                 const upgradeGroups = [...new Set(compatAccessories.filter((a) => a.upgrade_group).map((a) => a.upgrade_group!))];
-                const compatSets = sets.filter((s) => s.available);
+                const compatSets = sets.filter((s) => {
+                  if (!s.available) return false;
+                  if (s.product_ids?.length) return s.product_ids.includes(sp.id);
+                  return true;
+                });
 
                 return (
                   <div key={sp.id} style={{ background: '#0f172a', borderRadius: 10, border: '1px solid #1e293b', padding: 16 }}>
