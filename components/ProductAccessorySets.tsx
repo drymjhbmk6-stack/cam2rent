@@ -2,28 +2,62 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useAccessories } from '@/components/AccessoriesProvider';
 import type { RentalSet } from '@/data/sets';
 
-// ─── Component ───────────────────────────────────────────────────────────────
+interface AccItem {
+  id: string;
+  name: string;
+  pricingMode: 'perDay' | 'flat';
+  price: number;
+  available: boolean;
+  group?: string;
+  upgradeGroup?: string;
+  isUpgradeBase?: boolean;
+}
 
-export default function ProductAccessorySets() {
-  const { accessories } = useAccessories();
+export default function ProductAccessorySets({ productId }: { productId: string }) {
+  const [accessories, setAccessories] = useState<AccItem[]>([]);
   const [sets, setSets] = useState<RentalSet[]>([]);
   const [openSetId, setOpenSetId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/sets?available=true')
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.sets) setSets(d.sets);
-        setLoading(false);
+    Promise.all([
+      fetch(`/api/accessory-availability?from=2099-01-01&to=2099-01-01&product_id=${productId}&delivery_mode=versand`)
+        .then((r) => r.json())
+        .then((d) => d.accessories ?? []),
+      fetch('/api/accessories').then((r) => r.json()),
+      fetch('/api/sets?available=true').then((r) => r.json()),
+    ])
+      .then(([availData, accData, setData]) => {
+        // Kompatibilitaet aus availability API
+        const compatIds = new Set(
+          (availData as { id: string; compatible: boolean }[])
+            .filter((a) => a.compatible)
+            .map((a) => a.id)
+        );
+        // Nur kompatible + nicht-interne Zubehoer
+        const filtered = (Array.isArray(accData) ? accData : []).filter(
+          (a: AccItem) => a.available && compatIds.has(a.id)
+        );
+        setAccessories(filtered);
+        if (setData.sets) setSets(setData.sets);
       })
-      .catch(() => setLoading(false));
-  }, []);
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [productId]);
 
-  const availableAccessories = accessories.filter((a) => a.available);
+  // Nach Kategorie gruppieren
+  const categoryMap = new Map<string, AccItem[]>();
+  for (const acc of accessories.filter((a) => !a.upgradeGroup)) {
+    const cat = acc.group || 'sonstiges';
+    if (!categoryMap.has(cat)) categoryMap.set(cat, []);
+    categoryMap.get(cat)!.push(acc);
+  }
+  const categories = [...categoryMap.entries()];
+
+  // Upgrade-Gruppen
+  const upgradeGroups = [...new Set(accessories.filter((a) => a.upgradeGroup).map((a) => a.upgradeGroup!))];
 
   function toggleSet(id: string) {
     setOpenSetId(openSetId === id ? null : id);
@@ -32,16 +66,15 @@ export default function ProductAccessorySets() {
   return (
     <div>
       <h2 className="font-heading font-bold text-xl sm:text-2xl text-brand-black dark:text-gray-100 mb-6">
-        Passendes Zubehör & Sets
+        Passendes Zubehoer & Sets
       </h2>
 
       <div className="grid md:grid-cols-2 gap-6">
-        {/* ── Links: Sets (Akkordeon) ── */}
+        {/* Links: Sets */}
         <div>
           <h3 className="font-heading font-semibold text-sm text-brand-muted dark:text-gray-500 uppercase tracking-wider mb-3">
             Sets
           </h3>
-
           {loading ? (
             <div className="space-y-2">
               {[1, 2, 3].map((i) => (
@@ -51,44 +84,24 @@ export default function ProductAccessorySets() {
           ) : (
             <div className="space-y-1.5">
               {sets.map((set) => (
-                <div
-                  key={set.id}
-                  className="bg-white dark:bg-gray-800 rounded-xl border border-brand-border dark:border-gray-700 overflow-hidden"
-                >
-                  {/* Set header */}
-                  <button
-                    type="button"
-                    onClick={() => toggleSet(set.id)}
-                    className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-brand-bg/50 dark:hover:bg-gray-700/50 transition-colors"
-                  >
+                <div key={set.id} className="bg-white dark:bg-gray-800 rounded-xl border border-brand-border dark:border-gray-700 overflow-hidden">
+                  <button type="button" onClick={() => toggleSet(set.id)}
+                    className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-brand-bg/50 dark:hover:bg-gray-700/50 transition-colors">
                     <div className="flex items-center gap-2 min-w-0">
-                      <span className="font-heading font-semibold text-sm text-brand-black dark:text-gray-100 truncate">
-                        {set.name}
-                      </span>
+                      <span className="font-heading font-semibold text-sm text-brand-black dark:text-gray-100 truncate">{set.name}</span>
                       {set.badge && (
-                        <span className={`flex-shrink-0 px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${set.badgeColor || 'bg-accent-blue text-white'}`}>
-                          {set.badge}
-                        </span>
+                        <span className={`flex-shrink-0 px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${set.badgeColor || 'bg-accent-blue text-white'}`}>{set.badge}</span>
                       )}
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
                       <span className="text-sm font-heading font-bold text-accent-blue">
-                        {set.price > 0
-                          ? `${set.price.toFixed(2).replace('.', ',')} € ${set.pricingMode === 'perDay' ? '/ Tag' : ''}`
-                          : 'Preis auf Anfrage'}
+                        {set.price > 0 ? `${set.price.toFixed(2).replace('.', ',')} € ${set.pricingMode === 'perDay' ? '/ Tag' : ''}` : 'Preis auf Anfrage'}
                       </span>
-                      <svg
-                        className={`w-4 h-4 text-brand-muted transition-transform ${openSetId === set.id ? 'rotate-180' : ''}`}
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
+                      <svg className={`w-4 h-4 text-brand-muted transition-transform ${openSetId === set.id ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                       </svg>
                     </div>
                   </button>
-
-                  {/* Set details (expanded) */}
                   {openSetId === set.id && (
                     <div className="px-4 pb-3 pt-1 border-t border-brand-border dark:border-gray-700">
                       {set.includedItems.length > 0 ? (
@@ -101,45 +114,66 @@ export default function ProductAccessorySets() {
                           ))}
                         </ul>
                       ) : (
-                        <p className="text-xs text-brand-muted dark:text-gray-500">Keine Details verfügbar</p>
+                        <p className="text-xs text-brand-muted dark:text-gray-500">Keine Details verfuegbar</p>
                       )}
                     </div>
                   )}
                 </div>
               ))}
-
               {sets.length === 0 && (
-                <p className="text-xs text-brand-muted dark:text-gray-500 py-2">Keine Sets verfügbar</p>
+                <p className="text-xs text-brand-muted dark:text-gray-500 py-2">Keine Sets verfuegbar</p>
               )}
             </div>
           )}
         </div>
 
-        {/* ── Rechts: Zubehör (Liste) ── */}
+        {/* Rechts: Zubehoer — nach Kategorie gruppiert */}
         <div>
           <h3 className="font-heading font-semibold text-sm text-brand-muted dark:text-gray-500 uppercase tracking-wider mb-3">
-            Zubehör
+            Zubehoer
           </h3>
 
-          <div className="space-y-1.5">
-            {availableAccessories.map((acc) => (
-              <div
-                key={acc.id}
-                className="flex items-center justify-between px-4 py-3 bg-white dark:bg-gray-800 rounded-xl border border-brand-border dark:border-gray-700"
-              >
-                <span className="font-heading font-semibold text-sm text-brand-black dark:text-gray-100">
-                  {acc.name}
-                </span>
-                <span className="text-sm font-heading font-bold text-accent-blue flex-shrink-0">
-                  {acc.price.toFixed(2).replace('.', ',')} € {acc.pricingMode === 'perDay' ? '/ Tag' : 'einmalig'}
-                </span>
+          {/* Upgrade-Gruppen */}
+          {upgradeGroups.map((group) => {
+            const groupAccs = accessories.filter((a) => a.upgradeGroup === group);
+            const baseAcc = groupAccs.find((a) => a.isUpgradeBase);
+            return (
+              <div key={group} className="mb-3">
+                <p className="text-[10px] font-heading font-bold text-brand-muted uppercase tracking-wider mb-1">{group}</p>
+                <div className="space-y-1">
+                  {groupAccs.map((acc) => (
+                    <div key={acc.id} className="flex items-center justify-between px-4 py-2.5 bg-white dark:bg-gray-800 rounded-xl border border-brand-border dark:border-gray-700">
+                      <span className="font-heading font-semibold text-sm text-brand-black dark:text-gray-100">{acc.name}</span>
+                      <span className="text-sm font-heading font-bold text-accent-blue flex-shrink-0">
+                        {acc.isUpgradeBase ? 'inklusive' : `+${(acc.price - (baseAcc?.price ?? 0)).toFixed(2).replace('.', ',')} €`}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
-            ))}
+            );
+          })}
 
-            {availableAccessories.length === 0 && (
-              <p className="text-xs text-brand-muted dark:text-gray-500 py-2">Kein Zubehör verfügbar</p>
-            )}
-          </div>
+          {/* Normales Zubehoer nach Kategorie */}
+          {categories.map(([cat, items]) => (
+            <div key={cat} className="mb-3">
+              <p className="text-[10px] font-heading font-bold text-brand-muted uppercase tracking-wider mb-1">{cat}</p>
+              <div className="space-y-1">
+                {items.map((acc) => (
+                  <div key={acc.id} className="flex items-center justify-between px-4 py-2.5 bg-white dark:bg-gray-800 rounded-xl border border-brand-border dark:border-gray-700">
+                    <span className="font-heading font-semibold text-sm text-brand-black dark:text-gray-100">{acc.name}</span>
+                    <span className="text-sm font-heading font-bold text-accent-blue flex-shrink-0">
+                      {acc.price.toFixed(2).replace('.', ',')} € {acc.pricingMode === 'perDay' ? '/ Tag' : 'einmalig'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+
+          {accessories.length === 0 && !loading && (
+            <p className="text-xs text-brand-muted dark:text-gray-500 py-2">Kein Zubehoer verfuegbar</p>
+          )}
         </div>
       </div>
 
@@ -151,7 +185,7 @@ export default function ProductAccessorySets() {
               Eigenes Set zusammenstellen
             </h3>
             <p className="text-xs font-body text-brand-steel dark:text-gray-400">
-              Kombiniere Kamera und Zubehör frei. Dein Set wird im Kundenkonto gespeichert.
+              Kombiniere Kamera und Zubehoer frei. Dein Set wird im Kundenkonto gespeichert.
             </p>
           </div>
           <Link

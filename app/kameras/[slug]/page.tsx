@@ -228,7 +228,7 @@ export default async function KameraDetailPage({
 
         {/* ── Zubehör & Sets ── */}
         <div className="mt-14">
-          <ProductAccessorySets />
+          <ProductAccessorySets productId={product.id} />
         </div>
 
         {/* ── Back to overview ── */}
