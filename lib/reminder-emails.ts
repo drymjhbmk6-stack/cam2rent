@@ -197,7 +197,7 @@ export async function sendSecondOverdueNotice(data: ReminderEmailData): Promise<
 // ─── 5. Review Request – 3 days after completed return ───────────────────────
 
 export async function sendReviewRequest(data: ReminderEmailData): Promise<string | null> {
-  const reviewUrl = `${BASE_URL}/bewertung/${data.bookingId}`;
+  const reviewUrl = `${BASE_URL}/umfrage/${data.bookingId}`;
   const subject = `Wie war dein Erlebnis mit ${data.productName}?`;
 
   const html = wrapLayout(`

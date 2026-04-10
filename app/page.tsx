@@ -7,10 +7,12 @@ import CtaBanner from '@/components/home/CtaBanner';
 import HomeReviews from '@/components/home/HomeReviews';
 import GoogleReviews from '@/components/home/GoogleReviews';
 import AppInstallBanner from '@/components/home/AppInstallBanner';
+import UnderConstructionBanner from '@/components/home/UnderConstructionBanner';
 
 export default function Home() {
   return (
     <>
+      <UnderConstructionBanner />
       <Hero />
       <TrustBanner />
       <ProductGrid />
