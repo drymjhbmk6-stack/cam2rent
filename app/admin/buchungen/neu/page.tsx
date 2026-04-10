@@ -159,28 +159,36 @@ export default function ManualBookingPage() {
         setAccessories(accData.accessories ?? []);
         setSets(setData.sets ?? []);
         if (depositSetting?.value) setDepositMode(depositSetting.value);
-        // Set default for add-dropdown
-        if (prods.length > 0) setAddProductId(prods[0].id);
+        // Set default for add-dropdown (DB-Produkte bevorzugen)
+        const apKeys = Object.keys(prices?.adminProducts ?? {});
+        if (apKeys.length > 0) setAddProductId(apKeys[0]);
+        else if (prods.length > 0) setAddProductId(prods[0].id);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
-  // Merged product list: static + dynamic overrides
+  // Produktliste: primaer aus DB (adminProducts), Fallback auf statische Daten
   const productList = useMemo(() => {
     const ap = dynPrices?.adminProducts;
+    if (ap && Object.keys(ap).length > 0) {
+      return Object.values(ap).map((p) => ({
+        id: p.id,
+        name: p.name,
+        brand: p.brand,
+        available: p.available ?? true,
+        deposit: p.deposit ?? 0,
+      }));
+    }
     return staticProducts
-      .filter((p) => p.id) // only valid
-      .map((sp) => {
-        const dyn = ap?.[sp.id];
-        return {
-          id: sp.id,
-          name: dyn?.name ?? sp.name,
-          brand: dyn?.brand ?? sp.brand,
-          available: dyn?.available ?? true,
-          deposit: dyn?.deposit ?? sp.deposit ?? 0,
-        };
-      });
+      .filter((p) => p.id)
+      .map((sp) => ({
+        id: sp.id,
+        name: sp.name,
+        brand: sp.brand,
+        available: true,
+        deposit: sp.deposit ?? 0,
+      }));
   }, [staticProducts, dynPrices]);
 
   const days = calcDays(rentalFrom, rentalTo);
