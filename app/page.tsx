@@ -8,6 +8,7 @@ import HomeReviews from '@/components/home/HomeReviews';
 import GoogleReviews from '@/components/home/GoogleReviews';
 import AppInstallBanner from '@/components/home/AppInstallBanner';
 import UnderConstructionBanner from '@/components/home/UnderConstructionBanner';
+import BetaFeedbackButton from '@/components/home/BetaFeedbackButton';
 import { getHomePageData } from '@/lib/get-homepage-data';
 
 export default async function Home() {
@@ -25,6 +26,7 @@ export default async function Home() {
       <GoogleReviews />
       <AppInstallBanner />
       <CtaBanner />
+      <BetaFeedbackButton />
     </>
   );
 }
