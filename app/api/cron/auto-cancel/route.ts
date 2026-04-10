@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { sendAndLog } from '@/lib/email';
+import { verifyCronAuth } from '@/lib/cron-auth';
 
 /**
  * GET /api/cron/auto-cancel
@@ -11,10 +12,7 @@ import { sendAndLog } from '@/lib/email';
  * Sollte taeglich via Coolify Cron oder externem Service aufgerufen werden.
  */
 export async function GET(req: NextRequest) {
-  const secret = req.headers.get('authorization')?.replace('Bearer ', '') ??
-    req.nextUrl.searchParams.get('secret');
-
-  if (secret !== process.env.CRON_SECRET) {
+  if (!verifyCronAuth(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

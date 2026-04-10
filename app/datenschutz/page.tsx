@@ -206,6 +206,29 @@ export default function DatenschutzPage() {
             Rechtsgrundlage ist Art. 6 Abs. 1 lit. b DSGVO (Vertragserfüllung). Buchungsdaten werden
             gemäß den handels- und steuerrechtlichen Aufbewahrungsfristen (6 bzw. 10 Jahre) gespeichert.
           </p>
+
+          <h3 className="font-heading font-semibold text-base text-brand-black dark:text-white mt-6 mb-3">
+            Ausweisdokumente zur Identitaetspruefung
+          </h3>
+          <p className="font-body text-brand-steel dark:text-gray-300">
+            Zur Verifizierung deiner Identitaet bitten wir dich, ein Foto der Vorder- und Rueckseite deines
+            Personalausweises hochzuladen. Die Bilder werden verschluesselt in unserem Speichersystem (Supabase Storage,
+            EU-Server) abgelegt. Rechtsgrundlage ist Art. 6 Abs. 1 lit. b DSGVO (vorvertragliche Massnahmen) und
+            Art. 6 Abs. 1 lit. f DSGVO (berechtigtes Interesse an der Verhinderung von Missbrauch).
+            Die Ausweisbilder werden nach erfolgreicher Verifizierung und Ablauf der Mietdauer, spaetestens jedoch
+            nach 90 Tagen automatisch geloescht. Bei Ablehnung werden die Bilder sofort geloescht.
+          </p>
+
+          <h3 className="font-heading font-semibold text-base text-brand-black dark:text-white mt-6 mb-3">
+            Schadensdokumentation (Fotos)
+          </h3>
+          <p className="font-body text-brand-steel dark:text-gray-300">
+            Im Falle eines Schadens an gemieteter Ausruestung koennen Fotos zur Dokumentation hochgeladen werden.
+            Diese werden in Supabase Storage (EU-Server) gespeichert. Rechtsgrundlage ist Art. 6 Abs. 1 lit. b DSGVO
+            (Vertragserfuellung) und Art. 6 Abs. 1 lit. f DSGVO (berechtigtes Interesse an der Durchsetzung
+            vertraglicher Ansprueche). Schadensfotos werden fuer die Dauer der Schadensabwicklung gespeichert,
+            maximal jedoch 2 Jahre nach Abschluss des Vorgangs.
+          </p>
         </section>
 
         <section className="mb-10">

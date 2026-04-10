@@ -1,22 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { sendAbandonedCartReminder } from '@/lib/email';
+import { verifyCronAuth } from '@/lib/cron-auth';
 
 /**
  * GET /api/cron/abandoned-cart
- * Cron-Job: Sendet Erinnerungen für Warenkörbe die seit X Stunden nicht abgeschlossen wurden.
- * Auth: CRON_SECRET Header.
+ * Cron-Job: Sendet Erinnerungen fuer Warenkoerbe die seit X Stunden nicht abgeschlossen wurden.
  */
-function isAuthorized(req: NextRequest): boolean {
-  const secret = req.headers.get('x-cron-secret');
-  if (secret && secret === process.env.CRON_SECRET) return true;
-  const auth = req.headers.get('authorization');
-  if (auth === `Bearer ${process.env.CRON_SECRET}`) return true;
-  return false;
-}
-
 export async function GET(req: NextRequest) {
-  if (!isAuthorized(req)) {
+  if (!verifyCronAuth(req)) {
     return NextResponse.json({ error: 'Nicht autorisiert.' }, { status: 401 });
   }
 

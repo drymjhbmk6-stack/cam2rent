@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import Anthropic from '@anthropic-ai/sdk';
+import { verifyCronAuth } from '@/lib/cron-auth';
 import OpenAI from 'openai';
 
 const LENGTH_MAP: Record<string, string> = {
@@ -17,15 +18,12 @@ const TONE_MAP: Record<string, string> = {
 
 /** POST /api/cron/blog-generate - Automatische Artikel-Generierung */
 export async function POST(req: NextRequest) {
-  // Absicherung via Secret
-  const url = new URL(req.url);
-  const secret = req.headers.get('x-cron-secret') ?? url.searchParams.get('secret');
-  if (secret !== process.env.CRON_SECRET) {
+  if (!verifyCronAuth(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   // force=true ueberspringt den Scheduler (fuer manuelle Tests)
-  const forceGenerate = url.searchParams.get('force') === 'true';
+  const forceGenerate = req.headers.get('x-force-generate') === 'true';
 
   const supabase = createServiceClient();
 

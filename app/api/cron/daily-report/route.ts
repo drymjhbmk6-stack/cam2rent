@@ -1,20 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Resend } from 'resend';
 import { createServiceClient } from '@/lib/supabase';
+import { verifyCronAuth } from '@/lib/cron-auth';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? 'kontakt@cam2rent.de';
 const FROM_EMAIL = process.env.FROM_EMAIL ?? 'buchungen@cam2rent.de';
 const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://cam2rent.de';
-
-// Auth: Cron-Secret oder Admin-Passwort
-function isAuthorized(req: NextRequest): boolean {
-  const secret = req.headers.get('x-cron-secret');
-  if (secret && secret === process.env.CRON_SECRET) return true;
-  const auth = req.headers.get('authorization');
-  if (auth === `Bearer ${process.env.CRON_SECRET}`) return true;
-  return false;
-}
 
 function pct(a: number, b: number): string {
   if (b === 0) return '0%';
@@ -33,7 +25,7 @@ function trend(current: number, previous: number): string {
 }
 
 export async function GET(req: NextRequest) {
-  if (!isAuthorized(req)) {
+  if (!verifyCronAuth(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

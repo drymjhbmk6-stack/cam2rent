@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { verifyCronAuth } from '@/lib/cron-auth';
 
 /** POST /api/cron/blog-publish - Geplante Posts veroeffentlichen */
 export async function POST(req: NextRequest) {
-  const secret = req.headers.get('x-cron-secret') ?? new URL(req.url).searchParams.get('secret');
-  if (secret !== process.env.CRON_SECRET) {
+  if (!verifyCronAuth(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

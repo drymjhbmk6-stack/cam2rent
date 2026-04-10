@@ -492,6 +492,8 @@ export default function CheckoutPage() {
 
   // Unverified: Buchung ohne Zahlung anlegen
   const [pendingSuccess, setPendingSuccess] = useState<string | null>(null);
+  const [acceptsTerms, setAcceptsTerms] = useState(false);
+  const [acceptsWithdrawal, setAcceptsWithdrawal] = useState(false);
   const handlePendingBooking = async () => {
     if (!user) {
       setIntentError('Bitte melde dich an, um eine Buchung anzufragen.');
@@ -922,12 +924,36 @@ export default function CheckoutPage() {
                   </div>
                 )}
 
+                {/* AGB + Widerrufsrecht Checkboxen */}
+                {!pendingSuccess && (
+                  <div className="space-y-3 mb-4">
+                    <label className="flex items-start gap-3 cursor-pointer">
+                      <input type="checkbox" checked={acceptsTerms} onChange={(e) => setAcceptsTerms(e.target.checked)}
+                        className="w-4 h-4 mt-0.5 rounded border-brand-border accent-accent-blue flex-shrink-0" />
+                      <span className="text-xs font-body text-brand-steel dark:text-gray-400 leading-relaxed">
+                        Ich habe die <a href="/agb" target="_blank" className="text-accent-blue underline">AGB</a>,{' '}
+                        <a href="/datenschutz" target="_blank" className="text-accent-blue underline">Datenschutzerklaerung</a> und{' '}
+                        <a href="/haftungsbedingungen" target="_blank" className="text-accent-blue underline">Haftungsbedingungen</a> gelesen und akzeptiere diese.
+                      </span>
+                    </label>
+                    <label className="flex items-start gap-3 cursor-pointer">
+                      <input type="checkbox" checked={acceptsWithdrawal} onChange={(e) => setAcceptsWithdrawal(e.target.checked)}
+                        className="w-4 h-4 mt-0.5 rounded border-brand-border accent-accent-blue flex-shrink-0" />
+                      <span className="text-xs font-body text-brand-steel dark:text-gray-400 leading-relaxed">
+                        Mir ist bekannt, dass bei zeitgebundenen Freizeitdienstleistungen gemaess{' '}
+                        <a href="/widerrufsbelehrung" target="_blank" className="text-accent-blue underline">§ 312g Abs. 2 Nr. 9 BGB</a>{' '}
+                        kein Widerrufsrecht besteht.
+                      </span>
+                    </label>
+                  </div>
+                )}
+
                 {/* Verifiziert: Normale Zahlung */}
                 {!pendingSuccess && isVerified && (
                   <button
                     onClick={handleProceedToPayment}
-                    disabled={isCreatingIntent}
-                    className="w-full py-4 bg-brand-black text-white font-heading font-semibold rounded-btn hover:bg-brand-dark disabled:opacity-60 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                    disabled={isCreatingIntent || !acceptsTerms || !acceptsWithdrawal}
+                    className="w-full py-4 bg-brand-black text-white font-heading font-semibold rounded-btn hover:bg-brand-dark disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
                   >
                     {isCreatingIntent ? (
                       <>
@@ -948,8 +974,8 @@ export default function CheckoutPage() {
                     </div>
                     <button
                       onClick={handlePendingBooking}
-                      disabled={isCreatingIntent}
-                      className="w-full py-4 bg-accent-blue text-white font-heading font-semibold rounded-btn hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                      disabled={isCreatingIntent || !acceptsTerms || !acceptsWithdrawal}
+                      className="w-full py-4 bg-accent-blue text-white font-heading font-semibold rounded-btn hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
                     >
                       {isCreatingIntent ? (
                         <>

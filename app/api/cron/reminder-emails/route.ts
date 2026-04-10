@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { verifyCronAuth } from '@/lib/cron-auth';
 import {
   sendReturnReminder,
   sendReturnDueToday,
@@ -8,16 +9,6 @@ import {
   sendReviewRequest,
   type ReminderEmailData,
 } from '@/lib/reminder-emails';
-
-// ─── Auth ────────────────────────────────────────────────────────────────────
-
-function isAuthorized(req: NextRequest): boolean {
-  const secret = req.headers.get('x-cron-secret');
-  if (secret && secret === process.env.CRON_SECRET) return true;
-  const auth = req.headers.get('authorization');
-  if (auth === `Bearer ${process.env.CRON_SECRET}`) return true;
-  return false;
-}
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -48,7 +39,7 @@ function dateOffset(days: number): string {
 // ─── Main handler ────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
-  if (!isAuthorized(req)) {
+  if (!verifyCronAuth(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
