@@ -4,6 +4,7 @@ import { createElement, type ReactElement } from 'react';
 import { createServiceClient } from '@/lib/supabase';
 import { InvoicePDF, type InvoiceData } from '@/lib/invoice-pdf';
 import { ensureBusinessConfig } from '@/lib/load-business-config';
+import QRCode from 'qrcode';
 
 export async function GET(
   req: NextRequest,
@@ -73,7 +74,6 @@ export async function GET(
   // EPC QR-Code fuer Banking generieren
   const invoiceNumber = booking.id.replace(/^(C2R|BK)-/, 'RE-');
   try {
-    const QRCode = (await import('qrcode')).default;
     const epcData = [
       'BCD',           // Service Tag
       '002',           // Version
@@ -88,8 +88,8 @@ export async function GET(
       `${invoiceNumber} ${data.customerName}`, // Verwendungszweck
     ].join('\n');
     data.qrCodeDataUrl = await QRCode.toDataURL(epcData, { width: 200, margin: 1 });
-  } catch {
-    // QR-Code Fehler ignorieren — Rechnung wird ohne generiert
+  } catch (qrErr) {
+    console.error('QR-Code Fehler:', qrErr);
   }
 
   const pdfBuffer = await renderToBuffer(
