@@ -26,6 +26,9 @@ export async function PUT(
       available: body.available,
       image_url: body.image_url ?? null,
       compatible_product_ids: body.compatible_product_ids ?? [],
+      internal: body.internal ?? false,
+      upgrade_group: body.upgrade_group || null,
+      is_upgrade_base: body.is_upgrade_base ?? false,
     })
     .eq('id', id);
 
