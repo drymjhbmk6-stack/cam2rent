@@ -24,6 +24,10 @@ interface DynAccessory {
   pricing_mode: 'perDay' | 'flat';
   price: number;
   available: boolean;
+  compatible_product_ids?: string[];
+  internal?: boolean;
+  upgrade_group?: string | null;
+  is_upgrade_base?: boolean;
 }
 
 interface DynSet {
@@ -213,6 +217,16 @@ export default function ManualBookingPage() {
       if (p.id !== productId) return p;
       const has = p.accessories.includes(accId);
       return { ...p, accessories: has ? p.accessories.filter((a) => a !== accId) : [...p.accessories, accId] };
+    }));
+  }
+  function selectProductUpgrade(productId: string, accId: string, group: string) {
+    setSelectedProducts((prev) => prev.map((p) => {
+      if (p.id !== productId) return p;
+      const groupIds = accessories.filter((a) => a.upgrade_group === group).map((a) => a.id);
+      const without = p.accessories.filter((id) => !groupIds.includes(id));
+      const acc = accessories.find((a) => a.id === accId);
+      if (acc?.is_upgrade_base) return { ...p, accessories: without };
+      return { ...p, accessories: [...without, accId] };
     }));
   }
   function toggleProductSet(productId: string, setId: string) {
@@ -643,8 +657,17 @@ export default function ManualBookingPage() {
                 const customParsed = parseFloat(sp.customPrice);
                 const hasCustomPrice = sp.customPrice !== '' && !isNaN(customParsed);
                 const displayPrice = hasCustomPrice ? customParsed * sp.qty : autoPrice * sp.qty;
-                // Kompatible Zubehörteile für dieses Produkt
-                const compatAccessories = accessories.filter((acc) => acc.available);
+                // Kompatible Zubehörteile für dieses Produkt (nicht internal, kompatibel)
+                const compatAccessories = accessories.filter((acc) => {
+                  if (!acc.available) return false;
+                  if (acc.internal) return false;
+                  if (acc.compatible_product_ids?.length) {
+                    return acc.compatible_product_ids.includes(sp.id);
+                  }
+                  return true;
+                });
+                const regularAccessories = compatAccessories.filter((a) => !a.upgrade_group);
+                const upgradeGroups = [...new Set(compatAccessories.filter((a) => a.upgrade_group).map((a) => a.upgrade_group!))];
                 const compatSets = sets.filter((s) => s.available);
 
                 return (
@@ -725,12 +748,41 @@ export default function ManualBookingPage() {
                       </div>
                     )}
 
-                    {/* Zubehör für dieses Produkt */}
-                    {compatAccessories.length > 0 && (
+                    {/* Upgrade-Gruppen (Radio-Buttons) */}
+                    {upgradeGroups.map((group) => {
+                      const groupAccs = compatAccessories.filter((a) => a.upgrade_group === group);
+                      if (!groupAccs.length) return null;
+                      const baseAcc = groupAccs.find((a) => a.is_upgrade_base);
+                      const basePrice = baseAcc && days > 0 ? getAccessoryPrice(baseAcc, days) : 0;
+                      const selectedId = groupAccs.find((a) => sp.accessories.includes(a.id))?.id ?? baseAcc?.id ?? null;
+                      return (
+                        <div key={group} className="mb-3">
+                          <p className="text-xs font-semibold mb-2" style={{ color: '#64748b' }}>{group.toUpperCase()}</p>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+                            {groupAccs.map((acc) => {
+                              const isSelected = selectedId === acc.id || (acc.is_upgrade_base && !groupAccs.some((a) => !a.is_upgrade_base && sp.accessories.includes(a.id)));
+                              const upgradePrice = days > 0 ? getAccessoryPrice(acc, days) - basePrice : acc.price;
+                              return (
+                                <label key={acc.id} className="flex items-center gap-2 p-2 rounded-lg text-xs cursor-pointer" style={{ border: `1px solid ${isSelected ? '#06b6d433' : '#1e293b'}`, background: isSelected ? '#06b6d40a' : 'transparent' }}>
+                                  <input type="radio" name={`upgrade-${sp.id}-${group}`} checked={isSelected} onChange={() => selectProductUpgrade(sp.id, acc.id, group)} className="accent-cyan-400" />
+                                  <span style={{ color: '#e2e8f0' }}>{acc.name}</span>
+                                  <span className="ml-auto" style={{ color: acc.is_upgrade_base ? '#22c55e' : '#06b6d4' }}>
+                                    {acc.is_upgrade_base ? 'inklusive' : `+${upgradePrice.toFixed(2)} €`}
+                                  </span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {/* Normales Zubehör (Checkboxen) */}
+                    {regularAccessories.length > 0 && (
                       <div>
                         <p className="text-xs font-semibold mb-2" style={{ color: '#64748b' }}>ZUBEHÖR</p>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
-                          {compatAccessories.map((acc) => {
+                          {regularAccessories.map((acc) => {
                             const checked = sp.accessories.includes(acc.id);
                             const avail = accAvailability[acc.id];
                             const unavail = avail && avail.remaining <= 0;
@@ -740,7 +792,7 @@ export default function ManualBookingPage() {
                                 <input type="checkbox" checked={checked} disabled={unavail} onChange={() => !unavail && toggleProductAccessory(sp.id, acc.id)} className="accent-cyan-400" />
                                 <span style={{ color: '#e2e8f0' }}>{acc.name}</span>
                                 {unavail ? (
-                                  <span className="ml-auto" style={{ color: '#ef4444' }}>nicht verfügbar</span>
+                                  <span className="ml-auto" style={{ color: '#ef4444' }}>nicht verfuegbar</span>
                                 ) : (
                                   <span className="ml-auto" style={{ color: '#06b6d4' }}>{price.toFixed(2)} €</span>
                                 )}
