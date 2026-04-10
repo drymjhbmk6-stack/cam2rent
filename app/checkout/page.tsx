@@ -208,7 +208,7 @@ function PaymentForm({
 export default function CheckoutPage() {
   const { accessories: ALL_ACCESSORIES } = useAccessories();
   const router = useRouter();
-  const { items, cartTotal, itemCount } = useCart();
+  const { items, cartTotal, itemCount, clearCart } = useCart();
   const { user } = useAuth();
 
   // Step: 'details' | 'payment'
