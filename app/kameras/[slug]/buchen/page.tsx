@@ -19,7 +19,7 @@ import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { shippingConfig, calcShipping, type ShippingMethod } from '@/data/shipping';
 import { isBlockedEndDateForShipping } from '@/lib/german-holidays';
-import { calcPriceFromKeyDays, type PriceConfig } from '@/lib/price-config';
+import { calcPriceFromKeyDays, calcPriceFromTable, type PriceConfig, type AdminProduct } from '@/lib/price-config';
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
 
@@ -162,10 +162,15 @@ function calcBreakdown(
     ? Math.max(1, differenceInCalendarDays(to, from) + 1)
     : 1;
 
-  // Mietpreis: dynamisch aus DB, Fallback auf statische Datei
-  const rentalPrice = dynPrices?.products?.[product.id]
-    ? calcPriceFromKeyDays(dynPrices.products[product.id], days)
-    : getPriceForDays(product, days);
+  // Mietpreis: 30-Tage-Tabelle aus Admin bevorzugen, dann 6-Stufen, dann statisch
+  const adminProduct = dynPrices && 'adminProducts' in dynPrices && dynPrices.adminProducts
+    ? (dynPrices.adminProducts as Record<string, AdminProduct>)[product.id]
+    : undefined;
+  const rentalPrice = adminProduct
+    ? calcPriceFromTable(adminProduct, days)
+    : dynPrices?.products?.[product.id]
+      ? calcPriceFromKeyDays(dynPrices.products[product.id], days)
+      : getPriceForDays(product, days);
 
   const accessoryPrice = accessories.reduce((sum, id) => {
     const acc = dbAccessories.find((a) => a.id === id);
