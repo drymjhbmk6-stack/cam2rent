@@ -884,12 +884,17 @@ export default function CheckoutPage() {
 
                 {/* Nicht eingeloggt */}
                 {!pendingSuccess && !user && (
-                  <div className="p-4 rounded-[10px] bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-sm">
-                    <p className="font-heading font-semibold text-amber-800 dark:text-amber-300 mb-1">Konto erforderlich</p>
-                    <p className="text-amber-700 dark:text-amber-400 font-body mb-3">Bitte melde dich an oder erstelle ein Konto, um zu buchen.</p>
-                    <a href={`/login?redirect=/checkout`} className="inline-block px-5 py-2 bg-brand-black text-white font-heading font-semibold text-sm rounded-btn">
-                      Anmelden
-                    </a>
+                  <div className="p-5 rounded-[10px] bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-300 dark:border-amber-700 text-sm">
+                    <p className="font-heading font-bold text-amber-800 dark:text-amber-300 mb-2 text-base">Konto erforderlich</p>
+                    <p className="text-amber-700 dark:text-amber-400 font-body mb-4">Um eine Buchung durchzufuehren, benoetigen wir ein Kundenkonto. So koennen wir deinen Ausweis pruefen und dir deine Buchungen zuordnen.</p>
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      <a href={`/login?redirect=/checkout`} className="inline-flex items-center justify-center px-6 py-2.5 bg-brand-black text-white font-heading font-semibold text-sm rounded-btn">
+                        Anmelden
+                      </a>
+                      <a href={`/registrierung`} className="inline-flex items-center justify-center px-6 py-2.5 border-2 border-brand-black dark:border-white text-brand-black dark:text-white font-heading font-semibold text-sm rounded-btn">
+                        Neues Konto erstellen
+                      </a>
+                    </div>
                   </div>
                 )}
 

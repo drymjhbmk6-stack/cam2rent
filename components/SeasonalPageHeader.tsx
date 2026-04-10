@@ -37,15 +37,15 @@ export default function SeasonalPageHeader({
             className="object-cover"
             priority
           />
-          <div className="absolute inset-0 bg-black/60" />
+          <div className="absolute inset-0 bg-black/65" />
         </>
       )}
       <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-        <h1 className="font-heading font-bold text-4xl sm:text-5xl mb-4">
+        <h1 className="font-heading font-bold text-4xl sm:text-5xl mb-4 text-white drop-shadow-lg" style={{ textShadow: '0 2px 8px rgba(0,0,0,0.5)' }}>
           {title}
         </h1>
         {subtitle && (
-          <p className="font-body text-lg text-gray-300 max-w-2xl mx-auto">
+          <p className="font-body text-lg text-white/90 max-w-2xl mx-auto drop-shadow-md">
             {subtitle}
           </p>
         )}
