@@ -974,15 +974,6 @@ export default function BuchenPage() {
                       Zubehör-Pakete (optional)
                     </p>
                     <div className="rounded-xl border border-brand-border overflow-hidden divide-y divide-brand-border">
-                      {/* Kein Set */}
-                      <label className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors ${!selectedSet ? 'bg-accent-blue-soft/30' : 'bg-white hover:bg-brand-bg'}`}>
-                        <input type="radio" name="rentalSet" checked={!selectedSet} onChange={() => setSelectedSet(null)} className="sr-only" />
-                        <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${!selectedSet ? 'border-accent-blue' : 'border-brand-border'}`}>
-                          {!selectedSet && <div className="w-2 h-2 rounded-full bg-accent-blue" />}
-                        </div>
-                        <span className="font-heading font-semibold text-sm text-brand-black flex-1">Kein Set</span>
-                        <span className="text-xs font-body text-brand-muted">Einzeln wählen</span>
-                      </label>
 
                       {availableSets.map((set) => {
                         const isSelected = selectedSet?.id === set.id;
