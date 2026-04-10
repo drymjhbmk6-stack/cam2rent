@@ -47,11 +47,28 @@ export async function GET(
   const taxMap: Record<string, string> = {};
   for (const s of taxSettings ?? []) taxMap[s.key] = s.value;
 
+  // Kundenadresse aus Profil laden
+  let customerAddress = booking.shipping_address ?? '';
+  if (!customerAddress && booking.user_id) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('address_street, address_zip, address_city')
+      .eq('id', booking.user_id)
+      .maybeSingle();
+    if (profile?.address_street) {
+      customerAddress = `${profile.address_street}, ${profile.address_zip} ${profile.address_city}`;
+    }
+  }
+
+  const invoiceNumber = booking.id.replace(/^(C2R|BK)-/, 'RE-');
+
   const data: InvoiceData = {
     bookingId: booking.id,
+    invoiceNumber,
     invoiceDate,
     customerName: booking.customer_name ?? '',
     customerEmail: booking.customer_email ?? '',
+    customerAddress,
     productName: booking.product_name ?? '',
     rentalFrom: booking.rental_from ?? '',
     rentalTo: booking.rental_to ?? '',
@@ -69,10 +86,11 @@ export async function GET(
     taxMode: (taxMap['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer',
     taxRate: parseFloat(taxMap['tax_rate'] || '19'),
     ustId: taxMap['ust_id'] || '',
+    paymentMethod: booking.payment_intent_id?.startsWith('MANUAL') ? 'Ueberweisung' : booking.payment_intent_id?.startsWith('PENDING') ? 'Ausstehend' : 'Stripe',
+    stripePaymentId: booking.payment_intent_id?.startsWith('pi_') ? booking.payment_intent_id : undefined,
   };
 
   // EPC QR-Code fuer Banking generieren
-  const invoiceNumber = booking.id.replace(/^(C2R|BK)-/, 'RE-');
   try {
     const epcData = [
       'BCD',           // Service Tag

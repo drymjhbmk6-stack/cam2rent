@@ -12,9 +12,11 @@ import { BUSINESS } from '@/lib/business-config';
 
 export interface InvoiceData {
   bookingId: string;
+  invoiceNumber?: string;
   invoiceDate: string;       // 'DD.MM.YYYY'
   customerName: string;
   customerEmail: string;
+  customerAddress?: string;
   productName: string;
   rentalFrom: string;        // 'YYYY-MM-DD'
   rentalTo: string;          // 'YYYY-MM-DD'
@@ -33,400 +35,497 @@ export interface InvoiceData {
   taxRate?: number;
   ustId?: string;
   qrCodeDataUrl?: string;
+  paymentMethod?: string;
+  stripePaymentId?: string;
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Colors ──────────────────────────────────────────────────────────────────
+
+const C = {
+  navy: '#0f172a',
+  cyan: '#06b6d4',
+  white: '#ffffff',
+  grayText: '#64748b',
+  grayLight: '#f1f5f9',
+  border: '#e2e8f0',
+  black: '#0a0a0a',
+  success: '#16a34a',
+};
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function fmt(n: number) {
   return n.toFixed(2).replace('.', ',') + ' €';
 }
 
 function fmtDate(iso: string) {
+  if (!iso) return '–';
   const [y, m, d] = iso.split('-');
   return `${d}.${m}.${y}`;
 }
 
 function haftungLabel(h: string) {
-  if (h === 'standard') return 'Standard-Haftungsoption (pauschal)';
-  if (h === 'premium') return 'Premium-Haftungsoption (pauschal)';
+  if (h === 'standard') return 'Standard-Haftungsschutz (pauschal)';
+  if (h === 'premium') return 'Premium-Haftungsschutz (pauschal)';
   return null;
 }
 
-function shippingLabel(method: string | undefined, mode: string) {
-  if (mode === 'abholung') return 'Selbst abholen (kostenlos)';
-  if (method === 'express') return 'Express-Versand (1–2 Werktage)';
-  return 'Standard-Versand (3–5 Werktage)';
-}
-
-// ─── Styles ───────────────────────────────────────────────────────────────────
+// ─── Styles ──────────────────────────────────────────────────────────────────
 
 const s = StyleSheet.create({
   page: {
     fontFamily: 'Helvetica',
-    fontSize: 11,
-    color: '#1a1a1a',
-    paddingTop: 50,
-    paddingBottom: 65,
-    paddingHorizontal: 56,
+    fontSize: 10,
+    color: C.black,
+    paddingBottom: 70,
   },
 
-  // Header
-  header: {
+  // Header Bar
+  headerBar: {
+    backgroundColor: C.navy,
+    paddingVertical: 20,
+    paddingHorizontal: 48,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 36,
-  },
-  brand: {
-    fontSize: 20,
-    fontFamily: 'Helvetica-Bold',
-    color: '#0a0a0a',
-    letterSpacing: 0.5,
-  },
-  brandSub: {
-    fontSize: 9,
-    color: '#9ca3af',
-    marginTop: 2,
-  },
-  senderBlock: {
-    fontSize: 9,
-    color: '#6b7280',
-    textAlign: 'right',
-    lineHeight: 1.5,
-  },
-
-  // Invoice meta
-  invoiceMeta: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 28,
   },
-  invoiceTitle: {
-    fontSize: 18,
+  headerBrand: {
+    fontSize: 22,
     fontFamily: 'Helvetica-Bold',
-    color: '#0a0a0a',
-    marginBottom: 4,
+    color: C.white,
+    letterSpacing: 0.5,
   },
-  invoiceSubtitle: {
-    fontSize: 9,
-    color: '#6b7280',
-  },
-  metaRight: {
+  headerRight: {
     textAlign: 'right',
   },
-  metaLabel: {
-    fontSize: 9,
-    color: '#9ca3af',
-    marginBottom: 2,
-  },
-  metaValue: {
-    fontSize: 10,
+  headerTitle: {
+    fontSize: 20,
     fontFamily: 'Helvetica-Bold',
-    color: '#0a0a0a',
+    color: C.white,
+  },
+  headerInvoiceNr: {
+    fontSize: 11,
+    color: C.cyan,
+    marginTop: 2,
   },
 
-  // Customer address block
-  addressBlock: {
+  // Content wrapper
+  content: {
+    paddingHorizontal: 48,
+  },
+
+  // Address blocks
+  addressRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     marginBottom: 24,
-    padding: 14,
-    backgroundColor: '#f9f9f7',
-    borderRadius: 6,
+  },
+  addressBlock: {
+    width: '48%',
   },
   addressLabel: {
     fontSize: 8,
-    color: '#9ca3af',
+    fontFamily: 'Helvetica-Bold',
+    color: C.grayText,
     textTransform: 'uppercase',
     letterSpacing: 0.8,
-    marginBottom: 4,
+    marginBottom: 6,
   },
   addressName: {
     fontSize: 11,
     fontFamily: 'Helvetica-Bold',
-    color: '#0a0a0a',
+    color: C.black,
     marginBottom: 2,
   },
-  addressEmail: {
+  addressLine: {
     fontSize: 9,
-    color: '#6b7280',
+    color: C.grayText,
+    lineHeight: 1.5,
+  },
+
+  // Rental period bar
+  periodBar: {
+    backgroundColor: C.grayLight,
+    borderRadius: 4,
+    padding: '8 14',
+    marginBottom: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  periodLabel: {
+    fontSize: 9,
+    fontFamily: 'Helvetica-Bold',
+    color: C.grayText,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  periodValue: {
+    fontSize: 10,
+    fontFamily: 'Helvetica-Bold',
+    color: C.black,
+  },
+
+  // Meta info
+  metaRow: {
+    flexDirection: 'row',
+    marginBottom: 4,
+  },
+  metaLabel: {
+    width: 120,
+    fontSize: 9,
+    color: C.grayText,
+  },
+  metaValue: {
+    fontSize: 10,
+    color: C.black,
   },
 
   // Divider
   divider: {
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-    marginBottom: 16,
+    borderBottomColor: C.border,
+    marginVertical: 16,
   },
 
-  // Section heading
-  sectionHeading: {
-    fontSize: 9,
-    fontFamily: 'Helvetica-Bold',
-    color: '#9ca3af',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    marginBottom: 10,
-  },
-
-  // Booking details
-  detailRow: {
-    flexDirection: 'row',
-    marginBottom: 5,
-  },
-  detailLabel: {
-    width: '35%',
-    fontSize: 9,
-    color: '#6b7280',
-  },
-  detailValue: {
-    width: '65%',
-    fontSize: 10,
-    color: '#0a0a0a',
-  },
-
-  // Line items table
+  // Table
   tableHeader: {
     flexDirection: 'row',
-    backgroundColor: '#f5f5f0',
-    padding: '8 10',
+    backgroundColor: C.navy,
+    padding: '8 12',
     borderRadius: 4,
-    marginBottom: 2,
+    marginBottom: 1,
+  },
+  tableHeaderText: {
+    fontSize: 9,
+    fontFamily: 'Helvetica-Bold',
+    color: C.white,
   },
   tableRow: {
     flexDirection: 'row',
-    padding: '7 10',
+    padding: '7 12',
     borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
+    borderBottomColor: C.border,
   },
-  colDescription: { width: '70%', fontSize: 10 },
-  colAmount: { width: '30%', fontSize: 10, textAlign: 'right' },
-  colDescriptionHeader: { width: '70%', fontSize: 9, fontFamily: 'Helvetica-Bold', color: '#6b7280' },
-  colAmountHeader: { width: '30%', fontSize: 9, fontFamily: 'Helvetica-Bold', color: '#6b7280', textAlign: 'right' },
+  tableRowAlt: {
+    backgroundColor: C.grayLight,
+  },
+  colPos: { width: 30, fontSize: 10 },
+  colDesc: { flex: 1, fontSize: 10 },
+  colDays: { width: 40, fontSize: 10, textAlign: 'center' },
+  colPerDay: { width: 65, fontSize: 10, textAlign: 'right' },
+  colTotal: { width: 75, fontSize: 10, textAlign: 'right' },
 
-  // Total
+  // Summen
+  sumRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    padding: '5 12',
+  },
+  sumLabel: { fontSize: 10, color: C.grayText, width: 120, textAlign: 'right', marginRight: 12 },
+  sumValue: { fontSize: 10, color: C.black, width: 75, textAlign: 'right' },
   totalRow: {
     flexDirection: 'row',
-    padding: '10 10',
-    backgroundColor: '#0a0a0a',
+    backgroundColor: C.navy,
     borderRadius: 4,
+    padding: '10 12',
     marginTop: 4,
+    justifyContent: 'flex-end',
   },
   totalLabel: {
-    width: '70%',
-    fontSize: 11,
+    fontSize: 12,
     fontFamily: 'Helvetica-Bold',
-    color: '#ffffff',
-  },
-  totalAmount: {
-    width: '30%',
-    fontSize: 11,
-    fontFamily: 'Helvetica-Bold',
-    color: '#ffffff',
+    color: C.white,
+    width: 140,
     textAlign: 'right',
+    marginRight: 12,
   },
-  depositNote: {
-    fontSize: 8,
-    color: '#6b7280',
-    marginTop: 6,
+  totalValue: {
+    fontSize: 12,
+    fontFamily: 'Helvetica-Bold',
+    color: C.white,
+    width: 75,
     textAlign: 'right',
   },
 
-  // Kleinunternehmer note
-  kleinNote: {
-    marginTop: 28,
+  // Payment + Notes
+  noteBox: {
+    marginTop: 20,
     padding: 12,
-    backgroundColor: '#f9f9f7',
-    borderRadius: 6,
+    backgroundColor: C.grayLight,
+    borderRadius: 4,
+  },
+  noteText: {
     fontSize: 9,
-    color: '#6b7280',
-    lineHeight: 1.5,
+    color: C.grayText,
+    lineHeight: 1.6,
   },
 
   // Footer
-  footer: {
+  footerBar: {
     position: 'absolute',
-    bottom: 30,
-    left: 52,
-    right: 52,
-    borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
-    paddingTop: 10,
+    bottom: 0,
+    left: 0,
+    right: 0,
+  },
+  footerLine: {
+    height: 3,
+    backgroundColor: C.cyan,
+  },
+  footerContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    paddingHorizontal: 48,
+    paddingVertical: 10,
   },
   footerText: {
     fontSize: 8,
-    color: '#9ca3af',
+    color: C.grayText,
   },
 });
 
-// ─── PDF Document ─────────────────────────────────────────────────────────────
+// ─── PDF Document ────────────────────────────────────────────────────────────
 
 export function InvoicePDF({ data }: { data: InvoiceData }) {
-  const lineItems: { description: string; amount: number }[] = [];
+  const invoiceNumber = data.invoiceNumber ?? data.bookingId.replace(/^(C2R|BK)-/, 'RE-');
 
-  lineItems.push({
-    description: `Kamera-Miete: ${data.productName} (${data.days} ${data.days === 1 ? 'Tag' : 'Tage'}, ${fmtDate(data.rentalFrom)} – ${fmtDate(data.rentalTo)})`,
-    amount: data.priceRental,
-  });
+  // Positionen aufbauen
+  interface LineItem {
+    pos: number;
+    description: string;
+    subline?: string;
+    days: string;
+    perDay: string;
+    total: number;
+  }
 
-  if (data.priceAccessories > 0) {
-    lineItems.push({
-      description: `Zubehör${data.accessories.length > 0 ? ': ' + data.accessories.join(', ') : ''}`,
-      amount: data.priceAccessories,
+  const items: LineItem[] = [];
+  let pos = 1;
+
+  // Kameras (koennen kommagetrennt sein)
+  const cameras = data.productName.split(',').map((n) => n.trim());
+  const rentalPerCamera = cameras.length > 1 ? data.priceRental / cameras.length : data.priceRental;
+  const perDayPerCamera = data.days > 0 ? rentalPerCamera / data.days : rentalPerCamera;
+
+  for (const cam of cameras) {
+    items.push({
+      pos: pos++,
+      description: cam,
+      subline: 'Kamera-Miete',
+      days: String(data.days),
+      perDay: fmt(perDayPerCamera),
+      total: rentalPerCamera,
     });
   }
 
+  // Zubehoer
+  if (data.priceAccessories > 0 && data.accessories.length > 0) {
+    const accNames = data.accessories.map((a) =>
+      a.replace(/-[a-z0-9]{6,}$/, '').split('-').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+    );
+    items.push({
+      pos: pos++,
+      description: accNames.join(', '),
+      subline: 'Zubehoer',
+      days: '–',
+      perDay: '–',
+      total: data.priceAccessories,
+    });
+  }
+
+  // Haftungsschutz
   const hLabel = haftungLabel(data.haftung);
   if (hLabel && data.priceHaftung > 0) {
-    lineItems.push({ description: hLabel, amount: data.priceHaftung });
-  }
-
-  if (data.shippingPrice > 0) {
-    lineItems.push({
-      description: shippingLabel(data.shippingMethod, data.deliveryMode),
-      amount: data.shippingPrice,
+    items.push({
+      pos: pos++,
+      description: hLabel,
+      days: '–',
+      perDay: '–',
+      total: data.priceHaftung,
     });
   }
 
-  // Rechnungsnummer: RE- Prefix + Rest der Buchungsnummer
-  const invoiceNumber = data.bookingId.replace(/^(C2R|BK)-/, 'RE-');
+  // Versand
+  if (data.shippingPrice > 0) {
+    items.push({
+      pos: pos++,
+      description: data.shippingMethod === 'express' ? 'Express-Versand' : 'Standard-Versand',
+      subline: 'Hin- und Ruecksendung',
+      days: '–',
+      perDay: '–',
+      total: data.shippingPrice,
+    });
+  }
+
+  // Steuerberechnung
+  const isRegel = data.taxMode === 'regelbesteuerung';
+  const taxRate = data.taxRate ?? 19;
+  const netAmount = isRegel ? data.priceTotal / (1 + taxRate / 100) : data.priceTotal;
+  const taxAmount = isRegel ? data.priceTotal - netAmount : 0;
 
   return (
     <Document>
       <Page size="A4" style={s.page}>
 
-        {/* ── Header ── */}
-        <View style={s.header}>
-          <View>
-            <Text style={s.brand}>{BUSINESS.name}</Text>
-            <Text style={s.brandSub}>{BUSINESS.slogan}</Text>
-          </View>
-          <View>
-            <Text style={s.senderBlock}>
-              {BUSINESS.owner}{'\n'}
-              {BUSINESS.street}{'\n'}
-              {`${BUSINESS.zip} ${BUSINESS.city}`}{'\n'}
-              {BUSINESS.email}{'\n'}
-              {BUSINESS.domain}
-            </Text>
+        {/* ── Header Bar ── */}
+        <View style={s.headerBar}>
+          <Text style={s.headerBrand}>{BUSINESS.name || 'cam2rent'}</Text>
+          <View style={s.headerRight}>
+            <Text style={s.headerTitle}>RECHNUNG</Text>
+            <Text style={s.headerInvoiceNr}>{invoiceNumber}</Text>
           </View>
         </View>
 
-        {/* ── Invoice meta ── */}
-        <View style={s.invoiceMeta}>
-          <View>
-            <Text style={s.invoiceTitle}>Rechnung</Text>
-            <Text style={s.invoiceSubtitle}>Buchungsbestätigung & Beleg</Text>
-          </View>
-          <View style={s.metaRight}>
-            <Text style={s.metaLabel}>Rechnungsnummer</Text>
-            <Text style={s.metaValue}>{invoiceNumber}</Text>
-            <Text style={[s.metaLabel, { marginTop: 8 }]}>Rechnungsdatum</Text>
-            <Text style={s.metaValue}>{data.invoiceDate}</Text>
-            <Text style={[s.metaLabel, { marginTop: 8 }]}>Buchungsnummer</Text>
-            <Text style={s.metaValue}>{data.bookingId}</Text>
-          </View>
-        </View>
+        <View style={s.content}>
 
-        {/* ── Customer ── */}
-        <View style={s.addressBlock}>
-          <Text style={s.addressLabel}>Rechnungsempfänger</Text>
-          <Text style={s.addressName}>{data.customerName || 'Kunde'}</Text>
-          <Text style={s.addressEmail}>{data.customerEmail}</Text>
-        </View>
-
-        {/* ── Booking details ── */}
-        <Text style={s.sectionHeading}>Buchungsdetails</Text>
-        <View style={{ marginBottom: 20 }}>
-          <View style={s.detailRow}>
-            <Text style={s.detailLabel}>Kamera</Text>
-            <Text style={s.detailValue}>{data.productName}</Text>
-          </View>
-          <View style={s.detailRow}>
-            <Text style={s.detailLabel}>Mietzeitraum</Text>
-            <Text style={s.detailValue}>{fmtDate(data.rentalFrom)} – {fmtDate(data.rentalTo)} ({data.days} {data.days === 1 ? 'Tag' : 'Tage'})</Text>
-          </View>
-          <View style={s.detailRow}>
-            <Text style={s.detailLabel}>Lieferung</Text>
-            <Text style={s.detailValue}>{shippingLabel(data.shippingMethod, data.deliveryMode)}</Text>
-          </View>
-          <View style={s.detailRow}>
-            <Text style={s.detailLabel}>Zahlungsstatus</Text>
-            <Text style={[s.detailValue, { color: '#16a34a', fontFamily: 'Helvetica-Bold' }]}>Bezahlt</Text>
-          </View>
-        </View>
-
-        <View style={s.divider} />
-
-        {/* ── Line items ── */}
-        <Text style={s.sectionHeading}>Leistungen</Text>
-        <View style={s.tableHeader}>
-          <Text style={s.colDescriptionHeader}>Beschreibung</Text>
-          <Text style={s.colAmountHeader}>Betrag</Text>
-        </View>
-        {lineItems.map((item, i) => (
-          <View key={i} style={s.tableRow}>
-            <Text style={s.colDescription}>{item.description}</Text>
-            <Text style={s.colAmount}>{fmt(item.amount)}</Text>
-          </View>
-        ))}
-
-        {/* ── Total ── */}
-        {data.taxMode === 'regelbesteuerung' && data.taxRate ? (
-          <>
-            <View style={[s.tableRow, { borderBottomWidth: 0 }]}>
-              <Text style={s.colDescription}>Nettobetrag</Text>
-              <Text style={s.colAmount}>{fmt(data.priceTotal / (1 + (data.taxRate) / 100))}</Text>
-            </View>
-            <View style={[s.tableRow, { borderBottomWidth: 0 }]}>
-              <Text style={s.colDescription}>MwSt. ({data.taxRate}%)</Text>
-              <Text style={s.colAmount}>{fmt(data.priceTotal - data.priceTotal / (1 + (data.taxRate) / 100))}</Text>
-            </View>
-          </>
-        ) : null}
-        <View style={s.totalRow}>
-          <Text style={s.totalLabel}>Gesamtbetrag{data.taxMode === 'regelbesteuerung' ? ' (brutto)' : ''}</Text>
-          <Text style={s.totalAmount}>{fmt(data.priceTotal)}</Text>
-        </View>
-        {data.deposit > 0 && (
-          <Text style={s.depositNote}>
-            * Enthält Kaution {fmt(data.deposit)} – wird nach Rückgabe erstattet
-          </Text>
-        )}
-
-        {/* ── Tax note ── */}
-        {data.taxMode === 'regelbesteuerung' ? (
-          <View style={s.kleinNote}>
-            <Text style={{ fontSize: 9, color: '#6b7280', lineHeight: 1.5 }}>
-              {data.ustId ? `USt-IdNr.: ${data.ustId}\n` : ''}Alle Beträge verstehen sich inkl. {data.taxRate}% MwSt.
-            </Text>
-          </View>
-        ) : (
-          <Text style={s.kleinNote}>
-            Gemäß §19 UStG wird keine Umsatzsteuer berechnet.
-          </Text>
-        )}
-
-        {/* ── QR-Code fuer Banking ── */}
-        {data.qrCodeDataUrl && (
-          <View style={{ marginTop: 20, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-            <Image src={data.qrCodeDataUrl} style={{ width: 80, height: 80 }} />
-            <View>
-              <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold', color: '#0a0a0a', marginBottom: 3 }}>
-                QR-Code fuer Ueberweisung
+          {/* ── Adressen ── */}
+          <View style={s.addressRow}>
+            {/* Links: Rechnungssteller */}
+            <View style={s.addressBlock}>
+              <Text style={s.addressLabel}>Rechnungssteller</Text>
+              <Text style={s.addressName}>{BUSINESS.name || 'cam2rent'}</Text>
+              <Text style={s.addressLine}>
+                {BUSINESS.owner}{'\n'}
+                {BUSINESS.street}{'\n'}
+                {BUSINESS.zip} {BUSINESS.city}{'\n'}
+                {BUSINESS.email}{'\n'}
+                {data.ustId ? `USt-IdNr.: ${data.ustId}` : `${BUSINESS.domain}`}
               </Text>
-              <Text style={{ fontSize: 8, color: '#6b7280', lineHeight: 1.5 }}>
-                Scanne den Code mit deiner Banking-App.{'\n'}
-                IBAN, Betrag und Verwendungszweck{'\n'}
-                werden automatisch ausgefuellt.
+            </View>
+
+            {/* Rechts: Rechnungsempfaenger */}
+            <View style={s.addressBlock}>
+              <Text style={s.addressLabel}>Rechnungsempfaenger</Text>
+              <Text style={s.addressName}>{data.customerName || 'Kunde'}</Text>
+              <Text style={s.addressLine}>
+                {data.customerAddress ? `${data.customerAddress}\n` : ''}
+                {data.customerEmail}
               </Text>
             </View>
           </View>
-        )}
+
+          {/* ── Meta-Info ── */}
+          <View style={{ marginBottom: 16 }}>
+            <View style={s.metaRow}>
+              <Text style={s.metaLabel}>Rechnungsdatum:</Text>
+              <Text style={s.metaValue}>{data.invoiceDate}</Text>
+            </View>
+            <View style={s.metaRow}>
+              <Text style={s.metaLabel}>Buchungsnummer:</Text>
+              <Text style={s.metaValue}>{data.bookingId}</Text>
+            </View>
+          </View>
+
+          {/* ── Leistungszeitraum ── */}
+          <View style={s.periodBar}>
+            <Text style={s.periodLabel}>Leistungszeitraum</Text>
+            <Text style={s.periodValue}>
+              {fmtDate(data.rentalFrom)} – {fmtDate(data.rentalTo)} ({data.days} {data.days === 1 ? 'Tag' : 'Tage'})
+            </Text>
+          </View>
+
+          {/* ── Positionstabelle ── */}
+          <View style={s.tableHeader}>
+            <Text style={[s.tableHeaderText, s.colPos]}>Pos</Text>
+            <Text style={[s.tableHeaderText, s.colDesc]}>Beschreibung</Text>
+            <Text style={[s.tableHeaderText, s.colDays]}>Tage</Text>
+            <Text style={[s.tableHeaderText, s.colPerDay]}>/Tag</Text>
+            <Text style={[s.tableHeaderText, s.colTotal]}>Netto</Text>
+          </View>
+
+          {items.map((item, i) => (
+            <View key={i} style={[s.tableRow, i % 2 === 1 ? s.tableRowAlt : {}]}>
+              <Text style={s.colPos}>{item.pos}</Text>
+              <View style={s.colDesc}>
+                <Text>{item.description}</Text>
+                {item.subline && (
+                  <Text style={{ fontSize: 8, color: C.grayText, marginTop: 1 }}>{item.subline}</Text>
+                )}
+              </View>
+              <Text style={s.colDays}>{item.days}</Text>
+              <Text style={s.colPerDay}>{item.perDay}</Text>
+              <Text style={s.colTotal}>{fmt(item.total)}</Text>
+            </View>
+          ))}
+
+          {/* ── Summen ── */}
+          <View style={{ marginTop: 8 }}>
+            {isRegel ? (
+              <>
+                <View style={s.sumRow}>
+                  <Text style={s.sumLabel}>Nettobetrag:</Text>
+                  <Text style={s.sumValue}>{fmt(netAmount)}</Text>
+                </View>
+                <View style={s.sumRow}>
+                  <Text style={s.sumLabel}>MwSt. {taxRate}%:</Text>
+                  <Text style={s.sumValue}>{fmt(taxAmount)}</Text>
+                </View>
+              </>
+            ) : null}
+          </View>
+
+          <View style={s.totalRow}>
+            <Text style={s.totalLabel}>
+              Gesamtbetrag{isRegel ? ' (brutto)' : ''}:
+            </Text>
+            <Text style={s.totalValue}>{fmt(data.priceTotal)}</Text>
+          </View>
+
+          {data.deposit > 0 && (
+            <Text style={{ fontSize: 8, color: C.grayText, marginTop: 6, textAlign: 'right', paddingRight: 12 }}>
+              Kaution: {fmt(data.deposit)} (wird nach Rueckgabe freigegeben)
+            </Text>
+          )}
+
+          <View style={s.divider} />
+
+          {/* ── Zahlungsinformation ── */}
+          <View style={s.noteBox}>
+            <Text style={[s.noteText, { fontFamily: 'Helvetica-Bold', color: C.black, marginBottom: 4 }]}>
+              Zahlungsinformation
+            </Text>
+            <Text style={s.noteText}>
+              Zahlung erfolgte per {data.paymentMethod || 'Stripe'}.
+              {data.stripePaymentId ? `\nZahlungs-ID: ${data.stripePaymentId}` : ''}
+              {data.deliveryMode === 'abholung' ? '\nAbholung — kein Versand.' : ''}
+            </Text>
+          </View>
+
+          {/* ── Steuer-Hinweis ── */}
+          <View style={[s.noteBox, { marginTop: 12 }]}>
+            <Text style={s.noteText}>
+              {isRegel
+                ? `${data.ustId ? `USt-IdNr.: ${data.ustId}\n` : ''}Alle Betraege verstehen sich inkl. ${taxRate}% MwSt.`
+                : 'Gemaess §19 UStG wird keine Umsatzsteuer berechnet (Kleinunternehmerregelung).'}
+            </Text>
+          </View>
+
+          {/* ── QR-Code ── */}
+          {data.qrCodeDataUrl && (
+            <View style={{ marginTop: 16, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <Image src={data.qrCodeDataUrl} style={{ width: 72, height: 72 }} />
+              <View>
+                <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold', color: C.black, marginBottom: 2 }}>
+                  QR-Code fuer Ueberweisung
+                </Text>
+                <Text style={{ fontSize: 8, color: C.grayText, lineHeight: 1.5 }}>
+                  Scanne mit deiner Banking-App.{'\n'}
+                  IBAN, Betrag und Verwendungszweck{'\n'}
+                  werden automatisch ausgefuellt.
+                </Text>
+              </View>
+            </View>
+          )}
+
+        </View>
 
         {/* ── Footer ── */}
-        <View style={s.footer}>
-          <Text style={s.footerText}>{BUSINESS.addressLine}</Text>
-          <Text style={s.footerText}>{`${BUSINESS.domain} · ${BUSINESS.email}`}</Text>
+        <View style={s.footerBar} fixed>
+          <View style={s.footerLine} />
+          <View style={s.footerContent}>
+            <Text style={s.footerText}>{BUSINESS.addressLine || `${BUSINESS.name} · ${BUSINESS.street} · ${BUSINESS.zip} ${BUSINESS.city}`}</Text>
+            <Text style={s.footerText}>{BUSINESS.domain} · {BUSINESS.email}</Text>
+          </View>
         </View>
 
       </Page>
