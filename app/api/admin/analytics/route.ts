@@ -218,6 +218,67 @@ export async function GET(req: NextRequest) {
     });
   }
 
+  // ── CUSTOMERS ────────────────────────────────────────────────────────────
+  if (type === 'customers') {
+    const since30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+    // Alle Buchungen fuer Kundenwert-Berechnung
+    const { data: allBookings } = await supabase
+      .from('bookings')
+      .select('user_id, customer_email, price_total, status, created_at')
+      .neq('status', 'cancelled');
+
+    const bookings = allBookings ?? [];
+
+    // Kunden nach Email gruppieren
+    const customerMap = new Map<string, { total: number; count: number; first: string }>();
+    for (const b of bookings) {
+      const key = b.user_id ?? b.customer_email ?? 'unknown';
+      const existing = customerMap.get(key) ?? { total: 0, count: 0, first: b.created_at };
+      existing.total += b.price_total ?? 0;
+      existing.count += 1;
+      if (b.created_at < existing.first) existing.first = b.created_at;
+      customerMap.set(key, existing);
+    }
+
+    const totalCustomers = customerMap.size;
+    const repeatCustomers = [...customerMap.values()].filter((c) => c.count > 1).length;
+    const avgLifetimeValue = totalCustomers > 0
+      ? Math.round([...customerMap.values()].reduce((s, c) => s + c.total, 0) / totalCustomers * 100) / 100
+      : 0;
+    const avgOrderValue = bookings.length > 0
+      ? Math.round(bookings.reduce((s, b) => s + (b.price_total ?? 0), 0) / bookings.length * 100) / 100
+      : 0;
+
+    // Warenkorbabbrueche (abandoned_carts)
+    const { count: abandonedTotal } = await supabase
+      .from('abandoned_carts')
+      .select('id', { count: 'exact', head: true })
+      .gte('created_at', since30);
+    const { count: abandonedRecovered } = await supabase
+      .from('abandoned_carts')
+      .select('id', { count: 'exact', head: true })
+      .eq('recovered', true)
+      .gte('created_at', since30);
+
+    // Neue Kunden letzter 30 Tage
+    const newCustomers30d = [...customerMap.values()].filter((c) => c.first >= since30).length;
+
+    return NextResponse.json({
+      totalCustomers,
+      repeatCustomers,
+      repeatRate: totalCustomers > 0 ? Math.round((repeatCustomers / totalCustomers) * 100) : 0,
+      avgLifetimeValue,
+      avgOrderValue,
+      newCustomers30d,
+      abandonedCarts: abandonedTotal ?? 0,
+      recoveredCarts: abandonedRecovered ?? 0,
+      recoveryRate: (abandonedTotal ?? 0) > 0
+        ? Math.round(((abandonedRecovered ?? 0) / (abandonedTotal ?? 0)) * 100)
+        : 0,
+    });
+  }
+
   // ── PRODUCTS ──────────────────────────────────────────────────────────────
   if (type === 'products') {
     const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();

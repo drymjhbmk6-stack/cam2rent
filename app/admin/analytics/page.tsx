@@ -419,6 +419,11 @@ export default function AnalyticsPage() {
   const [trafficData, setTrafficData] = useState<TrafficData | null>(null);
   const [bookingsData, setBookingsData] = useState<BookingsData | null>(null);
   const [productsData, setProductsData] = useState<ProductsData | null>(null);
+  const [customersData, setCustomersData] = useState<{
+    totalCustomers: number; repeatCustomers: number; repeatRate: number;
+    avgLifetimeValue: number; avgOrderValue: number; newCustomers30d: number;
+    abandonedCarts: number; recoveredCarts: number; recoveryRate: number;
+  } | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Filters
@@ -492,6 +497,9 @@ export default function AnalyticsPage() {
     if (activeTab === 'customers') {
       fetchTraffic();
       fetchHistory();
+      if (!customersData) {
+        fetch('/api/admin/analytics?type=customers').then((r) => r.json()).then(setCustomersData).catch(() => {});
+      }
     }
   }, [activeTab, fetchBookings, fetchTraffic, fetchHistory]);
 
@@ -1195,7 +1203,18 @@ export default function AnalyticsPage() {
       {/* ── TAB 4: KUNDEN & VERHALTEN ────────────────────────────────────────── */}
       {activeTab === 'customers' && (
         <div className="tab-content">
-          {/* Stat Cards */}
+          {/* Kundenwert + Warenkorbabbrueche */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginBottom: 20 }}>
+            <StatCard label="Kunden gesamt" value={customersData?.totalCustomers ?? '–'} color={C.cyan} tooltip="Gesamtanzahl aller Kunden die mindestens eine Buchung haben." />
+            <StatCard label="Wiederbuchungen" value={customersData ? `${customersData.repeatRate}%` : '–'} color={C.purple} tooltip="Anteil der Kunden die mehr als einmal gebucht haben." />
+            <StatCard label="Durchschn. Kundenwert" value={customersData ? `${customersData.avgLifetimeValue.toFixed(2)} €` : '–'} color={C.green} tooltip="Durchschnittlicher Gesamtumsatz pro Kunde ueber alle Buchungen." />
+            <StatCard label="Durchschn. Bestellwert" value={customersData ? `${customersData.avgOrderValue.toFixed(2)} €` : '–'} color={C.cyanLight} tooltip="Durchschnittlicher Umsatz pro einzelne Buchung." />
+            <StatCard label="Neue Kunden (30 Tage)" value={customersData?.newCustomers30d ?? '–'} color={C.yellow} tooltip="Anzahl neuer Kunden in den letzten 30 Tagen." />
+            <StatCard label="Warenkorbabbrueche" value={customersData?.abandonedCarts ?? '–'} color={C.red} tooltip="Anzahl abgebrochener Warenkoerbe in den letzten 30 Tagen." />
+            <StatCard label="Zurueckgewonnen" value={customersData ? `${customersData.recoveryRate}%` : '–'} color={C.green} tooltip="Anteil der abgebrochenen Warenkoerbe die durch Erinnerungs-Emails zurueckgewonnen wurden." />
+          </div>
+
+          {/* Traffic Stats */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginBottom: 20 }}>
             {/* New vs Returning */}
             <Card>
