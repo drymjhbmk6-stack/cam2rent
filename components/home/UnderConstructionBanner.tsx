@@ -24,13 +24,16 @@ export default function UnderConstructionBanner({ serverVisible }: { serverVisib
 
   return (
     <div className="bg-amber-500 text-white">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-center gap-3">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-center gap-3 flex-wrap">
         <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" />
         </svg>
         <p className="text-sm font-heading font-semibold text-center">
-          Diese Seite befindet sich noch im Aufbau. Der Shop ist bald fuer dich verfuegbar!
+          Diese Seite befindet sich noch im Aufbau.
         </p>
+        <a href="/beta-feedback" className="px-3 py-1 bg-white text-amber-600 text-xs font-heading font-bold rounded-full hover:bg-amber-50 transition-colors">
+          Feedback geben
+        </a>
       </div>
     </div>
   );
