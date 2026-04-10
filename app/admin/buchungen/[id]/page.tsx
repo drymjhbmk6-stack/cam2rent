@@ -411,6 +411,9 @@ export default function BuchungDetailPage() {
                   />
                 )}
                 <InfoRow label="Lieferart" value={booking.delivery_mode === 'versand' ? 'Versand' : 'Abholung'} />
+                {booking.shipping_address && (
+                  <InfoRow label="Adresse" value={booking.shipping_address} />
+                )}
                 {booking.shipping_method && (
                   <InfoRow label="Versandart" value={booking.shipping_method === 'express' ? 'Express' : 'Standard'} />
                 )}
@@ -451,13 +454,17 @@ export default function BuchungDetailPage() {
               {/* Zubehör */}
               {booking.accessories && booking.accessories.length > 0 && (
                 <div className="mt-4 pt-4 border-t border-brand-border">
-                  <p className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider mb-2">Zubehör</p>
+                  <p className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider mb-2">Zubehör & Set</p>
                   <div className="flex flex-wrap gap-2">
-                    {booking.accessories.map((a, i) => (
-                      <span key={i} className="px-2.5 py-1 bg-brand-bg rounded-full text-xs font-body text-brand-steel">
-                        {a}
-                      </span>
-                    ))}
+                    {booking.accessories.map((a, i) => {
+                      // ID in lesbaren Namen umwandeln: kebab-case → Titel
+                      const name = a.replace(/-[a-z0-9]{6,}$/, '').split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                      return (
+                        <span key={i} className="px-2.5 py-1 bg-brand-bg rounded-full text-xs font-body text-brand-steel">
+                          {name}
+                        </span>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -465,7 +472,11 @@ export default function BuchungDetailPage() {
               {/* Haftung */}
               {booking.haftung && (
                 <div className="mt-4 pt-4 border-t border-brand-border">
-                  <InfoRow label="Haftungsoption" value={booking.haftung} />
+                  <InfoRow label="Haftungsoption" value={
+                    booking.haftung === 'standard' ? 'Standard-Haftungsschutz'
+                    : booking.haftung === 'premium' ? 'Premium-Haftungsschutz'
+                    : 'Keine Haftungsbegrenzung'
+                  } />
                 </div>
               )}
             </Section>
