@@ -70,7 +70,56 @@ export default function ProductAccessorySets({ productId }: { productId: string 
       </h2>
 
       <div className="grid md:grid-cols-2 gap-6">
-        {/* Links: Sets */}
+        {/* Links: Zubehoer — nach Kategorie gruppiert */}
+        <div>
+          <h3 className="font-heading font-semibold text-sm text-brand-muted dark:text-gray-500 uppercase tracking-wider mb-3">
+            Zubehoer
+          </h3>
+
+          {/* Upgrade-Gruppen */}
+          {upgradeGroups.map((group) => {
+            const groupAccs = accessories.filter((a) => a.upgradeGroup === group);
+            const baseAcc = groupAccs.find((a) => a.isUpgradeBase);
+            return (
+              <div key={group} className="mb-3">
+                <p className="text-[10px] font-heading font-bold text-brand-muted uppercase tracking-wider mb-1">{group}</p>
+                <div className="space-y-1">
+                  {groupAccs.map((acc) => (
+                    <div key={acc.id} className="flex items-center justify-between px-4 py-2.5 bg-white dark:bg-gray-800 rounded-xl border border-brand-border dark:border-gray-700">
+                      <span className="font-heading font-semibold text-sm text-brand-black dark:text-gray-100">{acc.name}</span>
+                      <span className="text-sm font-heading font-bold text-accent-blue flex-shrink-0">
+                        {acc.isUpgradeBase ? 'inklusive' : `+${(acc.price - (baseAcc?.price ?? 0)).toFixed(2).replace('.', ',')} €`}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Normales Zubehoer nach Kategorie */}
+          {categories.map(([cat, items]) => (
+            <div key={cat} className="mb-3">
+              <p className="text-[10px] font-heading font-bold text-brand-muted uppercase tracking-wider mb-1">{cat}</p>
+              <div className="space-y-1">
+                {items.map((acc) => (
+                  <div key={acc.id} className="flex items-center justify-between px-4 py-2.5 bg-white dark:bg-gray-800 rounded-xl border border-brand-border dark:border-gray-700">
+                    <span className="font-heading font-semibold text-sm text-brand-black dark:text-gray-100">{acc.name}</span>
+                    <span className="text-sm font-heading font-bold text-accent-blue flex-shrink-0">
+                      {acc.price.toFixed(2).replace('.', ',')} € {acc.pricingMode === 'perDay' ? '/ Tag' : 'einmalig'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+
+          {accessories.length === 0 && !loading && (
+            <p className="text-xs text-brand-muted dark:text-gray-500 py-2">Kein Zubehoer verfuegbar</p>
+          )}
+        </div>
+
+        {/* Rechts: Sets */}
         <div>
           <h3 className="font-heading font-semibold text-sm text-brand-muted dark:text-gray-500 uppercase tracking-wider mb-3">
             Sets
@@ -124,55 +173,6 @@ export default function ProductAccessorySets({ productId }: { productId: string 
                 <p className="text-xs text-brand-muted dark:text-gray-500 py-2">Keine Sets verfuegbar</p>
               )}
             </div>
-          )}
-        </div>
-
-        {/* Rechts: Zubehoer — nach Kategorie gruppiert */}
-        <div>
-          <h3 className="font-heading font-semibold text-sm text-brand-muted dark:text-gray-500 uppercase tracking-wider mb-3">
-            Zubehoer
-          </h3>
-
-          {/* Upgrade-Gruppen */}
-          {upgradeGroups.map((group) => {
-            const groupAccs = accessories.filter((a) => a.upgradeGroup === group);
-            const baseAcc = groupAccs.find((a) => a.isUpgradeBase);
-            return (
-              <div key={group} className="mb-3">
-                <p className="text-[10px] font-heading font-bold text-brand-muted uppercase tracking-wider mb-1">{group}</p>
-                <div className="space-y-1">
-                  {groupAccs.map((acc) => (
-                    <div key={acc.id} className="flex items-center justify-between px-4 py-2.5 bg-white dark:bg-gray-800 rounded-xl border border-brand-border dark:border-gray-700">
-                      <span className="font-heading font-semibold text-sm text-brand-black dark:text-gray-100">{acc.name}</span>
-                      <span className="text-sm font-heading font-bold text-accent-blue flex-shrink-0">
-                        {acc.isUpgradeBase ? 'inklusive' : `+${(acc.price - (baseAcc?.price ?? 0)).toFixed(2).replace('.', ',')} €`}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-
-          {/* Normales Zubehoer nach Kategorie */}
-          {categories.map(([cat, items]) => (
-            <div key={cat} className="mb-3">
-              <p className="text-[10px] font-heading font-bold text-brand-muted uppercase tracking-wider mb-1">{cat}</p>
-              <div className="space-y-1">
-                {items.map((acc) => (
-                  <div key={acc.id} className="flex items-center justify-between px-4 py-2.5 bg-white dark:bg-gray-800 rounded-xl border border-brand-border dark:border-gray-700">
-                    <span className="font-heading font-semibold text-sm text-brand-black dark:text-gray-100">{acc.name}</span>
-                    <span className="text-sm font-heading font-bold text-accent-blue flex-shrink-0">
-                      {acc.price.toFixed(2).replace('.', ',')} € {acc.pricingMode === 'perDay' ? '/ Tag' : 'einmalig'}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-
-          {accessories.length === 0 && !loading && (
-            <p className="text-xs text-brand-muted dark:text-gray-500 py-2">Kein Zubehoer verfuegbar</p>
           )}
         </div>
       </div>

@@ -162,11 +162,16 @@ export default function AdminZubehoerPage() {
     }
   }
 
+  const [filterCategory, setFilterCategory] = useState('');
+
+  // Alle vorhandenen Kategorien sammeln
+  const allCategories = [...new Set(accessories.map((a) => a.category).filter(Boolean))].sort();
+
   return (
     <div className="min-h-screen bg-brand-bg">
       <div className="max-w-4xl mx-auto px-6 py-8">
         {/* Header */}
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center justify-between mb-4">
           <h1 className="font-heading font-bold text-xl text-brand-black">Zubehör</h1>
           <button
             onClick={() => { setShowNew(true); setEditId(null); }}
@@ -175,6 +180,27 @@ export default function AdminZubehoerPage() {
             + Neues Zubehör
           </button>
         </div>
+
+        {/* Kategorie-Filter */}
+        {allCategories.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-6">
+            <button
+              onClick={() => setFilterCategory('')}
+              className={`px-3 py-1.5 rounded-full text-xs font-heading font-semibold transition-colors ${!filterCategory ? 'bg-brand-black text-white' : 'bg-brand-bg text-brand-steel border border-brand-border hover:bg-brand-border'}`}
+            >
+              Alle
+            </button>
+            {allCategories.map((cat) => (
+              <button
+                key={cat}
+                onClick={() => setFilterCategory(filterCategory === cat ? '' : cat)}
+                className={`px-3 py-1.5 rounded-full text-xs font-heading font-semibold transition-colors ${filterCategory === cat ? 'bg-brand-black text-white' : 'bg-brand-bg text-brand-steel border border-brand-border hover:bg-brand-border'}`}
+              >
+                {cat} ({accessories.filter((a) => a.category === cat).length})
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Neues Zubehör Form */}
         {showNew && (
@@ -330,10 +356,10 @@ export default function AdminZubehoerPage() {
               <div className="flex items-center gap-2 mb-3">
                 <span className="w-2 h-2 rounded-full bg-status-success" />
                 <h2 className="font-heading font-bold text-sm text-brand-black">Buchbar fuer Kunden</h2>
-                <span className="text-xs text-brand-muted font-body">({accessories.filter((a) => !a.internal).length})</span>
+                <span className="text-xs text-brand-muted font-body">({accessories.filter((a) => !a.internal && (!filterCategory || a.category === filterCategory)).length})</span>
               </div>
               <div className="space-y-1">
-                {groupByCategory(accessories.filter((a) => !a.internal)).map(({ category, items }) => (
+                {groupByCategory(accessories.filter((a) => !a.internal && (!filterCategory || a.category === filterCategory))).map(({ category, items }) => (
                   <div key={category}>
                     <p className="text-[10px] font-heading font-bold text-brand-muted uppercase tracking-wider mt-3 mb-1 px-1">{category}</p>
                     {items.map((acc) => (
@@ -343,7 +369,7 @@ export default function AdminZubehoerPage() {
                     ))}
                   </div>
                 ))}
-                {accessories.filter((a) => !a.internal).length === 0 && (
+                {accessories.filter((a) => !a.internal && (!filterCategory || a.category === filterCategory)).length === 0 && (
                   <p className="text-sm text-brand-muted font-body py-4 text-center">Kein buchbares Zubehoer.</p>
                 )}
               </div>
@@ -354,10 +380,10 @@ export default function AdminZubehoerPage() {
               <div className="flex items-center gap-2 mb-3">
                 <span className="w-2 h-2 rounded-full bg-amber-500" />
                 <h2 className="font-heading font-bold text-sm text-brand-black">Intern (Kunde sieht es nicht)</h2>
-                <span className="text-xs text-brand-muted font-body">({accessories.filter((a) => a.internal).length})</span>
+                <span className="text-xs text-brand-muted font-body">({accessories.filter((a) => a.internal && (!filterCategory || a.category === filterCategory)).length})</span>
               </div>
               <div className="space-y-1">
-                {groupByCategory(accessories.filter((a) => a.internal)).map(({ category, items }) => (
+                {groupByCategory(accessories.filter((a) => a.internal && (!filterCategory || a.category === filterCategory))).map(({ category, items }) => (
                   <div key={category}>
                     <p className="text-[10px] font-heading font-bold text-brand-muted uppercase tracking-wider mt-3 mb-1 px-1">{category}</p>
                     {items.map((acc) => (
@@ -367,7 +393,7 @@ export default function AdminZubehoerPage() {
                     ))}
                   </div>
                 ))}
-                {accessories.filter((a) => a.internal).length === 0 && (
+                {accessories.filter((a) => a.internal && (!filterCategory || a.category === filterCategory)).length === 0 && (
                   <p className="text-sm text-brand-muted font-body py-4 text-center">Kein internes Zubehoer. Erstelle welches mit &bdquo;Nur intern&ldquo;.</p>
                 )}
               </div>
