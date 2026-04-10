@@ -457,21 +457,22 @@ export default function BuchenPage() {
 
   // Zubehör aus DB laden
   useEffect(() => {
-    fetch('/api/admin/accessories')
+    fetch('/api/accessories')
       .then((r) => r.json())
-      .then(({ accessories: data }) => {
-        if (data) {
-          const mapped: Accessory[] = data
-            .filter((a: { available: boolean }) => a.available)
-            .map((a: { id: string; name: string; pricing_mode: string; price: number; description?: string; category?: string }) => ({
-              id: a.id,
-              name: a.name,
-              pricingMode: a.pricing_mode as 'perDay' | 'flat',
-              price: a.price,
-              description: a.description ?? '',
-              available: true,
-              iconId: 'custom' as const,
-            }));
+      .then((data: { id: string; name: string; pricingMode: string; price: number; description?: string; group?: string; upgradeGroup?: string; isUpgradeBase?: boolean }[]) => {
+        if (Array.isArray(data) && data.length > 0) {
+          const mapped: Accessory[] = data.map((a) => ({
+            id: a.id,
+            name: a.name,
+            pricingMode: a.pricingMode as 'perDay' | 'flat',
+            price: a.price,
+            description: a.description ?? '',
+            available: true,
+            iconId: 'mount' as const,
+            group: a.group,
+            upgradeGroup: a.upgradeGroup,
+            isUpgradeBase: a.isUpgradeBase,
+          }));
           setDbAccessories(mapped);
         }
       })
