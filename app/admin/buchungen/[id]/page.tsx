@@ -61,12 +61,13 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }
   awaiting_payment: { label: 'Warte auf Zahlung', color: '#8b5cf6', bg: '#8b5cf614' },
   confirmed: { label: 'Bestätigt', color: '#06b6d4', bg: '#06b6d414' },
   shipped: { label: 'Versendet', color: '#10b981', bg: '#10b98114' },
+  picked_up: { label: 'Abgeholt', color: '#10b981', bg: '#10b98114' },
   completed: { label: 'Abgeschlossen', color: '#64748b', bg: '#64748b14' },
   cancelled: { label: 'Storniert', color: '#ef4444', bg: '#ef444414' },
   damaged: { label: 'Beschädigt', color: '#f97316', bg: '#f9731614' },
 };
 
-const ALL_STATUSES = ['pending_verification', 'awaiting_payment', 'confirmed', 'shipped', 'completed', 'cancelled', 'damaged'];
+const ALL_STATUSES = ['pending_verification', 'awaiting_payment', 'confirmed', 'shipped', 'picked_up', 'completed', 'cancelled', 'damaged'];
 
 function fmtDate(iso: string) {
   if (!iso) return '–';
@@ -146,7 +147,7 @@ export default function BuchungDetailPage() {
   const docStyles = `
     @page { size: A4 portrait; margin: 20mm; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 11pt; color: #1a1a1a; padding: 40px 48px; max-width: 210mm; min-height: 297mm; }
+    body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 11pt; color: #1a1a1a; padding: 20mm 25mm; max-width: none; min-height: 297mm; }
     h1 { font-size: 20pt; color: #1e3a5f; margin-bottom: 6px; border-bottom: 3px solid #1e3a5f; padding-bottom: 8px; }
     .subtitle { font-size: 9pt; color: #6b7280; margin-bottom: 20px; }
     h2 { font-size: 12pt; color: #1e3a5f; margin: 18px 0 8px; }
@@ -231,16 +232,27 @@ export default function BuchungDetailPage() {
     const kundenName = booking.customer_name || customer?.full_name || '';
     const kundenEmail = booking.customer_email || customer?.email || '';
     const kundenAdresse = booking.shipping_address || (customer ? `${customer.address_street || ''}, ${customer.address_zip || ''} ${customer.address_city || ''}` : '');
-    const produktName = booking.product_name || '';
     const zeitraum = `${fmtDate(booking.rental_from)} – ${fmtDate(booking.rental_to)}`;
-    const accRows2 = booking.accessories?.map((a, i) => `<tr><td style="width:40px">${i + 1}</td><td>${a}</td><td style="width:50px"></td></tr>`) ?? [];
+
+    // Kameras mit Seriennummern — Produktnamen aufsplitten (kommagetrennt)
+    const productNames = (booking.product_name || '').split(',').map((n: string) => n.trim()).filter(Boolean);
+    const kameraRows = productNames.map((name: string) =>
+      `<p style="margin-bottom:4px"><strong>Kamera:</strong> ${name} &nbsp;&nbsp;&nbsp;&nbsp; <strong>SN:</strong> <span class="line line-short"></span></p>`
+    ).join('');
+
+    // Zubehoer-Namen aufloesen (IDs → Namen aus AccessoriesProvider nicht verfuegbar, nutze IDs als Fallback)
+    const accList = Array.isArray(booking.accessories) ? booking.accessories : [];
+    const accRows2 = accList.map((a: string, i: number) => `<tr><td style="width:40px">${i + 1}</td><td>${a}</td><td style="width:50px"></td></tr>`);
     const emptyCount2 = Math.max(0, 10 - accRows2.length);
     const zubehoerRows = accRows2.join('') + Array.from({ length: emptyCount2 }, (_, i) => `<tr><td style="width:40px">${accRows2.length + i + 1}</td><td></td><td style="width:50px"></td></tr>`).join('');
+
+    // Lieferart
+    const lieferart = booking.delivery_mode === 'abholung' ? 'Abgeholt' : 'Versand';
 
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Übergabeprotokoll – ${booking.id}</title><style>${docStyles}</style></head><body>
   ${toolbarHtml}
   <h1>Übergabeprotokoll – Kameraequipment</h1>
-  <div class="subtitle">cam2rent – Buchung ${booking.id}</div>
+  <div class="subtitle">cam2rent – Buchung ${booking.id} · ${lieferart}</div>
 
   <div style="margin-bottom:16px">
     <p style="font-weight:700;margin-bottom:2px">Vermieter (Cam2Rent):</p>
@@ -263,9 +275,8 @@ export default function BuchungDetailPage() {
   <p style="margin-bottom:14px">Ort: <span class="line"></span></p>
 
   <h2>2. Mietgegenstand</h2>
-  <div class="info-grid" style="margin-bottom:4px"><span class="info-label">Kamera / Gerät:</span><span class="info-value">${produktName}</span></div>
-  <p style="margin-bottom:4px">Bezeichnung: <span class="line"></span> &nbsp; Seriennummer: <span class="line"></span></p>
-  <p style="margin-bottom:6px;margin-top:8px;font-weight:600">Zubehör:</p>
+  ${kameraRows}
+  <p style="margin-bottom:6px;margin-top:12px;font-weight:600">Zubehör:</p>
   <table><thead><tr><th style="width:40px">Nr.</th><th>Bezeichnung</th><th style="width:50px">OK</th></tr></thead><tbody>${zubehoerRows}</tbody></table>
 
   <h2>3. Zustand bei Übergabe</h2>
@@ -679,6 +690,13 @@ export default function BuchungDetailPage() {
                       Versand-Packliste
                     </button>
                   )}
+                  <a
+                    href={`/api/invoice/${booking.id}`}
+                    target="_blank"
+                    className="block w-full text-center px-4 py-2 text-sm font-heading font-semibold bg-brand-black text-white rounded-btn hover:bg-brand-dark transition-colors"
+                  >
+                    Rechnung herunterladen
+                  </a>
                   {booking.delivery_mode === 'abholung' && (
                     <button
                       onClick={openUebergabeprotokoll}
