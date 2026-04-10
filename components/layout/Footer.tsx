@@ -185,7 +185,7 @@ export default function Footer() {
 
             {/* Payment Icons */}
             <p className="text-xs font-body text-brand-muted mb-3 uppercase tracking-wider">Zahlung</p>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <div className="bg-white rounded px-2 py-1">
                 <svg viewBox="0 0 50 16" className="h-4 w-auto" aria-label="Visa">
                   <text x="0" y="13" fontFamily="Arial" fontWeight="bold" fontSize="14" fill="#1a1f71">VISA</text>
@@ -195,8 +195,28 @@ export default function Footer() {
                 <div className="w-4 h-4 rounded-full bg-red-500 opacity-90" />
                 <div className="w-4 h-4 rounded-full bg-yellow-400 -ml-2" />
               </div>
+              <div className="bg-[#003087] rounded px-2 py-1">
+                <span className="text-[10px] font-bold text-white font-body">PayPal</span>
+              </div>
               <div className="bg-[#ffb3c7] rounded px-2 py-1">
                 <span className="text-xs font-bold text-black font-body">klarna</span>
+              </div>
+              <div className="bg-black rounded px-2 py-1">
+                <span className="text-[10px] font-bold text-white font-body">Apple Pay</span>
+              </div>
+              <div className="bg-white rounded px-2 py-1">
+                <span className="text-[10px] font-bold text-gray-700 font-body">G Pay</span>
+              </div>
+            </div>
+
+            {/* Versand */}
+            <p className="text-xs font-body text-brand-muted mb-3 mt-5 uppercase tracking-wider">Versand</p>
+            <div className="flex items-center gap-2">
+              <div className="bg-[#ffcc00] rounded px-2 py-1">
+                <span className="text-[10px] font-bold text-[#d40511] font-body">DHL</span>
+              </div>
+              <div className="bg-[#dc0032] rounded px-2 py-1">
+                <span className="text-[10px] font-bold text-white font-body">DPD</span>
               </div>
             </div>
           </div>
