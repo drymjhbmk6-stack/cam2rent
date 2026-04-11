@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCart } from '@/components/CartProvider';
@@ -22,6 +23,25 @@ function formatEur(n: number) {
 export default function WarenkorbPage() {
   const { items, removeItem, cartTotal, itemCount } = useCart();
   const router = useRouter();
+  const [showDateModal, setShowDateModal] = useState(false);
+
+  // Pruefen ob alle Kameras den gleichen Zeitraum haben
+  const handleCheckout = () => {
+    if (items.length <= 1) {
+      router.push('/checkout');
+      return;
+    }
+    const firstFrom = items[0].rentalFrom;
+    const firstTo = items[0].rentalTo;
+    const allSame = items.every((it) => it.rentalFrom === firstFrom && it.rentalTo === firstTo);
+    if (allSame) {
+      router.push('/checkout');
+    } else {
+      setShowDateModal(true);
+    }
+  };
+
+  const uniquePeriods = [...new Set(items.map((it) => `${it.rentalFrom}_${it.rentalTo}`))];
 
   if (itemCount === 0) {
     return (
@@ -154,21 +174,32 @@ export default function WarenkorbPage() {
                   </div>
                 </div>
 
-                {/* Badges */}
-                <div className="flex flex-wrap gap-2">
+                {/* Zubehoer + Set + Haftung */}
+                <div className="flex flex-wrap gap-1.5">
                   {item.haftung !== 'none' && (
-                    <span className="px-2 py-0.5 text-xs rounded-full bg-accent-blue-soft text-accent-blue font-medium">
-                      {item.haftung === 'standard' ? 'Standard-Schutz' : 'Premium-Schutz'} (+{formatEur(item.priceHaftung)})
+                    <span className="px-2 py-0.5 text-[10px] rounded-full bg-accent-blue-soft text-accent-blue font-medium">
+                      {item.haftung === 'standard' ? 'Standard-Schutz' : 'Premium-Schutz'}
                     </span>
                   )}
-                  {item.accessories.length > 0 && (
-                    <span className="px-2 py-0.5 text-xs rounded-full bg-brand-bg dark:bg-brand-black text-brand-steel dark:text-gray-400 font-medium">
-                      +{item.accessories.length} Zubehör (+{formatEur(item.priceAccessories)})
+                  {item.accessories.map((accId) => (
+                    <span key={accId} className="px-2 py-0.5 text-[10px] rounded-full bg-brand-bg dark:bg-white/5 text-brand-steel dark:text-gray-400">
+                      {accId.replace(/-[a-z0-9]{6,}$/, '').split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
                     </span>
-                  )}
+                  ))}
                 </div>
               </div>
             ))}
+
+            {/* Weitere Kamera hinzufuegen */}
+            <Link
+              href="/kameras"
+              className="flex items-center justify-center gap-2 w-full py-3 border-2 border-dashed border-brand-border dark:border-white/10 rounded-card text-sm font-heading font-semibold text-brand-steel dark:text-gray-400 hover:border-accent-blue hover:text-accent-blue transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Weitere Kamera hinzufuegen
+            </Link>
           </div>
 
           {/* Summary */}
@@ -206,7 +237,7 @@ export default function WarenkorbPage() {
               </p>
 
               <button
-                onClick={() => router.push('/checkout')}
+                onClick={handleCheckout}
                 className="w-full py-3 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold rounded-btn hover:bg-brand-dark dark:hover:bg-accent-blue/90 transition-colors"
               >
                 Weiter zum Checkout
@@ -233,6 +264,32 @@ export default function WarenkorbPage() {
           </div>
         </div>
       </div>
+
+      {/* Modal: Unterschiedliche Mietzeitraeume */}
+      {showDateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
+          <div className="bg-white dark:bg-brand-dark rounded-card shadow-card p-6 sm:p-8 max-w-md w-full">
+            <h3 className="font-heading font-bold text-lg text-brand-black dark:text-white mb-2">
+              Unterschiedliche Mietzeitraeume
+            </h3>
+            <p className="font-body text-sm text-brand-steel dark:text-gray-400 mb-6 leading-relaxed">
+              Deine Kameras haben unterschiedliche Mietzeitraeume.
+              Wenn du fortfaehrst, werden <strong className="text-brand-black dark:text-white">{uniquePeriods.length} separate Bestellungen</strong> angelegt — eine pro Zeitraum.
+              Du bezahlst am Ende trotzdem nur einmal.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button onClick={() => setShowDateModal(false)}
+                className="flex-1 py-2.5 border border-brand-border dark:border-white/10 text-brand-black dark:text-white font-heading font-semibold text-sm rounded-btn hover:bg-brand-bg dark:hover:bg-white/5 transition-colors">
+                Zurueck zum Warenkorb
+              </button>
+              <button onClick={() => { setShowDateModal(false); router.push('/checkout'); }}
+                className="flex-1 py-2.5 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold text-sm rounded-btn hover:bg-brand-dark transition-colors">
+                Trotzdem fortfahren →
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
