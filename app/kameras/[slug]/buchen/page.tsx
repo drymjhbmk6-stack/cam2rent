@@ -368,7 +368,8 @@ export default function BuchenPage() {
   const preFrom = searchParams.get('from');
   const preTo = searchParams.get('to');
   const preDelivery = searchParams.get('delivery');
-  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(1);
+  const hasPreselection = !!(preFrom && preTo);
+  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(hasPreselection ? 2 : 1);
   const [returnToSummary, setReturnToSummary] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [isCreatingIntent, setIsCreatingIntent] = useState(false);
