@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { generateBookingId } from '@/lib/booking-id';
 import type { CartItem } from '@/components/CartProvider';
+import { calcShipping } from '@/data/shipping';
+import type { ShippingMethod } from '@/data/shipping';
+import { DEFAULT_SHIPPING, type ShippingPriceConfig } from '@/lib/price-config';
 import { sendAdminNotification, type BookingEmailData } from '@/lib/email';
 
 /**
@@ -101,10 +104,20 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Versand-Config aus DB laden
+    let shippingCfg: ShippingPriceConfig = DEFAULT_SHIPPING;
+    const { data: shippingRow } = await supabase
+      .from('admin_config')
+      .select('value')
+      .eq('key', 'shipping')
+      .maybeSingle();
+    if (shippingRow?.value) {
+      shippingCfg = shippingRow.value as ShippingPriceConfig;
+    }
+
     // Items nach Mietzeitraum gruppieren
     const periodGroups = groupByPeriod(items);
     const totalCartSubtotal = items.reduce((s, it) => s + it.subtotal, 0);
-    const totalDiscount = (discountAmount ?? 0) + (durationDiscount ?? 0) + (loyaltyDiscount ?? 0);
     const bookingIds: string[] = [];
 
     for (let gi = 0; gi < periodGroups.length; gi++) {
@@ -117,8 +130,14 @@ export async function POST(req: NextRequest) {
       const groupDiscountAmount = Math.round((discountAmount ?? 0) * ratio * 100) / 100;
       const groupDurationDiscount = Math.round((durationDiscount ?? 0) * ratio * 100) / 100;
       const groupLoyaltyDiscount = Math.round((loyaltyDiscount ?? 0) * ratio * 100) / 100;
-      // Versand nur bei erster Gruppe
-      const groupShipping = gi === 0 ? (shippingPrice ?? 0) : 0;
+      // Versand pro Gruppe neu berechnen (jede Gruppe prueft Gratis-Schwelle)
+      const groupShippingResult = calcShipping(
+        groupSubtotal,
+        shippingMethod as ShippingMethod,
+        deliveryMode as 'versand' | 'abholung',
+        shippingCfg
+      );
+      const groupShipping = groupShippingResult.price;
       const groupTotalDiscount = groupDiscountAmount + groupDurationDiscount + groupLoyaltyDiscount;
       const priceTotal = groupSubtotal - groupTotalDiscount + groupShipping;
 

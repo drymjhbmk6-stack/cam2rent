@@ -4,6 +4,9 @@ import { createServiceClient } from '@/lib/supabase';
 import { generateBookingId } from '@/lib/booking-id';
 import { detectSuspicious } from '@/lib/suspicious';
 import type { CartItem } from '@/components/CartProvider';
+import { calcShipping } from '@/data/shipping';
+import type { ShippingMethod } from '@/data/shipping';
+import { DEFAULT_SHIPPING, type ShippingPriceConfig } from '@/lib/price-config';
 import {
   sendBookingConfirmation,
   sendAdminNotification,
@@ -189,7 +192,18 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 3. Items nach Mietzeitraum gruppieren → separate Buchungen
+    // 3. Versand-Config aus DB laden
+    let shippingCfg: ShippingPriceConfig = DEFAULT_SHIPPING;
+    const { data: shippingRow } = await supabase
+      .from('admin_config')
+      .select('value')
+      .eq('key', 'shipping')
+      .maybeSingle();
+    if (shippingRow?.value) {
+      shippingCfg = shippingRow.value as ShippingPriceConfig;
+    }
+
+    // 4. Items nach Mietzeitraum gruppieren → separate Buchungen
     const periodGroups = groupByPeriod(r_items);
     const totalCartSubtotal = r_items.reduce((s, it) => s + it.subtotal, 0);
     const bookingIds: string[] = [];
@@ -199,13 +213,19 @@ export async function POST(req: NextRequest) {
       const firstItem = groupItems[0];
       const groupSubtotal = groupItems.reduce((s, it) => s + it.subtotal, 0);
 
-      // Rabatte und Versand proportional aufteilen
+      // Rabatte proportional aufteilen
       const ratio = totalCartSubtotal > 0 ? groupSubtotal / totalCartSubtotal : 1 / periodGroups.length;
       const groupDiscount = Math.round((r_discountAmount ?? 0) * ratio * 100) / 100;
       const groupDurationDiscount = Math.round((r_durationDiscount ?? 0) * ratio * 100) / 100;
       const groupLoyaltyDiscount = Math.round((r_loyaltyDiscount ?? 0) * ratio * 100) / 100;
-      // Versand nur bei der ersten Gruppe
-      const groupShipping = gi === 0 ? r_shippingPrice : 0;
+      // Versand pro Gruppe neu berechnen (jede Gruppe prueft Gratis-Schwelle)
+      const groupShippingResult = calcShipping(
+        groupSubtotal,
+        r_shippingMethod as ShippingMethod,
+        r_deliveryMode as 'versand' | 'abholung',
+        shippingCfg
+      );
+      const groupShipping = groupShippingResult.price;
       const groupTotal = groupSubtotal - groupDiscount - groupDurationDiscount - groupLoyaltyDiscount + groupShipping;
 
       const bookingId = await generateBookingId();
@@ -405,12 +425,17 @@ export async function POST(req: NextRequest) {
         const allAccessories = [...new Set(groupItems.flatMap((it) => it.accessories))];
         const groupSubtotal = groupItems.reduce((s, it) => s + it.subtotal, 0);
         const ratio = totalCartSubtotal > 0 ? groupSubtotal / totalCartSubtotal : 1 / periodGroups.length;
-        const groupShipping = gi === 0 ? r_shippingPrice : 0;
+        const emailShipping = calcShipping(
+          groupSubtotal,
+          r_shippingMethod as ShippingMethod,
+          r_deliveryMode as 'versand' | 'abholung',
+          shippingCfg
+        ).price;
         const groupTotal = groupSubtotal
           - Math.round((r_discountAmount ?? 0) * ratio * 100) / 100
           - Math.round((r_durationDiscount ?? 0) * ratio * 100) / 100
           - Math.round((r_loyaltyDiscount ?? 0) * ratio * 100) / 100
-          + groupShipping;
+          + emailShipping;
 
         const emailData: BookingEmailData = {
           bookingId: bookingIds[gi],
@@ -429,7 +454,7 @@ export async function POST(req: NextRequest) {
           priceHaftung: groupItems.reduce((s, it) => s + it.priceHaftung, 0),
           priceTotal: Math.max(0, groupTotal),
           deposit: groupItems.reduce((s, it) => s + it.deposit, 0),
-          shippingPrice: groupShipping,
+          shippingPrice: emailShipping,
           taxMode: (txMap['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer',
           taxRate: parseFloat(txMap['tax_rate'] || '19'),
           ustId: txMap['ust_id'] || '',
