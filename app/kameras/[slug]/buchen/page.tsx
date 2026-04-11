@@ -962,6 +962,10 @@ export default function BuchenPage() {
             {/* ════ STEP 2: Accessories only ════ */}
             {step === 2 && (
               <div>
+                <button type="button" onClick={() => setStep(1)} className="text-sm font-body text-accent-blue hover:underline mb-4 flex items-center gap-1">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+                  Zurueck zu Versand & Datum
+                </button>
                 <h2 className="font-heading font-bold text-lg text-brand-black mb-1">
                   Zubehör
                 </h2>
@@ -1162,7 +1166,7 @@ export default function BuchenPage() {
                     onClick={() => setStep(1)}
                     className="px-6 py-3 text-brand-steel font-heading font-semibold text-sm rounded-[10px] border border-brand-border hover:bg-brand-bg transition-colors"
                   >
-                    Zurück
+                    ← Versand & Datum
                   </button>
                   <button
                     type="button"
@@ -1182,6 +1186,10 @@ export default function BuchenPage() {
             {/* ════ STEP 3: Haftung only ════ */}
             {step === 3 && (
               <div>
+                <button type="button" onClick={() => setStep(2)} className="text-sm font-body text-accent-blue hover:underline mb-4 flex items-center gap-1">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+                  Zurueck zu Zubehoer
+                </button>
                 <h2 className="font-heading font-bold text-lg text-brand-black mb-1">
                   Haftungsschutz
                 </h2>
@@ -1453,7 +1461,7 @@ export default function BuchenPage() {
                     onClick={() => setStep(2)}
                     className="px-6 py-3 text-brand-steel font-heading font-semibold text-sm rounded-[10px] border border-brand-border hover:bg-brand-bg transition-colors"
                   >
-                    Zurück
+                    ← Zubehoer
                   </button>
                   <button
                     type="button"
@@ -1503,6 +1511,10 @@ export default function BuchenPage() {
             {/* ════ STEP 4: Summary ════ */}
             {step === 4 && breakdown && range?.from && (
               <div>
+                <button type="button" onClick={() => setStep(3)} className="text-sm font-body text-accent-blue hover:underline mb-4 flex items-center gap-1">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+                  Zurueck zu Haftungsschutz
+                </button>
                 <h2 className="font-heading font-bold text-lg text-brand-black mb-1">
                   Zusammenfassung
                 </h2>
@@ -1730,7 +1742,7 @@ export default function BuchenPage() {
                     disabled={isCreatingIntent}
                     className="px-6 py-3 text-brand-steel font-heading font-semibold text-sm rounded-[10px] border border-brand-border hover:bg-brand-bg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
-                    Zurück
+                    ← Haftungsschutz
                   </button>
                   <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 flex-1 sm:flex-none">
                     {/* In den Warenkorb */}
