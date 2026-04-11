@@ -706,8 +706,17 @@ export default function BuchungDetailPage() {
                     target="_blank"
                     className="block w-full text-center px-4 py-2 text-sm font-heading font-semibold bg-brand-black text-white rounded-btn hover:bg-brand-dark transition-colors"
                   >
-                    Rechnung herunterladen
+                    Rechnung PDF
                   </a>
+                  {booking.delivery_mode === 'versand' && (
+                    <a
+                      href={`/api/packlist/${booking.id}`}
+                      target="_blank"
+                      className="block w-full text-center px-4 py-2 text-sm font-heading font-semibold bg-amber-500 text-white rounded-btn hover:bg-amber-600 transition-colors"
+                    >
+                      Packliste PDF
+                    </a>
+                  )}
                   {booking.delivery_mode === 'abholung' && (
                     <button
                       onClick={openUebergabeprotokoll}
