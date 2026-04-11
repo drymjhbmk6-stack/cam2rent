@@ -816,6 +816,36 @@ export default function CheckoutPage() {
                           })}
                         </div>
 
+                        {/* Lieferanschrift */}
+                        <label className="flex items-center gap-3 cursor-pointer">
+                          <input type="checkbox" checked={sameAsBilling} onChange={(e) => setSameAsBilling(e.target.checked)}
+                            className="w-4 h-4 rounded border-brand-border accent-accent-blue" />
+                          <span className="text-sm font-body text-brand-black dark:text-white">Lieferanschrift ist gleich Rechnungsanschrift</span>
+                        </label>
+
+                        {!sameAsBilling && (
+                          <div className="space-y-3 mt-3 pt-3 border-t border-brand-border/50 dark:border-white/5">
+                            <p className="text-xs font-heading font-semibold text-brand-muted dark:text-gray-500 uppercase tracking-wider">Abweichende Lieferanschrift</p>
+                            <div>
+                              <label className={labelClass}>Strasse *</label>
+                              <input type="text" value={shipStreet} onChange={(e) => setShipStreet(e.target.value)}
+                                className={inputClass} placeholder="Lieferstrasse 1" />
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                              <div>
+                                <label className={labelClass}>PLZ *</label>
+                                <input type="text" value={shipZip} onChange={(e) => setShipZip(e.target.value)}
+                                  className={inputClass} placeholder="12345" maxLength={5} />
+                              </div>
+                              <div>
+                                <label className={labelClass}>Stadt *</label>
+                                <input type="text" value={shipCity} onChange={(e) => setShipCity(e.target.value)}
+                                  className={inputClass} placeholder="Berlin" />
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
                       </div>
                     )}
                   </label>
@@ -855,40 +885,6 @@ export default function CheckoutPage() {
                     )}
                   </label>
                 </div>
-
-                {/* Lieferanschrift bei Versand */}
-                {deliveryMode === 'versand' && (
-                  <div className="bg-white dark:bg-brand-dark rounded-card shadow-card p-5">
-                    <label className="flex items-center gap-3 cursor-pointer mb-3">
-                      <input type="checkbox" checked={sameAsBilling} onChange={(e) => setSameAsBilling(e.target.checked)}
-                        className="w-4 h-4 rounded border-brand-border accent-accent-blue" />
-                      <span className="text-sm font-body text-brand-black dark:text-white">Lieferanschrift ist gleich Rechnungsanschrift</span>
-                    </label>
-
-                    {!sameAsBilling && (
-                      <div className="space-y-3 pt-2 border-t border-brand-border/50 dark:border-white/5">
-                        <p className="text-xs font-heading font-semibold text-brand-muted dark:text-gray-500 uppercase tracking-wider">Abweichende Lieferanschrift</p>
-                        <div>
-                          <label className={labelClass}>Strasse *</label>
-                          <input type="text" value={shipStreet} onChange={(e) => setShipStreet(e.target.value)}
-                            className={inputClass} placeholder="Lieferstrasse 1" />
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <label className={labelClass}>PLZ *</label>
-                            <input type="text" value={shipZip} onChange={(e) => setShipZip(e.target.value)}
-                              className={inputClass} placeholder="12345" maxLength={5} />
-                          </div>
-                          <div>
-                            <label className={labelClass}>Stadt *</label>
-                            <input type="text" value={shipCity} onChange={(e) => setShipCity(e.target.value)}
-                              className={inputClass} placeholder="Berlin" />
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
 
                 {/* Coupon */}
                 <div className="bg-white dark:bg-brand-dark rounded-card shadow-card p-6">
