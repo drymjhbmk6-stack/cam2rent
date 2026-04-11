@@ -758,15 +758,15 @@ export default function CheckoutPage() {
                     {deliveryMode === 'versand' && (
                       <div className="px-4 pb-4 pt-2 border-t border-brand-border/50 dark:border-white/5" onClick={(e) => e.preventDefault()}>
                         {/* Versandart */}
-                        <div className="grid sm:grid-cols-2 gap-2 mb-4">
+                        <div className="grid grid-cols-2 gap-2 mb-4">
                           {([
                             { id: 'standard' as ShippingMethod, label: 'Standard', sub: '3–5 Werktage', price: dynShipping.standardPrice },
-                            { id: 'express' as ShippingMethod, label: 'Express', sub: 'Naechster Werktag', price: dynShipping.expressPrice },
+                            { id: 'express' as ShippingMethod, label: 'Express', sub: 'Nächster Werktag', price: dynShipping.expressPrice },
                           ] as const).map((opt) => {
                             const isFree = opt.id === 'standard' && cartTotal >= dynShipping.freeShippingThreshold;
                             return (
                               <label key={opt.id}
-                                className={`flex items-center justify-between gap-2 p-3 rounded-lg border cursor-pointer transition-colors ${
+                                className={`flex flex-col p-3 rounded-lg border cursor-pointer transition-colors ${
                                   shippingMethod === opt.id
                                     ? 'border-accent-blue bg-accent-blue/5'
                                     : 'border-brand-border dark:border-white/10'
@@ -774,14 +774,12 @@ export default function CheckoutPage() {
                                 <div className="flex items-center gap-2">
                                   <input type="radio" name="shippingMethod" value={opt.id} checked={shippingMethod === opt.id}
                                     onChange={() => setShippingMethod(opt.id)} className="accent-accent-blue" />
-                                  <div>
-                                    <span className="font-body font-semibold text-sm text-brand-black dark:text-white">{opt.label}</span>
-                                    <span className="text-xs text-brand-muted ml-1.5">{opt.sub}</span>
-                                  </div>
+                                  <span className="font-body font-semibold text-sm text-brand-black dark:text-white">{opt.label}</span>
                                 </div>
-                                <span className="text-sm font-semibold flex-shrink-0">
+                                <p className="text-xs text-brand-muted mt-1 ml-6">{opt.sub}</p>
+                                <p className="text-sm font-semibold mt-1 ml-6">
                                   {isFree ? <span className="text-status-success">Gratis</span> : <span className="text-brand-black dark:text-white">{fmt(opt.price)}</span>}
-                                </span>
+                                </p>
                               </label>
                             );
                           })}

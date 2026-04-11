@@ -167,7 +167,7 @@ export default function WarenkorbPage() {
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs text-brand-muted dark:text-gray-500 mb-0.5">Subtotal</p>
+                    <p className="text-xs text-brand-muted dark:text-gray-500 mb-0.5">Gesamt</p>
                     <p className="text-sm font-bold text-brand-black dark:text-white">
                       {formatEur(item.subtotal)}
                     </p>
