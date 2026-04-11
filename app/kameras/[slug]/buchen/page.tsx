@@ -17,6 +17,7 @@ import AvailabilityCalendar, { type CalendarRange } from '@/components/Availabil
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { shippingConfig, calcShipping, type ShippingMethod } from '@/data/shipping';
 import { calcPriceFromKeyDays, calcPriceFromTable, type PriceConfig, type AdminProduct } from '@/lib/price-config';
+import SignatureStep, { type SignatureResult } from '@/components/booking/SignatureStep';
 
 /** Inline type to replace react-day-picker's DateRange */
 type DateRange = { from: Date; to?: Date };
@@ -200,13 +201,14 @@ function calcBreakdown(
 
 // ─── Step indicator ───────────────────────────────────────────────────────────
 
-function StepIndicator({ current }: { current: 1 | 2 | 3 | 4 | 5 }) {
+function StepIndicator({ current }: { current: 1 | 2 | 3 | 4 | 5 | 6 }) {
   const steps = [
     { n: 1, label: 'Versand' },
-    { n: 2, label: 'Zubehör' },
+    { n: 2, label: 'Zubeh\u00f6r' },
     { n: 3, label: 'Haftung' },
-    { n: 4, label: 'Zusammenfassung' },
-    { n: 5, label: 'Zahlung' },
+    { n: 4, label: '\u00dcbersicht' },
+    { n: 5, label: 'Mietvertrag' },
+    { n: 6, label: 'Zahlung' },
   ];
   return (
     <div className="flex items-center" aria-label="Buchungsschritte">
@@ -369,7 +371,7 @@ export default function BuchenPage() {
   const preTo = searchParams.get('to');
   const preDelivery = searchParams.get('delivery');
   const hasPreselection = !!(preFrom && preTo);
-  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(hasPreselection ? 2 : 1);
+  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5 | 6>(hasPreselection ? 2 : 1);
   const [returnToSummary, setReturnToSummary] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [isCreatingIntent, setIsCreatingIntent] = useState(false);
@@ -418,6 +420,9 @@ export default function BuchenPage() {
   // Tax config
   const [taxMode, setTaxMode] = useState<'kleinunternehmer' | 'regelbesteuerung'>('kleinunternehmer');
   const [taxRate, setTaxRate] = useState(19);
+
+  // Mietvertrag-Signatur
+  const [contractSignature, setContractSignature] = useState<SignatureResult | null>(null);
 
   useEffect(() => {
     fetch('/api/prices').then((r) => r.json()).then(setDynPrices).catch(() => {});
@@ -564,7 +569,7 @@ export default function BuchenPage() {
         throw new Error(data.error ?? 'Unbekannter Fehler');
       }
       setClientSecret(data.clientSecret);
-      setStep(5);
+      setStep(6);
     } catch (err) {
       setIntentError(err instanceof Error ? err.message : 'Fehler beim Verbinden mit der Zahlungsseite.');
     } finally {
@@ -678,7 +683,7 @@ export default function BuchenPage() {
 
       {/* ── Body ── */}
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-        <div className={`${step === 4 ? '' : 'lg:grid lg:grid-cols-[1fr_300px] lg:gap-8'}`}>
+        <div className={`${step >= 4 ? '' : 'lg:grid lg:grid-cols-[1fr_300px] lg:gap-8'}`}>
 
           {/* ── Main card ── */}
           <div className="bg-white rounded-card shadow-card p-6 sm:p-8">
@@ -1386,8 +1391,8 @@ export default function BuchenPage() {
               </div>
             )}
 
-            {/* ════ STEP 5: Stripe Payment ════ */}
-            {step === 5 && clientSecret && breakdown && (
+            {/* ════ STEP 6: Stripe Payment ════ */}
+            {step === 6 && clientSecret && breakdown && (
               <Elements
                 stripe={stripePromise}
                 options={{
@@ -1407,7 +1412,7 @@ export default function BuchenPage() {
                 <PaymentStep
                   total={effectiveTotal}
                   onBack={() => {
-                    setStep(4);
+                    setStep(5);
                     setClientSecret(null);
                     setIntentError(null);
                   }}
@@ -1652,40 +1657,101 @@ export default function BuchenPage() {
                 <div className="mt-8">
                   <button
                     type="button"
-                    onClick={() => {
-                      if (!breakdown || !range?.from || !product) return;
-                      addItem({
-                        id: crypto.randomUUID(),
-                        productId: product.id,
-                        productName: product.name,
-                        productSlug: product.slug,
-                        rentalFrom: format(range.from, 'yyyy-MM-dd'),
-                        rentalTo: format(range.to ?? range.from, 'yyyy-MM-dd'),
-                        days: breakdown.days,
-                        accessories: selectedSet ? [] : accessories,
-                        haftung,
-                        priceRental: breakdown.rentalPrice,
-                        priceAccessories: selectedSet ? setPrice : breakdown.accessoryPrice,
-                        priceHaftung: breakdown.haftungPrice,
-                        subtotal: breakdown.rentalPrice + (selectedSet ? setPrice : breakdown.accessoryPrice) + breakdown.haftungPrice,
-                        deposit: product.deposit,
-                      });
-                      router.push('/warenkorb');
-                    }}
+                    onClick={() => setStep(5)}
                     className="w-full flex items-center justify-center gap-2 py-4 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold text-sm rounded-[10px] hover:bg-brand-dark transition-colors"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 00-3 3h15.75m-12.75-3h11.218c1.121-2.3 2.1-4.684 2.924-7.138a60.114 60.114 0 00-16.536-1.84M7.5 14.25L5.106 5.272M6 20.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm12.75 0a.75.75 0 11-1.5 0 .75.75 0 011.5 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
-                    In den Warenkorb — {fmt(effectiveTotal)} €
+                    Weiter: Mietvertrag
                   </button>
                 </div>
               </div>
             )}
+
+            {/* ════ STEP 5: Mietvertrag & Unterschrift ════ */}
+            {step === 5 && breakdown && range?.from && (
+              <div>
+                {contractSignature ? (
+                  /* Bereits unterschrieben — In den Warenkorb */
+                  <div>
+                    <div className="mb-6 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl flex items-start gap-3">
+                      <svg className="w-5 h-5 text-status-success mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <div>
+                        <p className="text-sm font-heading font-semibold text-green-800 dark:text-green-300">Mietvertrag unterschrieben</p>
+                        <p className="text-xs font-body text-green-700 dark:text-green-400 mt-0.5">
+                          Unterschrieben von {contractSignature.signerName}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between gap-4 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => setStep(4)}
+                        className="px-6 py-3 text-brand-steel font-heading font-semibold text-sm rounded-[10px] border border-brand-border hover:bg-brand-bg transition-colors"
+                      >
+                        Zurueck
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!breakdown || !range?.from || !product) return;
+                          // Signatur in sessionStorage speichern fuer confirm-booking
+                          try {
+                            sessionStorage.setItem('cam2rent_contract_signature', JSON.stringify(contractSignature));
+                          } catch { /* sessionStorage nicht verfuegbar */ }
+                          addItem({
+                            id: crypto.randomUUID(),
+                            productId: product.id,
+                            productName: product.name,
+                            productSlug: product.slug,
+                            rentalFrom: format(range.from, 'yyyy-MM-dd'),
+                            rentalTo: format(range.to ?? range.from, 'yyyy-MM-dd'),
+                            days: breakdown.days,
+                            accessories: selectedSet ? [] : accessories,
+                            haftung,
+                            priceRental: breakdown.rentalPrice,
+                            priceAccessories: selectedSet ? setPrice : breakdown.accessoryPrice,
+                            priceHaftung: breakdown.haftungPrice,
+                            subtotal: breakdown.rentalPrice + (selectedSet ? setPrice : breakdown.accessoryPrice) + breakdown.haftungPrice,
+                            deposit: product.deposit,
+                          });
+                          router.push('/warenkorb');
+                        }}
+                        className="flex items-center gap-2 px-8 py-3 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold text-sm rounded-[10px] hover:bg-brand-dark transition-colors"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 00-3 3h15.75m-12.75-3h11.218c1.121-2.3 2.1-4.684 2.924-7.138a60.114 60.114 0 00-16.536-1.84M7.5 14.25L5.106 5.272M6 20.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm12.75 0a.75.75 0 11-1.5 0 .75.75 0 011.5 0z" />
+                        </svg>
+                        In den Warenkorb — {fmt(effectiveTotal)} \u20ac
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <SignatureStep
+                    customerName={user?.user_metadata?.full_name ?? user?.email ?? ''}
+                    customerEmail={user?.email ?? ''}
+                    productName={product.name}
+                    accessories={selectedSet
+                      ? getFilteredSetItems()
+                      : accessories.map((id) => dbAccessories.find((a) => a.id === id)?.name ?? id)}
+                    rentalFrom={format(range.from, 'dd.MM.yyyy', { locale: de })}
+                    rentalTo={format(range.to ?? range.from, 'dd.MM.yyyy', { locale: de })}
+                    rentalDays={breakdown.days}
+                    priceTotal={effectiveTotal}
+                    deposit={product.deposit}
+                    onSigned={(data) => setContractSignature(data)}
+                    onBack={() => setStep(4)}
+                  />
+                )}
+              </div>
+            )}
           </div>
 
-          {/* ── Sidebar (nur auf Steps 1-3, nicht auf Zusammenfassung) ── */}
-          <div className={`mt-6 lg:mt-0 lg:sticky lg:top-24 lg:self-start flex flex-col gap-4 ${step === 4 ? 'hidden' : ''}`}>
+          {/* ── Sidebar (nur auf Steps 1-3, nicht auf Zusammenfassung/Vertrag) ── */}
+          <div className={`mt-6 lg:mt-0 lg:sticky lg:top-24 lg:self-start flex flex-col gap-4 ${step >= 4 ? 'hidden' : ''}`}>
             <div className="bg-white rounded-card shadow-card p-5">
               <h3 className="font-heading font-semibold text-base text-brand-black mb-4">
                 Deine Buchung

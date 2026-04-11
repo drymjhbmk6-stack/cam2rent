@@ -522,6 +522,40 @@ export default function BuchungDetailPage() {
               )}
             </Section>
 
+            {/* Mietvertrag */}
+            <Section title="Mietvertrag">
+              {booking.contract_signed ? (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-heading font-semibold bg-green-100 text-green-700">
+                      Unterschrieben
+                    </span>
+                  </div>
+                  <InfoRow
+                    label="Unterzeichnet am"
+                    value={booking.contract_signed_at ? fmtDateTime(booking.contract_signed_at) : '\u2013'}
+                  />
+                  <a
+                    href={`/api/rental-contract/${booking.id}`}
+                    target="_blank"
+                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-heading font-semibold bg-cyan-600 text-white rounded-btn hover:bg-cyan-700 transition-colors mt-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    Vertrag PDF herunterladen
+                  </a>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-heading font-semibold bg-red-100 text-red-600">
+                    Ausstehend
+                  </span>
+                  <span className="text-sm font-body text-brand-muted">Noch nicht unterschrieben</span>
+                </div>
+              )}
+            </Section>
+
             {/* Statusverlauf */}
             <Section title="Statusverlauf">
               <div className="space-y-4">
@@ -708,6 +742,15 @@ export default function BuchungDetailPage() {
                   >
                     Rechnung PDF
                   </a>
+                  {booking.contract_signed && (
+                    <a
+                      href={`/api/rental-contract/${booking.id}`}
+                      target="_blank"
+                      className="block w-full text-center px-4 py-2 text-sm font-heading font-semibold bg-teal-600 text-white rounded-btn hover:bg-teal-700 transition-colors"
+                    >
+                      Mietvertrag PDF
+                    </a>
+                  )}
                   {booking.delivery_mode === 'versand' && (
                     <a
                       href={`/api/packlist/${booking.id}`}
