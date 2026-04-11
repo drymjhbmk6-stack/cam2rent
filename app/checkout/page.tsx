@@ -154,7 +154,7 @@ function PaymentForm({
         <button
           type="submit"
           disabled={!stripe || !elements || isLoading}
-          className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-8 py-3 bg-brand-black text-white font-heading font-semibold text-sm rounded-btn hover:bg-brand-dark transition-colors disabled:opacity-40"
+          className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-8 py-3 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold text-sm rounded-btn hover:bg-brand-dark transition-colors disabled:opacity-40"
         >
           {isLoading ? (
             <>
@@ -911,7 +911,7 @@ export default function CheckoutPage() {
                     <p className="text-xs font-body text-brand-muted dark:text-gray-500">
                       Wir pruefen deinen Ausweis und senden dir einen Zahlungslink per Email.
                     </p>
-                    <a href="/konto/buchungen" className="inline-block mt-4 px-6 py-2.5 bg-brand-black text-white font-heading font-semibold text-sm rounded-btn">
+                    <a href="/konto/buchungen" className="inline-block mt-4 px-6 py-2.5 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold text-sm rounded-btn">
                       Meine Buchungen
                     </a>
                   </div>
@@ -953,7 +953,7 @@ export default function CheckoutPage() {
                   <button
                     onClick={handleProceedToPayment}
                     disabled={isCreatingIntent || !acceptsTerms || !acceptsWithdrawal}
-                    className="w-full py-4 bg-brand-black text-white font-heading font-semibold rounded-btn hover:bg-brand-dark disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                    className="w-full py-4 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold rounded-btn hover:bg-brand-dark disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
                   >
                     {isCreatingIntent ? (
                       <>

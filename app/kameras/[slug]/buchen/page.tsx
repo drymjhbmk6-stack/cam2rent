@@ -349,7 +349,7 @@ function PaymentStep({ total, onBack }: { total: number; onBack: () => void }) {
         <button
           type="submit"
           disabled={!stripe || !elements || isLoading}
-          className="flex items-center gap-2 px-8 py-3 bg-brand-black text-white font-heading font-semibold text-sm rounded-[10px] hover:bg-brand-dark transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          className="flex items-center gap-2 px-8 py-3 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold text-sm rounded-[10px] hover:bg-brand-dark transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {isLoading ? (
             <>
@@ -1008,7 +1008,7 @@ export default function BuchenPage() {
                     type="button"
                     disabled={!range?.from}
                     onClick={() => setStep(2)}
-                    className="px-8 py-3 bg-brand-black text-white font-heading font-semibold text-sm rounded-[10px] hover:bg-brand-dark transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="px-8 py-3 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold text-sm rounded-[10px] hover:bg-brand-dark transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     Weiter: Zubehör
                   </button>
@@ -1229,7 +1229,7 @@ export default function BuchenPage() {
                     type="button"
                     onClick={() => setStep(3)}
                     disabled={availableSets.length > 0 && !selectedSet}
-                    className="px-8 py-3 bg-brand-black text-white font-heading font-semibold text-sm rounded-[10px] hover:bg-brand-dark transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="px-8 py-3 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold text-sm rounded-[10px] hover:bg-brand-dark transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     Weiter: Haftung
                   </button>
@@ -1528,7 +1528,7 @@ export default function BuchenPage() {
                         : !confirmLiability
                     }
                     onClick={() => setStep(4)}
-                    className="px-8 py-3 bg-brand-black text-white font-heading font-semibold text-sm rounded-[10px] hover:bg-brand-dark transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="px-8 py-3 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold text-sm rounded-[10px] hover:bg-brand-dark transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     Weiter: Zusammenfassung
                   </button>
@@ -1855,7 +1855,7 @@ export default function BuchenPage() {
                           });
                           router.push('/checkout');
                         }}
-                        className="w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-3 bg-brand-black text-white font-heading font-semibold text-sm rounded-[10px] hover:bg-brand-dark transition-colors"
+                        className="w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-3 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold text-sm rounded-[10px] hover:bg-brand-dark transition-colors"
                       >
                         <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4" aria-hidden="true">
                           <path fillRule="evenodd" d="M10 1a4.5 4.5 0 00-4.5 4.5V9H5a2 2 0 00-2 2v6a2 2 0 002 2h10a2 2 0 002-2v-6a2 2 0 00-2-2h-.5V5.5A4.5 4.5 0 0010 1zm3 8V5.5a3 3 0 10-6 0V9h6z" clipRule="evenodd" />

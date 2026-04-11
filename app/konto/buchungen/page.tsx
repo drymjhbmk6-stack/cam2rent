@@ -231,7 +231,7 @@ function ExtendModal({ booking, onClose }: Omit<ExtendModalProps, 'onSuccess'>) 
           <button
             onClick={handleCalculate}
             disabled={!newDate || calculating}
-            className="w-full py-2.5 bg-brand-black text-white font-heading font-semibold text-sm rounded-btn hover:bg-brand-dark transition-colors disabled:opacity-40 disabled:cursor-not-allowed mb-3"
+            className="w-full py-2.5 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold text-sm rounded-btn hover:bg-brand-dark transition-colors disabled:opacity-40 disabled:cursor-not-allowed mb-3"
           >
             {calculating ? 'Wird berechnet...' : 'Preis berechnen'}
           </button>
@@ -471,7 +471,7 @@ function SignContractModal({ booking, onClose, onSuccess }: SignModalProps) {
           <button
             onClick={handleSubmit}
             disabled={!hasDrawn || !signerName.trim() || !accepted || submitting}
-            className="flex-1 px-4 py-2.5 bg-brand-black text-white rounded-btn text-sm font-heading font-semibold hover:bg-brand-dark transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="flex-1 px-4 py-2.5 bg-brand-black dark:bg-accent-blue text-white rounded-btn text-sm font-heading font-semibold hover:bg-brand-dark transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {submitting && <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
             Unterschreiben
@@ -628,7 +628,7 @@ export default function BuchungenPage() {
             </div>
             <h2 className="font-heading font-semibold text-brand-black dark:text-white mb-2">Noch keine Buchungen</h2>
             <p className="text-brand-text dark:text-gray-300 text-sm mb-6 max-w-sm mx-auto">Deine zukünftigen Buchungen erscheinen hier automatisch, sobald du eingeloggt buchst.</p>
-            <Link href="/kameras" className="inline-flex items-center gap-2 px-5 py-2.5 bg-brand-black text-white font-heading font-semibold text-sm rounded-btn hover:bg-brand-dark transition-colors">
+            <Link href="/kameras" className="inline-flex items-center gap-2 px-5 py-2.5 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold text-sm rounded-btn hover:bg-brand-dark transition-colors">
               Kameras entdecken
             </Link>
           </div>

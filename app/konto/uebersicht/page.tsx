@@ -213,7 +213,7 @@ function ProfilEdit() {
           <button
             type="submit"
             disabled={saving}
-            className="px-6 py-3 bg-brand-black text-white font-heading font-semibold rounded-btn hover:bg-brand-dark disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+            className="px-6 py-3 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold rounded-btn hover:bg-brand-dark disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
           >
             {saving ? 'Wird gespeichert…' : 'Profil speichern'}
           </button>

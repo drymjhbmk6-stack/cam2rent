@@ -23,7 +23,7 @@ export default function BetaFeedbackButton() {
         </a>
         <button
           onClick={(e) => { e.preventDefault(); setDismissed(true); }}
-          className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-brand-black text-white text-[10px] flex items-center justify-center hover:bg-gray-700 transition-colors"
+          className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-gray-800 dark:bg-gray-600 text-white text-[10px] flex items-center justify-center hover:bg-gray-700 transition-colors"
           aria-label="Schliessen"
         >
           ✕

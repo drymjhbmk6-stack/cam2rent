@@ -37,7 +37,7 @@ export default function ReferralLandingPage() {
 
           <Link
             href="/produkte"
-            className="inline-flex items-center gap-2 px-8 py-3.5 bg-brand-black text-white font-heading font-semibold rounded-btn hover:bg-brand-dark transition-colors"
+            className="inline-flex items-center gap-2 px-8 py-3.5 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold rounded-btn hover:bg-brand-dark transition-colors"
           >
             Kameras entdecken
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
