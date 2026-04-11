@@ -212,8 +212,7 @@ const s = StyleSheet.create({
   },
   colPos: { width: 30, fontSize: 10 },
   colDesc: { flex: 1, fontSize: 10 },
-  colDays: { width: 40, fontSize: 10, textAlign: 'center' },
-  colPerDay: { width: 65, fontSize: 10, textAlign: 'right' },
+  colDays: { width: 45, fontSize: 10, textAlign: 'center' },
   colTotal: { width: 75, fontSize: 10, textAlign: 'right' },
 
   // Summen
@@ -294,8 +293,7 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
     pos: number;
     description: string;
     subline?: string;
-    days: string;
-    perDay: string;
+    qty: string;
     total: number;
   }
 
@@ -305,32 +303,31 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
   // Kameras (koennen kommagetrennt sein)
   const cameras = data.productName.split(',').map((n) => n.trim());
   const rentalPerCamera = cameras.length > 1 ? data.priceRental / cameras.length : data.priceRental;
-  const perDayPerCamera = data.days > 0 ? rentalPerCamera / data.days : rentalPerCamera;
 
   for (const cam of cameras) {
     items.push({
       pos: pos++,
       description: cam,
-      subline: 'Kamera-Miete',
-      days: String(data.days),
-      perDay: fmt(perDayPerCamera),
+      subline: `Kamera-Miete (${data.days} ${data.days === 1 ? 'Tag' : 'Tage'})`,
+      qty: String(data.days),
       total: rentalPerCamera,
     });
   }
 
-  // Zubehoer
-  if (data.priceAccessories > 0 && data.accessories.length > 0) {
-    const accNames = data.accessories.map((a) =>
-      a.replace(/-[a-z0-9]{6,}$/, '').split('-').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
-    );
-    items.push({
-      pos: pos++,
-      description: accNames.join(', '),
-      subline: 'Zubehoer',
-      days: '–',
-      perDay: '–',
-      total: data.priceAccessories,
-    });
+  // Zubehoer — einzeln auflisten
+  if (data.accessories.length > 0) {
+    for (const accId of data.accessories) {
+      const name = accId.replace(/-[a-z0-9]{6,}$/, '').split('-').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+      items.push({
+        pos: pos++,
+        description: name,
+        subline: 'Zubehoer',
+        qty: '1',
+        total: data.priceAccessories > 0 && data.accessories.length > 0
+          ? data.priceAccessories / data.accessories.length
+          : 0,
+      });
+    }
   }
 
   // Haftungsschutz
@@ -339,8 +336,7 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
     items.push({
       pos: pos++,
       description: hLabel,
-      days: '–',
-      perDay: '–',
+      qty: '1',
       total: data.priceHaftung,
     });
   }
@@ -351,8 +347,7 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
       pos: pos++,
       description: data.shippingMethod === 'express' ? 'Express-Versand' : 'Standard-Versand',
       subline: 'Hin- und Ruecksendung',
-      days: '–',
-      perDay: '–',
+      qty: '1',
       total: data.shippingPrice,
     });
   }
@@ -428,8 +423,7 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
           <View style={s.tableHeader}>
             <Text style={[s.tableHeaderText, s.colPos]}>Pos</Text>
             <Text style={[s.tableHeaderText, s.colDesc]}>Beschreibung</Text>
-            <Text style={[s.tableHeaderText, s.colDays]}>Tage</Text>
-            <Text style={[s.tableHeaderText, s.colPerDay]}>/Tag</Text>
+            <Text style={[s.tableHeaderText, s.colDays]}>Menge</Text>
             <Text style={[s.tableHeaderText, s.colTotal]}>Netto</Text>
           </View>
 
@@ -442,8 +436,7 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
                   <Text style={{ fontSize: 8, color: C.grayText, marginTop: 1 }}>{item.subline}</Text>
                 )}
               </View>
-              <Text style={s.colDays}>{item.days}</Text>
-              <Text style={s.colPerDay}>{item.perDay}</Text>
+              <Text style={s.colDays}>{item.qty}</Text>
               <Text style={s.colTotal}>{fmt(item.total)}</Text>
             </View>
           ))}
@@ -479,17 +472,24 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
 
           <View style={s.divider} />
 
-          {/* ── Zahlungsinformation ── */}
-          <View style={s.noteBox}>
-            <Text style={[s.noteText, { fontFamily: 'Helvetica-Bold', color: C.black, marginBottom: 4 }]}>
-              Zahlungsinformation
-            </Text>
-            <Text style={s.noteText}>
-              Zahlung erfolgte per {data.paymentMethod || 'Stripe'}.
-              {data.stripePaymentId ? `\nZahlungs-ID: ${data.stripePaymentId}` : ''}
-              {data.deliveryMode === 'abholung' ? '\nAbholung — kein Versand.' : ''}
-            </Text>
-          </View>
+          {/* ── Bezahlt / Zahlungsinformation ── */}
+          {data.paymentMethod !== 'Ausstehend' ? (
+            <View style={[s.noteBox, { backgroundColor: '#f0fdf4', borderWidth: 1, borderColor: '#bbf7d0' }]}>
+              <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: '#16a34a' }}>
+                Bezahlt
+              </Text>
+            </View>
+          ) : (
+            <View style={s.noteBox}>
+              <Text style={[s.noteText, { fontFamily: 'Helvetica-Bold', color: C.black, marginBottom: 4 }]}>
+                Zahlung ausstehend
+              </Text>
+              <Text style={s.noteText}>
+                Bitte ueberweise den Gesamtbetrag auf das angegebene Konto.
+                {data.deliveryMode === 'abholung' ? '\nAbholung — kein Versand.' : ''}
+              </Text>
+            </View>
+          )}
 
           {/* ── Steuer-Hinweis ── */}
           <View style={[s.noteBox, { marginTop: 12 }]}>
@@ -500,8 +500,8 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
             </Text>
           </View>
 
-          {/* ── QR-Code ── */}
-          {data.qrCodeDataUrl && (
+          {/* ── QR-Code — nur wenn nicht bezahlt ── */}
+          {data.paymentMethod === 'Ausstehend' && data.qrCodeDataUrl && (
             <View style={{ marginTop: 16, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
               <Image src={data.qrCodeDataUrl} style={{ width: 72, height: 72 }} />
               <View>
