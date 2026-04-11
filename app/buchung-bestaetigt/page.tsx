@@ -1,11 +1,47 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useState, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useCart } from '@/components/CartProvider';
 import { useAuth } from '@/components/AuthProvider';
 import { createAuthBrowserClient } from '@/lib/supabase-auth';
+
+// ─── Vertrag automatisch signieren nach Buchungserstellung ──────────────────
+
+async function signContractForBooking(bookingId: string) {
+  try {
+    const raw = sessionStorage.getItem('cam2rent_contract_signature');
+    if (!raw) return;
+
+    const signature = JSON.parse(raw);
+    if (!signature?.agreedToTerms) return;
+
+    await fetch('/api/contracts/sign', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        bookingId,
+        signatureDataUrl: signature.signatureDataUrl,
+        customerName: signature.signerName,
+        agreedToTerms: true,
+        signatureMethod: signature.signatureMethod || 'canvas',
+      }),
+    });
+  } catch {
+    // Fehler beim Signieren nicht blockierend
+  }
+}
+
+async function processContractSignatures(bookingIds: string[]) {
+  for (const id of bookingIds) {
+    await signContractForBooking(id);
+  }
+  // sessionStorage aufraeumen
+  try {
+    sessionStorage.removeItem('cam2rent_contract_signature');
+  } catch {}
+}
 
 // ─── Single-item flow (from /kameras/[slug]/buchen) ──────────────────────────
 
@@ -24,7 +60,11 @@ function SingleBookingConfirmed({
     })
       .then((r) => r.json())
       .then((data) => {
-        if (data.booking_id) setBookingId(data.booking_id);
+        if (data.booking_id) {
+          setBookingId(data.booking_id);
+          // Vertrag automatisch signieren
+          processContractSignatures([data.booking_id]);
+        }
       })
       .catch(() => {});
   }, [paymentIntentId]);
@@ -44,10 +84,7 @@ function CartBookingConfirmed({
   const [bookingIds, setBookingIds] = useState<string[] | null>(null);
   const [confirmed, setConfirmed] = useState(false);
 
-  useEffect(() => {
-    if (confirmed) return;
-    if (authLoading) return; // warten bis Auth-Status bekannt ist
-
+  const handleConfirm = useCallback(async () => {
     // Read checkout context saved before payment
     let context: Record<string, unknown> | null = null;
     try {
@@ -55,66 +92,65 @@ function CartBookingConfirmed({
       if (raw) context = JSON.parse(raw);
     } catch {}
 
-    // Adresse aus Profil holen und Buchung bestätigen
-    async function confirm() {
-      let shippingAddress: string | null = null;
-      if (user && context?.deliveryMode === 'versand') {
-        const supabase = createAuthBrowserClient();
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('address_street, address_zip, address_city')
-          .eq('id', user.id)
-          .maybeSingle();
-        if (profile?.address_street) {
-          shippingAddress = [
-            profile.address_street,
-            [profile.address_zip, profile.address_city].filter(Boolean).join(' '),
-          ].filter(Boolean).join(', ');
-        }
+    // Adresse aus Profil holen
+    let shippingAddress: string | null = null;
+    if (user && context?.deliveryMode === 'versand') {
+      const supabase = createAuthBrowserClient();
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('address_street, address_zip, address_city')
+        .eq('id', user.id)
+        .maybeSingle();
+      if (profile?.address_street) {
+        shippingAddress = [
+          profile.address_street,
+          [profile.address_zip, profile.address_city].filter(Boolean).join(' '),
+        ].filter(Boolean).join(', ');
       }
-      return shippingAddress;
     }
 
     // Use cart items from context (more reliable than live cart)
     const cartItems =
       (context?.items as typeof items) ?? items;
 
-    // Auch ohne Items fortfahren — Server hat den Kontext in der DB
-    setConfirmed(true);
-
-    confirm().then((shippingAddress) => {
-      fetch('/api/confirm-cart', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          payment_intent_id: paymentIntentId,
-          items: cartItems.length ? cartItems : [],
-          customerName: context?.customerName ?? '',
-          customerEmail: context?.customerEmail ?? '',
-          userId: context?.userId ?? null,
-          deliveryMode: context?.deliveryMode ?? 'versand',
-          shippingMethod: context?.shippingMethod ?? 'standard',
-          shippingPrice: context?.shippingPrice ?? 0,
-          discountAmount: context?.discountAmount ?? 0,
-          couponCode: context?.couponCode ?? '',
-          productDiscount: context?.productDiscount ?? 0,
-          durationDiscount: context?.durationDiscount ?? 0,
-          loyaltyDiscount: context?.loyaltyDiscount ?? 0,
-          referralCode: context?.referralCode ?? '',
-          shippingAddress,
-        }),
-      })
-        .then((r) => r.json())
-        .then((data) => {
-          if (data.booking_ids) {
-            setBookingIds(data.booking_ids);
-            clearCart();
-            sessionStorage.removeItem('cam2rent_checkout_context');
-          }
-        })
-        .catch(() => {});
+    const res = await fetch('/api/confirm-cart', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        payment_intent_id: paymentIntentId,
+        items: cartItems.length ? cartItems : [],
+        customerName: context?.customerName ?? '',
+        customerEmail: context?.customerEmail ?? '',
+        userId: context?.userId ?? null,
+        deliveryMode: context?.deliveryMode ?? 'versand',
+        shippingMethod: context?.shippingMethod ?? 'standard',
+        shippingPrice: context?.shippingPrice ?? 0,
+        discountAmount: context?.discountAmount ?? 0,
+        couponCode: context?.couponCode ?? '',
+        productDiscount: context?.productDiscount ?? 0,
+        durationDiscount: context?.durationDiscount ?? 0,
+        loyaltyDiscount: context?.loyaltyDiscount ?? 0,
+        referralCode: context?.referralCode ?? '',
+        shippingAddress,
+      }),
     });
-  }, [paymentIntentId, confirmed, items, clearCart, user, authLoading]);
+    const data = await res.json();
+
+    if (data.booking_ids) {
+      setBookingIds(data.booking_ids);
+      clearCart();
+      sessionStorage.removeItem('cam2rent_checkout_context');
+      // Vertrag automatisch signieren fuer alle Buchungen
+      processContractSignatures(data.booking_ids);
+    }
+  }, [paymentIntentId, items, clearCart, user]);
+
+  useEffect(() => {
+    if (confirmed) return;
+    if (authLoading) return;
+    setConfirmed(true);
+    handleConfirm().catch(() => {});
+  }, [confirmed, authLoading, handleConfirm]);
 
   return <SuccessCard bookingIds={bookingIds} />;
 }
@@ -143,11 +179,11 @@ function SuccessCard({ bookingIds }: { bookingIds: string[] | null }) {
         </div>
 
         <h1 className="font-heading font-bold text-2xl text-brand-black dark:text-white mb-2">
-          Buchung bestätigt!
+          Buchung best&auml;tigt!
         </h1>
         <p className="font-body text-brand-steel dark:text-gray-400 mb-8">
-          Deine Zahlung war erfolgreich. Du erhältst in Kürze eine
-          Bestätigungs-E-Mail mit allen Details.
+          Deine Zahlung war erfolgreich. Du erh&auml;ltst in K&uuml;rze eine
+          Best&auml;tigungs-E-Mail mit allen Details.
         </p>
 
         {/* Buchungsnummer */}
@@ -180,9 +216,9 @@ function SuccessCard({ bookingIds }: { bookingIds: string[] | null }) {
           </p>
           <ul className="space-y-3">
             {[
-              'Check dein Postfach — deine Bestätigung ist schon unterwegs',
-              'Wir packen deine Kamera sorgfältig ein',
-              'Du erhältst eine Versandbestätigung mit Tracking-Link',
+              'Check dein Postfach — deine Best\u00e4tigung ist schon unterwegs',
+              'Wir packen deine Kamera sorgf\u00e4ltig ein',
+              'Du erh\u00e4ltst eine Versandbest\u00e4tigung mit Tracking-Link',
               'Kamera auspacken und Abenteuer starten!',
             ].map((item, i) => (
               <li
@@ -250,7 +286,7 @@ function PaymentFailed() {
             href="/warenkorb"
             className="px-6 py-3 border border-brand-border dark:border-white/10 text-brand-black dark:text-white font-heading font-semibold text-sm rounded-[10px] hover:bg-brand-bg dark:hover:bg-brand-black transition-colors"
           >
-            Zurück zum Warenkorb
+            Zur&uuml;ck zum Warenkorb
           </Link>
           <Link
             href="/kameras"
