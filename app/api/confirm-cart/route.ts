@@ -14,10 +14,24 @@ import {
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
 /**
+ * Gruppiert Cart-Items nach Mietzeitraum.
+ * Gibt ein Array von Gruppen zurueck, jede mit eigenem Zeitraum und Items.
+ */
+function groupByPeriod(items: CartItem[]) {
+  const groups: Record<string, CartItem[]> = {};
+  for (const item of items) {
+    const key = `${item.rentalFrom}_${item.rentalTo}`;
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(item);
+  }
+  return Object.values(groups);
+}
+
+/**
  * POST /api/confirm-cart
  *
  * Bestaetigt einen Warenkorb-Checkout nach erfolgreicher Stripe-Zahlung.
- * Erstellt EINE Buchung fuer den gesamten Warenkorb.
+ * Erstellt separate Buchungen pro Mietzeitraum.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -74,18 +88,17 @@ export async function POST(req: NextRequest) {
 
     const supabase = createServiceClient();
 
-    // 2. Idempotency: check if booking already exists for this payment intent
-    const { data: existing } = await supabase
+    // 2. Idempotency: check if bookings already exist for this payment intent
+    const { data: existingRows } = await supabase
       .from('bookings')
       .select('id')
-      .eq('payment_intent_id', payment_intent_id)
-      .maybeSingle();
+      .like('payment_intent_id', `${payment_intent_id}%`);
 
-    if (existing) {
+    if (existingRows && existingRows.length > 0) {
       return NextResponse.json({
         success: true,
         already_confirmed: true,
-        booking_ids: [existing.id],
+        booking_ids: existingRows.map((r) => r.id),
       });
     }
 
@@ -142,9 +155,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 3. Buchungsnummer generieren
-    const bookingId = await generateBookingId();
-
     // Deposit-Vorautorisierung bestaetigen
     let confirmedDepositIntentId: string | null = null;
     let depositStatus = 'none';
@@ -179,51 +189,74 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Preise zusammenrechnen
-    const firstItem = r_items[0];
-    const productName = r_items.length === 1
-      ? firstItem.productName
-      : r_items.map((it) => it.productName).join(', ');
-    const allAccessories = [...new Set(r_items.flatMap((it) => it.accessories))];
+    // 3. Items nach Mietzeitraum gruppieren → separate Buchungen
+    const periodGroups = groupByPeriod(r_items);
+    const totalCartSubtotal = r_items.reduce((s, it) => s + it.subtotal, 0);
+    const bookingIds: string[] = [];
 
-    // 4. EINE Buchung fuer den gesamten Warenkorb
-    const { error } = await supabase.from('bookings').insert({
-      id: bookingId,
-      payment_intent_id,
-      product_id: firstItem.productId,
-      product_name: productName,
-      rental_from: firstItem.rentalFrom,
-      rental_to: firstItem.rentalTo,
-      days: firstItem.days,
-      delivery_mode: r_deliveryMode,
-      shipping_method: r_deliveryMode === 'versand' ? r_shippingMethod : null,
-      shipping_price: r_shippingPrice,
-      haftung: firstItem.haftung,
-      accessories: allAccessories,
-      price_rental: r_items.reduce((s, it) => s + it.priceRental, 0),
-      price_accessories: r_items.reduce((s, it) => s + it.priceAccessories, 0),
-      price_haftung: r_items.reduce((s, it) => s + it.priceHaftung, 0),
-      price_total: intent.amount / 100,
-      deposit: r_items.reduce((s, it) => s + it.deposit, 0),
-      deposit_intent_id: confirmedDepositIntentId,
-      deposit_status: depositStatus,
-      status: 'confirmed',
-      user_id: r_userId ?? null,
-      customer_email: r_email,
-      customer_name: r_name,
-      shipping_address: profileAddress ?? r_shippingAddress ?? null,
-      coupon_code: r_couponCode || null,
-      discount_amount: r_discountAmount ?? 0,
-      duration_discount: r_durationDiscount ?? 0,
-      loyalty_discount: r_loyaltyDiscount ?? 0,
-    });
+    for (let gi = 0; gi < periodGroups.length; gi++) {
+      const groupItems = periodGroups[gi];
+      const firstItem = groupItems[0];
+      const groupSubtotal = groupItems.reduce((s, it) => s + it.subtotal, 0);
 
-    if (error) {
-      console.error(`Error saving booking ${bookingId}:`, error);
-      return NextResponse.json(
-        { error: 'Buchung konnte nicht gespeichert werden.' },
-        { status: 500 }
-      );
+      // Rabatte und Versand proportional aufteilen
+      const ratio = totalCartSubtotal > 0 ? groupSubtotal / totalCartSubtotal : 1 / periodGroups.length;
+      const groupDiscount = Math.round((r_discountAmount ?? 0) * ratio * 100) / 100;
+      const groupDurationDiscount = Math.round((r_durationDiscount ?? 0) * ratio * 100) / 100;
+      const groupLoyaltyDiscount = Math.round((r_loyaltyDiscount ?? 0) * ratio * 100) / 100;
+      // Versand nur bei der ersten Gruppe
+      const groupShipping = gi === 0 ? r_shippingPrice : 0;
+      const groupTotal = groupSubtotal - groupDiscount - groupDurationDiscount - groupLoyaltyDiscount + groupShipping;
+
+      const bookingId = await generateBookingId();
+      bookingIds.push(bookingId);
+
+      const productName = groupItems.length === 1
+        ? firstItem.productName
+        : groupItems.map((it) => it.productName).join(', ');
+      const allAccessories = [...new Set(groupItems.flatMap((it) => it.accessories))];
+
+      // payment_intent_id: erste Gruppe bekommt die originale ID, weitere bekommen Suffix
+      const piId = gi === 0 ? payment_intent_id : `${payment_intent_id}_g${gi + 1}`;
+
+      const { error } = await supabase.from('bookings').insert({
+        id: bookingId,
+        payment_intent_id: piId,
+        product_id: firstItem.productId,
+        product_name: productName,
+        rental_from: firstItem.rentalFrom,
+        rental_to: firstItem.rentalTo,
+        days: firstItem.days,
+        delivery_mode: r_deliveryMode,
+        shipping_method: r_deliveryMode === 'versand' ? r_shippingMethod : null,
+        shipping_price: groupShipping,
+        haftung: firstItem.haftung,
+        accessories: allAccessories,
+        price_rental: groupItems.reduce((s, it) => s + it.priceRental, 0),
+        price_accessories: groupItems.reduce((s, it) => s + it.priceAccessories, 0),
+        price_haftung: groupItems.reduce((s, it) => s + it.priceHaftung, 0),
+        price_total: Math.max(0, groupTotal),
+        deposit: groupItems.reduce((s, it) => s + it.deposit, 0),
+        deposit_intent_id: gi === 0 ? confirmedDepositIntentId : null,
+        deposit_status: gi === 0 ? depositStatus : 'none',
+        status: 'confirmed',
+        user_id: r_userId ?? null,
+        customer_email: r_email,
+        customer_name: r_name,
+        shipping_address: profileAddress ?? r_shippingAddress ?? null,
+        coupon_code: gi === 0 ? (r_couponCode || null) : null,
+        discount_amount: groupDiscount,
+        duration_discount: groupDurationDiscount,
+        loyalty_discount: groupLoyaltyDiscount,
+      });
+
+      if (error) {
+        console.error(`Error saving booking ${bookingId}:`, error);
+        return NextResponse.json(
+          { error: 'Buchung konnte nicht gespeichert werden.' },
+          { status: 500 }
+        );
+      }
     }
 
     // 5. Coupon used_count erhoehen
@@ -241,7 +274,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 6. User booking_count erhoehen
+    // 6. User booking_count erhoehen (um Anzahl der Buchungen)
     if (r_userId) {
       const { data: profile } = await supabase
         .from('profiles')
@@ -251,7 +284,7 @@ export async function POST(req: NextRequest) {
       if (profile) {
         await supabase
           .from('profiles')
-          .update({ booking_count: (profile.booking_count ?? 0) + 1 })
+          .update({ booking_count: (profile.booking_count ?? 0) + periodGroups.length })
           .eq('id', r_userId);
       }
     }
@@ -265,7 +298,7 @@ export async function POST(req: NextRequest) {
           .eq('id', r_userId)
           .maybeSingle();
 
-        const isFirstBooking = (profile?.booking_count ?? 0) <= 1;
+        const isFirstBooking = (profile?.booking_count ?? 0) <= periodGroups.length;
         if (isFirstBooking) {
           const { data: referrer } = await supabase
             .from('profiles')
@@ -300,7 +333,7 @@ export async function POST(req: NextRequest) {
               referrer_user_id: referrer.id,
               referral_code: r_referralCode,
               referred_email: r_email,
-              referred_booking_id: bookingId,
+              referred_booking_id: bookingIds[0],
               reward_coupon_id: rewardCoupon?.id ?? null,
               status: 'rewarded',
             });
@@ -335,22 +368,26 @@ export async function POST(req: NextRequest) {
       ).catch((err: unknown) => console.error('Abandoned cart recovery error:', err));
     }
 
-    // 9. Suspicious Detection
+    // 9. Suspicious Detection (fuer erste Buchung)
+    const firstGroupItems = periodGroups[0];
     detectSuspicious(supabase, {
       userId: r_userId || null,
       priceTotal: intent.amount / 100,
-      rentalFrom: firstItem.rentalFrom,
-      days: firstItem.days,
+      rentalFrom: firstGroupItems[0].rentalFrom,
+      days: firstGroupItems[0].days,
     }).then(async (result) => {
       if (result.suspicious) {
-        await supabase
-          .from('bookings')
-          .update({ suspicious: true, suspicious_reasons: result.reasons })
-          .eq('id', bookingId);
+        // Alle Buchungen als verdaechtig markieren
+        for (const bid of bookingIds) {
+          await supabase
+            .from('bookings')
+            .update({ suspicious: true, suspicious_reasons: result.reasons })
+            .eq('id', bid);
+        }
       }
     }).catch((err) => console.error('Suspicious detection error:', err));
 
-    // 10. Steuer-Config + Email senden
+    // 10. Steuer-Config + Email senden (fuer jede Buchung)
     const { data: taxSettings } = await supabase
       .from('admin_settings')
       .select('key, value')
@@ -359,33 +396,50 @@ export async function POST(req: NextRequest) {
     for (const s of taxSettings ?? []) txMap[s.key] = s.value;
 
     if (r_email) {
-      const emailData: BookingEmailData = {
-        bookingId,
-        customerName: r_name,
-        customerEmail: r_email,
-        productName,
-        rentalFrom: firstItem.rentalFrom,
-        rentalTo: firstItem.rentalTo,
-        days: firstItem.days,
-        deliveryMode: r_deliveryMode as 'versand' | 'abholung',
-        shippingMethod: r_shippingMethod,
-        haftung: firstItem.haftung,
-        accessories: allAccessories,
-        priceRental: r_items.reduce((s, it) => s + it.priceRental, 0),
-        priceAccessories: r_items.reduce((s, it) => s + it.priceAccessories, 0),
-        priceHaftung: r_items.reduce((s, it) => s + it.priceHaftung, 0),
-        priceTotal: intent.amount / 100,
-        deposit: r_items.reduce((s, it) => s + it.deposit, 0),
-        shippingPrice: r_shippingPrice,
-        taxMode: (txMap['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer',
-        taxRate: parseFloat(txMap['tax_rate'] || '19'),
-        ustId: txMap['ust_id'] || '',
-      };
+      for (let gi = 0; gi < periodGroups.length; gi++) {
+        const groupItems = periodGroups[gi];
+        const firstItem = groupItems[0];
+        const productName = groupItems.length === 1
+          ? firstItem.productName
+          : groupItems.map((it) => it.productName).join(', ');
+        const allAccessories = [...new Set(groupItems.flatMap((it) => it.accessories))];
+        const groupSubtotal = groupItems.reduce((s, it) => s + it.subtotal, 0);
+        const ratio = totalCartSubtotal > 0 ? groupSubtotal / totalCartSubtotal : 1 / periodGroups.length;
+        const groupShipping = gi === 0 ? r_shippingPrice : 0;
+        const groupTotal = groupSubtotal
+          - Math.round((r_discountAmount ?? 0) * ratio * 100) / 100
+          - Math.round((r_durationDiscount ?? 0) * ratio * 100) / 100
+          - Math.round((r_loyaltyDiscount ?? 0) * ratio * 100) / 100
+          + groupShipping;
 
-      Promise.all([
-        sendBookingConfirmation(emailData),
-        sendAdminNotification(emailData),
-      ]).catch((err) => console.error('Email send error:', err));
+        const emailData: BookingEmailData = {
+          bookingId: bookingIds[gi],
+          customerName: r_name,
+          customerEmail: r_email,
+          productName,
+          rentalFrom: firstItem.rentalFrom,
+          rentalTo: firstItem.rentalTo,
+          days: firstItem.days,
+          deliveryMode: r_deliveryMode as 'versand' | 'abholung',
+          shippingMethod: r_shippingMethod,
+          haftung: firstItem.haftung,
+          accessories: allAccessories,
+          priceRental: groupItems.reduce((s, it) => s + it.priceRental, 0),
+          priceAccessories: groupItems.reduce((s, it) => s + it.priceAccessories, 0),
+          priceHaftung: groupItems.reduce((s, it) => s + it.priceHaftung, 0),
+          priceTotal: Math.max(0, groupTotal),
+          deposit: groupItems.reduce((s, it) => s + it.deposit, 0),
+          shippingPrice: groupShipping,
+          taxMode: (txMap['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer',
+          taxRate: parseFloat(txMap['tax_rate'] || '19'),
+          ustId: txMap['ust_id'] || '',
+        };
+
+        Promise.all([
+          sendBookingConfirmation(emailData),
+          sendAdminNotification(emailData),
+        ]).catch((err) => console.error('Email send error:', err));
+      }
     }
 
     // 11. Checkout-Kontext aufraeumen
@@ -396,7 +450,7 @@ export async function POST(req: NextRequest) {
         .eq('key', `checkout_${payment_intent_id}`)
     ).catch(() => {});
 
-    return NextResponse.json({ success: true, booking_ids: [bookingId] });
+    return NextResponse.json({ success: true, booking_ids: bookingIds });
   } catch (err) {
     console.error('Confirm cart error:', err);
     return NextResponse.json(

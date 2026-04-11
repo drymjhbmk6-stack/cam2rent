@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { loadStripe } from '@stripe/stripe-js';
@@ -321,6 +321,21 @@ export default function CheckoutPage() {
     if (itemCount === 0) router.replace('/warenkorb');
   }, [itemCount, router]);
 
+  // Artikel nach Mietzeitraum gruppieren
+  const periodGroups = useMemo(() => {
+    const groups: Record<string, typeof items> = {};
+    for (const item of items) {
+      const key = `${item.rentalFrom}_${item.rentalTo}`;
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(item);
+    }
+    return Object.entries(groups).map(([key, groupItems]) => {
+      const [from, to] = key.split('_');
+      return { from, to, items: groupItems, key };
+    });
+  }, [items]);
+  const hasMultiplePeriods = periodGroups.length > 1;
+
   // ── Auto-discount calculations ──────────────────────────────────────────────
 
   // Product discount: per-item discount on rental price (e.g. Black Friday 25% off)
@@ -600,26 +615,42 @@ export default function CheckoutPage() {
               <>
                 {/* Warenkorb-Zusammenfassung */}
                 <div className="bg-white dark:bg-brand-dark rounded-card shadow-card p-5">
-                  <h2 className="font-heading font-semibold text-brand-black dark:text-white mb-4">Deine Bestellung</h2>
+                  <h2 className="font-heading font-semibold text-brand-black dark:text-white mb-4">
+                    {hasMultiplePeriods ? `Deine Bestellungen (${periodGroups.length})` : 'Deine Bestellung'}
+                  </h2>
                   <div className="space-y-3">
-                    {items.map((item, i) => (
-                      <div key={i} className="flex items-start justify-between gap-3 pb-3 border-b border-brand-border/50 dark:border-white/5 last:border-0 last:pb-0">
-                        <div className="min-w-0">
-                          <p className="font-heading font-semibold text-sm text-brand-black dark:text-white">{item.productName}</p>
-                          <p className="text-xs text-brand-muted dark:text-gray-500 mt-0.5">
-                            {item.days} {item.days === 1 ? 'Tag' : 'Tage'} · {item.rentalFrom} bis {item.rentalTo}
-                          </p>
-                          {item.accessories.length > 0 && (
-                            <div className="flex flex-wrap gap-1 mt-1.5">
-                              {item.accessories.map((accId) => (
-                                <span key={accId} className="px-1.5 py-0.5 bg-brand-bg dark:bg-white/5 rounded text-[10px] text-brand-steel dark:text-gray-400">
-                                  {accId.replace(/-[a-z0-9]{6,}$/, '').split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
-                                </span>
-                              ))}
+                    {periodGroups.map((group, gi) => (
+                      <div key={group.key}>
+                        {hasMultiplePeriods && (
+                          <div className="flex items-center gap-2 mb-2 mt-1 first:mt-0">
+                            <span className="px-2 py-0.5 bg-accent-blue/10 text-accent-blue text-[10px] font-heading font-bold rounded-full">
+                              Buchung {gi + 1}
+                            </span>
+                            <span className="text-[10px] text-brand-muted dark:text-gray-500">
+                              {group.from} bis {group.to}
+                            </span>
+                          </div>
+                        )}
+                        {group.items.map((item, i) => (
+                          <div key={i} className="flex items-start justify-between gap-3 pb-3 border-b border-brand-border/50 dark:border-white/5 last:border-0 last:pb-0">
+                            <div className="min-w-0">
+                              <p className="font-heading font-semibold text-sm text-brand-black dark:text-white">{item.productName}</p>
+                              <p className="text-xs text-brand-muted dark:text-gray-500 mt-0.5">
+                                {item.days} {item.days === 1 ? 'Tag' : 'Tage'} · {item.rentalFrom} bis {item.rentalTo}
+                              </p>
+                              {item.accessories.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-1.5">
+                                  {item.accessories.map((accId) => (
+                                    <span key={accId} className="px-1.5 py-0.5 bg-brand-bg dark:bg-white/5 rounded text-[10px] text-brand-steel dark:text-gray-400">
+                                      {accId.replace(/-[a-z0-9]{6,}$/, '').split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
                             </div>
-                          )}
-                        </div>
-                        <span className="font-heading font-semibold text-sm text-brand-black dark:text-white flex-shrink-0">{fmt(item.subtotal)}</span>
+                            <span className="font-heading font-semibold text-sm text-brand-black dark:text-white flex-shrink-0">{fmt(item.subtotal)}</span>
+                          </div>
+                        ))}
                       </div>
                     ))}
                   </div>

@@ -5,9 +5,23 @@ import type { CartItem } from '@/components/CartProvider';
 import { sendAdminNotification, type BookingEmailData } from '@/lib/email';
 
 /**
+ * Gruppiert Cart-Items nach Mietzeitraum.
+ */
+function groupByPeriod(items: CartItem[]) {
+  const groups: Record<string, CartItem[]> = {};
+  for (const item of items) {
+    const key = `${item.rentalFrom}_${item.rentalTo}`;
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(item);
+  }
+  return Object.values(groups);
+}
+
+/**
  * POST /api/create-pending-booking
  *
- * Erstellt eine Buchung im Status "pending_verification" fuer unverifizierten Kunden.
+ * Erstellt Buchungen im Status "pending_verification" fuer unverifizierten Kunden.
+ * Bei unterschiedlichen Mietzeitraeumen werden separate Buchungen erstellt.
  * Keine Zahlung — der Kunde wartet auf Admin-Freigabe + Zahlungslink.
  */
 export async function POST(req: NextRequest) {
@@ -71,9 +85,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Buchungsnummer generieren
-    const bookingId = await generateBookingId();
-
     // Lieferadresse aus Profil
     let shippingAddress: string | null = null;
     if (deliveryMode === 'versand') {
@@ -90,83 +101,106 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const firstItem = items[0];
-    const productName = items.length === 1
-      ? firstItem.productName
-      : items.map((it) => it.productName).join(', ');
-    const allAccessories = [...new Set(items.flatMap((it) => it.accessories))];
-
-    // Gesamtpreis berechnen
+    // Items nach Mietzeitraum gruppieren
+    const periodGroups = groupByPeriod(items);
+    const totalCartSubtotal = items.reduce((s, it) => s + it.subtotal, 0);
     const totalDiscount = (discountAmount ?? 0) + (durationDiscount ?? 0) + (loyaltyDiscount ?? 0);
-    const subtotal = items.reduce((s, it) => s + it.subtotal, 0);
-    const priceTotal = subtotal - totalDiscount + (shippingPrice ?? 0);
+    const bookingIds: string[] = [];
 
-    // Buchung als pending_verification speichern
-    const { error } = await supabase.from('bookings').insert({
-      id: bookingId,
-      payment_intent_id: `PENDING-${bookingId}`,
-      product_id: firstItem.productId,
-      product_name: productName,
-      rental_from: firstItem.rentalFrom,
-      rental_to: firstItem.rentalTo,
-      days: firstItem.days,
-      delivery_mode: deliveryMode,
-      shipping_method: deliveryMode === 'versand' ? shippingMethod : null,
-      shipping_price: shippingPrice ?? 0,
-      haftung: firstItem.haftung,
-      accessories: allAccessories,
-      price_rental: items.reduce((s, it) => s + it.priceRental, 0),
-      price_accessories: items.reduce((s, it) => s + it.priceAccessories, 0),
-      price_haftung: items.reduce((s, it) => s + it.priceHaftung, 0),
-      price_total: Math.max(0, priceTotal),
-      deposit: items.reduce((s, it) => s + it.deposit, 0),
-      status: 'pending_verification',
-      user_id: userId,
-      customer_email: customerEmail,
-      customer_name: customerName,
-      shipping_address: shippingAddress,
-      coupon_code: couponCode || null,
-      discount_amount: discountAmount ?? 0,
-      duration_discount: durationDiscount ?? 0,
-      loyalty_discount: loyaltyDiscount ?? 0,
-    });
+    for (let gi = 0; gi < periodGroups.length; gi++) {
+      const groupItems = periodGroups[gi];
+      const firstItem = groupItems[0];
+      const groupSubtotal = groupItems.reduce((s, it) => s + it.subtotal, 0);
 
-    if (error) {
-      console.error('Pending booking error:', error);
-      return NextResponse.json(
-        { error: 'Buchung konnte nicht gespeichert werden.' },
-        { status: 500 }
+      // Rabatte proportional aufteilen
+      const ratio = totalCartSubtotal > 0 ? groupSubtotal / totalCartSubtotal : 1 / periodGroups.length;
+      const groupDiscountAmount = Math.round((discountAmount ?? 0) * ratio * 100) / 100;
+      const groupDurationDiscount = Math.round((durationDiscount ?? 0) * ratio * 100) / 100;
+      const groupLoyaltyDiscount = Math.round((loyaltyDiscount ?? 0) * ratio * 100) / 100;
+      // Versand nur bei erster Gruppe
+      const groupShipping = gi === 0 ? (shippingPrice ?? 0) : 0;
+      const groupTotalDiscount = groupDiscountAmount + groupDurationDiscount + groupLoyaltyDiscount;
+      const priceTotal = groupSubtotal - groupTotalDiscount + groupShipping;
+
+      const bookingId = await generateBookingId();
+      bookingIds.push(bookingId);
+
+      const productName = groupItems.length === 1
+        ? firstItem.productName
+        : groupItems.map((it) => it.productName).join(', ');
+      const allAccessories = [...new Set(groupItems.flatMap((it) => it.accessories))];
+
+      const { error } = await supabase.from('bookings').insert({
+        id: bookingId,
+        payment_intent_id: gi === 0 ? `PENDING-${bookingId}` : `PENDING-${bookingId}_g${gi + 1}`,
+        product_id: firstItem.productId,
+        product_name: productName,
+        rental_from: firstItem.rentalFrom,
+        rental_to: firstItem.rentalTo,
+        days: firstItem.days,
+        delivery_mode: deliveryMode,
+        shipping_method: deliveryMode === 'versand' ? shippingMethod : null,
+        shipping_price: groupShipping,
+        haftung: firstItem.haftung,
+        accessories: allAccessories,
+        price_rental: groupItems.reduce((s, it) => s + it.priceRental, 0),
+        price_accessories: groupItems.reduce((s, it) => s + it.priceAccessories, 0),
+        price_haftung: groupItems.reduce((s, it) => s + it.priceHaftung, 0),
+        price_total: Math.max(0, priceTotal),
+        deposit: groupItems.reduce((s, it) => s + it.deposit, 0),
+        status: 'pending_verification',
+        user_id: userId,
+        customer_email: customerEmail,
+        customer_name: customerName,
+        shipping_address: shippingAddress,
+        coupon_code: gi === 0 ? (couponCode || null) : null,
+        discount_amount: groupDiscountAmount,
+        duration_discount: groupDurationDiscount,
+        loyalty_discount: groupLoyaltyDiscount,
+      });
+
+      if (error) {
+        console.error('Pending booking error:', error);
+        return NextResponse.json(
+          { error: 'Buchung konnte nicht gespeichert werden.' },
+          { status: 500 }
+        );
+      }
+
+      // Admin benachrichtigen (non-blocking)
+      const emailData: BookingEmailData = {
+        bookingId,
+        customerName,
+        customerEmail,
+        productName,
+        rentalFrom: firstItem.rentalFrom,
+        rentalTo: firstItem.rentalTo,
+        days: firstItem.days,
+        deliveryMode: deliveryMode as 'versand' | 'abholung',
+        shippingMethod,
+        haftung: firstItem.haftung,
+        accessories: allAccessories,
+        priceRental: groupItems.reduce((s, it) => s + it.priceRental, 0),
+        priceAccessories: groupItems.reduce((s, it) => s + it.priceAccessories, 0),
+        priceHaftung: groupItems.reduce((s, it) => s + it.priceHaftung, 0),
+        priceTotal: Math.max(0, priceTotal),
+        deposit: groupItems.reduce((s, it) => s + it.deposit, 0),
+        shippingPrice: groupShipping,
+        taxMode: 'kleinunternehmer',
+        taxRate: 19,
+        ustId: '',
+      };
+      sendAdminNotification(emailData).catch((err) =>
+        console.error('Admin notification error:', err)
       );
     }
 
-    // Admin benachrichtigen (non-blocking)
-    const emailData: BookingEmailData = {
-      bookingId,
-      customerName,
-      customerEmail,
-      productName,
-      rentalFrom: firstItem.rentalFrom,
-      rentalTo: firstItem.rentalTo,
-      days: firstItem.days,
-      deliveryMode: deliveryMode as 'versand' | 'abholung',
-      shippingMethod,
-      haftung: firstItem.haftung,
-      accessories: allAccessories,
-      priceRental: items.reduce((s, it) => s + it.priceRental, 0),
-      priceAccessories: items.reduce((s, it) => s + it.priceAccessories, 0),
-      priceHaftung: items.reduce((s, it) => s + it.priceHaftung, 0),
-      priceTotal: Math.max(0, priceTotal),
-      deposit: items.reduce((s, it) => s + it.deposit, 0),
-      shippingPrice: shippingPrice ?? 0,
-      taxMode: 'kleinunternehmer',
-      taxRate: 19,
-      ustId: '',
-    };
-    sendAdminNotification(emailData).catch((err) =>
-      console.error('Admin notification error:', err)
-    );
-
-    return NextResponse.json({ success: true, booking_id: bookingId });
+    // Ergebnis: bei einer Gruppe single booking_id, bei mehreren booking_ids Array
+    return NextResponse.json({
+      success: true,
+      booking_id: bookingIds[0],
+      booking_ids: bookingIds,
+    });
   } catch (err) {
     console.error('Create pending booking error:', err);
     return NextResponse.json(

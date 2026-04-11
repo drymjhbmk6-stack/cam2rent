@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCart } from '@/components/CartProvider';
@@ -25,23 +25,29 @@ export default function WarenkorbPage() {
   const router = useRouter();
   const [showDateModal, setShowDateModal] = useState(false);
 
-  // Pruefen ob alle Kameras den gleichen Zeitraum haben
-  const handleCheckout = () => {
-    if (items.length <= 1) {
-      router.push('/checkout');
-      return;
+  // Artikel nach Mietzeitraum gruppieren
+  const periodGroups = useMemo(() => {
+    const groups: Record<string, typeof items> = {};
+    for (const item of items) {
+      const key = `${item.rentalFrom}_${item.rentalTo}`;
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(item);
     }
-    const firstFrom = items[0].rentalFrom;
-    const firstTo = items[0].rentalTo;
-    const allSame = items.every((it) => it.rentalFrom === firstFrom && it.rentalTo === firstTo);
-    if (allSame) {
-      router.push('/checkout');
-    } else {
+    return Object.entries(groups).map(([key, groupItems]) => {
+      const [from, to] = key.split('_');
+      const groupTotal = groupItems.reduce((s, i) => s + i.subtotal, 0);
+      return { from, to, items: groupItems, key, total: groupTotal };
+    });
+  }, [items]);
+  const hasMultiplePeriods = periodGroups.length > 1;
+
+  const handleCheckout = () => {
+    if (hasMultiplePeriods) {
       setShowDateModal(true);
+    } else {
+      router.push('/checkout');
     }
   };
-
-  const uniquePeriods = [...new Set(items.map((it) => `${it.rentalFrom}_${it.rentalTo}`))];
 
   if (itemCount === 0) {
     return (
@@ -114,79 +120,94 @@ export default function WarenkorbPage() {
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Cart items */}
           <div className="lg:col-span-2 space-y-4">
-            {items.map((item) => (
-              <div key={item.id} className="bg-white dark:bg-brand-dark rounded-card shadow-card p-5">
-                <div className="flex items-start justify-between gap-3 mb-3">
-                  <div>
-                    <h2 className="font-heading font-semibold text-brand-black dark:text-white">
-                      {item.productName}
-                    </h2>
-                    <p className="text-xs text-brand-muted dark:text-gray-500 mt-0.5">
-                      {item.days} {item.days === 1 ? 'Tag' : 'Tage'}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => removeItem(item.id)}
-                    className="text-brand-muted dark:text-gray-500 hover:text-status-error transition-colors flex-shrink-0 p-1"
-                    aria-label="Artikel entfernen"
-                  >
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M6 18L18 6M6 6l12 12"
-                      />
-                    </svg>
-                  </button>
-                </div>
-
-                {/* Dates */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-                  <div>
-                    <p className="text-xs text-brand-muted dark:text-gray-500 mb-0.5">Mietstart</p>
-                    <p className="text-sm font-medium text-brand-black dark:text-white">
-                      {formatDate(item.rentalFrom)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-brand-muted dark:text-gray-500 mb-0.5">Rückgabe</p>
-                    <p className="text-sm font-medium text-brand-black dark:text-white">
-                      {formatDate(item.rentalTo)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-brand-muted dark:text-gray-500 mb-0.5">Miete</p>
-                    <p className="text-sm font-medium text-brand-black dark:text-white">
-                      {formatEur(item.priceRental)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-brand-muted dark:text-gray-500 mb-0.5">Gesamt</p>
-                    <p className="text-sm font-bold text-brand-black dark:text-white">
-                      {formatEur(item.subtotal)}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Zubehoer + Set + Haftung */}
-                <div className="flex flex-wrap gap-1.5">
-                  {item.haftung !== 'none' && (
-                    <span className="px-2 py-0.5 text-[10px] rounded-full bg-accent-blue-soft text-accent-blue font-medium">
-                      {item.haftung === 'standard' ? 'Standard-Schutz' : 'Premium-Schutz'}
+            {periodGroups.map((group, gi) => (
+              <div key={group.key} className="space-y-4">
+                {/* Gruppen-Header bei unterschiedlichen Zeitraeumen */}
+                {hasMultiplePeriods && (
+                  <div className="flex items-center gap-3">
+                    <span className="px-3 py-1 bg-accent-blue/10 text-accent-blue text-xs font-heading font-bold rounded-full">
+                      Buchung {gi + 1}
                     </span>
-                  )}
-                  {item.accessories.map((accId) => (
-                    <span key={accId} className="px-2 py-0.5 text-[10px] rounded-full bg-brand-bg dark:bg-white/5 text-brand-steel dark:text-gray-400">
-                      {accId.replace(/-[a-z0-9]{6,}$/, '').split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
+                    <span className="text-xs text-brand-muted dark:text-gray-500">
+                      {formatDate(group.from)} – {formatDate(group.to)} · {group.items[0].days} {group.items[0].days === 1 ? 'Tag' : 'Tage'}
                     </span>
-                  ))}
-                </div>
+                  </div>
+                )}
+                {group.items.map((item) => (
+                  <div key={item.id} className="bg-white dark:bg-brand-dark rounded-card shadow-card p-5">
+                    <div className="flex items-start justify-between gap-3 mb-3">
+                      <div>
+                        <h2 className="font-heading font-semibold text-brand-black dark:text-white">
+                          {item.productName}
+                        </h2>
+                        <p className="text-xs text-brand-muted dark:text-gray-500 mt-0.5">
+                          {item.days} {item.days === 1 ? 'Tag' : 'Tage'}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => removeItem(item.id)}
+                        className="text-brand-muted dark:text-gray-500 hover:text-status-error transition-colors flex-shrink-0 p-1"
+                        aria-label="Artikel entfernen"
+                      >
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M6 18L18 6M6 6l12 12"
+                          />
+                        </svg>
+                      </button>
+                    </div>
+
+                    {/* Dates */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                      <div>
+                        <p className="text-xs text-brand-muted dark:text-gray-500 mb-0.5">Mietstart</p>
+                        <p className="text-sm font-medium text-brand-black dark:text-white">
+                          {formatDate(item.rentalFrom)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-brand-muted dark:text-gray-500 mb-0.5">Rückgabe</p>
+                        <p className="text-sm font-medium text-brand-black dark:text-white">
+                          {formatDate(item.rentalTo)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-brand-muted dark:text-gray-500 mb-0.5">Miete</p>
+                        <p className="text-sm font-medium text-brand-black dark:text-white">
+                          {formatEur(item.priceRental)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-brand-muted dark:text-gray-500 mb-0.5">Gesamt</p>
+                        <p className="text-sm font-bold text-brand-black dark:text-white">
+                          {formatEur(item.subtotal)}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Zubehoer + Set + Haftung */}
+                    <div className="flex flex-wrap gap-1.5">
+                      {item.haftung !== 'none' && (
+                        <span className="px-2 py-0.5 text-[10px] rounded-full bg-accent-blue-soft text-accent-blue font-medium">
+                          {item.haftung === 'standard' ? 'Standard-Schutz' : 'Premium-Schutz'}
+                        </span>
+                      )}
+                      {item.accessories.map((accId) => (
+                        <span key={accId} className="px-2 py-0.5 text-[10px] rounded-full bg-brand-bg dark:bg-white/5 text-brand-steel dark:text-gray-400">
+                          {accId.replace(/-[a-z0-9]{6,}$/, '').split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </div>
             ))}
 
@@ -210,16 +231,36 @@ export default function WarenkorbPage() {
               </h2>
 
               <div className="space-y-2 mb-4">
-                {items.map((item) => (
-                  <div key={item.id} className="flex justify-between text-sm">
-                    <span className="text-brand-text dark:text-gray-300 truncate pr-2">
-                      {item.productName}
-                    </span>
-                    <span className="text-brand-black dark:text-white font-medium flex-shrink-0">
-                      {formatEur(item.subtotal)}
-                    </span>
-                  </div>
-                ))}
+                {hasMultiplePeriods ? (
+                  periodGroups.map((group, gi) => (
+                    <div key={group.key}>
+                      <p className="text-[10px] font-heading font-bold text-brand-muted dark:text-gray-500 uppercase tracking-wider mb-1 mt-2 first:mt-0">
+                        Buchung {gi + 1} · {formatDate(group.from)} – {formatDate(group.to)}
+                      </p>
+                      {group.items.map((item) => (
+                        <div key={item.id} className="flex justify-between text-sm">
+                          <span className="text-brand-text dark:text-gray-300 truncate pr-2">
+                            {item.productName}
+                          </span>
+                          <span className="text-brand-black dark:text-white font-medium flex-shrink-0">
+                            {formatEur(item.subtotal)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ))
+                ) : (
+                  items.map((item) => (
+                    <div key={item.id} className="flex justify-between text-sm">
+                      <span className="text-brand-text dark:text-gray-300 truncate pr-2">
+                        {item.productName}
+                      </span>
+                      <span className="text-brand-black dark:text-white font-medium flex-shrink-0">
+                        {formatEur(item.subtotal)}
+                      </span>
+                    </div>
+                  ))
+                )}
               </div>
 
               <div className="border-t border-brand-border dark:border-white/10 pt-3 mb-1">
@@ -270,21 +311,38 @@ export default function WarenkorbPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
           <div className="bg-white dark:bg-brand-dark rounded-card shadow-card p-6 sm:p-8 max-w-md w-full">
             <h3 className="font-heading font-bold text-lg text-brand-black dark:text-white mb-2">
-              Unterschiedliche Mietzeitraeume
+              {periodGroups.length} separate Buchungen
             </h3>
-            <p className="font-body text-sm text-brand-steel dark:text-gray-400 mb-6 leading-relaxed">
-              Deine Kameras haben unterschiedliche Mietzeitraeume.
-              Wenn du fortfaehrst, werden <strong className="text-brand-black dark:text-white">{uniquePeriods.length} separate Bestellungen</strong> angelegt — eine pro Zeitraum.
+            <p className="font-body text-sm text-brand-steel dark:text-gray-400 mb-4 leading-relaxed">
+              Deine Kameras haben unterschiedliche Mietzeiträume.
+              Es werden <strong className="text-brand-black dark:text-white">{periodGroups.length} separate Buchungen</strong> erstellt:
+            </p>
+            <div className="space-y-2 mb-6">
+              {periodGroups.map((group, gi) => (
+                <div key={group.key} className="flex items-center gap-2 text-sm">
+                  <span className="w-6 h-6 rounded-full bg-accent-blue/10 text-accent-blue text-xs font-bold flex items-center justify-center flex-shrink-0">
+                    {gi + 1}
+                  </span>
+                  <span className="text-brand-black dark:text-white font-medium">
+                    {group.items.map((it) => it.productName).join(', ')}
+                  </span>
+                  <span className="text-brand-muted dark:text-gray-500 text-xs ml-auto flex-shrink-0">
+                    {formatDate(group.from)} – {formatDate(group.to)}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <p className="font-body text-xs text-brand-muted dark:text-gray-500 mb-5">
               Du bezahlst am Ende trotzdem nur einmal.
             </p>
             <div className="flex flex-col sm:flex-row gap-3">
               <button onClick={() => setShowDateModal(false)}
                 className="flex-1 py-2.5 border border-brand-border dark:border-white/10 text-brand-black dark:text-white font-heading font-semibold text-sm rounded-btn hover:bg-brand-bg dark:hover:bg-white/5 transition-colors">
-                Zurueck zum Warenkorb
+                Zurück zum Warenkorb
               </button>
               <button onClick={() => { setShowDateModal(false); router.push('/checkout'); }}
                 className="flex-1 py-2.5 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold text-sm rounded-btn hover:bg-brand-dark transition-colors">
-                Trotzdem fortfahren →
+                Fortfahren →
               </button>
             </div>
           </div>
