@@ -79,6 +79,7 @@ export async function POST(req: NextRequest) {
 
     // Optionale Felder nur setzen wenn vorhanden (Spalten könnten fehlen)
     // Erster Versuch mit allen Feldern, bei Fehler ohne optionale Felder
+    if (body.user_id) insertData.user_id = body.user_id;
     if (bookingNotes) insertData.notes = bookingNotes;
     if (payment_status) insertData.payment_status = payment_status;
 

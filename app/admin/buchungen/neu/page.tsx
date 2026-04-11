@@ -131,6 +131,64 @@ export default function ManualBookingPage() {
   const [street, setStreet] = useState('');
   const [zip, setZip] = useState('');
   const [city, setCity] = useState('');
+  const [customerUserId, setCustomerUserId] = useState('');
+
+  // Kundensuche
+  const [showCustomerSearch, setShowCustomerSearch] = useState(false);
+  const [customerSearchQuery, setCustomerSearchQuery] = useState('');
+  const [customerSearchResults, setCustomerSearchResults] = useState<{ id: string; full_name: string; email: string; phone: string; address_city: string }[]>([]);
+  const [customerSearchLoading, setCustomerSearchLoading] = useState(false);
+  const [allCustomers, setAllCustomers] = useState<{ id: string; full_name: string; email: string; phone: string; address_street?: string; address_zip?: string; address_city: string }[]>([]);
+
+  const loadCustomers = useCallback(async () => {
+    if (allCustomers.length > 0) return;
+    setCustomerSearchLoading(true);
+    try {
+      const res = await fetch('/api/admin/kunden');
+      const data = await res.json();
+      if (data.customers) {
+        setAllCustomers(data.customers);
+        setCustomerSearchResults(data.customers.slice(0, 8));
+      }
+    } catch {}
+    setCustomerSearchLoading(false);
+  }, [allCustomers.length]);
+
+  // Kundensuche filtern
+  useEffect(() => {
+    if (!showCustomerSearch) return;
+    if (!customerSearchQuery.trim()) {
+      setCustomerSearchResults(allCustomers.slice(0, 8));
+      return;
+    }
+    const q = customerSearchQuery.toLowerCase();
+    const filtered = allCustomers.filter((c) =>
+      c.full_name.toLowerCase().includes(q) ||
+      c.email.toLowerCase().includes(q) ||
+      c.phone?.toLowerCase().includes(q) ||
+      c.address_city?.toLowerCase().includes(q)
+    );
+    setCustomerSearchResults(filtered.slice(0, 8));
+  }, [customerSearchQuery, allCustomers, showCustomerSearch]);
+
+  function selectCustomer(c: typeof allCustomers[0]) {
+    setCustomerName(c.full_name);
+    setCustomerEmail(c.email);
+    setCustomerUserId(c.id);
+    // Adresse aus Profil laden
+    fetch(`/api/admin/customer/${c.id}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.profile) {
+          if (data.profile.address_street) setStreet(data.profile.address_street);
+          if (data.profile.address_zip) setZip(data.profile.address_zip);
+          if (data.profile.address_city) setCity(data.profile.address_city);
+        }
+      })
+      .catch(() => {});
+    setShowCustomerSearch(false);
+    setCustomerSearchQuery('');
+  }
   const [selectedProducts, setSelectedProducts] = useState<{ id: string; qty: number; accessories: string[]; sets: string[]; note: string; customPrice: string; haftung: string; serial: string }[]>([]);
   const [addProductId, setAddProductId] = useState('');
   const [rentalFrom, setRentalFrom] = useState('');
@@ -541,6 +599,7 @@ export default function ManualBookingPage() {
           deposit: totalDep,
           customer_name: customerName.trim(),
           customer_email: customerEmail.trim() || null,
+          user_id: customerUserId || null,
           shipping_address: shippingAddress || null,
           payment_status: paymentStatus,
           notes: [
@@ -592,7 +651,81 @@ export default function ManualBookingPage() {
       <form onSubmit={handleSubmit}>
         {/* ─── Kundendaten ─── */}
         <div style={sectionStyle}>
-          <h2 className="font-heading font-semibold text-sm mb-4" style={headingStyle}>Kundendaten</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-heading font-semibold text-sm" style={headingStyle}>Kundendaten</h2>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => { setShowCustomerSearch(!showCustomerSearch); if (!showCustomerSearch) loadCustomers(); }}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                style={{ background: showCustomerSearch ? '#334155' : '#1e293b', color: '#06b6d4', border: '1px solid #334155' }}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                Kunde laden
+              </button>
+
+              {/* Suchdropdown */}
+              {showCustomerSearch && (
+                <div
+                  className="absolute right-0 top-full mt-2 w-80 rounded-xl shadow-xl z-50"
+                  style={{ background: '#1e293b', border: '1px solid #334155' }}
+                >
+                  <div className="p-3 border-b" style={{ borderColor: '#334155' }}>
+                    <input
+                      type="text"
+                      value={customerSearchQuery}
+                      onChange={(e) => setCustomerSearchQuery(e.target.value)}
+                      placeholder="Name, E-Mail oder Stadt..."
+                      autoFocus
+                      className="w-full text-sm"
+                      style={{ ...inputStyle, background: '#0f172a' }}
+                    />
+                  </div>
+                  <div className="max-h-64 overflow-y-auto">
+                    {customerSearchLoading ? (
+                      <p className="p-4 text-center text-xs" style={{ color: '#64748b' }}>Wird geladen...</p>
+                    ) : customerSearchResults.length === 0 ? (
+                      <p className="p-4 text-center text-xs" style={{ color: '#64748b' }}>Keine Kunden gefunden</p>
+                    ) : (
+                      customerSearchResults.map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => selectCustomer(c)}
+                          className="w-full text-left px-4 py-2.5 transition-colors hover:bg-white/5 flex items-center gap-3"
+                          style={{ borderBottom: '1px solid #1e293b' }}
+                        >
+                          <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold" style={{ background: '#06b6d420', color: '#06b6d4' }}>
+                            {c.full_name?.charAt(0)?.toUpperCase() || '?'}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium truncate" style={{ color: '#e2e8f0' }}>{c.full_name || 'Kein Name'}</p>
+                            <p className="text-xs truncate" style={{ color: '#64748b' }}>
+                              {c.email}{c.address_city ? ` · ${c.address_city}` : ''}
+                            </p>
+                          </div>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Ausgewaehlter Kunde Badge */}
+          {customerUserId && (
+            <div className="mb-4 flex items-center gap-2 px-3 py-2 rounded-lg text-xs" style={{ background: '#06b6d410', border: '1px solid #06b6d430', color: '#06b6d4' }}>
+              <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+              <span>Verknüpft mit bestehendem Kunden</span>
+              <button type="button" onClick={() => setCustomerUserId('')} className="ml-auto hover:text-white transition-colors">✕</button>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label style={labelStyle}>Name *</label>
