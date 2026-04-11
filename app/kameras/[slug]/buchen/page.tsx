@@ -257,34 +257,6 @@ function StepIndicator({ current }: { current: 1 | 2 | 3 | 4 | 5 }) {
 
 type DeliveryMode = 'abholung' | 'versand';
 
-const DELIVERY_MODES: Array<{
-  id: DeliveryMode;
-  name: string;
-  sub: string;
-  icon: React.ReactNode;
-}> = [
-  {
-    id: 'abholung',
-    name: 'Selbst abholen',
-    sub: 'Du holst die Kamera ab und bringst sie zurück',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-6 h-6" aria-hidden="true">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
-        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
-      </svg>
-    ),
-  },
-  {
-    id: 'versand',
-    name: 'Versand',
-    sub: 'Lieferung und Rücksendung per Post',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-6 h-6" aria-hidden="true">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 00-3.213-9.193 2.056 2.056 0 00-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 00-10.026 0 1.106 1.106 0 00-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12" />
-      </svg>
-    ),
-  },
-];
 
 // ─── Sidebar price ────────────────────────────────────────────────────────────
 
@@ -717,132 +689,71 @@ export default function BuchenPage() {
                   Wähle zuerst die Übergabeart, dann die reinen Miettage.
                 </p>
 
-                {/* ── Delivery mode selector ── */}
-                <div className="grid grid-cols-2 gap-3 mb-8">
-                  {DELIVERY_MODES.map((mode) => {
-                    const selected = deliveryMode === mode.id;
-                    return (
-                      <label
-                        key={mode.id}
-                        className={`flex flex-col items-center text-center gap-3 p-5 rounded-xl border-2 cursor-pointer transition-all ${
-                          selected
-                            ? 'border-accent-blue bg-accent-blue-soft/30 shadow-sm'
-                            : 'border-brand-border bg-white hover:border-brand-muted'
-                        }`}
-                      >
-                        <input
-                          type="radio"
-                          name="deliveryMode"
-                          value={mode.id}
-                          checked={selected}
-                          onChange={() => {
-                            setDeliveryMode(mode.id);
-                            setRange(undefined); // reset dates on mode change
-                          }}
-                          className="sr-only"
-                          aria-label={mode.name}
-                        />
-                        {/* Icon circle */}
-                        <div
-                          className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${
-                            selected ? 'bg-accent-blue text-white' : 'bg-brand-bg text-brand-steel'
-                          }`}
-                          aria-hidden="true"
-                        >
-                          {mode.icon}
+                {/* ── Lieferung — aufklappbar wie Checkout ── */}
+                <div className="space-y-3 mb-6">
+                  {/* Versand */}
+                  <label className={`block rounded-xl border-2 cursor-pointer transition-all overflow-hidden ${
+                    deliveryMode === 'versand' ? 'border-accent-blue' : 'border-brand-border hover:border-brand-muted'
+                  }`}>
+                    <div className={`flex items-start gap-3 p-4 ${deliveryMode === 'versand' ? 'bg-accent-blue-soft/30' : ''}`}>
+                      <input type="radio" name="deliveryMode" value="versand" checked={deliveryMode === 'versand'}
+                        onChange={() => { setDeliveryMode('versand'); setRange(undefined); }} className="mt-0.5 accent-accent-blue" />
+                      <div>
+                        <p className="font-heading font-semibold text-sm text-brand-black">Versand</p>
+                        <p className="text-xs text-brand-steel mt-0.5">Wir liefern zu dir nach Hause</p>
+                      </div>
+                    </div>
+                    {deliveryMode === 'versand' && (
+                      <div className="px-4 pb-4 pt-2 border-t border-brand-border/50" onClick={(e) => e.preventDefault()}>
+                        <div className="grid grid-cols-2 gap-2">
+                          {([
+                            { id: 'standard' as ShippingMethod, label: 'Standard', sub: '3-5 Werktage', price: dynPrices?.shipping?.standardPrice ?? shippingConfig.standardPrice },
+                            { id: 'express' as ShippingMethod, label: 'Express', sub: 'Naechster Werktag', price: dynPrices?.shipping?.expressPrice ?? shippingConfig.expressPrice },
+                          ] as const).map((opt) => (
+                            <label key={opt.id} className={`flex items-center justify-between gap-2 p-3 rounded-lg border cursor-pointer transition-colors ${
+                              shippingMethod === opt.id ? 'border-accent-blue bg-accent-blue/5' : 'border-brand-border'
+                            }`}>
+                              <div className="flex items-center gap-2">
+                                <input type="radio" name="shippingMethod" value={opt.id} checked={shippingMethod === opt.id}
+                                  onChange={() => setShippingMethod(opt.id)} className="accent-accent-blue" />
+                                <div>
+                                  <span className="font-heading font-semibold text-sm text-brand-black">{opt.label}</span>
+                                  <span className="text-xs text-brand-muted ml-1">{opt.sub}</span>
+                                </div>
+                              </div>
+                              <span className="text-sm font-semibold text-brand-black">{opt.price.toFixed(2).replace('.', ',')} €</span>
+                            </label>
+                          ))}
                         </div>
-                        <div>
-                          <p className={`font-heading font-bold text-sm ${selected ? 'text-accent-blue' : 'text-brand-black'}`}>
-                            {mode.name}
-                          </p>
-                          <p className="text-xs font-body text-brand-steel mt-0.5 leading-snug">
-                            {mode.sub}
-                          </p>
+                      </div>
+                    )}
+                  </label>
+
+                  {/* Abholung */}
+                  <label className={`block rounded-xl border-2 cursor-pointer transition-all overflow-hidden ${
+                    deliveryMode === 'abholung' ? 'border-accent-blue' : 'border-brand-border hover:border-brand-muted'
+                  }`}>
+                    <div className={`flex items-start gap-3 p-4 ${deliveryMode === 'abholung' ? 'bg-accent-blue-soft/30' : ''}`}>
+                      <input type="radio" name="deliveryMode" value="abholung" checked={deliveryMode === 'abholung'}
+                        onChange={() => { setDeliveryMode('abholung'); setRange(undefined); }} className="mt-0.5 accent-accent-blue" />
+                      <div>
+                        <p className="font-heading font-semibold text-sm text-brand-black">Selbst abholen</p>
+                        <p className="text-xs text-brand-steel mt-0.5">Du holst die Kamera bei uns ab und bringst sie zurueck</p>
+                      </div>
+                    </div>
+                    {deliveryMode === 'abholung' && (
+                      <div className="px-4 pb-4 pt-2 border-t border-brand-border/50" onClick={(e) => e.preventDefault()}>
+                        <div className="bg-brand-bg rounded-lg p-3">
+                          <p className="font-body font-semibold text-sm text-brand-black">cam2rent</p>
+                          <p className="text-xs text-brand-steel mt-1">Heimsbrunner Str. 12, 12349 Berlin</p>
+                          <p className="text-xs text-brand-muted mt-2">Abholung nach Terminvereinbarung.</p>
                         </div>
-                        {/* Selection dot */}
-                        <div
-                          className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all ${
-                            selected ? 'border-accent-blue' : 'border-brand-border'
-                          }`}
-                          aria-hidden="true"
-                        >
-                          {selected && <div className="w-2 h-2 rounded-full bg-accent-blue" />}
-                        </div>
-                      </label>
-                    );
-                  })}
+                      </div>
+                    )}
+                  </label>
                 </div>
 
-                {/* ── Shipping method (nur bei Versand) ── */}
-                {deliveryMode === 'versand' && (
-                  <div className="mb-6">
-                    <p className="text-xs font-body font-semibold text-brand-steel uppercase tracking-wider mb-3">
-                      Versandoption
-                    </p>
-                    <div className="grid grid-cols-2 gap-3">
-                      {([
-                        {
-                          id: 'standard' as ShippingMethod,
-                          name: 'Standard',
-                          sub: '3–5 Werktage',
-                          price: dynPrices?.shipping?.standardPrice ?? shippingConfig.standardPrice,
-                        },
-                        {
-                          id: 'express' as ShippingMethod,
-                          name: 'Express',
-                          sub: '24h an Werktagen',
-                          price: dynPrices?.shipping?.expressPrice ?? shippingConfig.expressPrice,
-                        },
-                      ] as const).map((method) => {
-                        const selected = shippingMethod === method.id;
-                        return (
-                          <label
-                            key={method.id}
-                            className={`flex flex-col items-center text-center gap-2 p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                              selected
-                                ? 'border-accent-blue bg-accent-blue-soft/30 shadow-sm'
-                                : 'border-brand-border bg-white hover:border-brand-muted'
-                            }`}
-                          >
-                            <input
-                              type="radio"
-                              name="shippingMethod"
-                              value={method.id}
-                              checked={selected}
-                              onChange={() => setShippingMethod(method.id)}
-                              className="sr-only"
-                              aria-label={method.name}
-                            />
-                            <div>
-                              <p className={`font-heading font-bold text-sm ${selected ? 'text-accent-blue' : 'text-brand-black'}`}>
-                                {method.name}
-                              </p>
-                              <p className="text-xs font-body text-brand-steel">{method.sub}</p>
-                              <p className={`text-xs font-heading font-semibold mt-1 ${selected ? 'text-accent-blue' : 'text-brand-black'}`}>
-                                {method.price.toFixed(2).replace('.', ',')} €
-                              </p>
-                            </div>
-                            <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all ${selected ? 'border-accent-blue' : 'border-brand-border'}`} aria-hidden="true">
-                              {selected && <div className="w-2 h-2 rounded-full bg-accent-blue" />}
-                            </div>
-                          </label>
-                        );
-                      })}
-                    </div>
-                    <p className="mt-2 text-xs font-body text-brand-muted flex items-center gap-1.5">
-                      <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 text-status-success flex-shrink-0" aria-hidden="true">
-                        <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
-                      </svg>
-                      Kostenloser Versand ab{' '}
-                      <strong className="text-status-success">
-                        {(dynPrices?.shipping?.freeShippingThreshold ?? shippingConfig.freeShippingThreshold).toFixed(2).replace('.', ',')} €
-                      </strong>{' '}
-                      Bestellwert
-                    </p>
-                  </div>
-                )}
-
-                {/* Info hint per mode */}
+                {/* Info hint */}
                 <div className={`flex items-start gap-2.5 p-3 rounded-xl mb-6 text-xs font-body ${
                   deliveryMode === 'abholung'
                     ? 'bg-accent-teal-soft text-accent-teal'
