@@ -3,6 +3,7 @@ import { Resend } from 'resend';
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 const FROM_EMAIL = process.env.FROM_EMAIL ?? 'buchungen@cam2rent.de';
+const REPLY_TO = process.env.ADMIN_EMAIL ?? 'kontakt@cam2rent.de';
 const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://cam2rent.de';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -92,6 +93,7 @@ export async function sendReturnReminder(data: ReminderEmailData): Promise<strin
 
   const result = await resend.emails.send({
     from: `cam2rent <${FROM_EMAIL}>`,
+    replyTo: REPLY_TO,
     to: data.customerEmail,
     subject,
     html,
@@ -122,6 +124,7 @@ export async function sendReturnDueToday(data: ReminderEmailData): Promise<strin
 
   const result = await resend.emails.send({
     from: `cam2rent <${FROM_EMAIL}>`,
+    replyTo: REPLY_TO,
     to: data.customerEmail,
     subject,
     html,
@@ -154,6 +157,7 @@ export async function sendOverdueNotice(data: ReminderEmailData): Promise<string
 
   const result = await resend.emails.send({
     from: `cam2rent <${FROM_EMAIL}>`,
+    replyTo: REPLY_TO,
     to: data.customerEmail,
     subject,
     html,
@@ -186,6 +190,7 @@ export async function sendSecondOverdueNotice(data: ReminderEmailData): Promise<
 
   const result = await resend.emails.send({
     from: `cam2rent <${FROM_EMAIL}>`,
+    replyTo: REPLY_TO,
     to: data.customerEmail,
     subject,
     html,
@@ -218,6 +223,7 @@ export async function sendReviewRequest(data: ReminderEmailData): Promise<string
 
   const result = await resend.emails.send({
     from: `cam2rent <${FROM_EMAIL}>`,
+    replyTo: REPLY_TO,
     to: data.customerEmail,
     subject,
     html,

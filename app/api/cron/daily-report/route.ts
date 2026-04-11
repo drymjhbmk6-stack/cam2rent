@@ -175,7 +175,8 @@ export async function GET(req: NextRequest) {
 </html>`;
 
   await resend.emails.send({
-    from: FROM_EMAIL,
+    from: `cam2rent <${FROM_EMAIL}>`,
+    replyTo: ADMIN_EMAIL,
     to: ADMIN_EMAIL,
     subject: `📊 cam2rent Tagesbericht — ${dateStr}`,
     html,

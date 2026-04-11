@@ -52,6 +52,7 @@ export async function sendAndLog(opts: {
   try {
     const result = await resend.emails.send({
       from: `${BUSINESS.name} <${FROM_EMAIL}>`,
+      replyTo: ADMIN_EMAIL,
       to: opts.to,
       subject: opts.subject,
       html: opts.html,
