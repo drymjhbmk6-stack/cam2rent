@@ -350,10 +350,16 @@ function SignContractModal({ booking, onClose, onSuccess }: SignModalProps) {
     try {
       const signatureDataUrl = canvasRef.current!.toDataURL('image/png');
 
-      const res = await fetch(`/api/rental-contract/${booking.id}/sign`, {
+      const res = await fetch('/api/contracts/sign', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ signatureDataUrl, signerName: signerName.trim() }),
+        body: JSON.stringify({
+          bookingId: booking.id,
+          signatureDataUrl,
+          customerName: signerName.trim(),
+          agreedToTerms: true,
+          signatureMethod: 'canvas',
+        }),
       });
       const data = await res.json();
 
@@ -399,14 +405,17 @@ function SignContractModal({ booking, onClose, onSuccess }: SignModalProps) {
         )}
 
         {/* Contract summary */}
-        <div className="bg-brand-bg dark:bg-brand-black rounded-lg p-4 mb-4 text-xs text-brand-text dark:text-gray-300 space-y-1.5">
+        <div className="bg-brand-bg dark:bg-brand-black rounded-lg p-4 mb-4 text-xs text-brand-text dark:text-gray-300 space-y-1.5 max-h-48 overflow-y-auto">
           <p className="font-heading font-semibold text-brand-black dark:text-white text-sm mb-2">Mietbedingungen (Zusammenfassung)</p>
-          <p>• Die Kamera ist pfleglich zu behandeln und bestimmungsgemäß zu nutzen.</p>
-          <p>• Der Mieter haftet für Schäden, die während der Mietzeit entstehen.</p>
-          <p>• Die Rückgabe muss spätestens am vereinbarten Rückgabedatum erfolgen.</p>
-          <p>• Bei verspäteter Rückgabe werden zusätzliche Mietgebühren berechnet.</p>
-          <p>• Der Vermieter behält sich vor, die Kaution bei Schäden einzubehalten.</p>
-          <p>• Stornierungsbedingungen gemäß den AGB von cam2rent.de.</p>
+          <p>• Der Mietgegenstand ist Eigentum des Vermieters. Weitervermietung ist untersagt.</p>
+          <p>• Die Kamera ist sorgsam zu behandeln und vor Wasser, Stoessen und Ueberhitzung zu schuetzen.</p>
+          <p>• Der Mieter haftet fuer alle Schaeden waehrend des Mietzeitraums.</p>
+          <p>• Maengel innerhalb von 24 Stunden nach Empfang melden.</p>
+          <p>• Bei verspaeteter Rueckgabe: Tagespreis + 5,00 EUR Bearbeitungsgebuehr pro Tag.</p>
+          <p>• Stornierung: 100% bei 7+ Tagen, 50% bei 3-7 Tagen, 0% bei weniger als 3 Tagen vor Mietbeginn.</p>
+          <p>• Vorautorisierung wird bei ordnungsgemaesser Rueckgabe freigegeben.</p>
+          <p>• Deutsches Recht. Gerichtsstand: Berlin.</p>
+          <p className="text-brand-muted dark:text-gray-500 mt-2">Der vollstaendige Vertragstext wurde beim Buchungsvorgang angezeigt.</p>
         </div>
 
         {/* Signer name */}
@@ -748,8 +757,8 @@ export default function BuchungenPage() {
                         Rechnung
                       </a>
 
-                      {/* Contract download */}
-                      {['confirmed', 'shipped', 'completed'].includes(booking.status) && (
+                      {/* Contract download — nur wenn unterschrieben */}
+                      {booking.contract_signed && (
                         <a href={`/api/rental-contract/${booking.id}`} download className="flex items-center gap-1.5 text-xs font-heading font-semibold text-brand-black dark:text-white hover:underline">
                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                           Mietvertrag
