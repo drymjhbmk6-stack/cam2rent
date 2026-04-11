@@ -100,6 +100,14 @@
   cursor: not-allowed;
 }
 
+.rdp-cam2rent .rdp-day_booked {
+  background: #fecaca !important;
+  color: #dc2626 !important;
+  text-decoration: line-through;
+  cursor: not-allowed;
+  border-radius: 8px;
+}
+
 .rdp-cam2rent .rdp-nav_button {
   border-radius: 8px;
   color: #64748b;

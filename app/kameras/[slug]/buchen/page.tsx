@@ -596,6 +596,37 @@ export default function BuchenPage() {
     }
   };
 
+  // Verfuegbarkeit fuer den Kalender laden (muss vor early return stehen)
+  const [bookedDays, setBookedDays] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    if (!product?.id) return;
+    const months: string[] = [];
+    for (let i = 0; i < 4; i++) {
+      const d = new Date();
+      d.setMonth(d.getMonth() + i);
+      months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+    }
+    Promise.all(
+      months.map((m) =>
+        fetch(`/api/availability/${product.id}?month=${m}&delivery_mode=${deliveryMode}`)
+          .then((r) => r.json())
+          .catch(() => ({ days: {} }))
+      )
+    ).then((results) => {
+      const booked = new Set<string>();
+      for (const res of results) {
+        if (res.days) {
+          for (const [date, status] of Object.entries(res.days)) {
+            if (status === 'booked' || status === 'blocked') {
+              booked.add(date);
+            }
+          }
+        }
+      }
+      setBookedDays(booked);
+    });
+  }, [product?.id, deliveryMode]);
+
   if (!product) {
     return (
       <div className="min-h-screen bg-brand-bg flex items-center justify-center">
@@ -846,13 +877,39 @@ export default function BuchenPage() {
                     showOutsideDays={false}
                     className="rdp-cam2rent"
                     disabled={(day) => {
-                      if (deliveryMode !== 'versand') return false;
-                      // Nur Enddatum einschränken: Folgetag muss Werktag sein
-                      if (range?.from && !range?.to && isBlockedEndDateForShipping(day)) return true;
+                      // Gebuchte/blockierte Tage sperren
+                      const key = format(day, 'yyyy-MM-dd');
+                      if (bookedDays.has(key)) return true;
+                      // Versand: Enddatum-Folgetag muss Werktag sein
+                      if (deliveryMode === 'versand' && range?.from && !range?.to && isBlockedEndDateForShipping(day)) return true;
                       return false;
+                    }}
+                    modifiers={{
+                      booked: (day) => bookedDays.has(format(day, 'yyyy-MM-dd')),
+                    }}
+                    modifiersClassNames={{
+                      booked: 'rdp-day_booked',
                     }}
                   />
                 </div>
+
+                {/* Legende */}
+                {bookedDays.size > 0 && (
+                  <div className="flex items-center justify-center gap-4 mt-2 text-xs font-body text-brand-muted">
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-3 h-3 rounded-sm bg-emerald-100 border border-emerald-300" />
+                      Verfuegbar
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-3 h-3 rounded-sm bg-red-200 border border-red-300" />
+                      Ausgebucht
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-3 h-3 rounded-sm bg-gray-200 border border-gray-300" />
+                      Gesperrt
+                    </div>
+                  </div>
+                )}
 
                 {/* ── Range preview ── */}
                 {range?.from && (
