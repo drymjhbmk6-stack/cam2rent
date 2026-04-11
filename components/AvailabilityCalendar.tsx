@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { isBlockedEndDateForShipping, getShippingBlockReason } from '@/lib/german-holidays';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -13,6 +14,24 @@ interface DayInfo {
 
 interface AvailabilityData {
   days: DayInfo[];
+}
+
+export type DeliveryMode = 'versand' | 'abholung';
+
+export interface CalendarRange {
+  from: string | null; // yyyy-MM-dd
+  to: string | null;
+}
+
+interface AvailabilityCalendarProps {
+  productId: string;
+  deliveryMode: DeliveryMode;
+  /** Pre-selected start date (yyyy-MM-dd) */
+  initialFrom?: string | null;
+  /** Pre-selected end date (yyyy-MM-dd) */
+  initialTo?: string | null;
+  /** Called whenever the range changes */
+  onRangeChange?: (range: CalendarRange, days: number) => void;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -28,186 +47,302 @@ function formatMonth(year: number, month: number): string {
   return `${year}-${String(month + 1).padStart(2, '0')}`;
 }
 
-/** Color config per status */
-const STATUS_CONFIG: Record<DayInfo['status'], { bg: string; text: string; label: string }> = {
-  available: { bg: 'bg-emerald-100', text: 'text-emerald-700', label: 'Verfügbar' },
-  partial:   { bg: 'bg-amber-100',   text: 'text-amber-700',   label: 'Teilweise verfügbar' },
-  booked:    { bg: 'bg-red-100',     text: 'text-red-600',     label: 'Ausgebucht' },
-  blocked:   { bg: 'bg-gray-200',    text: 'text-gray-400',    label: 'Gesperrt' },
-  past:      { bg: 'bg-gray-100',    text: 'text-gray-300',    label: 'Vergangen' },
-};
+function fmtDate(year: number, month: number, day: number): string {
+  return `${formatMonth(year, month)}-${String(day).padStart(2, '0')}`;
+}
 
-const STATUS_DOT: Record<DayInfo['status'], string> = {
-  available: 'bg-emerald-500',
-  partial:   'bg-amber-500',
-  booked:    'bg-red-500',
-  blocked:   'bg-gray-400',
-  past:      'bg-gray-300',
-};
+function parseDate(dateStr: string): Date {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
+function daysBetween(from: string, to: string): number {
+  const a = parseDate(from);
+  const b = parseDate(to);
+  return Math.round((b.getTime() - a.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+}
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export default function AvailabilityCalendar({ productId }: { productId: string }) {
+export default function AvailabilityCalendar({
+  productId,
+  deliveryMode,
+  initialFrom,
+  initialTo,
+  onRangeChange,
+}: AvailabilityCalendarProps) {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
-  const [month, setMonth] = useState(now.getMonth()); // 0-based
+  const [month, setMonth] = useState(now.getMonth());
   const [data, setData] = useState<AvailabilityData | null>(null);
   const [loading, setLoading] = useState(true);
   const cache = useRef<Record<string, AvailabilityData>>({});
 
-  // Fetch a given month, with caching
+  const [rangeFrom, setRangeFrom] = useState<string | null>(initialFrom ?? null);
+  const [rangeTo, setRangeTo] = useState<string | null>(initialTo ?? null);
+  const [hoverDate, setHoverDate] = useState<string | null>(null);
+
+  // Notify parent when range changes
+  useEffect(() => {
+    if (onRangeChange) {
+      const days = rangeFrom && rangeTo ? daysBetween(rangeFrom, rangeTo) : 0;
+      onRangeChange({ from: rangeFrom, to: rangeTo }, days);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rangeFrom, rangeTo]);
+
+  // Fetch month data (mit delivery_mode für Puffertage)
   const fetchMonth = useCallback(
     async (y: number, m: number) => {
-      const key = formatMonth(y, m);
+      const key = `${formatMonth(y, m)}_${deliveryMode}`;
       if (cache.current[key]) return cache.current[key];
-
-      const res = await fetch(`/api/availability/${productId}?month=${key}`);
+      const res = await fetch(`/api/availability/${productId}?month=${formatMonth(y, m)}&delivery_mode=${deliveryMode}`);
       if (!res.ok) return null;
       const json: AvailabilityData = await res.json();
       cache.current[key] = json;
       return json;
     },
-    [productId]
+    [productId, deliveryMode]
   );
 
-  // Load current month + prefetch next
+  // Cache leeren wenn delivery_mode wechselt
+  useEffect(() => {
+    cache.current = {};
+  }, [deliveryMode]);
+
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-
     fetchMonth(year, month).then((result) => {
-      if (!cancelled) {
-        setData(result);
-        setLoading(false);
-      }
+      if (!cancelled) { setData(result); setLoading(false); }
     });
-
     // Prefetch next month
     const nextM = month === 11 ? 0 : month + 1;
     const nextY = month === 11 ? year + 1 : year;
     fetchMonth(nextY, nextM);
-
     return () => { cancelled = true; };
   }, [year, month, fetchMonth]);
 
-  // Navigation handlers
+  // Navigation
+  const isPrevDisabled = year === now.getFullYear() && month === now.getMonth();
+  const maxNext = new Date(now.getFullYear(), now.getMonth() + 6, 1);
+  const isNextDisabled = new Date(year, month + 1, 1) > maxNext;
+
   const goPrev = () => {
-    // Don't go before current month
-    const nowMonth = now.getMonth();
-    const nowYear = now.getFullYear();
-    if (year === nowYear && month === nowMonth) return;
+    if (isPrevDisabled) return;
     if (month === 0) { setMonth(11); setYear(year - 1); }
     else setMonth(month - 1);
   };
 
   const goNext = () => {
-    // Allow up to 6 months ahead
-    const maxDate = new Date(now.getFullYear(), now.getMonth() + 6, 1);
-    const next = new Date(year, month + 1, 1);
-    if (next > maxDate) return;
+    if (isNextDisabled) return;
     if (month === 11) { setMonth(0); setYear(year + 1); }
     else setMonth(month + 1);
   };
 
-  // Build calendar grid
-  // First day of month: getDay() returns 0=Sun,1=Mon...6=Sat -> convert to Mo=0
+  // Calendar grid
   const firstDayOfWeek = new Date(year, month, 1).getDay();
-  const startOffset = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1; // Mo-based
+  const startOffset = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1;
   const daysInMonth = new Date(year, month + 1, 0).getDate();
 
-  // Map day data by date string
   const dayMap = new Map<string, DayInfo>();
   if (data?.days) {
     for (const d of data.days) dayMap.set(d.date, d);
   }
 
-  const isPrevDisabled = year === now.getFullYear() && month === now.getMonth();
-  const maxNext = new Date(now.getFullYear(), now.getMonth() + 6, 1);
-  const isNextDisabled = new Date(year, month + 1, 1) > maxNext;
+  // Check if a day is selectable
+  const isChoosingEnd = !!rangeFrom && !rangeTo;
+
+  function isDaySelectable(dateStr: string, info: DayInfo | undefined): boolean {
+    if (!info) return false;
+    const effectiveStatus = info.status === 'partial' ? 'available' : info.status;
+    if (effectiveStatus !== 'available') return false;
+    const minDaysAhead = deliveryMode === 'abholung' ? 2 : 3;
+    const minDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + minDaysAhead);
+    const dayDate = parseDate(dateStr);
+    if (dayDate < minDate) return false;
+    // Versand-Enddatum: gesperrt wenn Folgetag Sonn-/Feiertag
+    if (deliveryMode === 'versand' && isChoosingEnd) {
+      if (isBlockedEndDateForShipping(dayDate)) return false;
+    }
+    return true;
+  }
+
+  // Handle day click
+  function handleDayClick(dateStr: string) {
+    if (!rangeFrom || rangeTo) {
+      setRangeFrom(dateStr);
+      setRangeTo(null);
+    } else {
+      if (dateStr < rangeFrom) {
+        setRangeFrom(dateStr);
+        setRangeTo(null);
+      } else {
+        setRangeTo(dateStr);
+      }
+    }
+  }
+
+  // Check if day is in range
+  function isInRange(dateStr: string): boolean {
+    if (!rangeFrom) return false;
+    const end = rangeTo || hoverDate;
+    if (!end) return dateStr === rangeFrom;
+    if (end < rangeFrom) return false;
+    return dateStr >= rangeFrom && dateStr <= end;
+  }
+
+  function isRangeStart(dateStr: string): boolean {
+    return dateStr === rangeFrom;
+  }
+
+  function isRangeEnd(dateStr: string): boolean {
+    return dateStr === (rangeTo || (hoverDate && !rangeTo && rangeFrom && hoverDate >= rangeFrom ? hoverDate : null));
+  }
+
+  // Reset range when delivery mode changes
+  useEffect(() => {
+    setRangeFrom(null);
+    setRangeTo(null);
+  }, [deliveryMode]);
+
+  // Display status (partial → available)
+  function getDisplayStatus(info: DayInfo): 'available' | 'booked' | 'blocked' | 'past' {
+    if (info.status === 'partial') return 'available';
+    return info.status as 'available' | 'booked' | 'blocked' | 'past';
+  }
+
+  const STATUS_CONFIG = {
+    available: { bg: 'bg-emerald-100 dark:bg-emerald-900/30', text: 'text-emerald-700 dark:text-emerald-400', label: 'Verfügbar' },
+    booked:    { bg: 'bg-red-100 dark:bg-red-900/30',         text: 'text-red-600 dark:text-red-400',         label: 'Ausgebucht' },
+    blocked:   { bg: 'bg-gray-200 dark:bg-gray-700',           text: 'text-gray-400 dark:text-gray-500',       label: 'Gesperrt' },
+    past:      { bg: 'bg-gray-100 dark:bg-gray-800',           text: 'text-gray-300 dark:text-gray-600',       label: 'Vergangen' },
+  };
+
+  const STATUS_DOT = {
+    available: 'bg-emerald-500',
+    booked:    'bg-red-500',
+    blocked:   'bg-gray-400',
+  };
 
   return (
-    <div className="bg-white rounded-card shadow-card p-5 sm:p-6">
-      {/* Header: month navigation */}
-      <div className="flex items-center justify-between mb-4">
+    <div className="bg-white dark:bg-gray-800 rounded-card shadow-card dark:shadow-gray-900/50 p-4 sm:p-5">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-3">
         <button
           type="button"
           onClick={goPrev}
           disabled={isPrevDisabled}
-          className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+          className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
           aria-label="Vorheriger Monat"
         >
-          <svg className="w-5 h-5 text-brand-steel" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-4 h-4 text-brand-steel dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
         </button>
-
-        <h3 className="font-heading font-bold text-brand-black text-base sm:text-lg">
+        <h3 className="font-heading font-bold text-brand-black dark:text-gray-100 text-sm">
           {MONTH_NAMES[month]} {year}
         </h3>
-
         <button
           type="button"
           onClick={goNext}
           disabled={isNextDisabled}
-          className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+          className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
           aria-label="Nächster Monat"
         >
-          <svg className="w-5 h-5 text-brand-steel" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-4 h-4 text-brand-steel dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
           </svg>
         </button>
       </div>
 
       {/* Weekday headers */}
-      <div className="grid grid-cols-7 gap-1 mb-1">
+      <div className="grid grid-cols-7 gap-0.5 mb-0.5">
         {WEEKDAYS.map((wd) => (
-          <div
-            key={wd}
-            className="text-center text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider py-1"
-          >
+          <div key={wd} className="text-center text-[10px] font-heading font-semibold text-brand-muted dark:text-gray-500 uppercase py-1">
             {wd}
           </div>
         ))}
       </div>
 
       {/* Calendar grid */}
-      <div className="grid grid-cols-7 gap-1">
-        {/* Empty cells for offset */}
+      <div className="grid grid-cols-7 gap-0.5">
         {Array.from({ length: startOffset }).map((_, i) => (
           <div key={`empty-${i}`} className="aspect-square" />
         ))}
-
-        {/* Day cells */}
         {Array.from({ length: daysInMonth }).map((_, i) => {
           const dayNum = i + 1;
-          const dateStr = `${formatMonth(year, month)}-${String(dayNum).padStart(2, '0')}`;
+          const dateStr = fmtDate(year, month, dayNum);
           const info = dayMap.get(dateStr);
 
           if (loading || !info) {
             return (
-              <div
-                key={dayNum}
-                className="aspect-square rounded-lg bg-gray-50 flex items-center justify-center"
-              >
-                <span className="text-xs text-gray-300">{dayNum}</span>
+              <div key={dayNum} className="aspect-square rounded-md bg-gray-50 dark:bg-gray-800 flex items-center justify-center">
+                <span className="text-[11px] text-gray-300 dark:text-gray-600">{dayNum}</span>
               </div>
             );
           }
 
-          const cfg = STATUS_CONFIG[info.status];
+          const displayStatus = getDisplayStatus(info);
+          const selectable = isDaySelectable(dateStr, info);
+          const inRange = isInRange(dateStr);
+          const isStart = isRangeStart(dateStr);
+          const isEnd = isRangeEnd(dateStr);
+          const cfg = STATUS_CONFIG[displayStatus];
+
+          const dayDate = parseDate(dateStr);
+          const blockReason = deliveryMode === 'versand' && isChoosingEnd && !selectable
+            ? getShippingBlockReason(dayDate, true)
+            : null;
+
+          let bgClass = cfg.bg;
+          let textClass = cfg.text;
+          let cursor = 'cursor-default';
+          let ringClass = '';
+
+          if (selectable) {
+            cursor = 'cursor-pointer';
+            if (inRange) {
+              bgClass = 'bg-accent-blue/20 dark:bg-accent-blue/30';
+              textClass = 'text-accent-blue dark:text-blue-300';
+            }
+            if (isStart || isEnd) {
+              bgClass = 'bg-accent-blue';
+              textClass = 'text-white';
+              ringClass = 'ring-2 ring-accent-blue ring-offset-1 dark:ring-offset-gray-800';
+            }
+          } else if (isStart) {
+            bgClass = 'bg-accent-blue';
+            textClass = 'text-white';
+            ringClass = 'ring-2 ring-accent-blue ring-offset-1 dark:ring-offset-gray-800';
+          } else if (blockReason) {
+            bgClass = 'bg-gray-100 dark:bg-gray-700';
+            textClass = 'text-gray-400 dark:text-gray-500';
+          }
+
+          const tooltip = blockReason
+            ?? (displayStatus === 'available' ? 'Verfügbar' : cfg.label);
+
           return (
-            <div
-              key={dayNum}
-              className={`aspect-square rounded-lg ${cfg.bg} flex flex-col items-center justify-center transition-colors relative group`}
-              title={`${dateStr}: ${info.available}/${info.total} verfügbar`}
-            >
-              <span className={`text-sm font-heading font-semibold ${cfg.text}`}>
-                {dayNum}
-              </span>
-              {info.status !== 'past' && info.status !== 'blocked' && (
-                <span className={`text-[9px] font-body ${cfg.text} opacity-70 leading-none`}>
-                  {info.available}/{info.total}
-                </span>
+            <div key={dayNum} className="relative group">
+              <button
+                type="button"
+                disabled={!selectable}
+                onClick={() => selectable && handleDayClick(dateStr)}
+                onMouseEnter={() => {
+                  if (selectable && rangeFrom && !rangeTo) setHoverDate(dateStr);
+                }}
+                onMouseLeave={() => setHoverDate(null)}
+                className={`w-full aspect-square rounded-md ${bgClass} ${textClass} ${cursor} ${ringClass} flex items-center justify-center transition-all disabled:cursor-default`}
+                title={tooltip}
+              >
+                <span className="text-[11px] font-heading font-semibold">{dayNum}</span>
+              </button>
+              {blockReason && (
+                <div className="hidden group-hover:block absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 rounded-md text-[10px] font-body whitespace-nowrap z-50 pointer-events-none"
+                  style={{ background: '#0f172a', color: '#f1f5f9', border: '1px solid #334155' }}>
+                  {blockReason}
+                </div>
               )}
             </div>
           );
@@ -215,14 +350,29 @@ export default function AvailabilityCalendar({ productId }: { productId: string 
       </div>
 
       {/* Legend */}
-      <div className="mt-4 pt-3 border-t border-brand-border flex flex-wrap gap-x-4 gap-y-1.5">
-        {(['available', 'partial', 'booked', 'blocked'] as const).map((status) => (
-          <div key={status} className="flex items-center gap-1.5">
-            <span className={`w-2.5 h-2.5 rounded-full ${STATUS_DOT[status]}`} />
-            <span className="text-xs font-body text-brand-steel">{STATUS_CONFIG[status].label}</span>
+      <div className="mt-3 pt-2 border-t border-brand-border dark:border-gray-700 flex flex-wrap gap-x-3 gap-y-1">
+        {(['available', 'booked', 'blocked'] as const).map((status) => (
+          <div key={status} className="flex items-center gap-1">
+            <span className={`w-2 h-2 rounded-full ${STATUS_DOT[status]}`} />
+            <span className="text-[10px] font-body text-brand-steel dark:text-gray-400">{STATUS_CONFIG[status].label}</span>
           </div>
         ))}
       </div>
+
+      {/* Startdatum gewählt, Enddatum noch offen */}
+      {rangeFrom && !rangeTo && (
+        <div className="mt-3 bg-accent-blue-soft/50 dark:bg-accent-blue/5 border border-accent-blue/10 rounded-[10px] p-3">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs font-body text-accent-blue/70 dark:text-blue-300/70">Startdatum</span>
+            <span className="text-xs font-heading font-bold text-accent-blue dark:text-blue-300">
+              {parseDate(rangeFrom).toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })}
+            </span>
+          </div>
+          <p className="text-[10px] font-body text-accent-blue/50 dark:text-blue-300/50">
+            Wähle jetzt das Enddatum im Kalender
+          </p>
+        </div>
+      )}
     </div>
   );
 }

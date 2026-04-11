@@ -6,20 +6,20 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/components/AuthProvider';
 import { useCart } from '@/components/CartProvider';
 import Link from 'next/link';
-import { DayPicker } from 'react-day-picker';
-import type { DateRange } from 'react-day-picker';
 import { de } from 'date-fns/locale';
 import { differenceInCalendarDays, format, addDays, subDays } from 'date-fns';
 import { getPriceForDays, type Product } from '@/data/products';
 import { useProducts } from '@/components/ProductsProvider';
 import { getAccessoryPrice, type Accessory } from '@/data/accessories';
 import type { RentalSet } from '@/data/sets';
-import 'react-day-picker/dist/style.css';
 import { loadStripe } from '@stripe/stripe-js';
+import AvailabilityCalendar, { type CalendarRange } from '@/components/AvailabilityCalendar';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { shippingConfig, calcShipping, type ShippingMethod } from '@/data/shipping';
-import { isBlockedEndDateForShipping } from '@/lib/german-holidays';
 import { calcPriceFromKeyDays, calcPriceFromTable, type PriceConfig, type AdminProduct } from '@/lib/price-config';
+
+/** Inline type to replace react-day-picker's DateRange */
+type DateRange = { from: Date; to?: Date };
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
 
@@ -571,36 +571,21 @@ export default function BuchenPage() {
     }
   };
 
-  // Verfuegbarkeit fuer den Kalender laden (muss vor early return stehen)
-  const [bookedDays, setBookedDays] = useState<Set<string>>(new Set());
-  useEffect(() => {
-    if (!product?.id) return;
-    const months: string[] = [];
-    for (let i = 0; i < 6; i++) {
-      const d = new Date();
-      d.setMonth(d.getMonth() + i);
-      months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+  // Handler fuer AvailabilityCalendar: String-Daten → DateRange konvertieren
+  const handleCalendarRangeChange = useCallback((calRange: CalendarRange) => {
+    if (!calRange.from) {
+      setRange(undefined);
+      return;
     }
-    Promise.all(
-      months.map((m) =>
-        fetch(`/api/availability/${product.id}?month=${m}&delivery_mode=${deliveryMode}`)
-          .then((r) => r.json())
-          .catch(() => ({ days: {} }))
-      )
-    ).then((results) => {
-      const booked = new Set<string>();
-      for (const res of results) {
-        if (res.days) {
-          for (const [date, status] of Object.entries(res.days)) {
-            if (status === 'booked' || status === 'blocked') {
-              booked.add(date);
-            }
-          }
-        }
-      }
-      setBookedDays(booked);
-    });
-  }, [product?.id, deliveryMode]);
+    const [fy, fm, fd] = calRange.from.split('-').map(Number);
+    const fromDate = new Date(fy, fm - 1, fd);
+    if (calRange.to) {
+      const [ty, tm, td] = calRange.to.split('-').map(Number);
+      setRange({ from: fromDate, to: new Date(ty, tm - 1, td) });
+    } else {
+      setRange({ from: fromDate });
+    }
+  }, []);
 
   if (!product) {
     return (
@@ -629,9 +614,6 @@ export default function BuchenPage() {
 
   // Effective total including set price
   const effectiveTotal = breakdown ? breakdown.total + setPrice : 0;
-
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
 
   return (
     <div className="min-h-screen bg-brand-bg">
@@ -776,53 +758,18 @@ export default function BuchenPage() {
                   )}
                 </div>
 
-                {/* ── Date picker ── */}
+                {/* ── Kalender (Verfügbarkeit + Auswahl) ── */}
                 <p className="text-xs font-body font-semibold text-brand-steel uppercase tracking-wider mb-3">
                   Miettage wählen
                 </p>
-                <div className="flex justify-center overflow-x-auto">
-                  <DayPicker
-                    mode="range"
-                    selected={range}
-                    onSelect={setRange}
-                    locale={de}
-                    fromDate={addDays(today, deliveryMode === 'abholung' ? 2 : 3)}
-                    numberOfMonths={2}
-                    showOutsideDays={false}
-                    className="rdp-cam2rent"
-                    disabled={(day) => {
-                      // Gebuchte/blockierte Tage sperren
-                      const key = format(day, 'yyyy-MM-dd');
-                      if (bookedDays.has(key)) return true;
-                      // Versand: Enddatum-Folgetag muss Werktag sein
-                      if (deliveryMode === 'versand' && range?.from && !range?.to && isBlockedEndDateForShipping(day)) return true;
-                      return false;
-                    }}
-                    modifiers={{
-                      booked: (day) => bookedDays.has(format(day, 'yyyy-MM-dd')),
-                    }}
-                    modifiersClassNames={{
-                      booked: 'rdp-day_booked',
-                    }}
+                {product?.id && (
+                  <AvailabilityCalendar
+                    productId={product.id}
+                    deliveryMode={deliveryMode}
+                    initialFrom={preFrom}
+                    initialTo={preTo}
+                    onRangeChange={handleCalendarRangeChange}
                   />
-                </div>
-
-                {/* Legende */}
-                {bookedDays.size > 0 && (
-                  <div className="flex items-center justify-center gap-4 mt-2 text-xs font-body text-brand-muted">
-                    <div className="flex items-center gap-1.5">
-                      <span className="w-3 h-3 rounded-sm bg-emerald-100 border border-emerald-300" />
-                      Verfuegbar
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="w-3 h-3 rounded-sm bg-red-200 border border-red-300" />
-                      Ausgebucht
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="w-3 h-3 rounded-sm bg-gray-200 border border-gray-300" />
-                      Gesperrt
-                    </div>
-                  </div>
                 )}
 
                 {/* ── Range preview ── */}
