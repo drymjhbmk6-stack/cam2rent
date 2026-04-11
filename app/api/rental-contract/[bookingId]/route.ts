@@ -4,12 +4,13 @@ import { cookies } from 'next/headers';
 import { createServiceClient } from '@/lib/supabase';
 import { renderToBuffer, type DocumentProps } from '@react-pdf/renderer';
 import { createElement, type ReactElement } from 'react';
-import { ContractPDF, type ContractData } from '@/lib/contract-pdf';
+import { RentalContractPDF, type RentalContractData } from '@/lib/contracts/contract-template';
 import { ensureBusinessConfig } from '@/lib/load-business-config';
 
 /**
  * GET /api/rental-contract/[bookingId]
- * Generate and download rental contract PDF.
+ * Mietvertrag-PDF generieren und herunterladen.
+ * Nutzt die neue umfassende Vertragsvorlage (§1-§12).
  */
 export async function GET(
   _req: NextRequest,
@@ -60,11 +61,10 @@ export async function GET(
     return NextResponse.json({ error: 'Buchung nicht gefunden.' }, { status: 404 });
   }
 
-  // Build contract data
-  const contractDate = new Date().toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
-
-  // Get customer profile for address
-  let customerAddress = '';
+  // Kundenprofil laden
+  let customerStreet = '';
+  let customerZip = '';
+  let customerCity = '';
   if (booking.user_id) {
     const { data: profile } = await supabase
       .from('profiles')
@@ -73,64 +73,134 @@ export async function GET(
       .single();
 
     if (profile?.address_street) {
-      customerAddress = `${profile.address_street}, ${profile.address_zip} ${profile.address_city}`;
+      customerStreet = profile.address_street;
+      customerZip = profile.address_zip || '';
+      customerCity = profile.address_city || '';
     }
   }
 
-  // Get signature if signed
+  // Signatur laden (aus rental_agreements oder altem signatures-Bucket)
   let signatureDataUrl: string | undefined;
-  if (booking.contract_signed && booking.contract_signature_url) {
+  let signatureMethod: 'canvas' | 'typed' = 'canvas';
+  let signerName = booking.contract_signer_name || booking.customer_name || 'Kunde';
+  let signedAt = '';
+  let ipAddress = '';
+  let contractHash = '';
+
+  // Zuerst in rental_agreements nachschauen (neues System)
+  const { data: agreement } = await supabase
+    .from('rental_agreements')
+    .select('*')
+    .eq('booking_id', bookingId)
+    .single();
+
+  if (agreement) {
+    signerName = agreement.signed_by_name;
+    signatureMethod = agreement.signature_method;
+    ipAddress = agreement.ip_address;
+    contractHash = agreement.contract_hash;
+    signedAt = new Date(agreement.signed_at).toLocaleString('de-DE', {
+      day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+    });
+
+    // PDF aus Storage laden wenn vorhanden
+    if (agreement.pdf_url) {
+      const storagePath = agreement.pdf_url.replace('contracts/', '');
+      const { data: signedUrlData } = await supabase.storage
+        .from('contracts')
+        .createSignedUrl(storagePath, 60);
+      if (signedUrlData?.signedUrl) {
+        try {
+          const pdfRes = await fetch(signedUrlData.signedUrl);
+          const pdfBuffer = await pdfRes.arrayBuffer();
+          const contractNumber = bookingId.replace('BK-', 'MV-');
+          return new NextResponse(new Uint8Array(pdfBuffer), {
+            headers: {
+              'Content-Type': 'application/pdf',
+              'Content-Disposition': `attachment; filename="Mietvertrag-${contractNumber}.pdf"`,
+            },
+          });
+        } catch {
+          // Fallback: PDF neu generieren
+        }
+      }
+    }
+  } else if (booking.contract_signed && booking.contract_signature_url) {
+    // Fallback: altes System (signatures-Bucket)
     try {
       const { data: signedUrlData } = await supabase.storage
         .from('signatures')
         .createSignedUrl(booking.contract_signature_url, 60);
       if (signedUrlData?.signedUrl) {
-        // Fetch the image and convert to base64 for PDF embedding
         const imgRes = await fetch(signedUrlData.signedUrl);
         const imgBuffer = await imgRes.arrayBuffer();
         const base64 = Buffer.from(imgBuffer).toString('base64');
         signatureDataUrl = `data:image/png;base64,${base64}`;
       }
     } catch {
-      // Ignore signature loading errors
+      // Signatur-Ladefehler ignorieren
     }
+    signedAt = booking.contract_signed_at
+      ? new Date(booking.contract_signed_at).toLocaleString('de-DE', {
+          day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+        })
+      : '';
   }
 
-  // Fetch tax config
+  // Steuer-Konfiguration
   const { data: taxSettings } = await supabase
     .from('admin_settings')
     .select('key, value')
-    .in('key', ['tax_mode', 'tax_rate', 'ust_id']);
+    .in('key', ['tax_mode', 'tax_rate']);
 
   const taxMap: Record<string, string> = {};
   for (const s of taxSettings ?? []) taxMap[s.key] = s.value;
+  const taxMode = (taxMap['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer';
 
-  const contractData: ContractData = {
+  // Datumsformatierung
+  const fmtDate = (iso: string) => {
+    if (!iso) return '';
+    const [y, m, d] = iso.split('T')[0].split('-');
+    return `${d}.${m}.${y}`;
+  };
+
+  const contractDate = new Date().toLocaleDateString('de-DE', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+  });
+
+  const contractData: RentalContractData = {
     bookingId,
+    bookingNumber: bookingId,
     contractDate,
     customerName: booking.customer_name || 'Kunde',
     customerEmail: booking.customer_email || '',
-    customerAddress,
+    customerStreet,
+    customerZip,
+    customerCity,
     productName: booking.product_name,
-    rentalFrom: booking.rental_from,
-    rentalTo: booking.rental_to,
-    days: booking.days,
-    priceTotal: booking.price_total,
+    accessories: Array.isArray(booking.accessories) ? booking.accessories : [],
+    rentalFrom: fmtDate(booking.rental_from),
+    rentalTo: fmtDate(booking.rental_to),
+    rentalDays: booking.days || 1,
+    priceRental: booking.price_rental || 0,
+    priceAccessories: booking.price_accessories || 0,
+    priceHaftung: booking.price_haftung || 0,
+    priceShipping: booking.shipping_price || 0,
+    priceTotal: booking.price_total || 0,
     deposit: booking.deposit || 0,
-    haftung: booking.haftung || 'none',
-    signatureDataUrl,
-    signedAt: booking.contract_signed_at
-      ? new Date(booking.contract_signed_at).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-      : undefined,
-    signerName: booking.contract_signer_name,
-    taxMode: (taxMap['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer',
+    taxMode,
     taxRate: parseFloat(taxMap['tax_rate'] || '19'),
-    ustId: taxMap['ust_id'] || '',
+    signatureDataUrl,
+    signatureMethod,
+    signerName,
+    signedAt: signedAt || contractDate,
+    ipAddress: ipAddress || '',
+    contractHash: contractHash || '',
   };
 
-  // Generate PDF
+  // PDF generieren
   const pdfBuffer = await renderToBuffer(
-    createElement(ContractPDF, { data: contractData }) as ReactElement<DocumentProps>
+    createElement(RentalContractPDF, { data: contractData }) as ReactElement<DocumentProps>
   );
 
   const contractNumber = bookingId.replace('BK-', 'MV-');
