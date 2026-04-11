@@ -35,11 +35,7 @@ function fmt(n: number) {
   }).format(n);
 }
 
-function extractVat(gross: number, rate = 19) {
-  const net = gross / (1 + rate / 100);
-  const vat = gross - net;
-  return { net, vat };
-}
+// extractVat entfernt — wird in der neuen Zusammenfassung nicht mehr gebraucht
 
 type DeliveryMode = 'versand' | 'abholung';
 
@@ -237,7 +233,7 @@ export default function CheckoutPage() {
 
   // Tax config
   const [taxMode, setTaxMode] = useState<'kleinunternehmer' | 'regelbesteuerung'>('kleinunternehmer');
-  const [taxRate, setTaxRate] = useState(19);
+  const [, setTaxRate] = useState(19);
 
   useEffect(() => {
     fetch('/api/prices')
@@ -333,14 +329,8 @@ export default function CheckoutPage() {
     if (!match) return sum;
     return sum + Math.round(item.priceRental * match.discount_percent) / 100;
   }, 0);
-  const productDiscountLabel = (() => {
-    // Find the first active product discount to show its name
-    for (const item of items) {
-      const match = getActiveProductDiscount(item.productId, productDiscounts);
-      if (match) return match.name || 'Produktrabatt';
-    }
-    return null;
-  })();
+  // productDiscountLabel fuer zukuenftige Nutzung
+  void productDiscountAmount;
 
   // Duration discount: based on max rental days across all items
   const maxDays = items.reduce((m, it) => Math.max(m, it.days), 0);
@@ -408,7 +398,6 @@ export default function CheckoutPage() {
   const shippingOnOriginal = calcShipping(cartTotal, shippingMethod, deliveryMode, dynShipping);
   const finalShipping = shippingOnOriginal.price;
   const total = discountedSubtotal + finalShipping;
-  const { net, vat } = extractVat(total, taxRate);
 
   const handleApplyCoupon = async () => {
     setCouponError('');
@@ -606,9 +595,7 @@ export default function CheckoutPage() {
           <h1 className="font-heading font-bold text-xl sm:text-2xl text-brand-black dark:text-white">Zusammenfassung & Checkout</h1>
         </div>
 
-        <div className="grid lg:grid-cols-3 gap-6">
-          {/* Left: Forms */}
-          <div className="lg:col-span-2 space-y-5">
+        <div className="max-w-2xl mx-auto space-y-5">
             {step === 'details' ? (
               <>
                 {/* Warenkorb-Zusammenfassung */}
@@ -1101,125 +1088,6 @@ export default function CheckoutPage() {
             )}
           </div>
 
-          {/* Right: Order summary */}
-          <div className="lg:col-span-1">
-            <div className="bg-white dark:bg-brand-dark rounded-card shadow-card p-5 sticky top-24">
-              <h2 className="font-heading font-semibold text-brand-black dark:text-white mb-4">
-                Bestellung
-              </h2>
-
-              {/* Items */}
-              <div className="space-y-3 mb-4">
-                {items.map((item) => (
-                  <div key={item.id} className="flex justify-between text-sm">
-                    <div>
-                      <p className="font-medium text-brand-black dark:text-white">{item.productName}</p>
-                      <p className="text-xs text-brand-muted dark:text-gray-500">
-                        {item.days} {item.days === 1 ? 'Tag' : 'Tage'}
-                      </p>
-                    </div>
-                    <span className="font-medium text-brand-black dark:text-white flex-shrink-0 ml-2">
-                      {fmt(item.subtotal)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              {/* Price breakdown */}
-              <div className="border-t border-brand-border dark:border-white/10 pt-3 space-y-2 text-sm">
-                <div className="flex justify-between text-brand-text dark:text-gray-300">
-                  <span>Zwischensumme</span>
-                  <span>{fmt(cartTotal)}</span>
-                </div>
-
-                {effectiveProductDiscount > 0 && (
-                  <div className="flex justify-between text-status-success">
-                    <span>{productDiscountLabel ?? 'Produktrabatt'}</span>
-                    <span>{'\u2212'}{fmt(effectiveProductDiscount)}</span>
-                  </div>
-                )}
-
-                {effectiveDurationDiscount > 0 && (
-                  <div className="flex justify-between text-status-success">
-                    <span>{durationMatch?.label ?? 'Mengenrabatt'}</span>
-                    <span>−{fmt(effectiveDurationDiscount)}</span>
-                  </div>
-                )}
-
-                {effectiveLoyaltyDiscount > 0 && (
-                  <div className="flex justify-between text-status-success">
-                    <span>{loyaltyMatch?.label ?? 'Treuerabatt'}</span>
-                    <span>−{fmt(effectiveLoyaltyDiscount)}</span>
-                  </div>
-                )}
-
-                {isNotCombinable && (durationDiscountAmount > 0 || loyaltyDiscountAmount > 0) && (
-                  <p className="text-xs text-brand-muted dark:text-gray-500 italic">
-                    Gutschein nicht mit anderen Rabatten kombinierbar
-                  </p>
-                )}
-
-                {couponDiscountAmount > 0 && (
-                  <div className="flex justify-between text-status-success">
-                    <span>Gutschein ({appliedCoupon?.code})</span>
-                    <span>−{fmt(couponDiscountAmount)}</span>
-                  </div>
-                )}
-
-                <div className="flex justify-between text-brand-text dark:text-gray-300">
-                  <span>
-                    {deliveryMode === 'abholung'
-                      ? 'Abholung'
-                      : shippingOnOriginal.isFree
-                      ? 'Versand (kostenlos)'
-                      : `Versand (${shippingMethod === 'express' ? 'Express' : 'Standard'})`}
-                  </span>
-                  <span>
-                    {finalShipping === 0 ? (
-                      <span className="text-status-success">Gratis</span>
-                    ) : (
-                      fmt(finalShipping)
-                    )}
-                  </span>
-                </div>
-
-                <div className="border-t border-brand-border dark:border-white/10 pt-2 mt-2">
-                  <div className="flex justify-between font-heading font-bold text-brand-black dark:text-white text-base">
-                    <span>Gesamt</span>
-                    <span>{fmt(total)}</span>
-                  </div>
-
-                  {/* MwSt. */}
-                  {taxMode === 'regelbesteuerung' ? (
-                    <div className="mt-1.5 space-y-0.5">
-                      <div className="flex justify-between text-xs text-brand-muted dark:text-gray-500">
-                        <span>darin Nettobetrag</span>
-                        <span>{fmt(net)}</span>
-                      </div>
-                      <div className="flex justify-between text-xs text-brand-muted dark:text-gray-500">
-                        <span>darin MwSt. ({taxRate}%)</span>
-                        <span>{fmt(vat)}</span>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="mt-1.5">
-                      <span className="text-xs text-brand-muted dark:text-gray-500">Gem. §19 UStG keine MwSt.</span>
-                    </div>
-                  )}
-                </div>
-
-                {cartTotal < dynShipping.freeShippingThreshold &&
-                  deliveryMode === 'versand' && (
-                    <p className="text-xs text-accent-teal bg-accent-teal-soft rounded-[8px] px-3 py-2 mt-2">
-                      Noch{' '}
-                      {fmt(dynShipping.freeShippingThreshold - cartTotal)}{' '}
-                      bis zum kostenlosen Versand!
-                    </p>
-                  )}
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   );
