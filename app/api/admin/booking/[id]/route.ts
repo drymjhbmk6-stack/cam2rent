@@ -3,7 +3,8 @@ import { createServiceClient } from '@/lib/supabase';
 
 /**
  * GET /api/admin/booking/[id]
- * Gibt eine einzelne Buchung mit allen Feldern + Kundenprofil zurück.
+ * Gibt eine einzelne Buchung mit allen Feldern + Kundenprofil +
+ * Vertragsdaten (rental_agreements) + E-Mail-Verlauf (email_log) zurueck.
  */
 export async function GET(
   _req: NextRequest,
@@ -15,7 +16,7 @@ export async function GET(
   const { data: booking, error } = await supabase
     .from('bookings')
     .select(
-      'id, product_id, product_name, user_id, rental_from, rental_to, days, delivery_mode, shipping_method, shipping_price, shipping_address, haftung, accessories, price_rental, price_accessories, price_haftung, price_total, deposit, deposit_status, deposit_intent_id, status, customer_name, customer_email, tracking_number, tracking_url, shipped_at, return_condition, return_notes, returned_at, created_at, original_rental_to, extended_at, contract_signed, contract_signed_at, suspicious, suspicious_reasons'
+      'id, payment_intent_id, product_id, product_name, user_id, rental_from, rental_to, days, delivery_mode, shipping_method, shipping_price, shipping_address, haftung, accessories, price_rental, price_accessories, price_haftung, price_total, deposit, deposit_status, deposit_intent_id, status, customer_name, customer_email, tracking_number, tracking_url, shipped_at, return_condition, return_notes, returned_at, created_at, original_rental_to, extended_at, contract_signed, contract_signed_at, suspicious, suspicious_reasons, notes, coupon_code, discount_amount, duration_discount, loyalty_discount, label_url, return_label_url'
     )
     .eq('id', id)
     .single();
@@ -24,7 +25,7 @@ export async function GET(
     return NextResponse.json({ error: 'Buchung nicht gefunden.' }, { status: 404 });
   }
 
-  // Kundenprofil laden, falls user_id vorhanden
+  // Kundenprofil laden
   let customer = null;
   if (booking.user_id) {
     const { data: profile } = await supabase
@@ -35,7 +36,24 @@ export async function GET(
     customer = profile;
   }
 
-  return NextResponse.json({ booking, customer });
+  // Vertragsdaten laden (rental_agreements)
+  let agreement = null;
+  const { data: agreementData } = await supabase
+    .from('rental_agreements')
+    .select('id, pdf_url, contract_hash, signed_by_name, signed_at, ip_address, signature_method, created_at')
+    .eq('booking_id', id)
+    .maybeSingle();
+  if (agreementData) agreement = agreementData;
+
+  // E-Mail-Verlauf laden (email_log)
+  const { data: emails } = await supabase
+    .from('email_log')
+    .select('id, email_type, subject, status, customer_email, resend_message_id, error_message, created_at')
+    .eq('booking_id', id)
+    .order('created_at', { ascending: false })
+    .limit(20);
+
+  return NextResponse.json({ booking, customer, agreement, emails: emails ?? [] });
 }
 
 /**
@@ -55,9 +73,9 @@ export async function PATCH(
     return NextResponse.json({ error: 'Status erforderlich.' }, { status: 400 });
   }
 
-  const allowed = ['confirmed', 'shipped', 'completed', 'cancelled', 'damaged'];
+  const allowed = ['pending_verification', 'awaiting_payment', 'confirmed', 'shipped', 'picked_up', 'completed', 'cancelled', 'damaged'];
   if (!allowed.includes(status)) {
-    return NextResponse.json({ error: 'Ungültiger Status.' }, { status: 400 });
+    return NextResponse.json({ error: 'Ungueltiger Status.' }, { status: 400 });
   }
 
   const supabase = createServiceClient();
