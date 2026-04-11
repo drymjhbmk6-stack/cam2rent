@@ -121,6 +121,18 @@ const faqSections: FaqSection[] = [
           </span>
         ),
       },
+      {
+        question: 'Wie weit im Voraus kann ich buchen?',
+        answer: 'Du kannst bis zu 6 Monate im Voraus buchen. Im Kalender siehst du in Echtzeit, welche Tage noch verfuegbar (gruen) oder bereits ausgebucht (rot) sind.',
+      },
+      {
+        question: 'Was ist im Versandpreis enthalten?',
+        answer: 'Der Versandpreis beinhaltet sowohl den Hinversand als auch den Rueckversand. Ein frankiertes Ruecksendeetikett liegt dem Paket bei — du musst dich um nichts kuemmern.',
+      },
+      {
+        question: 'Wie lange dauert die Kautionsfreigabe?',
+        answer: 'Nach erfolgreicher Rueckgabe und Zustandspruefung wird die Kaution innerhalb von 5 Werktagen auf deinem Konto freigegeben.',
+      },
     ],
   },
   {

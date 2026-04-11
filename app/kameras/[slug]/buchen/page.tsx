@@ -601,7 +601,7 @@ export default function BuchenPage() {
   useEffect(() => {
     if (!product?.id) return;
     const months: string[] = [];
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 6; i++) {
       const d = new Date();
       d.setMonth(d.getMonth() + i);
       months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
