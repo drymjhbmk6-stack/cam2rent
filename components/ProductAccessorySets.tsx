@@ -41,7 +41,14 @@ export default function ProductAccessorySets({ productId }: { productId: string 
           (a: AccItem) => a.available && compatIds.has(a.id)
         );
         setAccessories(filtered);
-        if (setData.sets) setSets(setData.sets);
+        if (setData.sets) {
+          // Sets nach Kamera-Kompatibilitaet filtern
+          const filteredSets = (setData.sets as (RentalSet & { product_ids?: string[] })[]).filter((s) => {
+            if (s.product_ids?.length) return s.product_ids.includes(productId);
+            return true; // Ohne product_ids = fuer alle Kameras
+          });
+          setSets(filteredSets);
+        }
       })
       .catch(() => {})
       .finally(() => setLoading(false));

@@ -29,13 +29,13 @@ export async function GET(req: NextRequest) {
         .order('sort_order', { ascending: true }),
       supabase
         .from('accessories')
-        .select('id, available, available_qty'),
+        .select('id, name, available, available_qty'),
     ]);
 
     if (setsRes.error) throw setsRes.error;
 
     const accMap = new Map(
-      (accRes.data ?? []).map((a) => [a.id, { available: a.available, available_qty: a.available_qty }])
+      (accRes.data ?? []).map((a) => [a.id, { name: a.name, available: a.available, available_qty: a.available_qty }])
     );
 
     const allSets: (RentalSet & { accessory_items: AccessoryItem[]; product_ids: string[] })[] =
@@ -48,7 +48,11 @@ export async function GET(req: NextRequest) {
           id: r.id,
           name: r.name ?? r.id,
           description: r.description ?? '',
-          includedItems: [],
+          includedItems: items.map((item) => {
+            const acc = accMap.get(item.accessory_id);
+            const name = acc?.name ?? item.accessory_id;
+            return item.qty > 1 ? `${item.qty}x ${name}` : name;
+          }),
           badge: r.badge ?? undefined,
           badgeColor: r.badge_color ?? undefined,
           sortOrder: r.sort_order ?? 999,
