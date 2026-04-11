@@ -495,6 +495,10 @@ export default function CheckoutPage() {
   const [pendingSuccess, setPendingSuccess] = useState<string | null>(null);
   const [acceptsTerms, setAcceptsTerms] = useState(false);
   const [acceptsWithdrawal, setAcceptsWithdrawal] = useState(false);
+  const [sameAsBilling, setSameAsBilling] = useState(true);
+  const [shipStreet, setShipStreet] = useState('');
+  const [shipZip, setShipZip] = useState('');
+  const [shipCity, setShipCity] = useState('');
   const handlePendingBooking = async () => {
     if (!user) {
       setIntentError('Bitte melde dich an, um eine Buchung anzufragen.');
@@ -599,7 +603,7 @@ export default function CheckoutPage() {
             </svg>
             Zurück zum Warenkorb
           </Link>
-          <h1 className="font-heading font-bold text-2xl text-brand-black dark:text-white">Checkout</h1>
+          <h1 className="font-heading font-bold text-xl sm:text-2xl text-brand-black dark:text-white">Zusammenfassung & Checkout</h1>
         </div>
 
         <div className="grid lg:grid-cols-3 gap-6">
@@ -607,6 +611,65 @@ export default function CheckoutPage() {
           <div className="lg:col-span-2 space-y-5">
             {step === 'details' ? (
               <>
+                {/* Warenkorb-Zusammenfassung */}
+                <div className="bg-white dark:bg-brand-dark rounded-card shadow-card p-5">
+                  <h2 className="font-heading font-semibold text-brand-black dark:text-white mb-4">Deine Bestellung</h2>
+                  <div className="space-y-3">
+                    {items.map((item, i) => (
+                      <div key={i} className="flex items-start justify-between gap-3 pb-3 border-b border-brand-border/50 dark:border-white/5 last:border-0 last:pb-0">
+                        <div className="min-w-0">
+                          <p className="font-heading font-semibold text-sm text-brand-black dark:text-white">{item.productName}</p>
+                          <p className="text-xs text-brand-muted dark:text-gray-500 mt-0.5">
+                            {item.days} {item.days === 1 ? 'Tag' : 'Tage'} · {item.rentalFrom} bis {item.rentalTo}
+                          </p>
+                          {item.accessories.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1.5">
+                              {item.accessories.map((accId) => (
+                                <span key={accId} className="px-1.5 py-0.5 bg-brand-bg dark:bg-white/5 rounded text-[10px] text-brand-steel dark:text-gray-400">
+                                  {accId.replace(/-[a-z0-9]{6,}$/, '').split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <span className="font-heading font-semibold text-sm text-brand-black dark:text-white flex-shrink-0">{fmt(item.subtotal)}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Preisaufstellung */}
+                  <div className="mt-4 pt-3 border-t border-brand-border dark:border-white/10 space-y-1.5">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-brand-steel dark:text-gray-400">Zwischensumme</span>
+                      <span className="text-brand-black dark:text-white">{fmt(cartTotal)}</span>
+                    </div>
+                    {finalShipping > 0 ? (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-brand-steel dark:text-gray-400">Versand ({shippingMethod === 'express' ? 'Express' : 'Standard'})</span>
+                        <span className="text-brand-black dark:text-white">{fmt(finalShipping)}</span>
+                      </div>
+                    ) : deliveryMode === 'versand' ? (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-brand-steel dark:text-gray-400">Versand</span>
+                        <span className="text-status-success font-semibold">Kostenlos</span>
+                      </div>
+                    ) : null}
+                    {totalDiscount > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-brand-steel dark:text-gray-400">Rabatt</span>
+                        <span className="text-status-success font-semibold">-{fmt(totalDiscount)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between pt-2 border-t border-brand-border dark:border-white/10">
+                      <span className="font-heading font-bold text-brand-black dark:text-white">Gesamt</span>
+                      <span className="font-heading font-bold text-lg text-brand-black dark:text-white">{fmt(total)}</span>
+                    </div>
+                    {taxMode === 'kleinunternehmer' && (
+                      <p className="text-[10px] text-brand-muted dark:text-gray-500">Gem. §19 UStG keine MwSt.</p>
+                    )}
+                  </div>
+                </div>
+
                 {/* Customer data */}
                 <div className="bg-white dark:bg-brand-dark rounded-card shadow-card p-6">
                   <h2 className="font-heading font-semibold text-brand-black dark:text-white mb-4">
@@ -776,6 +839,40 @@ export default function CheckoutPage() {
                     )}
                   </label>
                 </div>
+
+                {/* Lieferanschrift bei Versand */}
+                {deliveryMode === 'versand' && (
+                  <div className="bg-white dark:bg-brand-dark rounded-card shadow-card p-5">
+                    <label className="flex items-center gap-3 cursor-pointer mb-3">
+                      <input type="checkbox" checked={sameAsBilling} onChange={(e) => setSameAsBilling(e.target.checked)}
+                        className="w-4 h-4 rounded border-brand-border accent-accent-blue" />
+                      <span className="text-sm font-body text-brand-black dark:text-white">Lieferanschrift ist gleich Rechnungsanschrift</span>
+                    </label>
+
+                    {!sameAsBilling && (
+                      <div className="space-y-3 pt-2 border-t border-brand-border/50 dark:border-white/5">
+                        <p className="text-xs font-heading font-semibold text-brand-muted dark:text-gray-500 uppercase tracking-wider">Abweichende Lieferanschrift</p>
+                        <div>
+                          <label className={labelClass}>Strasse *</label>
+                          <input type="text" value={shipStreet} onChange={(e) => setShipStreet(e.target.value)}
+                            className={inputClass} placeholder="Lieferstrasse 1" />
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className={labelClass}>PLZ *</label>
+                            <input type="text" value={shipZip} onChange={(e) => setShipZip(e.target.value)}
+                              className={inputClass} placeholder="12345" maxLength={5} />
+                          </div>
+                          <div>
+                            <label className={labelClass}>Stadt *</label>
+                            <input type="text" value={shipCity} onChange={(e) => setShipCity(e.target.value)}
+                              className={inputClass} placeholder="Berlin" />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Coupon */}
                 <div className="bg-white dark:bg-brand-dark rounded-card shadow-card p-6">
