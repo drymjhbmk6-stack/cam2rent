@@ -48,7 +48,6 @@ export async function POST(req: NextRequest) {
       userId,
       deliveryMode,
       shippingMethod,
-      shippingPrice,
       discountAmount,
       couponCode,
       durationDiscount,
@@ -64,7 +63,6 @@ export async function POST(req: NextRequest) {
       userId?: string;
       deliveryMode: string;
       shippingMethod: string;
-      shippingPrice: number;
       discountAmount: number;
       couponCode?: string;
       durationDiscount?: number;
@@ -112,7 +110,6 @@ export async function POST(req: NextRequest) {
     let r_userId = userId;
     let r_deliveryMode = deliveryMode;
     let r_shippingMethod = shippingMethod;
-    let r_shippingPrice = shippingPrice;
     let r_discountAmount = discountAmount;
     let r_couponCode = couponCode;
     let r_durationDiscount = durationDiscount;
@@ -136,7 +133,6 @@ export async function POST(req: NextRequest) {
           r_userId = ctx.userId ?? r_userId;
           r_deliveryMode = ctx.deliveryMode ?? r_deliveryMode;
           r_shippingMethod = ctx.shippingMethod ?? r_shippingMethod;
-          r_shippingPrice = ctx.shippingPrice ?? r_shippingPrice;
           r_discountAmount = ctx.discountAmount ?? r_discountAmount;
           r_couponCode = ctx.couponCode ?? r_couponCode;
           r_durationDiscount = ctx.durationDiscount ?? r_durationDiscount;

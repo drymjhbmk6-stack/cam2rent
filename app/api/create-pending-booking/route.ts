@@ -37,7 +37,6 @@ export async function POST(req: NextRequest) {
       userId,
       deliveryMode,
       shippingMethod,
-      shippingPrice,
       discountAmount,
       couponCode,
       durationDiscount,
@@ -49,7 +48,6 @@ export async function POST(req: NextRequest) {
       userId: string;
       deliveryMode: string;
       shippingMethod: string;
-      shippingPrice: number;
       discountAmount: number;
       couponCode?: string;
       durationDiscount?: number;
