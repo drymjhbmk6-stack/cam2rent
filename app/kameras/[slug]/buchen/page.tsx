@@ -692,21 +692,25 @@ export default function BuchenPage() {
                       <div className="px-4 pb-4 pt-2 border-t border-brand-border/50" onClick={(e) => e.preventDefault()}>
                         <div className="grid grid-cols-2 gap-2">
                           {([
-                            { id: 'standard' as ShippingMethod, label: 'Standard', sub: '3-5 Werktage', price: dynPrices?.shipping?.standardPrice ?? shippingConfig.standardPrice },
-                            { id: 'express' as ShippingMethod, label: 'Express', sub: 'Naechster Werktag', price: dynPrices?.shipping?.expressPrice ?? shippingConfig.expressPrice },
+                            { id: 'standard' as ShippingMethod, label: 'Standard', sub: '3–5 Werktage', price: dynPrices?.shipping?.standardPrice ?? shippingConfig.standardPrice },
+                            { id: 'express' as ShippingMethod, label: 'Express', sub: 'Nächster Werktag', price: dynPrices?.shipping?.expressPrice ?? shippingConfig.expressPrice },
                           ] as const).map((opt) => (
-                            <label key={opt.id} className={`flex items-center justify-between gap-2 p-3 rounded-lg border cursor-pointer transition-colors ${
-                              shippingMethod === opt.id ? 'border-accent-blue bg-accent-blue/5' : 'border-brand-border'
-                            }`}>
+                            <label
+                              key={opt.id}
+                              onClick={(e) => e.stopPropagation()}
+                              className={`flex flex-col gap-1 p-3 rounded-lg border cursor-pointer transition-colors ${
+                                shippingMethod === opt.id ? 'border-accent-blue bg-accent-blue/5' : 'border-brand-border'
+                              }`}
+                            >
                               <div className="flex items-center gap-2">
                                 <input type="radio" name="shippingMethod" value={opt.id} checked={shippingMethod === opt.id}
-                                  onChange={() => setShippingMethod(opt.id)} className="accent-accent-blue" />
-                                <div>
-                                  <span className="font-heading font-semibold text-sm text-brand-black">{opt.label}</span>
-                                  <span className="text-xs text-brand-muted ml-1">{opt.sub}</span>
-                                </div>
+                                  onChange={() => setShippingMethod(opt.id)} className="accent-accent-blue flex-shrink-0" />
+                                <span className="font-heading font-semibold text-sm text-brand-black">{opt.label}</span>
                               </div>
-                              <span className="text-sm font-semibold text-brand-black">{opt.price.toFixed(2).replace('.', ',')} €</span>
+                              <div className="flex items-center justify-between pl-6">
+                                <span className="text-xs text-brand-muted">{opt.sub}</span>
+                                <span className="text-sm font-semibold text-brand-black">{opt.price.toFixed(2).replace('.', ',')} €</span>
+                              </div>
                             </label>
                           ))}
                         </div>
