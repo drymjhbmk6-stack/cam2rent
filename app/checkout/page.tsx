@@ -659,6 +659,25 @@ export default function CheckoutPage() {
                         autoComplete="tel"
                       />
                     </div>
+
+                    {/* Adresse — immer sichtbar */}
+                    <div>
+                      <label className={labelClass}>Strasse und Hausnummer *</label>
+                      <input type="text" value={street} onChange={(e) => setStreet(e.target.value)}
+                        className={inputClass} placeholder="Musterstrasse 42" autoComplete="street-address" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className={labelClass}>PLZ *</label>
+                        <input type="text" value={zip} onChange={(e) => setZip(e.target.value)}
+                          className={inputClass} placeholder="12345" autoComplete="postal-code" maxLength={5} />
+                      </div>
+                      <div>
+                        <label className={labelClass}>Stadt *</label>
+                        <input type="text" value={city} onChange={(e) => setCity(e.target.value)}
+                          className={inputClass} placeholder="Berlin" autoComplete="address-level2" />
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -718,27 +737,6 @@ export default function CheckoutPage() {
                           })}
                         </div>
 
-                        {/* Adresse */}
-                        <p className="text-xs font-heading font-semibold text-brand-muted dark:text-gray-500 uppercase tracking-wider mb-2">Lieferadresse</p>
-                        <div className="space-y-3">
-                          <div>
-                            <label className={labelClass}>Strasse und Hausnummer *</label>
-                            <input type="text" value={street} onChange={(e) => setStreet(e.target.value)}
-                              className={inputClass} placeholder="Musterstrasse 42" autoComplete="street-address" />
-                          </div>
-                          <div className="grid grid-cols-2 gap-3">
-                            <div>
-                              <label className={labelClass}>PLZ *</label>
-                              <input type="text" value={zip} onChange={(e) => setZip(e.target.value)}
-                                className={inputClass} placeholder="12345" autoComplete="postal-code" maxLength={5} />
-                            </div>
-                            <div>
-                              <label className={labelClass}>Stadt *</label>
-                              <input type="text" value={city} onChange={(e) => setCity(e.target.value)}
-                                className={inputClass} placeholder="Berlin" autoComplete="address-level2" />
-                            </div>
-                          </div>
-                        </div>
                       </div>
                     )}
                   </label>
