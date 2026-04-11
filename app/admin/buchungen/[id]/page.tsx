@@ -6,6 +6,7 @@ import Link from 'next/link';
 
 interface BookingDetail {
   id: string;
+  payment_intent_id: string | null;
   product_id: string;
   product_name: string;
   user_id: string | null;
@@ -42,7 +43,50 @@ interface BookingDetail {
   suspicious: boolean;
   suspicious_reasons: string[];
   notes: string | null;
+  coupon_code: string | null;
+  discount_amount: number | null;
+  duration_discount: number | null;
+  loyalty_discount: number | null;
+  label_url: string | null;
+  return_label_url: string | null;
 }
+
+interface RentalAgreement {
+  id: string;
+  pdf_url: string;
+  contract_hash: string;
+  signed_by_name: string;
+  signed_at: string;
+  ip_address: string;
+  signature_method: string;
+  created_at: string;
+}
+
+interface EmailLogEntry {
+  id: string;
+  email_type: string;
+  subject: string | null;
+  status: string;
+  customer_email: string;
+  resend_message_id: string | null;
+  error_message: string | null;
+  created_at: string;
+}
+
+const EMAIL_TYPE_LABELS: Record<string, string> = {
+  booking_confirmation: 'Buchungsbestaetigung',
+  booking_admin: 'Admin-Benachrichtigung',
+  cancellation_customer: 'Stornierung',
+  cancellation_admin: 'Stornierung (Admin)',
+  shipping_confirmation: 'Versandbestaetigung',
+  contract_signed: 'Mietvertrag',
+  damage_report: 'Schadensmeldung',
+  damage_resolution: 'Schadensabschluss',
+  review_request: 'Bewertungsanfrage',
+  extension_confirmation: 'Verlaengerung',
+  return_reminder: 'Rueckgabe-Erinnerung',
+  overdue_notice: 'Ueberfaellig',
+};
 
 interface CustomerProfile {
   id: string;
@@ -94,6 +138,8 @@ export default function BuchungDetailPage() {
 
   const [booking, setBooking] = useState<BookingDetail | null>(null);
   const [customer, setCustomer] = useState<CustomerProfile | null>(null);
+  const [agreement, setAgreement] = useState<RentalAgreement | null>(null);
+  const [emails, setEmails] = useState<EmailLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [statusUpdating, setStatusUpdating] = useState(false);
@@ -112,6 +158,8 @@ export default function BuchungDetailPage() {
       const data = await res.json();
       setBooking(data.booking);
       setCustomer(data.customer ?? null);
+      setAgreement(data.agreement ?? null);
+      setEmails(data.emails ?? []);
       setNewStatus(data.booking.status);
     } catch {
       setError('Buchung konnte nicht geladen werden.');
@@ -324,72 +372,68 @@ export default function BuchungDetailPage() {
 
   const sc = STATUS_CONFIG[booking.status] ?? { label: booking.status, color: '#94a3b8', bg: '#94a3b814' };
 
+  const totalDiscount = (booking.discount_amount ?? 0) + (booking.duration_discount ?? 0) + (booking.loyalty_discount ?? 0);
+
+  async function quickStatusChange(targetStatus: string, label: string) {
+    if (!confirm(`Status wirklich auf "${label}" aendern?`)) return;
+    setStatusUpdating(true);
+    try {
+      const res = await fetch(`/api/admin/booking/${bookingId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: targetStatus }),
+      });
+      if (!res.ok) { alert('Fehler beim Aktualisieren.'); return; }
+      setBooking((prev) => prev ? { ...prev, status: targetStatus } : prev);
+      setNewStatus(targetStatus);
+    } catch { alert('Netzwerkfehler.'); } finally { setStatusUpdating(false); }
+  }
+
   return (
     <div className="min-h-screen bg-brand-bg">
       <div className="max-w-5xl mx-auto px-6 py-8">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
           <div>
-            <Link
-              href="/admin/buchungen"
-              className="text-sm font-heading text-accent-blue hover:underline mb-2 inline-flex items-center gap-1"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-              Zurück zur Übersicht
+            <Link href="/admin/buchungen" className="text-sm font-heading text-accent-blue hover:underline mb-2 inline-flex items-center gap-1">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+              Zurueck zur Uebersicht
             </Link>
             <div className="flex items-center gap-3 mt-1">
               <h1 className="font-heading font-bold text-2xl text-brand-black">{booking.id}</h1>
-              <span
-                className="inline-flex px-3 py-1 rounded-full text-xs font-heading font-semibold"
-                style={{ color: sc.color, backgroundColor: sc.bg, border: `1px solid ${sc.color}30` }}
-              >
-                {sc.label}
-              </span>
+              <span className="inline-flex px-3 py-1 rounded-full text-xs font-heading font-semibold" style={{ color: sc.color, backgroundColor: sc.bg, border: `1px solid ${sc.color}30` }}>{sc.label}</span>
             </div>
-            <p className="text-sm font-body text-brand-muted mt-1">
-              Erstellt am {fmtDateTime(booking.created_at)}
-            </p>
+            <p className="text-sm font-body text-brand-muted mt-1">Erstellt am {fmtDateTime(booking.created_at)}</p>
           </div>
           <div className="flex items-center gap-2">
-            {customer && (
-              <Link
-                href={`/admin/kunden`}
-                className="px-4 py-2 text-sm font-heading font-semibold border border-brand-border rounded-btn hover:bg-brand-bg transition-colors text-brand-steel"
-              >
-                Kundenprofil
-              </Link>
+            {booking.status === 'shipped' && (
+              <button onClick={() => quickStatusChange('completed', 'Zugestellt / Abgeschlossen')} disabled={statusUpdating} className="px-4 py-2 text-sm font-heading font-semibold bg-green-600 text-white rounded-btn hover:bg-green-700 transition-colors disabled:opacity-40">
+                Als zugestellt markieren
+              </button>
             )}
-            <Link
-              href="/admin/schaeden"
-              className="px-4 py-2 text-sm font-heading font-semibold bg-orange-500 text-white rounded-btn hover:bg-orange-600 transition-colors"
-            >
-              Schadensbericht
-            </Link>
+            {booking.status === 'confirmed' && booking.delivery_mode === 'abholung' && (
+              <button onClick={() => quickStatusChange('picked_up', 'Abgeholt')} disabled={statusUpdating} className="px-4 py-2 text-sm font-heading font-semibold bg-green-600 text-white rounded-btn hover:bg-green-700 transition-colors disabled:opacity-40">
+                Als abgeholt markieren
+              </button>
+            )}
           </div>
         </div>
 
         {/* Suspicious warning */}
         {booking.suspicious && (
           <div className="mb-6 p-4 rounded-xl border border-amber-300 bg-amber-50 flex items-start gap-3">
-            <svg className="w-5 h-5 text-amber-500 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
+            <svg className="w-5 h-5 text-amber-500 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
             <div>
-              <p className="text-sm font-heading font-semibold text-amber-800">Verdächtige Buchung</p>
-              {booking.suspicious_reasons?.length > 0 && (
-                <p className="text-xs font-body text-amber-700 mt-0.5">
-                  {booking.suspicious_reasons.join(', ')}
-                </p>
-              )}
+              <p className="text-sm font-heading font-semibold text-amber-800">Verdaechtige Buchung</p>
+              {booking.suspicious_reasons?.length > 0 && <p className="text-xs font-body text-amber-700 mt-0.5">{booking.suspicious_reasons.join(', ')}</p>}
             </div>
           </div>
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left column: 2/3 */}
+          {/* ═══ Left column: 2/3 ═══ */}
           <div className="lg:col-span-2 space-y-6">
+
             {/* Buchungsdaten */}
             <Section title="Buchungsdaten">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -397,400 +441,291 @@ export default function BuchungDetailPage() {
                 <InfoRow label="Mietdauer" value={`${booking.days} Tag${booking.days !== 1 ? 'e' : ''}`} />
                 <InfoRow label="Von" value={fmtDate(booking.rental_from)} />
                 <InfoRow label="Bis" value={fmtDate(booking.rental_to)} />
-                {booking.extended_at && (
-                  <InfoRow
-                    label="Verlängert"
-                    value={`Ursprünglich bis ${booking.original_rental_to ? fmtDate(booking.original_rental_to) : '–'}`}
-                    highlight
-                  />
-                )}
-                {booking.contract_signed && (
-                  <InfoRow
-                    label="Vertrag"
-                    value={`Unterschrieben am ${booking.contract_signed_at ? fmtDateTime(booking.contract_signed_at) : '–'}`}
-                  />
-                )}
+                {booking.extended_at && <InfoRow label="Verlaengert" value={`Urspruenglich bis ${booking.original_rental_to ? fmtDate(booking.original_rental_to) : '\u2013'}`} highlight />}
                 <InfoRow label="Lieferart" value={booking.delivery_mode === 'versand' ? 'Versand' : 'Abholung'} />
-                {booking.shipping_address && (
-                  <InfoRow label="Adresse" value={booking.shipping_address} />
-                )}
-                {booking.shipping_method && (
-                  <InfoRow label="Versandart" value={booking.shipping_method === 'express' ? 'Express' : 'Standard'} />
-                )}
+                {booking.shipping_method && <InfoRow label="Versandart" value={booking.shipping_method === 'express' ? 'Express' : 'Standard'} />}
+                <InfoRow label="Haftungsoption" value={booking.haftung === 'standard' ? 'Standard-Haftungsschutz' : booking.haftung === 'premium' ? 'Premium-Haftungsschutz' : 'Keine Haftungsbegrenzung'} />
               </div>
-
-              {/* Preisaufstellung */}
-              <div className="mt-5 pt-5 border-t border-brand-border">
-                <p className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider mb-3">Preisaufstellung</p>
-                <div className="space-y-2">
-                  <PriceRow label="Miete" amount={booking.price_rental} />
-                  {booking.price_accessories > 0 && (
-                    <PriceRow label="Zubehör" amount={booking.price_accessories} />
-                  )}
-                  {booking.price_haftung > 0 && (
-                    <PriceRow label="Haftungsreduzierung" amount={booking.price_haftung} />
-                  )}
-                  {(booking.shipping_price ?? 0) > 0 && (
-                    <PriceRow label="Versand" amount={booking.shipping_price!} />
-                  )}
-                  <div className="flex justify-between items-center pt-2 border-t border-brand-border">
-                    <span className="font-heading font-bold text-sm text-brand-black">Gesamt</span>
-                    <span className="font-heading font-bold text-sm text-brand-black">{fmtEuro(booking.price_total)}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Kaution */}
-              {booking.deposit > 0 && (
+              {booking.payment_intent_id && (
                 <div className="mt-4 pt-4 border-t border-brand-border">
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm font-body text-brand-steel">Kaution:</span>
-                    <span className="font-heading font-semibold text-sm text-brand-black">{fmtEuro(booking.deposit)}</span>
-                    <DepositBadge status={booking.deposit_status} />
-                  </div>
+                  <p className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider mb-1">Payment Intent</p>
+                  <p className="text-xs font-mono text-brand-steel break-all">{booking.payment_intent_id}</p>
                 </div>
               )}
-
-              {/* Zubehör */}
-              {booking.accessories && booking.accessories.length > 0 && (
+              {booking.notes && (
                 <div className="mt-4 pt-4 border-t border-brand-border">
-                  <p className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider mb-2">Zubehör & Set</p>
-                  <div className="flex flex-wrap gap-2">
-                    {booking.accessories.map((a, i) => {
-                      // ID in lesbaren Namen umwandeln: kebab-case → Titel
-                      const name = a.replace(/-[a-z0-9]{6,}$/, '').split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-                      return (
-                        <span key={i} className="px-2.5 py-1 bg-brand-bg rounded-full text-xs font-body text-brand-steel">
-                          {name}
-                        </span>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Haftung */}
-              {booking.haftung && (
-                <div className="mt-4 pt-4 border-t border-brand-border">
-                  <InfoRow label="Haftungsoption" value={
-                    booking.haftung === 'standard' ? 'Standard-Haftungsschutz'
-                    : booking.haftung === 'premium' ? 'Premium-Haftungsschutz'
-                    : 'Keine Haftungsbegrenzung'
-                  } />
+                  <InfoRow label="Notizen" value={booking.notes} />
                 </div>
               )}
             </Section>
 
-            {/* Versanddaten */}
-            <Section title="Versanddaten">
+            {/* Preisaufstellung */}
+            <Section title="Preisaufstellung">
+              <div className="space-y-2">
+                <PriceRow label={`Miete (${booking.days} ${booking.days === 1 ? 'Tag' : 'Tage'})`} amount={booking.price_rental} />
+                {booking.price_accessories > 0 && <PriceRow label="Zubehoer" amount={booking.price_accessories} />}
+                {booking.price_haftung > 0 && <PriceRow label="Haftungsschutz" amount={booking.price_haftung} />}
+                {(booking.shipping_price ?? 0) > 0 && <PriceRow label="Versand" amount={booking.shipping_price!} />}
+                {(booking.discount_amount ?? 0) > 0 && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-body text-green-600">Gutschein ({booking.coupon_code})</span>
+                    <span className="text-sm font-body text-green-600">-{fmtEuro(booking.discount_amount!)}</span>
+                  </div>
+                )}
+                {(booking.duration_discount ?? 0) > 0 && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-body text-green-600">Mengenrabatt</span>
+                    <span className="text-sm font-body text-green-600">-{fmtEuro(booking.duration_discount!)}</span>
+                  </div>
+                )}
+                {(booking.loyalty_discount ?? 0) > 0 && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-body text-green-600">Treuerabatt</span>
+                    <span className="text-sm font-body text-green-600">-{fmtEuro(booking.loyalty_discount!)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between items-center pt-2 border-t border-brand-border">
+                  <span className="font-heading font-bold text-sm text-brand-black">Gesamt</span>
+                  <span className="font-heading font-bold text-sm text-brand-black">{fmtEuro(booking.price_total)}</span>
+                </div>
+                {totalDiscount > 0 && (
+                  <p className="text-xs text-brand-muted">Rabatte gesamt: {fmtEuro(totalDiscount)}</p>
+                )}
+              </div>
+              {booking.deposit > 0 && (
+                <div className="mt-4 pt-4 border-t border-brand-border flex items-center gap-3">
+                  <span className="text-sm font-body text-brand-steel">Kaution:</span>
+                  <span className="font-heading font-semibold text-sm text-brand-black">{fmtEuro(booking.deposit)}</span>
+                  <DepositBadge status={booking.deposit_status} />
+                </div>
+              )}
+            </Section>
+
+            {/* Zubehoer */}
+            {booking.accessories && booking.accessories.length > 0 && (
+              <Section title="Zubehoer & Set">
+                <div className="flex flex-wrap gap-2">
+                  {booking.accessories.map((a, i) => {
+                    const name = a.replace(/-[a-z0-9]{6,}$/, '').split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                    return <span key={i} className="px-2.5 py-1 bg-brand-bg rounded-full text-xs font-body text-brand-steel">{name}</span>;
+                  })}
+                </div>
+              </Section>
+            )}
+
+            {/* Versand & Tracking */}
+            <Section title="Versand & Tracking">
               {booking.delivery_mode === 'versand' ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <InfoRow label="Trackingnummer" value={booking.tracking_number || '–'} />
-                  {booking.tracking_url && (
-                    <div>
-                      <p className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider mb-1">Tracking-Link</p>
-                      <a
-                        href={booking.tracking_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-sm font-body text-accent-blue hover:underline break-all"
-                      >
-                        Link öffnen
-                      </a>
-                    </div>
-                  )}
-                  <InfoRow label="Versandt am" value={booking.shipped_at ? fmtDateTime(booking.shipped_at) : '–'} />
-                  {booking.shipping_address && (
-                    <div className="sm:col-span-2">
-                      <p className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider mb-1">Lieferadresse</p>
-                      <p className="text-sm font-body text-brand-black whitespace-pre-line">{booking.shipping_address}</p>
-                    </div>
-                  )}
-                  <InfoRow label="Rückgabe" value={booking.returned_at ? fmtDateTime(booking.returned_at) : 'Noch nicht zurück'} />
-                  {booking.return_condition && (
-                    <InfoRow label="Zustand bei Rückgabe" value={booking.return_condition} />
-                  )}
+                <div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <InfoRow label="Trackingnummer" value={booking.tracking_number || '\u2013'} />
+                    <InfoRow label="Versandt am" value={booking.shipped_at ? fmtDateTime(booking.shipped_at) : '\u2013'} />
+                    {booking.tracking_url && (
+                      <div>
+                        <p className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider mb-1">Tracking-Link</p>
+                        <a href={booking.tracking_url} target="_blank" rel="noopener noreferrer" className="text-sm font-body text-accent-blue hover:underline break-all">Sendung verfolgen</a>
+                      </div>
+                    )}
+                    {booking.shipping_address && (
+                      <div>
+                        <p className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider mb-1">Lieferadresse</p>
+                        <p className="text-sm font-body text-brand-black whitespace-pre-line">{booking.shipping_address}</p>
+                      </div>
+                    )}
+                    <InfoRow label="Rueckgabe" value={booking.returned_at ? fmtDateTime(booking.returned_at) : 'Noch nicht zurueck'} />
+                    {booking.return_condition && <InfoRow label="Zustand" value={booking.return_condition} />}
+                  </div>
                   {booking.return_notes && (
-                    <div className="sm:col-span-2">
-                      <p className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider mb-1">Rückgabe-Notizen</p>
+                    <div className="mt-3 pt-3 border-t border-brand-border">
+                      <p className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider mb-1">Rueckgabe-Notizen</p>
                       <p className="text-sm font-body text-brand-black">{booking.return_notes}</p>
                     </div>
                   )}
+                  {/* Labels */}
+                  {(booking.label_url || booking.return_label_url) && (
+                    <div className="mt-3 pt-3 border-t border-brand-border flex flex-wrap gap-2">
+                      {booking.label_url && <a href={booking.label_url} target="_blank" className="text-xs font-heading font-semibold text-accent-blue hover:underline">Versandlabel</a>}
+                      {booking.return_label_url && <a href={`/api/admin/return-label/${booking.id}`} target="_blank" className="text-xs font-heading font-semibold text-accent-blue hover:underline">Ruecksendeetikett</a>}
+                    </div>
+                  )}
+                  {/* Quick actions */}
+                  <div className="mt-4 pt-4 border-t border-brand-border flex flex-wrap gap-2">
+                    {booking.status === 'confirmed' && <Link href="/admin/versand" className="px-3 py-1.5 text-xs font-heading font-semibold bg-brand-black text-white rounded-btn hover:bg-brand-dark transition-colors">Zum Versand</Link>}
+                    {booking.status === 'shipped' && (
+                      <button onClick={() => quickStatusChange('completed', 'Zugestellt / Abgeschlossen')} disabled={statusUpdating} className="px-3 py-1.5 text-xs font-heading font-semibold bg-green-600 text-white rounded-btn hover:bg-green-700 transition-colors disabled:opacity-40">Als zugestellt markieren</button>
+                    )}
+                    {(booking.status === 'shipped' || booking.status === 'picked_up') && <Link href="/admin/retouren" className="px-3 py-1.5 text-xs font-heading font-semibold bg-cyan-600 text-white rounded-btn hover:bg-cyan-700 transition-colors">Rueckgabe pruefen</Link>}
+                  </div>
                 </div>
               ) : (
-                <p className="text-sm font-body text-brand-muted">Abholung — kein Versand.</p>
+                <div>
+                  <p className="text-sm font-body text-brand-muted mb-3">Selbstabholung</p>
+                  {booking.status === 'confirmed' && (
+                    <button onClick={() => quickStatusChange('picked_up', 'Abgeholt')} disabled={statusUpdating} className="px-3 py-1.5 text-xs font-heading font-semibold bg-green-600 text-white rounded-btn hover:bg-green-700 transition-colors disabled:opacity-40">Als abgeholt markieren</button>
+                  )}
+                </div>
               )}
             </Section>
 
             {/* Mietvertrag */}
             <Section title="Mietvertrag">
               {booking.contract_signed ? (
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-heading font-semibold bg-green-100 text-green-700">
-                      Unterschrieben
-                    </span>
+                <div>
+                  <div className="flex items-center gap-2 mb-4">
+                    <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-heading font-semibold bg-green-100 text-green-700">Unterschrieben</span>
                   </div>
-                  <InfoRow
-                    label="Unterzeichnet am"
-                    value={booking.contract_signed_at ? fmtDateTime(booking.contract_signed_at) : '\u2013'}
-                  />
-                  <a
-                    href={`/api/rental-contract/${booking.id}`}
-                    target="_blank"
-                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-heading font-semibold bg-cyan-600 text-white rounded-btn hover:bg-cyan-700 transition-colors mt-2"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <InfoRow label="Unterzeichnet am" value={booking.contract_signed_at ? fmtDateTime(booking.contract_signed_at) : '\u2013'} />
+                    {agreement && (
+                      <>
+                        <InfoRow label="Unterzeichner" value={agreement.signed_by_name} />
+                        <InfoRow label="Methode" value={agreement.signature_method === 'canvas' ? 'Canvas-Unterschrift' : 'Getippter Name'} />
+                        <InfoRow label="IP-Adresse" value={agreement.ip_address} />
+                      </>
+                    )}
+                  </div>
+                  {agreement?.contract_hash && (
+                    <div className="mt-3 pt-3 border-t border-brand-border">
+                      <p className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider mb-1">Dokument-Hash (SHA-256)</p>
+                      <p className="text-xs font-mono text-brand-steel break-all">{agreement.contract_hash}</p>
+                    </div>
+                  )}
+                  <a href={`/api/rental-contract/${booking.id}`} target="_blank" className="inline-flex items-center gap-2 px-4 py-2 text-sm font-heading font-semibold bg-teal-600 text-white rounded-btn hover:bg-teal-700 transition-colors mt-4">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                     Vertrag PDF herunterladen
                   </a>
                 </div>
               ) : (
                 <div className="flex items-center gap-2">
-                  <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-heading font-semibold bg-red-100 text-red-600">
-                    Ausstehend
-                  </span>
+                  <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-heading font-semibold bg-red-100 text-red-600">Ausstehend</span>
                   <span className="text-sm font-body text-brand-muted">Noch nicht unterschrieben</span>
                 </div>
               )}
             </Section>
 
+            {/* E-Mail-Verlauf */}
+            {emails.length > 0 && (
+              <Section title="E-Mail-Verlauf">
+                <div className="space-y-3">
+                  {emails.map((em) => (
+                    <div key={em.id} className="flex items-start justify-between gap-3 py-2 border-b border-brand-border last:border-0">
+                      <div className="min-w-0">
+                        <p className="text-sm font-heading font-semibold text-brand-black">
+                          {EMAIL_TYPE_LABELS[em.email_type] || em.email_type}
+                        </p>
+                        {em.subject && <p className="text-xs font-body text-brand-muted truncate">{em.subject}</p>}
+                        <p className="text-xs font-body text-brand-muted">{em.customer_email}</p>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-heading font-semibold ${em.status === 'sent' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+                          {em.status === 'sent' ? 'Gesendet' : 'Fehler'}
+                        </span>
+                        <span className="text-xs text-brand-muted whitespace-nowrap">{fmtDateTime(em.created_at)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Section>
+            )}
+
             {/* Statusverlauf */}
             <Section title="Statusverlauf">
               <div className="space-y-4">
-                <TimelineItem
-                  label="Buchung erstellt"
-                  date={fmtDateTime(booking.created_at)}
-                  status="confirmed"
-                  active
-                />
-                {booking.shipped_at && (
-                  <TimelineItem
-                    label="Versendet"
-                    date={fmtDateTime(booking.shipped_at)}
-                    status="shipped"
-                    active
-                  />
-                )}
-                {booking.extended_at && (
-                  <TimelineItem
-                    label="Verlängert"
-                    date={fmtDateTime(booking.extended_at)}
-                    status="confirmed"
-                    active
-                  />
-                )}
-                {booking.returned_at && (
-                  <TimelineItem
-                    label="Zurückgegeben"
-                    date={fmtDateTime(booking.returned_at)}
-                    status="completed"
-                    active
-                  />
-                )}
-                {booking.status === 'completed' && !booking.returned_at && (
-                  <TimelineItem
-                    label="Abgeschlossen"
-                    date=""
-                    status="completed"
-                    active
-                  />
-                )}
-                {booking.status === 'cancelled' && (
-                  <TimelineItem
-                    label="Storniert"
-                    date=""
-                    status="cancelled"
-                    active
-                  />
-                )}
-                {booking.status === 'damaged' && (
-                  <TimelineItem
-                    label="Beschädigt gemeldet"
-                    date=""
-                    status="damaged"
-                    active
-                  />
-                )}
+                <TimelineItem label="Buchung erstellt" date={fmtDateTime(booking.created_at)} status="confirmed" active />
+                {booking.contract_signed_at && <TimelineItem label="Vertrag unterschrieben" date={fmtDateTime(booking.contract_signed_at)} status="confirmed" active />}
+                {booking.shipped_at && <TimelineItem label="Versendet" date={fmtDateTime(booking.shipped_at)} status="shipped" active />}
+                {booking.status === 'picked_up' && <TimelineItem label="Abgeholt" date="" status="shipped" active />}
+                {booking.extended_at && <TimelineItem label="Verlaengert" date={fmtDateTime(booking.extended_at)} status="confirmed" active />}
+                {booking.returned_at && <TimelineItem label="Zurueckgegeben" date={fmtDateTime(booking.returned_at)} status="completed" active />}
+                {booking.status === 'completed' && !booking.returned_at && <TimelineItem label="Abgeschlossen" date="" status="completed" active />}
+                {booking.status === 'cancelled' && <TimelineItem label="Storniert" date="" status="cancelled" active />}
+                {booking.status === 'damaged' && <TimelineItem label="Beschaedigt gemeldet" date="" status="damaged" active />}
               </div>
             </Section>
           </div>
 
-          {/* Right column: 1/3 */}
+          {/* ═══ Right column: 1/3 ═══ */}
           <div className="space-y-6">
+
             {/* Kundendaten */}
             <Section title="Kundendaten">
               <div className="space-y-3">
-                <InfoRow label="Name" value={booking.customer_name || customer?.full_name || '–'} />
+                <InfoRow label="Name" value={booking.customer_name || customer?.full_name || '\u2013'} />
                 {(booking.customer_email || customer?.email) && (
                   <div>
                     <p className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider mb-1">E-Mail</p>
-                    <a
-                      href={`mailto:${booking.customer_email || customer?.email}`}
-                      className="text-sm font-body text-accent-blue hover:underline"
-                    >
-                      {booking.customer_email || customer?.email}
-                    </a>
+                    <a href={`mailto:${booking.customer_email || customer?.email}`} className="text-sm font-body text-accent-blue hover:underline">{booking.customer_email || customer?.email}</a>
                   </div>
                 )}
-                {customer?.phone && (
-                  <InfoRow label="Telefon" value={customer.phone} />
-                )}
+                {customer?.phone && <InfoRow label="Telefon" value={customer.phone} />}
                 {customer?.address_street && (
                   <div>
                     <p className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider mb-1">Adresse</p>
-                    <p className="text-sm font-body text-brand-black">
-                      {customer.address_street}<br />
-                      {customer.address_zip} {customer.address_city}
-                    </p>
+                    <p className="text-sm font-body text-brand-black">{customer.address_street}<br />{customer.address_zip} {customer.address_city}</p>
                   </div>
                 )}
-                {customer?.blacklisted && (
-                  <div className="mt-2">
-                    <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-heading font-semibold bg-red-100 text-red-600">
-                      GESPERRT
-                    </span>
-                  </div>
-                )}
+                {customer?.blacklisted && <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-heading font-semibold bg-red-100 text-red-600">GESPERRT</span>}
+                {customer?.verification_status && <InfoRow label="Verifizierung" value={customer.verification_status} />}
               </div>
             </Section>
 
             {/* Aktionen */}
             <Section title="Aktionen">
               <div className="space-y-4">
-                {/* Freigeben-Button fuer pending Buchungen */}
                 {(booking.status === 'pending_verification' || booking.status === 'awaiting_payment') && (
                   <div className="p-4 rounded-xl" style={{ background: '#f59e0b14', border: '1px solid #f59e0b40' }}>
                     <p className="text-xs font-heading font-semibold text-amber-600 uppercase tracking-wider mb-2">
                       {booking.status === 'pending_verification' ? 'Warte auf Freigabe' : 'Warte auf Zahlung'}
                     </p>
                     {booking.status === 'pending_verification' && (
-                      <button
-                        onClick={async () => {
-                          if (!confirm('Buchung freigeben und Zahlungslink an den Kunden senden?')) return;
-                          setStatusUpdating(true);
-                          try {
-                            const res = await fetch('/api/admin/approve-booking', {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ bookingId: booking.id }),
-                            });
-                            const data = await res.json();
-                            if (!res.ok) throw new Error(data.error);
-                            alert('Zahlungslink wurde an den Kunden gesendet!');
-                            window.location.reload();
-                          } catch (err) {
-                            alert(`Fehler: ${err instanceof Error ? err.message : 'Unbekannt'}`);
-                          } finally {
-                            setStatusUpdating(false);
-                          }
-                        }}
-                        disabled={statusUpdating}
-                        className="w-full px-4 py-2.5 text-sm font-heading font-semibold bg-amber-500 text-white rounded-btn hover:bg-amber-600 transition-colors disabled:opacity-40"
-                      >
+                      <button onClick={async () => {
+                        if (!confirm('Buchung freigeben und Zahlungslink an den Kunden senden?')) return;
+                        setStatusUpdating(true);
+                        try {
+                          const res = await fetch('/api/admin/approve-booking', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bookingId: booking.id }) });
+                          const data = await res.json();
+                          if (!res.ok) throw new Error(data.error);
+                          alert('Zahlungslink wurde an den Kunden gesendet!');
+                          window.location.reload();
+                        } catch (err) { alert(`Fehler: ${err instanceof Error ? err.message : 'Unbekannt'}`); } finally { setStatusUpdating(false); }
+                      }} disabled={statusUpdating} className="w-full px-4 py-2.5 text-sm font-heading font-semibold bg-amber-500 text-white rounded-btn hover:bg-amber-600 transition-colors disabled:opacity-40">
                         {statusUpdating ? 'Wird gesendet...' : 'Freigeben + Zahlungslink senden'}
                       </button>
-                    )}
-                    {booking.status === 'awaiting_payment' && booking.notes && (
-                      <p className="text-xs font-body text-brand-steel mt-1">
-                        {booking.notes}
-                      </p>
                     )}
                   </div>
                 )}
 
                 <div>
-                  <label className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider block mb-2">
-                    Status ändern
-                  </label>
+                  <label className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider block mb-2">Status aendern</label>
                   <div className="flex gap-2">
-                    <select
-                      value={newStatus}
-                      onChange={(e) => setNewStatus(e.target.value)}
-                      className="flex-1 text-sm font-body border border-brand-border rounded-btn px-3 py-2 bg-white text-brand-black focus:outline-none focus:ring-2 focus:ring-accent-blue"
-                    >
-                      {ALL_STATUSES.map((s) => (
-                        <option key={s} value={s}>
-                          {STATUS_CONFIG[s]?.label || s}
-                        </option>
-                      ))}
+                    <select value={newStatus} onChange={(e) => setNewStatus(e.target.value)} className="flex-1 text-sm font-body border border-brand-border rounded-btn px-3 py-2 bg-white text-brand-black focus:outline-none focus:ring-2 focus:ring-accent-blue">
+                      {ALL_STATUSES.map((s) => <option key={s} value={s}>{STATUS_CONFIG[s]?.label || s}</option>)}
                     </select>
-                    <button
-                      onClick={handleStatusUpdate}
-                      disabled={statusUpdating || newStatus === booking.status}
-                      className="px-4 py-2 text-sm font-heading font-semibold bg-brand-black text-white rounded-btn hover:bg-brand-dark transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                    >
+                    <button onClick={handleStatusUpdate} disabled={statusUpdating || newStatus === booking.status} className="px-4 py-2 text-sm font-heading font-semibold bg-brand-black text-white rounded-btn hover:bg-brand-dark transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
                       {statusUpdating ? '...' : 'Speichern'}
                     </button>
                   </div>
                 </div>
+              </div>
+            </Section>
 
-                <div className="pt-3 border-t border-brand-border space-y-2">
-                  {booking.delivery_mode === 'versand' && (
-                    <button
-                      onClick={openPackliste}
-                      className="block w-full text-center px-4 py-2 text-sm font-heading font-semibold bg-cyan-600 text-white rounded-btn hover:bg-cyan-700 transition-colors"
-                    >
-                      Versand-Packliste
-                    </button>
-                  )}
-                  <a
-                    href={`/api/invoice/${booking.id}`}
-                    target="_blank"
-                    className="block w-full text-center px-4 py-2 text-sm font-heading font-semibold bg-brand-black text-white rounded-btn hover:bg-brand-dark transition-colors"
-                  >
-                    Rechnung PDF
-                  </a>
-                  {booking.contract_signed && (
-                    <a
-                      href={`/api/rental-contract/${booking.id}`}
-                      target="_blank"
-                      className="block w-full text-center px-4 py-2 text-sm font-heading font-semibold bg-teal-600 text-white rounded-btn hover:bg-teal-700 transition-colors"
-                    >
-                      Mietvertrag PDF
-                    </a>
-                  )}
-                  {booking.delivery_mode === 'versand' && (
-                    <a
-                      href={`/api/packlist/${booking.id}`}
-                      target="_blank"
-                      className="block w-full text-center px-4 py-2 text-sm font-heading font-semibold bg-amber-500 text-white rounded-btn hover:bg-amber-600 transition-colors"
-                    >
-                      Packliste PDF
-                    </a>
-                  )}
-                  {booking.delivery_mode === 'abholung' && (
-                    <button
-                      onClick={openUebergabeprotokoll}
-                      className="block w-full text-center px-4 py-2 text-sm font-heading font-semibold bg-cyan-600 text-white rounded-btn hover:bg-cyan-700 transition-colors"
-                    >
-                      Übergabeprotokoll
-                    </button>
-                  )}
-                  {booking.delivery_mode === 'versand' && booking.status === 'confirmed' && (
-                    <Link
-                      href="/admin/versand"
-                      className="block w-full text-center px-4 py-2 text-sm font-heading font-semibold bg-brand-black text-white rounded-btn hover:bg-brand-dark transition-colors"
-                    >
-                      Zum Versand
-                    </Link>
-                  )}
-                  {(booking.status === 'shipped' || (booking.status === 'confirmed' && booking.delivery_mode === 'abholung')) && (
-                    <Link
-                      href="/admin/retouren"
-                      className="block w-full text-center px-4 py-2 text-sm font-heading font-semibold bg-green-600 text-white rounded-btn hover:bg-green-700 transition-colors"
-                    >
-                      Rückgabe prüfen
-                    </Link>
-                  )}
-                  <Link
-                    href="/admin/schaeden"
-                    className="block w-full text-center px-4 py-2 text-sm font-heading font-semibold bg-orange-500 text-white rounded-btn hover:bg-orange-600 transition-colors"
-                  >
-                    Schadensbericht erstellen
-                  </Link>
-                </div>
+            {/* Dokumente */}
+            <Section title="Dokumente">
+              <div className="space-y-2">
+                <a href={`/api/invoice/${booking.id}`} target="_blank" className="block w-full text-center px-4 py-2 text-sm font-heading font-semibold bg-brand-black text-white rounded-btn hover:bg-brand-dark transition-colors">Rechnung PDF</a>
+                {booking.contract_signed && (
+                  <a href={`/api/rental-contract/${booking.id}`} target="_blank" className="block w-full text-center px-4 py-2 text-sm font-heading font-semibold bg-teal-600 text-white rounded-btn hover:bg-teal-700 transition-colors">Mietvertrag PDF</a>
+                )}
+                {booking.delivery_mode === 'versand' && (
+                  <>
+                    <button onClick={openPackliste} className="block w-full text-center px-4 py-2 text-sm font-heading font-semibold bg-cyan-600 text-white rounded-btn hover:bg-cyan-700 transition-colors">Versand-Packliste</button>
+                    <a href={`/api/packlist/${booking.id}`} target="_blank" className="block w-full text-center px-4 py-2 text-sm font-heading font-semibold bg-amber-500 text-white rounded-btn hover:bg-amber-600 transition-colors">Packliste PDF</a>
+                  </>
+                )}
+                {booking.delivery_mode === 'abholung' && (
+                  <button onClick={openUebergabeprotokoll} className="block w-full text-center px-4 py-2 text-sm font-heading font-semibold bg-cyan-600 text-white rounded-btn hover:bg-cyan-700 transition-colors">Uebergabeprotokoll</button>
+                )}
+                <Link href="/admin/schaeden" className="block w-full text-center px-4 py-2 text-sm font-heading font-semibold bg-orange-500 text-white rounded-btn hover:bg-orange-600 transition-colors">Schadensbericht erstellen</Link>
               </div>
             </Section>
           </div>
