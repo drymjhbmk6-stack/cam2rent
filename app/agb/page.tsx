@@ -108,15 +108,18 @@ export default function AGBPage() {
             </li>
             <li>
               Der Versand ist ab einem Bestellwert von 49 € kostenlos. Darunter fallen die jeweils
-              ausgewiesenen Versandkosten an.
+              ausgewiesenen Versandkosten an. Die Versandkosten beinhalten sowohl den Hin- als auch den
+              Rueckversand — ein frankiertes Ruecksendeetikett liegt dem Paket bei.
             </li>
             <li>
               Die Zahlung erfolgt über den Zahlungsdienstleister Stripe. Akzeptiert werden
-              Kreditkarte (Visa, Mastercard), Klarna und weitere von Stripe unterstützte
+              Kreditkarte (Visa, Mastercard), PayPal, Klarna (auch Ratenzahlung), Apple Pay,
+              Google Pay und weitere von Stripe unterstützte
               Zahlungsmethoden. Barzahlung ist nicht möglich.
             </li>
             <li>
-              Der Mietpreis ist bei Buchungsabschluss vollständig zu entrichten.
+              Der Mietpreis ist bei Buchungsabschluss vollstaendig zu entrichten. Bei Zahlung ueber
+              Klarna gelten die Ratenzahlungsbedingungen von Klarna.
             </li>
           </ol>
         </section>
@@ -136,7 +139,7 @@ export default function AGBPage() {
             </li>
             <li>
               Nach erfolgreicher Rückgabe und positiver Zustandsprüfung wird die Vorautorisierung
-              automatisch freigegeben.
+              innerhalb von 5 Werktagen freigegeben.
             </li>
             <li>
               Bei Beschädigungen, Verlust oder fehlenden Zubehörteilen kann die Kaution ganz oder
@@ -156,6 +159,11 @@ export default function AGBPage() {
                 <li><strong>Standard-Haftung:</strong> Selbstbeteiligung im Schadensfall gemäß Preisliste</li>
                 <li><strong>Premium-Haftung:</strong> Reduzierte Selbstbeteiligung gegen Aufpreis</li>
               </ul>
+            </li>
+            <li>
+              Die Haftungsoptionen werden durch ein selbstfinanziertes Reparaturdepot von cam2rent
+              getragen. Es handelt sich nicht um eine Versicherung im Sinne des
+              Versicherungsvertragsgesetzes (VVG).
             </li>
             <li>
               Schäden durch Vorsatz oder grobe Fahrlässigkeit sind von allen Haftungsoptionen
@@ -252,6 +260,34 @@ export default function AGBPage() {
             <li>
               Im Übrigen haftet der Vermieter nur bei Verletzung wesentlicher Vertragspflichten
               (Kardinalpflichten) und beschränkt auf den vertragstypischen, vorhersehbaren Schaden.
+            </li>
+          </ol>
+        </section>
+
+        <section className="mb-10">
+          <h2 className="font-heading font-semibold text-lg text-brand-black dark:text-white mb-4">
+            § 13a Bearbeitungszeiten
+          </h2>
+          <ol className="list-decimal list-inside font-body text-brand-steel dark:text-gray-300 space-y-2">
+            <li>
+              <strong>Ausweis-Verifizierung:</strong> Die Pruefung hochgeladener Ausweisdokumente erfolgt
+              in der Regel innerhalb von 24 Stunden an Werktagen.
+            </li>
+            <li>
+              <strong>Schadenspruefung:</strong> Bei Schadensmeldungen erhaelt der Mieter innerhalb von
+              3 Werktagen eine Rueckmeldung mit Einschaetzung und ggf. Kostenaufstellung.
+            </li>
+            <li>
+              <strong>Rueckerstattungen:</strong> Stornierungen und berechtigte Rueckerstattungen werden
+              innerhalb von 5 Werktagen ueber den urspruenglichen Zahlungsweg erstattet.
+            </li>
+            <li>
+              <strong>Kautionsfreigabe:</strong> Die Freigabe der Kautionsvorautorisierung erfolgt
+              innerhalb von 5 Werktagen nach erfolgreicher Rueckgabe und Zustandspruefung.
+            </li>
+            <li>
+              <strong>Kundenservice:</strong> Anfragen per E-Mail werden in der Regel innerhalb von
+              24 Stunden an Werktagen beantwortet.
             </li>
           </ol>
         </section>

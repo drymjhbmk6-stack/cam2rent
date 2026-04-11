@@ -223,6 +223,21 @@ export default function HaftungsbedingungenPage() {
           </div>
         </section>
 
+        <section className="mb-10">
+          <h2 className="font-heading font-semibold text-lg text-brand-black dark:text-white mb-4">
+            Wichtiger Hinweis
+          </h2>
+          <div className="bg-brand-bg dark:bg-white/5 rounded-xl p-5 border border-brand-border dark:border-white/10">
+            <p className="font-body text-brand-steel dark:text-gray-300 leading-relaxed">
+              Die Haftungsoptionen von cam2rent stellen <strong>keine Versicherung</strong> im Sinne des
+              Versicherungsvertragsgesetzes (VVG) dar. Die Haftungsbegrenzung wird durch ein
+              <strong> selbstfinanziertes Reparaturdepot</strong> von cam2rent getragen. Die erhobenen
+              Gebuehren fuer Standard- und Premium-Haftungsschutz fliessen in dieses Depot und dienen
+              ausschliesslich der Deckung von Reparatur- und Ersatzkosten.
+            </p>
+          </div>
+        </section>
+
         <section>
           <h2 className="font-heading font-semibold text-lg text-brand-black dark:text-white mb-4">
             Kontakt
