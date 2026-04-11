@@ -1168,7 +1168,7 @@ export default function BuchenPage() {
                             <span className={`font-heading font-semibold text-sm flex-1 ${disabled ? 'text-brand-muted' : 'text-brand-black dark:text-gray-100'}`}>{acc.name}</span>
                             {!disabled && (
                               <span className="font-heading font-semibold text-sm text-accent-blue flex-shrink-0">
-                                +{fmt(getAccessoryPrice(acc, days))} € {acc.pricingMode === 'flat' ? 'einmalig' : 'pro Tag'}
+                                +{fmt(getAccessoryPrice(acc, days))} €{acc.pricingMode === 'perDay' ? ' pro Tag' : ''}
                               </span>
                             )}
                           </div>
@@ -1182,40 +1182,6 @@ export default function BuchenPage() {
                 </div>
                   ));
                 })()}
-
-                {/* "Im Paket enthalten" — komplette Auflistung mit Zusammenfassung */}
-                {selectedSet && (
-                  <div className="mb-6 bg-accent-blue-soft/20 border border-accent-blue/20 rounded-xl p-4">
-                    <p className="text-xs font-body font-semibold text-accent-blue uppercase tracking-wider mb-3">
-                      Im Paket enthalten
-                    </p>
-                    <div className="space-y-1.5">
-                      {(() => {
-                        const counts: Record<string, number> = {};
-                        // Set-Inhalt
-                        for (const item of selectedSet.includedItems) {
-                          counts[item] = (counts[item] ?? 0) + 1;
-                        }
-                        // Einzeln gewaehltes Zubehoer
-                        for (const accId of accessories) {
-                          const acc = dbAccessories.find((a) => a.id === accId);
-                          if (acc) counts[acc.name] = (counts[acc.name] ?? 0) + 1;
-                        }
-                        return Object.entries(counts).map(([name, qty]) => (
-                          <div key={name} className="flex items-center gap-2 text-sm font-body text-brand-black dark:text-gray-200">
-                            <svg viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5 text-status-success flex-shrink-0">
-                              <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
-                            </svg>
-                            <span>{qty > 1 ? `${qty}x ` : ''}{name}</span>
-                          </div>
-                        ));
-                      })()}
-                    </div>
-                    <p className="text-[10px] text-brand-muted mt-2">
-                      {selectedSet.name}{accessories.length > 0 ? ` + ${accessories.length} zusaetzliche${accessories.length > 1 ? 's' : ''} Zubehoer` : ''}
-                    </p>
-                  </div>
-                )}
 
                 <div className="mt-8 flex items-center justify-between">
                   <button
