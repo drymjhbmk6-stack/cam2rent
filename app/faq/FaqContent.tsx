@@ -321,16 +321,11 @@ function AccordionItem({
 /* ------------------------------------------------------------------ */
 
 export default function FaqContent() {
-  const [openItems, setOpenItems] = useState<Set<string>>(new Set());
+  const [openItem, setOpenItem] = useState<string | null>(null);
   const [search, setSearch] = useState('');
 
   function toggle(key: string) {
-    setOpenItems((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
+    setOpenItem((prev) => prev === key ? null : key);
   }
 
   /* Suche: nur plaintext-Teile der Fragen durchsuchen */
@@ -452,7 +447,7 @@ export default function FaqContent() {
                         <AccordionItem
                           key={key}
                           item={item}
-                          isOpen={openItems.has(key)}
+                          isOpen={openItem === key}
                           onToggle={() => toggle(key)}
                         />
                       );
