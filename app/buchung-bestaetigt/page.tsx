@@ -7,40 +7,22 @@ import { useCart } from '@/components/CartProvider';
 import { useAuth } from '@/components/AuthProvider';
 import { createAuthBrowserClient } from '@/lib/supabase-auth';
 
-// ─── Vertrag automatisch signieren nach Buchungserstellung ──────────────────
+// ─── Signaturdaten aus sessionStorage lesen ──────────────────────────────────
 
-async function signContractForBooking(bookingId: string) {
+function readContractSignature() {
   try {
     const raw = sessionStorage.getItem('cam2rent_contract_signature');
-    if (!raw) return;
-
-    const signature = JSON.parse(raw);
-    if (!signature?.agreedToTerms) return;
-
-    await fetch('/api/contracts/sign', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        bookingId,
-        signatureDataUrl: signature.signatureDataUrl,
-        customerName: signature.signerName,
-        agreedToTerms: true,
-        signatureMethod: signature.signatureMethod || 'canvas',
-      }),
-    });
+    if (!raw) return undefined;
+    const sig = JSON.parse(raw);
+    if (!sig?.agreedToTerms) return undefined;
+    return sig;
   } catch {
-    // Fehler beim Signieren nicht blockierend
+    return undefined;
   }
 }
 
-async function processContractSignatures(bookingIds: string[]) {
-  for (const id of bookingIds) {
-    await signContractForBooking(id);
-  }
-  // sessionStorage aufraeumen
-  try {
-    sessionStorage.removeItem('cam2rent_contract_signature');
-  } catch {}
+function clearContractSignature() {
+  try { sessionStorage.removeItem('cam2rent_contract_signature'); } catch {}
 }
 
 // ─── Single-item flow (from /kameras/[slug]/buchen) ──────────────────────────
@@ -53,17 +35,21 @@ function SingleBookingConfirmed({
   const [bookingId, setBookingId] = useState<string | null>(null);
 
   useEffect(() => {
+    const contractSignature = readContractSignature();
+
     fetch('/api/confirm-booking', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ payment_intent_id: paymentIntentId }),
+      body: JSON.stringify({
+        payment_intent_id: paymentIntentId,
+        contractSignature,
+      }),
     })
       .then((r) => r.json())
       .then((data) => {
         if (data.booking_id) {
           setBookingId(data.booking_id);
-          // Vertrag automatisch signieren
-          processContractSignatures([data.booking_id]);
+          clearContractSignature();
         }
       })
       .catch(() => {});
@@ -113,6 +99,8 @@ function CartBookingConfirmed({
     const cartItems =
       (context?.items as typeof items) ?? items;
 
+    const contractSignature = readContractSignature();
+
     const res = await fetch('/api/confirm-cart', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -132,6 +120,7 @@ function CartBookingConfirmed({
         loyaltyDiscount: context?.loyaltyDiscount ?? 0,
         referralCode: context?.referralCode ?? '',
         shippingAddress,
+        contractSignature,
       }),
     });
     const data = await res.json();
@@ -140,8 +129,7 @@ function CartBookingConfirmed({
       setBookingIds(data.booking_ids);
       clearCart();
       sessionStorage.removeItem('cam2rent_checkout_context');
-      // Vertrag automatisch signieren fuer alle Buchungen
-      processContractSignatures(data.booking_ids);
+      clearContractSignature();
     }
   }, [paymentIntentId, items, clearCart, user]);
 

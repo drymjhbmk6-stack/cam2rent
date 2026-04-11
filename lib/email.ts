@@ -106,7 +106,7 @@ export interface BookingEmailData {
 
 // ─── Send functions ───────────────────────────────────────────────────────────
 
-export async function sendBookingConfirmation(data: BookingEmailData) {
+export async function sendBookingConfirmation(data: BookingEmailData, contractPdfBuffer?: Buffer) {
   const { html, subject } = buildCustomerEmail(data);
 
   // Generate PDF invoice as attachment
@@ -140,10 +140,19 @@ export async function sendBookingConfirmation(data: BookingEmailData) {
     createElement(InvoicePDF, { data: invoiceData }) as ReactElement<DocumentProps>
   );
   const invoiceNumber = data.bookingId.replace('BK-', 'RE-');
+  const contractNumber = data.bookingId.replace('BK-', 'MV-');
+
+  const attachments: { filename: string; content: Buffer }[] = [
+    { filename: `Rechnung-${invoiceNumber}.pdf`, content: pdfBuffer },
+  ];
+
+  if (contractPdfBuffer) {
+    attachments.push({ filename: `Mietvertrag-${contractNumber}.pdf`, content: contractPdfBuffer });
+  }
 
   await sendAndLog({
     to: data.customerEmail, subject, html, bookingId: data.bookingId, emailType: 'booking_confirmation',
-    attachments: [{ filename: `Rechnung-${invoiceNumber}.pdf`, content: pdfBuffer }],
+    attachments,
   });
 }
 

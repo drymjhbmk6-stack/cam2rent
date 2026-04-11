@@ -9,6 +9,8 @@ import {
   sendAdminNotification,
   type BookingEmailData,
 } from '@/lib/email';
+import { generateContractPDF } from '@/lib/contracts/generate-contract';
+import { storeContract } from '@/lib/contracts/store-contract';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
@@ -25,9 +27,15 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 export async function POST(req: NextRequest) {
   await ensureBusinessConfig();
   try {
-    const { payment_intent_id, deposit_intent_id } = (await req.json()) as {
+    const { payment_intent_id, deposit_intent_id, contractSignature } = (await req.json()) as {
       payment_intent_id: string;
       deposit_intent_id?: string;
+      contractSignature?: {
+        signatureDataUrl: string | null;
+        signatureMethod: 'canvas' | 'typed';
+        signerName: string;
+        agreedToTerms: boolean;
+      };
     };
 
     if (!payment_intent_id) {
@@ -187,7 +195,80 @@ export async function POST(req: NextRequest) {
     const txMap: Record<string, string> = {};
     for (const s of taxSettings ?? []) txMap[s.key] = s.value;
 
-    // 8. Send confirmation emails (fire-and-forget — don't block the response)
+    // 8. Vertrag generieren (wenn Signaturdaten vorhanden)
+    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+      || req.headers.get('x-real-ip')
+      || 'unknown';
+
+    const fmtDate = (iso: string) => {
+      if (!iso) return '';
+      const [y, m, d] = iso.split('-');
+      return `${d}.${m}.${y}`;
+    };
+
+    let contractPdfBuffer: Buffer | undefined;
+    if (contractSignature?.agreedToTerms && contractSignature?.signerName) {
+      try {
+        // Kundenprofil fuer Adresse laden
+        let custStreet = '';
+        let custZip = '';
+        let custCity = '';
+        if (meta.user_id) {
+          const { data: addrProfile } = await supabase
+            .from('profiles')
+            .select('address_street, address_zip, address_city')
+            .eq('id', meta.user_id)
+            .maybeSingle();
+          if (addrProfile?.address_street) {
+            custStreet = addrProfile.address_street;
+            custZip = addrProfile.address_zip || '';
+            custCity = addrProfile.address_city || '';
+          }
+        }
+
+        const result = await generateContractPDF({
+          bookingId,
+          bookingNumber: bookingId,
+          customerName: contractSignature.signerName,
+          customerEmail,
+          customerStreet: custStreet,
+          customerZip: custZip,
+          customerCity: custCity,
+          productName: meta.product_name || '',
+          accessories,
+          rentalFrom: fmtDate(meta.rental_from),
+          rentalTo: fmtDate(meta.rental_to),
+          rentalDays: parseInt(meta.days, 10),
+          priceRental: parseFloat(meta.price_rental ?? '0'),
+          priceAccessories: parseFloat(meta.price_accessories ?? '0'),
+          priceHaftung: parseFloat(meta.price_haftung ?? '0'),
+          priceShipping: parseFloat(meta.shipping_price ?? '0'),
+          priceTotal: intent.amount / 100,
+          deposit: parseFloat(meta.deposit ?? '0'),
+          taxMode: (txMap['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer',
+          taxRate: parseFloat(txMap['tax_rate'] || '19'),
+          signatureDataUrl: contractSignature.signatureDataUrl,
+          signatureMethod: contractSignature.signatureMethod,
+          signerName: contractSignature.signerName,
+          ipAddress: ip,
+        });
+
+        contractPdfBuffer = result.pdfBuffer;
+
+        // Vertrag in Supabase speichern (non-blocking fuer Response)
+        storeContract(bookingId, result.pdfBuffer, {
+          contractHash: result.contractHash,
+          customerName: contractSignature.signerName,
+          ipAddress: ip,
+          signedAt: new Date().toISOString(),
+          signatureMethod: contractSignature.signatureMethod,
+        }).catch((err) => console.error('Contract store error:', err));
+      } catch (err) {
+        console.error('Contract generation error:', err);
+      }
+    }
+
+    // 9. Send confirmation emails with Rechnung + Vertrag (fire-and-forget)
     if (customerEmail) {
       const emailData: BookingEmailData = {
         bookingId,
@@ -213,7 +294,7 @@ export async function POST(req: NextRequest) {
       };
 
       Promise.all([
-        sendBookingConfirmation(emailData),
+        sendBookingConfirmation(emailData, contractPdfBuffer),
         sendAdminNotification(emailData),
       ]).catch((err) => console.error('Email send error:', err));
     }

@@ -7,6 +7,8 @@ import type { CartItem } from '@/components/CartProvider';
 import { calcShipping } from '@/data/shipping';
 import type { ShippingMethod } from '@/data/shipping';
 import { DEFAULT_SHIPPING, type ShippingPriceConfig } from '@/lib/price-config';
+import { generateContractPDF } from '@/lib/contracts/generate-contract';
+import { storeContract } from '@/lib/contracts/store-contract';
 import {
   sendBookingConfirmation,
   sendAdminNotification,
@@ -69,7 +71,20 @@ export async function POST(req: NextRequest) {
       loyaltyDiscount?: number;
       referralCode?: string;
       shippingAddress?: string | null;
+      contractSignature?: {
+        signatureDataUrl: string | null;
+        signatureMethod: 'canvas' | 'typed';
+        signerName: string;
+        agreedToTerms: boolean;
+      };
     };
+
+    const contractSignature = body.contractSignature as {
+      signatureDataUrl: string | null;
+      signatureMethod: 'canvas' | 'typed';
+      signerName: string;
+      agreedToTerms: boolean;
+    } | undefined;
 
     if (!payment_intent_id) {
       return NextResponse.json(
@@ -403,13 +418,23 @@ export async function POST(req: NextRequest) {
       }
     }).catch((err) => console.error('Suspicious detection error:', err));
 
-    // 10. Steuer-Config + Email senden (fuer jede Buchung)
+    // 10. Steuer-Config + Vertrag generieren + Email senden (fuer jede Buchung)
     const { data: taxSettings } = await supabase
       .from('admin_settings')
       .select('key, value')
       .in('key', ['tax_mode', 'tax_rate', 'ust_id']);
     const txMap: Record<string, string> = {};
     for (const s of taxSettings ?? []) txMap[s.key] = s.value;
+
+    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+      || req.headers.get('x-real-ip')
+      || 'unknown';
+
+    const fmtDateForContract = (iso: string) => {
+      if (!iso) return '';
+      const [y, m, d] = iso.split('-');
+      return `${d}.${m}.${y}`;
+    };
 
     if (r_email) {
       for (let gi = 0; gi < periodGroups.length; gi++) {
@@ -432,6 +457,46 @@ export async function POST(req: NextRequest) {
           - Math.round((r_durationDiscount ?? 0) * ratio * 100) / 100
           - Math.round((r_loyaltyDiscount ?? 0) * ratio * 100) / 100
           + emailShipping;
+
+        // Vertrag generieren wenn Signatur vorhanden
+        let contractPdfBuffer: Buffer | undefined;
+        if (contractSignature?.agreedToTerms && contractSignature?.signerName) {
+          try {
+            const result = await generateContractPDF({
+              bookingId: bookingIds[gi],
+              bookingNumber: bookingIds[gi],
+              customerName: contractSignature.signerName,
+              customerEmail: r_email,
+              productName,
+              accessories: allAccessories,
+              rentalFrom: fmtDateForContract(firstItem.rentalFrom),
+              rentalTo: fmtDateForContract(firstItem.rentalTo),
+              rentalDays: firstItem.days,
+              priceRental: groupItems.reduce((s, it) => s + it.priceRental, 0),
+              priceAccessories: groupItems.reduce((s, it) => s + it.priceAccessories, 0),
+              priceHaftung: groupItems.reduce((s, it) => s + it.priceHaftung, 0),
+              priceShipping: emailShipping,
+              priceTotal: Math.max(0, groupTotal),
+              deposit: groupItems.reduce((s, it) => s + it.deposit, 0),
+              taxMode: (txMap['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer',
+              taxRate: parseFloat(txMap['tax_rate'] || '19'),
+              signatureDataUrl: contractSignature.signatureDataUrl,
+              signatureMethod: contractSignature.signatureMethod,
+              signerName: contractSignature.signerName,
+              ipAddress: ip,
+            });
+            contractPdfBuffer = result.pdfBuffer;
+            storeContract(bookingIds[gi], result.pdfBuffer, {
+              contractHash: result.contractHash,
+              customerName: contractSignature.signerName,
+              ipAddress: ip,
+              signedAt: new Date().toISOString(),
+              signatureMethod: contractSignature.signatureMethod,
+            }).catch((err) => console.error('Contract store error:', err));
+          } catch (err) {
+            console.error('Contract generation error:', err);
+          }
+        }
 
         const emailData: BookingEmailData = {
           bookingId: bookingIds[gi],
@@ -457,7 +522,7 @@ export async function POST(req: NextRequest) {
         };
 
         Promise.all([
-          sendBookingConfirmation(emailData),
+          sendBookingConfirmation(emailData, contractPdfBuffer),
           sendAdminNotification(emailData),
         ]).catch((err) => console.error('Email send error:', err));
       }
