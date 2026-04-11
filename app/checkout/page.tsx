@@ -20,6 +20,7 @@ import type { ShippingPriceConfig, DurationDiscount, LoyaltyDiscount, ProductDis
 import { calcDurationDiscount, calcLoyaltyDiscount, getActiveProductDiscount } from '@/lib/price-config';
 import { useAccessories } from '@/components/AccessoriesProvider';
 import { getAccessoryPrice } from '@/data/accessories';
+import { BUSINESS } from '@/lib/business-config';
 
 const stripePromise = loadStripe(
   process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!
@@ -661,157 +662,121 @@ export default function CheckoutPage() {
                   </div>
                 </div>
 
-                {/* Shipping */}
+                {/* Shipping — aufklappbar */}
                 <div className="bg-white dark:bg-brand-dark rounded-card shadow-card p-6">
                   <h2 className="font-heading font-semibold text-brand-black dark:text-white mb-4">
                     Lieferung
                   </h2>
 
-                  <div className="grid sm:grid-cols-2 gap-3 mb-4">
-                    {(
-                      [
-                        {
-                          id: 'versand' as DeliveryMode,
-                          label: 'Versand',
-                          sub: 'Wir liefern zu dir nach Hause',
-                        },
-                        {
-                          id: 'abholung' as DeliveryMode,
-                          label: 'Selbst abholen',
-                          sub: 'Du holst die Kamera bei uns ab',
-                        },
-                      ] as const
-                    ).map((opt) => (
-                      <label
-                        key={opt.id}
-                        className={`flex items-start gap-3 p-4 rounded-[10px] border-2 cursor-pointer transition-colors ${
-                          deliveryMode === opt.id
-                            ? 'border-accent-blue bg-accent-blue-soft dark:bg-accent-blue/10'
-                            : 'border-brand-border dark:border-white/10 hover:border-brand-steel'
-                        }`}
-                      >
-                        <input
-                          type="radio"
-                          name="deliveryMode"
-                          value={opt.id}
-                          checked={deliveryMode === opt.id}
-                          onChange={() => setDeliveryMode(opt.id)}
-                          className="mt-0.5 accent-accent-blue"
-                        />
-                        <div>
-                          <p className="font-body font-semibold text-brand-black dark:text-white text-sm">
-                            {opt.label}
-                          </p>
-                          <p className="text-xs text-brand-steel dark:text-gray-400 mt-0.5">{opt.sub}</p>
-                        </div>
-                      </label>
-                    ))}
-                  </div>
+                  {/* Versand */}
+                  <label
+                    className={`block rounded-[10px] border-2 cursor-pointer transition-all mb-3 overflow-hidden ${
+                      deliveryMode === 'versand'
+                        ? 'border-accent-blue'
+                        : 'border-brand-border dark:border-white/10 hover:border-brand-steel'
+                    }`}
+                  >
+                    <div className={`flex items-start gap-3 p-4 ${deliveryMode === 'versand' ? 'bg-accent-blue-soft dark:bg-accent-blue/10' : ''}`}>
+                      <input type="radio" name="deliveryMode" value="versand" checked={deliveryMode === 'versand'}
+                        onChange={() => setDeliveryMode('versand')} className="mt-0.5 accent-accent-blue" />
+                      <div>
+                        <p className="font-body font-semibold text-brand-black dark:text-white text-sm">Versand</p>
+                        <p className="text-xs text-brand-steel dark:text-gray-400 mt-0.5">Wir liefern zu dir nach Hause</p>
+                      </div>
+                    </div>
 
-                  {deliveryMode === 'versand' && (
-                    <>
-                      {/* Shipping method */}
-                      <div className="grid sm:grid-cols-2 gap-3 mb-5">
-                        {(
-                          [
-                            {
-                              id: 'standard' as ShippingMethod,
-                              label: 'Standardversand',
-                              sub: '3–5 Werktage',
-                              price: dynShipping.standardPrice,
-                            },
-                            {
-                              id: 'express' as ShippingMethod,
-                              label: 'Expressversand',
-                              sub: 'Nächster Werktag',
-                              price: dynShipping.expressPrice,
-                            },
-                          ] as const
-                        ).map((opt) => {
-                          const isFreeStandard =
-                            opt.id === 'standard' &&
-                            cartTotal >= dynShipping.freeShippingThreshold;
-                          return (
-                            <label
-                              key={opt.id}
-                              className={`flex items-start justify-between gap-3 p-4 rounded-[10px] border-2 cursor-pointer transition-colors ${
-                                shippingMethod === opt.id
-                                  ? 'border-accent-blue bg-accent-blue-soft dark:bg-accent-blue/10'
-                                  : 'border-brand-border dark:border-white/10 hover:border-brand-steel'
-                              }`}
-                            >
-                              <div className="flex items-start gap-3">
-                                <input
-                                  type="radio"
-                                  name="shippingMethod"
-                                  value={opt.id}
-                                  checked={shippingMethod === opt.id}
-                                  onChange={() => setShippingMethod(opt.id)}
-                                  className="mt-0.5 accent-accent-blue"
-                                />
-                                <div>
-                                  <p className="font-body font-semibold text-brand-black dark:text-white text-sm">
-                                    {opt.label}
-                                  </p>
-                                  <p className="text-xs text-brand-steel dark:text-gray-400">{opt.sub}</p>
-                                  {opt.id === 'express' && (
-                                    <p className="text-xs text-brand-muted dark:text-gray-500 mt-0.5">Immer kostenpflichtig</p>
-                                  )}
+                    {/* Aufklappbar: Versandart + Adresse */}
+                    {deliveryMode === 'versand' && (
+                      <div className="px-4 pb-4 pt-2 border-t border-brand-border/50 dark:border-white/5" onClick={(e) => e.preventDefault()}>
+                        {/* Versandart */}
+                        <div className="grid sm:grid-cols-2 gap-2 mb-4">
+                          {([
+                            { id: 'standard' as ShippingMethod, label: 'Standard', sub: '3–5 Werktage', price: dynShipping.standardPrice },
+                            { id: 'express' as ShippingMethod, label: 'Express', sub: 'Naechster Werktag', price: dynShipping.expressPrice },
+                          ] as const).map((opt) => {
+                            const isFree = opt.id === 'standard' && cartTotal >= dynShipping.freeShippingThreshold;
+                            return (
+                              <label key={opt.id}
+                                className={`flex items-center justify-between gap-2 p-3 rounded-lg border cursor-pointer transition-colors ${
+                                  shippingMethod === opt.id
+                                    ? 'border-accent-blue bg-accent-blue/5'
+                                    : 'border-brand-border dark:border-white/10'
+                                }`}>
+                                <div className="flex items-center gap-2">
+                                  <input type="radio" name="shippingMethod" value={opt.id} checked={shippingMethod === opt.id}
+                                    onChange={() => setShippingMethod(opt.id)} className="accent-accent-blue" />
+                                  <div>
+                                    <span className="font-body font-semibold text-sm text-brand-black dark:text-white">{opt.label}</span>
+                                    <span className="text-xs text-brand-muted ml-1.5">{opt.sub}</span>
+                                  </div>
                                 </div>
-                              </div>
-                              <span className="text-sm font-semibold flex-shrink-0">
-                                {isFreeStandard ? (
-                                  <span className="text-status-success">Gratis</span>
-                                ) : (
-                                  <span className="text-brand-black dark:text-white">{fmt(opt.price)}</span>
-                                )}
-                              </span>
-                            </label>
-                          );
-                        })}
-                      </div>
+                                <span className="text-sm font-semibold flex-shrink-0">
+                                  {isFree ? <span className="text-status-success">Gratis</span> : <span className="text-brand-black dark:text-white">{fmt(opt.price)}</span>}
+                                </span>
+                              </label>
+                            );
+                          })}
+                        </div>
 
-                      {/* Shipping address */}
-                      <div className="space-y-3">
-                        <div>
-                          <label className={labelClass}>Straße und Hausnummer *</label>
-                          <input
-                            type="text"
-                            value={street}
-                            onChange={(e) => setStreet(e.target.value)}
-                            className={inputClass}
-                            placeholder="Musterstraße 42"
-                            autoComplete="street-address"
-                          />
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
+                        {/* Adresse */}
+                        <p className="text-xs font-heading font-semibold text-brand-muted dark:text-gray-500 uppercase tracking-wider mb-2">Lieferadresse</p>
+                        <div className="space-y-3">
                           <div>
-                            <label className={labelClass}>PLZ *</label>
-                            <input
-                              type="text"
-                              value={zip}
-                              onChange={(e) => setZip(e.target.value)}
-                              className={inputClass}
-                              placeholder="12345"
-                              autoComplete="postal-code"
-                              maxLength={5}
-                            />
+                            <label className={labelClass}>Strasse und Hausnummer *</label>
+                            <input type="text" value={street} onChange={(e) => setStreet(e.target.value)}
+                              className={inputClass} placeholder="Musterstrasse 42" autoComplete="street-address" />
                           </div>
-                          <div>
-                            <label className={labelClass}>Stadt *</label>
-                            <input
-                              type="text"
-                              value={city}
-                              onChange={(e) => setCity(e.target.value)}
-                              className={inputClass}
-                              placeholder="Berlin"
-                              autoComplete="address-level2"
-                            />
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className={labelClass}>PLZ *</label>
+                              <input type="text" value={zip} onChange={(e) => setZip(e.target.value)}
+                                className={inputClass} placeholder="12345" autoComplete="postal-code" maxLength={5} />
+                            </div>
+                            <div>
+                              <label className={labelClass}>Stadt *</label>
+                              <input type="text" value={city} onChange={(e) => setCity(e.target.value)}
+                                className={inputClass} placeholder="Berlin" autoComplete="address-level2" />
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </>
-                  )}
+                    )}
+                  </label>
+
+                  {/* Abholung */}
+                  <label
+                    className={`block rounded-[10px] border-2 cursor-pointer transition-all overflow-hidden ${
+                      deliveryMode === 'abholung'
+                        ? 'border-accent-blue'
+                        : 'border-brand-border dark:border-white/10 hover:border-brand-steel'
+                    }`}
+                  >
+                    <div className={`flex items-start gap-3 p-4 ${deliveryMode === 'abholung' ? 'bg-accent-blue-soft dark:bg-accent-blue/10' : ''}`}>
+                      <input type="radio" name="deliveryMode" value="abholung" checked={deliveryMode === 'abholung'}
+                        onChange={() => setDeliveryMode('abholung')} className="mt-0.5 accent-accent-blue" />
+                      <div>
+                        <p className="font-body font-semibold text-brand-black dark:text-white text-sm">Selbst abholen</p>
+                        <p className="text-xs text-brand-steel dark:text-gray-400 mt-0.5">Du holst die Kamera bei uns ab</p>
+                      </div>
+                    </div>
+
+                    {/* Aufklappbar: Abholadresse */}
+                    {deliveryMode === 'abholung' && (
+                      <div className="px-4 pb-4 pt-2 border-t border-brand-border/50 dark:border-white/5" onClick={(e) => e.preventDefault()}>
+                        <p className="text-xs font-heading font-semibold text-brand-muted dark:text-gray-500 uppercase tracking-wider mb-2">Abholadresse</p>
+                        <div className="bg-brand-bg dark:bg-brand-black rounded-lg p-3">
+                          <p className="font-body font-semibold text-sm text-brand-black dark:text-white">{BUSINESS.name || 'cam2rent'}</p>
+                          <p className="text-xs text-brand-steel dark:text-gray-400 mt-1">
+                            {BUSINESS.street}<br />
+                            {BUSINESS.zip} {BUSINESS.city}
+                          </p>
+                          <p className="text-xs text-brand-muted dark:text-gray-500 mt-2">
+                            Abholung nach Terminvereinbarung per E-Mail oder WhatsApp.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </label>
                 </div>
 
                 {/* Coupon */}
