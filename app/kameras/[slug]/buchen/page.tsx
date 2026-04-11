@@ -587,6 +587,24 @@ export default function BuchenPage() {
     }
   }, []);
 
+  // Set-Items filtern: Wenn ein Upgrade gewaehlt wurde, Base-Item ersetzen
+  const getFilteredSetItems = useCallback((): string[] => {
+    if (!selectedSet) return [];
+    // Finde alle Base-Accessories deren Upgrade-Gruppe ein aktives Upgrade hat
+    const replacedBaseNames = new Set<string>();
+    for (const accId of accessories) {
+      const acc = dbAccessories.find((a) => a.id === accId);
+      if (!acc?.upgradeGroup) continue;
+      // Dieses Accessory ist ein Upgrade → finde die Base der gleichen Gruppe
+      const baseAcc = dbAccessories.find(
+        (a) => a.upgradeGroup === acc.upgradeGroup && a.isUpgradeBase
+      );
+      if (baseAcc) replacedBaseNames.add(baseAcc.name);
+    }
+    // Set-Items filtern: Base-Name raus wenn durch Upgrade ersetzt
+    return selectedSet.includedItems.filter((item) => !replacedBaseNames.has(item));
+  }, [selectedSet, accessories, dbAccessories]);
+
   if (!product) {
     return (
       <div className="min-h-screen bg-brand-bg flex items-center justify-center">
@@ -1590,7 +1608,7 @@ export default function BuchenPage() {
                       )}
                     </div>
                     <ul className="space-y-1.5">
-                      {selectedSet.includedItems.map((item) => (
+                      {getFilteredSetItems().map((item) => (
                         <li key={item} className="flex items-center gap-2 text-sm font-body text-brand-steel">
                           <svg viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5 text-status-success flex-shrink-0" aria-hidden="true">
                             <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
@@ -1831,7 +1849,8 @@ export default function BuchenPage() {
                 <div className="space-y-1.5">
                   {(() => {
                     const counts: Record<string, number> = {};
-                    for (const item of selectedSet.includedItems) counts[item] = (counts[item] ?? 0) + 1;
+                    const filteredItems = getFilteredSetItems();
+                    for (const item of filteredItems) counts[item] = (counts[item] ?? 0) + 1;
                     for (const accId of accessories) {
                       const acc = dbAccessories.find((a) => a.id === accId);
                       if (acc) counts[acc.name] = (counts[acc.name] ?? 0) + 1;
