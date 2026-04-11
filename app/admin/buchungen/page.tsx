@@ -227,18 +227,18 @@ export default function AdminBuchungenPage() {
 
   return (
     <div className="min-h-screen bg-brand-bg">
-      <div className="max-w-7xl mx-auto px-6 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
         {/* Header */}
-        <div className="mb-6 flex items-center justify-between">
+        <div className="mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div>
-            <h1 className="font-heading font-bold text-2xl text-brand-black">Buchungsübersicht</h1>
-            <p className="text-sm font-body text-brand-muted mt-1">
+            <h1 className="font-heading font-bold text-xl sm:text-2xl text-brand-black">Buchungen</h1>
+            <p className="text-xs sm:text-sm font-body text-brand-muted mt-1">
               Alle Buchungen verwalten und Status aktualisieren
             </p>
           </div>
           <Link
             href="/admin/buchungen/neu"
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-heading font-semibold transition-colors"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-heading font-semibold transition-colors flex-shrink-0"
             style={{ background: '#06b6d4', color: 'white' }}
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -249,9 +249,9 @@ export default function AdminBuchungenPage() {
         </div>
 
         {/* Filters */}
-        <div className="bg-white rounded-xl border border-brand-border p-4 mb-6 space-y-4">
+        <div className="bg-white rounded-xl border border-brand-border p-3 sm:p-4 mb-4 sm:mb-6 space-y-3 sm:space-y-4">
           {/* Status tabs */}
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-1.5 sm:gap-2">
             {STATUS_TABS.map((tab) => {
               const sc = STATUS_CONFIG[tab.value];
               const isActive = statusFilter === tab.value;
@@ -259,7 +259,7 @@ export default function AdminBuchungenPage() {
                 <button
                   key={tab.value}
                   onClick={() => setStatusFilter(tab.value)}
-                  className="px-4 py-2 text-sm font-heading font-semibold rounded-btn transition-colors"
+                  className="px-2.5 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-heading font-semibold rounded-btn transition-colors"
                   style={
                     isActive
                       ? sc
@@ -323,23 +323,23 @@ export default function AdminBuchungenPage() {
           </div>
         ) : (
           <div className="bg-white rounded-xl border border-brand-border overflow-hidden">
-            <div className="px-5 py-3 border-b border-brand-border bg-brand-bg">
+            <div className="px-3 sm:px-5 py-3 border-b border-brand-border bg-brand-bg">
               <p className="text-xs font-heading font-semibold text-brand-muted">
                 {filtered.length} Buchung{filtered.length !== 1 ? 'en' : ''}
               </p>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full">
+              <table className="w-full min-w-[600px]">
                 <thead>
                   <tr className="border-b border-brand-border bg-brand-bg">
-                    <th className="text-left px-5 py-3 text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider">Buchungsnr.</th>
-                    <th className="text-left px-5 py-3 text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider">Kunde</th>
-                    <th className="text-left px-5 py-3 text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider">Produkt</th>
-                    <th className="text-left px-5 py-3 text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider">Zeitraum</th>
-                    <th className="text-left px-5 py-3 text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider">Status</th>
-                    <th className="text-left px-5 py-3 text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider">Betrag</th>
-                    <th className="text-left px-5 py-3 text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider">Erstellt am</th>
-                    <th className="px-5 py-3" />
+                    <th className="text-left px-3 sm:px-5 py-3 text-[10px] sm:text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider">Nr.</th>
+                    <th className="text-left px-3 sm:px-5 py-3 text-[10px] sm:text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider">Kunde</th>
+                    <th className="text-left px-3 sm:px-5 py-3 text-[10px] sm:text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider hidden md:table-cell">Produkt</th>
+                    <th className="text-left px-3 sm:px-5 py-3 text-[10px] sm:text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider hidden lg:table-cell">Zeitraum</th>
+                    <th className="text-left px-3 sm:px-5 py-3 text-[10px] sm:text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider">Status</th>
+                    <th className="text-left px-3 sm:px-5 py-3 text-[10px] sm:text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider">Betrag</th>
+                    <th className="text-left px-3 sm:px-5 py-3 text-[10px] sm:text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider hidden lg:table-cell">Erstellt</th>
+                    <th className="px-3 sm:px-5 py-3" />
                   </tr>
                 </thead>
                 <tbody>
@@ -351,12 +351,12 @@ export default function AdminBuchungenPage() {
                         updatingId === booking.id ? 'opacity-50' : 'hover:bg-brand-bg/50'
                       }`}
                     >
-                      <td className="px-5 py-4">
-                        <p className="font-heading font-semibold text-sm text-accent-blue">{booking.id}</p>
+                      <td className="px-3 sm:px-5 py-3 sm:py-4">
+                        <p className="font-heading font-semibold text-xs sm:text-sm text-accent-blue">{booking.id}</p>
                       </td>
-                      <td className="px-5 py-4">
+                      <td className="px-3 sm:px-5 py-3 sm:py-4">
                         <div className="flex items-center gap-1.5">
-                          <p className="font-body text-sm text-brand-black">{booking.customer_name || '–'}</p>
+                          <p className="font-body text-xs sm:text-sm text-brand-black">{booking.customer_name || '–'}</p>
                           {booking.customer_blacklisted && (
                             <span title="Gesperrter Kunde" className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-600">
                               GESPERRT
@@ -379,11 +379,11 @@ export default function AdminBuchungenPage() {
                           </p>
                         )}
                       </td>
-                      <td className="px-5 py-4">
-                        <p className="font-body text-sm text-brand-black">{booking.product_name}</p>
+                      <td className="px-3 sm:px-5 py-3 sm:py-4 hidden md:table-cell">
+                        <p className="font-body text-sm text-brand-black truncate max-w-[200px]">{booking.product_name}</p>
                         <p className="text-xs font-body text-brand-muted">{booking.days} Tag{booking.days !== 1 ? 'e' : ''}</p>
                       </td>
-                      <td className="px-5 py-4">
+                      <td className="px-3 sm:px-5 py-3 sm:py-4 hidden lg:table-cell">
                         <p className="font-body text-sm text-brand-black whitespace-nowrap">
                           {fmtDate(booking.rental_from)} – {fmtDate(booking.rental_to)}
                         </p>
@@ -393,34 +393,20 @@ export default function AdminBuchungenPage() {
                           </p>
                         )}
                       </td>
-                      <td className="px-5 py-4">
+                      <td className="px-3 sm:px-5 py-3 sm:py-4">
                         <StatusBadge status={booking.status} />
                       </td>
-                      <td className="px-5 py-4">
-                        <p className="font-heading font-semibold text-sm text-brand-black whitespace-nowrap">
+                      <td className="px-3 sm:px-5 py-3 sm:py-4">
+                        <p className="font-heading font-semibold text-xs sm:text-sm text-brand-black whitespace-nowrap">
                           {fmtEuro(booking.price_total)}
                         </p>
-                        {booking.deposit > 0 && (
-                          <p className="text-xs font-body text-brand-muted">
-                            +{fmtEuro(booking.deposit)} Kaution
-                            {booking.deposit_status === 'held' && (
-                              <span className="ml-1 text-amber-600" title="Kaution gehalten">&#x23F3;</span>
-                            )}
-                            {booking.deposit_status === 'released' && (
-                              <span className="ml-1 text-green-600" title="Kaution freigegeben">&#x2713;</span>
-                            )}
-                            {booking.deposit_status === 'captured' && (
-                              <span className="ml-1 text-red-600" title="Kaution eingezogen">&#x2717;</span>
-                            )}
-                          </p>
-                        )}
                       </td>
-                      <td className="px-5 py-4">
+                      <td className="px-3 sm:px-5 py-3 sm:py-4 hidden lg:table-cell">
                         <p className="font-body text-sm text-brand-muted whitespace-nowrap">
                           {fmtDateTime(booking.created_at)}
                         </p>
                       </td>
-                      <td className="px-5 py-4 text-right" onClick={(e) => e.stopPropagation()}>
+                      <td className="px-3 sm:px-5 py-3 sm:py-4 text-right" onClick={(e) => e.stopPropagation()}>
                         <ActionButtons
                           booking={booking}
                           onAction={openConfirm}
