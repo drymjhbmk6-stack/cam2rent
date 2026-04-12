@@ -99,7 +99,9 @@ function CartBookingConfirmed({
     const cartItems =
       (context?.items as typeof items) ?? items;
 
-    const contractSignature = readContractSignature();
+    // Vertragssignatur: zuerst aus separatem Key, dann Fallback aus Checkout-Context
+    const contractSignature = readContractSignature()
+      ?? (context?.contractSignature as ReturnType<typeof readContractSignature>);
 
     const res = await fetch('/api/confirm-cart', {
       method: 'POST',

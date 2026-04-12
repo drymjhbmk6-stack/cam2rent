@@ -92,6 +92,13 @@ function PaymentForm({
     setError(null);
 
     // Save checkout context to sessionStorage so confirm page can read it
+    // Vertragssignatur aus separatem Key einbetten (falls vorhanden)
+    let contractSignature: unknown = undefined;
+    try {
+      const sigRaw = sessionStorage.getItem('cam2rent_contract_signature');
+      if (sigRaw) contractSignature = JSON.parse(sigRaw);
+    } catch { /* ignore */ }
+
     sessionStorage.setItem(
       'cam2rent_checkout_context',
       JSON.stringify({
@@ -111,6 +118,7 @@ function PaymentForm({
         street,
         zip,
         city,
+        contractSignature,
       })
     );
 
