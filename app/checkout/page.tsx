@@ -205,7 +205,7 @@ function PaymentForm({
 export default function CheckoutPage() {
   const { accessories: ALL_ACCESSORIES } = useAccessories();
   const router = useRouter();
-  const { items, cartTotal, itemCount, clearCart } = useCart();
+  const { items, cartTotal, itemCount, clearCart, hydrated } = useCart();
   const { user } = useAuth();
 
   // Step: 'details' | 'payment'
@@ -316,10 +316,10 @@ export default function CheckoutPage() {
     if (user.email) setEmail(user.email);
   }, [user]);
 
-  // Redirect if cart empty
+  // Redirect if cart empty (erst nach Hydratisierung prüfen)
   useEffect(() => {
-    if (itemCount === 0) router.replace('/warenkorb');
-  }, [itemCount, router]);
+    if (hydrated && itemCount === 0) router.replace('/warenkorb');
+  }, [hydrated, itemCount, router]);
 
   // Artikel nach Mietzeitraum gruppieren
   const periodGroups = useMemo(() => {

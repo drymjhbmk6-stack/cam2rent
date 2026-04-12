@@ -34,6 +34,7 @@ interface CartContextType {
   clearCart: () => void;
   itemCount: number;
   cartTotal: number; // sum of subtotals (ohne Versand)
+  hydrated: boolean;
 }
 
 const CartContext = createContext<CartContextType>({
@@ -43,12 +44,14 @@ const CartContext = createContext<CartContextType>({
   clearCart: () => {},
   itemCount: 0,
   cartTotal: 0,
+  hydrated: false,
 });
 
 const STORAGE_KEY = 'cam2rent_cart';
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
+  const [hydrated, setHydrated] = useState(false);
   const { user } = useAuth();
   const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -57,6 +60,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) setItems(JSON.parse(stored));
     } catch {}
+    setHydrated(true);
   }, []);
 
   useEffect(() => {
@@ -106,7 +110,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <CartContext.Provider
-      value={{ items, addItem, removeItem, clearCart, itemCount, cartTotal }}
+      value={{ items, addItem, removeItem, clearCart, itemCount, cartTotal, hydrated }}
     >
       {children}
     </CartContext.Provider>
