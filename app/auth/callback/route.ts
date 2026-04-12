@@ -26,42 +26,56 @@ export async function GET(request: NextRequest) {
   }
 
   if (code) {
-    const cookieStore = await cookies();
+    try {
+      const cookieStore = await cookies();
 
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return cookieStore.getAll();
+      const supabase = createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        {
+          cookies: {
+            getAll() {
+              return cookieStore.getAll();
+            },
+            setAll(cookiesToSet) {
+              try {
+                cookiesToSet.forEach(({ name, value, options }) =>
+                  cookieStore.set(name, value, options)
+                );
+              } catch {
+                // Cookies koennen in bestimmten Kontexten nicht gesetzt werden
+              }
+            },
           },
-          setAll(cookiesToSet) {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
-            );
-          },
-        },
-      }
-    );
-
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
-
-    if (!error) {
-      // Pruefen ob Profil verifiziert ist — wenn nicht, zur Ausweis-Upload-Seite
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user && next === '/konto') {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('verification_status')
-          .eq('id', user.id)
-          .maybeSingle();
-
-        if (!profile || profile.verification_status === 'none' || !profile.verification_status) {
-          return NextResponse.redirect(`${origin}/konto/verifizierung`);
         }
+      );
+
+      const { error } = await supabase.auth.exchangeCodeForSession(code);
+
+      if (!error) {
+        // Pruefen ob Profil verifiziert ist — wenn nicht, zur Verifizierungs-Seite
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user && next === '/konto') {
+            const { data: profile } = await supabase
+              .from('profiles')
+              .select('verification_status')
+              .eq('id', user.id)
+              .maybeSingle();
+
+            if (!profile || profile.verification_status === 'none' || !profile.verification_status) {
+              return NextResponse.redirect(`${origin}/konto/verifizierung`);
+            }
+          }
+        } catch {
+          // Profil-Check fehlgeschlagen — trotzdem weiterleiten
+        }
+        return NextResponse.redirect(`${origin}${next}`);
       }
-      return NextResponse.redirect(`${origin}${next}`);
+
+      console.error('[auth/callback] Code-Austausch fehlgeschlagen:', error.message);
+    } catch (err) {
+      console.error('[auth/callback] Unerwarteter Fehler:', err);
     }
   }
 
