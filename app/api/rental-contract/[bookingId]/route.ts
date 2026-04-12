@@ -168,34 +168,56 @@ export async function GET(
     day: '2-digit', month: '2-digit', year: 'numeric',
   });
 
+  const haftungLabel = booking.haftung === 'standard' ? 'Basis-Schadenspauschale'
+    : booking.haftung === 'premium' ? 'Premium-Schadenspauschale'
+    : 'Ohne Schadenspauschale';
+
+  const accs: string[] = Array.isArray(booking.accessories) ? booking.accessories : [];
+  const items = [
+    { position: 1, bezeichnung: booking.product_name || '', seriennr: '', tage: booking.days || 1, preis: booking.price_rental || 0, wiederbeschaffungswert: booking.deposit || 0 },
+    ...accs.map((a: string, i: number) => ({ position: i + 2, bezeichnung: a, seriennr: '', tage: booking.days || 1, preis: 0, wiederbeschaffungswert: 0 })),
+  ];
+
   const contractData: RentalContractData = {
     bookingId,
     bookingNumber: bookingId,
     contractDate,
+    contractTime: new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }),
     customerName: booking.customer_name || 'Kunde',
     customerEmail: booking.customer_email || '',
     customerStreet,
     customerZip,
     customerCity,
-    productName: booking.product_name,
-    accessories: Array.isArray(booking.accessories) ? booking.accessories : [],
+    items,
     rentalFrom: fmtDate(booking.rental_from),
     rentalTo: fmtDate(booking.rental_to),
     rentalDays: booking.days || 1,
+    deliveryMode: booking.delivery_mode === 'abholung' ? 'Abholung' : 'Versand',
+    returnMode: booking.delivery_mode === 'abholung' ? 'Rückgabe vor Ort' : 'Rücksendung',
+    deliveryAddress: booking.shipping_address || '',
     priceRental: booking.price_rental || 0,
-    priceAccessories: booking.price_accessories || 0,
-    priceHaftung: booking.price_haftung || 0,
     priceShipping: booking.shipping_price || 0,
+    priceHaftung: booking.price_haftung || 0,
     priceTotal: booking.price_total || 0,
-    deposit: booking.deposit || 0,
-    taxMode,
-    taxRate: parseFloat(taxMap['tax_rate'] || '19'),
+    haftungOption: haftungLabel,
+    haftungDescription: haftungLabel === 'Ohne Schadenspauschale'
+      ? 'Keine Schadenspauschale gewählt. Haftung bis zum Wiederbeschaffungswert.'
+      : haftungLabel === 'Basis-Schadenspauschale'
+      ? 'Ersatzpflicht auf max. 200 EUR je Schadensereignis begrenzt.'
+      : 'Volle Haftungsfreistellung – keine Selbstbeteiligung.',
+    stripePaymentIntentId: booking.payment_intent_id || '',
     signatureDataUrl,
     signatureMethod,
     signerName,
     signedAt: signedAt || contractDate,
     ipAddress: ipAddress || '',
     contractHash: contractHash || '',
+    productName: booking.product_name,
+    accessories: accs,
+    priceAccessories: booking.price_accessories || 0,
+    deposit: booking.deposit || 0,
+    taxMode,
+    taxRate: parseFloat(taxMap['tax_rate'] || '19'),
   };
 
   // PDF generieren
