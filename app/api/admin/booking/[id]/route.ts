@@ -15,9 +15,7 @@ export async function GET(
 
   const { data: booking, error } = await supabase
     .from('bookings')
-    .select(
-      'id, payment_intent_id, product_id, product_name, user_id, rental_from, rental_to, days, delivery_mode, shipping_method, shipping_price, shipping_address, haftung, accessories, price_rental, price_accessories, price_haftung, price_total, deposit, deposit_status, deposit_intent_id, status, customer_name, customer_email, tracking_number, tracking_url, shipped_at, return_condition, return_notes, returned_at, created_at, original_rental_to, extended_at, contract_signed, contract_signed_at, suspicious, suspicious_reasons, notes, coupon_code, discount_amount, duration_discount, loyalty_discount, label_url, return_label_url'
-    )
+    .select('*')
     .eq('id', id)
     .single();
 
