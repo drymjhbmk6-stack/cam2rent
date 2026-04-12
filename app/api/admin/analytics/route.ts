@@ -1,17 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { createHash } from 'crypto';
 import { createServiceClient } from '@/lib/supabase';
-
-async function checkAdminAuth(): Promise<boolean> {
-  const jar = await cookies();
-  const token = jar.get('admin_token')?.value;
-  if (!token) return false;
-  const expected = createHash('sha256')
-    .update((process.env.ADMIN_PASSWORD ?? '') + '_cam2rent_admin')
-    .digest('hex');
-  return token === expected;
-}
+import { checkAdminAuth } from '@/lib/admin-auth';
 
 function formatReferrer(ref: string | null): string {
   if (!ref) return 'direkt';

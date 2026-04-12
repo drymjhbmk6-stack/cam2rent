@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
-import { cookies } from 'next/headers';
+import { checkAdminAuth } from '@/lib/admin-auth';
 
 /**
  * POST /api/admin/anonymize-customer
@@ -11,9 +11,7 @@ import { cookies } from 'next/headers';
  */
 export async function POST(req: NextRequest) {
   // Admin-Auth prüfen
-  const cookieStore = await cookies();
-  const adminHash = cookieStore.get('admin_session')?.value;
-  if (!adminHash) {
+  if (!(await checkAdminAuth())) {
     return NextResponse.json({ error: 'Nicht autorisiert.' }, { status: 401 });
   }
 

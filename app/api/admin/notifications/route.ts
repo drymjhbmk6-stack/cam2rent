@@ -1,15 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
-import { cookies } from 'next/headers';
+import { checkAdminAuth } from '@/lib/admin-auth';
 
 /**
  * GET /api/admin/notifications
  * Gibt die letzten 20 Benachrichtigungen + Anzahl ungelesener zurück.
  */
 export async function GET() {
-  const cookieStore = await cookies();
-  const adminHash = cookieStore.get('admin_session')?.value;
-  if (!adminHash) {
+  if (!(await checkAdminAuth())) {
     return NextResponse.json({ error: 'Nicht autorisiert.' }, { status: 401 });
   }
 
@@ -48,9 +46,7 @@ export async function GET() {
  * Body: { ids: string[] } oder { markAllRead: true }
  */
 export async function PATCH(req: NextRequest) {
-  const cookieStore = await cookies();
-  const adminHash = cookieStore.get('admin_session')?.value;
-  if (!adminHash) {
+  if (!(await checkAdminAuth())) {
     return NextResponse.json({ error: 'Nicht autorisiert.' }, { status: 401 });
   }
 

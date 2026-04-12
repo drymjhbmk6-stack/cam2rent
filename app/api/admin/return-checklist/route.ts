@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
-import { cookies } from 'next/headers';
+import { checkAdminAuth } from '@/lib/admin-auth';
 
 /**
  * GET /api/admin/return-checklist?bookingId=BK-2026-00001
  * Returns the checklist for a booking, or creates one from template if none exists.
  */
 export async function GET(req: NextRequest) {
-  const cookieStore = await cookies();
-  if (!cookieStore.get('admin_session')?.value) {
+  if (!(await checkAdminAuth())) {
     return NextResponse.json({ error: 'Nicht autorisiert.' }, { status: 401 });
   }
 
@@ -75,8 +74,7 @@ export async function GET(req: NextRequest) {
  * Updates the checklist items and optionally completes it.
  */
 export async function PATCH(req: NextRequest) {
-  const cookieStore = await cookies();
-  if (!cookieStore.get('admin_session')?.value) {
+  if (!(await checkAdminAuth())) {
     return NextResponse.json({ error: 'Nicht autorisiert.' }, { status: 401 });
   }
 

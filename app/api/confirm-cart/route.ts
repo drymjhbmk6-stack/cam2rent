@@ -525,13 +525,13 @@ export async function POST(req: NextRequest) {
               ipAddress: ip,
             });
             contractPdfBuffer = result.pdfBuffer;
-            storeContract(bookingIds[gi], result.pdfBuffer, {
+            await storeContract(bookingIds[gi], result.pdfBuffer, {
               contractHash: result.contractHash,
               customerName: contractSignature.signerName,
               ipAddress: ip,
               signedAt: new Date().toISOString(),
               signatureMethod: contractSignature.signatureMethod,
-            }).catch((err) => console.error('Contract store error:', err));
+            });
           } catch (err) {
             console.error('Contract generation error:', err);
           }

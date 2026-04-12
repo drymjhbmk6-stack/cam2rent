@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import { createServiceClient } from '@/lib/supabase';
+import { checkAdminAuth } from '@/lib/admin-auth';
 
 /**
  * GET /api/admin/datev-export?from=2026-01-01&to=2026-03-31
@@ -66,9 +66,7 @@ function escapeField(val: string): string {
 
 export async function GET(req: NextRequest) {
   // Auth check
-  const cookieStore = await cookies();
-  const adminHash = cookieStore.get('admin_session')?.value;
-  if (!adminHash) {
+  if (!(await checkAdminAuth())) {
     return NextResponse.json({ error: 'Nicht autorisiert.' }, { status: 401 });
   }
 

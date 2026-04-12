@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { createServiceClient } from '@/lib/supabase';
+import { checkAdminAuth } from '@/lib/admin-auth';
 import { renderToBuffer, type DocumentProps } from '@react-pdf/renderer';
 import { createElement, type ReactElement } from 'react';
 import { RentalContractPDF, type RentalContractData } from '@/lib/contracts/contract-template';
@@ -35,9 +36,8 @@ export async function GET(
   );
   const { data: { user } } = await supabaseAuth.auth.getUser();
 
-  // Also check admin cookie
-  const adminCookie = cookieStore.get('admin_session');
-  const isAdmin = adminCookie?.value === process.env.ADMIN_PASSWORD;
+  // Also check admin cookie (admin_token = SHA-256 Hash)
+  const isAdmin = await checkAdminAuth();
 
   if (!user && !isAdmin) {
     return NextResponse.json({ error: 'Nicht angemeldet.' }, { status: 401 });

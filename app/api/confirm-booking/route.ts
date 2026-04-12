@@ -294,14 +294,14 @@ export async function POST(req: NextRequest) {
 
         contractPdfBuffer = result.pdfBuffer;
 
-        // Vertrag in Supabase speichern (non-blocking fuer Response)
-        storeContract(bookingId, result.pdfBuffer, {
+        // Vertrag in Supabase speichern
+        await storeContract(bookingId, result.pdfBuffer, {
           contractHash: result.contractHash,
           customerName: contractSignature.signerName,
           ipAddress: ip,
           signedAt: new Date().toISOString(),
           signatureMethod: contractSignature.signatureMethod,
-        }).catch((err) => console.error('Contract store error:', err));
+        });
       } catch (err) {
         console.error('Contract generation error:', err);
       }

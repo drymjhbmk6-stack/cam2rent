@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
-import { cookies } from 'next/headers';
+import { checkAdminAuth } from '@/lib/admin-auth';
 import { type AdminProduct } from '@/lib/price-config';
 
 /**
@@ -8,8 +8,7 @@ import { type AdminProduct } from '@/lib/price-config';
  * Gibt Auslastungsdaten fuer alle Kameras zurueck.
  */
 export async function GET(req: NextRequest) {
-  const cookieStore = await cookies();
-  if (!cookieStore.get('admin_session')?.value) {
+  if (!(await checkAdminAuth())) {
     return NextResponse.json({ error: 'Nicht autorisiert.' }, { status: 401 });
   }
 
