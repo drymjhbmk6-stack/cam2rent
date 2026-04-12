@@ -49,22 +49,22 @@ Zahlung erfolgt über Stripe per Kreditkarte oder SEPA-Lastschrift.
 \u00a7 4 \u2013 Kaution (Vorautorisierung)
 Vorautorisierung: ${fmt(opts.deposit)}
 Wird nach ordnungsgemäßer Rückgabe vollständig freigegeben.
-Bei Schaeden oder Verlust kann die Vorautorisierung eingezogen werden.
+Bei Schäden oder Verlust kann die Vorautorisierung eingezogen werden.
 
-\u00a7 5 \u2013 Versand und Uebergabe
+\u00a7 5 \u2013 Versand und Übergabe
 Mietgegenstand wird per Paketdienstleister versendet.
-Maengel innerhalb von 24 Stunden nach Empfang per E-Mail an ${BUSINESS.email} melden.
+Mängel innerhalb von 24 Stunden nach Empfang per E-Mail an ${BUSINESS.email} melden.
 
 \u00a7 6 \u2013 Sorgfaltspflicht
-Der Mieter behandelt den Mietgegenstand sorgsam und schuetzt ihn vor Wasser, Stoessen und Ueberhitzung.
+Der Mieter behandelt den Mietgegenstand sorgsam und schützt ihn vor Wasser, Stößen und Überhitzung.
 Keine eigenmächtigen Reparaturversuche.
 
-\u00a7 7 \u2013 Haftung bei Schaeden und Verlust
-Der Mieter haftet fuer alle Schaeden waehrend des Mietzeitraums.
+\u00a7 7 \u2013 Haftung bei Schäden und Verlust
+Der Mieter haftet für alle Schäden während des Mietzeitraums.
 Bei Totalschaden/Verlust: Ersatz des Wiederbeschaffungswertes.
 
 \u00a7 8 \u2013 Verspätete Rückgabe
-Pro angefangenem Tag: regulaerer Tagespreis + 5,00 \u20ac Bearbeitungsgebuehr.
+Pro angefangenem Tag: regulärer Tagespreis + 5,00 \u20ac Bearbeitungsgebühr.
 Ab 3 Werktagen Verspätung ohne Absprache: Strafanzeige möglich.
 
 \u00a7 9 \u2013 Stornierung
@@ -73,25 +73,25 @@ Mehr als 7 Tage vor Mietbeginn: 100% Erstattung.
 Weniger als 3 Tage: keine Erstattung.
 
 \u00a7 10 \u2013 Datenschutz
-Datenverarbeitung gemaess DSGVO. Details: ${BUSINESS.url}/datenschutz
+Datenverarbeitung gemäß DSGVO. Details: ${BUSINESS.url}/datenschutz
 
-\u00a7 11 \u2013 Haftungsbeschraenkung des Vermieters
+\u00a7 11 \u2013 Haftungsbeschränkung des Vermieters
 Haftung des Vermieters bei leichter Fahrlässigkeit auf vorhersehbare Schäden begrenzt.
-Keine Haftung fuer Datenverluste auf Speicherkarten.
+Keine Haftung für Datenverluste auf Speicherkarten.
 
 \u00a7 12 \u2013 Schlussbestimmungen
 Deutsches Recht. Gerichtsstand: ${BUSINESS.city}.
-Salvatorische Klausel. Aenderungen beduerfen der Textform.
+Salvatorische Klausel. Änderungen bedürfen der Textform.
 
 \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 
-Einwilligungserklaerung:
-Mit meiner digitalen Unterschrift bestaetige ich:
-1. Ich habe diesen Mietvertrag vollstaendig gelesen und verstanden.
+Einwilligungserklärung:
+Mit meiner digitalen Unterschrift bestätige ich:
+1. Ich habe diesen Mietvertrag vollständig gelesen und verstanden.
 2. Ich stimme allen Bedingungen zu.
-3. Ich bin volljaehrig (mindestens 18 Jahre) und geschaeftsfaehig.
+3. Ich bin volljährig (mindestens 18 Jahre) und geschäftsfähig.
 4. Meine Kontakt- und Zahlungsdaten sind korrekt.
-5. Diese digitale Signatur gilt gemaess eIDAS-Verordnung (EU) 2014/910 als rechtsgueltige elektronische Signatur.`;
+5. Diese digitale Signatur gilt gemäß eIDAS-Verordnung (EU) 2014/910 als rechtsgültige elektronische Signatur.`;
 }
 
 // ─── Props ────────────────────────────────────────────────────────────────────

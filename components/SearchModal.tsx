@@ -379,13 +379,13 @@ export default function SearchModal({
               <kbd className="px-1 py-0.5 bg-white dark:bg-gray-700 border border-brand-border dark:border-gray-600 rounded text-[9px] font-mono">
                 &crarr;
               </kbd>
-              <span>oeffnen</span>
+              <span>öffnen</span>
             </div>
             <button
               onClick={onClose}
               className="text-[10px] font-body text-brand-muted dark:text-gray-500 hover:text-brand-text dark:hover:text-gray-300 transition-colors"
             >
-              Schliessen
+              Schließen
             </button>
           </div>
         </div>

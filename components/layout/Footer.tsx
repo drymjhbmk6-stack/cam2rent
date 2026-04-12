@@ -4,8 +4,8 @@ import ThemeToggle from '@/components/ThemeToggle';
 
 const shopLinks = [
   { href: '/kameras', label: 'Alle Kameras' },
-  { href: '/kameras?filter=neu', label: 'Neuheiten' },
-  { href: '/kameras?filter=angebot', label: 'Angebote' },
+  { href: '/vergleich', label: 'Kamera-Vergleich' },
+  { href: '/set-konfigurator', label: 'Set-Konfigurator' },
   { href: '/so-funktionierts', label: "So funktioniert's" },
 ];
 
@@ -22,7 +22,7 @@ const legalLinks = [
 
 const sonstigesLinks = [
   { href: '/blog', label: 'Blog' },
-  { href: '/neuigkeiten', label: 'Neuigkeiten' },
+  { href: '/kamera-finder', label: 'Kamera-Finder' },
 ];
 
 const supportLinks = [

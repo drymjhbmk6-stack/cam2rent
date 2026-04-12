@@ -248,14 +248,14 @@ export default function ArticleEditor({ postId }: { postId?: string }) {
     update('featured_image', img.url);
     update('featured_image_alt', post.title || img.name);
     setShowMediathek(false);
-    setMsg('Bild aus Mediathek uebernommen!');
+    setMsg('Bild aus Mediathek übernommen!');
   }
 
   async function runFactcheck() {
     if (!post.content.trim()) return;
     setFactchecking(true);
     setFactcheckResult(null);
-    setMsg('Faktencheck laeuft — 3 Durchgaenge...');
+    setMsg('Faktencheck läuft — 3 Durchgänge...');
     try {
       const res = await fetch('/api/admin/blog/factcheck', {
         method: 'POST',
@@ -342,7 +342,7 @@ export default function ArticleEditor({ postId }: { postId?: string }) {
       update('featured_image', data.url);
       update('featured_image_alt', img.alt || post.title);
       setShowUnsplash(false);
-      setMsg('Bild uebernommen!');
+      setMsg('Bild übernommen!');
     } else {
       setMsg(data.error || 'Bild-Download fehlgeschlagen.');
     }
@@ -569,7 +569,7 @@ export default function ArticleEditor({ postId }: { postId?: string }) {
               style={{ ...inputStyle, minHeight: 80 }}
               value={post.excerpt}
               onChange={(e) => update('excerpt', e.target.value)}
-              placeholder="Kurzbeschreibung fuer die Blog-Uebersicht..."
+              placeholder="Kurzbeschreibung für die Blog-Übersicht..."
             />
             <p className="text-xs mt-1" style={{ color: '#475569' }}>{post.excerpt.length}/160 Zeichen</p>
           </div>

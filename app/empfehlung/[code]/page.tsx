@@ -36,7 +36,7 @@ export default function ReferralLandingPage() {
           </p>
 
           <Link
-            href="/produkte"
+            href="/kameras"
             className="inline-flex items-center gap-2 px-8 py-3.5 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold rounded-btn hover:bg-brand-dark transition-colors"
           >
             Kameras entdecken

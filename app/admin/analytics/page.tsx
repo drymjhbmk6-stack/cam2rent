@@ -1085,7 +1085,7 @@ export default function AnalyticsPage() {
           <Card>
             <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16 }}>
               Kamera-Performance — 30 Tage
-              <InfoTooltip text="Uebersicht ueber Aufrufe, Buchungen, Umsatz und Auslastung je Kamera." />
+              <InfoTooltip text="Übersicht über Aufrufe, Buchungen, Umsatz und Auslastung je Kamera." />
             </div>
             {productsData ? (
               <div style={{ overflowX: 'auto' }}>
@@ -1203,15 +1203,15 @@ export default function AnalyticsPage() {
       {/* ── TAB 4: KUNDEN & VERHALTEN ────────────────────────────────────────── */}
       {activeTab === 'customers' && (
         <div className="tab-content">
-          {/* Kundenwert + Warenkorbabbrueche */}
+          {/* Kundenwert + Warenkorbabbrüche */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginBottom: 20 }}>
             <StatCard label="Kunden gesamt" value={customersData?.totalCustomers ?? '–'} color={C.cyan} tooltip="Gesamtanzahl aller Kunden die mindestens eine Buchung haben." />
             <StatCard label="Wiederbuchungen" value={customersData ? `${customersData.repeatRate}%` : '–'} color={C.purple} tooltip="Anteil der Kunden die mehr als einmal gebucht haben." />
-            <StatCard label="Durchschn. Kundenwert" value={customersData ? `${customersData.avgLifetimeValue.toFixed(2)} €` : '–'} color={C.green} tooltip="Durchschnittlicher Gesamtumsatz pro Kunde ueber alle Buchungen." />
+            <StatCard label="Durchschn. Kundenwert" value={customersData ? `${customersData.avgLifetimeValue.toFixed(2)} €` : '–'} color={C.green} tooltip="Durchschnittlicher Gesamtumsatz pro Kunde über alle Buchungen." />
             <StatCard label="Durchschn. Bestellwert" value={customersData ? `${customersData.avgOrderValue.toFixed(2)} €` : '–'} color={C.cyanLight} tooltip="Durchschnittlicher Umsatz pro einzelne Buchung." />
             <StatCard label="Neue Kunden (30 Tage)" value={customersData?.newCustomers30d ?? '–'} color={C.yellow} tooltip="Anzahl neuer Kunden in den letzten 30 Tagen." />
-            <StatCard label="Warenkorbabbrueche" value={customersData?.abandonedCarts ?? '–'} color={C.red} tooltip="Anzahl abgebrochener Warenkoerbe in den letzten 30 Tagen." />
-            <StatCard label="Zurueckgewonnen" value={customersData ? `${customersData.recoveryRate}%` : '–'} color={C.green} tooltip="Anteil der abgebrochenen Warenkoerbe die durch Erinnerungs-Emails zurueckgewonnen wurden." />
+            <StatCard label="Warenkorbabbrüche" value={customersData?.abandonedCarts ?? '–'} color={C.red} tooltip="Anzahl abgebrochener Warenkörbe in den letzten 30 Tagen." />
+            <StatCard label="Zurückgewonnen" value={customersData ? `${customersData.recoveryRate}%` : '–'} color={C.green} tooltip="Anteil der abgebrochenen Warenkörbe die durch Erinnerungs-Emails zurückgewonnen wurden." />
           </div>
 
           {/* Traffic Stats */}

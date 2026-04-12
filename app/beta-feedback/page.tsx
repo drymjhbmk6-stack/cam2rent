@@ -12,9 +12,9 @@ const SECTIONS = [
     icon: '👁️',
     subtitle: 'Wie wirkt die Seite auf dich?',
     questions: [
-      { id: 'q_design', type: 'stars' as const, label: 'Wie gefaellt dir das Design insgesamt?' },
-      { id: 'q_trust', type: 'stars' as const, label: 'Wie vertrauenswuerdig wirkt die Seite auf dich?' },
-      { id: 'q_first_feeling', type: 'choice' as const, label: 'Was war dein erster Gedanke beim Oeffnen?', options: ['Sieht professionell aus', 'Modern und ansprechend', 'Uebersichtlich und klar', 'Etwas unuebersichtlich', 'Wusste nicht, wo ich anfangen soll'], multi: false },
+      { id: 'q_design', type: 'stars' as const, label: 'Wie gefällt dir das Design insgesamt?' },
+      { id: 'q_trust', type: 'stars' as const, label: 'Wie vertrauenswürdig wirkt die Seite auf dich?' },
+      { id: 'q_first_feeling', type: 'choice' as const, label: 'Was war dein erster Gedanke beim Öffnen?', options: ['Sieht professionell aus', 'Modern und ansprechend', 'Übersichtlich und klar', 'Etwas unübersichtlich', 'Wusste nicht, wo ich anfangen soll'], multi: false },
     ],
   },
   {
@@ -24,7 +24,7 @@ const SECTIONS = [
     subtitle: 'Findest du dich zurecht?',
     questions: [
       { id: 'q_nav_ease', type: 'stars' as const, label: 'Wie einfach war es, sich auf der Seite zurechtzufinden?' },
-      { id: 'q_mobile', type: 'choice' as const, label: 'Auf welchem Geraet testest du hauptsaechlich?', options: ['Smartphone', 'Tablet', 'Laptop/PC'], multi: false },
+      { id: 'q_mobile', type: 'choice' as const, label: 'Auf welchem Gerät testest du hauptsächlich?', options: ['Smartphone', 'Tablet', 'Laptop/PC'], multi: false },
       { id: 'q_nav_issues', type: 'text' as const, label: 'Gab es Stellen, wo du nicht weiterwusstest?', placeholder: 'z.B. Button ging nicht, Seite hat nicht geladen...' },
     ],
   },
@@ -34,10 +34,10 @@ const SECTIONS = [
     icon: '📅',
     subtitle: 'Vom Produkt bis zur Buchung',
     questions: [
-      { id: 'q_product_info', type: 'stars' as const, label: 'Waren die Produktinfos ausreichend und verstaendlich?' },
+      { id: 'q_product_info', type: 'stars' as const, label: 'Waren die Produktinfos ausreichend und verständlich?' },
       { id: 'q_booking_ease', type: 'stars' as const, label: 'Wie einfach war der Buchungsvorgang?' },
-      { id: 'q_pricing', type: 'choice' as const, label: 'Wie empfindest du die Preise?', options: ['Sehr fair / guenstig', 'Angemessen', 'Etwas teuer', 'Zu teuer', 'Kann ich nicht einschaetzen'], multi: false },
-      { id: 'q_booking_blocker', type: 'text' as const, label: 'Was wuerde dich davon abhalten, hier zu buchen?', placeholder: 'Sei ehrlich — jedes Feedback hilft uns!' },
+      { id: 'q_pricing', type: 'choice' as const, label: 'Wie empfindest du die Preise?', options: ['Sehr fair / günstig', 'Angemessen', 'Etwas teuer', 'Zu teuer', 'Kann ich nicht einschätzen'], multi: false },
+      { id: 'q_booking_blocker', type: 'text' as const, label: 'Was würde dich davon abhalten, hier zu buchen?', placeholder: 'Sei ehrlich — jedes Feedback hilft uns!' },
     ],
   },
   {
@@ -46,8 +46,8 @@ const SECTIONS = [
     icon: '✏️',
     subtitle: 'Verstehst du alles?',
     questions: [
-      { id: 'q_texts', type: 'stars' as const, label: 'Sind die Texte verstaendlich und hilfreich?' },
-      { id: 'q_missing_info', type: 'choice' as const, label: 'Hat dir irgendeine Information gefehlt?', options: ['Nein, alles klar', 'FAQ / Haeufige Fragen', 'Versandinfos', 'Rueckgabe-Prozess', 'Mehr Produktdetails', 'Erfahrungsberichte'], multi: true },
+      { id: 'q_texts', type: 'stars' as const, label: 'Sind die Texte verständlich und hilfreich?' },
+      { id: 'q_missing_info', type: 'choice' as const, label: 'Hat dir irgendeine Information gefehlt?', options: ['Nein, alles klar', 'FAQ / Häufige Fragen', 'Versandinfos', 'Rückgabe-Prozess', 'Mehr Produktdetails', 'Erfahrungsberichte'], multi: true },
     ],
   },
   {
@@ -56,10 +56,10 @@ const SECTIONS = [
     icon: '⭐',
     subtitle: 'Dein Fazit',
     questions: [
-      { id: 'q_recommend', type: 'nps' as const, label: 'Wie wahrscheinlich wuerdest du cam2rent an Freunde weiterempfehlen?' },
-      { id: 'q_best', type: 'text' as const, label: 'Was gefaellt dir am besten an cam2rent?', placeholder: 'Das Beste zuerst...' },
-      { id: 'q_worst', type: 'text' as const, label: 'Was sollten wir unbedingt verbessern?', placeholder: 'Deine ehrliche Meinung zaehlt am meisten!' },
-      { id: 'q_idea', type: 'text' as const, label: 'Hast du eine Idee oder einen Wunsch?', placeholder: 'Optional — aber wir freuen uns ueber jeden Input!', optional: true },
+      { id: 'q_recommend', type: 'nps' as const, label: 'Wie wahrscheinlich würdest du cam2rent an Freunde weiterempfehlen?' },
+      { id: 'q_best', type: 'text' as const, label: 'Was gefällt dir am besten an cam2rent?', placeholder: 'Das Beste zuerst...' },
+      { id: 'q_worst', type: 'text' as const, label: 'Was sollten wir unbedingt verbessern?', placeholder: 'Deine ehrliche Meinung zählt am meisten!' },
+      { id: 'q_idea', type: 'text' as const, label: 'Hast du eine Idee oder einen Wunsch?', placeholder: 'Optional — aber wir freuen uns über jeden Input!', optional: true },
     ],
   },
 ];

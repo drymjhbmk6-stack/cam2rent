@@ -97,10 +97,10 @@ export default function GoogleReviews() {
             id="google-reviews-heading"
             className="font-heading font-bold text-2xl sm:text-3xl text-brand-black dark:text-gray-100 mb-3"
           >
-            Unsere Kunden sprechen fuer uns
+            Unsere Kunden sprechen für uns
           </h2>
           <p className="font-body text-brand-steel dark:text-gray-400 text-base max-w-lg mx-auto mb-6">
-            Ueber {totalReviews} zufriedene Kunden vertrauen auf cam2rent. Ueberzeuge dich selbst.
+            Über {totalReviews} zufriedene Kunden vertrauen auf cam2rent. Überzeuge dich selbst.
           </p>
 
           {/* Google Rating Badge */}

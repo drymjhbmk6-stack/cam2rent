@@ -1004,7 +1004,7 @@ export default function CheckoutPage() {
                         className="w-4 h-4 mt-0.5 rounded border-brand-border accent-accent-blue flex-shrink-0" />
                       <span className="text-xs font-body text-brand-steel dark:text-gray-400 leading-relaxed">
                         Ich habe die <a href="/agb" target="_blank" className="text-accent-blue underline">AGB</a>,{' '}
-                        <a href="/datenschutz" target="_blank" className="text-accent-blue underline">Datenschutzerklaerung</a> und{' '}
+                        <a href="/datenschutz" target="_blank" className="text-accent-blue underline">Datenschutzerklärung</a> und{' '}
                         <a href="/haftungsbedingungen" target="_blank" className="text-accent-blue underline">Haftungsbedingungen</a> gelesen und akzeptiere diese.
                       </span>
                     </label>
@@ -1012,8 +1012,8 @@ export default function CheckoutPage() {
                       <input type="checkbox" checked={acceptsWithdrawal} onChange={(e) => setAcceptsWithdrawal(e.target.checked)}
                         className="w-4 h-4 mt-0.5 rounded border-brand-border accent-accent-blue flex-shrink-0" />
                       <span className="text-xs font-body text-brand-steel dark:text-gray-400 leading-relaxed">
-                        Mir ist bekannt, dass bei zeitgebundenen Freizeitdienstleistungen gemaess{' '}
-                        <a href="/widerrufsbelehrung" target="_blank" className="text-accent-blue underline">§ 312g Abs. 2 Nr. 9 BGB</a>{' '}
+                        Mir ist bekannt, dass bei zeitgebundenen Freizeitdienstleistungen gemäß{' '}
+                        <a href="/widerruf" target="_blank" className="text-accent-blue underline">§ 312g Abs. 2 Nr. 9 BGB</a>{' '}
                         kein Widerrufsrecht besteht.
                       </span>
                     </label>

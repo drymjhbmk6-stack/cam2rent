@@ -1117,7 +1117,7 @@ function AdminInstallSection() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
           <p className="text-sm" style={{ color: '#94a3b8' }}>
-            Die Admin-App ist bereits installiert. Du kannst sie ueber dein Home-Bildschirm oeffnen.
+            Die Admin-App ist bereits installiert. Du kannst sie über dein Home-Bildschirm öffnen.
           </p>
         </div>
       ) : isIOS ? (
@@ -1154,18 +1154,18 @@ function AdminInstallSection() {
             <div className="flex items-start gap-3 p-3 rounded-lg" style={{ background: '#0a0f1e', border: '1px solid #1e293b' }}>
               <span className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: '#3b82f620', color: '#3b82f6' }}>4</span>
               <p className="text-sm" style={{ color: '#e2e8f0' }}>
-                Tippe auf <strong>&quot;Hinzufuegen&quot;</strong> — fertig!
+                Tippe auf <strong>&quot;Hinzufügen&quot;</strong> — fertig!
               </p>
             </div>
           </div>
           <div className="p-3 rounded-lg text-xs" style={{ background: '#3b82f608', border: '1px solid #3b82f620', color: '#94a3b8' }}>
-            <strong style={{ color: '#60a5fa' }}>Wichtig:</strong> Oeffne zuerst <strong>/admin</strong> (Schritt 1), damit die App beim Oeffnen das Dashboard zeigt und nicht die Einstellungen. Stelle sicher, dass du <strong>Safari</strong> verwendest.
+            <strong style={{ color: '#60a5fa' }}>Wichtig:</strong> Öffne zuerst <strong>/admin</strong> (Schritt 1), damit die App beim Öffnen das Dashboard zeigt und nicht die Einstellungen. Stelle sicher, dass du <strong>Safari</strong> verwendest.
           </div>
         </div>
       ) : deferredPrompt ? (
         <div className="space-y-4">
           <p className="text-sm" style={{ color: '#94a3b8' }}>
-            Installiere die Admin-App fuer schnellen Zugriff direkt vom Home-Bildschirm.
+            Installiere die Admin-App für schnellen Zugriff direkt vom Home-Bildschirm.
           </p>
           <button
             onClick={handleInstall}

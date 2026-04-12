@@ -272,12 +272,12 @@ const PARAGRAPHEN: { title: string; text: string }[] = [
   { title: '\u00a7 19 Anwendbares Recht, Schlussbestimmungen', text: '(1) Es gilt das Recht der Bundesrepublik Deutschland unter Ausschluss des UN-Kaufrechts. Zwingende Verbraucherschutzvorschriften bleiben unber\u00fchrt.\n(2) Eine Gerichtsstandsvereinbarung wird nicht getroffen; es gelten die gesetzlichen Regelungen.\n(3) Sollten einzelne Bestimmungen unwirksam sein, bleibt die Wirksamkeit der \u00fcbrigen Bestimmungen unber\u00fchrt (Salvatorische Klausel).\n(4) M\u00fcndliche Nebenabreden bestehen nicht.' },
 ];
 
-// ─── buildContractText (fuer SHA-256 Hash) ───────────────────────────────────
+// ─── buildContractText (für SHA-256 Hash) ───────────────────────────────────
 
 export function buildContractText(data: RentalContractData): string {
   const lines: string[] = [
     'MIETVERTRAG',
-    'ueber die Vermietung von Kamera- und Zubehoerprodukten',
+    'über die Vermietung von Kamera- und Zubehörprodukten',
     '',
     `Vermieter: ${BUSINESS.name} | ${BUSINESS.owner} | ${BUSINESS.street} | ${BUSINESS.zip} ${BUSINESS.city}`,
     `Mieter: ${data.customerName} | ${data.customerEmail}`,

@@ -102,7 +102,7 @@ export default function BlogDashboardPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-8">
         <div>
           <h1 className="font-heading font-bold text-xl sm:text-2xl" style={{ color: 'white' }}>Blog-Dashboard</h1>
-          <p className="text-sm" style={{ color: '#64748b' }}>Uebersicht ueber alle Blog-Aktivitaeten</p>
+          <p className="text-sm" style={{ color: '#64748b' }}>Übersicht über alle Blog-Aktivitäten</p>
         </div>
         <div className="flex gap-2">
           <Link href="/admin/blog/artikel/neu" className="px-4 py-2 rounded-lg text-sm font-heading font-semibold" style={{ background: '#06b6d4', color: 'white' }}>

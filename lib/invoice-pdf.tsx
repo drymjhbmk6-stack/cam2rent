@@ -485,7 +485,7 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
                 Zahlung ausstehend
               </Text>
               <Text style={s.noteText}>
-                Bitte ueberweise den Gesamtbetrag auf das angegebene Konto.
+                Bitte überweise den Gesamtbetrag auf das angegebene Konto.
                 {data.deliveryMode === 'abholung' ? '\nAbholung — kein Versand.' : ''}
               </Text>
             </View>
@@ -495,8 +495,8 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
           <View style={[s.noteBox, { marginTop: 12 }]}>
             <Text style={s.noteText}>
               {isRegel
-                ? `${data.ustId ? `USt-IdNr.: ${data.ustId}\n` : ''}Alle Betraege verstehen sich inkl. ${taxRate}% MwSt.`
-                : 'Gemaess §19 UStG wird keine Umsatzsteuer berechnet (Kleinunternehmerregelung).'}
+                ? `${data.ustId ? `USt-IdNr.: ${data.ustId}\n` : ''}Alle Beträge verstehen sich inkl. ${taxRate}% MwSt.`
+                : 'Gemäß §19 UStG wird keine Umsatzsteuer berechnet (Kleinunternehmerregelung).'}
             </Text>
           </View>
 
@@ -506,7 +506,7 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
               <Image src={data.qrCodeDataUrl} style={{ width: 72, height: 72 }} />
               <View>
                 <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold', color: C.black, marginBottom: 2 }}>
-                  QR-Code fuer Ueberweisung
+                  QR-Code für Überweisung
                 </Text>
                 <Text style={{ fontSize: 8, color: C.grayText, lineHeight: 1.5 }}>
                   Scanne mit deiner Banking-App.{'\n'}

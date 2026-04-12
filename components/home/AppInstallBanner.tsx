@@ -114,7 +114,7 @@ export default function AppInstallBanner() {
             ) : isIOS ? (
               <div className="flex-shrink-0 inline-flex items-center gap-2 px-6 py-3 bg-white/10 text-white/80 font-heading font-semibold text-sm rounded-[10px] border border-white/20">
                 <ShareIcon />
-                Ueber Safari teilen
+                Über Safari teilen
               </div>
             ) : null}
           </div>

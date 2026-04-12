@@ -26,7 +26,7 @@ const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> =
   generated: { label: 'Fertig', color: '#06b6d4', bg: '#06b6d420' },
   reviewed: { label: 'Gesehen', color: '#22c55e', bg: '#22c55e20' },
   published: { label: 'Live', color: '#22c55e', bg: '#22c55e20' },
-  skipped: { label: 'Uebersprungen', color: '#64748b', bg: '#64748b20' },
+  skipped: { label: 'Übersprungen', color: '#64748b', bg: '#64748b20' },
 };
 
 export default function BlogZeitplanPage() {
@@ -325,7 +325,7 @@ export default function BlogZeitplanPage() {
                     <span className="px-2 py-0.5 rounded text-[10px] font-heading font-bold" style={{ background: st.bg, color: st.color }}>{st.label}</span>
                     {entry.blog_categories && <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: entry.blog_categories.color + '20', color: entry.blog_categories.color }}>{entry.blog_categories.name}</span>}
                     {isToday && <span className="text-[10px] px-1.5 py-0.5 rounded font-heading font-bold" style={{ background: '#06b6d420', color: '#06b6d4' }}>HEUTE</span>}
-                    {isPast && !isToday && entry.status === 'planned' && <span className="text-[10px] px-1.5 py-0.5 rounded font-heading font-bold" style={{ background: '#ef444420', color: '#ef4444' }}>UEBERFAELLIG</span>}
+                    {isPast && !isToday && entry.status === 'planned' && <span className="text-[10px] px-1.5 py-0.5 rounded font-heading font-bold" style={{ background: '#ef444420', color: '#ef4444' }}>ÜBERFÄLLIG</span>}
                   </div>
                   {entry.blog_posts && (
                     <Link href={`/admin/blog/artikel/${entry.blog_posts.id}`} className="text-xs hover:underline block mb-1" style={{ color: '#06b6d4' }}>→ {entry.blog_posts.title}</Link>
