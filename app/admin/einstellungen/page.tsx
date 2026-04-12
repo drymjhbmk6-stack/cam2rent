@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { SpecDefinitionsManager } from '@/components/admin/SpecDefinitions';
 
-type DepositMode = 'kaution' | 'haftung' | 'both';
+type DepositMode = 'kaution' | 'haftung';
 
 export default function EinstellungenPage() {
   // 2FA State
@@ -19,7 +19,7 @@ export default function EinstellungenPage() {
   const [actionLoading, setActionLoading] = useState(false);
 
   // Deposit Mode State
-  const [depositMode, setDepositMode] = useState<DepositMode>('both');
+  const [depositMode, setDepositMode] = useState<DepositMode>('haftung');
   const [depositLoading, setDepositLoading] = useState(true);
   const [depositSaving, setDepositSaving] = useState(false);
   const [depositSuccess, setDepositSuccess] = useState('');
@@ -426,10 +426,9 @@ export default function EinstellungenPage() {
         ) : (
           <div className="space-y-3">
             {([
-              { value: 'kaution', label: 'Nur Kaution (Stripe-Vorautorisierung)', desc: 'Betrag wird auf der Karte blockiert, nicht abgebucht. Freigabe nach Rückgabe.' },
-              { value: 'haftung', label: 'Nur Haftungsschutz', desc: 'Kunde bucht eine optionale Haftungsbegrenzung dazu. Keine Kartenblockerung.' },
-              { value: 'both', label: 'Beides (Kaution + Haftungsschutz)', desc: 'Kunde kann Haftungsschutz wählen UND es wird eine Kaution blockiert.' },
-            ] as const).map((opt) => (
+              { value: 'kaution' as DepositMode, label: 'Nur Kaution (Stripe-Vorautorisierung)', desc: 'Betrag wird auf der Karte blockiert, nicht abgebucht. Freigabe nach Rückgabe.' },
+              { value: 'haftung' as DepositMode, label: 'Nur Haftungsschutz', desc: 'Kunde bucht eine optionale Haftungsbegrenzung dazu. Keine Kartenblockerung.' },
+            ]).map((opt) => (
               <label
                 key={opt.value}
                 className="flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-colors"

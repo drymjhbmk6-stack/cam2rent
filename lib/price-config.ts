@@ -21,19 +21,35 @@ export const DEFAULT_SHIPPING: ShippingPriceConfig = {
 // ─── Haftungsoptionen ─────────────────────────────────────────────────────────
 
 export interface HaftungConfig {
-  /** Preis Standard-Haftungsschutz */
+  /** Basispreis Standard-Haftungsschutz (1-7 Tage) */
   standard: number;
-  /** Max. Eigenbeteiligung bei Standard (z.B. 150 €) */
+  /** Aufschlag Standard pro weitere Woche */
+  standardIncrement: number;
+  /** Max. Eigenbeteiligung bei Standard */
   standardEigenbeteiligung: number;
-  /** Preis Premium-Haftungsschutz (keine Eigenbeteiligung) */
+  /** Basispreis Premium-Haftungsschutz (1-7 Tage) */
   premium: number;
+  /** Aufschlag Premium pro weitere Woche */
+  premiumIncrement: number;
 }
 
 export const DEFAULT_HAFTUNG: HaftungConfig = {
   standard: 15,
-  standardEigenbeteiligung: 150,
+  standardIncrement: 5,
+  standardEigenbeteiligung: 200,
   premium: 25,
+  premiumIncrement: 10,
 };
+
+/** Berechnet den gestaffelten Haftungspreis basierend auf Miettagen */
+export function calcHaftungTieredPrice(
+  basePrice: number,
+  increment: number,
+  days: number
+): number {
+  const weeks = Math.ceil(days / 7);
+  return basePrice + Math.max(0, weeks - 1) * increment;
+}
 
 // ─── Kaution Tiers ────────────────────────────────────────────────────────────
 

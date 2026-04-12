@@ -44,7 +44,7 @@ export default function AdminNeueKameraPage() {
   const [allProducts, setAllProducts] = useState<Record<string, AdminProduct>>({});
   const [saving, setSaving] = useState(false);
   const [autoSlug, setAutoSlug] = useState(true);
-  const [depositMode, setDepositMode] = useState<'kaution' | 'haftung' | 'both'>('both');
+  const [depositMode, setDepositMode] = useState<'kaution' | 'haftung'>('haftung');
 
   const { specs: specDefs } = useSpecDefinitions();
 
@@ -279,11 +279,11 @@ export default function AdminNeueKameraPage() {
               <p className="text-xs font-body text-brand-muted mb-4">
                 {depositMode === 'kaution' && 'Globaler Modus: Nur Kaution. Kaution-Stufe für dieses Produkt wählen.'}
                 {depositMode === 'haftung' && 'Globaler Modus: Nur Haftungsschutz. Kunden können Standard/Premium wählen.'}
-                {depositMode === 'both' && 'Globaler Modus: Beides. Haftungsoption oder Kaution-Stufe wählen.'}
+{/* both-Modus entfernt */}
               </p>
 
               <div className="space-y-3">
-                {(depositMode === 'haftung' || depositMode === 'both') && (
+                {(depositMode === 'haftung') && (
                   <label className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-colors ${product.hasHaftungsoption ? 'border-accent-blue bg-accent-blue-soft/20' : 'border-brand-border hover:border-brand-muted'}`}>
                     <input type="radio" name="liability" checked={product.hasHaftungsoption}
                       onChange={() => setProduct((p) => ({ ...p, hasHaftungsoption: true, kautionTier: null }))}
@@ -298,7 +298,7 @@ export default function AdminNeueKameraPage() {
                   </label>
                 )}
 
-                {(depositMode === 'kaution' || depositMode === 'both') && ([1, 2, 3] as const).map((tier) => (
+                {(depositMode === 'kaution') && ([1, 2, 3] as const).map((tier) => (
                   <label key={tier} className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-colors ${!product.hasHaftungsoption && product.kautionTier === tier ? 'border-accent-blue bg-accent-blue-soft/20' : 'border-brand-border hover:border-brand-muted'}`}>
                     <input type="radio" name="liability"
                       checked={!product.hasHaftungsoption && product.kautionTier === tier}

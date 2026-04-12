@@ -4,6 +4,7 @@ import { cookies } from 'next/headers';
 import { createServiceClient } from '@/lib/supabase';
 import { getPriceForDays } from '@/data/products';
 import { getProducts } from '@/lib/get-products';
+import { calcHaftungTieredPrice, DEFAULT_HAFTUNG } from '@/lib/price-config';
 import { sendExtensionConfirmation } from '@/lib/email';
 import Stripe from 'stripe';
 
@@ -93,9 +94,9 @@ export async function POST(req: NextRequest) {
 
   let newHaftungPrice = booking.price_haftung || 0;
   if (booking.haftung === 'standard') {
-    newHaftungPrice = newDays * 15;
+    newHaftungPrice = calcHaftungTieredPrice(DEFAULT_HAFTUNG.standard, DEFAULT_HAFTUNG.standardIncrement, newDays);
   } else if (booking.haftung === 'premium') {
-    newHaftungPrice = newDays * 25;
+    newHaftungPrice = calcHaftungTieredPrice(DEFAULT_HAFTUNG.premium, DEFAULT_HAFTUNG.premiumIncrement, newDays);
   }
 
   const priceDifference = (paymentIntent.amount ?? 0) / 100;

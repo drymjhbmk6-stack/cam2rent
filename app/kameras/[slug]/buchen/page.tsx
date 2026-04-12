@@ -16,7 +16,7 @@ import { loadStripe } from '@stripe/stripe-js';
 import AvailabilityCalendar, { type CalendarRange } from '@/components/AvailabilityCalendar';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { shippingConfig, calcShipping, type ShippingMethod } from '@/data/shipping';
-import { calcPriceFromKeyDays, calcPriceFromTable, type PriceConfig, type AdminProduct } from '@/lib/price-config';
+import { calcPriceFromKeyDays, calcPriceFromTable, calcHaftungTieredPrice, type PriceConfig, type AdminProduct } from '@/lib/price-config';
 import SignatureStep, { type SignatureResult } from '@/components/booking/SignatureStep';
 
 /** Inline type to replace react-day-picker's DateRange */
@@ -28,44 +28,48 @@ const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!
 
 type HaftungId = 'none' | 'standard' | 'premium';
 
-const HAFTUNGSOPTIONEN: Array<{
+interface HaftungOption {
   id: HaftungId;
   name: string;
-  price: number; // flat fee per booking
+  basePrice: number;
   liability: string;
   description: string;
   badge?: string;
   badgeColor?: string;
-}> = [
-  {
-    id: 'none',
-    name: 'Keine Haftungsbegrenzung',
-    price: 0,
-    liability: 'Volle Haftung bis zum Wiederbeschaffungswert',
-    description:
-      'Du haftest bei Schäden, Verlust oder Totalschaden in voller Höhe des Wiederbeschaffungswertes.',
-  },
-  {
-    id: 'standard',
-    name: 'Standard-Haftungsoption',
-    price: 15,
-    liability: 'Max. 150 € Eigenbeteiligung pro Schadensfall',
-    description:
-      'Deckt Sturz-, Stoß-, Wasser- und Elektronikschäden bei ordnungsgemäßer Nutzung ab.',
-    badge: 'Beliebt',
-    badgeColor: 'bg-accent-blue text-white',
-  },
-  {
-    id: 'premium',
-    name: 'Premium-Haftungsoption',
-    price: 25,
-    liability: 'Keine Eigenbeteiligung',
-    description:
-      'Volle Haftungsfreistellung bei bestimmungsgemäßer Nutzung – ohne Selbstbeteiligung.',
-    badge: 'Vollschutz',
-    badgeColor: 'bg-accent-teal text-white',
-  },
-];
+}
+
+function getHaftungsoptionen(eigenbeteiligung: number): HaftungOption[] {
+  return [
+    {
+      id: 'none',
+      name: 'Keine Haftungsbegrenzung',
+      basePrice: 0,
+      liability: 'Volle Haftung bis zum Wiederbeschaffungswert',
+      description:
+        'Du haftest bei Schäden, Verlust oder Totalschaden in voller Höhe des Wiederbeschaffungswertes.',
+    },
+    {
+      id: 'standard',
+      name: 'Standard-Haftungsoption',
+      basePrice: 15,
+      liability: `Max. ${eigenbeteiligung} € Eigenbeteiligung pro Schadensfall`,
+      description:
+        'Deckt Sturz-, Stoß-, Wasser- und Elektronikschäden bei ordnungsgemäßer Nutzung ab.',
+      badge: 'Beliebt',
+      badgeColor: 'bg-accent-blue text-white',
+    },
+    {
+      id: 'premium',
+      name: 'Premium-Haftungsoption',
+      basePrice: 25,
+      liability: 'Keine Eigenbeteiligung',
+      description:
+        'Volle Haftungsfreistellung bei bestimmungsgemäßer Nutzung – ohne Selbstbeteiligung.',
+      badge: 'Vollschutz',
+      badgeColor: 'bg-accent-teal text-white',
+    },
+  ];
+}
 
 // ─── Accessories ──────────────────────────────────────────────────────────────
 // Data lives in data/accessories.ts — add / remove items there.
@@ -178,10 +182,13 @@ function calcBreakdown(
     return sum + (acc ? getAccessoryPrice(acc, days) : 0);
   }, 0);
 
-  // Haftungspreis: dynamisch aus DB
+  // Haftungspreis: gestaffelt nach Wochen
+  const h = dynPrices?.haftung;
   const haftungPrice =
-    haftung === 'standard' ? (dynPrices?.haftung?.standard ?? 15)
-    : haftung === 'premium' ? (dynPrices?.haftung?.premium ?? 25)
+    haftung === 'standard'
+      ? calcHaftungTieredPrice(h?.standard ?? 15, h?.standardIncrement ?? 5, days)
+    : haftung === 'premium'
+      ? calcHaftungTieredPrice(h?.premium ?? 25, h?.premiumIncrement ?? 10, days)
     : 0;
 
   const subtotal = rentalPrice + accessoryPrice + haftungPrice;
@@ -628,6 +635,9 @@ export default function BuchenPage() {
   const breakdown = range?.from
     ? calcBreakdown(product, range.from, range.to, accessories, dbAccessories, haftung, shippingMethod, deliveryMode, dynPrices)
     : null;
+
+  // Haftungsoptionen dynamisch (Eigenbeteiligung aus Admin-Config)
+  const haftungsoptionen = getHaftungsoptionen(dynPrices?.haftung?.standardEigenbeteiligung ?? 200);
 
   // Set price is calculated separately and added on top of the base breakdown
   const setPrice = selectedSet && breakdown
@@ -1118,7 +1128,7 @@ export default function BuchenPage() {
                       <span className="text-xs font-body text-brand-muted">(Pauschal pro Buchung)</span>
                     </div>
                     <div className="space-y-3">
-                      {HAFTUNGSOPTIONEN.map((opt) => {
+                      {haftungsoptionen.map((opt) => {
                         const selected = haftung === opt.id;
                         return (
                           <div key={opt.id} className="flex flex-col">
@@ -1176,16 +1186,20 @@ export default function BuchenPage() {
 
                             <div className="text-right flex-shrink-0">
                               {(() => {
+                                const h = dynPrices?.haftung;
+                                const days = breakdown?.days ?? 1;
                                 const p = opt.id === 'standard'
-                                  ? (dynPrices?.haftung?.standard ?? opt.price)
+                                  ? calcHaftungTieredPrice(h?.standard ?? 15, h?.standardIncrement ?? 5, days)
                                   : opt.id === 'premium'
-                                  ? (dynPrices?.haftung?.premium ?? opt.price)
+                                  ? calcHaftungTieredPrice(h?.premium ?? 25, h?.premiumIncrement ?? 10, days)
                                   : 0;
                                 return p === 0
                                   ? <p className="font-heading font-bold text-sm text-brand-muted">0 €</p>
                                   : <p className="font-heading font-bold text-sm text-brand-black">+{p} €</p>;
                               })()}
-                              <p className="text-xs font-body text-brand-muted">einmalig</p>
+                              <p className="text-xs font-body text-brand-muted">
+                                {(breakdown?.days ?? 1) <= 7 ? 'erste Woche' : `${Math.ceil((breakdown?.days ?? 1) / 7)} Wochen`}
+                              </p>
                             </div>
                           </label>
                           {/* Bestätigungen direkt unter "Keine Haftungsbegrenzung" */}
@@ -1522,7 +1536,7 @@ export default function BuchenPage() {
                   {breakdown.haftungPrice > 0 && (
                     <div className="flex justify-between items-center text-sm font-body">
                       <span className="text-brand-steel">
-                        {HAFTUNGSOPTIONEN.find((h) => h.id === haftung)?.name} (pauschal)
+                        {haftungsoptionen.find((h) => h.id === haftung)?.name}
                       </span>
                       <span className="font-semibold text-brand-black">
                         {breakdown.haftungPrice} €
@@ -1579,7 +1593,7 @@ export default function BuchenPage() {
                       <button type="button" onClick={() => { setReturnToSummary(true); setStep(3); }} className="text-xs font-heading font-semibold text-accent-blue hover:underline">Ändern →</button>
                     </div>
                     {(() => {
-                      const opt = HAFTUNGSOPTIONEN.find((h) => h.id === haftung)!;
+                      const opt = haftungsoptionen.find((h) => h.id === haftung)!;
                       return (
                         <div className="flex items-start gap-2.5">
                           <svg viewBox="0 0 20 20" fill="currentColor" className={`w-4 h-4 flex-shrink-0 mt-0.5 ${haftung === 'none' ? 'text-brand-muted' : 'text-status-success'}`} aria-hidden="true">
@@ -1900,7 +1914,7 @@ export default function BuchenPage() {
                       ? 'bg-accent-blue-soft text-accent-blue'
                       : 'bg-brand-bg text-brand-muted'
                   }`}>
-                    {haftung === 'none' ? 'Keine Begrenzung' : HAFTUNGSOPTIONEN.find((h) => h.id === haftung)?.name}
+                    {haftung === 'none' ? 'Keine Begrenzung' : haftungsoptionen.find((h) => h.id === haftung)?.name}
                   </span>
                 </div>
               )}

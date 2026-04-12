@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { calcHaftungTieredPrice } from '@/lib/price-config';
 
 /* ─── Types ─────────────────────────────────────────────────────────────────── */
 
@@ -41,7 +42,7 @@ interface DynSet {
 }
 
 interface DynPrices {
-  haftung?: { standard: number; standardEigenbeteiligung?: number; premium: number };
+  haftung?: { standard: number; standardIncrement?: number; standardEigenbeteiligung?: number; premium: number; premiumIncrement?: number };
   shipping?: { standardPrice: number; expressPrice: number; freeShippingThreshold: number };
   adminProducts?: Record<string, DynProduct>;
 }
@@ -194,7 +195,7 @@ export default function ManualBookingPage() {
   const [rentalFrom, setRentalFrom] = useState('');
   const [rentalTo, setRentalTo] = useState('');
   const [accAvailability, setAccAvailability] = useState<Record<string, { remaining: number; compatible: boolean; total: number }>>({});
-  const [depositMode, setDepositMode] = useState<'kaution' | 'haftung' | 'both'>('haftung');
+  const [depositMode, setDepositMode] = useState<'kaution' | 'haftung'>('haftung');
   const [deliveryMode, setDeliveryMode] = useState<'versand' | 'abholung'>('versand');
   const [shippingMethod, setShippingMethod] = useState<'standard' | 'express'>('standard');
   const [notes, setNotes] = useState('');
@@ -324,7 +325,10 @@ export default function ManualBookingPage() {
   function getHaftungPrice(haftungValue: string): number {
     if (haftungValue === 'none') return 0;
     const h = dynPrices?.haftung;
-    return haftungValue === 'standard' ? (h?.standard ?? 15) : (h?.premium ?? 25);
+    const d = days || 1;
+    return haftungValue === 'standard'
+      ? calcHaftungTieredPrice(h?.standard ?? 15, h?.standardIncrement ?? 5, d)
+      : calcHaftungTieredPrice(h?.premium ?? 25, h?.premiumIncrement ?? 10, d);
   }
 
   const haftungPrice = useMemo(() => {
@@ -502,7 +506,7 @@ export default function ManualBookingPage() {
     </tbody>
   </table>
   <table style="margin-top:4px"><tbody><tr class="total-row"><td>Gesamtbetrag</td><td>${fmtP(total)}</td></tr></tbody></table>
-  ${(depositMode === 'kaution' || depositMode === 'both') && deposit > 0 ? `<div style="font-size:8pt;color:#6b7280;margin-top:6px;text-align:right">* Enthält Kaution ${fmtP(deposit)} – wird nach Rückgabe erstattet</div>` : ''}
+  ${(depositMode === 'kaution') && deposit > 0 ? `<div style="font-size:8pt;color:#6b7280;margin-top:6px;text-align:right">* Enthält Kaution ${fmtP(deposit)} – wird nach Rückgabe erstattet</div>` : ''}
   ${remark ? `<div class="note" style="margin-top:16px"><strong>Bemerkung:</strong><br>${remark.replace(/\n/g, '<br>')}</div>` : ''}
   <div class="note"${remark ? ' style="margin-top:8px"' : ''}>Gemäß §19 UStG wird keine Umsatzsteuer berechnet.</div>
   ${paymentStatus === 'unpaid' ? `<div class="note" style="margin-top:12px;border:1px solid #d97706;background:#fffbeb"><strong style="color:#d97706">Überweisungsdaten:</strong><br>Kontoinhaber: Lennart Schickel<br>IBAN: DE77 2022 0800 0027 7841 43<br>BIC: SXPYDEHHXXX<br>Verwendungszweck: ${customerName || 'Kunde'} – Kameraleihe</div>` : ''}
@@ -552,7 +556,7 @@ export default function ManualBookingPage() {
           return sum + (s ? getSetPrice(s, days) : 0);
         }, 0);
         const pHaftungPrice = getHaftungPrice(sp.haftung);
-        const pDeposit = (depositMode === 'kaution' || depositMode === 'both') ? (p?.deposit ?? 0) : 0;
+        const pDeposit = (depositMode === 'kaution') ? (p?.deposit ?? 0) : 0;
 
         for (let q = 0; q < sp.qty; q++) {
           productNames.push(p?.name ?? sp.id);
@@ -950,7 +954,7 @@ export default function ManualBookingPage() {
                     )}
 
                     {/* Haftungsschutz pro Kamera (je nach deposit_mode) */}
-                    {(depositMode === 'haftung' || depositMode === 'both') && (
+                    {(depositMode === 'haftung') && (
                       <div className="mt-3">
                         <p className="text-xs font-semibold mb-2" style={{ color: '#64748b' }}>HAFTUNGSSCHUTZ</p>
                         <div className="space-y-1">
@@ -1154,7 +1158,7 @@ export default function ManualBookingPage() {
               <span>Gesamt</span>
               <span>{total.toFixed(2)} €</span>
             </div>
-            {deposit > 0 && (depositMode === 'kaution' || depositMode === 'both') && (
+            {deposit > 0 && (depositMode === 'kaution') && (
               <div className="flex justify-between text-xs" style={{ color: '#64748b' }}>
                 <span>Kaution (vorgemerkt)</span>
                 <span>{deposit.toFixed(2)} €</span>

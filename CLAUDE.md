@@ -92,7 +92,9 @@ Alle Dropdowns laden aus `admin_settings` und können neue Einträge hinzufügen
 
 ### Kaution & Haftungsschutz
 - Gegenseitig ausschließend pro Produkt
-- Globaler Modus in `admin_settings.deposit_mode`: 'kaution' | 'haftung' | 'both'
+- Globaler Modus in `admin_settings.deposit_mode`: 'kaution' | 'haftung' (kein 'both' mehr)
+- Haftungsschutz-Preise gestaffelt: Basispreis (1-7 Tage), +Aufschlag pro weitere Woche
+- Standard: 15€ Basis +5€/Woche, Premium: 25€ Basis +10€/Woche
 - Kamera-Editor zeigt nur relevante Optionen basierend auf globalem Modus
 
 ### next/image

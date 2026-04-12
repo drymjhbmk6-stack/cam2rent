@@ -5,6 +5,7 @@ import { createServiceClient } from '@/lib/supabase';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { getPriceForDays } from '@/data/products';
 import { getProducts } from '@/lib/get-products';
+import { calcHaftungTieredPrice, DEFAULT_HAFTUNG } from '@/lib/price-config';
 import Stripe from 'stripe';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
@@ -111,12 +112,16 @@ export async function POST(req: NextRequest) {
   const newRentalPrice = getPriceForDays(product, newDays);
   const priceDifference = Math.max(0, newRentalPrice - oldRentalPrice);
 
-  // Also recalculate haftung if per-day
+  // Haftung: Differenz zwischen altem und neuem Staffelpreis
   let haftungDiff = 0;
   if (booking.haftung === 'standard') {
-    haftungDiff = (newDays - oldDays) * 15; // 15€/Tag Standard
+    const oldH = calcHaftungTieredPrice(DEFAULT_HAFTUNG.standard, DEFAULT_HAFTUNG.standardIncrement, oldDays);
+    const newH = calcHaftungTieredPrice(DEFAULT_HAFTUNG.standard, DEFAULT_HAFTUNG.standardIncrement, newDays);
+    haftungDiff = Math.max(0, newH - oldH);
   } else if (booking.haftung === 'premium') {
-    haftungDiff = (newDays - oldDays) * 25; // 25€/Tag Premium
+    const oldH = calcHaftungTieredPrice(DEFAULT_HAFTUNG.premium, DEFAULT_HAFTUNG.premiumIncrement, oldDays);
+    const newH = calcHaftungTieredPrice(DEFAULT_HAFTUNG.premium, DEFAULT_HAFTUNG.premiumIncrement, newDays);
+    haftungDiff = Math.max(0, newH - oldH);
   }
 
   const totalDifference = priceDifference + haftungDiff;

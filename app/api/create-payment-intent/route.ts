@@ -77,8 +77,8 @@ export async function POST(req: NextRequest) {
         .eq('key', 'deposit_mode')
         .maybeSingle();
 
-      const depositMode = setting?.value || 'both';
-      if (depositMode === 'kaution' || depositMode === 'both') {
+      const depositMode = setting?.value || 'haftung';
+      if (depositMode === 'kaution') {
         const depositIntent = await stripe.paymentIntents.create({
           amount: depositCents,
           currency: 'eur',
