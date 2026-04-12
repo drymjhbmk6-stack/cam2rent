@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
     // 2. Buchung laden
     const { data: booking, error: bookingError } = await supabase
       .from('bookings')
-      .select('*, profiles:user_id(full_name, email, address_street, address_zip, address_city)')
+      .select('*')
       .eq('id', bookingId)
       .single();
 
@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
       .from('rental_agreements')
       .select('pdf_url')
       .eq('booking_id', bookingId)
-      .single();
+      .maybeSingle();
 
     if (existing) {
       return NextResponse.json({ success: true, contractUrl: existing.pdf_url, alreadySigned: true });
@@ -64,8 +64,19 @@ export async function POST(request: NextRequest) {
       .from('admin_settings')
       .select('value')
       .eq('key', 'tax_mode')
-      .single();
+      .maybeSingle();
     const taxMode = (taxSettings?.value as string) === 'regelbesteuerung' ? 'regelbesteuerung' : 'kleinunternehmer';
+
+    // Kundenprofil separat laden
+    let profile: { full_name?: string; email?: string; address_street?: string; address_zip?: string; address_city?: string } | null = null;
+    if (booking.user_id) {
+      const { data: p } = await supabase
+        .from('profiles')
+        .select('full_name, email, address_street, address_zip, address_city')
+        .eq('id', booking.user_id)
+        .maybeSingle();
+      profile = p;
+    }
 
     // Datumsformatierung
     const fmtDate = (iso: string) => {
@@ -77,8 +88,6 @@ export async function POST(request: NextRequest) {
     const rentalFrom = fmtDate(booking.rental_from);
     const rentalTo = fmtDate(booking.rental_to);
 
-    // Kundendaten aus Profile oder Buchung
-    const profile = Array.isArray(booking.profiles) ? booking.profiles[0] : booking.profiles;
     const custName = customerName || profile?.full_name || booking.customer_name || '';
     const custEmail = profile?.email || booking.customer_email || '';
 

@@ -408,14 +408,14 @@ function SignContractModal({ booking, onClose, onSuccess }: SignModalProps) {
         <div className="bg-brand-bg dark:bg-brand-black rounded-lg p-4 mb-4 text-xs text-brand-text dark:text-gray-300 space-y-1.5 max-h-48 overflow-y-auto">
           <p className="font-heading font-semibold text-brand-black dark:text-white text-sm mb-2">Mietbedingungen (Zusammenfassung)</p>
           <p>• Der Mietgegenstand ist Eigentum des Vermieters. Weitervermietung ist untersagt.</p>
-          <p>• Die Kamera ist sorgsam zu behandeln und vor Wasser, Stoessen und Ueberhitzung zu schuetzen.</p>
-          <p>• Der Mieter haftet fuer alle Schaeden waehrend des Mietzeitraums.</p>
-          <p>• Maengel innerhalb von 24 Stunden nach Empfang melden.</p>
-          <p>• Bei verspaeteter Rueckgabe: Tagespreis + 5,00 EUR Bearbeitungsgebuehr pro Tag.</p>
+          <p>• Die Kamera ist sorgsam zu behandeln und vor Wasser, Stößen und Überhitzung zu schützen.</p>
+          <p>• Der Mieter haftet für alle Schäden während des Mietzeitraums.</p>
+          <p>• Mängel innerhalb von 24 Stunden nach Empfang melden.</p>
+          <p>• Bei verspäteter Rückgabe: Tagespreis + 5,00 EUR Bearbeitungsgebühr pro Tag.</p>
           <p>• Stornierung: 100% bei 7+ Tagen, 50% bei 3-7 Tagen, 0% bei weniger als 3 Tagen vor Mietbeginn.</p>
-          <p>• Vorautorisierung wird bei ordnungsgemaesser Rueckgabe freigegeben.</p>
+          <p>• Vorautorisierung wird bei ordnungsgemäßer Rückgabe freigegeben.</p>
           <p>• Deutsches Recht. Gerichtsstand: Berlin.</p>
-          <p className="text-brand-muted dark:text-gray-500 mt-2">Der vollstaendige Vertragstext wurde beim Buchungsvorgang angezeigt.</p>
+          <p className="text-brand-muted dark:text-gray-500 mt-2">Der vollständige Vertragstext wurde beim Buchungsvorgang angezeigt.</p>
         </div>
 
         {/* Signer name */}
