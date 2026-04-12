@@ -111,6 +111,43 @@ export async function POST(req: NextRequest) {
       .like('payment_intent_id', `${payment_intent_id}%`);
 
     if (existingRows && existingRows.length > 0) {
+      // Buchungen existieren bereits — aber Vertrag noch signieren falls nötig
+      if (contractSignature?.agreedToTerms && contractSignature?.signerName) {
+        const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+          || req.headers.get('x-real-ip') || 'unknown';
+        for (const row of existingRows) {
+          const { data: bk } = await supabase.from('bookings').select('contract_signed').eq('id', row.id).single();
+          if (bk && !bk.contract_signed) {
+            try {
+              const { data: fullBooking } = await supabase.from('bookings').select('*').eq('id', row.id).single();
+              if (!fullBooking) continue;
+              const fmtD = (iso: string) => { const [y, m, d] = (iso || '').split('T')[0].split('-'); return `${d}.${m}.${y}`; };
+              const { data: txS } = await supabase.from('admin_settings').select('key, value').in('key', ['tax_mode', 'tax_rate']);
+              const txM: Record<string, string> = {}; for (const s of txS ?? []) txM[s.key] = s.value;
+              const result = await generateContractPDF({
+                bookingId: row.id, bookingNumber: row.id,
+                customerName: contractSignature.signerName, customerEmail: fullBooking.customer_email || '',
+                productName: fullBooking.product_name || '',
+                accessories: Array.isArray(fullBooking.accessories) ? fullBooking.accessories : [],
+                rentalFrom: fmtD(fullBooking.rental_from), rentalTo: fmtD(fullBooking.rental_to),
+                rentalDays: fullBooking.days || 1,
+                priceRental: fullBooking.price_rental || 0, priceAccessories: fullBooking.price_accessories || 0,
+                priceHaftung: fullBooking.price_haftung || 0, priceShipping: fullBooking.shipping_price || 0,
+                priceTotal: fullBooking.price_total || 0, deposit: fullBooking.deposit || 0,
+                taxMode: (txM['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer',
+                taxRate: parseFloat(txM['tax_rate'] || '19'),
+                signatureDataUrl: contractSignature.signatureDataUrl,
+                signatureMethod: contractSignature.signatureMethod,
+                signerName: contractSignature.signerName, ipAddress: ip,
+              });
+              await storeContract(row.id, result.pdfBuffer, {
+                contractHash: result.contractHash, customerName: contractSignature.signerName,
+                ipAddress: ip, signedAt: new Date().toISOString(), signatureMethod: contractSignature.signatureMethod,
+              });
+            } catch (err) { console.error('Contract generation (idempotent) error:', err); }
+          }
+        }
+      }
       return NextResponse.json({
         success: true,
         already_confirmed: true,
