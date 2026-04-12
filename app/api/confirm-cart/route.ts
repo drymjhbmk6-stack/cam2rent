@@ -112,6 +112,7 @@ export async function POST(req: NextRequest) {
 
     if (existingRows && existingRows.length > 0) {
       // Buchungen existieren bereits — aber Vertrag noch signieren falls nötig
+      console.log('[confirm-cart] Idempotent: existingRows=', existingRows.length, 'contractSignature=', contractSignature ? 'vorhanden' : 'FEHLT');
       if (contractSignature?.agreedToTerms && contractSignature?.signerName) {
         const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
           || req.headers.get('x-real-ip') || 'unknown';
@@ -144,7 +145,8 @@ export async function POST(req: NextRequest) {
                 contractHash: result.contractHash, customerName: contractSignature.signerName,
                 ipAddress: ip, signedAt: new Date().toISOString(), signatureMethod: contractSignature.signatureMethod,
               });
-            } catch (err) { console.error('Contract generation (idempotent) error:', err); }
+              console.log('[confirm-cart] Vertrag gespeichert für', row.id);
+            } catch (err) { console.error('[confirm-cart] Contract generation (idempotent) error:', err); }
           }
         }
       }

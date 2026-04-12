@@ -64,21 +64,19 @@ export async function POST(req: NextRequest) {
       .maybeSingle();
 
     if (existing) {
-      // Buchung existiert bereits (Webhook oder Reload) — aber Vertrag noch signieren falls nötig
+      // Buchung existiert bereits (Webhook oder Reload) — Vertrag noch signieren falls nötig
+      console.log('[confirm-booking] Idempotent: existing=', existing.id, 'contractSignature=', contractSignature ? 'vorhanden' : 'FEHLT');
       if (contractSignature?.agreedToTerms && contractSignature?.signerName) {
         const { data: bk } = await supabase.from('bookings').select('contract_signed').eq('id', existing.id).single();
         if (bk && !bk.contract_signed) {
-          // Vertrag asynchron generieren (nicht blockierend)
           const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
             || req.headers.get('x-real-ip') || 'unknown';
-          import('@/lib/contracts/generate-contract').then(async ({ generateContractPDF }) => {
-            const { storeContract } = await import('@/lib/contracts/store-contract');
+          try {
             const { data: fullBooking } = await supabase.from('bookings').select('*').eq('id', existing.id).single();
-            if (!fullBooking) return;
-            const fmtD = (iso: string) => { const [y, m, d] = (iso || '').split('T')[0].split('-'); return `${d}.${m}.${y}`; };
-            const { data: txS } = await supabase.from('admin_settings').select('key, value').in('key', ['tax_mode', 'tax_rate']);
-            const txM: Record<string, string> = {}; for (const s of txS ?? []) txM[s.key] = s.value;
-            try {
+            if (fullBooking) {
+              const fmtD = (iso: string) => { const [y, m, d] = (iso || '').split('T')[0].split('-'); return `${d}.${m}.${y}`; };
+              const { data: txS } = await supabase.from('admin_settings').select('key, value').in('key', ['tax_mode', 'tax_rate']);
+              const txM: Record<string, string> = {}; for (const s of txS ?? []) txM[s.key] = s.value;
               const result = await generateContractPDF({
                 bookingId: existing.id, bookingNumber: existing.id,
                 customerName: contractSignature.signerName,
@@ -100,8 +98,9 @@ export async function POST(req: NextRequest) {
                 contractHash: result.contractHash, customerName: contractSignature.signerName,
                 ipAddress: ip, signedAt: new Date().toISOString(), signatureMethod: contractSignature.signatureMethod,
               });
-            } catch (err) { console.error('Contract generation (idempotent) error:', err); }
-          }).catch((err) => console.error('Contract import error:', err));
+              console.log('[confirm-booking] Vertrag gespeichert für', existing.id);
+            }
+          } catch (err) { console.error('[confirm-booking] Contract generation error:', err); }
         }
       }
       return NextResponse.json({ success: true, booking_id: existing.id });
