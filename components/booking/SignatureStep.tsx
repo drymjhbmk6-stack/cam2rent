@@ -44,11 +44,11 @@ Mietdauer: ${opts.rentalDays} Tag${opts.rentalDays !== 1 ? 'e' : ''}
 
 \u00a7 3 \u2013 Mietpreis und Zahlung
 Gesamtbetrag: ${fmt(opts.priceTotal)}
-Zahlung erfolgt ueber Stripe per Kreditkarte oder SEPA-Lastschrift.
+Zahlung erfolgt über Stripe per Kreditkarte oder SEPA-Lastschrift.
 
 \u00a7 4 \u2013 Kaution (Vorautorisierung)
 Vorautorisierung: ${fmt(opts.deposit)}
-Wird nach ordnungsgemaesser Rueckgabe vollstaendig freigegeben.
+Wird nach ordnungsgemäßer Rückgabe vollständig freigegeben.
 Bei Schaeden oder Verlust kann die Vorautorisierung eingezogen werden.
 
 \u00a7 5 \u2013 Versand und Uebergabe
@@ -57,15 +57,15 @@ Maengel innerhalb von 24 Stunden nach Empfang per E-Mail an ${BUSINESS.email} me
 
 \u00a7 6 \u2013 Sorgfaltspflicht
 Der Mieter behandelt den Mietgegenstand sorgsam und schuetzt ihn vor Wasser, Stoessen und Ueberhitzung.
-Keine eigenmaaechtigen Reparaturversuche.
+Keine eigenmächtigen Reparaturversuche.
 
 \u00a7 7 \u2013 Haftung bei Schaeden und Verlust
 Der Mieter haftet fuer alle Schaeden waehrend des Mietzeitraums.
 Bei Totalschaden/Verlust: Ersatz des Wiederbeschaffungswertes.
 
-\u00a7 8 \u2013 Verspaetete Rueckgabe
+\u00a7 8 \u2013 Verspätete Rückgabe
 Pro angefangenem Tag: regulaerer Tagespreis + 5,00 \u20ac Bearbeitungsgebuehr.
-Ab 3 Werktagen Verspaetung ohne Absprache: Strafanzeige moeglich.
+Ab 3 Werktagen Verspätung ohne Absprache: Strafanzeige möglich.
 
 \u00a7 9 \u2013 Stornierung
 Mehr als 7 Tage vor Mietbeginn: 100% Erstattung.
@@ -76,7 +76,7 @@ Weniger als 3 Tage: keine Erstattung.
 Datenverarbeitung gemaess DSGVO. Details: ${BUSINESS.url}/datenschutz
 
 \u00a7 11 \u2013 Haftungsbeschraenkung des Vermieters
-Haftung des Vermieters bei leichter Fahrlaessigkeit auf vorhersehbare Schaeden begrenzt.
+Haftung des Vermieters bei leichter Fahrlässigkeit auf vorhersehbare Schäden begrenzt.
 Keine Haftung fuer Datenverluste auf Speicherkarten.
 
 \u00a7 12 \u2013 Schlussbestimmungen
@@ -306,7 +306,7 @@ export default function SignatureStep({
           </div>
         )}
 
-        {/* Loeschen-Button */}
+        {/* Löschen-Button */}
         {!useTypedName && (
           <button
             type="button"
@@ -316,7 +316,7 @@ export default function SignatureStep({
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
             </svg>
-            Loeschen
+            Löschen
           </button>
         )}
       </div>
@@ -342,7 +342,7 @@ export default function SignatureStep({
           disabled={isSubmitting}
           className="px-6 py-3 text-brand-steel font-heading font-semibold text-sm rounded-[10px] border border-brand-border hover:bg-brand-bg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          Zurueck
+          Zurück
         </button>
 
         <div className="relative group">

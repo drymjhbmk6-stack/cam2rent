@@ -84,8 +84,8 @@ const EMAIL_TYPE_LABELS: Record<string, string> = {
   damage_resolution: 'Schadensabschluss',
   review_request: 'Bewertungsanfrage',
   extension_confirmation: 'Verlaengerung',
-  return_reminder: 'Rueckgabe-Erinnerung',
-  overdue_notice: 'Ueberfaellig',
+  return_reminder: 'Rückgabe-Erinnerung',
+  overdue_notice: 'Überfällig',
 };
 
 interface CustomerProfile {
@@ -275,7 +275,7 @@ export default function BuchungDetailPage() {
     if (w) { w.document.write(html); w.document.close(); }
   }, [booking, customer]);
 
-  const openUebergabeprotokoll = useCallback(() => {
+  const openÜbergabeprotokoll = useCallback(() => {
     if (!booking) return;
     const kundenName = booking.customer_name || customer?.full_name || '';
     const kundenEmail = booking.customer_email || customer?.email || '';
@@ -375,7 +375,7 @@ export default function BuchungDetailPage() {
   const totalDiscount = (booking.discount_amount ?? 0) + (booking.duration_discount ?? 0) + (booking.loyalty_discount ?? 0);
 
   async function quickStatusChange(targetStatus: string, label: string) {
-    if (!confirm(`Status wirklich auf "${label}" aendern?`)) return;
+    if (!confirm(`Status wirklich auf "${label}" ändern?`)) return;
     setStatusUpdating(true);
     try {
       const res = await fetch(`/api/admin/booking/${bookingId}`, {
@@ -397,7 +397,7 @@ export default function BuchungDetailPage() {
           <div>
             <Link href="/admin/buchungen" className="text-sm font-heading text-accent-blue hover:underline mb-2 inline-flex items-center gap-1">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
-              Zurueck zur Uebersicht
+              Zurück zur Übersicht
             </Link>
             <div className="flex items-center gap-3 mt-1">
               <h1 className="font-heading font-bold text-2xl text-brand-black">{booking.id}</h1>
@@ -424,7 +424,7 @@ export default function BuchungDetailPage() {
           <div className="mb-6 p-4 rounded-xl border border-amber-300 bg-amber-50 flex items-start gap-3">
             <svg className="w-5 h-5 text-amber-500 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
             <div>
-              <p className="text-sm font-heading font-semibold text-amber-800">Verdaechtige Buchung</p>
+              <p className="text-sm font-heading font-semibold text-amber-800">Verdächtige Buchung</p>
               {booking.suspicious_reasons?.length > 0 && <p className="text-xs font-body text-amber-700 mt-0.5">{booking.suspicious_reasons.join(', ')}</p>}
             </div>
           </div>
@@ -463,7 +463,7 @@ export default function BuchungDetailPage() {
             <Section title="Preisaufstellung">
               <div className="space-y-2">
                 <PriceRow label={`Miete (${booking.days} ${booking.days === 1 ? 'Tag' : 'Tage'})`} amount={booking.price_rental} />
-                {booking.price_accessories > 0 && <PriceRow label="Zubehoer" amount={booking.price_accessories} />}
+                {booking.price_accessories > 0 && <PriceRow label="Zubehör" amount={booking.price_accessories} />}
                 {booking.price_haftung > 0 && <PriceRow label="Haftungsschutz" amount={booking.price_haftung} />}
                 {(booking.shipping_price ?? 0) > 0 && <PriceRow label="Versand" amount={booking.shipping_price!} />}
                 {(booking.discount_amount ?? 0) > 0 && (
@@ -503,7 +503,7 @@ export default function BuchungDetailPage() {
 
             {/* Zubehoer */}
             {booking.accessories && booking.accessories.length > 0 && (
-              <Section title="Zubehoer & Set">
+              <Section title="Zubehör & Set">
                 <div className="flex flex-wrap gap-2">
                   {booking.accessories.map((a, i) => {
                     const name = a.replace(/-[a-z0-9]{6,}$/, '').split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
@@ -532,12 +532,12 @@ export default function BuchungDetailPage() {
                         <p className="text-sm font-body text-brand-black whitespace-pre-line">{booking.shipping_address}</p>
                       </div>
                     )}
-                    <InfoRow label="Rueckgabe" value={booking.returned_at ? fmtDateTime(booking.returned_at) : 'Noch nicht zurueck'} />
+                    <InfoRow label="Rückgabe" value={booking.returned_at ? fmtDateTime(booking.returned_at) : 'Noch nicht zurück'} />
                     {booking.return_condition && <InfoRow label="Zustand" value={booking.return_condition} />}
                   </div>
                   {booking.return_notes && (
                     <div className="mt-3 pt-3 border-t border-brand-border">
-                      <p className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider mb-1">Rueckgabe-Notizen</p>
+                      <p className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider mb-1">Rückgabe-Notizen</p>
                       <p className="text-sm font-body text-brand-black">{booking.return_notes}</p>
                     </div>
                   )}
@@ -545,7 +545,7 @@ export default function BuchungDetailPage() {
                   {(booking.label_url || booking.return_label_url) && (
                     <div className="mt-3 pt-3 border-t border-brand-border flex flex-wrap gap-2">
                       {booking.label_url && <a href={booking.label_url} target="_blank" className="text-xs font-heading font-semibold text-accent-blue hover:underline">Versandlabel</a>}
-                      {booking.return_label_url && <a href={`/api/admin/return-label/${booking.id}`} target="_blank" className="text-xs font-heading font-semibold text-accent-blue hover:underline">Ruecksendeetikett</a>}
+                      {booking.return_label_url && <a href={`/api/admin/return-label/${booking.id}`} target="_blank" className="text-xs font-heading font-semibold text-accent-blue hover:underline">Rücksendeetikett</a>}
                     </div>
                   )}
                   {/* Quick actions */}
@@ -554,7 +554,7 @@ export default function BuchungDetailPage() {
                     {booking.status === 'shipped' && (
                       <button onClick={() => quickStatusChange('completed', 'Zugestellt / Abgeschlossen')} disabled={statusUpdating} className="px-3 py-1.5 text-xs font-heading font-semibold bg-green-600 text-white rounded-btn hover:bg-green-700 transition-colors disabled:opacity-40">Als zugestellt markieren</button>
                     )}
-                    {(booking.status === 'shipped' || booking.status === 'picked_up') && <Link href="/admin/retouren" className="px-3 py-1.5 text-xs font-heading font-semibold bg-cyan-600 text-white rounded-btn hover:bg-cyan-700 transition-colors">Rueckgabe pruefen</Link>}
+                    {(booking.status === 'shipped' || booking.status === 'picked_up') && <Link href="/admin/retouren" className="px-3 py-1.5 text-xs font-heading font-semibold bg-cyan-600 text-white rounded-btn hover:bg-cyan-700 transition-colors">Rückgabe prüfen</Link>}
                   </div>
                 </div>
               ) : (
@@ -636,7 +636,7 @@ export default function BuchungDetailPage() {
                 {booking.shipped_at && <TimelineItem label="Versendet" date={fmtDateTime(booking.shipped_at)} status="shipped" active />}
                 {booking.status === 'picked_up' && <TimelineItem label="Abgeholt" date="" status="shipped" active />}
                 {booking.extended_at && <TimelineItem label="Verlaengert" date={fmtDateTime(booking.extended_at)} status="confirmed" active />}
-                {booking.returned_at && <TimelineItem label="Zurueckgegeben" date={fmtDateTime(booking.returned_at)} status="completed" active />}
+                {booking.returned_at && <TimelineItem label="Zurückgegeben" date={fmtDateTime(booking.returned_at)} status="completed" active />}
                 {booking.status === 'completed' && !booking.returned_at && <TimelineItem label="Abgeschlossen" date="" status="completed" active />}
                 {booking.status === 'cancelled' && <TimelineItem label="Storniert" date="" status="cancelled" active />}
                 {booking.status === 'damaged' && <TimelineItem label="Beschaedigt gemeldet" date="" status="damaged" active />}
@@ -696,7 +696,7 @@ export default function BuchungDetailPage() {
                 )}
 
                 <div>
-                  <label className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider block mb-2">Status aendern</label>
+                  <label className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider block mb-2">Status ändern</label>
                   <div className="flex gap-2">
                     <select value={newStatus} onChange={(e) => setNewStatus(e.target.value)} className="flex-1 text-sm font-body border border-brand-border rounded-btn px-3 py-2 bg-white text-brand-black focus:outline-none focus:ring-2 focus:ring-accent-blue">
                       {ALL_STATUSES.map((s) => <option key={s} value={s}>{STATUS_CONFIG[s]?.label || s}</option>)}
@@ -723,7 +723,7 @@ export default function BuchungDetailPage() {
                   </>
                 )}
                 {booking.delivery_mode === 'abholung' && (
-                  <button onClick={openUebergabeprotokoll} className="block w-full text-center px-4 py-2 text-sm font-heading font-semibold bg-cyan-600 text-white rounded-btn hover:bg-cyan-700 transition-colors">Uebergabeprotokoll</button>
+                  <button onClick={openÜbergabeprotokoll} className="block w-full text-center px-4 py-2 text-sm font-heading font-semibold bg-cyan-600 text-white rounded-btn hover:bg-cyan-700 transition-colors">Übergabeprotokoll</button>
                 )}
                 <Link href="/admin/schaeden" className="block w-full text-center px-4 py-2 text-sm font-heading font-semibold bg-orange-500 text-white rounded-btn hover:bg-orange-600 transition-colors">Schadensbericht erstellen</Link>
               </div>

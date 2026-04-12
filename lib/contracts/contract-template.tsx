@@ -214,79 +214,79 @@ function buildClauses(data: RentalContractData) {
     {
       title: '\u00a7 1 \u2013 Mietgegenstand',
       paragraphs: [
-        '(1) Der Vermieter vermietet dem Mieter folgende(s) Geraet(e) und Zubehoer (nachfolgend \u201eMietgegenstand\u201c):',
+        '(1) Der Vermieter vermietet dem Mieter folgende(s) Gerät(e) und Zubehör (nachfolgend \u201eMietgegenstand\u201c):',
         `${data.productName}${data.exemplarId ? ` (Exemplar-ID: ${data.exemplarId})` : ''}`,
-        data.accessories.length > 0 ? `Zubehoer: ${data.accessories.join(', ')}` : '',
+        data.accessories.length > 0 ? `Zubehör: ${data.accessories.join(', ')}` : '',
         '(2) Der Mietgegenstand ist Eigentum des Vermieters. Der Mieter erwirbt durch diesen Vertrag keinerlei Eigentumsrechte.',
-        '(3) Dem Mieter ist es untersagt, den Mietgegenstand an Dritte weiterzuvermieten, zu ueberlassen oder als Sicherheit zu verwenden.',
+        '(3) Dem Mieter ist es untersagt, den Mietgegenstand an Dritte weiterzuvermieten, zu überlassen oder als Sicherheit zu verwenden.',
       ],
     },
     {
       title: '\u00a7 2 \u2013 Mietzeitraum',
       paragraphs: [
-        '(1) Der Mietzeitraum beginnt mit Anlieferung des Mietgegenstands beim Mieter und endet mit dem Eingang des vollstaendig und unbeschaedigt zurueckgesendeten Mietgegenstands beim Vermieter.',
+        '(1) Der Mietzeitraum beginnt mit Anlieferung des Mietgegenstands beim Mieter und endet mit dem Eingang des vollständig und unbeschädigt zurückgesendeten Mietgegenstands beim Vermieter.',
         `(2) Vereinbarter Mietzeitraum: ${data.rentalFrom} bis ${data.rentalTo} (${data.rentalDays} Tag${data.rentalDays !== 1 ? 'e' : ''}).`,
-        '(3) Massgeblich fuer das Ende des Mietzeitraums ist der Eingang der Ruecksendung beim Vermieter, nicht der Aufgabezeitpunkt beim Paketdienstleister.',
+        '(3) Maßgeblich für das Ende des Mietzeitraums ist der Eingang der Rücksendung beim Vermieter, nicht der Aufgabezeitpunkt beim Paketdienstleister.',
       ],
     },
     {
       title: '\u00a7 3 \u2013 Mietpreis und Zahlung',
       paragraphs: [
-        `(1) Der Mietpreis betraegt insgesamt ${fmt(data.priceTotal)}.`,
+        `(1) Der Mietpreis beträgt insgesamt ${fmt(data.priceTotal)}.`,
         data.taxMode === 'kleinunternehmer'
           ? '(2) Der Vermieter ist Kleinunternehmer im Sinne von \u00a7 19 Abs. 1 UStG. Es wird keine Umsatzsteuer berechnet und ausgewiesen.'
-          : `(2) Alle Betraege verstehen sich inkl. ${data.taxRate || 19}% MwSt.`,
-        '(3) Die Zahlung erfolgt bargeldlos ueber den Zahlungsdienstleister Stripe per Kreditkarte oder SEPA-Lastschrift.',
+          : `(2) Alle Beträge verstehen sich inkl. ${data.taxRate || 19}% MwSt.`,
+        '(3) Die Zahlung erfolgt bargeldlos über den Zahlungsdienstleister Stripe per Kreditkarte oder SEPA-Lastschrift.',
       ],
     },
     {
       title: '\u00a7 4 \u2013 Kaution (Vorautorisierung)',
       paragraphs: [
-        `(1) Zur Absicherung wird eine Vorautorisierung in Hoehe von ${fmt(data.deposit)} auf der Zahlungsmethode des Mieters vorgemerkt. Dieser Betrag wird nicht sofort eingezogen, sondern lediglich reserviert.`,
-        '(2) Die Vorautorisierung wird vollstaendig freigegeben, wenn der Mietgegenstand fristgerecht, vollstaendig und ohne Schaeden zurueckgegeben wird.',
-        '(3) Im Falle von Schaeden oder Verlust ist der Vermieter berechtigt, die Vorautorisierung ganz oder teilweise einzuziehen. Voraussetzung ist eine schriftliche Schadensbenachrichtigung mit Fotodokumentation.',
+        `(1) Zur Absicherung wird eine Vorautorisierung in Höhe von ${fmt(data.deposit)} auf der Zahlungsmethode des Mieters vorgemerkt. Dieser Betrag wird nicht sofort eingezogen, sondern lediglich reserviert.`,
+        '(2) Die Vorautorisierung wird vollständig freigegeben, wenn der Mietgegenstand fristgerecht, vollstaendig und ohne Schäden zurückgegeben wird.',
+        '(3) Im Falle von Schäden oder Verlust ist der Vermieter berechtigt, die Vorautorisierung ganz oder teilweise einzuziehen. Voraussetzung ist eine schriftliche Schadensbenachrichtigung mit Fotodokumentation.',
         '(4) Uebersteigt der Schaden die Hoehe der Vorautorisierung, ist der Vermieter berechtigt, den Differenzbetrag gesondert in Rechnung zu stellen.',
       ],
     },
     {
-      title: '\u00a7 5 \u2013 Versand und Uebergabe',
+      title: '\u00a7 5 \u2013 Versand und Übergabe',
       paragraphs: [
         '(1) Der Mietgegenstand wird per Paketdienstleister an die vom Mieter angegebene Lieferadresse versandt.',
-        `(2) Der Mieter ist verpflichtet, den Mietgegenstand bei Empfang auf Vollstaendigkeit und Maengel zu pruefen. Maengel sind innerhalb von 24 Stunden per E-Mail an ${companyEmail} mit Fotodokumentation zu melden.`,
+        `(2) Der Mieter ist verpflichtet, den Mietgegenstand bei Empfang auf Vollständigkeit und Mängel zu prüfen. Mängel sind innerhalb von 24 Stunden per E-Mail an ${companyEmail} mit Fotodokumentation zu melden.`,
         '(3) Werden Maengel nicht innerhalb dieser Frist gemeldet, gilt der Mietgegenstand als in einwandfreiem Zustand uebergeben.',
-        '(4) Der Vermieter stellt ein vorfrankiertes Ruecksendeetikett bereit. Die Ruecksendung hat in der Originalverpackung oder gleichwertiger Schutzverpackung zu erfolgen.',
+        '(4) Der Vermieter stellt ein vorfrankiertes Rücksendeetikett bereit. Die Rücksendung hat in der Originalverpackung oder gleichwertiger Schutzverpackung zu erfolgen.',
       ],
     },
     {
       title: '\u00a7 6 \u2013 Sorgfaltspflicht und zulaessige Nutzung',
       paragraphs: [
         '(1) Der Mieter ist verpflichtet, den Mietgegenstand mit der Sorgfalt eines ordentlichen Kaufmanns zu behandeln.',
-        '(2) Der Mieter ist insbesondere verpflichtet: den Mietgegenstand vor Feuchtigkeit, Regen und Hitze (>45\u00b0C) zu schuetzen; vor Stoessen und mechanischen Schaeden zu schuetzen; keine inkompatiblen Speicherkarten oder Akkus zu verwenden; keine eigenmaaechtigen Reparaturversuche vorzunehmen.',
+        '(2) Der Mieter ist insbesondere verpflichtet: den Mietgegenstand vor Feuchtigkeit, Regen und Hitze (>45\u00b0C) zu schützen; vor Stößen und mechanischen Schäden zu schützen; keine inkompatiblen Speicherkarten oder Akkus zu verwenden; keine eigenmächtigen Reparaturversuche vorzunehmen.',
         '(3) Verboten ist die Nutzung zur Verletzung der Persoenlichkeitsrechte Dritter, in Bereichen ohne erforderliche Genehmigung oder fuer strafbare Handlungen.',
       ],
     },
     {
-      title: '\u00a7 7 \u2013 Haftung bei Schaeden und Verlust',
+      title: '\u00a7 7 \u2013 Haftung bei Schäden und Verlust',
       paragraphs: [
-        '(1) Der Mieter haftet fuer alle Schaeden, die waehrend des Mietzeitraums am Mietgegenstand entstehen.',
+        '(1) Der Mieter haftet für alle Schäden, die während des Mietzeitraums am Mietgegenstand entstehen.',
         '(2) Bei Totalschaden oder Verlust ist der Mieter zum Ersatz des Wiederbeschaffungswertes verpflichtet.',
         '(3) Bei Diebstahl ist unverzueglich eine Anzeige bei der Polizei zu erstatten. Die Erstattung entbindet den Mieter nicht von der Ersatzpflicht.',
-        '(4) Schaeden durch normale, bestimmungsgemaesse Abnutzung werden dem Mieter nicht in Rechnung gestellt.',
+        '(4) Schäden durch normale, bestimmungsgemäße Abnutzung werden dem Mieter nicht in Rechnung gestellt.',
       ],
     },
     {
-      title: '\u00a7 8 \u2013 Verspaetete Rueckgabe',
+      title: '\u00a7 8 \u2013 Verspätete Rückgabe',
       paragraphs: [
         '(1) Bei verspaeteter Rueckgabe wird fuer jeden angefangenen Tag der regulaere Tagespreis zzgl. 5,00 \u20ac Bearbeitungsgebuehr berechnet.',
-        '(2) Ab einer Verspaetung von mehr als 3 Werktagen ohne Absprache ist der Vermieter berechtigt, die Vorautorisierung einzuziehen und die Polizei wegen Unterschlagung (\u00a7 246 StGB) zu informieren.',
-        `(3) Drohende Verspaetungen sind so frueh wie moeglich per E-Mail an ${companyEmail} zu melden.`,
+        '(2) Ab einer Verspätung von mehr als 3 Werktagen ohne Absprache ist der Vermieter berechtigt, die Vorautorisierung einzuziehen und die Polizei wegen Unterschlagung (\u00a7 246 StGB) zu informieren.',
+        `(3) Drohende Verspätungen sind so früh wie möglich per E-Mail an ${companyEmail} zu melden.`,
       ],
     },
     {
       title: '\u00a7 9 \u2013 Stornierung und Ruecktritt',
       paragraphs: [
         '(1) Stornierung mehr als 7 Tage vor Mietbeginn: 100% Erstattung. 3\u20137 Tage vorher: 50% Erstattung. Weniger als 3 Tage: keine Erstattung.',
-        `(2) Stornierungen sind ueber das Kundenportal auf ${companyWebsite} oder per E-Mail an ${companyEmail} moeglich.`,
+        `(2) Stornierungen sind über das Kundenportal auf ${companyWebsite} oder per E-Mail an ${companyEmail} möglich.`,
         '(3) Gemaess \u00a7 312g Abs. 2 Nr. 9 BGB ist das gesetzliche Widerrufsrecht fuer zeitgebundene Mietvertraege ausgeschlossen.',
       ],
     },
@@ -301,8 +301,8 @@ function buildClauses(data: RentalContractData) {
     {
       title: '\u00a7 11 \u2013 Haftungsbeschraenkung des Vermieters',
       paragraphs: [
-        '(1) Der Vermieter haftet unbeschraenkt fuer Schaeden aus Verletzung des Lebens, des Koerpers oder der Gesundheit sowie fuer vorsaetzlich verursachte Schaeden.',
-        '(2) Im Uebrigen ist die Haftung auf typischerweise vorhersehbare Schaeden begrenzt.',
+        '(1) Der Vermieter haftet unbeschränkt für Schäden aus Verletzung des Lebens, des Körpers oder der Gesundheit sowie für vorsätzlich verursachte Schäden.',
+        '(2) Im Übrigen ist die Haftung auf typischerweise vorhersehbare Schäden begrenzt.',
         '(3) Der Vermieter haftet nicht fuer Datenverluste auf Speicherkarten oder im Geraetespeicher.',
       ],
     },
@@ -312,7 +312,7 @@ function buildClauses(data: RentalContractData) {
         `(1) Es gilt ausschliesslich deutsches Recht. Das UN-Kaufrecht (CISG) findet keine Anwendung.`,
         `(2) Gerichtsstand ist, soweit gesetzlich zulaessig, ${companyCity}.`,
         '(3) Sollten einzelne Bestimmungen unwirksam sein, bleibt die Wirksamkeit der uebrigen Bestimmungen unberuehrt (Salvatorische Klausel).',
-        '(4) Aenderungen dieses Vertrages beduerfen der Textform (\u00a7 126b BGB).',
+        '(4) Änderungen dieses Vertrages bedürfen der Textform (\u00a7 126b BGB).',
       ],
     },
   ];
@@ -333,7 +333,7 @@ export function buildContractText(data: RentalContractData): string {
     data.customerEmail,
     '',
     `Mietgegenstand: ${data.productName}`,
-    data.accessories.length > 0 ? `Zubehoer: ${data.accessories.join(', ')}` : '',
+    data.accessories.length > 0 ? `Zubehör: ${data.accessories.join(', ')}` : '',
     '',
     `Mietzeitraum: ${data.rentalFrom} bis ${data.rentalTo} (${data.rentalDays} Tage)`,
     `Gesamtbetrag: ${fmt(data.priceTotal)}`,
@@ -418,7 +418,7 @@ export function RentalContractPDF({ data }: { data: RentalContractData }) {
         </View>
         {data.accessories.length > 0 && (
           <View style={s.detailRow}>
-            <Text style={s.detailLabel}>Zubehoer</Text>
+            <Text style={s.detailLabel}>Zubehör</Text>
             <Text style={s.detailValue}>{data.accessories.join(', ')}</Text>
           </View>
         )}
@@ -432,7 +432,7 @@ export function RentalContractPDF({ data }: { data: RentalContractData }) {
         </View>
         {data.priceAccessories > 0 && (
           <View style={s.detailRow}>
-            <Text style={s.detailLabel}>Zubehoer</Text>
+            <Text style={s.detailLabel}>Zubehör</Text>
             <Text style={s.detailValue}>{fmt(data.priceAccessories)}</Text>
           </View>
         )}
@@ -522,7 +522,7 @@ export function RentalContractPDF({ data }: { data: RentalContractData }) {
         {/* Einwilligungserklaerung */}
         <View style={{ marginTop: 14, padding: 10, backgroundColor: LIGHT_BG, borderRadius: 4 }}>
           <Text style={{ fontSize: 8, color: '#374151', lineHeight: 1.55 }}>
-            Mit meiner digitalen Unterschrift bestaetige ich: (1) Ich habe diesen Mietvertrag vollstaendig gelesen und verstanden. (2) Ich stimme allen Bedingungen zu. (3) Ich bin volljaehrig und geschaeftsfaehig. (4) Die von mir angegebenen Daten sind korrekt. (5) Ich bin einverstanden, dass diese digitale Signatur gemaess der eIDAS-Verordnung (EU) 2014/910 als rechtsgueltige elektronische Signatur gilt.
+            Mit meiner digitalen Unterschrift bestätige ich: (1) Ich habe diesen Mietvertrag vollständig gelesen und verstanden. (2) Ich stimme allen Bedingungen zu. (3) Ich bin volljährig und geschäftsfähig. (4) Die von mir angegebenen Daten sind korrekt. (5) Ich bin einverstanden, dass diese digitale Signatur gemäß der eIDAS-Verordnung (EU) 2014/910 als rechtsgültige elektronische Signatur gilt.
           </Text>
         </View>
 

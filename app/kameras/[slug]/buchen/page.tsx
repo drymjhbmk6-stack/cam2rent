@@ -910,7 +910,7 @@ export default function BuchenPage() {
               <div>
                 <button type="button" onClick={() => setStep(1)} className="text-sm font-body text-accent-blue hover:underline mb-4 flex items-center gap-1">
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
-                  Zurueck zu Versand & Datum
+                  Zurück zu Versand & Datum
                 </button>
                 <h2 className="font-heading font-bold text-lg text-brand-black mb-1">
                   Zubehör
@@ -1015,7 +1015,7 @@ export default function BuchenPage() {
                   });
                 })()}
 
-                {/* Normales Zubehoer (Checkboxen) — nach Kategorie gruppiert */}
+                {/* Normales Zubehör (Checkboxen) — nach Kategorie gruppiert */}
                 {(() => {
                   const filtered = dbAccessories.filter((acc) => {
                     if (acc.upgradeGroup) return false;
@@ -1100,7 +1100,7 @@ export default function BuchenPage() {
               <div>
                 <button type="button" onClick={() => setStep(2)} className="text-sm font-body text-accent-blue hover:underline mb-4 flex items-center gap-1">
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
-                  Zurueck zu Zubehoer
+                  Zurück zu Zubehör
                 </button>
                 <h2 className="font-heading font-bold text-lg text-brand-black mb-1">
                   Haftungsschutz
@@ -1373,7 +1373,7 @@ export default function BuchenPage() {
                     onClick={() => setStep(2)}
                     className="px-6 py-3 text-brand-steel font-heading font-semibold text-sm rounded-[10px] border border-brand-border hover:bg-brand-bg transition-colors"
                   >
-                    ← Zubehoer
+                    ← Zubehör
                   </button>
                   <button
                     type="button"
@@ -1434,7 +1434,7 @@ export default function BuchenPage() {
                 <div className="rounded-xl border border-brand-border overflow-hidden mb-5">
                   <div className="flex justify-between items-center px-4 py-2 bg-brand-bg/50 dark:bg-white/5 border-b border-brand-border">
                     <span className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider">Zeitraum & Versand</span>
-                    <button type="button" onClick={() => { setReturnToSummary(true); setStep(1); }} className="text-xs font-heading font-semibold text-accent-blue hover:underline">Aendern →</button>
+                    <button type="button" onClick={() => { setReturnToSummary(true); setStep(1); }} className="text-xs font-heading font-semibold text-accent-blue hover:underline">Ändern →</button>
                   </div>
                   {/* Abholung top row */}
                   {deliveryMode === 'abholung' && (
@@ -1576,7 +1576,7 @@ export default function BuchenPage() {
                       <p className="text-xs font-body font-semibold text-brand-steel uppercase tracking-wider">
                         Haftungsschutz
                       </p>
-                      <button type="button" onClick={() => { setReturnToSummary(true); setStep(3); }} className="text-xs font-heading font-semibold text-accent-blue hover:underline">Aendern →</button>
+                      <button type="button" onClick={() => { setReturnToSummary(true); setStep(3); }} className="text-xs font-heading font-semibold text-accent-blue hover:underline">Ändern →</button>
                     </div>
                     {(() => {
                       const opt = HAFTUNGSOPTIONEN.find((h) => h.id === haftung)!;
@@ -1596,14 +1596,14 @@ export default function BuchenPage() {
                 )}
 
                 {/* Selected set or individual accessories */}
-                {/* Block 2: Set & Zubehoer */}
+                {/* Block 2: Set & Zubehör */}
                 {selectedSet ? (
                   <div className="mb-5 bg-brand-bg dark:bg-white/5 rounded-xl p-4">
                     <div className="flex justify-between items-center mb-2">
                       <p className="text-xs font-body font-semibold text-brand-steel uppercase tracking-wider">
-                        Set & Zubehoer
+                        Set & Zubehör
                       </p>
-                      <button type="button" onClick={() => { setReturnToSummary(true); setStep(2); }} className="text-xs font-heading font-semibold text-accent-blue hover:underline">Aendern →</button>
+                      <button type="button" onClick={() => { setReturnToSummary(true); setStep(2); }} className="text-xs font-heading font-semibold text-accent-blue hover:underline">Ändern →</button>
                     </div>
                     <div className="flex items-center gap-2 mb-2">
                       <p className="font-heading font-semibold text-sm text-brand-black">{selectedSet.name}</p>
@@ -1692,7 +1692,7 @@ export default function BuchenPage() {
                         onClick={() => setStep(4)}
                         className="px-6 py-3 text-brand-steel font-heading font-semibold text-sm rounded-[10px] border border-brand-border hover:bg-brand-bg transition-colors"
                       >
-                        Zurueck
+                        Zurück
                       </button>
                       <button
                         type="button"
