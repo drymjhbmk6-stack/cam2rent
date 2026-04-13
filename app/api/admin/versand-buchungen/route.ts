@@ -12,7 +12,7 @@ export async function GET() {
   const { data: bookings, error } = await supabase
     .from('bookings')
     .select(
-      'id, product_id, product_name, rental_from, rental_to, days, customer_name, customer_email, shipping_method, shipping_address, status, tracking_number, tracking_url, shipped_at, accessories, haftung, price_total, deposit, return_condition, return_notes, returned_at, created_at, label_url, return_label_url'
+      'id, product_id, product_name, rental_from, rental_to, days, customer_name, customer_email, shipping_method, shipping_address, status, tracking_number, tracking_url, shipped_at, accessories, haftung, price_total, deposit, return_condition, return_notes, returned_at, created_at, label_url, return_label_url, unit_id'
     )
     .eq('delivery_mode', 'versand')
     .in('status', ['confirmed', 'shipped'])
@@ -23,5 +23,23 @@ export async function GET() {
     return NextResponse.json({ bookings: [] });
   }
 
-  return NextResponse.json({ bookings: bookings ?? [] });
+  // Seriennummern für zugeordnete Units laden
+  const unitIds = (bookings ?? []).map((b) => b.unit_id).filter(Boolean);
+  let unitMap: Record<string, string> = {};
+  if (unitIds.length > 0) {
+    const { data: units } = await supabase
+      .from('product_units')
+      .select('id, serial_number')
+      .in('id', unitIds);
+    if (units) {
+      unitMap = Object.fromEntries(units.map((u) => [u.id, u.serial_number]));
+    }
+  }
+
+  const enriched = (bookings ?? []).map((b) => ({
+    ...b,
+    serial_number: b.unit_id ? unitMap[b.unit_id] ?? null : null,
+  }));
+
+  return NextResponse.json({ bookings: enriched });
 }

@@ -24,6 +24,8 @@ interface Booking {
   deposit: number;
   label_url?: string | null;
   return_label_url?: string | null;
+  unit_id?: string | null;
+  serial_number?: string | null;
 }
 
 interface ShippingMethod {
@@ -257,7 +259,7 @@ export default function AdminVersandPage() {
 <h1>Versand-Packliste</h1><div class="sub">cam2rent – ${b.id}</div>
 <div class="ig"><span class="il">Buchungsnummer:</span><span class="iv">${b.id}</span><span class="il">Kundenname:</span><span class="iv">${b.customer_name || '–'}</span><span class="il">Mietzeitraum:</span><span class="iv">${fmtDate(b.rental_from)} – ${fmtDate(b.rental_to)}</span><span class="il">Versandart:</span><span class="iv">${b.shipping_method === 'express' ? 'Express-Versand' : 'Standard-Versand'}</span><span class="il">Lieferadresse:</span><span class="iv">${b.shipping_address || '–'}</span></div>
 <h2>1. Versanddatum</h2><p style="margin-bottom:12px">Datum: <strong>${dateStr}</strong></p>
-<h2>2. Versandgegenstand</h2><div class="ig" style="margin-bottom:4px"><span class="il">Kamera / Gerät:</span><span class="iv">${b.product_name}</span></div><p style="margin-bottom:8px">Seriennummer: <span class="ln ls"></span></p>
+<h2>2. Versandgegenstand</h2><div class="ig" style="margin-bottom:4px"><span class="il">Kamera / Gerät:</span><span class="iv">${b.product_name}</span></div><p style="margin-bottom:8px">Seriennummer: <strong>${b.serial_number || '<span class="ln ls"></span>'}</strong></p>
 <p style="margin-bottom:4px;font-weight:600">Zubehör:</p><table><thead><tr><th style="width:40px">Nr.</th><th>Bezeichnung</th><th style="width:50px">OK</th></tr></thead><tbody>${zubehoerRows}</tbody></table>
 <h2>3. Zustand bei Verpackung</h2><div style="margin:12px 0"><div class="cr"><div class="ci"><span class="cb"></span> Gerät funktionsfähig getestet</div><div class="ci"><span class="cb"></span> Keine sichtbaren Schäden</div></div><div class="cr"><div class="ci"><span class="cb"></span> Sonstiges: <span class="ln"></span></div></div></div>
 <h2>4. Verpackungskontrolle</h2><div style="margin:12px 0"><div class="cr"><div class="ci"><span class="cb"></span> Gerät sicher verpackt</div><div class="ci"><span class="cb"></span> Zubehör vollständig</div></div><div class="cr"><div class="ci"><span class="cb"></span> Paketinhalt dokumentiert (Foto/Video)</div><div class="ci"><span class="cb"></span> Paketnummer: <span class="ln ls"></span></div></div></div>
@@ -352,7 +354,7 @@ export default function AdminVersandPage() {
                             <div>
                               <p className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider mb-2">Packliste</p>
                               <div className="bg-white rounded-xl border border-brand-border overflow-hidden">
-                                <PackRow label={b.product_name} sub="Kamera" strong />
+                                <PackRow label={b.product_name} sub={b.serial_number ? `SN: ${b.serial_number}` : 'Kamera'} strong />
                                 {accs.map((id) => <PackRow key={id} label={accName(id)} sub="Zubehör" />)}
                                 <PackRow label="Rücksendeetikett / DHL-Beileger" sub="Im Paket beilegen" />
                                 <PackRow label="Lieferschein (Kopie)" sub="Ins Paket legen" />

@@ -57,6 +57,8 @@ export async function generateContractPDF(opts: {
   ipAddress: string;
   // Eigenbeteiligung (dynamisch pro Kategorie)
   eigenbeteiligung?: number;
+  // Seriennummer der zugeordneten Kamera
+  serialNumber?: string;
 }): Promise<GenerateContractResult> {
   const now = new Date();
   const signedAt = now.toISOString().replace('T', ' ').substring(0, 16);
@@ -70,7 +72,7 @@ export async function generateContractPDF(opts: {
         {
           position: 1,
           bezeichnung: opts.productName,
-          seriennr: '',
+          seriennr: opts.serialNumber || '',
           tage: opts.rentalDays,
           preis: opts.priceRental,
           wiederbeschaffungswert: opts.deposit || 0,

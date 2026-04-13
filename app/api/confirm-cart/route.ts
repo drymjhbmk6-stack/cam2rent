@@ -7,6 +7,7 @@ import type { CartItem } from '@/components/CartProvider';
 import { calcShipping } from '@/data/shipping';
 import type { ShippingMethod } from '@/data/shipping';
 import { DEFAULT_SHIPPING, type ShippingPriceConfig } from '@/lib/price-config';
+import { assignUnitToBooking } from '@/lib/unit-assignment';
 import { generateContractPDF } from '@/lib/contracts/generate-contract';
 import { storeContract } from '@/lib/contracts/store-contract';
 import {
@@ -327,6 +328,10 @@ export async function POST(req: NextRequest) {
           { status: 500 }
         );
       }
+
+      // Unit automatisch zuordnen (non-blocking)
+      assignUnitToBooking(bookingId, firstItem.productId, firstItem.rentalFrom, firstItem.rentalTo)
+        .catch((err) => console.error(`Unit assignment error for ${bookingId}:`, err));
     }
 
     // 5. Coupon used_count erhoehen
@@ -511,6 +516,16 @@ export async function POST(req: NextRequest) {
               - Math.round((r_loyaltyDiscount ?? 0) * ratio * 100) / 100
               + emailShipping;
 
+            // Seriennummer laden falls Unit zugeordnet
+            let serialNumber = '';
+            try {
+              const { data: bkRow } = await supabase.from('bookings').select('unit_id').eq('id', bookingIds[gi]).maybeSingle();
+              if (bkRow?.unit_id) {
+                const { data: unitRow } = await supabase.from('product_units').select('serial_number').eq('id', bkRow.unit_id).maybeSingle();
+                serialNumber = unitRow?.serial_number ?? '';
+              }
+            } catch { /* ignore */ }
+
             // Vertrag generieren wenn Signatur vorhanden
             let contractPdfBuffer: Buffer | undefined;
             if (contractSignature?.agreedToTerms && contractSignature?.signerName) {
@@ -522,6 +537,7 @@ export async function POST(req: NextRequest) {
                   customerEmail: r_email,
                   productName,
                   accessories: allAccessories,
+                  serialNumber,
                   rentalFrom: fmtDateForContract(firstItem.rentalFrom),
                   rentalTo: fmtDateForContract(firstItem.rentalTo),
                   rentalDays: firstItem.days,

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -15,6 +15,24 @@ import MarkdownEditor from '@/components/MarkdownEditor';
 import BrandSelect from '@/components/admin/BrandSelect';
 import { useSpecDefinitions } from '@/components/admin/SpecDefinitions';
 
+interface ProductUnit {
+  id: string;
+  product_id: string;
+  serial_number: string;
+  label: string | null;
+  status: 'available' | 'rented' | 'maintenance' | 'retired';
+  notes: string | null;
+  purchased_at: string | null;
+  created_at: string;
+}
+
+const UNIT_STATUS_CONFIG: Record<string, { label: string; color: string }> = {
+  available: { label: 'Verfügbar', color: 'bg-emerald-100 text-emerald-700' },
+  rented: { label: 'Vermietet', color: 'bg-blue-100 text-blue-700' },
+  maintenance: { label: 'Wartung', color: 'bg-amber-100 text-amber-700' },
+  retired: { label: 'Ausgemustert', color: 'bg-gray-200 text-gray-600' },
+};
+
 export default function AdminKameraEditorPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -27,6 +45,14 @@ export default function AdminKameraEditorPage() {
   const [uploading, setUploading] = useState(false);
   const [depositMode, setDepositMode] = useState<'kaution' | 'haftung'>('haftung');
   const { specs: specDefs } = useSpecDefinitions();
+
+  // Seriennummern-Verwaltung
+  const [units, setUnits] = useState<ProductUnit[]>([]);
+  const [unitsLoading, setUnitsLoading] = useState(true);
+  const [newUnit, setNewUnit] = useState({ serial_number: '', label: '', notes: '', purchased_at: '' });
+  const [addingUnit, setAddingUnit] = useState(false);
+  const [editingUnit, setEditingUnit] = useState<string | null>(null);
+  const [editUnitData, setEditUnitData] = useState<Partial<ProductUnit>>({});
 
   useEffect(() => {
     // Load kaution tiers
@@ -56,6 +82,88 @@ export default function AdminKameraEditorPage() {
         setProduct({ ...createEmpty(id) });
       });
   }, [id]);
+
+  // Units laden
+  const loadUnits = useCallback(async () => {
+    setUnitsLoading(true);
+    try {
+      const res = await fetch(`/api/admin/product-units?product_id=${id}`);
+      const data = await res.json();
+      setUnits(data.units ?? []);
+    } catch {
+      setUnits([]);
+    } finally {
+      setUnitsLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => { loadUnits(); }, [loadUnits]);
+
+  // Stock automatisch aus aktiven Units berechnen
+  const activeUnitCount = units.filter((u) => u.status !== 'retired').length;
+  useEffect(() => {
+    if (product && product.stock !== activeUnitCount) {
+      setProduct((p) => p && ({ ...p, stock: activeUnitCount }));
+    }
+  }, [activeUnitCount, product]);
+
+  async function handleAddUnit() {
+    if (!newUnit.serial_number.trim()) return;
+    setAddingUnit(true);
+    try {
+      const res = await fetch('/api/admin/product-units', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ product_id: id, ...newUnit }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        alert(err.error || 'Fehler beim Hinzufügen.');
+        return;
+      }
+      setNewUnit({ serial_number: '', label: '', notes: '', purchased_at: '' });
+      await loadUnits();
+    } catch {
+      alert('Fehler beim Hinzufügen.');
+    } finally {
+      setAddingUnit(false);
+    }
+  }
+
+  async function handleUpdateUnit(unitId: string) {
+    try {
+      const res = await fetch('/api/admin/product-units', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: unitId, ...editUnitData }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        alert(err.error || 'Fehler beim Speichern.');
+        return;
+      }
+      setEditingUnit(null);
+      setEditUnitData({});
+      await loadUnits();
+    } catch {
+      alert('Fehler beim Speichern.');
+    }
+  }
+
+  async function handleDeleteUnit(unit: ProductUnit) {
+    if (!confirm(`Kamera "${unit.serial_number}" wirklich löschen?`)) return;
+    try {
+      const res = await fetch(`/api/admin/product-units?id=${unit.id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const err = await res.json();
+        alert(err.error || 'Fehler beim Löschen.');
+        return;
+      }
+      await loadUnits();
+    } catch {
+      alert('Fehler beim Löschen.');
+    }
+  }
 
   function createEmpty(productId: string): AdminProduct {
     return {
@@ -378,10 +486,10 @@ export default function AdminKameraEditorPage() {
                   </label>
                 </div>
                 <div>
-                  <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Lagerbestand</label>
-                  <input type="number" min="0" value={product.stock}
-                    onChange={(e) => setProduct((p) => p && ({ ...p, stock: parseInt(e.target.value) || 0 }))}
-                    className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
+                  <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Bestand (automatisch)</label>
+                  <div className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body bg-gray-50 text-brand-muted">
+                    {activeUnitCount} {activeUnitCount === 1 ? 'Kamera' : 'Kameras'} (aus Seriennummern)
+                  </div>
                 </div>
               </div>
             </div>
@@ -489,6 +597,145 @@ export default function AdminKameraEditorPage() {
               >
                 + Spec hinzufügen
               </button>
+            </div>
+
+            {/* Seriennummern / Kameras */}
+            <div className="bg-white rounded-2xl border border-brand-border p-6">
+              <div className="flex items-center justify-between mb-1">
+                <h2 className="font-heading font-bold text-sm text-brand-black">Kameras / Seriennummern</h2>
+                <span className="text-xs font-body text-brand-muted">
+                  {activeUnitCount} aktiv{units.filter((u) => u.status === 'retired').length > 0 && `, ${units.filter((u) => u.status === 'retired').length} ausgemustert`}
+                </span>
+              </div>
+              <p className="text-xs font-body text-brand-muted mb-4">Jede physische Kamera einzeln erfassen. Der Lagerbestand wird automatisch berechnet.</p>
+
+              {unitsLoading ? (
+                <p className="text-sm text-brand-muted py-4 text-center">Lade Seriennummern…</p>
+              ) : (
+                <>
+                  {/* Bestehende Units */}
+                  {units.length > 0 && (
+                    <div className="overflow-x-auto mb-4">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-brand-border">
+                            <th className="text-left text-xs font-heading font-semibold text-brand-muted py-2 px-2">Seriennummer</th>
+                            <th className="text-left text-xs font-heading font-semibold text-brand-muted py-2 px-2">Label</th>
+                            <th className="text-left text-xs font-heading font-semibold text-brand-muted py-2 px-2">Status</th>
+                            <th className="text-left text-xs font-heading font-semibold text-brand-muted py-2 px-2">Kaufdatum</th>
+                            <th className="text-left text-xs font-heading font-semibold text-brand-muted py-2 px-2">Notizen</th>
+                            <th className="text-right text-xs font-heading font-semibold text-brand-muted py-2 px-2">Aktionen</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {units.map((unit) => (
+                            <tr key={unit.id} className="border-b border-brand-border/50 hover:bg-brand-bg transition-colors">
+                              {editingUnit === unit.id ? (
+                                <>
+                                  <td className="py-2 px-2">
+                                    <input type="text" value={editUnitData.serial_number ?? unit.serial_number}
+                                      onChange={(e) => setEditUnitData((d) => ({ ...d, serial_number: e.target.value }))}
+                                      className="w-full px-2 py-1 border border-brand-border rounded-lg text-xs font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
+                                  </td>
+                                  <td className="py-2 px-2">
+                                    <input type="text" value={editUnitData.label ?? unit.label ?? ''}
+                                      onChange={(e) => setEditUnitData((d) => ({ ...d, label: e.target.value }))}
+                                      className="w-full px-2 py-1 border border-brand-border rounded-lg text-xs font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
+                                  </td>
+                                  <td className="py-2 px-2">
+                                    <select value={editUnitData.status ?? unit.status}
+                                      onChange={(e) => setEditUnitData((d) => ({ ...d, status: e.target.value as ProductUnit['status'] }))}
+                                      className="px-2 py-1 border border-brand-border rounded-lg text-xs font-body focus:outline-none focus:ring-2 focus:ring-accent-blue">
+                                      <option value="available">Verfügbar</option>
+                                      <option value="rented">Vermietet</option>
+                                      <option value="maintenance">Wartung</option>
+                                      <option value="retired">Ausgemustert</option>
+                                    </select>
+                                  </td>
+                                  <td className="py-2 px-2">
+                                    <input type="date" value={editUnitData.purchased_at ?? unit.purchased_at ?? ''}
+                                      onChange={(e) => setEditUnitData((d) => ({ ...d, purchased_at: e.target.value }))}
+                                      className="px-2 py-1 border border-brand-border rounded-lg text-xs font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
+                                  </td>
+                                  <td className="py-2 px-2">
+                                    <input type="text" value={editUnitData.notes ?? unit.notes ?? ''}
+                                      onChange={(e) => setEditUnitData((d) => ({ ...d, notes: e.target.value }))}
+                                      className="w-full px-2 py-1 border border-brand-border rounded-lg text-xs font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
+                                  </td>
+                                  <td className="py-2 px-2 text-right whitespace-nowrap">
+                                    <button onClick={() => handleUpdateUnit(unit.id)}
+                                      className="text-xs text-green-600 hover:text-green-700 font-semibold mr-2">Speichern</button>
+                                    <button onClick={() => { setEditingUnit(null); setEditUnitData({}); }}
+                                      className="text-xs text-brand-muted hover:text-brand-black">Abbrechen</button>
+                                  </td>
+                                </>
+                              ) : (
+                                <>
+                                  <td className="py-2 px-2 font-mono text-xs font-semibold text-brand-black">{unit.serial_number}</td>
+                                  <td className="py-2 px-2 text-xs text-brand-muted">{unit.label || '–'}</td>
+                                  <td className="py-2 px-2">
+                                    <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold ${UNIT_STATUS_CONFIG[unit.status]?.color ?? ''}`}>
+                                      {UNIT_STATUS_CONFIG[unit.status]?.label ?? unit.status}
+                                    </span>
+                                  </td>
+                                  <td className="py-2 px-2 text-xs text-brand-muted">
+                                    {unit.purchased_at ? new Date(unit.purchased_at).toLocaleDateString('de-DE') : '–'}
+                                  </td>
+                                  <td className="py-2 px-2 text-xs text-brand-muted max-w-[150px] truncate">{unit.notes || '–'}</td>
+                                  <td className="py-2 px-2 text-right whitespace-nowrap">
+                                    <button onClick={() => { setEditingUnit(unit.id); setEditUnitData({}); }}
+                                      className="text-xs text-accent-blue hover:text-blue-700 font-semibold mr-2">Bearbeiten</button>
+                                    <button onClick={() => handleDeleteUnit(unit)}
+                                      className="text-xs text-red-500 hover:text-red-700 font-semibold">Löschen</button>
+                                  </td>
+                                </>
+                              )}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {/* Neue Unit hinzufügen */}
+                  <div className="bg-brand-bg rounded-xl border border-brand-border/50 p-4">
+                    <p className="text-xs font-heading font-semibold text-brand-black mb-3">+ Neue Kamera hinzufügen</p>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+                      <div>
+                        <label className="block text-[10px] font-heading font-semibold text-brand-muted mb-1">Seriennummer *</label>
+                        <input type="text" value={newUnit.serial_number}
+                          onChange={(e) => setNewUnit((u) => ({ ...u, serial_number: e.target.value }))}
+                          placeholder="z.B. HERO13-ABC123"
+                          className="w-full px-2 py-1.5 border border-brand-border rounded-lg text-xs font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-heading font-semibold text-brand-muted mb-1">Label (optional)</label>
+                        <input type="text" value={newUnit.label}
+                          onChange={(e) => setNewUnit((u) => ({ ...u, label: e.target.value }))}
+                          placeholder="z.B. GoPro #1"
+                          className="w-full px-2 py-1.5 border border-brand-border rounded-lg text-xs font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-heading font-semibold text-brand-muted mb-1">Kaufdatum</label>
+                        <input type="date" value={newUnit.purchased_at}
+                          onChange={(e) => setNewUnit((u) => ({ ...u, purchased_at: e.target.value }))}
+                          className="w-full px-2 py-1.5 border border-brand-border rounded-lg text-xs font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-heading font-semibold text-brand-muted mb-1">Notizen</label>
+                        <input type="text" value={newUnit.notes}
+                          onChange={(e) => setNewUnit((u) => ({ ...u, notes: e.target.value }))}
+                          placeholder="Zustand, Bemerkungen…"
+                          className="w-full px-2 py-1.5 border border-brand-border rounded-lg text-xs font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
+                      </div>
+                    </div>
+                    <button onClick={handleAddUnit} disabled={addingUnit || !newUnit.serial_number.trim()}
+                      className="px-4 py-2 text-xs font-heading font-semibold text-white bg-accent-blue rounded-btn hover:bg-blue-600 transition-colors disabled:opacity-40">
+                      {addingUnit ? 'Wird hinzugefügt…' : '+ Hinzufügen'}
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Preistabelle Tag 1-30 */}
