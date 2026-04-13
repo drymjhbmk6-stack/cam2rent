@@ -19,13 +19,33 @@ interface GenerationStatus {
   finished_at?: string | null;
 }
 
+interface ScheduleEntry {
+  id: string;
+  topic: string;
+  scheduled_date: string;
+  scheduled_time: string;
+  status: string;
+  reviewed: boolean;
+  tone?: string;
+  target_length?: string;
+  post_id?: string;
+  generated_at?: string;
+  category?: { name: string; color: string } | null;
+}
+
 export default function BlogDashboardPage() {
   const [stats, setStats] = useState<Stats>({ total: 0, published: 0, draft: 0, scheduled: 0, pendingComments: 0, totalViews: 0 });
   const [recent, setRecent] = useState<RecentPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [genStatus, setGenStatus] = useState<GenerationStatus>({ status: 'idle' });
   const [autoEnabled, setAutoEnabled] = useState(false);
+  const [autoMode, setAutoMode] = useState<'semi' | 'voll'>('semi');
+  const [autoWeekdays, setAutoWeekdays] = useState<string[]>([]);
+  const [autoTimeFrom, setAutoTimeFrom] = useState('');
+  const [autoTimeTo, setAutoTimeTo] = useState('');
   const [openTopics, setOpenTopics] = useState(0);
+  const [schedule, setSchedule] = useState<ScheduleEntry[]>([]);
+  const [recentAiPosts, setRecentAiPosts] = useState<RecentPost[]>([]);
 
   const loadStatus = useCallback(async () => {
     try {
@@ -37,12 +57,16 @@ export default function BlogDashboardPage() {
         setGenStatus(parsed);
       }
 
-      // Auto-Generierung aktiv?
+      // Auto-Generierung Einstellungen
       const settingsRes = await fetch('/api/admin/settings?key=blog_settings');
       const settingsData = await settingsRes.json();
       if (settingsData.value) {
         const parsed = typeof settingsData.value === 'string' ? JSON.parse(settingsData.value) : settingsData.value;
         setAutoEnabled(!!parsed.auto_generate);
+        setAutoMode(parsed.auto_generate_mode || 'semi');
+        setAutoWeekdays(parsed.auto_generate_weekdays || []);
+        setAutoTimeFrom(parsed.auto_generate_time_from || '');
+        setAutoTimeTo(parsed.auto_generate_time_to || '');
       }
 
       // Offene Themen zaehlen
@@ -50,6 +74,15 @@ export default function BlogDashboardPage() {
       const topicsData = await topicsRes.json();
       const open = (topicsData.topics ?? []).filter((t: { used: boolean }) => !t.used).length;
       setOpenTopics(open);
+
+      // Zeitplan laden (naechste 10 geplante Eintraege)
+      const schedRes = await fetch('/api/admin/blog/schedule');
+      const schedData = await schedRes.json();
+      const entries = (schedData.entries ?? [])
+        .filter((e: ScheduleEntry) => ['planned', 'generating', 'generated', 'reviewed'].includes(e.status))
+        .sort((a: ScheduleEntry, b: ScheduleEntry) => a.scheduled_date.localeCompare(b.scheduled_date))
+        .slice(0, 8);
+      setSchedule(entries);
     } catch { /* leer */ }
   }, []);
 
@@ -73,6 +106,7 @@ export default function BlogDashboardPage() {
         totalViews: posts.reduce((sum: number, p: RecentPost) => sum + (p.view_count || 0), 0),
       });
       setRecent(posts.slice(0, 5));
+      setRecentAiPosts(posts.filter((p: RecentPost & { ai_generated?: boolean }) => p.ai_generated).slice(0, 5));
       setLoading(false);
     }
     load();
@@ -177,6 +211,136 @@ export default function BlogDashboardPage() {
               </div>
             ))}
           </div>
+
+          {/* KI-Bot Uebersicht */}
+          <div className="rounded-xl p-4 sm:p-6 mb-6" style={{ background: '#1e293b', border: '1px solid #334155' }}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-heading font-semibold" style={{ color: '#e2e8f0' }}>KI-Bot Status</h2>
+              <Link href="/admin/blog/einstellungen" className="text-xs font-heading" style={{ color: '#06b6d4' }}>Einstellungen</Link>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+              <div className="rounded-lg p-3" style={{ background: '#0f172a' }}>
+                <p className="text-[10px] font-semibold uppercase" style={{ color: '#64748b' }}>Modus</p>
+                <p className="text-sm font-bold" style={{ color: autoMode === 'voll' ? '#22c55e' : '#f59e0b' }}>
+                  {autoMode === 'voll' ? 'Vollautomatisch' : 'Halb-Automatisch'}
+                </p>
+              </div>
+              <div className="rounded-lg p-3" style={{ background: '#0f172a' }}>
+                <p className="text-[10px] font-semibold uppercase" style={{ color: '#64748b' }}>Aktive Tage</p>
+                <p className="text-sm font-bold" style={{ color: '#e2e8f0' }}>
+                  {autoWeekdays.length > 0 ? autoWeekdays.map(d => d.charAt(0).toUpperCase() + d.slice(1)).join(', ') : 'Keine'}
+                </p>
+              </div>
+              <div className="rounded-lg p-3" style={{ background: '#0f172a' }}>
+                <p className="text-[10px] font-semibold uppercase" style={{ color: '#64748b' }}>Zeitfenster</p>
+                <p className="text-sm font-bold" style={{ color: '#e2e8f0' }}>
+                  {autoTimeFrom && autoTimeTo ? `${autoTimeFrom}–${autoTimeTo}` : 'Nicht gesetzt'}
+                </p>
+              </div>
+              <div className="rounded-lg p-3" style={{ background: '#0f172a' }}>
+                <p className="text-[10px] font-semibold uppercase" style={{ color: '#64748b' }}>Themen-Pool</p>
+                <p className="text-sm font-bold" style={{ color: openTopics > 0 ? '#22c55e' : '#ef4444' }}>
+                  {openTopics} offen
+                </p>
+              </div>
+            </div>
+
+            {/* Letzte KI-Artikel */}
+            {recentAiPosts.length > 0 && (
+              <div className="mt-3 pt-3" style={{ borderTop: '1px solid #334155' }}>
+                <p className="text-[10px] font-semibold uppercase mb-2" style={{ color: '#64748b' }}>Zuletzt von KI generiert</p>
+                <div className="space-y-1.5">
+                  {recentAiPosts.slice(0, 3).map((p) => (
+                    <div key={p.id} className="flex items-center justify-between">
+                      <span className="text-xs truncate" style={{ color: '#94a3b8' }}>{p.title}</span>
+                      <span className="text-[10px] shrink-0 ml-2" style={{ color: '#475569' }}>
+                        {new Date(p.created_at).toLocaleDateString('de-DE')}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Naechste geplante Artikel */}
+          {schedule.length > 0 && (
+            <div className="rounded-xl p-4 sm:p-6 mb-6" style={{ background: '#1e293b', border: '1px solid #334155' }}>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="font-heading font-semibold" style={{ color: '#e2e8f0' }}>Naechste Artikel im Zeitplan</h2>
+                <Link href="/admin/blog/zeitplan" className="text-xs font-heading" style={{ color: '#06b6d4' }}>Redaktionsplan</Link>
+              </div>
+              <div className="space-y-2">
+                {schedule.map((entry, i) => {
+                  const isNext = i === 0;
+                  const statusColors: Record<string, { bg: string; text: string; label: string }> = {
+                    planned: { bg: '#64748b20', text: '#94a3b8', label: 'Geplant' },
+                    generating: { bg: '#22c55e20', text: '#22c55e', label: 'Wird generiert' },
+                    generated: { bg: '#06b6d420', text: '#06b6d4', label: 'Generiert' },
+                    reviewed: { bg: '#8b5cf620', text: '#8b5cf6', label: 'Geprueft' },
+                  };
+                  const sc = statusColors[entry.status] || statusColors.planned;
+                  const dateStr = new Date(entry.scheduled_date + 'T00:00:00').toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
+                  const isToday = entry.scheduled_date === new Date().toISOString().split('T')[0];
+
+                  return (
+                    <div
+                      key={entry.id}
+                      className="flex items-start gap-3 rounded-lg px-3 py-2.5"
+                      style={{
+                        background: isNext ? '#06b6d410' : '#0f172a',
+                        border: isNext ? '1px solid #06b6d430' : '1px solid transparent',
+                      }}
+                    >
+                      {/* Nummer / Naechster */}
+                      <div className="shrink-0 mt-0.5">
+                        {isNext ? (
+                          <span className="inline-flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-bold" style={{ background: '#06b6d4', color: 'white' }}>
+                            <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-bold" style={{ background: '#1e293b', color: '#475569' }}>
+                            {i + 1}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Inhalt */}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold truncate" style={{ color: isNext ? '#e2e8f0' : '#94a3b8' }}>
+                          {entry.topic}
+                        </p>
+                        <div className="flex items-center gap-2 mt-1 flex-wrap">
+                          <span className="inline-flex px-2 py-0.5 rounded text-[10px] font-semibold" style={{ background: sc.bg, color: sc.text }}>
+                            {sc.label}
+                          </span>
+                          <span className="text-[10px]" style={{ color: '#475569' }}>
+                            {dateStr} {entry.scheduled_time?.slice(0, 5) || ''}
+                          </span>
+                          {isToday && (
+                            <span className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-bold" style={{ background: '#22c55e20', color: '#22c55e' }}>
+                              HEUTE
+                            </span>
+                          )}
+                          {isNext && (
+                            <span className="text-[10px] font-semibold" style={{ color: '#06b6d4' }}>
+                              Naechster Artikel
+                            </span>
+                          )}
+                          {entry.category?.name && (
+                            <span className="text-[10px]" style={{ color: entry.category.color || '#475569' }}>
+                              {entry.category.name}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Letzte Artikel */}
           <div className="rounded-xl p-4 sm:p-6" style={{ background: '#1e293b' }}>
