@@ -153,6 +153,23 @@ export default function AvailabilityCalendar({
   // Check if a day is selectable
   const isChoosingEnd = !!rangeFrom && !rangeTo;
 
+  // Wenn Startdatum gewählt: finde den nächsten gebuchten/gesperrten Tag
+  // Alle Tage danach sind nicht wählbar (verhindert Überbuchungen)
+  const maxEndDate = (() => {
+    if (!isChoosingEnd || !data?.days) return null;
+    // Sortierte Tage nach dem Startdatum durchgehen
+    const sorted = [...data.days]
+      .filter((d) => d.date > rangeFrom!)
+      .sort((a, b) => a.date.localeCompare(b.date));
+    for (const d of sorted) {
+      const effectiveStatus = d.status === 'partial' ? 'available' : d.status;
+      if (effectiveStatus !== 'available') {
+        return d.date; // Erster nicht-verfügbarer Tag = Grenze
+      }
+    }
+    return null; // Kein gebuchter Tag gefunden — kein Limit
+  })();
+
   function isDaySelectable(dateStr: string, info: DayInfo | undefined): boolean {
     if (!info) return false;
     const effectiveStatus = info.status === 'partial' ? 'available' : info.status;
@@ -165,22 +182,47 @@ export default function AvailabilityCalendar({
     if (deliveryMode === 'versand' && isChoosingEnd) {
       if (isBlockedEndDateForShipping(dayDate)) return false;
     }
+    // Enddatum darf nicht hinter einem gebuchten Tag liegen
+    if (isChoosingEnd && maxEndDate && dateStr >= maxEndDate) return false;
     return true;
   }
 
   // Handle day click
   function handleDayClick(dateStr: string) {
     if (!rangeFrom || rangeTo) {
+      // Neues Startdatum wählen
       setRangeFrom(dateStr);
       setRangeTo(null);
     } else {
       if (dateStr < rangeFrom) {
+        // Klick vor dem Startdatum → neues Startdatum
         setRangeFrom(dateStr);
         setRangeTo(null);
+      } else if (dateStr === rangeFrom) {
+        // Gleicher Tag nochmal → Auswahl zurücksetzen
+        setRangeFrom(null);
+        setRangeTo(null);
       } else {
-        setRangeTo(dateStr);
+        // Enddatum: prüfen ob dazwischen gebuchte Tage liegen
+        if (hasBookedDaysBetween(rangeFrom, dateStr)) {
+          // Ungültiger Bereich → Startdatum zurücksetzen
+          setRangeFrom(dateStr);
+          setRangeTo(null);
+        } else {
+          setRangeTo(dateStr);
+        }
       }
     }
+  }
+
+  // Prüft ob zwischen zwei Daten gebuchte/gesperrte Tage liegen
+  function hasBookedDaysBetween(from: string, to: string): boolean {
+    if (!data?.days) return false;
+    return data.days.some((d) => {
+      if (d.date <= from || d.date >= to) return false;
+      const effectiveStatus = d.status === 'partial' ? 'available' : d.status;
+      return effectiveStatus !== 'available';
+    });
   }
 
   // Check if day is in range
