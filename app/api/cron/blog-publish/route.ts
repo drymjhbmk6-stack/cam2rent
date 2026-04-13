@@ -34,6 +34,8 @@ export async function POST(req: NextRequest) {
   // oder die keinen Zeitplan-Eintrag haben (manuell geplante)
   const { data: scheduledPosts } = await publishQuery;
 
+  console.log(`[blog-publish] Modus: ${autoMode}, Gefundene scheduled Posts: ${scheduledPosts?.length ?? 0}`);
+
   const postsToPublish: string[] = [];
   for (const post of scheduledPosts ?? []) {
     if (!post.schedule_id) {
@@ -78,6 +80,8 @@ export async function POST(req: NextRequest) {
     .not('post_id', 'is', null)
     .lte('scheduled_date', now.split('T')[0]);
 
+  console.log(`[blog-publish] Schedule-Eintraege mit Status ${allowedStatuses.join('/')}: ${draftFixes?.length ?? 0}`);
+
   const fixedPosts: { id: string; title: string; slug: string; schedule_id: string }[] = [];
   for (const entry of draftFixes ?? []) {
     const scheduleDateTime = `${entry.scheduled_date}T${(entry.scheduled_time || '09:00').slice(0, 5)}:00`;
@@ -86,7 +90,7 @@ export async function POST(req: NextRequest) {
         .from('blog_posts')
         .update({ status: 'published', published_at: now, updated_at: now, scheduled_at: scheduleDateTime })
         .eq('id', entry.post_id)
-        .in('status', ['draft', 'generated'])
+        .in('status', ['draft', 'generated', 'scheduled'])
         .select('id, title, slug, schedule_id');
       if (fixed?.length) fixedPosts.push(...fixed.map((f) => ({ ...f, schedule_id: entry.id })));
     }
