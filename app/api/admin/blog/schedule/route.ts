@@ -102,6 +102,28 @@ export async function POST(req: NextRequest) {
       ? `\nBeschraenke die Themen auf diese Kategorien: ${categoryIds.map((id: string) => categories?.find((c) => c.id === id)?.name).filter(Boolean).join(', ')}`
       : '';
 
+    // Bestehende Artikel + geplante Themen laden (Duplikat-Vermeidung)
+    const { data: existingPosts } = await supabase
+      .from('blog_posts')
+      .select('title')
+      .order('created_at', { ascending: false })
+      .limit(100);
+
+    const { data: existingSchedule } = await supabase
+      .from('blog_schedule')
+      .select('topic')
+      .order('created_at', { ascending: false })
+      .limit(100);
+
+    const existingTopics = [
+      ...(existingPosts ?? []).map((p) => p.title),
+      ...(existingSchedule ?? []).map((s) => s.topic),
+    ];
+
+    const duplicateInfo = existingTopics.length > 0
+      ? `\n\nBEREITS VORHANDENE ARTIKEL UND GEPLANTE THEMEN (KEINE Dopplungen oder aehnliche Themen erstellen!):\n${existingTopics.map((t) => `- ${t}`).join('\n')}`
+      : '';
+
     const today = new Date();
     const currentMonth = today.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' });
     const currentYear = today.getFullYear();
@@ -119,7 +141,7 @@ AKTUELLES JAHR: ${currentYear}
 
 Erstelle einen Redaktionsplan mit ${totalPosts} Blog-Themen fuer die naechsten ${weeks} Wochen.
 
-Vorhandene Kategorien: ${catInfo}${catFilterInfo}${productInfo}
+Vorhandene Kategorien: ${catInfo}${catFilterInfo}${productInfo}${duplicateInfo}
 
 WICHTIGE REGELN:
 - Verwende NUR aktuelle Produkte (${currentYear}). KEINE veralteten Modelle wie GoPro Hero 12, DJI Action 4, Insta360 X3 etc.
@@ -134,7 +156,7 @@ WICHTIGE REGELN:
   - Herbst: Herbstwanderungen, Indoor-Sport, Drohnen
   - Winter: Skifahren, Snowboard, Winterlandschaften
 - Mische spezifische Produktthemen mit allgemeinen Ratgeber-Themen
-- Duplikate vermeiden: Jedes Thema muss einzigartig sein
+- DUPLIKATE STRIKT VERMEIDEN: Pruefe die Liste der vorhandenen Artikel oben. Kein Thema darf inhaltlich aehnlich sein. Keine Wiederholungen, keine leichten Variationen (z.B. "Beste Action-Cam 2026" und "Top Action-Cams 2026" waere ein Duplikat). Jedes Thema muss einen NEUEN Blickwinkel bieten
 ${kiContext ? `\nZUSAETZLICHER KONTEXT VOM ADMIN:\n${kiContext}` : ''}
 
 Antworte NUR als JSON-Array (kein Markdown-Codeblock):
