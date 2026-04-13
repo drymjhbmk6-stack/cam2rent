@@ -450,7 +450,7 @@ export default function AdminVerfuegbarkeitPage() {
                                       style={{
                                         color: d.isToday ? '#f59e0b' : d.isWeekend ? '#475569' : '#64748b',
                                         minWidth: '34px',
-                                        background: d.isToday ? '#422006' : weekBg,
+                                        background: weekBg,
                                         borderBottom: d.isToday ? '2px solid #f59e0b' : '1px solid #1e293b',
                                       }}>
                                       <div className="text-[9px]">{d.dayName}</div>
