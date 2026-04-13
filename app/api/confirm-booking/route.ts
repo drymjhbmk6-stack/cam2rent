@@ -263,7 +263,7 @@ export async function POST(req: NextRequest) {
     let contractPdfBuffer: Buffer | undefined;
     if (contractSignature?.agreedToTerms && contractSignature?.signerName) {
       try {
-        // Kundenprofil fuer Adresse laden
+        // Kundenprofil für Adresse laden
         let custStreet = '';
         let custZip = '';
         let custCity = '';

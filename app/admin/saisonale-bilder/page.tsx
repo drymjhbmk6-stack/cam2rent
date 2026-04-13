@@ -226,7 +226,7 @@ export default function SaisonaleBilderPage() {
       <div className="mb-8">
         <h1 className="font-heading font-bold text-2xl text-white mb-2">Saisonale Bilder</h1>
         <p className="text-sm text-slate-400">
-          Verwalte monatlich wechselnde Bilder fuer Startseite und andere Seitenbereiche.
+          Verwalte monatlich wechselnde Bilder für Startseite und andere Seitenbereiche.
           Bilder werden automatisch zum Monatswechsel aktiv.
         </p>
       </div>
@@ -246,7 +246,7 @@ export default function SaisonaleBilderPage() {
         </div>
         <div className="rounded-xl p-4" style={{ background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.2)' }}>
           <div className="text-xs font-heading font-semibold text-indigo-400 uppercase tracking-wider mb-1">
-            Naechster Monat
+            Nächster Monat
           </div>
           <div className="text-white font-heading font-bold text-lg">
             {MONTH_NAMES[next.month]} {next.year}

@@ -191,7 +191,7 @@ function HeroEditor({ content, onChange }: { content: HeroContent; onChange: (c:
   return (
     <>
       <InputField
-        label="Ueberschrift"
+        label="Überschrift"
         value={content.ueberschrift}
         onChange={(v) => onChange({ ...content, ueberschrift: v })}
         placeholder="z.B. Action-Cams mieten statt kaufen"
@@ -200,7 +200,7 @@ function HeroEditor({ content, onChange }: { content: HeroContent; onChange: (c:
         label="Untertitel"
         value={content.untertitel}
         onChange={(v) => onChange({ ...content, untertitel: v })}
-        placeholder="Beschreibungstext unter der Ueberschrift"
+        placeholder="Beschreibungstext unter der Überschrift"
       />
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <InputField
@@ -295,7 +295,7 @@ function NewsBannerEditor({ content, onChange }: { content: NewsBannerContent; o
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
         </svg>
-        Nachricht hinzufuegen
+        Nachricht hinzufügen
       </button>
     </>
   );
@@ -372,7 +372,7 @@ function UspsEditor({ content, onChange }: { content: UspsContent; onChange: (c:
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
         </svg>
-        Vorteil hinzufuegen
+        Vorteil hinzufügen
       </button>
     </>
   );
@@ -510,14 +510,14 @@ export default function ShopUpdaterPage() {
           Shop Updater
         </h1>
         <p className="text-sm" style={{ color: '#64748b' }}>
-          Inhalte der Shop-Seiten bearbeiten und veroeffentlichen
+          Inhalte der Shop-Seiten bearbeiten und veröffentlichen
         </p>
       </div>
 
       {/* Page Selector */}
       <div className="mb-6">
         <label className="block text-xs font-heading font-semibold mb-2" style={{ color: '#94a3b8' }}>
-          Seite auswaehlen
+          Seite auswählen
         </label>
         <div className="flex gap-2">
           {['startseite'].map((page) => (
@@ -592,7 +592,7 @@ export default function ShopUpdaterPage() {
           {/* Reviews Config */}
           <SectionCard
             title="Bewertungen"
-            description="Einstellungen fuer die Bewertungsanzeige"
+            description="Einstellungen für die Bewertungsanzeige"
             isActive={getSection('reviews_config')?.is_active ?? true}
             onToggleActive={(v) => updateSectionLocal('reviews_config', { is_active: v })}
             saving={savingSection === 'reviews_config'}

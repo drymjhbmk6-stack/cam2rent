@@ -174,7 +174,7 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        // E-Mail senden wenn gewuenscht
+        // E-Mail senden wenn gewünscht
         if (send_email && customer_email) {
           const emailData: BookingEmailData = {
             bookingId,
@@ -203,7 +203,7 @@ export async function POST(req: NextRequest) {
             sendBookingConfirmation(emailData, contractPdfBuffer),
             sendAdminNotification(emailData),
           ]);
-          console.log(`[manual-booking] E-Mails gesendet fuer ${bookingId}`);
+          console.log(`[manual-booking] E-Mails gesendet für ${bookingId}`);
         }
       } catch (err) {
         console.error('[manual-booking] Background task error:', err);

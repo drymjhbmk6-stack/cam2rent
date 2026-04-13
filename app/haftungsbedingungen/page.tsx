@@ -232,8 +232,8 @@ export default function HaftungsbedingungenPage() {
               Die Haftungsoptionen von cam2rent stellen <strong>keine Versicherung</strong> im Sinne des
               Versicherungsvertragsgesetzes (VVG) dar. Die Haftungsbegrenzung wird durch ein
               <strong> selbstfinanziertes Reparaturdepot</strong> von cam2rent getragen. Die erhobenen
-              Gebuehren fuer Standard- und Premium-Haftungsschutz fliessen in dieses Depot und dienen
-              ausschliesslich der Deckung von Reparatur- und Ersatzkosten.
+              Gebühren für Standard- und Premium-Haftungsschutz fließen in dieses Depot und dienen
+              ausschließlich der Deckung von Reparatur- und Ersatzkosten.
             </p>
           </div>
         </section>

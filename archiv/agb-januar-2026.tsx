@@ -109,7 +109,7 @@ export default function AGBPage() {
             <li>
               Der Versand ist ab einem Bestellwert von 49 € kostenlos. Darunter fallen die jeweils
               ausgewiesenen Versandkosten an. Die Versandkosten beinhalten sowohl den Hin- als auch den
-              Rueckversand — ein frankiertes Ruecksendeetikett liegt dem Paket bei.
+              Rückversand — ein frankiertes Rücksendeetikett liegt dem Paket bei.
             </li>
             <li>
               Die Zahlung erfolgt über den Zahlungsdienstleister Stripe. Akzeptiert werden
@@ -118,7 +118,7 @@ export default function AGBPage() {
               Zahlungsmethoden. Barzahlung ist nicht möglich.
             </li>
             <li>
-              Der Mietpreis ist bei Buchungsabschluss vollstaendig zu entrichten. Bei Zahlung ueber
+              Der Mietpreis ist bei Buchungsabschluss vollständig zu entrichten. Bei Zahlung über
               Klarna gelten die Ratenzahlungsbedingungen von Klarna.
             </li>
           </ol>
@@ -270,20 +270,20 @@ export default function AGBPage() {
           </h2>
           <ol className="list-decimal list-inside font-body text-brand-steel dark:text-gray-300 space-y-2">
             <li>
-              <strong>Ausweis-Verifizierung:</strong> Die Pruefung hochgeladener Ausweisdokumente erfolgt
+              <strong>Ausweis-Verifizierung:</strong> Die Prüfung hochgeladener Ausweisdokumente erfolgt
               in der Regel innerhalb von 24 Stunden an Werktagen.
             </li>
             <li>
-              <strong>Schadenspruefung:</strong> Bei Schadensmeldungen erhaelt der Mieter innerhalb von
-              3 Werktagen eine Rueckmeldung mit Einschaetzung und ggf. Kostenaufstellung.
+              <strong>Schadensprüfung:</strong> Bei Schadensmeldungen erhält der Mieter innerhalb von
+              3 Werktagen eine Rückmeldung mit Einschätzung und ggf. Kostenaufstellung.
             </li>
             <li>
-              <strong>Rueckerstattungen:</strong> Stornierungen und berechtigte Rueckerstattungen werden
-              innerhalb von 5 Werktagen ueber den urspruenglichen Zahlungsweg erstattet.
+              <strong>Rückerstattungen:</strong> Stornierungen und berechtigte Rückerstattungen werden
+              innerhalb von 5 Werktagen über den ursprünglichen Zahlungsweg erstattet.
             </li>
             <li>
               <strong>Kautionsfreigabe:</strong> Die Freigabe der Kautionsvorautorisierung erfolgt
-              innerhalb von 5 Werktagen nach erfolgreicher Rueckgabe und Zustandspruefung.
+              innerhalb von 5 Werktagen nach erfolgreicher Rückgabe und Zustandsprüfung.
             </li>
             <li>
               <strong>Kundenservice:</strong> Anfragen per E-Mail werden in der Regel innerhalb von

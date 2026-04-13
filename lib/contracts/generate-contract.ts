@@ -65,7 +65,7 @@ export async function generateContractPDF(opts: {
   const contractDate = `${now.getUTCDate().toString().padStart(2, '0')}.${(now.getUTCMonth() + 1).toString().padStart(2, '0')}.${now.getUTCFullYear()}`;
   const contractTime = `${now.getUTCHours().toString().padStart(2, '0')}:${now.getUTCMinutes().toString().padStart(2, '0')}`;
 
-  // Items aus productName + accessories generieren falls nicht explizit uebergeben
+  // Items aus productName + accessories generieren falls nicht explizit übergeben
   const items: MietgegenstandItem[] = opts.items && opts.items.length > 0
     ? opts.items
     : [

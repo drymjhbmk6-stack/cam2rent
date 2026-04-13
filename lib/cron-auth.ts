@@ -4,7 +4,7 @@ import { NextRequest } from 'next/server';
  * Zentrale Cron-Authentifizierung.
  * Akzeptiert NUR Header-basierte Auth — keine URL-Parameter (Sicherheit).
  *
- * Unterstuetzte Methoden:
+ * Unterstützte Methoden:
  * - Header: x-cron-secret: <secret>
  * - Header: Authorization: Bearer <secret>
  */
@@ -20,7 +20,7 @@ export function verifyCronAuth(req: NextRequest): boolean {
   const authHeader = req.headers.get('authorization');
   if (authHeader === `Bearer ${cronSecret}`) return true;
 
-  // URL-Parameter: ?secret=<secret> (fuer einfache Cron-Setups)
+  // URL-Parameter: ?secret=<secret> (für einfache Cron-Setups)
   const urlSecret = req.nextUrl.searchParams.get('secret');
   if (urlSecret === cronSecret) return true;
 

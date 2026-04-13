@@ -131,7 +131,7 @@ export default function BlogDashboardPage() {
   const statCards = [
     { label: 'Gesamt', value: stats.total, color: '#e2e8f0' },
     { label: 'Live', value: stats.published, color: '#22c55e' },
-    { label: 'Entwuerfe', value: stats.draft, color: '#f59e0b' },
+    { label: 'Entwürfe', value: stats.draft, color: '#f59e0b' },
     { label: 'Geplant', value: stats.scheduled, color: '#06b6d4' },
     { label: 'Kommentare', value: stats.pendingComments, color: '#ef4444' },
     { label: 'Views', value: stats.totalViews, color: '#a78bfa' },
@@ -178,12 +178,12 @@ export default function BlogDashboardPage() {
                   <p className="text-xs mt-0.5 truncate" style={{ color: '#94a3b8' }}>Thema: {genStatus.topic}</p>
                 )}
                 {elapsedSeconds > 0 && (
-                  <p className="text-[11px] mt-0.5" style={{ color: '#475569' }}>Laeuft seit {elapsedSeconds} Sekunden</p>
+                  <p className="text-[11px] mt-0.5" style={{ color: '#475569' }}>Läuft seit {elapsedSeconds} Sekunden</p>
                 )}
               </>
             ) : autoEnabled ? (
               <>
-                <span className="font-heading font-semibold text-sm" style={{ color: '#f59e0b' }}>Wartet auf naechsten Slot</span>
+                <span className="font-heading font-semibold text-sm" style={{ color: '#f59e0b' }}>Wartet auf nächsten Slot</span>
                 <div className="flex gap-3 mt-0.5">
                   <span className="text-xs" style={{ color: '#475569' }}>{plannedSchedule} Artikel im Zeitplan</span>
                   {genStatus.finished_at && (
@@ -219,7 +219,7 @@ export default function BlogDashboardPage() {
             ))}
           </div>
 
-          {/* KI-Bot Uebersicht */}
+          {/* KI-Bot Übersicht */}
           <div className="rounded-xl p-4 sm:p-6 mb-6" style={{ background: '#1e293b', border: '1px solid #334155' }}>
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-heading font-semibold" style={{ color: '#e2e8f0' }}>KI-Bot Status</h2>
@@ -271,11 +271,11 @@ export default function BlogDashboardPage() {
             )}
           </div>
 
-          {/* Naechste geplante Artikel */}
+          {/* Nächste geplante Artikel */}
           {schedule.length > 0 && (
             <div className="rounded-xl p-4 sm:p-6 mb-6" style={{ background: '#1e293b', border: '1px solid #334155' }}>
               <div className="flex items-center justify-between mb-4">
-                <h2 className="font-heading font-semibold" style={{ color: '#e2e8f0' }}>Naechste Artikel im Zeitplan</h2>
+                <h2 className="font-heading font-semibold" style={{ color: '#e2e8f0' }}>Nächste Artikel im Zeitplan</h2>
                 <Link href="/admin/blog/zeitplan" className="text-xs font-heading" style={{ color: '#06b6d4' }}>Redaktionsplan</Link>
               </div>
               <div className="space-y-2">
@@ -285,7 +285,7 @@ export default function BlogDashboardPage() {
                     planned: { bg: '#64748b20', text: '#94a3b8', label: 'Geplant' },
                     generating: { bg: '#22c55e20', text: '#22c55e', label: 'Wird generiert' },
                     generated: { bg: '#06b6d420', text: '#06b6d4', label: 'Generiert' },
-                    reviewed: { bg: '#8b5cf620', text: '#8b5cf6', label: 'Geprueft' },
+                    reviewed: { bg: '#8b5cf620', text: '#8b5cf6', label: 'Geprüft' },
                   };
                   const sc = statusColors[entry.status] || statusColors.planned;
                   const dateStr = new Date(entry.scheduled_date + 'T00:00:00').toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
@@ -300,7 +300,7 @@ export default function BlogDashboardPage() {
                         border: isNext ? '1px solid #06b6d430' : '1px solid transparent',
                       }}
                     >
-                      {/* Nummer / Naechster */}
+                      {/* Nummer / Nächster */}
                       <div className="shrink-0 mt-0.5">
                         {isNext ? (
                           <span className="inline-flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-bold" style={{ background: '#06b6d4', color: 'white' }}>
@@ -332,7 +332,7 @@ export default function BlogDashboardPage() {
                           )}
                           {isNext && (
                             <span className="text-[10px] font-semibold" style={{ color: '#06b6d4' }}>
-                              Naechster Artikel
+                              Nächster Artikel
                             </span>
                           )}
                           {entry.category?.name && (

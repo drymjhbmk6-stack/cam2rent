@@ -4,7 +4,7 @@ import { createServiceClient } from '@/lib/supabase';
 /**
  * GET /api/admin/booking/[id]
  * Gibt eine einzelne Buchung mit allen Feldern + Kundenprofil +
- * Vertragsdaten (rental_agreements) + E-Mail-Verlauf (email_log) zurueck.
+ * Vertragsdaten (rental_agreements) + E-Mail-Verlauf (email_log) zurück.
  */
 export async function GET(
   _req: NextRequest,
@@ -85,7 +85,7 @@ export async function PATCH(
 
   const allowed = ['pending_verification', 'awaiting_payment', 'confirmed', 'shipped', 'picked_up', 'completed', 'cancelled', 'damaged'];
   if (!allowed.includes(status)) {
-    return NextResponse.json({ error: 'Ungueltiger Status.' }, { status: 400 });
+    return NextResponse.json({ error: 'Ungültiger Status.' }, { status: 400 });
   }
 
   const supabase = createServiceClient();

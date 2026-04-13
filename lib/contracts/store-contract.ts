@@ -2,7 +2,7 @@ import { createServiceClient } from '@/lib/supabase';
 
 /**
  * Speichert das Vertrags-PDF in Supabase Storage und erstellt einen
- * unveraenderlichen Eintrag in der rental_agreements-Tabelle.
+ * unveränderlichen Eintrag in der rental_agreements-Tabelle.
  *
  * Bucket: contracts (privat, nur signierte URLs)
  * Pfad: contracts/{year}/{bookingId}.pdf
@@ -34,7 +34,7 @@ export async function storeContract(
     throw new Error(`Vertrag konnte nicht hochgeladen werden: ${uploadError.message}`);
   }
 
-  // 2. Signierte URL generieren (7 Tage gueltig)
+  // 2. Signierte URL generieren (7 Tage gültig)
   const { data: urlData, error: urlError } = await supabase.storage
     .from('contracts')
     .createSignedUrl(storagePath, 60 * 60 * 24 * 7);
@@ -43,10 +43,10 @@ export async function storeContract(
     throw new Error(`Signierte URL konnte nicht erstellt werden: ${urlError?.message}`);
   }
 
-  // Fuer die DB speichern wir den Storage-Pfad (nicht die signierte URL, da die ablaeuft)
+  // Für die DB speichern wir den Storage-Pfad (nicht die signierte URL, da die abläuft)
   const pdfUrl = `contracts/${storagePath}`;
 
-  // 3. Eintrag in rental_agreements (unveraenderlich)
+  // 3. Eintrag in rental_agreements (unveränderlich)
   const { error: dbError } = await supabase
     .from('rental_agreements')
     .insert({

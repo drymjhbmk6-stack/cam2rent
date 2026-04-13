@@ -21,7 +21,7 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
 /**
  * Gruppiert Cart-Items nach Mietzeitraum.
- * Gibt ein Array von Gruppen zurueck, jede mit eigenem Zeitraum und Items.
+ * Gibt ein Array von Gruppen zurück, jede mit eigenem Zeitraum und Items.
  */
 function groupByPeriod(items: CartItem[]) {
   const groups: Record<string, CartItem[]> = {};
@@ -36,7 +36,7 @@ function groupByPeriod(items: CartItem[]) {
 /**
  * POST /api/confirm-cart
  *
- * Bestaetigt einen Warenkorb-Checkout nach erfolgreicher Stripe-Zahlung.
+ * Bestätigt einen Warenkorb-Checkout nach erfolgreicher Stripe-Zahlung.
  * Erstellt separate Buchungen pro Mietzeitraum.
  */
 export async function POST(req: NextRequest) {
@@ -209,7 +209,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Deposit-Vorautorisierung bestaetigen
+    // Deposit-Vorautorisierung bestätigen
     let confirmedDepositIntentId: string | null = null;
     let depositStatus = 'none';
     if (deposit_intent_id) {
@@ -269,7 +269,7 @@ export async function POST(req: NextRequest) {
       const groupDiscount = Math.round((r_discountAmount ?? 0) * ratio * 100) / 100;
       const groupDurationDiscount = Math.round((r_durationDiscount ?? 0) * ratio * 100) / 100;
       const groupLoyaltyDiscount = Math.round((r_loyaltyDiscount ?? 0) * ratio * 100) / 100;
-      // Versand pro Gruppe neu berechnen (jede Gruppe prueft Gratis-Schwelle)
+      // Versand pro Gruppe neu berechnen (jede Gruppe prüft Gratis-Schwelle)
       const groupShippingResult = calcShipping(
         groupSubtotal,
         r_shippingMethod as ShippingMethod,
@@ -334,7 +334,7 @@ export async function POST(req: NextRequest) {
         .catch((err) => console.error(`Unit assignment error for ${bookingId}:`, err));
     }
 
-    // 5. Coupon used_count erhoehen
+    // 5. Coupon used_count erhöhen
     if (r_couponCode) {
       const { data: couponRow } = await supabase
         .from('coupons')
@@ -349,7 +349,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 6. User booking_count erhoehen (um Anzahl der Buchungen)
+    // 6. User booking_count erhöhen (um Anzahl der Buchungen)
     if (r_userId) {
       const { data: profile } = await supabase
         .from('profiles')
@@ -443,7 +443,7 @@ export async function POST(req: NextRequest) {
       ).catch((err: unknown) => console.error('Abandoned cart recovery error:', err));
     }
 
-    // 9. Suspicious Detection (fuer erste Buchung)
+    // 9. Suspicious Detection (für erste Buchung)
     const firstGroupItems = periodGroups[0];
     detectSuspicious(supabase, {
       userId: r_userId || null,
@@ -452,7 +452,7 @@ export async function POST(req: NextRequest) {
       days: firstGroupItems[0].days,
     }).then(async (result) => {
       if (result.suspicious) {
-        // Alle Buchungen als verdaechtig markieren
+        // Alle Buchungen als verdächtig markieren
         for (const bid of bookingIds) {
           await supabase
             .from('bookings')
@@ -483,7 +483,7 @@ export async function POST(req: NextRequest) {
     // ── Response SOFORT senden — Warenkorb wird geleert ──
     // Vertrag + E-Mails laufen im Hintergrund weiter.
 
-    // 11. Checkout-Kontext aufraeumen
+    // 11. Checkout-Kontext aufräumen
     Promise.resolve(
       supabase
         .from('admin_settings')

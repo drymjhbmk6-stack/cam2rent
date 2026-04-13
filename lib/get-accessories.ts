@@ -37,7 +37,7 @@ function dbToAccessory(db: DbAccessory): Accessory {
   };
 }
 
-/** Nur buchbares Zubehoer (fuer Kunden sichtbar) */
+/** Nur buchbares Zubehör (für Kunden sichtbar) */
 export async function getAccessories(): Promise<Accessory[]> {
   try {
     const supabase = createServiceClient();
@@ -54,7 +54,7 @@ export async function getAccessories(): Promise<Accessory[]> {
   }
 }
 
-/** Alle Zubehoer inkl. internes (fuer Admin + Sets) */
+/** Alle Zubehör inkl. internes (für Admin + Sets) */
 export async function getAllAccessories(): Promise<Accessory[]> {
   try {
     const supabase = createServiceClient();

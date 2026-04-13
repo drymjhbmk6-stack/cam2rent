@@ -517,7 +517,7 @@ export default function CheckoutPage() {
       return;
     }
     if (!firstName || !email) {
-      setIntentError('Bitte fuelle alle Pflichtfelder aus.');
+      setIntentError('Bitte fülle alle Pflichtfelder aus.');
       return;
     }
     if (deliveryMode === 'versand' && (!street || !zip || !city)) {
@@ -582,8 +582,8 @@ export default function CheckoutPage() {
             Konto erforderlich
           </h1>
           <p className="font-body text-sm text-brand-steel dark:text-gray-400 mb-6">
-            Um eine Buchung durchzufuehren, benoetigen wir ein Kundenkonto.
-            So koennen wir deinen Ausweis pruefen und dir deine Buchungen zuordnen.
+            Um eine Buchung durchzuführen, benötigen wir ein Kundenkonto.
+            So können wir deinen Ausweis prüfen und dir deine Buchungen zuordnen.
           </p>
           <div className="flex flex-col gap-3">
             <a href="/login?redirect=/checkout" className="w-full py-3 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold text-sm rounded-btn text-center hover:bg-brand-dark dark:hover:bg-blue-700 transition-colors">
@@ -989,7 +989,7 @@ export default function CheckoutPage() {
                       Deine Buchung <strong>{pendingSuccess}</strong> wartet auf Freigabe.
                     </p>
                     <p className="text-xs font-body text-brand-muted dark:text-gray-500">
-                      Wir pruefen deinen Ausweis und senden dir einen Zahlungslink per Email.
+                      Wir prüfen deinen Ausweis und senden dir einen Zahlungslink per Email.
                     </p>
                     <a href="/konto/buchungen" className="inline-block mt-4 px-6 py-2.5 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold text-sm rounded-btn">
                       Meine Buchungen
@@ -1050,7 +1050,7 @@ export default function CheckoutPage() {
                 {!pendingSuccess && isVerified === false && (
                   <div>
                     <div className="p-3 rounded-[10px] bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-xs font-body text-blue-700 dark:text-blue-300 mb-3">
-                      Da dies deine erste Buchung ist, pruefen wir kurz deinen Ausweis. Du erhaeltst danach einen Zahlungslink per Email.
+                      Da dies deine erste Buchung ist, prüfen wir kurz deinen Ausweis. Du erhältst danach einen Zahlungslink per Email.
                     </div>
                     <button
                       onClick={handlePendingBooking}

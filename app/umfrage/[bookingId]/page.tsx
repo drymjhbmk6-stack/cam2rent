@@ -38,7 +38,7 @@ export default function UmfragePage({ params }: { params: Promise<{ bookingId: s
             </svg>
           </div>
           <h1 className="font-heading font-bold text-xl text-brand-black dark:text-white mb-2">
-            Vielen Dank fuer dein Feedback!
+            Vielen Dank für dein Feedback!
           </h1>
           <p className="font-body text-sm text-brand-steel dark:text-gray-400 mb-6">
             Deine Meinung hilft uns, unseren Service stetig zu verbessern.
@@ -50,7 +50,7 @@ export default function UmfragePage({ params }: { params: Promise<{ bookingId: s
                 Freut uns, dass du zufrieden bist!
               </p>
               <p className="font-body text-sm text-brand-steel dark:text-gray-400 mb-4">
-                Wuerdest du deine Erfahrung auch auf Google teilen? Das hilft uns sehr!
+                Würdest du deine Erfahrung auch auf Google teilen? Das hilft uns sehr!
               </p>
               <a
                 href="https://g.page/r/YOUR_GOOGLE_REVIEW_LINK/review"
@@ -67,7 +67,7 @@ export default function UmfragePage({ params }: { params: Promise<{ bookingId: s
           )}
 
           <Link href="/kameras" className="text-sm font-body text-accent-blue hover:underline">
-            Zurueck zum Shop
+            Zurück zum Shop
           </Link>
         </div>
       </div>
@@ -123,12 +123,12 @@ export default function UmfragePage({ params }: { params: Promise<{ bookingId: s
         {/* Freitext */}
         <div className="mb-6">
           <label className="block text-sm font-heading font-semibold text-brand-black dark:text-white mb-2">
-            Moechtest du uns noch etwas mitteilen? (optional)
+            Möchtest du uns noch etwas mitteilen? (optional)
           </label>
           <textarea
             value={feedback}
             onChange={(e) => setFeedback(e.target.value)}
-            placeholder="Was hat dir gefallen? Was koennen wir verbessern?"
+            placeholder="Was hat dir gefallen? Was können wir verbessern?"
             rows={3}
             className="w-full px-4 py-3 border border-brand-border dark:border-white/10 rounded-[10px] text-sm font-body bg-white dark:bg-brand-black text-brand-black dark:text-white placeholder-brand-muted resize-none focus:outline-none focus:ring-2 focus:ring-accent-blue"
           />

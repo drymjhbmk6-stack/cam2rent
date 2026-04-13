@@ -36,12 +36,12 @@ export async function sendContractEmail(opts: ContractEmailOpts) {
           <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#0a0a0a;">Dein Mietvertrag</h1>
           <p style="margin:0 0 24px;font-size:15px;color:#4b5563;">
             Hallo ${opts.customerName || 'Kunde'},<br>
-            im Anhang findest du deinen digital unterzeichneten Mietvertrag fuer die Buchung
+            im Anhang findest du deinen digital unterzeichneten Mietvertrag für die Buchung
             <strong>${opts.bookingNumber}</strong> (${opts.productName}, ${opts.rentalFrom} \u2013 ${opts.rentalTo}).
           </p>
 
           <p style="margin:0 0 24px;font-size:15px;color:#4b5563;">
-            Bitte hebe dieses Dokument fuer deine Unterlagen auf.
+            Bitte hebe dieses Dokument für deine Unterlagen auf.
           </p>
 
           <!-- Info-Box -->
