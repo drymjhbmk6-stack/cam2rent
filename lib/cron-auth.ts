@@ -12,11 +12,17 @@ export function verifyCronAuth(req: NextRequest): boolean {
   const cronSecret = process.env.CRON_SECRET;
   if (!cronSecret) return false;
 
+  // Header: x-cron-secret
   const headerSecret = req.headers.get('x-cron-secret');
   if (headerSecret === cronSecret) return true;
 
+  // Header: Authorization: Bearer <secret>
   const authHeader = req.headers.get('authorization');
   if (authHeader === `Bearer ${cronSecret}`) return true;
+
+  // URL-Parameter: ?secret=<secret> (fuer einfache Cron-Setups)
+  const urlSecret = req.nextUrl.searchParams.get('secret');
+  if (urlSecret === cronSecret) return true;
 
   return false;
 }
