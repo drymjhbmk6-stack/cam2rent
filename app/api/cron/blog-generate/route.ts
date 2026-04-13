@@ -55,6 +55,7 @@ export async function POST(req: NextRequest) {
   const currentHour = berlinTime.getHours();
   const currentMinute = berlinTime.getMinutes();
 
+  const interval = (blogSettings.auto_generate_interval as string) ?? 'weekly';
   const weekdays = (blogSettings.auto_generate_weekdays as string[]) ?? ['mo', 'do'];
   const timeFrom = (blogSettings.auto_generate_time_from as string) ?? '09:00';
   const timeTo = (blogSettings.auto_generate_time_to as string) ?? '18:00';
@@ -62,9 +63,11 @@ export async function POST(req: NextRequest) {
   const dayMap = ['so', 'mo', 'di', 'mi', 'do', 'fr', 'sa'];
   const todayKey = dayMap[berlinTime.getDay()];
 
-  // Wochentag-Check
-  if (!weekdays.includes(todayKey)) {
-    return NextResponse.json({ message: `Heute (${todayKey.toUpperCase()}) ist kein geplanter Tag.` });
+  // Wochentag-Check — nur bei weekly/biweekly, NICHT bei daily/monthly
+  if (interval !== 'daily' && interval !== 'monthly') {
+    if (!weekdays.includes(todayKey)) {
+      return NextResponse.json({ message: `Heute (${todayKey.toUpperCase()}) ist kein geplanter Tag.` });
+    }
   }
 
   // Uhrzeit-Check
