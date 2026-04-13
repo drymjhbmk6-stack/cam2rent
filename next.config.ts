@@ -29,6 +29,14 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  // ESLint und TypeScript beim Build skippen (spart RAM auf dem Server)
+  // Wird lokal vor dem Push geprueft
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+  typescript: {
+    ignoreBuildErrors: true,
+  },
 };
 
 export default nextConfig;
