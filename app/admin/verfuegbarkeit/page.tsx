@@ -252,8 +252,29 @@ export default function AdminVerfuegbarkeitPage() {
     // Auch nicht zugeordnete Buchungen prüfen (Fallback wenn keine Units zugeordnet)
     const unassignedBookings = product.bookings.filter((b) => !b.unit_id);
     for (const b of unassignedBookings) {
+      const bMode = b.delivery_mode ?? 'versand';
+      const before = bMode === 'abholung' ? buf.abholung_before : buf.versand_before;
+      const after = bMode === 'abholung' ? buf.abholung_after : buf.versand_after;
+
+      const fromDate = new Date(b.rental_from);
+      const toDate = new Date(b.rental_to);
+      const bufferStart = new Date(fromDate);
+      bufferStart.setDate(bufferStart.getDate() - before);
+      const bufferEnd = new Date(toDate);
+      bufferEnd.setDate(bufferEnd.getDate() + after);
+      const bufStartStr = bufferStart.toISOString().split('T')[0];
+      const bufEndStr = bufferEnd.toISOString().split('T')[0];
+
       if (dateStr >= b.rental_from && dateStr <= b.rental_to) {
         return { type: 'booked', booking: b };
+      }
+      if (dateStr >= bufStartStr && dateStr < b.rental_from) {
+        const label = bMode === 'abholung' ? 'Abholung' : 'Hinversand';
+        return { type: 'buffer-hin', booking: b, bufferLabel: label };
+      }
+      if (dateStr > b.rental_to && dateStr <= bufEndStr) {
+        const label = bMode === 'abholung' ? 'Rückgabe' : 'Rückversand';
+        return { type: 'buffer-rueck', booking: b, bufferLabel: label };
       }
     }
 
