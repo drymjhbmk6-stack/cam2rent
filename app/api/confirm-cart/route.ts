@@ -457,7 +457,7 @@ export async function POST(req: NextRequest) {
       }
     }).catch((err) => console.error('Suspicious detection error:', err));
 
-    // 10. Steuer-Config + Vertrag generieren + Email senden (fuer jede Buchung)
+    // 10. Steuer-Config laden (schnell)
     const { data: taxSettings } = await supabase
       .from('admin_settings')
       .select('key, value')
@@ -475,97 +475,8 @@ export async function POST(req: NextRequest) {
       return `${d}.${m}.${y}`;
     };
 
-    if (r_email) {
-      for (let gi = 0; gi < periodGroups.length; gi++) {
-        const groupItems = periodGroups[gi];
-        const firstItem = groupItems[0];
-        const productName = groupItems.length === 1
-          ? firstItem.productName
-          : groupItems.map((it) => it.productName).join(', ');
-        const allAccessories = [...new Set(groupItems.flatMap((it) => it.accessories))];
-        const groupSubtotal = groupItems.reduce((s, it) => s + it.subtotal, 0);
-        const ratio = totalCartSubtotal > 0 ? groupSubtotal / totalCartSubtotal : 1 / periodGroups.length;
-        const emailShipping = calcShipping(
-          groupSubtotal,
-          r_shippingMethod as ShippingMethod,
-          r_deliveryMode as 'versand' | 'abholung',
-          shippingCfg
-        ).price;
-        const groupTotal = groupSubtotal
-          - Math.round((r_discountAmount ?? 0) * ratio * 100) / 100
-          - Math.round((r_durationDiscount ?? 0) * ratio * 100) / 100
-          - Math.round((r_loyaltyDiscount ?? 0) * ratio * 100) / 100
-          + emailShipping;
-
-        // Vertrag generieren wenn Signatur vorhanden
-        let contractPdfBuffer: Buffer | undefined;
-        if (contractSignature?.agreedToTerms && contractSignature?.signerName) {
-          try {
-            const result = await generateContractPDF({
-              bookingId: bookingIds[gi],
-              bookingNumber: bookingIds[gi],
-              customerName: contractSignature.signerName,
-              customerEmail: r_email,
-              productName,
-              accessories: allAccessories,
-              rentalFrom: fmtDateForContract(firstItem.rentalFrom),
-              rentalTo: fmtDateForContract(firstItem.rentalTo),
-              rentalDays: firstItem.days,
-              priceRental: groupItems.reduce((s, it) => s + it.priceRental, 0),
-              priceAccessories: groupItems.reduce((s, it) => s + it.priceAccessories, 0),
-              priceHaftung: groupItems.reduce((s, it) => s + it.priceHaftung, 0),
-              priceShipping: emailShipping,
-              priceTotal: Math.max(0, groupTotal),
-              deposit: groupItems.reduce((s, it) => s + it.deposit, 0),
-              taxMode: (txMap['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer',
-              taxRate: parseFloat(txMap['tax_rate'] || '19'),
-              signatureDataUrl: contractSignature.signatureDataUrl,
-              signatureMethod: contractSignature.signatureMethod,
-              signerName: contractSignature.signerName,
-              ipAddress: ip,
-            });
-            contractPdfBuffer = result.pdfBuffer;
-            await storeContract(bookingIds[gi], result.pdfBuffer, {
-              contractHash: result.contractHash,
-              customerName: contractSignature.signerName,
-              ipAddress: ip,
-              signedAt: new Date().toISOString(),
-              signatureMethod: contractSignature.signatureMethod,
-            });
-          } catch (err) {
-            console.error('Contract generation error:', err);
-          }
-        }
-
-        const emailData: BookingEmailData = {
-          bookingId: bookingIds[gi],
-          customerName: r_name,
-          customerEmail: r_email,
-          productName,
-          rentalFrom: firstItem.rentalFrom,
-          rentalTo: firstItem.rentalTo,
-          days: firstItem.days,
-          deliveryMode: r_deliveryMode as 'versand' | 'abholung',
-          shippingMethod: r_shippingMethod,
-          haftung: firstItem.haftung,
-          accessories: allAccessories,
-          priceRental: groupItems.reduce((s, it) => s + it.priceRental, 0),
-          priceAccessories: groupItems.reduce((s, it) => s + it.priceAccessories, 0),
-          priceHaftung: groupItems.reduce((s, it) => s + it.priceHaftung, 0),
-          priceTotal: Math.max(0, groupTotal),
-          deposit: groupItems.reduce((s, it) => s + it.deposit, 0),
-          shippingPrice: emailShipping,
-          taxMode: (txMap['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer',
-          taxRate: parseFloat(txMap['tax_rate'] || '19'),
-          ustId: txMap['ust_id'] || '',
-        };
-
-        Promise.all([
-          sendBookingConfirmation(emailData, contractPdfBuffer),
-          sendAdminNotification(emailData),
-        ]).catch((err) => console.error('Email send error:', err));
-      }
-    }
+    // ── Response SOFORT senden — Warenkorb wird geleert ──
+    // Vertrag + E-Mails laufen im Hintergrund weiter.
 
     // 11. Checkout-Kontext aufraeumen
     Promise.resolve(
@@ -574,6 +485,105 @@ export async function POST(req: NextRequest) {
         .delete()
         .eq('key', `checkout_${payment_intent_id}`)
     ).catch(() => {});
+
+    // 12. Vertrag generieren + E-Mails senden (HINTERGRUND — blockiert Response nicht)
+    if (r_email) {
+      (async () => {
+        try {
+          for (let gi = 0; gi < periodGroups.length; gi++) {
+            const groupItems = periodGroups[gi];
+            const firstItem = groupItems[0];
+            const productName = groupItems.length === 1
+              ? firstItem.productName
+              : groupItems.map((it) => it.productName).join(', ');
+            const allAccessories = [...new Set(groupItems.flatMap((it) => it.accessories))];
+            const groupSubtotal = groupItems.reduce((s, it) => s + it.subtotal, 0);
+            const ratio = totalCartSubtotal > 0 ? groupSubtotal / totalCartSubtotal : 1 / periodGroups.length;
+            const emailShipping = calcShipping(
+              groupSubtotal,
+              r_shippingMethod as ShippingMethod,
+              r_deliveryMode as 'versand' | 'abholung',
+              shippingCfg
+            ).price;
+            const groupTotal = groupSubtotal
+              - Math.round((r_discountAmount ?? 0) * ratio * 100) / 100
+              - Math.round((r_durationDiscount ?? 0) * ratio * 100) / 100
+              - Math.round((r_loyaltyDiscount ?? 0) * ratio * 100) / 100
+              + emailShipping;
+
+            // Vertrag generieren wenn Signatur vorhanden
+            let contractPdfBuffer: Buffer | undefined;
+            if (contractSignature?.agreedToTerms && contractSignature?.signerName) {
+              try {
+                const result = await generateContractPDF({
+                  bookingId: bookingIds[gi],
+                  bookingNumber: bookingIds[gi],
+                  customerName: contractSignature.signerName,
+                  customerEmail: r_email,
+                  productName,
+                  accessories: allAccessories,
+                  rentalFrom: fmtDateForContract(firstItem.rentalFrom),
+                  rentalTo: fmtDateForContract(firstItem.rentalTo),
+                  rentalDays: firstItem.days,
+                  priceRental: groupItems.reduce((s, it) => s + it.priceRental, 0),
+                  priceAccessories: groupItems.reduce((s, it) => s + it.priceAccessories, 0),
+                  priceHaftung: groupItems.reduce((s, it) => s + it.priceHaftung, 0),
+                  priceShipping: emailShipping,
+                  priceTotal: Math.max(0, groupTotal),
+                  deposit: groupItems.reduce((s, it) => s + it.deposit, 0),
+                  taxMode: (txMap['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer',
+                  taxRate: parseFloat(txMap['tax_rate'] || '19'),
+                  signatureDataUrl: contractSignature.signatureDataUrl,
+                  signatureMethod: contractSignature.signatureMethod,
+                  signerName: contractSignature.signerName,
+                  ipAddress: ip,
+                });
+                contractPdfBuffer = result.pdfBuffer;
+                await storeContract(bookingIds[gi], result.pdfBuffer, {
+                  contractHash: result.contractHash,
+                  customerName: contractSignature.signerName,
+                  ipAddress: ip,
+                  signedAt: new Date().toISOString(),
+                  signatureMethod: contractSignature.signatureMethod,
+                });
+              } catch (err) {
+                console.error('Contract generation error:', err);
+              }
+            }
+
+            const emailData: BookingEmailData = {
+              bookingId: bookingIds[gi],
+              customerName: r_name,
+              customerEmail: r_email,
+              productName,
+              rentalFrom: firstItem.rentalFrom,
+              rentalTo: firstItem.rentalTo,
+              days: firstItem.days,
+              deliveryMode: r_deliveryMode as 'versand' | 'abholung',
+              shippingMethod: r_shippingMethod,
+              haftung: firstItem.haftung,
+              accessories: allAccessories,
+              priceRental: groupItems.reduce((s, it) => s + it.priceRental, 0),
+              priceAccessories: groupItems.reduce((s, it) => s + it.priceAccessories, 0),
+              priceHaftung: groupItems.reduce((s, it) => s + it.priceHaftung, 0),
+              priceTotal: Math.max(0, groupTotal),
+              deposit: groupItems.reduce((s, it) => s + it.deposit, 0),
+              shippingPrice: emailShipping,
+              taxMode: (txMap['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer',
+              taxRate: parseFloat(txMap['tax_rate'] || '19'),
+              ustId: txMap['ust_id'] || '',
+            };
+
+            await Promise.all([
+              sendBookingConfirmation(emailData, contractPdfBuffer),
+              sendAdminNotification(emailData),
+            ]);
+          }
+        } catch (err) {
+          console.error('Background email/contract error:', err);
+        }
+      })();
+    }
 
     return NextResponse.json({ success: true, booking_ids: bookingIds });
   } catch (err) {
