@@ -118,6 +118,8 @@ export async function GET(
         address_city: profile.address_city || '',
         verification_status: profile.verification_status || 'none',
         verified_at: profile.verified_at,
+        id_front_url: profile.id_front_url || null,
+        id_back_url: profile.id_back_url || null,
         blacklisted: profile.blacklisted || false,
         blacklist_reason: profile.blacklist_reason || '',
         blacklisted_at: profile.blacklisted_at,

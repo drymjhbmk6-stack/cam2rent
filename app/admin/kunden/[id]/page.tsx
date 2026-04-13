@@ -15,6 +15,8 @@ interface CustomerProfile {
   address_city: string;
   verification_status: string;
   verified_at: string | null;
+  id_front_url: string | null;
+  id_back_url: string | null;
   blacklisted: boolean;
   blacklist_reason: string;
   blacklisted_at: string | null;
@@ -162,6 +164,10 @@ export default function KundenDetailPage() {
   const [noteSaving, setNoteSaving] = useState(false);
   const [blockLoading, setBlockLoading] = useState(false);
   const [blacklistReason, setBlacklistReason] = useState('');
+  const [verifyLoading, setVerifyLoading] = useState(false);
+  const [idFrontSignedUrl, setIdFrontSignedUrl] = useState<string | null>(null);
+  const [idBackSignedUrl, setIdBackSignedUrl] = useState<string | null>(null);
+  const [idImagesLoading, setIdImagesLoading] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -199,6 +205,43 @@ export default function KundenDetailPage() {
     fetchData();
     fetchNotes();
   }, [fetchData, fetchNotes]);
+
+  // Ausweis-Bilder laden wenn Customer geladen ist
+  useEffect(() => {
+    if (!customer?.id_front_url && !customer?.id_back_url) return;
+
+    async function loadIdImages() {
+      setIdImagesLoading(true);
+      try {
+        if (customer?.id_front_url) {
+          const res = await fetch(`/api/admin/id-document-url?path=${encodeURIComponent(customer.id_front_url)}`);
+          const data = await res.json();
+          if (data.url) setIdFrontSignedUrl(data.url);
+        }
+        if (customer?.id_back_url) {
+          const res = await fetch(`/api/admin/id-document-url?path=${encodeURIComponent(customer.id_back_url)}`);
+          const data = await res.json();
+          if (data.url) setIdBackSignedUrl(data.url);
+        }
+      } catch {
+        // Bilder konnten nicht geladen werden
+      }
+      setIdImagesLoading(false);
+    }
+
+    loadIdImages();
+  }, [customer?.id_front_url, customer?.id_back_url]);
+
+  async function handleVerify(status: 'verified' | 'rejected') {
+    setVerifyLoading(true);
+    await fetch('/api/admin/verify-customer', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ customerId, status }),
+    });
+    setVerifyLoading(false);
+    fetchData();
+  }
 
   async function handleBlock(blocked: boolean) {
     setBlockLoading(true);
@@ -375,6 +418,158 @@ export default function KundenDetailPage() {
               } />
             </div>
           </div>
+
+          {/* Ausweis-Verifizierung */}
+          {(customer.id_front_url || customer.id_back_url || customer.verification_status === 'pending') && (
+            <div style={{
+              background: '#111827', borderRadius: 12, border: '1px solid #1e293b',
+              padding: 24, marginBottom: 20,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+                <h2 style={{ fontSize: 16, fontWeight: 700, color: '#e2e8f0', margin: 0 }}>
+                  Ausweis-Verifizierung
+                </h2>
+                <span style={{
+                  display: 'inline-block', padding: '4px 12px', borderRadius: 6,
+                  fontSize: 12, fontWeight: 700,
+                  color: customer.verification_status === 'verified' ? '#10b981'
+                    : customer.verification_status === 'pending' ? '#f59e0b'
+                    : customer.verification_status === 'rejected' ? '#ef4444'
+                    : '#64748b',
+                  background: customer.verification_status === 'verified' ? '#10b98114'
+                    : customer.verification_status === 'pending' ? '#f59e0b14'
+                    : customer.verification_status === 'rejected' ? '#ef444414'
+                    : '#64748b14',
+                }}>
+                  {customer.verification_status === 'verified' ? 'Verifiziert'
+                    : customer.verification_status === 'pending' ? 'Ausstehend'
+                    : customer.verification_status === 'rejected' ? 'Abgelehnt'
+                    : 'Nicht verifiziert'}
+                </span>
+              </div>
+
+              {/* Ausweis-Bilder */}
+              {idImagesLoading ? (
+                <div style={{ padding: 20, textAlign: 'center', color: '#64748b' }}>
+                  Bilder werden geladen...
+                </div>
+              ) : (idFrontSignedUrl || idBackSignedUrl) ? (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
+                  {/* Vorderseite */}
+                  <div>
+                    <div style={{
+                      fontSize: 11, fontWeight: 600, color: '#64748b',
+                      textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8,
+                    }}>
+                      Vorderseite
+                    </div>
+                    {idFrontSignedUrl ? (
+                      <a href={idFrontSignedUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'block' }}>
+                        <img
+                          src={idFrontSignedUrl}
+                          alt="Ausweis Vorderseite"
+                          style={{
+                            width: '100%', borderRadius: 8, border: '1px solid #1e293b',
+                            cursor: 'pointer', maxHeight: 300, objectFit: 'contain',
+                            background: '#0a0f1e',
+                          }}
+                        />
+                      </a>
+                    ) : (
+                      <div style={{
+                        padding: 32, textAlign: 'center', color: '#64748b',
+                        background: '#0a0f1e', borderRadius: 8, border: '1px solid #1e293b',
+                      }}>
+                        Nicht hochgeladen
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Rueckseite */}
+                  <div>
+                    <div style={{
+                      fontSize: 11, fontWeight: 600, color: '#64748b',
+                      textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8,
+                    }}>
+                      Rueckseite
+                    </div>
+                    {idBackSignedUrl ? (
+                      <a href={idBackSignedUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'block' }}>
+                        <img
+                          src={idBackSignedUrl}
+                          alt="Ausweis Rueckseite"
+                          style={{
+                            width: '100%', borderRadius: 8, border: '1px solid #1e293b',
+                            cursor: 'pointer', maxHeight: 300, objectFit: 'contain',
+                            background: '#0a0f1e',
+                          }}
+                        />
+                      </a>
+                    ) : (
+                      <div style={{
+                        padding: 32, textAlign: 'center', color: '#64748b',
+                        background: '#0a0f1e', borderRadius: 8, border: '1px solid #1e293b',
+                      }}>
+                        Nicht hochgeladen
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div style={{
+                  padding: 20, textAlign: 'center', color: '#64748b', marginBottom: 20,
+                  background: '#0a0f1e', borderRadius: 8, border: '1px solid #1e293b',
+                }}>
+                  Keine Ausweisbilder hochgeladen.
+                </div>
+              )}
+
+              {/* Verifizierungs-Buttons */}
+              {customer.verification_status !== 'verified' && (
+                <div style={{ display: 'flex', gap: 12 }}>
+                  <button
+                    onClick={() => handleVerify('verified')}
+                    disabled={verifyLoading}
+                    style={{
+                      padding: '10px 24px', borderRadius: 8, fontSize: 14, fontWeight: 700,
+                      background: '#10b981', color: 'white', border: 'none', cursor: 'pointer',
+                      opacity: verifyLoading ? 0.5 : 1,
+                      display: 'flex', alignItems: 'center', gap: 8,
+                    }}
+                  >
+                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    Verifizieren
+                  </button>
+                  <button
+                    onClick={() => handleVerify('rejected')}
+                    disabled={verifyLoading}
+                    style={{
+                      padding: '10px 24px', borderRadius: 8, fontSize: 14, fontWeight: 700,
+                      background: '#1e293b', color: '#ef4444', border: '1px solid #ef444440', cursor: 'pointer',
+                      opacity: verifyLoading ? 0.5 : 1,
+                      display: 'flex', alignItems: 'center', gap: 8,
+                    }}
+                  >
+                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                    Ablehnen
+                  </button>
+                </div>
+              )}
+
+              {customer.verification_status === 'verified' && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#10b981', fontSize: 14 }}>
+                  <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Verifiziert am {formatDate(customer.verified_at)}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Stats Cards */}
           {stats && (
