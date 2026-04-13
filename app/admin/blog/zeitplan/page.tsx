@@ -41,6 +41,7 @@ export default function BlogZeitplanPage() {
   const [postsPerWeek, setPostsPerWeek] = useState(2);
   const [showImport, setShowImport] = useState(false);
   const [importDate, setImportDate] = useState(new Date(Date.now() + 86400000).toISOString().split('T')[0]);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const dragItem = useRef<number | null>(null);
   const dragOverItem = useRef<number | null>(null);
 
@@ -297,6 +298,10 @@ export default function BlogZeitplanPage() {
     if (filtered.length === 0) {
       return <div className="text-center py-12"><p className="text-sm" style={{ color: '#475569' }}>Noch keine Eintraege.</p></div>;
     }
+
+    const TONE_LABELS: Record<string, string> = { informativ: 'Informativ', locker: 'Locker', professionell: 'Professionell' };
+    const LENGTH_LABELS: Record<string, string> = { kurz: 'Kurz (~500 Wörter)', mittel: 'Mittel (~1000 Wörter)', lang: 'Lang (~1500 Wörter)' };
+
     return (
       <div className="space-y-2">
         {filtered.map((entry, index) => {
@@ -304,39 +309,123 @@ export default function BlogZeitplanPage() {
           const todayStr = new Date().toISOString().split('T')[0];
           const isPast = entry.scheduled_date < todayStr;
           const isToday = entry.scheduled_date === todayStr;
+          const isExpanded = expandedId === entry.id;
+          const postIsPublished = entry.blog_posts?.status === 'published';
+
           return (
             <div key={entry.id} draggable onDragStart={() => handleDragStart(index)} onDragEnter={() => handleDragEnter(index)} onDragEnd={handleDragEnd} onDragOver={(e) => e.preventDefault()}
-              className="rounded-xl p-4 transition-colors cursor-grab active:cursor-grabbing"
-              style={{ background: isToday ? '#06b6d408' : '#1e293b', border: `1px solid ${isToday ? '#06b6d430' : '#334155'}`, opacity: entry.status === 'skipped' ? 0.5 : 1 }}>
-              <div className="flex items-start gap-3">
-                <div className="flex flex-col items-center gap-1 pt-0.5 shrink-0">
-                  <svg className="w-4 h-4" fill="none" stroke="#475569" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" /></svg>
-                  <button onClick={() => toggleReviewed(entry)} className="w-5 h-5 rounded flex items-center justify-center transition-colors"
-                    style={entry.reviewed ? { background: '#22c55e', color: 'white' } : { background: '#0f172a', border: '1.5px solid #475569' }}
-                    title={entry.reviewed ? 'Als ungesehen markieren' : 'Als gesehen markieren'}>
-                    {entry.reviewed && <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
-                  </button>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="mb-1">
+              className="rounded-xl transition-colors"
+              style={{ background: isToday ? '#06b6d408' : '#1e293b', border: `1px solid ${isToday ? '#06b6d430' : isExpanded ? '#06b6d450' : '#334155'}`, opacity: entry.status === 'skipped' ? 0.5 : 1 }}>
+
+              {/* Header — klickbar */}
+              <div
+                className="p-4 cursor-pointer"
+                onClick={() => setExpandedId(isExpanded ? null : entry.id)}
+              >
+                <div className="flex items-start gap-3">
+                  <div className="flex flex-col items-center gap-1 pt-0.5 shrink-0">
+                    <svg className="w-4 h-4 cursor-grab active:cursor-grabbing" fill="none" stroke="#475569" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" /></svg>
+                    <button onClick={(e) => { e.stopPropagation(); toggleReviewed(entry); }} className="w-5 h-5 rounded flex items-center justify-center transition-colors"
+                      style={entry.reviewed ? { background: '#22c55e', color: 'white' } : { background: '#0f172a', border: '1.5px solid #475569' }}
+                      title={entry.reviewed ? 'Als ungesehen markieren' : 'Als gesehen markieren'}>
+                      {entry.reviewed && <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
+                    </button>
+                  </div>
+                  <div className="flex-1 min-w-0">
                     <span className="font-heading font-semibold text-sm block" style={{ color: '#e2e8f0' }}>{entry.topic}</span>
+                    <div className="flex flex-wrap gap-1.5 mt-1">
+                      <span className="px-2 py-0.5 rounded text-[10px] font-heading font-bold" style={{ background: st.bg, color: st.color }}>{st.label}</span>
+                      {postIsPublished && <span className="px-2 py-0.5 rounded text-[10px] font-heading font-bold" style={{ background: '#22c55e20', color: '#22c55e' }}>Veröffentlicht</span>}
+                      {entry.blog_categories && <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: entry.blog_categories.color + '20', color: entry.blog_categories.color }}>{entry.blog_categories.name}</span>}
+                      {isToday && <span className="text-[10px] px-1.5 py-0.5 rounded font-heading font-bold" style={{ background: '#06b6d420', color: '#06b6d4' }}>HEUTE</span>}
+                      {isPast && !isToday && entry.status === 'planned' && <span className="text-[10px] px-1.5 py-0.5 rounded font-heading font-bold" style={{ background: '#ef444420', color: '#ef4444' }}>ÜBERFÄLLIG</span>}
+                    </div>
                   </div>
-                  <div className="flex flex-wrap gap-1.5 mb-2">
-                    <span className="px-2 py-0.5 rounded text-[10px] font-heading font-bold" style={{ background: st.bg, color: st.color }}>{st.label}</span>
-                    {entry.blog_categories && <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: entry.blog_categories.color + '20', color: entry.blog_categories.color }}>{entry.blog_categories.name}</span>}
-                    {isToday && <span className="text-[10px] px-1.5 py-0.5 rounded font-heading font-bold" style={{ background: '#06b6d420', color: '#06b6d4' }}>HEUTE</span>}
-                    {isPast && !isToday && entry.status === 'planned' && <span className="text-[10px] px-1.5 py-0.5 rounded font-heading font-bold" style={{ background: '#ef444420', color: '#ef4444' }}>ÜBERFÄLLIG</span>}
-                  </div>
-                  {entry.blog_posts && (
-                    <Link href={`/admin/blog/artikel/${entry.blog_posts.id}`} className="text-xs hover:underline block mb-1" style={{ color: '#06b6d4' }}>→ {entry.blog_posts.title}</Link>
-                  )}
-                  <div className="flex items-center gap-2 mt-2">
-                    <input type="date" value={entry.scheduled_date} onChange={(e) => updateDate(entry.id, e.target.value)} className="px-2 py-1 rounded text-xs font-body" style={{ background: '#0f172a', border: '1px solid #334155', color: '#e2e8f0' }} />
-                    <input type="time" value={entry.scheduled_time} onChange={(e) => updateTime(entry.id, e.target.value)} className="px-2 py-1 rounded text-xs font-body" style={{ background: '#0f172a', border: '1px solid #334155', color: '#e2e8f0' }} />
-                    <button onClick={() => deleteEntry(entry.id)} className="px-2 py-1 rounded text-[11px] font-heading font-semibold ml-auto" style={{ background: '#ef444420', color: '#ef4444' }}>Loeschen</button>
-                  </div>
+                  {/* Pfeil */}
+                  <svg className="w-4 h-4 shrink-0 mt-1 transition-transform" style={{ color: '#475569', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
                 </div>
               </div>
+
+              {/* Aufgeklappter Detailbereich */}
+              {isExpanded && (
+                <div className="px-4 pb-4" style={{ borderTop: '1px solid #334155' }}>
+                  <div className="grid grid-cols-2 gap-3 pt-4">
+                    {/* KI-Prompt / Thema */}
+                    <div className="col-span-2 rounded-lg p-3" style={{ background: '#0f172a' }}>
+                      <p className="text-[10px] font-semibold uppercase mb-1" style={{ color: '#64748b' }}>KI-Prompt / Thema</p>
+                      <p className="text-sm" style={{ color: '#e2e8f0' }}>{entry.topic}</p>
+                    </div>
+
+                    {/* Keywords */}
+                    <div className="col-span-2 rounded-lg p-3" style={{ background: '#0f172a' }}>
+                      <p className="text-[10px] font-semibold uppercase mb-1" style={{ color: '#64748b' }}>Keywords / SEO</p>
+                      {entry.keywords && entry.keywords.length > 0 ? (
+                        <div className="flex flex-wrap gap-1.5">
+                          {entry.keywords.map((kw, i) => (
+                            <span key={i} className="px-2 py-0.5 rounded text-xs" style={{ background: '#1e293b', color: '#94a3b8' }}>{kw}</span>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs" style={{ color: '#475569' }}>Keine Keywords — KI generiert automatisch</p>
+                      )}
+                    </div>
+
+                    {/* Ton */}
+                    <div className="rounded-lg p-3" style={{ background: '#0f172a' }}>
+                      <p className="text-[10px] font-semibold uppercase mb-1" style={{ color: '#64748b' }}>Ton</p>
+                      <p className="text-sm" style={{ color: '#e2e8f0' }}>{TONE_LABELS[entry.tone] || entry.tone || 'Informativ'}</p>
+                    </div>
+
+                    {/* Länge */}
+                    <div className="rounded-lg p-3" style={{ background: '#0f172a' }}>
+                      <p className="text-[10px] font-semibold uppercase mb-1" style={{ color: '#64748b' }}>Ziel-Länge</p>
+                      <p className="text-sm" style={{ color: '#e2e8f0' }}>{LENGTH_LABELS[entry.target_length] || entry.target_length || 'Mittel'}</p>
+                    </div>
+
+                    {/* Kategorie */}
+                    <div className="rounded-lg p-3" style={{ background: '#0f172a' }}>
+                      <p className="text-[10px] font-semibold uppercase mb-1" style={{ color: '#64748b' }}>Kategorie</p>
+                      {entry.blog_categories ? (
+                        <span className="text-sm" style={{ color: entry.blog_categories.color }}>{entry.blog_categories.name}</span>
+                      ) : (
+                        <span className="text-sm" style={{ color: '#475569' }}>Keine</span>
+                      )}
+                    </div>
+
+                    {/* Status Details */}
+                    <div className="rounded-lg p-3" style={{ background: '#0f172a' }}>
+                      <p className="text-[10px] font-semibold uppercase mb-1" style={{ color: '#64748b' }}>Status</p>
+                      <div className="flex flex-col gap-1">
+                        <span className="text-sm" style={{ color: st.color }}>{st.label}</span>
+                        {entry.generated_at && <span className="text-[10px]" style={{ color: '#475569' }}>Generiert: {new Date(entry.generated_at).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>}
+                        {postIsPublished && <span className="text-[10px]" style={{ color: '#22c55e' }}>Veröffentlicht</span>}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Generierter Artikel */}
+                  {entry.blog_posts && (
+                    <div className="mt-3 rounded-lg p-3 flex items-center justify-between" style={{ background: '#06b6d410', border: '1px solid #06b6d430' }}>
+                      <div>
+                        <p className="text-[10px] font-semibold uppercase" style={{ color: '#06b6d4' }}>Generierter Artikel</p>
+                        <p className="text-sm font-semibold" style={{ color: '#e2e8f0' }}>{entry.blog_posts.title}</p>
+                      </div>
+                      <Link href={`/admin/blog/artikel/${entry.blog_posts.id}`} className="px-3 py-1.5 rounded text-xs font-heading font-semibold" style={{ background: '#06b6d4', color: 'white' }}>
+                        Bearbeiten
+                      </Link>
+                    </div>
+                  )}
+
+                  {/* Datum/Uhrzeit + Aktionen */}
+                  <div className="flex items-center gap-2 mt-3 pt-3" style={{ borderTop: '1px solid #334155' }}>
+                    <input type="date" value={entry.scheduled_date} onClick={(e) => e.stopPropagation()} onChange={(e) => updateDate(entry.id, e.target.value)} className="px-2 py-1 rounded text-xs font-body" style={{ background: '#0f172a', border: '1px solid #334155', color: '#e2e8f0' }} />
+                    <input type="time" value={entry.scheduled_time} onClick={(e) => e.stopPropagation()} onChange={(e) => updateTime(entry.id, e.target.value)} className="px-2 py-1 rounded text-xs font-body" style={{ background: '#0f172a', border: '1px solid #334155', color: '#e2e8f0' }} />
+                    <button onClick={(e) => { e.stopPropagation(); deleteEntry(entry.id); }} className="px-2 py-1 rounded text-[11px] font-heading font-semibold ml-auto" style={{ background: '#ef444420', color: '#ef4444' }}>Loeschen</button>
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}
