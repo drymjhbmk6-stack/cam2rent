@@ -1,6 +1,6 @@
 /**
- * Server-seitige Daten fuer die Homepage.
- * Wird in app/page.tsx aufgerufen — kein Client-Fetch noetig.
+ * Server-seitige Daten für die Homepage.
+ * Wird in app/page.tsx aufgerufen — kein Client-Fetch nötig.
  */
 import { createServiceClient } from '@/lib/supabase';
 import { yearMonthKey, type SeasonalImage } from '@/lib/seasonal-themes';

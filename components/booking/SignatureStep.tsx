@@ -4,7 +4,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import SignatureCanvas from 'react-signature-canvas';
 import { BUSINESS } from '@/lib/business-config';
 
-// ─── Vertragstext (Plaintext fuer die UI-Anzeige) ────────────────────────────
+// ─── Vertragstext (Plaintext für die UI-Anzeige) ────────────────────────────
 
 function buildDisplayText(opts: {
   customerName: string;
@@ -32,8 +32,8 @@ ${opts.customerName}
 ${opts.customerEmail}
 
 \u00a7 1 \u2013 Mietgegenstand
-(1) Der Vermieter vermietet dem Mieter folgende(s) Geraet(e):
-${opts.productName}${opts.accessories.length > 0 ? `\nZubehoer: ${opts.accessories.join(', ')}` : ''}
+(1) Der Vermieter vermietet dem Mieter folgende(s) Gerät(e):
+${opts.productName}${opts.accessories.length > 0 ? `\nZubehör: ${opts.accessories.join(', ')}` : ''}
 (2) Der Mietgegenstand ist Eigentum des Vermieters.
 (3) Weitervermietung an Dritte ist untersagt.
 
@@ -165,7 +165,7 @@ export default function SignatureStep({
     }
   }, []);
 
-  // Pruefen ob Vertragstext kuerzer als Container ist (kein Scrollen noetig)
+  // Prüfen ob Vertragstext kürzer als Container ist (kein Scrollen nötig)
   useEffect(() => {
     const el = contractRef.current;
     if (!el) return;
@@ -178,11 +178,11 @@ export default function SignatureStep({
   const hasSignature = useTypedName ? typedName.trim().length >= 2 : hasDrawn;
   const isValid = hasSignature && agreedToTerms && scrolledToBottom;
 
-  // Fehlende Bedingungen fuer Tooltip
+  // Fehlende Bedingungen für Tooltip
   const missingItems: string[] = [];
   if (!scrolledToBottom) missingItems.push('Vertrag bis zum Ende lesen');
   if (!hasSignature) missingItems.push('Unterschreiben');
-  if (!agreedToTerms) missingItems.push('Checkbox bestaetigen');
+  if (!agreedToTerms) missingItems.push('Checkbox bestätigen');
 
   const handleClear = () => {
     sigPadRef.current?.clear();
@@ -216,7 +216,7 @@ export default function SignatureStep({
         Mietvertrag
       </h2>
       <p className="text-sm font-body text-brand-steel dark:text-gray-400 mb-6">
-        Bitte lies den Vertrag vollstaendig durch und unterschreibe ihn digital, um fortzufahren.
+        Bitte lies den Vertrag vollständig durch und unterschreibe ihn digital, um fortzufahren.
       </p>
 
       {/* ── Vertragstext (scrollbar) ── */}
@@ -265,7 +265,7 @@ export default function SignatureStep({
           /* Getippter Name */
           <div className="border border-brand-border dark:border-gray-700 rounded-lg bg-slate-50 dark:bg-gray-800 p-4">
             <label className="block text-xs font-body text-brand-muted mb-2">
-              Dein vollstaendiger Name
+              Dein vollständiger Name
             </label>
             <input
               type="text"
@@ -330,7 +330,7 @@ export default function SignatureStep({
           className="mt-0.5 accent-accent-blue flex-shrink-0"
         />
         <span className="text-sm font-body text-brand-steel dark:text-gray-300">
-          Ich habe den Mietvertrag vollstaendig gelesen und stimme allen Bedingungen zu.
+          Ich habe den Mietvertrag vollständig gelesen und stimme allen Bedingungen zu.
         </span>
       </label>
 

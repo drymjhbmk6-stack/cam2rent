@@ -42,7 +42,7 @@ export default function VerifizierungPage() {
     if (!file) return;
 
     if (file.size > 5 * 1024 * 1024) {
-      setError('Datei zu gross (max. 5 MB).');
+      setError('Datei zu groß (max. 5 MB).');
       return;
     }
 
@@ -59,7 +59,7 @@ export default function VerifizierungPage() {
 
   async function handleUpload() {
     if (!user || !frontFile || !backFile) {
-      setError('Bitte lade Vorder- und Rueckseite deines Ausweises hoch.');
+      setError('Bitte lade Vorder- und Rückseite deines Ausweises hoch.');
       return;
     }
 
@@ -115,11 +115,11 @@ export default function VerifizierungPage() {
               </svg>
             </div>
             <h1 className="font-heading font-bold text-xl text-brand-black dark:text-white mb-2">
-              Ausweis wird geprueft
+              Ausweis wird geprüft
             </h1>
             <p className="font-body text-sm text-brand-steel dark:text-gray-400 mb-6">
-              Dein Ausweis wurde hochgeladen und wird von uns geprueft. Das dauert in der Regel nur wenige Stunden.
-              Du erhaeltst eine Benachrichtigung sobald dein Konto freigeschaltet ist.
+              Dein Ausweis wurde hochgeladen und wird von uns geprüft. Das dauert in der Regel nur wenige Stunden.
+              Du erhältst eine Benachrichtigung sobald dein Konto freigeschaltet ist.
             </p>
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
               <Link href="/kameras" className="px-6 py-3 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold text-sm rounded-btn text-center">
@@ -168,7 +168,7 @@ export default function VerifizierungPage() {
                 Ausweis verifizieren
               </h1>
               <p className="font-body text-sm text-brand-steel dark:text-gray-400">
-                Fuer deine Sicherheit und die unserer Geraete benoetigen wir einmalig ein Foto deines Ausweises.
+                Für deine Sicherheit und die unserer Geräte benötigen wir einmalig ein Foto deines Ausweises.
                 Deine Daten werden vertraulich behandelt.
               </p>
             </div>
@@ -197,10 +197,10 @@ export default function VerifizierungPage() {
               </button>
             </div>
 
-            {/* Rueckseite */}
+            {/* Rückseite */}
             <div className="mb-6">
               <label className="block text-sm font-heading font-semibold text-brand-black dark:text-white mb-2">
-                Rueckseite
+                Rückseite
               </label>
               <input ref={backRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden"
                 onChange={(e) => handleFile('back', e)} />
@@ -209,7 +209,7 @@ export default function VerifizierungPage() {
                 className="w-full h-36 rounded-xl border-2 border-dashed border-brand-border dark:border-white/10 hover:border-accent-blue dark:hover:border-accent-blue transition-colors flex items-center justify-center overflow-hidden"
               >
                 {backPreview ? (
-                  <Image src={backPreview} alt="Rueckseite" width={320} height={200} className="object-contain max-h-full" />
+                  <Image src={backPreview} alt="Rückseite" width={320} height={200} className="object-contain max-h-full" />
                 ) : (
                   <div className="text-center">
                     <svg className="w-8 h-8 mx-auto mb-1 text-brand-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -244,12 +244,12 @@ export default function VerifizierungPage() {
 
             <p className="text-xs text-brand-muted dark:text-gray-500 text-center mt-4">
               Akzeptiert: JPG, PNG, WebP (max. 5 MB).
-              Deine Daten werden verschluesselt gespeichert und nur zur Verifizierung verwendet.
+              Deine Daten werden verschlüsselt gespeichert und nur zur Verifizierung verwendet.
             </p>
 
             <div className="mt-6 pt-4 border-t border-brand-border dark:border-white/10 text-center">
               <Link href="/kameras" className="text-sm font-body text-accent-blue hover:underline">
-                Spaeter verifizieren — erstmal Kameras ansehen
+                Später verifizieren — erstmal Kameras ansehen
               </Link>
             </div>
           </>

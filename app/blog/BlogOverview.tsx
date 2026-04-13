@@ -76,7 +76,7 @@ export default function BlogOverview() {
             Blog
           </h1>
           <p className="font-body text-white/90 text-lg max-w-xl mx-auto drop-shadow-md">
-            Tipps, Vergleiche und Neuigkeiten rund um Action-Kameras &mdash; von Experten fuer Abenteurer.
+            Tipps, Vergleiche und Neuigkeiten rund um Action-Kameras &mdash; von Experten für Abenteurer.
           </p>
           {seasonalImage?.source === 'unsplash' && seasonalImage.photographer && (
             <div className="absolute bottom-3 right-4 px-2 py-1 rounded bg-black/40 backdrop-blur-sm">
@@ -243,7 +243,7 @@ export default function BlogOverview() {
                 disabled={page === 1}
                 className="px-4 py-2 rounded-btn text-sm font-heading font-semibold transition-colors disabled:opacity-30 bg-brand-bg dark:bg-white/5 text-brand-black dark:text-white hover:bg-brand-border dark:hover:bg-white/10"
               >
-                Zureck
+                Zurück
               </button>
               {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
                 <button

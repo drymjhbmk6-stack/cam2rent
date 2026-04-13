@@ -300,7 +300,7 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
   const items: LineItem[] = [];
   let pos = 1;
 
-  // Kameras (koennen kommagetrennt sein)
+  // Kameras (können kommagetrennt sein)
   const cameras = data.productName.split(',').map((n) => n.trim());
   const rentalPerCamera = cameras.length > 1 ? data.priceRental / cameras.length : data.priceRental;
 
@@ -314,14 +314,14 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
     });
   }
 
-  // Zubehoer — einzeln auflisten
+  // Zubehör — einzeln auflisten
   if (data.accessories.length > 0) {
     for (const accId of data.accessories) {
       const name = accId.replace(/-[a-z0-9]{6,}$/, '').split('-').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
       items.push({
         pos: pos++,
         description: name,
-        subline: 'Zubehoer',
+        subline: 'Zubehör',
         qty: '1',
         total: data.priceAccessories > 0 && data.accessories.length > 0
           ? data.priceAccessories / data.accessories.length
@@ -346,7 +346,7 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
     items.push({
       pos: pos++,
       description: data.shippingMethod === 'express' ? 'Express-Versand' : 'Standard-Versand',
-      subline: 'Hin- und Ruecksendung',
+      subline: 'Hin- und Rücksendung',
       qty: '1',
       total: data.shippingPrice,
     });
@@ -388,9 +388,9 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
               </Text>
             </View>
 
-            {/* Rechts: Rechnungsempfaenger */}
+            {/* Rechts: Rechnungsempfänger */}
             <View style={s.addressBlock}>
-              <Text style={s.addressLabel}>Rechnungsempfaenger</Text>
+              <Text style={s.addressLabel}>Rechnungsempfänger</Text>
               <Text style={s.addressName}>{data.customerName || 'Kunde'}</Text>
               <Text style={s.addressLine}>
                 {data.customerAddress ? `${data.customerAddress}\n` : ''}
@@ -466,7 +466,7 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
 
           {data.deposit > 0 && (
             <Text style={{ fontSize: 8, color: C.grayText, marginTop: 6, textAlign: 'right', paddingRight: 12 }}>
-              Kaution: {fmt(data.deposit)} (wird nach Rueckgabe freigegeben)
+              Kaution: {fmt(data.deposit)} (wird nach Rückgabe freigegeben)
             </Text>
           )}
 
@@ -511,7 +511,7 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
                 <Text style={{ fontSize: 8, color: C.grayText, lineHeight: 1.5 }}>
                   Scanne mit deiner Banking-App.{'\n'}
                   IBAN, Betrag und Verwendungszweck{'\n'}
-                  werden automatisch ausgefuellt.
+                  werden automatisch ausgefüllt.
                 </Text>
               </View>
             </View>

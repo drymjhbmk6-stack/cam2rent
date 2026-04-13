@@ -205,7 +205,7 @@ export default function BetaFeedbackPage() {
               </div>
               <div className="flex items-center gap-3">
                 <span className="w-6 h-6 rounded-full bg-accent-blue text-white text-xs font-bold flex items-center justify-center flex-shrink-0">🎁</span>
-                <span><strong className="text-accent-blue">10% Gutschein</strong> als Dankeschoen</span>
+                <span><strong className="text-accent-blue">10% Gutschein</strong> als Dankeschön</span>
               </div>
             </div>
           </div>
@@ -241,7 +241,7 @@ export default function BetaFeedbackPage() {
             </div>
           )}
           <Link href="/" className="text-sm font-body text-accent-blue hover:underline">
-            Zurueck zur Startseite
+            Zurück zur Startseite
           </Link>
         </div>
       </div>
@@ -301,8 +301,8 @@ export default function BetaFeedbackPage() {
         {/* Gutschein (letzter Step) */}
         {isLastStep && (
           <div className="mt-6 bg-accent-blue/5 dark:bg-accent-blue/10 border border-accent-blue/20 rounded-card p-5">
-            <p className="font-heading font-bold text-sm text-accent-blue mb-1">🎁 Moechtest du einen 10% Gutschein?</p>
-            <p className="text-xs text-brand-muted mb-4">Als Dankeschoen fuer dein Feedback.</p>
+            <p className="font-heading font-bold text-sm text-accent-blue mb-1">🎁 Möchtest du einen 10% Gutschein?</p>
+            <p className="text-xs text-brand-muted mb-4">Als Dankeschön für dein Feedback.</p>
             <div className="flex gap-3 mb-4">
               <button type="button" onClick={() => setWantsGutschein(true)}
                 className={`px-4 py-2 rounded-btn text-sm font-heading font-semibold transition-all ${wantsGutschein ? 'bg-accent-blue/20 text-accent-blue border-2 border-accent-blue' : 'bg-brand-bg dark:bg-gray-800 text-brand-muted border border-brand-border dark:border-gray-700'}`}>
@@ -317,7 +317,7 @@ export default function BetaFeedbackPage() {
               <div className="space-y-3">
                 <input type="text" value={testerName} onChange={(e) => setTesterName(e.target.value)} placeholder="Dein Vorname"
                   className="w-full px-4 py-2.5 rounded-[10px] border border-brand-border dark:border-white/10 bg-white dark:bg-brand-black text-brand-black dark:text-white text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
-                <input type="email" value={testerEmail} onChange={(e) => setTesterEmail(e.target.value)} placeholder="Deine E-Mail (fuer den Gutschein)"
+                <input type="email" value={testerEmail} onChange={(e) => setTesterEmail(e.target.value)} placeholder="Deine E-Mail (für den Gutschein)"
                   className="w-full px-4 py-2.5 rounded-[10px] border border-brand-border dark:border-white/10 bg-white dark:bg-brand-black text-brand-black dark:text-white text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
               </div>
             )}
@@ -328,7 +328,7 @@ export default function BetaFeedbackPage() {
         <div className="flex justify-between mt-8 gap-3">
           {step > 0 ? (
             <button onClick={goBack} className="px-5 py-3 rounded-btn text-sm font-heading font-semibold text-brand-muted border border-brand-border dark:border-gray-700 hover:bg-brand-bg dark:hover:bg-gray-800 transition-colors">
-              ← Zurueck
+              ← Zurück
             </button>
           ) : <div />}
           {isLastStep ? (

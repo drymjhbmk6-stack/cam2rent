@@ -894,7 +894,7 @@ export async function sendReferralReward(data: ReferralRewardEmailData) {
           <p style="margin:0 0 20px;font-size:15px;color:#374151;">
             Hallo ${data.referrerName || 'dort'},<br><br>
             deine Empfehlung hat funktioniert! <strong>${data.referredName}</strong> hat gerade eine Buchung abgeschlossen.
-            Als Dankeschoen erhaeltst du einen <strong>${data.rewardValue} EUR Gutschein</strong>.
+            Als Dankeschön erhältst du einen <strong>${data.rewardValue} EUR Gutschein</strong>.
           </p>
           <table width="100%" cellpadding="0" cellspacing="0" style="background:#f0f9ff;border:2px solid #bae6fd;border-radius:10px;margin-bottom:24px;">
             <tr><td style="padding:20px 24px;text-align:center;">
@@ -904,7 +904,7 @@ export async function sendReferralReward(data: ReferralRewardEmailData) {
             </td></tr>
           </table>
           <p style="margin:0;font-size:14px;color:#6b7280;">
-            Gib den Code einfach beim naechsten Checkout ein. Der Gutschein ist einmalig einloesbar.
+            Gib den Code einfach beim nächsten Checkout ein. Der Gutschein ist einmalig einlösbar.
           </p>
         </td></tr>
         <tr><td style="background:#f5f5f0;border-radius:0 0 12px 12px;padding:20px 32px;text-align:center;">

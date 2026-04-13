@@ -42,7 +42,7 @@ export default function BlogArtikelPage() {
   useEffect(() => { loadPosts(); }, [loadPosts]);
 
   async function deletePost(id: string) {
-    if (!confirm('Artikel wirklich loeschen?')) return;
+    if (!confirm('Artikel wirklich löschen?')) return;
     await fetch(`/api/admin/blog/posts/${id}`, { method: 'DELETE' });
     loadPosts();
   }
@@ -152,7 +152,7 @@ export default function BlogArtikelPage() {
                       ? { background: '#f59e0b20', color: '#f59e0b' }
                       : { background: '#22c55e20', color: '#22c55e' }}
                   >
-                    {post.status === 'published' ? 'Zurueckziehen' : 'Veroeffentlichen'}
+                    {post.status === 'published' ? 'Zurückziehen' : 'Veröffentlichen'}
                   </button>
                   <Link
                     href={`/admin/blog/artikel/${post.id}`}
@@ -166,7 +166,7 @@ export default function BlogArtikelPage() {
                     className="px-3 py-1.5 rounded text-xs font-heading font-semibold"
                     style={{ background: '#ef444420', color: '#ef4444' }}
                   >
-                    Loeschen
+                    Löschen
                   </button>
                 </div>
               </div>

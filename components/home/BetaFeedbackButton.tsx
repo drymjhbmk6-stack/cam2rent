@@ -4,7 +4,7 @@ import { useState } from 'react';
 
 /**
  * Schwebender Beta-Feedback Button — immer sichtbar, unabhaengig vom Banner.
- * Kann ueber admin_settings (show_feedback_button) gesteuert werden.
+ * Kann über admin_settings (show_feedback_button) gesteuert werden.
  */
 export default function BetaFeedbackButton() {
   const [dismissed, setDismissed] = useState(false);

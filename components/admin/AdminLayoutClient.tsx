@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import NotificationDropdown from '@/components/admin/NotificationDropdown';
 import { useAutoLogout } from '@/hooks/useAutoLogout';
 
-// 30 Minuten Inaktivitaet fuer Admin
+// 30 Minuten Inaktivität für Admin
 const ADMIN_TIMEOUT_MS = 30 * 60 * 1000;
 
 type NavItem = { href: string; label: string; exact?: boolean; icon: React.ReactNode };
@@ -48,12 +48,12 @@ const CATALOG_ITEMS: NavItem[] = [
   },
   {
     href: '/admin/zubehoer',
-    label: 'Zubehoer',
+    label: 'Zubehör',
     icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 00-1-1H4a2 2 0 110-4h1a1 1 0 001-1V7a1 1 0 011-1h3a1 1 0 001-1V4z" /></svg>,
   },
   {
     href: '/admin/verfuegbarkeit',
-    label: 'Verfuegbarkeit',
+    label: 'Verfügbarkeit',
     icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 16l2 2 4-4" /></svg>,
   },
 ];
@@ -76,7 +76,7 @@ const CUSTOMERS_ITEMS: NavItem[] = [
   },
   {
     href: '/admin/schaeden',
-    label: 'Schaeden',
+    label: 'Schäden',
     icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" /></svg>,
   },
 ];
@@ -283,7 +283,7 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
 
   const isLoginOrBlog = pathname === '/admin/login' || pathname.startsWith('/admin/blog');
 
-  // Auto-Logout nach Inaktivitaet (nicht auf Login-Seite)
+  // Auto-Logout nach Inaktivität (nicht auf Login-Seite)
   useAutoLogout({
     timeoutMs: ADMIN_TIMEOUT_MS,
     onLogout: handleLogout,
@@ -348,7 +348,7 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
             onClick={closeSidebar}
             className="p-1.5 rounded-lg transition-colors"
             style={{ color: '#475569' }}
-            aria-label="Menu schliessen"
+            aria-label="Menü schließen"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

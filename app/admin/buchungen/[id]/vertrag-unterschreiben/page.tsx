@@ -100,7 +100,7 @@ export default function VertragUnterschreibenPage() {
           Vertrag unterschrieben!
         </h1>
         <p style={{ fontSize: 14, color: '#94a3b8', marginBottom: 24 }}>
-          Der Mietvertrag fuer Buchung {bookingId} wurde erfolgreich signiert.
+          Der Mietvertrag für Buchung {bookingId} wurde erfolgreich signiert.
           {booking.customer_email && ' Eine Kopie wird per E-Mail versendet.'}
         </p>
         <button
@@ -110,7 +110,7 @@ export default function VertragUnterschreibenPage() {
             background: '#06b6d4', color: 'white', border: 'none', cursor: 'pointer',
           }}
         >
-          Zurueck zur Buchung
+          Zurück zur Buchung
         </button>
       </div>
     );
@@ -135,7 +135,7 @@ export default function VertragUnterschreibenPage() {
         <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
         </svg>
-        Zurueck
+        Zurück
       </button>
 
       <h1 style={{ fontSize: 20, fontWeight: 800, color: '#e2e8f0', marginBottom: 4 }}>

@@ -208,25 +208,25 @@ export default function DatenschutzPage() {
           </p>
 
           <h3 className="font-heading font-semibold text-base text-brand-black dark:text-white mt-6 mb-3">
-            Ausweisdokumente zur Identitaetspruefung
+            Ausweisdokumente zur Identitätsprüfung
           </h3>
           <p className="font-body text-brand-steel dark:text-gray-300">
-            Zur Verifizierung deiner Identitaet bitten wir dich, ein Foto der Vorder- und Rueckseite deines
-            Personalausweises hochzuladen. Die Bilder werden verschluesselt in unserem Speichersystem (Supabase Storage,
-            EU-Server) abgelegt. Rechtsgrundlage ist Art. 6 Abs. 1 lit. b DSGVO (vorvertragliche Massnahmen) und
+            Zur Verifizierung deiner Identität bitten wir dich, ein Foto der Vorder- und Rückseite deines
+            Personalausweises hochzuladen. Die Bilder werden verschlüsselt in unserem Speichersystem (Supabase Storage,
+            EU-Server) abgelegt. Rechtsgrundlage ist Art. 6 Abs. 1 lit. b DSGVO (vorvertragliche Maßnahmen) und
             Art. 6 Abs. 1 lit. f DSGVO (berechtigtes Interesse an der Verhinderung von Missbrauch).
-            Die Ausweisbilder werden nach erfolgreicher Verifizierung und Ablauf der Mietdauer, spaetestens jedoch
-            nach 90 Tagen automatisch geloescht. Bei Ablehnung werden die Bilder sofort geloescht.
+            Die Ausweisbilder werden nach erfolgreicher Verifizierung und Ablauf der Mietdauer, spätestens jedoch
+            nach 90 Tagen automatisch gelöscht. Bei Ablehnung werden die Bilder sofort gelöscht.
           </p>
 
           <h3 className="font-heading font-semibold text-base text-brand-black dark:text-white mt-6 mb-3">
             Schadensdokumentation (Fotos)
           </h3>
           <p className="font-body text-brand-steel dark:text-gray-300">
-            Im Falle eines Schadens an gemieteter Ausruestung koennen Fotos zur Dokumentation hochgeladen werden.
+            Im Falle eines Schadens an gemieteter Ausrüstung können Fotos zur Dokumentation hochgeladen werden.
             Diese werden in Supabase Storage (EU-Server) gespeichert. Rechtsgrundlage ist Art. 6 Abs. 1 lit. b DSGVO
-            (Vertragserfuellung) und Art. 6 Abs. 1 lit. f DSGVO (berechtigtes Interesse an der Durchsetzung
-            vertraglicher Ansprueche). Schadensfotos werden fuer die Dauer der Schadensabwicklung gespeichert,
+            (Vertragserfüllung) und Art. 6 Abs. 1 lit. f DSGVO (berechtigtes Interesse an der Durchsetzung
+            vertraglicher Ansprüche). Schadensfotos werden für die Dauer der Schadensabwicklung gespeichert,
             maximal jedoch 2 Jahre nach Abschluss des Vorgangs.
           </p>
         </section>

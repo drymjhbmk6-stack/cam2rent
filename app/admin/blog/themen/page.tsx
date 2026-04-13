@@ -78,7 +78,7 @@ export default function BlogThemenPage() {
   async function addCategory() {
     if (!catName.trim()) return;
     const res = await fetch('/api/admin/blog/categories', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: catName.trim(), slug: catSlug.trim() || toSlug(catName), description: catDesc, color: catColor }) });
-    if (res.ok) { setCatName(''); setCatSlug(''); setCatDesc(''); setCatColor('#06b6d4'); loadAll(); flash('Kategorie hinzugefuegt!'); } else { const d = await res.json(); flash(d.error || 'Fehler'); }
+    if (res.ok) { setCatName(''); setCatSlug(''); setCatDesc(''); setCatColor('#06b6d4'); loadAll(); flash('Kategorie hinzugefügt!'); } else { const d = await res.json(); flash(d.error || 'Fehler'); }
   }
   async function deleteCategory(id: string) { await fetch(`/api/admin/blog/categories/${id}`, { method: 'DELETE' }); loadAll(); }
 
@@ -86,7 +86,7 @@ export default function BlogThemenPage() {
   async function addTopic() {
     if (!topicText.trim()) return;
     const res = await fetch('/api/admin/blog/auto-topics', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ topic: topicText.trim(), keywords: topicKeywords.split(',').map((k) => k.trim()).filter(Boolean), category_id: topicCatId || null, tone: topicTone, target_length: topicLength }) });
-    if (res.ok) { setTopicText(''); setTopicKeywords(''); loadAll(); flash('Thema hinzugefuegt!'); } else { const d = await res.json(); flash(d.error || 'Fehler'); }
+    if (res.ok) { setTopicText(''); setTopicKeywords(''); loadAll(); flash('Thema hinzugefügt!'); } else { const d = await res.json(); flash(d.error || 'Fehler'); }
   }
   async function deleteTopic(id: string) { await fetch(`/api/admin/blog/auto-topics?id=${id}`, { method: 'DELETE' }); loadAll(); }
 
@@ -105,7 +105,7 @@ export default function BlogThemenPage() {
     if (res.ok) { setSeriesTitle(''); setSeriesDesc(''); setSeriesParts([{ topic: '', prompt: '', keywords: '' }, { topic: '', prompt: '', keywords: '' }, { topic: '', prompt: '', keywords: '' }]); loadAll(); flash('Serie erstellt!'); }
     else { const d = await res.json(); flash(d.error || 'Fehler'); }
   }
-  async function deleteSeries(id: string) { if (!confirm('Serie wirklich loeschen?')) return; await fetch(`/api/admin/blog/series/${id}`, { method: 'DELETE' }); loadAll(); }
+  async function deleteSeries(id: string) { if (!confirm('Serie wirklich löschen?')) return; await fetch(`/api/admin/blog/series/${id}`, { method: 'DELETE' }); loadAll(); }
 
   function updateSeriesPart(i: number, key: 'topic' | 'prompt' | 'keywords', value: string) {
     setSeriesParts((prev) => prev.map((p, j) => j === i ? { ...p, [key]: value } : p));
@@ -164,13 +164,13 @@ export default function BlogThemenPage() {
                 </div>
               </div>
             </div>
-            <button onClick={addCategory} style={btnStyle} className="font-heading">Hinzufuegen</button>
+            <button onClick={addCategory} style={btnStyle} className="font-heading">Hinzufügen</button>
           </div>
           <div className="space-y-2">
             {categories.map((cat) => (
               <div key={cat.id} className="flex items-center justify-between px-4 py-3 rounded-lg" style={{ background: '#1e293b' }}>
                 <div className="flex items-center gap-3"><span className="w-3 h-3 rounded-full" style={{ background: cat.color }} /><span className="font-heading font-semibold text-sm" style={{ color: '#e2e8f0' }}>{cat.name}</span><span className="text-xs" style={{ color: '#475569' }}>/{cat.slug}</span></div>
-                <button onClick={() => deleteCategory(cat.id)} style={btnDanger} className="font-heading">Loeschen</button>
+                <button onClick={() => deleteCategory(cat.id)} style={btnDanger} className="font-heading">Löschen</button>
               </div>
             ))}
             {categories.length === 0 && <p className="text-sm text-center py-8" style={{ color: '#475569' }}>Noch keine Kategorien.</p>}
@@ -186,7 +186,7 @@ export default function BlogThemenPage() {
             <div className="space-y-3">
               <div>
                 <label style={labelStyle} className="block">Thema / Artikelidee</label>
-                <input style={inputStyle} value={topicText} onChange={(e) => setTopicText(e.target.value)} placeholder="z.B. Die 5 besten Action-Cams fuer Unterwasser 2026" />
+                <input style={inputStyle} value={topicText} onChange={(e) => setTopicText(e.target.value)} placeholder="z.B. Die 5 besten Action-Cams für Unterwasser 2026" />
               </div>
               <div>
                 <label style={labelStyle} className="block">Keywords (kommagetrennt)</label>
@@ -207,14 +207,14 @@ export default function BlogThemenPage() {
                   </select>
                 </div>
                 <div>
-                  <label style={labelStyle} className="block">Laenge</label>
+                  <label style={labelStyle} className="block">Länge</label>
                   <select style={inputStyle} value={topicLength} onChange={(e) => setTopicLength(e.target.value)}>
                     <option value="kurz">Kurz</option><option value="mittel">Mittel</option><option value="lang">Lang</option>
                   </select>
                 </div>
               </div>
             </div>
-            <button onClick={addTopic} style={btnStyle} className="font-heading mt-3">Hinzufuegen</button>
+            <button onClick={addTopic} style={btnStyle} className="font-heading mt-3">Hinzufügen</button>
           </div>
           <div className="space-y-2">
             {topics.map((t) => (
@@ -225,7 +225,7 @@ export default function BlogThemenPage() {
                     <span className="px-2 py-0.5 rounded text-xs font-heading shrink-0" style={t.used ? { background: '#22c55e20', color: '#22c55e' } : { background: '#06b6d420', color: '#06b6d4' }}>{t.used ? 'Verwendet' : 'Offen'}</span>
                   </div>
                 </div>
-                <button onClick={() => deleteTopic(t.id)} style={btnDanger} className="font-heading ml-3 shrink-0">Loeschen</button>
+                <button onClick={() => deleteTopic(t.id)} style={btnDanger} className="font-heading ml-3 shrink-0">Löschen</button>
               </div>
             ))}
             {topics.length === 0 && <p className="text-sm text-center py-8" style={{ color: '#475569' }}>Noch keine Einzelthemen.</p>}
@@ -238,7 +238,7 @@ export default function BlogThemenPage() {
         <>
           <div style={sectionStyle}>
             <h3 className="font-heading font-semibold text-sm mb-1" style={{ color: '#e2e8f0' }}>Neue Artikelserie</h3>
-            <p className="text-xs mb-4" style={{ color: '#475569' }}>Eine Serie besteht aus mehreren zusammenhaengenden Artikeln, die nacheinander generiert werden.</p>
+            <p className="text-xs mb-4" style={{ color: '#475569' }}>Eine Serie besteht aus mehreren zusammenhängenden Artikeln, die nacheinander generiert werden.</p>
             <div className="space-y-3">
               <div>
                 <label style={labelStyle} className="block">Serientitel</label>
@@ -263,7 +263,7 @@ export default function BlogThemenPage() {
                   </select>
                 </div>
                 <div>
-                  <label style={labelStyle} className="block">Laenge</label>
+                  <label style={labelStyle} className="block">Länge</label>
                   <select style={inputStyle} value={seriesLength} onChange={(e) => setSeriesLength(e.target.value)}>
                     <option value="kurz">Kurz</option><option value="mittel">Mittel</option><option value="lang">Lang</option>
                   </select>
@@ -289,12 +289,12 @@ export default function BlogThemenPage() {
                         )}
                       </div>
                       <textarea style={{ ...inputStyle, minHeight: 60, fontSize: 13, borderColor: '#f59e0b40' }} value={part.prompt} onChange={(e) => updateSeriesPart(i, 'prompt', e.target.value)}
-                        placeholder={`Ausfuehrlicher Prompt fuer Teil ${i + 1}: Beschreibe genau was der Artikel enthalten soll — Aufbau, Zielgruppe, Vergleiche, Tipps...`} />
+                        placeholder={`Ausführlicher Prompt für Teil ${i + 1}: Beschreibe genau was der Artikel enthalten soll — Aufbau, Zielgruppe, Vergleiche, Tipps...`} />
                     </div>
                   ))}
                 </div>
                 <button onClick={addSeriesPartRow} className="mt-2 text-xs font-heading font-semibold px-3 py-1.5 rounded" style={{ color: '#06b6d4', background: '#06b6d410' }}>
-                  + Weiteren Teil hinzufuegen
+                  + Weiteren Teil hinzufügen
                 </button>
               </div>
             </div>
@@ -337,7 +337,7 @@ export default function BlogThemenPage() {
                         ))}
                       </div>
                     </div>
-                    <button onClick={() => deleteSeries(s.id)} style={btnDanger} className="font-heading shrink-0">Loeschen</button>
+                    <button onClick={() => deleteSeries(s.id)} style={btnDanger} className="font-heading shrink-0">Löschen</button>
                   </div>
                 </div>
               );

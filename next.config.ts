@@ -6,7 +6,7 @@ const supabaseHostname = supabaseUrl ? new URL(supabaseUrl).hostname : '';
 const nextConfig: NextConfig = {
   output: 'standalone',
   compress: true,
-  // Grosse Pakete automatisch tree-shaken
+  // Große Pakete automatisch tree-shaken
   experimental: {
     optimizePackageImports: ['@supabase/supabase-js', 'date-fns', 'lucide-react'],
   },
@@ -35,7 +35,7 @@ const nextConfig: NextConfig = {
     ],
   },
   // ESLint und TypeScript beim Build skippen (spart RAM auf dem Server)
-  // Wird lokal vor dem Push geprueft
+  // Wird lokal vor dem Push geprüft
   eslint: {
     ignoreDuringBuilds: true,
   },

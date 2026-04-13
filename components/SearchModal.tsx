@@ -162,7 +162,7 @@ export default function SearchModal({
               value={query}
               onChange={(e) => handleChange(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Kamera, Zubehoer oder Set suchen..."
+              placeholder="Kamera, Zubehör oder Set suchen..."
               className="flex-1 text-sm font-body text-brand-black dark:text-gray-100 placeholder:text-brand-muted dark:placeholder:text-gray-500 outline-none bg-transparent"
               autoComplete="off"
             />
@@ -182,7 +182,7 @@ export default function SearchModal({
             {noResults && !loading && (
               <div className="px-4 py-8 text-center">
                 <p className="text-sm font-body text-brand-steel dark:text-gray-400">
-                  Keine Ergebnisse fuer &quot;{query}&quot;
+                  Keine Ergebnisse für &quot;{query}&quot;
                 </p>
                 <p className="text-xs font-body text-brand-muted dark:text-gray-500 mt-1">
                   Versuch es mit einem anderen Suchbegriff
@@ -239,7 +239,7 @@ export default function SearchModal({
                               {k.brand} &middot; ab {k.pricePerDay.toFixed(2).replace('.', ',')} &euro;/Tag
                               {!k.available && (
                                 <span className="ml-1.5 text-status-error">
-                                  &middot; nicht verfuegbar
+                                  &middot; nicht verfügbar
                                 </span>
                               )}
                             </p>
@@ -263,11 +263,11 @@ export default function SearchModal({
                   </div>
                 )}
 
-                {/* Zubehoer */}
+                {/* Zubehör */}
                 {results.zubehoer.length > 0 && (
                   <div>
                     <p className="px-4 py-1.5 text-[10px] font-heading font-semibold uppercase tracking-wider text-brand-muted mt-1">
-                      Zubehoer
+                      Zubehör
                     </p>
                     {results.zubehoer.map((z) => {
                       const idx = flatIndex++;

@@ -30,22 +30,22 @@ export default function ProductAccessorySets({ productId }: { productId: string 
       fetch('/api/sets?available=true').then((r) => r.json()),
     ])
       .then(([availData, accData, setData]) => {
-        // Kompatibilitaet aus availability API
+        // Kompatibilität aus availability API
         const compatIds = new Set(
           (availData as { id: string; compatible: boolean }[])
             .filter((a) => a.compatible)
             .map((a) => a.id)
         );
-        // Nur kompatible + nicht-interne Zubehoer
+        // Nur kompatible + nicht-interne Zubehör
         const filtered = (Array.isArray(accData) ? accData : []).filter(
           (a: AccItem) => a.available && compatIds.has(a.id)
         );
         setAccessories(filtered);
         if (setData.sets) {
-          // Sets nach Kamera-Kompatibilitaet filtern
+          // Sets nach Kamera-Kompatibilität filtern
           const filteredSets = (setData.sets as (RentalSet & { product_ids?: string[] })[]).filter((s) => {
             if (s.product_ids?.length) return s.product_ids.includes(productId);
-            return true; // Ohne product_ids = fuer alle Kameras
+            return true; // Ohne product_ids = für alle Kameras
           });
           setSets(filteredSets);
         }
@@ -73,14 +73,14 @@ export default function ProductAccessorySets({ productId }: { productId: string 
   return (
     <div>
       <h2 className="font-heading font-bold text-xl sm:text-2xl text-brand-black dark:text-gray-100 mb-6">
-        Passendes Zubehoer & Sets
+        Passendes Zubehör & Sets
       </h2>
 
       <div className="grid md:grid-cols-2 gap-6">
-        {/* Links: Zubehoer — nach Kategorie gruppiert */}
+        {/* Links: Zubehör — nach Kategorie gruppiert */}
         <div>
           <h3 className="font-heading font-semibold text-sm text-brand-muted dark:text-gray-500 uppercase tracking-wider mb-3">
-            Zubehoer
+            Zubehör
           </h3>
 
           {/* Upgrade-Gruppen */}
@@ -104,7 +104,7 @@ export default function ProductAccessorySets({ productId }: { productId: string 
             );
           })}
 
-          {/* Normales Zubehoer nach Kategorie */}
+          {/* Normales Zubehör nach Kategorie */}
           {categories.map(([cat, items]) => (
             <div key={cat} className="mb-3">
               <p className="text-[10px] font-heading font-bold text-brand-muted uppercase tracking-wider mb-1">{cat}</p>
@@ -122,7 +122,7 @@ export default function ProductAccessorySets({ productId }: { productId: string 
           ))}
 
           {accessories.length === 0 && !loading && (
-            <p className="text-xs text-brand-muted dark:text-gray-500 py-2">Kein Zubehoer verfuegbar</p>
+            <p className="text-xs text-brand-muted dark:text-gray-500 py-2">Kein Zubehör verfügbar</p>
           )}
         </div>
 
@@ -170,14 +170,14 @@ export default function ProductAccessorySets({ productId }: { productId: string 
                           ))}
                         </ul>
                       ) : (
-                        <p className="text-xs text-brand-muted dark:text-gray-500">Keine Details verfuegbar</p>
+                        <p className="text-xs text-brand-muted dark:text-gray-500">Keine Details verfügbar</p>
                       )}
                     </div>
                   )}
                 </div>
               ))}
               {sets.length === 0 && (
-                <p className="text-xs text-brand-muted dark:text-gray-500 py-2">Keine Sets verfuegbar</p>
+                <p className="text-xs text-brand-muted dark:text-gray-500 py-2">Keine Sets verfügbar</p>
               )}
             </div>
           )}
@@ -192,7 +192,7 @@ export default function ProductAccessorySets({ productId }: { productId: string 
               Eigenes Set zusammenstellen
             </h3>
             <p className="text-xs font-body text-brand-steel dark:text-gray-400">
-              Kombiniere Kamera und Zubehoer frei. Dein Set wird im Kundenkonto gespeichert.
+              Kombiniere Kamera und Zubehör frei. Dein Set wird im Kundenkonto gespeichert.
             </p>
           </div>
           <Link

@@ -26,18 +26,18 @@ export default function WartungPage() {
         </div>
 
         <h1 className="font-heading font-bold text-2xl text-brand-black dark:text-white mb-3">
-          Wir sind gleich zurueck!
+          Wir sind gleich zurück!
         </h1>
 
         <p className="font-body text-brand-text dark:text-gray-300 mb-6 leading-relaxed">
-          cam2rent wird gerade aktualisiert, damit alles noch besser laeuft.
+          cam2rent wird gerade aktualisiert, damit alles noch besser läuft.
           Normalerweise dauert das nur wenige Minuten.
         </p>
 
         <div className="inline-flex items-center gap-2 px-4 py-2.5 bg-brand-bg rounded-btn border border-brand-border">
           <div className="w-2 h-2 rounded-full bg-accent-amber animate-pulse-dot" />
           <span className="text-sm font-body text-brand-text dark:text-gray-300">
-            Wartung laeuft...
+            Wartung läuft...
           </span>
         </div>
 

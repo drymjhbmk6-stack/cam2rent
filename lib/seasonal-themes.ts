@@ -1,6 +1,6 @@
 /**
  * Saisonale Bilder — Themen-Konfiguration
- * Definiert Zonen (Seitenbereiche) und monatliche Themen fuer Action-Cam Verleih.
+ * Definiert Zonen (Seitenbereiche) und monatliche Themen für Action-Cam Verleih.
  */
 
 export const SEASONAL_ZONES = [
@@ -29,7 +29,7 @@ export interface SeasonalImagesData {
 export const MONTH_NAMES: Record<number, string> = {
   1: 'Januar',
   2: 'Februar',
-  3: 'Maerz',
+  3: 'März',
   4: 'April',
   5: 'Mai',
   6: 'Juni',
@@ -58,61 +58,61 @@ export const MONTH_THEMES: Record<number, MonthTheme> = {
     name: 'Februar',
     unsplashQuery: 'snowboarding action camera winter adventure',
     aiPrompt:
-      'Snowboarder springt ueber eine Kante mit Blick auf verschneite Berglandschaft, Action-Cam befestigt am Helm, dynamische Bewegung, klarer Himmel',
+      'Snowboarder springt über eine Kante mit Blick auf verschneite Berglandschaft, Action-Cam befestigt am Helm, dynamische Bewegung, klarer Himmel',
   },
   3: {
-    name: 'Maerz',
+    name: 'März',
     unsplashQuery: 'spring outdoor adventure hiking action camera',
     aiPrompt:
-      'Fruehlingswanderung durch blühende Landschaft, Person mit Action-Cam am Rucksack, erste Sonnenstrahlen, gruene Wiesen und Berge im Hintergrund',
+      'Frühlingswanderung durch blühende Landschaft, Person mit Action-Cam am Rucksack, erste Sonnenstrahlen, grüne Wiesen und Berge im Hintergrund',
   },
   4: {
     name: 'April',
     unsplashQuery: 'mountain biking spring trail action camera',
     aiPrompt:
-      'Mountainbiker auf einem Fruehlingsweg durch den Wald, Action-Cam am Lenker befestigt, Kirschblueten am Wegesrand, dynamische Sportaufnahme',
+      'Mountainbiker auf einem Frühlingsweg durch den Wald, Action-Cam am Lenker befestigt, Kirschblüten am Wegesrand, dynamische Sportaufnahme',
   },
   5: {
     name: 'Mai',
     unsplashQuery: 'outdoor cycling adventure action camera spring',
     aiPrompt:
-      'Radfahrer auf einer kurvigen Strasse durch bluehende Fruehsommerlandschaft, Action-Cam-Aufnahme, warmes Sonnenlicht, weitlaeufige gruene Huegel',
+      'Radfahrer auf einer kurvigen Strasse durch blühende Frühsommerlandschaft, Action-Cam-Aufnahme, warmes Sonnenlicht, weitläufige grüne Hügel',
   },
   6: {
     name: 'Juni',
     unsplashQuery: 'surfing summer water sport action camera',
     aiPrompt:
-      'Surfer reitet eine Welle bei Sonnenuntergang, Action-Cam-Perspektive, tuerkisblaues Wasser, Sommeratmosphaere, professionelle Sportfotografie',
+      'Surfer reitet eine Welle bei Sonnenuntergang, Action-Cam-Perspektive, türkisblaues Wasser, Sommeratmosphäre, professionelle Sportfotografie',
   },
   7: {
     name: 'Juli',
     unsplashQuery: 'diving underwater action camera summer ocean',
     aiPrompt:
-      'Taucher erkundet buntes Korallenriff mit Action-Cam, kristallklares Wasser, tropische Fische, Sommersonne scheint durch die Wasseroberflaeche',
+      'Taucher erkundet buntes Korallenriff mit Action-Cam, kristallklares Wasser, tropische Fische, Sommersonne scheint durch die Wasseroberfläche',
   },
   8: {
     name: 'August',
     unsplashQuery: 'summer adventure travel action camera beach',
     aiPrompt:
-      'Abenteuerurlaub am Strand, Person springt von einer Klippe ins tuerkisblaue Meer, Action-Cam-Aufnahme, Hochsommer, Palmen im Hintergrund',
+      'Abenteuerurlaub am Strand, Person springt von einer Klippe ins türkisblaue Meer, Action-Cam-Aufnahme, Hochsommer, Palmen im Hintergrund',
   },
   9: {
     name: 'September',
     unsplashQuery: 'autumn hiking adventure action camera nature',
     aiPrompt:
-      'Wanderer auf einem Berggipfel im fruehen Herbst, Action-Cam befestigt, goldene Herbstfarben im Tal, Nebelschwaden, warmes Licht',
+      'Wanderer auf einem Berggipfel im frühen Herbst, Action-Cam befestigt, goldene Herbstfarben im Tal, Nebelschwaden, warmes Licht',
   },
   10: {
     name: 'Oktober',
     unsplashQuery: 'autumn mountain biking trail fall colors',
     aiPrompt:
-      'Mountainbiker auf einem Waldweg mit buntem Herbstlaub, Action-Cam am Helm, orangefarbene und rote Blaetter, atmosphaerische Herbststimmung',
+      'Mountainbiker auf einem Waldweg mit buntem Herbstlaub, Action-Cam am Helm, orangefarbene und rote Blätter, atmosphärische Herbststimmung',
   },
   11: {
     name: 'November',
     unsplashQuery: 'indoor sport climbing action camera adventure',
     aiPrompt:
-      'Kletterer an einer beeindruckenden Felswand, Nebel und Herbststimmung, Action-Cam-Perspektive, dramatische Beleuchtung, Abenteuer-Atmosphaere',
+      'Kletterer an einer beeindruckenden Felswand, Nebel und Herbststimmung, Action-Cam-Perspektive, dramatische Beleuchtung, Abenteuer-Atmosphäre',
   },
   12: {
     name: 'Dezember',
@@ -122,7 +122,7 @@ export const MONTH_THEMES: Record<number, MonthTheme> = {
   },
 };
 
-/** Gibt zurueck ob im aktuellen Monat das Bild links (true) oder rechts (false) angezeigt wird */
+/** Gibt zurück ob im aktuellen Monat das Bild links (true) oder rechts (false) angezeigt wird */
 export function isImageLeftMonth(month: number): boolean {
   return month % 2 === 1; // Ungerade Monate: Bild links
 }
@@ -132,7 +132,7 @@ export function yearMonthKey(year: number, month: number): string {
   return `${year}-${String(month).padStart(2, '0')}`;
 }
 
-/** Gibt aktuellen und naechsten Monat zurueck */
+/** Gibt aktuellen und nächsten Monat zurück */
 export function getCurrentAndNextMonth(): {
   current: { year: number; month: number; key: string };
   next: { year: number; month: number; key: string };

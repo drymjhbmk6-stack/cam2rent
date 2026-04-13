@@ -38,7 +38,7 @@ export default function AppInstallBanner() {
   const [installed, setInstalled] = useState(false);
 
   useEffect(() => {
-    // Pruefen ob bereits als PWA installiert
+    // Prüfen ob bereits als PWA installiert
     const standalone = window.matchMedia('(display-mode: standalone)').matches
       || ('standalone' in window.navigator && (window.navigator as unknown as { standalone: boolean }).standalone);
     setIsStandalone(!!standalone);
@@ -93,11 +93,11 @@ export default function AppInstallBanner() {
 
               {isIOS ? (
                 <p className="font-body text-white/70 text-sm sm:text-base max-w-lg">
-                  Tippe auf <ShareIcon /> <strong className="text-white">Teilen</strong> und dann auf <strong className="text-white">&quot;Zum Home-Bildschirm&quot;</strong> — fuer schnellen Zugriff wie eine echte App.
+                  Tippe auf <ShareIcon /> <strong className="text-white">Teilen</strong> und dann auf <strong className="text-white">&quot;Zum Home-Bildschirm&quot;</strong> — für schnellen Zugriff wie eine echte App.
                 </p>
               ) : (
                 <p className="font-body text-white/70 text-sm sm:text-base max-w-lg">
-                  Installiere cam2rent auf deinem Handy — fuer schnellen Zugriff, Offline-Modus und eine App-aehnliche Erfahrung.
+                  Installiere cam2rent auf deinem Handy — für schnellen Zugriff, Offline-Modus und eine App-ähnliche Erfahrung.
                 </p>
               )}
             </div>

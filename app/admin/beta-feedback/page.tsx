@@ -83,7 +83,7 @@ export default function BetaFeedbackAdmin() {
         <div className="text-center py-16 text-slate-500">Noch kein Feedback erhalten.</div>
       ) : (
         <>
-          {/* Uebersicht */}
+          {/* Übersicht */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
             <div className="rounded-xl p-4" style={{ background: '#111827', border: '1px solid #1e293b' }}>
               <p className="text-xs text-slate-400 font-heading uppercase tracking-wider mb-1">Feedbacks</p>
@@ -94,7 +94,7 @@ export default function BetaFeedbackAdmin() {
               <p className={`text-2xl font-heading font-bold ${nps.score >= 50 ? 'text-green-400' : nps.score >= 0 ? 'text-amber-400' : 'text-red-400'}`}>{nps.score}</p>
             </div>
             <div className="rounded-xl p-4" style={{ background: '#111827', border: '1px solid #1e293b' }}>
-              <p className="text-xs text-slate-400 font-heading uppercase tracking-wider mb-1">Gutschein gewuenscht</p>
+              <p className="text-xs text-slate-400 font-heading uppercase tracking-wider mb-1">Gutschein gewünscht</p>
               <p className="text-2xl font-heading font-bold text-cyan-400">{feedbacks.filter((f) => f.wants_gutschein).length}</p>
             </div>
             <div className="rounded-xl p-4" style={{ background: '#111827', border: '1px solid #1e293b' }}>
@@ -124,7 +124,7 @@ export default function BetaFeedbackAdmin() {
             </div>
           </div>
 
-          {/* NPS Aufschluesselung */}
+          {/* NPS Aufschlüsselung */}
           <div className="rounded-xl overflow-hidden mb-8" style={{ background: '#111827', border: '1px solid #1e293b' }}>
             <div className="px-5 py-3" style={{ borderBottom: '1px solid #1e293b' }}>
               <h2 className="font-heading font-bold text-sm text-white">NPS — Net Promoter Score</h2>
@@ -150,7 +150,7 @@ export default function BetaFeedbackAdmin() {
             {[
               { id: 'q_first_feeling', label: 'Erster Eindruck' },
               { id: 'q_pricing', label: 'Preisempfinden' },
-              { id: 'q_mobile', label: 'Geraete' },
+              { id: 'q_mobile', label: 'Geräte' },
               { id: 'q_missing_info', label: 'Fehlende Infos' },
             ].map((q) => {
               const stats = choiceStats(q.id);

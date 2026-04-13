@@ -19,7 +19,7 @@ export default function SoFunktionierts() {
         subtitle="Action-Cam mieten in drei einfachen Schritten — ohne Kompliziertes, ohne Kleingedrucktes."
       />
 
-      {/* Steps (wiederverwendete Komponente, ohne doppelte Ueberschrift) */}
+      {/* Steps (wiederverwendete Komponente, ohne doppelte Überschrift) */}
       <HowItWorks hideHeader />
 
       {/* Detail-Abschnitte */}

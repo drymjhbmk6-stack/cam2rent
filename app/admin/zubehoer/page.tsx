@@ -272,7 +272,7 @@ export default function AdminZubehoerPage() {
                   <input type="checkbox" checked={newForm.available}
                     onChange={(e) => setNewForm((f) => ({ ...f, available: e.target.checked }))}
                     className="w-4 h-4 rounded border-brand-border" />
-                  <span className="text-sm font-body text-brand-black">Verfuegbar</span>
+                  <span className="text-sm font-body text-brand-black">Verfügbar</span>
                 </label>
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input type="checkbox" checked={newForm.internal}
@@ -289,7 +289,7 @@ export default function AdminZubehoerPage() {
                   <select value={newForm.upgrade_group}
                     onChange={(e) => setNewForm((f) => ({ ...f, upgrade_group: e.target.value, is_upgrade_base: e.target.value ? f.is_upgrade_base : false }))}
                     className="flex-1 px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue">
-                    <option value="">Keine (normales Zubehoer)</option>
+                    <option value="">Keine (normales Zubehör)</option>
                     {UPGRADE_GROUPS.filter(Boolean).map((g) => (
                       <option key={g} value={g}>{g}</option>
                     ))}
@@ -346,10 +346,10 @@ export default function AdminZubehoerPage() {
 
         {/* Liste — Zwei Spalten: Buchbar + Intern */}
         {loading ? (
-          <div className="text-center py-16 text-brand-muted font-body">Laedt…</div>
+          <div className="text-center py-16 text-brand-muted font-body">Lädt…</div>
         ) : accessories.length === 0 ? (
           <div className="text-center py-16 text-brand-muted font-body">
-            Noch kein Zubehoer angelegt. Klicke auf &bdquo;+ Neues Zubehoer&ldquo;.
+            Noch kein Zubehör angelegt. Klicke auf &bdquo;+ Neues Zubehör&ldquo;.
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -357,7 +357,7 @@ export default function AdminZubehoerPage() {
             <div>
               <div className="flex items-center gap-2 mb-3">
                 <span className="w-2 h-2 rounded-full bg-status-success" />
-                <h2 className="font-heading font-bold text-sm text-brand-black">Buchbar fuer Kunden</h2>
+                <h2 className="font-heading font-bold text-sm text-brand-black">Buchbar für Kunden</h2>
                 <span className="text-xs text-brand-muted font-body">({accessories.filter((a) => !a.internal && (!filterCategory || a.category === filterCategory)).length})</span>
               </div>
               <div className="space-y-1">
@@ -372,7 +372,7 @@ export default function AdminZubehoerPage() {
                   </div>
                 ))}
                 {accessories.filter((a) => !a.internal && (!filterCategory || a.category === filterCategory)).length === 0 && (
-                  <p className="text-sm text-brand-muted font-body py-4 text-center">Kein buchbares Zubehoer.</p>
+                  <p className="text-sm text-brand-muted font-body py-4 text-center">Kein buchbares Zubehör.</p>
                 )}
               </div>
             </div>
@@ -396,7 +396,7 @@ export default function AdminZubehoerPage() {
                   </div>
                 ))}
                 {accessories.filter((a) => a.internal && (!filterCategory || a.category === filterCategory)).length === 0 && (
-                  <p className="text-sm text-brand-muted font-body py-4 text-center">Kein internes Zubehoer. Erstelle welches mit &bdquo;Nur intern&ldquo;.</p>
+                  <p className="text-sm text-brand-muted font-body py-4 text-center">Kein internes Zubehör. Erstelle welches mit &bdquo;Nur intern&ldquo;.</p>
                 )}
               </div>
             </div>
@@ -451,7 +451,7 @@ function AccessoryCard({ acc, editId, editForm, setEditForm, savedId, savingId, 
               </span>
             )}
             {!acc.available && (
-              <span className="text-[10px] font-body text-brand-muted bg-brand-bg px-1.5 py-0.5 rounded-full shrink-0">nicht verfuegbar</span>
+              <span className="text-[10px] font-body text-brand-muted bg-brand-bg px-1.5 py-0.5 rounded-full shrink-0">nicht verfügbar</span>
             )}
             {savedId === acc.id && (
               <span className="text-[10px] font-body text-green-600 shrink-0">Gespeichert</span>
@@ -556,7 +556,7 @@ function AccessoryCard({ acc, editId, editForm, setEditForm, savedId, savingId, 
                           <input type="checkbox" checked={editForm.available ?? true}
                             onChange={(e) => setEditForm((f) => ({ ...f, available: e.target.checked }))}
                             className="w-4 h-4 rounded border-brand-border" />
-                          <span className="text-sm font-body text-brand-black">Verfuegbar</span>
+                          <span className="text-sm font-body text-brand-black">Verfügbar</span>
                         </label>
                         <label className="flex items-center gap-2 cursor-pointer">
                           <input type="checkbox" checked={(editForm as Record<string, unknown>).internal as boolean ?? false}
@@ -573,7 +573,7 @@ function AccessoryCard({ acc, editId, editForm, setEditForm, savedId, savingId, 
                           <select value={(editForm as Record<string, unknown>).upgrade_group as string ?? ''}
                             onChange={(e) => setEditForm((f) => ({ ...f, upgrade_group: e.target.value || null, is_upgrade_base: e.target.value ? (f as Record<string, unknown>).is_upgrade_base as boolean : false }))}
                             className="flex-1 px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body bg-white focus:outline-none focus:ring-2 focus:ring-accent-blue">
-                            <option value="">Keine (normales Zubehoer)</option>
+                            <option value="">Keine (normales Zubehör)</option>
                             {UPGRADE_GROUPS.filter(Boolean).map((g) => (
                               <option key={g} value={g}>{g}</option>
                             ))}

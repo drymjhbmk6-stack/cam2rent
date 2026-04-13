@@ -225,11 +225,11 @@ export default function ArticleEditor({ postId }: { postId?: string }) {
           setPost((prev) => ({ ...prev, content: fcData.content }));
           setFactcheckResult({ approved: fcData.approved, quality: fcData.quality, changes: fcData.changes ?? [], reviewLog: fcData.reviewLog ?? [] });
           setMsg(fcData.approved
-            ? `Fertig! Faktencheck bestanden (${fcData.quality}/10) — ${fcData.changes?.length ?? 0} Aenderungen`
+            ? `Fertig! Faktencheck bestanden (${fcData.quality}/10) — ${fcData.changes?.length ?? 0} Änderungen`
             : `Fertig! Faktencheck: Korrekturen vorgenommen (${fcData.quality}/10)`);
         }
       } catch {
-        setMsg('Artikel generiert! Faktencheck konnte nicht durchgefuehrt werden.');
+        setMsg('Artikel generiert! Faktencheck konnte nicht durchgeführt werden.');
       }
     } else {
       setMsg(data.error || 'KI-Generierung fehlgeschlagen.');
@@ -264,14 +264,14 @@ export default function ArticleEditor({ postId }: { postId?: string }) {
       });
       const data = await res.json();
       if (res.ok) {
-        // Korrigierten Text uebernehmen
+        // Korrigierten Text übernehmen
         if (data.content && data.content !== post.content) {
           update('content', data.content);
         }
         setFactcheckResult({ approved: data.approved, quality: data.quality, changes: data.changes ?? [], reviewLog: data.reviewLog ?? [] });
         setMsg(data.approved
-          ? `Faktencheck bestanden! Qualitaet: ${data.quality}/10 — ${data.changes?.length ?? 0} Aenderungen`
-          : `Faktencheck: Korrekturen vorgenommen. Qualitaet: ${data.quality}/10`);
+          ? `Faktencheck bestanden! Qualität: ${data.quality}/10 — ${data.changes?.length ?? 0} Änderungen`
+          : `Faktencheck: Korrekturen vorgenommen. Qualität: ${data.quality}/10`);
       } else {
         setMsg(data.error || 'Faktencheck fehlgeschlagen.');
       }
@@ -402,7 +402,7 @@ export default function ArticleEditor({ postId }: { postId?: string }) {
             style={{ background: '#f59e0b20', color: '#f59e0b', border: '1px solid #f59e0b40', opacity: factchecking ? 0.6 : 1 }}
           >
             {factchecking ? (
-              <><span className="w-3 h-3 border-2 border-amber-400/30 border-t-amber-400 rounded-full animate-spin" /> Pruefe...</>
+              <><span className="w-3 h-3 border-2 border-amber-400/30 border-t-amber-400 rounded-full animate-spin" /> Prüfe...</>
             ) : (
               <><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> Faktencheck</>
             )}
@@ -447,14 +447,14 @@ export default function ArticleEditor({ postId }: { postId?: string }) {
               <p className="font-heading font-semibold text-sm" style={{ color: factcheckResult.approved ? '#22c55e' : '#f59e0b' }}>
                 {factcheckResult.approved ? 'Faktencheck bestanden' : 'Korrekturen vorgenommen'}
               </p>
-              <p className="text-xs" style={{ color: '#94a3b8' }}>Qualitaet: {factcheckResult.quality}/10 — {factcheckResult.changes.length} Aenderungen</p>
+              <p className="text-xs" style={{ color: '#94a3b8' }}>Qualität: {factcheckResult.quality}/10 — {factcheckResult.changes.length} Änderungen</p>
             </div>
           </div>
 
-          {/* Vorher/Nachher Aenderungen */}
+          {/* Vorher/Nachher Änderungen */}
           {factcheckResult.changes.length > 0 && (
             <div className="mb-3">
-              <p className="text-xs font-heading font-semibold mb-2" style={{ color: '#e2e8f0' }}>Aenderungen im Detail:</p>
+              <p className="text-xs font-heading font-semibold mb-2" style={{ color: '#e2e8f0' }}>Änderungen im Detail:</p>
               <div className="space-y-1.5 max-h-48 overflow-y-auto">
                 {factcheckResult.changes.map((c, i) => (
                   <div key={i} className="flex items-start gap-2 text-[11px] px-2 py-1.5 rounded" style={{ background: c.type === 'removed' ? '#ef444410' : '#22c55e10' }}>
@@ -502,11 +502,11 @@ export default function ArticleEditor({ postId }: { postId?: string }) {
                 </select>
               </div>
               <div>
-                <label style={labelStyle} className="block">Laenge</label>
+                <label style={labelStyle} className="block">Länge</label>
                 <select style={inputStyle} value={aiLength} onChange={(e) => setAiLength(e.target.value)}>
-                  <option value="kurz">Kurz (~500 Woerter)</option>
-                  <option value="mittel">Mittel (~1000 Woerter)</option>
-                  <option value="lang">Lang (~1500 Woerter)</option>
+                  <option value="kurz">Kurz (~500 Wörter)</option>
+                  <option value="mittel">Mittel (~1000 Wörter)</option>
+                  <option value="lang">Lang (~1500 Wörter)</option>
                 </select>
               </div>
             </div>
@@ -585,12 +585,12 @@ export default function ArticleEditor({ postId }: { postId?: string }) {
             <label style={labelStyle} className="block mb-2">Status</label>
             <select style={inputStyle} value={post.status} onChange={(e) => update('status', e.target.value)}>
               <option value="draft">Entwurf</option>
-              <option value="published">Veroeffentlicht</option>
+              <option value="published">Veröffentlicht</option>
               <option value="scheduled">Geplant</option>
             </select>
             {post.status === 'scheduled' && (
               <div className="mt-3">
-                <label style={labelStyle} className="block">Veroeffentlichung am</label>
+                <label style={labelStyle} className="block">Veröffentlichung am</label>
                 <input
                   type="datetime-local"
                   style={inputStyle}
@@ -654,7 +654,7 @@ export default function ArticleEditor({ postId }: { postId?: string }) {
                 style={{ background: '#334155', color: '#e2e8f0' }}
               >
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                Aus Mediathek waehlen
+                Aus Mediathek wählen
               </button>
               <button
                 onClick={regenerateImage}
@@ -699,7 +699,7 @@ export default function ArticleEditor({ postId }: { postId?: string }) {
           {/* Mediathek */}
             {showMediathek && (
               <div className="mt-3 p-3 rounded-lg" style={{ background: '#0f172a' }}>
-                <p className="text-xs font-heading font-semibold mb-2" style={{ color: '#94a3b8' }}>Aus Mediathek waehlen</p>
+                <p className="text-xs font-heading font-semibold mb-2" style={{ color: '#94a3b8' }}>Aus Mediathek wählen</p>
                 {mediathekLoading ? (
                   <p className="text-xs py-4 text-center" style={{ color: '#475569' }}>Laden...</p>
                 ) : mediathekImages.length === 0 ? (

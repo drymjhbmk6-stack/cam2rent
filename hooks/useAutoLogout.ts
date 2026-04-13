@@ -13,7 +13,7 @@ interface UseAutoLogoutOptions {
 }
 
 /**
- * Hook fuer automatisches Ausloggen nach Inaktivitaet.
+ * Hook für automatisches Ausloggen nach Inaktivität.
  * Trackt Maus, Tastatur, Touch und Scroll-Events.
  */
 export function useAutoLogout({
@@ -60,10 +60,10 @@ export function useAutoLogout({
       window.addEventListener(event, handleActivity, { passive: true });
     }
 
-    // Auch bei Tab-Wechsel pruefen
+    // Auch bei Tab-Wechsel prüfen
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
-        // Pruefen ob waehrend der Abwesenheit die Zeit abgelaufen ist
+        // Prüfen ob während der Abwesenheit die Zeit abgelaufen ist
         const lastActivity = sessionStorage.getItem('cam2rent_last_activity');
         if (lastActivity) {
           const elapsed = Date.now() - parseInt(lastActivity, 10);
@@ -76,7 +76,7 @@ export function useAutoLogout({
       }
     };
 
-    // Aktivitaets-Zeitstempel speichern (fuer Tab-Wechsel-Pruefung)
+    // Aktivitäts-Zeitstempel speichern (für Tab-Wechsel-Prüfung)
     const saveTimestamp = () => {
       sessionStorage.setItem('cam2rent_last_activity', Date.now().toString());
     };

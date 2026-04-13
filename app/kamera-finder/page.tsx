@@ -152,7 +152,7 @@ const questions: Question[] = [
     ],
   },
   {
-    title: 'Welche Videoqualitaet brauchst du?',
+    title: 'Welche Videoqualität brauchst du?',
     options: [
       { label: '4K oder besser', icon: <Icon4K />, value: '4k_plus' },
       { label: 'Full HD reicht', icon: <IconHD />, value: 'hd' },
@@ -225,27 +225,27 @@ function computeRecommendations(answers: Answers, products: Product[]): ScoredPr
       // --- Usage ---
       switch (answers.usage) {
         case 'sport':
-          if (fps >= 120) { score += 30; reasons.push(`${product.specs.fps} fuer fluessige Action-Aufnahmen`); }
-          else if (fps >= 60) { score += 15; reasons.push(`${product.specs.fps} fuer Sport-Videos`); }
-          if (product.specs.resolution.toLowerCase().includes('360')) { score += 10; reasons.push('360\u00b0-Perspektive ideal fuer dynamische Szenen'); }
+          if (fps >= 120) { score += 30; reasons.push(`${product.specs.fps} für flüssige Action-Aufnahmen`); }
+          else if (fps >= 60) { score += 15; reasons.push(`${product.specs.fps} für Sport-Videos`); }
+          if (product.specs.resolution.toLowerCase().includes('360')) { score += 10; reasons.push('360\u00b0-Perspektive ideal für dynamische Szenen'); }
           break;
         case 'travel':
-          if (battery >= 1900) { score += 25; reasons.push(`${product.specs.battery} Akku fuer lange Drehtage`); }
-          else if (battery >= 1770) { score += 15; reasons.push('Gute Akkulaufzeit fuer unterwegs'); }
-          if (resRank >= 2) { score += 10; reasons.push('Hohe Aufloesung fuer beeindruckende Reisevideos'); }
+          if (battery >= 1900) { score += 25; reasons.push(`${product.specs.battery} Akku für lange Drehtage`); }
+          else if (battery >= 1770) { score += 15; reasons.push('Gute Akkulaufzeit für unterwegs'); }
+          if (resRank >= 2) { score += 10; reasons.push('Hohe Auflösung für beeindruckende Reisevideos'); }
           break;
         case 'underwater':
           if (depth >= 40) { score += 35; reasons.push(`Wasserdicht bis ${depth}m \u2013 perfekt zum Tauchen`); }
-          else if (depth >= 10) { score += 20; reasons.push(`Wasserdicht bis ${depth}m fuer Unterwasseraufnahmen`); }
+          else if (depth >= 10) { score += 20; reasons.push(`Wasserdicht bis ${depth}m für Unterwasseraufnahmen`); }
           break;
         case 'timelapse':
-          if (resRank >= 2) { score += 25; reasons.push('Hohe Aufloesung fuer detailreiche Zeitraffer'); }
-          if (battery >= 1900) { score += 15; reasons.push('Langer Akku fuer ausgedehnte Zeitraffer-Aufnahmen'); }
+          if (resRank >= 2) { score += 25; reasons.push('Hohe Auflösung für detailreiche Zeitraffer'); }
+          if (battery >= 1900) { score += 15; reasons.push('Langer Akku für ausgedehnte Zeitraffer-Aufnahmen'); }
           break;
         case 'events':
-          if (battery >= 1800) { score += 20; reasons.push('Langer Akku fuer Event-Aufnahmen'); }
-          if (resRank >= 1) { score += 10; reasons.push('Gute Videoqualitaet fuer Erinnerungen'); }
-          if (product.specs.resolution.toLowerCase().includes('360')) { score += 15; reasons.push('360\u00b0-Video faengt die ganze Atmosphaere ein'); }
+          if (battery >= 1800) { score += 20; reasons.push('Langer Akku für Event-Aufnahmen'); }
+          if (resRank >= 1) { score += 10; reasons.push('Gute Videoqualität für Erinnerungen'); }
+          if (product.specs.resolution.toLowerCase().includes('360')) { score += 15; reasons.push('360\u00b0-Video fängt die ganze Atmosphäre ein'); }
           break;
         default:
           score += 10;
@@ -304,7 +304,7 @@ function computeRecommendations(answers: Answers, products: Product[]): ScoredPr
       // --- Availability bonus ---
       if (product.available) {
         score += 10;
-        reasons.push('Sofort verfuegbar');
+        reasons.push('Sofort verfügbar');
       }
 
       return { product, score, reasons };
@@ -360,11 +360,11 @@ function ResultsView({
           </svg>
         </div>
         <h2 className="font-heading font-bold text-2xl sm:text-3xl text-brand-black dark:text-white mb-2">
-          {hasResults ? 'Unsere Empfehlung fuer dich' : 'Keine passende Kamera gefunden'}
+          {hasResults ? 'Unsere Empfehlung für dich' : 'Keine passende Kamera gefunden'}
         </h2>
         <p className="font-body text-brand-steel dark:text-gray-400 max-w-lg mx-auto">
           {hasResults
-            ? 'Basierend auf deinen Angaben haben wir die besten Kameras fuer dich ausgewaehlt.'
+            ? 'Basierend auf deinen Angaben haben wir die besten Kameras für dich ausgewählt.'
             : 'Versuche es mit anderen Kriterien oder schau dir alle Kameras an.'}
         </p>
       </div>
@@ -376,7 +376,7 @@ function ResultsView({
             const isBestAlt = !isTop && score < topScore * 0.7;
 
             // Deduplicate reasons and take top 2
-            const uniqueReasons = [...new Set(reasons.filter((r) => r !== 'Sofort verfuegbar'))].slice(0, 2);
+            const uniqueReasons = [...new Set(reasons.filter((r) => r !== 'Sofort verfügbar'))].slice(0, 2);
 
             return (
               <div
@@ -438,7 +438,7 @@ function ResultsView({
                           product.available ? 'bg-green-500' : 'bg-red-500'
                         }`}
                       />
-                      {product.available ? 'Verfuegbar' : 'Nicht verfuegbar'}
+                      {product.available ? 'Verfügbar' : 'Nicht verfügbar'}
                     </span>
                   </div>
 
@@ -532,7 +532,7 @@ export default function KameraFinderPage() {
             Kamera-Finder
           </h1>
           <p className="font-body text-white/80 text-lg max-w-xl mx-auto">
-            Beantworte 5 kurze Fragen und wir finden die perfekte Action-Cam fuer dich.
+            Beantworte 5 kurze Fragen und wir finden die perfekte Action-Cam für dich.
           </p>
         </div>
       </section>
@@ -552,7 +552,7 @@ export default function KameraFinderPage() {
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.75 19.5L8.25 12l7.5-7.5" />
                 </svg>
-                Zurueck
+                Zurück
               </button>
             )}
 

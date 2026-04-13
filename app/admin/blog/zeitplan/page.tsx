@@ -111,7 +111,7 @@ export default function BlogZeitplanPage() {
     if (res.ok) {
       // Thema als verwendet markieren
       await fetch(`/api/admin/blog/auto-topics?id=${topic.id}`, { method: 'DELETE' });
-      flash(`"${topic.topic.slice(0, 40)}..." in Zeitplan eingefuegt!`);
+      flash(`"${topic.topic.slice(0, 40)}..." in Zeitplan eingefügt!`);
       loadAll();
     }
   }
@@ -125,7 +125,7 @@ export default function BlogZeitplanPage() {
         tone: 'informativ', target_length: 'mittel', scheduled_date: importDate,
       }),
     });
-    if (res.ok) { flash(`Serie "${series.title}" Teil ${part.part_number} eingefuegt!`); loadAll(); }
+    if (res.ok) { flash(`Serie "${series.title}" Teil ${part.part_number} eingefügt!`); loadAll(); }
   }
 
   async function toggleReviewed(entry: ScheduleEntry) {
@@ -151,7 +151,7 @@ export default function BlogZeitplanPage() {
   }
 
   async function deleteEntry(id: string) {
-    if (!confirm('Eintrag wirklich loeschen?')) return;
+    if (!confirm('Eintrag wirklich löschen?')) return;
     await fetch(`/api/admin/blog/schedule?id=${id}`, { method: 'DELETE' });
     loadAll();
   }
@@ -185,7 +185,7 @@ export default function BlogZeitplanPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
         <div>
           <h1 className="font-heading font-bold text-xl sm:text-2xl" style={{ color: 'white' }}>Redaktionsplan</h1>
-          <p className="text-sm" style={{ color: '#64748b' }}>Drag&Drop fuer Reihenfolge — Themen importieren oder per KI planen</p>
+          <p className="text-sm" style={{ color: '#64748b' }}>Drag&Drop für Reihenfolge — Themen importieren oder per KI planen</p>
         </div>
         <div className="flex items-center gap-3 text-xs font-heading" style={{ color: '#94a3b8' }}>
           <span>{plannedCount} geplant</span>
@@ -230,7 +230,7 @@ export default function BlogZeitplanPage() {
           {showImport && (
             <div className="rounded-xl p-4 mb-6" style={{ background: '#1e293b', border: '1px solid #06b6d430' }}>
               <div className="flex items-center justify-between mb-3">
-                <h3 className="font-heading font-semibold text-sm" style={{ color: '#06b6d4' }}>Einzelthemen → in Zeitplan einfuegen</h3>
+                <h3 className="font-heading font-semibold text-sm" style={{ color: '#06b6d4' }}>Einzelthemen → in Zeitplan einfügen</h3>
                 <div className="flex items-center gap-2">
                   <label className="text-[11px] font-heading" style={{ color: '#94a3b8' }}>Datum:</label>
                   <input type="date" value={importDate} onChange={(e) => setImportDate(e.target.value)} className="px-2 py-1 rounded text-xs" style={{ background: '#0f172a', border: '1px solid #334155', color: '#e2e8f0' }} />
@@ -286,7 +286,7 @@ export default function BlogZeitplanPage() {
                             </div>
                             <div className="flex justify-end mt-3">
                               <button onClick={() => importTopic(t)} className="px-4 py-1.5 rounded text-xs font-heading font-semibold" style={{ background: '#06b6d4', color: 'white' }}>
-                                + In Zeitplan einfuegen
+                                + In Zeitplan einfügen
                               </button>
                             </div>
                           </div>
@@ -354,7 +354,7 @@ export default function BlogZeitplanPage() {
             </div>
           )}
 
-          {/* Serien-Eintraege im Zeitplan */}
+          {/* Serien-Einträge im Zeitplan */}
           {schedule.some((s) => s.topic.includes('Teil')) && (
             <div className="mt-8">
               <h3 className="font-heading font-semibold text-sm mb-3" style={{ color: '#8b5cf6' }}>Serien im Zeitplan</h3>
@@ -369,7 +369,7 @@ export default function BlogZeitplanPage() {
   function renderScheduleList(seriesOnly?: boolean) {
     const filtered = seriesOnly ? schedule.filter((s) => s.topic.includes('Teil')) : schedule;
     if (filtered.length === 0) {
-      return <div className="text-center py-12"><p className="text-sm" style={{ color: '#475569' }}>Noch keine Eintraege.</p></div>;
+      return <div className="text-center py-12"><p className="text-sm" style={{ color: '#475569' }}>Noch keine Einträge.</p></div>;
     }
 
     const TONE_LABELS: Record<string, string> = { informativ: 'Informativ', locker: 'Locker', professionell: 'Professionell' };
@@ -434,13 +434,13 @@ export default function BlogZeitplanPage() {
                         className="w-full px-3 py-2 rounded-lg text-sm" style={{ background: '#0f172a', border: '1px solid #334155', color: '#e2e8f0' }} />
                     </div>
 
-                    {/* Ausfuehrlicher Prompt */}
+                    {/* Ausführlicher Prompt */}
                     <div className="col-span-2">
-                      <label className="text-[10px] font-semibold uppercase block mb-1" style={{ color: '#f59e0b' }}>Ausfuehrlicher KI-Prompt</label>
+                      <label className="text-[10px] font-semibold uppercase block mb-1" style={{ color: '#f59e0b' }}>Ausführlicher KI-Prompt</label>
                       <p className="text-[10px] mb-1.5" style={{ color: '#475569' }}>Je detaillierter, desto besser der Artikel. Beschreibe Aufbau, Zielgruppe, Beispiele, was enthalten sein soll.</p>
                       <textarea defaultValue={entry.prompt || ''}
                         onBlur={(e) => updateField(entry.id, 'prompt', e.target.value || null)}
-                        rows={5} placeholder="z.B.: Schreibe einen ausfuehrlichen Ratgeber fuer Wanderer die eine Action-Cam mieten moechten. Gehe auf die besten Spots in Deutschland ein (Alpen, Schwarzwald, Saechsische Schweiz). Erklaere welche Kamera-Einstellungen fuer Wandervideos ideal sind. Vergleiche GoPro Hero 13 vs. DJI Osmo Action 5. Erwaehne unsere Mietpreise und Haftungsschutz-Optionen..."
+                        rows={5} placeholder="z.B.: Schreibe einen ausführlichen Ratgeber für Wanderer die eine Action-Cam mieten möchten. Gehe auf die besten Spots in Deutschland ein (Alpen, Schwarzwald, Sächsische Schweiz). Erkläre welche Kamera-Einstellungen für Wandervideos ideal sind. Vergleiche GoPro Hero 13 vs. DJI Osmo Action 5. Erwähne unsere Mietpreise und Haftungsschutz-Optionen..."
                         className="w-full px-3 py-2 rounded-lg text-sm resize-y" style={{ background: '#0f172a', border: '1px solid #f59e0b40', color: '#e2e8f0', minHeight: 100 }} />
                     </div>
 
@@ -465,15 +465,15 @@ export default function BlogZeitplanPage() {
                       </select>
                     </div>
 
-                    {/* Laenge */}
+                    {/* Länge */}
                     <div>
-                      <label className="text-[10px] font-semibold uppercase block mb-1" style={{ color: '#64748b' }}>Ziel-Laenge</label>
+                      <label className="text-[10px] font-semibold uppercase block mb-1" style={{ color: '#64748b' }}>Ziel-Länge</label>
                       <select defaultValue={entry.target_length || 'mittel'}
                         onChange={(e) => updateField(entry.id, 'target_length', e.target.value)}
                         className="w-full px-3 py-2 rounded-lg text-sm" style={{ background: '#0f172a', border: '1px solid #334155', color: '#e2e8f0' }}>
-                        <option value="kurz">Kurz (~500 Woerter)</option>
-                        <option value="mittel">Mittel (~1000 Woerter)</option>
-                        <option value="lang">Lang (~1500 Woerter)</option>
+                        <option value="kurz">Kurz (~500 Wörter)</option>
+                        <option value="mittel">Mittel (~1000 Wörter)</option>
+                        <option value="lang">Lang (~1500 Wörter)</option>
                       </select>
                     </div>
 
@@ -507,7 +507,7 @@ export default function BlogZeitplanPage() {
                   <div className="flex items-center gap-2 mt-3 pt-3" style={{ borderTop: '1px solid #334155' }}>
                     <input type="date" value={entry.scheduled_date} onChange={(e) => updateDate(entry.id, e.target.value)} className="px-2 py-1 rounded text-xs font-body" style={{ background: '#0f172a', border: '1px solid #334155', color: '#e2e8f0' }} />
                     <input type="time" value={entry.scheduled_time} onChange={(e) => updateTime(entry.id, e.target.value)} className="px-2 py-1 rounded text-xs font-body" style={{ background: '#0f172a', border: '1px solid #334155', color: '#e2e8f0' }} />
-                    <button onClick={(e) => { e.stopPropagation(); deleteEntry(entry.id); }} className="px-2 py-1 rounded text-[11px] font-heading font-semibold ml-auto" style={{ background: '#ef444420', color: '#ef4444' }}>Loeschen</button>
+                    <button onClick={(e) => { e.stopPropagation(); deleteEntry(entry.id); }} className="px-2 py-1 rounded text-[11px] font-heading font-semibold ml-auto" style={{ background: '#ef444420', color: '#ef4444' }}>Löschen</button>
                   </div>
                 </div>
               )}

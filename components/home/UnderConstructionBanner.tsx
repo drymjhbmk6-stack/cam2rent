@@ -29,7 +29,7 @@ export default function UnderConstructionBanner({ serverVisible }: { serverVisib
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" />
         </svg>
         <p className="text-sm font-heading font-semibold text-center">
-          Diese Seite befindet sich noch im Aufbau. Der Shop ist bald fuer dich verfuegbar!
+          Diese Seite befindet sich noch im Aufbau. Der Shop ist bald für dich verfügbar!
         </p>
       </div>
     </div>

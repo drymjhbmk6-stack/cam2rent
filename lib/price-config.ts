@@ -47,7 +47,7 @@ export const DEFAULT_HAFTUNG: HaftungConfig = {
   premiumIncrement: 10,
 };
 
-/** Gibt die Eigenbeteiligung fuer eine Produktkategorie zurueck */
+/** Gibt die Eigenbeteiligung für eine Produktkategorie zurück */
 export function getEigenbeteiligung(config: HaftungConfig, category?: string): number {
   if (category && config.eigenbeteiligungByCategory?.[category] !== undefined) {
     return config.eigenbeteiligungByCategory[category];

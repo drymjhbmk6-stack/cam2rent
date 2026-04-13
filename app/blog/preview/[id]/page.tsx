@@ -10,7 +10,7 @@ export default async function BlogPreviewPage({ params }: { params: Promise<{ id
   const { id } = await params;
   const supabase = createServiceClient();
 
-  // Artikel laden (auch Entwuerfe und geplante)
+  // Artikel laden (auch Entwürfe und geplante)
   const { data: post } = await supabase
     .from('blog_posts')
     .select('*, blog_categories(id, name, slug, color)')
@@ -19,7 +19,7 @@ export default async function BlogPreviewPage({ params }: { params: Promise<{ id
 
   if (!post) notFound();
 
-  // Falls nicht veroeffentlicht: published_at auf jetzt setzen fuer die Anzeige
+  // Falls nicht veröffentlicht: published_at auf jetzt setzen für die Anzeige
   const previewPost = {
     ...post,
     published_at: post.published_at || new Date().toISOString(),
@@ -46,9 +46,9 @@ export default async function BlogPreviewPage({ params }: { params: Promise<{ id
         <div className="flex items-center gap-2">
           <span className="text-sm font-heading font-bold">VORSCHAU</span>
           <span className="text-xs font-body">
-            {post.status === 'draft' && '(Entwurf — nicht veroeffentlicht)'}
+            {post.status === 'draft' && '(Entwurf — nicht veröffentlicht)'}
             {post.status === 'scheduled' && '(Geplant — noch nicht live)'}
-            {post.status === 'published' && '(Veroeffentlicht)'}
+            {post.status === 'published' && '(Veröffentlicht)'}
           </span>
         </div>
         <div className="flex gap-2">

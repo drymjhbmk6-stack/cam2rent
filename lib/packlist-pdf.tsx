@@ -225,10 +225,10 @@ function Checkbox() {
 // ─── PDF Document ────────────────────────────────────────────────────────────
 
 export function PacklistPDF({ data }: { data: PacklistData }) {
-  // Kameras aufspalten (koennen kommagetrennt sein)
+  // Kameras aufspalten (können kommagetrennt sein)
   const cameras = data.productName.split(',').map((n) => n.trim());
 
-  // Zubehoer-Namen aufloesen
+  // Zubehör-Namen auflösen
   const accItems = data.accessories.map((id) => accName(id));
 
   // Haftung Label
@@ -294,7 +294,7 @@ export function PacklistPDF({ data }: { data: PacklistData }) {
             <Text style={s.sectionTitle}>2. Versandgegenstand</Text>
 
             <View style={s.metaRow}>
-              <Text style={s.metaLabel}>Kamera / Geraet:</Text>
+              <Text style={s.metaLabel}>Kamera / Gerät:</Text>
               <Text style={[s.metaValue, { color: C.navy }]}>{camera}</Text>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'flex-end', marginBottom: 10 }}>
@@ -309,8 +309,8 @@ export function PacklistPDF({ data }: { data: PacklistData }) {
               </View>
             )}
 
-            {/* Zubehoer-Tabelle */}
-            <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', marginTop: 10, marginBottom: 6 }}>Zubehoer:</Text>
+            {/* Zubehör-Tabelle */}
+            <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', marginTop: 10, marginBottom: 6 }}>Zubehör:</Text>
 
             <View style={s.tableHeader}>
               <Text style={[s.tableHeaderText, s.colNr]}>Nr.</Text>
@@ -331,15 +331,15 @@ export function PacklistPDF({ data }: { data: PacklistData }) {
             ) : (
               <View style={s.tableRow}>
                 <Text style={s.colNr}>–</Text>
-                <Text style={[s.colBez, { color: C.grayText, fontStyle: 'italic' }]}>Kein Zubehoer gebucht</Text>
+                <Text style={[s.colBez, { color: C.grayText, fontStyle: 'italic' }]}>Kein Zubehör gebucht</Text>
                 <Text style={s.colOk}>–</Text>
               </View>
             )}
 
-            {/* Ruecksendeetikett */}
+            {/* Rücksendeetikett */}
             <View style={[s.tableRow, { marginTop: 4, backgroundColor: C.grayLight }]}>
               <Text style={s.colNr}>+</Text>
-              <Text style={[s.colBez, { fontFamily: 'Helvetica-Bold' }]}>Ruecksendeetikett beilegen</Text>
+              <Text style={[s.colBez, { fontFamily: 'Helvetica-Bold' }]}>Rücksendeetikett beilegen</Text>
               <View style={[s.colOk, { alignItems: 'center' }]}>
                 <Checkbox />
               </View>
@@ -349,8 +349,8 @@ export function PacklistPDF({ data }: { data: PacklistData }) {
 
             {/* ── 3. Zustand bei Verpackung ── */}
             <Text style={s.sectionTitle}>3. Zustand bei Verpackung</Text>
-            <View style={s.checkRow}><Checkbox /><Text style={s.checkLabel}>Geraet funktionsfaehig getestet</Text></View>
-            <View style={s.checkRow}><Checkbox /><Text style={s.checkLabel}>Keine sichtbaren Schaeden</Text></View>
+            <View style={s.checkRow}><Checkbox /><Text style={s.checkLabel}>Gerät funktionstüchtig getestet</Text></View>
+            <View style={s.checkRow}><Checkbox /><Text style={s.checkLabel}>Keine sichtbaren Schäden</Text></View>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 }}>
               <Checkbox />
               <Text style={s.checkLabel}>Sonstiges: </Text>
@@ -361,8 +361,8 @@ export function PacklistPDF({ data }: { data: PacklistData }) {
 
             {/* ── 4. Verpackungskontrolle ── */}
             <Text style={s.sectionTitle}>4. Verpackungskontrolle</Text>
-            <View style={s.checkRow}><Checkbox /><Text style={s.checkLabel}>Geraet sicher verpackt</Text></View>
-            <View style={s.checkRow}><Checkbox /><Text style={s.checkLabel}>Zubehoer vollstaendig</Text></View>
+            <View style={s.checkRow}><Checkbox /><Text style={s.checkLabel}>Gerät sicher verpackt</Text></View>
+            <View style={s.checkRow}><Checkbox /><Text style={s.checkLabel}>Zubehör vollständig</Text></View>
             <View style={s.checkRow}><Checkbox /><Text style={s.checkLabel}>Paketinhalt dokumentiert (Foto/Video)</Text></View>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 }}>
               <Checkbox />
@@ -372,10 +372,10 @@ export function PacklistPDF({ data }: { data: PacklistData }) {
 
             <View style={s.divider} />
 
-            {/* ── 5. Bestaetigung ── */}
-            <Text style={s.sectionTitle}>5. Bestaetigung</Text>
+            {/* ── 5. Bestätigung ── */}
+            <Text style={s.sectionTitle}>5. Bestätigung</Text>
             <Text style={{ fontSize: 9, color: C.grayText, lineHeight: 1.5, marginBottom: 4 }}>
-              Der Unterzeichner bestaetigt die vollstaendige und ordnungsgemaesse Verpackung des oben genannten Equipments.
+              Der Unterzeichner bestätigt die vollständige und ordnungsgemäße Verpackung des oben genannten Equipments.
               Die Kontrolle wurde durch eine zweite Person gegengezeichnet.
             </Text>
 

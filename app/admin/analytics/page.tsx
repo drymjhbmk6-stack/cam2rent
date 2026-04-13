@@ -299,7 +299,7 @@ function generateCSV(
     rows.push(['Seiten pro Besuch', String(liveData?.avg_pages_per_session ?? 0)]);
     if (liveData?.visitors?.length) {
       rows.push([]);
-      rows.push(['Besucher-ID', 'Aktuelle Seite', 'Geraet', 'Browser', 'Herkunft', 'Seiten', 'Zuletzt gesehen']);
+      rows.push(['Besucher-ID', 'Aktuelle Seite', 'Gerät', 'Browser', 'Herkunft', 'Seiten', 'Zuletzt gesehen']);
       for (const v of liveData.visitors) {
         rows.push([v.visitor_id, v.current_page, v.device, v.browser, v.referrer, String(v.page_count), v.last_seen]);
       }

@@ -1,7 +1,7 @@
 /**
- * Zentrale Geschaeftsdaten fuer cam2rent.
- * Standardwerte (Fallback) — koennen im Admin unter /admin/einstellungen
- * ueberschrieben werden (gespeichert in admin_settings.business_config).
+ * Zentrale Geschäftsdaten für cam2rent.
+ * Standardwerte (Fallback) — können im Admin unter /admin/einstellungen
+ * überschrieben werden (gespeichert in admin_settings.business_config).
  */
 
 export interface BusinessConfig {
@@ -44,7 +44,7 @@ const DEFAULTS: BusinessConfig = {
   pickupLocation: 'Alt-Buckow, Berlin',
 };
 
-// Laufzeit-Cache fuer DB-Werte (wird beim ersten Aufruf von loadBusinessConfig gefuellt)
+// Laufzeit-Cache für DB-Werte (wird beim ersten Aufruf von loadBusinessConfig gefüllt)
 let _override: Partial<BusinessConfig> | null = null;
 
 /** Setzt DB-Override (wird von API-Route aufgerufen) */
@@ -52,7 +52,7 @@ export function setBusinessOverride(data: Partial<BusinessConfig>) {
   _override = data;
 }
 
-/** Gibt die gemergten Geschaeftsdaten zurueck */
+/** Gibt die gemergten Geschäftsdaten zurück */
 function getConfig(): BusinessConfig {
   return _override ? { ...DEFAULTS, ..._override } : DEFAULTS;
 }

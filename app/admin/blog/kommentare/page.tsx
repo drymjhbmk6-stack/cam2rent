@@ -41,7 +41,7 @@ export default function BlogKommentarePage() {
   }
 
   async function deleteComment(id: string) {
-    if (!confirm('Kommentar wirklich loeschen?')) return;
+    if (!confirm('Kommentar wirklich löschen?')) return;
     await fetch(`/api/admin/blog/comments?id=${id}`, { method: 'DELETE' });
     loadComments();
   }
@@ -101,7 +101,7 @@ export default function BlogKommentarePage() {
                       </button>
                     )}
                     <button onClick={() => deleteComment(c.id)} className="px-3 py-1 rounded text-xs font-heading font-semibold" style={{ background: '#ef444420', color: '#ef4444' }}>
-                      Loeschen
+                      Löschen
                     </button>
                   </div>
                 </div>

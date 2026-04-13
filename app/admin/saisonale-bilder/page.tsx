@@ -285,10 +285,10 @@ export default function SaisonaleBilderPage() {
               layoutHint={zone.id === 'hero' ? (isImageLeftMonth(current.month) ? 'Bild links' : 'Bild rechts') : undefined}
             />
 
-            {/* Naechster Monat */}
+            {/* Nächster Monat */}
             <ImageSlot
               label={`${MONTH_NAMES[next.month]} ${next.year}`}
-              badge="Naechster"
+              badge="Nächster"
               badgeColor="#6366f1"
               image={getImage(zone.id, next.key)}
               zone={zone.id as SeasonalZone}
@@ -418,7 +418,7 @@ export default function SaisonaleBilderPage() {
                         className="px-3 py-1.5 rounded-lg text-xs font-heading font-semibold transition-colors disabled:opacity-30"
                         style={{ background: '#1e293b', color: '#e2e8f0' }}
                       >
-                        Zurueck
+                        Zurück
                       </button>
                       <span className="px-3 py-1.5 text-xs text-slate-400">
                         Seite {unsplashPage} von {unsplashTotalPages}

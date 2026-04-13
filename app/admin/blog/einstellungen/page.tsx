@@ -129,9 +129,9 @@ export default function BlogEinstellungenPage() {
         <div className="mb-4 p-3 rounded-lg text-sm" style={{ background: '#ef444420', color: '#ef4444', border: '1px solid #ef444440' }}>{error}</div>
       )}
 
-      {/* API-Schluessel */}
+      {/* API-Schlüssel */}
       <div style={sectionStyle}>
-        <h2 className="font-heading font-semibold text-base mb-4" style={{ color: 'white' }}>API-Schluessel</h2>
+        <h2 className="font-heading font-semibold text-base mb-4" style={{ color: 'white' }}>API-Schlüssel</h2>
         <div className="space-y-4">
           <div>
             <label style={labelStyle}>Anthropic API Key (Text)</label>
@@ -143,7 +143,7 @@ export default function BlogEinstellungenPage() {
           </div>
           <div>
             <label style={labelStyle}>Unsplash Access Key (optional)</label>
-            <input style={inputStyle} type="password" value={settings.unsplash_access_key} onChange={(e) => update('unsplash_access_key', e.target.value)} placeholder="Fuer manuelle Bildsuche..." />
+            <input style={inputStyle} type="password" value={settings.unsplash_access_key} onChange={(e) => update('unsplash_access_key', e.target.value)} placeholder="Für manuelle Bildsuche..." />
           </div>
         </div>
       </div>
@@ -162,11 +162,11 @@ export default function BlogEinstellungenPage() {
             </select>
           </div>
           <div>
-            <label style={labelStyle}>Standard-Laenge</label>
+            <label style={labelStyle}>Standard-Länge</label>
             <select style={selectStyle} value={settings.default_length} onChange={(e) => update('default_length', e.target.value)}>
-              <option value="kurz">Kurz (~500 Woerter)</option>
-              <option value="mittel">Mittel (~1000 Woerter)</option>
-              <option value="lang">Lang (~1500 Woerter)</option>
+              <option value="kurz">Kurz (~500 Wörter)</option>
+              <option value="mittel">Mittel (~1000 Wörter)</option>
+              <option value="lang">Lang (~1500 Wörter)</option>
             </select>
           </div>
           <div className="sm:col-span-2">
@@ -174,18 +174,18 @@ export default function BlogEinstellungenPage() {
             <input style={inputStyle} value={settings.default_author} onChange={(e) => update('default_author', e.target.value)} placeholder="cam2rent" />
           </div>
           <div className="sm:col-span-2">
-            <label style={labelStyle}>Zusatz-Kontext fuer die KI</label>
+            <label style={labelStyle}>Zusatz-Kontext für die KI</label>
             <textarea
               style={{ ...inputStyle, minHeight: 120 }}
               value={settings.ki_context}
               onChange={(e) => update('ki_context', e.target.value)}
-              placeholder={`Hier kannst du der KI zusaetzliche Infos geben, z.B.:
+              placeholder={`Hier kannst du der KI zusätzliche Infos geben, z.B.:
 
 - Aktuelle Kamera-Modelle: GoPro Hero 14 Black, DJI Osmo Action 6, Insta360 X5
 - Neue Features: 8K Video, KI-Stabilisierung, magnetisches Mount
 - Preise: GoPro ab 12€/Tag, DJI ab 10€/Tag
 - Aktionen: 10% Rabatt im Sommer auf alle Kameras
-- Eigene Erfahrungen oder USPs die erwaehnt werden sollen`}
+- Eigene Erfahrungen oder USPs die erwähnt werden sollen`}
             />
             <p className="text-[11px] mt-1" style={{ color: '#475569' }}>
               Dieser Text wird der KI bei jeder Generierung mitgegeben — fuer aktuelle Produkte, Preise, Aktionen etc.
@@ -222,7 +222,7 @@ export default function BlogEinstellungenPage() {
                 <div className="grid grid-cols-2 gap-2 mt-1">
                   {[
                     { value: 'semi', label: 'Semi-Automatisch', desc: 'KI generiert als Entwurf — du gibst frei', color: '#f59e0b' },
-                    { value: 'voll', label: 'Voll-Automatisch', desc: 'KI generiert und veroeffentlicht sofort', color: '#22c55e' },
+                    { value: 'voll', label: 'Voll-Automatisch', desc: 'KI generiert und veröffentlicht sofort', color: '#22c55e' },
                   ].map((m) => {
                     const active = (settings.auto_generate_mode || 'semi') === m.value;
                     return (
@@ -244,8 +244,8 @@ export default function BlogEinstellungenPage() {
               <div>
                 <label style={labelStyle}>Intervall</label>
                 <select style={selectStyle} value={settings.auto_generate_interval} onChange={(e) => update('auto_generate_interval', e.target.value)}>
-                  <option value="daily">Taeglich</option>
-                  <option value="weekly">Woechentlich</option>
+                  <option value="daily">Täglich</option>
+                  <option value="weekly">Wöchentlich</option>
                   <option value="biweekly">Alle 2 Wochen</option>
                   <option value="monthly">Monatlich</option>
                 </select>
@@ -274,7 +274,7 @@ export default function BlogEinstellungenPage() {
                     })}
                   </div>
                   <p className="text-[11px] mt-1.5" style={{ color: '#475569' }}>
-                    Pro ausgewaehltem Tag wird ein Artikel generiert.
+                    Pro ausgewähltem Tag wird ein Artikel generiert.
                     Aktuell: {(settings.auto_generate_weekdays ?? []).length} Artikel pro Woche
                   </p>
                 </div>
@@ -284,7 +284,7 @@ export default function BlogEinstellungenPage() {
               <div>
                 <label style={labelStyle}>
                   {settings.auto_generate_interval === 'daily'
-                    ? 'Veroeffentlichungszeitraum (taeglich zwischen)'
+                    ? 'Veröffentlichungszeitraum (täglich zwischen)'
                     : 'Uhrzeit (zwischen)'}
                 </label>
                 <div className="flex items-center gap-2">
@@ -304,7 +304,7 @@ export default function BlogEinstellungenPage() {
                 </div>
                 <p className="text-[11px] mt-1.5" style={{ color: '#475569' }}>
                   {settings.auto_generate_interval === 'daily'
-                    ? 'Der Cron-Job generiert taeglich einen Artikel innerhalb dieses Zeitfensters.'
+                    ? 'Der Cron-Job generiert täglich einen Artikel innerhalb dieses Zeitfensters.'
                     : 'Der Cron-Job sollte innerhalb dieses Zeitfensters laufen.'}
                 </p>
               </div>
@@ -320,7 +320,7 @@ export default function BlogEinstellungenPage() {
                   <option value={7}>1 Woche vorher</option>
                 </select>
                 <p className="text-[11px] mt-1.5" style={{ color: '#475569' }}>
-                  Artikel aus dem Zeitplan werden X Tage vor dem Veroeffentlichungsdatum generiert. So hast du Zeit sie zu pruefen. Am geplanten Tag wird automatisch veroeffentlicht.
+                  Artikel aus dem Zeitplan werden X Tage vor dem Veröffentlichungsdatum generiert. So hast du Zeit sie zu prüfen. Am geplanten Tag wird automatisch veröffentlicht.
                 </p>
               </div>
 
@@ -339,7 +339,7 @@ export default function BlogEinstellungenPage() {
                   <span className="text-base mt-0.5">&#9888;</span>
                   <p className="text-xs" style={{ color: '#94a3b8' }}>
                     Artikel werden als <strong style={{ color: '#f59e0b' }}>Entwurf</strong> gespeichert.
-                    Du findest sie unter Artikel und kannst sie pruefen, bearbeiten und manuell veroeffentlichen.
+                    Du findest sie unter Artikel und kannst sie prüfen, bearbeiten und manuell veröffentlichen.
                   </p>
                 </div>
               )}
@@ -347,21 +347,21 @@ export default function BlogEinstellungenPage() {
               {/* Cron-Info */}
               <div className="space-y-3">
                 <div style={{ background: '#0f172a', borderRadius: 8, padding: 16 }}>
-                  <p style={{ color: '#94a3b8' }} className="text-xs font-heading font-semibold uppercase mb-2">Cron 1: Artikel generieren (stuendlich)</p>
+                  <p style={{ color: '#94a3b8' }} className="text-xs font-heading font-semibold uppercase mb-2">Cron 1: Artikel generieren (stündlich)</p>
                   <code className="text-xs break-all" style={{ color: '#06b6d4' }}>
                     {baseUrl}/api/cron/blog-generate?secret=DEIN_CRON_SECRET
                   </code>
                   <p className="text-[11px] mt-2" style={{ color: '#475569' }}>
-                    Generiert Artikel {settings.schedule_days_before || 3} Tage vor dem Veroeffentlichungsdatum.
+                    Generiert Artikel {settings.schedule_days_before || 3} Tage vor dem Veröffentlichungsdatum.
                   </p>
                 </div>
                 <div style={{ background: '#0f172a', borderRadius: 8, padding: 16 }}>
-                  <p style={{ color: '#94a3b8' }} className="text-xs font-heading font-semibold uppercase mb-2">Cron 2: Geplante veroeffentlichen (stuendlich)</p>
+                  <p style={{ color: '#94a3b8' }} className="text-xs font-heading font-semibold uppercase mb-2">Cron 2: Geplante veröffentlichen (stündlich)</p>
                   <code className="text-xs break-all" style={{ color: '#06b6d4' }}>
                     {baseUrl}/api/cron/blog-publish?secret=DEIN_CRON_SECRET
                   </code>
                   <p className="text-[11px] mt-2" style={{ color: '#475569' }}>
-                    Veroeffentlicht Artikel automatisch wenn ihr geplantes Datum erreicht ist — egal ob du sie gesehen hast oder nicht.
+                    Veröffentlicht Artikel automatisch wenn ihr geplantes Datum erreicht ist — egal ob du sie gesehen hast oder nicht.
                   </p>
                 </div>
               </div>

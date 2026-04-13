@@ -48,7 +48,7 @@ export default function BlogMediathekPage() {
   }
 
   async function deleteImage(name: string) {
-    if (!confirm('Bild wirklich loeschen?')) return;
+    if (!confirm('Bild wirklich löschen?')) return;
     await fetch(`/api/admin/blog/media?name=${encodeURIComponent(name)}`, { method: 'DELETE' });
     if (selected === name) setSelected(null);
     loadImages();
@@ -91,7 +91,7 @@ export default function BlogMediathekPage() {
         </div>
       )}
 
-      {/* Ausgewaehltes Bild Detail */}
+      {/* Ausgewähltes Bild Detail */}
       {selected && (
         <div className="mb-6 rounded-xl p-4 flex flex-col sm:flex-row gap-4" style={{ background: '#1e293b', border: '1px solid #06b6d430' }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -104,10 +104,10 @@ export default function BlogMediathekPage() {
                 URL kopieren
               </button>
               <button onClick={() => deleteImage(selected)} className="px-3 py-1.5 rounded text-xs font-heading font-semibold" style={{ background: '#ef444420', color: '#ef4444' }}>
-                Loeschen
+                Löschen
               </button>
               <button onClick={() => setSelected(null)} className="px-3 py-1.5 rounded text-xs font-heading font-semibold" style={{ background: '#334155', color: '#94a3b8' }}>
-                Schliessen
+                Schließen
               </button>
             </div>
           </div>

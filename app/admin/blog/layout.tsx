@@ -142,7 +142,7 @@ export default function BlogAdminLayout({ children }: { children: React.ReactNod
         <div className="px-3 py-4" style={{ borderTop: '1px solid #1e293b' }}>
           <Link href="/admin" className="flex items-center gap-2 px-3 py-2 text-xs font-body rounded-lg" style={{ color: '#475569' }}>
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
-            Zurueck zum Admin
+            Zurück zum Admin
           </Link>
         </div>
       </div>
@@ -182,7 +182,7 @@ export default function BlogAdminLayout({ children }: { children: React.ReactNod
               onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = '#475569'; }}
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
-              Zurueck zum Admin
+              Zurück zum Admin
             </Link>
           </div>
         </aside>

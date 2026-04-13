@@ -17,7 +17,7 @@ export default function ServiceWorkerRegistration() {
                 navigator.serviceWorker.controller
               ) {
                 // New version available — will be used on next reload
-                console.debug('[SW] Neues Update verfuegbar');
+                console.debug('[SW] Neues Update verfügbar');
               }
             });
           });

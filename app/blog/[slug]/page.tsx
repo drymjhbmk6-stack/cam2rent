@@ -82,7 +82,7 @@ export default async function BlogArticlePage({ params }: { params: Promise<{ sl
     keywords: post.tags?.join(', '),
   };
 
-  // View-Count erhoehen (fire-and-forget, server-side)
+  // View-Count erhöhen (fire-and-forget, server-side)
   const supabase = createServiceClient();
   supabase
     .from('blog_posts')

@@ -67,7 +67,7 @@ export default function InstallPrompt() {
               cam2rent installieren
             </p>
             <p className="text-xs font-body text-brand-steel mt-0.5">
-              Fuer schnellen Zugriff zum Startbildschirm hinzufuegen
+              Für schnellen Zugriff zum Startbildschirm hinzufügen
             </p>
 
             <div className="flex items-center gap-2 mt-3">
@@ -81,7 +81,7 @@ export default function InstallPrompt() {
                 onClick={handleDismiss}
                 className="px-3 py-1.5 text-xs font-body text-brand-steel hover:text-brand-text transition-colors"
               >
-                Spaeter
+                Später
               </button>
             </div>
           </div>
