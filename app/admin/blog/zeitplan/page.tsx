@@ -195,32 +195,78 @@ export default function BlogZeitplanPage() {
               {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}/Wo.</option>)}
             </select>
             <button onClick={() => setShowImport(!showImport)} className="px-4 py-2 rounded-lg text-xs font-heading font-semibold" style={{ background: showImport ? '#06b6d4' : '#334155', color: showImport ? 'white' : '#e2e8f0' }}>
-              {showImport ? 'Import schliessen' : `Einzelthemen importieren (${topics.length})`}
+              {showImport ? 'Themen schliessen' : `Themen anzeigen (${topics.length})`}
             </button>
           </div>
 
-          {/* Import aus Einzelthemen */}
+          {/* Einzelthemen mit Details */}
           {showImport && (
             <div className="rounded-xl p-4 mb-6" style={{ background: '#1e293b', border: '1px solid #06b6d430' }}>
               <div className="flex items-center justify-between mb-3">
-                <h3 className="font-heading font-semibold text-sm" style={{ color: '#06b6d4' }}>Einzelthemen in Zeitplan einfuegen</h3>
+                <h3 className="font-heading font-semibold text-sm" style={{ color: '#06b6d4' }}>Einzelthemen → in Zeitplan einfuegen</h3>
                 <div className="flex items-center gap-2">
                   <label className="text-[11px] font-heading" style={{ color: '#94a3b8' }}>Datum:</label>
                   <input type="date" value={importDate} onChange={(e) => setImportDate(e.target.value)} className="px-2 py-1 rounded text-xs" style={{ background: '#0f172a', border: '1px solid #334155', color: '#e2e8f0' }} />
                 </div>
               </div>
               {topics.length === 0 ? (
-                <p className="text-xs py-4 text-center" style={{ color: '#475569' }}>Keine offenen Einzelthemen. Erstelle welche unter Themen → Einzelthemen.</p>
+                <p className="text-xs py-4 text-center" style={{ color: '#475569' }}>Keine offenen Einzelthemen. Erstelle welche unter <Link href="/admin/blog/themen" style={{ color: '#06b6d4' }}>Themen → Einzelthemen</Link>.</p>
               ) : (
-                <div className="space-y-1.5 max-h-64 overflow-y-auto">
-                  {topics.map((t) => (
-                    <div key={t.id} className="flex items-center justify-between px-3 py-2 rounded-lg" style={{ background: '#0f172a' }}>
-                      <span className="text-xs font-body truncate flex-1" style={{ color: '#e2e8f0' }}>{t.topic}</span>
-                      <button onClick={() => importTopic(t)} className="px-3 py-1 rounded text-[11px] font-heading font-semibold shrink-0 ml-2" style={{ background: '#06b6d4', color: '#0f172a' }}>
-                        + Einfuegen
-                      </button>
-                    </div>
-                  ))}
+                <div className="space-y-2 max-h-[500px] overflow-y-auto">
+                  {topics.map((t) => {
+                    const isOpen = expandedId === `topic-${t.id}`;
+                    const TONE_L: Record<string, string> = { informativ: 'Informativ', locker: 'Locker', professionell: 'Professionell' };
+                    const LEN_L: Record<string, string> = { kurz: 'Kurz (~500)', mittel: 'Mittel (~1000)', lang: 'Lang (~1500)' };
+                    return (
+                      <div key={t.id} className="rounded-lg overflow-hidden" style={{ background: '#0f172a', border: isOpen ? '1px solid #06b6d440' : '1px solid #334155' }}>
+                        {/* Header */}
+                        <div className="flex items-center gap-3 px-3 py-2.5 cursor-pointer" onClick={() => setExpandedId(isOpen ? null : `topic-${t.id}`)}>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-heading font-bold" style={{ background: '#f59e0b20', color: '#f59e0b' }}>Entwurf</span>
+                          <span className="text-sm font-semibold truncate flex-1" style={{ color: '#e2e8f0' }}>{t.topic}</span>
+                          <svg className="w-3.5 h-3.5 shrink-0 transition-transform" style={{ color: '#475569', transform: isOpen ? 'rotate(180deg)' : 'rotate(0)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </div>
+
+                        {/* Details */}
+                        {isOpen && (
+                          <div className="px-3 pb-3" style={{ borderTop: '1px solid #334155' }}>
+                            <div className="grid grid-cols-2 gap-2 pt-3">
+                              <div className="col-span-2 rounded p-2.5" style={{ background: '#1e293b' }}>
+                                <p className="text-[10px] font-semibold uppercase mb-1" style={{ color: '#64748b' }}>KI-Prompt / Thema</p>
+                                <p className="text-xs" style={{ color: '#e2e8f0' }}>{t.topic}</p>
+                              </div>
+                              <div className="col-span-2 rounded p-2.5" style={{ background: '#1e293b' }}>
+                                <p className="text-[10px] font-semibold uppercase mb-1" style={{ color: '#64748b' }}>Keywords / SEO</p>
+                                {t.keywords?.length > 0 ? (
+                                  <div className="flex flex-wrap gap-1">
+                                    {t.keywords.map((kw, i) => (
+                                      <span key={i} className="px-1.5 py-0.5 rounded text-[10px]" style={{ background: '#0f172a', color: '#94a3b8' }}>{kw}</span>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <p className="text-[10px]" style={{ color: '#475569' }}>KI generiert automatisch</p>
+                                )}
+                              </div>
+                              <div className="rounded p-2.5" style={{ background: '#1e293b' }}>
+                                <p className="text-[10px] font-semibold uppercase mb-1" style={{ color: '#64748b' }}>Ton</p>
+                                <p className="text-xs" style={{ color: '#e2e8f0' }}>{TONE_L[t.tone] || t.tone || 'Informativ'}</p>
+                              </div>
+                              <div className="rounded p-2.5" style={{ background: '#1e293b' }}>
+                                <p className="text-[10px] font-semibold uppercase mb-1" style={{ color: '#64748b' }}>Ziel-Laenge</p>
+                                <p className="text-xs" style={{ color: '#e2e8f0' }}>{LEN_L[t.target_length] || t.target_length || 'Mittel'}</p>
+                              </div>
+                            </div>
+                            <div className="flex justify-end mt-3">
+                              <button onClick={() => importTopic(t)} className="px-4 py-1.5 rounded text-xs font-heading font-semibold" style={{ background: '#06b6d4', color: 'white' }}>
+                                + In Zeitplan einfuegen
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
