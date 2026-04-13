@@ -596,9 +596,16 @@ export default function BuchungDetailPage() {
                   </a>
                 </div>
               ) : (
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3 flex-wrap">
                   <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-heading font-semibold bg-red-100 text-red-600">Ausstehend</span>
                   <span className="text-sm font-body text-brand-muted">Noch nicht unterschrieben</span>
+                  <a
+                    href={`/admin/buchungen/${booking.id}/vertrag-unterschreiben`}
+                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-heading font-semibold bg-amber-500 text-white rounded-btn hover:bg-amber-600 transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                    Jetzt unterschreiben
+                  </a>
                 </div>
               )}
             </Section>
