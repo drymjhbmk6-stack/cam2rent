@@ -10,6 +10,8 @@ function LoginForm() {
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get('redirect') ?? '/konto';
   const urlError = searchParams.get('error');
+  const urlSuccess = searchParams.get('success');
+  const urlInfo = searchParams.get('info');
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -57,6 +59,18 @@ function LoginForm() {
           <p className="text-brand-text dark:text-gray-300 text-sm mb-6">
             Melde dich an, um deine Buchungen zu verwalten.
           </p>
+
+          {urlSuccess && (
+            <div className="mb-4 p-4 rounded-[10px] bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-400 text-sm">
+              {urlSuccess}
+            </div>
+          )}
+
+          {urlInfo && (
+            <div className="mb-4 p-4 rounded-[10px] bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400 text-sm">
+              {urlInfo}
+            </div>
+          )}
 
           {error && (
             <div className="mb-4 p-4 rounded-[10px] bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-status-error text-sm">

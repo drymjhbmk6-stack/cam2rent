@@ -7,13 +7,14 @@ import type { EmailOtpType } from '@supabase/supabase-js';
  * GET /auth/callback
  *
  * Verarbeitet alle Supabase Auth-Callbacks:
- * - E-Mail-Bestätigung nach Registrierung (?token_hash=xxx&type=signup)
- * - Passwort-Reset-Link (?token_hash=xxx&type=recovery)
- * - OAuth / PKCE (?code=xxx)
+ * - E-Mail-Bestätigung (code aus ConfirmationURL — Supabase bestätigt die E-Mail
+ *   bereits serverseitig, bevor hierher redirected wird)
+ * - Passwort-Reset-Link
+ * - OAuth / PKCE
  *
- * Die E-Mail-Templates in Supabase verwenden:
- *   {{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=signup
- * Damit funktioniert die Bestätigung geraeteuebergreifend (ohne PKCE-Cookies).
+ * Wenn der PKCE Code-Austausch fehlschlaegt (anderer Browser/Geraet),
+ * wird trotzdem zum Login weitergeleitet mit Erfolgsmeldung,
+ * da die E-Mail-Bestätigung bereits durch Supabase erfolgt ist.
  */
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -22,17 +23,26 @@ export async function GET(request: NextRequest) {
   const type = searchParams.get('type') as EmailOtpType | null;
   const next = searchParams.get('next') ?? '/konto';
   const errorParam = searchParams.get('error');
+  const errorCode = searchParams.get('error_code');
+  const errorDescription = searchParams.get('error_description');
 
-  // Sichere Base-URL: Forwarded-Header oder Env-Variable statt request.url
+  // Sichere Base-URL
   const forwardedHost = request.headers.get('x-forwarded-host');
   const forwardedProto = request.headers.get('x-forwarded-proto') ?? 'https';
   const baseUrl = forwardedHost
     ? `${forwardedProto}://${forwardedHost}`
     : (process.env.NEXT_PUBLIC_SITE_URL ?? 'https://test.cam2rent.de');
 
+  // Fehler von Supabase (z.B. otp_expired)
   if (errorParam) {
+    // Bei abgelaufenen Links: freundliche Meldung
+    if (errorCode === 'otp_expired') {
+      return NextResponse.redirect(
+        `${baseUrl}/login?info=Link+abgelaufen.+Bitte+erneut+registrieren+oder+einloggen.`
+      );
+    }
     return NextResponse.redirect(
-      `${baseUrl}/login?error=${encodeURIComponent(errorParam)}`
+      `${baseUrl}/login?error=${encodeURIComponent(errorDescription || errorParam)}`
     );
   }
 
@@ -61,29 +71,35 @@ export async function GET(request: NextRequest) {
     );
 
     let authSuccess = false;
+    let pkceFailedWithCodeVerifier = false;
 
-    // Flow 1: Token-Hash (E-Mail-Bestätigung, Passwort-Reset — geraetuebergreifend)
+    // Flow 1: Token-Hash (falls vorhanden)
     if (token_hash && type) {
       const { error } = await supabase.auth.verifyOtp({ token_hash, type });
       if (!error) {
         authSuccess = true;
       } else {
-        console.error('[auth/callback] Token-Hash-Verifizierung fehlgeschlagen:', error.message);
+        console.error('[auth/callback] Token-Hash fehlgeschlagen:', error.message);
       }
     }
 
-    // Flow 2: PKCE Code-Austausch (OAuth, selber Browser)
+    // Flow 2: PKCE Code-Austausch
     if (!authSuccess && code) {
       const { error } = await supabase.auth.exchangeCodeForSession(code);
       if (!error) {
         authSuccess = true;
       } else {
         console.error('[auth/callback] Code-Austausch fehlgeschlagen:', error.message);
+        // Wenn PKCE fehlschlaegt weil Code-Verifier fehlt (anderer Browser),
+        // ist die E-Mail trotzdem bereits von Supabase bestaetigt worden.
+        if (error.message.includes('code verifier') || error.message.includes('PKCE')) {
+          pkceFailedWithCodeVerifier = true;
+        }
       }
     }
 
     if (authSuccess) {
-      // Pruefen ob Profil verifiziert ist — wenn nicht, zur Verifizierungs-Seite
+      // Pruefen ob Profil verifiziert ist
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (user && next === '/konto') {
@@ -100,7 +116,20 @@ export async function GET(request: NextRequest) {
       } catch {
         // Profil-Check fehlgeschlagen — trotzdem weiterleiten
       }
+
+      // Passwort-Reset: zur Passwort-Aendern-Seite
+      if (next.includes('passwort')) {
+        return NextResponse.redirect(`${baseUrl}${next}`);
+      }
       return NextResponse.redirect(`${baseUrl}${next}`);
+    }
+
+    // PKCE fehlgeschlagen, aber E-Mail wurde von Supabase bestaetigt
+    // → User zum Login mit Erfolgsmeldung schicken
+    if (pkceFailedWithCodeVerifier) {
+      return NextResponse.redirect(
+        `${baseUrl}/login?success=E-Mail+bestaetigt!+Bitte+melde+dich+jetzt+an.`
+      );
     }
   } catch (err) {
     console.error('[auth/callback] Unerwarteter Fehler:', err);
