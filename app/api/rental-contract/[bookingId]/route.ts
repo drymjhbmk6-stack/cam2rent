@@ -172,9 +172,20 @@ export async function GET(
     : booking.haftung === 'premium' ? 'Premium-Schadenspauschale'
     : 'Ohne Schadenspauschale';
 
+  // Seriennummer laden falls Unit zugeordnet
+  let serialNumber = '';
+  if (booking.unit_id) {
+    const { data: unit } = await supabase
+      .from('product_units')
+      .select('serial_number')
+      .eq('id', booking.unit_id)
+      .maybeSingle();
+    serialNumber = unit?.serial_number ?? '';
+  }
+
   const accs: string[] = Array.isArray(booking.accessories) ? booking.accessories : [];
   const items = [
-    { position: 1, bezeichnung: booking.product_name || '', seriennr: '', tage: booking.days || 1, preis: booking.price_rental || 0, wiederbeschaffungswert: booking.deposit || 0 },
+    { position: 1, bezeichnung: booking.product_name || '', seriennr: serialNumber, tage: booking.days || 1, preis: booking.price_rental || 0, wiederbeschaffungswert: booking.deposit || 0 },
     ...accs.map((a: string, i: number) => ({ position: i + 2, bezeichnung: a, seriennr: '', tage: booking.days || 1, preis: 0, wiederbeschaffungswert: 0 })),
   ];
 

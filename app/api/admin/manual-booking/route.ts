@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { generateBookingId } from '@/lib/booking-id';
+import { assignUnitToBooking } from '@/lib/unit-assignment';
 import { generateContractPDF } from '@/lib/contracts/generate-contract';
 import { storeContract } from '@/lib/contracts/store-contract';
 import { sendBookingConfirmation, sendAdminNotification, type BookingEmailData } from '@/lib/email';
@@ -76,6 +77,7 @@ export async function POST(req: NextRequest) {
     };
 
     if (body.user_id) insertData.user_id = body.user_id;
+    if (body.unit_id) insertData.unit_id = body.unit_id;
     if (bookingNotes) insertData.notes = bookingNotes;
     if (payment_status) insertData.payment_status = payment_status;
 
@@ -100,6 +102,12 @@ export async function POST(req: NextRequest) {
         { error: 'Buchung konnte nicht erstellt werden.' },
         { status: 500 }
       );
+    }
+
+    // Unit automatisch zuordnen falls keine manuell gewählt
+    if (!body.unit_id) {
+      assignUnitToBooking(bookingId, product_id, rental_from, rental_to)
+        .catch((err) => console.error(`Unit assignment error for ${bookingId}:`, err));
     }
 
     // ── Response sofort senden — PDF + E-Mail im Hintergrund ──

@@ -23,6 +23,18 @@ export async function GET(
     return NextResponse.json({ error: 'Buchung nicht gefunden.' }, { status: 404 });
   }
 
+  // Seriennummer laden falls Unit zugeordnet
+  let serialNumber: string | null = null;
+  if (booking.unit_id) {
+    const { data: unit } = await supabase
+      .from('product_units')
+      .select('serial_number')
+      .eq('id', booking.unit_id)
+      .maybeSingle();
+    serialNumber = unit?.serial_number ?? null;
+  }
+  booking.serial_number = serialNumber;
+
   // Kundenprofil laden
   let customer = null;
   if (booking.user_id) {

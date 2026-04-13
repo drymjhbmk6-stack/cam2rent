@@ -4,6 +4,7 @@ import { createServiceClient } from '@/lib/supabase';
 import { detectSuspicious } from '@/lib/suspicious';
 import { ensureBusinessConfig } from '@/lib/load-business-config';
 import { generateBookingId } from '@/lib/booking-id';
+import { assignUnitToBooking } from '@/lib/unit-assignment';
 import {
   sendBookingConfirmation,
   sendAdminNotification,
@@ -187,6 +188,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // 6a. Unit automatisch zuordnen (non-blocking)
+    assignUnitToBooking(bookingId, meta.product_id, meta.rental_from, meta.rental_to)
+      .catch((err) => console.error(`Unit assignment error for ${bookingId}:`, err));
+
     // 6b. Abandoned Cart als recovered markieren (non-blocking)
     if (meta.user_id) {
       Promise.resolve(
@@ -245,6 +250,16 @@ export async function POST(req: NextRequest) {
       return `${d}.${m}.${y}`;
     };
 
+    // Seriennummer laden falls Unit zugeordnet
+    let serialNumber = '';
+    try {
+      const { data: bkRow } = await supabase.from('bookings').select('unit_id').eq('id', bookingId).maybeSingle();
+      if (bkRow?.unit_id) {
+        const { data: unitRow } = await supabase.from('product_units').select('serial_number').eq('id', bkRow.unit_id).maybeSingle();
+        serialNumber = unitRow?.serial_number ?? '';
+      }
+    } catch { /* ignore */ }
+
     let contractPdfBuffer: Buffer | undefined;
     if (contractSignature?.agreedToTerms && contractSignature?.signerName) {
       try {
@@ -275,6 +290,7 @@ export async function POST(req: NextRequest) {
           customerCity: custCity,
           productName: meta.product_name || '',
           accessories,
+          serialNumber,
           rentalFrom: fmtDate(meta.rental_from),
           rentalTo: fmtDate(meta.rental_to),
           rentalDays: parseInt(meta.days, 10),

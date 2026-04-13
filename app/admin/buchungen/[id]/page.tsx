@@ -49,6 +49,8 @@ interface BookingDetail {
   loyalty_discount: number | null;
   label_url: string | null;
   return_label_url: string | null;
+  unit_id: string | null;
+  serial_number: string | null;
 }
 
 interface RentalAgreement {
@@ -253,7 +255,7 @@ export default function BuchungDetailPage() {
   <p style="margin-bottom:12px">Datum: <strong>${dateStr}</strong></p>
   <h2>2. Versandgegenstand</h2>
   <div class="info-grid" style="margin-bottom:4px"><span class="info-label">Kamera / Gerät:</span><span class="info-value">${produktName}</span></div>
-  <p style="margin-bottom:8px">Seriennummer: <span class="line line-short"></span></p>
+  <p style="margin-bottom:8px">Seriennummer: <strong>${booking.serial_number || '<span class="line line-short"></span>'}</strong></p>
   <p style="margin-bottom:4px;font-weight:600">Zubehör:</p>
   <table><thead><tr><th style="width:40px">Nr.</th><th>Bezeichnung</th><th style="width:50px">OK</th></tr></thead><tbody>${zubehoerRows}</tbody></table>
   <h2>3. Zustand bei Verpackung</h2>
@@ -285,7 +287,7 @@ export default function BuchungDetailPage() {
     // Kameras mit Seriennummern — Produktnamen aufsplitten (kommagetrennt)
     const productNames = (booking.product_name || '').split(',').map((n: string) => n.trim()).filter(Boolean);
     const kameraRows = productNames.map((name: string) =>
-      `<p style="margin-bottom:4px"><strong>Kamera:</strong> ${name} &nbsp;&nbsp;&nbsp;&nbsp; <strong>SN:</strong> <span class="line line-short"></span></p>`
+      `<p style="margin-bottom:4px"><strong>Kamera:</strong> ${name} &nbsp;&nbsp;&nbsp;&nbsp; <strong>SN:</strong> ${booking.serial_number || '<span class="line line-short"></span>'}</p>`
     ).join('');
 
     // Zubehoer-Namen aufloesen (IDs → Namen aus AccessoriesProvider nicht verfuegbar, nutze IDs als Fallback)
@@ -438,6 +440,7 @@ export default function BuchungDetailPage() {
             <Section title="Buchungsdaten">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <InfoRow label="Produkt" value={booking.product_name} />
+                {booking.serial_number && <InfoRow label="Seriennummer" value={booking.serial_number} highlight />}
                 <InfoRow label="Mietdauer" value={`${booking.days} Tag${booking.days !== 1 ? 'e' : ''}`} />
                 <InfoRow label="Von" value={fmtDate(booking.rental_from)} />
                 <InfoRow label="Bis" value={fmtDate(booking.rental_to)} />
