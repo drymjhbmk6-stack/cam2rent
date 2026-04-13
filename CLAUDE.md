@@ -40,7 +40,7 @@ In `data/shipping.ts` → `calcShipping()`: Express-Zweig prüft NICHT den `free
 - react-day-picker v8 + date-fns (--legacy-peer-deps)
 - Docker + Coolify Deployment
 
-## Architektur-Übersicht (Stand 2026-04-07)
+## Architektur-Übersicht (Stand 2026-04-13)
 
 ### Datenquellen — ALLES aus DB, keine statischen Fallbacks
 - **Kameras:** `admin_config.products` → `getProducts()` (lib/get-products.ts) → `/api/products` → `ProductsProvider` + `useProducts()`
@@ -79,10 +79,37 @@ Alle Dropdowns laden aus `admin_settings` und können neue Einträge hinzufügen
 - Shop-Filter `/kameras`: Ausklappbar, dynamische Specs aus DB
 - `getMergedSpecs()` bevorzugt `product.adminSpecs`, filtert leere Werte raus
 
-### Verfügbarkeit
-- 3 Tabs: Kameras, Sets, Zubehör
-- Kameras aus `useProducts()` (DB), gelöschte verschwinden sofort
-- Availability-API berücksichtigt Puffertage + Viewer delivery_mode
+### Seriennummern / Einzelkamera-Tracking
+- **Kein manueller Lagerbestand mehr** — `stock` wird automatisch aus `product_units` berechnet (Anzahl Units mit status != 'retired')
+- **DB-Tabelle `product_units`:** id (UUID), product_id, serial_number, label, status (available/rented/maintenance/retired), notes, purchased_at
+  - Unique Constraint: Seriennummer pro Produkt eindeutig
+  - Migration: `supabase-product-units.sql`
+- **DB-Spalte `bookings.unit_id`:** FK auf `product_units(id)` — ordnet einer Buchung eine physische Kamera zu
+- **API `/api/admin/product-units`:** GET (alle/nach product_id), POST (neue Unit), PUT (Update), DELETE (mit Prüfung auf aktive Buchungen)
+- **Kamera-Editor (`/admin/preise/kameras/[id]`):** Seriennummern-Tabelle statt Lagerbestand-Eingabefeld. Inline-Bearbeitung, Hinzufügen, Löschen pro Zeile.
+- **Automatische Unit-Zuordnung bei Buchung:**
+  - `lib/unit-assignment.ts` → `findFreeUnit()` + `assignUnitToBooking()`
+  - Wird non-blocking aufgerufen in: `confirm-cart`, `confirm-booking`, `manual-booking`
+  - Logik: Findet Unit deren ID nicht in überlappenden aktiven Buchungen vorkommt
+  - Bei manueller Buchung: Optional `unit_id` im Body direkt übergeben
+- **Seriennummer in Dokumenten:**
+  - Vertrags-PDF: `generateContractPDF({ serialNumber })` → `MietgegenstandItem.seriennr` → erscheint in PDF + SHA-256 Hash
+  - Packliste (Versand-Seite + Buchungsdetails): Seriennummer statt leerer Unterstrich-Linie
+  - Übergabeprotokoll: Seriennummer pro Kamera
+  - Buchungsdetails: Seriennummer als Info-Zeile
+- **APIs die `unit_id`/Seriennummer liefern:**
+  - `GET /api/admin/booking/[id]` → `booking.serial_number` (aus product_units nachgeladen)
+  - `GET /api/admin/versand-buchungen` → `booking.serial_number` (angereichert)
+
+### Verfügbarkeit + Gantt-Kalender
+- **Gantt-Kalender** (`/admin/verfuegbarkeit`, Kameras-Tab): Pro Kameratyp aufklappbarer Bereich mit allen Units als Zeilen
+  - Monatsnavigation (< Monat Jahr >), Heute-Button
+  - Tageszellen farbcodiert: Grün=frei, Blau=gebucht, Gelb=Hinversand, Orange=Rückversand, Rot=Wartung, Grau=ausgemustert
+  - Hover-Tooltip: Buchungs-ID, Kundenname, Zeitraum, Lieferart
+  - Klick auf gebuchte Zelle → öffnet `/admin/buchungen/[id]` in neuem Tab
+  - API: `GET /api/admin/availability-gantt?month=YYYY-MM` → liefert Produkte mit Units, Buchungen, blockierte Tage, Puffertage
+- **Sets + Zubehör Tabs:** Wie bisher (einfache Tabelle mit Status)
+- **Availability-API** (`/api/availability/[productId]`): Nutzt weiterhin `product.stock` für Shop-seitige Verfügbarkeitsprüfung, berücksichtigt Puffertage + Viewer delivery_mode
 
 ### Kundenkonto
 `/app/konto/` mit horizontaler Tab-Leiste
@@ -121,3 +148,5 @@ Steuer-Modus umschaltbar im Admin (/admin/einstellungen):
 - Google Reviews: User muss Google Place ID + API Key liefern
 - SQL-Migration `supabase-zubehoer-verfuegbarkeit.sql` ist erledigt (verschoben in `erledigte supabase/`)
 - Bestehende 6 Kameras brauchen Admin-Specs (Technische Daten im Editor anlegen)
+- SQL-Migration `supabase-product-units.sql` muss in Supabase ausgeführt werden (product_units Tabelle + unit_id in bookings)
+- Bestehende Kameras brauchen Seriennummern (im Kamera-Editor unter "Kameras / Seriennummern" anlegen)
