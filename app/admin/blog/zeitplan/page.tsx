@@ -222,7 +222,7 @@ export default function BlogZeitplanPage() {
               {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}/Wo.</option>)}
             </select>
             <button onClick={() => setShowImport(!showImport)} className="px-4 py-2 rounded-lg text-xs font-heading font-semibold" style={{ background: showImport ? '#06b6d4' : '#334155', color: showImport ? 'white' : '#e2e8f0' }}>
-              {showImport ? 'Themen schliessen' : `Themen anzeigen (${topics.length})`}
+              {showImport ? 'Themen schließen' : `Themen anzeigen (${topics.length})`}
             </button>
           </div>
 
@@ -280,7 +280,7 @@ export default function BlogZeitplanPage() {
                                 <p className="text-xs" style={{ color: '#e2e8f0' }}>{TONE_L[t.tone] || t.tone || 'Informativ'}</p>
                               </div>
                               <div className="rounded p-2.5" style={{ background: '#1e293b' }}>
-                                <p className="text-[10px] font-semibold uppercase mb-1" style={{ color: '#64748b' }}>Ziel-Laenge</p>
+                                <p className="text-[10px] font-semibold uppercase mb-1" style={{ color: '#64748b' }}>Ziel-Länge</p>
                                 <p className="text-xs" style={{ color: '#e2e8f0' }}>{LEN_L[t.target_length] || t.target_length || 'Mittel'}</p>
                               </div>
                             </div>

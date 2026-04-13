@@ -77,16 +77,16 @@ interface EmailLogEntry {
 }
 
 const EMAIL_TYPE_LABELS: Record<string, string> = {
-  booking_confirmation: 'Buchungsbestaetigung',
+  booking_confirmation: 'Buchungsbestätigung',
   booking_admin: 'Admin-Benachrichtigung',
   cancellation_customer: 'Stornierung',
   cancellation_admin: 'Stornierung (Admin)',
-  shipping_confirmation: 'Versandbestaetigung',
+  shipping_confirmation: 'Versandbestätigung',
   contract_signed: 'Mietvertrag',
   damage_report: 'Schadensmeldung',
   damage_resolution: 'Schadensabschluss',
   review_request: 'Bewertungsanfrage',
-  extension_confirmation: 'Verlaengerung',
+  extension_confirmation: 'Verlängerung',
   return_reminder: 'Rückgabe-Erinnerung',
   overdue_notice: 'Überfällig',
 };
@@ -291,7 +291,7 @@ export default function BuchungDetailPage() {
       `<p style="margin-bottom:4px"><strong>Kamera:</strong> ${name} &nbsp;&nbsp;&nbsp;&nbsp; <strong>SN:</strong> ${booking.serial_number || '<span class="line line-short"></span>'}</p>`
     ).join('');
 
-    // Zubehoer-Namen aufloesen (IDs → Namen aus AccessoriesProvider nicht verfuegbar, nutze IDs als Fallback)
+    // Zubehör-Namen auflösen (IDs → Namen aus AccessoriesProvider nicht verfügbar, nutze IDs als Fallback)
     const accList = Array.isArray(booking.accessories) ? booking.accessories : [];
     const accRows2 = accList.map((a: string, i: number) => `<tr><td style="width:40px">${i + 1}</td><td>${a}</td><td style="width:50px"></td></tr>`);
     const emptyCount2 = Math.max(0, 10 - accRows2.length);
@@ -440,7 +440,7 @@ export default function BuchungDetailPage() {
                 <InfoRow label="Mietdauer" value={`${booking.days} Tag${booking.days !== 1 ? 'e' : ''}`} />
                 <InfoRow label="Von" value={fmtDate(booking.rental_from)} />
                 <InfoRow label="Bis" value={fmtDate(booking.rental_to)} />
-                {booking.extended_at && <InfoRow label="Verlaengert" value={`Urspruenglich bis ${booking.original_rental_to ? fmtDate(booking.original_rental_to) : '\u2013'}`} highlight />}
+                {booking.extended_at && <InfoRow label="Verlängert" value={`Ursprünglich bis ${booking.original_rental_to ? fmtDate(booking.original_rental_to) : '\u2013'}`} highlight />}
                 <InfoRow label="Lieferart" value={booking.delivery_mode === 'versand' ? 'Versand' : 'Abholung'} />
                 {booking.shipping_method && <InfoRow label="Versandart" value={booking.shipping_method === 'express' ? 'Express' : 'Standard'} />}
                 <InfoRow label="Haftungsoption" value={booking.haftung === 'standard' ? 'Standard-Haftungsschutz' : booking.haftung === 'premium' ? 'Premium-Haftungsschutz' : 'Keine Haftungsbegrenzung'} />
@@ -500,7 +500,7 @@ export default function BuchungDetailPage() {
               )}
             </Section>
 
-            {/* Zubehoer */}
+            {/* Zubehör */}
             {booking.accessories && booking.accessories.length > 0 && (
               <Section title="Zubehör & Set">
                 <div className="flex flex-wrap gap-2">
@@ -641,11 +641,11 @@ export default function BuchungDetailPage() {
                 {booking.contract_signed_at && <TimelineItem label="Vertrag unterschrieben" date={fmtDateTime(booking.contract_signed_at)} status="confirmed" active />}
                 {booking.shipped_at && <TimelineItem label="Versendet" date={fmtDateTime(booking.shipped_at)} status="shipped" active />}
                 {booking.status === 'picked_up' && <TimelineItem label="Abgeholt" date="" status="shipped" active />}
-                {booking.extended_at && <TimelineItem label="Verlaengert" date={fmtDateTime(booking.extended_at)} status="confirmed" active />}
+                {booking.extended_at && <TimelineItem label="Verlängert" date={fmtDateTime(booking.extended_at)} status="confirmed" active />}
                 {booking.returned_at && <TimelineItem label="Zurückgegeben" date={fmtDateTime(booking.returned_at)} status="completed" active />}
                 {booking.status === 'completed' && !booking.returned_at && <TimelineItem label="Abgeschlossen" date="" status="completed" active />}
                 {booking.status === 'cancelled' && <TimelineItem label="Storniert" date="" status="cancelled" active />}
-                {booking.status === 'damaged' && <TimelineItem label="Beschaedigt gemeldet" date="" status="damaged" active />}
+                {booking.status === 'damaged' && <TimelineItem label="Beschädigt gemeldet" date="" status="damaged" active />}
               </div>
             </Section>
           </div>

@@ -940,19 +940,19 @@ export default function AnalyticsPage() {
               label="Seitenaufrufe heute"
               value={liveData?.total_views ?? todayData?.total_views ?? '–'}
               sub="Seitenaufrufe"
-              tooltip="Gesamtanzahl aller aufgerufenen Seiten seit Mitternacht. Jeder Klick auf eine Seite zaehlt als ein Aufruf."
+              tooltip="Gesamtanzahl aller aufgerufenen Seiten seit Mitternacht. Jeder Klick auf eine Seite zählt als ein Aufruf."
             />
             <StatCard
               label="Einzelne Besucher heute"
               value={liveData?.unique_visitors ?? todayData?.unique_visitors ?? '–'}
               sub="Einzelne Besucher"
-              tooltip="Anzahl verschiedener Personen, die heute die Seite besucht haben. Mehrfachbesuche derselben Person werden nur einmal gezaehlt."
+              tooltip="Anzahl verschiedener Personen, die heute die Seite besucht haben. Mehrfachbesuche derselben Person werden nur einmal gezählt."
             />
             <StatCard
               label="Seiten pro Besuch"
               value={liveData?.avg_pages_per_session ?? '–'}
               sub="Durchschnitt"
-              tooltip="Durchschnittliche Anzahl der Seiten, die ein Besucher pro Sitzung aufruft. Je hoeher, desto interessierter sind die Besucher."
+              tooltip="Durchschnittliche Anzahl der Seiten, die ein Besucher pro Sitzung aufruft. Je höher, desto interessierter sind die Besucher."
             />
           </div>
 
@@ -971,7 +971,7 @@ export default function AnalyticsPage() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                   <thead>
                     <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                      {['Besucher', 'Aktuelle Seite', 'Geraet', 'Herkunft', 'Seiten', 'Zuletzt'].map((h) => (
+                      {['Besucher', 'Aktuelle Seite', 'Gerät', 'Herkunft', 'Seiten', 'Zuletzt'].map((h) => (
                         <th key={h} style={{ padding: '8px 12px', textAlign: 'left', color: C.textDim, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 600 }}>{h}</th>
                       ))}
                     </tr>
@@ -1033,7 +1033,7 @@ export default function AnalyticsPage() {
               label="Abschlussquote"
               value={bookingsData ? `${bookingsData.conversion_rate}%` : '–'}
               color={C.yellow}
-              tooltip="Anteil der Besucher, die tatsaechlich eine Buchung abgeschlossen haben. Berechnet als Buchungen geteilt durch Besuche."
+              tooltip="Anteil der Besucher, die tatsächlich eine Buchung abgeschlossen haben. Berechnet als Buchungen geteilt durch Besuche."
             />
             <StatCard
               label="Durchschnittl. Buchungswert"
@@ -1076,7 +1076,7 @@ export default function AnalyticsPage() {
           <Card style={{ marginBottom: 20 }}>
             <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16 }}>
               Buchungstrend — {getTimeRangeLabel(filters.timeRange)}
-              <InfoTooltip text="Anzahl der Buchungen pro Tag im gewaehlten Zeitraum." />
+              <InfoTooltip text="Anzahl der Buchungen pro Tag im gewählten Zeitraum." />
             </div>
             {bookingsData ? (
               <BarChart data={getFilteredTrend().map((d) => d.count)} color={C.green} height={100} />
@@ -1182,7 +1182,7 @@ export default function AnalyticsPage() {
           <Card style={{ marginBottom: 20 }}>
             <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16 }}>
               Besucher-Verlauf — {getTimeRangeLabel(filters.timeRange)}
-              <InfoTooltip text="Seitenaufrufe pro Tag im gewaehlten Zeitraum." />
+              <InfoTooltip text="Seitenaufrufe pro Tag im gewählten Zeitraum." />
             </div>
             {historyData ? (
               <BarChart data={getFilteredHistory().map((d) => d.views)} color={C.cyan} height={100} />
@@ -1193,7 +1193,7 @@ export default function AnalyticsPage() {
           <Card style={{ background: `${C.cyan}08`, border: `1px solid ${C.cyan}33` }}>
             <div style={{ fontWeight: 600, fontSize: 13, color: C.cyanLight, marginBottom: 8 }}>UTM-Tracking einrichten</div>
             <p style={{ fontSize: 12, color: C.textMuted, marginBottom: 10, lineHeight: 1.6 }}>
-              Fuege UTM-Parameter zu deinen Links hinzu, um Traffic-Quellen genau zuzuordnen.
+              Füge UTM-Parameter zu deinen Links hinzu, um Traffic-Quellen genau zuzuordnen.
             </p>
             <code style={{ display: 'block', background: C.border, borderRadius: 8, padding: '8px 12px', fontSize: 11, color: C.cyanLight, fontFamily: 'monospace', wordBreak: 'break-all' }}>
               {'https://cam2rent.de/?utm_source=instagram&utm_medium=social&utm_campaign=hero13-launch'}
@@ -1222,7 +1222,7 @@ export default function AnalyticsPage() {
             <Card>
               <div style={{ fontSize: 11, color: C.textDim, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>
                 Neu vs. Wiederkehrend
-                <InfoTooltip text="Verhaeltnis zwischen Erstbesuchern und wiederkehrenden Besuchern in den letzten 30 Tagen." />
+                <InfoTooltip text="Verhältnis zwischen Erstbesuchern und wiederkehrenden Besuchern in den letzten 30 Tagen." />
               </div>
               {trafficData ? (
                 <>
@@ -1248,13 +1248,13 @@ export default function AnalyticsPage() {
               label="Besuche (30 Tage)"
               value={trafficData?.total_sessions ?? '–'}
               color={C.text}
-              tooltip="Gesamtanzahl aller Sitzungen in den letzten 30 Tagen. Eine Sitzung ist ein zusammenhaengender Besuch auf der Website."
+              tooltip="Gesamtanzahl aller Sitzungen in den letzten 30 Tagen. Eine Sitzung ist ein zusammenhängender Besuch auf der Website."
             />
             <StatCard
               label="Einzelne Besucher (heute)"
               value={todayData?.unique_visitors ?? '–'}
               color={C.cyanLight}
-              tooltip="Anzahl verschiedener Besucher heute. Jede Person wird nur einmal gezaehlt, auch bei mehreren Besuchen."
+              tooltip="Anzahl verschiedener Besucher heute. Jede Person wird nur einmal gezählt, auch bei mehreren Besuchen."
             />
           </div>
 
@@ -1262,8 +1262,8 @@ export default function AnalyticsPage() {
             {/* Device Distribution */}
             <Card>
               <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16 }}>
-                Geraete-Verteilung — 30 Tage
-                <InfoTooltip text="Zeigt, mit welchen Geraeten deine Besucher die Website aufrufen." />
+                Geräte-Verteilung — 30 Tage
+                <InfoTooltip text="Zeigt, mit welchen Geräten deine Besucher die Website aufrufen." />
               </div>
               {trafficData ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>

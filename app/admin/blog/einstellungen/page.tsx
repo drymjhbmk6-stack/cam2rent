@@ -188,7 +188,7 @@ export default function BlogEinstellungenPage() {
 - Eigene Erfahrungen oder USPs die erwähnt werden sollen`}
             />
             <p className="text-[11px] mt-1" style={{ color: '#475569' }}>
-              Dieser Text wird der KI bei jeder Generierung mitgegeben — fuer aktuelle Produkte, Preise, Aktionen etc.
+              Dieser Text wird der KI bei jeder Generierung mitgegeben — für aktuelle Produkte, Preise, Aktionen etc.
               Die Produkte aus deinem Shop werden automatisch geladen.
             </p>
           </div>

@@ -650,7 +650,7 @@ export default function ManualBookingPage() {
         Manuelle Buchung erstellen
       </h1>
       <p className="text-sm mb-6" style={{ color: '#64748b' }}>
-        Fuer Kleinanzeigen, Telefon- oder sonstige externe Bestellungen
+        Für Kleinanzeigen, Telefon- oder sonstige externe Bestellungen
       </p>
 
       {error && (
@@ -727,7 +727,7 @@ export default function ManualBookingPage() {
             </div>
           </div>
 
-          {/* Ausgewaehlter Kunde Badge */}
+          {/* Ausgewählter Kunde Badge */}
           {customerUserId && (
             <div className="mb-4 flex items-center gap-2 px-3 py-2 rounded-lg text-xs" style={{ background: '#06b6d410', border: '1px solid #06b6d430', color: '#06b6d4' }}>
               <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -950,7 +950,7 @@ export default function ManualBookingPage() {
                                 <input type="checkbox" checked={checked} disabled={unavail} onChange={() => !unavail && toggleProductAccessory(sp.id, acc.id)} className="accent-cyan-400" />
                                 <span style={{ color: '#e2e8f0' }}>{acc.name}</span>
                                 {unavail ? (
-                                  <span className="ml-auto" style={{ color: '#ef4444' }}>nicht verfuegbar</span>
+                                  <span className="ml-auto" style={{ color: '#ef4444' }}>nicht verfügbar</span>
                                 ) : (
                                   <span className="ml-auto" style={{ color: '#06b6d4' }}>{price.toFixed(2)} €</span>
                                 )}
@@ -1145,7 +1145,7 @@ export default function ManualBookingPage() {
             )}
             {accessoryPrice > 0 && (
               <div className="flex justify-between" style={{ color: '#e2e8f0' }}>
-                <span>Zubehoer ({selectedProducts.reduce((n, sp) => n + sp.accessories.length, 0)}x)</span>
+                <span>Zubehör ({selectedProducts.reduce((n, sp) => n + sp.accessories.length, 0)}x)</span>
                 <span>{accessoryPrice.toFixed(2)} €</span>
               </div>
             )}

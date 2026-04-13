@@ -1183,10 +1183,10 @@ function AdminInstallSection() {
       ) : (
         <div className="space-y-4">
           <p className="text-sm" style={{ color: '#94a3b8' }}>
-            Oeffne diese Seite in deinem mobilen Browser und verwende die &quot;Zum Home-Bildschirm hinzufuegen&quot;-Funktion deines Browsers.
+            Öffne diese Seite in deinem mobilen Browser und verwende die &quot;Zum Home-Bildschirm hinzufügen&quot;-Funktion deines Browsers.
           </p>
           <div className="p-3 rounded-lg text-xs" style={{ background: '#3b82f608', border: '1px solid #3b82f620', color: '#94a3b8' }}>
-            <strong style={{ color: '#60a5fa' }}>Tipp:</strong> Auf Android: Tippe auf die drei Punkte oben rechts im Browser und waehle &quot;App installieren&quot; oder &quot;Zum Startbildschirm hinzufuegen&quot;.
+            <strong style={{ color: '#60a5fa' }}>Tipp:</strong> Auf Android: Tippe auf die drei Punkte oben rechts im Browser und wähle &quot;App installieren&quot; oder &quot;Zum Startbildschirm hinzufügen&quot;.
           </div>
         </div>
       )}
