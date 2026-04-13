@@ -20,7 +20,9 @@ export async function GET() {
       return NextResponse.json({ reviews: [] });
     }
 
-    return NextResponse.json({ reviews: reviews ?? [] });
+    return NextResponse.json({ reviews: reviews ?? [] }, {
+      headers: { 'Cache-Control': 'public, max-age=60, s-maxage=600, stale-while-revalidate=3600' },
+    });
   } catch {
     return NextResponse.json({ reviews: [] });
   }

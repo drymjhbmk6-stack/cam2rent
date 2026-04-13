@@ -3,14 +3,20 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 /**
  * Berechnet den erwarteten Admin-Token als SHA-256-Hash des Passworts.
- * Läuft in der Edge Runtime (Web Crypto API).
+ * Gecached damit nicht bei jedem Request neu gehasht wird.
  */
+let cachedAdminToken: string | null = null;
+let cachedAdminPassword: string | null = null;
+
 async function computeAdminToken(password: string): Promise<string> {
+  if (cachedAdminToken && cachedAdminPassword === password) return cachedAdminToken;
   const msgBuffer = new TextEncoder().encode(password + '_cam2rent_admin');
   const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-  return Array.from(new Uint8Array(hashBuffer))
+  cachedAdminToken = Array.from(new Uint8Array(hashBuffer))
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('');
+  cachedAdminPassword = password;
+  return cachedAdminToken;
 }
 
 export async function middleware(request: NextRequest) {

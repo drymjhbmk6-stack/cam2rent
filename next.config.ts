@@ -5,6 +5,11 @@ const supabaseHostname = supabaseUrl ? new URL(supabaseUrl).hostname : '';
 
 const nextConfig: NextConfig = {
   output: 'standalone',
+  compress: true,
+  // Grosse Pakete automatisch tree-shaken
+  experimental: {
+    optimizePackageImports: ['@supabase/supabase-js', 'date-fns', 'lucide-react'],
+  },
   images: {
     remotePatterns: [
       // Supabase Storage Bilder

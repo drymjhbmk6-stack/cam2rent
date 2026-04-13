@@ -38,6 +38,13 @@ const DEFAULTS: Record<string, unknown> = {
   reviews_config: DEFAULT_REVIEWS_CONFIG,
 };
 
+function cachedJson(data: unknown, status = 200) {
+  return NextResponse.json(data, {
+    status,
+    headers: { 'Cache-Control': 'public, max-age=60, s-maxage=600, stale-while-revalidate=3600' },
+  });
+}
+
 export async function GET(req: NextRequest) {
   const page = req.nextUrl.searchParams.get('page');
   const section = req.nextUrl.searchParams.get('section');
@@ -56,17 +63,17 @@ export async function GET(req: NextRequest) {
       if (error || !data || data.length === 0) {
         // Defaults zurueckgeben fuer Startseite
         if (page === 'startseite') {
-          return NextResponse.json([
+          return cachedJson([
             { page: 'startseite', section: 'hero', content: DEFAULT_HERO, is_active: true, sort_order: 0 },
             { page: 'startseite', section: 'news_banner', content: DEFAULT_NEWS_BANNER, is_active: true, sort_order: 1 },
             { page: 'startseite', section: 'usps', content: DEFAULT_USPS, is_active: true, sort_order: 2 },
             { page: 'startseite', section: 'reviews_config', content: DEFAULT_REVIEWS_CONFIG, is_active: true, sort_order: 3 },
           ]);
         }
-        return NextResponse.json([]);
+        return cachedJson([]);
       }
 
-      return NextResponse.json(data);
+      return cachedJson(data);
     }
 
     // Einzelne Sektion laden (Rueckwaertskompatibel)
@@ -79,16 +86,15 @@ export async function GET(req: NextRequest) {
 
       if (error || !data) {
         const fallback = DEFAULTS[section];
-        if (fallback) return NextResponse.json(fallback);
+        if (fallback) return cachedJson(fallback);
         return NextResponse.json({ error: 'Sektion nicht gefunden' }, { status: 404 });
       }
 
-      // Fuer news_banner: Content direkt zurueckgeben (Kompatibilitaet)
       if (section === 'news_banner') {
-        return NextResponse.json(data.content);
+        return cachedJson(data.content);
       }
 
-      return NextResponse.json({ ...data.content, is_active: data.is_active });
+      return cachedJson({ ...data.content, is_active: data.is_active });
     }
 
     return NextResponse.json({ error: 'Parameter "page" oder "section" erforderlich' }, { status: 400 });
