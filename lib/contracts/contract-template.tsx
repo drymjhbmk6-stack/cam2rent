@@ -314,14 +314,6 @@ function Footer() {
   );
 }
 
-function MiniHeader({ contractNumber }: { contractNumber: string }) {
-  return (
-    <View style={[s.headerBar, { paddingVertical: 12, marginBottom: 16 }]}>
-      <Text style={[s.headerTitle, { fontSize: 12 }]}>{BUSINESS.name} {'\u2013'} Mietvertrag {contractNumber}</Text>
-    </View>
-  );
-}
-
 // ─── PDF-Dokument ─────────────────────────────────────────────────────────────
 
 export function RentalContractPDF({ data }: { data: RentalContractData }) {

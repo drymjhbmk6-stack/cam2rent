@@ -465,6 +465,7 @@ export default function KundenDetailPage() {
                     </div>
                     {idFrontSignedUrl ? (
                       <a href={idFrontSignedUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'block' }}>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={idFrontSignedUrl}
                           alt="Ausweis Vorderseite"
@@ -495,6 +496,7 @@ export default function KundenDetailPage() {
                     </div>
                     {idBackSignedUrl ? (
                       <a href={idBackSignedUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'block' }}>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={idBackSignedUrl}
                           alt="Ausweis Rueckseite"
