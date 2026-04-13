@@ -302,13 +302,13 @@ export function buildContractText(data: RentalContractData): string {
 
 // ─── Footer-Komponente ────────────────────────────────────────────────────────
 
-function Footer({ pageNum, totalPages }: { pageNum: number; totalPages: number }) {
+function Footer() {
   return (
-    <View style={s.footer}>
+    <View style={s.footer} fixed>
       <View style={s.footerBar} />
       <View style={s.footerRow}>
-        <Text style={s.footerText}>cam2rent \u2013 Lennart Schickel \u2013 Heimsbrunner Str. 12, 12349 Berlin</Text>
-        <Text style={s.footerText}>Seite {pageNum} von {totalPages}</Text>
+        <Text style={s.footerText}>cam2rent {'\u2013'} {BUSINESS.owner} {'\u2013'} {BUSINESS.street}, {BUSINESS.zip} {BUSINESS.city}</Text>
+        <Text style={s.footerText} render={({ pageNumber, totalPages }) => `Seite ${pageNumber} von ${totalPages}`} />
       </View>
     </View>
   );
@@ -317,7 +317,7 @@ function Footer({ pageNum, totalPages }: { pageNum: number; totalPages: number }
 function MiniHeader({ contractNumber }: { contractNumber: string }) {
   return (
     <View style={[s.headerBar, { paddingVertical: 12, marginBottom: 16 }]}>
-      <Text style={[s.headerTitle, { fontSize: 12 }]}>{BUSINESS.name} \u2013 Mietvertrag {contractNumber}</Text>
+      <Text style={[s.headerTitle, { fontSize: 12 }]}>{BUSINESS.name} {'\u2013'} Mietvertrag {contractNumber}</Text>
     </View>
   );
 }
@@ -326,17 +326,18 @@ function MiniHeader({ contractNumber }: { contractNumber: string }) {
 
 export function RentalContractPDF({ data }: { data: RentalContractData }) {
   const contractNumber = data.bookingNumber.replace('BK-', 'MV-').replace('C2R-', 'MV-');
-  const totalPages = 5;
 
   return (
     <Document>
-      {/* ═══════ SEITE 1: Header + Vertragsparteien + Buchungsdaten + Mietgegenstand ═══════ */}
-      <Page size="A4" style={s.page}>
+      <Page size="A4" style={s.page} wrap>
+        {/* Fester Footer auf jeder Seite */}
+        <Footer />
+
         {/* Header */}
         <View style={s.headerBar}>
           <View>
             <Text style={s.headerTitle}>Mietvertrag</Text>
-            <Text style={{ fontSize: 8, color: '#94a3b8', marginTop: 2 }}>über die Vermietung von Kamera- und Zubehörprodukten</Text>
+            <Text style={{ fontSize: 8, color: '#94a3b8', marginTop: 2 }}>{'\u00fc'}ber die Vermietung von Kamera- und Zubeh{'\u00f6'}rprodukten</Text>
           </View>
           <View style={s.headerRight}>
             <Text style={s.headerLabel}>Vertragsnummer</Text>
@@ -429,13 +430,6 @@ export function RentalContractPDF({ data }: { data: RentalContractData }) {
           ))}
         </View>
 
-        <Footer pageNum={1} totalPages={totalPages} />
-      </Page>
-
-      {/* ═══════ SEITE 2: Entgelt + Haftungsoption + §1-§5 ═══════ */}
-      <Page size="A4" style={s.page}>
-        <MiniHeader contractNumber={contractNumber} />
-
         {/* Entgelt und Zahlung */}
         <Text style={s.sectionHeading}>Entgelt und Zahlung</Text>
         <View style={{ borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 4, overflow: 'hidden', marginBottom: 8 }}>
@@ -463,45 +457,8 @@ export function RentalContractPDF({ data }: { data: RentalContractData }) {
         <Text style={[s.sectionHeading, { marginTop: 8 }]}>Vertragsbedingungen</Text>
         <Text style={[s.clauseText, { marginBottom: 8 }]}>Die nachfolgenden Bestimmungen regeln die Rechte und Pflichten der Vertragsparteien. Ergänzend gelten die AGB, die Widerrufsbelehrung, die Haftungsbedingungen und die Datenschutzerklärung des Vermieters in der zum Zeitpunkt des Vertragsschlusses geltenden Fassung. Bei Widersprüchen gehen die Regelungen dieses Vertrags vor.</Text>
 
-        {/* §1-§5 */}
-        {PARAGRAPHEN.slice(0, 5).map((p, i) => (
-          <View key={i} wrap={false}>
-            <Text style={s.clauseTitle}>{p.title}</Text>
-            <Text style={s.clauseText}>{p.text}</Text>
-          </View>
-        ))}
-
-        <Footer pageNum={2} totalPages={totalPages} />
-      </Page>
-
-      {/* ═══════ SEITE 3: §6-§9 ═══════ */}
-      <Page size="A4" style={s.page}>
-        <MiniHeader contractNumber={contractNumber} />
-        {PARAGRAPHEN.slice(5, 9).map((p, i) => (
-          <View key={i} wrap={false}>
-            <Text style={s.clauseTitle}>{p.title}</Text>
-            <Text style={s.clauseText}>{p.text}</Text>
-          </View>
-        ))}
-        <Footer pageNum={3} totalPages={totalPages} />
-      </Page>
-
-      {/* ═══════ SEITE 4: §10-§16 ═══════ */}
-      <Page size="A4" style={s.page}>
-        <MiniHeader contractNumber={contractNumber} />
-        {PARAGRAPHEN.slice(9, 16).map((p, i) => (
-          <View key={i} wrap={false}>
-            <Text style={s.clauseTitle}>{p.title}</Text>
-            <Text style={s.clauseText}>{p.text}</Text>
-          </View>
-        ))}
-        <Footer pageNum={4} totalPages={totalPages} />
-      </Page>
-
-      {/* ═══════ SEITE 5: §17-§19 + Bestätigung + Signatur ═══════ */}
-      <Page size="A4" style={s.page}>
-        <MiniHeader contractNumber={contractNumber} />
-        {PARAGRAPHEN.slice(16).map((p, i) => (
+        {/* Alle Paragraphen — automatischer Seitenumbruch */}
+        {PARAGRAPHEN.map((p, i) => (
           <View key={i} wrap={false}>
             <Text style={s.clauseTitle}>{p.title}</Text>
             <Text style={s.clauseText}>{p.text}</Text>
@@ -555,7 +512,6 @@ export function RentalContractPDF({ data }: { data: RentalContractData }) {
           )}
         </View>
 
-        <Footer pageNum={5} totalPages={totalPages} />
       </Page>
     </Document>
   );
