@@ -58,9 +58,11 @@ export async function POST(req: NextRequest) {
       .from('admin_settings').select('value').eq('key', 'blog_settings').single();
 
     let apiKey = '';
+    let kiContext = '';
     if (settingsData?.value) {
       const parsed = typeof settingsData.value === 'string' ? JSON.parse(settingsData.value) : settingsData.value;
       apiKey = parsed.anthropic_api_key || '';
+      kiContext = parsed.ki_context || '';
     }
     if (!apiKey) {
       return NextResponse.json({ error: 'Anthropic API Key nicht konfiguriert.' }, { status: 400 });
@@ -122,17 +124,27 @@ WICHTIGE REGELN:
   - Winter: Skifahren, Snowboard, Winterlandschaften
 - Mische spezifische Produktthemen mit allgemeinen Ratgeber-Themen
 - Duplikate vermeiden: Jedes Thema muss einzigartig sein
+${kiContext ? `\nZUSAETZLICHER KONTEXT VOM ADMIN:\n${kiContext}` : ''}
 
 Antworte NUR als JSON-Array (kein Markdown-Codeblock):
 [
   {
-    "topic": "Thema des Artikels",
+    "topic": "Thema / Titel des Artikels",
+    "prompt": "Ausfuehrlicher Prompt fuer die KI (3-6 Saetze): Beschreibe genau was der Artikel enthalten soll. Welche Produkte sollen verglichen werden? Welche Tipps/Tricks? Welche Zielgruppe? Welche Struktur (Einleitung, Vergleichstabelle, Fazit)? Welche Fragen soll der Artikel beantworten?",
     "keywords": ["keyword1", "keyword2", "keyword3"],
     "category": "Kategorie-Name",
     "tone": "informativ|locker|professionell",
     "length": "kurz|mittel|lang"
   }
-]`,
+]
+
+WICHTIG fuer das "prompt"-Feld:
+- Sei SEHR ausfuehrlich und spezifisch — je detaillierter, desto besser der Artikel
+- Nenne konkrete Produkte aus dem Shop die verglichen oder empfohlen werden sollen
+- Beschreibe die gewuenschte Artikelstruktur (z.B. "Beginne mit einer persoenlichen Anekdote, dann Vergleichstabelle, dann Fazit")
+- Erwaehne spezifische Tipps die enthalten sein sollen
+- Gib an welche Fragen der Leser beantwortet bekommen soll
+- Nenne 2-3 Callout-Boxen die sinnvoll waeren (Tipp, Wichtig, Fazit)`,
       messages: [{ role: 'user', content: `Erstelle ${totalPosts} Blog-Themen fuer die naechsten ${weeks} Wochen ab ${currentMonth}.` }],
     });
 
@@ -191,6 +203,7 @@ Antworte NUR als JSON-Array (kein Markdown-Codeblock):
 
         scheduleEntries.push({
           topic: t.topic,
+          prompt: t.prompt || null,
           keywords: t.keywords ?? [],
           category_id: cat?.id || null,
           tone: t.tone || 'informativ',
