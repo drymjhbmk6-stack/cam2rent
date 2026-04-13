@@ -1265,7 +1265,7 @@ export default function ManualBookingPage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`https://www.paypal.me/cam2rent/${total.toFixed(2)}`)}`}
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`https://paypal.me/Cam2Rent/${total.toFixed(2)}`)}`}
                 alt="PayPal QR-Code"
                 width={120}
                 height={120}
@@ -1274,12 +1274,12 @@ export default function ManualBookingPage() {
               <div style={{ fontSize: 13, color: '#94a3b8' }}>
                 <p style={{ margin: '0 0 8px' }}>QR-Code scannen oder Link nutzen:</p>
                 <a
-                  href={`https://www.paypal.me/cam2rent/${total.toFixed(2)}`}
+                  href={`https://paypal.me/Cam2Rent/${total.toFixed(2)}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   style={{ color: '#06b6d4', wordBreak: 'break-all' }}
                 >
-                  paypal.me/cam2rent/{total.toFixed(2)}
+                  paypal.me/Cam2Rent/{total.toFixed(2)}
                 </a>
               </div>
             </div>
