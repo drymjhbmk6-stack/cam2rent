@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { calcHaftungTieredPrice } from '@/lib/price-config';
+import { calcHaftungTieredPrice, getEigenbeteiligung, type HaftungConfig } from '@/lib/price-config';
+import SignatureStep, { type SignatureResult } from '@/components/booking/SignatureStep';
 
 /* ─── Types ─────────────────────────────────────────────────────────────────── */
 
@@ -203,6 +204,9 @@ export default function ManualBookingPage() {
   const [paymentStatus, setPaymentStatus] = useState<'paid' | 'unpaid'>('unpaid');
   const [customShippingPrice, setCustomShippingPrice] = useState('');
   const [remark, setRemark] = useState('');
+  const [showSignature, setShowSignature] = useState(false);
+  const [signatureData, setSignatureData] = useState<SignatureResult | null>(null);
+  const [createdBookingId, setCreatedBookingId] = useState<string | null>(null);
 
   // Load all data on mount
   useEffect(() => {
@@ -606,6 +610,8 @@ export default function ManualBookingPage() {
           user_id: customerUserId || null,
           shipping_address: shippingAddress || null,
           payment_status: paymentStatus,
+          send_email: !!customerEmail.trim(),
+          contractSignature: signatureData ?? undefined,
           notes: [
             source ? `Quelle: ${source}` : '',
             paymentStatus === 'paid' ? 'Bezahlt' : '',
@@ -619,8 +625,8 @@ export default function ManualBookingPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Fehler');
 
+      setCreatedBookingId(data.bookingId);
       setSuccess(`Buchung erstellt: ${data.bookingId}`);
-      setTimeout(() => router.push('/admin/buchungen'), 2000);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unbekannter Fehler');
     } finally {
@@ -1171,6 +1177,39 @@ export default function ManualBookingPage() {
           </div>
         </div>
 
+        {/* ─── Signatur ─── */}
+        {showSignature && days > 0 && selectedProducts.length > 0 ? (
+          <div style={sectionStyle}>
+            <h3 style={{ ...headingStyle, fontSize: 11, marginBottom: 12 }}>Vertrag unterschreiben</h3>
+            <SignatureStep
+              customerName={customerName}
+              customerEmail={customerEmail}
+              productName={selectedProducts.map((sp) => productList.find((p) => p.id === sp.id)?.name ?? sp.id).join(', ')}
+              accessories={selectedProducts.flatMap((sp) => [...sp.accessories.map((id) => accessories.find((a) => a.id === id)?.name ?? id), ...sp.sets.map((id) => sets.find((s) => s.id === id)?.name ?? id)])}
+              rentalFrom={rentalFrom ? new Date(rentalFrom).toLocaleDateString('de-DE') : ''}
+              rentalTo={rentalTo ? new Date(rentalTo).toLocaleDateString('de-DE') : ''}
+              rentalDays={days}
+              priceTotal={total}
+              deposit={0}
+              onSigned={(result) => {
+                setSignatureData(result);
+                setShowSignature(false);
+              }}
+              onBack={() => setShowSignature(false)}
+            />
+          </div>
+        ) : signatureData ? (
+          <div style={{ ...sectionStyle, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <svg width="20" height="20" fill="none" stroke="#10b981" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+              <span style={{ color: '#10b981', fontWeight: 600, fontSize: 14 }}>Vertrag unterschrieben von {signatureData.signerName}</span>
+            </div>
+            <button type="button" onClick={() => { setSignatureData(null); setShowSignature(true); }} style={{ color: '#64748b', fontSize: 13, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
+              Neu unterschreiben
+            </button>
+          </div>
+        ) : null}
+
         {/* ─── Submit ─── */}
         <div className="flex items-center gap-4 flex-wrap">
           <button
@@ -1182,6 +1221,16 @@ export default function ManualBookingPage() {
           >
             Rechnungsvorschau
           </button>
+          {!showSignature && !signatureData && days > 0 && selectedProducts.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowSignature(true)}
+              className="px-5 py-3 rounded-lg font-heading font-semibold text-sm transition-colors"
+              style={{ background: '#1e293b', color: '#f59e0b', border: '1px solid #f59e0b40' }}
+            >
+              Vertrag unterschreiben
+            </button>
+          )}
           <button type="submit" disabled={saving || !days} className="px-6 py-3 rounded-lg font-heading font-semibold text-sm transition-colors disabled:opacity-50" style={{ background: '#06b6d4', color: 'white' }}>
             {saving ? 'Wird erstellt...' : 'Buchung erstellen'}
           </button>
@@ -1190,6 +1239,70 @@ export default function ManualBookingPage() {
           </button>
         </div>
       </form>
+
+      {/* ─── Erfolg: Zahlungsoptionen ─── */}
+      {createdBookingId && (
+        <div style={{ ...sectionStyle, marginTop: 24, borderColor: '#10b98140' }}>
+          <h3 style={{ fontSize: 16, fontWeight: 700, color: '#10b981', marginBottom: 16 }}>
+            Buchung {createdBookingId} erstellt!
+          </h3>
+
+          {/* Überweisungsdaten */}
+          <div style={{ background: '#0f172a', borderRadius: 8, padding: 16, marginBottom: 16 }}>
+            <h4 style={{ fontSize: 13, fontWeight: 700, color: '#e2e8f0', marginBottom: 10 }}>Banküberweisung</h4>
+            <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '6px 12px', fontSize: 13 }}>
+              <span style={{ color: '#64748b' }}>Empfänger:</span><span style={{ color: '#e2e8f0' }}>Lennart Schickel</span>
+              <span style={{ color: '#64748b' }}>IBAN:</span><span style={{ color: '#e2e8f0', fontFamily: 'monospace' }}>DE77 2022 0800 0027 7841 43</span>
+              <span style={{ color: '#64748b' }}>BIC:</span><span style={{ color: '#e2e8f0', fontFamily: 'monospace' }}>SXPYDEHHXXX</span>
+              <span style={{ color: '#64748b' }}>Betrag:</span><span style={{ color: '#22d3ee', fontWeight: 700 }}>{total.toFixed(2).replace('.', ',')} €</span>
+              <span style={{ color: '#64748b' }}>Verwendung:</span><span style={{ color: '#e2e8f0' }}>{createdBookingId} – {customerName}</span>
+            </div>
+          </div>
+
+          {/* PayPal QR */}
+          <div style={{ background: '#0f172a', borderRadius: 8, padding: 16, marginBottom: 16 }}>
+            <h4 style={{ fontSize: 13, fontWeight: 700, color: '#e2e8f0', marginBottom: 10 }}>PayPal</h4>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`https://www.paypal.me/cam2rent/${total.toFixed(2)}`)}`}
+                alt="PayPal QR-Code"
+                width={120}
+                height={120}
+                style={{ borderRadius: 8, background: 'white', padding: 4 }}
+              />
+              <div style={{ fontSize: 13, color: '#94a3b8' }}>
+                <p style={{ margin: '0 0 8px' }}>QR-Code scannen oder Link nutzen:</p>
+                <a
+                  href={`https://www.paypal.me/cam2rent/${total.toFixed(2)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: '#06b6d4', wordBreak: 'break-all' }}
+                >
+                  paypal.me/cam2rent/{total.toFixed(2)}
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex gap-3">
+            <button
+              onClick={() => router.push(`/admin/buchungen?id=${createdBookingId}`)}
+              className="px-5 py-3 rounded-lg font-heading font-semibold text-sm"
+              style={{ background: '#06b6d4', color: 'white' }}
+            >
+              Zur Buchung
+            </button>
+            <button
+              onClick={() => { setCreatedBookingId(null); setSignatureData(null); setSuccess(''); }}
+              className="px-5 py-3 rounded-lg font-heading font-semibold text-sm"
+              style={{ background: '#1e293b', color: '#e2e8f0' }}
+            >
+              Neue Buchung
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

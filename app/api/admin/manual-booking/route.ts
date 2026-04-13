@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { generateBookingId } from '@/lib/booking-id';
+import { generateContractPDF } from '@/lib/contracts/generate-contract';
+import { storeContract } from '@/lib/contracts/store-contract';
+import { sendBookingConfirmation, sendAdminNotification, type BookingEmailData } from '@/lib/email';
 
 /**
  * POST /api/admin/manual-booking
  *
- * Erstellt eine manuelle Buchung (z.B. fuer Kleinanzeigen-Bestellungen).
- * Kein Stripe Payment Intent noetig — Zahlung wird extern abgewickelt.
+ * Erstellt eine manuelle Buchung (Gast-Buchung).
+ * Optional: Vertrag generieren (wenn Signatur vorhanden), E-Mail senden.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -32,9 +35,10 @@ export async function POST(req: NextRequest) {
       customer_email,
       shipping_address,
       payment_status,
+      send_email,
+      contractSignature,
     } = body;
 
-    // Pflichtfelder pruefen
     if (!product_id || !product_name || !rental_from || !rental_to || !days || !customer_name) {
       return NextResponse.json(
         { error: 'Pflichtfelder fehlen (Produkt, Zeitraum, Name).' },
@@ -43,14 +47,8 @@ export async function POST(req: NextRequest) {
     }
 
     const supabase = createServiceClient();
-
-    // Buchungsnummer generieren
     const bookingId = await generateBookingId();
-
-    // Manuelle Buchung — payment_intent_id mit MANUAL-Prefix
     const paymentIntentId = `MANUAL-${bookingId}-${Date.now()}`;
-
-    // Notizen aus dem Body (enthalten jetzt auch Produkt-Notizen, Bezahlstatus, Bankdaten etc.)
     const bookingNotes = body.notes || null;
 
     const insertData: Record<string, unknown> = {
@@ -77,31 +75,132 @@ export async function POST(req: NextRequest) {
       shipping_address: shipping_address || null,
     };
 
-    // Optionale Felder nur setzen wenn vorhanden (Spalten könnten fehlen)
-    // Erster Versuch mit allen Feldern, bei Fehler ohne optionale Felder
     if (body.user_id) insertData.user_id = body.user_id;
     if (bookingNotes) insertData.notes = bookingNotes;
     if (payment_status) insertData.payment_status = payment_status;
 
+    // Vertrag als signiert markieren wenn Signatur vorhanden
+    if (contractSignature?.agreedToTerms) {
+      insertData.contract_signed = true;
+    }
+
     let result = await supabase.from('bookings').insert(insertData);
 
-    // Falls Fehler (z.B. unbekannte Spalte), nochmal ohne optionale Felder versuchen
     if (result.error) {
       console.warn('Insert with optional fields failed, retrying without:', result.error.message);
       delete insertData.notes;
       delete insertData.payment_status;
+      delete insertData.contract_signed;
       result = await supabase.from('bookings').insert(insertData);
     }
 
-    const { error } = result;
-
-    if (error) {
-      console.error('Manual booking insert error:', error);
+    if (result.error) {
+      console.error('Manual booking insert error:', result.error);
       return NextResponse.json(
         { error: 'Buchung konnte nicht erstellt werden.' },
         { status: 500 }
       );
     }
+
+    // ── Response sofort senden — PDF + E-Mail im Hintergrund ──
+
+    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+      || req.headers.get('x-real-ip') || 'unknown';
+
+    const fmtD = (iso: string) => {
+      if (!iso) return '';
+      const [y, m, d] = iso.split('-');
+      return `${d}.${m}.${y}`;
+    };
+
+    // Steuer-Config laden
+    const { data: taxSettings } = await supabase
+      .from('admin_settings')
+      .select('key, value')
+      .in('key', ['tax_mode', 'tax_rate', 'ust_id']);
+    const txMap: Record<string, string> = {};
+    for (const s of taxSettings ?? []) txMap[s.key] = s.value;
+
+    // Hintergrund: Vertrag generieren + E-Mail senden
+    (async () => {
+      try {
+        let contractPdfBuffer: Buffer | undefined;
+
+        // Vertrag generieren wenn Signatur vorhanden
+        if (contractSignature?.agreedToTerms && contractSignature?.signerName) {
+          try {
+            const contractResult = await generateContractPDF({
+              bookingId,
+              bookingNumber: bookingId,
+              customerName: contractSignature.signerName,
+              customerEmail: customer_email || '',
+              productName: product_name,
+              accessories: accessories || [],
+              rentalFrom: fmtD(rental_from),
+              rentalTo: fmtD(rental_to),
+              rentalDays: parseInt(days, 10),
+              priceRental: parseFloat(price_rental || '0'),
+              priceAccessories: parseFloat(price_accessories || '0'),
+              priceHaftung: parseFloat(price_haftung || '0'),
+              priceShipping: parseFloat(shipping_price || '0'),
+              priceTotal: parseFloat(price_total || '0'),
+              deposit: parseFloat(deposit || '0'),
+              taxMode: (txMap['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer',
+              taxRate: parseFloat(txMap['tax_rate'] || '19'),
+              signatureDataUrl: contractSignature.signatureDataUrl,
+              signatureMethod: contractSignature.signatureMethod,
+              signerName: contractSignature.signerName,
+              ipAddress: ip,
+            });
+            contractPdfBuffer = contractResult.pdfBuffer;
+
+            await storeContract(bookingId, contractResult.pdfBuffer, {
+              contractHash: contractResult.contractHash,
+              customerName: contractSignature.signerName,
+              ipAddress: ip,
+              signedAt: new Date().toISOString(),
+              signatureMethod: contractSignature.signatureMethod,
+            });
+          } catch (err) {
+            console.error('[manual-booking] Contract generation error:', err);
+          }
+        }
+
+        // E-Mail senden wenn gewuenscht
+        if (send_email && customer_email) {
+          const emailData: BookingEmailData = {
+            bookingId,
+            customerName: customer_name,
+            customerEmail: customer_email,
+            productName: product_name,
+            rentalFrom: rental_from,
+            rentalTo: rental_to,
+            days: parseInt(days, 10),
+            deliveryMode: (delivery_mode || 'versand') as 'versand' | 'abholung',
+            shippingMethod: shipping_method,
+            haftung: haftung || 'none',
+            accessories: accessories || [],
+            priceRental: parseFloat(price_rental || '0'),
+            priceAccessories: parseFloat(price_accessories || '0'),
+            priceHaftung: parseFloat(price_haftung || '0'),
+            priceTotal: parseFloat(price_total || '0'),
+            deposit: parseFloat(deposit || '0'),
+            shippingPrice: parseFloat(shipping_price || '0'),
+            taxMode: (txMap['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer',
+            taxRate: parseFloat(txMap['tax_rate'] || '19'),
+            ustId: txMap['ust_id'] || '',
+          };
+
+          await Promise.all([
+            sendBookingConfirmation(emailData, contractPdfBuffer),
+            sendAdminNotification(emailData),
+          ]);
+          console.log(`[manual-booking] E-Mails gesendet fuer ${bookingId}`);
+        }
+      } catch (err) {
+        console.error('[manual-booking] Background task error:', err);
+      }
+    })();
 
     return NextResponse.json({ success: true, bookingId });
   } catch (err) {
