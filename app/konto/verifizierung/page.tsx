@@ -71,32 +71,16 @@ export default function VerifizierungPage() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) throw new Error('Nicht eingeloggt.');
 
-      // Dateien als Base64 senden
-      const toBase64 = (file: File): Promise<string> =>
-        new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve((reader.result as string).split(',')[1]);
-          reader.onerror = reject;
-          reader.readAsDataURL(file);
-        });
-
-      const [frontB64, backB64] = await Promise.all([
-        toBase64(frontFile),
-        toBase64(backFile),
-      ]);
+      const formData = new FormData();
+      formData.append('front', frontFile);
+      formData.append('back', backFile);
 
       const res = await fetch('/api/upload-id', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
           Authorization: `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({
-          front: frontB64,
-          back: backB64,
-          frontExt: frontFile.name.split('.').pop() ?? 'jpg',
-          backExt: backFile.name.split('.').pop() ?? 'jpg',
-        }),
+        body: formData,
       });
 
       const data = await res.json();
