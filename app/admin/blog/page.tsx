@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
+import AdminBackLink from '@/components/admin/AdminBackLink';
 
 interface Stats {
   total: number; published: number; draft: number; scheduled: number;
@@ -136,6 +137,7 @@ export default function BlogDashboardPage() {
 
   return (
     <div className="p-4 sm:p-8">
+      <AdminBackLink label="Zurück" />
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-8">
         <div>
           <h1 className="font-heading font-bold text-xl sm:text-2xl" style={{ color: 'white' }}>Blog-Dashboard</h1>

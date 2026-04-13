@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
+import AdminBackLink from '@/components/admin/AdminBackLink';
 import { DEFAULT_SHIPPING, type ShippingPriceConfig } from '@/lib/price-config';
 
 export default function AdminVersandPreisePage() {
@@ -38,11 +38,8 @@ export default function AdminVersandPreisePage() {
   return (
     <div className="min-h-screen bg-brand-bg">
       <div className="max-w-xl mx-auto px-6 py-8">
+        <AdminBackLink href="/admin/preise" label="Zurück zu Preise" />
         <div className="flex items-center gap-2 mb-8">
-          <Link href="/admin/preise" className="text-sm font-body text-brand-muted hover:text-brand-black transition-colors">
-            ← Preise
-          </Link>
-          <span className="text-brand-muted">/</span>
           <h1 className="font-heading font-bold text-xl text-brand-black">Versandkosten</h1>
         </div>
 

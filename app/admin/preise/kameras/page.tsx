@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import AdminBackLink from '@/components/admin/AdminBackLink';
 import { type AdminProduct } from '@/lib/price-config';
 
 interface UtilizationData {
@@ -77,6 +78,7 @@ export default function AdminKameraListePage() {
 
   return (
     <div className="min-h-screen bg-brand-bg">
+      <AdminBackLink href="/admin/preise" label="Zurück zu Preise" />
       <div className="max-w-3xl mx-auto px-6 py-8">
         <div className="flex items-center justify-between mb-8">
           <div>

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useProducts } from '@/components/ProductsProvider';
+import AdminBackLink from '@/components/admin/AdminBackLink';
 
 /* ─── Typen ─────────────────────────────────────────────────────────────── */
 
@@ -230,28 +231,18 @@ export default function AdminVerfuegbarkeitPage() {
     return { type: 'free' };
   }
 
-  // Zellenfarbe
-  function cellBg(info: DayCellInfo): string {
+  // Zellenfarbe — kräftige, gut unterscheidbare Farben auf dunklem Hintergrund
+  function cellStyle(info: DayCellInfo): React.CSSProperties {
     switch (info.type) {
-      case 'free': return 'bg-emerald-900/20';
-      case 'booked': return 'bg-blue-600/70';
-      case 'buffer-hin': return 'bg-amber-600/40';
-      case 'buffer-rueck': return 'bg-orange-600/40';
-      case 'maintenance': return 'bg-red-900/40';
-      case 'retired': return 'bg-gray-700/30';
-      case 'blocked': return 'bg-red-900/30';
-      case 'past': return 'bg-gray-800/20';
-      default: return '';
-    }
-  }
-
-  function cellTextColor(info: DayCellInfo): string {
-    switch (info.type) {
-      case 'booked': return 'text-white';
-      case 'buffer-hin':
-      case 'buffer-rueck': return 'text-amber-200';
-      case 'maintenance': return 'text-red-300';
-      default: return 'text-gray-500';
+      case 'free': return { background: '#065f46', color: '#6ee7b7' };           // kräftiges Grün
+      case 'booked': return { background: '#1d4ed8', color: '#ffffff' };          // kräftiges Blau
+      case 'buffer-hin': return { background: '#a16207', color: '#fef3c7' };      // kräftiges Gelb/Gold
+      case 'buffer-rueck': return { background: '#c2410c', color: '#fed7aa' };    // kräftiges Orange
+      case 'maintenance': return { background: '#991b1b', color: '#fca5a5' };     // kräftiges Rot
+      case 'retired': return { background: '#374151', color: '#9ca3af' };         // Grau
+      case 'blocked': return { background: '#7f1d1d', color: '#fca5a5' };         // Dunkelrot
+      case 'past': return { background: '#1e293b', color: '#475569' };            // Dezent dunkel
+      default: return {};
     }
   }
 
@@ -288,6 +279,7 @@ export default function AdminVerfuegbarkeitPage() {
 
   return (
     <div className="p-6 sm:p-8 max-w-full">
+      <AdminBackLink label="Zurück" />
       <h1 className="font-heading font-bold text-2xl mb-1" style={{ color: 'white' }}>
         Verfügbarkeit
       </h1>
@@ -353,13 +345,13 @@ export default function AdminVerfuegbarkeitPage() {
           ) : (
             <div className="space-y-3">
               {/* Legende */}
-              <div className="flex flex-wrap gap-3 text-[10px] font-body mb-2" style={{ color: '#94a3b8' }}>
-                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-emerald-900/40 inline-block" /> Frei</span>
-                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-blue-600/70 inline-block" /> Gebucht</span>
-                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-amber-600/40 inline-block" /> Hinversand</span>
-                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-orange-600/40 inline-block" /> Rückversand</span>
-                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-red-900/40 inline-block" /> Wartung</span>
-                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-gray-700/30 inline-block" /> Ausgemustert</span>
+              <div className="flex flex-wrap gap-4 text-[11px] font-body font-semibold mb-2" style={{ color: '#cbd5e1' }}>
+                <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#065f46' }} /> Frei</span>
+                <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#1d4ed8' }} /> Gebucht</span>
+                <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#a16207' }} /> Hinversand</span>
+                <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#c2410c' }} /> Rückversand</span>
+                <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#991b1b' }} /> Wartung</span>
+                <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#374151' }} /> Ausgemustert</span>
               </div>
 
               {ganttData.products.map((product) => {
@@ -430,7 +422,7 @@ export default function AdminVerfuegbarkeitPage() {
                                     return (
                                       <td
                                         key={d.dateStr}
-                                        className={`px-0 py-0.5 text-center cursor-default ${cellBg(info)}`}
+                                        className="px-0 py-0.5 text-center"
                                         onMouseEnter={(e) => handleCellHover(e, info, d.dateStr)}
                                         onMouseLeave={() => setTooltip(null)}
                                         onClick={() => {
@@ -438,17 +430,17 @@ export default function AdminVerfuegbarkeitPage() {
                                             window.open(`/admin/buchungen/${info.booking.id}`, '_blank');
                                           }
                                         }}
-                                        style={{ cursor: info.booking ? 'pointer' : 'default' }}
+                                        style={{ ...cellStyle(info), cursor: info.booking ? 'pointer' : 'default' }}
                                       >
-                                        <div className={`text-[9px] leading-tight truncate px-0.5 ${cellTextColor(info)}`}>
+                                        <div className="text-[9px] leading-tight truncate px-0.5" style={{ color: cellStyle(info).color }}>
                                           {info.type === 'booked' && info.booking && (
                                             <span title={info.booking.customer_name}>
                                               {info.booking.customer_name?.split(' ')[0]?.slice(0, 6) || '…'}
                                             </span>
                                           )}
-                                          {info.type === 'buffer-hin' && <span className="text-[8px]">↓</span>}
-                                          {info.type === 'buffer-rueck' && <span className="text-[8px]">↑</span>}
-                                          {info.type === 'maintenance' && <span className="text-[8px]">⚠</span>}
+                                          {info.type === 'buffer-hin' && <span style={{ fontSize: '8px' }}>▼ HIN</span>}
+                                          {info.type === 'buffer-rueck' && <span style={{ fontSize: '8px' }}>▲ RÜ</span>}
+                                          {info.type === 'maintenance' && <span style={{ fontSize: '8px' }}>⚠</span>}
                                         </div>
                                       </td>
                                     );

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import AdminBackLink from '@/components/admin/AdminBackLink';
 
 const C = {
   bg: '#0a0f1e',
@@ -95,6 +96,7 @@ export default function AdminBewertungenPage() {
 
   return (
     <div style={{ padding: '20px 16px', maxWidth: 1000 }}>
+      <AdminBackLink label="Zurück" />
       <h1 className="font-heading font-bold text-xl mb-1" style={{ color: C.text }}>
         Bewertungen
       </h1>

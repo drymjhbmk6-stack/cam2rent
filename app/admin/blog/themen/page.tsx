@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import AdminBackLink from '@/components/admin/AdminBackLink';
 
 const inputStyle: React.CSSProperties = {
   background: '#0f172a', border: '1px solid #334155', color: '#e2e8f0',
@@ -116,6 +117,7 @@ export default function BlogThemenPage() {
 
   return (
     <div className="p-4 sm:p-8 max-w-4xl">
+      <AdminBackLink href="/admin/blog" label="Zurück zum Blog" />
       <h1 className="font-heading font-bold text-xl sm:text-2xl mb-1" style={{ color: 'white' }}>Themen</h1>
       <p className="text-sm mb-6" style={{ color: '#64748b' }}>Kategorien, Einzelthemen und Artikelserien verwalten</p>
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
+import AdminBackLink from '@/components/admin/AdminBackLink';
 import { DEFAULT_HAFTUNG, DEFAULT_KAUTION_TIERS, type HaftungConfig, type KautionTiers } from '@/lib/price-config';
 
 function Field({ label, sub, value, onChange, step = '1' }: {
@@ -69,9 +69,8 @@ export default function AdminHaftungPage() {
   return (
     <div className="min-h-screen bg-brand-bg">
       <div className="max-w-2xl mx-auto px-6 py-8">
+        <AdminBackLink href="/admin/preise" label="Zurück zu Preise" />
         <div className="flex items-center gap-2 mb-8">
-          <Link href="/admin/preise" className="text-sm font-body text-brand-muted hover:text-brand-black transition-colors">← Preise</Link>
-          <span className="text-brand-muted">/</span>
           <h1 className="font-heading font-bold text-xl text-brand-black">Haftung & Kaution</h1>
         </div>
 

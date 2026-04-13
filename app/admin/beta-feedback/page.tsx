@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import AdminBackLink from '@/components/admin/AdminBackLink';
 
 interface Feedback {
   id: string;
@@ -74,6 +75,7 @@ export default function BetaFeedbackAdmin() {
 
   return (
     <div className="p-6 lg:p-8 max-w-5xl mx-auto">
+      <AdminBackLink label="Zurück" />
       <h1 className="font-heading font-bold text-2xl text-white mb-2">Beta-Feedback Auswertung</h1>
       <p className="text-sm text-slate-400 mb-8">{feedbacks.length} Feedback{feedbacks.length !== 1 ? 's' : ''} erhalten</p>
 

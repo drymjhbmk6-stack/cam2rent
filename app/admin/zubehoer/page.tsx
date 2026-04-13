@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import DynamicSelect from '@/components/admin/DynamicSelect';
+import AdminBackLink from '@/components/admin/AdminBackLink';
 import { type AdminProduct } from '@/lib/price-config';
 
 interface Accessory {
@@ -170,6 +171,7 @@ export default function AdminZubehoerPage() {
   return (
     <div className="min-h-screen bg-brand-bg">
       <div className="max-w-4xl mx-auto px-6 py-8">
+        <AdminBackLink label="Zurück" />
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <h1 className="font-heading font-bold text-xl text-brand-black">Zubehör</h1>

@@ -3,6 +3,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import AdminBackLink from '@/components/admin/AdminBackLink';
 
 interface Booking {
   id: string;
@@ -228,6 +229,7 @@ export default function AdminBuchungenPage() {
   return (
     <div className="min-h-screen bg-brand-bg">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+        <AdminBackLink label="Zurück" />
         {/* Header */}
         <div className="mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div>

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import AdminBackLink from '@/components/admin/AdminBackLink';
 
 /* ───── Types ───── */
 interface CustomerProfile {
@@ -289,9 +290,7 @@ export default function KundenDetailPage() {
       <div style={{ padding: '40px 16px', textAlign: 'center', color: '#64748b' }}>
         Kunde nicht gefunden.
         <div style={{ marginTop: 16 }}>
-          <Link href="/admin/kunden" style={{ color: '#06b6d4', textDecoration: 'none' }}>
-            Zurück zur Kundenliste
-          </Link>
+          <AdminBackLink href="/admin/kunden" label="Zurück zu Kunden" />
         </div>
       </div>
     );
@@ -301,27 +300,7 @@ export default function KundenDetailPage() {
     <div style={{ padding: '20px 16px', maxWidth: 1100, margin: '0 auto' }}>
       {/* ───── Header ───── */}
       <div style={{ marginBottom: 24 }}>
-        <button
-          onClick={() => router.push('/admin/kunden')}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 6,
-            color: '#06b6d4',
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            fontSize: 14,
-            fontWeight: 600,
-            padding: 0,
-            marginBottom: 16,
-          }}
-        >
-          <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-          </svg>
-          Zurück zur Kundenliste
-        </button>
+        <AdminBackLink href="/admin/kunden" label="Zurück zu Kunden" />
 
         <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: '#e2e8f0', margin: 0 }}>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
+import AdminBackLink from '@/components/admin/AdminBackLink';
 
 interface Conversation {
   id: string;
@@ -131,6 +132,7 @@ export default function AdminNachrichtenPage() {
 
   return (
     <div style={{ padding: '24px 20px' }}>
+      <AdminBackLink label="Zurück" />
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <div>

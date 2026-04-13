@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import AdminBackLink from '@/components/admin/AdminBackLink';
 
 interface MediaImage {
   name: string;
@@ -68,6 +69,7 @@ export default function BlogMediathekPage() {
 
   return (
     <div className="p-4 sm:p-8">
+      <AdminBackLink href="/admin/blog" label="Zurück zum Blog" />
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
         <div>
           <h1 className="font-heading font-bold text-xl sm:text-2xl" style={{ color: 'white' }}>Mediathek</h1>

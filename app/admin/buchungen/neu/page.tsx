@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { calcHaftungTieredPrice } from '@/lib/price-config';
 import SignatureStep, { type SignatureResult } from '@/components/booking/SignatureStep';
+import AdminBackLink from '@/components/admin/AdminBackLink';
 
 /* ─── Types ─────────────────────────────────────────────────────────────────── */
 
@@ -644,6 +645,7 @@ export default function ManualBookingPage() {
 
   return (
     <div style={{ padding: '20px 16px', maxWidth: 800 }}>
+      <AdminBackLink href="/admin/buchungen" label="Zurück zu Buchungen" />
       <h1 className="font-heading font-bold text-xl mb-1" style={{ color: '#e2e8f0' }}>
         Manuelle Buchung erstellen
       </h1>

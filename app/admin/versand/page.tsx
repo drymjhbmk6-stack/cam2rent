@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useAccessories } from '@/components/AccessoriesProvider';
+import AdminBackLink from '@/components/admin/AdminBackLink';
 
 interface Booking {
   id: string;
@@ -279,6 +280,7 @@ export default function AdminVersandPage() {
   return (
     <div className="min-h-screen bg-brand-bg">
       <div className="max-w-5xl mx-auto px-6 py-8">
+        <AdminBackLink label="Zurück" />
         <div className="mb-8">
           <h1 className="font-heading font-bold text-2xl text-brand-black">Fulfillment</h1>
           <p className="text-sm font-body text-brand-muted mt-0.5">Versand vorbereiten, verfolgen und Rückgaben abschließen</p>

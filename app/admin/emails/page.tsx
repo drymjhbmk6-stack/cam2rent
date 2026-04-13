@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import AdminBackLink from '@/components/admin/AdminBackLink';
 
 interface EmailEntry {
   id: string;
@@ -88,6 +89,7 @@ export default function AdminEmailLogPage() {
   return (
     <div className="min-h-screen bg-brand-bg">
       <div className="max-w-6xl mx-auto px-6 py-8">
+        <AdminBackLink label="Zurück" />
         <div className="mb-6">
           <h1 className="font-heading font-bold text-2xl text-brand-black">E-Mail-Protokoll</h1>
           <p className="text-sm font-body text-brand-muted mt-0.5">

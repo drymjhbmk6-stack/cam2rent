@@ -2,8 +2,14 @@
 
 import { use } from 'react';
 import ArticleEditor from '@/components/admin/blog/ArticleEditor';
+import AdminBackLink from '@/components/admin/AdminBackLink';
 
 export default function BlogArtikelEditPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  return <ArticleEditor postId={id} />;
+  return (
+    <div className="p-4 sm:p-8">
+      <AdminBackLink href="/admin/blog/artikel" label="Zurück zu Artikeln" />
+      <ArticleEditor postId={id} />
+    </div>
+  );
 }

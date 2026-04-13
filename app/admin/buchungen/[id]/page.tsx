@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import AdminBackLink from '@/components/admin/AdminBackLink';
 
 interface BookingDetail {
   id: string;
@@ -361,9 +362,7 @@ export default function BuchungDetailPage() {
     return (
       <div className="min-h-screen bg-brand-bg">
         <div className="max-w-5xl mx-auto px-6 py-8">
-          <Link href="/admin/buchungen" className="text-sm font-heading text-accent-blue hover:underline mb-4 inline-block">
-            ← Zurück zur Übersicht
-          </Link>
+          <AdminBackLink href="/admin/buchungen" label="Zurück zu Buchungen" />
           <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700 font-body">
             {error || 'Buchung nicht gefunden.'}
           </div>
@@ -397,10 +396,7 @@ export default function BuchungDetailPage() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
           <div>
-            <Link href="/admin/buchungen" className="text-sm font-heading text-accent-blue hover:underline mb-2 inline-flex items-center gap-1">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
-              Zurück zur Übersicht
-            </Link>
+            <AdminBackLink href="/admin/buchungen" label="Zurück zu Buchungen" />
             <div className="flex items-center gap-3 mt-1">
               <h1 className="font-heading font-bold text-2xl text-brand-black">{booking.id}</h1>
               <span className="inline-flex px-3 py-1 rounded-full text-xs font-heading font-semibold" style={{ color: sc.color, backgroundColor: sc.bg, border: `1px solid ${sc.color}30` }}>{sc.label}</span>

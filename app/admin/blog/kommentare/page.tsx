@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import AdminBackLink from '@/components/admin/AdminBackLink';
 
 interface Comment {
   id: string; author_name: string; author_email: string; content: string;
@@ -47,6 +48,7 @@ export default function BlogKommentarePage() {
 
   return (
     <div className="p-8 max-w-4xl">
+      <AdminBackLink href="/admin/blog" label="Zurück zum Blog" />
       <h1 className="font-heading font-bold text-2xl mb-1" style={{ color: 'white' }}>Kommentare</h1>
       <p className="text-sm mb-6" style={{ color: '#64748b' }}>Blog-Kommentare moderieren</p>
 

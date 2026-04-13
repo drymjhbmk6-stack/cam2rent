@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import AdminBackLink from '@/components/admin/AdminBackLink';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -257,6 +258,7 @@ export default function EinkaufPage() {
 
   return (
     <div style={{ padding: '32px 24px', maxWidth: 1200, margin: '0 auto' }}>
+      <AdminBackLink label="Zurück" />
       {/* Header */}
       <h1 className="font-heading" style={{ fontSize: 22, fontWeight: 800, color: 'white', marginBottom: 6 }}>
         Einkauf & Lieferanten

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
+import AdminBackLink from '@/components/admin/AdminBackLink';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -504,6 +505,7 @@ export default function AdminGutscheinePage() {
 
   return (
     <div style={{ padding: '20px 16px', maxWidth: 800, margin: '0 auto' }}>
+      <AdminBackLink label="Zurück" />
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
         <div>

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { use } from 'react';
 import { useAccessories } from '@/components/AccessoriesProvider';
+import AdminBackLink from '@/components/admin/AdminBackLink';
 
 interface Booking {
   id: string;
@@ -57,6 +58,7 @@ export default function DruckenPage({ params }: { params: Promise<{ id: string }
 
   return (
     <>
+      <div className="print:hidden"><AdminBackLink href="/admin/versand" label="Zurück zum Versand" /></div>
       {/* Print button — wird beim Drucken ausgeblendet */}
       <div className="print:hidden fixed top-4 right-4 flex gap-2 z-10">
         <button

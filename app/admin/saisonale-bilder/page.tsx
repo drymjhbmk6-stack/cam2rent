@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react';
 import Image from 'next/image';
+import AdminBackLink from '@/components/admin/AdminBackLink';
 import {
   SEASONAL_ZONES,
   MONTH_THEMES,
@@ -220,6 +221,7 @@ export default function SaisonaleBilderPage() {
 
   return (
     <div className="p-6 lg:p-8 max-w-6xl mx-auto">
+      <AdminBackLink label="Zurück" />
       {/* Header */}
       <div className="mb-8">
         <h1 className="font-heading font-bold text-2xl text-white mb-2">Saisonale Bilder</h1>

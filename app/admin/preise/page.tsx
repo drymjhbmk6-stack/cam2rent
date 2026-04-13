@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import AdminBackLink from '@/components/admin/AdminBackLink';
 
 export default function AdminPreiseOverviewPage() {
   const cards = [
@@ -32,6 +33,7 @@ export default function AdminPreiseOverviewPage() {
   return (
     <div className="min-h-screen bg-brand-bg">
       <div className="max-w-3xl mx-auto px-6 py-8">
+        <AdminBackLink label="Zurück" />
         <div className="mb-8">
           <h1 className="font-heading font-bold text-2xl text-brand-black">Preise & Produkte</h1>
           <p className="text-sm font-body text-brand-muted mt-1">

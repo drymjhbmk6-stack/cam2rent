@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import type { DurationDiscount, LoyaltyDiscount, ProductDiscount } from '@/lib/price-config';
+import AdminBackLink from '@/components/admin/AdminBackLink';
 
 interface ProductOption { id: string; name: string; }
 
@@ -89,6 +90,7 @@ export default function AdminRabattePage() {
 
   return (
     <div style={{ padding: '20px 16px', maxWidth: 750, margin: '0 auto' }}>
+      <AdminBackLink label="Zurück" />
       <h1 style={{ fontSize: 20, fontWeight: 700, color: '#e2e8f0', marginBottom: 2 }}>Rabatte</h1>
       <p style={{ fontSize: 13, color: '#64748b', marginBottom: 28 }}>
         Automatische Kunden- und Produktrabatte konfigurieren

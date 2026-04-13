@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import AdminBackLink from '@/components/admin/AdminBackLink';
 import {
   DEFAULT_KAUTION_TIERS,
   type AdminProduct,
@@ -153,10 +154,11 @@ export default function AdminNeueKameraPage() {
   return (
     <div className="min-h-screen bg-brand-bg">
       <div className="max-w-7xl mx-auto px-6 py-8">
+        <AdminBackLink href="/admin/preise/kameras" label="Zurück zu Kameras" />
         {/* Header */}
         <div className="flex items-center justify-between mb-8 flex-wrap gap-3">
           <div className="flex items-center gap-2">
-            <Link href="/admin/preise/kameras" className="text-sm font-body text-brand-muted hover:text-brand-black transition-colors">← Kameras</Link>
+            <Link href="/admin/preise/kameras" className="text-sm font-body text-brand-muted hover:text-brand-black transition-colors">Kameras</Link>
             <span className="text-brand-muted">/</span>
             <h1 className="font-heading font-bold text-xl text-brand-black">Neue Kamera</h1>
           </div>

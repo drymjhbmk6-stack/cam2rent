@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import AdminBackLink from '@/components/admin/AdminBackLink';
 
 interface Customer {
   id: string;
@@ -79,6 +80,7 @@ export default function KundenPage() {
 
   return (
     <div style={{ padding: '20px 16px' }}>
+      <AdminBackLink label="Zurück" />
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
         <div>

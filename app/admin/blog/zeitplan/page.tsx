@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react';
 import Link from 'next/link';
+import AdminBackLink from '@/components/admin/AdminBackLink';
 
 const inputStyle: React.CSSProperties = {
   background: '#0f172a', border: '1px solid #334155', color: '#e2e8f0',
@@ -180,6 +181,7 @@ export default function BlogZeitplanPage() {
 
   return (
     <div className="p-4 sm:p-8 max-w-4xl">
+      <AdminBackLink href="/admin/blog" label="Zurück zum Blog" />
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
         <div>
           <h1 className="font-heading font-bold text-xl sm:text-2xl" style={{ color: 'white' }}>Redaktionsplan</h1>

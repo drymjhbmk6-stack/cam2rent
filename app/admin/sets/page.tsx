@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import type { AdminProduct } from '@/lib/price-config';
+import AdminBackLink from '@/components/admin/AdminBackLink';
 
 interface AccessoryItem { accessory_id: string; qty: number; }
 
@@ -294,6 +295,7 @@ export default function AdminSetsPage() {
   return (
     <div className="min-h-screen bg-brand-bg">
       <div className="max-w-4xl mx-auto px-6 py-8">
+        <AdminBackLink label="Zurück" />
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div>

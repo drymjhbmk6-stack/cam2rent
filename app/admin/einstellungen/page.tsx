@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { SpecDefinitionsManager } from '@/components/admin/SpecDefinitions';
+import AdminBackLink from '@/components/admin/AdminBackLink';
 
 type DepositMode = 'kaution' | 'haftung';
 
@@ -243,6 +244,7 @@ export default function EinstellungenPage() {
 
   return (
     <div style={{ padding: '20px 16px', maxWidth: 700 }}>
+      <AdminBackLink label="Zurück" />
       <h1 className="font-heading font-bold text-xl mb-1" style={{ color: '#e2e8f0' }}>
         Einstellungen
       </h1>

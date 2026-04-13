@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
+import AdminBackLink from '@/components/admin/AdminBackLink';
 
 const inputStyle: React.CSSProperties = {
   background: '#0f172a', border: '1px solid #334155', color: '#e2e8f0',
@@ -58,6 +59,7 @@ export default function BlogArtikelPage() {
 
   return (
     <div className="p-8">
+      <AdminBackLink href="/admin/blog" label="Zurück zum Blog" />
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="font-heading font-bold text-2xl" style={{ color: 'white' }}>Artikel</h1>

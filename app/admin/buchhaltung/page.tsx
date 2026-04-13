@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import AdminBackLink from '@/components/admin/AdminBackLink';
 
 // ─── Design Tokens ────────────────────────────────────────────────────────────
 const C = {
@@ -319,6 +320,7 @@ export default function BuchhaltungPage() {
 
   return (
     <div style={{ padding: '32px 24px', maxWidth: 900, margin: '0 auto' }}>
+      <AdminBackLink label="Zurück" />
       {/* Header */}
       <div style={{ marginBottom: 32 }}>
         <h1 style={{ fontSize: 24, fontWeight: 800, color: C.text, margin: 0 }}>

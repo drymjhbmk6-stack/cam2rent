@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import AdminBackLink from '@/components/admin/AdminBackLink';
 
 // ─── Design Tokens ────────────────────────────────────────────────────────────
 const C = {
@@ -623,6 +624,7 @@ export default function AnalyticsPage() {
 
   return (
     <div style={{ color: C.text, fontFamily: 'Inter, system-ui, sans-serif', padding: '20px 16px' }}>
+      <AdminBackLink label="Zurück" />
       <style>{`
         @keyframes pulse-dot { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(0.8)} }
         @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }

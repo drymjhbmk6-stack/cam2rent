@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import AdminBackLink from '@/components/admin/AdminBackLink';
 
 interface AuditEntry {
   id: string;
@@ -191,6 +192,7 @@ export default function AktivitaetsprotokollPage() {
 
   return (
     <div style={{ padding: '32px 24px', maxWidth: 1200, margin: '0 auto' }}>
+      <AdminBackLink label="Zurück" />
       {/* Header */}
       <div style={{ marginBottom: 24 }}>
         <h1 style={{ fontSize: 24, fontWeight: 800, color: '#f1f5f9', margin: 0 }}>

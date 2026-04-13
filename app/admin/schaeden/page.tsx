@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import AdminBackLink from '@/components/admin/AdminBackLink';
 
 interface DamageReport {
   id: string;
@@ -155,6 +156,7 @@ export default function AdminSchaedenPage() {
 
   return (
     <div className="min-h-screen" style={{ padding: '20px 16px' }}>
+      <AdminBackLink label="Zurück" />
       {/* Header */}
       <div className="mb-6">
         <h1 className="font-heading font-bold text-2xl" style={{ color: '#e2e8f0' }}>
