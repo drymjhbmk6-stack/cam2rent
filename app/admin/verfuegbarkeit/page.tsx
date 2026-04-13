@@ -145,6 +145,20 @@ export default function AdminVerfuegbarkeitPage() {
   const [curYear, curMon] = currentMonth.split('-').map(Number);
   const monthLabel = `${MONTH_NAMES[curMon - 1]} ${curYear}`;
 
+  // ISO-Kalenderwoche berechnen
+  function getISOWeek(date: Date): number {
+    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+  }
+
+  // Heutiges Datum als String
+  const todayStr = useMemo(() => {
+    const t = new Date();
+    return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+  }, []);
+
   // Tage im Monat
   const days = useMemo(() => {
     if (!ganttData) return [];
@@ -154,9 +168,24 @@ export default function AdminVerfuegbarkeitPage() {
       const dateObj = new Date(curYear, curMon - 1, day);
       const dayName = DAY_NAMES[dateObj.getDay()];
       const isWeekend = dateObj.getDay() === 0 || dateObj.getDay() === 6;
-      return { day, dateStr, dayName, isWeekend };
+      const kw = getISOWeek(dateObj);
+      const isToday = dateStr === todayStr;
+      return { day, dateStr, dayName, isWeekend, kw, isToday };
     });
-  }, [ganttData, currentMonth, curYear, curMon]);
+  }, [ganttData, currentMonth, curYear, curMon, todayStr]);
+
+  // KW-Gruppen für den Header-Balken
+  const kwGroups = useMemo(() => {
+    const groups: { kw: number; span: number }[] = [];
+    for (const d of days) {
+      if (groups.length === 0 || groups[groups.length - 1].kw !== d.kw) {
+        groups.push({ kw: d.kw, span: 1 });
+      } else {
+        groups[groups.length - 1].span++;
+      }
+    }
+    return groups;
+  }, [days]);
 
   function toggleProduct(productId: string) {
     setExpandedProducts((prev) => {
@@ -390,21 +419,45 @@ export default function AdminVerfuegbarkeitPage() {
                             </a>
                           </div>
                         ) : (
-                          <table className="w-full text-[11px]" style={{ minWidth: `${180 + days.length * 36}px` }}>
+                          <table className="w-full text-[11px]" style={{ minWidth: `${180 + days.length * 36}px`, borderCollapse: 'collapse' }}>
                             <thead>
-                              <tr style={{ borderBottom: '1px solid #1e293b' }}>
-                                <th className="text-left px-3 py-2 font-heading font-semibold sticky left-0 z-10"
-                                  style={{ color: '#64748b', background: '#0f172a', minWidth: '160px' }}>
+                              {/* KW-Balken */}
+                              <tr>
+                                <th rowSpan={2} className="text-left px-3 py-2 font-heading font-semibold sticky left-0 z-10"
+                                  style={{ color: '#64748b', background: '#0f172a', minWidth: '160px', borderBottom: '1px solid #1e293b' }}>
                                   Seriennummer
                                 </th>
-                                {days.map((d) => (
-                                  <th key={d.dateStr}
-                                    className="text-center px-0 py-1 font-heading font-semibold"
-                                    style={{ color: d.isWeekend ? '#475569' : '#64748b', minWidth: '34px' }}>
-                                    <div className="text-[9px]">{d.dayName}</div>
-                                    <div>{d.day}</div>
+                                {kwGroups.map((g, gi) => (
+                                  <th key={`kw-${g.kw}-${gi}`} colSpan={g.span}
+                                    className="text-center font-heading font-bold text-[9px] py-1"
+                                    style={{
+                                      color: gi % 2 === 0 ? '#94a3b8' : '#64748b',
+                                      background: gi % 2 === 0 ? '#0f172a' : '#131c2e',
+                                      borderLeft: gi > 0 ? '1px solid #334155' : 'none',
+                                    }}>
+                                    KW {g.kw}
                                   </th>
                                 ))}
+                              </tr>
+                              {/* Tage */}
+                              <tr style={{ borderBottom: '1px solid #1e293b' }}>
+                                {days.map((d) => {
+                                  const kwIdx = kwGroups.findIndex((g) => g.kw === d.kw);
+                                  const weekBg = kwIdx % 2 === 0 ? '#0f172a' : '#131c2e';
+                                  return (
+                                    <th key={d.dateStr}
+                                      className="text-center px-0 py-1 font-heading font-semibold"
+                                      style={{
+                                        color: d.isToday ? '#f59e0b' : d.isWeekend ? '#475569' : '#64748b',
+                                        minWidth: '34px',
+                                        background: d.isToday ? '#422006' : weekBg,
+                                        borderBottom: d.isToday ? '2px solid #f59e0b' : '1px solid #1e293b',
+                                      }}>
+                                      <div className="text-[9px]">{d.dayName}</div>
+                                      <div style={{ fontWeight: d.isToday ? 800 : 600 }}>{d.day}</div>
+                                    </th>
+                                  );
+                                })}
                               </tr>
                             </thead>
                             <tbody>
@@ -419,6 +472,7 @@ export default function AdminVerfuegbarkeitPage() {
                                   </td>
                                   {days.map((d) => {
                                     const info = getCellInfo(unit, d.dateStr, product, ganttData.bufferDays);
+                                    const cs = cellStyle(info);
                                     return (
                                       <td
                                         key={d.dateStr}
@@ -430,9 +484,13 @@ export default function AdminVerfuegbarkeitPage() {
                                             window.open(`/admin/buchungen/${info.booking.id}`, '_blank');
                                           }
                                         }}
-                                        style={{ ...cellStyle(info), cursor: info.booking ? 'pointer' : 'default' }}
+                                        style={{
+                                          ...cs,
+                                          cursor: info.booking ? 'pointer' : 'default',
+                                          boxShadow: d.isToday ? 'inset 0 0 0 1.5px #f59e0b' : 'none',
+                                        }}
                                       >
-                                        <div className="text-[9px] leading-tight truncate px-0.5" style={{ color: cellStyle(info).color }}>
+                                        <div className="text-[9px] leading-tight truncate px-0.5" style={{ color: cs.color }}>
                                           {info.type === 'booked' && info.booking && (
                                             <span title={info.booking.customer_name}>
                                               {info.booking.customer_name?.split(' ')[0]?.slice(0, 6) || '…'}
