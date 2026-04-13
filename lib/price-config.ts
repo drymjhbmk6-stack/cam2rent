@@ -25,8 +25,10 @@ export interface HaftungConfig {
   standard: number;
   /** Aufschlag Standard pro weitere Woche */
   standardIncrement: number;
-  /** Max. Eigenbeteiligung bei Standard */
+  /** Max. Eigenbeteiligung bei Standard (Fallback wenn keine Kategorie passt) */
   standardEigenbeteiligung: number;
+  /** Eigenbeteiligung pro Produktkategorie bei Standard, z.B. { "action-cam": 200, "360-cam": 300 } */
+  eigenbeteiligungByCategory?: Record<string, number>;
   /** Basispreis Premium-Haftungsschutz (1-7 Tage) */
   premium: number;
   /** Aufschlag Premium pro weitere Woche */
@@ -37,9 +39,21 @@ export const DEFAULT_HAFTUNG: HaftungConfig = {
   standard: 15,
   standardIncrement: 5,
   standardEigenbeteiligung: 200,
+  eigenbeteiligungByCategory: {
+    'action-cam': 200,
+    '360-cam': 300,
+  },
   premium: 25,
   premiumIncrement: 10,
 };
+
+/** Gibt die Eigenbeteiligung fuer eine Produktkategorie zurueck */
+export function getEigenbeteiligung(config: HaftungConfig, category?: string): number {
+  if (category && config.eigenbeteiligungByCategory?.[category] !== undefined) {
+    return config.eigenbeteiligungByCategory[category];
+  }
+  return config.standardEigenbeteiligung;
+}
 
 /** Berechnet den gestaffelten Haftungspreis basierend auf Miettagen */
 export function calcHaftungTieredPrice(

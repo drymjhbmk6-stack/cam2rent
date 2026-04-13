@@ -88,8 +88,67 @@ export default function AdminHaftungPage() {
               <div className="bg-brand-bg rounded-xl border border-brand-border p-4 space-y-4">
                 <p className="font-heading font-semibold text-sm text-brand-black">Standard-Haftungsschutz</p>
                 <div className="grid grid-cols-2 gap-4">
-                  <Field label="Preis" value={haftung.standard} onChange={(v) => setHaftung((h) => ({ ...h, standard: v }))} />
-                  <Field label="Max. Eigenbeteiligung" sub="Höchstbetrag den der Kunde zahlt" value={haftung.standardEigenbeteiligung} onChange={(v) => setHaftung((h) => ({ ...h, standardEigenbeteiligung: v }))} />
+                  <Field label="Basispreis (1-7 Tage)" value={haftung.standard} onChange={(v) => setHaftung((h) => ({ ...h, standard: v }))} />
+                  <Field label="Aufschlag pro Woche" value={haftung.standardIncrement} onChange={(v) => setHaftung((h) => ({ ...h, standardIncrement: v }))} />
+                </div>
+                <Field label="Fallback-Eigenbeteiligung" sub="Wird verwendet wenn keine Kategorie passt" value={haftung.standardEigenbeteiligung} onChange={(v) => setHaftung((h) => ({ ...h, standardEigenbeteiligung: v }))} />
+
+                {/* Eigenbeteiligung pro Kategorie */}
+                <div className="mt-3 pt-3 border-t border-brand-border">
+                  <p className="text-xs font-heading font-semibold text-brand-muted mb-3">Eigenbeteiligung pro Kategorie</p>
+                  <div className="space-y-3">
+                    {Object.entries(haftung.eigenbeteiligungByCategory ?? { 'action-cam': 200, '360-cam': 300 }).map(([cat, val]) => (
+                      <div key={cat} className="flex items-center gap-3">
+                        <input
+                          type="text"
+                          value={cat}
+                          onChange={(e) => {
+                            const old = haftung.eigenbeteiligungByCategory ?? {};
+                            const updated = { ...old };
+                            delete updated[cat];
+                            updated[e.target.value] = val;
+                            setHaftung((h) => ({ ...h, eigenbeteiligungByCategory: updated }));
+                          }}
+                          className="flex-1 px-3 py-2 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue"
+                          placeholder="Kategorie-Slug"
+                        />
+                        <div className="relative w-28">
+                          <input
+                            type="number"
+                            value={val}
+                            onChange={(e) => {
+                              const updated = { ...(haftung.eigenbeteiligungByCategory ?? {}) };
+                              updated[cat] = parseFloat(e.target.value) || 0;
+                              setHaftung((h) => ({ ...h, eigenbeteiligungByCategory: updated }));
+                            }}
+                            className="w-full pr-8 pl-3 py-2 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue"
+                          />
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-brand-muted pointer-events-none">€</span>
+                        </div>
+                        <button
+                          onClick={() => {
+                            const updated = { ...(haftung.eigenbeteiligungByCategory ?? {}) };
+                            delete updated[cat];
+                            setHaftung((h) => ({ ...h, eigenbeteiligungByCategory: updated }));
+                          }}
+                          className="text-red-500 hover:text-red-700 text-sm font-bold px-2"
+                          title="Entfernen"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      onClick={() => {
+                        const updated = { ...(haftung.eigenbeteiligungByCategory ?? {}) };
+                        updated[`kategorie-${Object.keys(updated).length + 1}`] = 200;
+                        setHaftung((h) => ({ ...h, eigenbeteiligungByCategory: updated }));
+                      }}
+                      className="text-xs font-heading font-semibold text-accent-blue hover:underline"
+                    >
+                      + Kategorie hinzufügen
+                    </button>
+                  </div>
                 </div>
               </div>
 

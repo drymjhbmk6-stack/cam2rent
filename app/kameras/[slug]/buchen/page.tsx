@@ -16,7 +16,7 @@ import { loadStripe } from '@stripe/stripe-js';
 import AvailabilityCalendar, { type CalendarRange } from '@/components/AvailabilityCalendar';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { shippingConfig, calcShipping, type ShippingMethod } from '@/data/shipping';
-import { calcPriceFromKeyDays, calcPriceFromTable, calcHaftungTieredPrice, type PriceConfig, type AdminProduct } from '@/lib/price-config';
+import { calcPriceFromKeyDays, calcPriceFromTable, calcHaftungTieredPrice, getEigenbeteiligung, type PriceConfig, type AdminProduct, type HaftungConfig } from '@/lib/price-config';
 import SignatureStep, { type SignatureResult } from '@/components/booking/SignatureStep';
 
 /** Inline type to replace react-day-picker's DateRange */
@@ -636,8 +636,12 @@ export default function BuchenPage() {
     ? calcBreakdown(product, range.from, range.to, accessories, dbAccessories, haftung, shippingMethod, deliveryMode, dynPrices)
     : null;
 
-  // Haftungsoptionen dynamisch (Eigenbeteiligung aus Admin-Config)
-  const haftungsoptionen = getHaftungsoptionen(dynPrices?.haftung?.standardEigenbeteiligung ?? 200);
+  // Haftungsoptionen dynamisch (Eigenbeteiligung je nach Produktkategorie)
+  const haftungConfig = dynPrices?.haftung as HaftungConfig | undefined;
+  const eigenbeteiligung = haftungConfig
+    ? getEigenbeteiligung(haftungConfig, product.category)
+    : 200;
+  const haftungsoptionen = getHaftungsoptionen(eigenbeteiligung);
 
   // Set price is calculated separately and added on top of the base breakdown
   const setPrice = selectedSet && breakdown

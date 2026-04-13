@@ -55,6 +55,8 @@ export async function generateContractPDF(opts: {
   signatureMethod: 'canvas' | 'typed';
   signerName: string;
   ipAddress: string;
+  // Eigenbeteiligung (dynamisch pro Kategorie)
+  eigenbeteiligung?: number;
 }): Promise<GenerateContractResult> {
   const now = new Date();
   const signedAt = now.toISOString().replace('T', ' ').substring(0, 16);
@@ -90,11 +92,12 @@ export async function generateContractPDF(opts: {
     : 'Premium-Schadenspauschale'
   );
 
+  const eb = opts.eigenbeteiligung ?? 200;
   const haftungDescription = opts.haftungDescription || (
     haftungOption === 'Ohne Schadenspauschale'
       ? 'Keine Schadenspauschale gewählt. Der Mieter haftet bis zur Höhe des Zeitwerts der Mietsache (Wiederbeschaffungswert).'
     : haftungOption === 'Basis-Schadenspauschale'
-      ? 'Ersatzpflicht im Schadensfall auf max. 200 EUR je Schadensereignis begrenzt (Selbstbeteiligung). Gilt bei bestimmungsgemäßer Nutzung.'
+      ? `Ersatzpflicht im Schadensfall auf max. ${eb} EUR je Schadensereignis begrenzt (Selbstbeteiligung). Gilt bei bestimmungsgemäßer Nutzung.`
     : 'Volle Haftungsfreistellung bei bestimmungsgemäßer Nutzung – keine Selbstbeteiligung.'
   );
 
@@ -134,6 +137,7 @@ export async function generateContractPDF(opts: {
     signedAt,
     ipAddress: opts.ipAddress,
     contractHash: '',
+    eigenbeteiligung: eb,
     // Backwards compat
     productName: opts.productName,
     accessories: opts.accessories,
