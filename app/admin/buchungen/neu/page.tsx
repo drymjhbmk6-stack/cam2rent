@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { calcHaftungTieredPrice, getEigenbeteiligung, type HaftungConfig } from '@/lib/price-config';
+import { calcHaftungTieredPrice } from '@/lib/price-config';
 import SignatureStep, { type SignatureResult } from '@/components/booking/SignatureStep';
 
 /* ─── Types ─────────────────────────────────────────────────────────────────── */
