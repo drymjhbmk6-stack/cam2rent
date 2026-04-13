@@ -36,14 +36,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Ungültige E-Mail-Adresse.' }, { status: 400 });
   }
 
-  // Content-Laenge begrenzen
+  // Content-Länge begrenzen
   if (content.length > 2000) {
     return NextResponse.json({ error: 'Kommentar darf maximal 2000 Zeichen lang sein.' }, { status: 400 });
   }
 
   const supabase = createServiceClient();
 
-  // Pruefen ob Post existiert und published ist
+  // Prüfen ob Post existiert und published ist
   const { data: post } = await supabase
     .from('blog_posts')
     .select('id')

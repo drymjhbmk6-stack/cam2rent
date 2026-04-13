@@ -58,13 +58,13 @@ export interface Accessory {
   /** If false, the item is hidden in the booking flow. */
   available: boolean;
 
-  /** Internes Zubehoer — nur im Admin und in Sets sichtbar, Kunde kann es nicht einzeln buchen. */
+  /** Internes Zubehör — nur im Admin und in Sets sichtbar, Kunde kann es nicht einzeln buchen. */
   internal?: boolean;
 
-  /** Upgrade-Gruppe (z.B. "speicherkarte") — Zubehoer in der gleichen Gruppe wird als Radio-Button statt Checkbox angezeigt. */
+  /** Upgrade-Gruppe (z.B. "speicherkarte") — Zubehör in der gleichen Gruppe wird als Radio-Button statt Checkbox angezeigt. */
   upgradeGroup?: string;
 
-  /** Ist die Standard-/Inklusive-Option in der Upgrade-Gruppe (vorausgewaehlt, 0 € Aufpreis). */
+  /** Ist die Standard-/Inklusive-Option in der Upgrade-Gruppe (vorausgewählt, 0 € Aufpreis). */
   isUpgradeBase?: boolean;
 
   /** Maps to an SVG icon in the booking page. */

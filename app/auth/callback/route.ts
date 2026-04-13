@@ -12,7 +12,7 @@ import type { EmailOtpType } from '@supabase/supabase-js';
  * - Passwort-Reset-Link
  * - OAuth / PKCE
  *
- * Wenn der PKCE Code-Austausch fehlschlaegt (anderer Browser/Geraet),
+ * Wenn der PKCE Code-Austausch fehlschlägt (anderer Browser/Gerät),
  * wird trotzdem zum Login weitergeleitet mit Erfolgsmeldung,
  * da die E-Mail-Bestätigung bereits durch Supabase erfolgt ist.
  */
@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
                 cookieStore.set(name, value, options)
               );
             } catch {
-              // Cookies koennen in bestimmten Kontexten nicht gesetzt werden
+              // Cookies können in bestimmten Kontexten nicht gesetzt werden
             }
           },
         },
@@ -99,7 +99,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (authSuccess) {
-      // Pruefen ob Profil verifiziert ist
+      // Prüfen ob Profil verifiziert ist
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (user && next === '/konto') {

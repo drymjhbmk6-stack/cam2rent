@@ -3,7 +3,7 @@ import { createServiceClient } from '@/lib/supabase';
 
 /**
  * GET /api/admin/id-document-url?path=userId/front.jpg
- * Gibt eine temporaere Signed URL fuer ein Ausweis-Bild zurueck (60 Min gueltig).
+ * Gibt eine temporäre Signed URL für ein Ausweis-Bild zurück (60 Min gültig).
  */
 export async function GET(req: NextRequest) {
   try {

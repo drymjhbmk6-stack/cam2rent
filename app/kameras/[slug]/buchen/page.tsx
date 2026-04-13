@@ -510,7 +510,7 @@ export default function BuchenPage() {
     setAccessories((prev) => {
       const groupIds = dbAccessories.filter((a) => a.upgradeGroup === group).map((a) => a.id);
       const without = prev.filter((id) => !groupIds.includes(id));
-      // Base-Option = abwaehlen (inklusive), Upgrade-Option = hinzufuegen
+      // Base-Option = abwählen (inklusive), Upgrade-Option = hinzufügen
       const acc = dbAccessories.find((a) => a.id === accId);
       if (acc?.isUpgradeBase) return without;
       return [...without, accId];
@@ -584,7 +584,7 @@ export default function BuchenPage() {
     }
   };
 
-  // Handler fuer AvailabilityCalendar: String-Daten → DateRange konvertieren
+  // Handler für AvailabilityCalendar: String-Daten → DateRange konvertieren
   const handleCalendarRangeChange = useCallback((calRange: CalendarRange) => {
     if (!calRange.from) {
       setRange(undefined);
@@ -765,7 +765,7 @@ export default function BuchenPage() {
                         onChange={() => { setDeliveryMode('abholung'); setRange(undefined); }} className="mt-0.5 accent-accent-blue" />
                       <div>
                         <p className="font-heading font-semibold text-sm text-brand-black">Selbst abholen</p>
-                        <p className="text-xs text-brand-steel mt-0.5">Du holst die Kamera bei uns ab und bringst sie zurueck</p>
+                        <p className="text-xs text-brand-steel mt-0.5">Du holst die Kamera bei uns ab und bringst sie zurück</p>
                       </div>
                     </div>
                     {deliveryMode === 'abholung' && (
@@ -1076,7 +1076,7 @@ export default function BuchenPage() {
                             )}
                           </div>
                           {isBookedOut && (
-                            <span className="text-xs text-status-error mt-1 ml-7">Fuer diesen Zeitraum nicht verfuegbar</span>
+                            <span className="text-xs text-status-error mt-1 ml-7">Für diesen Zeitraum nicht verfügbar</span>
                           )}
                         </label>
                       );
@@ -1445,7 +1445,7 @@ export default function BuchenPage() {
                   Zusammenfassung
                 </h2>
                 <p className="text-sm font-body text-brand-steel dark:text-gray-400 mb-6">
-                  Pruefe deine Buchung und lege sie in den Warenkorb.
+                  Prüfe deine Buchung und lege sie in den Warenkorb.
                 </p>
 
                 {/* Block 1: Zeitraum & Versand */}
@@ -1716,10 +1716,10 @@ export default function BuchenPage() {
                         type="button"
                         onClick={() => {
                           if (!breakdown || !range?.from || !product) return;
-                          // Signatur in sessionStorage speichern fuer confirm-booking
+                          // Signatur in sessionStorage speichern für confirm-booking
                           try {
                             sessionStorage.setItem('cam2rent_contract_signature', JSON.stringify(contractSignature));
-                          } catch { /* sessionStorage nicht verfuegbar */ }
+                          } catch { /* sessionStorage nicht verfügbar */ }
                           addItem({
                             id: crypto.randomUUID(),
                             productId: product.id,

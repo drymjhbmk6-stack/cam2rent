@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 
-// Gleicher Bucket wie Blog-Bilder — kein extra Bucket noetig
+// Gleicher Bucket wie Blog-Bilder — kein extra Bucket nötig
 const BUCKET = 'blog-images';
 
 async function getUnsplashKey(): Promise<string | null> {
@@ -22,10 +22,10 @@ async function getUnsplashKey(): Promise<string | null> {
 
 /**
  * POST /api/admin/seasonal-images/upload
- * Laedt ein Bild hoch — entweder von Unsplash-URL oder als Base64.
+ * Lädt ein Bild hoch — entweder von Unsplash-URL oder als Base64.
  *
- * Body fuer Unsplash: { imageUrl, downloadLocation, alt }
- * Body fuer Custom Upload: { base64, filename, alt }
+ * Body für Unsplash: { imageUrl, downloadLocation, alt }
+ * Body für Custom Upload: { base64, filename, alt }
  */
 export async function POST(req: NextRequest) {
   const body = await req.json();

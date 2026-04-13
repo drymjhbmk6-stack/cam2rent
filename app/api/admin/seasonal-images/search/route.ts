@@ -19,7 +19,7 @@ async function getUnsplashKey(): Promise<string | null> {
 
 /**
  * GET /api/admin/seasonal-images/search?query=...&page=1
- * Sucht Unsplash-Bilder fuer saisonale Bilder.
+ * Sucht Unsplash-Bilder für saisonale Bilder.
  */
 export async function GET(req: NextRequest) {
   const query = req.nextUrl.searchParams.get('query');

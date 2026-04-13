@@ -16,11 +16,11 @@ const DEFAULT_BUFFER: BufferDays = {
 /**
  * GET /api/accessory-availability?from=2026-04-10&to=2026-04-15&product_id=1&delivery_mode=versand
  *
- * Berechnet welche Zubehörteile und Sets fuer den Zeitraum verfuegbar sind.
- * Beruecksichtigt:
+ * Berechnet welche Zubehörteile und Sets für den Zeitraum verfügbar sind.
+ * Berücksichtigt:
  * - Gesamtmenge (available_qty) des Zubehörs
- * - Bereits gebuchtes Zubehoer in ueberlappenden Buchungen (inkl. Puffer-Tage)
- * - Produkt-Kompatibilitaet (compatible_product_ids)
+ * - Bereits gebuchtes Zubehör in überlappenden Buchungen (inkl. Puffer-Tage)
+ * - Produkt-Kompatibilität (compatible_product_ids)
  *
  * Returns: { accessories: [{ id, available_qty_remaining, compatible }], buffer }
  */
@@ -85,7 +85,7 @@ export async function GET(req: NextRequest) {
     for (const booking of bookings) {
       if (!booking.accessories || booking.accessories.length === 0) continue;
 
-      // Puffer fuer diese Buchung berechnen
+      // Puffer für diese Buchung berechnen
       const bMode = booking.delivery_mode ?? 'versand';
       const bBefore = bMode === 'abholung' ? buffer.abholung_before : buffer.versand_before;
       const bAfter = bMode === 'abholung' ? buffer.abholung_after : buffer.versand_after;

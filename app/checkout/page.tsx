@@ -352,7 +352,7 @@ export default function CheckoutPage() {
     if (!match) return sum;
     return sum + Math.round(item.priceRental * match.discount_percent) / 100;
   }, 0);
-  // productDiscountLabel fuer zukuenftige Nutzung
+  // productDiscountLabel für zukünftige Nutzung
   void productDiscountAmount;
 
   // Duration discount: based on max rental days across all items

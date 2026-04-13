@@ -66,7 +66,7 @@ export async function GET(req: NextRequest) {
             </h1>
             <p style="color: #64748b; font-size: 14px; line-height: 1.6;">
               Hallo ${booking.customer_name || 'dort'},<br/>
-              deine Buchung <strong>${booking.id}</strong> fuer <strong>${booking.product_name}</strong>
+              deine Buchung <strong>${booking.id}</strong> für <strong>${booking.product_name}</strong>
               wurde automatisch storniert, da keine Zahlung vor dem Mietbeginn eingegangen ist.
             </p>
             <p style="color: #64748b; font-size: 14px; margin-top: 16px;">

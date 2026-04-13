@@ -3,7 +3,7 @@ import { createServiceClient } from '@/lib/supabase';
 
 /**
  * POST /api/survey
- * Speichert Kundenfeedback nach Rueckgabe.
+ * Speichert Kundenfeedback nach Rückgabe.
  * Body: { bookingId, rating (1-5), feedback (optional text) }
  */
 export async function POST(req: NextRequest) {
@@ -11,12 +11,12 @@ export async function POST(req: NextRequest) {
     const { bookingId, rating, feedback } = await req.json();
 
     if (!bookingId || !rating || rating < 1 || rating > 5) {
-      return NextResponse.json({ error: 'Ungueltige Daten.' }, { status: 400 });
+      return NextResponse.json({ error: 'Ungültige Daten.' }, { status: 400 });
     }
 
     const supabase = createServiceClient();
 
-    // Buchung laden fuer Kontext
+    // Buchung laden für Kontext
     const { data: booking } = await supabase
       .from('bookings')
       .select('customer_name, customer_email, product_name')

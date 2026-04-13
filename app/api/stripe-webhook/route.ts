@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
 
     const supabase = createServiceClient();
 
-    // Idempotenz: Pruefen ob Buchung bereits existiert
+    // Idempotenz: Prüfen ob Buchung bereits existiert
     const { data: existing } = await supabase
       .from('bookings')
       .select('id')
@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
     // Andere PaymentIntents (z.B. ohne booking metadata) ignorieren
   }
 
-  // Zahlungslink-Flow: Kunde bezahlt ueber genehmigten Link
+  // Zahlungslink-Flow: Kunde bezahlt über genehmigten Link
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object as Stripe.Checkout.Session;
     const meta = session.metadata ?? {};
@@ -108,9 +108,9 @@ export async function POST(req: NextRequest) {
           })
           .eq('id', meta.booking_id);
 
-        console.log(`[Webhook] Pending-Buchung ${meta.booking_id} nach Zahlung bestaetigt.`);
+        console.log(`[Webhook] Pending-Buchung ${meta.booking_id} nach Zahlung bestätigt.`);
 
-        // Bestaetigungs-Email senden
+        // Bestätigungs-Email senden
         if (booking.customer_email) {
           const { data: taxSettings } = await supabase
             .from('admin_settings')
@@ -263,7 +263,7 @@ async function handleCartBooking(
     .maybeSingle();
 
   if (!ctxRow?.value) {
-    console.error(`[Webhook] Kein Checkout-Kontext fuer ${intent.id} gefunden.`);
+    console.error(`[Webhook] Kein Checkout-Kontext für ${intent.id} gefunden.`);
     return;
   }
 
@@ -271,13 +271,13 @@ async function handleCartBooking(
   try {
     ctx = typeof ctxRow.value === 'string' ? JSON.parse(ctxRow.value) : ctxRow.value;
   } catch {
-    console.error(`[Webhook] Checkout-Kontext fuer ${intent.id} ungueltig.`);
+    console.error(`[Webhook] Checkout-Kontext für ${intent.id} ungültig.`);
     return;
   }
 
   const items = (ctx.items ?? []) as CartItem[];
   if (!items.length) {
-    console.error(`[Webhook] Keine Items im Kontext fuer ${intent.id}.`);
+    console.error(`[Webhook] Keine Items im Kontext für ${intent.id}.`);
     return;
   }
 
@@ -311,7 +311,7 @@ async function handleCartBooking(
     }
   }
 
-  // EINE Buchung fuer den gesamten Warenkorb
+  // EINE Buchung für den gesamten Warenkorb
   const bookingId = await generateBookingId();
   const firstItem = items[0];
   const productName = items.length === 1

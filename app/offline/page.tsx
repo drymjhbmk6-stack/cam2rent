@@ -36,7 +36,7 @@ export default function OfflinePage() {
         </h1>
 
         <p className="font-body text-brand-text dark:text-gray-300 mb-6 leading-relaxed">
-          Du bist gerade offline. Pruefe deine Internetverbindung und versuche
+          Du bist gerade offline. Prüfe deine Internetverbindung und versuche
           es erneut.
         </p>
 

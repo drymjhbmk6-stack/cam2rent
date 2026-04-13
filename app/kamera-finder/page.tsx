@@ -165,7 +165,7 @@ const questions: Question[] = [
       { label: '1\u20133 Tage', icon: <IconDays />, value: '1-3' },
       { label: '4\u20137 Tage', icon: <IconDays />, value: '4-7' },
       { label: '1\u20132 Wochen', icon: <IconDays />, value: '1-2w' },
-      { label: 'Laenger als 2 Wochen', icon: <IconDays />, value: '2w+' },
+      { label: 'Länger als 2 Wochen', icon: <IconDays />, value: '2w+' },
     ],
   },
   {

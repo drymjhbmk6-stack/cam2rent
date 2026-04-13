@@ -24,7 +24,7 @@ async function getOpenAIKey(): Promise<string | null> {
  *
  * Body: { prompt: string, title?: string }
  * - prompt: Bild-Prompt (von Claude generiert oder manuell)
- * - title: Artikel-Titel fuer den Alt-Text
+ * - title: Artikel-Titel für den Alt-Text
  */
 export async function POST(req: NextRequest) {
   const body = await req.json();
@@ -49,9 +49,9 @@ export async function POST(req: NextRequest) {
       model: 'dall-e-3',
       prompt,
       n: 1,
-      size: '1792x1024', // Landscape fuer Blog-Header
+      size: '1792x1024', // Landscape für Blog-Header
       quality: 'hd',
-      style: 'natural', // Fotorealistisch statt kuenstlerisch
+      style: 'natural', // Fotorealistisch statt künstlerisch
     });
 
     const imageUrl = response.data?.[0]?.url;

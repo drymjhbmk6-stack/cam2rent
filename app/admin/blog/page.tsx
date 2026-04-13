@@ -79,7 +79,7 @@ export default function BlogDashboardPage() {
       const open = (topicsData.topics ?? []).filter((t: { used: boolean }) => !t.used).length;
       setOpenTopics(open);
 
-      // Zeitplan laden (naechste 10 geplante Eintraege)
+      // Zeitplan laden (nächste 10 geplante Einträge)
       const schedRes = await fetch('/api/admin/blog/schedule');
       const schedData = await schedRes.json();
       const allEntries = (schedData.entries ?? schedData.schedule ?? [])

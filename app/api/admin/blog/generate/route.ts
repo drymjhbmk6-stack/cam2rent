@@ -3,15 +3,15 @@ import { createServiceClient } from '@/lib/supabase';
 import Anthropic from '@anthropic-ai/sdk';
 
 const LENGTH_MAP: Record<string, string> = {
-  kurz: 'ca. 500 Woerter',
-  mittel: 'ca. 1000 Woerter',
-  lang: 'ca. 1500 Woerter',
+  kurz: 'ca. 500 Wörter',
+  mittel: 'ca. 1000 Wörter',
+  lang: 'ca. 1500 Wörter',
 };
 
 const TONE_MAP: Record<string, string> = {
   informativ: 'sachlich-informativ, gut recherchiert',
-  locker: 'locker und unterhaltsam, mit persoenlicher Note',
-  professionell: 'professionell und vertrauenswuerdig, Experten-Ton',
+  locker: 'locker und unterhaltsam, mit persönlicher Note',
+  professionell: 'professionell und vertrauenswürdig, Experten-Ton',
 };
 
 async function getBlogSettings(): Promise<Record<string, string> | null> {
@@ -75,24 +75,24 @@ export async function POST(req: NextRequest) {
 
   let productContext = '';
   if (referenceProducts?.length) {
-    productContext = `\n\nReferenz-Produkte aus dem Shop (erwaehne diese natuerlich im Artikel):\n${referenceProducts.map((p: string) => `- ${p}`).join('\n')}`;
+    productContext = `\n\nReferenz-Produkte aus dem Shop (erwähne diese natürlich im Artikel):\n${referenceProducts.map((p: string) => `- ${p}`).join('\n')}`;
   }
 
   const keywordHint = keywords?.length
-    ? `\nWichtige Keywords fuer SEO: ${keywords.join(', ')}`
+    ? `\nWichtige Keywords für SEO: ${keywords.join(', ')}`
     : '';
 
   const shopProductsInfo = shopProducts.length > 0
     ? `\n\nAKTUELLE PRODUKTE IM CAM2RENT SHOP (verlinke diese wenn relevant):\n${shopProducts.map((p) => `- ${p}`).join('\n')}\n\nVerwende NUR diese Produkte oder allgemeine Themen. KEINE veralteten Modelle erfinden.`
     : '';
 
-  // Zusaetzlicher Admin-Kontext aus Einstellungen
+  // Zusätzlicher Admin-Kontext aus Einstellungen
   const allSettings = await getBlogSettings();
   const kiContext = allSettings?.ki_context
-    ? `\n\nZUSAETZLICHER KONTEXT VOM ADMIN:\n${allSettings.ki_context}`
+    ? `\n\nZUSÄTZLICHER KONTEXT VOM ADMIN:\n${allSettings.ki_context}`
     : '';
 
-  const systemPrompt = `Du bist ein erfahrener Redakteur fuer cam2rent.de, einen deutschen Online-Verleih fuer Action-Kameras.
+  const systemPrompt = `Du bist ein erfahrener Redakteur für cam2rent.de, einen deutschen Online-Verleih für Action-Kameras.
 
 AKTUELLES JAHR: ${currentYear}. Verwende NUR aktuelle Informationen und Produkte.${shopProductsInfo}${kiContext}
 
@@ -100,34 +100,34 @@ Deine Aufgabe: Schreibe einen hochwertigen, redaktionellen Blog-Artikel auf Deut
 
 STIL-REGELN:
 - Schreibe ${length} in ${toneDesc}m Stil
-- Schreibe wie ein erfahrener Journalist/Blogger — mit Persoenlichkeit, nicht wie ein Lexikon
-- Kurze Absaetze (max 3-4 Saetze), dann Absatzwechsel
-- Variiere die Satzlaenge — kurze knackige Saetze mischen mit laengeren
+- Schreibe wie ein erfahrener Journalist/Blogger — mit Persönlichkeit, nicht wie ein Lexikon
+- Kurze Absätze (max 3-4 Sätze), dann Absatzwechsel
+- Variiere die Satzlänge — kurze knackige Sätze mischen mit längeren
 - Verwende "du" statt "Sie", schreibe direkt und nahbar
-- Beginne Absaetze NICHT immer gleich — variiere den Einstieg
+- Beginne Absätze NICHT immer gleich — variiere den Einstieg
 - Keine leeren Floskeln wie "In der heutigen Zeit" oder "Es ist wichtig zu beachten"
 - Beginne NICHT mit dem Titel im Content
 
 FORMATIERUNGS-REGELN (Markdown):
-- ## fuer Hauptueberschriften, ### fuer Unterueberschriften
-- **Fett** fuer Produktnamen und wichtige Begriffe
-- Nutze Blockquotes fuer farbige Info-Boxen im Artikel (werden automatisch gestylt):
-  - > **Tipp:** Text — fuer Miet-Hinweise und praktische Tipps (z.B. cam2rent erwaehnen)
-  - > **Fazit:** Text — fuer Zwischen-Fazits nach wichtigen Abschnitten
-  - > **Wichtig:** Text — fuer Warnungen oder wichtige Hinweise
-  - > **Gut zu wissen:** Text — fuer interessante Zusatzinfos
-- Nutze MINDESTENS 2-3 Blockquote-Boxen pro Artikel fuer visuelle Abwechslung
-- Nutze Listen (- oder 1.) fuer Aufzaehlungen, aber nicht fuer alles
+- ## für Hauptüberschriften, ### für Unterüberschriften
+- **Fett** für Produktnamen und wichtige Begriffe
+- Nutze Blockquotes für farbige Info-Boxen im Artikel (werden automatisch gestylt):
+  - > **Tipp:** Text — für Miet-Hinweise und praktische Tipps (z.B. cam2rent erwähnen)
+  - > **Fazit:** Text — für Zwischen-Fazits nach wichtigen Abschnitten
+  - > **Wichtig:** Text — für Warnungen oder wichtige Hinweise
+  - > **Gut zu wissen:** Text — für interessante Zusatzinfos
+- Nutze MINDESTENS 2-3 Blockquote-Boxen pro Artikel für visuelle Abwechslung
+- Nutze Listen (- oder 1.) für Aufzählungen, aber nicht für alles
 - Tabellen bei direkten Vergleichen von 2+ Produkten mit Specs — Feature in Spalte 1, Produkte in weiteren Spalten
 - Lockere den Text auf mit Zwischenfragen an den Leser
-- Beginne den Artikel mit einem kurzen Lead-Absatz (2-3 Saetze, der das Thema auf den Punkt bringt)
+- Beginne den Artikel mit einem kurzen Lead-Absatz (2-3 Sätze, der das Thema auf den Punkt bringt)
 
 INHALTLICHE REGELN:
-- Schreibe SEO-freundlich mit natuerlicher Keyword-Integration
+- Schreibe SEO-freundlich mit natürlicher Keyword-Integration
 - NIEMALS "Versicherung" — nur "Haftungsschutz" oder "Haftungsbegrenzung"
-- Erwaehne cam2rent.de natuerlich, z.B. "Bei cam2rent kannst du die XY einfach mieten und testen"
+- Erwähne cam2rent.de natürlich, z.B. "Bei cam2rent kannst du die XY einfach mieten und testen"
 - Zielgruppe: Abenteurer, Reisende, Content Creator die Action-Cams mieten wollen
-- Schliesse mit einem kurzen, praegnanten Fazit ab${productContext}${keywordHint}
+- Schließe mit einem kurzen, prägnanten Fazit ab${productContext}${keywordHint}
 
 Antworte AUSSCHLIESSLICH im folgenden JSON-Format (kein Markdown-Codeblock, nur reines JSON):
 {
@@ -146,7 +146,7 @@ Antworte AUSSCHLIESSLICH im folgenden JSON-Format (kein Markdown-Codeblock, nur 
     const message = await client.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 4096,
-      messages: [{ role: 'user', content: `Schreibe einen Blog-Artikel ueber: ${topic}` }],
+      messages: [{ role: 'user', content: `Schreibe einen Blog-Artikel über: ${topic}` }],
       system: systemPrompt,
     });
 
@@ -166,7 +166,7 @@ Antworte AUSSCHLIESSLICH im folgenden JSON-Format (kein Markdown-Codeblock, nur 
       }
     }
 
-    // Lesezeit berechnen (ca. 200 Woerter/Minute)
+    // Lesezeit berechnen (ca. 200 Wörter/Minute)
     const wordCount = (parsed.content || '').split(/\s+/).length;
     const readingTime = Math.max(1, Math.ceil(wordCount / 200));
 

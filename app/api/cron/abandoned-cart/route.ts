@@ -5,7 +5,7 @@ import { verifyCronAuth } from '@/lib/cron-auth';
 
 /**
  * GET /api/cron/abandoned-cart
- * Cron-Job: Sendet Erinnerungen fuer Warenkoerbe die seit X Stunden nicht abgeschlossen wurden.
+ * Cron-Job: Sendet Erinnerungen für Warenkörbe die seit X Stunden nicht abgeschlossen wurden.
  */
 export async function GET(req: NextRequest) {
   if (!verifyCronAuth(req)) {

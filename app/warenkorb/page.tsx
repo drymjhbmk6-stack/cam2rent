@@ -193,7 +193,7 @@ export default function WarenkorbPage() {
                       </div>
                     </div>
 
-                    {/* Zubehoer + Set + Haftung */}
+                    {/* Zubehör + Set + Haftung */}
                     <div className="flex flex-wrap gap-1.5">
                       {item.haftung !== 'none' && (
                         <span className="px-2 py-0.5 text-[10px] rounded-full bg-accent-blue-soft text-accent-blue font-medium">

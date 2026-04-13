@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { verifyCronAuth } from '@/lib/cron-auth';
 
-/** POST /api/cron/blog-publish - Geplante Posts veroeffentlichen */
+/** POST /api/cron/blog-publish - Geplante Posts veröffentlichen */
 export async function POST(req: NextRequest) {
   if (!verifyCronAuth(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -23,14 +23,14 @@ export async function POST(req: NextRequest) {
     } catch { /* leer */ }
   }
 
-  // 1. Geplante Artikel veroeffentlichen deren scheduled_at erreicht ist
+  // 1. Geplante Artikel veröffentlichen deren scheduled_at erreicht ist
   const publishQuery = supabase
     .from('blog_posts')
     .select('id, title, slug, schedule_id')
     .eq('status', 'scheduled')
     .lte('scheduled_at', now);
 
-  // Im Semi-Modus: nur Artikel veroeffentlichen deren Zeitplan-Eintrag als "gesehen" markiert ist
+  // Im Semi-Modus: nur Artikel veröffentlichen deren Zeitplan-Eintrag als "gesehen" markiert ist
   // oder die keinen Zeitplan-Eintrag haben (manuell geplante)
   const { data: scheduledPosts } = await publishQuery;
 
@@ -39,10 +39,10 @@ export async function POST(req: NextRequest) {
   const postsToPublish: string[] = [];
   for (const post of scheduledPosts ?? []) {
     if (!post.schedule_id) {
-      // Kein Zeitplan-Eintrag — immer veroeffentlichen
+      // Kein Zeitplan-Eintrag — immer veröffentlichen
       postsToPublish.push(post.id);
     } else if (autoMode === 'voll') {
-      // Voll-Modus — immer veroeffentlichen
+      // Voll-Modus — immer veröffentlichen
       postsToPublish.push(post.id);
     } else {
       // Semi-Modus — nur wenn "gesehen"
@@ -66,9 +66,9 @@ export async function POST(req: NextRequest) {
     error = result.error;
   }
 
-  // 2. Artikel aus dem Zeitplan veroeffentlichen
+  // 2. Artikel aus dem Zeitplan veröffentlichen
   // Semi-Modus: NUR wenn "gesehen" (reviewed = true)
-  // Voll-Modus: Immer wenn Datum faellig
+  // Voll-Modus: Immer wenn Datum fällig
   const allowedStatuses = autoMode === 'semi'
     ? ['reviewed']  // Semi: nur gesehene
     : ['generated', 'reviewed'];  // Voll: alle fertigen
@@ -100,19 +100,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // Alle veroeffentlichten Posts zusammenfuehren
+  // Alle veröffentlichten Posts zusammenführen
   const allPublished = [...(data ?? []), ...fixedPosts];
 
-  // Zugehoerige Schedule-Eintraege: loggen + loeschen
+  // Zugehörige Schedule-Einträge: loggen + löschen
   const scheduleIds = allPublished.map((p) => p.schedule_id).filter(Boolean);
   if (scheduleIds.length > 0) {
-    // Eintraege laden fuer das Log
+    // Einträge laden für das Log
     const { data: scheduleEntries } = await supabase
       .from('blog_schedule')
       .select('*')
       .in('id', scheduleIds);
 
-    // In Aktivitaetsprotokoll loggen
+    // In Aktivitätsprotokoll loggen
     for (const entry of scheduleEntries ?? []) {
       const post = allPublished.find((p) => p.schedule_id === entry.id);
       await supabase.from('admin_audit_log').insert({
@@ -130,7 +130,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Schedule-Eintraege loeschen
+    // Schedule-Einträge löschen
     await supabase
       .from('blog_schedule')
       .delete()

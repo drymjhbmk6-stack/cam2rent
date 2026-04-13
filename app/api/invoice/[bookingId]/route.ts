@@ -90,7 +90,7 @@ export async function GET(
     stripePaymentId: booking.payment_intent_id?.startsWith('pi_') ? booking.payment_intent_id : undefined,
   };
 
-  // EPC QR-Code fuer Banking generieren
+  // EPC QR-Code für Banking generieren
   try {
     const epcData = [
       'BCD',           // Service Tag

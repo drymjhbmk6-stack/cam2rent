@@ -5,7 +5,7 @@ import { type AdminProduct } from '@/lib/price-config';
 
 /**
  * GET /api/admin/utilization?days=30
- * Gibt Auslastungsdaten fuer alle Kameras zurueck.
+ * Gibt Auslastungsdaten für alle Kameras zurück.
  */
 export async function GET(req: NextRequest) {
   if (!(await checkAdminAuth())) {
@@ -58,7 +58,7 @@ export async function GET(req: NextRequest) {
     }> = [];
 
     for (const product of Object.values(productsMap)) {
-      // Buchungen fuer dieses Produkt filtern
+      // Buchungen für dieses Produkt filtern
       const productBookings = (bookings ?? []).filter(
         (b) => b.product_id === product.id || b.product_name === product.name
       );
@@ -68,7 +68,7 @@ export async function GET(req: NextRequest) {
       let totalDuration = 0;
 
       for (const booking of productBookings) {
-        // Effektive Tage im Zeitraum berechnen (Ueberlappung)
+        // Effektive Tage im Zeitraum berechnen (Überlappung)
         const rentalStart = new Date(booking.rental_from);
         const rentalEnd = new Date(booking.rental_to);
         const effectiveStart = rentalStart < periodStart ? periodStart : rentalStart;
@@ -81,7 +81,7 @@ export async function GET(req: NextRequest) {
         totalBookedDays += bookedDays;
         totalRevenue += booking.price_total || 0;
 
-        // Gesamtdauer der Buchung (fuer Durchschnitt)
+        // Gesamtdauer der Buchung (für Durchschnitt)
         const fullDuration = Math.max(
           1,
           Math.ceil((rentalEnd.getTime() - rentalStart.getTime()) / (1000 * 60 * 60 * 24)) + 1

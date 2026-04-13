@@ -32,7 +32,7 @@ export async function GET() {
 
 /**
  * POST /api/admin/seasonal-images
- * Speichert ein saisonales Bild fuer eine Zone und einen Monat.
+ * Speichert ein saisonales Bild für eine Zone und einen Monat.
  * Body: { zone, yearMonth, image } oder { zone, yearMonth, remove: true }
  */
 export async function POST(req: NextRequest) {

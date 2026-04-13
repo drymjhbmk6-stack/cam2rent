@@ -4,9 +4,9 @@ import Anthropic from '@anthropic-ai/sdk';
 
 /**
  * GET /api/admin/blog/schedule — Redaktionsplan laden
- * POST /api/admin/blog/schedule — KI-Zeitplan generieren ODER einzelnen Eintrag hinzufuegen
+ * POST /api/admin/blog/schedule — KI-Zeitplan generieren ODER einzelnen Eintrag hinzufügen
  * PUT /api/admin/blog/schedule — Eintrag aktualisieren (Datum, Reihenfolge, reviewed)
- * DELETE /api/admin/blog/schedule?id=... — Eintrag loeschen
+ * DELETE /api/admin/blog/schedule?id=... — Eintrag löschen
  */
 
 export async function GET() {
@@ -19,7 +19,7 @@ export async function GET() {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Kategorien und Posts separat laden fuer robustere Abfrage
+  // Kategorien und Posts separat laden für robustere Abfrage
   const entries = data ?? [];
   const catIds = [...new Set(entries.map((e) => e.category_id).filter(Boolean))];
   const postIds = [...new Set(entries.map((e) => e.post_id).filter(Boolean))];
@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const supabase = createServiceClient();
 
-  // Option A: KI-Zeitplan generieren (laeuft im Hintergrund)
+  // Option A: KI-Zeitplan generieren (läuft im Hintergrund)
   if (body.action === 'generate_plan') {
     const { weeks = 4, postsPerWeek = 2, categoryIds, startDate } = body;
 
@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Anthropic API Key nicht konfiguriert.' }, { status: 400 });
     }
 
-    // Status setzen: Planung laeuft
+    // Status setzen: Planung läuft
     await supabase.from('admin_settings').upsert({
       key: 'blog_plan_status',
       value: JSON.stringify({ status: 'planning', total: weeks * postsPerWeek, created: 0, started_at: new Date().toISOString() }),
@@ -94,12 +94,12 @@ export async function POST(req: NextRequest) {
     }
 
     const productInfo = productNames.length > 0
-      ? `\n\nAKTUELLE PRODUKTE IM SHOP (NUR diese Kameras fuer Vergleiche/Tests verwenden!):\n${productNames.map((n) => `- ${n}`).join('\n')}`
+      ? `\n\nAKTUELLE PRODUKTE IM SHOP (NUR diese Kameras für Vergleiche/Tests verwenden!):\n${productNames.map((n) => `- ${n}`).join('\n')}`
       : '';
 
     const catInfo = (categories ?? []).map((c) => c.name).join(', ');
     const catFilterInfo = categoryIds?.length
-      ? `\nBeschraenke die Themen auf diese Kategorien: ${categoryIds.map((id: string) => categories?.find((c) => c.id === id)?.name).filter(Boolean).join(', ')}`
+      ? `\nBeschränke die Themen auf diese Kategorien: ${categoryIds.map((id: string) => categories?.find((c) => c.id === id)?.name).filter(Boolean).join(', ')}`
       : '';
 
     // Bestehende Artikel + geplante Themen laden (Duplikat-Vermeidung)
@@ -121,7 +121,7 @@ export async function POST(req: NextRequest) {
     ];
 
     const duplicateInfo = existingTopics.length > 0
-      ? `\n\nBEREITS VORHANDENE ARTIKEL UND GEPLANTE THEMEN (KEINE Dopplungen oder aehnliche Themen erstellen!):\n${existingTopics.map((t) => `- ${t}`).join('\n')}`
+      ? `\n\nBEREITS VORHANDENE ARTIKEL UND GEPLANTE THEMEN (KEINE Dopplungen oder ähnliche Themen erstellen!):\n${existingTopics.map((t) => `- ${t}`).join('\n')}`
       : '';
 
     const today = new Date();
@@ -134,36 +134,36 @@ export async function POST(req: NextRequest) {
     const message = await client.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 4096,
-      system: `Du bist Redaktionsplaner fuer cam2rent.de, einen deutschen Action-Cam Verleih.
+      system: `Du bist Redaktionsplaner für cam2rent.de, einen deutschen Action-Cam Verleih.
 
 AKTUELLES DATUM: ${currentMonth}
 AKTUELLES JAHR: ${currentYear}
 
-Erstelle einen Redaktionsplan mit ${totalPosts} Blog-Themen fuer die naechsten ${weeks} Wochen.
+Erstelle einen Redaktionsplan mit ${totalPosts} Blog-Themen für die nächsten ${weeks} Wochen.
 
 Vorhandene Kategorien: ${catInfo}${catFilterInfo}${productInfo}${duplicateInfo}
 
 WICHTIGE REGELN:
 - Verwende NUR aktuelle Produkte (${currentYear}). KEINE veralteten Modelle wie GoPro Hero 12, DJI Action 4, Insta360 X3 etc.
-- Wenn du Produkte erwaehst, nutze NUR die oben gelisteten Shop-Produkte oder allgemeine Themen ohne spezifische Modellnamen
-- Abwechslungsreiche Themen: Vergleiche, Tipps, Guides, Tutorials, Saisonale Themen, Anwendungsfaelle
+- Wenn du Produkte erwähnst, nutze NUR die oben gelisteten Shop-Produkte oder allgemeine Themen ohne spezifische Modellnamen
+- Abwechslungsreiche Themen: Vergleiche, Tipps, Guides, Tutorials, Saisonale Themen, Anwendungsfälle
 - SEO-relevante Themen die Leute im Jahr ${currentYear} wirklich suchen
 - Jedes Thema mit 3-5 Keywords
 - NIEMALS "Versicherung" — nur "Haftungsschutz"
 - Saisonale Themen passend zum aktuellen Monat (${currentMonth}):
-  - Fruehling: Wandern, Radfahren, erste Outdoor-Abenteuer
+  - Frühling: Wandern, Radfahren, erste Outdoor-Abenteuer
   - Sommer: Wassersport, Urlaub, Tauchen, Festivals
   - Herbst: Herbstwanderungen, Indoor-Sport, Drohnen
   - Winter: Skifahren, Snowboard, Winterlandschaften
 - Mische spezifische Produktthemen mit allgemeinen Ratgeber-Themen
-- DUPLIKATE STRIKT VERMEIDEN: Pruefe die Liste der vorhandenen Artikel oben. Kein Thema darf inhaltlich aehnlich sein. Keine Wiederholungen, keine leichten Variationen (z.B. "Beste Action-Cam 2026" und "Top Action-Cams 2026" waere ein Duplikat). Jedes Thema muss einen NEUEN Blickwinkel bieten
-${kiContext ? `\nZUSAETZLICHER KONTEXT VOM ADMIN:\n${kiContext}` : ''}
+- DUPLIKATE STRIKT VERMEIDEN: Prüfe die Liste der vorhandenen Artikel oben. Kein Thema darf inhaltlich ähnlich sein. Keine Wiederholungen, keine leichten Variationen (z.B. "Beste Action-Cam 2026" und "Top Action-Cams 2026" wäre ein Duplikat). Jedes Thema muss einen NEUEN Blickwinkel bieten
+${kiContext ? `\nZUSÄTZLICHER KONTEXT VOM ADMIN:\n${kiContext}` : ''}
 
 Antworte NUR als JSON-Array (kein Markdown-Codeblock):
 [
   {
     "topic": "Thema / Titel des Artikels",
-    "prompt": "Ausfuehrlicher Prompt fuer die KI (3-6 Saetze): Beschreibe genau was der Artikel enthalten soll. Welche Produkte sollen verglichen werden? Welche Tipps/Tricks? Welche Zielgruppe? Welche Struktur (Einleitung, Vergleichstabelle, Fazit)? Welche Fragen soll der Artikel beantworten?",
+    "prompt": "Ausführlicher Prompt für die KI (3-6 Sätze): Beschreibe genau was der Artikel enthalten soll. Welche Produkte sollen verglichen werden? Welche Tipps/Tricks? Welche Zielgruppe? Welche Struktur (Einleitung, Vergleichstabelle, Fazit)? Welche Fragen soll der Artikel beantworten?",
     "keywords": ["keyword1", "keyword2", "keyword3"],
     "category": "Kategorie-Name",
     "tone": "informativ|locker|professionell",
@@ -171,14 +171,14 @@ Antworte NUR als JSON-Array (kein Markdown-Codeblock):
   }
 ]
 
-WICHTIG fuer das "prompt"-Feld:
-- Sei SEHR ausfuehrlich und spezifisch — je detaillierter, desto besser der Artikel
+WICHTIG für das "prompt"-Feld:
+- Sei SEHR ausführlich und spezifisch — je detaillierter, desto besser der Artikel
 - Nenne konkrete Produkte aus dem Shop die verglichen oder empfohlen werden sollen
-- Beschreibe die gewuenschte Artikelstruktur (z.B. "Beginne mit einer persoenlichen Anekdote, dann Vergleichstabelle, dann Fazit")
-- Erwaehne spezifische Tipps die enthalten sein sollen
+- Beschreibe die gewünschte Artikelstruktur (z.B. "Beginne mit einer persönlichen Anekdote, dann Vergleichstabelle, dann Fazit")
+- Erwähne spezifische Tipps die enthalten sein sollen
 - Gib an welche Fragen der Leser beantwortet bekommen soll
-- Nenne 2-3 Callout-Boxen die sinnvoll waeren (Tipp, Wichtig, Fazit)`,
-      messages: [{ role: 'user', content: `Erstelle ${totalPosts} Blog-Themen fuer die naechsten ${weeks} Wochen ab ${currentMonth}.` }],
+- Nenne 2-3 Callout-Boxen die sinnvoll wären (Tipp, Wichtig, Fazit)`,
+      messages: [{ role: 'user', content: `Erstelle ${totalPosts} Blog-Themen für die nächsten ${weeks} Wochen ab ${currentMonth}.` }],
     });
 
     const text = message.content[0].type === 'text' ? message.content[0].text : '';
@@ -203,14 +203,14 @@ WICHTIG fuer das "prompt"-Feld:
       } catch { /* leer */ }
     }
 
-    // Einstellungen fuer Zeitplan
+    // Einstellungen für Zeitplan
     const dayMap: Record<string, number> = { so: 0, mo: 1, di: 2, mi: 3, do: 4, fr: 5, sa: 6 };
     const allowedWeekdays = (blogSettings.auto_generate_weekdays as string[]) ?? ['mo', 'do'];
     const allowedDayNumbers = allowedWeekdays.map((d) => dayMap[d]).filter((n) => n !== undefined);
     const timeFrom = (blogSettings.auto_generate_time_from as string) ?? '09:00';
     const timeTo = (blogSettings.auto_generate_time_to as string) ?? '18:00';
 
-    // Zufaellige Uhrzeit innerhalb des Zeitfensters generieren
+    // Zufällige Uhrzeit innerhalb des Zeitfensters generieren
     function randomTime(): string {
       const fromH = parseInt(timeFrom.split(':')[0]) || 9;
       const toH = parseInt(timeTo.split(':')[0]) || 18;
@@ -281,10 +281,10 @@ WICHTIG fuer das "prompt"-Feld:
     })();
 
     // Sofort antworten
-    return NextResponse.json({ background: true, message: 'Planung laeuft im Hintergrund...' });
+    return NextResponse.json({ background: true, message: 'Planung läuft im Hintergrund...' });
   }
 
-  // Option B: Einzelnen Eintrag hinzufuegen
+  // Option B: Einzelnen Eintrag hinzufügen
   const { topic, keywords, category_id, tone, target_length, scheduled_date, scheduled_time } = body;
   if (!topic || !scheduled_date) {
     return NextResponse.json({ error: 'Thema und Datum sind erforderlich.' }, { status: 400 });
@@ -320,7 +320,7 @@ export async function PUT(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Wenn Datum oder Uhrzeit geaendert wurde: auch blog_posts.scheduled_at aktualisieren
+  // Wenn Datum oder Uhrzeit geändert wurde: auch blog_posts.scheduled_at aktualisieren
   if (data?.post_id && ('scheduled_date' in updates || 'scheduled_time' in updates)) {
     const date = data.scheduled_date;
     const time = (data.scheduled_time || '09:00').slice(0, 5);

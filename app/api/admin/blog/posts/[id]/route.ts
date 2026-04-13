@@ -38,7 +38,7 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
 
   // published_at setzen wenn Status auf published wechselt
   if (body.status === 'published' && !body.keep_published_at) {
-    // Aktuellen Status pruefen
+    // Aktuellen Status prüfen
     const { data: current } = await supabase
       .from('blog_posts')
       .select('status, published_at')

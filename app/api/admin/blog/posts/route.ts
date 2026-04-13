@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
 
   const supabase = createServiceClient();
 
-  // Slug-Duplikat pruefen
+  // Slug-Duplikat prüfen
   const { data: existing } = await supabase
     .from('blog_posts')
     .select('id')

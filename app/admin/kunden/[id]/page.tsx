@@ -465,20 +465,20 @@ export default function KundenDetailPage() {
                     )}
                   </div>
 
-                  {/* Rueckseite */}
+                  {/* Rückseite */}
                   <div>
                     <div style={{
                       fontSize: 11, fontWeight: 600, color: '#64748b',
                       textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8,
                     }}>
-                      Rueckseite
+                      Rückseite
                     </div>
                     {idBackSignedUrl ? (
                       <a href={idBackSignedUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'block' }}>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={idBackSignedUrl}
-                          alt="Ausweis Rueckseite"
+                          alt="Ausweis Rückseite"
                           style={{
                             width: '100%', borderRadius: 8, border: '1px solid #1e293b',
                             cursor: 'pointer', maxHeight: 300, objectFit: 'contain',

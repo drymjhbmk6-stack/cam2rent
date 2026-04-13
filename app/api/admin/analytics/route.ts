@@ -211,7 +211,7 @@ export async function GET(req: NextRequest) {
   if (type === 'customers') {
     const since30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
-    // Alle Buchungen fuer Kundenwert-Berechnung
+    // Alle Buchungen für Kundenwert-Berechnung
     const { data: allBookings } = await supabase
       .from('bookings')
       .select('user_id, customer_email, price_total, status, created_at')

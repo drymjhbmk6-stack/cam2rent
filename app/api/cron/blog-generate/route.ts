@@ -5,15 +5,15 @@ import { verifyCronAuth } from '@/lib/cron-auth';
 import OpenAI from 'openai';
 
 const LENGTH_MAP: Record<string, string> = {
-  kurz: 'ca. 500 Woerter',
-  mittel: 'ca. 1000 Woerter',
-  lang: 'ca. 1500 Woerter',
+  kurz: 'ca. 500 Wörter',
+  mittel: 'ca. 1000 Wörter',
+  lang: 'ca. 1500 Wörter',
 };
 
 const TONE_MAP: Record<string, string> = {
   informativ: 'sachlich-informativ, gut recherchiert',
-  locker: 'locker und unterhaltsam, mit persoenlicher Note',
-  professionell: 'professionell und vertrauenswuerdig, Experten-Ton',
+  locker: 'locker und unterhaltsam, mit persönlicher Note',
+  professionell: 'professionell und vertrauenswürdig, Experten-Ton',
 };
 
 /** POST /api/cron/blog-generate - Automatische Artikel-Generierung */
@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // force=true ueberspringt den Scheduler (fuer manuelle Tests)
+  // force=true überspringt den Scheduler (für manuelle Tests)
   const forceGenerate = req.headers.get('x-force-generate') === 'true';
 
   const supabase = createServiceClient();
@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
     } catch { /* leer */ }
   }
 
-  // Pruefen ob Auto-Generierung aktiv
+  // Prüfen ob Auto-Generierung aktiv
   if (!blogSettings.auto_generate) {
     return NextResponse.json({ message: 'Auto-Generierung ist deaktiviert.' });
   }
@@ -91,7 +91,7 @@ export async function POST(req: NextRequest) {
   }
   } // ── Ende Scheduler ─────────────────────────────────────────────
 
-  // Modus: semi = Entwurf, voll/true = veroeffentlichen
+  // Modus: semi = Entwurf, voll/true = veröffentlichen
   const autoMode = (blogSettings.auto_generate_mode as string) ?? 'semi';
 
   const apiKey = (blogSettings.anthropic_api_key as string) || null;
@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Kein Anthropic API Key konfiguriert.' }, { status: 400 });
   }
 
-  // Status-Flag: Generierung laeuft
+  // Status-Flag: Generierung läuft
   async function setGenerationStatus(status: 'generating' | 'idle', topic?: string) {
     await supabase.from('admin_settings').upsert({
       key: 'blog_generation_status',
@@ -108,9 +108,9 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // ── Prioritaet 0: Redaktionsplan pruefen ────────────────────────
-  // Artikel werden X Tage VOR dem Veroeffentlichungsdatum generiert,
-  // damit der Admin sie vorher pruefen kann
+  // ── Priorität 0: Redaktionsplan prüfen ────────────────────────
+  // Artikel werden X Tage VOR dem Veröffentlichungsdatum generiert,
+  // damit der Admin sie vorher prüfen kann
   const daysBeforeGenerate = parseInt(String(blogSettings.schedule_days_before ?? '3')) || 3;
   const todayDate = new Date();
   const generateBeforeDate = new Date(todayDate);
@@ -125,8 +125,8 @@ export async function POST(req: NextRequest) {
     .order('sort_order', { ascending: true })
     .limit(1);
 
-  // Bei force=true: naechsten Eintrag nehmen, egal welches Datum
-  // Sonst: Eintraege deren Veroeffentlichungsdatum innerhalb der naechsten X Tage liegt
+  // Bei force=true: nächsten Eintrag nehmen, egal welches Datum
+  // Sonst: Einträge deren Veröffentlichungsdatum innerhalb der nächsten X Tage liegt
   if (!forceGenerate) {
     scheduleQuery = scheduleQuery.lte('scheduled_date', generateBeforeDateStr);
   }
@@ -153,17 +153,17 @@ export async function POST(req: NextRequest) {
   }
 
   if (!topicData) {
-    return NextResponse.json({ message: 'Kein faelliger Artikel im Zeitplan.' });
+    return NextResponse.json({ message: 'Kein fälliger Artikel im Zeitplan.' });
   }
 
   const length = LENGTH_MAP[topicData.target_length] ?? LENGTH_MAP.mittel;
   const toneDesc = TONE_MAP[topicData.tone] ?? TONE_MAP.informativ;
   const keywordHint = topicData.keywords?.length
-    ? `\nWichtige Keywords fuer SEO: ${topicData.keywords.join(', ')}`
+    ? `\nWichtige Keywords für SEO: ${topicData.keywords.join(', ')}`
     : '';
 
   const detailedPrompt = topicData.prompt
-    ? `\n\nAUSFUEHRLICHE ANWEISUNGEN VOM REDAKTEUR:\n${topicData.prompt}`
+    ? `\n\nAUSFÜHRLICHE ANWEISUNGEN VOM REDAKTEUR:\n${topicData.prompt}`
     : '';
 
   const seriesHint = seriesContext
@@ -171,7 +171,7 @@ export async function POST(req: NextRequest) {
 - Serientitel: "${seriesContext.title}"
 - Teil ${seriesContext.part_number} von ${seriesContext.total_parts}
 - Serienbeschreibung: ${seriesContext.description}
-- Erwaehne am Anfang kurz die Serie und welcher Teil das ist
+- Erwähne am Anfang kurz die Serie und welcher Teil das ist
 - Verweise am Ende auf die weiteren Teile der Serie
 - Der Titel sollte den Serientitel und die Teilnummer enthalten (z.B. "Serientitel — Teil ${seriesContext.part_number}")`
     : '';
@@ -190,10 +190,10 @@ export async function POST(req: NextRequest) {
   const currentYear = new Date().getFullYear();
 
   const kiContext = (blogSettings.ki_context as string)
-    ? `\n\nZUSAETZLICHER KONTEXT VOM ADMIN:\n${blogSettings.ki_context}`
+    ? `\n\nZUSÄTZLICHER KONTEXT VOM ADMIN:\n${blogSettings.ki_context}`
     : '';
 
-  const systemPrompt = `Du bist ein erfahrener Redakteur fuer cam2rent.de, einen deutschen Online-Verleih fuer Action-Kameras.
+  const systemPrompt = `Du bist ein erfahrener Redakteur für cam2rent.de, einen deutschen Online-Verleih für Action-Kameras.
 
 AKTUELLES JAHR: ${currentYear}. Verwende NUR aktuelle Informationen und Produkte.${shopProductsInfo}${kiContext}
 
@@ -201,34 +201,34 @@ Deine Aufgabe: Schreibe einen hochwertigen, redaktionellen Blog-Artikel auf Deut
 
 STIL-REGELN:
 - Schreibe ${length} in ${toneDesc}m Stil
-- Schreibe wie ein erfahrener Journalist/Blogger — mit Persoenlichkeit, nicht wie ein Lexikon
-- Kurze Absaetze (max 3-4 Saetze), dann Absatzwechsel
-- Variiere die Satzlaenge — kurze knackige Saetze mischen mit laengeren
+- Schreibe wie ein erfahrener Journalist/Blogger — mit Persönlichkeit, nicht wie ein Lexikon
+- Kurze Absätze (max 3-4 Sätze), dann Absatzwechsel
+- Variiere die Satzlänge — kurze knackige Sätze mischen mit längeren
 - Verwende "du" statt "Sie", schreibe direkt und nahbar
-- Beginne Absaetze NICHT immer gleich — variiere den Einstieg
+- Beginne Absätze NICHT immer gleich — variiere den Einstieg
 - Keine leeren Floskeln wie "In der heutigen Zeit" oder "Es ist wichtig zu beachten"
 - Beginne NICHT mit dem Titel im Content
 
 FORMATIERUNGS-REGELN (Markdown):
-- ## fuer Hauptueberschriften, ### fuer Unterueberschriften
-- **Fett** fuer Produktnamen und wichtige Begriffe
-- Nutze Blockquotes fuer farbige Info-Boxen im Artikel (werden automatisch gestylt):
-  - > **Tipp:** Text — fuer Miet-Hinweise und praktische Tipps (z.B. cam2rent erwaehnen)
-  - > **Fazit:** Text — fuer Zwischen-Fazits nach wichtigen Abschnitten
-  - > **Wichtig:** Text — fuer Warnungen oder wichtige Hinweise
-  - > **Gut zu wissen:** Text — fuer interessante Zusatzinfos
-- Nutze MINDESTENS 2-3 Blockquote-Boxen pro Artikel fuer visuelle Abwechslung
-- Nutze Listen (- oder 1.) fuer Aufzaehlungen, aber nicht fuer alles
+- ## für Hauptüberschriften, ### für Unterüberschriften
+- **Fett** für Produktnamen und wichtige Begriffe
+- Nutze Blockquotes für farbige Info-Boxen im Artikel (werden automatisch gestylt):
+  - > **Tipp:** Text — für Miet-Hinweise und praktische Tipps (z.B. cam2rent erwähnen)
+  - > **Fazit:** Text — für Zwischen-Fazits nach wichtigen Abschnitten
+  - > **Wichtig:** Text — für Warnungen oder wichtige Hinweise
+  - > **Gut zu wissen:** Text — für interessante Zusatzinfos
+- Nutze MINDESTENS 2-3 Blockquote-Boxen pro Artikel für visuelle Abwechslung
+- Nutze Listen (- oder 1.) für Aufzählungen, aber nicht für alles
 - Tabellen bei direkten Vergleichen von 2+ Produkten mit Specs — Feature in Spalte 1, Produkte in weiteren Spalten
 - Lockere den Text auf mit Zwischenfragen an den Leser
-- Beginne den Artikel mit einem kurzen Lead-Absatz (2-3 Saetze, der das Thema auf den Punkt bringt)
+- Beginne den Artikel mit einem kurzen Lead-Absatz (2-3 Sätze, der das Thema auf den Punkt bringt)
 
 INHALTLICHE REGELN:
-- Schreibe SEO-freundlich mit natuerlicher Keyword-Integration
+- Schreibe SEO-freundlich mit natürlicher Keyword-Integration
 - NIEMALS "Versicherung" — nur "Haftungsschutz" oder "Haftungsbegrenzung"
-- Erwaehne cam2rent.de natuerlich, z.B. "Bei cam2rent kannst du die XY einfach mieten und testen"
+- Erwähne cam2rent.de natürlich, z.B. "Bei cam2rent kannst du die XY einfach mieten und testen"
 - Zielgruppe: Abenteurer, Reisende, Content Creator die Action-Cams mieten wollen
-- Schliesse mit einem kurzen, praegnanten Fazit ab${keywordHint}${seriesHint}
+- Schließe mit einem kurzen, prägnanten Fazit ab${keywordHint}${seriesHint}
 
 Antworte AUSSCHLIESSLICH im folgenden JSON-Format (kein Markdown-Codeblock, nur reines JSON):
 {
@@ -248,7 +248,7 @@ Antworte AUSSCHLIESSLICH im folgenden JSON-Format (kein Markdown-Codeblock, nur 
     const message = await client.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 4096,
-      messages: [{ role: 'user', content: `Schreibe einen Blog-Artikel ueber: ${topicData.topic}${detailedPrompt}${keywordHint}${seriesHint}` }],
+      messages: [{ role: 'user', content: `Schreibe einen Blog-Artikel über: ${topicData.topic}${detailedPrompt}${keywordHint}${seriesHint}` }],
       system: systemPrompt,
     });
 
@@ -267,9 +267,9 @@ Antworte AUSSCHLIESSLICH im folgenden JSON-Format (kein Markdown-Codeblock, nur 
 
     // ── Automatischer 3-stufiger Faktencheck ──────────────────────
     const REVIEW_PASSES = [
-      { role: 'Faktenpruefer', instruction: 'Pruefe auf erfundene Specs, Preise, Features, Technologien. Korrigiere alles was nicht belegbar ist. Entferne konkrete Zahlen wenn du dir nicht sicher bist und ersetze sie durch allgemeine Formulierungen.' },
-      { role: 'Qualitaetsredakteur', instruction: 'Pruefe auf uebertriebene Superlative, Marketing-Luegen, Widersprueche, KI-typische Floskeln. Korrigiere den Ton auf ehrlich und nachvollziehbar.' },
-      { role: 'Chefredakteur', instruction: 'Letzte Pruefung: Wuerdest du das mit deinem Namen veroeffentlichen? Korrigiere letzte Details. Stelle sicher dass "Versicherung" nirgends vorkommt — nur "Haftungsschutz".' },
+      { role: 'Faktenprüfer', instruction: 'Prüfe auf erfundene Specs, Preise, Features, Technologien. Korrigiere alles was nicht belegbar ist. Entferne konkrete Zahlen wenn du dir nicht sicher bist und ersetze sie durch allgemeine Formulierungen.' },
+      { role: 'Qualitätsredakteur', instruction: 'Prüfe auf übertriebene Superlative, Marketing-Lügen, Widersprüche, KI-typische Floskeln. Korrigiere den Ton auf ehrlich und nachvollziehbar.' },
+      { role: 'Chefredakteur', instruction: 'Letzte Prüfung: Würdest du das mit deinem Namen veröffentlichen? Korrigiere letzte Details. Stelle sicher dass "Versicherung" nirgends vorkommt — nur "Haftungsschutz".' },
     ];
 
     let checkedContent = parsed.content;
@@ -280,7 +280,7 @@ Antworte AUSSCHLIESSLICH im folgenden JSON-Format (kein Markdown-Codeblock, nur 
           max_tokens: 4096,
           system: `Du bist ${pass.role} bei cam2rent.de. ${pass.instruction}
 
-Antworte NUR mit dem korrigierten Artikel-Text in Markdown. Keine Erklaerungen, keine Kommentare — nur der fertige Text.`,
+Antworte NUR mit dem korrigierten Artikel-Text in Markdown. Keine Erklärungen, keine Kommentare — nur der fertige Text.`,
           messages: [{ role: 'user', content: checkedContent }],
         });
         const reviewText = reviewMsg.content[0].type === 'text' ? reviewMsg.content[0].text : '';
@@ -293,7 +293,7 @@ Antworte NUR mit dem korrigierten Artikel-Text in Markdown. Keine Erklaerungen, 
     // ── Ende Faktencheck ──────────────────────────────────────────
 
     // Status bestimmen:
-    // - Zeitplan-Artikel: immer als "scheduled" mit geplantem Datum (Admin prueft vorher)
+    // - Zeitplan-Artikel: immer als "scheduled" mit geplantem Datum (Admin prüft vorher)
     // - Andere Artikel: Semi = draft, Voll = published
     const now = new Date().toISOString();
     let postStatus: string;
@@ -301,7 +301,7 @@ Antworte NUR mit dem korrigierten Artikel-Text in Markdown. Keine Erklaerungen, 
     let scheduledAt: string | null = null;
 
     if (scheduleId && scheduleEntry) {
-      // Zeitplan: Artikel als "scheduled" mit dem geplanten Veroeffentlichungsdatum
+      // Zeitplan: Artikel als "scheduled" mit dem geplanten Veröffentlichungsdatum
       postStatus = 'scheduled';
       const time = (scheduleEntry.scheduled_time || '09:00').slice(0, 5); // HH:MM
       // Timezone-korrekt: Deutsche Zeit (CET/CEST) in UTC umrechnen
@@ -386,7 +386,7 @@ Antworte NUR mit dem korrigierten Artikel-Text in Markdown. Keine Erklaerungen, 
             imageError = `Upload fehlgeschlagen: ${uploadErr.message}`;
           }
         } else {
-          imageError = 'DALL-E hat kein Bild zurueckgegeben';
+          imageError = 'DALL-E hat kein Bild zurückgegeben';
         }
       } catch (imgErr: unknown) {
         imageError = imgErr instanceof Error ? imgErr.message : 'Unbekannter Bild-Fehler';
@@ -401,7 +401,7 @@ Antworte NUR mit dem korrigierten Artikel-Text in Markdown. Keine Erklaerungen, 
         .update({ used: true, used_at: now, post_id: post.id })
         .eq('id', seriesContext.partId);
 
-      // generated_parts zaehler erhoehen
+      // generated_parts Zähler erhöhen
       await supabase
         .from('blog_series')
         .update({ generated_parts: seriesContext.part_number })
@@ -416,7 +416,7 @@ Antworte NUR mit dem korrigierten Artikel-Text in Markdown. Keine Erklaerungen, 
       }
     }
 
-    // Redaktionsplan-Eintrag aktualisieren (unabhaengig von Series/Themenpool)
+    // Redaktionsplan-Eintrag aktualisieren (unabhängig von Series/Themenpool)
     if (scheduleId) {
       await supabase.from('blog_schedule').update({
         status: 'generated',

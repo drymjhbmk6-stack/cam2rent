@@ -13,45 +13,45 @@ async function getApiKey(): Promise<string | null> {
 
 const REVIEW_PASSES = [
   {
-    role: 'Faktenpruefer',
-    instruction: `Du bist ein investigativer Faktenpruefer. Pruefe den Artikel KRITISCH:
+    role: 'Faktenprüfer',
+    instruction: `Du bist ein investigativer Faktenprüfer. Prüfe den Artikel KRITISCH:
 
-- Erfundene Kamera-Specs (Aufloesungen, Akkulaufzeiten, Sensoren)? ENTFERNEN oder durch allgemeine Formulierungen ersetzen.
+- Erfundene Kamera-Specs (Auflösungen, Akkulaufzeiten, Sensoren)? ENTFERNEN oder durch allgemeine Formulierungen ersetzen.
 - Falsche Preisangaben? ENTFERNEN.
 - Nicht existierende Features oder Technologien? ENTFERNEN.
 - "Laut Tests", "Studien zeigen" ohne Quelle? ENTFERNEN.
 - Veraltete Informationen? AKTUALISIEREN oder ENTFERNEN.
 
-Gib den KOMPLETTEN korrigierten Artikel zurueck. Nur den Artikeltext, keine Erklaerungen.
-Schreibe am ENDE nach einer Leerzeile "---CHANGES---" und dann eine kurze Liste der Aenderungen.`,
+Gib den KOMPLETTEN korrigierten Artikel zurück. Nur den Artikeltext, keine Erklärungen.
+Schreibe am ENDE nach einer Leerzeile "---CHANGES---" und dann eine kurze Liste der Änderungen.`,
   },
   {
-    role: 'Qualitaetsredakteur',
-    instruction: `Du bist Qualitaetsredakteur. Pruefe und korrigiere:
+    role: 'Qualitätsredakteur',
+    instruction: `Du bist Qualitätsredakteur. Prüfe und korrigiere:
 
-- Uebertriebene Superlative ("die beste aller Zeiten", "revolutionaer", "perfekt") → ehrliche Formulierungen
+- Übertriebene Superlative ("die beste aller Zeiten", "revolutionär", "perfekt") → ehrliche Formulierungen
 - Falsche Versprechen → entfernen
-- Widersprueche im Text → aufloesen
-- KI-typische Floskeln ("tauchen wir ein", "am Ende des Tages") → natuerliche Sprache
+- Widersprüche im Text → auflösen
+- KI-typische Floskeln ("tauchen wir ein", "am Ende des Tages") → natürliche Sprache
 - "Versicherung" → "Haftungsschutz" (IMMER!)
 
-Gib den KOMPLETTEN korrigierten Artikel zurueck. Nur den Artikeltext, keine Erklaerungen.
-Schreibe am ENDE nach einer Leerzeile "---CHANGES---" und dann eine kurze Liste der Aenderungen.`,
+Gib den KOMPLETTEN korrigierten Artikel zurück. Nur den Artikeltext, keine Erklärungen.
+Schreibe am ENDE nach einer Leerzeile "---CHANGES---" und dann eine kurze Liste der Änderungen.`,
   },
   {
     role: 'Chefredakteur',
     instruction: `Du bist der Chefredakteur und gibst die finale Freigabe.
 
-- Wuerdest du diesen Artikel mit deinem Namen veroeffentlichen?
+- Würdest du diesen Artikel mit deinem Namen veröffentlichen?
 - Gibt es peinliche Stellen oder Vertrauenskiller?
 - Sind Empfehlungen ehrlich und nachvollziehbar?
 - Letzter Feinschliff an Formulierungen.
 
-Gib den KOMPLETTEN finalen Artikel zurueck. Nur den Artikeltext, keine Erklaerungen.
+Gib den KOMPLETTEN finalen Artikel zurück. Nur den Artikeltext, keine Erklärungen.
 Schreibe am ENDE nach einer Leerzeile "---CHANGES---" und dann:
 FREIGABE: JA oder NEIN
-QUALITAET: 1-10
-AENDERUNGEN: Kurze Liste`,
+QUALITÄT: 1-10
+ÄNDERUNGEN: Kurze Liste`,
   },
 ];
 
@@ -81,13 +81,13 @@ export async function POST(req: NextRequest) {
         system: pass.instruction,
         messages: [{
           role: 'user',
-          content: `Pruefe und korrigiere diesen Blog-Artikel fuer cam2rent.de:\n\nTITEL: ${title}\n\n${currentContent}`,
+          content: `Prüfe und korrigiere diesen Blog-Artikel für cam2rent.de:\n\nTITEL: ${title}\n\n${currentContent}`,
         }],
       });
 
       const text = message.content[0].type === 'text' ? message.content[0].text : '';
 
-      // Text und Aenderungen trennen
+      // Text und Änderungen trennen
       const parts = text.split('---CHANGES---');
       const correctedText = parts[0].trim();
       const changesText = parts[1]?.trim() || 'Keine Details';
@@ -96,9 +96,9 @@ export async function POST(req: NextRequest) {
         currentContent = correctedText;
       }
 
-      // Qualitaet aus letztem Durchgang extrahieren
+      // Qualität aus letztem Durchgang extrahieren
       if (i === REVIEW_PASSES.length - 1) {
-        const qualityMatch = changesText.match(/QUALITAET:\s*(\d+)/i);
+        const qualityMatch = changesText.match(/QUALITÄT:\s*(\d+)/i);
         if (qualityMatch) finalQuality = parseInt(qualityMatch[1]);
         const approvedMatch = changesText.match(/FREIGABE:\s*(JA|NEIN)/i);
         if (approvedMatch) finalApproved = approvedMatch[1].toUpperCase() === 'JA';
@@ -111,7 +111,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Aenderungen finden (einfacher Vergleich)
+  // Änderungen finden (einfacher Vergleich)
   const originalLines = originalContent.split('\n').filter((l: string) => l.trim());
   const correctedLines = currentContent.split('\n').filter((l: string) => l.trim());
   const changes: { type: 'removed' | 'added'; text: string }[] = [];

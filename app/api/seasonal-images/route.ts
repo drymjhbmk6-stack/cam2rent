@@ -5,7 +5,7 @@ import type { SeasonalImagesData } from '@/lib/seasonal-themes';
 
 /**
  * GET /api/seasonal-images?zone=hero
- * Liefert das saisonale Bild fuer den aktuellen Monat und die angegebene Zone.
+ * Liefert das saisonale Bild für den aktuellen Monat und die angegebene Zone.
  */
 export async function GET(req: NextRequest) {
   const zone = req.nextUrl.searchParams.get('zone');

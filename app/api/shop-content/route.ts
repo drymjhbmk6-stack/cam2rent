@@ -61,7 +61,7 @@ export async function GET(req: NextRequest) {
         .order('sort_order', { ascending: true });
 
       if (error || !data || data.length === 0) {
-        // Defaults zurueckgeben fuer Startseite
+        // Defaults zurückgeben für Startseite
         if (page === 'startseite') {
           return cachedJson([
             { page: 'startseite', section: 'hero', content: DEFAULT_HERO, is_active: true, sort_order: 0 },
@@ -76,7 +76,7 @@ export async function GET(req: NextRequest) {
       return cachedJson(data);
     }
 
-    // Einzelne Sektion laden (Rueckwaertskompatibel)
+    // Einzelne Sektion laden (rückwärtskompatibel)
     if (section) {
       const { data, error } = await supabase
         .from('shop_page_content')

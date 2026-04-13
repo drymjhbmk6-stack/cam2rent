@@ -23,8 +23,8 @@ function groupByPeriod(items: CartItem[]) {
 /**
  * POST /api/create-pending-booking
  *
- * Erstellt Buchungen im Status "pending_verification" fuer unverifizierten Kunden.
- * Bei unterschiedlichen Mietzeitraeumen werden separate Buchungen erstellt.
+ * Erstellt Buchungen im Status "pending_verification" für unverifizierten Kunden.
+ * Bei unterschiedlichen Mietzeiträumen werden separate Buchungen erstellt.
  * Keine Zahlung — der Kunde wartet auf Admin-Freigabe + Zahlungslink.
  */
 export async function POST(req: NextRequest) {
@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
 
     const supabase = createServiceClient();
 
-    // Pruefen ob User schon eine pending Buchung hat
+    // Prüfen ob User schon eine pending Buchung hat
     const { data: existingPending } = await supabase
       .from('bookings')
       .select('id')
@@ -128,7 +128,7 @@ export async function POST(req: NextRequest) {
       const groupDiscountAmount = Math.round((discountAmount ?? 0) * ratio * 100) / 100;
       const groupDurationDiscount = Math.round((durationDiscount ?? 0) * ratio * 100) / 100;
       const groupLoyaltyDiscount = Math.round((loyaltyDiscount ?? 0) * ratio * 100) / 100;
-      // Versand pro Gruppe neu berechnen (jede Gruppe prueft Gratis-Schwelle)
+      // Versand pro Gruppe neu berechnen (jede Gruppe prüft Gratis-Schwelle)
       const groupShippingResult = calcShipping(
         groupSubtotal,
         shippingMethod as ShippingMethod,

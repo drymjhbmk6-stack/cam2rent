@@ -5,7 +5,7 @@ const KEY = 'business_config';
 
 /**
  * GET /api/admin/business-config
- * Gibt die gespeicherten Geschaeftsdaten zurueck.
+ * Gibt die gespeicherten Geschäftsdaten zurück.
  */
 export async function GET() {
   const supabase = createServiceClient();
