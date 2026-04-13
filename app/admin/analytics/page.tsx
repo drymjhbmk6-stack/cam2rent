@@ -372,7 +372,7 @@ function generateCSV(
     rows.push(['Einzelne Besucher (heute)', String(todayData?.unique_visitors ?? 0)]);
     if (trafficData?.devices) {
       rows.push([]);
-      rows.push(['Geraet', 'Prozent']);
+      rows.push(['Gerät', 'Prozent']);
       rows.push(['Desktop', `${trafficData.devices.desktop}%`]);
       rows.push(['Mobile', `${trafficData.devices.mobile}%`]);
       rows.push(['Tablet', `${trafficData.devices.tablet}%`]);
@@ -387,7 +387,7 @@ function generateCSV(
   }
 
   if (rows.length === 0) {
-    rows.push(['Keine Daten verfuegbar']);
+    rows.push(['Keine Daten verfügbar']);
   }
 
   return rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(';')).join('\n');
