@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const supabase = createServiceClient();
 
-  // Option A: KI-Zeitplan fuer 1 Monat generieren
+  // Option A: KI-Zeitplan generieren (laeuft im Hintergrund)
   if (body.action === 'generate_plan') {
     const { weeks = 4, postsPerWeek = 2, categoryIds, startDate } = body;
 
@@ -67,6 +67,17 @@ export async function POST(req: NextRequest) {
     if (!apiKey) {
       return NextResponse.json({ error: 'Anthropic API Key nicht konfiguriert.' }, { status: 400 });
     }
+
+    // Status setzen: Planung laeuft
+    await supabase.from('admin_settings').upsert({
+      key: 'blog_plan_status',
+      value: JSON.stringify({ status: 'planning', total: weeks * postsPerWeek, created: 0, started_at: new Date().toISOString() }),
+      updated_at: new Date().toISOString(),
+    });
+
+    // Sofort antworten — Generierung im Hintergrund
+    const bgPromise = (async () => {
+      try {
 
     // Kategorien laden
     const { data: categories } = await supabase
@@ -225,8 +236,30 @@ WICHTIG fuer das "prompt"-Feld:
       .insert(scheduleEntries)
       .select();
 
-    if (insertError) return NextResponse.json({ error: insertError.message }, { status: 500 });
-    return NextResponse.json({ schedule: inserted, count: inserted?.length ?? 0 });
+    if (insertError) {
+        console.error('[blog-plan] Insert error:', insertError.message);
+      } else {
+        console.log(`[blog-plan] ${inserted?.length ?? 0} Themen erstellt`);
+      }
+
+      // Status: fertig
+      await supabase.from('admin_settings').upsert({
+        key: 'blog_plan_status',
+        value: JSON.stringify({ status: 'done', total: scheduleEntries.length, created: inserted?.length ?? 0, finished_at: new Date().toISOString() }),
+        updated_at: new Date().toISOString(),
+      });
+      } catch (err) {
+        console.error('[blog-plan] Background error:', err);
+        await supabase.from('admin_settings').upsert({
+          key: 'blog_plan_status',
+          value: JSON.stringify({ status: 'error', error: err instanceof Error ? err.message : 'Unbekannter Fehler', finished_at: new Date().toISOString() }),
+          updated_at: new Date().toISOString(),
+        });
+      }
+    })();
+
+    // Sofort antworten
+    return NextResponse.json({ background: true, message: 'Planung laeuft im Hintergrund...' });
   }
 
   // Option B: Einzelnen Eintrag hinzufuegen

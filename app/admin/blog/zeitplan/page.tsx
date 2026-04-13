@@ -72,9 +72,31 @@ export default function BlogZeitplanPage() {
       body: JSON.stringify({ action: 'generate_plan', weeks, postsPerWeek }),
     });
     const data = await res.json();
-    setGenerating(false);
-    if (res.ok) { flash(`${data.count} Themen fuer ${weeks} Wochen erstellt!`); loadAll(); }
-    else flash(data.error || 'Fehler');
+    if (!res.ok) { setGenerating(false); flash(data.error || 'Fehler'); return; }
+
+    // Hintergrund-Status pollen
+    const poll = setInterval(async () => {
+      try {
+        const statusRes = await fetch('/api/admin/settings?key=blog_plan_status');
+        const statusData = await statusRes.json();
+        if (statusData.value) {
+          const parsed = typeof statusData.value === 'string' ? JSON.parse(statusData.value) : statusData.value;
+          if (parsed.status === 'done') {
+            clearInterval(poll);
+            setGenerating(false);
+            flash(`${parsed.created} Themen erstellt!`);
+            loadAll();
+          } else if (parsed.status === 'error') {
+            clearInterval(poll);
+            setGenerating(false);
+            flash(parsed.error || 'Fehler bei der Planung');
+          }
+        }
+      } catch { /* weiter pollen */ }
+    }, 2000);
+
+    // Timeout nach 2 Minuten
+    setTimeout(() => { clearInterval(poll); setGenerating(false); loadAll(); }, 120000);
   }
 
   async function importTopic(topic: AutoTopic) {
