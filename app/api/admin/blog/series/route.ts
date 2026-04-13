@@ -44,10 +44,11 @@ export async function POST(req: NextRequest) {
   if (seriesError) return NextResponse.json({ error: seriesError.message }, { status: 500 });
 
   // Teile erstellen
-  const partsData = parts.map((p: { topic: string; keywords?: string[] }, i: number) => ({
+  const partsData = parts.map((p: { topic: string; prompt?: string | null; keywords?: string[] }, i: number) => ({
     series_id: series.id,
     part_number: i + 1,
     topic: p.topic.trim(),
+    prompt: p.prompt || null,
     keywords: p.keywords ?? [],
     used: false,
   }));

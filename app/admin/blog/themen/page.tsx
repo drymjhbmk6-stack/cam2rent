@@ -47,10 +47,10 @@ export default function BlogThemenPage() {
   const [seriesCatId, setSeriesCatId] = useState('');
   const [seriesTone, setSeriesTone] = useState('informativ');
   const [seriesLength, setSeriesLength] = useState('mittel');
-  const [seriesParts, setSeriesParts] = useState<{ topic: string; keywords: string }[]>([
-    { topic: '', keywords: '' },
-    { topic: '', keywords: '' },
-    { topic: '', keywords: '' },
+  const [seriesParts, setSeriesParts] = useState<{ topic: string; prompt: string; keywords: string }[]>([
+    { topic: '', prompt: '', keywords: '' },
+    { topic: '', prompt: '', keywords: '' },
+    { topic: '', prompt: '', keywords: '' },
   ]);
 
   useEffect(() => { loadAll(); }, []);
@@ -98,18 +98,18 @@ export default function BlogThemenPage() {
       body: JSON.stringify({
         title: seriesTitle.trim(), slug: toSlug(seriesTitle), description: seriesDesc,
         category_id: seriesCatId || null, tone: seriesTone, target_length: seriesLength,
-        parts: validParts.map((p) => ({ topic: p.topic, keywords: p.keywords.split(',').map((k) => k.trim()).filter(Boolean) })),
+        parts: validParts.map((p) => ({ topic: p.topic, prompt: p.prompt || null, keywords: p.keywords.split(',').map((k) => k.trim()).filter(Boolean) })),
       }),
     });
-    if (res.ok) { setSeriesTitle(''); setSeriesDesc(''); setSeriesParts([{ topic: '', keywords: '' }, { topic: '', keywords: '' }, { topic: '', keywords: '' }]); loadAll(); flash('Serie erstellt!'); }
+    if (res.ok) { setSeriesTitle(''); setSeriesDesc(''); setSeriesParts([{ topic: '', prompt: '', keywords: '' }, { topic: '', prompt: '', keywords: '' }, { topic: '', prompt: '', keywords: '' }]); loadAll(); flash('Serie erstellt!'); }
     else { const d = await res.json(); flash(d.error || 'Fehler'); }
   }
   async function deleteSeries(id: string) { if (!confirm('Serie wirklich loeschen?')) return; await fetch(`/api/admin/blog/series/${id}`, { method: 'DELETE' }); loadAll(); }
 
-  function updateSeriesPart(i: number, key: 'topic' | 'keywords', value: string) {
+  function updateSeriesPart(i: number, key: 'topic' | 'prompt' | 'keywords', value: string) {
     setSeriesParts((prev) => prev.map((p, j) => j === i ? { ...p, [key]: value } : p));
   }
-  function addSeriesPartRow() { setSeriesParts((prev) => [...prev, { topic: '', keywords: '' }]); }
+  function addSeriesPartRow() { setSeriesParts((prev) => [...prev, { topic: '', prompt: '', keywords: '' }]); }
   function removeSeriesPartRow(i: number) { setSeriesParts((prev) => prev.filter((_, j) => j !== i)); }
 
   if (loading) return <div className="p-4 sm:p-8"><p style={{ color: '#64748b' }}>Laden...</p></div>;
@@ -273,17 +273,21 @@ export default function BlogThemenPage() {
                 <label style={labelStyle} className="block">Teile der Serie</label>
                 <div className="space-y-2 mt-1">
                   {seriesParts.map((part, i) => (
-                    <div key={i} className="flex gap-2 items-start">
-                      <span className="shrink-0 w-7 h-9 flex items-center justify-center rounded text-xs font-heading font-bold" style={{ background: '#0f172a', color: '#06b6d4' }}>{i + 1}</span>
-                      <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <input style={inputStyle} value={part.topic} onChange={(e) => updateSeriesPart(i, 'topic', e.target.value)} placeholder={`Teil ${i + 1}: Thema`} />
-                        <input style={inputStyle} value={part.keywords} onChange={(e) => updateSeriesPart(i, 'keywords', e.target.value)} placeholder="Keywords (optional)" />
+                    <div key={i} className="rounded-lg p-3" style={{ background: '#0f172a', border: '1px solid #334155' }}>
+                      <div className="flex gap-2 items-start mb-2">
+                        <span className="shrink-0 w-7 h-9 flex items-center justify-center rounded text-xs font-heading font-bold" style={{ background: '#1e293b', color: '#06b6d4' }}>{i + 1}</span>
+                        <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <input style={inputStyle} value={part.topic} onChange={(e) => updateSeriesPart(i, 'topic', e.target.value)} placeholder={`Teil ${i + 1}: Titel / Thema`} />
+                          <input style={inputStyle} value={part.keywords} onChange={(e) => updateSeriesPart(i, 'keywords', e.target.value)} placeholder="Keywords (kommagetrennt)" />
+                        </div>
+                        {seriesParts.length > 2 && (
+                          <button onClick={() => removeSeriesPartRow(i)} className="shrink-0 w-9 h-9 flex items-center justify-center rounded" style={{ color: '#ef4444', background: '#ef444410' }}>
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                          </button>
+                        )}
                       </div>
-                      {seriesParts.length > 2 && (
-                        <button onClick={() => removeSeriesPartRow(i)} className="shrink-0 w-9 h-9 flex items-center justify-center rounded" style={{ color: '#ef4444', background: '#ef444410' }}>
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                        </button>
-                      )}
+                      <textarea style={{ ...inputStyle, minHeight: 60, fontSize: 13, borderColor: '#f59e0b40' }} value={part.prompt} onChange={(e) => updateSeriesPart(i, 'prompt', e.target.value)}
+                        placeholder={`Ausfuehrlicher Prompt fuer Teil ${i + 1}: Beschreibe genau was der Artikel enthalten soll — Aufbau, Zielgruppe, Vergleiche, Tipps...`} />
                     </div>
                   ))}
                 </div>
