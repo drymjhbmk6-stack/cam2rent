@@ -146,22 +146,11 @@ export async function POST(req: NextRequest) {
 
   const { data: scheduleEntry } = await scheduleQuery.maybeSingle();
 
-  // ── Prioritaet 1+2: Serien, dann Themenpool ───────────────────
-  // Naechstes ungenutztes Thema holen — erst Serien, dann normale Themen
-  // 1. Pruefen ob eine aktive Serie einen offenen Teil hat
-  const { data: seriesPart } = await supabase
-    .from('blog_series_parts')
-    .select('*, blog_series!inner(id, title, slug, description, category_id, tone, target_length, status, total_parts, generated_parts, blog_categories(id, name, slug))')
-    .eq('used', false)
-    .eq('blog_series.status', 'active')
-    .order('part_number', { ascending: true })
-    .limit(1)
-    .maybeSingle();
-
+  // ── Nur Redaktionsplan — kein Pool/Serien-Fallback ───────────
   let topicData: { topic: string; keywords?: string[]; category_id?: string | null; tone: string; target_length: string; id: string } | null = null;
   let scheduleId: string | null = null;
+  const seriesContext: { id: string; title: string; part_number: number; total_parts: number; description: string; partId: string } | null = null;
 
-  // Redaktionsplan hat hoechste Prio
   if (scheduleEntry) {
     topicData = {
       id: scheduleEntry.id,
@@ -174,47 +163,9 @@ export async function POST(req: NextRequest) {
     scheduleId = scheduleEntry.id;
     await supabase.from('blog_schedule').update({ status: 'generating' }).eq('id', scheduleEntry.id);
   }
-  let seriesContext: { id: string; title: string; part_number: number; total_parts: number; description: string; partId: string } | null = null;
-
-  if (topicData) {
-    // topicData kommt vom Redaktionsplan — Serien/Pool ueberspringen
-  } else if (seriesPart?.blog_series) {
-    const s = seriesPart.blog_series as { id: string; title: string; total_parts: number; description: string; category_id: string | null; tone: string; target_length: string };
-    topicData = {
-      id: seriesPart.id,
-      topic: seriesPart.topic,
-      keywords: seriesPart.keywords,
-      category_id: s.category_id,
-      tone: s.tone,
-      target_length: s.target_length,
-    };
-    seriesContext = {
-      id: s.id,
-      title: s.title,
-      part_number: seriesPart.part_number,
-      total_parts: s.total_parts,
-      description: s.description,
-      partId: seriesPart.id,
-    };
-  }
-
-  // 2. Wenn keine Serie offen, normales Thema nehmen
-  if (!topicData) {
-    const { data: normalTopic } = await supabase
-      .from('blog_auto_topics')
-      .select('*, blog_categories(id, name, slug)')
-      .eq('used', false)
-      .order('created_at', { ascending: true })
-      .limit(1)
-      .single();
-
-    if (normalTopic) {
-      topicData = normalTopic;
-    }
-  }
 
   if (!topicData) {
-    return NextResponse.json({ message: 'Keine ungenutzten Themen im Pool und keine offenen Serien.' });
+    return NextResponse.json({ message: 'Kein faelliger Artikel im Zeitplan.' });
   }
 
   const length = LENGTH_MAP[topicData.target_length] ?? LENGTH_MAP.mittel;

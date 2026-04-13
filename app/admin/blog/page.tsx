@@ -181,7 +181,7 @@ export default function BlogDashboardPage() {
               <>
                 <span className="font-heading font-semibold text-sm" style={{ color: '#f59e0b' }}>Wartet auf naechsten Slot</span>
                 <div className="flex gap-3 mt-0.5">
-                  <span className="text-xs" style={{ color: '#475569' }}>{plannedSchedule} im Zeitplan · {openTopics} im Pool</span>
+                  <span className="text-xs" style={{ color: '#475569' }}>{plannedSchedule} Artikel im Zeitplan</span>
                   {genStatus.finished_at && (
                     <span className="text-xs" style={{ color: '#475569' }}>
                       Letzter Lauf: {new Date(genStatus.finished_at).toLocaleString('de-DE', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })}
@@ -243,8 +243,8 @@ export default function BlogDashboardPage() {
               </div>
               <div className="rounded-lg p-3" style={{ background: '#0f172a' }}>
                 <p className="text-[10px] font-semibold uppercase" style={{ color: '#64748b' }}>Warteschlange</p>
-                <p className="text-sm font-bold" style={{ color: (plannedSchedule + openTopics) > 0 ? '#22c55e' : '#ef4444' }}>
-                  {plannedSchedule} Zeitplan · {openTopics} Pool
+                <p className="text-sm font-bold" style={{ color: plannedSchedule > 0 ? '#22c55e' : '#ef4444' }}>
+                  {plannedSchedule} geplant
                 </p>
               </div>
             </div>
