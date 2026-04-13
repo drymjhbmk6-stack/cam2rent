@@ -7,25 +7,32 @@ import type { EmailOtpType } from '@supabase/supabase-js';
  * GET /auth/callback
  *
  * Verarbeitet alle Supabase Auth-Callbacks:
- * - E-Mail-Bestätigung nach Registrierung (token_hash + type ODER code)
- * - Passwort-Reset-Link
- * - OAuth (Google etc.)
+ * - E-Mail-Bestätigung nach Registrierung (?token_hash=xxx&type=signup)
+ * - Passwort-Reset-Link (?token_hash=xxx&type=recovery)
+ * - OAuth / PKCE (?code=xxx)
  *
- * Unterstuetzt zwei Flows:
- * 1. Token-Hash-Flow (?token_hash=xxx&type=signup) — funktioniert geraetuebergreifend
- * 2. PKCE-Flow (?code=xxx) — nur im selben Browser wie die Registrierung
+ * Die E-Mail-Templates in Supabase verwenden:
+ *   {{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=signup
+ * Damit funktioniert die Bestätigung geraeteuebergreifend (ohne PKCE-Cookies).
  */
 export async function GET(request: NextRequest) {
-  const { searchParams, origin } = new URL(request.url);
+  const { searchParams } = new URL(request.url);
   const code = searchParams.get('code');
   const token_hash = searchParams.get('token_hash');
   const type = searchParams.get('type') as EmailOtpType | null;
   const next = searchParams.get('next') ?? '/konto';
   const errorParam = searchParams.get('error');
 
+  // Sichere Base-URL: Forwarded-Header oder Env-Variable statt request.url
+  const forwardedHost = request.headers.get('x-forwarded-host');
+  const forwardedProto = request.headers.get('x-forwarded-proto') ?? 'https';
+  const baseUrl = forwardedHost
+    ? `${forwardedProto}://${forwardedHost}`
+    : (process.env.NEXT_PUBLIC_SITE_URL ?? 'https://test.cam2rent.de');
+
   if (errorParam) {
     return NextResponse.redirect(
-      `${origin}/login?error=${encodeURIComponent(errorParam)}`
+      `${baseUrl}/login?error=${encodeURIComponent(errorParam)}`
     );
   }
 
@@ -87,19 +94,19 @@ export async function GET(request: NextRequest) {
             .maybeSingle();
 
           if (!profile || profile.verification_status === 'none' || !profile.verification_status) {
-            return NextResponse.redirect(`${origin}/konto/verifizierung`);
+            return NextResponse.redirect(`${baseUrl}/konto/verifizierung`);
           }
         }
       } catch {
         // Profil-Check fehlgeschlagen — trotzdem weiterleiten
       }
-      return NextResponse.redirect(`${origin}${next}`);
+      return NextResponse.redirect(`${baseUrl}${next}`);
     }
   } catch (err) {
     console.error('[auth/callback] Unerwarteter Fehler:', err);
   }
 
   return NextResponse.redirect(
-    `${origin}/login?error=Anmeldung+fehlgeschlagen.+Bitte+erneut+versuchen.`
+    `${baseUrl}/login?error=Anmeldung+fehlgeschlagen.+Bitte+erneut+versuchen.`
   );
 }
