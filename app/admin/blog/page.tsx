@@ -44,6 +44,7 @@ export default function BlogDashboardPage() {
   const [autoTimeFrom, setAutoTimeFrom] = useState('');
   const [autoTimeTo, setAutoTimeTo] = useState('');
   const [openTopics, setOpenTopics] = useState(0);
+  const [plannedSchedule, setPlannedSchedule] = useState(0);
   const [schedule, setSchedule] = useState<ScheduleEntry[]>([]);
   const [recentAiPosts, setRecentAiPosts] = useState<RecentPost[]>([]);
 
@@ -78,8 +79,10 @@ export default function BlogDashboardPage() {
       // Zeitplan laden (naechste 10 geplante Eintraege)
       const schedRes = await fetch('/api/admin/blog/schedule');
       const schedData = await schedRes.json();
-      const entries = (schedData.entries ?? [])
-        .filter((e: ScheduleEntry) => ['planned', 'generating', 'generated', 'reviewed'].includes(e.status))
+      const allEntries = (schedData.entries ?? schedData.schedule ?? [])
+        .filter((e: ScheduleEntry) => ['planned', 'generating', 'generated', 'reviewed'].includes(e.status));
+      setPlannedSchedule(allEntries.filter((e: ScheduleEntry) => e.status === 'planned').length);
+      const entries = allEntries
         .sort((a: ScheduleEntry, b: ScheduleEntry) => a.scheduled_date.localeCompare(b.scheduled_date))
         .slice(0, 8);
       setSchedule(entries);
@@ -178,7 +181,7 @@ export default function BlogDashboardPage() {
               <>
                 <span className="font-heading font-semibold text-sm" style={{ color: '#f59e0b' }}>Wartet auf naechsten Slot</span>
                 <div className="flex gap-3 mt-0.5">
-                  <span className="text-xs" style={{ color: '#475569' }}>{openTopics} offene Themen im Pool</span>
+                  <span className="text-xs" style={{ color: '#475569' }}>{plannedSchedule} im Zeitplan · {openTopics} im Pool</span>
                   {genStatus.finished_at && (
                     <span className="text-xs" style={{ color: '#475569' }}>
                       Letzter Lauf: {new Date(genStatus.finished_at).toLocaleString('de-DE', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })}
@@ -239,9 +242,9 @@ export default function BlogDashboardPage() {
                 </p>
               </div>
               <div className="rounded-lg p-3" style={{ background: '#0f172a' }}>
-                <p className="text-[10px] font-semibold uppercase" style={{ color: '#64748b' }}>Themen-Pool</p>
-                <p className="text-sm font-bold" style={{ color: openTopics > 0 ? '#22c55e' : '#ef4444' }}>
-                  {openTopics} offen
+                <p className="text-[10px] font-semibold uppercase" style={{ color: '#64748b' }}>Warteschlange</p>
+                <p className="text-sm font-bold" style={{ color: (plannedSchedule + openTopics) > 0 ? '#22c55e' : '#ef4444' }}>
+                  {plannedSchedule} Zeitplan · {openTopics} Pool
                 </p>
               </div>
             </div>
