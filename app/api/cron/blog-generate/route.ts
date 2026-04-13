@@ -147,7 +147,7 @@ export async function POST(req: NextRequest) {
   const { data: scheduleEntry } = await scheduleQuery.maybeSingle();
 
   // ── Nur Redaktionsplan — kein Pool/Serien-Fallback ───────────
-  let topicData: { topic: string; keywords?: string[]; category_id?: string | null; tone: string; target_length: string; id: string } | null = null;
+  let topicData: { topic: string; prompt?: string | null; keywords?: string[]; category_id?: string | null; tone: string; target_length: string; id: string } | null = null;
   let scheduleId: string | null = null;
   const seriesContext: { id: string; title: string; part_number: number; total_parts: number; description: string; partId: string } | null = null;
 
@@ -155,6 +155,7 @@ export async function POST(req: NextRequest) {
     topicData = {
       id: scheduleEntry.id,
       topic: scheduleEntry.topic,
+      prompt: scheduleEntry.prompt || null,
       keywords: scheduleEntry.keywords,
       category_id: scheduleEntry.category_id,
       tone: scheduleEntry.tone ?? 'informativ',
@@ -172,6 +173,10 @@ export async function POST(req: NextRequest) {
   const toneDesc = TONE_MAP[topicData.tone] ?? TONE_MAP.informativ;
   const keywordHint = topicData.keywords?.length
     ? `\nWichtige Keywords fuer SEO: ${topicData.keywords.join(', ')}`
+    : '';
+
+  const detailedPrompt = topicData.prompt
+    ? `\n\nAUSFUEHRLICHE ANWEISUNGEN VOM REDAKTEUR:\n${topicData.prompt}`
     : '';
 
   const seriesHint = seriesContext
@@ -256,7 +261,7 @@ Antworte AUSSCHLIESSLICH im folgenden JSON-Format (kein Markdown-Codeblock, nur 
     const message = await client.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 4096,
-      messages: [{ role: 'user', content: `Schreibe einen Blog-Artikel ueber: ${topicData.topic}` }],
+      messages: [{ role: 'user', content: `Schreibe einen Blog-Artikel ueber: ${topicData.topic}${detailedPrompt}${keywordHint}${seriesHint}` }],
       system: systemPrompt,
     });
 

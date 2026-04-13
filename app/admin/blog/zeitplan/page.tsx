@@ -9,7 +9,7 @@ const inputStyle: React.CSSProperties = {
 };
 
 interface ScheduleEntry {
-  id: string; topic: string; keywords: string[]; category_id: string | null;
+  id: string; topic: string; prompt: string | null; keywords: string[]; category_id: string | null;
   tone: string; target_length: string; scheduled_date: string; scheduled_time: string;
   sort_order: number; status: string; reviewed: boolean; post_id: string | null;
   generated_at: string | null;
@@ -114,14 +114,17 @@ export default function BlogZeitplanPage() {
     loadAll();
   }
 
-  async function updateDate(id: string, date: string) {
-    await fetch('/api/admin/blog/schedule', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, scheduled_date: date }) });
+  async function updateField(id: string, field: string, value: unknown) {
+    await fetch('/api/admin/blog/schedule', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, [field]: value }) });
     loadAll();
   }
 
+  async function updateDate(id: string, date: string) {
+    await updateField(id, 'scheduled_date', date);
+  }
+
   async function updateTime(id: string, time: string) {
-    await fetch('/api/admin/blog/schedule', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, scheduled_time: time }) });
-    loadAll();
+    await updateField(id, 'scheduled_time', time);
   }
 
   async function deleteEntry(id: string) {
@@ -394,59 +397,71 @@ export default function BlogZeitplanPage() {
                 </div>
               </div>
 
-              {/* Aufgeklappter Detailbereich */}
+              {/* Aufgeklappter Detailbereich — alles editierbar */}
               {isExpanded && (
-                <div className="px-4 pb-4" style={{ borderTop: '1px solid #334155' }}>
+                <div className="px-4 pb-4" style={{ borderTop: '1px solid #334155' }} onClick={(e) => e.stopPropagation()}>
                   <div className="grid grid-cols-2 gap-3 pt-4">
-                    {/* KI-Prompt / Thema */}
-                    <div className="col-span-2 rounded-lg p-3" style={{ background: '#0f172a' }}>
-                      <p className="text-[10px] font-semibold uppercase mb-1" style={{ color: '#64748b' }}>KI-Prompt / Thema</p>
-                      <p className="text-sm" style={{ color: '#e2e8f0' }}>{entry.topic}</p>
+
+                    {/* Titel */}
+                    <div className="col-span-2">
+                      <label className="text-[10px] font-semibold uppercase block mb-1" style={{ color: '#64748b' }}>Titel / Thema</label>
+                      <input type="text" defaultValue={entry.topic}
+                        onBlur={(e) => { if (e.target.value !== entry.topic) updateField(entry.id, 'topic', e.target.value); }}
+                        className="w-full px-3 py-2 rounded-lg text-sm" style={{ background: '#0f172a', border: '1px solid #334155', color: '#e2e8f0' }} />
+                    </div>
+
+                    {/* Ausfuehrlicher Prompt */}
+                    <div className="col-span-2">
+                      <label className="text-[10px] font-semibold uppercase block mb-1" style={{ color: '#f59e0b' }}>Ausfuehrlicher KI-Prompt</label>
+                      <p className="text-[10px] mb-1.5" style={{ color: '#475569' }}>Je detaillierter, desto besser der Artikel. Beschreibe Aufbau, Zielgruppe, Beispiele, was enthalten sein soll.</p>
+                      <textarea defaultValue={entry.prompt || ''}
+                        onBlur={(e) => updateField(entry.id, 'prompt', e.target.value || null)}
+                        rows={5} placeholder="z.B.: Schreibe einen ausfuehrlichen Ratgeber fuer Wanderer die eine Action-Cam mieten moechten. Gehe auf die besten Spots in Deutschland ein (Alpen, Schwarzwald, Saechsische Schweiz). Erklaere welche Kamera-Einstellungen fuer Wandervideos ideal sind. Vergleiche GoPro Hero 13 vs. DJI Osmo Action 5. Erwaehne unsere Mietpreise und Haftungsschutz-Optionen..."
+                        className="w-full px-3 py-2 rounded-lg text-sm resize-y" style={{ background: '#0f172a', border: '1px solid #f59e0b40', color: '#e2e8f0', minHeight: 100 }} />
                     </div>
 
                     {/* Keywords */}
-                    <div className="col-span-2 rounded-lg p-3" style={{ background: '#0f172a' }}>
-                      <p className="text-[10px] font-semibold uppercase mb-1" style={{ color: '#64748b' }}>Keywords / SEO</p>
-                      {entry.keywords && entry.keywords.length > 0 ? (
-                        <div className="flex flex-wrap gap-1.5">
-                          {entry.keywords.map((kw, i) => (
-                            <span key={i} className="px-2 py-0.5 rounded text-xs" style={{ background: '#1e293b', color: '#94a3b8' }}>{kw}</span>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-xs" style={{ color: '#475569' }}>Keine Keywords — KI generiert automatisch</p>
-                      )}
+                    <div className="col-span-2">
+                      <label className="text-[10px] font-semibold uppercase block mb-1" style={{ color: '#64748b' }}>Keywords / SEO (kommagetrennt)</label>
+                      <input type="text" defaultValue={(entry.keywords || []).join(', ')}
+                        onBlur={(e) => { const kw = e.target.value.split(',').map((k) => k.trim()).filter(Boolean); updateField(entry.id, 'keywords', kw); }}
+                        placeholder="z.B.: wandern action cam, outdoor filming, hiking kamera tipps"
+                        className="w-full px-3 py-2 rounded-lg text-sm" style={{ background: '#0f172a', border: '1px solid #334155', color: '#e2e8f0' }} />
                     </div>
 
                     {/* Ton */}
-                    <div className="rounded-lg p-3" style={{ background: '#0f172a' }}>
-                      <p className="text-[10px] font-semibold uppercase mb-1" style={{ color: '#64748b' }}>Ton</p>
-                      <p className="text-sm" style={{ color: '#e2e8f0' }}>{TONE_LABELS[entry.tone] || entry.tone || 'Informativ'}</p>
+                    <div>
+                      <label className="text-[10px] font-semibold uppercase block mb-1" style={{ color: '#64748b' }}>Ton</label>
+                      <select defaultValue={entry.tone || 'informativ'}
+                        onChange={(e) => updateField(entry.id, 'tone', e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg text-sm" style={{ background: '#0f172a', border: '1px solid #334155', color: '#e2e8f0' }}>
+                        <option value="informativ">Informativ</option>
+                        <option value="locker">Locker</option>
+                        <option value="professionell">Professionell</option>
+                      </select>
                     </div>
 
-                    {/* Länge */}
-                    <div className="rounded-lg p-3" style={{ background: '#0f172a' }}>
-                      <p className="text-[10px] font-semibold uppercase mb-1" style={{ color: '#64748b' }}>Ziel-Länge</p>
-                      <p className="text-sm" style={{ color: '#e2e8f0' }}>{LENGTH_LABELS[entry.target_length] || entry.target_length || 'Mittel'}</p>
+                    {/* Laenge */}
+                    <div>
+                      <label className="text-[10px] font-semibold uppercase block mb-1" style={{ color: '#64748b' }}>Ziel-Laenge</label>
+                      <select defaultValue={entry.target_length || 'mittel'}
+                        onChange={(e) => updateField(entry.id, 'target_length', e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg text-sm" style={{ background: '#0f172a', border: '1px solid #334155', color: '#e2e8f0' }}>
+                        <option value="kurz">Kurz (~500 Woerter)</option>
+                        <option value="mittel">Mittel (~1000 Woerter)</option>
+                        <option value="lang">Lang (~1500 Woerter)</option>
+                      </select>
                     </div>
 
-                    {/* Kategorie */}
-                    <div className="rounded-lg p-3" style={{ background: '#0f172a' }}>
-                      <p className="text-[10px] font-semibold uppercase mb-1" style={{ color: '#64748b' }}>Kategorie</p>
-                      {entry.blog_categories ? (
-                        <span className="text-sm" style={{ color: entry.blog_categories.color }}>{entry.blog_categories.name}</span>
-                      ) : (
-                        <span className="text-sm" style={{ color: '#475569' }}>Keine</span>
-                      )}
-                    </div>
-
-                    {/* Status Details */}
-                    <div className="rounded-lg p-3" style={{ background: '#0f172a' }}>
-                      <p className="text-[10px] font-semibold uppercase mb-1" style={{ color: '#64748b' }}>Status</p>
-                      <div className="flex flex-col gap-1">
-                        <span className="text-sm" style={{ color: st.color }}>{st.label}</span>
+                    {/* Status */}
+                    <div className="col-span-2 rounded-lg p-3" style={{ background: '#0f172a' }}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-semibold uppercase" style={{ color: '#64748b' }}>Status:</span>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold" style={{ background: st.bg, color: st.color }}>{st.label}</span>
+                          {postIsPublished && <span className="px-2 py-0.5 rounded text-[10px] font-bold" style={{ background: '#22c55e20', color: '#22c55e' }}>Veröffentlicht</span>}
+                        </div>
                         {entry.generated_at && <span className="text-[10px]" style={{ color: '#475569' }}>Generiert: {new Date(entry.generated_at).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>}
-                        {postIsPublished && <span className="text-[10px]" style={{ color: '#22c55e' }}>Veröffentlicht</span>}
                       </div>
                     </div>
                   </div>
@@ -466,8 +481,8 @@ export default function BlogZeitplanPage() {
 
                   {/* Datum/Uhrzeit + Aktionen */}
                   <div className="flex items-center gap-2 mt-3 pt-3" style={{ borderTop: '1px solid #334155' }}>
-                    <input type="date" value={entry.scheduled_date} onClick={(e) => e.stopPropagation()} onChange={(e) => updateDate(entry.id, e.target.value)} className="px-2 py-1 rounded text-xs font-body" style={{ background: '#0f172a', border: '1px solid #334155', color: '#e2e8f0' }} />
-                    <input type="time" value={entry.scheduled_time} onClick={(e) => e.stopPropagation()} onChange={(e) => updateTime(entry.id, e.target.value)} className="px-2 py-1 rounded text-xs font-body" style={{ background: '#0f172a', border: '1px solid #334155', color: '#e2e8f0' }} />
+                    <input type="date" value={entry.scheduled_date} onChange={(e) => updateDate(entry.id, e.target.value)} className="px-2 py-1 rounded text-xs font-body" style={{ background: '#0f172a', border: '1px solid #334155', color: '#e2e8f0' }} />
+                    <input type="time" value={entry.scheduled_time} onChange={(e) => updateTime(entry.id, e.target.value)} className="px-2 py-1 rounded text-xs font-body" style={{ background: '#0f172a', border: '1px solid #334155', color: '#e2e8f0' }} />
                     <button onClick={(e) => { e.stopPropagation(); deleteEntry(entry.id); }} className="px-2 py-1 rounded text-[11px] font-heading font-semibold ml-auto" style={{ background: '#ef444420', color: '#ef4444' }}>Loeschen</button>
                   </div>
                 </div>
