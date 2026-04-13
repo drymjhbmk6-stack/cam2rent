@@ -41,6 +41,7 @@ export default function BlogDashboardPage() {
   const [genStatus, setGenStatus] = useState<GenerationStatus>({ status: 'idle' });
   const [autoEnabled, setAutoEnabled] = useState(false);
   const [autoMode, setAutoMode] = useState<'semi' | 'voll'>('semi');
+  const [autoInterval, setAutoInterval] = useState('weekly');
   const [autoWeekdays, setAutoWeekdays] = useState<string[]>([]);
   const [autoTimeFrom, setAutoTimeFrom] = useState('');
   const [autoTimeTo, setAutoTimeTo] = useState('');
@@ -66,6 +67,7 @@ export default function BlogDashboardPage() {
         const parsed = typeof settingsData.value === 'string' ? JSON.parse(settingsData.value) : settingsData.value;
         setAutoEnabled(!!parsed.auto_generate);
         setAutoMode(parsed.auto_generate_mode || 'semi');
+        setAutoInterval(parsed.auto_generate_interval || 'weekly');
         setAutoWeekdays(parsed.auto_generate_weekdays || []);
         setAutoTimeFrom(parsed.auto_generate_time_from || '');
         setAutoTimeTo(parsed.auto_generate_time_to || '');
@@ -234,7 +236,7 @@ export default function BlogDashboardPage() {
               <div className="rounded-lg p-3" style={{ background: '#0f172a' }}>
                 <p className="text-[10px] font-semibold uppercase" style={{ color: '#64748b' }}>Aktive Tage</p>
                 <p className="text-sm font-bold" style={{ color: '#e2e8f0' }}>
-                  {autoWeekdays.length > 0 ? autoWeekdays.map(d => d.charAt(0).toUpperCase() + d.slice(1)).join(', ') : 'Keine'}
+                  {autoInterval === 'daily' ? 'Jeden Tag' : autoWeekdays.length > 0 ? autoWeekdays.map(d => d.charAt(0).toUpperCase() + d.slice(1)).join(', ') : 'Keine'}
                 </p>
               </div>
               <div className="rounded-lg p-3" style={{ background: '#0f172a' }}>
