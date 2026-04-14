@@ -113,7 +113,7 @@ export default function ProductAccessorySets({ productId }: { productId: string 
                   <div key={acc.id} className="flex items-center justify-between px-4 py-2.5 bg-white dark:bg-gray-800 rounded-xl border border-brand-border dark:border-gray-700">
                     <span className="font-heading font-semibold text-sm text-brand-black dark:text-gray-100">{acc.name}</span>
                     <span className="text-sm font-heading font-bold text-accent-blue flex-shrink-0">
-                      {acc.price.toFixed(2).replace('.', ',')} € {acc.pricingMode === 'perDay' ? '/ Tag' : 'einmalig'}
+                      +{acc.price.toFixed(2).replace('.', ',')} €{acc.pricingMode === 'perDay' ? ' pro Tag' : ''}
                     </span>
                   </div>
                 ))}
@@ -151,7 +151,7 @@ export default function ProductAccessorySets({ productId }: { productId: string 
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
                       <span className="text-sm font-heading font-bold text-accent-blue">
-                        {set.price > 0 ? `${set.price.toFixed(2).replace('.', ',')} € ${set.pricingMode === 'perDay' ? '/ Tag' : ''}` : 'Preis auf Anfrage'}
+                        {set.price.toFixed(2).replace('.', ',')} €{set.pricingMode === 'perDay' ? ' pro Tag' : ''}
                       </span>
                       <svg className={`w-4 h-4 text-brand-muted transition-transform ${openSetId === set.id ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
