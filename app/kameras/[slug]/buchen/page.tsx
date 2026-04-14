@@ -600,7 +600,7 @@ export default function BuchenPage() {
     }
   }, []);
 
-  // Set-Items filtern: Wenn ein Upgrade gewaehlt wurde, Base-Item ersetzen
+  // Set-Items filtern: Wenn ein Upgrade gewählt wurde, Base-Item ersetzen
   const getFilteredSetItems = useCallback((): string[] => {
     if (!selectedSet) return [];
     // Finde alle Base-Accessories deren Upgrade-Gruppe ein aktives Upgrade hat
@@ -937,7 +937,7 @@ export default function BuchenPage() {
                 {availableSets.length > 0 && (
                   <div className="mb-6">
                     <p className="text-xs font-body font-semibold text-brand-steel uppercase tracking-wider mb-2">
-                      Waehle dein Set (Pflicht)
+                      Wähle dein Set (Pflicht)
                     </p>
                     <div className="rounded-xl border border-brand-border overflow-hidden divide-y divide-brand-border">
 
@@ -990,7 +990,7 @@ export default function BuchenPage() {
                     if (groupAccs.length === 0) return null;
                     const baseAcc = groupAccs.find((a) => a.isUpgradeBase);
                     const basePrice = baseAcc ? getAccessoryPrice(baseAcc, days) : 0;
-                    // Welche Option ist gewaehlt? Schaue ob eine Upgrade-Option in accessories ist
+                    // Welche Option ist gewählt? Schaue ob eine Upgrade-Option in accessories ist
                     const selectedId = groupAccs.find((a) => accessories.includes(a.id))?.id ?? baseAcc?.id ?? null;
                     return (
                       <div key={group} className="mb-6">
@@ -1103,7 +1103,7 @@ export default function BuchenPage() {
                     Weiter: Haftung
                   </button>
                   {availableSets.length > 0 && !selectedSet && (
-                    <p className="text-xs text-status-error mt-2 text-right">Bitte waehle ein Set aus.</p>
+                    <p className="text-xs text-status-error mt-2 text-right">Bitte wähle ein Set aus.</p>
                   )}
                 </div>
               </div>
