@@ -8,6 +8,8 @@ import SpecIcon from '@/components/SpecIcon';
 import { useFavorites } from '@/components/FavoritesProvider';
 import { useCompare } from '@/components/CompareProvider';
 import { useAuth } from '@/components/AuthProvider';
+import { getBrandStyle } from '@/lib/brand-colors';
+import { useBrandColors } from '@/hooks/useBrandColors';
 
 interface ProductCardProps {
   product: Product;
@@ -20,19 +22,9 @@ const tagConfig = {
   deal: { label: 'Angebot', className: 'bg-accent-amber text-white' },
 };
 
-const brandBg: Record<string, string> = {
-  GoPro: 'bg-accent-blue-soft',
-  DJI: 'bg-accent-teal-soft',
-  Insta360: 'bg-accent-amber-soft',
-};
-
-function CameraIcon({ brand }: { brand: string }) {
-  const colorMap: Record<string, string> = {
-    GoPro: '#3b82f6',
-    DJI: '#0d9488',
-    Insta360: '#f59e0b',
-  };
-  const color = colorMap[brand] ?? '#6b7280';
+function CameraIcon({ brand, brandColors }: { brand: string; brandColors?: Record<string, string> }) {
+  const style = getBrandStyle(brand, brandColors);
+  const color = style.color;
 
   return (
     <svg
@@ -101,6 +93,7 @@ export default function ProductCard({ product, imageUrl }: ProductCardProps) {
   const { user } = useAuth();
   const { isFavorited, toggleFavorite } = useFavorites();
   const { addToCompare, isInCompare } = useCompare();
+  const brandColors = useBrandColors();
   const [notifyOpen, setNotifyOpen] = useState(false);
 
   const wishlisted = isFavorited(product.id);
@@ -119,7 +112,7 @@ export default function ProductCard({ product, imageUrl }: ProductCardProps) {
     <>
       <article className="group bg-white dark:bg-gray-800 rounded-card shadow-card dark:shadow-gray-900/50 hover:shadow-card-hover hover:-translate-y-1 transition-all duration-200 overflow-hidden flex flex-col">
         {/* Image area */}
-        <div className={`relative ${imageUrl ? 'bg-white' : brandBg[product.brand] ?? 'bg-gray-100'} flex items-center justify-center overflow-hidden`} style={{ aspectRatio: '4/3' }}>
+        <div className="relative bg-white dark:bg-gray-800 flex items-center justify-center overflow-hidden" style={imageUrl ? { aspectRatio: '4/3' } : { aspectRatio: '4/3', backgroundColor: getBrandStyle(product.brand, brandColors).bg }}>
           {/* Tag badge */}
           {primaryTag && (
             <span
@@ -166,7 +159,7 @@ export default function ProductCard({ product, imageUrl }: ProductCardProps) {
               priority={false}
             />
           ) : (
-            <CameraIcon brand={product.brand} />
+            <CameraIcon brand={product.brand} brandColors={brandColors} />
           )}
         </div>
 

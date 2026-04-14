@@ -3,6 +3,9 @@
 import { useState, useEffect } from 'react';
 import type { AdminProduct } from '@/lib/price-config';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import BrandBadge from '@/components/BrandBadge';
+import { getBrandStyle } from '@/lib/brand-colors';
+import { useBrandColors } from '@/hooks/useBrandColors';
 
 interface AccessoryItem { accessory_id: string; qty: number; }
 
@@ -369,15 +372,8 @@ export default function AdminSetsPage() {
                       {set.product_ids?.length > 0 ? (
                         set.product_ids.map((pid) => {
                           const p = products[pid];
-                          const brand = p?.brand?.toLowerCase() ?? '';
-                          const colors = brand.includes('gopro') ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800/50'
-                            : brand.includes('dji') || brand.includes('osmo') ? 'bg-gray-100 dark:bg-gray-800/40 text-gray-800 dark:text-gray-300 border-gray-300 dark:border-gray-600/50'
-                            : brand.includes('insta') ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800/50'
-                            : 'bg-brand-bg dark:bg-slate-800/40 text-brand-steel border-brand-border dark:border-slate-600/50';
                           return (
-                            <span key={pid} className={`px-2 py-0.5 rounded-full text-[10px] font-body border ${colors}`}>
-                              {p?.name ?? pid}
-                            </span>
+                            <BrandBadge key={pid} brand={p?.brand ?? 'Sonstige'} className="text-[10px]" />
                           );
                         })
                       ) : (
@@ -528,11 +524,8 @@ export default function AdminSetsPage() {
                           <p className="text-xs font-heading font-semibold text-brand-muted mb-3">Passende Kameras (optional)</p>
                           <div className="flex flex-wrap gap-2">
                             {Object.values(products).map((p) => (
-                              <label key={p.id} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-heading font-semibold cursor-pointer transition-colors ${e.product_ids.includes(p.id) ? 'border-accent-blue bg-accent-blue/10 text-accent-blue' : 'border-brand-border dark:border-slate-600 text-brand-steel dark:text-slate-400 hover:border-brand-black dark:hover:border-slate-400'}`}>
-                                <input type="checkbox" checked={e.product_ids.includes(p.id)}
-                                  onChange={() => toggleProduct(set.id, p.id)} className="sr-only" />
-                                {p.name}
-                              </label>
+                              <CameraToggle key={p.id} product={p} checked={e.product_ids.includes(p.id)}
+                                onToggle={() => toggleProduct(set.id, p.id)} />
                             ))}
                           </div>
                         </div>
@@ -713,15 +706,36 @@ function NewSetForm({
           <p className="text-xs font-heading font-semibold text-brand-muted mb-3">Passende Kameras (optional)</p>
           <div className="flex flex-wrap gap-2">
             {Object.values(products).map((p) => (
-              <label key={p.id} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-heading font-semibold cursor-pointer transition-colors ${newSet.product_ids.includes(p.id) ? 'border-accent-blue bg-accent-blue/10 text-accent-blue' : 'border-brand-border dark:border-slate-600 text-brand-steel dark:text-slate-400 hover:border-brand-black dark:hover:border-slate-400'}`}>
-                <input type="checkbox" checked={newSet.product_ids.includes(p.id)}
-                  onChange={() => toggleProduct(p.id)} className="sr-only" />
-                {p.name}
-              </label>
+              <CameraToggle key={p.id} product={p} checked={newSet.product_ids.includes(p.id)}
+                onToggle={() => toggleProduct(p.id)} />
             ))}
           </div>
         </div>
       )}
     </div>
+  );
+}
+
+// ── Kamera-Toggle mit Brand-Farben ───────────────────────────────────────────
+
+function CameraToggle({ product, checked, onToggle }: { product: AdminProduct; checked: boolean; onToggle: () => void }) {
+  const brandColors = useBrandColors();
+  const style = getBrandStyle(product.brand, brandColors);
+
+  return (
+    <label
+      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-heading font-semibold cursor-pointer transition-all"
+      style={checked ? {
+        borderColor: style.color,
+        backgroundColor: style.bg,
+        color: style.color,
+      } : {
+        borderColor: 'rgba(100,116,139,0.3)',
+        color: 'rgb(148,163,184)',
+      }}
+    >
+      <input type="checkbox" checked={checked} onChange={onToggle} className="sr-only" />
+      {product.name}
+    </label>
   );
 }

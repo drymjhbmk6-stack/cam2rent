@@ -3,12 +3,8 @@
 import { useRouter } from 'next/navigation';
 import { useCompare } from '@/components/CompareProvider';
 import { useProducts } from '@/components/ProductsProvider';
-
-const brandColor: Record<string, string> = {
-  GoPro: '#3b82f6',
-  DJI: '#0d9488',
-  Insta360: '#f59e0b',
-};
+import { getBrandStyle } from '@/lib/brand-colors';
+import { useBrandColors } from '@/hooks/useBrandColors';
 
 function XIcon() {
   return (
@@ -22,6 +18,7 @@ export default function CompareBar() {
   const { products } = useProducts();
   const router = useRouter();
   const { compareIds, removeFromCompare, clearCompare } = useCompare();
+  const brandColorMap = useBrandColors();
 
   if (compareIds.length === 0) return null;
 
@@ -52,7 +49,7 @@ export default function CompareBar() {
             <div className="flex items-center gap-3 flex-1 min-w-0 overflow-x-auto">
               {selectedProducts.map((product) => {
                 if (!product) return null;
-                const color = brandColor[product.brand] || '#6b7280';
+                const color = getBrandStyle(product.brand, brandColorMap).color;
                 return (
                   <div key={product.id} className="flex items-center gap-2 flex-shrink-0">
                     {/* Farbiger Platzhalter */}

@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import BrandBadge from '@/components/BrandBadge';
+import BrandColorManager from '@/components/admin/BrandColorManager';
 import { type AdminProduct } from '@/lib/price-config';
 
 interface UtilizationData {
@@ -69,12 +71,7 @@ export default function AdminKameraListePage() {
     }
   }
 
-  const brandColor = (brand: string) => {
-    if (brand === 'GoPro') return 'bg-accent-blue-soft text-accent-blue';
-    if (brand === 'DJI') return 'bg-accent-teal-soft text-accent-teal';
-    if (brand === 'Insta360') return 'bg-accent-amber-soft text-accent-amber';
-    return 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300';
-  };
+  // brandColor entfernt — BrandBadge-Komponente nutzt dynamische Farben
 
   return (
     <div className="min-h-screen bg-brand-bg">
@@ -92,6 +89,11 @@ export default function AdminKameraListePage() {
           </Link>
         </div>
 
+        {/* Markenfarben */}
+        <div className="mb-6">
+          <BrandColorManager />
+        </div>
+
         {loading ? (
           <div className="text-center py-16 text-brand-muted font-body">Lädt…</div>
         ) : products.length === 0 ? (
@@ -107,9 +109,7 @@ export default function AdminKameraListePage() {
               >
                 {/* Klickbarer Bereich → Edit-Seite */}
                 <Link href={`/admin/preise/kameras/${p.id}`} className="flex items-center gap-3 flex-1 min-w-0">
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-heading font-semibold shrink-0 ${brandColor(p.brand)}`}>
-                    {p.brand}
-                  </span>
+                  <BrandBadge brand={p.brand} />
                   <span className="font-heading font-semibold text-sm text-brand-black truncate">{p.name}</span>
                   {!p.available && (
                     <span className="text-xs font-body text-brand-muted bg-brand-bg px-2 py-0.5 rounded-full shrink-0">

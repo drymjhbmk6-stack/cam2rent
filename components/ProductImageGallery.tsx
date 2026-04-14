@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import Image from 'next/image';
 import { useProductImageAll } from '@/components/ProductImagesProvider';
+import { getBrandStyle } from '@/lib/brand-colors';
+import { useBrandColors } from '@/hooks/useBrandColors';
 
 interface ProductImageGalleryProps {
   productId: string;
@@ -10,20 +12,8 @@ interface ProductImageGalleryProps {
   available: boolean;
 }
 
-const brandColors: Record<string, string> = {
-  GoPro: '#3b82f6',
-  DJI: '#0d9488',
-  Insta360: '#f59e0b',
-};
-
-const brandBg: Record<string, string> = {
-  GoPro: 'bg-accent-blue-soft',
-  DJI: 'bg-accent-teal-soft',
-  Insta360: 'bg-accent-amber-soft',
-};
-
-function CameraPlaceholder({ brand, size = 'lg' }: { brand: string; size?: 'lg' | 'sm' }) {
-  const color = brandColors[brand] ?? '#94a3b8';
+function CameraPlaceholder({ brand, brandColors, size = 'lg' }: { brand: string; brandColors?: Record<string, string>; size?: 'lg' | 'sm' }) {
+  const color = getBrandStyle(brand, brandColors).color;
   const dim = size === 'lg' ? { w: 160, h: 120, vw: '0 0 160 120' } : { w: 48, h: 36, vw: '0 0 48 36' };
   return (
     <svg viewBox={dim.vw} fill="none" style={{ width: size === 'lg' ? 160 : 48, height: size === 'lg' ? 120 : 36 }} aria-hidden="true">
@@ -38,15 +28,16 @@ function CameraPlaceholder({ brand, size = 'lg' }: { brand: string; size?: 'lg' 
 
 export default function ProductImageGallery({ productId, brand, available }: ProductImageGalleryProps) {
   const images = useProductImageAll(productId);
+  const brandColors = useBrandColors();
   const [activeIndex, setActiveIndex] = useState(0);
-  const bg = brandBg[brand] ?? 'bg-gray-100';
+  const brandStyle = getBrandStyle(brand, brandColors);
 
   const hasImages = images.length > 0;
 
   return (
     <div>
       {/* Main image */}
-      <div className={`relative rounded-card overflow-hidden ${hasImages ? 'bg-white' : bg} flex items-center justify-center`} style={{ aspectRatio: '4/3' }}>
+      <div className="relative rounded-card overflow-hidden flex items-center justify-center" style={{ aspectRatio: '4/3', backgroundColor: hasImages ? 'white' : brandStyle.bg }}>
         {!available && (
           <div className="absolute inset-0 bg-white/60 backdrop-blur-sm flex items-center justify-center z-10">
             <span className="px-4 py-2 bg-status-error text-white font-heading font-bold text-sm rounded-full shadow-lg">
@@ -65,7 +56,7 @@ export default function ProductImageGallery({ productId, brand, available }: Pro
           />
         ) : (
           <>
-            <CameraPlaceholder brand={brand} size="lg" />
+            <CameraPlaceholder brand={brand} brandColors={brandColors} size="lg" />
             <p className="absolute bottom-4 left-0 right-0 text-center text-xs font-body text-brand-muted/60 select-none">
               Foto folgt
             </p>
@@ -93,11 +84,12 @@ export default function ProductImageGallery({ productId, brand, available }: Pro
           [0, 1, 2, 3].map((i) => (
             <div
               key={i}
-              className={`aspect-square rounded-xl overflow-hidden ${bg} flex items-center justify-center border-2 ${
+              className={`aspect-square rounded-xl overflow-hidden flex items-center justify-center border-2 ${
                 i === 0 ? 'border-accent-blue' : 'border-transparent'
               }`}
+              style={{ backgroundColor: brandStyle.bg }}
             >
-              <CameraPlaceholder brand={brand} size="sm" />
+              <CameraPlaceholder brand={brand} brandColors={brandColors} size="sm" />
             </div>
           ))
         )}

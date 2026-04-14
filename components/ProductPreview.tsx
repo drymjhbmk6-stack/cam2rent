@@ -5,17 +5,11 @@ import SpecIcon from '@/components/SpecIcon';
 import type { AdminProduct, AdminProductSpec } from '@/lib/price-config';
 import { calcPriceFromTable } from '@/lib/price-config';
 import Markdown from 'react-markdown';
+import { getBrandStyle } from '@/lib/brand-colors';
+import { useBrandColors } from '@/hooks/useBrandColors';
 
-// ─── Brand config (gleich wie auf der Shopseite) ─────────────────────────────
-
-const brandConfig: Record<string, { bg: string; color: string; pill: string }> = {
-  GoPro:   { bg: 'bg-blue-50',   color: '#3b82f6', pill: 'bg-blue-50 text-blue-500' },
-  DJI:     { bg: 'bg-teal-50',   color: '#0d9488', pill: 'bg-teal-50 text-teal-600' },
-  Insta360: { bg: 'bg-amber-50', color: '#f59e0b', pill: 'bg-amber-50 text-amber-600' },
-};
-
-function CameraPlaceholder({ brand }: { brand: string }) {
-  const color = brandConfig[brand]?.color ?? '#94a3b8';
+function CameraPlaceholder({ brand, brandColors }: { brand: string; brandColors?: Record<string, string> }) {
+  const color = getBrandStyle(brand, brandColors).color;
   return (
     <svg viewBox="0 0 160 120" fill="none" style={{ width: 80, height: 60 }} aria-hidden="true">
       <rect x="12" y="20" width="136" height="82" rx="10" fill={color} fillOpacity="0.12" stroke={color} strokeWidth="2.5" />
@@ -59,8 +53,9 @@ export default function ProductPreview({
   available = true,
 }: ProductPreviewProps) {
   const [activeImage, setActiveImage] = useState(0);
+  const brandColorMap = useBrandColors();
   const day1Price = calcPriceFromTable(product, 1);
-  const bc = brandConfig[brand] ?? { bg: 'bg-gray-100', color: '#94a3b8', pill: 'bg-gray-100 text-gray-500' };
+  const bc = getBrandStyle(brand, brandColorMap);
   const hasImages = images && images.length > 0;
 
   return (
@@ -73,7 +68,7 @@ export default function ProductPreview({
       </div>
 
       {/* ── Hauptbild ── */}
-      <div className={`relative ${bc.bg} flex items-center justify-center overflow-hidden`} style={{ aspectRatio: '4/3' }}>
+      <div className="relative flex items-center justify-center overflow-hidden" style={{ aspectRatio: '4/3', backgroundColor: bc.bg }}>
         {hasImages ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -83,7 +78,7 @@ export default function ProductPreview({
           />
         ) : (
           <div className="flex flex-col items-center gap-2">
-            <CameraPlaceholder brand={brand} />
+            <CameraPlaceholder brand={brand} brandColors={brandColorMap} />
             <p className="text-[10px] text-brand-muted/60">Foto folgt</p>
           </div>
         )}
@@ -118,7 +113,7 @@ export default function ProductPreview({
       {/* ── Produkt-Info ── */}
       <div className="p-4 space-y-3">
         {/* Brand badge */}
-        <span className={`inline-block px-2 py-0.5 text-[10px] font-heading font-semibold rounded-full uppercase tracking-wider ${bc.pill}`}>
+        <span className="inline-block px-2 py-0.5 text-[10px] font-heading font-semibold rounded-full uppercase tracking-wider border" style={{ color: bc.color, backgroundColor: bc.bg, borderColor: bc.border }}>
           {brand}
         </span>
 
@@ -181,7 +176,7 @@ export default function ProductPreview({
           <div className="grid grid-cols-2 gap-1.5">
             {specs.map((spec) => (
               <div key={spec.id} className="flex items-center gap-1.5 p-1.5 rounded-md bg-brand-bg border border-brand-border">
-                <div className={`w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 ${bc.bg}`} style={{ color: bc.color }}>
+                <div className="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0" style={{ backgroundColor: bc.bg, color: bc.color }}>
                   <SpecIcon iconId={spec.icon} className="w-3 h-3" />
                 </div>
                 <div className="min-w-0">
