@@ -42,7 +42,18 @@ export default function AdminHaftungPage() {
     fetch('/api/prices')
       .then((r) => r.json())
       .then((d) => {
-        if (d.haftung) setHaftung({ ...DEFAULT_HAFTUNG, ...d.haftung });
+        if (d.haftung) {
+          const merged = { ...DEFAULT_HAFTUNG, ...d.haftung };
+          // Sicherstellen dass eigenbeteiligungByCategory-Werte Zahlen sind
+          if (merged.eigenbeteiligungByCategory) {
+            const fixed: Record<string, number> = {};
+            for (const [k, v] of Object.entries(merged.eigenbeteiligungByCategory)) {
+              fixed[k] = typeof v === 'number' ? v : (parseFloat(String(v)) || 0);
+            }
+            merged.eigenbeteiligungByCategory = fixed;
+          }
+          setHaftung(merged);
+        }
         if (d.kautionTiers) setKaution(d.kautionTiers);
       })
       .catch(() => {});
@@ -96,7 +107,9 @@ export default function AdminHaftungPage() {
                 <div className="mt-3 pt-3 border-t border-brand-border">
                   <p className="text-xs font-heading font-semibold text-brand-muted mb-3">Eigenbeteiligung pro Kategorie</p>
                   <div className="space-y-3">
-                    {Object.entries(haftung.eigenbeteiligungByCategory ?? { 'action-cam': 200, '360-cam': 300 }).map(([cat, val]) => (
+                    {Object.entries(haftung.eigenbeteiligungByCategory ?? { 'action-cam': 200, '360-cam': 300 }).map(([cat, val]) => {
+                      const numVal = typeof val === 'number' ? val : (parseFloat(String(val)) || 0);
+                      return (
                       <div key={cat} className="flex items-center gap-3">
                         <input
                           type="text"
@@ -105,7 +118,7 @@ export default function AdminHaftungPage() {
                             const old = haftung.eigenbeteiligungByCategory ?? {};
                             const updated = { ...old };
                             delete updated[cat];
-                            updated[e.target.value] = val;
+                            updated[e.target.value] = numVal;
                             setHaftung((h) => ({ ...h, eigenbeteiligungByCategory: updated }));
                           }}
                           className="flex-1 px-3 py-2 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue"
@@ -114,7 +127,7 @@ export default function AdminHaftungPage() {
                         <div className="relative w-28">
                           <input
                             type="number"
-                            value={val}
+                            value={numVal}
                             onChange={(e) => {
                               const updated = { ...(haftung.eigenbeteiligungByCategory ?? {}) };
                               updated[cat] = parseFloat(e.target.value) || 0;
@@ -136,7 +149,8 @@ export default function AdminHaftungPage() {
                           ×
                         </button>
                       </div>
-                    ))}
+                      );
+                    })}
                     <button
                       onClick={() => {
                         const updated = { ...(haftung.eigenbeteiligungByCategory ?? {}) };
