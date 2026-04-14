@@ -45,7 +45,7 @@ export default function BlogDashboardPage() {
   const [autoWeekdays, setAutoWeekdays] = useState<string[]>([]);
   const [autoTimeFrom, setAutoTimeFrom] = useState('');
   const [autoTimeTo, setAutoTimeTo] = useState('');
-  const [openTopics, setOpenTopics] = useState(0);
+  const [, setOpenTopics] = useState(0);
   const [plannedSchedule, setPlannedSchedule] = useState(0);
   const [schedule, setSchedule] = useState<ScheduleEntry[]>([]);
   const [recentAiPosts, setRecentAiPosts] = useState<RecentPost[]>([]);

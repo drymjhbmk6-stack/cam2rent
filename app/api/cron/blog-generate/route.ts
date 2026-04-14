@@ -136,7 +136,9 @@ export async function POST(req: NextRequest) {
   // ── Nur Redaktionsplan — kein Pool/Serien-Fallback ───────────
   let topicData: { topic: string; prompt?: string | null; keywords?: string[]; category_id?: string | null; tone: string; target_length: string; id: string } | null = null;
   let scheduleId: string | null = null;
-  const seriesContext: { id: string; title: string; part_number: number; total_parts: number; description: string; partId: string } | null = null;
+  // Serien-Kontext (wird aktuell nicht befüllt, Platzhalter für zukünftige Serien-Logik)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const seriesContext = null as { id: string; title: string; part_number: number; total_parts: number; description: string; partId: string } | null;
 
   if (scheduleEntry) {
     topicData = {

@@ -95,10 +95,13 @@ export async function POST(req: NextRequest) {
     // E-Mail im Hintergrund senden
     if (booking.customer_email) {
       sendContractEmail({
+        to: booking.customer_email,
         bookingId,
+        bookingNumber: booking.booking_number || bookingId,
         customerName: signerName,
-        customerEmail: booking.customer_email,
         productName: booking.product_name || '',
+        rentalFrom: fmtD(booking.rental_from),
+        rentalTo: fmtD(booking.rental_to),
         pdfBuffer: result.pdfBuffer,
       }).catch((err) => console.error('[sign-contract] Email error:', err));
     }

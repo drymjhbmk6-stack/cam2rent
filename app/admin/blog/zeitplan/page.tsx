@@ -372,9 +372,6 @@ export default function BlogZeitplanPage() {
       return <div className="text-center py-12"><p className="text-sm" style={{ color: '#475569' }}>Noch keine Einträge.</p></div>;
     }
 
-    const TONE_LABELS: Record<string, string> = { informativ: 'Informativ', locker: 'Locker', professionell: 'Professionell' };
-    const LENGTH_LABELS: Record<string, string> = { kurz: 'Kurz (~500 Wörter)', mittel: 'Mittel (~1000 Wörter)', lang: 'Lang (~1500 Wörter)' };
-
     return (
       <div className="space-y-2">
         {filtered.map((entry, index) => {

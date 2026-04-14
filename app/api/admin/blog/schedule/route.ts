@@ -76,7 +76,7 @@ export async function POST(req: NextRequest) {
     });
 
     // Sofort antworten — Generierung im Hintergrund
-    const bgPromise = (async () => {
+    void (async () => {
       try {
 
     // Kategorien laden
