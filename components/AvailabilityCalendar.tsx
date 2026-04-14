@@ -199,9 +199,8 @@ export default function AvailabilityCalendar({
         setRangeFrom(dateStr);
         setRangeTo(null);
       } else if (dateStr === rangeFrom) {
-        // Gleicher Tag nochmal → Auswahl zurücksetzen
-        setRangeFrom(null);
-        setRangeTo(null);
+        // Gleicher Tag nochmal → 1-Tag-Buchung (Start = Ende)
+        setRangeTo(dateStr);
       } else {
         // Enddatum: prüfen ob dazwischen gebuchte Tage liegen
         if (hasBookedDaysBetween(rangeFrom, dateStr)) {
@@ -411,7 +410,7 @@ export default function AvailabilityCalendar({
             </span>
           </div>
           <p className="text-[10px] font-body text-accent-blue/50 dark:text-blue-300/50">
-            Wähle jetzt das Enddatum im Kalender
+            Wähle das Enddatum oder klicke erneut für 1 Tag
           </p>
         </div>
       )}
