@@ -554,7 +554,7 @@ export default function ManualBookingPage() {
   ${(depositMode === 'kaution') && deposit > 0 ? `<div style="font-size:8pt;color:#6b7280;margin-top:6px;text-align:right">* Enthält Kaution ${fmtP(deposit)} – wird nach Rückgabe erstattet</div>` : ''}
   ${remark ? `<div class="note" style="margin-top:16px"><strong>Bemerkung:</strong><br>${remark.replace(/\n/g, '<br>')}</div>` : ''}
   <div class="note"${remark ? ' style="margin-top:8px"' : ''}>${BIZ.taxHinweis}</div>
-  ${paymentStatus === 'unpaid' ? `<div class="note" style="margin-top:12px;border:1px solid #d97706;background:#fffbeb"><strong style="color:#d97706">Überweisungsdaten:</strong><br>Kontoinhaber: ${BIZ.owner}<br>IBAN: ${BIZ.iban}<br>BIC: ${BIZ.bic}<br>Verwendungszweck: ${customerName || 'Kunde'} – Kameraleihe</div>` : ''}
+  ${paymentStatus === 'unpaid' ? `<div class="note" style="margin-top:12px;border:1px solid #d97706;background:#fffbeb"><strong style="color:#d97706">Überweisungsdaten:</strong><br>Kontoinhaber: ${BIZ.owner}<br>IBAN: ${BIZ.iban}<br>BIC: ${BIZ.bic}<br>Verwendungszweck: ${customerName || 'Kunde'} - ${createdBookingId ? createdBookingId.replace(/^(C2R|BK)-/, 'RE-') : 'RE-XXXXX'}</div>` : ''}
   <div class="footer"><span>cam2rent · ${BIZ.owner} · ${BIZ.street} · ${BIZ.zip} ${BIZ.city}</span><span>${BIZ.domain} · ${BIZ.email}</span></div>
 </body></html>`;
 
@@ -624,7 +624,7 @@ export default function ManualBookingPage() {
       }
 
       const bankInfo = paymentStatus === 'unpaid'
-        ? `Überweisung ausstehend | Kontoinhaber: ${BIZ.owner} | IBAN: ${BIZ.iban} | BIC: ${BIZ.bic} | Verwendungszweck: ${customerName.trim() || 'Kunde'} – Kameraleihe`
+        ? `Überweisung ausstehend | Kontoinhaber: ${BIZ.owner} | IBAN: ${BIZ.iban} | BIC: ${BIZ.bic} | Verwendungszweck: ${customerName.trim() || 'Kunde'}`
         : '';
 
       const res = await fetch('/api/admin/manual-booking', {
@@ -1166,7 +1166,7 @@ export default function ManualBookingPage() {
                 </div>
                 <div>
                   <span className="text-xs" style={{ color: '#64748b' }}>Verwendungszweck</span>
-                  <p style={{ color: '#06b6d4' }}>{customerName.trim() || 'Kundenname'} – Kameraleihe</p>
+                  <p style={{ color: '#06b6d4' }}>{customerName.trim() || 'Kundenname'} - {createdBookingId ? createdBookingId.replace(/^(C2R|BK)-/, 'RE-') : 'RE-XXXXX'}</p>
                 </div>
               </div>
             </div>
