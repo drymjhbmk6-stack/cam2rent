@@ -51,7 +51,8 @@ interface DynSet {
   id: string;
   name: string;
   description?: string;
-  pricing_mode: 'perDay' | 'flat';
+  pricing_mode?: 'perDay' | 'flat';
+  pricingMode?: 'perDay' | 'flat';
   price: number;
   available: boolean;
   product_ids?: string[];
@@ -115,7 +116,8 @@ function getAccessoryPrice(acc: DynAccessory, days: number): number {
 
 function getSetPrice(set: DynSet, days: number): number {
   const p = set.price ?? 0;
-  return set.pricing_mode === 'flat' ? p : p * days;
+  const mode = set.pricing_mode ?? set.pricingMode ?? 'perDay';
+  return mode === 'flat' ? p : p * days;
 }
 
 /* ─── Styles ────────────────────────────────────────────────────────────────── */
