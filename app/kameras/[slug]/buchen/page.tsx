@@ -953,13 +953,13 @@ export default function BuchenPage() {
                         const price = breakdown
                           ? set.pricingMode === 'perDay' ? set.price * breakdown.days : set.price
                           : set.price;
-                        // Verfügbarkeit: Alle Zubehör-Items im Set müssen verfügbar sein
+                        // Verfügbarkeit: Nur Lagerbestand prüfen, nicht Kompatibilität
+                        // (Sets sind bereits per product_ids für diese Kamera gefiltert)
                         const setItems: { accessory_id: string; qty: number }[] = (set as unknown as { accessory_items?: { accessory_id: string; qty: number }[] }).accessory_items ?? [];
                         const setUnavailable = setItems.length > 0 && setItems.some((item) => {
                           const av = accAvailability[item.accessory_id];
-                          return av && (av.remaining < item.qty || !av.compatible);
+                          return av && av.remaining < item.qty;
                         });
-                        // Nicht kompatible Sets komplett ausblenden
                         if (setUnavailable) return null;
                         return (
                           <div key={set.id} className={`transition-colors ${isSelected ? 'bg-accent-blue-soft/30' : 'bg-white dark:bg-gray-900'}`}>
