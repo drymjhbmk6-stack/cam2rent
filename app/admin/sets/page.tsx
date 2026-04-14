@@ -82,7 +82,36 @@ export default function AdminSetsPage() {
   const [newSet, setNewSet] = useState(emptyNew());
   const [creating, setCreating] = useState(false);
 
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
+
   const accMap = new Map(accessories.map((a) => [a.id, a]));
+
+  // ── Gruppierung nach Kamera-Marken ──────────────────────────────────────────
+  function getGroupKey(set: AdminSet): string {
+    if (!set.product_ids || set.product_ids.length === 0) return 'Alle Kameras';
+    const brands = [...new Set(set.product_ids.map((pid) => products[pid]?.brand ?? 'Sonstige'))].sort();
+    return brands.join(' + ');
+  }
+
+  const groupedSets = (() => {
+    const groups = new Map<string, AdminSet[]>();
+    for (const set of sets) {
+      const key = getGroupKey(set);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(set);
+    }
+    // Innerhalb jeder Gruppe nach Preis aufsteigend sortieren
+    for (const [, arr] of groups) {
+      arr.sort((a, b) => a.price - b.price);
+    }
+    // Gruppen sortieren: "Alle Kameras" zuerst, dann alphabetisch
+    const sorted = [...groups.entries()].sort(([a], [b]) => {
+      if (a === 'Alle Kameras') return -1;
+      if (b === 'Alle Kameras') return 1;
+      return a.localeCompare(b, 'de');
+    });
+    return sorted;
+  })();
 
   useEffect(() => {
     Promise.all([
@@ -215,6 +244,52 @@ export default function AdminSetsPage() {
       if (!res.ok) { const d = await res.json(); alert(d.error ?? 'Fehler.'); return; }
       setSets((prev) => prev.filter((s) => s.id !== id));
     } catch { alert('Fehler beim Löschen.'); }
+  }
+
+  async function handleDuplicate(set: AdminSet) {
+    setDuplicatingId(set.id);
+    try {
+      const badgeOption = BADGE_OPTIONS.find((b) => b.value === (set.badge ?? ''));
+      const res = await fetch('/api/sets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: `${set.name} (Kopie)`,
+          description: set.description || null,
+          badge: set.badge || null,
+          badge_color: badgeOption?.badgeColor ?? badgeOption?.color ?? null,
+          pricing_mode: set.pricingMode,
+          price: set.price,
+          available: set.available,
+          accessory_items: set.accessory_items ?? [],
+          product_ids: set.product_ids ?? [],
+        }),
+      });
+      if (!res.ok) { const d = await res.json(); alert(d.error ?? 'Fehler beim Duplizieren.'); return; }
+      const { set: created } = await res.json();
+
+      const newAdminSet: AdminSet = {
+        id: created.id,
+        name: created.name,
+        description: created.description ?? '',
+        badge: created.badge ?? undefined,
+        badgeColor: created.badge_color ?? undefined,
+        sortOrder: created.sort_order ?? 999,
+        pricingMode: created.pricing_mode,
+        price: Number(created.price),
+        available: created.available,
+        accessory_items: set.accessory_items ?? [],
+        product_ids: set.product_ids ?? [],
+        includedItems: (set.accessory_items ?? []).map((item) => {
+          const acc = accMap.get(item.accessory_id);
+          return acc ? `${acc.name}${item.qty > 1 ? ` ×${item.qty}` : ''}` : item.accessory_id;
+        }),
+      };
+      setSets((prev) => [...prev, newAdminSet]);
+      // Direkt zum Bearbeiten öffnen
+      openEdit(newAdminSet);
+    } catch { alert('Netzwerkfehler beim Duplizieren.'); }
+    finally { setDuplicatingId(null); }
   }
 
   // New set helpers
@@ -352,8 +427,21 @@ export default function AdminSetsPage() {
             Noch kein Set angelegt. Klicke auf &bdquo;+ Neues Set&ldquo;.
           </div>
         ) : (
-          <div className="space-y-3">
-            {sets.map((set) => {
+          <div className="space-y-6">
+            {groupedSets.map(([groupName, groupSets]) => (
+              <div key={groupName}>
+                {/* Gruppen-Header */}
+                <div className="flex items-center gap-3 mb-2 px-1">
+                  <h2 className="font-heading font-bold text-sm text-brand-black dark:text-slate-300">
+                    {groupName}
+                  </h2>
+                  <span className="text-xs font-body text-brand-muted">
+                    ({groupSets.length} {groupSets.length === 1 ? 'Set' : 'Sets'})
+                  </span>
+                  <div className="flex-1 border-t border-brand-border dark:border-slate-700" />
+                </div>
+                <div className="space-y-3">
+            {groupSets.map((set) => {
               const isExpanded = expandedId === set.id;
               const e = editState[set.id];
               const _isStatic = STATIC_IDS.has(set.id); void _isStatic;
@@ -387,6 +475,14 @@ export default function AdminSetsPage() {
                       <span className="text-sm font-heading font-semibold text-brand-black dark:text-slate-200 hidden sm:block">
                         {set.price} € {set.pricingMode === 'perDay' ? '/Tag' : 'einmalig'}
                       </span>
+                      <button
+                        onClick={() => handleDuplicate(set)}
+                        disabled={duplicatingId === set.id}
+                        title="Set duplizieren"
+                        className="px-3 py-1.5 text-xs font-heading font-semibold text-cyan-600 dark:text-cyan-400 border border-cyan-200 dark:border-cyan-800/50 rounded-lg hover:bg-cyan-50 dark:hover:bg-cyan-950/30 transition-colors disabled:opacity-40"
+                      >
+                        {duplicatingId === set.id ? '…' : 'Kopieren'}
+                      </button>
                       <button
                         onClick={() => handleDelete(set.id, set.name)}
                         className="px-3 py-1.5 text-xs font-heading font-semibold text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800/50 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
@@ -543,6 +639,9 @@ export default function AdminSetsPage() {
                 </div>
               );
             })}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>
