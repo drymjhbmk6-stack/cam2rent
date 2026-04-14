@@ -8,6 +8,7 @@ Server: Hetzner CX23 (178.104.117.135) + Coolify → test.cam2rent.de
 
 ## Sprache
 Alle UI-Texte, Kommentare und Kommunikation auf **Deutsch**.
+**Umlaute:** Immer ä/ö/ü verwenden, NIEMALS ae/oe/ue in UI-Texten.
 
 ## Git-Workflow
 Immer direkt auf **`master`** committen und pushen. Keine Feature-Branches verwenden.
@@ -40,7 +41,7 @@ In `data/shipping.ts` → `calcShipping()`: Express-Zweig prüft NICHT den `free
 - react-day-picker v8 + date-fns (--legacy-peer-deps)
 - Docker + Coolify Deployment
 
-## Architektur-Übersicht (Stand 2026-04-13)
+## Architektur-Übersicht (Stand 2026-04-14)
 
 ### Datenquellen — ALLES aus DB, keine statischen Fallbacks
 - **Kameras:** `admin_config.products` → `getProducts()` (lib/get-products.ts) → `/api/products` → `ProductsProvider` + `useProducts()`
@@ -102,14 +103,31 @@ Alle Dropdowns laden aus `admin_settings` und können neue Einträge hinzufügen
   - `GET /api/admin/versand-buchungen` → `booking.serial_number` (angereichert)
 
 ### Verfügbarkeit + Gantt-Kalender
-- **Gantt-Kalender** (`/admin/verfuegbarkeit`, Kameras-Tab): Pro Kameratyp aufklappbarer Bereich mit allen Units als Zeilen
-  - Monatsnavigation (< Monat Jahr >), Heute-Button
-  - Tageszellen farbcodiert: Grün=frei, Blau=gebucht, Gelb=Hinversand, Orange=Rückversand, Rot=Wartung, Grau=ausgemustert
+- **Gantt-Kalender** (`/admin/verfuegbarkeit`): Alle 3 Tabs (Kameras, Zubehör, Sets) mit Gantt-Ansicht
+  - Monatsnavigation (< Monat Jahr >), Heute-Button, KW-Balken über Tagen
+  - Wochen heben sich farblich voneinander ab (abwechselnder Hintergrund)
+  - Heutiger Tag: Gelbe Umrandung + gelbe Schrift im Header
+  - Puffertage dynamisch aus `admin_settings.booking_buffer_days`, unterschiedlich für Versand/Abholung
+  - Puffertage werden auch für nicht-zugeordnete Buchungen (ohne `unit_id`) angezeigt
+- **Kameras-Tab:** Pro Kameratyp aufklappbarer Bereich mit allen Units als Zeilen
+  - Farbcodiert: Grün=frei, Blau=gebucht, Gold=Hinversand, Orange=Rückversand, Rot=Wartung, Grau=ausgemustert
   - Hover-Tooltip: Buchungs-ID, Kundenname, Zeitraum, Lieferart
   - Klick auf gebuchte Zelle → öffnet `/admin/buchungen/[id]` in neuem Tab
-  - API: `GET /api/admin/availability-gantt?month=YYYY-MM` → liefert Produkte mit Units, Buchungen, blockierte Tage, Puffertage
-- **Sets + Zubehör Tabs:** Wie bisher (einfache Tabelle mit Status)
-- **Availability-API** (`/api/availability/[productId]`): Nutzt weiterhin `product.stock` für Shop-seitige Verfügbarkeitsprüfung, berücksichtigt Puffertage + Viewer delivery_mode
+- **Zubehör-Tab:** Pro Zubehörteil ein Kalender mit einer Zeile (aggregiert, nicht pro Stück)
+  - Zeigt Belegung als "X/Y" (z.B. "3/10" belegt von gesamt)
+  - Grün=alle frei, Gold=teilweise belegt, Blau=ausgebucht
+  - Set-Buchungen werden auf Einzelzubehör aufgelöst (über `sets.accessory_items`)
+- **Sets-Tab:** Pro Set ein Kalender mit einer Zeile
+  - Grün=frei, Blau=gebucht (mit Anzahl)
+- **API:** `GET /api/admin/availability-gantt?month=YYYY-MM` → liefert products[], accessories[], sets[] mit Buchungsdaten und Puffertagen
+- **Availability-API** (`/api/availability/[productId]`): Nutzt weiterhin `product.stock` für Shop-seitige Verfügbarkeitsprüfung
+
+### Admin-Navigation
+- **AdminBackLink** (`components/admin/AdminBackLink.tsx`): Einheitliche "Zurück zu..."- Komponente auf allen 40 Admin-Seiten
+  - Detail-Seiten: Fester Link zur Elternseite (`href` prop)
+  - Listen-Seiten: Browser-History zurück (kein `href`, nutzt `router.back()`)
+  - Cyan-Farbe (#06b6d4), Chevron-Icon
+  - Ausnahmen: Dashboard, Login, Vertragsunterschrift (hat eigenen router.back())
 
 ### Kundenkonto
 `/app/konto/` mit horizontaler Tab-Leiste
