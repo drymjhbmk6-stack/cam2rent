@@ -10,6 +10,17 @@ const nextConfig: NextConfig = {
   experimental: {
     optimizePackageImports: ['@supabase/supabase-js', 'date-fns', 'lucide-react'],
   },
+  // Unnötige Dateien vom Output-Tracing ausschließen (spart RAM beim Build)
+  outputFileTracingExcludes: {
+    '*': [
+      'node_modules/@swc/core-linux-x64-gnu',
+      'node_modules/@swc/core-linux-x64-musl',
+      'node_modules/@esbuild',
+      'node_modules/typescript',
+      'node_modules/prettier',
+      'node_modules/eslint',
+    ],
+  },
   images: {
     remotePatterns: [
       // Supabase Storage Bilder
