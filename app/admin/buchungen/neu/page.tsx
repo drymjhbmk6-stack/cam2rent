@@ -95,11 +95,13 @@ function getRentalPrice(
 }
 
 function getAccessoryPrice(acc: DynAccessory, days: number): number {
-  return acc.pricing_mode === 'flat' ? acc.price : acc.price * days;
+  const p = acc.price ?? 0;
+  return acc.pricing_mode === 'flat' ? p : p * days;
 }
 
 function getSetPrice(set: DynSet, days: number): number {
-  return set.pricing_mode === 'flat' ? set.price : set.price * days;
+  const p = set.price ?? 0;
+  return set.pricing_mode === 'flat' ? p : p * days;
 }
 
 /* ─── Styles ────────────────────────────────────────────────────────────────── */
@@ -889,7 +891,7 @@ export default function ManualBookingPage() {
                               const av = accAvailability[item.accessory_id];
                               return av && av.remaining < item.qty;
                             });
-                            const price = days > 0 ? getSetPrice(set, days) : set.price;
+                            const price = days > 0 ? getSetPrice(set, days) : (set.price ?? 0);
                             return (
                               <label key={set.id} className={`flex items-center gap-2 p-2 rounded-lg text-xs ${unavail ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`} style={{ border: `1px solid ${checked ? '#06b6d433' : '#1e293b'}`, background: checked ? '#06b6d40a' : 'transparent' }}>
                                 <input type="checkbox" checked={checked} disabled={unavail} onChange={() => !unavail && toggleProductSet(sp.id, set.id)} className="accent-cyan-400" />
@@ -919,7 +921,7 @@ export default function ManualBookingPage() {
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
                             {groupAccs.map((acc) => {
                               const isSelected = selectedId === acc.id || (acc.is_upgrade_base && !groupAccs.some((a) => !a.is_upgrade_base && sp.accessories.includes(a.id)));
-                              const upgradePrice = days > 0 ? getAccessoryPrice(acc, days) - basePrice : acc.price;
+                              const upgradePrice = days > 0 ? getAccessoryPrice(acc, days) - basePrice : (acc.price ?? 0);
                               return (
                                 <label key={acc.id} className="flex items-center gap-2 p-2 rounded-lg text-xs cursor-pointer" style={{ border: `1px solid ${isSelected ? '#06b6d433' : '#1e293b'}`, background: isSelected ? '#06b6d40a' : 'transparent' }}>
                                   <input type="radio" name={`upgrade-${sp.id}-${group}`} checked={isSelected} onChange={() => selectProductUpgrade(sp.id, acc.id, group)} className="accent-cyan-400" />
@@ -944,7 +946,7 @@ export default function ManualBookingPage() {
                             const checked = sp.accessories.includes(acc.id);
                             const avail = accAvailability[acc.id];
                             const unavail = avail && avail.remaining <= 0;
-                            const price = days > 0 ? getAccessoryPrice(acc, days) : acc.price;
+                            const price = days > 0 ? getAccessoryPrice(acc, days) : (acc.price ?? 0);
                             return (
                               <label key={acc.id} className={`flex items-center gap-2 p-2 rounded-lg text-xs ${unavail ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`} style={{ border: `1px solid ${checked ? '#06b6d433' : '#1e293b'}`, background: checked ? '#06b6d40a' : 'transparent' }}>
                                 <input type="checkbox" checked={checked} disabled={unavail} onChange={() => !unavail && toggleProductAccessory(sp.id, acc.id)} className="accent-cyan-400" />
