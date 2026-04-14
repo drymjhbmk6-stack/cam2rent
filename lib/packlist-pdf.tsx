@@ -6,6 +6,7 @@ import {
   StyleSheet,
 } from '@react-pdf/renderer';
 import { BUSINESS } from '@/lib/business-config';
+import { isoToDE } from '@/lib/format-utils';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -37,12 +38,6 @@ const C = {
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function fmtDate(iso: string) {
-  if (!iso) return '–';
-  const [y, m, d] = iso.split('-');
-  return `${d}.${m}.${y}`;
-}
 
 function accName(id: string): string {
   return id.replace(/-[a-z0-9]{6,}$/, '').split('-').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
@@ -265,7 +260,7 @@ export function PacklistPDF({ data }: { data: PacklistData }) {
               </View>
               <View style={s.metaRow}>
                 <Text style={s.metaLabel}>Mietzeitraum:</Text>
-                <Text style={s.metaValue}>{fmtDate(data.rentalFrom)} – {fmtDate(data.rentalTo)} ({data.days} Tage)</Text>
+                <Text style={s.metaValue}>{isoToDE(data.rentalFrom)} – {isoToDE(data.rentalTo)} ({data.days} Tage)</Text>
               </View>
               <View style={s.metaRow}>
                 <Text style={s.metaLabel}>Versandart:</Text>

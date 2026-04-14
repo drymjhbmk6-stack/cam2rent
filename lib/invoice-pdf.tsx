@@ -7,6 +7,7 @@ import {
   StyleSheet,
 } from '@react-pdf/renderer';
 import { BUSINESS } from '@/lib/business-config';
+import { fmtEuro, isoToDE } from '@/lib/format-utils';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -53,16 +54,6 @@ const C = {
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function fmt(n: number) {
-  return n.toFixed(2).replace('.', ',') + ' €';
-}
-
-function fmtDate(iso: string) {
-  if (!iso) return '–';
-  const [y, m, d] = iso.split('-');
-  return `${d}.${m}.${y}`;
-}
 
 function haftungLabel(h: string) {
   if (h === 'standard') return 'Standard-Haftungsschutz (pauschal)';
@@ -415,7 +406,7 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
           <View style={s.periodBar}>
             <Text style={s.periodLabel}>Leistungszeitraum</Text>
             <Text style={s.periodValue}>
-              {fmtDate(data.rentalFrom)} – {fmtDate(data.rentalTo)} ({data.days} {data.days === 1 ? 'Tag' : 'Tage'})
+              {isoToDE(data.rentalFrom)} – {isoToDE(data.rentalTo)} ({data.days} {data.days === 1 ? 'Tag' : 'Tage'})
             </Text>
           </View>
 
@@ -437,7 +428,7 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
                 )}
               </View>
               <Text style={s.colDays}>{item.qty}</Text>
-              <Text style={s.colTotal}>{fmt(item.total)}</Text>
+              <Text style={s.colTotal}>{fmtEuro(item.total)}</Text>
             </View>
           ))}
 
@@ -447,11 +438,11 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
               <>
                 <View style={s.sumRow}>
                   <Text style={s.sumLabel}>Nettobetrag:</Text>
-                  <Text style={s.sumValue}>{fmt(netAmount)}</Text>
+                  <Text style={s.sumValue}>{fmtEuro(netAmount)}</Text>
                 </View>
                 <View style={s.sumRow}>
                   <Text style={s.sumLabel}>MwSt. {taxRate}%:</Text>
-                  <Text style={s.sumValue}>{fmt(taxAmount)}</Text>
+                  <Text style={s.sumValue}>{fmtEuro(taxAmount)}</Text>
                 </View>
               </>
             ) : null}
@@ -461,12 +452,12 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
             <Text style={s.totalLabel}>
               Gesamtbetrag{isRegel ? ' (brutto)' : ''}:
             </Text>
-            <Text style={s.totalValue}>{fmt(data.priceTotal)}</Text>
+            <Text style={s.totalValue}>{fmtEuro(data.priceTotal)}</Text>
           </View>
 
           {data.deposit > 0 && (
             <Text style={{ fontSize: 8, color: C.grayText, marginTop: 6, textAlign: 'right', paddingRight: 12 }}>
-              Kaution: {fmt(data.deposit)} (wird nach Rückgabe freigegeben)
+              Kaution: {fmtEuro(data.deposit)} (wird nach Rückgabe freigegeben)
             </Text>
           )}
 

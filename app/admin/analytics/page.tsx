@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import { formatCurrency } from '@/lib/format-utils';
 
 // ─── Design Tokens ────────────────────────────────────────────────────────────
 const C = {
@@ -197,9 +198,7 @@ function timeAgo(iso: string): string {
   return `vor ${Math.floor(diff / 3600)}h`;
 }
 
-function fmtEur(n: number): string {
-  return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(n);
-}
+const fmtEur = formatCurrency;
 
 function deviceEmoji(d: string): string {
   if (d === 'mobile') return '📱';

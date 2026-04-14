@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { use } from 'react';
 import { useAccessories } from '@/components/AccessoriesProvider';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import { fmtDate } from '@/lib/format-utils';
 
 interface Booking {
   id: string;
@@ -20,11 +21,6 @@ interface Booking {
   price_total: number;
   deposit: number;
   tracking_number: string | null;
-}
-
-function fmtDate(iso: string) {
-  const [y, m, d] = iso.split('-');
-  return `${d}.${m}.${y}`;
 }
 
 export default function DruckenPage({ params }: { params: Promise<{ id: string }> }) {

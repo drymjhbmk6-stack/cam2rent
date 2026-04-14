@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import Link from 'next/link';
+import { fmtDate } from '@/lib/format-utils';
 
 interface BookingOption {
   id: string;
@@ -10,10 +11,6 @@ interface BookingOption {
   rental_from: string;
   rental_to: string;
   status: string;
-}
-
-function formatDate(d: string) {
-  return new Date(d).toLocaleDateString('de-DE', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
 export default function ReklamationPage() {
@@ -168,7 +165,7 @@ export default function ReklamationPage() {
               <option value="">Bitte wählen...</option>
               {bookings.map((b) => (
                 <option key={b.id} value={b.id}>
-                  {b.id} – {b.product_name} ({formatDate(b.rental_from)} – {formatDate(b.rental_to)})
+                  {b.id} – {b.product_name} ({fmtDate(b.rental_from)} – {fmtDate(b.rental_to)})
                 </option>
               ))}
             </select>

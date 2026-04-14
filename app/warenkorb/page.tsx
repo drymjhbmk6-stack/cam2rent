@@ -4,21 +4,7 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCart } from '@/components/CartProvider';
-
-function formatDate(iso: string) {
-  return new Date(iso + 'T12:00:00').toLocaleDateString('de-DE', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
-}
-
-function formatEur(n: number) {
-  return new Intl.NumberFormat('de-DE', {
-    style: 'currency',
-    currency: 'EUR',
-  }).format(n);
-}
+import { fmtDate, fmtEuro } from '@/lib/format-utils';
 
 export default function WarenkorbPage() {
   const { items, removeItem, cartTotal, itemCount } = useCart();
@@ -129,7 +115,7 @@ export default function WarenkorbPage() {
                       Buchung {gi + 1}
                     </span>
                     <span className="text-xs text-brand-muted dark:text-gray-500">
-                      {formatDate(group.from)} – {formatDate(group.to)} · {group.items[0].days} {group.items[0].days === 1 ? 'Tag' : 'Tage'}
+                      {fmtDate(group.from)} – {fmtDate(group.to)} · {group.items[0].days} {group.items[0].days === 1 ? 'Tag' : 'Tage'}
                     </span>
                   </div>
                 )}
@@ -170,25 +156,25 @@ export default function WarenkorbPage() {
                       <div>
                         <p className="text-xs text-brand-muted dark:text-gray-500 mb-0.5">Mietstart</p>
                         <p className="text-sm font-medium text-brand-black dark:text-white">
-                          {formatDate(item.rentalFrom)}
+                          {fmtDate(item.rentalFrom)}
                         </p>
                       </div>
                       <div>
                         <p className="text-xs text-brand-muted dark:text-gray-500 mb-0.5">Rückgabe</p>
                         <p className="text-sm font-medium text-brand-black dark:text-white">
-                          {formatDate(item.rentalTo)}
+                          {fmtDate(item.rentalTo)}
                         </p>
                       </div>
                       <div>
                         <p className="text-xs text-brand-muted dark:text-gray-500 mb-0.5">Miete</p>
                         <p className="text-sm font-medium text-brand-black dark:text-white">
-                          {formatEur(item.priceRental)}
+                          {fmtEuro(item.priceRental)}
                         </p>
                       </div>
                       <div>
                         <p className="text-xs text-brand-muted dark:text-gray-500 mb-0.5">Gesamt</p>
                         <p className="text-sm font-bold text-brand-black dark:text-white">
-                          {formatEur(item.subtotal)}
+                          {fmtEuro(item.subtotal)}
                         </p>
                       </div>
                     </div>
@@ -235,7 +221,7 @@ export default function WarenkorbPage() {
                   periodGroups.map((group, gi) => (
                     <div key={group.key}>
                       <p className="text-[10px] font-heading font-bold text-brand-muted dark:text-gray-500 uppercase tracking-wider mb-1 mt-2 first:mt-0">
-                        Buchung {gi + 1} · {formatDate(group.from)} – {formatDate(group.to)}
+                        Buchung {gi + 1} · {fmtDate(group.from)} – {fmtDate(group.to)}
                       </p>
                       {group.items.map((item) => (
                         <div key={item.id} className="flex justify-between text-sm">
@@ -243,7 +229,7 @@ export default function WarenkorbPage() {
                             {item.productName}
                           </span>
                           <span className="text-brand-black dark:text-white font-medium flex-shrink-0">
-                            {formatEur(item.subtotal)}
+                            {fmtEuro(item.subtotal)}
                           </span>
                         </div>
                       ))}
@@ -256,7 +242,7 @@ export default function WarenkorbPage() {
                         {item.productName}
                       </span>
                       <span className="text-brand-black dark:text-white font-medium flex-shrink-0">
-                        {formatEur(item.subtotal)}
+                        {fmtEuro(item.subtotal)}
                       </span>
                     </div>
                   ))
@@ -269,7 +255,7 @@ export default function WarenkorbPage() {
                     Zwischensumme
                   </span>
                   <span className="font-heading font-bold text-brand-black dark:text-white">
-                    {formatEur(cartTotal)}
+                    {fmtEuro(cartTotal)}
                   </span>
                 </div>
               </div>
@@ -327,7 +313,7 @@ export default function WarenkorbPage() {
                     {group.items.map((it) => it.productName).join(', ')}
                   </span>
                   <span className="text-brand-muted dark:text-gray-500 text-xs ml-auto flex-shrink-0">
-                    {formatDate(group.from)} – {formatDate(group.to)}
+                    {fmtDate(group.from)} – {fmtDate(group.to)}
                   </span>
                 </div>
               ))}

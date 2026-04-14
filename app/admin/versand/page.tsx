@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useAccessories } from '@/components/AccessoriesProvider';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import { fmtDate } from '@/lib/format-utils';
 
 interface Booking {
   id: string;
@@ -38,11 +39,6 @@ interface ShippingMethod {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function fmtDate(iso: string) {
-  const [y, m, d] = iso.split('-');
-  return `${d}.${m}.${y}`;
-}
 
 function daysDiff(isoDate: string): number {
   const target = new Date(isoDate);

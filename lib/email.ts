@@ -4,6 +4,7 @@ import { createElement, type ReactElement } from 'react';
 import { InvoicePDF, type InvoiceData } from '@/lib/invoice-pdf';
 import { BUSINESS } from '@/lib/business-config';
 import { createServiceClient } from '@/lib/supabase';
+import { fmtDate, fmtEuro } from '@/lib/format-utils';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -189,14 +190,6 @@ export async function sendAdminNotification(data: BookingEmailData) {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function fmt(n: number) {
-  return n.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
-}
-
-function fmtDate(iso: string) {
-  const [y, m, d] = iso.split('-');
-  return `${d}.${m}.${y}`;
-}
 
 function haftungLabel(h: string) {
   if (h === 'standard') return 'Standard-Haftungsoption';
@@ -216,19 +209,19 @@ function buildCustomerEmail(d: BookingEmailData): { html: string; subject: strin
   const subject = `Buchungsbestätigung ${d.bookingId} – ${BUSINESS.name}`;
 
   const accessoriesRow = d.accessories.length > 0
-    ? `<tr><td style="padding:6px 0;color:#6b7280;font-size:14px;">Zubehör</td><td style="padding:6px 0;text-align:right;font-size:14px;">${fmt(d.priceAccessories)}</td></tr>`
+    ? `<tr><td style="padding:6px 0;color:#6b7280;font-size:14px;">Zubehör</td><td style="padding:6px 0;text-align:right;font-size:14px;">${fmtEuro(d.priceAccessories)}</td></tr>`
     : '';
 
   const haftungRow = d.priceHaftung > 0
-    ? `<tr><td style="padding:6px 0;color:#6b7280;font-size:14px;">${haftungLabel(d.haftung)}</td><td style="padding:6px 0;text-align:right;font-size:14px;">${fmt(d.priceHaftung)}</td></tr>`
+    ? `<tr><td style="padding:6px 0;color:#6b7280;font-size:14px;">${haftungLabel(d.haftung)}</td><td style="padding:6px 0;text-align:right;font-size:14px;">${fmtEuro(d.priceHaftung)}</td></tr>`
     : '';
 
   const shippingRow = d.shippingPrice > 0
-    ? `<tr><td style="padding:6px 0;color:#6b7280;font-size:14px;">Versandkosten</td><td style="padding:6px 0;text-align:right;font-size:14px;">${fmt(d.shippingPrice)}</td></tr>`
+    ? `<tr><td style="padding:6px 0;color:#6b7280;font-size:14px;">Versandkosten</td><td style="padding:6px 0;text-align:right;font-size:14px;">${fmtEuro(d.shippingPrice)}</td></tr>`
     : '';
 
   const depositNote = d.deposit > 0
-    ? `<p style="margin:0 0 8px;font-size:13px;color:#6b7280;">* Kaution ${fmt(d.deposit)} wird nach Rückgabe erstattet.</p>`
+    ? `<p style="margin:0 0 8px;font-size:13px;color:#6b7280;">* Kaution ${fmtEuro(d.deposit)} wird nach Rückgabe erstattet.</p>`
     : '';
 
   const html = `
@@ -285,16 +278,16 @@ function buildCustomerEmail(d: BookingEmailData): { html: string; subject: strin
           <!-- Price breakdown -->
           <h2 style="margin:0 0 12px;font-size:15px;font-weight:700;color:#0a0a0a;">Kostenübersicht</h2>
           <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:8px;">
-            <tr><td style="padding:6px 0;color:#6b7280;font-size:14px;">Kamera-Miete (${d.days} ${d.days === 1 ? 'Tag' : 'Tage'})</td><td style="padding:6px 0;text-align:right;font-size:14px;">${fmt(d.priceRental)}</td></tr>
+            <tr><td style="padding:6px 0;color:#6b7280;font-size:14px;">Kamera-Miete (${d.days} ${d.days === 1 ? 'Tag' : 'Tage'})</td><td style="padding:6px 0;text-align:right;font-size:14px;">${fmtEuro(d.priceRental)}</td></tr>
             ${accessoriesRow}
             ${haftungRow}
             ${shippingRow}
             <tr><td colspan="2" style="padding:4px 0;border-top:1px solid #e5e7eb;"></td></tr>
             <tr>
               <td style="padding:8px 0;font-weight:700;color:#0a0a0a;font-size:15px;">Gesamtbetrag</td>
-              <td style="padding:8px 0;text-align:right;font-weight:700;color:#0a0a0a;font-size:15px;">${fmt(d.priceTotal)}</td>
+              <td style="padding:8px 0;text-align:right;font-weight:700;color:#0a0a0a;font-size:15px;">${fmtEuro(d.priceTotal)}</td>
             </tr>
-            ${d.deposit > 0 ? `<tr><td style="padding:4px 0;color:#6b7280;font-size:13px;">inkl. Kaution*</td><td style="padding:4px 0;text-align:right;color:#6b7280;font-size:13px;">${fmt(d.deposit)}</td></tr>` : ''}
+            ${d.deposit > 0 ? `<tr><td style="padding:4px 0;color:#6b7280;font-size:13px;">inkl. Kaution*</td><td style="padding:4px 0;text-align:right;color:#6b7280;font-size:13px;">${fmtEuro(d.deposit)}</td></tr>` : ''}
           </table>
           ${depositNote}
 
@@ -393,7 +386,7 @@ function buildAdminEmail(d: BookingEmailData): { html: string; subject: string }
             </tr>` : ''}
             <tr>
               <td style="padding:8px 0;font-size:14px;color:#6b7280;">Gesamtbetrag</td>
-              <td style="padding:8px 0;font-size:15px;font-weight:700;color:#0a0a0a;">${fmt(d.priceTotal)}</td>
+              <td style="padding:8px 0;font-size:15px;font-weight:700;color:#0a0a0a;">${fmtEuro(d.priceTotal)}</td>
             </tr>
           </table>
 
@@ -420,7 +413,7 @@ function buildCancellationCustomerEmail(d: CancellationEmailData): { html: strin
   const refundRow = d.refundAmount > 0
     ? `<tr>
         <td style="padding:8px 0;font-size:15px;font-weight:700;color:#16a34a;">Rückerstattung</td>
-        <td style="padding:8px 0;text-align:right;font-size:15px;font-weight:700;color:#16a34a;">${fmt(d.refundAmount)}</td>
+        <td style="padding:8px 0;text-align:right;font-size:15px;font-weight:700;color:#16a34a;">${fmtEuro(d.refundAmount)}</td>
        </tr>`
     : `<tr>
         <td colspan="2" style="padding:8px 0;font-size:14px;color:#dc2626;">Keine Rückerstattung (Stornierung < 7 Tage vor Mietstart)</td>
@@ -478,7 +471,7 @@ function buildCancellationCustomerEmail(d: CancellationEmailData): { html: strin
           <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px;">
             <tr>
               <td style="padding:6px 0;color:#6b7280;font-size:14px;">Gebuchter Betrag</td>
-              <td style="padding:6px 0;text-align:right;font-size:14px;">${fmt(d.priceTotal)}</td>
+              <td style="padding:6px 0;text-align:right;font-size:14px;">${fmtEuro(d.priceTotal)}</td>
             </tr>
             <tr><td colspan="2" style="padding:2px 0;border-top:1px solid #e5e7eb;"></td></tr>
             ${refundRow}
@@ -555,11 +548,11 @@ function buildCancellationAdminEmail(d: CancellationEmailData): { html: string; 
             </tr>
             <tr>
               <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#6b7280;">Gebuchter Betrag</td>
-              <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#0a0a0a;">${fmt(d.priceTotal)}</td>
+              <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#0a0a0a;">${fmtEuro(d.priceTotal)}</td>
             </tr>
             <tr>
               <td style="padding:8px 0;font-size:14px;color:#6b7280;">Rückerstattung</td>
-              <td style="padding:8px 0;font-size:15px;font-weight:700;color:${d.refundAmount > 0 ? '#16a34a' : '#dc2626'};">${d.refundAmount > 0 ? fmt(d.refundAmount) + ` (${d.refundPercentage * 100} %)` : 'Keine'}</td>
+              <td style="padding:8px 0;font-size:15px;font-weight:700;color:${d.refundAmount > 0 ? '#16a34a' : '#dc2626'};">${d.refundAmount > 0 ? fmtEuro(d.refundAmount) + ` (${d.refundPercentage * 100} %)` : 'Keine'}</td>
             </tr>
           </table>
         </td></tr>
@@ -721,7 +714,7 @@ export async function sendDamageResolution(data: DamageResolutionEmailData) {
   const retainedInfo = data.depositRetained > 0
     ? `<tr><td style="padding:16px 20px;border-bottom:1px solid #e5e7eb;">
         <p style="margin:0 0 2px;font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:0.8px;">Einbehaltene Kaution</p>
-        <p style="margin:0;font-size:15px;font-weight:700;color:#dc2626;">${fmt(data.depositRetained)}</p>
+        <p style="margin:0;font-size:15px;font-weight:700;color:#dc2626;">${fmtEuro(data.depositRetained)}</p>
       </td></tr>`
     : `<tr><td style="padding:16px 20px;border-bottom:1px solid #e5e7eb;">
         <p style="margin:0 0 2px;font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:0.8px;">Kaution</p>
@@ -758,7 +751,7 @@ export async function sendDamageResolution(data: DamageResolutionEmailData) {
             </td></tr>
             <tr><td style="padding:16px 20px;border-bottom:1px solid #e5e7eb;">
               <p style="margin:0 0 2px;font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:0.8px;">Festgestellte Schadenshöhe</p>
-              <p style="margin:0;font-size:15px;font-weight:600;color:#0a0a0a;">${fmt(data.damageAmount)}</p>
+              <p style="margin:0;font-size:15px;font-weight:600;color:#0a0a0a;">${fmtEuro(data.damageAmount)}</p>
             </td></tr>
             ${retainedInfo}
             ${notesRow}
@@ -1055,8 +1048,8 @@ export async function sendExtensionConfirmation(data: ExtensionEmailData) {
                 <tr><td style="padding:6px 0;font-size:14px;color:#6b7280;">Neues Rückgabedatum</td><td style="padding:6px 0;font-size:14px;color:#15803d;font-weight:600;text-align:right;">${fmtDate(data.newRentalTo)}</td></tr>
                 <tr><td style="padding:6px 0;font-size:14px;color:#6b7280;">Zusätzliche Tage</td><td style="padding:6px 0;font-size:14px;color:#0a0a0a;font-weight:600;text-align:right;">+${data.additionalDays} Tag${data.additionalDays !== 1 ? 'e' : ''}</td></tr>
                 <tr><td colspan="2" style="border-top:1px solid #e2e8f0;padding:8px 0 0;"></td></tr>
-                <tr><td style="padding:6px 0;font-size:14px;color:#6b7280;">Aufpreis</td><td style="padding:6px 0;font-size:14px;color:#0a0a0a;font-weight:600;text-align:right;">${fmt(data.priceDifference)}</td></tr>
-                <tr><td style="padding:6px 0;font-size:14px;color:#6b7280;font-weight:600;">Neuer Gesamtpreis</td><td style="padding:6px 0;font-size:16px;color:#0a0a0a;font-weight:700;text-align:right;">${fmt(data.newTotal)}</td></tr>
+                <tr><td style="padding:6px 0;font-size:14px;color:#6b7280;">Aufpreis</td><td style="padding:6px 0;font-size:14px;color:#0a0a0a;font-weight:600;text-align:right;">${fmtEuro(data.priceDifference)}</td></tr>
+                <tr><td style="padding:6px 0;font-size:14px;color:#6b7280;font-weight:600;">Neuer Gesamtpreis</td><td style="padding:6px 0;font-size:16px;color:#0a0a0a;font-weight:700;text-align:right;">${fmtEuro(data.newTotal)}</td></tr>
               </table>
             </td></tr>
           </table>
@@ -1137,7 +1130,7 @@ export async function sendAbandonedCartReminder(data: {
     `<tr>
       <td style="padding:8px 0;font-size:14px;color:#0a0a0a;font-weight:500;">${item.productName}</td>
       <td style="padding:8px 0;font-size:14px;color:#6b7280;text-align:center;">${item.days} Tag${item.days !== 1 ? 'e' : ''}</td>
-      <td style="padding:8px 0;font-size:14px;color:#0a0a0a;font-weight:600;text-align:right;">${fmt(item.subtotal)}</td>
+      <td style="padding:8px 0;font-size:14px;color:#0a0a0a;font-weight:600;text-align:right;">${fmtEuro(item.subtotal)}</td>
     </tr>`
   ).join('');
 
@@ -1175,7 +1168,7 @@ export async function sendAbandonedCartReminder(data: {
             <tr><td colspan="3" style="border-top:1px solid #e2e8f0;padding-top:8px;"></td></tr>
             <tr>
               <td colspan="2" style="padding:4px 0;font-size:14px;color:#6b7280;font-weight:600;">Gesamt</td>
-              <td style="padding:4px 0;font-size:16px;color:#0a0a0a;font-weight:700;text-align:right;">${fmt(data.cartTotal)}</td>
+              <td style="padding:4px 0;font-size:16px;color:#0a0a0a;font-weight:700;text-align:right;">${fmtEuro(data.cartTotal)}</td>
             </tr>
           </table>
           ${couponSection}

@@ -8,8 +8,12 @@ import { getCancellationInfo } from '@/data/cancellation';
 import { useProducts } from '@/components/ProductsProvider';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
+import { fmtDate, formatCurrency } from '@/lib/format-utils';
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
+
+// Geschäftsdaten (Client-Komponente kann BUSINESS nicht importieren)
+const KONTAKT_EMAIL = 'kontakt@cam2rent.de';
 
 interface Booking {
   id: string;
@@ -41,14 +45,6 @@ const statusConfig: Record<string, { label: string; className: string }> = {
   damaged: { label: 'Schaden gemeldet', className: 'bg-orange-100 text-orange-700' },
 };
 
-function formatDate(dateStr: string) {
-  return new Date(dateStr).toLocaleDateString('de-DE', { day: '2-digit', month: 'short', year: 'numeric' });
-}
-
-function formatCurrency(amount: number) {
-  return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(amount);
-}
-
 // ─── Cancel modal ────────────────────────────────────────────────────────────
 
 interface CancelModalProps {
@@ -67,7 +63,7 @@ function CancelModal({ booking, onConfirm, onClose, loading }: CancelModalProps)
       <div className="bg-white dark:bg-brand-dark rounded-card shadow-2xl w-full max-w-md p-6">
         <h2 className="font-heading font-bold text-lg text-brand-black dark:text-white mb-1">Buchung stornieren?</h2>
         <p className="text-sm text-brand-text dark:text-gray-300 mb-4">
-          {booking.product_name} · {formatDate(booking.rental_from)} – {formatDate(booking.rental_to)}
+          {booking.product_name} · {fmtDate(booking.rental_from)} – {fmtDate(booking.rental_to)}
         </p>
         <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-5">
           <p className="text-sm font-semibold mb-1 text-green-700">{cancelInfo.label}</p>
@@ -207,7 +203,7 @@ function ExtendModal({ booking, onClose }: Omit<ExtendModalProps, 'onSuccess'>) 
       <div className="bg-white dark:bg-brand-dark rounded-card shadow-2xl w-full max-w-md p-6">
         <h2 className="font-heading font-bold text-lg text-brand-black dark:text-white mb-1">Buchung verlängern</h2>
         <p className="text-sm text-brand-text dark:text-gray-300 mb-4">
-          {booking.product_name} · Aktuell bis {formatDate(booking.rental_to)}
+          {booking.product_name} · Aktuell bis {fmtDate(booking.rental_to)}
         </p>
 
         {error && (
@@ -397,7 +393,7 @@ function SignContractModal({ booking, onClose, onSuccess }: SignModalProps) {
       <div className="bg-white dark:bg-brand-dark rounded-card shadow-2xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
         <h2 className="font-heading font-bold text-lg text-brand-black dark:text-white mb-1">Mietvertrag unterschreiben</h2>
         <p className="text-sm text-brand-text dark:text-gray-300 mb-4">
-          {booking.product_name} · {formatDate(booking.rental_from)} – {formatDate(booking.rental_to)}
+          {booking.product_name} · {fmtDate(booking.rental_from)} – {fmtDate(booking.rental_to)}
         </p>
 
         {error && (
@@ -667,11 +663,11 @@ export default function BuchungenPage() {
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
                     <div>
                       <p className="text-xs text-brand-muted dark:text-gray-500 mb-0.5">Mietstart</p>
-                      <p className="text-sm font-medium text-brand-black dark:text-white">{formatDate(booking.rental_from)}</p>
+                      <p className="text-sm font-medium text-brand-black dark:text-white">{fmtDate(booking.rental_from)}</p>
                     </div>
                     <div>
                       <p className="text-xs text-brand-muted dark:text-gray-500 mb-0.5">Rückgabe</p>
-                      <p className="text-sm font-medium text-brand-black dark:text-white">{formatDate(booking.rental_to)}</p>
+                      <p className="text-sm font-medium text-brand-black dark:text-white">{fmtDate(booking.rental_to)}</p>
                     </div>
                     <div>
                       <p className="text-xs text-brand-muted dark:text-gray-500 mb-0.5">Miettage</p>
@@ -692,7 +688,7 @@ export default function BuchungenPage() {
                       <div className="text-xs">
                         <span className="font-semibold text-blue-800">Verlängert</span>
                         <span className="text-blue-700">
-                          {' '}— Ursprünglich bis {formatDate(booking.original_rental_to)}, jetzt bis {formatDate(booking.rental_to)}
+                          {' '}— Ursprünglich bis {fmtDate(booking.original_rental_to)}, jetzt bis {fmtDate(booking.rental_to)}
                         </span>
                       </div>
                     </div>
@@ -705,7 +701,7 @@ export default function BuchungenPage() {
                         <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
                       <span className="text-xs font-semibold text-green-700">
-                        Mietvertrag unterschrieben{booking.contract_signed_at ? ` am ${formatDate(booking.contract_signed_at)}` : ''}
+                        Mietvertrag unterschrieben{booking.contract_signed_at ? ` am ${fmtDate(booking.contract_signed_at)}` : ''}
                       </span>
                     </div>
                   )}
@@ -811,7 +807,7 @@ export default function BuchungenPage() {
 
                       {/* Email cancel */}
                       {cancelInfo.eligibility === 'email_only' && (
-                        <a href={`mailto:kontakt@cam2rent.de?subject=Stornierung%20${booking.id}`} className="flex items-center gap-1.5 text-xs font-heading font-semibold text-orange-600 hover:underline">
+                        <a href={`mailto:${KONTAKT_EMAIL}?subject=Stornierung%20${booking.id}`} className="flex items-center gap-1.5 text-xs font-heading font-semibold text-orange-600 hover:underline">
                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
                           Per E-Mail stornieren (50 % Gebühr)
                         </a>

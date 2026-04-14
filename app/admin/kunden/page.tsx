@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import { fmtDate } from '@/lib/format-utils';
 
 interface Customer {
   id: string;
@@ -51,15 +52,6 @@ export default function KundenPage() {
   useEffect(() => {
     fetchCustomers();
   }, [fetchCustomers]);
-
-  function formatDate(dateStr: string | null) {
-    if (!dateStr) return '—';
-    return new Date(dateStr).toLocaleDateString('de-DE', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-    });
-  }
 
   // Client-side filtering
   const filtered = customers.filter((c) => {
@@ -249,7 +241,7 @@ export default function KundenPage() {
                         )}
                       </td>
                       <td style={{ padding: '12px 14px', fontSize: 13, color: '#64748b' }}>
-                        {formatDate(c.created_at)}
+                        {fmtDate(c.created_at)}
                       </td>
                     </tr>
                   );

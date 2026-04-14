@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { formatCurrency } from '@/lib/format-utils';
 
 // ─── Theme Colors (matching admin layout) ────────────────────────
 const C = {
@@ -173,10 +174,6 @@ function getWidgetColor(widgetId: string): { accent: string; bg: string } {
     camera_utilization: { accent: C.cyan, bg: C.cyanDim },
   };
   return map[widgetId] || { accent: C.cyan, bg: C.cyanDim };
-}
-
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(value);
 }
 
 function formatDate(dateStr: string): string {

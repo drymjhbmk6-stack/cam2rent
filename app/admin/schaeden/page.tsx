@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import { fmtDateTime, fmtEuro } from '@/lib/format-utils';
 
 interface DamageReport {
   id: string;
@@ -31,17 +32,6 @@ const STATUS_CONFIG: Record<string, { label: string; bg: string; text: string }>
   confirmed: { label: 'Bestätigt', bg: '#ef444422', text: '#ef4444' },
   resolved: { label: 'Gelöst', bg: '#10b98122', text: '#10b981' },
 };
-
-function fmtDateTime(iso: string) {
-  return new Date(iso).toLocaleString('de-DE', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  });
-}
-
-function fmtEuro(n: number) {
-  return n.toFixed(2).replace('.', ',') + ' €';
-}
 
 export default function AdminSchaedenPage() {
   const [reports, setReports] = useState<DamageReport[]>([]);

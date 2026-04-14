@@ -54,7 +54,7 @@ function wrapLayout(body: string): string {
 
         <!-- Footer -->
         <tr><td style="background:#f5f5f0;border-radius:0 0 12px 12px;padding:20px 32px;text-align:center;">
-          <p style="margin:0;font-size:12px;color:#9ca3af;">cam2rent &middot; Action-Cam Verleih &middot; <a href="https://cam2rent.de" style="color:#9ca3af;">cam2rent.de</a></p>
+          <p style="margin:0;font-size:12px;color:#9ca3af;">cam2rent &middot; Action-Cam Verleih &middot; <a href="${BASE_URL}" style="color:#9ca3af;">${BASE_URL.replace('https://', '')}</a></p>
         </td></tr>
 
       </table>

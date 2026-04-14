@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import { fmtDate, fmtDateTime, formatCurrency } from '@/lib/format-utils';
 
 /* ───── Types ───── */
 interface CustomerProfile {
@@ -116,34 +117,10 @@ const DAMAGE_STATUS: Record<string, { label: string; color: string; bg: string }
 };
 
 /* ───── Helpers ───── */
-function formatDate(dateStr: string | null) {
-  if (!dateStr) return '—';
-  return new Date(dateStr).toLocaleDateString('de-DE', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  });
-}
-
-function formatDateTime(dateStr: string | null) {
-  if (!dateStr) return '—';
-  return new Date(dateStr).toLocaleDateString('de-DE', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
-function formatCurrency(amount: number) {
-  return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(amount);
-}
-
 function retentionDate(createdAt: string) {
   const d = new Date(createdAt);
   d.setFullYear(d.getFullYear() + 10);
-  return formatDate(d.toISOString());
+  return fmtDate(d.toISOString());
 }
 
 /* ───── Component ───── */
@@ -390,7 +367,7 @@ export default function KundenDetailPage() {
               } />
               <InfoField label="Registriert am" value={formatDate(customer.created_at)} />
               <InfoField label="Verifizierung" value={
-                customer.verification_status === 'verified' ? `Verifiziert am ${formatDate(customer.verified_at)}`
+                customer.verification_status === 'verified' ? `Verifiziert am ${customer.verified_at ? fmtDate(customer.verified_at) : '—'}`
                   : customer.verification_status === 'pending' ? 'Ausstehend'
                   : customer.verification_status === 'rejected' ? 'Abgelehnt'
                   : 'Nicht verifiziert'
@@ -546,7 +523,7 @@ export default function KundenDetailPage() {
                   <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  Verifiziert am {formatDate(customer.verified_at)}
+                  Verifiziert am {customer.verified_at ? fmtDate(customer.verified_at) : '—'}
                 </div>
               )}
             </div>
@@ -561,7 +538,7 @@ export default function KundenDetailPage() {
               <StatCard label="Buchungen gesamt" value={String(stats.totalBookings)} />
               <StatCard label="Gesamtumsatz" value={formatCurrency(stats.totalRevenue)} />
               <StatCard label="Durchschn. Buchungswert" value={formatCurrency(stats.avgBookingValue)} />
-              <StatCard label="Letzte Buchung" value={formatDate(stats.lastBooking)} />
+              <StatCard label="Letzte Buchung" value={stats.lastBooking ? fmtDate(stats.lastBooking) : '—'} />
             </div>
           )}
 
@@ -589,7 +566,7 @@ export default function KundenDetailPage() {
                   <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
                   </svg>
-                  Gesperrt seit {formatDate(customer.blacklisted_at)}
+                  Gesperrt seit {customer.blacklisted_at ? fmtDate(customer.blacklisted_at) : '—'}
                 </div>
                 {customer.blacklist_reason && (
                   <p style={{ fontSize: 13, color: '#94a3b8', marginBottom: 12 }}>

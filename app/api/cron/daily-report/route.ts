@@ -3,6 +3,7 @@ import { Resend } from 'resend';
 import { createServiceClient } from '@/lib/supabase';
 import { verifyCronAuth } from '@/lib/cron-auth';
 import { BUSINESS } from '@/lib/business-config';
+import { fmtEuro } from '@/lib/format-utils';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? BUSINESS.emailKontakt;
@@ -12,10 +13,6 @@ const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? BUSINESS.url;
 function pct(a: number, b: number): string {
   if (b === 0) return '0%';
   return `${Math.round((a / b) * 100)}%`;
-}
-
-function fmtEur(n: number): string {
-  return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(n);
 }
 
 function trend(current: number, previous: number): string {
@@ -131,7 +128,7 @@ export async function GET(req: NextRequest) {
         </div>
         <div>
           <div style="font-size:10px;color:#64748b;margin-bottom:4px;">UMSATZ</div>
-          <div style="font-size:22px;font-weight:700;color:#06b6d4;">${fmtEur(revenue)}</div>
+          <div style="font-size:22px;font-weight:700;color:#06b6d4;">${fmtEuro(revenue)}</div>
         </div>
         <div>
           <div style="font-size:10px;color:#64748b;margin-bottom:4px;">CONVERSION</div>
