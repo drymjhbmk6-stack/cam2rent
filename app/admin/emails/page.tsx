@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import { fmtDateTime } from '@/lib/format-utils';
 
 interface EmailEntry {
   id: string;
@@ -36,13 +37,6 @@ const TYPE_LABELS: Record<string, { label: string; color: string; bg: string }> 
   overdue_1d: { label: 'Überfällig (1T)', color: '#ef4444', bg: '#ef444414' },
   overdue_3d: { label: 'Überfällig (3T)', color: '#dc2626', bg: '#dc262614' },
 };
-
-function fmtDateTime(iso: string) {
-  return new Date(iso).toLocaleString('de-DE', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  });
-}
 
 export default function AdminEmailLogPage() {
   const [emails, setEmails] = useState<EmailEntry[]>([]);

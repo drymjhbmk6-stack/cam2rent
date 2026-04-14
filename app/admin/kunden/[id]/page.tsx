@@ -365,7 +365,7 @@ export default function KundenDetailPage() {
                 [customer.address_street, `${customer.address_zip} ${customer.address_city}`]
                   .filter((s) => s.trim()).join(', ') || '—'
               } />
-              <InfoField label="Registriert am" value={formatDate(customer.created_at)} />
+              <InfoField label="Registriert am" value={fmtDate(customer.created_at)} />
               <InfoField label="Verifizierung" value={
                 customer.verification_status === 'verified' ? `Verifiziert am ${customer.verified_at ? fmtDate(customer.verified_at) : '—'}`
                   : customer.verification_status === 'pending' ? 'Ausstehend'
@@ -658,7 +658,7 @@ export default function KundenDetailPage() {
                           {b.product_name}
                         </td>
                         <td style={{ padding: '12px 14px', fontSize: 13, color: '#94a3b8' }}>
-                          {formatDate(b.rental_from)} — {formatDate(b.rental_to)}
+                          {fmtDate(b.rental_from)} — {fmtDate(b.rental_to)}
                         </td>
                         <td style={{ padding: '12px 14px' }}>
                           <span style={{
@@ -701,7 +701,7 @@ export default function KundenDetailPage() {
                     padding: 20,
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-                      <span style={{ fontSize: 13, color: '#64748b' }}>{formatDate(d.created_at)}</span>
+                      <span style={{ fontSize: 13, color: '#64748b' }}>{fmtDate(d.created_at)}</span>
                       <span style={{ fontSize: 14, fontWeight: 600, color: '#e2e8f0' }}>{d.product_name}</span>
                       <span style={{
                         display: 'inline-block', padding: '3px 10px', borderRadius: 6,
@@ -757,7 +757,7 @@ export default function KundenDetailPage() {
                       </span>
                     )}
                     <span style={{ fontSize: 12, color: '#64748b', marginLeft: 'auto' }}>
-                      {formatDate(conv.created_at)}
+                      {fmtDate(conv.created_at)}
                     </span>
                   </div>
 
@@ -784,7 +784,7 @@ export default function KundenDetailPage() {
                             borderBottomLeftRadius: isAdmin ? 12 : 4,
                           }}>
                             <div style={{ fontSize: 10, color: '#64748b', marginBottom: 4, fontWeight: 600 }}>
-                              {isAdmin ? 'Admin' : 'Kunde'} — {formatDateTime(msg.created_at)}
+                              {isAdmin ? 'Admin' : 'Kunde'} — {fmtDateTime(msg.created_at)}
                             </div>
                             <div style={{ fontSize: 14, color: '#e2e8f0', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
                               {msg.body}
@@ -838,7 +838,7 @@ export default function KundenDetailPage() {
                       ))}
                     </div>
                     <span style={{ fontSize: 12, color: '#64748b', marginLeft: 'auto' }}>
-                      {formatDate(r.created_at)}
+                      {fmtDate(r.created_at)}
                     </span>
                   </div>
                   {r.title && (
@@ -908,7 +908,7 @@ export default function KundenDetailPage() {
                   padding: 20,
                 }}>
                   <div style={{ fontSize: 12, color: '#64748b', marginBottom: 8 }}>
-                    {formatDateTime(note.created_at)}
+                    {fmtDateTime(note.created_at)}
                   </div>
                   <div style={{ fontSize: 14, color: '#e2e8f0', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
                     {note.content}

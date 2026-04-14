@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import { fmtDate } from '@/lib/format-utils';
 
 interface ReturnBooking {
   id: string;
@@ -26,10 +27,6 @@ const CONDITION_CONFIG: Record<string, { label: string; color: string; bg: strin
   gebrauchsspuren: { label: 'Gebrauchsspuren', color: '#f59e0b', bg: '#f59e0b22' },
   beschaedigt: { label: 'Beschädigt', color: '#ef4444', bg: '#ef444422' },
 };
-
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
-}
 
 function isOverdue(rentalTo: string) {
   const today = new Date();

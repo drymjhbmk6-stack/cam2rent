@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import { fmtDate, formatCurrency } from '@/lib/format-utils';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -72,14 +73,9 @@ const btnDanger: React.CSSProperties = {
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-function fmtDate(iso: string | null): string {
-  if (!iso) return '\u2014';
-  return new Date(iso).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
-}
-
 function fmtCurrency(v: number | null): string {
   if (v == null) return '\u2014';
-  return v.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+  return formatCurrency(v);
 }
 
 const STATUS_MAP: Record<string, { label: string; bg: string; color: string }> = {

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import { fmtDate } from '@/lib/format-utils';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -58,11 +59,6 @@ function emptyForm(): FormData {
     min_order_value: null, once_per_customer: false, not_combinable: false,
     active: true,
   };
-}
-
-function fmtDate(iso: string | null): string {
-  if (!iso) return '\u2014';
-  return new Date(iso).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
 function toLocal(iso: string | null): string {

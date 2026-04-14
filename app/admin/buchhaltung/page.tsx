@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import { isoToDE, formatCurrency } from '@/lib/format-utils';
 
 // ─── Design Tokens ────────────────────────────────────────────────────────────
 const C = {
@@ -184,15 +185,6 @@ function getQuarterRange(date: Date): { from: string; to: string } {
 function getYearRange(date: Date): { from: string; to: string } {
   const y = date.getFullYear();
   return { from: `${y}-01-01`, to: `${y}-12-31` };
-}
-
-function formatDate(d: string): string {
-  const [y, m, day] = d.split('-');
-  return `${day}.${m}.${y}`;
-}
-
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(amount);
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
@@ -470,7 +462,7 @@ export default function BuchhaltungPage() {
                     Zeitraum
                   </div>
                   <div style={{ fontSize: 14, fontWeight: 600, color: C.textMuted }}>
-                    {formatDate(getDateRange()!.from)} - {formatDate(getDateRange()!.to)}
+                    {isoToDE(getDateRange()!.from)} - {isoToDE(getDateRange()!.to)}
                   </div>
                 </div>
               </>

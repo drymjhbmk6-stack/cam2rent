@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import { fmtDateTime } from '@/lib/format-utils';
 
 interface AuditEntry {
   id: string;
@@ -61,17 +62,6 @@ const ENTITY_LABELS: Record<string, string> = {
   review: 'Bewertung',
   blog: 'Blog',
 };
-
-function formatDate(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleDateString('de-DE', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
 
 function truncate(str: string, max: number): string {
   return str.length > max ? str.slice(0, max) + '...' : str;
@@ -338,7 +328,7 @@ export default function AktivitaetsprotokollPage() {
                       }}
                     >
                       <td style={{ padding: '10px 16px', color: '#94a3b8', whiteSpace: 'nowrap' }}>
-                        {formatDate(entry.created_at)}
+                        {fmtDateTime(entry.created_at)}
                       </td>
                       <td style={{ padding: '10px 16px', color: '#cbd5e1' }}>
                         {entry.admin_user_name || '–'}

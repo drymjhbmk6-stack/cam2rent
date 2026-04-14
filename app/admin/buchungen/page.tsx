@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import { fmtDate, fmtDateTime, fmtEuro } from '@/lib/format-utils';
 
 interface Booking {
   id: string;
@@ -44,22 +45,6 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }
   cancelled: { label: 'Storniert', color: '#ef4444', bg: '#ef444414' },
   damaged: { label: 'Beschädigt', color: '#f97316', bg: '#f9731614' },
 };
-
-function fmtDate(iso: string) {
-  const [y, m, d] = iso.split('-');
-  return `${d}.${m}.${y}`;
-}
-
-function fmtDateTime(iso: string) {
-  return new Date(iso).toLocaleString('de-DE', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  });
-}
-
-function fmtEuro(n: number) {
-  return n.toFixed(2).replace('.', ',') + ' €';
-}
 
 function startOfDay(d: Date) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
