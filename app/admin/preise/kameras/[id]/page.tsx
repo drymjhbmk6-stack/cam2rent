@@ -12,6 +12,7 @@ import {
 } from '@/lib/price-config';
 import ProductPreview from '@/components/ProductPreview';
 import MarkdownEditor from '@/components/MarkdownEditor';
+import PriceInput from '@/components/admin/PriceInput';
 import BrandSelect from '@/components/admin/BrandSelect';
 import { useSpecDefinitions } from '@/components/admin/SpecDefinitions';
 import AdminBackLink from '@/components/admin/AdminBackLink';
@@ -466,8 +467,8 @@ export default function AdminKameraEditorPage() {
                 </div>
                 <div>
                   <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Kaution (€)</label>
-                  <input type="number" min="0" step="10" value={product.deposit ?? 0}
-                    onChange={(e) => setProduct((p) => p && ({ ...p, deposit: parseFloat(e.target.value) || 0 }))}
+                  <PriceInput value={product.deposit ?? 0}
+                    onChange={(v) => setProduct((p) => p && ({ ...p, deposit: v }))}
                     placeholder="z.B. 150"
                     className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
                 </div>
@@ -754,12 +755,10 @@ export default function AdminKameraEditorPage() {
                       <label className="block text-xs font-heading font-semibold text-brand-muted mb-1 text-center">
                         {day}T
                       </label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="1"
+                      <PriceInput
                         value={price}
-                        onChange={(e) => setTableDay(day, parseFloat(e.target.value) || 0)}
+                        onChange={(v) => setTableDay(day, v)}
+                        min={0}
                         className="w-full px-1.5 py-2 border border-brand-border rounded-[8px] text-sm font-body text-center focus:outline-none focus:ring-2 focus:ring-accent-blue"
                       />
                     </div>
@@ -778,8 +777,9 @@ export default function AdminKameraEditorPage() {
                 <div className="w-40">
                   <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Preis pro Zusatztag</label>
                   <div className="relative">
-                    <input type="number" min="0" step="0.50" value={product.perDayAfter30}
-                      onChange={(e) => setProduct((p) => p && ({ ...p, perDayAfter30: parseFloat(e.target.value) || 0 }))}
+                    <PriceInput value={product.perDayAfter30}
+                      onChange={(v) => setProduct((p) => p && ({ ...p, perDayAfter30: v }))}
+                      placeholder="z.B. 4,50"
                       className="w-full pr-8 pl-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-brand-muted pointer-events-none">€</span>
                   </div>

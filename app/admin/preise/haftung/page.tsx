@@ -2,18 +2,18 @@
 
 import { useEffect, useState } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import PriceInput from '@/components/admin/PriceInput';
 import { DEFAULT_HAFTUNG, DEFAULT_KAUTION_TIERS, type HaftungConfig, type KautionTiers } from '@/lib/price-config';
 
-function Field({ label, sub, value, onChange, step = '1' }: {
-  label: string; sub?: string; value: number; onChange: (v: number) => void; step?: string;
+function Field({ label, sub, value, onChange }: {
+  label: string; sub?: string; value: number; onChange: (v: number) => void;
 }) {
   return (
     <div>
       <label className="block text-sm font-heading font-semibold text-brand-black mb-1">{label}</label>
       {sub && <p className="text-xs font-body text-brand-muted mb-2">{sub}</p>}
       <div className="relative">
-        <input type="number" step={step} min="0" value={value}
-          onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
+        <PriceInput value={value} onChange={onChange} min={0}
           className="w-full pr-8 pl-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
         <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-brand-muted pointer-events-none">€</span>
       </div>
@@ -125,14 +125,14 @@ export default function AdminHaftungPage() {
                           placeholder="Kategorie-Slug"
                         />
                         <div className="relative w-28">
-                          <input
-                            type="number"
+                          <PriceInput
                             value={numVal}
-                            onChange={(e) => {
+                            onChange={(v) => {
                               const updated = { ...(haftung.eigenbeteiligungByCategory ?? {}) };
-                              updated[cat] = parseFloat(e.target.value) || 0;
+                              updated[cat] = v;
                               setHaftung((h) => ({ ...h, eigenbeteiligungByCategory: updated }));
                             }}
+                            min={0}
                             className="w-full pr-8 pl-3 py-2 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue"
                           />
                           <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-brand-muted pointer-events-none">€</span>
@@ -203,7 +203,6 @@ export default function AdminHaftungPage() {
                       label="Betrag"
                       value={kaution[tier].amount}
                       onChange={(v) => setKaution((k) => ({ ...k, [tier]: { ...k[tier], amount: v } }))}
-                      step="10"
                     />
                   </div>
                 </div>
