@@ -144,6 +144,8 @@ export default function BuchungDetailPage() {
   const [customer, setCustomer] = useState<CustomerProfile | null>(null);
   const [agreement, setAgreement] = useState<RentalAgreement | null>(null);
   const [emails, setEmails] = useState<EmailLogEntry[]>([]);
+  const [accessoryMap, setAccessoryMap] = useState<Record<string, string>>({});
+  const [setMap, setSetMap] = useState<Record<string, { name: string; items: { accessory_id: string; qty: number }[] }>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [statusUpdating, setStatusUpdating] = useState(false);
@@ -157,7 +159,11 @@ export default function BuchungDetailPage() {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch(`/api/admin/booking/${bookingId}`);
+      const [res, accRes, setsRes] = await Promise.all([
+        fetch(`/api/admin/booking/${bookingId}`),
+        fetch('/api/admin/accessories'),
+        fetch('/api/sets'),
+      ]);
       if (!res.ok) throw new Error('Nicht gefunden');
       const data = await res.json();
       setBooking(data.booking);
@@ -165,6 +171,18 @@ export default function BuchungDetailPage() {
       setAgreement(data.agreement ?? null);
       setEmails(data.emails ?? []);
       setNewStatus(data.booking.status);
+
+      // Zubehör-Map (ID → Name)
+      const accData = accRes.ok ? await accRes.json() : { accessories: [] };
+      const aMap: Record<string, string> = {};
+      for (const a of accData.accessories ?? []) aMap[a.id] = a.name;
+      setAccessoryMap(aMap);
+
+      // Sets-Map (ID → { name, items })
+      const sData = setsRes.ok ? await setsRes.json() : { sets: [] };
+      const sMap: Record<string, { name: string; items: { accessory_id: string; qty: number }[] }> = {};
+      for (const s of sData.sets ?? []) sMap[s.id] = { name: s.name, items: s.accessory_items ?? [] };
+      setSetMap(sMap);
     } catch {
       setError('Buchung konnte nicht geladen werden.');
     } finally {
@@ -193,6 +211,26 @@ export default function BuchungDetailPage() {
     } finally {
       setStatusUpdating(false);
     }
+  }
+
+  // ─── Zubehör-IDs auflösen (Sets → Einzelteile) ───
+  function resolveAccessoryNames(accIds: string[]): string[] {
+    const result: string[] = [];
+    for (const id of accIds) {
+      const setInfo = setMap[id];
+      if (setInfo) {
+        // Set → Einzelteile auflösen
+        result.push(`── ${setInfo.name} ──`);
+        for (const item of setInfo.items) {
+          const accName = accessoryMap[item.accessory_id] || item.accessory_id;
+          result.push(item.qty > 1 ? `${item.qty}x ${accName}` : accName);
+        }
+      } else {
+        // Einzelnes Zubehör
+        result.push(accessoryMap[id] || id.replace(/-[a-z0-9]{6,}$/, '').split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' '));
+      }
+    }
+    return result;
   }
 
   // ─── Gemeinsame Styles für A4-Dokumente ───
@@ -237,9 +275,18 @@ export default function BuchungDetailPage() {
     const kundenName = booking.customer_name || customer?.full_name || '';
     const produktName = booking.product_name || '';
     const zeitraum = `${fmtDate(booking.rental_from)} – ${fmtDate(booking.rental_to)}`;
-    const accRows = booking.accessories?.map((a, i) => `<tr><td style="width:40px">${i + 1}</td><td>${a}</td><td style="width:50px"></td></tr>`) ?? [];
-    const emptyCount = Math.max(0, 10 - accRows.length);
-    const zubehoerRows = accRows.join('') + Array.from({ length: emptyCount }, (_, i) => `<tr><td style="width:40px">${accRows.length + i + 1}</td><td></td><td style="width:50px"></td></tr>`).join('');
+    const resolvedAcc = resolveAccessoryNames(booking.accessories ?? []);
+    let accNum = 0;
+    const accRows = resolvedAcc.map((name) => {
+      const isSetHeader = name.startsWith('── ');
+      if (isSetHeader) {
+        return `<tr><td style="width:40px"></td><td style="font-weight:700;font-size:9pt;color:#1e3a5f;padding-top:6px">${name}</td><td style="width:50px"></td></tr>`;
+      }
+      accNum++;
+      return `<tr><td style="width:40px">${accNum}</td><td>${name}</td><td style="width:50px"></td></tr>`;
+    });
+    const emptyCount = Math.max(0, 3 - accNum);
+    const zubehoerRows = accRows.join('') + Array.from({ length: emptyCount }, (_, i) => `<tr><td style="width:40px">${accNum + i + 1}</td><td></td><td style="width:50px"></td></tr>`).join('');
     const adresse = booking.shipping_address || (customer ? `${customer.address_street || ''}, ${customer.address_zip || ''} ${customer.address_city || ''}` : '');
 
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Versand-Packliste – ${booking.id}</title><style>${docStyles}</style></head><body>
@@ -277,7 +324,7 @@ export default function BuchungDetailPage() {
 
     const w = window.open('', '_blank', 'width=800,height=1100');
     if (w) { w.document.write(html); w.document.close(); }
-  }, [booking, customer]);
+  }, [booking, customer, accessoryMap, setMap]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const openÜbergabeprotokoll = useCallback(() => {
     if (!booking) return;
@@ -292,11 +339,19 @@ export default function BuchungDetailPage() {
       `<p style="margin-bottom:4px"><strong>Kamera:</strong> ${name} &nbsp;&nbsp;&nbsp;&nbsp; <strong>SN:</strong> ${booking.serial_number || '<span class="line line-short"></span>'}</p>`
     ).join('');
 
-    // Zubehör-Namen auflösen (IDs → Namen aus AccessoriesProvider nicht verfügbar, nutze IDs als Fallback)
-    const accList = Array.isArray(booking.accessories) ? booking.accessories : [];
-    const accRows2 = accList.map((a: string, i: number) => `<tr><td style="width:40px">${i + 1}</td><td>${a}</td><td style="width:50px"></td></tr>`);
-    const emptyCount2 = Math.max(0, 10 - accRows2.length);
-    const zubehoerRows = accRows2.join('') + Array.from({ length: emptyCount2 }, (_, i) => `<tr><td style="width:40px">${accRows2.length + i + 1}</td><td></td><td style="width:50px"></td></tr>`).join('');
+    // Zubehör-Namen auflösen (Sets → Einzelteile)
+    const resolvedAcc2 = resolveAccessoryNames(Array.isArray(booking.accessories) ? booking.accessories : []);
+    let accNum2 = 0;
+    const accRows2 = resolvedAcc2.map((name: string) => {
+      const isSetHeader = name.startsWith('── ');
+      if (isSetHeader) {
+        return `<tr><td style="width:40px"></td><td style="font-weight:700;font-size:9pt;color:#1e3a5f;padding-top:6px">${name}</td><td style="width:50px"></td></tr>`;
+      }
+      accNum2++;
+      return `<tr><td style="width:40px">${accNum2}</td><td>${name}</td><td style="width:50px"></td></tr>`;
+    });
+    const emptyCount2 = Math.max(0, 3 - accNum2);
+    const zubehoerRows = accRows2.join('') + Array.from({ length: emptyCount2 }, (_, i) => `<tr><td style="width:40px">${accNum2 + i + 1}</td><td></td><td style="width:50px"></td></tr>`).join('');
 
     // Lieferart
     const lieferart = booking.delivery_mode === 'abholung' ? 'Abgeholt' : 'Versand';
@@ -349,7 +404,7 @@ export default function BuchungDetailPage() {
 
     const w = window.open('', '_blank', 'width=800,height=1100');
     if (w) { w.document.write(html); w.document.close(); }
-  }, [booking, customer]);
+  }, [booking, customer, accessoryMap, setMap]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) {
     return (
