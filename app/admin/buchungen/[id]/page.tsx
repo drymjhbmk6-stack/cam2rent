@@ -233,37 +233,37 @@ export default function BuchungDetailPage() {
     return result;
   }
 
-  // ─── Gemeinsame Styles für A4-Dokumente ───
+  // ─── Gemeinsame Styles für A4-Dokumente (kompakt, 1 Seite) ───
   const docStyles = `
-    @page { size: A4 portrait; margin: 20mm; }
+    @page { size: A4 portrait; margin: 12mm 15mm; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 11pt; color: #1a1a1a; padding: 20mm 25mm; max-width: none; min-height: 297mm; }
-    h1 { font-size: 20pt; color: #1e3a5f; margin-bottom: 6px; border-bottom: 3px solid #1e3a5f; padding-bottom: 8px; }
-    .subtitle { font-size: 9pt; color: #6b7280; margin-bottom: 20px; }
-    h2 { font-size: 12pt; color: #1e3a5f; margin: 18px 0 8px; }
-    .info-grid { display: grid; grid-template-columns: 150px 1fr; gap: 4px 12px; margin-bottom: 14px; }
-    .info-label { font-size: 10pt; color: #6b7280; }
-    .info-value { font-size: 11pt; font-weight: 600; }
-    table { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
-    th { background: #eef2f7; padding: 5px 8px; text-align: left; font-size: 10pt; color: #4a5568; border: 1px solid #ccc; }
-    td { padding: 4px 8px; border: 1px solid #ccc; }
-    .check-section { margin: 12px 0; }
-    .check-row { display: flex; gap: 28px; margin-bottom: 8px; flex-wrap: wrap; }
-    .check-item { display: flex; align-items: center; gap: 6px; font-size: 10.5pt; }
-    .checkbox { width: 14px; height: 14px; border: 2px solid #4a5568; display: inline-block; border-radius: 2px; flex-shrink: 0; }
-    .line { border-bottom: 1px solid #333; width: 180px; display: inline-block; margin-left: 4px; }
-    .line-short { width: 120px; }
-    .line-long { width: 280px; }
-    .confirm-text { font-size: 10pt; color: #4a5568; line-height: 1.5; margin: 10px 0; }
-    .sig-row { display: flex; justify-content: space-between; margin-top: 36px; }
+    body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 9pt; color: #1a1a1a; padding: 12mm 15mm; max-width: none; }
+    h1 { font-size: 14pt; color: #1e3a5f; margin-bottom: 2px; border-bottom: 2px solid #1e3a5f; padding-bottom: 4px; }
+    .subtitle { font-size: 8pt; color: #6b7280; margin-bottom: 10px; }
+    h2 { font-size: 10pt; color: #1e3a5f; margin: 10px 0 4px; }
+    .info-grid { display: grid; grid-template-columns: 120px 1fr; gap: 1px 8px; margin-bottom: 8px; }
+    .info-label { font-size: 8pt; color: #6b7280; }
+    .info-value { font-size: 9pt; font-weight: 600; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
+    th { background: #eef2f7; padding: 3px 6px; text-align: left; font-size: 8pt; color: #4a5568; border: 1px solid #ccc; }
+    td { padding: 2px 6px; border: 1px solid #ccc; font-size: 8.5pt; }
+    .check-section { margin: 6px 0; }
+    .check-row { display: flex; gap: 20px; margin-bottom: 4px; flex-wrap: wrap; }
+    .check-item { display: flex; align-items: center; gap: 4px; font-size: 8.5pt; }
+    .checkbox { width: 11px; height: 11px; border: 1.5px solid #4a5568; display: inline-block; border-radius: 2px; flex-shrink: 0; }
+    .line { border-bottom: 1px solid #333; width: 160px; display: inline-block; margin-left: 4px; }
+    .line-short { width: 100px; }
+    .line-long { width: 240px; }
+    .confirm-text { font-size: 8pt; color: #4a5568; line-height: 1.4; margin: 4px 0; }
+    .sig-row { display: flex; justify-content: space-between; margin-top: 20px; }
     .sig-block { text-align: center; }
-    .sig-line { border-top: 1px solid #333; width: 200px; margin-bottom: 4px; padding-top: 4px; }
-    .sig-label { font-size: 9pt; color: #6b7280; }
-    .toolbar { position: fixed; top: 0; left: 0; right: 0; background: #111827; padding: 12px 24px; display: flex; gap: 12px; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,.3); }
-    .toolbar button { padding: 8px 20px; border-radius: 8px; font-size: 13px; font-weight: 600; border: none; cursor: pointer; }
+    .sig-line { border-top: 1px solid #333; width: 180px; margin-bottom: 2px; padding-top: 2px; }
+    .sig-label { font-size: 7.5pt; color: #6b7280; }
+    .toolbar { position: fixed; top: 0; left: 0; right: 0; background: #111827; padding: 8px 24px; display: flex; gap: 12px; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,.3); }
+    .toolbar button { padding: 6px 16px; border-radius: 8px; font-size: 12px; font-weight: 600; border: none; cursor: pointer; }
     .btn-pdf { background: #06b6d4; color: #fff; }
     .btn-close { background: #374151; color: #e5e7eb; }
-    .toolbar-spacer { height: 52px; }
+    .toolbar-spacer { height: 40px; }
     @media print { .toolbar, .toolbar-spacer { display: none !important; } body { padding: 0; } }`;
 
   const toolbarHtml = `<div class="toolbar"><button class="btn-pdf" onclick="window.print()">Als PDF speichern / Drucken</button><button class="btn-close" onclick="window.close()">Schließen</button></div><div class="toolbar-spacer"></div>`;
@@ -285,40 +285,38 @@ export default function BuchungDetailPage() {
       accNum++;
       return `<tr><td style="width:40px">${accNum}</td><td>${name}</td><td style="width:50px"></td></tr>`;
     });
-    const emptyCount = Math.max(0, 3 - accNum);
+    const emptyCount = accNum > 0 ? 0 : 2;
     const zubehoerRows = accRows.join('') + Array.from({ length: emptyCount }, (_, i) => `<tr><td style="width:40px">${accNum + i + 1}</td><td></td><td style="width:50px"></td></tr>`).join('');
     const adresse = booking.shipping_address || (customer ? `${customer.address_street || ''}, ${customer.address_zip || ''} ${customer.address_city || ''}` : '');
 
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Versand-Packliste – ${booking.id}</title><style>${docStyles}</style></head><body>
   ${toolbarHtml}
   <h1>Versand-Packliste</h1>
-  <div class="subtitle">cam2rent – internes Versanddokument</div>
-  <div class="info-grid">
-    <span class="info-label">Buchungsnummer:</span><span class="info-value">${booking.id}</span>
-    <span class="info-label">Kundenname:</span><span class="info-value">${kundenName}</span>
-    <span class="info-label">Mietzeitraum:</span><span class="info-value">${zeitraum}</span>
-    <span class="info-label">Versandart:</span><span class="info-value">${booking.shipping_method === 'express' ? 'Express-Versand' : 'Standard-Versand'}</span>
-    <span class="info-label">Lieferadresse:</span><span class="info-value">${adresse}</span>
+  <div class="subtitle">cam2rent · ${booking.id} · ${dateStr}</div>
+  <div style="display:flex;gap:24px;margin-bottom:8px">
+    <div class="info-grid" style="flex:1">
+      <span class="info-label">Kunde:</span><span class="info-value">${kundenName}</span>
+      <span class="info-label">Zeitraum:</span><span class="info-value">${zeitraum}</span>
+      <span class="info-label">Versandart:</span><span class="info-value">${booking.shipping_method === 'express' ? 'Express' : 'Standard'}</span>
+    </div>
+    <div class="info-grid" style="flex:1">
+      <span class="info-label">Adresse:</span><span class="info-value">${adresse}</span>
+    </div>
   </div>
-  <h2>1. Versanddatum</h2>
-  <p style="margin-bottom:12px">Datum: <strong>${dateStr}</strong></p>
-  <h2>2. Versandgegenstand</h2>
-  <div class="info-grid" style="margin-bottom:4px"><span class="info-label">Kamera / Gerät:</span><span class="info-value">${produktName}</span></div>
-  <p style="margin-bottom:8px">Seriennummer: <strong>${booking.serial_number || '<span class="line line-short"></span>'}</strong></p>
-  <p style="margin-bottom:4px;font-weight:600">Zubehör:</p>
-  <table><thead><tr><th style="width:40px">Nr.</th><th>Bezeichnung</th><th style="width:50px">OK</th></tr></thead><tbody>${zubehoerRows}</tbody></table>
-  <h2>3. Zustand bei Verpackung</h2>
+  <h2>1. Versandgegenstand</h2>
+  <div style="display:flex;gap:16px;margin-bottom:4px">
+    <span><strong>Kamera:</strong> ${produktName}</span>
+    <span><strong>SN:</strong> ${booking.serial_number || '<span class="line line-short"></span>'}</span>
+  </div>
+  <p style="margin:4px 0 2px;font-weight:600;font-size:8.5pt">Zubehör:</p>
+  <table><thead><tr><th style="width:30px">Nr.</th><th>Bezeichnung</th><th style="width:40px">OK</th></tr></thead><tbody>${zubehoerRows}</tbody></table>
+  <h2>2. Zustand & Verpackung</h2>
   <div class="check-section">
-    <div class="check-row"><div class="check-item"><span class="checkbox"></span> Gerät funktionsfähig getestet</div><div class="check-item"><span class="checkbox"></span> Keine sichtbaren Schäden</div></div>
-    <div class="check-row"><div class="check-item"><span class="checkbox"></span> Sonstiges: <span class="line"></span></div></div>
+    <div class="check-row"><div class="check-item"><span class="checkbox"></span> Funktionsfähig getestet</div><div class="check-item"><span class="checkbox"></span> Keine Schäden</div><div class="check-item"><span class="checkbox"></span> Sicher verpackt</div><div class="check-item"><span class="checkbox"></span> Zubehör vollständig</div></div>
+    <div class="check-row"><div class="check-item"><span class="checkbox"></span> Inhalt dokumentiert (Foto/Video)</div><div class="check-item"><span class="checkbox"></span> Paketnr.: <span class="line line-short"></span></div><div class="check-item"><span class="checkbox"></span> Sonstiges: <span class="line"></span></div></div>
   </div>
-  <h2>4. Verpackungskontrolle</h2>
-  <div class="check-section">
-    <div class="check-row"><div class="check-item"><span class="checkbox"></span> Gerät sicher verpackt</div><div class="check-item"><span class="checkbox"></span> Zubehör vollständig</div></div>
-    <div class="check-row"><div class="check-item"><span class="checkbox"></span> Paketinhalt dokumentiert (Foto/Video)</div><div class="check-item"><span class="checkbox"></span> Paketnummer: <span class="line line-short"></span></div></div>
-  </div>
-  <h2>5. Bestätigung</h2>
-  <p class="confirm-text">Der Unterzeichner bestätigt die vollständige und ordnungsgemäße Verpackung des oben genannten Equipments.<br>Die Kontrolle wurde durch eine zweite Person gegengezeichnet.</p>
+  <h2>3. Bestätigung</h2>
+  <p class="confirm-text">Vollständige und ordnungsgemäße Verpackung bestätigt. Kontrolle durch zweite Person gegengezeichnet.</p>
   <div class="sig-row"><div class="sig-block"><div class="sig-line"></div><div class="sig-label">(Packer, Ort/Datum)</div></div><div class="sig-block"><div class="sig-line"></div><div class="sig-label">(Kontrolleur, Ort/Datum)</div></div></div>
 </body></html>`;
 
@@ -336,7 +334,7 @@ export default function BuchungDetailPage() {
     // Kameras mit Seriennummern — Produktnamen aufsplitten (kommagetrennt)
     const productNames = (booking.product_name || '').split(',').map((n: string) => n.trim()).filter(Boolean);
     const kameraRows = productNames.map((name: string) =>
-      `<p style="margin-bottom:4px"><strong>Kamera:</strong> ${name} &nbsp;&nbsp;&nbsp;&nbsp; <strong>SN:</strong> ${booking.serial_number || '<span class="line line-short"></span>'}</p>`
+      `<p style="margin-bottom:2px"><strong>Kamera:</strong> ${name} &nbsp;&nbsp; <strong>SN:</strong> ${booking.serial_number || '<span class="line line-short"></span>'}</p>`
     ).join('');
 
     // Zubehör-Namen auflösen (Sets → Einzelteile)
@@ -350,7 +348,7 @@ export default function BuchungDetailPage() {
       accNum2++;
       return `<tr><td style="width:40px">${accNum2}</td><td>${name}</td><td style="width:50px"></td></tr>`;
     });
-    const emptyCount2 = Math.max(0, 3 - accNum2);
+    const emptyCount2 = accNum2 > 0 ? 0 : 2;
     const zubehoerRows = accRows2.join('') + Array.from({ length: emptyCount2 }, (_, i) => `<tr><td style="width:40px">${accNum2 + i + 1}</td><td></td><td style="width:50px"></td></tr>`).join('');
 
     // Lieferart
@@ -358,47 +356,41 @@ export default function BuchungDetailPage() {
 
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Übergabeprotokoll – ${booking.id}</title><style>${docStyles}</style></head><body>
   ${toolbarHtml}
-  <h1>Übergabeprotokoll – Kameraequipment</h1>
-  <div class="subtitle">cam2rent – Buchung ${booking.id} · ${lieferart}</div>
+  <h1>Übergabeprotokoll</h1>
+  <div class="subtitle">cam2rent · ${booking.id} · ${lieferart}</div>
 
-  <div style="margin-bottom:16px">
-    <p style="font-weight:700;margin-bottom:2px">Vermieter (Cam2Rent):</p>
-    <p>Name: ${BUSINESS.owner}</p>
-    <p>Adresse: ${BUSINESS.fullAddress}</p>
-  </div>
-
-  <div style="margin-bottom:16px">
-    <p style="font-weight:700;color:#1e3a5f;margin-bottom:4px">Mieter:</p>
-    <div class="info-grid">
-      <span class="info-label">Name:</span><span class="info-value">${kundenName || '<span class="line-long" style="display:inline-block;border-bottom:1px solid #333;width:250px"></span>'}</span>
-      <span class="info-label">Adresse:</span><span class="info-value">${kundenAdresse || '<span class="line-long" style="display:inline-block;border-bottom:1px solid #333;width:250px"></span>'}</span>
-      <span class="info-label">Ausweisnummer:</span><span class="info-value"><span class="line" style="width:220px"></span></span>
-      <span class="info-label">Telefon / E-Mail:</span><span class="info-value">${kundenEmail || '<span class="line" style="width:220px"></span>'}</span>
+  <div style="display:flex;gap:20px;margin-bottom:8px">
+    <div style="flex:1">
+      <p style="font-weight:700;font-size:8pt;color:#1e3a5f;margin-bottom:2px">Vermieter</p>
+      <p style="font-size:8.5pt">${BUSINESS.owner} · ${BUSINESS.fullAddress}</p>
+    </div>
+    <div style="flex:1">
+      <p style="font-weight:700;font-size:8pt;color:#1e3a5f;margin-bottom:2px">Mieter</p>
+      <div class="info-grid" style="grid-template-columns:90px 1fr;margin-bottom:0">
+        <span class="info-label">Name:</span><span class="info-value">${kundenName || '<span style="display:inline-block;border-bottom:1px solid #333;width:140px"></span>'}</span>
+        <span class="info-label">Adresse:</span><span class="info-value">${kundenAdresse || '<span style="display:inline-block;border-bottom:1px solid #333;width:140px"></span>'}</span>
+        <span class="info-label">Ausweis-Nr.:</span><span class="info-value"><span class="line" style="width:140px"></span></span>
+        <span class="info-label">Tel. / E-Mail:</span><span class="info-value">${kundenEmail || '<span class="line" style="width:140px"></span>'}</span>
+      </div>
     </div>
   </div>
 
-  <h2>1. Übergabedatum & Ort</h2>
-  <p style="margin-bottom:4px">Datum: <span class="line line-short"></span> &nbsp;&nbsp; Uhrzeit: <span class="line line-short"></span></p>
-  <p style="margin-bottom:14px">Ort: <span class="line"></span></p>
+  <h2>1. Übergabe</h2>
+  <p style="margin-bottom:6px">Datum: <span class="line line-short"></span> &nbsp; Uhrzeit: <span class="line line-short"></span> &nbsp; Ort: <span class="line"></span></p>
 
   <h2>2. Mietgegenstand</h2>
   ${kameraRows}
-  <p style="margin-bottom:6px;margin-top:12px;font-weight:600">Zubehör:</p>
-  <table><thead><tr><th style="width:40px">Nr.</th><th>Bezeichnung</th><th style="width:50px">OK</th></tr></thead><tbody>${zubehoerRows}</tbody></table>
+  <p style="margin:4px 0 2px;font-weight:600;font-size:8.5pt">Zubehör:</p>
+  <table><thead><tr><th style="width:30px">Nr.</th><th>Bezeichnung</th><th style="width:40px">OK</th></tr></thead><tbody>${zubehoerRows}</tbody></table>
 
   <h2>3. Zustand bei Übergabe</h2>
   <div class="check-section">
-    <div class="check-row"><div class="check-item"><span class="checkbox"></span> Gerät funktionsfähig getestet</div></div>
-    <div class="check-row"><div class="check-item"><span class="checkbox"></span> Keine sichtbaren Schäden</div></div>
-    <div class="check-row"><div class="check-item"><span class="checkbox"></span> Sonstiges: <span class="line"></span></div></div>
+    <div class="check-row"><div class="check-item"><span class="checkbox"></span> Funktionsfähig getestet</div><div class="check-item"><span class="checkbox"></span> Keine sichtbaren Schäden</div><div class="check-item"><span class="checkbox"></span> Fotos/Videos erstellt</div><div class="check-item"><span class="checkbox"></span> Sonstiges: <span class="line line-short"></span></div></div>
   </div>
-  <p style="margin-top:8px">Fotos / Videos zur Dokumentation erstellt:</p>
-  <div class="check-row" style="margin-top:6px"><div class="check-item"><span class="checkbox"></span> Ja</div><div class="check-item"><span class="checkbox"></span> Nein</div></div>
 
-  <h2>4. Bestätigung der Übergabe</h2>
-  <p class="confirm-text">Der Mieter bestätigt den ordnungsgemäßen Erhalt des oben genannten Equipments in beschriebenem Zustand.<br>Etwaige Schäden oder fehlendes Zubehör sind auf diesem Protokoll vermerkt.</p>
-  <p class="confirm-text" style="font-size:9pt">Mietzeitraum: <strong>${zeitraum}</strong> &nbsp;|&nbsp; Buchung: <strong>${booking.id}</strong></p>
-
+  <h2>4. Bestätigung</h2>
+  <p class="confirm-text">Der Mieter bestätigt den ordnungsgemäßen Erhalt des Equipments in beschriebenem Zustand. Schäden oder fehlendes Zubehör sind vermerkt.</p>
+  <p class="confirm-text">Mietzeitraum: <strong>${zeitraum}</strong> · Buchung: <strong>${booking.id}</strong></p>
   <div class="sig-row"><div class="sig-block"><div class="sig-line"></div><div class="sig-label">(Vermieter, Ort/Datum)</div></div><div class="sig-block"><div class="sig-line"></div><div class="sig-label">(Mieter, Ort/Datum)</div></div></div>
 </body></html>`;
 
