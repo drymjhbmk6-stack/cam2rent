@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { BUSINESS } from '@/lib/business-config';
 
 export const metadata: Metadata = {
   title: 'AGB',
@@ -18,8 +19,8 @@ export default function AGBPage() {
         <div className="prose prose-sm dark:prose-invert max-w-none font-body text-brand-steel dark:text-gray-300 [&_h2]:font-heading [&_h2]:font-semibold [&_h2]:text-lg [&_h2]:text-brand-black [&_h2]:dark:text-white [&_h2]:mt-10 [&_h2]:mb-4 [&_p]:mb-3 [&_ul]:mb-3 [&_ul]:ml-5 [&_li]:mb-1">
 
           <h2>§ 1 Geltungsbereich, Vertragspartner</h2>
-          <p>(1) Diese Allgemeinen Geschäftsbedingungen (AGB) gelten für alle Mietverträge über Kamera- und Zubehörprodukte, die Verbraucher im Sinne des § 13 BGB über die Website www.cam2rent.de mit dem Vermieter schließen.</p>
-          <p>(2) Vermieter ist: cam2rent – Lennart Schickel (Einzelunternehmen), Heimsbrunner Str. 12, 12349 Berlin, Telefon 0162 / 8367477, E-Mail kontakt@cam2rent.de.</p>
+          <p>(1) Diese Allgemeinen Geschäftsbedingungen (AGB) gelten für alle Mietverträge über Kamera- und Zubehörprodukte, die Verbraucher im Sinne des § 13 BGB über die Website www.{BUSINESS.domain} mit dem Vermieter schließen.</p>
+          <p>(2) Vermieter ist: cam2rent – {BUSINESS.owner} (Einzelunternehmen), {BUSINESS.street}, {BUSINESS.zip} {BUSINESS.city}, Telefon {BUSINESS.phone}, E-Mail {BUSINESS.emailKontakt}.</p>
           <p>(3) Abweichende oder ergänzende Bedingungen des Mieters werden nicht Vertragsbestandteil, es sei denn, der Vermieter stimmt ihrer Geltung ausdrücklich in Textform zu.</p>
           <p>(4) Der Vermieter richtet sich ausschließlich an Verbraucher. Buchungen zu gewerblichen Zwecken bedürfen der vorherigen ausdrücklichen Zustimmung des Vermieters.</p>
 
@@ -64,7 +65,7 @@ export default function AGBPage() {
           <p>(2) Untersagt sind insbesondere: a) die Nutzung entgegen Herstellerangaben oder außerhalb der angegebenen Einsatzbedingungen (z. B. Überschreiten von Tauchtiefen, Temperatur- oder Feuchtigkeitsgrenzen), b) das Öffnen, Modifizieren oder Reparieren der Mietsache sowie das Aufspielen nicht vom Hersteller freigegebener Firmware, c) die Weitergabe, Untervermietung, Verleihung oder sonstige Überlassung an Dritte ohne vorherige schriftliche Zustimmung des Vermieters, d) die Nutzung zu gewerblichen Zwecken ohne vorherige schriftliche Zustimmung des Vermieters, e) die Nutzung im Rahmen rechtswidriger Handlungen oder unter Verstoß gegen Rechte Dritter (insbesondere Persönlichkeitsrechte).</p>
           <p>(3) Der Mieter schützt die Mietsache vor Verlust, Diebstahl, Witterungseinflüssen außerhalb der Herstellerspezifikationen und unberechtigtem Zugriff Dritter. Die Mietsache ist insbesondere nicht unbeaufsichtigt an öffentlich zugänglichen Orten zurückzulassen.</p>
           <p>(4) Zuwiderhandlungen gegen Absatz 2 berechtigen den Vermieter zur fristlosen Kündigung des Mietvertrags und zur sofortigen Rückforderung der Mietsache. Schadensersatzansprüche bleiben unberührt.</p>
-          <p>(5) Schäden, Verlust oder Diebstahl sind dem Vermieter unverzüglich, spätestens innerhalb von 48 Stunden nach Kenntnis, per E-Mail an kontakt@cam2rent.de zu melden. Bei Diebstahl ist zusätzlich unverzüglich Strafanzeige bei der Polizei zu erstatten; eine Kopie der Anzeige ist dem Vermieter binnen 7 Tagen vorzulegen.</p>
+          <p>(5) Schäden, Verlust oder Diebstahl sind dem Vermieter unverzüglich, spätestens innerhalb von 48 Stunden nach Kenntnis, per E-Mail an {BUSINESS.emailKontakt} zu melden. Bei Diebstahl ist zusätzlich unverzüglich Strafanzeige bei der Polizei zu erstatten; eine Kopie der Anzeige ist dem Vermieter binnen 7 Tagen vorzulegen.</p>
 
           <h2 id="haftung">§ 9 Haftung des Mieters, Schadenspauschale</h2>
           <p>(1) Der Mieter haftet nach den gesetzlichen Vorschriften für Schäden, Verlust, Zerstörung oder Diebstahl der Mietsache während der Mietdauer, soweit er diese zu vertreten hat. Maßgeblich ist der Zeitraum zwischen Übergabe und vertragsgemäßer Rückgabe.</p>
@@ -100,7 +101,7 @@ export default function AGBPage() {
           </ul>
           <p>(2) Dem Mieter bleibt ausdrücklich der Nachweis vorbehalten, dass dem Vermieter kein oder ein wesentlich geringerer Schaden entstanden ist. Dem Vermieter bleibt der Nachweis eines höheren Schadens vorbehalten.</p>
           <p>(3) Versandkosten werden bei Stornierung vor Versand vollständig erstattet.</p>
-          <p>(4) Die Stornierung erfolgt per E-Mail an kontakt@cam2rent.de. Maßgeblich ist der Eingang beim Vermieter.</p>
+          <p>(4) Die Stornierung erfolgt per E-Mail an {BUSINESS.emailKontakt}. Maßgeblich ist der Eingang beim Vermieter.</p>
 
           <h2>§ 14 Widerrufsrecht</h2>
           <p>Der Mieter als Verbraucher hat ein gesetzliches Widerrufsrecht nach §§ 355 ff. BGB. Einzelheiten, Fristen und Rechtsfolgen ergeben sich aus der separat zur Verfügung gestellten Widerrufsbelehrung, die Bestandteil des Vertrags ist und zusammen mit der Buchungsbestätigung in Textform übermittelt wird.</p>
@@ -117,7 +118,7 @@ export default function AGBPage() {
           <h2>§ 17 Datenschutz</h2>
           <p>(1) Der Vermieter verarbeitet personenbezogene Daten des Mieters zur Vertragsdurchführung (Art. 6 Abs. 1 lit. b DSGVO), zur Betrugsprävention (Art. 6 Abs. 1 lit. f DSGVO) und zur Erfüllung gesetzlicher Aufbewahrungspflichten (Art. 6 Abs. 1 lit. c DSGVO i. V. m. § 147 AO).</p>
           <p>(2) Empfänger personenbezogener Daten sind insbesondere der Zahlungsdienstleister Stripe, der E-Mail-Dienstleister Resend sowie der Versanddienstleister Sendcloud.</p>
-          <p>(3) Einzelheiten zu Art, Umfang, Zweck, Speicherdauer und Betroffenenrechten ergeben sich aus der Datenschutzerklärung, abrufbar unter www.cam2rent.de/datenschutz.</p>
+          <p>(3) Einzelheiten zu Art, Umfang, Zweck, Speicherdauer und Betroffenenrechten ergeben sich aus der Datenschutzerklärung, abrufbar unter www.{BUSINESS.domain}/datenschutz.</p>
 
           <h2>§ 18 Elektronischer Vertragsschluss, Textform</h2>
           <p>(1) Der Vertrag wird elektronisch geschlossen. Die Bestätigung erfolgt per automatisierter E-Mail an die vom Mieter angegebene Adresse.</p>
@@ -136,7 +137,7 @@ export default function AGBPage() {
           <p>(4) Mündliche Nebenabreden bestehen nicht.</p>
 
           <div className="mt-12 pt-8 border-t border-brand-border text-center">
-            <p className="text-sm text-brand-muted dark:text-gray-500">cam2rent – Lennart Schickel – Heimsbrunner Str. 12, 12349 Berlin – kontakt@cam2rent.de</p>
+            <p className="text-sm text-brand-muted dark:text-gray-500">cam2rent – {BUSINESS.owner} – {BUSINESS.street}, {BUSINESS.zip} {BUSINESS.city} – {BUSINESS.emailKontakt}</p>
           </div>
         </div>
       </div>

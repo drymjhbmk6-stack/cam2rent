@@ -1,3 +1,5 @@
+import { BUSINESS } from '@/lib/business-config';
+
 export const dynamic = 'force-static';
 
 export const metadata = {
@@ -44,10 +46,10 @@ export default function WartungPage() {
         <p className="mt-8 text-xs font-body text-brand-muted dark:text-gray-500">
           Bei dringenden Fragen:{' '}
           <a
-            href="mailto:kontakt@cam2rent.de"
+            href={`mailto:${BUSINESS.emailKontakt}`}
             className="text-accent-blue hover:underline"
           >
-            kontakt@cam2rent.de
+            {BUSINESS.emailKontakt}
           </a>
         </p>
 

@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import { BUSINESS } from '@/lib/business-config';
 
 interface BookingDetail {
   id: string;
@@ -307,8 +308,8 @@ export default function BuchungDetailPage() {
 
   <div style="margin-bottom:16px">
     <p style="font-weight:700;margin-bottom:2px">Vermieter (Cam2Rent):</p>
-    <p>Name: Lennart Schickel</p>
-    <p>Adresse: Heimsbrunner Str. 12, 12349 Berlin</p>
+    <p>Name: ${BUSINESS.owner}</p>
+    <p>Adresse: ${BUSINESS.fullAddress}</p>
   </div>
 
   <div style="margin-bottom:16px">

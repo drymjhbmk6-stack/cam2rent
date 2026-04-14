@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { BUSINESS } from '@/lib/business-config';
 
 export const metadata: Metadata = {
   title: 'Stornierungs- & Rückerstattungsbedingungen',
@@ -43,8 +44,8 @@ export default function StornierungPage() {
               </p>
               <p className="font-body text-brand-steel dark:text-gray-300 text-sm">
                 Stornogebühr: 50 % des Mietpreises. Die Stornierung muss schriftlich per E-Mail an{' '}
-                <a href="mailto:kontakt@cam2rent.de" className="text-accent-blue hover:underline">
-                  kontakt@cam2rent.de
+                <a href={`mailto:${BUSINESS.emailKontakt}`} className="text-accent-blue hover:underline">
+                  {BUSINESS.emailKontakt}
                 </a>{' '}
                 erfolgen.
               </p>
@@ -128,10 +129,10 @@ export default function StornierungPage() {
           </h2>
           <p className="font-body text-brand-steel dark:text-gray-300">
             Bei Fragen zu Stornierungen oder Rückerstattungen wenden Sie sich bitte an uns:{' '}
-            <a href="mailto:kontakt@cam2rent.de" className="text-accent-blue hover:underline">
-              kontakt@cam2rent.de
+            <a href={`mailto:${BUSINESS.emailKontakt}`} className="text-accent-blue hover:underline">
+              {BUSINESS.emailKontakt}
             </a>{' '}
-            oder telefonisch unter 0162 / 8367477.
+            oder telefonisch unter {BUSINESS.phone}.
           </p>
         </section>
       </div>

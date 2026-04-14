@@ -22,6 +22,11 @@ export interface BusinessConfig {
   url: string;
   instagram: string;
   pickupLocation: string;
+  iban: string;
+  ibanFormatted: string;
+  bic: string;
+  bankName: string;
+  paypalMe: string;
 }
 
 const DEFAULTS: BusinessConfig = {
@@ -42,6 +47,11 @@ const DEFAULTS: BusinessConfig = {
   url: 'https://cam2rent.de',
   instagram: 'https://instagram.com/cam2rent',
   pickupLocation: 'Alt-Buckow, Berlin',
+  iban: 'DE77202208000027784143',
+  ibanFormatted: 'DE77 2022 0800 0027 7841 43',
+  bic: 'SXPYDEHHXXX',
+  bankName: 'Vivid Money',
+  paypalMe: 'https://paypal.me/Cam2Rent',
 };
 
 // Laufzeit-Cache für DB-Werte (wird beim ersten Aufruf von loadBusinessConfig gefüllt)
@@ -66,6 +76,11 @@ export const BUSINESS = new Proxy({} as BusinessConfig & {
   addressLine: string;
   whatsappUrl: string;
   testUrl: string;
+  paypalMeUrl: (amount?: number) => string;
+  tax: {
+    hinweis: string;
+    hinweisKurz: string;
+  };
   shipping: {
     standardLabel: string;
     expressLabel: string;
@@ -87,6 +102,11 @@ export const BUSINESS = new Proxy({} as BusinessConfig & {
       case 'addressLine': return `${c.name} · ${c.owner} · ${c.street} · ${c.zip} ${c.city}`;
       case 'whatsappUrl': return `https://wa.me/${c.phoneRaw}`;
       case 'testUrl': return `https://test.${c.domain}`;
+      case 'paypalMeUrl': return (amount?: number) => amount ? `${c.paypalMe}/${amount.toFixed(2)}` : c.paypalMe;
+      case 'tax': return {
+        hinweis: 'Gemäß §19 UStG wird keine Umsatzsteuer berechnet (Kleinunternehmerregelung).',
+        hinweisKurz: 'Gem. §19 UStG keine MwSt.',
+      };
       case 'shipping': return {
         standardLabel: 'Standard-Versand (3\u20135 Werktage)',
         expressLabel: 'Express-Versand (1\u20132 Werktage)',

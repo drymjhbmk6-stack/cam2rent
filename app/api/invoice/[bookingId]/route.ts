@@ -4,6 +4,7 @@ import { createElement, type ReactElement } from 'react';
 import { createServiceClient } from '@/lib/supabase';
 import { InvoicePDF, type InvoiceData } from '@/lib/invoice-pdf';
 import { ensureBusinessConfig } from '@/lib/load-business-config';
+import { BUSINESS } from '@/lib/business-config';
 import QRCode from 'qrcode';
 
 export async function GET(
@@ -97,9 +98,9 @@ export async function GET(
       '002',           // Version
       '1',             // Character set (UTF-8)
       'SCT',           // Identification
-      'SXPYDEHHXXX',   // BIC
-      'Lennart Schickel', // Empfaenger
-      'DE77202208000027784143', // IBAN (ohne Leerzeichen)
+      BUSINESS.bic,    // BIC
+      BUSINESS.owner,  // Empfaenger
+      BUSINESS.iban,   // IBAN (ohne Leerzeichen)
       `EUR${data.priceTotal.toFixed(2)}`, // Betrag
       '',              // Purpose Code
       '',              // Structured Reference

@@ -6,6 +6,20 @@ import { calcHaftungTieredPrice } from '@/lib/price-config';
 import SignatureStep, { type SignatureResult } from '@/components/booking/SignatureStep';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 
+// ─── Business-Daten (zentral definiert in lib/business-config.ts) ────────────
+const BIZ = {
+  owner: 'Lennart Schickel',
+  street: 'Heimsbrunner Str. 12',
+  zip: '12349',
+  city: 'Berlin',
+  email: 'buchung@cam2rent.de',
+  domain: 'cam2rent.de',
+  iban: 'DE77 2022 0800 0027 7841 43',
+  bic: 'SXPYDEHHXXX',
+  paypalMe: 'https://paypal.me/Cam2Rent',
+  taxHinweis: 'Gemäß §19 UStG wird keine Umsatzsteuer berechnet.',
+} as const;
+
 /* ─── Types ─────────────────────────────────────────────────────────────────── */
 
 interface DynProduct {
@@ -486,7 +500,7 @@ export default function ManualBookingPage() {
   <div class="toolbar-spacer"></div>
   <div class="header">
     <div><div class="brand">cam2rent</div><div class="brand-sub">Action-Cam Verleih</div></div>
-    <div class="sender">Lennart Schickel<br>Heimsbrunner Str. 12<br>12349 Berlin<br>buchung@cam2rent.de<br>cam2rent.de</div>
+    <div class="sender">${BIZ.owner}<br>${BIZ.street}<br>${BIZ.zip} ${BIZ.city}<br>${BIZ.email}<br>${BIZ.domain}</div>
   </div>
   <div class="meta">
     <div><div class="meta-title">Rechnung</div><div class="meta-sub">Buchungsbestätigung & Beleg</div></div>
@@ -515,9 +529,9 @@ export default function ManualBookingPage() {
   <table style="margin-top:4px"><tbody><tr class="total-row"><td>Gesamtbetrag</td><td>${fmtP(total)}</td></tr></tbody></table>
   ${(depositMode === 'kaution') && deposit > 0 ? `<div style="font-size:8pt;color:#6b7280;margin-top:6px;text-align:right">* Enthält Kaution ${fmtP(deposit)} – wird nach Rückgabe erstattet</div>` : ''}
   ${remark ? `<div class="note" style="margin-top:16px"><strong>Bemerkung:</strong><br>${remark.replace(/\n/g, '<br>')}</div>` : ''}
-  <div class="note"${remark ? ' style="margin-top:8px"' : ''}>Gemäß §19 UStG wird keine Umsatzsteuer berechnet.</div>
-  ${paymentStatus === 'unpaid' ? `<div class="note" style="margin-top:12px;border:1px solid #d97706;background:#fffbeb"><strong style="color:#d97706">Überweisungsdaten:</strong><br>Kontoinhaber: Lennart Schickel<br>IBAN: DE77 2022 0800 0027 7841 43<br>BIC: SXPYDEHHXXX<br>Verwendungszweck: ${customerName || 'Kunde'} – Kameraleihe</div>` : ''}
-  <div class="footer"><span>cam2rent · Lennart Schickel · Heimsbrunner Str. 12 · 12349 Berlin</span><span>cam2rent.de · buchung@cam2rent.de</span></div>
+  <div class="note"${remark ? ' style="margin-top:8px"' : ''}>${BIZ.taxHinweis}</div>
+  ${paymentStatus === 'unpaid' ? `<div class="note" style="margin-top:12px;border:1px solid #d97706;background:#fffbeb"><strong style="color:#d97706">Überweisungsdaten:</strong><br>Kontoinhaber: ${BIZ.owner}<br>IBAN: ${BIZ.iban}<br>BIC: ${BIZ.bic}<br>Verwendungszweck: ${customerName || 'Kunde'} – Kameraleihe</div>` : ''}
+  <div class="footer"><span>cam2rent · ${BIZ.owner} · ${BIZ.street} · ${BIZ.zip} ${BIZ.city}</span><span>${BIZ.domain} · ${BIZ.email}</span></div>
 </body></html>`;
 
     const w = window.open('', '_blank', 'width=800,height=1100');
@@ -586,7 +600,7 @@ export default function ManualBookingPage() {
       }
 
       const bankInfo = paymentStatus === 'unpaid'
-        ? `Überweisung ausstehend | Kontoinhaber: Lennart Schickel | IBAN: DE77 2022 0800 0027 7841 43 | BIC: SXPYDEHHXXX | Verwendungszweck: ${customerName.trim() || 'Kunde'} – Kameraleihe`
+        ? `Überweisung ausstehend | Kontoinhaber: ${BIZ.owner} | IBAN: ${BIZ.iban} | BIC: ${BIZ.bic} | Verwendungszweck: ${customerName.trim() || 'Kunde'} – Kameraleihe`
         : '';
 
       const res = await fetch('/api/admin/manual-booking', {
@@ -1110,15 +1124,15 @@ export default function ManualBookingPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm" style={{ color: '#e2e8f0' }}>
                 <div>
                   <span className="text-xs" style={{ color: '#64748b' }}>Kontoinhaber</span>
-                  <p>Lennart Schickel</p>
+                  <p>{BIZ.owner}</p>
                 </div>
                 <div>
                   <span className="text-xs" style={{ color: '#64748b' }}>IBAN</span>
-                  <p style={{ fontFamily: 'monospace', letterSpacing: 1 }}>DE77 2022 0800 0027 7841 43</p>
+                  <p style={{ fontFamily: 'monospace', letterSpacing: 1 }}>{BIZ.iban}</p>
                 </div>
                 <div>
                   <span className="text-xs" style={{ color: '#64748b' }}>BIC</span>
-                  <p style={{ fontFamily: 'monospace' }}>SXPYDEHHXXX</p>
+                  <p style={{ fontFamily: 'monospace' }}>{BIZ.bic}</p>
                 </div>
                 <div>
                   <span className="text-xs" style={{ color: '#64748b' }}>Verwendungszweck</span>
@@ -1255,9 +1269,9 @@ export default function ManualBookingPage() {
           <div style={{ background: '#0f172a', borderRadius: 8, padding: 16, marginBottom: 16 }}>
             <h4 style={{ fontSize: 13, fontWeight: 700, color: '#e2e8f0', marginBottom: 10 }}>Banküberweisung</h4>
             <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '6px 12px', fontSize: 13 }}>
-              <span style={{ color: '#64748b' }}>Empfänger:</span><span style={{ color: '#e2e8f0' }}>Lennart Schickel</span>
-              <span style={{ color: '#64748b' }}>IBAN:</span><span style={{ color: '#e2e8f0', fontFamily: 'monospace' }}>DE77 2022 0800 0027 7841 43</span>
-              <span style={{ color: '#64748b' }}>BIC:</span><span style={{ color: '#e2e8f0', fontFamily: 'monospace' }}>SXPYDEHHXXX</span>
+              <span style={{ color: '#64748b' }}>Empfänger:</span><span style={{ color: '#e2e8f0' }}>{BIZ.owner}</span>
+              <span style={{ color: '#64748b' }}>IBAN:</span><span style={{ color: '#e2e8f0', fontFamily: 'monospace' }}>{BIZ.iban}</span>
+              <span style={{ color: '#64748b' }}>BIC:</span><span style={{ color: '#e2e8f0', fontFamily: 'monospace' }}>{BIZ.bic}</span>
               <span style={{ color: '#64748b' }}>Betrag:</span><span style={{ color: '#22d3ee', fontWeight: 700 }}>{total.toFixed(2).replace('.', ',')} €</span>
               <span style={{ color: '#64748b' }}>Verwendung:</span><span style={{ color: '#e2e8f0' }}>{createdBookingId} – {customerName}</span>
             </div>
@@ -1269,7 +1283,7 @@ export default function ManualBookingPage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`https://paypal.me/Cam2Rent/${total.toFixed(2)}`)}`}
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`${BIZ.paypalMe}/${total.toFixed(2)}`)}`}
                 alt="PayPal QR-Code"
                 width={120}
                 height={120}
@@ -1278,12 +1292,12 @@ export default function ManualBookingPage() {
               <div style={{ fontSize: 13, color: '#94a3b8' }}>
                 <p style={{ margin: '0 0 8px' }}>QR-Code scannen oder Link nutzen:</p>
                 <a
-                  href={`https://paypal.me/Cam2Rent/${total.toFixed(2)}`}
+                  href={`${BIZ.paypalMe}/${total.toFixed(2)}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   style={{ color: '#06b6d4', wordBreak: 'break-all' }}
                 >
-                  paypal.me/Cam2Rent/{total.toFixed(2)}
+                  {BIZ.paypalMe.replace('https://', '')}/{total.toFixed(2)}
                 </a>
               </div>
             </div>

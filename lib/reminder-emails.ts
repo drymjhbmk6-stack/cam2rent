@@ -1,10 +1,11 @@
 import { Resend } from 'resend';
+import { BUSINESS } from '@/lib/business-config';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-const FROM_EMAIL = process.env.FROM_EMAIL ?? 'buchungen@cam2rent.de';
-const REPLY_TO = process.env.ADMIN_EMAIL ?? 'kontakt@cam2rent.de';
-const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://cam2rent.de';
+const FROM_EMAIL = process.env.FROM_EMAIL ?? BUSINESS.email;
+const REPLY_TO = process.env.ADMIN_EMAIL ?? BUSINESS.emailKontakt;
+const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? BUSINESS.url;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
