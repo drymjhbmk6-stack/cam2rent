@@ -136,6 +136,7 @@ const headingStyle: React.CSSProperties = { color: '#94a3b8', textTransform: 'up
 export default function ManualBookingPage() {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
+  const [adding, setAdding] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -276,13 +277,34 @@ export default function ManualBookingPage() {
 
   const days = calcDays(rentalFrom, rentalTo);
 
-  function addProduct() {
-    if (!addProductId) return;
-    setSelectedProducts((prev) => {
-      const existing = prev.find((p) => p.id === addProductId);
-      if (existing) return prev.map((p) => p.id === addProductId ? { ...p, qty: p.qty + 1 } : p);
-      return [...prev, { id: addProductId, qty: 1, accessories: [], sets: [], note: '', customPrice: '', haftung: 'none', serial: '' }];
-    });
+  async function addProduct() {
+    if (!addProductId || !rentalFrom || !rentalTo) return;
+
+    setAdding(true);
+    setError('');
+    try {
+      const res = await fetch(`/api/admin/find-free-unit?product_id=${addProductId}&from=${rentalFrom}&to=${rentalTo}`);
+      const data = await res.json();
+
+      if (!data.available) {
+        setError(data.message || 'Keine Kamera verfügbar für diesen Zeitraum.');
+        return;
+      }
+
+      setSelectedProducts((prev) => {
+        const existing = prev.find((p) => p.id === addProductId);
+        if (existing) return prev.map((p) => p.id === addProductId ? { ...p, qty: p.qty + 1 } : p);
+        return [...prev, {
+          id: addProductId, qty: 1, accessories: [], sets: [],
+          note: '', customPrice: '', haftung: 'none',
+          serial: data.unit?.serial_number || '',
+        }];
+      });
+    } catch {
+      setError('Fehler beim Prüfen der Verfügbarkeit.');
+    } finally {
+      setAdding(false);
+    }
   }
   function removeProduct(id: string) {
     setSelectedProducts((prev) => prev.filter((p) => p.id !== id));
@@ -784,26 +806,7 @@ export default function ManualBookingPage() {
         <div style={sectionStyle}>
           <h2 className="font-heading font-semibold text-sm mb-4" style={headingStyle}>Produkte</h2>
 
-          {/* Hinzufügen */}
-          <div className="flex gap-2 mb-4">
-            <select style={{ ...selectStyle, flex: 1 }} value={addProductId} onChange={(e) => setAddProductId(e.target.value)}>
-              {productList.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name} ({p.brand}) {!p.available ? '— nicht verfügbar' : ''}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              onClick={addProduct}
-              className="px-4 py-2 rounded-lg text-sm font-semibold flex-shrink-0"
-              style={{ background: '#06b6d4', color: 'white' }}
-            >
-              + Hinzufügen
-            </button>
-          </div>
-
-          {/* Zeitraum */}
+          {/* Zeitraum — muss vor Produktauswahl gesetzt werden */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
             <div>
               <label style={labelStyle}>Mietbeginn *</label>
@@ -819,6 +822,31 @@ export default function ManualBookingPage() {
               {days} {days === 1 ? 'Tag' : 'Tage'}
             </p>
           )}
+
+          {/* Hinzufügen */}
+          <div className="mb-4">
+            <div className="flex gap-2">
+              <select style={{ ...selectStyle, flex: 1 }} value={addProductId} onChange={(e) => setAddProductId(e.target.value)}>
+                {productList.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} ({p.brand}) {!p.available ? '— nicht verfügbar' : ''}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={addProduct}
+                disabled={!rentalFrom || !rentalTo || adding}
+                className="px-4 py-2 rounded-lg text-sm font-semibold flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{ background: (!rentalFrom || !rentalTo) ? '#334155' : '#06b6d4', color: 'white' }}
+              >
+                {adding ? 'Prüfe...' : '+ Hinzufügen'}
+              </button>
+            </div>
+            {(!rentalFrom || !rentalTo) && (
+              <p className="text-xs mt-1.5" style={{ color: '#f59e0b' }}>Bitte zuerst Mietzeitraum wählen</p>
+            )}
+          </div>
 
           {/* Pro-Produkt Blöcke */}
           {selectedProducts.length > 0 && (
