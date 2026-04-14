@@ -439,8 +439,6 @@ export default function BuchenPage() {
     }).catch(() => {});
   }, []);
 
-  const [debugSets, setDebugSets] = useState('');
-
   useEffect(() => {
     fetch('/api/sets?available=true')
       .then((r) => r.json())
@@ -452,8 +450,6 @@ export default function BuchenPage() {
             if (!s.product_ids?.length) return true; // Keine Einschränkung = alle Kameras
             return pid ? s.product_ids.includes(pid) : true;
           });
-          // Debug: temporär sichtbar auf der Seite
-          setDebugSets(`Kamera-ID: ${pid} | Sets total: ${data.sets.length} | Kompatibel: ${compatible.length} | ${data.sets.map((s: RentalSet & { product_ids?: string[] }) => `${s.name}: [${(s.product_ids ?? []).join(', ')}]`).join(' · ')}`);
           setAvailableSets([...compatible].sort((a: RentalSet, b: RentalSet) => a.price - b.price));
         }
       })
@@ -943,12 +939,6 @@ export default function BuchenPage() {
                   Alles optional. Füge hinzu was du brauchst.
                 </p>
 
-                {/* DEBUG — nach Analyse entfernen */}
-                {debugSets && (
-                  <div className="mb-4 p-3 rounded-lg text-[10px] font-mono leading-relaxed break-all" style={{ background: '#fef3c7', color: '#92400e', border: '1px solid #f59e0b' }}>
-                    {debugSets}
-                  </div>
-                )}
 
                 {/* ── Set selection ── */}
                 {availableSets.length > 0 && (
