@@ -43,12 +43,12 @@ export async function GET(req: NextRequest) {
   const extLast = new Date(year, mon - 1, daysInMonth + maxBuffer).toISOString().split('T')[0];
 
   // Parallele Abfragen
-  const [products, unitsResult, bookingsResult, blockedResult] = await Promise.all([
+  const [products, unitsResult, bookingsResult, blockedResult, accessoriesResult, setsResult] = await Promise.all([
     getProducts(),
     supabase.from('product_units').select('*').order('created_at', { ascending: true }),
     supabase
       .from('bookings')
-      .select('id, product_id, product_name, rental_from, rental_to, days, status, delivery_mode, customer_name, unit_id')
+      .select('id, product_id, product_name, rental_from, rental_to, days, status, delivery_mode, customer_name, unit_id, accessories')
       .in('status', ['confirmed', 'shipped', 'active'])
       .lte('rental_from', extLast)
       .gte('rental_to', extFirst),
@@ -57,6 +57,15 @@ export async function GET(req: NextRequest) {
       .select('product_id, start_date, end_date, reason')
       .lte('start_date', lastDay)
       .gte('end_date', firstDay),
+    supabase
+      .from('accessories')
+      .select('id, name, category, available_qty, available, sort_order')
+      .eq('available', true)
+      .order('sort_order', { ascending: true }),
+    supabase
+      .from('sets')
+      .select('id, name, badge, available, accessory_items, sort_order')
+      .order('sort_order', { ascending: true }),
   ]);
 
   const units = unitsResult.data ?? [];
@@ -94,10 +103,84 @@ export async function GET(req: NextRequest) {
       };
     });
 
+  // ── Zubehör-Daten ──
+  const allAccessories = accessoriesResult.data ?? [];
+  const allSets = setsResult.data ?? [];
+
+  // Set-ID → Zubehör-Mapping (um Set-Buchungen auf Zubehör aufzulösen)
+  const setAccessoryMap: Record<string, { accessory_id: string; qty: number }[]> = {};
+  for (const s of allSets) {
+    if (Array.isArray(s.accessory_items)) {
+      setAccessoryMap[s.id] = s.accessory_items;
+    }
+  }
+
+  // Buchungen die Zubehör enthalten
+  const accBookings = bookings
+    .filter((b) => Array.isArray(b.accessories) && b.accessories.length > 0)
+    .map((b) => ({
+      id: b.id,
+      rental_from: b.rental_from,
+      rental_to: b.rental_to,
+      customer_name: b.customer_name,
+      delivery_mode: b.delivery_mode,
+      accessories: b.accessories as string[],
+    }));
+
+  // Pro Zubehörteil: Welche Buchungen nutzen es? (inkl. Set-Auflösung)
+  const accessoryData = allAccessories.map((acc) => {
+    const relevantBookings = accBookings.filter((b) => {
+      // Direkt gebucht
+      if (b.accessories.includes(acc.id)) return true;
+      // Über ein Set gebucht
+      for (const accId of b.accessories) {
+        const setItems = setAccessoryMap[accId];
+        if (setItems?.some((si) => si.accessory_id === acc.id)) return true;
+      }
+      return false;
+    });
+
+    return {
+      id: acc.id,
+      name: acc.name,
+      category: acc.category,
+      available_qty: acc.available_qty,
+      bookings: relevantBookings.map((b) => ({
+        id: b.id,
+        rental_from: b.rental_from,
+        rental_to: b.rental_to,
+        customer_name: b.customer_name,
+        delivery_mode: b.delivery_mode,
+      })),
+    };
+  });
+
+  // Pro Set: Welche Buchungen nutzen es?
+  const setData = allSets.map((s) => {
+    const relevantBookings = accBookings.filter((b) => b.accessories.includes(s.id));
+
+    return {
+      id: s.id,
+      name: s.name,
+      badge: s.badge,
+      available: s.available,
+      accessory_items: s.accessory_items,
+      bookings: relevantBookings.map((b) => ({
+        id: b.id,
+        rental_from: b.rental_from,
+        rental_to: b.rental_to,
+        customer_name: b.customer_name,
+        delivery_mode: b.delivery_mode,
+      })),
+    };
+  });
+
   return NextResponse.json({
     month,
     daysInMonth,
     bufferDays: buf,
     products: productData,
+    accessories: accessoryData,
+    sets: setData,
   });
 }

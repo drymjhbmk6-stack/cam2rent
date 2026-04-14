@@ -50,19 +50,33 @@ interface GanttData {
   daysInMonth: number;
   bufferDays: BufferDays;
   products: GanttProduct[];
+  accessories: GanttAccessory[];
+  sets: GanttSet[];
 }
 
-interface Accessory {
+interface GanttAccessory {
   id: string;
   name: string;
+  category: string;
   available_qty: number;
-  available: boolean;
+  bookings: GanttSimpleBooking[];
 }
 
-interface RentalSet {
+interface GanttSimpleBooking {
+  id: string;
+  rental_from: string;
+  rental_to: string;
+  customer_name: string;
+  delivery_mode: string;
+}
+
+interface GanttSet {
   id: string;
   name: string;
+  badge: string | null;
   available: boolean;
+  accessory_items: { accessory_id: string; qty: number }[];
+  bookings: GanttSimpleBooking[];
 }
 
 type DayCellType = 'free' | 'booked' | 'buffer-hin' | 'buffer-rueck' | 'maintenance' | 'retired' | 'blocked' | 'past';
@@ -72,13 +86,6 @@ interface DayCellInfo {
   booking?: GanttBooking;
   bufferLabel?: string;
 }
-
-const STATUS_CONFIG: Record<string, { label: string; cls: string }> = {
-  available: { label: 'Verfügbar', cls: 'bg-emerald-900/30 text-emerald-400' },
-  partial: { label: 'Teilweise', cls: 'bg-amber-900/30 text-amber-400' },
-  booked: { label: 'Ausgebucht', cls: 'bg-red-900/30 text-red-400' },
-  blocked: { label: 'Gesperrt', cls: 'bg-gray-700/30 text-gray-400' },
-};
 
 const DAY_NAMES = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
 const MONTH_NAMES = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
@@ -99,18 +106,13 @@ export default function AdminVerfuegbarkeitPage() {
   const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
   const [tooltip, setTooltip] = useState<{ x: number; y: number; content: string } | null>(null);
 
-  // Sets + Zubehör
-  const [accessories, setAccessories] = useState<Accessory[]>([]);
-  const [sets, setSets] = useState<RentalSet[]>([]);
-
-  // Gantt-Daten laden
+  // Gantt-Daten laden (Kameras + Zubehör + Sets)
   const loadGantt = useCallback(async () => {
     setGanttLoading(true);
     try {
       const res = await fetch(`/api/admin/availability-gantt?month=${currentMonth}`);
       const data = await res.json();
       setGanttData(data);
-      // Alle Produkte aufklappen die Units haben
       if (data.products) {
         setExpandedProducts(new Set(data.products.filter((p: GanttProduct) => p.units.length > 0).map((p: GanttProduct) => p.id)));
       }
@@ -122,18 +124,6 @@ export default function AdminVerfuegbarkeitPage() {
   }, [currentMonth]);
 
   useEffect(() => { loadGantt(); }, [loadGantt]);
-
-  // Zubehör + Sets laden
-  useEffect(() => {
-    fetch('/api/admin/accessories')
-      .then((r) => r.json())
-      .then(({ accessories: data }) => setAccessories(data ?? []))
-      .catch(() => {});
-    fetch('/api/sets')
-      .then((r) => r.json())
-      .then((data) => setSets(data?.sets ?? data ?? []))
-      .catch(() => setSets([]));
-  }, []);
 
   // Monat-Navigation
   function changeMonth(delta: number) {
@@ -321,10 +311,37 @@ export default function AdminVerfuegbarkeitPage() {
     setTooltip({ x: rect.left + rect.width / 2, y: rect.top - 8, content });
   }
 
+  // Zubehör-Zellinfo
+  function getAccCellInfo(acc: GanttAccessory, dateStr: string, buf: BufferDays): { type: string; count: number; total: number; bookings: GanttSimpleBooking[] } {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    if (new Date(dateStr) < today) return { type: 'past', count: 0, total: acc.available_qty, bookings: [] };
+
+    const matchedBookings: GanttSimpleBooking[] = [];
+    for (const b of acc.bookings) {
+      const bMode = b.delivery_mode ?? 'versand';
+      const before = bMode === 'abholung' ? buf.abholung_before : buf.versand_before;
+      const after = bMode === 'abholung' ? buf.abholung_after : buf.versand_after;
+      const fromDate = new Date(b.rental_from);
+      const toDate = new Date(b.rental_to);
+      fromDate.setDate(fromDate.getDate() - before);
+      toDate.setDate(toDate.getDate() + after);
+      const effFrom = fromDate.toISOString().split('T')[0];
+      const effTo = toDate.toISOString().split('T')[0];
+      if (effFrom <= dateStr && effTo >= dateStr) matchedBookings.push(b);
+    }
+
+    const count = matchedBookings.length;
+    const free = acc.available_qty - count;
+    let type = 'free';
+    if (free <= 0) type = 'booked';
+    else if (count > 0) type = 'partial';
+    return { type, count, total: acc.available_qty, bookings: matchedBookings };
+  }
+
   const tabs: { key: Tab; label: string; count: number }[] = [
     { key: 'kameras', label: 'Kameras', count: ganttData?.products?.length ?? shopProducts.length },
-    { key: 'sets', label: 'Sets', count: sets.length },
-    { key: 'zubehoer', label: 'Zubehör', count: accessories.length },
+    { key: 'sets', label: 'Sets', count: ganttData?.sets?.length ?? 0 },
+    { key: 'zubehoer', label: 'Zubehör', count: ganttData?.accessories?.length ?? 0 },
   ];
 
   return (
@@ -539,41 +556,209 @@ export default function AdminVerfuegbarkeitPage() {
         </>
       )}
 
-      {/* ──────── Sets Tab ──────── */}
-      {tab === 'sets' && (
-        sets.length === 0 ? (
-          <p className="text-center py-12 text-sm" style={{ color: '#64748b' }}>Keine Sets vorhanden.</p>
-        ) : (
-          <SimpleTable
-            headers={['Set', 'Status']}
-            rows={sets.map((s) => ({
-              key: s.id,
-              cells: [
-                <span key="n" className="font-heading font-semibold" style={{ color: '#e2e8f0' }}>{s.name}</span>,
-                <StatusBadge key="b" status={s.available ? 'available' : 'blocked'} />,
-              ],
-            }))}
-          />
-        )
+      {/* ──────── Zubehör Tab: Gantt ──────── */}
+      {tab === 'zubehoer' && (
+        <>
+          {/* Monatsnavigation (gleich wie Kameras) */}
+          <div className="flex items-center gap-4 mb-5">
+            <button onClick={() => changeMonth(-1)} className="px-3 py-1.5 rounded-lg text-sm font-heading font-semibold transition-colors hover:bg-gray-700" style={{ color: '#94a3b8', border: '1px solid #334155' }}>← Zurück</button>
+            <h2 className="font-heading font-bold text-lg" style={{ color: 'white' }}>{monthLabel}</h2>
+            <button onClick={() => changeMonth(1)} className="px-3 py-1.5 rounded-lg text-sm font-heading font-semibold transition-colors hover:bg-gray-700" style={{ color: '#94a3b8', border: '1px solid #334155' }}>Weiter →</button>
+            <button onClick={() => { const n = new Date(); setCurrentMonth(`${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}`); }} className="px-3 py-1.5 rounded-lg text-xs font-heading font-semibold transition-colors hover:bg-gray-700 ml-auto" style={{ color: '#64748b', border: '1px solid #334155' }}>Heute</button>
+          </div>
+
+          {ganttLoading ? (
+            <div className="flex items-center gap-3 py-12 justify-center" style={{ color: '#64748b' }}>
+              <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+              Lade Verfügbarkeit…
+            </div>
+          ) : !ganttData || ganttData.accessories.length === 0 ? (
+            <p className="text-center py-12 text-sm" style={{ color: '#64748b' }}>Kein Zubehör vorhanden.</p>
+          ) : (
+            <div className="space-y-3">
+              {/* Legende */}
+              <div className="flex flex-wrap gap-4 text-[11px] font-body font-semibold mb-2" style={{ color: '#cbd5e1' }}>
+                <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#065f46' }} /> Alle frei</span>
+                <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#a16207' }} /> Teilweise belegt</span>
+                <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#1d4ed8' }} /> Ausgebucht</span>
+              </div>
+
+              {ganttData.accessories.map((acc) => (
+                <div key={acc.id} className="rounded-xl overflow-hidden" style={{ border: '1px solid #1e293b', background: '#0f172a' }}>
+                  <div className="px-4 py-3 flex items-center gap-3">
+                    <span className="font-heading font-bold text-sm" style={{ color: '#e2e8f0' }}>{acc.name}</span>
+                    <span className="text-xs font-body" style={{ color: '#64748b' }}>({acc.available_qty} Stück)</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold" style={{ background: '#1e293b', color: '#94a3b8' }}>{acc.category}</span>
+                  </div>
+                  <div className="overflow-x-auto" style={{ borderTop: '1px solid #1e293b' }}>
+                    <table className="w-full text-[11px]" style={{ minWidth: `${80 + days.length * 36}px`, borderCollapse: 'collapse' }}>
+                      <thead>
+                        <tr>
+                          <th className="text-left px-3 py-1 font-heading font-semibold sticky left-0 z-10" style={{ color: '#64748b', background: '#0f172a', minWidth: '70px' }}></th>
+                          {kwGroups.map((g, gi) => (
+                            <th key={`kw-${g.kw}-${gi}`} colSpan={g.span} className="text-center font-heading font-bold text-[9px] py-1"
+                              style={{ color: gi % 2 === 0 ? '#94a3b8' : '#64748b', background: gi % 2 === 0 ? '#0f172a' : '#131c2e', borderLeft: gi > 0 ? '1px solid #334155' : 'none' }}>
+                              KW {g.kw}
+                            </th>
+                          ))}
+                        </tr>
+                        <tr style={{ borderBottom: '1px solid #1e293b' }}>
+                          <th className="sticky left-0 z-10" style={{ background: '#0f172a' }}></th>
+                          {days.map((d) => (
+                            <th key={d.dateStr} className="text-center px-0 py-1 font-heading font-semibold"
+                              style={{ color: d.isToday ? '#f59e0b' : d.isWeekend ? '#475569' : '#64748b', minWidth: '34px', borderBottom: d.isToday ? '2px solid #f59e0b' : '1px solid #1e293b' }}>
+                              <div className="text-[9px]">{d.dayName}</div>
+                              <div style={{ fontWeight: d.isToday ? 800 : 600 }}>{d.day}</div>
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td className="px-3 py-1.5 font-semibold sticky left-0 z-10 whitespace-nowrap text-[10px]" style={{ color: '#94a3b8', background: '#0f172a' }}>
+                            Belegt
+                          </td>
+                          {days.map((d) => {
+                            const info = getAccCellInfo(acc, d.dateStr, ganttData.bufferDays);
+                            const bg = info.type === 'past' ? '#1e293b'
+                              : info.type === 'booked' ? '#1d4ed8'
+                              : info.count > 0 ? '#a16207'
+                              : '#065f46';
+                            const color = info.type === 'past' ? '#475569'
+                              : info.type === 'booked' ? '#ffffff'
+                              : info.count > 0 ? '#fef3c7'
+                              : '#6ee7b7';
+                            return (
+                              <td key={d.dateStr} className="px-0 py-0.5 text-center"
+                                onMouseEnter={(e) => {
+                                  if (info.type === 'past' || info.count === 0) { setTooltip(null); return; }
+                                  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                  const names = info.bookings.map((b) => b.customer_name || '–').join(', ');
+                                  setTooltip({ x: rect.left + rect.width / 2, y: rect.top - 8, content: `${info.count} von ${info.total} belegt\n${names}` });
+                                }}
+                                onMouseLeave={() => setTooltip(null)}
+                                style={{ background: bg, color, boxShadow: d.isToday ? 'inset 0 0 0 1.5px #f59e0b' : 'none' }}>
+                                <div className="text-[9px] leading-tight font-semibold">
+                                  {info.type !== 'past' && info.count > 0 ? `${info.count}/${info.total}` : ''}
+                                </div>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
       )}
 
-      {/* ──────── Zubehör Tab ──────── */}
-      {tab === 'zubehoer' && (
-        accessories.length === 0 ? (
-          <p className="text-center py-12 text-sm" style={{ color: '#64748b' }}>Kein Zubehör vorhanden.</p>
-        ) : (
-          <SimpleTable
-            headers={['Zubehör', 'Bestand', 'Status']}
-            rows={accessories.map((acc) => ({
-              key: acc.id,
-              cells: [
-                <span key="n" className="font-heading font-semibold" style={{ color: '#e2e8f0' }}>{acc.name}</span>,
-                <span key="q" style={{ color: '#94a3b8' }}>{acc.available_qty}</span>,
-                <StatusBadge key="b" status={acc.available ? (acc.available_qty > 0 ? 'available' : 'booked') : 'blocked'} />,
-              ],
-            }))}
-          />
-        )
+      {/* ──────── Sets Tab: Gantt ──────── */}
+      {tab === 'sets' && (
+        <>
+          <div className="flex items-center gap-4 mb-5">
+            <button onClick={() => changeMonth(-1)} className="px-3 py-1.5 rounded-lg text-sm font-heading font-semibold transition-colors hover:bg-gray-700" style={{ color: '#94a3b8', border: '1px solid #334155' }}>← Zurück</button>
+            <h2 className="font-heading font-bold text-lg" style={{ color: 'white' }}>{monthLabel}</h2>
+            <button onClick={() => changeMonth(1)} className="px-3 py-1.5 rounded-lg text-sm font-heading font-semibold transition-colors hover:bg-gray-700" style={{ color: '#94a3b8', border: '1px solid #334155' }}>Weiter →</button>
+            <button onClick={() => { const n = new Date(); setCurrentMonth(`${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}`); }} className="px-3 py-1.5 rounded-lg text-xs font-heading font-semibold transition-colors hover:bg-gray-700 ml-auto" style={{ color: '#64748b', border: '1px solid #334155' }}>Heute</button>
+          </div>
+
+          {ganttLoading ? (
+            <div className="flex items-center gap-3 py-12 justify-center" style={{ color: '#64748b' }}>
+              <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+              Lade Verfügbarkeit…
+            </div>
+          ) : !ganttData || ganttData.sets.length === 0 ? (
+            <p className="text-center py-12 text-sm" style={{ color: '#64748b' }}>Keine Sets vorhanden.</p>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex flex-wrap gap-4 text-[11px] font-body font-semibold mb-2" style={{ color: '#cbd5e1' }}>
+                <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#065f46' }} /> Frei</span>
+                <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#1d4ed8' }} /> Gebucht</span>
+              </div>
+
+              {ganttData.sets.map((s) => (
+                <div key={s.id} className="rounded-xl overflow-hidden" style={{ border: '1px solid #1e293b', background: '#0f172a' }}>
+                  <div className="px-4 py-3 flex items-center gap-3">
+                    <span className="font-heading font-bold text-sm" style={{ color: '#e2e8f0' }}>{s.name}</span>
+                    {s.badge && <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold" style={{ background: '#1e293b', color: '#94a3b8' }}>{s.badge}</span>}
+                    <span className="text-xs font-body" style={{ color: '#64748b' }}>({s.bookings.length} Buchungen)</span>
+                  </div>
+                  <div className="overflow-x-auto" style={{ borderTop: '1px solid #1e293b' }}>
+                    <table className="w-full text-[11px]" style={{ minWidth: `${80 + days.length * 36}px`, borderCollapse: 'collapse' }}>
+                      <thead>
+                        <tr>
+                          <th className="text-left px-3 py-1 font-heading font-semibold sticky left-0 z-10" style={{ color: '#64748b', background: '#0f172a', minWidth: '70px' }}></th>
+                          {kwGroups.map((g, gi) => (
+                            <th key={`kw-${g.kw}-${gi}`} colSpan={g.span} className="text-center font-heading font-bold text-[9px] py-1"
+                              style={{ color: gi % 2 === 0 ? '#94a3b8' : '#64748b', background: gi % 2 === 0 ? '#0f172a' : '#131c2e', borderLeft: gi > 0 ? '1px solid #334155' : 'none' }}>
+                              KW {g.kw}
+                            </th>
+                          ))}
+                        </tr>
+                        <tr style={{ borderBottom: '1px solid #1e293b' }}>
+                          <th className="sticky left-0 z-10" style={{ background: '#0f172a' }}></th>
+                          {days.map((d) => (
+                            <th key={d.dateStr} className="text-center px-0 py-1 font-heading font-semibold"
+                              style={{ color: d.isToday ? '#f59e0b' : d.isWeekend ? '#475569' : '#64748b', minWidth: '34px', borderBottom: d.isToday ? '2px solid #f59e0b' : '1px solid #1e293b' }}>
+                              <div className="text-[9px]">{d.dayName}</div>
+                              <div style={{ fontWeight: d.isToday ? 800 : 600 }}>{d.day}</div>
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td className="px-3 py-1.5 font-semibold sticky left-0 z-10 whitespace-nowrap text-[10px]" style={{ color: '#94a3b8', background: '#0f172a' }}>
+                            Status
+                          </td>
+                          {days.map((d) => {
+                            const today = new Date(); today.setHours(0, 0, 0, 0);
+                            const isPast = new Date(d.dateStr) < today;
+                            let isBooked = false;
+                            const matchedBookings: GanttSimpleBooking[] = [];
+                            if (!isPast) {
+                              for (const b of s.bookings) {
+                                const bMode = b.delivery_mode ?? 'versand';
+                                const before = bMode === 'abholung' ? ganttData.bufferDays.abholung_before : ganttData.bufferDays.versand_before;
+                                const after = bMode === 'abholung' ? ganttData.bufferDays.abholung_after : ganttData.bufferDays.versand_after;
+                                const fromDate = new Date(b.rental_from); fromDate.setDate(fromDate.getDate() - before);
+                                const toDate = new Date(b.rental_to); toDate.setDate(toDate.getDate() + after);
+                                if (fromDate.toISOString().split('T')[0] <= d.dateStr && toDate.toISOString().split('T')[0] >= d.dateStr) {
+                                  isBooked = true;
+                                  matchedBookings.push(b);
+                                }
+                              }
+                            }
+                            const bg = isPast ? '#1e293b' : isBooked ? '#1d4ed8' : '#065f46';
+                            const color = isPast ? '#475569' : isBooked ? '#ffffff' : '#6ee7b7';
+                            return (
+                              <td key={d.dateStr} className="px-0 py-0.5 text-center"
+                                onMouseEnter={(e) => {
+                                  if (isPast || !isBooked) { setTooltip(null); return; }
+                                  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                  const names = matchedBookings.map((b) => b.customer_name || '–').join(', ');
+                                  setTooltip({ x: rect.left + rect.width / 2, y: rect.top - 8, content: `${s.name}\n${names}` });
+                                }}
+                                onMouseLeave={() => setTooltip(null)}
+                                style={{ background: bg, color, boxShadow: d.isToday ? 'inset 0 0 0 1.5px #f59e0b' : 'none' }}>
+                                <div className="text-[9px] leading-tight font-semibold">
+                                  {!isPast && isBooked ? matchedBookings.length.toString() : ''}
+                                </div>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
       )}
 
       {/* Tooltip */}
@@ -596,48 +781,3 @@ export default function AdminVerfuegbarkeitPage() {
   );
 }
 
-/* ─── Sub-Komponenten ───────────────────────────────────────────────────── */
-
-function StatusBadge({ status }: { status: string }) {
-  const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.available;
-  return (
-    <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-heading font-semibold ${cfg.cls}`}>
-      {cfg.label}
-    </span>
-  );
-}
-
-function SimpleTable({ headers, rows }: { headers: string[]; rows: { key: string; cells: React.ReactNode[] }[] }) {
-  return (
-    <div className="rounded-xl overflow-hidden max-w-3xl" style={{ border: '1px solid #1e293b' }}>
-      <table className="w-full text-sm">
-        <thead>
-          <tr style={{ background: '#0f172a', borderBottom: '1px solid #1e293b' }}>
-            {headers.map((h, i) => (
-              <th key={h} className={`${i === 0 ? 'text-left' : 'text-center'} px-4 py-3 font-heading font-semibold text-xs uppercase tracking-wider`} style={{ color: '#64748b' }}>
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr
-              key={row.key}
-              className="transition-colors"
-              style={{ borderBottom: '1px solid #1e293b' }}
-              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = '#0f172a'; }}
-              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
-            >
-              {row.cells.map((cell, i) => (
-                <td key={i} className={`px-4 py-3 ${i === 0 ? '' : 'text-center'}`}>
-                  {cell}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
