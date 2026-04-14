@@ -6,6 +6,7 @@ import { getPriceForDays } from '@/data/products';
 import { getProducts } from '@/lib/get-products';
 import { calcHaftungTieredPrice, DEFAULT_HAFTUNG } from '@/lib/price-config';
 import { sendExtensionConfirmation } from '@/lib/email';
+import { createAdminNotification } from '@/lib/admin-notifications';
 import Stripe from 'stripe';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
@@ -135,6 +136,14 @@ export async function POST(req: NextRequest) {
     priceDifference,
     newTotal,
   }).catch(() => {});
+
+  // Admin-Benachrichtigung (fire-and-forget)
+  createAdminNotification(supabase, {
+    type: 'new_booking',
+    title: `Buchung verlängert: ${bookingId}`,
+    message: `${booking.customer_name} — +${additionalDays} Tage`,
+    link: `/admin/buchungen/${bookingId}`,
+  });
 
   return NextResponse.json({
     success: true,

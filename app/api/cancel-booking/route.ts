@@ -8,6 +8,7 @@ import {
   sendCancellationConfirmation,
   sendAdminCancellationNotification,
 } from '@/lib/email';
+import { createAdminNotification } from '@/lib/admin-notifications';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
@@ -133,6 +134,14 @@ export async function POST(req: NextRequest) {
     sendCancellationConfirmation(emailData),
     sendAdminCancellationNotification(emailData),
   ]).catch((err) => console.error('[cancel-booking] Email error:', err));
+
+  // Admin-Benachrichtigung (fire-and-forget)
+  createAdminNotification(supabase, {
+    type: 'booking_cancelled',
+    title: `Buchung storniert: ${booking.id}`,
+    message: `${booking.customer_name} — ${booking.product_name}`,
+    link: `/admin/buchungen/${booking.id}`,
+  });
 
   return NextResponse.json({
     success: true,

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { createAdminNotification } from '@/lib/admin-notifications';
 
 /**
  * GET /api/reviews?productId=xxx
@@ -124,6 +125,14 @@ export async function POST(req: NextRequest) {
     console.error('Review insert error:', error);
     return NextResponse.json({ error: 'Bewertung konnte nicht gespeichert werden.' }, { status: 500 });
   }
+
+  // Admin-Benachrichtigung (fire-and-forget)
+  createAdminNotification(supabase, {
+    type: 'new_review',
+    title: `Neue Bewertung (${rating}/5)`,
+    message: title || 'Ohne Titel',
+    link: `/admin/bewertungen`,
+  });
 
   return NextResponse.json({ success: true });
 }

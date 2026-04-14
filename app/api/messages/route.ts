@@ -4,6 +4,7 @@ import { cookies } from 'next/headers';
 import { createServiceClient } from '@/lib/supabase';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { sendNewMessageNotificationToAdmin } from '@/lib/email';
+import { createAdminNotification } from '@/lib/admin-notifications';
 
 const limiter = rateLimit({ maxAttempts: 10, windowMs: 60_000 });
 
@@ -148,6 +149,14 @@ export async function POST(req: NextRequest) {
     subject: subject.trim(),
     messagePreview: body.trim().substring(0, 200),
   }).catch(() => {});
+
+  // Admin-Benachrichtigung (fire-and-forget)
+  createAdminNotification(supabase, {
+    type: 'new_message',
+    title: 'Neue Nachricht',
+    message: `${user.email}: ${subject}`,
+    link: `/admin/nachrichten`,
+  });
 
   return NextResponse.json({ conversation_id: conv.id });
 }

@@ -5,6 +5,7 @@ import { detectSuspicious } from '@/lib/suspicious';
 import { ensureBusinessConfig } from '@/lib/load-business-config';
 import { generateBookingId } from '@/lib/booking-id';
 import { assignUnitToBooking } from '@/lib/unit-assignment';
+import { createAdminNotification } from '@/lib/admin-notifications';
 import {
   sendBookingConfirmation,
   sendAdminNotification,
@@ -353,6 +354,14 @@ export async function POST(req: NextRequest) {
         sendAdminNotification(emailData),
       ]).catch((err) => console.error('Email send error:', err));
     }
+
+    // Admin-Benachrichtigung (fire-and-forget)
+    createAdminNotification(supabase, {
+      type: 'new_booking',
+      title: `Neue Buchung: ${bookingId}`,
+      message: `${meta.customer_name} — ${meta.product_name} (${meta.days} Tage)`,
+      link: `/admin/buchungen/${bookingId}`,
+    });
 
     return NextResponse.json({ success: true, booking_id: bookingId });
   } catch (err) {

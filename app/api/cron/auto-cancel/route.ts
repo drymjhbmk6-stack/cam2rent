@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { sendAndLog } from '@/lib/email';
 import { verifyCronAuth } from '@/lib/cron-auth';
+import { createAdminNotification } from '@/lib/admin-notifications';
 
 /**
  * GET /api/cron/auto-cancel
@@ -50,6 +51,14 @@ export async function GET(req: NextRequest) {
     }
 
     cancelledIds.push(booking.id);
+
+    // Admin-Benachrichtigung (fire-and-forget)
+    createAdminNotification(supabase, {
+      type: 'booking_cancelled',
+      title: `Auto-Stornierung: ${booking.id}`,
+      message: `${booking.customer_name} — Zahlung nicht eingegangen`,
+      link: `/admin/buchungen/${booking.id}`,
+    });
 
     // Kunde informieren
     if (booking.customer_email) {

@@ -8,6 +8,7 @@ import { calcShipping } from '@/data/shipping';
 import type { ShippingMethod } from '@/data/shipping';
 import { DEFAULT_SHIPPING, type ShippingPriceConfig } from '@/lib/price-config';
 import { assignUnitToBooking } from '@/lib/unit-assignment';
+import { createAdminNotification } from '@/lib/admin-notifications';
 import { generateContractPDF } from '@/lib/contracts/generate-contract';
 import { storeContract } from '@/lib/contracts/store-contract';
 import {
@@ -600,6 +601,14 @@ export async function POST(req: NextRequest) {
         }
       })();
     }
+
+    // Admin-Benachrichtigung (fire-and-forget)
+    createAdminNotification(supabase, {
+      type: 'new_booking',
+      title: `Neue Buchung: ${bookingIds[0]}`,
+      message: `${r_name} — ${bookingIds.length} Buchung(en)`,
+      link: `/admin/buchungen/${bookingIds[0]}`,
+    });
 
     return NextResponse.json({ success: true, booking_ids: bookingIds });
   } catch (err) {

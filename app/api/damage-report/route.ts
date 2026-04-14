@@ -5,6 +5,7 @@ import {
   sendDamageReportConfirmation,
   sendAdminDamageNotification,
 } from '@/lib/email';
+import { createAdminNotification } from '@/lib/admin-notifications';
 
 const damageLimiter = rateLimit({ maxAttempts: 3, windowMs: 60 * 60 * 1000 }); // 3 pro Stunde
 
@@ -144,6 +145,14 @@ export async function POST(req: NextRequest) {
         console.error('Admin damage notification error:', e)
       ),
     ]);
+
+    // Admin-Benachrichtigung (fire-and-forget)
+    createAdminNotification(supabase, {
+      type: 'new_damage',
+      title: 'Neuer Schadensbericht',
+      message: `${booking.customer_name} — ${booking.product_name}`,
+      link: `/admin/schaeden`,
+    });
 
     return NextResponse.json({ success: true, reportId: report.id });
   } catch (err) {

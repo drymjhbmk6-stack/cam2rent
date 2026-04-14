@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { generateBookingId } from '@/lib/booking-id';
 import { assignUnitToBooking } from '@/lib/unit-assignment';
+import { createAdminNotification } from '@/lib/admin-notifications';
 import { generateContractPDF } from '@/lib/contracts/generate-contract';
 import { storeContract } from '@/lib/contracts/store-contract';
 import { sendBookingConfirmation, sendAdminNotification, type BookingEmailData } from '@/lib/email';
@@ -209,6 +210,14 @@ export async function POST(req: NextRequest) {
         console.error('[manual-booking] Background task error:', err);
       }
     })();
+
+    // Admin-Benachrichtigung (fire-and-forget)
+    createAdminNotification(supabase, {
+      type: 'new_booking',
+      title: `Manuelle Buchung: ${bookingId}`,
+      message: `${customer_name} — ${product_name} (${days} Tage)`,
+      link: `/admin/buchungen/${bookingId}`,
+    });
 
     return NextResponse.json({ success: true, bookingId });
   } catch (err) {
