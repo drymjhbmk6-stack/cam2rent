@@ -77,7 +77,7 @@ export async function PATCH(
 ) {
   const { id } = await params;
   const body = await req.json();
-  const { status } = body as { status?: string };
+  const { status, cancellation_reason } = body as { status?: string; cancellation_reason?: string };
 
   if (!status) {
     return NextResponse.json({ error: 'Status erforderlich.' }, { status: 400 });
@@ -90,14 +90,63 @@ export async function PATCH(
 
   const supabase = createServiceClient();
 
+  const updates: Record<string, unknown> = { status };
+
+  // Bei Stornierung: Grund in Notizen speichern
+  if (status === 'cancelled' && cancellation_reason) {
+    const { data: existing } = await supabase
+      .from('bookings')
+      .select('notes')
+      .eq('id', id)
+      .maybeSingle();
+    const existingNotes = existing?.notes ? `${existing.notes} | ` : '';
+    updates.notes = `${existingNotes}Stornierungsgrund: ${cancellation_reason}`;
+  }
+
   const { error } = await supabase
     .from('bookings')
-    .update({ status })
+    .update(updates)
     .eq('id', id);
 
   if (error) {
     console.error('Status update error:', error);
     return NextResponse.json({ error: 'Status konnte nicht aktualisiert werden.' }, { status: 500 });
+  }
+
+  return NextResponse.json({ success: true });
+}
+
+/**
+ * DELETE /api/admin/booking/[id]
+ * Löscht eine Buchung unwiderruflich aus der Datenbank.
+ * Erfordert Admin-Passwort.
+ */
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  const body = await req.json();
+  const { password } = body as { password?: string };
+
+  if (password !== 'Admin') {
+    return NextResponse.json({ error: 'Falsches Passwort.' }, { status: 403 });
+  }
+
+  const supabase = createServiceClient();
+
+  // Zugehörige Daten löschen (rental_agreements, email_log)
+  await supabase.from('rental_agreements').delete().eq('booking_id', id);
+  await supabase.from('email_log').delete().eq('booking_id', id);
+
+  const { error } = await supabase
+    .from('bookings')
+    .delete()
+    .eq('id', id);
+
+  if (error) {
+    console.error('Booking delete error:', error);
+    return NextResponse.json({ error: 'Buchung konnte nicht gelöscht werden.' }, { status: 500 });
   }
 
   return NextResponse.json({ success: true });

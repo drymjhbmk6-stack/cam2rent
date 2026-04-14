@@ -150,6 +150,11 @@ export default function BuchungDetailPage() {
   const [error, setError] = useState('');
   const [statusUpdating, setStatusUpdating] = useState(false);
   const [newStatus, setNewStatus] = useState('');
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleteError, setDeleteError] = useState('');
 
   useEffect(() => {
     fetchBooking();
@@ -211,6 +216,39 @@ export default function BuchungDetailPage() {
     } finally {
       setStatusUpdating(false);
     }
+  }
+
+  async function handleCancel() {
+    if (!booking || !cancelReason.trim()) return;
+    setStatusUpdating(true);
+    try {
+      const res = await fetch(`/api/admin/booking/${bookingId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'cancelled', cancellation_reason: cancelReason.trim() }),
+      });
+      if (!res.ok) { const d = await res.json(); alert(d.error ?? 'Fehler.'); return; }
+      setBooking((prev) => prev ? { ...prev, status: 'cancelled' } : prev);
+      setNewStatus('cancelled');
+      setShowCancelModal(false);
+      setCancelReason('');
+    } catch { alert('Netzwerkfehler.'); }
+    finally { setStatusUpdating(false); }
+  }
+
+  async function handleDelete() {
+    if (!booking) return;
+    setDeleteError('');
+    try {
+      const res = await fetch(`/api/admin/booking/${bookingId}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: deletePassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setDeleteError(data.error ?? 'Fehler.'); return; }
+      window.location.href = '/admin/buchungen';
+    } catch { setDeleteError('Netzwerkfehler.'); }
   }
 
   // ─── Zubehör-IDs auflösen (Sets → Einzelteile) ───
@@ -760,6 +798,20 @@ export default function BuchungDetailPage() {
                     </button>
                   </div>
                 </div>
+
+                {/* Stornieren + Löschen */}
+                <div className="flex gap-2 pt-2 border-t border-brand-border">
+                  {booking.status !== 'cancelled' && (
+                    <button onClick={() => setShowCancelModal(true)}
+                      className="flex-1 px-4 py-2 text-sm font-heading font-semibold text-red-600 border border-red-200 rounded-btn hover:bg-red-50 transition-colors">
+                      Stornieren
+                    </button>
+                  )}
+                  <button onClick={() => { setShowDeleteModal(true); setDeletePassword(''); setDeleteError(''); }}
+                    className="flex-1 px-4 py-2 text-sm font-heading font-semibold text-red-600 bg-red-50 border border-red-200 rounded-btn hover:bg-red-100 transition-colors">
+                    Endgültig löschen
+                  </button>
+                </div>
               </div>
             </Section>
 
@@ -784,6 +836,67 @@ export default function BuchungDetailPage() {
             </Section>
           </div>
         </div>
+
+        {/* ═══ Stornieren-Modal ═══ */}
+        {showCancelModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowCancelModal(false)}>
+            <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl p-6 w-full max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
+              <h3 className="font-heading font-bold text-lg text-brand-black dark:text-white mb-1">Buchung stornieren</h3>
+              <p className="text-sm font-body text-brand-muted mb-4">Buchung {booking.id} wird als storniert markiert.</p>
+              <label className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider block mb-2">Stornierungsgrund *</label>
+              <textarea
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                placeholder="Warum wird die Buchung storniert?"
+                rows={3}
+                autoFocus
+                className="w-full px-3 py-2.5 border border-brand-border dark:border-slate-600 rounded-xl text-sm font-body bg-white dark:bg-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-red-400 resize-none"
+              />
+              <div className="flex justify-end gap-2 mt-4">
+                <button onClick={() => { setShowCancelModal(false); setCancelReason(''); }}
+                  className="px-4 py-2 text-sm font-heading font-semibold text-brand-muted border border-brand-border rounded-btn hover:bg-brand-bg transition-colors">
+                  Abbrechen
+                </button>
+                <button onClick={handleCancel} disabled={!cancelReason.trim() || statusUpdating}
+                  className="px-5 py-2 text-sm font-heading font-semibold bg-red-600 text-white rounded-btn hover:bg-red-700 transition-colors disabled:opacity-40">
+                  {statusUpdating ? 'Wird storniert...' : 'Stornieren'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ═══ Löschen-Modal ═══ */}
+        {showDeleteModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowDeleteModal(false)}>
+            <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl p-6 w-full max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
+              <h3 className="font-heading font-bold text-lg text-red-600 mb-1">Buchung endgültig löschen</h3>
+              <p className="text-sm font-body text-brand-muted mb-1">Buchung <strong>{booking.id}</strong> wird unwiderruflich aus der Datenbank entfernt.</p>
+              <p className="text-sm font-body text-red-600 font-semibold mb-4">Diese Aktion kann nicht rückgängig gemacht werden!</p>
+              <label className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider block mb-2">Admin-Passwort eingeben</label>
+              <input
+                type="password"
+                value={deletePassword}
+                onChange={(e) => { setDeletePassword(e.target.value); setDeleteError(''); }}
+                placeholder="Passwort"
+                autoFocus
+                onKeyDown={(e) => { if (e.key === 'Enter' && deletePassword) handleDelete(); }}
+                className="w-full px-3 py-2.5 border border-brand-border dark:border-slate-600 rounded-xl text-sm font-body bg-white dark:bg-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-red-400"
+              />
+              {deleteError && <p className="text-xs text-red-600 mt-2 font-body">{deleteError}</p>}
+              <div className="flex justify-end gap-2 mt-4">
+                <button onClick={() => setShowDeleteModal(false)}
+                  className="px-4 py-2 text-sm font-heading font-semibold text-brand-muted border border-brand-border rounded-btn hover:bg-brand-bg transition-colors">
+                  Abbrechen
+                </button>
+                <button onClick={handleDelete} disabled={!deletePassword}
+                  className="px-5 py-2 text-sm font-heading font-semibold bg-red-600 text-white rounded-btn hover:bg-red-700 transition-colors disabled:opacity-40">
+                  Endgültig löschen
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
