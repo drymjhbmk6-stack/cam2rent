@@ -23,8 +23,8 @@ ENV NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=$NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
 ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
 ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-ENV NODE_OPTIONS="--max-old-space-size=2560"
-RUN npm run build
+ENV NODE_OPTIONS="--max-old-space-size=1536 --max-semi-space-size=64 --expose-gc"
+RUN node --max-old-space-size=1536 ./node_modules/.bin/next build
 
 # ── Stage 3: Production ──────────────────────────────────────────────────────
 FROM node:20-alpine AS runner

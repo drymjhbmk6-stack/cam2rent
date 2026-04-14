@@ -15,10 +15,16 @@ const nextConfig: NextConfig = {
     '*': [
       'node_modules/@swc/core-linux-x64-gnu',
       'node_modules/@swc/core-linux-x64-musl',
+      'node_modules/@swc/core-linux-arm64-gnu',
+      'node_modules/@swc/core-linux-arm64-musl',
       'node_modules/@esbuild',
       'node_modules/typescript',
       'node_modules/prettier',
       'node_modules/eslint',
+      'node_modules/@next/swc-linux-x64-gnu',
+      'node_modules/@next/swc-linux-x64-musl',
+      'node_modules/sharp',
+      'node_modules/@img',
     ],
   },
   images: {
