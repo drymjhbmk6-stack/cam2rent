@@ -299,23 +299,23 @@ export default function AdminSetsPage() {
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="font-heading font-bold text-xl text-brand-black">Sets verwalten</h1>
+            <h1 className="font-heading font-bold text-xl text-brand-black dark:text-white">Sets verwalten</h1>
             <p className="text-xs font-body text-brand-muted mt-0.5">
               ⟳ = Verfügbarkeit wird automatisch aus dem Zubehör-Lagerbestand berechnet
             </p>
           </div>
           <button onClick={() => setShowNew(true)}
-            className="px-4 py-2 bg-brand-black text-white text-sm font-heading font-semibold rounded-btn hover:bg-brand-dark transition-colors">
+            className="px-4 py-2 bg-brand-black dark:bg-accent-blue text-white text-sm font-heading font-semibold rounded-btn hover:bg-brand-dark dark:hover:bg-accent-blue/80 transition-colors">
             + Neues Set
           </button>
         </div>
 
         {/* Neues Set Form */}
         {showNew && (
-          <div className="bg-white rounded-2xl border-2 border-accent-blue p-6 mb-6">
+          <div className="bg-white dark:bg-slate-800/80 rounded-2xl border-2 border-accent-blue p-6 mb-6">
             <div className="flex items-center justify-between mb-5">
-              <h2 className="font-heading font-bold text-base text-brand-black">Neues Set anlegen</h2>
-              <button onClick={() => setShowNew(false)} className="text-brand-muted hover:text-brand-black text-lg">✕</button>
+              <h2 className="font-heading font-bold text-base text-brand-black dark:text-white">Neues Set anlegen</h2>
+              <button onClick={() => setShowNew(false)} className="text-brand-muted hover:text-brand-black dark:hover:text-white text-lg">✕</button>
             </div>
             <NewSetForm
               newSet={newSet} setNewSet={setNewSet}
@@ -326,11 +326,11 @@ export default function AdminSetsPage() {
             />
             <div className="flex justify-end mt-5 gap-2">
               <button onClick={() => setShowNew(false)}
-                className="px-4 py-2 text-sm font-heading font-semibold text-brand-muted border border-brand-border rounded-btn hover:bg-brand-bg transition-colors">
+                className="px-4 py-2 text-sm font-heading font-semibold text-brand-muted border border-brand-border dark:border-slate-600 rounded-btn hover:bg-brand-bg dark:hover:bg-slate-700 transition-colors">
                 Abbrechen
               </button>
               <button onClick={handleCreate} disabled={creating}
-                className="px-5 py-2 text-sm font-heading font-semibold rounded-btn bg-brand-black text-white hover:bg-brand-dark transition-colors disabled:opacity-40">
+                className="px-5 py-2 text-sm font-heading font-semibold rounded-btn bg-brand-black dark:bg-accent-blue text-white hover:bg-brand-dark dark:hover:bg-accent-blue/80 transition-colors disabled:opacity-40">
                 {creating ? 'Erstelle…' : 'Set erstellen'}
               </button>
             </div>
@@ -354,11 +354,11 @@ export default function AdminSetsPage() {
               const _isStatic = STATIC_IDS.has(set.id); void _isStatic;
 
               return (
-                <div key={set.id} className="bg-white rounded-xl border border-brand-border overflow-hidden">
+                <div key={set.id} className="bg-white dark:bg-slate-800/60 rounded-xl border border-brand-border dark:border-slate-700 overflow-hidden">
                   {/* Row */}
                   <div className="flex items-center justify-between px-5 py-4">
                     <div className="flex items-center gap-3 min-w-0 flex-wrap">
-                      <span className="font-heading font-semibold text-sm text-brand-black">{set.name}</span>
+                      <span className="font-heading font-semibold text-sm text-brand-black dark:text-slate-200">{set.name}</span>
                       {set.badge && (
                         <span className={`px-2 py-0.5 rounded-full text-xs font-heading font-semibold ${set.badgeColor}`}>
                           {set.badge}
@@ -370,10 +370,10 @@ export default function AdminSetsPage() {
                         set.product_ids.map((pid) => {
                           const p = products[pid];
                           const brand = p?.brand?.toLowerCase() ?? '';
-                          const colors = brand.includes('gopro') ? 'bg-blue-50 text-blue-700 border-blue-200'
-                            : brand.includes('dji') || brand.includes('osmo') ? 'bg-gray-100 text-gray-800 border-gray-300'
-                            : brand.includes('insta') ? 'bg-amber-50 text-amber-700 border-amber-200'
-                            : 'bg-brand-bg text-brand-steel border-brand-border';
+                          const colors = brand.includes('gopro') ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800/50'
+                            : brand.includes('dji') || brand.includes('osmo') ? 'bg-gray-100 dark:bg-gray-800/40 text-gray-800 dark:text-gray-300 border-gray-300 dark:border-gray-600/50'
+                            : brand.includes('insta') ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800/50'
+                            : 'bg-brand-bg dark:bg-slate-800/40 text-brand-steel border-brand-border dark:border-slate-600/50';
                           return (
                             <span key={pid} className={`px-2 py-0.5 rounded-full text-[10px] font-body border ${colors}`}>
                               {p?.name ?? pid}
@@ -386,12 +386,12 @@ export default function AdminSetsPage() {
                       {savedId === set.id && <span className="text-xs text-green-600 font-body">Gespeichert</span>}
                     </div>
                     <div className="flex items-center gap-3 shrink-0">
-                      <span className="text-sm font-heading font-semibold text-brand-black hidden sm:block">
+                      <span className="text-sm font-heading font-semibold text-brand-black dark:text-slate-200 hidden sm:block">
                         {set.price} € {set.pricingMode === 'perDay' ? '/Tag' : 'einmalig'}
                       </span>
                       <button
                         onClick={() => handleDelete(set.id, set.name)}
-                        className="px-3 py-1.5 text-xs font-heading font-semibold text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors"
+                        className="px-3 py-1.5 text-xs font-heading font-semibold text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800/50 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
                       >
                         Löschen
                       </button>
@@ -406,7 +406,7 @@ export default function AdminSetsPage() {
 
                   {/* Edit Panel */}
                   {isExpanded && e && (
-                    <div className="border-t border-brand-border px-5 py-5 bg-brand-bg space-y-5">
+                    <div className="border-t border-brand-border dark:border-slate-700 px-5 py-5 bg-brand-bg dark:bg-slate-800/30 space-y-5">
                       {/* Grunddaten */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
@@ -436,18 +436,18 @@ export default function AdminSetsPage() {
                       </div>
 
                       {/* Preis */}
-                      <div className="bg-white rounded-xl border border-brand-border p-4">
+                      <div className="bg-white dark:bg-slate-800/50 rounded-xl border border-brand-border dark:border-slate-700 p-4">
                         <p className="text-xs font-heading font-semibold text-brand-muted mb-3">Preis</p>
                         <div className="flex gap-3 items-center">
                           <div className="relative w-32">
                             <input type="number" min="0" step="0.50" value={e.price}
                               onChange={(ev) => setEdit(set.id, 'price', ev.target.value)}
-                              className="w-full pr-8 pl-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
+                              className="w-full pr-8 pl-3 py-2.5 border border-brand-border dark:border-slate-600 rounded-[10px] text-sm font-body bg-white dark:bg-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-blue" />
                             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-brand-muted">€</span>
                           </div>
                           <select value={e.pricing_mode}
                             onChange={(ev) => setEdit(set.id, 'pricing_mode', ev.target.value as 'perDay' | 'flat')}
-                            className="px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue">
+                            className="px-3 py-2.5 border border-brand-border dark:border-slate-600 rounded-[10px] text-sm font-body bg-white dark:bg-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-blue">
                             <option value="flat">€ einmalig</option>
                             <option value="perDay">€ / Tag</option>
                           </select>
@@ -455,7 +455,7 @@ export default function AdminSetsPage() {
                       </div>
 
                       {/* Zubehör */}
-                      <div className="bg-white rounded-xl border border-brand-border p-4">
+                      <div className="bg-white dark:bg-slate-800/50 rounded-xl border border-brand-border dark:border-slate-700 p-4">
                         <div className="flex items-center justify-between mb-3">
                           <div>
                             <p className="text-xs font-heading font-semibold text-brand-muted">Enthaltenes Zubehör</p>
@@ -491,28 +491,30 @@ export default function AdminSetsPage() {
                               const acc = accMap.get(item.accessory_id);
                               const accOk = acc && acc.available && acc.available_qty >= item.qty;
                               return (
-                                <div key={idx} className={`flex items-center gap-2 p-2 rounded-lg ${accOk ? 'bg-green-50' : 'bg-red-50'}`}>
-                                  <select value={item.accessory_id}
-                                    onChange={(ev) => updateItem(set.id, idx, 'accessory_id', ev.target.value)}
-                                    className="flex-1 px-3 py-2 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue">
-                                    {accessories.map((a) => {
-                                      const compat = a.compatible_product_ids?.length
-                                        ? a.compatible_product_ids.map((pid) => products[pid]?.name ?? pid).join(', ')
-                                        : 'Alle';
-                                      return (
-                                        <option key={a.id} value={a.id}>{a.name} ({a.available_qty} St.) [{compat}]</option>
-                                      );
-                                    })}
-                                  </select>
-                                  <div className="flex items-center gap-1">
-                                    <span className="text-xs text-brand-muted">×</span>
-                                    <input type="number" min="1" value={item.qty}
-                                      onChange={(ev) => updateItem(set.id, idx, 'qty', parseInt(ev.target.value) || 1)}
-                                      className="w-16 px-2 py-2 border border-brand-border rounded-[10px] text-sm font-body text-center bg-white focus:outline-none focus:ring-2 focus:ring-accent-blue" />
+                                <div key={idx} className={`rounded-lg border p-3 ${accOk ? 'bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800/40' : 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800/40'}`}>
+                                  <div className="flex items-center gap-2">
+                                    <select value={item.accessory_id}
+                                      onChange={(ev) => updateItem(set.id, idx, 'accessory_id', ev.target.value)}
+                                      className="flex-1 min-w-0 px-3 py-2 border border-brand-border dark:border-slate-600 rounded-[10px] text-sm font-body bg-white dark:bg-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-blue truncate">
+                                      {accessories.map((a) => {
+                                        const compat = a.compatible_product_ids?.length
+                                          ? a.compatible_product_ids.map((pid) => products[pid]?.name ?? pid).join(', ')
+                                          : 'Alle';
+                                        return (
+                                          <option key={a.id} value={a.id}>{a.name} ({a.available_qty} St.) [{compat}]</option>
+                                        );
+                                      })}
+                                    </select>
+                                    <div className="flex items-center gap-1 flex-shrink-0">
+                                      <span className="text-xs text-brand-muted">×</span>
+                                      <input type="number" min="1" value={item.qty}
+                                        onChange={(ev) => updateItem(set.id, idx, 'qty', parseInt(ev.target.value) || 1)}
+                                        className="w-14 px-2 py-2 border border-brand-border dark:border-slate-600 rounded-[10px] text-sm font-body text-center bg-white dark:bg-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-blue" />
+                                    </div>
+                                    <span className={`text-xs flex-shrink-0 ${accOk ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>{accOk ? '✓' : '✗'}</span>
+                                    <button onClick={() => removeItem(set.id, idx)}
+                                      className="text-red-400 hover:text-red-600 transition-colors text-lg leading-none flex-shrink-0">✕</button>
                                   </div>
-                                  <span className="text-xs">{accOk ? '✓' : '✗'}</span>
-                                  <button onClick={() => removeItem(set.id, idx)}
-                                    className="text-red-400 hover:text-red-600 transition-colors text-lg leading-none">✕</button>
                                 </div>
                               );
                             })}
@@ -522,11 +524,11 @@ export default function AdminSetsPage() {
 
                       {/* Passende Kameras */}
                       {Object.keys(products).length > 0 && (
-                        <div className="bg-white rounded-xl border border-brand-border p-4">
+                        <div className="bg-white dark:bg-slate-800/50 rounded-xl border border-brand-border dark:border-slate-700 p-4">
                           <p className="text-xs font-heading font-semibold text-brand-muted mb-3">Passende Kameras (optional)</p>
                           <div className="flex flex-wrap gap-2">
                             {Object.values(products).map((p) => (
-                              <label key={p.id} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-heading font-semibold cursor-pointer transition-colors ${e.product_ids.includes(p.id) ? 'border-accent-blue bg-accent-blue-soft/20 text-accent-blue' : 'border-brand-border text-brand-steel hover:border-brand-black'}`}>
+                              <label key={p.id} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-heading font-semibold cursor-pointer transition-colors ${e.product_ids.includes(p.id) ? 'border-accent-blue bg-accent-blue/10 text-accent-blue' : 'border-brand-border dark:border-slate-600 text-brand-steel dark:text-slate-400 hover:border-brand-black dark:hover:border-slate-400'}`}>
                                 <input type="checkbox" checked={e.product_ids.includes(p.id)}
                                   onChange={() => toggleProduct(set.id, p.id)} className="sr-only" />
                                 {p.name}
@@ -539,11 +541,11 @@ export default function AdminSetsPage() {
                       {/* Aktionen */}
                       <div className="flex justify-end gap-2 pt-1">
                         <button onClick={() => setExpandedId(null)}
-                          className="px-4 py-2 text-sm font-heading font-semibold text-brand-muted border border-brand-border rounded-btn hover:bg-white transition-colors">
+                          className="px-4 py-2 text-sm font-heading font-semibold text-brand-muted border border-brand-border dark:border-slate-600 rounded-btn hover:bg-white dark:hover:bg-slate-700 transition-colors">
                           Abbrechen
                         </button>
                         <button onClick={() => handleSave(set.id)} disabled={savingId === set.id}
-                          className="px-5 py-2 text-sm font-heading font-semibold rounded-btn bg-brand-black text-white hover:bg-brand-dark transition-colors disabled:opacity-40">
+                          className="px-5 py-2 text-sm font-heading font-semibold rounded-btn bg-brand-black dark:bg-accent-blue text-white hover:bg-brand-dark dark:hover:bg-accent-blue/80 transition-colors disabled:opacity-40">
                           {savingId === set.id ? 'Speichern…' : 'Speichern'}
                         </button>
                       </div>
@@ -643,23 +645,23 @@ function NewSetForm({
         </div>
       </div>
 
-      <div className="bg-brand-bg rounded-xl p-4 flex gap-3 items-center">
+      <div className="bg-brand-bg dark:bg-slate-800/50 rounded-xl p-4 flex gap-3 items-center">
         <div className="relative w-32">
           <input type="number" min="0" step="0.50" value={newSet.price}
             onChange={(e) => setNewSet((f) => ({ ...f, price: parseFloat(e.target.value) || 0 }))}
-            className="w-full pr-8 pl-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
+            className="w-full pr-8 pl-3 py-2.5 border border-brand-border dark:border-slate-600 rounded-[10px] text-sm font-body bg-white dark:bg-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-blue" />
           <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-brand-muted">€</span>
         </div>
         <select value={newSet.pricing_mode}
           onChange={(e) => setNewSet((f) => ({ ...f, pricing_mode: e.target.value as 'perDay' | 'flat' }))}
-          className="px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue">
+          className="px-3 py-2.5 border border-brand-border dark:border-slate-600 rounded-[10px] text-sm font-body bg-white dark:bg-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-blue">
           <option value="flat">€ einmalig</option>
           <option value="perDay">€ / Tag</option>
         </select>
       </div>
 
       {accessories.length > 0 && (
-        <div className="bg-brand-bg rounded-xl p-4">
+        <div className="bg-brand-bg dark:bg-slate-800/50 rounded-xl p-4">
           <div className="flex items-center justify-between mb-3">
             <p className="text-xs font-heading font-semibold text-brand-muted">Enthaltenes Zubehör</p>
             <button onClick={addItem}
@@ -675,25 +677,29 @@ function NewSetForm({
                 const acc = accMap.get(item.accessory_id);
                 const ok = acc && acc.available && acc.available_qty >= item.qty;
                 return (
-                  <div key={idx} className={`flex items-center gap-2 p-2 rounded-lg ${ok ? 'bg-green-50' : 'bg-red-50'}`}>
-                    <select value={item.accessory_id}
-                      onChange={(e) => updateItem(idx, 'accessory_id', e.target.value)}
-                      className="flex-1 px-3 py-2 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue">
-                      {accessories.map((a) => {
-                        const compat = a.compatible_product_ids?.length
-                          ? a.compatible_product_ids.map((pid) => products[pid]?.name ?? pid).join(', ')
-                          : 'Alle';
-                        return (
-                          <option key={a.id} value={a.id}>{a.name} ({a.available_qty} St.) [{compat}]</option>
-                        );
-                      })}
-                    </select>
-                    <span className="text-xs text-brand-muted">×</span>
-                    <input type="number" min="1" value={item.qty}
-                      onChange={(e) => updateItem(idx, 'qty', parseInt(e.target.value) || 1)}
-                      className="w-16 px-2 py-2 border border-brand-border rounded-[10px] text-sm text-center bg-white focus:outline-none focus:ring-2 focus:ring-accent-blue" />
-                    <span className="text-xs">{ok ? '✓' : '✗'}</span>
-                    <button onClick={() => removeItem(idx)} className="text-red-400 hover:text-red-600 text-lg leading-none">✕</button>
+                  <div key={idx} className={`rounded-lg border p-3 ${ok ? 'bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800/40' : 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800/40'}`}>
+                    <div className="flex items-center gap-2">
+                      <select value={item.accessory_id}
+                        onChange={(e) => updateItem(idx, 'accessory_id', e.target.value)}
+                        className="flex-1 min-w-0 px-3 py-2 border border-brand-border dark:border-slate-600 rounded-[10px] text-sm font-body bg-white dark:bg-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-blue truncate">
+                        {accessories.map((a) => {
+                          const compat = a.compatible_product_ids?.length
+                            ? a.compatible_product_ids.map((pid) => products[pid]?.name ?? pid).join(', ')
+                            : 'Alle';
+                          return (
+                            <option key={a.id} value={a.id}>{a.name} ({a.available_qty} St.) [{compat}]</option>
+                          );
+                        })}
+                      </select>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <span className="text-xs text-brand-muted">×</span>
+                        <input type="number" min="1" value={item.qty}
+                          onChange={(e) => updateItem(idx, 'qty', parseInt(e.target.value) || 1)}
+                          className="w-14 px-2 py-2 border border-brand-border dark:border-slate-600 rounded-[10px] text-sm text-center bg-white dark:bg-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-blue" />
+                      </div>
+                      <span className={`text-xs flex-shrink-0 ${ok ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>{ok ? '✓' : '✗'}</span>
+                      <button onClick={() => removeItem(idx)} className="text-red-400 hover:text-red-600 text-lg leading-none flex-shrink-0">✕</button>
+                    </div>
                   </div>
                 );
               })}
@@ -703,11 +709,11 @@ function NewSetForm({
       )}
 
       {Object.keys(products).length > 0 && (
-        <div className="bg-brand-bg rounded-xl p-4">
+        <div className="bg-brand-bg dark:bg-slate-800/50 rounded-xl p-4">
           <p className="text-xs font-heading font-semibold text-brand-muted mb-3">Passende Kameras (optional)</p>
           <div className="flex flex-wrap gap-2">
             {Object.values(products).map((p) => (
-              <label key={p.id} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-heading font-semibold cursor-pointer transition-colors ${newSet.product_ids.includes(p.id) ? 'border-accent-blue bg-accent-blue-soft/20 text-accent-blue' : 'border-brand-border text-brand-steel hover:border-brand-black'}`}>
+              <label key={p.id} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-heading font-semibold cursor-pointer transition-colors ${newSet.product_ids.includes(p.id) ? 'border-accent-blue bg-accent-blue/10 text-accent-blue' : 'border-brand-border dark:border-slate-600 text-brand-steel dark:text-slate-400 hover:border-brand-black dark:hover:border-slate-400'}`}>
                 <input type="checkbox" checked={newSet.product_ids.includes(p.id)}
                   onChange={() => toggleProduct(p.id)} className="sr-only" />
                 {p.name}
