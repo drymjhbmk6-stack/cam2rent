@@ -27,6 +27,7 @@ In `data/shipping.ts` → `calcShipping()`: Express-Zweig prüft NICHT den `free
 ### Vor jedem Push: TypeScript + ESLint prüfen
 `npx tsc --noEmit` UND `npx next lint` ausführen. Erst pushen wenn 0 Errors.
 `npx next build` funktioniert in der Cloud-Umgebung NICHT (kein Google Fonts Zugang).
+ESLint + TypeScript werden auf dem Server beim Build geskippt (RAM-Limit CX23).
 
 ## Tech-Stack
 - Next.js 15.2.4 (App Router, output: 'standalone')
@@ -40,6 +41,8 @@ In `data/shipping.ts` → `calcShipping()`: Express-Zweig prüft NICHT den `free
 - react-markdown (Produktbeschreibungen im Admin + Detailseite)
 - react-day-picker v8 + date-fns (--legacy-peer-deps)
 - Docker + Coolify Deployment
+- Anthropic Claude API (Blog-KI-Generierung)
+- OpenAI DALL-E 3 (Blog-Bildgenerierung)
 
 ## Architektur-Übersicht (Stand 2026-04-14)
 
@@ -52,6 +55,8 @@ In `data/shipping.ts` → `calcShipping()`: Express-Zweig prüft NICHT den `free
 
 ### Buchungsflow
 5 Steps (Versand → Zubehör → Haftung → Zusammenfassung → Zahlung)
+- Buchungsbestätigung antwortet sofort — PDF + E-Mail laufen im Hintergrund
+- Kalender verhindert Buchung über ausgebuchte Tage hinweg (maxEndDate-Logik)
 
 ### Kalender-Logik (Versand)
 - **Startdatum:** Keine Sonn-/Feiertagssperre — Paket wird vorher von cam2rent verschickt. Nur 3 Tage Vorlaufzeit.
@@ -59,6 +64,15 @@ In `data/shipping.ts` → `calcShipping()`: Express-Zweig prüft NICHT den `free
 - **Puffertage:** In `admin_settings.booking_buffer_days` konfigurierbar (versand_before/after, abholung_before/after).
 - **Tooltips:** Gesperrte Tage zeigen Grund beim Hover.
 - Startdatum wird immer blau hervorgehoben + Anzeige unter Kalender.
+- **Überbuchungsschutz:** Wenn Startdatum gewählt, werden alle Tage nach dem nächsten gebuchten Tag blockiert.
+
+### Manuelle Buchung (`/admin/buchungen/neu`)
+- Gast-Buchung ohne Kundenkonto (nur Name + E-Mail)
+- Digitale Vertragsunterschrift auf Admin-Tablet/Handy (SignatureStep)
+- Rechnung-PDF + Vertrag-PDF werden im Hintergrund generiert
+- E-Mail mit Anhängen automatisch gesendet wenn E-Mail hinterlegt
+- Nach Erstellung: PayPal QR-Code (`paypal.me/Cam2Rent`) + Bankdaten
+- Vertrag nachträglich unterschreiben: `/admin/buchungen/[id]/vertrag-unterschreiben`
 
 ### Admin-Sidebar Struktur
 - **Produkte & Katalog:** Kameras, Sets, Zubehör, Verfügbarkeit
@@ -129,6 +143,19 @@ Alle Dropdowns laden aus `admin_settings` und können neue Einträge hinzufügen
   - Cyan-Farbe (#06b6d4), Chevron-Icon
   - Ausnahmen: Dashboard, Login, Vertragsunterschrift (hat eigenen router.back())
 
+### Kunden-Verifizierung
+- Kunden registrieren sich → Bestätigungs-E-Mail (Supabase Auth)
+- Auth-Callback (`/auth/callback`): Unterstützt PKCE + Token-Hash + Fallback bei In-App-Browsern
+- Bei PKCE-Fehler (Outlook/Mail-App): Grüne Erfolgsmeldung "E-Mail bestätigt! Bitte einloggen."
+- Supabase Auth Flow: Implicit (`flowType: 'implicit'` in supabase-auth.ts)
+- Supabase E-Mail-Templates: Custom HTML mit cam2rent-Branding (im Dashboard konfiguriert)
+- Ausweis-Upload: `/konto/verifizierung` → `/api/upload-id` (FormData, Storage: `id-documents`)
+- Admin-Verifizierung: `/admin/kunden/[id]` → Ausweisbilder anzeigen + Verifizieren/Ablehnen Buttons
+  - API: `/api/admin/verify-customer` (POST)
+  - API: `/api/admin/id-document-url` (GET, Signed URLs)
+- Profiles-Trigger: `handle_new_user()` erstellt automatisch Profil bei Registrierung
+- Base-URL in Callback: `x-forwarded-host` Header oder `NEXT_PUBLIC_SITE_URL` Env-Variable
+
 ### Kundenkonto
 `/app/konto/` mit horizontaler Tab-Leiste
 
@@ -140,7 +167,20 @@ Alle Dropdowns laden aus `admin_settings` und können neue Einträge hinzufügen
 - Globaler Modus in `admin_settings.deposit_mode`: 'kaution' | 'haftung' (kein 'both' mehr)
 - Haftungsschutz-Preise gestaffelt: Basispreis (1-7 Tage), +Aufschlag pro weitere Woche
 - Standard: 15€ Basis +5€/Woche, Premium: 25€ Basis +10€/Woche
+- **Eigenbeteiligung pro Kategorie:** `HaftungConfig.eigenbeteiligungByCategory` (z.B. action-cam: 200€, 360-cam: 300€)
+  - `getEigenbeteiligung(config, category)` Helper in `lib/price-config.ts`
+  - Admin: `/admin/preise/haftung` → Kategorie-Tabelle
+  - Buchungsflow: Zeigt kategorie-spezifische Eigenbeteiligung
+  - Vertrag: Dynamischer Wert statt hardcoded 200€
 - Kamera-Editor zeigt nur relevante Optionen basierend auf globalem Modus
+
+### Mietvertrag-PDF
+- `lib/contracts/contract-template.tsx` — React-PDF Template mit 19 Paragraphen
+- Dynamischer Seitenumbruch (eine Page mit `wrap`), kein festes Seitenlayout mehr
+- Footer mit automatischen Seitenzahlen (`render={({ pageNumber, totalPages })`)
+- `getParagraphen(eigenbeteiligung)` — Funktion statt Konstante (§7 dynamisch)
+- Signatur: Canvas oder getippter Name
+- SHA-256 Hash des Vertragstexts
 
 ### next/image
 - ProductCard + ProductImageGallery nutzen `next/image` (WebP, Lazy Loading)
@@ -156,6 +196,38 @@ Steuer-Modus umschaltbar im Admin (/admin/einstellungen):
 - Stripe Redirect-Flow (nicht in-Modal): Payment → Redirect zu /konto/buchungen?extend_confirm=1 → confirm-extension API
 - Extension-Context wird in sessionStorage gespeichert ('cam2rent_extension')
 
+## Performance-Optimierungen
+- **API-Caching:** `/api/shop-content` + `/api/home-reviews` (10min Server-Cache), `/api/prices` (5min)
+- **next.config.ts:** `compress: true`, `optimizePackageImports` (supabase, date-fns, lucide-react)
+- **Middleware:** Admin-Token wird gecached statt bei jedem Request neu gehasht
+- **ESLint/TypeScript:** Beim Build geskippt (`ignoreDuringBuilds`) wegen RAM-Limit
+- **Dockerfile:** `NODE_OPTIONS=--max-old-space-size=3072` für Build
+
+## Blog-System (KI-automatisiert)
+Vollautomatisches Blog-System mit Redaktionsplan, KI-Generierung und Cron-Jobs.
+Ausführliche Dokumentation: `BLOG_SYSTEM_DOCS.md`
+
+### Kernfunktionen
+- **Redaktionsplan** (`/admin/blog/zeitplan`): Aufklappbare Karten mit editierbarem Titel, ausführlichem KI-Prompt, Keywords, Ton, Länge, Kategorie
+- **KI-Themenplanung:** Generiert Themen mit detaillierten Prompts im Hintergrund (Fenster kann geschlossen werden)
+- **Duplikat-Prüfung:** KI bekommt alle bestehenden Artikel + Zeitplan-Themen als Kontext
+- **Blog-Dashboard** (`/admin/blog`): KI-Bot-Status, nächste geplante Artikel, Warteschlange
+- **Generierung:** Nur aus Redaktionsplan (kein Pool/Serien-Fallback)
+- **3-stufiger Faktencheck** nach Generierung (Claude)
+- **DALL-E 3 Bildgenerierung** (optional, wenn OpenAI Key vorhanden)
+
+### Cron-Jobs (Hetzner Server)
+```
+0 * * * * curl -s -X POST "https://test.cam2rent.de/api/cron/blog-generate?secret=<CRON_SECRET>"
+*/10 * * * * curl -s -X POST "https://test.cam2rent.de/api/cron/blog-publish?secret=<CRON_SECRET>"
+```
+- **Generate:** Jede Stunde. Bei Intervall "daily" kein Wochentag-Check. Max 5 Artikel/Tag.
+- **Publish:** Alle 10 Min. Voll-Modus: automatisch. Semi-Modus: nur wenn "Gesehen"-Haken gesetzt.
+- **Auth:** `verifyCronAuth()` in `lib/cron-auth.ts` — akzeptiert Header (Authorization/x-cron-secret) UND URL-Parameter (?secret=)
+
+### DB-Tabellen
+- `blog_posts`, `blog_categories`, `blog_comments`, `blog_schedule` (mit `prompt` TEXT Spalte), `blog_auto_topics`, `blog_series`, `blog_series_parts` (mit `prompt` TEXT Spalte)
+
 ## Kunden-Features
 - **Kamera-Vergleich:** `/vergleich?ids=1,2,3` — CompareProvider Context, CompareBar (sticky unten), max 3 Produkte
 - **Kamera-Finder:** `/kamera-finder` — 5-Fragen-Assistent mit Score-basiertem Produkt-Matching
@@ -168,3 +240,4 @@ Steuer-Modus umschaltbar im Admin (/admin/einstellungen):
 - Bestehende 6 Kameras brauchen Admin-Specs (Technische Daten im Editor anlegen)
 - SQL-Migration `supabase-product-units.sql` muss in Supabase ausgeführt werden (product_units Tabelle + unit_id in bookings)
 - Bestehende Kameras brauchen Seriennummern (im Kamera-Editor unter "Kameras / Seriennummern" anlegen)
+- **Sicherheit:** API-Keys rotieren (wurden in einer Session öffentlich geteilt)
