@@ -91,6 +91,7 @@ export async function GET(
     stripePaymentId: booking.payment_intent_id?.startsWith('pi_') ? booking.payment_intent_id : undefined,
     paymentStatus: booking.payment_intent_id?.includes('UNPAID') ? 'unpaid'
       : booking.payment_status === 'unpaid' ? 'unpaid'
+      : (booking.notes && typeof booking.notes === 'string' && booking.notes.includes('Überweisung ausstehend')) ? 'unpaid'
       : undefined,
   };
 

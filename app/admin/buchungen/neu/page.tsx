@@ -1145,32 +1145,6 @@ export default function ManualBookingPage() {
             </div>
           </div>
 
-          {/* Kontodaten bei "nicht bezahlt" */}
-          {paymentStatus === 'unpaid' && (
-            <div className="rounded-lg p-4" style={{ background: '#f59e0b0a', border: '1px solid #f59e0b33' }}>
-              <p className="text-xs font-semibold mb-2" style={{ color: '#f59e0b' }}>
-                ÜBERWEISUNGSDATEN (werden in Notizen gespeichert)
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm" style={{ color: '#e2e8f0' }}>
-                <div>
-                  <span className="text-xs" style={{ color: '#64748b' }}>Kontoinhaber</span>
-                  <p>{BIZ.owner}</p>
-                </div>
-                <div>
-                  <span className="text-xs" style={{ color: '#64748b' }}>IBAN</span>
-                  <p style={{ fontFamily: 'monospace', letterSpacing: 1 }}>{BIZ.iban}</p>
-                </div>
-                <div>
-                  <span className="text-xs" style={{ color: '#64748b' }}>BIC</span>
-                  <p style={{ fontFamily: 'monospace' }}>{BIZ.bic}</p>
-                </div>
-                <div>
-                  <span className="text-xs" style={{ color: '#64748b' }}>Verwendungszweck</span>
-                  <p style={{ color: '#06b6d4' }}>{customerName.trim() || 'Kundenname'} - {createdBookingId ? createdBookingId.replace(/^(C2R|BK)-/, 'RE-') : 'RE-XXXXX'}</p>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
 
         {/* ─── Zusammenfassung ─── */}
@@ -1288,54 +1262,26 @@ export default function ManualBookingPage() {
         </div>
       </form>
 
-      {/* ─── Erfolg: Zahlungsoptionen ─── */}
+      {/* ─── Erfolg ─── */}
       {createdBookingId && (
         <div style={{ ...sectionStyle, marginTop: 24, borderColor: '#10b98140' }}>
-          <h3 style={{ fontSize: 16, fontWeight: 700, color: '#10b981', marginBottom: 16 }}>
+          <h3 style={{ fontSize: 16, fontWeight: 700, color: '#10b981', marginBottom: 8 }}>
             Buchung {createdBookingId} erstellt!
           </h3>
-
-          {/* Überweisungsdaten */}
-          <div style={{ background: '#0f172a', borderRadius: 8, padding: 16, marginBottom: 16 }}>
-            <h4 style={{ fontSize: 13, fontWeight: 700, color: '#e2e8f0', marginBottom: 10 }}>Banküberweisung</h4>
-            <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '6px 12px', fontSize: 13 }}>
-              <span style={{ color: '#64748b' }}>Empfänger:</span><span style={{ color: '#e2e8f0' }}>{BIZ.owner}</span>
-              <span style={{ color: '#64748b' }}>IBAN:</span><span style={{ color: '#e2e8f0', fontFamily: 'monospace' }}>{BIZ.iban}</span>
-              <span style={{ color: '#64748b' }}>BIC:</span><span style={{ color: '#e2e8f0', fontFamily: 'monospace' }}>{BIZ.bic}</span>
-              <span style={{ color: '#64748b' }}>Betrag:</span><span style={{ color: '#22d3ee', fontWeight: 700 }}>{total.toFixed(2).replace('.', ',')} €</span>
-              <span style={{ color: '#64748b' }}>Verwendung:</span><span style={{ color: '#e2e8f0' }}>{createdBookingId} – {customerName}</span>
-            </div>
-          </div>
-
-          {/* PayPal QR */}
-          <div style={{ background: '#0f172a', borderRadius: 8, padding: 16, marginBottom: 16 }}>
-            <h4 style={{ fontSize: 13, fontWeight: 700, color: '#e2e8f0', marginBottom: 10 }}>PayPal</h4>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`${BIZ.paypalMe}/${total.toFixed(2)}`)}`}
-                alt="PayPal QR-Code"
-                width={120}
-                height={120}
-                style={{ borderRadius: 8, background: 'white', padding: 4 }}
-              />
-              <div style={{ fontSize: 13, color: '#94a3b8' }}>
-                <p style={{ margin: '0 0 8px' }}>QR-Code scannen oder Link nutzen:</p>
-                <a
-                  href={`${BIZ.paypalMe}/${total.toFixed(2)}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ color: '#06b6d4', wordBreak: 'break-all' }}
-                >
-                  {BIZ.paypalMe.replace('https://', '')}/{total.toFixed(2)}
-                </a>
-              </div>
-            </div>
-          </div>
-
+          <p style={{ fontSize: 13, color: '#94a3b8', marginBottom: 16 }}>
+            {paymentStatus === 'unpaid' ? 'Zahlungsdaten stehen auf der Rechnung.' : 'Buchung wurde als bezahlt markiert.'}
+          </p>
           <div className="flex gap-3">
+            <a
+              href={`/api/invoice/${createdBookingId}`}
+              target="_blank"
+              className="px-5 py-3 rounded-lg font-heading font-semibold text-sm"
+              style={{ background: '#0f172a', color: '#e2e8f0', border: '1px solid #334155' }}
+            >
+              Rechnung PDF
+            </a>
             <button
-              onClick={() => router.push(`/admin/buchungen?id=${createdBookingId}`)}
+              onClick={() => router.push(`/admin/buchungen/${createdBookingId}`)}
               className="px-5 py-3 rounded-lg font-heading font-semibold text-sm"
               style={{ background: '#06b6d4', color: 'white' }}
             >
