@@ -53,8 +53,51 @@ ESLint + TypeScript werden auf dem Server beim Build geskippt (RAM-Limit CX23).
 - **Bilder:** Kommen über ProductsProvider (kein eigener API-Call mehr)
 - **Statische Dateien** (`data/products.ts`, `data/accessories.ts`, `data/sets.ts`) enthalten nur noch **Typ-Definitionen** und **Hilfsfunktionen** (`getPriceForDays`, `getAccessoryPrice`, `getMergedSpecs`), KEINE Daten als Fallback.
 
+### Zentralisierte Systeme
+
+#### Brand-Farben-System (dynamisch aus DB)
+- **`lib/brand-colors.ts`**: `getBrandStyle(brand, colors?)` → `{ color, bg, border }` inline Styles
+- **`hooks/useBrandColors.ts`**: Hook lädt Farben aus `admin_settings` (key: `brand_colors`), cached
+- **`components/BrandBadge.tsx`**: Wiederverwendbare Badge-Komponente
+- **`components/admin/BrandColorManager.tsx`**: Ausklappbare Karte auf `/admin/preise/kameras` — Marken hinzufügen/löschen + Farben zuweisen (10 Presets + Color-Picker + Hex)
+- **Speicherung:** `admin_settings.camera_brands` (Array) + `admin_settings.brand_colors` (Record<string, hex>)
+- **Verwendet in:** ProductCard, ProductImageGallery, CompareBar, ProductPreview, alle Admin-Seiten (Kameras, Sets, Zubehör, Verfügbarkeit), Buchungsprozess, Set-Konfigurator, Vergleich, Favoriten
+
+#### Business-Daten (BUSINESS Config)
+- **`lib/business-config.ts`**: Zentrale Geschäftsdaten als Proxy-Objekt
+- **Felder:** owner, street, zip, city, email, emailKontakt, phone, domain, url, iban, ibanFormatted, bic, bankName, paypalMe
+- **Berechnete Properties:** fullAddress, addressLine, whatsappUrl, testUrl, paypalMeUrl(amount), tax.hinweis, tax.hinweisKurz, shipping.*, cancellation.*
+- **Verwendung:** Invoice-Templates, AGB, Impressum, Stornierung, Email-Services, Vertrag-PDFs
+- **DB-Override:** Kann aus `admin_settings.business_config` geladen werden via `setBusinessOverride()`
+
+#### Format-Utilities
+- **`lib/format-utils.ts`**: Zentrale Datum/Preis-Formatierung
+- **Funktionen:** `fmtEuro()`, `formatCurrency()`, `fmtDate()`, `fmtDateShort()`, `fmtDateLong()`, `fmtDateTime()`, `fmtDateTimeShort()`, `isoToDE()`
+- **Ersetzt** ~40 duplizierte lokale Funktionen in Admin/Kunden/API-Dateien
+
+#### PriceInput-Komponente
+- **`components/admin/PriceInput.tsx`**: Ersetzt `<input type="number">` in Admin-Preisfeldern
+- **Features:** Komma als Dezimaltrennzeichen, 0 löschbar, `inputMode="decimal"` für Mobile-Tastatur
+- **Verwendet in:** Kamera-Editor (Kaution, Preistabelle, perDayAfter30), Haftungs-Admin
+
+### Benachrichtigungssystem
+- **DB-Tabelle:** `admin_notifications` (id, type, title, message, link, is_read, created_at)
+- **API:** GET/PATCH `/api/admin/notifications`, POST `/api/admin/notifications/create`
+- **Helper:** `createAdminNotification(supabase, { type, title, message?, link? })` in `lib/admin-notifications.ts`
+- **UI:** `NotificationDropdown` in Admin-Sidebar + Mobile-Header, pollt alle 30s
+- **9 Events angeschlossen:**
+  - `new_booking`: confirm-booking, confirm-cart, manual-booking, confirm-extension
+  - `booking_cancelled`: cancel-booking, cron/auto-cancel
+  - `new_damage`: damage-report
+  - `new_message`: messages
+  - `new_review`: reviews
+- **Typen mit Icons:** new_booking (cyan), booking_cancelled (rot), new_damage (amber), new_message (lila), new_customer (grün), overdue_return (rot), new_review (amber), payment_failed (rot)
+
 ### Buchungsflow
 5 Steps (Versand → Zubehör → Haftung → Zusammenfassung → Zahlung)
+- **Sets gefiltert** nach `product_ids` (Kamera-Kompatibilität) — nur passende Sets werden angezeigt
+- **Set-Verfügbarkeit:** Nur Lagerbestand prüfen, NICHT Zubehör-Kompatibilität (Sets sind bereits per product_ids gefiltert)
+- **Set-Preis:** `getSetPrice()` prüft `pricing_mode ?? pricingMode` (API gibt camelCase `pricingMode` zurück)
 - Buchungsbestätigung antwortet sofort — PDF + E-Mail laufen im Hintergrund
 - Kalender verhindert Buchung über ausgebuchte Tage hinweg (maxEndDate-Logik)
 
@@ -64,14 +107,19 @@ ESLint + TypeScript werden auf dem Server beim Build geskippt (RAM-Limit CX23).
 - **Puffertage:** In `admin_settings.booking_buffer_days` konfigurierbar (versand_before/after, abholung_before/after).
 - **Tooltips:** Gesperrte Tage zeigen Grund beim Hover.
 - Startdatum wird immer blau hervorgehoben + Anzeige unter Kalender.
+- **1-Tag-Buchung:** Doppelklick auf gleichen Tag = Start und Ende am selben Tag. Hinweis: "Wähle das Enddatum oder klicke erneut für 1 Tag"
 - **Überbuchungsschutz:** Wenn Startdatum gewählt, werden alle Tage nach dem nächsten gebuchten Tag blockiert.
 
 ### Manuelle Buchung (`/admin/buchungen/neu`)
+- **Datum ist Pflicht** — Datum-Felder stehen ÜBER dem Produkt-Dropdown, "Hinzufügen" ist disabled ohne Datum
+- **Auto-Seriennummer:** Beim Hinzufügen wird API `/api/admin/find-free-unit` aufgerufen → findet freie Unit mit Puffertagen → Seriennummer automatisch eingetragen
+- **Verfügbarkeitsprüfung:** Fehlermeldung wenn keine Kamera-Unit für den Zeitraum verfügbar
+- **Sets/Zubehör gefiltert** nach Kamera-Kompatibilität (product_ids / compatible_product_ids)
 - Gast-Buchung ohne Kundenkonto (nur Name + E-Mail)
 - Digitale Vertragsunterschrift auf Admin-Tablet/Handy (SignatureStep)
 - Rechnung-PDF + Vertrag-PDF werden im Hintergrund generiert
 - E-Mail mit Anhängen automatisch gesendet wenn E-Mail hinterlegt
-- Nach Erstellung: PayPal QR-Code (`paypal.me/Cam2Rent`) + Bankdaten
+- Nach Erstellung: PayPal QR-Code + Bankdaten (aus BUSINESS Config)
 - Vertrag nachträglich unterschreiben: `/admin/buchungen/[id]/vertrag-unterschreiben`
 
 ### Admin-Sidebar Struktur
@@ -86,7 +134,13 @@ Alle Dropdowns laden aus `admin_settings` und können neue Einträge hinzufügen
 - **Marken:** `camera_brands` (DynamicSelect via BrandSelect)
 - **Zubehör-Kategorien:** `accessory_categories` (DynamicSelect)
 - **Set-Badges:** `set_badges` (in Sets-Seite)
+- **Markenfarben:** `brand_colors` (BrandColorManager auf Kameras-Seite)
 - **Spec-Definitionen:** `spec_definitions` (SpecDefinitionsManager in Einstellungen)
+
+### Sets-Admin (`/admin/sets`)
+- **Zubehör-Dropdown:** Gruppiert nach Kategorie (`<optgroup>`), zeigt intern-Flag, Upgrade-Gruppe, Stückzahl, Kompatibilität
+- **Kamera-Toggles:** Nutzen `CameraToggle` mit dynamischen Brand-Farben
+- **Dark-Mode:** Alle Elemente mit `dark:` Klassen versehen
 
 ### Technische Daten (Specs)
 - Spec-Typen werden in `/admin/einstellungen` → "Technische Daten" verwaltet (Name, Icon, Einheit)
@@ -201,7 +255,8 @@ Steuer-Modus umschaltbar im Admin (/admin/einstellungen):
 - **next.config.ts:** `compress: true`, `optimizePackageImports` (supabase, date-fns, lucide-react)
 - **Middleware:** Admin-Token wird gecached statt bei jedem Request neu gehasht
 - **ESLint/TypeScript:** Beim Build geskippt (`ignoreDuringBuilds`) wegen RAM-Limit
-- **Dockerfile:** `NODE_OPTIONS=--max-old-space-size=3072` für Build
+- **Dockerfile:** `NODE_OPTIONS=--max-old-space-size=1536 --max-semi-space-size=64` für Build
+- **outputFileTracingExcludes:** @swc, @esbuild, typescript, eslint, sharp (spart RAM beim "Collecting build traces")
 
 ## Blog-System (KI-automatisiert)
 Vollautomatisches Blog-System mit Redaktionsplan, KI-Generierung und Cron-Jobs.
