@@ -444,7 +444,12 @@ export default function BuchenPage() {
       .then((r) => r.json())
       .then((data) => {
         if (Array.isArray(data?.sets)) {
-          setAvailableSets([...data.sets].sort((a: RentalSet, b: RentalSet) => a.price - b.price));
+          // Nur Sets anzeigen die für diese Kamera kompatibel sind
+          const compatible = data.sets.filter((s: RentalSet & { product_ids?: string[] }) => {
+            if (!s.product_ids?.length) return true; // Keine Einschränkung = alle Kameras
+            return s.product_ids.includes(product!.id);
+          });
+          setAvailableSets([...compatible].sort((a: RentalSet, b: RentalSet) => a.price - b.price));
         }
       })
       .catch(() => {});
