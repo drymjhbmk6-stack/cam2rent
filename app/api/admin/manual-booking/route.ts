@@ -50,7 +50,10 @@ export async function POST(req: NextRequest) {
 
     const supabase = createServiceClient();
     const bookingId = await generateBookingId();
-    const paymentIntentId = `MANUAL-${bookingId}-${Date.now()}`;
+    const isUnpaid = payment_status === 'unpaid';
+    const paymentIntentId = isUnpaid
+      ? `MANUAL-UNPAID-${bookingId}-${Date.now()}`
+      : `MANUAL-${bookingId}-${Date.now()}`;
     const bookingNotes = body.notes || null;
 
     const insertData: Record<string, unknown> = {
