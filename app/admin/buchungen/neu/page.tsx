@@ -554,7 +554,23 @@ export default function ManualBookingPage() {
   ${(depositMode === 'kaution') && deposit > 0 ? `<div style="font-size:8pt;color:#6b7280;margin-top:6px;text-align:right">* Enthält Kaution ${fmtP(deposit)} – wird nach Rückgabe erstattet</div>` : ''}
   ${remark ? `<div class="note" style="margin-top:16px"><strong>Bemerkung:</strong><br>${remark.replace(/\n/g, '<br>')}</div>` : ''}
   <div class="note"${remark ? ' style="margin-top:8px"' : ''}>${BIZ.taxHinweis}</div>
-  ${paymentStatus === 'unpaid' ? `<div class="note" style="margin-top:12px;border:1px solid #d97706;background:#fffbeb"><strong style="color:#d97706">Überweisungsdaten:</strong><br>Kontoinhaber: ${BIZ.owner}<br>IBAN: ${BIZ.iban}<br>BIC: ${BIZ.bic}<br>Verwendungszweck: ${customerName || 'Kunde'} - ${createdBookingId ? createdBookingId.replace(/^(C2R|BK)-/, 'RE-') : 'RE-XXXXX'}</div>` : ''}
+  ${paymentStatus === 'unpaid' ? `<div class="note" style="margin-top:12px;border:1px solid #d97706;background:#fffbeb">
+    <strong style="color:#d97706">Überweisungsdaten:</strong><br>
+    Kontoinhaber: ${BIZ.owner}<br>
+    IBAN: ${BIZ.iban}<br>
+    BIC: ${BIZ.bic}<br>
+    Verwendungszweck: <strong>${customerName || 'Kunde'} - ${createdBookingId ? createdBookingId.replace(/^(C2R|BK)-/, 'RE-') : 'RE-XXXXX'}</strong>
+  </div>
+  <div style="display:flex;gap:24px;margin-top:12px;align-items:flex-start">
+    <div style="text-align:center">
+      <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`BCD\n002\n1\nSCT\n${BIZ.bic}\n${BIZ.owner}\n${BIZ.iban}\nEUR${total.toFixed(2)}\n\n\n${createdBookingId ? createdBookingId.replace(/^(C2R|BK)-/, 'RE-') : 'RE'} ${customerName || 'Kunde'}`)}" width="120" height="120" style="border-radius:6px" />
+      <div style="font-size:8pt;color:#6b7280;margin-top:4px">Banking QR-Code<br><span style="font-size:7pt">Scanne mit deiner Banking-App</span></div>
+    </div>
+    <div style="text-align:center">
+      <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`${BIZ.paypalMe}/${total.toFixed(2)}`)}" width="120" height="120" style="border-radius:6px" />
+      <div style="font-size:8pt;color:#6b7280;margin-top:4px">PayPal QR-Code<br><a href="${BIZ.paypalMe}/${total.toFixed(2)}" target="_blank" style="font-size:7pt;color:#06b6d4">${BIZ.paypalMe.replace('https://', '')}/${total.toFixed(2)}</a></div>
+    </div>
+  </div>` : ''}
   <div class="footer"><span>cam2rent · ${BIZ.owner} · ${BIZ.street} · ${BIZ.zip} ${BIZ.city}</span><span>${BIZ.domain} · ${BIZ.email}</span></div>
 </body></html>`;
 
