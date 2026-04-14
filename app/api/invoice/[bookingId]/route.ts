@@ -89,6 +89,7 @@ export async function GET(
     ustId: taxMap['ust_id'] || '',
     paymentMethod: booking.payment_intent_id?.startsWith('MANUAL') ? 'Ueberweisung' : booking.payment_intent_id?.startsWith('PENDING') ? 'Ausstehend' : 'Stripe',
     stripePaymentId: booking.payment_intent_id?.startsWith('pi_') ? booking.payment_intent_id : undefined,
+    paymentStatus: booking.payment_status ?? undefined,
   };
 
   // EPC QR-Code für Banking generieren

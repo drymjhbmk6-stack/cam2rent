@@ -38,6 +38,7 @@ export interface InvoiceData {
   qrCodeDataUrl?: string;
   paymentMethod?: string;
   stripePaymentId?: string;
+  paymentStatus?: string;
 }
 
 // ─── Colors ──────────────────────────────────────────────────────────────────
@@ -464,23 +465,85 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
           <View style={s.divider} />
 
           {/* ── Bezahlt / Zahlungsinformation ── */}
-          {data.paymentMethod !== 'Ausstehend' ? (
-            <View style={[s.noteBox, { backgroundColor: '#f0fdf4', borderWidth: 1, borderColor: '#bbf7d0' }]}>
-              <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: '#16a34a' }}>
-                Bezahlt
-              </Text>
-            </View>
-          ) : (
-            <View style={s.noteBox}>
-              <Text style={[s.noteText, { fontFamily: 'Helvetica-Bold', color: C.black, marginBottom: 4 }]}>
-                Zahlung ausstehend
-              </Text>
-              <Text style={s.noteText}>
-                Bitte überweise den Gesamtbetrag auf das angegebene Konto.
-                {data.deliveryMode === 'abholung' ? '\nAbholung — kein Versand.' : ''}
-              </Text>
-            </View>
-          )}
+          {(() => {
+            const isUnpaid = data.paymentStatus === 'unpaid' || data.paymentMethod === 'Ausstehend';
+            const verwendungszweck = `${data.invoiceNumber ?? data.bookingId} ${data.customerName}`;
+
+            return isUnpaid ? (
+              <>
+                <View style={s.noteBox}>
+                  <Text style={[s.noteText, { fontFamily: 'Helvetica-Bold', color: C.black, marginBottom: 4 }]}>
+                    Zahlung ausstehend
+                  </Text>
+                  <Text style={s.noteText}>
+                    Bitte überweise den Gesamtbetrag auf das angegebene Konto.
+                    {data.deliveryMode === 'abholung' ? '\nAbholung — kein Versand.' : ''}
+                  </Text>
+                </View>
+
+                {/* Bankdaten */}
+                <View style={{ marginTop: 12, backgroundColor: C.grayLight, borderRadius: 6, padding: 12 }}>
+                  <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold', color: C.black, marginBottom: 6 }}>
+                    Bankverbindung
+                  </Text>
+                  <View style={{ flexDirection: 'row', marginBottom: 3 }}>
+                    <Text style={{ fontSize: 8, color: C.grayText, width: 100 }}>Kontoinhaber:</Text>
+                    <Text style={{ fontSize: 8, color: C.black }}>{BUSINESS.owner}</Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', marginBottom: 3 }}>
+                    <Text style={{ fontSize: 8, color: C.grayText, width: 100 }}>IBAN:</Text>
+                    <Text style={{ fontSize: 8, color: C.black, fontFamily: 'Courier' }}>{BUSINESS.ibanFormatted || BUSINESS.iban}</Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', marginBottom: 3 }}>
+                    <Text style={{ fontSize: 8, color: C.grayText, width: 100 }}>BIC:</Text>
+                    <Text style={{ fontSize: 8, color: C.black, fontFamily: 'Courier' }}>{BUSINESS.bic}</Text>
+                  </View>
+                  <View style={{ flexDirection: 'row' }}>
+                    <Text style={{ fontSize: 8, color: C.grayText, width: 100 }}>Verwendungszweck:</Text>
+                    <Text style={{ fontSize: 8, fontFamily: 'Helvetica-Bold', color: '#06b6d4' }}>{verwendungszweck}</Text>
+                  </View>
+                </View>
+
+                {/* QR-Code + PayPal */}
+                <View style={{ marginTop: 12, flexDirection: 'row', gap: 16 }}>
+                  {data.qrCodeDataUrl && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                      <Image src={data.qrCodeDataUrl} style={{ width: 68, height: 68 }} />
+                      <View>
+                        <Text style={{ fontSize: 8, fontFamily: 'Helvetica-Bold', color: C.black, marginBottom: 2 }}>
+                          QR-Code für Überweisung
+                        </Text>
+                        <Text style={{ fontSize: 7, color: C.grayText, lineHeight: 1.4 }}>
+                          Scanne mit deiner Banking-App.{'\n'}
+                          IBAN, Betrag und Verwendungszweck{'\n'}
+                          werden automatisch ausgefüllt.
+                        </Text>
+                      </View>
+                    </View>
+                  )}
+                  {BUSINESS.paypalMe && (
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 8, fontFamily: 'Helvetica-Bold', color: C.black, marginBottom: 2 }}>
+                        Oder per PayPal
+                      </Text>
+                      <Text style={{ fontSize: 7, color: '#06b6d4' }}>
+                        {BUSINESS.paypalMe}
+                      </Text>
+                      <Text style={{ fontSize: 7, color: C.grayText, marginTop: 2 }}>
+                        Betrag: {fmtEuro(data.priceTotal)}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </>
+            ) : (
+              <View style={[s.noteBox, { backgroundColor: '#f0fdf4', borderWidth: 1, borderColor: '#bbf7d0' }]}>
+                <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: '#16a34a' }}>
+                  Bezahlt
+                </Text>
+              </View>
+            );
+          })()}
 
           {/* ── Steuer-Hinweis ── */}
           <View style={[s.noteBox, { marginTop: 12 }]}>
@@ -490,23 +553,6 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
                 : 'Gemäß §19 UStG wird keine Umsatzsteuer berechnet (Kleinunternehmerregelung).'}
             </Text>
           </View>
-
-          {/* ── QR-Code — nur wenn nicht bezahlt ── */}
-          {data.paymentMethod === 'Ausstehend' && data.qrCodeDataUrl && (
-            <View style={{ marginTop: 16, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-              <Image src={data.qrCodeDataUrl} style={{ width: 72, height: 72 }} />
-              <View>
-                <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold', color: C.black, marginBottom: 2 }}>
-                  QR-Code für Überweisung
-                </Text>
-                <Text style={{ fontSize: 8, color: C.grayText, lineHeight: 1.5 }}>
-                  Scanne mit deiner Banking-App.{'\n'}
-                  IBAN, Betrag und Verwendungszweck{'\n'}
-                  werden automatisch ausgefüllt.
-                </Text>
-              </View>
-            </View>
-          )}
 
         </View>
 
