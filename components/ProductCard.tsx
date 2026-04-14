@@ -166,7 +166,7 @@ export default function ProductCard({ product, imageUrl }: ProductCardProps) {
         {/* Content */}
         <div className="flex flex-col flex-1 p-5">
           <div className="mb-3">
-            <p className="text-xs font-body font-semibold text-accent-blue uppercase tracking-wider mb-1">
+            <p className="text-xs font-body font-semibold uppercase tracking-wider mb-1" style={{ color: getBrandStyle(product.brand, brandColors).color }}>
               {product.brand}
             </p>
             <h3 className="font-heading font-semibold text-base text-brand-black dark:text-gray-100 leading-snug mb-1">

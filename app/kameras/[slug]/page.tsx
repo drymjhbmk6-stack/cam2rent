@@ -9,6 +9,8 @@ import ProductBookingCalendar from '@/components/ProductBookingCalendar';
 import ProductAccessorySets from '@/components/ProductAccessorySets';
 import ProductImageGallery from '@/components/ProductImageGallery';
 import MarkdownContent from '@/components/MarkdownContent';
+import { getBrandStyle } from '@/lib/brand-colors';
+import BrandBadge from '@/components/BrandBadge';
 
 // ─── Static generation ──────────────────────────────────────────────────────
 
@@ -35,29 +37,6 @@ export async function generateMetadata({
   };
 }
 
-// ─── Brand config ────────────────────────────────────────────────────────────
-
-const brandConfig: Record<
-  string,
-  { bg: string; color: string; pill: string }
-> = {
-  GoPro: {
-    bg: 'bg-accent-blue-soft',
-    color: '#3b82f6',
-    pill: 'bg-accent-blue-soft text-accent-blue',
-  },
-  DJI: {
-    bg: 'bg-accent-teal-soft',
-    color: '#0d9488',
-    pill: 'bg-accent-teal-soft text-accent-teal',
-  },
-  Insta360: {
-    bg: 'bg-accent-amber-soft',
-    color: '#f59e0b',
-    pill: 'bg-accent-amber-soft text-accent-amber',
-  },
-};
-
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default async function KameraDetailPage({
@@ -71,7 +50,7 @@ export default async function KameraDetailPage({
 
   if (!product) notFound();
 
-  const brand = brandConfig[product.brand] ?? { bg: 'bg-gray-100', color: '#6b7280', pill: 'bg-gray-100 text-gray-600' };
+  const brandStyle = getBrandStyle(product.brand);
 
   return (
     <div className="min-h-screen bg-brand-bg dark:bg-gray-950">
@@ -147,9 +126,7 @@ export default async function KameraDetailPage({
                   </div>
                 )}
                 {/* Brand Badge */}
-                <span className={`inline-flex px-3 py-1 rounded-full text-xs font-heading font-semibold uppercase tracking-wider ${brand.pill} mb-2`}>
-                  {product.brand}
-                </span>
+                <BrandBadge brand={product.brand} className="uppercase tracking-wider mb-2" />
 
                 <h1 className="font-heading font-bold text-2xl sm:text-3xl text-brand-black dark:text-gray-100 leading-tight">
                   {product.name}
@@ -207,8 +184,8 @@ export default async function KameraDetailPage({
                 className="bg-white dark:bg-gray-800 rounded-card shadow-card dark:shadow-gray-900/50 p-5 flex items-center gap-4"
               >
                 <div
-                  className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${brand.bg}`}
-                  style={{ color: brand.color }}
+                  className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                  style={{ backgroundColor: brandStyle.bg, color: brandStyle.color }}
                 >
                   <SpecIcon iconId={spec.icon} />
                 </div>

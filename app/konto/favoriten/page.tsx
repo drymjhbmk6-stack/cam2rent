@@ -6,12 +6,15 @@ import { useFavorites } from '@/components/FavoritesProvider';
 import { type Product } from '@/data/products';
 import { useProducts } from '@/components/ProductsProvider';
 import Link from 'next/link';
+import { getBrandStyle } from '@/lib/brand-colors';
+import { useBrandColors } from '@/hooks/useBrandColors';
 
 export default function FavoritenPage() {
   const { products } = useProducts();
   const { user } = useAuth();
   const { favorites, loading, toggleFavorite } = useFavorites();
   const [favProducts, setFavProducts] = useState<Product[]>([]);
+  const brandColors = useBrandColors();
 
   useEffect(() => {
     if (loading) return;
@@ -70,12 +73,7 @@ export default function FavoritenPage() {
         /* Favorites grid */
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {favProducts.map((product) => {
-            const brandColors: Record<string, { bg: string; text: string }> = {
-              GoPro: { bg: 'bg-accent-blue-soft', text: 'text-accent-blue' },
-              DJI: { bg: 'bg-accent-teal-soft', text: 'text-accent-teal' },
-              Insta360: { bg: 'bg-accent-amber-soft', text: 'text-accent-amber' },
-            };
-            const colors = brandColors[product.brand] || brandColors.GoPro;
+            const style = getBrandStyle(product.brand, brandColors);
 
             return (
               <div
@@ -83,9 +81,9 @@ export default function FavoritenPage() {
                 className="bg-white dark:bg-brand-dark rounded-card shadow-card overflow-hidden flex flex-col"
               >
                 {/* Top: brand bar + remove button */}
-                <div className={`${colors.bg} px-5 py-4 flex items-center justify-between`}>
+                <div className="px-5 py-4 flex items-center justify-between" style={{ backgroundColor: style.bg }}>
                   <div>
-                    <p className={`text-xs font-body font-semibold ${colors.text} uppercase tracking-wider`}>
+                    <p className="text-xs font-body font-semibold uppercase tracking-wider" style={{ color: style.color }}>
                       {product.brand}
                     </p>
                     <h3 className="font-heading font-semibold text-base text-brand-black dark:text-white mt-0.5">

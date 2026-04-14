@@ -8,15 +8,8 @@ import { getPriceForDays, type Product } from '@/data/products';
 import { useProducts } from '@/components/ProductsProvider';
 import { useAccessories } from '@/components/AccessoriesProvider';
 import { getAccessoryPrice, type Accessory } from '@/data/accessories';
-
-// ─── Brand config ────────────────────────────────────────────────────────────
-
-const brandConfig: Record<string, { bg: string; color: string; border: string; pill: string }> = {
-  GoPro: { bg: 'bg-accent-blue-soft', color: '#3b82f6', border: 'border-blue-500', pill: 'bg-accent-blue-soft text-accent-blue' },
-  DJI: { bg: 'bg-accent-teal-soft', color: '#0d9488', border: 'border-teal-500', pill: 'bg-accent-teal-soft text-accent-teal' },
-  Insta360: { bg: 'bg-accent-amber-soft', color: '#f59e0b', border: 'border-amber-500', pill: 'bg-accent-amber-soft text-accent-amber' },
-};
-const defaultBrand = { bg: 'bg-gray-100', color: '#6b7280', border: 'border-gray-400', pill: 'bg-gray-100 text-gray-600' };
+import { getBrandStyle } from '@/lib/brand-colors';
+import { useBrandColors } from '@/hooks/useBrandColors';
 
 // ─── Available items ─────────────────────────────────────────────────────────
 
@@ -24,8 +17,8 @@ const defaultBrand = { bg: 'bg-gray-100', color: '#6b7280', border: 'border-gray
 
 // ─── Camera placeholder SVG ──────────────────────────────────────────────────
 
-function CameraIcon({ brand }: { brand: string }) {
-  const color = (brandConfig[brand] ?? defaultBrand).color;
+function CameraIcon({ brand, brandColors }: { brand: string; brandColors?: Record<string, string> }) {
+  const color = getBrandStyle(brand, brandColors).color;
   return (
     <svg viewBox="0 0 80 60" fill="none" className="w-20 h-16" aria-hidden="true">
       <rect x="8" y="18" width="64" height="36" rx="6" fill={color} fillOpacity="0.15" stroke={color} strokeWidth="2" />
@@ -158,6 +151,7 @@ function fmt(n: number) {
 export default function SetKonfiguratorPage() {
   const { accessories: ALL_ACCESSORIES } = useAccessories();
   const { products } = useProducts();
+  const brandColors = useBrandColors();
   const router = useRouter();
   const { user } = useAuth();
 
@@ -295,7 +289,7 @@ export default function SetKonfiguratorPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {availableCameras.map((cam) => {
                     const isSelected = selectedCamera?.id === cam.id;
-                    const brand = brandConfig[cam.brand] ?? defaultBrand;
+                    const bs = getBrandStyle(cam.brand, brandColors);
                     return (
                       <button
                         key={cam.id}
@@ -308,8 +302,8 @@ export default function SetKonfiguratorPage() {
                         }`}
                       >
                         {/* Brand color bar */}
-                        <div className={`${brand.bg} px-4 py-3 flex items-center justify-between`}>
-                          <span className={`text-xs font-heading font-semibold uppercase tracking-wider ${brand.pill.split(' ')[1] ?? 'text-gray-600'}`}>
+                        <div className="px-4 py-3 flex items-center justify-between" style={{ backgroundColor: bs.bg }}>
+                          <span className="text-xs font-heading font-semibold uppercase tracking-wider" style={{ color: bs.color }}>
                             {cam.brand}
                           </span>
                           {isSelected && (
@@ -428,7 +422,14 @@ export default function SetKonfiguratorPage() {
                 {selectedCamera && (
                   <div className="bg-white dark:bg-brand-dark rounded-card border border-brand-border dark:border-white/10 p-5 mb-4">
                     <div className="flex items-center gap-3 mb-3">
-                      <div className={`px-2 py-0.5 rounded-full text-xs font-heading font-semibold ${(brandConfig[selectedCamera.brand] ?? defaultBrand).pill}`}>
+                      <div
+                        className="px-2 py-0.5 rounded-full text-xs font-heading font-semibold border"
+                        style={{
+                          color: getBrandStyle(selectedCamera.brand, brandColors).color,
+                          backgroundColor: getBrandStyle(selectedCamera.brand, brandColors).bg,
+                          borderColor: getBrandStyle(selectedCamera.brand, brandColors).border,
+                        }}
+                      >
                         {selectedCamera.brand}
                       </div>
                       <h3 className="font-heading font-semibold text-base text-brand-black dark:text-white">
@@ -584,7 +585,7 @@ export default function SetKonfiguratorPage() {
               {selectedCamera && (
                 <div className="mb-3">
                   <div className="flex items-center gap-2 mb-1">
-                    <div className={`w-2 h-2 rounded-full`} style={{ backgroundColor: (brandConfig[selectedCamera.brand] ?? defaultBrand).color }} />
+                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: getBrandStyle(selectedCamera.brand, brandColors).color }} />
                     <p className="text-sm font-heading font-semibold text-brand-black dark:text-white truncate">
                       {selectedCamera.name}
                     </p>

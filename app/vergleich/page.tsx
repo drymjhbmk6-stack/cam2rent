@@ -6,12 +6,8 @@ import Link from 'next/link';
 import { type Product } from '@/data/products';
 import { useProducts } from '@/components/ProductsProvider';
 import { Suspense } from 'react';
-
-const brandColor: Record<string, string> = {
-  GoPro: '#3b82f6',
-  DJI: '#0d9488',
-  Insta360: '#f59e0b',
-};
+import { getBrandStyle } from '@/lib/brand-colors';
+import { useBrandColors } from '@/hooks/useBrandColors';
 
 // Spec-Zeilen-Konfiguration
 interface SpecRow {
@@ -64,8 +60,8 @@ function findBestIndices(prods: Product[], row: SpecRow): Set<number> {
   return indices;
 }
 
-function CameraPlaceholder({ brand }: { brand: string }) {
-  const color = brandColor[brand] || '#6b7280';
+function CameraPlaceholder({ brand, brandColors }: { brand: string; brandColors: Record<string, string> }) {
+  const color = getBrandStyle(brand, brandColors).color;
   return (
     <div
       className="w-full aspect-square rounded-card flex items-center justify-center"
@@ -93,6 +89,7 @@ function ChevronIcon() {
 
 function CompareContent() {
   const { products } = useProducts();
+  const brandColors = useBrandColors();
   const searchParams = useSearchParams();
   const idsParam = searchParams.get('ids') || '';
   const ids = idsParam.split(',').filter(Boolean);
@@ -210,7 +207,7 @@ function CompareContent() {
                 {selectedProducts.map((product) => (
                   <th key={product.id} className="p-3 align-top w-1/3 max-w-[260px]">
                     <div className="bg-white dark:bg-brand-dark rounded-card shadow-card p-4">
-                      <CameraPlaceholder brand={product.brand} />
+                      <CameraPlaceholder brand={product.brand} brandColors={brandColors} />
                       <p className="text-xs font-body font-semibold text-accent-blue uppercase tracking-wider mt-3 mb-0.5">
                         {product.brand}
                       </p>

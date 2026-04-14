@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import DynamicSelect from '@/components/admin/DynamicSelect';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { type AdminProduct } from '@/lib/price-config';
+import { getBrandStyle } from '@/lib/brand-colors';
+import { useBrandColors } from '@/hooks/useBrandColors';
 
 interface Accessory {
   id: string;
@@ -53,7 +55,7 @@ export default function AdminZubehoerPage() {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [savedId, setSavedId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [productList, setProductList] = useState<{ id: string; name: string }[]>([]);
+  const [productList, setProductList] = useState<{ id: string; name: string; brand: string }[]>([]);
 
   useEffect(() => {
     loadAccessories();
@@ -61,8 +63,8 @@ export default function AdminZubehoerPage() {
     fetch('/api/admin/config?key=products')
       .then((r) => r.json())
       .then((data: Record<string, AdminProduct> | null) => {
-        const source = data && Object.keys(data).length > 0 ? data : {};
-        setProductList(Object.entries(source).map(([id, p]) => ({ id, name: p.name })));
+        if (!data || Object.keys(data).length === 0) { setProductList([]); return; }
+        setProductList(Object.entries(data).map(([id, p]) => ({ id, name: p.name, brand: p.brand ?? '' })));
       })
       .catch(() => {
         setProductList([]);
@@ -429,12 +431,13 @@ function AccessoryCard({ acc, editId, editForm, setEditForm, savedId, savingId, 
   savedId: string | null;
   savingId: string | null;
   deletingId: string | null;
-  productList: { id: string; name: string }[];
+  productList: { id: string; name: string; brand: string }[];
   onStartEdit: (acc: Accessory) => void;
   onSetEditId: (id: string | null) => void;
   onSave: (id: string) => void;
   onDelete: (id: string, name: string) => void;
 }) {
+  const brandColors = useBrandColors();
   return (
     <div className={`bg-white rounded-xl border overflow-hidden ${acc.internal ? 'border-amber-300' : 'border-brand-border'}`}>
       {/* Row */}
@@ -476,13 +479,11 @@ function AccessoryCard({ acc, editId, editForm, setEditForm, savedId, savingId, 
           <div className="flex flex-wrap gap-1 mt-2">
             {acc.compatible_product_ids.map((pid) => {
               const p = productList.find((pr) => pr.id === pid);
-              const brandName = p?.name?.toLowerCase() ?? '';
-              const colors = brandName.includes('gopro') ? 'bg-blue-50 text-blue-700 border-blue-200'
-                : brandName.includes('dji') || brandName.includes('osmo') ? 'bg-gray-100 text-gray-800 border-gray-300'
-                : brandName.includes('insta') ? 'bg-amber-50 text-amber-700 border-amber-200'
-                : 'bg-brand-bg text-brand-steel border-brand-border';
+              const brand = p?.brand ?? '';
+              const style = getBrandStyle(brand, brandColors);
               return (
-                <span key={pid} className={`px-2 py-0.5 rounded-full text-[10px] font-body border ${colors}`}>
+                <span key={pid} className="px-2 py-0.5 rounded-full text-[10px] font-body border"
+                  style={{ color: style.color, backgroundColor: style.bg, borderColor: style.border }}>
                   {p?.name ?? pid}
                 </span>
               );
