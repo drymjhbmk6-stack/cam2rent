@@ -333,14 +333,28 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
     });
   }
 
-  // Versand
-  if (data.shippingPrice > 0) {
+  // Versand / Abholung
+  if (data.deliveryMode === 'abholung') {
+    items.push({
+      pos: pos++,
+      description: 'Selbstabholung',
+      qty: '1',
+      total: 0,
+    });
+  } else if (data.shippingPrice > 0) {
     items.push({
       pos: pos++,
       description: data.shippingMethod === 'express' ? 'Express-Versand' : 'Standard-Versand',
       subline: 'Hin- und Rücksendung',
       qty: '1',
       total: data.shippingPrice,
+    });
+  } else {
+    items.push({
+      pos: pos++,
+      description: 'Standard-Versand (kostenlos)',
+      qty: '1',
+      total: 0,
     });
   }
 
@@ -457,10 +471,17 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
           </View>
 
           {data.deposit > 0 && (
-            <Text style={{ fontSize: 8, color: C.grayText, marginTop: 6, textAlign: 'right', paddingRight: 12 }}>
+            <Text style={{ fontSize: 8, color: C.grayText, marginTop: 4, textAlign: 'right', paddingRight: 12 }}>
               Kaution: {fmtEuro(data.deposit)} (wird nach Rückgabe freigegeben)
             </Text>
           )}
+
+          {/* ── Steuer-Hinweis (direkt unter Gesamtbetrag, ohne Box) ── */}
+          <Text style={{ fontSize: 8, color: C.grayText, marginTop: 6, lineHeight: 1.4 }}>
+            {isRegel
+              ? `${data.ustId ? `USt-IdNr.: ${data.ustId} · ` : ''}Alle Beträge verstehen sich inkl. ${taxRate}% MwSt.`
+              : 'Gemäß §19 UStG wird keine Umsatzsteuer berechnet (Kleinunternehmerregelung).'}
+          </Text>
 
           <View style={s.divider} />
 
@@ -471,66 +492,50 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
 
             return isUnpaid ? (
               <>
-                <View style={s.noteBox}>
-                  <Text style={[s.noteText, { fontFamily: 'Helvetica-Bold', color: C.black, marginBottom: 4 }]}>
-                    Zahlung ausstehend
-                  </Text>
-                  <Text style={s.noteText}>
-                    Bitte überweise den Gesamtbetrag auf das angegebene Konto.
-                    {data.deliveryMode === 'abholung' ? '\nAbholung — kein Versand.' : ''}
-                  </Text>
-                </View>
+                <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: C.black, marginBottom: 6 }}>
+                  Zahlung ausstehend
+                </Text>
+                <Text style={{ fontSize: 8, color: C.grayText, marginBottom: 10 }}>
+                  Bitte überweise den Gesamtbetrag auf das angegebene Konto.
+                </Text>
 
                 {/* Bankdaten */}
-                <View style={{ marginTop: 12, backgroundColor: C.grayLight, borderRadius: 6, padding: 12 }}>
-                  <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold', color: C.black, marginBottom: 6 }}>
-                    Bankverbindung
-                  </Text>
-                  <View style={{ flexDirection: 'row', marginBottom: 3 }}>
-                    <Text style={{ fontSize: 8, color: C.grayText, width: 100 }}>Kontoinhaber:</Text>
+                <View style={{ backgroundColor: C.grayLight, borderRadius: 4, padding: 10, marginBottom: 10 }}>
+                  <View style={{ flexDirection: 'row', marginBottom: 2 }}>
+                    <Text style={{ fontSize: 8, color: C.grayText, width: 90 }}>Kontoinhaber:</Text>
                     <Text style={{ fontSize: 8, color: C.black }}>{BUSINESS.owner}</Text>
                   </View>
-                  <View style={{ flexDirection: 'row', marginBottom: 3 }}>
-                    <Text style={{ fontSize: 8, color: C.grayText, width: 100 }}>IBAN:</Text>
+                  <View style={{ flexDirection: 'row', marginBottom: 2 }}>
+                    <Text style={{ fontSize: 8, color: C.grayText, width: 90 }}>IBAN:</Text>
                     <Text style={{ fontSize: 8, color: C.black, fontFamily: 'Courier' }}>{BUSINESS.ibanFormatted || BUSINESS.iban}</Text>
                   </View>
-                  <View style={{ flexDirection: 'row', marginBottom: 3 }}>
-                    <Text style={{ fontSize: 8, color: C.grayText, width: 100 }}>BIC:</Text>
+                  <View style={{ flexDirection: 'row', marginBottom: 2 }}>
+                    <Text style={{ fontSize: 8, color: C.grayText, width: 90 }}>BIC:</Text>
                     <Text style={{ fontSize: 8, color: C.black, fontFamily: 'Courier' }}>{BUSINESS.bic}</Text>
                   </View>
                   <View style={{ flexDirection: 'row' }}>
-                    <Text style={{ fontSize: 8, color: C.grayText, width: 100 }}>Verwendungszweck:</Text>
+                    <Text style={{ fontSize: 8, color: C.grayText, width: 90 }}>Verwendungszweck:</Text>
                     <Text style={{ fontSize: 8, fontFamily: 'Helvetica-Bold', color: '#06b6d4' }}>{verwendungszweck}</Text>
                   </View>
                 </View>
 
-                {/* QR-Code + PayPal */}
-                <View style={{ marginTop: 12, flexDirection: 'row', gap: 16 }}>
+                {/* QR-Codes nebeneinander: Banking + PayPal */}
+                <View style={{ flexDirection: 'row', gap: 20, alignItems: 'flex-start' }}>
                   {data.qrCodeDataUrl && (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
-                      <Image src={data.qrCodeDataUrl} style={{ width: 68, height: 68 }} />
-                      <View>
-                        <Text style={{ fontSize: 8, fontFamily: 'Helvetica-Bold', color: C.black, marginBottom: 2 }}>
-                          QR-Code für Überweisung
-                        </Text>
-                        <Text style={{ fontSize: 7, color: C.grayText, lineHeight: 1.4 }}>
-                          Scanne mit deiner Banking-App.{'\n'}
-                          IBAN, Betrag und Verwendungszweck{'\n'}
-                          werden automatisch ausgefüllt.
-                        </Text>
-                      </View>
+                    <View style={{ alignItems: 'center', flex: 1 }}>
+                      <Image src={data.qrCodeDataUrl} style={{ width: 64, height: 64, marginBottom: 4 }} />
+                      <Text style={{ fontSize: 7, fontFamily: 'Helvetica-Bold', color: C.black }}>Banküberweisung</Text>
+                      <Text style={{ fontSize: 6, color: C.grayText, textAlign: 'center' }}>
+                        Scanne mit Banking-App
+                      </Text>
                     </View>
                   )}
                   {BUSINESS.paypalMe && (
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 8, fontFamily: 'Helvetica-Bold', color: C.black, marginBottom: 2 }}>
-                        Oder per PayPal
-                      </Text>
-                      <Text style={{ fontSize: 7, color: '#06b6d4' }}>
-                        {BUSINESS.paypalMe}
-                      </Text>
-                      <Text style={{ fontSize: 7, color: C.grayText, marginTop: 2 }}>
-                        Betrag: {fmtEuro(data.priceTotal)}
+                    <View style={{ alignItems: 'center', flex: 1 }}>
+                      <Image src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(`${BUSINESS.paypalMe}/${data.priceTotal.toFixed(2)}`)}`} style={{ width: 64, height: 64, marginBottom: 4 }} />
+                      <Text style={{ fontSize: 7, fontFamily: 'Helvetica-Bold', color: C.black }}>PayPal</Text>
+                      <Text style={{ fontSize: 6, color: '#06b6d4', textAlign: 'center' }}>
+                        {BUSINESS.paypalMe.replace('https://', '')}
                       </Text>
                     </View>
                   )}
@@ -544,15 +549,6 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
               </View>
             );
           })()}
-
-          {/* ── Steuer-Hinweis ── */}
-          <View style={[s.noteBox, { marginTop: 12 }]}>
-            <Text style={s.noteText}>
-              {isRegel
-                ? `${data.ustId ? `USt-IdNr.: ${data.ustId}\n` : ''}Alle Beträge verstehen sich inkl. ${taxRate}% MwSt.`
-                : 'Gemäß §19 UStG wird keine Umsatzsteuer berechnet (Kleinunternehmerregelung).'}
-            </Text>
-          </View>
 
         </View>
 
