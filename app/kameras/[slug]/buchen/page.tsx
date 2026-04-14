@@ -444,16 +444,20 @@ export default function BuchenPage() {
       .then((r) => r.json())
       .then((data) => {
         if (Array.isArray(data?.sets)) {
+          const pid = product?.id;
           // Nur Sets anzeigen die für diese Kamera kompatibel sind
           const compatible = data.sets.filter((s: RentalSet & { product_ids?: string[] }) => {
             if (!s.product_ids?.length) return true; // Keine Einschränkung = alle Kameras
-            return s.product_ids.includes(product!.id);
+            return pid ? s.product_ids.includes(pid) : true;
           });
+          if (typeof window !== 'undefined') {
+            console.log('[Sets Debug]', { pid, total: data.sets.length, compatible: compatible.length, sets: data.sets.map((s: RentalSet & { product_ids?: string[] }) => ({ name: s.name, product_ids: s.product_ids })) });
+          }
           setAvailableSets([...compatible].sort((a: RentalSet, b: RentalSet) => a.price - b.price));
         }
       })
       .catch(() => {});
-  }, []);
+  }, [product?.id]);
 
   // Zubehör aus DB laden
   useEffect(() => {
