@@ -31,6 +31,8 @@ interface Accessory {
   available: boolean;
   available_qty: number;
   compatible_product_ids: string[];
+  internal?: boolean;
+  upgrade_group?: string | null;
 }
 
 const DEFAULT_BADGE_OPTIONS = [
@@ -489,18 +491,12 @@ export default function AdminSetsPage() {
                               return (
                                 <div key={idx} className={`rounded-lg border p-3 ${accOk ? 'bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800/40' : 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800/40'}`}>
                                   <div className="flex items-center gap-2">
-                                    <select value={item.accessory_id}
-                                      onChange={(ev) => updateItem(set.id, idx, 'accessory_id', ev.target.value)}
-                                      className="flex-1 min-w-0 px-3 py-2 border border-brand-border dark:border-slate-600 rounded-[10px] text-sm font-body bg-white dark:bg-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-blue truncate">
-                                      {accessories.map((a) => {
-                                        const compat = a.compatible_product_ids?.length
-                                          ? a.compatible_product_ids.map((pid) => products[pid]?.name ?? pid).join(', ')
-                                          : 'Alle';
-                                        return (
-                                          <option key={a.id} value={a.id}>{a.name} ({a.available_qty} St.) [{compat}]</option>
-                                        );
-                                      })}
-                                    </select>
+                                    <AccessorySelect
+                                      value={item.accessory_id}
+                                      onChange={(val) => updateItem(set.id, idx, 'accessory_id', val)}
+                                      accessories={accessories}
+                                      products={products}
+                                    />
                                     <div className="flex items-center gap-1 flex-shrink-0">
                                       <span className="text-xs text-brand-muted">×</span>
                                       <input type="number" min="1" value={item.qty}
@@ -672,18 +668,12 @@ function NewSetForm({
                 return (
                   <div key={idx} className={`rounded-lg border p-3 ${ok ? 'bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800/40' : 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800/40'}`}>
                     <div className="flex items-center gap-2">
-                      <select value={item.accessory_id}
-                        onChange={(e) => updateItem(idx, 'accessory_id', e.target.value)}
-                        className="flex-1 min-w-0 px-3 py-2 border border-brand-border dark:border-slate-600 rounded-[10px] text-sm font-body bg-white dark:bg-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-blue truncate">
-                        {accessories.map((a) => {
-                          const compat = a.compatible_product_ids?.length
-                            ? a.compatible_product_ids.map((pid) => products[pid]?.name ?? pid).join(', ')
-                            : 'Alle';
-                          return (
-                            <option key={a.id} value={a.id}>{a.name} ({a.available_qty} St.) [{compat}]</option>
-                          );
-                        })}
-                      </select>
+                      <AccessorySelect
+                        value={item.accessory_id}
+                        onChange={(val) => updateItem(idx, 'accessory_id', val)}
+                        accessories={accessories}
+                        products={products}
+                      />
                       <div className="flex items-center gap-1 flex-shrink-0">
                         <span className="text-xs text-brand-muted">×</span>
                         <input type="number" min="1" value={item.qty}
@@ -737,5 +727,49 @@ function CameraToggle({ product, checked, onToggle }: { product: AdminProduct; c
       <input type="checkbox" checked={checked} onChange={onToggle} className="sr-only" />
       {product.name}
     </label>
+  );
+}
+
+// ── Gruppiertes Zubehör-Dropdown mit Kategorie + Intern-Marker ───────────────
+
+function AccessorySelect({
+  value, onChange, accessories, products,
+}: {
+  value: string;
+  onChange: (val: string) => void;
+  accessories: Accessory[];
+  products: Record<string, AdminProduct>;
+}) {
+  // Nach Kategorie gruppieren
+  const categories = [...new Set(accessories.map((a) => a.category))].sort();
+
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="flex-1 min-w-0 px-3 py-2 border border-brand-border dark:border-slate-600 rounded-[10px] text-sm font-body bg-white dark:bg-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-blue"
+    >
+      {categories.map((cat) => {
+        const group = accessories.filter((a) => a.category === cat);
+        return (
+          <optgroup key={cat} label={cat}>
+            {group.map((a) => {
+              const tags: string[] = [];
+              tags.push(`${a.available_qty} St.`);
+              if (a.internal) tags.push('intern');
+              if (a.upgrade_group) tags.push(`↑ ${a.upgrade_group}`);
+              const compat = a.compatible_product_ids?.length
+                ? a.compatible_product_ids.map((pid) => products[pid]?.name ?? pid).join(', ')
+                : 'Alle';
+              return (
+                <option key={a.id} value={a.id}>
+                  {a.name} ({tags.join(' · ')}) [{compat}]
+                </option>
+              );
+            })}
+          </optgroup>
+        );
+      })}
+    </select>
   );
 }
