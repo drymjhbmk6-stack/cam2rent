@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
+import { logAudit } from '@/lib/audit';
 import Stripe from 'stripe';
 
 export async function POST(req: NextRequest) {
@@ -103,6 +104,13 @@ export async function POST(req: NextRequest) {
       hasMore = false;
     }
   }
+
+  await logAudit({
+    action: 'stripe.sync_run',
+    entityType: 'stripe_transaction',
+    changes: { from, to, synced },
+    request: req,
+  });
 
   return NextResponse.json({ synced });
 }

@@ -39,6 +39,8 @@ export default function StripeAbgleichTab() {
   const [matchModal, setMatchModal] = useState<StripeTx | null>(null);
   const [matchBookingId, setMatchBookingId] = useState('');
   const [processing, setProcessing] = useState(false);
+  const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
+  const [importingFees, setImportingFees] = useState(false);
 
   function showToast(msg: string, type: 'ok' | 'err') {
     setToast({ msg, type });
@@ -73,6 +75,7 @@ export default function StripeAbgleichTab() {
       if (res.ok) {
         const result = await res.json();
         showToast(`${result.synced} Stripe-Transaktionen synchronisiert`, 'ok');
+        setLastSyncAt(new Date().toISOString());
         fetchData(range);
       } else {
         const err = await res.json();
@@ -120,6 +123,27 @@ export default function StripeAbgleichTab() {
     URL.revokeObjectURL(url);
   }
 
+  async function handleImportFees() {
+    if (!range.from || !range.to) return;
+    setImportingFees(true);
+    try {
+      const res = await fetch('/api/admin/buchhaltung/stripe-reconciliation/import-fees', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from: range.from, to: range.to }),
+      });
+      if (res.ok) {
+        const result = await res.json();
+        showToast(`${result.imported} Stripe-Gebühren als Ausgaben verbucht`, 'ok');
+      } else {
+        const err = await res.json();
+        showToast(err.error || 'Fehler', 'err');
+      }
+    } finally {
+      setImportingFees(false);
+    }
+  }
+
   const inputStyle: React.CSSProperties = {
     padding: '8px 12px', background: '#0f172a', border: '1px solid #1e293b',
     borderRadius: 8, color: '#e2e8f0', fontSize: 14, outline: 'none', width: '100%',
@@ -128,21 +152,30 @@ export default function StripeAbgleichTab() {
   return (
     <div>
       {toast && (
-        <div style={{ position: 'fixed', top: 20, right: 20, zIndex: 999, padding: '12px 20px', borderRadius: 8, background: toast.type === 'ok' ? '#10b981' : '#ef4444', color: '#fff', fontWeight: 600, fontSize: 14 }}>
+        <div style={{ position: 'fixed', top: 20, right: 20, zIndex: 999, padding: '12px 20px', borderRadius: 8, background: toast.type === 'ok' ? '#10b981' : '#ef4444', color: '#fff', fontWeight: 600, fontSize: 14, boxShadow: '0 4px 12px rgba(0,0,0,0.3)' }}>
           {toast.msg}
         </div>
       )}
 
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 24 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 12 }}>
         <DateRangePicker onChange={handleRangeChange} />
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button onClick={handleSync} disabled={syncing || !range.from} style={{ padding: '8px 16px', borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: syncing ? 'not-allowed' : 'pointer', background: '#06b6d4', color: '#0f172a', border: 'none', opacity: syncing ? 0.5 : 1 }}>
             {syncing ? 'Synchronisiere...' : 'Synchronisieren'}
+          </button>
+          <button onClick={handleImportFees} disabled={importingFees || !data} style={{ padding: '8px 16px', borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: importingFees || !data ? 'not-allowed' : 'pointer', background: 'transparent', color: '#06b6d4', border: '1px solid #06b6d4', opacity: importingFees || !data ? 0.5 : 1 }}>
+            {importingFees ? 'Importiere...' : 'Gebühren als Ausgaben'}
           </button>
           <ExportButton label="CSV-Export" onClick={handleCsvExport} disabled={!data} />
         </div>
       </div>
+
+      {lastSyncAt && (
+        <div style={{ fontSize: 12, color: '#64748b', marginBottom: 16 }}>
+          Letzte Synchronisierung: {new Date(lastSyncAt).toLocaleDateString('de-DE', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })} Uhr
+        </div>
+      )}
 
       {/* Übersicht */}
       {data?.summary && (

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
+import { logAudit } from '@/lib/audit';
 import Stripe from 'stripe';
 
 export async function POST(
@@ -88,6 +89,14 @@ export async function POST(
       .update({ status: 'cancelled' })
       .eq('id', creditNote.invoice_id);
   }
+
+  await logAudit({
+    action: 'credit_note.approve',
+    entityType: 'credit_note',
+    entityId: id,
+    changes: { refundStatus, stripeRefundId },
+    request: _req,
+  });
 
   return NextResponse.json({ ok: true, refundStatus, stripeRefundId });
 }

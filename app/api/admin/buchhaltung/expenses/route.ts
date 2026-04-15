@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
+import { logAudit } from '@/lib/audit';
 
 export async function GET() {
   if (!(await checkAdminAuth())) {
@@ -12,6 +13,7 @@ export async function GET() {
   const { data, error } = await supabase
     .from('expenses')
     .select('*')
+    .is('deleted_at', null)
     .order('expense_date', { ascending: false });
 
   if (error) {
@@ -53,6 +55,15 @@ export async function POST(req: NextRequest) {
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  await logAudit({
+    action: 'expense.create',
+    entityType: 'expense',
+    entityId: data.id,
+    entityLabel: description,
+    changes: { category, gross_amount },
+    request: req,
+  });
 
   return NextResponse.json({ expense: data });
 }

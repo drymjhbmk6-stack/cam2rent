@@ -9,11 +9,11 @@ export async function GET() {
 
   const supabase = createServiceClient();
 
-  // Offene Rechnungen laden
+  // Offene Rechnungen laden (status oder payment_status)
   const { data: invoices, error } = await supabase
     .from('invoices')
     .select('*')
-    .in('status', ['open', 'overdue'])
+    .or('status.in.(open,overdue),payment_status.in.(open,overdue)')
     .order('invoice_date', { ascending: true });
 
   if (error) {
@@ -21,8 +21,8 @@ export async function GET() {
   }
 
   const now = new Date();
+  let level1 = 0, level2 = 0, level3 = 0;
 
-  // Mahnungen pro Rechnung laden
   const items = await Promise.all((invoices || []).map(async (inv) => {
     // Kundenname aus Buchung
     let customerName = '';
@@ -48,6 +48,12 @@ export async function GET() {
       .limit(1);
 
     const lastDunning = dunnings?.[0];
+    const dunningLevel = lastDunning?.level || 0;
+
+    if (dunningLevel === 1) level1++;
+    else if (dunningLevel === 2) level2++;
+    else if (dunningLevel >= 3) level3++;
+
     const dueDate = inv.due_date ? new Date(inv.due_date) : new Date(inv.invoice_date);
     const daysOverdue = Math.max(0, Math.floor((now.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24)));
 
@@ -61,7 +67,7 @@ export async function GET() {
       invoice_date: inv.invoice_date,
       due_date: inv.due_date,
       days_overdue: daysOverdue,
-      dunning_level: lastDunning?.level || 0,
+      dunning_level: dunningLevel,
       last_dunning_at: lastDunning?.sent_at || lastDunning?.created_at || null,
     };
   }));
@@ -72,5 +78,6 @@ export async function GET() {
     items,
     total: items.length,
     totalAmount,
+    dunningStats: { level1, level2, level3 },
   });
 }

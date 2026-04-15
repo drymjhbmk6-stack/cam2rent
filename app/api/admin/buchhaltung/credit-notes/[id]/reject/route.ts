@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
+import { logAudit } from '@/lib/audit';
 
 export async function POST(
   _req: NextRequest,
@@ -35,6 +36,13 @@ export async function POST(
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  await logAudit({
+    action: 'credit_note.reject',
+    entityType: 'credit_note',
+    entityId: id,
+    request: _req,
+  });
 
   return NextResponse.json({ ok: true });
 }

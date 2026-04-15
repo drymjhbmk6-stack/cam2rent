@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
+import { logAudit } from '@/lib/audit';
 
 export async function POST(req: NextRequest) {
   if (!(await checkAdminAuth())) {
@@ -8,7 +9,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { invoice_id, level } = body;
+  const { invoice_id, level, fee, custom_text, send } = body;
 
   if (!invoice_id || !level) {
     return NextResponse.json({ error: 'invoice_id und level erforderlich.' }, { status: 400 });
@@ -39,14 +40,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `Mahnung Stufe ${level} existiert bereits.` }, { status: 409 });
   }
 
-  // Mahngebühr laden
-  const { data: feeSetting } = await supabase
-    .from('admin_settings')
-    .select('value')
-    .eq('key', `accounting_dunning_fee_${level}`)
-    .maybeSingle();
+  // Mahngebühr: aus Body oder aus Einstellungen
+  let feeAmount = fee !== undefined ? parseFloat(fee) : 0;
+  if (fee === undefined) {
+    const { data: feeSetting } = await supabase
+      .from('admin_settings')
+      .select('value')
+      .eq('key', `accounting_dunning_fee_${level}`)
+      .maybeSingle();
+    feeAmount = parseFloat(feeSetting?.value || '0');
+  }
 
-  const feeAmount = parseFloat(feeSetting?.value || '0');
+  // Neue Zahlungsfrist (7 Tage ab jetzt)
+  const newDueDate = new Date();
+  newDueDate.setDate(newDueDate.getDate() + 7);
+
+  const status = send ? 'sent' : 'draft';
 
   // Mahnung erstellen
   const { data: dunning, error } = await supabase
@@ -55,7 +64,10 @@ export async function POST(req: NextRequest) {
       invoice_id,
       level,
       fee_amount: feeAmount,
-      status: 'draft',
+      custom_text: custom_text || null,
+      new_due_date: newDueDate.toISOString().split('T')[0],
+      status,
+      sent_at: send ? new Date().toISOString() : null,
       sent_to_email: invoice.sent_to_email,
     })
     .select()
@@ -68,13 +80,44 @@ export async function POST(req: NextRequest) {
   // Rechnung-Status auf overdue setzen
   await supabase
     .from('invoices')
-    .update({ status: 'overdue' })
+    .update({ status: 'overdue', payment_status: 'overdue' })
     .eq('id', invoice_id);
+
+  // E-Mail senden wenn send=true
+  if (send && invoice.sent_to_email && process.env.RESEND_API_KEY) {
+    try {
+      const { Resend } = await import('resend');
+      const resend = new Resend(process.env.RESEND_API_KEY);
+      await resend.emails.send({
+        from: process.env.RESEND_FROM_EMAIL || 'buchung@cam2rent.de',
+        to: invoice.sent_to_email,
+        subject: `Mahnung Stufe ${level} — Rechnung ${invoice.invoice_number}`,
+        html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;">
+          <h2 style="color:#0f172a;">Mahnung — Stufe ${level}</h2>
+          <p style="white-space:pre-wrap;">${(custom_text || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>
+          <hr style="border:1px solid #e2e8f0;"/>
+          <p style="color:#64748b;font-size:13px;">Rechnung: ${invoice.invoice_number}<br/>
+          Betrag: ${(invoice.gross_amount || 0).toFixed(2).replace('.', ',')} €${feeAmount > 0 ? `<br/>Mahngebühr: ${feeAmount.toFixed(2).replace('.', ',')} €` : ''}</p>
+        </div>`,
+      });
+    } catch (err) {
+      console.error('Mahn-E-Mail Fehler:', err);
+    }
+  }
+
+  // Audit
+  await logAudit({
+    action: send ? 'dunning.send' : 'dunning.create_draft',
+    entityType: 'dunning',
+    entityId: dunning.id,
+    entityLabel: `Mahnung Stufe ${level} für ${invoice.invoice_number}`,
+    changes: { level, fee: feeAmount, send },
+    request: req,
+  });
 
   return NextResponse.json({ dunning });
 }
 
-// GET: Mahnungen auflisten
 export async function GET() {
   if (!(await checkAdminAuth())) {
     return NextResponse.json({ error: 'Nicht autorisiert.' }, { status: 401 });

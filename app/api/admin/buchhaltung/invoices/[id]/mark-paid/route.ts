@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
+import { logAudit } from '@/lib/audit';
 
 export async function POST(
   req: NextRequest,
@@ -18,7 +19,7 @@ export async function POST(
 
   const { data: invoice } = await supabase
     .from('invoices')
-    .select('id, status')
+    .select('id, invoice_number, status, payment_status')
     .eq('id', id)
     .maybeSingle();
 
@@ -26,12 +27,15 @@ export async function POST(
     return NextResponse.json({ error: 'Rechnung nicht gefunden.' }, { status: 404 });
   }
 
+  // Rechnung als bezahlt markieren
   const { error } = await supabase
     .from('invoices')
     .update({
       status: 'paid',
+      payment_status: 'paid',
       payment_method: method || 'bank_transfer',
-      notes: note || `Manuell als bezahlt markiert am ${date || new Date().toISOString().split('T')[0]}`,
+      payment_notes: note || null,
+      paid_at: date ? `${date}T12:00:00Z` : new Date().toISOString(),
     })
     .eq('id', id);
 
@@ -45,6 +49,16 @@ export async function POST(
     .update({ status: 'paid' })
     .eq('invoice_id', id)
     .in('status', ['draft', 'sent']);
+
+  // Audit
+  await logAudit({
+    action: 'invoice.mark_paid',
+    entityType: 'invoice',
+    entityId: id,
+    entityLabel: invoice.invoice_number,
+    changes: { method, date, note, previousStatus: invoice.payment_status },
+    request: req,
+  });
 
   return NextResponse.json({ ok: true });
 }

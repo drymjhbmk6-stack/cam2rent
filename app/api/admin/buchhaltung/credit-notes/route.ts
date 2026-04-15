@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
 import { calculateTax, type TaxMode } from '@/lib/accounting/tax';
+import { logAudit } from '@/lib/audit';
 
 export async function GET(req: NextRequest) {
   if (!(await checkAdminAuth())) {
@@ -138,6 +139,15 @@ export async function POST(req: NextRequest) {
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  await logAudit({
+    action: 'credit_note.create_draft',
+    entityType: 'credit_note',
+    entityId: creditNote.id,
+    entityLabel: creditNote.credit_note_number,
+    changes: { invoice_id, gross_amount: taxCalc.gross, reason },
+    request: req,
+  });
 
   return NextResponse.json({ creditNote });
 }
