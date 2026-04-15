@@ -271,7 +271,7 @@ function SummaryCard({ icon, color, label, value }: { icon: string; color: strin
   const iconMap: Record<string, React.ReactNode> = {
     check: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>,
     warn: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>,
-    euro: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>,
+    euro: <span style={{ fontSize: 18, fontWeight: 700, color, lineHeight: 1 }}>€</span>,
   };
   return (
     <div style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 12, padding: '14px 20px', display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 180 }}>
