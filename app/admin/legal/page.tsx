@@ -34,6 +34,28 @@ function fmtDate(iso: string) {
 export default function AdminLegalPage() {
   const [docs, setDocs] = useState<LegalDoc[]>([]);
   const [loading, setLoading] = useState(true);
+  const [promptText, setPromptText] = useState('');
+  const [promptLoading, setPromptLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  async function handleExportPrompt() {
+    setPromptLoading(true);
+    try {
+      const res = await fetch('/api/admin/legal/export-prompt');
+      if (res.ok) {
+        const data = await res.json();
+        setPromptText(data.prompt);
+      }
+    } finally {
+      setPromptLoading(false);
+    }
+  }
+
+  async function handleCopy() {
+    await navigator.clipboard.writeText(promptText);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
 
   useEffect(() => {
     fetch('/api/admin/legal')
@@ -135,7 +157,7 @@ export default function AdminLegalPage() {
           </div>
         )}
 
-        {/* Vertragsparagraphen */}
+        {/* Mietvertrag + Prüfung */}
         <div className="mt-8">
           <h2 className="font-heading font-semibold text-sm text-gray-400 uppercase tracking-wider mb-3">Mietvertrag</h2>
           <Link
@@ -157,6 +179,58 @@ export default function AdminLegalPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
           </Link>
+        </div>
+        {/* KI-Prüfung Button */}
+        <div className="mt-8">
+          <h2 className="font-heading font-semibold text-sm text-gray-400 uppercase tracking-wider mb-3">KI-Prüfung</h2>
+          <div
+            className="p-5 rounded-2xl border"
+            style={{ background: '#111827', borderColor: '#1e293b' }}
+          >
+            <p className="text-sm font-body text-gray-400 mb-4">
+              Exportiert alle Rechtstexte, Vertragsparagraphen und Geschäftsdaten als Prompt.
+              Kopiere den Text und füge ihn bei Claude ein, um Widersprüche und Probleme prüfen zu lassen.
+            </p>
+            {!promptText ? (
+              <button
+                onClick={handleExportPrompt}
+                disabled={promptLoading}
+                className="px-5 py-2.5 rounded-lg text-sm font-heading font-semibold transition-colors"
+                style={{ background: '#06b6d4', color: '#0f172a', border: 'none', cursor: promptLoading ? 'not-allowed' : 'pointer', opacity: promptLoading ? 0.5 : 1 }}
+              >
+                {promptLoading ? 'Lade alle Texte...' : 'Prompt für KI-Prüfung generieren'}
+              </button>
+            ) : (
+              <div>
+                <div className="flex gap-2 mb-3">
+                  <button
+                    onClick={handleCopy}
+                    className="px-4 py-2 rounded-lg text-sm font-heading font-semibold"
+                    style={{ background: copied ? '#10b981' : '#06b6d4', color: '#0f172a', border: 'none', cursor: 'pointer' }}
+                  >
+                    {copied ? 'Kopiert!' : 'In Zwischenablage kopieren'}
+                  </button>
+                  <button
+                    onClick={() => setPromptText('')}
+                    className="px-4 py-2 rounded-lg text-sm font-heading font-semibold"
+                    style={{ background: 'transparent', color: '#94a3b8', border: '1px solid #1e293b', cursor: 'pointer' }}
+                  >
+                    Schließen
+                  </button>
+                </div>
+                <textarea
+                  value={promptText}
+                  readOnly
+                  rows={15}
+                  className="w-full rounded-xl text-xs font-body"
+                  style={{ background: '#0f172a', border: '1px solid #1e293b', color: '#94a3b8', padding: 12, resize: 'vertical', lineHeight: 1.5 }}
+                />
+                <p className="text-xs font-body text-gray-500 mt-2">
+                  {promptText.length.toLocaleString('de-DE')} Zeichen — Kopiere diesen Text und füge ihn in einer neuen Claude-Sitzung ein.
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
