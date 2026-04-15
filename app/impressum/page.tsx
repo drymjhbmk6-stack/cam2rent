@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { BUSINESS } from '@/lib/business-config';
+import LegalPage from '@/components/LegalPage';
 
 export const metadata: Metadata = {
   title: 'Impressum – Cam2Rent',
@@ -7,6 +8,12 @@ export const metadata: Metadata = {
 };
 
 export default function ImpressumPage() {
+  return (
+    <LegalPage slug="impressum" fallbackTitle="Impressum" fallbackContent={<ImpressumFallback />} />
+  );
+}
+
+function ImpressumFallback() {
   return (
     <div className="min-h-screen bg-white dark:bg-brand-black">
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
@@ -121,3 +128,5 @@ export default function ImpressumPage() {
     </div>
   );
 }
+
+export const revalidate = 300;

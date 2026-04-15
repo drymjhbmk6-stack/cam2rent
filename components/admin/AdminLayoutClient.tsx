@@ -109,6 +109,14 @@ const MARKETING_ITEMS: NavItem[] = [
   },
 ];
 
+const LEGAL_ITEMS: NavItem[] = [
+  {
+    href: '/admin/legal',
+    label: 'Rechtliches',
+    icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>,
+  },
+];
+
 const DATA_ITEMS: NavItem[] = [
   {
     href: '/admin/analytics',
@@ -219,6 +227,8 @@ function SidebarContent({ pathname, isDashboard, onNavClick, handleLogout }: {
         <NavSection label="Preise & Marketing" items={MARKETING_ITEMS} pathname={pathname} onNavClick={onNavClick} />
         <div style={{ height: 1, background: '#1e293b', margin: '6px 12px' }} />
         <NavSection label="Auswertung" items={DATA_ITEMS} pathname={pathname} onNavClick={onNavClick} />
+        <div style={{ height: 1, background: '#1e293b', margin: '6px 12px' }} />
+        <NavSection label="Rechtliches" items={LEGAL_ITEMS} pathname={pathname} onNavClick={onNavClick} />
       </nav>
 
       {/* Footer */}

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { BUSINESS } from '@/lib/business-config';
+import LegalPage from '@/components/LegalPage';
 
 export const metadata: Metadata = {
   title: 'Datenschutzerklärung',
@@ -8,6 +9,12 @@ export const metadata: Metadata = {
 };
 
 export default function DatenschutzPage() {
+  return (
+    <LegalPage slug="datenschutz" fallbackTitle="Datenschutzerklärung" fallbackContent={<DatenschutzFallback />} />
+  );
+}
+
+function DatenschutzFallback() {
   return (
     <div className="min-h-screen bg-white dark:bg-brand-black">
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
@@ -309,3 +316,5 @@ export default function DatenschutzPage() {
     </div>
   );
 }
+
+export const revalidate = 300;
