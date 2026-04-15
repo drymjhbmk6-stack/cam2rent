@@ -147,6 +147,28 @@ export async function GET() {
     lines.push('');
   }
 
+  // Letzten unterschriebenen Vertrag laden
+  const { data: lastAgreement } = await supabase
+    .from('rental_agreements')
+    .select('booking_id, contract_text, contract_hash, signed_by_name, signed_at')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (lastAgreement?.contract_text) {
+    lines.push('## Aktueller Vertrag (zuletzt unterschrieben)');
+    lines.push('');
+    lines.push(`Buchung: ${lastAgreement.booking_id} | Unterschrieben von: ${lastAgreement.signed_by_name} | Datum: ${lastAgreement.signed_at}`);
+    lines.push(`SHA-256 Hash: ${lastAgreement.contract_hash}`);
+    lines.push('');
+    lines.push('```');
+    lines.push(lastAgreement.contract_text);
+    lines.push('```');
+    lines.push('');
+    lines.push('---');
+    lines.push('');
+  }
+
   // Vertragsstruktur (was der Kunde im PDF sieht)
   lines.push('## Vollständiger Vertragsaufbau (PDF-Struktur)');
   lines.push('');
