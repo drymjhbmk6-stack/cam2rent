@@ -5,6 +5,7 @@ import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
 import { InvoicePDF, type InvoiceData } from '@/lib/invoice-pdf';
 import { LegalDocumentPDF } from '@/lib/legal-pdf';
+import { generateContractPDF } from '@/lib/contracts/generate-contract';
 import { ensureBusinessConfig } from '@/lib/load-business-config';
 import { BUSINESS } from '@/lib/business-config';
 import QRCode from 'qrcode';
@@ -142,12 +143,15 @@ export async function POST(
       }
     }
 
-    // Mietvertrag PDF aus Storage laden
+    // Mietvertrag PDF — zuerst aus Storage versuchen, sonst neu generieren
     if (attachVertrag && booking.contract_signed) {
+      let vertragAttached = false;
+
+      // Versuch 1: Aus rental_agreements.pdf_url laden
       try {
         const { data: agreement } = await supabase
           .from('rental_agreements')
-          .select('pdf_url')
+          .select('pdf_url, signed_by_name, signature_data_url, signature_method, ip_address')
           .eq('booking_id', id)
           .order('created_at', { ascending: false })
           .limit(1)
@@ -157,7 +161,52 @@ export async function POST(
           const pdfRes = await fetch(agreement.pdf_url);
           if (pdfRes.ok) {
             attachments.push({ filename: `Mietvertrag-${id}.pdf`, content: Buffer.from(await pdfRes.arrayBuffer()) });
+            vertragAttached = true;
           }
+        }
+
+        // Versuch 2: Vertrag neu generieren
+        if (!vertragAttached && agreement) {
+          const { data: taxSettings } = await supabase
+            .from('admin_settings')
+            .select('key, value')
+            .in('key', ['tax_mode', 'tax_rate']);
+          const txMap: Record<string, string> = {};
+          for (const s of taxSettings ?? []) txMap[s.key] = s.value;
+
+          const fmtD = (iso: string) => {
+            if (!iso) return '';
+            const [y, m, d] = iso.split('-');
+            return `${d}.${m}.${y}`;
+          };
+
+          const contractResult = await generateContractPDF({
+            bookingId: id,
+            bookingNumber: id,
+            customerName: agreement.signed_by_name || booking.customer_name || '',
+            customerEmail: booking.customer_email || to,
+            productName: booking.product_name || '',
+            accessories: Array.isArray(booking.accessories) ? booking.accessories : [],
+            rentalFrom: fmtD(booking.rental_from),
+            rentalTo: fmtD(booking.rental_to),
+            rentalDays: booking.days || 1,
+            deliveryMode: booking.delivery_mode === 'abholung' ? 'Abholung' : 'Versand',
+            priceRental: booking.price_rental || 0,
+            priceAccessories: booking.price_accessories || 0,
+            priceHaftung: booking.price_haftung || 0,
+            priceShipping: booking.shipping_price || 0,
+            priceTotal: booking.price_total || 0,
+            deposit: booking.deposit || 0,
+            taxMode: (txMap['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer',
+            taxRate: parseFloat(txMap['tax_rate'] || '19'),
+            signatureDataUrl: agreement.signature_data_url || null,
+            signatureMethod: (agreement.signature_method as 'canvas' | 'typed') || 'typed',
+            signerName: agreement.signed_by_name || booking.customer_name || '',
+            ipAddress: agreement.ip_address || 'unknown',
+          });
+
+          attachments.push({ filename: `Mietvertrag-${id}.pdf`, content: contractResult.pdfBuffer });
+          vertragAttached = true;
         }
       } catch (err) {
         console.error('Vertrag-PDF Fehler:', err);
