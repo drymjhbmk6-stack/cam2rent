@@ -264,6 +264,7 @@ Alle Dropdowns laden aus `admin_settings` und können neue Einträge hinzufügen
   - Footer mit automatischen Seitenzahlen (`render={({ pageNumber, totalPages })`)
   - `getParagraphen(eigenbeteiligung)` — Funktion statt Konstante (§7 dynamisch)
   - Signatur: Canvas oder getippter Name
+  - Signatur-Block: `wrap={false}` verhindert Seitenumbruch mitten im Block
   - SHA-256 Hash des Vertragstexts
 - **Packliste-PDF** (`lib/packlist-pdf.tsx`): DIN A4, inline-Anzeige
 
@@ -275,15 +276,50 @@ Alle Dropdowns laden aus `admin_settings` und können neue Einträge hinzufügen
 - Übergabeprotokoll: Vermieter/Mieter nebeneinander, Checkboxen kompakt
 - Packliste: Info-Blöcke nebeneinander, Zustand+Verpackung zusammengefasst
 
-### Buchhaltung & DATEV-Export (`/admin/buchhaltung`)
-- **Konten-Konfiguration:** Erlöskonto, USt-Konto, Kautionskonto, Versandkostenkonto, Berater-/Mandantennummer, Wirtschaftsjahr-Beginn
-- **Export:** CSV-Buchungsstapel (DATEV-Format, Semikolon-getrennt, UTF-8 mit BOM)
-- **Zeitraum-Auswahl:** Aktueller Monat/Quartal/Jahr oder benutzerdefiniert
-- **Vorschau:** Anzahl Buchungen + Gesamtumsatz vor dem Export
-- **Pro Buchung bis zu 3 Zeilen:** Mieterlös, Haftungsoption, Versand
-- **Stornierungen:** Umgekehrtes Soll/Haben-Kennzeichen (Storno)
-- **API:** `GET /api/admin/datev-export?from=...&to=...[&preview=1]`
-- **Config-Speicherung:** `admin_config.datev_config`
+### Buchhaltungs-Cockpit (`/admin/buchhaltung`)
+Tab-basiertes Cockpit mit 8 Tabs (Query-Parameter `?tab=...`):
+
+#### Tab-Struktur
+- **Dashboard:** 4 KPI-Karten (Umsatz, Offene Posten, Bezahlte Rechnungen, Stornierungen), Umsatzverlauf (Recharts Line Chart, 12 Monate), Top 5 Produkte (Bar Chart), Mini-Tabellen (Letzte Rechnungen, Offene Mahnungen)
+- **Rechnungen:** Liste aus `invoices`-Tabelle, Suche/Filter/Pagination, CSV-Export, E-Mail-Resend, Bulk-Aktionen
+- **Offene Posten:** Mahnwesen mit 3 Stufen, Filter nach Mahnstufe, Suche, Mahn-Modal (editierbarer Text + Mahngebühr + Freigeben/Entwurf), Als-bezahlt-markieren mit Zahlungsweise
+- **Gutschriften:** Freigabe-Workflow (pending_review → approved → sent), Stripe-Refund-Integration, Detail-Modal mit Bearbeiten/Freigeben/Verwerfen
+- **Stripe-Abgleich:** Sync mit Stripe API, Reconciliation, manuelles Verknüpfen, Gebühren als Ausgaben importieren, CSV-Export
+- **Reports:** Sub-Tabs: EÜR (Einnahmen/Ausgaben/Gewinn), Umsatzliste (CSV-Export), USt-VA Vorbereitung (nur bei Regelbesteuerung), Ausgaben verwalten (CRUD + Soft-Delete + Kategorie-Filter)
+- **DATEV-Export:** Vorschau-Modal (erste 10 Buchungszeilen), Validierungs-Warnungen, Ausgaben optional mit-exportierbar, Export-Historie
+- **Einstellungen:** Steuermodus (Kleinunternehmer/Regelbesteuerung), DATEV-Konten, Mahnwesen-Fristen + Gebühren + Texte, Rechnungs-Defaults
+
+#### DB-Tabellen (Buchhaltung)
+- **`invoices`**: Rechnungen (booking_id, invoice_number, amounts, status, payment_status, paid_at, payment_method, tax_mode, tax_rate, due_date)
+- **`credit_notes`**: Gutschriften mit Workflow (credit_note_number GS-YYYY-XXXXXX, status: pending_review/approved/sent/rejected, Stripe-Refund-Tracking)
+- **`dunning_notices`**: Mahnungen Stufe 1-3 (invoice_id, level, fee_amount, custom_text, new_due_date, status: draft/sent/paid/escalated)
+- **`stripe_transactions`**: Cache für Stripe-PaymentIntents (amount, fee, net, match_status: matched/unmatched/manual/refunded)
+- **`expenses`**: Ausgaben für EÜR (Kategorien: fees, shipping, software, hardware, marketing, office, travel, insurance, legal, other; Soft-Delete via deleted_at; source_type/source_id für Idempotenz)
+- **`export_log`**: Export-Historie (export_type: datev/euer/umsatzliste/rechnungen_zip/ustva)
+
+#### Helper-Libs
+- **`lib/accounting/tax.ts`**: `calculateTax(amount, mode, rate, amountIs)` — zentrale Steuerberechnung für beide Modi, `getTaxFooterText()`, `getTaxModeLabel()`
+- **`lib/audit.ts`**: `logAudit({ action, entityType, entityId, changes, request })` — zentrales Audit-Logging in `admin_audit_log`
+
+#### Cron-Job: Mahnstufen-Prüfung
+- **Endpoint:** `GET /api/cron/dunning-check`
+- **Schedule:** Täglich 06:00 Uhr via Hetzner-Crontab
+- **Logik:** Prüft fällige Mahnstufen, erstellt Entwürfe (KEIN automatischer Versand — Admin muss freigeben)
+- **Auth:** `verifyCronAuth()` (CRON_SECRET via Header oder URL-Parameter)
+
+#### E-Mail-Versand aus Buchungsdetails
+- **Button** "E-Mail senden" in Dokumente-Section jeder Buchung (`/admin/buchungen/[id]`)
+- **Modal:** Empfänger (vorausgefüllt, änderbar), Checkboxen für Rechnung + Mietvertrag
+- **API:** `POST /api/admin/booking/[id]/send-email` — generiert PDFs on-the-fly, sendet via Resend, protokolliert in email_log
+
+#### Manuelle Buchung — Zahlungsdetails
+- Bei "Bezahlt": Zahlungsweise-Dropdown (Bar/PayPal/Überweisung/Karte/Sonstige) + Transaktionsgebühren-Feld
+- Gebühren werden automatisch als Ausgabe in `expenses` verbucht (Kategorie: fees)
+
+#### Tests (Vitest)
+- `lib/accounting/__tests__/tax.test.ts` — 15 Tests: Kleinunternehmer, Regelbesteuerung, Rundung, Edge Cases
+- `lib/accounting/__tests__/dunning.test.ts` — 10 Tests: Mahnstufen-Logik mit Standard-/benutzerdefinierten Fristen
+- `lib/accounting/__tests__/reconciliation.test.ts` — 10 Tests: Stripe-Match-Logik
 
 ### next/image
 - ProductCard + ProductImageGallery nutzen `next/image` (WebP, Lazy Loading)
