@@ -155,7 +155,11 @@ export default function BuchungDetailPage() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
   const [deleteError, setDeleteError] = useState('');
-
+  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [emailSending, setEmailSending] = useState(false);
+  const [emailToast, setEmailToast] = useState<{ msg: string; type: 'ok' | 'err' } | null>(null);
+  const [emailRecipient, setEmailRecipient] = useState('');
+  const [emailAttachments, setEmailAttachments] = useState<{ rechnung: boolean; vertrag: boolean }>({ rechnung: true, vertrag: true });
   useEffect(() => {
     fetchBooking();
   }, [bookingId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -192,6 +196,37 @@ export default function BuchungDetailPage() {
       setError('Buchung konnte nicht geladen werden.');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleSendEmail() {
+    if (!booking) return;
+    const recipient = emailRecipient || booking.customer_email;
+    if (!recipient) return;
+    setEmailSending(true);
+    try {
+      const res = await fetch(`/api/admin/booking/${bookingId}/send-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: recipient,
+          attachRechnung: emailAttachments.rechnung,
+          attachVertrag: emailAttachments.vertrag,
+        }),
+      });
+      if (res.ok) {
+        setEmailToast({ msg: 'E-Mail erfolgreich gesendet', type: 'ok' });
+        setShowEmailModal(false);
+        fetchBooking(); // E-Mail-Verlauf aktualisieren
+      } else {
+        const err = await res.json();
+        setEmailToast({ msg: err.error || 'Fehler beim Senden', type: 'err' });
+      }
+    } catch {
+      setEmailToast({ msg: 'Netzwerkfehler beim Senden', type: 'err' });
+    } finally {
+      setEmailSending(false);
+      setTimeout(() => setEmailToast(null), 4000);
     }
   }
 
@@ -818,6 +853,17 @@ export default function BuchungDetailPage() {
             {/* Dokumente */}
             <Section title="Dokumente">
               <div className="space-y-2">
+                <button
+                  onClick={() => {
+                    setEmailRecipient(booking.customer_email || '');
+                    setEmailAttachments({ rechnung: true, vertrag: booking.contract_signed ?? false });
+                    setShowEmailModal(true);
+                  }}
+                  className="block w-full text-center px-4 py-2.5 text-sm font-heading font-semibold bg-blue-600 text-white rounded-btn hover:bg-blue-700 transition-colors"
+                >
+                  ✉ E-Mail senden
+                </button>
+                <div className="border-t border-brand-border dark:border-slate-700 my-2" />
                 <a href={`/api/invoice/${booking.id}`} target="_blank" className="block w-full text-center px-4 py-2 text-sm font-heading font-semibold bg-brand-black text-white rounded-btn hover:bg-brand-dark transition-colors">Rechnung PDF</a>
                 {booking.contract_signed && (
                   <a href={`/api/rental-contract/${booking.id}`} target="_blank" className="block w-full text-center px-4 py-2 text-sm font-heading font-semibold bg-teal-600 text-white rounded-btn hover:bg-teal-700 transition-colors">Mietvertrag PDF</a>
@@ -895,6 +941,85 @@ export default function BuchungDetailPage() {
                 </button>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* ═══ E-Mail-senden-Modal ═══ */}
+        {showEmailModal && booking && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowEmailModal(false)}>
+            <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl p-6 w-full max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
+              <h3 className="font-heading font-bold text-lg text-brand-black dark:text-white mb-1">E-Mail senden</h3>
+              <p className="text-sm font-body text-brand-muted mb-4">Dokumente an den Kunden senden</p>
+
+              {/* Empfänger */}
+              <label className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider block mb-2">Empfänger</label>
+              <input
+                type="email"
+                value={emailRecipient}
+                onChange={(e) => setEmailRecipient(e.target.value)}
+                placeholder="E-Mail-Adresse"
+                className="w-full px-3 py-2.5 border border-brand-border dark:border-slate-600 rounded-xl text-sm font-body bg-white dark:bg-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-400 mb-4"
+              />
+
+              {/* Anhänge */}
+              <label className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider block mb-2">Anhänge auswählen</label>
+              <div className="space-y-2 mb-4">
+                <label className="flex items-center gap-3 p-3 rounded-xl border border-brand-border dark:border-slate-600 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={emailAttachments.rechnung}
+                    onChange={(e) => setEmailAttachments(prev => ({ ...prev, rechnung: e.target.checked }))}
+                    className="w-4 h-4 accent-blue-600"
+                  />
+                  <div>
+                    <span className="text-sm font-heading font-semibold text-brand-black dark:text-white">Rechnung</span>
+                    <span className="text-xs font-body text-brand-muted block">PDF-Rechnung für Buchung {booking.id}</span>
+                  </div>
+                </label>
+
+                <label className={`flex items-center gap-3 p-3 rounded-xl border border-brand-border dark:border-slate-600 transition-colors ${booking.contract_signed ? 'cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700' : 'opacity-40 cursor-not-allowed'}`}>
+                  <input
+                    type="checkbox"
+                    checked={emailAttachments.vertrag}
+                    onChange={(e) => setEmailAttachments(prev => ({ ...prev, vertrag: e.target.checked }))}
+                    disabled={!booking.contract_signed}
+                    className="w-4 h-4 accent-blue-600"
+                  />
+                  <div>
+                    <span className="text-sm font-heading font-semibold text-brand-black dark:text-white">Mietvertrag</span>
+                    <span className="text-xs font-body text-brand-muted block">
+                      {booking.contract_signed ? 'Unterschriebener Mietvertrag' : 'Noch nicht unterschrieben'}
+                    </span>
+                  </div>
+                </label>
+              </div>
+
+              {/* Hinweis wenn nichts ausgewählt */}
+              {!emailAttachments.rechnung && !emailAttachments.vertrag && (
+                <p className="text-xs text-amber-600 font-body mb-3">Bitte mindestens ein Dokument auswählen.</p>
+              )}
+
+              <div className="flex justify-end gap-2 mt-2">
+                <button onClick={() => setShowEmailModal(false)}
+                  className="px-4 py-2 text-sm font-heading font-semibold text-brand-muted border border-brand-border rounded-btn hover:bg-brand-bg transition-colors">
+                  Abbrechen
+                </button>
+                <button
+                  onClick={handleSendEmail}
+                  disabled={emailSending || !emailRecipient || (!emailAttachments.rechnung && !emailAttachments.vertrag)}
+                  className="px-5 py-2 text-sm font-heading font-semibold bg-blue-600 text-white rounded-btn hover:bg-blue-700 transition-colors disabled:opacity-40"
+                >
+                  {emailSending ? 'Sende...' : '✉ Senden'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* E-Mail Toast */}
+        {emailToast && (
+          <div className={`fixed top-5 right-5 z-[9999] px-5 py-3 rounded-lg shadow-lg text-white font-semibold text-sm ${emailToast.type === 'ok' ? 'bg-green-500' : 'bg-red-500'}`}>
+            {emailToast.msg}
           </div>
         )}
       </div>
