@@ -71,6 +71,8 @@ const s = StyleSheet.create({
     paddingTop: M,
     paddingBottom: 70,
     paddingHorizontal: M,
+    width: '100%',
+    height: '100%',
   },
 
   // Header
@@ -343,7 +345,7 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
 
   return (
     <Document>
-      <Page size="A4" style={s.page} wrap>
+      <Page size={[595.28, 841.89]} style={s.page} wrap>
 
         {/* ── Header ── */}
         <View style={s.headerRow}>

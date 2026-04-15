@@ -119,13 +119,15 @@ export async function GET(
     createElement(InvoicePDF, { data }) as ReactElement<DocumentProps>
   );
 
+  const pdfBytes = new Uint8Array(pdfBuffer);
   const filename = `Rechnung-${booking.id}.pdf`;
 
-  return new NextResponse(new Uint8Array(pdfBuffer), {
+  return new NextResponse(pdfBytes, {
     status: 200,
     headers: {
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename="${filename}"`,
+      'Content-Length': String(pdfBytes.length),
+      'Content-Disposition': `inline; filename="${filename}"`,
     },
   });
 }
