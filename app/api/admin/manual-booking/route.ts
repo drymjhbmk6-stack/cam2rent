@@ -114,6 +114,28 @@ export async function POST(req: NextRequest) {
         .catch((err) => console.error(`Unit assignment error for ${bookingId}:`, err));
     }
 
+    // Transaktionsgebühren als Ausgabe verbuchen
+    const fees = parseFloat(body.payment_fees || '0');
+    if (fees > 0 && body.payment_method) {
+      const methodLabels: Record<string, string> = {
+        paypal: 'PayPal', stripe: 'Stripe', bank_transfer: 'Banküberweisung', bar: 'Barzahlung',
+      };
+      const label = methodLabels[body.payment_method] || body.payment_method;
+      await supabase.from('expenses').insert({
+        expense_date: new Date().toISOString().split('T')[0],
+        category: body.payment_method === 'stripe' ? 'stripe_fees' : 'other',
+        description: `${label}-Gebühr für Buchung ${bookingId}`,
+        vendor: label,
+        net_amount: fees,
+        tax_amount: 0,
+        gross_amount: fees,
+        source_type: 'booking_fee',
+        source_id: bookingId,
+      }).then(({ error }) => {
+        if (error) console.error('Expense insert error:', error.message);
+      });
+    }
+
     // ── Response sofort senden — PDF + E-Mail im Hintergrund ──
 
     const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()

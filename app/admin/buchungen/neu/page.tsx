@@ -222,6 +222,8 @@ export default function ManualBookingPage() {
   const [notes, setNotes] = useState('');
   const [source, setSource] = useState('kleinanzeigen');
   const [paymentStatus, setPaymentStatus] = useState<'paid' | 'unpaid'>('unpaid');
+  const [paymentMethod, setPaymentMethod] = useState('bar');
+  const [paymentFees, setPaymentFees] = useState('');
   const [customShippingPrice, setCustomShippingPrice] = useState('');
   const [remark, setRemark] = useState('');
   const [showSignature, setShowSignature] = useState(false);
@@ -667,11 +669,14 @@ export default function ManualBookingPage() {
           user_id: customerUserId || null,
           shipping_address: shippingAddress || null,
           payment_status: paymentStatus,
+          payment_method: paymentStatus === 'paid' ? paymentMethod : null,
+          payment_fees: paymentStatus === 'paid' && paymentFees ? parseFloat(paymentFees) : 0,
           send_email: !!customerEmail.trim(),
           contractSignature: signatureData ?? undefined,
           notes: [
             source ? `Quelle: ${source}` : '',
-            paymentStatus === 'paid' ? 'Bezahlt' : '',
+            paymentStatus === 'paid' ? `Bezahlt (${paymentMethod === 'bar' ? 'Bar' : paymentMethod === 'paypal' ? 'PayPal' : paymentMethod === 'bank_transfer' ? 'Überweisung' : paymentMethod === 'stripe' ? 'Karte' : 'Sonstige'})` : '',
+            paymentFees && parseFloat(paymentFees) > 0 ? `Transaktionsgebühren: ${parseFloat(paymentFees).toFixed(2)} €` : '',
             ...allNotes,
             bankInfo,
             remark ? `Bemerkung: ${remark}` : '',
@@ -1161,6 +1166,41 @@ export default function ManualBookingPage() {
             </div>
           </div>
 
+          {paymentStatus === 'paid' && (
+            <>
+              <div className="mb-4">
+                <label style={labelStyle}>Zahlungsweise</label>
+                <select
+                  value={paymentMethod}
+                  onChange={(e) => setPaymentMethod(e.target.value)}
+                  style={{ ...inputStyle, cursor: 'pointer' }}
+                >
+                  <option value="bar">Barzahlung</option>
+                  <option value="paypal">PayPal</option>
+                  <option value="bank_transfer">Banküberweisung</option>
+                  <option value="stripe">Kartenzahlung (Stripe)</option>
+                  <option value="other">Sonstige</option>
+                </select>
+              </div>
+
+              <div className="mb-4">
+                <label style={labelStyle}>Transaktionsgebühren (€)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={paymentFees}
+                  onChange={(e) => setPaymentFees(e.target.value)}
+                  placeholder="z.B. 3,50 für PayPal-Gebühr"
+                  style={inputStyle}
+                />
+                <p style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
+                  Wird als Betriebsausgabe in der EÜR verbucht (z.B. PayPal-Gebühr)
+                </p>
+              </div>
+            </>
+          )}
+
         </div>
 
         {/* ─── Zusammenfassung ─── */}
@@ -1208,9 +1248,15 @@ export default function ManualBookingPage() {
                 <span>{deposit.toFixed(2)} €</span>
               </div>
             )}
+            {paymentStatus === 'paid' && parseFloat(paymentFees) > 0 && (
+              <div className="flex justify-between text-xs" style={{ color: '#ef4444' }}>
+                <span>Transaktionsgebühren ({paymentMethod === 'paypal' ? 'PayPal' : paymentMethod === 'stripe' ? 'Stripe' : 'Gebühr'})</span>
+                <span>-{parseFloat(paymentFees).toFixed(2)} €</span>
+              </div>
+            )}
             <div className="flex justify-between text-xs" style={{ color: paymentStatus === 'paid' ? '#10b981' : '#f59e0b' }}>
               <span>Status</span>
-              <span>{paymentStatus === 'paid' ? 'Bezahlt' : 'Nicht bezahlt – Überweisung ausstehend'}</span>
+              <span>{paymentStatus === 'paid' ? `Bezahlt (${paymentMethod === 'bar' ? 'Bar' : paymentMethod === 'paypal' ? 'PayPal' : paymentMethod === 'bank_transfer' ? 'Überweisung' : paymentMethod === 'stripe' ? 'Karte' : 'Sonstige'})` : 'Nicht bezahlt – Überweisung ausstehend'}</span>
             </div>
           </div>
         </div>
