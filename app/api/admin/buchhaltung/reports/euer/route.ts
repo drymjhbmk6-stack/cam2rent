@@ -12,6 +12,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   travel: 'Reisekosten',
   insurance: 'Versicherungen',
   legal: 'Rechts- & Beratungskosten',
+  fees: 'Gebühren',
   other: 'Sonstiges',
 };
 
