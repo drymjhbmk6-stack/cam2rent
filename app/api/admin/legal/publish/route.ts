@@ -73,6 +73,30 @@ export async function POST(req: Request) {
     }).catch((err) => console.error('PDF-Archivierung fehlgeschlagen:', err));
   }
 
+  // 5. Erinnerung erstellen: Vertragsparagraphen prüfen
+  if (doc?.slug) {
+    const SLUG_TO_PARAGRAPHS: Record<string, string> = {
+      agb: '§1-6, §10-12, §15, §17-19',
+      haftungsausschluss: '§7-9, §14',
+      widerruf: '§13',
+      datenschutz: '§16',
+    };
+    const affectedParagraphs = SLUG_TO_PARAGRAPHS[doc.slug];
+    if (affectedParagraphs) {
+      try {
+        const { createAdminNotification } = await import('@/lib/admin-notifications');
+        await createAdminNotification(supabase, {
+          type: 'new_message',
+          title: `Vertragsparagraphen prüfen: ${doc.title} geändert`,
+          message: `Die ${doc.title} wurden aktualisiert. Bitte prüfe ob die Vertragsparagraphen (${affectedParagraphs}) noch aktuell sind.`,
+          link: '/admin/legal/vertragsparagraphen',
+        });
+      } catch {
+        // Notification nicht kritisch
+      }
+    }
+  }
+
   return NextResponse.json({ success: true, version_id: data });
 }
 

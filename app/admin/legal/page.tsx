@@ -134,6 +134,30 @@ export default function AdminLegalPage() {
             })}
           </div>
         )}
+
+        {/* Vertragsparagraphen */}
+        <div className="mt-8">
+          <h2 className="font-heading font-semibold text-sm text-gray-400 uppercase tracking-wider mb-3">Mietvertrag</h2>
+          <Link
+            href="/admin/legal/vertragsparagraphen"
+            className="flex items-center gap-4 p-5 rounded-2xl border transition-all hover:scale-[1.005]"
+            style={{ background: '#111827', borderColor: '#1e293b', textDecoration: 'none' }}
+          >
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 text-lg"
+              style={{ background: 'rgba(6,182,212,0.15)' }}>
+              📝
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-heading font-semibold text-sm text-white">Vertragsparagraphen</p>
+              <p className="text-xs font-body text-gray-500 mt-0.5">
+                19 Paragraphen des Mietvertrags — werden bei Vertragsabschluss in das PDF eingebettet
+              </p>
+            </div>
+            <svg className="w-4 h-4 flex-shrink-0" style={{ color: '#475569' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </Link>
+        </div>
       </div>
     </div>
   );
