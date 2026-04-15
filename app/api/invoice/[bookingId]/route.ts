@@ -110,7 +110,7 @@ export async function GET(
       '',              // Structured Reference
       `${invoiceNumber} ${data.customerName}`, // Verwendungszweck
     ].join('\n');
-    data.qrCodeDataUrl = await QRCode.toDataURL(epcData, { width: 200, margin: 1 });
+    data.qrCodeDataUrl = await QRCode.toDataURL(epcData, { width: 200, margin: 1, color: { dark: '#000000', light: '#ffffff' } });
   } catch (qrErr) {
     console.error('QR-Code Fehler:', qrErr);
   }
