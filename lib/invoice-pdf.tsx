@@ -358,6 +358,17 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
         {/* ── Adressen (zweispaltig) ── */}
         <View style={s.addressRow}>
           <View style={s.addressBlock}>
+            <Text style={s.addressLabel}>Rechnungsempfänger</Text>
+            <Text style={s.addressName}>{data.customerName || 'Kunde'}</Text>
+            <Text style={s.addressLine}>
+              {(() => {
+                if (!data.customerAddress) return data.customerEmail || '';
+                const parts = data.customerAddress.split(',').map((p) => p.trim());
+                return parts.join('\n') + (data.customerEmail ? `\n${data.customerEmail}` : '');
+              })()}
+            </Text>
+          </View>
+          <View style={s.addressBlock}>
             <Text style={s.addressLabel}>Rechnungssteller</Text>
             <Text style={s.addressName}>{BUSINESS.name || 'cam2rent'}</Text>
             <Text style={s.addressLine}>
@@ -366,14 +377,6 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
               {BUSINESS.zip} {BUSINESS.city}{'\n'}
               {BUSINESS.email}{'\n'}
               {data.ustId ? `USt-IdNr.: ${data.ustId}` : BUSINESS.domain}
-            </Text>
-          </View>
-          <View style={s.addressBlock}>
-            <Text style={s.addressLabel}>Rechnungsempfänger</Text>
-            <Text style={s.addressName}>{data.customerName || 'Kunde'}</Text>
-            <Text style={s.addressLine}>
-              {data.customerAddress ? `${data.customerAddress}\n` : ''}
-              {data.customerEmail}
             </Text>
           </View>
         </View>
