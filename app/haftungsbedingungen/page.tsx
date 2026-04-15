@@ -10,9 +10,22 @@ export default function HaftungsbedingungenPage() {
   return (
     <div className="min-h-screen bg-white dark:bg-brand-black">
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-        <h1 className="font-heading font-bold text-3xl text-brand-black dark:text-white mb-2">
-          Haftungsbedingungen
-        </h1>
+        <div className="flex items-center justify-between mb-2">
+          <h1 className="font-heading font-bold text-3xl text-brand-black dark:text-white">
+            Haftungsbedingungen
+          </h1>
+          <a
+            href="/api/haftungsbedingungen-pdf"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-brand-black dark:bg-accent-blue text-white text-sm font-heading font-semibold rounded-[10px] hover:bg-brand-dark dark:hover:bg-accent-blue/80 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            Als PDF
+          </a>
+        </div>
         <p className="text-sm font-body text-brand-muted dark:text-gray-400 mb-10">Stand: Januar 2026</p>
 
         <section className="mb-10">
