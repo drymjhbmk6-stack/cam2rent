@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createElement, type ReactElement } from 'react';
+import { renderToBuffer, type DocumentProps } from '@react-pdf/renderer';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
+import { InvoicePDF, type InvoiceData } from '@/lib/invoice-pdf';
+import { ensureBusinessConfig } from '@/lib/load-business-config';
 import { BUSINESS } from '@/lib/business-config';
+import QRCode from 'qrcode';
 
 export async function POST(
   req: NextRequest,
@@ -23,12 +28,13 @@ export async function POST(
     return NextResponse.json({ error: 'Mindestens ein Dokument auswählen.' }, { status: 400 });
   }
 
+  await ensureBusinessConfig();
   const supabase = createServiceClient();
 
   // Buchung laden
   const { data: booking } = await supabase
     .from('bookings')
-    .select('id, product_name, customer_name, rental_from, rental_to, price_total, contract_signed')
+    .select('*')
     .eq('id', id)
     .maybeSingle();
 
@@ -46,34 +52,97 @@ export async function POST(
 
     const attachments: Array<{ filename: string; content: Buffer }> = [];
 
-    // Rechnung PDF generieren
+    // Rechnung PDF direkt generieren (kein interner HTTP-Call)
     if (attachRechnung) {
-      const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
-      const invoiceRes = await fetch(`${baseUrl}/api/invoice/${id}`, {
-        headers: { cookie: req.headers.get('cookie') || '' },
-      });
-      if (invoiceRes.ok) {
-        const pdfBuffer = Buffer.from(await invoiceRes.arrayBuffer());
-        attachments.push({ filename: `Rechnung-${id}.pdf`, content: pdfBuffer });
+      try {
+        // Tax Config
+        const { data: taxSettings } = await supabase
+          .from('admin_settings')
+          .select('key, value')
+          .in('key', ['tax_mode', 'tax_rate', 'ust_id']);
+        const taxMap: Record<string, string> = {};
+        for (const s of taxSettings ?? []) taxMap[s.key] = s.value;
+
+        // Kundenadresse
+        let customerAddress = booking.shipping_address ?? '';
+        if (!customerAddress && booking.user_id) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('address_street, address_zip, address_city')
+            .eq('id', booking.user_id)
+            .maybeSingle();
+          if (profile?.address_street) {
+            customerAddress = `${profile.address_street}, ${profile.address_zip} ${profile.address_city}`;
+          }
+        }
+
+        const invoiceNumber = booking.id.replace(/^(C2R|BK)-/, 'RE-');
+        const raw = booking.created_at ? new Date(booking.created_at) : new Date();
+        const invoiceDate = raw.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+        const invoiceData: InvoiceData = {
+          bookingId: booking.id,
+          invoiceNumber,
+          invoiceDate,
+          customerName: booking.customer_name ?? '',
+          customerEmail: booking.customer_email ?? to,
+          customerAddress,
+          productName: booking.product_name ?? '',
+          rentalFrom: booking.rental_from ?? '',
+          rentalTo: booking.rental_to ?? '',
+          days: booking.days ?? 1,
+          deliveryMode: booking.delivery_mode ?? 'versand',
+          shippingMethod: booking.shipping_method ?? undefined,
+          haftung: booking.haftung ?? 'none',
+          accessories: Array.isArray(booking.accessories) ? booking.accessories : [],
+          priceRental: booking.price_rental ?? 0,
+          priceAccessories: booking.price_accessories ?? 0,
+          priceHaftung: booking.price_haftung ?? 0,
+          shippingPrice: booking.shipping_price ?? 0,
+          priceTotal: booking.price_total ?? 0,
+          deposit: booking.deposit ?? 0,
+          taxMode: (taxMap['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer',
+          taxRate: parseFloat(taxMap['tax_rate'] || '19'),
+          ustId: taxMap['ust_id'] || '',
+          paymentMethod: booking.payment_intent_id?.startsWith('MANUAL') ? 'Ueberweisung' : 'Stripe',
+          paymentStatus: booking.payment_intent_id?.includes('UNPAID') ? 'unpaid' : undefined,
+        };
+
+        // QR-Code
+        try {
+          const epcData = ['BCD', '002', '1', 'SCT', BUSINESS.bic, BUSINESS.owner, BUSINESS.iban,
+            `EUR${invoiceData.priceTotal.toFixed(2)}`, '', '', `${invoiceNumber} ${invoiceData.customerName}`].join('\n');
+          invoiceData.qrCodeDataUrl = await QRCode.toDataURL(epcData, { width: 200, margin: 1, color: { dark: '#000000', light: '#ffffff' } });
+        } catch { /* QR optional */ }
+
+        const pdfBuffer = await renderToBuffer(
+          createElement(InvoicePDF, { data: invoiceData }) as ReactElement<DocumentProps>
+        );
+        attachments.push({ filename: `Rechnung-${id}.pdf`, content: Buffer.from(pdfBuffer) });
+      } catch (err) {
+        console.error('Rechnung-PDF Fehler:', err);
       }
     }
 
-    // Mietvertrag PDF
+    // Mietvertrag PDF aus Storage laden
     if (attachVertrag && booking.contract_signed) {
-      const { data: agreement } = await supabase
-        .from('rental_agreements')
-        .select('pdf_url')
-        .eq('booking_id', id)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      try {
+        const { data: agreement } = await supabase
+          .from('rental_agreements')
+          .select('pdf_url')
+          .eq('booking_id', id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
 
-      if (agreement?.pdf_url) {
-        const pdfRes = await fetch(agreement.pdf_url);
-        if (pdfRes.ok) {
-          const pdfBuffer = Buffer.from(await pdfRes.arrayBuffer());
-          attachments.push({ filename: `Mietvertrag-${id}.pdf`, content: pdfBuffer });
+        if (agreement?.pdf_url) {
+          const pdfRes = await fetch(agreement.pdf_url);
+          if (pdfRes.ok) {
+            attachments.push({ filename: `Mietvertrag-${id}.pdf`, content: Buffer.from(await pdfRes.arrayBuffer()) });
+          }
         }
+      } catch (err) {
+        console.error('Vertrag-PDF Fehler:', err);
       }
     }
 
@@ -81,9 +150,7 @@ export async function POST(
       return NextResponse.json({ error: 'Keine Dokumente konnten generiert werden.' }, { status: 500 });
     }
 
-    // Dokumentliste für E-Mail-Text
-    const docNames = attachments.map(a => a.filename.split('-')[0]).join(' und ');
-
+    const docNames = attachments.map(a => a.filename.replace(/-.+\.pdf$/, '')).join(' und ');
     const von = booking.rental_from ? new Date(booking.rental_from).toLocaleDateString('de-DE') : '';
     const bis = booking.rental_to ? new Date(booking.rental_to).toLocaleDateString('de-DE') : '';
 
