@@ -166,6 +166,20 @@ export default function AdminLegalEditPage() {
               )}
             </p>
           </div>
+          <div className="flex items-center gap-2">
+            <a
+              href={`/api/admin/legal/pdf?slug=${slug}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-heading font-semibold transition-colors"
+              style={{ background: '#1e293b', color: '#94a3b8' }}
+              title="Aktuelle Version als PDF"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              PDF
+            </a>
           <button
             type="button"
             onClick={() => setShowHistory(!showHistory)}
@@ -180,6 +194,7 @@ export default function AdminLegalEditPage() {
             </svg>
             Versionshistorie ({versions.length})
           </button>
+          </div>
         </div>
 
         <div className="flex gap-6">
@@ -303,6 +318,15 @@ export default function AdminLegalEditPage() {
                         >
                           Anzeigen
                         </button>
+                        <a
+                          href={`/api/admin/legal/pdf?slug=${slug}&version=${v.version_number}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[11px] font-heading font-semibold transition-colors"
+                          style={{ color: '#94a3b8' }}
+                        >
+                          PDF
+                        </a>
                         {!v.is_current && (
                           <button
                             onClick={() => handleRestore(v)}

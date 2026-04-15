@@ -103,13 +103,26 @@ export default function AdminLegalPage() {
                     )}
                   </div>
 
-                  {/* Datum */}
-                  <div className="text-right flex-shrink-0">
+                  {/* Datum + PDF */}
+                  <div className="flex items-center gap-2 flex-shrink-0">
                     {doc.currentVersion?.published_at && (
                       <p className="text-xs font-body text-gray-500">
                         {fmtDate(doc.currentVersion.published_at)}
                       </p>
                     )}
+                    <a
+                      href={`/api/admin/legal/pdf?slug=${doc.slug}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="p-1.5 rounded-lg transition-colors"
+                      style={{ color: '#475569' }}
+                      title="PDF herunterladen"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                    </a>
                   </div>
 
                   {/* Pfeil */}
