@@ -60,10 +60,13 @@ export async function GET(
     createElement(PacklistPDF, { data }) as ReactElement<DocumentProps>
   );
 
-  return new NextResponse(new Uint8Array(pdfBuffer), {
+  const pdfBytes = new Uint8Array(pdfBuffer);
+
+  return new NextResponse(pdfBytes, {
     headers: {
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename="Packliste-${booking.id}.pdf"`,
+      'Content-Length': String(pdfBytes.length),
+      'Content-Disposition': `inline; filename="Packliste-${booking.id}.pdf"`,
     },
   });
 }

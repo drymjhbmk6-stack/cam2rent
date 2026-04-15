@@ -233,7 +233,7 @@ export function PacklistPDF({ data }: { data: PacklistData }) {
   return (
     <Document>
       {cameras.map((camera, cameraIdx) => (
-        <Page key={cameraIdx} size="A4" style={s.page}>
+        <Page key={cameraIdx} size={[595.28, 841.89]} style={s.page}>
 
           {/* ── Header Bar ── */}
           <View style={s.headerBar}>

@@ -113,11 +113,13 @@ export async function GET(
         try {
           const pdfRes = await fetch(signedUrlData.signedUrl);
           const pdfBuffer = await pdfRes.arrayBuffer();
+          const pdfBytes = new Uint8Array(pdfBuffer);
           const contractNumber = bookingId.replace('BK-', 'MV-');
-          return new NextResponse(new Uint8Array(pdfBuffer), {
+          return new NextResponse(pdfBytes, {
             headers: {
               'Content-Type': 'application/pdf',
-              'Content-Disposition': `attachment; filename="Mietvertrag-${contractNumber}.pdf"`,
+              'Content-Length': String(pdfBytes.length),
+              'Content-Disposition': `inline; filename="Mietvertrag-${contractNumber}.pdf"`,
             },
           });
         } catch {
@@ -238,10 +240,13 @@ export async function GET(
 
   const contractNumber = bookingId.replace('BK-', 'MV-');
 
-  return new NextResponse(new Uint8Array(pdfBuffer), {
+  const pdfBytes = new Uint8Array(pdfBuffer);
+
+  return new NextResponse(pdfBytes, {
     headers: {
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename="Mietvertrag-${contractNumber}.pdf"`,
+      'Content-Length': String(pdfBytes.length),
+      'Content-Disposition': `inline; filename="Mietvertrag-${contractNumber}.pdf"`,
     },
   });
 }

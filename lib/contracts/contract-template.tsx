@@ -325,7 +325,7 @@ export function RentalContractPDF({ data }: { data: RentalContractData }) {
 
   return (
     <Document>
-      <Page size="A4" style={s.page} wrap>
+      <Page size={[595.28, 841.89]} style={s.page} wrap>
         {/* Fester Footer auf jeder Seite */}
         <Footer />
 
