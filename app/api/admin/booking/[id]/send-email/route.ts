@@ -4,9 +4,26 @@ import { renderToBuffer, type DocumentProps } from '@react-pdf/renderer';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
 import { InvoicePDF, type InvoiceData } from '@/lib/invoice-pdf';
+import { LegalDocumentPDF } from '@/lib/legal-pdf';
 import { ensureBusinessConfig } from '@/lib/load-business-config';
 import { BUSINESS } from '@/lib/business-config';
 import QRCode from 'qrcode';
+
+const LEGAL_SLUG_MAP: Record<string, string> = {
+  agb: 'agb',
+  widerruf: 'widerruf',
+  haftung: 'haftungsausschluss',
+  datenschutz: 'datenschutz',
+  impressum: 'impressum',
+};
+
+const LEGAL_LABELS: Record<string, string> = {
+  agb: 'AGB',
+  widerruf: 'Widerrufsbelehrung',
+  haftung: 'Haftungsbedingungen',
+  datenschutz: 'Datenschutzerklaerung',
+  impressum: 'Impressum',
+};
 
 export async function POST(
   req: NextRequest,
@@ -18,13 +35,14 @@ export async function POST(
 
   const { id } = await params;
   const body = await req.json();
-  const { to, attachRechnung, attachVertrag } = body;
+  const { to, attachRechnung, attachVertrag, legalDocs } = body;
+  const requestedLegalDocs: string[] = Array.isArray(legalDocs) ? legalDocs : [];
 
   if (!to) {
     return NextResponse.json({ error: 'Empfänger-E-Mail fehlt.' }, { status: 400 });
   }
 
-  if (!attachRechnung && !attachVertrag) {
+  if (!attachRechnung && !attachVertrag && requestedLegalDocs.length === 0) {
     return NextResponse.json({ error: 'Mindestens ein Dokument auswählen.' }, { status: 400 });
   }
 
@@ -143,6 +161,46 @@ export async function POST(
         }
       } catch (err) {
         console.error('Vertrag-PDF Fehler:', err);
+      }
+    }
+
+    // Rechtliche Dokumente als PDFs generieren
+    for (const docKey of requestedLegalDocs) {
+      const slug = LEGAL_SLUG_MAP[docKey];
+      const label = LEGAL_LABELS[docKey];
+      if (!slug || !label) continue;
+
+      try {
+        const { data: legalDoc } = await supabase
+          .from('legal_documents')
+          .select('title, current_version_id')
+          .eq('slug', slug)
+          .maybeSingle();
+
+        if (!legalDoc?.current_version_id) continue;
+
+        const { data: version } = await supabase
+          .from('legal_document_versions')
+          .select('content, version_number, published_at')
+          .eq('id', legalDoc.current_version_id)
+          .maybeSingle();
+
+        if (!version?.content) continue;
+
+        const legalPdfBuffer = await renderToBuffer(
+          createElement(LegalDocumentPDF, {
+            data: {
+              title: legalDoc.title,
+              slug,
+              content: version.content,
+              versionNumber: version.version_number,
+              publishedAt: version.published_at,
+            },
+          }) as ReactElement<DocumentProps>
+        );
+        attachments.push({ filename: `${label}.pdf`, content: Buffer.from(legalPdfBuffer) });
+      } catch (err) {
+        console.error(`Legal-PDF ${slug} Fehler:`, err);
       }
     }
 

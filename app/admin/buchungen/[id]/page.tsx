@@ -159,7 +159,7 @@ export default function BuchungDetailPage() {
   const [emailSending, setEmailSending] = useState(false);
   const [emailToast, setEmailToast] = useState<{ msg: string; type: 'ok' | 'err' } | null>(null);
   const [emailRecipient, setEmailRecipient] = useState('');
-  const [emailAttachments, setEmailAttachments] = useState<{ rechnung: boolean; vertrag: boolean }>({ rechnung: true, vertrag: true });
+  const [emailAttachments, setEmailAttachments] = useState<{ rechnung: boolean; vertrag: boolean; agb: boolean; widerruf: boolean; haftung: boolean; datenschutz: boolean; impressum: boolean }>({ rechnung: true, vertrag: true, agb: false, widerruf: false, haftung: false, datenschutz: false, impressum: false });
   useEffect(() => {
     fetchBooking();
   }, [bookingId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -212,6 +212,8 @@ export default function BuchungDetailPage() {
           to: recipient,
           attachRechnung: emailAttachments.rechnung,
           attachVertrag: emailAttachments.vertrag,
+          legalDocs: ['agb', 'widerruf', 'haftung', 'datenschutz', 'impressum']
+            .filter(key => emailAttachments[key as keyof typeof emailAttachments]),
         }),
       });
       if (res.ok) {
@@ -856,7 +858,7 @@ export default function BuchungDetailPage() {
                 <button
                   onClick={() => {
                     setEmailRecipient(booking.customer_email || '');
-                    setEmailAttachments({ rechnung: true, vertrag: booking.contract_signed ?? false });
+                    setEmailAttachments({ rechnung: true, vertrag: booking.contract_signed ?? false, agb: false, widerruf: false, haftung: false, datenschutz: false, impressum: false });
                     setShowEmailModal(true);
                   }}
                   className="block w-full text-center px-4 py-2.5 text-sm font-heading font-semibold bg-blue-600 text-white rounded-btn hover:bg-blue-700 transition-colors"
@@ -962,15 +964,25 @@ export default function BuchungDetailPage() {
               />
 
               {/* Anhänge */}
-              <label className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider block mb-2">Anhänge auswählen</label>
-              <div className="space-y-2 mb-4">
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider">Anhänge auswählen</label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const allChecked = emailAttachments.rechnung && emailAttachments.agb && emailAttachments.widerruf && emailAttachments.haftung && emailAttachments.datenschutz && emailAttachments.impressum;
+                    const val = !allChecked;
+                    setEmailAttachments(prev => ({ ...prev, rechnung: val, agb: val, widerruf: val, haftung: val, datenschutz: val, impressum: val, vertrag: val && (booking.contract_signed ?? false) }));
+                  }}
+                  className="text-xs font-heading font-semibold text-blue-500 hover:text-blue-400"
+                >
+                  Alle auswählen
+                </button>
+              </div>
+              <div className="space-y-2 mb-4 max-h-72 overflow-y-auto">
+                {/* Buchungsdokumente */}
+                <p className="text-xs font-heading font-semibold text-brand-muted mt-1 mb-1">Buchungsdokumente</p>
                 <label className="flex items-center gap-3 p-3 rounded-xl border border-brand-border dark:border-slate-600 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={emailAttachments.rechnung}
-                    onChange={(e) => setEmailAttachments(prev => ({ ...prev, rechnung: e.target.checked }))}
-                    className="w-4 h-4 accent-blue-600"
-                  />
+                  <input type="checkbox" checked={emailAttachments.rechnung} onChange={(e) => setEmailAttachments(prev => ({ ...prev, rechnung: e.target.checked }))} className="w-4 h-4 accent-blue-600" />
                   <div>
                     <span className="text-sm font-heading font-semibold text-brand-black dark:text-white">Rechnung</span>
                     <span className="text-xs font-body text-brand-muted block">PDF-Rechnung für Buchung {booking.id}</span>
@@ -978,24 +990,34 @@ export default function BuchungDetailPage() {
                 </label>
 
                 <label className={`flex items-center gap-3 p-3 rounded-xl border border-brand-border dark:border-slate-600 transition-colors ${booking.contract_signed ? 'cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700' : 'opacity-40 cursor-not-allowed'}`}>
-                  <input
-                    type="checkbox"
-                    checked={emailAttachments.vertrag}
-                    onChange={(e) => setEmailAttachments(prev => ({ ...prev, vertrag: e.target.checked }))}
-                    disabled={!booking.contract_signed}
-                    className="w-4 h-4 accent-blue-600"
-                  />
+                  <input type="checkbox" checked={emailAttachments.vertrag} onChange={(e) => setEmailAttachments(prev => ({ ...prev, vertrag: e.target.checked }))} disabled={!booking.contract_signed} className="w-4 h-4 accent-blue-600" />
                   <div>
                     <span className="text-sm font-heading font-semibold text-brand-black dark:text-white">Mietvertrag</span>
-                    <span className="text-xs font-body text-brand-muted block">
-                      {booking.contract_signed ? 'Unterschriebener Mietvertrag' : 'Noch nicht unterschrieben'}
-                    </span>
+                    <span className="text-xs font-body text-brand-muted block">{booking.contract_signed ? 'Unterschriebener Mietvertrag' : 'Noch nicht unterschrieben'}</span>
                   </div>
                 </label>
+
+                {/* Rechtliche Dokumente */}
+                <p className="text-xs font-heading font-semibold text-brand-muted mt-3 mb-1">Rechtliche Dokumente</p>
+                {[
+                  { key: 'agb' as const, label: 'AGB', desc: 'Allgemeine Geschäftsbedingungen' },
+                  { key: 'widerruf' as const, label: 'Widerrufsbelehrung', desc: 'Widerrufsrecht und Muster-Widerrufsformular' },
+                  { key: 'haftung' as const, label: 'Haftungsbedingungen', desc: 'Haftungsschutz und Schadensbedingungen' },
+                  { key: 'datenschutz' as const, label: 'Datenschutzerklärung', desc: 'DSGVO-konforme Datenschutzhinweise' },
+                  { key: 'impressum' as const, label: 'Impressum', desc: 'Anbieterkennzeichnung nach §5 TMG' },
+                ].map(doc => (
+                  <label key={doc.key} className="flex items-center gap-3 p-3 rounded-xl border border-brand-border dark:border-slate-600 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+                    <input type="checkbox" checked={emailAttachments[doc.key]} onChange={(e) => setEmailAttachments(prev => ({ ...prev, [doc.key]: e.target.checked }))} className="w-4 h-4 accent-blue-600" />
+                    <div>
+                      <span className="text-sm font-heading font-semibold text-brand-black dark:text-white">{doc.label}</span>
+                      <span className="text-xs font-body text-brand-muted block">{doc.desc}</span>
+                    </div>
+                  </label>
+                ))}
               </div>
 
               {/* Hinweis wenn nichts ausgewählt */}
-              {!emailAttachments.rechnung && !emailAttachments.vertrag && (
+              {!emailAttachments.rechnung && !emailAttachments.vertrag && !emailAttachments.agb && !emailAttachments.widerruf && !emailAttachments.haftung && !emailAttachments.datenschutz && !emailAttachments.impressum && (
                 <p className="text-xs text-amber-600 font-body mb-3">Bitte mindestens ein Dokument auswählen.</p>
               )}
 
@@ -1006,7 +1028,7 @@ export default function BuchungDetailPage() {
                 </button>
                 <button
                   onClick={handleSendEmail}
-                  disabled={emailSending || !emailRecipient || (!emailAttachments.rechnung && !emailAttachments.vertrag)}
+                  disabled={emailSending || !emailRecipient || (!emailAttachments.rechnung && !emailAttachments.vertrag && !emailAttachments.agb && !emailAttachments.widerruf && !emailAttachments.haftung && !emailAttachments.datenschutz && !emailAttachments.impressum)}
                   className="px-5 py-2 text-sm font-heading font-semibold bg-blue-600 text-white rounded-btn hover:bg-blue-700 transition-colors disabled:opacity-40"
                 >
                   {emailSending ? 'Sende...' : '✉ Senden'}
