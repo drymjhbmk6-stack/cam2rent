@@ -191,10 +191,12 @@ export async function GET() {
   lines.push('## Bitte prüfe:');
   lines.push('1. Stimmen die Vertragsparagraphen mit den Rechtsseiten überein?');
   lines.push('2. Gibt es Widersprüche (z.B. unterschiedliche Fristen, Beträge, Formulierungen)?');
-  lines.push('3. Fehlen wichtige Klauseln?');
+  lines.push('3. Gibt es NEUE Inhalte in den Rechtsseiten (AGB, Haftung, Widerruf, Datenschutz) die im Vertrag FEHLEN? Zum Beispiel neue Klauseln, geänderte Bedingungen oder komplett neue Regelungen die vertragsrelevant sind.');
   lines.push('4. Werden die Begriffe korrekt verwendet (Haftungsschutz statt Versicherung)?');
-  lines.push('5. Sind die Paragraphen juristisch korrekt für deutsches Mietrecht?');
-  lines.push('6. Schlage konkrete Textänderungen vor falls nötig.');
+  lines.push('5. Sind die Paragraphen juristisch korrekt für deutsches Mietrecht (BGB Mietrecht, Fernabsatzrecht, DSGVO)?');
+  lines.push('6. Fehlen Pflichtangaben nach §14 UStG, Fernabsatzrecht oder Verbraucherrecht?');
+  lines.push('7. Vergleiche den zuletzt unterschriebenen Vertrag mit den aktuellen Paragraphen — gibt es Abweichungen?');
+  lines.push('8. Schlage konkrete Textänderungen vor falls nötig — gib den neuen Text direkt an.');
 
   const prompt = lines.join('\n');
 
