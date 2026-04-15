@@ -47,7 +47,7 @@ ESLint + TypeScript werden auf dem Server beim Build geskippt (RAM-Limit CX23).
 - Anthropic Claude API (Blog-KI-Generierung)
 - OpenAI DALL-E 3 (Blog-Bildgenerierung)
 
-## Architektur-Übersicht (Stand 2026-04-14)
+## Architektur-Übersicht (Stand 2026-04-15)
 
 ### Datenquellen — ALLES aus DB, keine statischen Fallbacks
 - **Kameras:** `admin_config.products` → `getProducts()` (lib/get-products.ts) → `/api/products` → `ProductsProvider` + `useProducts()`
@@ -118,12 +118,20 @@ ESLint + TypeScript werden auf dem Server beim Build geskippt (RAM-Limit CX23).
 - **Auto-Seriennummer:** Beim Hinzufügen wird API `/api/admin/find-free-unit` aufgerufen → findet freie Unit mit Puffertagen → Seriennummer automatisch eingetragen
 - **Verfügbarkeitsprüfung:** Fehlermeldung wenn keine Kamera-Unit für den Zeitraum verfügbar
 - **Sets/Zubehör gefiltert** nach Kamera-Kompatibilität (product_ids / compatible_product_ids)
+- **Bezahlstatus:** "Bezahlt" / "Nicht bezahlt" — bei "Nicht bezahlt" wird `MANUAL-UNPAID-...` als `payment_intent_id` gespeichert
+- **Verwendungszweck:** Format `Name - Rechnungsnummer` (z.B. "Lars Kanitzky - RE-2616-001")
 - Gast-Buchung ohne Kundenkonto (nur Name + E-Mail)
 - Digitale Vertragsunterschrift auf Admin-Tablet/Handy (SignatureStep)
 - Rechnung-PDF + Vertrag-PDF werden im Hintergrund generiert
 - E-Mail mit Anhängen automatisch gesendet wenn E-Mail hinterlegt
-- Nach Erstellung: PayPal QR-Code + Bankdaten (aus BUSINESS Config)
+- **Erfolgsseite:** Zeigt "Rechnung PDF" + "Zur Buchung" + "Neue Buchung" Buttons (keine Bankdaten mehr in UI — stehen auf der Rechnung)
+- **Rechnungsvorschau:** HTML-Vorschau mit QR-Codes (Banking + PayPal) bei "Nicht bezahlt"
 - Vertrag nachträglich unterschreiben: `/admin/buchungen/[id]/vertrag-unterschreiben`
+
+### Buchungsdetails (`/admin/buchungen/[id]`)
+- **Stornieren mit Begründung:** "Stornieren"-Button öffnet Modal mit Pflicht-Freitext → Grund wird in Buchungsnotizen gespeichert
+- **Endgültig löschen:** "Endgültig löschen"-Button mit Admin-Passwort-Abfrage (Passwort: Admin) → löscht Buchung + Verträge + E-Mail-Logs aus DB
+- **DELETE-Endpoint:** `DELETE /api/admin/booking/[id]` mit `{ password }` im Body
 
 ### Admin-Sidebar Struktur
 - **Produkte & Katalog:** Kameras, Sets, Zubehör, Verfügbarkeit
@@ -141,6 +149,9 @@ Alle Dropdowns laden aus `admin_settings` und können neue Einträge hinzufügen
 - **Spec-Definitionen:** `spec_definitions` (SpecDefinitionsManager in Einstellungen)
 
 ### Sets-Admin (`/admin/sets`)
+- **Gruppierung nach Kamera-Marken:** Sets werden nach Kamera-Kompatibilität gruppiert (Alle Kameras, GoPro, DJI, Insta360, etc.)
+- **Preissortierung:** Innerhalb jeder Gruppe nach Preis aufsteigend sortiert
+- **Kopieren-Button:** Dupliziert ein Set mit allen Einstellungen (Zubehör, Kameras, Preis), Kopie öffnet sich direkt zum Bearbeiten
 - **Zubehör-Dropdown:** Gruppiert nach Kategorie (`<optgroup>`), zeigt intern-Flag, Upgrade-Gruppe, Stückzahl, Kompatibilität
 - **Kamera-Toggles:** Nutzen `CameraToggle` mit dynamischen Brand-Farben
 - **Dark-Mode:** Alle Elemente mit `dark:` Klassen versehen
@@ -231,13 +242,48 @@ Alle Dropdowns laden aus `admin_settings` und können neue Einträge hinzufügen
   - Vertrag: Dynamischer Wert statt hardcoded 200€
 - Kamera-Editor zeigt nur relevante Optionen basierend auf globalem Modus
 
-### Mietvertrag-PDF
-- `lib/contracts/contract-template.tsx` — React-PDF Template mit 19 Paragraphen
-- Dynamischer Seitenumbruch (eine Page mit `wrap`), kein festes Seitenlayout mehr
-- Footer mit automatischen Seitenzahlen (`render={({ pageNumber, totalPages })`)
-- `getParagraphen(eigenbeteiligung)` — Funktion statt Konstante (§7 dynamisch)
-- Signatur: Canvas oder getippter Name
-- SHA-256 Hash des Vertragstexts
+### PDF-Dokumente (DIN A4)
+- **Alle PDFs nutzen explizite Seitengröße:** `size={[595.28, 841.89]}` (exakt DIN A4 in Punkten)
+- **Content-Disposition: inline** + **Content-Length** Header für korrekte Anzeige/Druck
+- **Rechnungs-PDF** (`lib/invoice-pdf.tsx`):
+  - Schlichtes Schwarz/Weiß-Design, keine farbigen Balken/Flächen
+  - Nur Farben: #000000, #1a1a1a, #6b7280, #d1d5db, #ffffff
+  - Header: "cam2rent" (20pt Bold) links, "Rechnung" (20pt Regular) rechts
+  - Adressen zweispaltig: Empfänger links, Steller rechts
+  - Empfänger-Adresse zeilenweise: Name, Straße, PLZ Stadt
+  - Meta dreispaltig: Rechnungsdatum, Buchungsnummer, Leistungszeitraum
+  - Tabelle ohne farbigen Header, schwarze Unterstreichung, keine Zebra-Streifen
+  - Gesamtbetrag rechtsbündig (12pt fett), kein Balken
+  - Steuerhinweis als einfacher Text direkt unter Gesamtbetrag
+  - Abholung/Versand als Position in der Tabelle (auch bei 0 €)
+  - Bei unbezahlt: Bankdaten (ohne Box) + QR-Codes nebeneinander (Banking + PayPal, Schwarz/Weiß)
+  - Payment-Status-Erkennung: `UNPAID` in payment_intent_id ODER `payment_status` Spalte ODER "Überweisung ausstehend" in Notizen
+- **Mietvertrag-PDF** (`lib/contracts/contract-template.tsx`):
+  - React-PDF Template mit 19 Paragraphen
+  - Dynamischer Seitenumbruch (eine Page mit `wrap`), kein festes Seitenlayout mehr
+  - Footer mit automatischen Seitenzahlen (`render={({ pageNumber, totalPages })`)
+  - `getParagraphen(eigenbeteiligung)` — Funktion statt Konstante (§7 dynamisch)
+  - Signatur: Canvas oder getippter Name
+  - SHA-256 Hash des Vertragstexts
+- **Packliste-PDF** (`lib/packlist-pdf.tsx`): DIN A4, inline-Anzeige
+
+### Übergabeprotokoll + Versand-Packliste (HTML-Dokumente)
+- HTML-Dokumente via `window.open()` in `/admin/buchungen/[id]`
+- **Kompakt für DIN A4:** Schriftgrößen 9pt Body, 14pt Titel, Seitenränder 12mm
+- **Zubehör automatisch aufgelöst:** Sets werden in Einzelteile aufgelöst (Set-Name als Header + alle Zubehörteile mit Namen)
+- Zubehör-IDs → lesbare Namen via Sets-API + Accessories-API
+- Übergabeprotokoll: Vermieter/Mieter nebeneinander, Checkboxen kompakt
+- Packliste: Info-Blöcke nebeneinander, Zustand+Verpackung zusammengefasst
+
+### Buchhaltung & DATEV-Export (`/admin/buchhaltung`)
+- **Konten-Konfiguration:** Erlöskonto, USt-Konto, Kautionskonto, Versandkostenkonto, Berater-/Mandantennummer, Wirtschaftsjahr-Beginn
+- **Export:** CSV-Buchungsstapel (DATEV-Format, Semikolon-getrennt, UTF-8 mit BOM)
+- **Zeitraum-Auswahl:** Aktueller Monat/Quartal/Jahr oder benutzerdefiniert
+- **Vorschau:** Anzahl Buchungen + Gesamtumsatz vor dem Export
+- **Pro Buchung bis zu 3 Zeilen:** Mieterlös, Haftungsoption, Versand
+- **Stornierungen:** Umgekehrtes Soll/Haben-Kennzeichen (Storno)
+- **API:** `GET /api/admin/datev-export?from=...&to=...[&preview=1]`
+- **Config-Speicherung:** `admin_config.datev_config`
 
 ### next/image
 - ProductCard + ProductImageGallery nutzen `next/image` (WebP, Lazy Loading)
