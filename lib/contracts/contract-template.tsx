@@ -475,8 +475,8 @@ export function RentalContractPDF({ data }: { data: RentalContractData }) {
           </Text>
         </View>
 
-        {/* Signatur-Block */}
-        <View style={s.signatureBox}>
+        {/* Signatur-Block — wrap={false} verhindert Seitenumbruch mitten im Block */}
+        <View style={s.signatureBox} wrap={false}>
           <Text style={s.signatureLabel}>Digitale Signatur</Text>
           <View style={s.detailRow}>
             <Text style={s.signatureLabel}>Unterzeichnet von:</Text>
