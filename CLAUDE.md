@@ -40,7 +40,8 @@ ESLint + TypeScript werden auf dem Server beim Build geskippt (RAM-Limit CX23).
 - Stripe (Payments + Kaution Pre-Auth)
 - Resend (E-Mails)
 - @react-pdf/renderer (Rechnungen, Mietverträge)
-- react-markdown (Produktbeschreibungen im Admin + Detailseite)
+- react-markdown (Produktbeschreibungen im Admin + Detailseite + Legal-Seiten)
+- marked (Markdown→Tokens Parser für Legal-PDFs)
 - react-day-picker v8 + date-fns (--legacy-peer-deps)
 - Docker + Coolify Deployment
 - Anthropic Claude API (Blog-KI-Generierung)
@@ -290,6 +291,44 @@ Ausführliche Dokumentation: `BLOG_SYSTEM_DOCS.md`
 - **Kamera-Finder:** `/kamera-finder` — 5-Fragen-Assistent mit Score-basiertem Produkt-Matching
 - **Set-Konfigurator:** `/set-konfigurator` — 3-Step Builder (Kamera→Zubehör→Zusammenfassung), Set-Rabatt 10%/15%
 - **Dark/Light Mode:** ThemeProvider mit localStorage Persistenz, Tailwind `darkMode: 'class'`, Toggle in Navbar
+
+## Legal-Content-Management-System
+Versionierte Verwaltung aller Rechtstexte (AGB, Datenschutz, Impressum, Widerruf, Haftungsbedingungen) über den Admin-Bereich. Jede Änderung erzeugt eine neue, unveränderliche Version.
+
+### DB-Tabellen
+- **`legal_documents`**: Metadaten pro Dokumenttyp (id, slug, title, current_version_id)
+  - Slugs: `agb`, `widerruf`, `haftungsausschluss`, `datenschutz`, `impressum`
+- **`legal_document_versions`**: Versionshistorie (id, document_id, version_number, content, content_format, change_note, published_at, is_current)
+  - RLS: Lesen für alle, UPDATE/DELETE auf alte Versionen verboten
+- **`publish_legal_version()`**: Postgres-Funktion für atomare Versionierung (alte Version deaktivieren → neue einfügen → current_version_id aktualisieren)
+- **Migration:** `supabase/legal-documents.sql`
+
+### Admin-UI (`/admin/legal`)
+- **Übersichtsseite:** Liste aller Dokumenttypen mit Status, Datum, PDF-Download-Button
+- **Bearbeitungsseite** (`/admin/legal/[slug]`): Markdown-Editor mit Live-Vorschau, Änderungsnotiz, Veröffentlichen-Button
+- **Versionshistorie:** Sidebar mit allen Versionen — Anzeigen (Modal), PDF pro Version, Wiederherstellen (erzeugt neue Version)
+- **Sidebar-Navigation:** Eigene Sektion "Rechtliches" in Admin-Sidebar
+
+### API-Routen
+- `GET /api/admin/legal` — Dokumentliste oder Einzeldokument mit Versionen
+- `POST /api/admin/legal/publish` — Neue Version veröffentlichen + PDF in Supabase Storage archivieren
+- `GET /api/admin/legal/pdf?slug=agb&version=3` — On-demand PDF-Download (beliebige Version)
+- `GET /api/legal?slug=agb` — Öffentliche API für Shop-Seiten (5 Min Cache)
+
+### Legal-PDF-Generierung
+- **`lib/legal-pdf.tsx`**: @react-pdf/renderer Template mit `marked` (Markdown→Tokens→PDF)
+  - Gleicher Stil wie Vertrags-PDFs (Navy Header, Cyan Akzente, Footer mit Seitenzahlen)
+  - Unterstützt: Headings, Listen, Tabellen, Blockquotes, Code, Links, Bold/Italic
+- **Automatische Archivierung:** Beim Publish wird PDF im Hintergrund generiert und in Supabase Storage hochgeladen (`legal-documents/{slug}/v{version}.pdf`)
+- **Kein Puppeteer** — nutzt bestehende @react-pdf/renderer Infrastruktur
+
+### Shop-Seiten (Frontend)
+- Routen: `/agb`, `/datenschutz`, `/impressum`, `/widerruf`, `/haftungsbedingungen`
+- **`components/LegalPage.tsx`**: Server Component, fetcht DB-Inhalt via `getLegalContent()`, Fallback auf hardcoded JSX
+- **`components/LegalPageContent.tsx`**: Markdown-Rendering mit cam2rent-Styling (font-heading, font-body, text-brand-steel, Dark-Mode)
+- **`lib/get-legal-content.ts`**: Cached DB-Fetch mit `unstable_cache` + `revalidateTag('legal:{slug}')`
+- **ISR:** Cache wird beim Publish über `revalidateTag` invalidiert → neue Version sofort sichtbar ohne Redeploy
+- **Fallback:** Bestehende hardcoded JSX-Seiten greifen wenn DB nicht erreichbar
 
 ## Offene Punkte
 - Google Reviews: User muss Google Place ID + API Key liefern
