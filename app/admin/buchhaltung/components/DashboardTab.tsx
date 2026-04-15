@@ -53,17 +53,24 @@ interface DashboardTabProps {
 
 export default function DashboardTab({ onNavigate }: DashboardTabProps) {
   const [data, setData] = useState<DashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [range, setRange] = useState<DateRange>({ from: '', to: '' });
 
   const fetchData = useCallback(async (r: DateRange) => {
     if (!r.from || !r.to) return;
     setLoading(true);
+    setError(null);
     try {
       const res = await fetch(`/api/admin/buchhaltung/dashboard?from=${r.from}&to=${r.to}`);
       if (res.ok) {
         setData(await res.json());
+      } else {
+        const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+        setError(err.error || `Fehler ${res.status}`);
       }
+    } catch (e) {
+      setError(`Netzwerkfehler: ${e instanceof Error ? e.message : 'Unbekannt'}`);
     } finally {
       setLoading(false);
     }
@@ -80,6 +87,18 @@ export default function DashboardTab({ onNavigate }: DashboardTabProps) {
 
   if (loading && !data) {
     return <DashboardSkeleton />;
+  }
+
+  if (error) {
+    return (
+      <div style={{ background: '#111827', border: '1px solid #ef4444', borderRadius: 12, padding: 24 }}>
+        <h3 style={{ color: '#ef4444', fontSize: 16, fontWeight: 700, marginTop: 0, marginBottom: 8 }}>Dashboard-Fehler</h3>
+        <p style={{ color: '#94a3b8', fontSize: 14, margin: 0, marginBottom: 16 }}>{error}</p>
+        <button onClick={() => { if (range.from) fetchData(range); }} style={{ padding: '8px 16px', borderRadius: 8, background: '#06b6d4', color: '#0f172a', border: 'none', fontWeight: 600, cursor: 'pointer' }}>
+          Erneut versuchen
+        </button>
+      </div>
+    );
   }
 
   const kpis = data?.kpis;
