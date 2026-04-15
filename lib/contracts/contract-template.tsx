@@ -72,6 +72,8 @@ export interface RentalContractData {
   taxMode?: 'kleinunternehmer' | 'regelbesteuerung';
   taxRate?: number;
   exemplarId?: string;
+  // Benutzerdefinierte Vertragsparagraphen aus DB (überschreibt hardcoded)
+  customParagraphs?: { title: string; text: string }[];
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -295,7 +297,8 @@ export function buildContractText(data: RentalContractData): string {
     lines.push(`Pos ${item.position}: ${item.bezeichnung} | ${item.seriennr} | ${fmt(item.preis)} | Wert: ${fmt(item.wiederbeschaffungswert)}`);
   }
   lines.push('');
-  for (const p of getParagraphen(data.eigenbeteiligung)) {
+  const paragraphs = data.customParagraphs ?? getParagraphen(data.eigenbeteiligung);
+  for (const p of paragraphs) {
     lines.push(p.title);
     lines.push(p.text);
     lines.push('');
@@ -454,7 +457,7 @@ export function RentalContractPDF({ data }: { data: RentalContractData }) {
         <Text style={[s.clauseText, { marginBottom: 8 }]}>Die nachfolgenden Bestimmungen regeln die Rechte und Pflichten der Vertragsparteien. Ergänzend gelten die AGB, die Widerrufsbelehrung, die Haftungsbedingungen und die Datenschutzerklärung des Vermieters in der zum Zeitpunkt des Vertragsschlusses geltenden Fassung. Bei Widersprüchen gehen die Regelungen dieses Vertrags vor.</Text>
 
         {/* Alle Paragraphen — automatischer Seitenumbruch */}
-        {getParagraphen(data.eigenbeteiligung).map((p, i) => (
+        {(data.customParagraphs ?? getParagraphen(data.eigenbeteiligung)).map((p, i) => (
           <View key={i} wrap={false}>
             <Text style={s.clauseTitle}>{p.title}</Text>
             <Text style={s.clauseText}>{p.text}</Text>

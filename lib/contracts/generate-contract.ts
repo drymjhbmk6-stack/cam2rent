@@ -1,6 +1,7 @@
 import { createElement, type ReactElement } from 'react';
 import { renderToBuffer, type DocumentProps } from '@react-pdf/renderer';
 import { createHash } from 'crypto';
+import { createServiceClient } from '@/lib/supabase';
 import { RentalContractPDF, buildContractText, type RentalContractData, type MietgegenstandItem } from './contract-template';
 
 export interface GenerateContractResult {
@@ -9,10 +10,66 @@ export interface GenerateContractResult {
   contractText: string;
 }
 
+/**
+ * Löst Zubehör-IDs und Set-IDs in lesbare Namen auf.
+ */
+async function resolveAccessoryNames(ids: string[]): Promise<Record<string, string>> {
+  if (ids.length === 0) return {};
+  const supabase = createServiceClient();
+  const nameMap: Record<string, string> = {};
+
+  // Zubehör laden
+  const { data: accessories } = await supabase
+    .from('accessories')
+    .select('id, name')
+    .in('id', ids);
+  for (const a of accessories || []) {
+    nameMap[a.id] = a.name;
+  }
+
+  // Sets laden (für IDs die nicht in accessories gefunden wurden)
+  const missingIds = ids.filter(id => !nameMap[id]);
+  if (missingIds.length > 0) {
+    const { data: sets } = await supabase
+      .from('sets')
+      .select('id, name')
+      .in('id', missingIds);
+    for (const s of sets || []) {
+      nameMap[s.id] = s.name;
+    }
+  }
+
+  return nameMap;
+}
+
+/**
+ * Lädt benutzerdefinierte Vertragsparagraphen aus admin_settings.
+ * Gibt null zurück wenn keine gespeichert sind (→ Fallback auf hardcoded).
+ */
+async function loadCustomParagraphs(): Promise<{ title: string; text: string }[] | null> {
+  try {
+    const supabase = createServiceClient();
+    const { data } = await supabase
+      .from('admin_settings')
+      .select('value')
+      .eq('key', 'contract_paragraphs')
+      .maybeSingle();
+
+    if (data?.value) {
+      const parsed = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch {
+    // Fallback auf hardcoded
+  }
+  return null;
+}
+
 export async function generateContractPDF(opts: {
   bookingId: string;
   bookingNumber: string;
-  // Mieter
   customerName: string;
   customerEmail: string;
   customerPhone?: string;
@@ -23,47 +80,41 @@ export async function generateContractPDF(opts: {
   customerBirthdate?: string;
   customerNumber?: string;
   customerVerifiedAt?: string;
-  // Mietgegenstand
   productName: string;
   accessories: string[];
   items?: MietgegenstandItem[];
-  // Zeitraum
   rentalFrom: string;
   rentalTo: string;
   rentalDays: number;
   deliveryMode?: string;
   returnMode?: string;
   deliveryAddress?: string;
-  // Preise
   priceRental: number;
   priceAccessories: number;
   priceHaftung: number;
   priceShipping: number;
   priceTotal: number;
   deposit: number;
-  // Haftung
   haftungOption?: string;
   haftungDescription?: string;
-  // Stripe
   stripePaymentIntentId?: string;
   paymentDate?: string;
-  // Steuer
   taxMode: 'kleinunternehmer' | 'regelbesteuerung';
   taxRate?: number;
-  // Signatur
   signatureDataUrl: string | null;
   signatureMethod: 'canvas' | 'typed';
   signerName: string;
   ipAddress: string;
-  // Eigenbeteiligung (dynamisch pro Kategorie)
   eigenbeteiligung?: number;
-  // Seriennummer der zugeordneten Kamera
   serialNumber?: string;
 }): Promise<GenerateContractResult> {
   const now = new Date();
   const signedAt = now.toISOString().replace('T', ' ').substring(0, 16);
   const contractDate = `${now.getUTCDate().toString().padStart(2, '0')}.${(now.getUTCMonth() + 1).toString().padStart(2, '0')}.${now.getUTCFullYear()}`;
   const contractTime = `${now.getUTCHours().toString().padStart(2, '0')}:${now.getUTCMinutes().toString().padStart(2, '0')}`;
+
+  // Zubehör-IDs zu lesbaren Namen auflösen
+  const accessoryNameMap = await resolveAccessoryNames(opts.accessories);
 
   // Items aus productName + accessories generieren falls nicht explizit übergeben
   const items: MietgegenstandItem[] = opts.items && opts.items.length > 0
@@ -79,7 +130,7 @@ export async function generateContractPDF(opts: {
         },
         ...opts.accessories.map((acc, i) => ({
           position: i + 2,
-          bezeichnung: acc,
+          bezeichnung: accessoryNameMap[acc] || acc,
           seriennr: '',
           tage: opts.rentalDays,
           preis: 0,
@@ -102,6 +153,9 @@ export async function generateContractPDF(opts: {
       ? `Ersatzpflicht im Schadensfall auf max. ${eb} EUR je Schadensereignis begrenzt (Selbstbeteiligung). Gilt bei bestimmungsgemäßer Nutzung.`
     : 'Volle Haftungsfreistellung bei bestimmungsgemäßer Nutzung – keine Selbstbeteiligung.'
   );
+
+  // Benutzerdefinierte Vertragsparagraphen aus DB laden
+  const customParagraphs = await loadCustomParagraphs();
 
   const data: RentalContractData = {
     bookingId: opts.bookingId,
@@ -140,6 +194,7 @@ export async function generateContractPDF(opts: {
     ipAddress: opts.ipAddress,
     contractHash: '',
     eigenbeteiligung: eb,
+    customParagraphs: customParagraphs ?? undefined,
     // Backwards compat
     productName: opts.productName,
     accessories: opts.accessories,
