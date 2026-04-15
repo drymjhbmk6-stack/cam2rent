@@ -2,6 +2,7 @@ import { Resend } from 'resend';
 import { renderToBuffer, type DocumentProps } from '@react-pdf/renderer';
 import { createElement, type ReactElement } from 'react';
 import { InvoicePDF, type InvoiceData } from '@/lib/invoice-pdf';
+import { LegalDocumentPDF } from '@/lib/legal-pdf';
 import { BUSINESS } from '@/lib/business-config';
 import { createServiceClient } from '@/lib/supabase';
 import { fmtDate, fmtEuro } from '@/lib/format-utils';
@@ -149,6 +150,54 @@ export async function sendBookingConfirmation(data: BookingEmailData, contractPd
 
   if (contractPdfBuffer) {
     attachments.push({ filename: `Mietvertrag-${contractNumber}.pdf`, content: contractPdfBuffer });
+  }
+
+  // Rechtliche Dokumente als PDF anhängen (AGB, Widerruf, Haftung, Datenschutz)
+  try {
+    const supabaseClient = createServiceClient();
+    const legalDocs = [
+      { slug: 'agb', filename: 'AGB.pdf' },
+      { slug: 'widerruf', filename: 'Widerrufsbelehrung.pdf' },
+      { slug: 'haftungsausschluss', filename: 'Haftungsbedingungen.pdf' },
+      { slug: 'datenschutz', filename: 'Datenschutzerklaerung.pdf' },
+    ];
+
+    for (const doc of legalDocs) {
+      try {
+        const { data: legalDoc } = await supabaseClient
+          .from('legal_documents')
+          .select('title, current_version_id')
+          .eq('slug', doc.slug)
+          .maybeSingle();
+
+        if (!legalDoc?.current_version_id) continue;
+
+        const { data: version } = await supabaseClient
+          .from('legal_document_versions')
+          .select('content, version_number, published_at')
+          .eq('id', legalDoc.current_version_id)
+          .maybeSingle();
+
+        if (!version?.content) continue;
+
+        const legalPdfBuffer = await renderToBuffer(
+          createElement(LegalDocumentPDF, {
+            data: {
+              title: legalDoc.title,
+              slug: doc.slug,
+              content: version.content,
+              versionNumber: version.version_number,
+              publishedAt: version.published_at,
+            },
+          }) as ReactElement<DocumentProps>
+        );
+        attachments.push({ filename: doc.filename, content: Buffer.from(legalPdfBuffer) });
+      } catch (err) {
+        console.error(`Legal-PDF ${doc.slug} Fehler:`, err);
+      }
+    }
+  } catch (err) {
+    console.error('Legal-PDFs Fehler:', err);
   }
 
   await sendAndLog({
