@@ -37,10 +37,10 @@ interface RevenueItem {
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
-  stripe_fees: 'Stripe-Gebühren', shipping: 'Versandkosten', software: 'Software & Abos',
+  fees: 'Gebühren', shipping: 'Versandkosten', software: 'Software & Abos',
   hardware: 'Hardware & Equipment', marketing: 'Marketing & Werbung', office: 'Bürobedarf',
   travel: 'Reisekosten', insurance: 'Versicherungen', legal: 'Rechts- & Beratungskosten',
-  fees: 'Gebühren', other: 'Sonstiges',
+  other: 'Sonstiges',
 };
 
 export default function ReportsTab() {

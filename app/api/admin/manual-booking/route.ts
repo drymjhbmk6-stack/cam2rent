@@ -123,7 +123,7 @@ export async function POST(req: NextRequest) {
       const label = methodLabels[body.payment_method] || body.payment_method;
       await supabase.from('expenses').insert({
         expense_date: new Date().toISOString().split('T')[0],
-        category: body.payment_method === 'stripe' ? 'stripe_fees' : 'other',
+        category: 'fees',
         description: `${label}-Gebühr für Buchung ${bookingId}`,
         vendor: label,
         net_amount: fees,

@@ -3,7 +3,7 @@ import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
 
 const CATEGORY_LABELS: Record<string, string> = {
-  stripe_fees: 'Stripe-Gebühren',
+  fees: 'Gebühren',
   shipping: 'Versandkosten',
   software: 'Software & Abos',
   hardware: 'Hardware & Equipment',
@@ -12,7 +12,6 @@ const CATEGORY_LABELS: Record<string, string> = {
   travel: 'Reisekosten',
   insurance: 'Versicherungen',
   legal: 'Rechts- & Beratungskosten',
-  fees: 'Gebühren',
   other: 'Sonstiges',
 };
 
