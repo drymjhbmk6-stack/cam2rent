@@ -99,8 +99,8 @@ export default function AdminVerfuegbarkeitPage() {
   const [tab, setTab] = useState<Tab>('kameras');
 
   // Gantt-State — durchgehend scrollbar (6 Monate zurück + 6 Monate voraus)
-  const MONTHS_BACK = 6;
-  const MONTHS_FORWARD = 6;
+  const MONTHS_BACK = 12;
+  const MONTHS_FORWARD = 12;
   const [ganttData, setGanttData] = useState<GanttData | null>(null);
   const [ganttLoading, setGanttLoading] = useState(true);
   const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
