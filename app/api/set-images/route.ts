@@ -32,14 +32,15 @@ export async function POST(req: NextRequest) {
 
     const supabase = createServiceClient();
     const inputBuffer = Buffer.from(await file.arrayBuffer());
-    const processedBuffer = await processSetImage(inputBuffer, setName);
+    const { buffer: processedBuffer, contentType } = await processSetImage(inputBuffer, setName);
 
-    const filename = `sets/${setId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.webp`;
+    const ext = contentType === 'image/webp' ? 'webp' : file.name.split('.').pop() || 'jpg';
+    const filename = `sets/${setId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
 
     const { error: uploadError } = await supabase.storage
       .from(BUCKET)
       .upload(filename, processedBuffer, {
-        contentType: 'image/webp',
+        contentType,
         upsert: false,
       });
 

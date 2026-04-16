@@ -1,11 +1,15 @@
-import sharp from 'sharp';
+let sharp: typeof import('sharp') | null = null;
+try {
+  sharp = require('sharp');
+} catch {
+  console.warn('Sharp nicht verfügbar — Bilder werden ohne Verarbeitung hochgeladen');
+}
 
 const TARGET_WIDTH = 1200;
 const TARGET_HEIGHT = 900;
 
 /**
  * Erstellt das cam2rent Logo als SVG-Buffer für Wasserzeichen.
- * Opacity steuert die Sichtbarkeit (0-1).
  */
 function createLogoWatermark(opacity: number = 0.12, size: number = 120): Buffer {
   const scale = size / 200;
@@ -40,6 +44,7 @@ function createTextWatermark(text: string, opacity: number = 0.55, fontSize: num
  * Skaliert ein Bild auf 1200x900 und zentriert es auf weißem Hintergrund.
  */
 async function resizeToTarget(inputBuffer: Buffer): Promise<Buffer> {
+  if (!sharp) return inputBuffer;
   const metadata = await sharp(inputBuffer).metadata();
   const origWidth = metadata.width || TARGET_WIDTH;
   const origHeight = metadata.height || TARGET_HEIGHT;
@@ -56,12 +61,17 @@ async function resizeToTarget(inputBuffer: Buffer): Promise<Buffer> {
 /**
  * Verarbeitet ein Produktbild:
  * 1200x900, weißer Hintergrund, cam2rent Logo unten rechts.
+ * Fallback: Gibt das Originalbild zurück wenn sharp nicht verfügbar.
  */
-export async function processProductImage(inputBuffer: Buffer): Promise<Buffer> {
+export async function processProductImage(inputBuffer: Buffer): Promise<{ buffer: Buffer; contentType: string }> {
+  if (!sharp) {
+    return { buffer: inputBuffer, contentType: 'image/jpeg' };
+  }
+
   const resized = await resizeToTarget(inputBuffer);
   const logoWatermark = createLogoWatermark(0.12, 120);
 
-  return sharp({
+  const buffer = await sharp({
     create: {
       width: TARGET_WIDTH,
       height: TARGET_HEIGHT,
@@ -75,17 +85,24 @@ export async function processProductImage(inputBuffer: Buffer): Promise<Buffer> 
     ])
     .webp({ quality: 85 })
     .toBuffer();
+
+  return { buffer, contentType: 'image/webp' };
 }
 
 /**
  * Verarbeitet ein Set-Bild:
  * 1200x900, weißer Hintergrund, Set-Name unten mittig.
+ * Fallback: Gibt das Originalbild zurück wenn sharp nicht verfügbar.
  */
-export async function processSetImage(inputBuffer: Buffer, setName: string): Promise<Buffer> {
+export async function processSetImage(inputBuffer: Buffer, setName: string): Promise<{ buffer: Buffer; contentType: string }> {
+  if (!sharp) {
+    return { buffer: inputBuffer, contentType: 'image/jpeg' };
+  }
+
   const resized = await resizeToTarget(inputBuffer);
   const textWatermark = createTextWatermark(setName);
 
-  return sharp({
+  const buffer = await sharp({
     create: {
       width: TARGET_WIDTH,
       height: TARGET_HEIGHT,
@@ -99,4 +116,6 @@ export async function processSetImage(inputBuffer: Buffer, setName: string): Pro
     ])
     .webp({ quality: 85 })
     .toBuffer();
+
+  return { buffer, contentType: 'image/webp' };
 }
