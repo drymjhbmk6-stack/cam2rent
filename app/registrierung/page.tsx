@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { createAuthBrowserClient } from '@/lib/supabase-auth';
 
@@ -12,6 +12,37 @@ export default function RegistrierungPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [rateLimited, setRateLimited] = useState(false);
+  const [resetMinutes, setResetMinutes] = useState(0);
+
+  // Rate-Limit beim Laden prüfen
+  useEffect(() => {
+    fetch('/api/auth/signup')
+      .then(r => r.json())
+      .then(d => {
+        if (!d.allowed) {
+          setRateLimited(true);
+          setResetMinutes(Math.ceil((d.resetInSeconds || 3600) / 60));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // Countdown für Rate-Limit
+  useEffect(() => {
+    if (!rateLimited || resetMinutes <= 0) return;
+    const interval = setInterval(() => {
+      setResetMinutes(prev => {
+        if (prev <= 1) {
+          setRateLimited(false);
+          clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 60000);
+    return () => clearInterval(interval);
+  }, [rateLimited, resetMinutes]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,6 +58,19 @@ export default function RegistrierungPage() {
     }
 
     setLoading(true);
+
+    // Rate-Limit prüfen + Zähler erhöhen
+    const limitRes = await fetch('/api/auth/signup', { method: 'POST' });
+    if (!limitRes.ok) {
+      const limitData = await limitRes.json();
+      if (limitData.rateLimited) {
+        setRateLimited(true);
+        setResetMinutes(Math.ceil((limitData.resetInSeconds || 3600) / 60));
+        setLoading(false);
+        return;
+      }
+    }
+
     const supabase = createAuthBrowserClient();
 
     const { error } = await supabase.auth.signUp({
@@ -43,6 +87,9 @@ export default function RegistrierungPage() {
     if (error) {
       if (error.message.includes('already registered')) {
         setError('Diese E-Mail-Adresse ist bereits registriert.');
+      } else if (error.status === 429 || error.message.includes('rate')) {
+        setRateLimited(true);
+        setResetMinutes(60);
       } else {
         setError(`Fehler: ${error.message}`);
       }
@@ -117,6 +164,13 @@ export default function RegistrierungPage() {
             Verwalte deine Buchungen bequem an einem Ort.
           </p>
 
+          {rateLimited && (
+            <div className="mb-4 p-4 rounded-[10px] bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 text-sm">
+              <p className="font-semibold mb-1">Registrierung vorübergehend nicht möglich</p>
+              <p>Aufgrund hoher Nachfrage können aktuell keine neuen Konten erstellt werden. Bitte versuche es in ca. {resetMinutes} {resetMinutes === 1 ? 'Minute' : 'Minuten'} erneut.</p>
+            </div>
+          )}
+
           {error && (
             <div className="mb-4 p-4 rounded-[10px] bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-status-error text-sm">
               {error}
@@ -186,10 +240,10 @@ export default function RegistrierungPage() {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || rateLimited}
               className="w-full py-3 px-6 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold rounded-btn hover:bg-brand-dark dark:hover:bg-accent-blue/90 disabled:opacity-60 disabled:cursor-not-allowed transition-colors mt-2"
             >
-              {loading ? 'Wird registriert…' : 'Konto erstellen'}
+              {loading ? 'Wird registriert…' : rateLimited ? 'Bitte warten…' : 'Konto erstellen'}
             </button>
           </form>
 
