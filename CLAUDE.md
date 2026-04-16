@@ -385,6 +385,14 @@ Ausführliche Dokumentation: `BLOG_SYSTEM_DOCS.md`
 - **Set-Konfigurator:** `/set-konfigurator` — 3-Step Builder (Kamera→Zubehör→Zusammenfassung), Set-Rabatt 10%/15%
 - **Dark/Light Mode:** ThemeProvider mit localStorage Persistenz, Tailwind `darkMode: 'class'`, Toggle in Navbar
 
+### Google Bewertungen (Places API New)
+- **API-Route:** `GET /api/google-reviews` — holt Bewertungen von Google Places API (New), 6h In-Memory-Cache
+- **Env-Variablen:** `GOOGLE_PLACES_API_KEY` + `GOOGLE_PLACE_ID` (Place ID: `ChIJ4eUe5O9FqEcRllyeThCwEBE`)
+- **Komponente:** `components/home/GoogleReviews.tsx` — zeigt echte Google-Bewertungen auf der Startseite
+- **Features:** Profilbilder, relative Zeitangaben, Rating-Badge mit Link, CTA "Bewertung auf Google schreiben"
+- **Fallback:** Wenn API nicht erreichbar oder nicht konfiguriert → Sektion wird ausgeblendet
+- **Umfrage-Seite:** `/umfrage/[bookingId]` — bei Rating ≥ 4 wird Google Review CTA gezeigt
+
 ## Legal-Content-Management-System
 Versionierte Verwaltung aller Rechtstexte (AGB, Datenschutz, Impressum, Widerruf, Haftungsbedingungen) über den Admin-Bereich. Jede Änderung erzeugt eine neue, unveränderliche Version.
 
@@ -446,7 +454,7 @@ Jede Buchungsbestätigung enthält automatisch als PDF-Anhang:
 - **Fallback:** Bestehende hardcoded JSX-Seiten greifen wenn DB nicht erreichbar
 
 ## Offene Punkte
-- Google Reviews: User muss Google Place ID + API Key liefern
+- ~~Google Reviews: erledigt — Places API (New) eingebunden~~
 - SQL-Migration `supabase-zubehoer-verfuegbarkeit.sql` ist erledigt (verschoben in `erledigte supabase/`)
 - Bestehende 6 Kameras brauchen Admin-Specs (Technische Daten im Editor anlegen)
 - SQL-Migration `supabase-product-units.sql` muss in Supabase ausgeführt werden (product_units Tabelle + unit_id in bookings)
