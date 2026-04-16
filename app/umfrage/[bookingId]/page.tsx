@@ -53,7 +53,7 @@ export default function UmfragePage({ params }: { params: Promise<{ bookingId: s
                 Würdest du deine Erfahrung auch auf Google teilen? Das hilft uns sehr!
               </p>
               <a
-                href="https://g.page/r/YOUR_GOOGLE_REVIEW_LINK/review"
+                href="https://search.google.com/local/writereview?placeid=ChIJ4eUe5O9FqEcRllyeThCwEBE"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 px-6 py-3 bg-accent-blue text-white font-heading font-semibold text-sm rounded-btn hover:bg-blue-700 transition-colors"

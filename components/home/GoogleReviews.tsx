@@ -7,6 +7,7 @@ interface GoogleReview {
   rating: number;
   text: string;
   date: string;
+  profilePhoto?: string;
 }
 
 function Stars({ rating }: { rating: number }) {
@@ -32,61 +33,44 @@ function GoogleLogo() {
   );
 }
 
-const FALLBACK_REVIEWS: GoogleReview[] = [
-  {
-    author: 'Max S.',
-    rating: 5,
-    text: 'Super unkompliziert! Kamera kam pünktlich, top Zustand. Haftungsschutz gibt einem ein gutes Gefühl. Gerne wieder!',
-    date: '2026-03-15',
-  },
-  {
-    author: 'Laura K.',
-    rating: 5,
-    text: 'Perfekt für unseren Skiurlaub. Die GoPro Hero 13 war in einwandfreiem Zustand. Versand war schnell und die Rückgabe super easy.',
-    date: '2026-03-08',
-  },
-  {
-    author: 'Jonas W.',
-    rating: 5,
-    text: 'Genial! Warum eine Kamera kaufen wenn man sie mieten kann? Preis-Leistung ist top. Der Kamera-Finder hat mir direkt die richtige Cam vorgeschlagen.',
-    date: '2026-02-22',
-  },
-  {
-    author: 'Sophie M.',
-    rating: 4,
-    text: 'Schnelle Lieferung, alles sauber verpackt. Die DJI Action 5 Pro war perfekt für mein Tauchvideo. Einziger Wunsch: mehr Zubehör-Auswahl.',
-    date: '2026-02-10',
-  },
-  {
-    author: 'Tim R.',
-    rating: 5,
-    text: 'Habe für ein Event die Insta360 X4 gemietet. 360°-Videos sind der Wahnsinn! Service war freundlich und hilfsbereit. Klare Empfehlung.',
-    date: '2026-01-28',
-  },
-  {
-    author: 'Lena B.',
-    rating: 5,
-    text: 'Schon zum dritten Mal hier gemietet. Jedes Mal problemlos und schnell. Für jeden Urlaub die perfekte Lösung statt 500€ für eine Kamera auszugeben.',
-    date: '2026-01-15',
-  },
-];
+function timeAgo(dateStr: string): string {
+  if (!dateStr) return '';
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return dateStr; // Fallback für relative Beschreibungen von Google
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  if (days < 1) return 'Heute';
+  if (days === 1) return 'Gestern';
+  if (days < 7) return `vor ${days} Tagen`;
+  if (days < 30) return `vor ${Math.floor(days / 7)} Woche${Math.floor(days / 7) > 1 ? 'n' : ''}`;
+  if (days < 365) return `vor ${Math.floor(days / 30)} Monat${Math.floor(days / 30) > 1 ? 'en' : ''}`;
+  return `vor ${Math.floor(days / 365)} Jahr${Math.floor(days / 365) > 1 ? 'en' : ''}`;
+}
 
 export default function GoogleReviews() {
-  const [reviews, setReviews] = useState<GoogleReview[]>(FALLBACK_REVIEWS);
-  const [avgRating, setAvgRating] = useState(4.9);
-  const [totalReviews, setTotalReviews] = useState(47);
+  const [reviews, setReviews] = useState<GoogleReview[]>([]);
+  const [avgRating, setAvgRating] = useState(0);
+  const [totalReviews, setTotalReviews] = useState(0);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    // Google Reviews aus Admin-Config laden (falls konfiguriert)
-    fetch('/api/shop-content?section=google_reviews')
+    fetch('/api/google-reviews')
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (d?.reviews?.length > 0) setReviews(d.reviews);
-        if (d?.avg_rating) setAvgRating(d.avg_rating);
-        if (d?.total_reviews) setTotalReviews(d.total_reviews);
+        if (d?.reviews?.length > 0) {
+          setReviews(d.reviews);
+          setAvgRating(d.avgRating ?? 0);
+          setTotalReviews(d.totalReviews ?? 0);
+        }
+        setLoaded(true);
       })
-      .catch(() => {});
+      .catch(() => setLoaded(true));
   }, []);
+
+  // Nichts anzeigen wenn keine Bewertungen vorhanden
+  if (loaded && reviews.length === 0) return null;
+  if (!loaded) return null;
 
   return (
     <section className="py-16 sm:py-20 bg-white dark:bg-gray-900" aria-labelledby="google-reviews-heading">
@@ -97,25 +81,34 @@ export default function GoogleReviews() {
             id="google-reviews-heading"
             className="font-heading font-bold text-2xl sm:text-3xl text-brand-black dark:text-gray-100 mb-3"
           >
-            Unsere Kunden sprechen für uns
+            Das sagen unsere Kunden auf Google
           </h2>
           <p className="font-body text-brand-steel dark:text-gray-400 text-base max-w-lg mx-auto mb-6">
-            Über {totalReviews} zufriedene Kunden vertrauen auf cam2rent. Überzeuge dich selbst.
+            {totalReviews > 0
+              ? `${totalReviews} Bewertungen auf Google – überzeuge dich selbst.`
+              : 'Echte Bewertungen von unseren Kunden.'}
           </p>
 
           {/* Google Rating Badge */}
-          <div className="inline-flex items-center gap-3 px-5 py-3 rounded-full bg-brand-bg dark:bg-gray-800 border border-brand-border dark:border-gray-700">
-            <GoogleLogo />
-            <div className="flex items-center gap-2">
-              <span className="font-heading font-bold text-lg text-brand-black dark:text-gray-100">
-                {avgRating.toFixed(1)}
+          {avgRating > 0 && (
+            <a
+              href="https://search.google.com/local/reviews?placeid=ChIJ4eUe5O9FqEcRllyeThCwEBE"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-3 px-5 py-3 rounded-full bg-brand-bg dark:bg-gray-800 border border-brand-border dark:border-gray-700 hover:border-accent-blue/50 transition-colors"
+            >
+              <GoogleLogo />
+              <div className="flex items-center gap-2">
+                <span className="font-heading font-bold text-lg text-brand-black dark:text-gray-100">
+                  {avgRating.toFixed(1)}
+                </span>
+                <Stars rating={Math.round(avgRating)} />
+              </div>
+              <span className="text-xs font-body text-brand-steel dark:text-gray-400">
+                Google Bewertungen
               </span>
-              <Stars rating={Math.round(avgRating)} />
-            </div>
-            <span className="text-xs font-body text-brand-steel dark:text-gray-400">
-              Google Bewertungen
-            </span>
-          </div>
+            </a>
+          )}
         </div>
 
         {/* Reviews Grid */}
@@ -129,26 +122,46 @@ export default function GoogleReviews() {
                 <Stars rating={review.rating} />
                 <GoogleLogo />
               </div>
-              <p className="text-sm font-body text-brand-text dark:text-gray-300 leading-relaxed line-clamp-4 mb-4">
-                &quot;{review.text}&quot;
-              </p>
+              {review.text && (
+                <p className="text-sm font-body text-brand-text dark:text-gray-300 leading-relaxed line-clamp-4 mb-4">
+                  &quot;{review.text}&quot;
+                </p>
+              )}
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-full bg-accent-blue/20 flex items-center justify-center">
-                  <span className="text-xs font-heading font-bold text-accent-blue">
-                    {review.author.charAt(0)}
-                  </span>
+                <div className="w-8 h-8 rounded-full bg-accent-blue/20 flex items-center justify-center overflow-hidden">
+                  {review.profilePhoto ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={review.profilePhoto} alt="" className="w-8 h-8 rounded-full object-cover" />
+                  ) : (
+                    <span className="text-xs font-heading font-bold text-accent-blue">
+                      {review.author.charAt(0)}
+                    </span>
+                  )}
                 </div>
                 <div>
                   <p className="text-sm font-heading font-semibold text-brand-black dark:text-gray-100">
                     {review.author}
                   </p>
                   <p className="text-[11px] text-brand-muted dark:text-gray-500">
-                    Google Rezension
+                    {timeAgo(review.date)}
                   </p>
                 </div>
               </div>
             </div>
           ))}
+        </div>
+
+        {/* Google Bewertung schreiben CTA */}
+        <div className="text-center mt-8">
+          <a
+            href="https://search.google.com/local/writereview?placeid=ChIJ4eUe5O9FqEcRllyeThCwEBE"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 px-6 py-3 rounded-btn bg-brand-bg dark:bg-gray-800 border border-brand-border dark:border-gray-700 text-sm font-heading font-semibold text-brand-black dark:text-gray-100 hover:border-accent-blue/50 transition-colors"
+          >
+            <GoogleLogo />
+            Bewertung auf Google schreiben
+          </a>
         </div>
       </div>
     </section>
