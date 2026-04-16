@@ -192,7 +192,7 @@ export default function AdminVerfuegbarkeitPage() {
     today.setHours(0, 0, 0, 0);
     const cellDate = new Date(dateStr);
 
-    if (cellDate < today) return { type: 'past' };
+    const isPast = cellDate < today;
     if (unit.status === 'retired') return { type: 'retired' };
     if (unit.status === 'maintenance') return { type: 'maintenance' };
 
@@ -268,7 +268,7 @@ export default function AdminVerfuegbarkeitPage() {
       }
     }
 
-    return { type: 'free' };
+    return { type: isPast ? 'past' : 'free' };
   }
 
   // Zellenfarbe — kräftige, gut unterscheidbare Farben auf dunklem Hintergrund
@@ -314,7 +314,7 @@ export default function AdminVerfuegbarkeitPage() {
   // Zubehör-Zellinfo
   function getAccCellInfo(acc: GanttAccessory, dateStr: string, buf: BufferDays): { type: string; count: number; total: number; bookings: GanttSimpleBooking[] } {
     const today = new Date(); today.setHours(0, 0, 0, 0);
-    if (new Date(dateStr) < today) return { type: 'past', count: 0, total: acc.available_qty, bookings: [] };
+    const isPast = new Date(dateStr) < today;
 
     const matchedBookings: GanttSimpleBooking[] = [];
     for (const b of acc.bookings) {
@@ -335,6 +335,7 @@ export default function AdminVerfuegbarkeitPage() {
     let type = 'free';
     if (free <= 0) type = 'booked';
     else if (count > 0) type = 'partial';
+    if (isPast && count === 0) type = 'past';
     return { type, count, total: acc.available_qty, bookings: matchedBookings };
   }
 
@@ -719,21 +720,19 @@ export default function AdminVerfuegbarkeitPage() {
                             const isPast = new Date(d.dateStr) < today;
                             let isBooked = false;
                             const matchedBookings: GanttSimpleBooking[] = [];
-                            if (!isPast) {
-                              for (const b of s.bookings) {
-                                const bMode = b.delivery_mode ?? 'versand';
-                                const before = bMode === 'abholung' ? ganttData.bufferDays.abholung_before : ganttData.bufferDays.versand_before;
-                                const after = bMode === 'abholung' ? ganttData.bufferDays.abholung_after : ganttData.bufferDays.versand_after;
-                                const fromDate = new Date(b.rental_from); fromDate.setDate(fromDate.getDate() - before);
-                                const toDate = new Date(b.rental_to); toDate.setDate(toDate.getDate() + after);
-                                if (fromDate.toISOString().split('T')[0] <= d.dateStr && toDate.toISOString().split('T')[0] >= d.dateStr) {
-                                  isBooked = true;
-                                  matchedBookings.push(b);
-                                }
+                            for (const b of s.bookings) {
+                              const bMode = b.delivery_mode ?? 'versand';
+                              const before = bMode === 'abholung' ? ganttData.bufferDays.abholung_before : ganttData.bufferDays.versand_before;
+                              const after = bMode === 'abholung' ? ganttData.bufferDays.abholung_after : ganttData.bufferDays.versand_after;
+                              const fromDate = new Date(b.rental_from); fromDate.setDate(fromDate.getDate() - before);
+                              const toDate = new Date(b.rental_to); toDate.setDate(toDate.getDate() + after);
+                              if (fromDate.toISOString().split('T')[0] <= d.dateStr && toDate.toISOString().split('T')[0] >= d.dateStr) {
+                                isBooked = true;
+                                matchedBookings.push(b);
                               }
                             }
-                            const bg = isPast ? '#1e293b' : isBooked ? '#1d4ed8' : '#065f46';
-                            const color = isPast ? '#475569' : isBooked ? '#ffffff' : '#6ee7b7';
+                            const bg = isPast && !isBooked ? '#1e293b' : isBooked ? (isPast ? '#1e3a5f' : '#1d4ed8') : '#065f46';
+                            const color = isPast && !isBooked ? '#475569' : isBooked ? '#ffffff' : '#6ee7b7';
                             return (
                               <td key={d.dateStr} className="px-0 py-0.5 text-center"
                                 onMouseEnter={(e) => {
