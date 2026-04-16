@@ -1,8 +1,16 @@
-let sharp: typeof import('sharp') | null = null;
-try {
-  sharp = require('sharp');
-} catch {
-  console.warn('Sharp nicht verfügbar — Bilder werden ohne Verarbeitung hochgeladen');
+import type SharpType from 'sharp';
+
+let sharpModule: typeof SharpType | null = null;
+
+async function getSharp(): Promise<typeof SharpType | null> {
+  if (sharpModule) return sharpModule;
+  try {
+    sharpModule = (await import('sharp')).default;
+    return sharpModule;
+  } catch {
+    console.warn('Sharp nicht verfügbar — Bilder werden ohne Verarbeitung hochgeladen');
+    return null;
+  }
 }
 
 const TARGET_WIDTH = 1200;
@@ -41,52 +49,43 @@ function createTextWatermark(text: string, opacity: number = 0.55, fontSize: num
 }
 
 /**
- * Skaliert ein Bild auf 1200x900 und zentriert es auf weißem Hintergrund.
- */
-async function resizeToTarget(inputBuffer: Buffer): Promise<Buffer> {
-  if (!sharp) return inputBuffer;
-  const metadata = await sharp(inputBuffer).metadata();
-  const origWidth = metadata.width || TARGET_WIDTH;
-  const origHeight = metadata.height || TARGET_HEIGHT;
-
-  const scale = Math.min(TARGET_WIDTH / origWidth, TARGET_HEIGHT / origHeight);
-  const resizedWidth = Math.round(origWidth * scale);
-  const resizedHeight = Math.round(origHeight * scale);
-
-  return sharp(inputBuffer)
-    .resize(resizedWidth, resizedHeight, { fit: 'inside', withoutEnlargement: false })
-    .toBuffer();
-}
-
-/**
  * Verarbeitet ein Produktbild:
  * 1200x900, weißer Hintergrund, cam2rent Logo unten rechts.
  * Fallback: Gibt das Originalbild zurück wenn sharp nicht verfügbar.
  */
 export async function processProductImage(inputBuffer: Buffer): Promise<{ buffer: Buffer; contentType: string }> {
+  const sharp = await getSharp();
   if (!sharp) {
     return { buffer: inputBuffer, contentType: 'image/jpeg' };
   }
 
-  const resized = await resizeToTarget(inputBuffer);
-  const logoWatermark = createLogoWatermark(0.12, 120);
+  try {
+    const metadata = await sharp(inputBuffer).metadata();
+    const origW = metadata.width || TARGET_WIDTH;
+    const origH = metadata.height || TARGET_HEIGHT;
+    const scale = Math.min(TARGET_WIDTH / origW, TARGET_HEIGHT / origH);
 
-  const buffer = await sharp({
-    create: {
-      width: TARGET_WIDTH,
-      height: TARGET_HEIGHT,
-      channels: 3,
-      background: { r: 255, g: 255, b: 255 },
-    },
-  })
-    .composite([
-      { input: resized, gravity: 'centre' },
-      { input: logoWatermark, gravity: 'southeast', top: TARGET_HEIGHT - 108, left: TARGET_WIDTH - 140 },
-    ])
-    .webp({ quality: 85 })
-    .toBuffer();
+    const resized = await sharp(inputBuffer)
+      .resize(Math.round(origW * scale), Math.round(origH * scale), { fit: 'inside', withoutEnlargement: false })
+      .toBuffer();
 
-  return { buffer, contentType: 'image/webp' };
+    const logoWatermark = createLogoWatermark(0.12, 120);
+
+    const buffer = await sharp({
+      create: { width: TARGET_WIDTH, height: TARGET_HEIGHT, channels: 3, background: { r: 255, g: 255, b: 255 } },
+    })
+      .composite([
+        { input: resized, gravity: 'centre' },
+        { input: logoWatermark, gravity: 'southeast', top: TARGET_HEIGHT - 108, left: TARGET_WIDTH - 140 },
+      ])
+      .webp({ quality: 85 })
+      .toBuffer();
+
+    return { buffer, contentType: 'image/webp' };
+  } catch (err) {
+    console.error('Bildverarbeitung fehlgeschlagen, lade Original hoch:', err);
+    return { buffer: inputBuffer, contentType: 'image/jpeg' };
+  }
 }
 
 /**
@@ -95,27 +94,36 @@ export async function processProductImage(inputBuffer: Buffer): Promise<{ buffer
  * Fallback: Gibt das Originalbild zurück wenn sharp nicht verfügbar.
  */
 export async function processSetImage(inputBuffer: Buffer, setName: string): Promise<{ buffer: Buffer; contentType: string }> {
+  const sharp = await getSharp();
   if (!sharp) {
     return { buffer: inputBuffer, contentType: 'image/jpeg' };
   }
 
-  const resized = await resizeToTarget(inputBuffer);
-  const textWatermark = createTextWatermark(setName);
+  try {
+    const metadata = await sharp(inputBuffer).metadata();
+    const origW = metadata.width || TARGET_WIDTH;
+    const origH = metadata.height || TARGET_HEIGHT;
+    const scale = Math.min(TARGET_WIDTH / origW, TARGET_HEIGHT / origH);
 
-  const buffer = await sharp({
-    create: {
-      width: TARGET_WIDTH,
-      height: TARGET_HEIGHT,
-      channels: 3,
-      background: { r: 255, g: 255, b: 255 },
-    },
-  })
-    .composite([
-      { input: resized, gravity: 'centre' },
-      { input: textWatermark, gravity: 'south' },
-    ])
-    .webp({ quality: 85 })
-    .toBuffer();
+    const resized = await sharp(inputBuffer)
+      .resize(Math.round(origW * scale), Math.round(origH * scale), { fit: 'inside', withoutEnlargement: false })
+      .toBuffer();
 
-  return { buffer, contentType: 'image/webp' };
+    const textWatermark = createTextWatermark(setName);
+
+    const buffer = await sharp({
+      create: { width: TARGET_WIDTH, height: TARGET_HEIGHT, channels: 3, background: { r: 255, g: 255, b: 255 } },
+    })
+      .composite([
+        { input: resized, gravity: 'centre' },
+        { input: textWatermark, gravity: 'south' },
+      ])
+      .webp({ quality: 85 })
+      .toBuffer();
+
+    return { buffer, contentType: 'image/webp' };
+  } catch (err) {
+    console.error('Set-Bildverarbeitung fehlgeschlagen, lade Original hoch:', err);
+    return { buffer: inputBuffer, contentType: 'image/jpeg' };
+  }
 }
