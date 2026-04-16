@@ -65,6 +65,8 @@ export async function POST(req: NextRequest) {
 
     // Gutschein erstellen wenn Rating >= 4 und Email vorhanden
     let couponCode: string | null = null;
+    let emailSent = false;
+    let emailError: string | null = null;
     const targetEmail = email?.trim() || booking?.customer_email;
 
     if (rating >= 4 && targetEmail) {
@@ -121,8 +123,10 @@ export async function POST(req: NextRequest) {
       if (couponCode) {
         try {
           await sendCouponEmail(targetEmail, booking?.customer_name ?? 'Kamera-Fan', couponCode);
+          emailSent = true;
         } catch (e) {
           console.error('Coupon email error:', e);
+          emailError = e instanceof Error ? e.message : 'Unbekannt';
         }
       }
     }
@@ -131,6 +135,8 @@ export async function POST(req: NextRequest) {
       success: true,
       couponCode: couponCode ? couponCode : undefined,
       discount: couponCode ? REWARD_DISCOUNT : undefined,
+      emailSent,
+      emailError,
     });
   } catch (err) {
     console.error('Survey error:', err);
