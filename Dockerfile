@@ -42,9 +42,8 @@ COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
-# Sharp aus Builder kopieren (wird aus Build-Tracing ausgeschlossen wegen RAM)
-COPY --from=builder /app/node_modules/sharp ./node_modules/sharp
-COPY --from=builder /app/node_modules/@img ./node_modules/@img
+# Sharp im Production-Image installieren (wird aus Build-Tracing ausgeschlossen wegen RAM)
+RUN cd /app && npm init -y --silent 2>/dev/null && npm install --no-save --platform=linuxmusl sharp@0.34.5 2>/dev/null; rm -f package.json package-lock.json
 
 USER nextjs
 
