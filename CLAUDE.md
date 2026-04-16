@@ -263,6 +263,8 @@ Alle Dropdowns laden aus `admin_settings` und können neue Einträge hinzufügen
   - Dynamischer Seitenumbruch (eine Page mit `wrap`), kein festes Seitenlayout mehr
   - Footer mit automatischen Seitenzahlen (`render={({ pageNumber, totalPages })`)
   - `getParagraphen(eigenbeteiligung)` — Funktion statt Konstante (§7 dynamisch)
+  - **Vertragsparagraphen aus DB:** `admin_settings.contract_paragraphs` (JSON) überschreibt hardcoded Paragraphen, editierbar unter `/admin/legal/vertragsparagraphen`
+  - **Zubehör-Namen aufgelöst:** `generate-contract.ts` löst IDs über `accessories` + `sets` Tabelle in lesbare Namen auf
   - Signatur: Canvas oder getippter Name
   - Signatur-Block: `wrap={false}` verhindert Seitenumbruch mitten im Block
   - SHA-256 Hash des Vertragstexts
@@ -389,13 +391,35 @@ Versionierte Verwaltung aller Rechtstexte (AGB, Datenschutz, Impressum, Widerruf
 - **Übersichtsseite:** Liste aller Dokumenttypen mit Status, Datum, PDF-Download-Button
 - **Bearbeitungsseite** (`/admin/legal/[slug]`): Markdown-Editor mit Live-Vorschau, Änderungsnotiz, Veröffentlichen-Button
 - **Versionshistorie:** Sidebar mit allen Versionen — Anzeigen (Modal), PDF pro Version, Wiederherstellen (erzeugt neue Version)
+- **Vertragsparagraphen-Editor** (`/admin/legal/vertragsparagraphen`): Alle 19 Paragraphen aufklappbar + editierbar, farbcodiert nach Rechtsquelle (AGB/Haftung/Widerruf/Datenschutz), gespeichert in `admin_settings.contract_paragraphs`
+- **KI-Prüfung Button:** Exportiert alle Rechtstexte + Vertragsparagraphen + letzten Vertrag + Business-Config als kopierbaren Prompt für Claude-Prüfung (`/api/admin/legal/export-prompt`)
+- **Erinnerung bei Rechtstext-Änderung:** Beim Veröffentlichen einer Rechtsseite wird automatisch eine Admin-Notification erstellt mit Hinweis welche Vertragsparagraphen zu prüfen sind
 - **Sidebar-Navigation:** Eigene Sektion "Rechtliches" in Admin-Sidebar
 
 ### API-Routen
 - `GET /api/admin/legal` — Dokumentliste oder Einzeldokument mit Versionen
-- `POST /api/admin/legal/publish` — Neue Version veröffentlichen + PDF in Supabase Storage archivieren
+- `POST /api/admin/legal/publish` — Neue Version veröffentlichen + PDF archivieren + Erinnerung erstellen
 - `GET /api/admin/legal/pdf?slug=agb&version=3` — On-demand PDF-Download (beliebige Version)
+- `GET /api/admin/legal/contract-paragraphs` — Vertragsparagraphen laden (DB oder Fallback)
+- `POST /api/admin/legal/contract-paragraphs` — Vertragsparagraphen speichern
+- `DELETE /api/admin/legal/contract-paragraphs` — Auf Standard zurücksetzen
+- `GET /api/admin/legal/export-prompt` — Alle Rechtstexte + Vertrag als Prüf-Prompt
 - `GET /api/legal?slug=agb` — Öffentliche API für Shop-Seiten (5 Min Cache)
+
+### Buchungsbestätigungs-E-Mail — Automatische Anhänge
+Jede Buchungsbestätigung enthält automatisch als PDF-Anhang:
+- Rechnung (generiert on-the-fly)
+- Mietvertrag (wenn unterschrieben, aus Supabase Storage — nur Original mit Unterschrift)
+- AGB (aktuelle Version aus legal_documents)
+- Widerrufsbelehrung (aktuelle Version)
+- Haftungsbedingungen (aktuelle Version)
+- Datenschutzerklärung (aktuelle Version)
+
+### E-Mail-Versand aus Buchungsdetails (manuell)
+- Button "E-Mail senden" in Dokumente-Section (`/admin/buchungen/[id]`)
+- Modal: Empfänger änderbar, 7 Checkboxen (Rechnung, Vertrag, AGB, Widerruf, Haftung, Datenschutz, Impressum), "Alle auswählen"
+- API: `POST /api/admin/booking/[id]/send-email`
+- Vertrag wird nur aus Storage geladen (Original mit Unterschrift, keine Neugenerierung)
 
 ### Legal-PDF-Generierung
 - **`lib/legal-pdf.tsx`**: @react-pdf/renderer Template mit `marked` (Markdown→Tokens→PDF)
