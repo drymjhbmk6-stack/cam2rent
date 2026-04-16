@@ -87,6 +87,10 @@ function fmt(n: number) {
 const NAVY = '#0f172a';
 const CYAN = '#06b6d4';
 const GRAY = '#6b7280';
+
+// Testmodus: Wasserzeichen auf dem Vertrag anzeigen
+// Auf false setzen wenn der Shop live geht
+const TEST_MODE = true;
 const DARK = '#1a1a1a';
 const LIGHT_BG = '#f8fafc';
 
@@ -329,6 +333,18 @@ export function RentalContractPDF({ data }: { data: RentalContractData }) {
   return (
     <Document>
       <Page size={[595.28, 841.89]} style={s.page} wrap>
+        {/* Testmodus-Wasserzeichen */}
+        {TEST_MODE && (
+          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', zIndex: 999 }} fixed>
+            <Text style={{ fontSize: 54, color: '#ef444430', fontWeight: 700, transform: 'rotate(-35deg)', textAlign: 'center', letterSpacing: 4 }}>
+              MUSTER
+            </Text>
+            <Text style={{ fontSize: 22, color: '#ef444425', fontWeight: 600, transform: 'rotate(-35deg)', textAlign: 'center', marginTop: 8 }}>
+              TESTVERTRAG – NICHT G{'\u00dc'}LTIG
+            </Text>
+          </View>
+        )}
+
         {/* Fester Footer auf jeder Seite */}
         <Footer />
 
