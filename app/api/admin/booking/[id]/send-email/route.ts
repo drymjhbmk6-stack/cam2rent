@@ -156,15 +156,21 @@ export async function POST(
           .limit(1)
           .maybeSingle();
 
-        // Versuch 1: Aus gespeicherter PDF-URL laden
+        // Versuch 1: Aus Supabase Storage laden
         if (agreement?.pdf_url) {
           try {
-            const pdfRes = await fetch(agreement.pdf_url);
-            if (pdfRes.ok) {
-              attachments.push({ filename: `Mietvertrag-${id}.pdf`, content: Buffer.from(await pdfRes.arrayBuffer()) });
+            // pdf_url ist ein Storage-Pfad wie "contracts/2026/BK-001.pdf"
+            const storagePath = agreement.pdf_url.replace(/^contracts\//, '');
+            const { data: fileData } = await supabase.storage
+              .from('contracts')
+              .download(storagePath);
+
+            if (fileData) {
+              const buffer = Buffer.from(await fileData.arrayBuffer());
+              attachments.push({ filename: `Mietvertrag-${id}.pdf`, content: buffer });
               vertragAttached = true;
             }
-          } catch { /* URL nicht erreichbar */ }
+          } catch { /* Storage nicht erreichbar */ }
         }
 
         // Versuch 2: Vertrag neu generieren (ohne Signatur-Bild, nur Name)
