@@ -147,26 +147,28 @@ export async function POST(
     if (attachVertrag && booking.contract_signed) {
       let vertragAttached = false;
 
-      // Versuch 1: Aus rental_agreements.pdf_url laden
       try {
         const { data: agreement } = await supabase
           .from('rental_agreements')
-          .select('pdf_url, signed_by_name, signature_data_url, signature_method, ip_address')
+          .select('pdf_url, signed_by_name, signature_method, ip_address, contract_hash')
           .eq('booking_id', id)
           .order('created_at', { ascending: false })
           .limit(1)
           .maybeSingle();
 
+        // Versuch 1: Aus gespeicherter PDF-URL laden
         if (agreement?.pdf_url) {
-          const pdfRes = await fetch(agreement.pdf_url);
-          if (pdfRes.ok) {
-            attachments.push({ filename: `Mietvertrag-${id}.pdf`, content: Buffer.from(await pdfRes.arrayBuffer()) });
-            vertragAttached = true;
-          }
+          try {
+            const pdfRes = await fetch(agreement.pdf_url);
+            if (pdfRes.ok) {
+              attachments.push({ filename: `Mietvertrag-${id}.pdf`, content: Buffer.from(await pdfRes.arrayBuffer()) });
+              vertragAttached = true;
+            }
+          } catch { /* URL nicht erreichbar */ }
         }
 
-        // Versuch 2: Vertrag neu generieren
-        if (!vertragAttached && agreement) {
+        // Versuch 2: Vertrag neu generieren (ohne Signatur-Bild, nur Name)
+        if (!vertragAttached) {
           const { data: taxSettings } = await supabase
             .from('admin_settings')
             .select('key, value')
@@ -180,10 +182,12 @@ export async function POST(
             return `${d}.${m}.${y}`;
           };
 
+          const signerName = agreement?.signed_by_name || booking.customer_name || '';
+
           const contractResult = await generateContractPDF({
             bookingId: id,
             bookingNumber: id,
-            customerName: agreement.signed_by_name || booking.customer_name || '',
+            customerName: signerName,
             customerEmail: booking.customer_email || to,
             productName: booking.product_name || '',
             accessories: Array.isArray(booking.accessories) ? booking.accessories : [],
@@ -199,10 +203,10 @@ export async function POST(
             deposit: booking.deposit || 0,
             taxMode: (txMap['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer',
             taxRate: parseFloat(txMap['tax_rate'] || '19'),
-            signatureDataUrl: agreement.signature_data_url || null,
-            signatureMethod: (agreement.signature_method as 'canvas' | 'typed') || 'typed',
-            signerName: agreement.signed_by_name || booking.customer_name || '',
-            ipAddress: agreement.ip_address || 'unknown',
+            signatureDataUrl: null,
+            signatureMethod: 'typed',
+            signerName,
+            ipAddress: agreement?.ip_address || 'unknown',
           });
 
           attachments.push({ filename: `Mietvertrag-${id}.pdf`, content: contractResult.pdfBuffer });
