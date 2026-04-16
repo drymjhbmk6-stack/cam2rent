@@ -23,9 +23,12 @@ interface CachedData {
 let cache: CachedData | null = null;
 const CACHE_DURATION = 6 * 60 * 60 * 1000; // 6 Stunden
 
-export async function GET() {
+export async function GET(req: Request) {
+  const { searchParams } = new URL(req.url);
+  const debug = searchParams.get('debug') === '1';
+
   // Cache prüfen
-  if (cache && Date.now() - cache.fetchedAt < CACHE_DURATION) {
+  if (!debug && cache && Date.now() - cache.fetchedAt < CACHE_DURATION) {
     return NextResponse.json(cache, {
       headers: { 'Cache-Control': 'public, max-age=3600, s-maxage=21600, stale-while-revalidate=86400' },
     });
@@ -36,28 +39,28 @@ export async function GET() {
 
   if (!apiKey || !placeId) {
     return NextResponse.json(
-      { reviews: [], avgRating: 0, totalReviews: 0, error: 'Google Places nicht konfiguriert' },
+      { reviews: [], avgRating: 0, totalReviews: 0, error: 'Google Places nicht konfiguriert', debug: debug ? { hasApiKey: !!apiKey, hasPlaceId: !!placeId } : undefined },
       { status: 200 }
     );
   }
 
   try {
     // Places API (New) — Place Details mit Reviews
-    const res = await fetch(
-      `https://places.googleapis.com/v1/places/${placeId}?fields=reviews,rating,userRatingCount`,
-      {
-        headers: {
-          'X-Goog-Api-Key': apiKey,
-          'X-Goog-FieldMask': 'reviews,rating,userRatingCount',
-          'Accept-Language': 'de',
-        },
-      }
-    );
+    const url = `https://places.googleapis.com/v1/places/${placeId}`;
+    const res = await fetch(url, {
+      headers: {
+        'X-Goog-Api-Key': apiKey,
+        'X-Goog-FieldMask': 'reviews,rating,userRatingCount',
+        'Accept-Language': 'de',
+      },
+    });
 
     if (!res.ok) {
       const errText = await res.text();
       console.error('Google Places API Fehler:', res.status, errText);
-      // Bei Fehler alten Cache zurückgeben falls vorhanden
+      if (debug) {
+        return NextResponse.json({ error: 'Google API Fehler', status: res.status, details: errText, placeId });
+      }
       if (cache) {
         return NextResponse.json(cache);
       }
