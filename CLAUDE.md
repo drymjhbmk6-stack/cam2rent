@@ -336,6 +336,14 @@ Tab-basiertes Cockpit mit 8 Tabs (Query-Parameter `?tab=...`):
 - ProductCard + ProductImageGallery nutzen `next/image` (WebP, Lazy Loading)
 - `next.config.ts`: Supabase + cam2rent.de Domains für Bilder erlaubt
 
+### Produktbild-Verarbeitung (automatisch beim Upload)
+- **API:** `POST /api/product-images` verarbeitet Bilder automatisch mit `sharp`
+- **Skalierung:** 1200x900px (4:3), Bild zentriert auf weißem Hintergrund
+- **Wasserzeichen:** "cam2rent" Text unten rechts (dezent, 12% Opazität)
+- **Format:** Automatische Konvertierung zu WebP (85% Qualität)
+- **Max Upload:** 10 MB (wird komprimiert auf ~50-150 KB)
+- **Wichtig:** `sharp` und `@img` NICHT in `outputFileTracingExcludes` aufnehmen
+
 ## Steuer
 Steuer-Modus umschaltbar im Admin (/admin/einstellungen):
 - `admin_settings.tax_mode`: 'kleinunternehmer' (default) oder 'regelbesteuerung'
