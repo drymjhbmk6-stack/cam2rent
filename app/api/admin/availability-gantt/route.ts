@@ -3,25 +3,54 @@ import { createServiceClient } from '@/lib/supabase';
 import { getProducts } from '@/lib/get-products';
 
 /**
+ * GET /api/admin/availability-gantt?from=2025-04-16&to=2027-04-15
+ * ODER (Rückwärtskompatibel):
  * GET /api/admin/availability-gantt?month=2026-04
  *
  * Liefert Gantt-Daten für den Verfügbarkeitskalender:
  * - Alle Produkte mit ihren Units
- * - Alle Buchungen im Monat (inkl. Puffertage)
+ * - Alle Buchungen im Zeitraum (inkl. Puffertage)
  * - Blockierte Tage
+ *
+ * Unterstützt bis zu 24 Monate in einem Request.
  */
 export async function GET(req: NextRequest) {
-  const month = req.nextUrl.searchParams.get('month');
-  if (!month || !/^\d{4}-\d{2}$/.test(month)) {
-    return NextResponse.json({ error: 'Parameter "month" im Format YYYY-MM erforderlich.' }, { status: 400 });
-  }
+  let firstDay: string;
+  let lastDay: string;
 
-  const [yearStr, monthStr] = month.split('-');
-  const year = parseInt(yearStr, 10);
-  const mon = parseInt(monthStr, 10);
-  const daysInMonth = new Date(year, mon, 0).getDate();
-  const firstDay = `${month}-01`;
-  const lastDay = `${month}-${String(daysInMonth).padStart(2, '0')}`;
+  const fromParam = req.nextUrl.searchParams.get('from');
+  const toParam = req.nextUrl.searchParams.get('to');
+  const monthParam = req.nextUrl.searchParams.get('month');
+
+  if (fromParam && toParam) {
+    // Neues Range-Format: ?from=YYYY-MM-DD&to=YYYY-MM-DD
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(fromParam) || !/^\d{4}-\d{2}-\d{2}$/.test(toParam)) {
+      return NextResponse.json({ error: 'Parameter "from" und "to" im Format YYYY-MM-DD erforderlich.' }, { status: 400 });
+    }
+    // Max 24 Monate Begrenzung
+    const fromDate = new Date(fromParam);
+    const toDate = new Date(toParam);
+    const diffMs = toDate.getTime() - fromDate.getTime();
+    const diffDays = diffMs / (1000 * 60 * 60 * 24);
+    if (diffDays > 750) { // ~24.5 Monate
+      return NextResponse.json({ error: 'Maximaler Zeitraum: 24 Monate.' }, { status: 400 });
+    }
+    if (diffDays < 0) {
+      return NextResponse.json({ error: '"from" muss vor "to" liegen.' }, { status: 400 });
+    }
+    firstDay = fromParam;
+    lastDay = toParam;
+  } else if (monthParam && /^\d{4}-\d{2}$/.test(monthParam)) {
+    // Rückwärtskompatibel: ?month=YYYY-MM
+    const [yearStr, monthStr] = monthParam.split('-');
+    const year = parseInt(yearStr, 10);
+    const mon = parseInt(monthStr, 10);
+    const daysInMonth = new Date(year, mon, 0).getDate();
+    firstDay = `${monthParam}-01`;
+    lastDay = `${monthParam}-${String(daysInMonth).padStart(2, '0')}`;
+  } else {
+    return NextResponse.json({ error: 'Parameter "from" + "to" (YYYY-MM-DD) oder "month" (YYYY-MM) erforderlich.' }, { status: 400 });
+  }
 
   const supabase = createServiceClient();
 
@@ -38,9 +67,14 @@ export async function GET(req: NextRequest) {
 
   const maxBuffer = Math.max(buf.versand_before, buf.versand_after, buf.abholung_before, buf.abholung_after, 3);
 
-  // Erweiterten Zeitraum berechnen
-  const extFirst = new Date(year, mon - 1, 1 - maxBuffer).toISOString().split('T')[0];
-  const extLast = new Date(year, mon - 1, daysInMonth + maxBuffer).toISOString().split('T')[0];
+  // Erweiterten Zeitraum berechnen (für Buchungen die über den Rand hinausragen)
+  const extFirstDate = new Date(firstDay);
+  extFirstDate.setDate(extFirstDate.getDate() - maxBuffer);
+  const extFirst = extFirstDate.toISOString().split('T')[0];
+
+  const extLastDate = new Date(lastDay);
+  extLastDate.setDate(extLastDate.getDate() + maxBuffer);
+  const extLast = extLastDate.toISOString().split('T')[0];
 
   // Parallele Abfragen
   const [products, unitsResult, bookingsResult, blockedResult, accessoriesResult, setsResult] = await Promise.all([
@@ -176,8 +210,8 @@ export async function GET(req: NextRequest) {
   });
 
   return NextResponse.json({
-    month,
-    daysInMonth,
+    from: firstDay,
+    to: lastDay,
     bufferDays: buf,
     products: productData,
     accessories: accessoryData,
