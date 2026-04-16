@@ -376,7 +376,7 @@ export default function AdminVerfuegbarkeitPage() {
       {tab === 'kameras' && (
         <>
           {/* Monatsnavigation */}
-          <div className="flex items-center gap-2 sm:gap-4 mb-5 flex-wrap">
+          <div className="flex items-center justify-center gap-2 sm:gap-4 mb-5 flex-wrap">
             <button onClick={() => changeMonth(-1)}
               className="px-2 sm:px-3 py-1.5 rounded-lg text-sm font-heading font-semibold transition-colors hover:bg-gray-700"
               style={{ color: '#94a3b8', border: '1px solid #334155' }}>
