@@ -427,7 +427,35 @@ export default function ShopUpdaterPage() {
       const res = await fetch(`/api/shop-content?page=${selectedPage}`);
       const data = await res.json();
       if (Array.isArray(data)) {
-        setSections(data);
+        // Alle erwarteten Sections garantieren — auch wenn DB leer/partial ist.
+        // Ohne diesen Schritt schlägt updateSectionLocal (map) fehl und Eingaben
+        // verpuffen, weil die Section im State nicht existiert.
+        const expected: Array<{ section: string; content: HeroContent | NewsBannerContent | UspsContent | ReviewsContent; sort_order: number }> = [
+          { section: 'hero', content: { ueberschrift: '', untertitel: '', cta_text: '', cta_link: '' }, sort_order: 0 },
+          { section: 'news_banner', content: { enabled: true, messages: [] }, sort_order: 1 },
+          { section: 'usps', content: { items: [] }, sort_order: 2 },
+          { section: 'reviews_config', content: { show_reviews: true, count: 6 }, sort_order: 3 },
+        ];
+        const normalized: SectionData[] = expected.map((exp) => {
+          const existing = data.find((s) => s.section === exp.section);
+          if (existing) {
+            return {
+              page: existing.page ?? selectedPage,
+              section: exp.section,
+              content: { ...(exp.content as object), ...((existing.content as object) ?? {}) } as SectionData['content'],
+              is_active: typeof existing.is_active === 'boolean' ? existing.is_active : true,
+              sort_order: typeof existing.sort_order === 'number' ? existing.sort_order : exp.sort_order,
+            };
+          }
+          return {
+            page: selectedPage,
+            section: exp.section,
+            content: exp.content,
+            is_active: true,
+            sort_order: exp.sort_order,
+          };
+        });
+        setSections(normalized);
       }
     } catch {
       showToast('Fehler beim Laden der Inhalte', 'error');
