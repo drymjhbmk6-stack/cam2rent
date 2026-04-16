@@ -2,7 +2,10 @@ import { NextResponse } from 'next/server';
 
 /**
  * GET /api/google-reviews
- * Holt Google-Bewertungen über die Places API (New) und cached sie 6 Stunden.
+ * Holt Google-Bewertungen über beide Places APIs:
+ * - Places API (New): Rating + Gesamtanzahl
+ * - Places API (alt): Neueste Bewertungen (reviews_sort=newest)
+ * Cached 6 Stunden im Speicher.
  */
 
 interface GoogleReviewData {
@@ -45,53 +48,69 @@ export async function GET(req: Request) {
   }
 
   try {
-    // Places API (New) — Place Details mit Reviews
-    const url = `https://places.googleapis.com/v1/places/${placeId}`;
-    const res = await fetch(url, {
-      headers: {
-        'X-Goog-Api-Key': apiKey,
-        'X-Goog-FieldMask': 'reviews,rating,userRatingCount',
-        'Accept-Language': 'de',
-      },
-    });
+    // Beide APIs parallel aufrufen:
+    // 1. Places API (alt) — neueste Bewertungen (reviews_sort=newest)
+    // 2. Places API (New) — Rating + Gesamtanzahl
+    const [oldRes, newRes] = await Promise.all([
+      fetch(
+        `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=reviews&reviews_sort=newest&language=de&key=${apiKey}`
+      ),
+      fetch(
+        `https://places.googleapis.com/v1/places/${placeId}`,
+        {
+          headers: {
+            'X-Goog-Api-Key': apiKey,
+            'X-Goog-FieldMask': 'rating,userRatingCount',
+            'Accept-Language': 'de',
+          },
+        }
+      ),
+    ]);
 
-    if (!res.ok) {
-      const errText = await res.text();
-      console.error('Google Places API Fehler:', res.status, errText);
-      if (debug) {
-        return NextResponse.json({ error: 'Google API Fehler', status: res.status, details: errText, placeId });
-      }
-      if (cache) {
-        return NextResponse.json(cache);
-      }
-      return NextResponse.json({ reviews: [], avgRating: 0, totalReviews: 0 }, { status: 200 });
+    // Rating + Gesamtanzahl aus neuer API
+    let avgRating = 0;
+    let totalReviews = 0;
+    if (newRes.ok) {
+      const newData = await newRes.json();
+      avgRating = newData.rating ?? 0;
+      totalReviews = newData.userRatingCount ?? 0;
     }
 
-    const data = await res.json();
+    // Neueste Bewertungen aus alter API
+    let reviews: GoogleReviewData[] = [];
+    if (oldRes.ok) {
+      const oldData = await oldRes.json();
 
-    const reviews: GoogleReviewData[] = (data.reviews ?? [])
-      .map((r: {
-        authorAttribution?: { displayName?: string; photoUri?: string };
-        rating?: number;
-        text?: { text?: string };
-        relativePublishTimeDescription?: string;
-        publishTime?: string;
-      }) => ({
-        author: r.authorAttribution?.displayName ?? 'Google Nutzer',
-        rating: r.rating ?? 5,
-        text: r.text?.text ?? '',
-        date: r.publishTime ?? r.relativePublishTimeDescription ?? '',
-        profilePhoto: r.authorAttribution?.photoUri ?? undefined,
-      }))
-      // Nur Bewertungen mit 4+ Sternen anzeigen
-      .filter((r: GoogleReviewData) => r.rating >= 4)
-      // Neueste zuerst
-      .sort((a: GoogleReviewData, b: GoogleReviewData) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      if (debug && oldData.status !== 'OK') {
+        return NextResponse.json({ error: 'Google Places API (alt) Fehler', status: oldData.status, details: oldData.error_message, placeId });
+      }
+
+      reviews = (oldData.result?.reviews ?? [])
+        .map((r: {
+          author_name?: string;
+          rating?: number;
+          text?: string;
+          time?: number;
+          profile_photo_url?: string;
+          relative_time_description?: string;
+        }) => ({
+          author: r.author_name ?? 'Google Nutzer',
+          rating: r.rating ?? 5,
+          text: r.text ?? '',
+          date: r.time ? new Date(r.time * 1000).toISOString() : '',
+          profilePhoto: r.profile_photo_url ?? undefined,
+        }))
+        // Nur Bewertungen mit 4+ Sternen anzeigen
+        .filter((r: GoogleReviewData) => r.rating >= 4);
+    } else if (debug) {
+      const errText = await oldRes.text();
+      return NextResponse.json({ error: 'Google API Fehler', status: oldRes.status, details: errText, placeId });
+    }
 
     const result: CachedData = {
       reviews,
-      avgRating: data.rating ?? 0,
-      totalReviews: data.userRatingCount ?? 0,
+      avgRating,
+      totalReviews,
       fetchedAt: Date.now(),
     };
 
