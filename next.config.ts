@@ -23,8 +23,6 @@ const nextConfig: NextConfig = {
       'node_modules/eslint',
       'node_modules/@next/swc-linux-x64-gnu',
       'node_modules/@next/swc-linux-x64-musl',
-      'node_modules/sharp',
-      'node_modules/@img',
     ],
   },
   images: {
