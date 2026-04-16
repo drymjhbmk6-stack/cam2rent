@@ -69,19 +69,24 @@ export async function GET(req: Request) {
 
     const data = await res.json();
 
-    const reviews: GoogleReviewData[] = (data.reviews ?? []).map((r: {
-      authorAttribution?: { displayName?: string; photoUri?: string };
-      rating?: number;
-      text?: { text?: string };
-      relativePublishTimeDescription?: string;
-      publishTime?: string;
-    }) => ({
-      author: r.authorAttribution?.displayName ?? 'Google Nutzer',
-      rating: r.rating ?? 5,
-      text: r.text?.text ?? '',
-      date: r.publishTime ?? r.relativePublishTimeDescription ?? '',
-      profilePhoto: r.authorAttribution?.photoUri ?? undefined,
-    }));
+    const reviews: GoogleReviewData[] = (data.reviews ?? [])
+      .map((r: {
+        authorAttribution?: { displayName?: string; photoUri?: string };
+        rating?: number;
+        text?: { text?: string };
+        relativePublishTimeDescription?: string;
+        publishTime?: string;
+      }) => ({
+        author: r.authorAttribution?.displayName ?? 'Google Nutzer',
+        rating: r.rating ?? 5,
+        text: r.text?.text ?? '',
+        date: r.publishTime ?? r.relativePublishTimeDescription ?? '',
+        profilePhoto: r.authorAttribution?.photoUri ?? undefined,
+      }))
+      // Nur Bewertungen mit 4+ Sternen anzeigen
+      .filter((r: GoogleReviewData) => r.rating >= 4)
+      // Neueste zuerst
+      .sort((a: GoogleReviewData, b: GoogleReviewData) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
     const result: CachedData = {
       reviews,
