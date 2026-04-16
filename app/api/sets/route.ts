@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
     const [setsRes, accRes] = await Promise.all([
       supabase
         .from('sets')
-        .select('id, name, description, badge, badge_color, pricing_mode, price, available, sort_order, accessory_items, product_ids')
+        .select('id, name, description, badge, badge_color, pricing_mode, price, available, sort_order, accessory_items, product_ids, image_url')
         .order('sort_order', { ascending: true }),
       supabase
         .from('accessories')
@@ -61,6 +61,7 @@ export async function GET(req: NextRequest) {
           available,
           accessory_items: items,
           product_ids: Array.isArray(r.product_ids) ? r.product_ids : [],
+          image_url: r.image_url ?? null,
         };
       });
 

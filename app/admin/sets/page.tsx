@@ -22,6 +22,7 @@ interface AdminSet {
   accessory_items: AccessoryItem[];
   product_ids: string[];
   includedItems: string[];
+  image_url?: string | null;
 }
 
 interface Accessory {
@@ -527,6 +528,54 @@ export default function AdminSetsPage() {
                             onChange={(ev) => setEdit(set.id, 'description', ev.target.value)}
                             className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
                         </div>
+                      </div>
+
+                      {/* Set-Bild */}
+                      <div className="bg-white dark:bg-slate-800/50 rounded-xl border border-brand-border dark:border-slate-700 p-4">
+                        <p className="text-xs font-heading font-semibold text-brand-muted mb-3">Set-Bild</p>
+                        <div className="flex items-center gap-4">
+                          {set.image_url ? (
+                            <div className="relative group">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={set.image_url} alt={set.name} className="w-40 h-30 object-contain rounded-lg border border-brand-border" />
+                              <button
+                                onClick={async () => {
+                                  if (!confirm('Bild löschen?')) return;
+                                  const pathMatch = set.image_url?.match(/product-images\/(.+)$/);
+                                  const path = pathMatch?.[1] ?? '';
+                                  try {
+                                    await fetch('/api/set-images', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path, setId: set.id }) });
+                                    setSets((prev) => prev.map((s) => s.id === set.id ? { ...s, image_url: null } : s));
+                                  } catch { alert('Fehler beim Löschen.'); }
+                                }}
+                                className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full text-xs font-bold flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                              >✕</button>
+                            </div>
+                          ) : (
+                            <div className="w-40 h-30 rounded-lg border-2 border-dashed border-brand-border dark:border-slate-600 flex items-center justify-center text-brand-muted text-xs">
+                              Kein Bild
+                            </div>
+                          )}
+                          <label className="cursor-pointer px-4 py-2.5 bg-accent-blue text-white text-sm font-heading font-semibold rounded-[10px] hover:bg-blue-700 transition-colors">
+                            {set.image_url ? 'Bild ändern' : 'Bild hochladen'}
+                            <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={async (ev) => {
+                              const file = ev.target.files?.[0];
+                              if (!file) return;
+                              const fd = new FormData();
+                              fd.append('setId', set.id);
+                              fd.append('setName', e.name || set.name);
+                              fd.append('file', file);
+                              try {
+                                const res = await fetch('/api/set-images', { method: 'POST', body: fd });
+                                if (!res.ok) { const d = await res.json(); alert(d.error ?? 'Upload fehlgeschlagen.'); return; }
+                                const data = await res.json();
+                                setSets((prev) => prev.map((s) => s.id === set.id ? { ...s, image_url: data.url } : s));
+                              } catch { alert('Upload fehlgeschlagen.'); }
+                              ev.target.value = '';
+                            }} />
+                          </label>
+                        </div>
+                        <p className="text-[11px] text-brand-muted mt-2">Wird automatisch auf 1200×900 skaliert mit Set-Name als Wasserzeichen.</p>
                       </div>
 
                       {/* Preis */}
