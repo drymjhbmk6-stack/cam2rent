@@ -49,7 +49,7 @@ interface BookingsData {
 }
 interface ProductsData { products: { slug: string; views: number; bookings: number; revenue: number; utilization: number }[] }
 
-type Tab = 'live' | 'bookings' | 'traffic' | 'customers';
+type Tab = 'live' | 'bookings' | 'traffic' | 'customers' | 'blog';
 
 type TimeRange = 'heute' | '7tage' | '30tage' | 'monat' | 'jahr' | 'custom';
 type StatusFilter = 'alle' | 'aktiv' | 'abgeschlossen' | 'storniert';
@@ -427,6 +427,8 @@ export default function AnalyticsPage() {
     avgLifetimeValue: number; avgOrderValue: number; newCustomers30d: number;
     abandonedCarts: number; recoveredCarts: number; recoveryRate: number;
   } | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [blogData, setBlogData] = useState<any>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Filters
@@ -504,7 +506,12 @@ export default function AnalyticsPage() {
         fetch('/api/admin/analytics?type=customers').then((r) => r.json()).then(setCustomersData).catch(() => {});
       }
     }
-  }, [activeTab, fetchBookings, fetchTraffic, fetchHistory]);
+    if (activeTab === 'blog') {
+      if (!blogData) {
+        fetch('/api/admin/analytics?type=blog').then((r) => r.json()).then(setBlogData).catch(() => {});
+      }
+    }
+  }, [activeTab, fetchBookings, fetchTraffic, fetchHistory]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Filter logic (client-side filtering of history/trend data) ───────────
   const getFilteredHistory = useCallback(() => {
@@ -582,6 +589,13 @@ export default function AnalyticsPage() {
       id: 'customers', label: 'Kunden & Verhalten', icon: (
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+      ),
+    },
+    {
+      id: 'blog', label: 'Blog', icon: (
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
         </svg>
       ),
     },
@@ -1306,6 +1320,69 @@ export default function AnalyticsPage() {
                   })}
                 </div>
               ) : <div style={{ color: C.textDim }}>Laden...</div>}
+            </Card>
+          </div>
+        </div>
+      )}
+
+      {/* ── TAB 5: BLOG ────────────────────────────────────────────────────── */}
+      {activeTab === 'blog' && (
+        <div className="tab-content">
+          {/* KPI-Karten */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 20 }}>
+            <StatCard label="Artikel gesamt" value={blogData?.totalPosts ?? '–'} color={C.cyan} tooltip="Gesamtanzahl aller Blog-Artikel (veröffentlicht + Entwürfe)." />
+            <StatCard label="Veröffentlicht" value={blogData?.publishedPosts ?? '–'} color={C.green} tooltip="Anzahl veröffentlichter Artikel." />
+            <StatCard label="Entwürfe" value={blogData?.draftPosts ?? '–'} color={C.yellow} tooltip="Anzahl noch nicht veröffentlichter Entwürfe." />
+            <StatCard label="Neu (30 Tage)" value={blogData?.recentPosts ?? '–'} color={C.purple} tooltip="Artikel die in den letzten 30 Tagen erstellt wurden." />
+            <StatCard label="Blog-Aufrufe (30 Tage)" value={blogData?.blogPageViews30d ?? '–'} color={C.cyanLight} tooltip="Seitenaufrufe auf Blog-Seiten in den letzten 30 Tagen." />
+            <StatCard label="Kommentare gesamt" value={blogData?.totalComments ?? '–'} tooltip="Gesamtanzahl aller Blog-Kommentare." />
+            <StatCard label="Neue Kommentare" value={blogData?.recentComments ?? '–'} color={C.cyan} tooltip="Kommentare der letzten 30 Tage." />
+            <StatCard label="Im Zeitplan" value={blogData?.scheduledCount ?? '–'} color={C.yellow} tooltip="Artikel die im Redaktionsplan stehen und noch nicht generiert wurden." />
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16 }}>
+            {/* Top Blog-Artikel nach Aufrufen */}
+            <Card>
+              <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16 }}>
+                Top Blog-Artikel — Aufrufe (30 Tage)
+                <InfoTooltip text="Die meistbesuchten Blog-Artikel der letzten 30 Tage (gemessen an Seitenaufrufen)." />
+              </div>
+              {blogData?.topBlogPages?.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {(blogData.topBlogPages as { slug: string; title: string; views: number }[]).map((p, i) => (
+                    <div key={p.slug} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{ width: 20, fontSize: 12, color: C.textDim, fontWeight: 700, textAlign: 'right' }}>
+                        {i + 1}.
+                      </span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, color: '#e2e8f0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {p.title}
+                        </div>
+                      </div>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: C.cyan, flexShrink: 0 }}>{p.views}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ color: C.textDim, fontSize: 13 }}>Noch keine Blog-Aufrufe</div>
+              )}
+            </Card>
+
+            {/* Blog-Aufrufe Trend */}
+            <Card>
+              <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16 }}>
+                Blog-Aufrufe pro Tag — 30 Tage
+                <InfoTooltip text="Tägliche Seitenaufrufe auf Blog-Seiten." />
+              </div>
+              {blogData?.viewTrend?.length > 0 ? (
+                <HourlyChart data={(() => {
+                  const trend = blogData.viewTrend as { date: string; views: number }[];
+                  const last14 = trend.slice(-14);
+                  return last14.map((d: { views: number }) => d.views);
+                })()} />
+              ) : (
+                <div style={{ color: C.textDim, fontSize: 13 }}>Noch keine Daten</div>
+              )}
             </Card>
           </div>
         </div>

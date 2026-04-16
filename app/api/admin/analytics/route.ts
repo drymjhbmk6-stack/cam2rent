@@ -461,5 +461,98 @@ export async function GET(req: NextRequest) {
     });
   }
 
+  // ── BLOG ────────────────────────────────────────────────────────────────────
+  if (type === 'blog') {
+    const since30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+    // Alle Blog-Artikel
+    const { data: allPosts } = await supabase
+      .from('blog_posts')
+      .select('id, title, slug, status, published_at, views, created_at')
+      .order('created_at', { ascending: false });
+
+    const posts = allPosts ?? [];
+    const totalPosts = posts.length;
+    const publishedPosts = posts.filter(p => p.status === 'published').length;
+    const draftPosts = posts.filter(p => p.status === 'draft').length;
+    const recentPosts = posts.filter(p => p.created_at >= since30).length;
+
+    // Gesamte Blog-Views
+    const totalViews = posts.reduce((s, p) => s + (p.views ?? 0), 0);
+
+    // Top-Artikel nach Views
+    const topArticles = posts
+      .filter(p => p.status === 'published')
+      .sort((a, b) => (b.views ?? 0) - (a.views ?? 0))
+      .slice(0, 10)
+      .map(p => ({ title: p.title, slug: p.slug, views: p.views ?? 0, published_at: p.published_at }));
+
+    // Blog Page Views aus page_views Tabelle
+    const { data: blogViews } = await supabase
+      .from('page_views')
+      .select('path, created_at')
+      .gte('created_at', since30)
+      .like('path', '/blog/%');
+
+    const blogPageViews30d = blogViews?.length ?? 0;
+
+    // Views pro Tag (letzte 30 Tage)
+    const dayMap = new Map<string, number>();
+    for (const row of blogViews ?? []) {
+      const day = row.created_at.slice(0, 10);
+      dayMap.set(day, (dayMap.get(day) ?? 0) + 1);
+    }
+    const viewTrend = Array.from(dayMap.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([date, views]) => ({ date, views }));
+
+    // Top Blog-Seiten aus page_views
+    const blogPageMap = new Map<string, number>();
+    for (const row of blogViews ?? []) {
+      const slug = row.path.replace('/blog/', '').split('?')[0];
+      if (slug && slug !== '') {
+        blogPageMap.set(slug, (blogPageMap.get(slug) ?? 0) + 1);
+      }
+    }
+    const topBlogPages = Array.from(blogPageMap.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([slug, views]) => {
+        const post = posts.find(p => p.slug === slug);
+        return { slug, title: post?.title ?? slug, views };
+      });
+
+    // Kommentare
+    const { count: totalComments } = await supabase
+      .from('blog_comments')
+      .select('id', { count: 'exact', head: true });
+    const { count: recentComments } = await supabase
+      .from('blog_comments')
+      .select('id', { count: 'exact', head: true })
+      .gte('created_at', since30);
+
+    // Zeitplan
+    const { data: scheduleData } = await supabase
+      .from('blog_schedule')
+      .select('id, status')
+      .in('status', ['pending', 'scheduled']);
+    const scheduledCount = scheduleData?.length ?? 0;
+
+    return NextResponse.json({
+      totalPosts,
+      publishedPosts,
+      draftPosts,
+      recentPosts,
+      totalViews,
+      blogPageViews30d,
+      topArticles,
+      topBlogPages,
+      viewTrend,
+      totalComments: totalComments ?? 0,
+      recentComments: recentComments ?? 0,
+      scheduledCount,
+    });
+  }
+
   return NextResponse.json({ error: 'Ungültiger type-Parameter' }, { status: 400 });
 }
