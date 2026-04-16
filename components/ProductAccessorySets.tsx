@@ -19,6 +19,7 @@ export default function ProductAccessorySets({ productId }: { productId: string 
   const [accessories, setAccessories] = useState<AccItem[]>([]);
   const [sets, setSets] = useState<RentalSet[]>([]);
   const [openSetId, setOpenSetId] = useState<string | null>(null);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -159,25 +160,33 @@ export default function ProductAccessorySets({ productId }: { productId: string 
                     </div>
                   </button>
                   {openSetId === set.id && (
-                    <div className="px-4 pb-3 pt-1 border-t border-brand-border dark:border-gray-700">
-                      {set.image_url && (
-                        <div className="mb-3">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={set.image_url} alt={set.name} className="w-full rounded-lg object-contain bg-white" style={{ aspectRatio: '4/3' }} />
+                    <div className="px-4 pb-3 pt-2 border-t border-brand-border dark:border-gray-700">
+                      <div className={`flex gap-3 ${set.image_url ? '' : ''}`}>
+                        {set.image_url && (
+                          <button
+                            type="button"
+                            onClick={() => setLightboxUrl(set.image_url!)}
+                            className="flex-shrink-0 rounded-lg overflow-hidden border border-brand-border dark:border-gray-600 hover:border-accent-blue transition-colors cursor-zoom-in"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={set.image_url} alt={set.name} className="w-24 h-18 object-contain bg-white" style={{ aspectRatio: '4/3' }} />
+                          </button>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          {set.includedItems.length > 0 ? (
+                            <ul className="space-y-1">
+                              {set.includedItems.map((item, i) => (
+                                <li key={i} className="flex items-center gap-2 text-xs text-brand-text dark:text-gray-300">
+                                  <span className="w-1 h-1 rounded-full bg-accent-blue flex-shrink-0" />
+                                  {item}
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="text-xs text-brand-muted dark:text-gray-500">Keine Details verfügbar</p>
+                          )}
                         </div>
-                      )}
-                      {set.includedItems.length > 0 ? (
-                        <ul className="space-y-1">
-                          {set.includedItems.map((item, i) => (
-                            <li key={i} className="flex items-center gap-2 text-xs text-brand-text dark:text-gray-300">
-                              <span className="w-1 h-1 rounded-full bg-accent-blue flex-shrink-0" />
-                              {item}
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p className="text-xs text-brand-muted dark:text-gray-500">Keine Details verfügbar</p>
-                      )}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -212,6 +221,23 @@ export default function ProductAccessorySets({ productId }: { productId: string 
           </Link>
         </div>
       </div>
+
+      {/* Lightbox */}
+      {lightboxUrl && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+          onClick={() => setLightboxUrl(null)}
+        >
+          <div className="relative max-w-3xl w-full" onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={() => setLightboxUrl(null)}
+              className="absolute -top-3 -right-3 w-8 h-8 bg-white dark:bg-gray-800 rounded-full shadow-lg flex items-center justify-center text-brand-black dark:text-gray-100 font-bold text-sm hover:bg-gray-100 dark:hover:bg-gray-700 z-10"
+            >✕</button>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={lightboxUrl} alt="Set-Bild" className="w-full rounded-xl object-contain bg-white shadow-2xl" />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
