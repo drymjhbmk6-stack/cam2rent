@@ -503,7 +503,7 @@ export default function AdminGutscheinePage() {
     <div style={{ padding: '20px 16px', maxWidth: 800, margin: '0 auto' }}>
       <AdminBackLink label="Zurück" />
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <div>
           <h1 style={{ fontSize: 20, fontWeight: 700, color: '#e2e8f0', marginBottom: 2 }}>Gutscheine</h1>
           <p style={{ fontSize: 13, color: '#64748b' }}>{coupons.length} Gutschein{coupons.length !== 1 ? 'e' : ''} angelegt</p>
@@ -515,6 +515,45 @@ export default function AdminGutscheinePage() {
           + Neuer Gutschein
         </button>
       </div>
+
+      {/* Statistik-Übersicht */}
+      {coupons.length > 0 && (() => {
+        const now = new Date();
+        const isValid = (c: CouponRow) => {
+          if (!c.active) return false;
+          if (c.valid_until && new Date(c.valid_until) < now) return false;
+          if (c.max_uses && c.used_count >= c.max_uses) return false;
+          return true;
+        };
+        const active = coupons.filter(isValid);
+        const fromSurvey = coupons.filter(c => c.description?.includes('Bewertung'));
+        const activeFromSurvey = fromSurvey.filter(isValid);
+        const totalUses = coupons.reduce((s, c) => s + (c.used_count || 0), 0);
+        return (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8, marginBottom: 20 }}>
+            <div style={{ ...S.card, padding: 14 }}>
+              <p style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>Im Umlauf</p>
+              <p style={{ fontSize: 22, fontWeight: 800, color: '#10b981', margin: 0 }}>{active.length}</p>
+              <p style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>aktiv &amp; gültig</p>
+            </div>
+            <div style={{ ...S.card, padding: 14 }}>
+              <p style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>Aus Bewertung</p>
+              <p style={{ fontSize: 22, fontWeight: 800, color: '#f59e0b', margin: 0 }}>{activeFromSurvey.length}</p>
+              <p style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>von {fromSurvey.length} gesamt</p>
+            </div>
+            <div style={{ ...S.card, padding: 14 }}>
+              <p style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>Eingelöst</p>
+              <p style={{ fontSize: 22, fontWeight: 800, color: '#06b6d4', margin: 0 }}>{totalUses}</p>
+              <p style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>Nutzungen gesamt</p>
+            </div>
+            <div style={{ ...S.card, padding: 14 }}>
+              <p style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>Gesamt</p>
+              <p style={{ fontSize: 22, fontWeight: 800, color: '#e2e8f0', margin: 0 }}>{coupons.length}</p>
+              <p style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>angelegt</p>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* New coupon form */}
       {showNew && (
