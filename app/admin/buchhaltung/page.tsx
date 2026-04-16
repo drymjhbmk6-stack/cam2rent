@@ -10,10 +10,11 @@ import OffenePostenTab from './components/OffenePostenTab';
 import GutschriftenTab from './components/GutschriftenTab';
 import StripeAbgleichTab from './components/StripeAbgleichTab';
 import ReportsTab from './components/ReportsTab';
+import AusgabenTab from './components/AusgabenTab';
 import DatevExportTab from './components/DatevExportTab';
 import EinstellungenTab from './components/EinstellungenTab';
 
-const VALID_TABS: TabId[] = ['dashboard', 'rechnungen', 'offene-posten', 'gutschriften', 'stripe', 'reports', 'datev', 'einstellungen'];
+const VALID_TABS: TabId[] = ['dashboard', 'rechnungen', 'offene-posten', 'gutschriften', 'stripe', 'reports', 'ausgaben', 'datev', 'einstellungen'];
 
 function BuchhaltungContent() {
   const searchParams = useSearchParams();
@@ -65,6 +66,7 @@ function BuchhaltungContent() {
         {activeTab === 'gutschriften' && <GutschriftenTab />}
         {activeTab === 'stripe' && <StripeAbgleichTab />}
         {activeTab === 'reports' && <ReportsTab />}
+        {activeTab === 'ausgaben' && <AusgabenTab />}
         {activeTab === 'datev' && <DatevExportTab />}
         {activeTab === 'einstellungen' && <EinstellungenTab />}
       </div>
