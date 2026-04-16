@@ -44,3 +44,22 @@ export async function GET() {
 
   return NextResponse.json({ feedbacks: data ?? [] });
 }
+
+/**
+ * DELETE /api/beta-feedback?id=UUID — Löscht ein einzelnes Feedback
+ */
+export async function DELETE(req: NextRequest) {
+  const id = req.nextUrl.searchParams.get('id');
+  if (!id) {
+    return NextResponse.json({ error: 'id erforderlich.' }, { status: 400 });
+  }
+
+  const supabase = createServiceClient();
+  const { error } = await supabase.from('beta_feedback').delete().eq('id', id);
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ success: true });
+}

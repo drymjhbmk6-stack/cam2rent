@@ -94,6 +94,22 @@ export default function BetaFeedbackAdmin() {
   const [feedbacks, setFeedbacks] = useState<Feedback[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  async function handleDelete(id: string, name: string) {
+    if (!confirm(`Feedback von ${name} wirklich löschen?`)) return;
+    setDeletingId(id);
+    try {
+      const res = await fetch(`/api/beta-feedback?id=${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Löschen fehlgeschlagen');
+      setFeedbacks((prev) => prev.filter((f) => f.id !== id));
+      if (expandedId === id) setExpandedId(null);
+    } catch {
+      alert('Fehler beim Löschen.');
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   useEffect(() => {
     fetch('/api/beta-feedback')
@@ -251,15 +267,25 @@ export default function BetaFeedbackAdmin() {
             <div className="divide-y divide-[#1e293b]">
               {feedbacks.map((f) => (
                 <div key={f.id}>
-                  <button onClick={() => setExpandedId(expandedId === f.id ? null : f.id)}
-                    className="w-full px-5 py-3 flex items-center justify-between text-left hover:bg-white/5 transition-colors">
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm font-heading font-semibold text-white">{f.tester_name || 'Anonym'}</span>
-                      {f.tester_email && <span className="text-xs text-slate-500">{f.tester_email}</span>}
-                      {f.wants_gutschein && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-cyan-900/50 text-cyan-400">Gutschein</span>}
+                  <div className="w-full px-5 py-3 flex items-center justify-between gap-3 hover:bg-white/5 transition-colors">
+                    <button onClick={() => setExpandedId(expandedId === f.id ? null : f.id)}
+                      className="flex-1 flex items-center gap-3 text-left min-w-0">
+                      <span className="text-sm font-heading font-semibold text-white truncate">{f.tester_name || 'Anonym'}</span>
+                      {f.tester_email && <span className="text-xs text-slate-500 truncate hidden sm:inline">{f.tester_email}</span>}
+                      {f.wants_gutschein && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-cyan-900/50 text-cyan-400 flex-shrink-0">Gutschein</span>}
+                    </button>
+                    <div className="flex items-center gap-3 flex-shrink-0">
+                      <span className="text-xs text-slate-500 hidden sm:inline">{new Date(f.created_at).toLocaleDateString('de-DE')}</span>
+                      <button
+                        onClick={() => handleDelete(f.id, f.tester_name || 'Anonym')}
+                        disabled={deletingId === f.id}
+                        className="text-xs font-heading font-semibold px-3 py-1.5 rounded-lg border border-red-900/50 text-red-400 hover:bg-red-950/30 transition-colors disabled:opacity-40"
+                        title="Feedback löschen"
+                      >
+                        {deletingId === f.id ? '…' : 'Löschen'}
+                      </button>
                     </div>
-                    <span className="text-xs text-slate-500">{new Date(f.created_at).toLocaleDateString('de-DE')}</span>
-                  </button>
+                  </div>
                   {expandedId === f.id && (
                     <div className="px-5 pb-5 space-y-3">
                       {ALL_QUESTIONS.map((q) => {
