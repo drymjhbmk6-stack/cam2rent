@@ -142,7 +142,7 @@ export default function RechnungenTab() {
           placeholder="Suche: Rechnungsnr., Kunde, E-Mail, Buchungs-ID..."
           value={search}
           onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-          style={{ ...inputStyle, flex: 1, minWidth: 280 }}
+          style={{ ...inputStyle, flex: 1, minWidth: 200, maxWidth: '100%' }}
         />
         <select
           value={statusFilter}

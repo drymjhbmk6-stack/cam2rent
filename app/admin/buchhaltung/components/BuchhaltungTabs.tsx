@@ -66,6 +66,7 @@ export default function BuchhaltungTabs({ activeTab, onTabChange }: BuchhaltungT
     <div style={{
       display: 'flex',
       gap: 2,
+      flexWrap: 'wrap',
       overflowX: 'auto',
       borderBottom: '1px solid #1e293b',
       paddingBottom: 0,

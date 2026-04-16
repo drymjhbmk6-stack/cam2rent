@@ -529,5 +529,5 @@ function ActionButtons({
     );
   }
 
-  return buttons.length > 0 ? <div className="flex gap-2">{buttons}</div> : null;
+  return buttons.length > 0 ? <div className="flex gap-2 flex-wrap">{buttons}</div> : null;
 }
