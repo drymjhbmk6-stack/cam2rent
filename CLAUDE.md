@@ -54,7 +54,7 @@ ESLint + TypeScript werden auf dem Server beim Build geskippt (RAM-Limit CX23).
 - Anthropic Claude API (Blog-KI-Generierung)
 - OpenAI DALL-E 3 (Blog-Bildgenerierung)
 
-## Architektur-Übersicht (Stand 2026-04-15)
+## Architektur-Übersicht (Stand 2026-04-16)
 
 ### Datenquellen — ALLES aus DB, keine statischen Fallbacks
 - **Kameras:** `admin_config.products` → `getProducts()` (lib/get-products.ts) → `/api/products` → `ProductsProvider` + `useProducts()`
@@ -146,7 +146,7 @@ ESLint + TypeScript werden auf dem Server beim Build geskippt (RAM-Limit CX23).
 - **Produkte & Katalog:** Kameras, Sets, Zubehör, Verfügbarkeit
 - **Bestellungen:** Buchungen, Neue Buchung, Versand & Labels, Retouren, Schäden
 - **Kunden:** Kundenliste, Nachrichten, Bewertungen
-- **Marketing & Preise:** Gutscheine, Rabatte, Shop Updater, Blog
+- **Preise & Marketing:** Versandpreise, Gutscheine, Rabatte, Shop Updater, Blog
 - **Finanzen & Daten:** Buchhaltung, Analytics, Aktivitätsprotokoll, Einkauf
 
 ### Dynamische Admin-Dropdowns
@@ -195,11 +195,15 @@ Alle Dropdowns laden aus `admin_settings` und können neue Einträge hinzufügen
 
 ### Verfügbarkeit + Gantt-Kalender
 - **Gantt-Kalender** (`/admin/verfuegbarkeit`): Alle 3 Tabs (Kameras, Zubehör, Sets) mit Gantt-Ansicht
-  - Monatsnavigation (< Monat Jahr >), Heute-Button, KW-Balken über Tagen
+  - **Durchgehend scrollbar:** 3 Monate zurück + 6 Monate voraus (kein Monatswechsel nötig)
+  - Auto-Scroll zum heutigen Tag (zentriert im Fenster) beim Laden und bei "Heute"-Button
+  - Monats-Header über KW-Zeilen, Monats-Trennlinien für Orientierung
+  - Vergangene Buchungen bleiben sichtbar (blau), vergangene freie Tage dezent grau
   - Wochen heben sich farblich voneinander ab (abwechselnder Hintergrund)
   - Heutiger Tag: Gelbe Umrandung + gelbe Schrift im Header
   - Puffertage dynamisch aus `admin_settings.booking_buffer_days`, unterschiedlich für Versand/Abholung
   - Puffertage werden auch für nicht-zugeordnete Buchungen (ohne `unit_id`) angezeigt
+  - **API:** `GET /api/admin/availability-gantt?from=YYYY-MM-DD&to=YYYY-MM-DD` (Zeitraum-basiert, max 24 Monate)
 - **Kameras-Tab:** Pro Kameratyp aufklappbarer Bereich mit allen Units als Zeilen
   - Farbcodiert: Grün=frei, Blau=gebucht, Gold=Hinversand, Orange=Rückversand, Rot=Wartung, Grau=ausgemustert
   - Hover-Tooltip: Buchungs-ID, Kundenname, Zeitraum, Lieferart
@@ -210,7 +214,7 @@ Alle Dropdowns laden aus `admin_settings` und können neue Einträge hinzufügen
   - Set-Buchungen werden auf Einzelzubehör aufgelöst (über `sets.accessory_items`)
 - **Sets-Tab:** Pro Set ein Kalender mit einer Zeile
   - Grün=frei, Blau=gebucht (mit Anzahl)
-- **API:** `GET /api/admin/availability-gantt?month=YYYY-MM` → liefert products[], accessories[], sets[] mit Buchungsdaten und Puffertagen
+- **API (alt):** `GET /api/admin/availability-gantt?month=YYYY-MM` → rückwärtskompatibel, liefert products[], accessories[], sets[]
 - **Availability-API** (`/api/availability/[productId]`): Nutzt weiterhin `product.stock` für Shop-seitige Verfügbarkeitsprüfung
 
 ### Admin-Navigation
@@ -339,10 +343,13 @@ Tab-basiertes Cockpit mit 8 Tabs (Query-Parameter `?tab=...`):
 ### Produktbild-Verarbeitung (automatisch beim Upload)
 - **API:** `POST /api/product-images` verarbeitet Bilder automatisch mit `sharp`
 - **Skalierung:** 1200x900px (4:3), Bild zentriert auf weißem Hintergrund
-- **Wasserzeichen:** "cam2rent" Text unten rechts (dezent, 12% Opazität)
+- **Wasserzeichen:** cam2rent Logo (Kamera-Icon + Text) unten rechts (dezent, 12% Opazität)
+- **Logo:** `public/logo.svg` — SVG-Version des cam2rent Logos (Kamera-Icon + Text)
 - **Format:** Automatische Konvertierung zu WebP (85% Qualität)
 - **Max Upload:** 10 MB (wird komprimiert auf ~50-150 KB)
-- **Wichtig:** `sharp` und `@img` NICHT in `outputFileTracingExcludes` aufnehmen
+- **Sharp im Docker:** `sharp` bleibt in `outputFileTracingExcludes` (RAM-Limit beim Build). Wird stattdessen im Dockerfile separat installiert (`npm install --platform=linuxmusl sharp`). Dynamischer Import mit Fallback wenn nicht verfügbar.
+- **Set-Bilder:** Eigene API `/api/set-images` — Set-Name als Wasserzeichen unten mittig (55% Opazität)
+- **Zentrale Bildverarbeitung:** `lib/image-processing.ts` — `processProductImage()` + `processSetImage()`
 
 ## Steuer
 Steuer-Modus umschaltbar im Admin (/admin/einstellungen):
@@ -461,6 +468,45 @@ Jede Buchungsbestätigung enthält automatisch als PDF-Anhang:
 - **ISR:** Cache wird beim Publish über `revalidateTag` invalidiert → neue Version sofort sichtbar ohne Redeploy
 - **Fallback:** Bestehende hardcoded JSX-Seiten greifen wenn DB nicht erreichbar
 
+### Registrierungs-Rate-Limiter
+- **API:** `GET/POST /api/auth/signup` — serverseitiger Zähler, max 3 Signups/Stunde
+- Supabase Free Tier erlaubt max 4 Signups/Stunde → eigener Zähler mit Puffer
+- Bei Limit: Gelber Hinweis-Banner + Button deaktiviert + Countdown in Minuten
+- Fängt auch Supabase-eigene Rate-Limit-Fehler ab (Fallback)
+
+### Feedback → Gutschein-System
+- **Umfrage-Seite** (`/umfrage/[bookingId]`): 2-Schritt-Flow
+  - Schritt 1: Rating + optionales Feedback
+  - Schritt 2 (bei 4+ Sternen): Email-Eingabe für 10% Gutschein
+- **Automatische Gutschein-Erstellung:** Code `DANKE-{BookingID}-{Random}`, 90 Tage gültig, 50€ Mindestbestellwert, personalisiert per Email
+- **Bestätigungs-Email** mit Gutschein-Code via Resend
+- **Admin:** Gutscheine erscheinen automatisch unter `/admin/gutscheine` mit Statistik-Übersicht (Im Umlauf, Aus Bewertung, Eingelöst, Gesamt)
+- **Duplikat-Schutz:** Pro Buchung max 1 Gutschein
+
+### Mietvertrag Testmodus
+- **`lib/contracts/contract-template.tsx`**: `TEST_MODE = true` → Diagonales Wasserzeichen "MUSTER / TESTVERTRAG – NICHT GÜLTIG" auf jeder Seite
+- Auf `false` setzen für Go-Live!
+
+### Analytics
+- **Blog-Tab** in Analytics: Artikel gesamt/veröffentlicht/Entwürfe, Blog-Aufrufe, Top-Artikel, Kommentare, Zeitplan-Zähler
+- **Stündliche Balken** zeigen Anzahl über jedem Balken
+- **Kritische Bugs gefixt:** price_total statt total_price, rental_from/to statt rental_start/end, Slug→ID Mapping, abandoned_carts Try-Catch, Funnel-Basis korrigiert
+
+### Buchhaltung
+- **Ausgaben** als eigener Haupttab (statt Sub-Tab unter Reports)
+- 9 Tabs: Dashboard, Rechnungen, Offene Posten, Gutschriften, Stripe-Abgleich, Reports, Ausgaben, DATEV-Export, Einstellungen
+
+### Admin-Login
+- Komplett im Dark-Mode (passend zum restlichen Admin-Bereich)
+- cam2rent Logo mit farbiger "2", Cyan-Anmelde-Button
+
+### Beta-Feedback Admin
+- Antworten schön formatiert (Sterne, NPS-Badge, Choice-Pills, Texte) statt Raw-JSON
+- Löschen-Button pro Feedback mit Bestätigung
+
+### Test-Email Endpoint
+- `GET /api/admin/test-email?to=email@example.de` — sendet Test-Email und gibt bei Fehler konkrete Hinweise (Sandbox? Domain? API-Key?)
+
 ## Offene Punkte
 - ~~Google Reviews: erledigt — Places API (New) eingebunden~~
 - SQL-Migration `supabase-zubehoer-verfuegbarkeit.sql` ist erledigt (verschoben in `erledigte supabase/`)
@@ -468,3 +514,7 @@ Jede Buchungsbestätigung enthält automatisch als PDF-Anhang:
 - SQL-Migration `supabase-product-units.sql` muss in Supabase ausgeführt werden (product_units Tabelle + unit_id in bookings)
 - Bestehende Kameras brauchen Seriennummern (im Kamera-Editor unter "Kameras / Seriennummern" anlegen)
 - **Sicherheit:** API-Keys rotieren (wurden in einer Session öffentlich geteilt)
+- **Go-Live:** `TEST_MODE = false` in `lib/contracts/contract-template.tsx` setzen
+- **Go-Live:** Stripe auf Live-Keys umstellen
+- **Go-Live:** Domain test.cam2rent.de → cam2rent.de
+- **Go-Live:** Resend Domain verifizieren (DKIM + SPF)
