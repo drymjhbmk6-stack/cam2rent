@@ -1,76 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
-import sharp from 'sharp';
+import { processSetImage } from '@/lib/image-processing';
 
 const BUCKET = 'product-images';
 const MAX_SIZE = 10 * 1024 * 1024;
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
-const TARGET_WIDTH = 1200;
-const TARGET_HEIGHT = 900;
-
-/**
- * Verarbeitet ein Set-Bild:
- * 1. Skaliert auf 1200x900 (4:3) mit weißem Hintergrund
- * 2. Fügt Set-Name als Wasserzeichen unten mittig hinzu
- * 3. Konvertiert zu WebP
- */
-async function processSetImage(inputBuffer: Buffer, setName: string): Promise<Buffer> {
-  const metadata = await sharp(inputBuffer).metadata();
-  const origWidth = metadata.width || TARGET_WIDTH;
-  const origHeight = metadata.height || TARGET_HEIGHT;
-
-  // Skalierung: Bild muss in 1200x900 passen
-  const scale = Math.min(TARGET_WIDTH / origWidth, TARGET_HEIGHT / origHeight);
-  const resizedWidth = Math.round(origWidth * scale);
-  const resizedHeight = Math.round(origHeight * scale);
-
-  const resized = await sharp(inputBuffer)
-    .resize(resizedWidth, resizedHeight, { fit: 'inside', withoutEnlargement: false })
-    .toBuffer();
-
-  // Set-Name als Wasserzeichen (unten mittig)
-  const fontSize = 32;
-  const padding = 24;
-  // HTML-Entities escapen
-  const safeName = setName.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
-  const watermarkSvg = Buffer.from(`
-    <svg width="${TARGET_WIDTH}" height="${TARGET_HEIGHT}">
-      <style>
-        .set-name {
-          font-family: sans-serif;
-          font-weight: 700;
-          font-size: ${fontSize}px;
-          fill: rgba(0, 0, 0, 0.55);
-          letter-spacing: 0.5px;
-        }
-      </style>
-      <text x="${TARGET_WIDTH / 2}" y="${TARGET_HEIGHT - padding}" text-anchor="middle" class="set-name">${safeName}</text>
-    </svg>
-  `);
-
-  const result = await sharp({
-    create: {
-      width: TARGET_WIDTH,
-      height: TARGET_HEIGHT,
-      channels: 3,
-      background: { r: 255, g: 255, b: 255 },
-    },
-  })
-    .composite([
-      { input: resized, gravity: 'centre' },
-      { input: watermarkSvg, gravity: 'south' },
-    ])
-    .webp({ quality: 85 })
-    .toBuffer();
-
-  return result;
-}
-
 /**
  * POST /api/set-images
- * Lädt ein Set-Bild hoch mit Set-Name als Wasserzeichen.
+ * Lädt ein Set-Bild hoch mit Set-Name als Wasserzeichen unten mittig.
  * FormData: setId, setName, file
  */
 export async function POST(req: NextRequest) {
@@ -93,7 +31,6 @@ export async function POST(req: NextRequest) {
     }
 
     const supabase = createServiceClient();
-
     const inputBuffer = Buffer.from(await file.arrayBuffer());
     const processedBuffer = await processSetImage(inputBuffer, setName);
 
