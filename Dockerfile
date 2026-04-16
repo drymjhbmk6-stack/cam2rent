@@ -42,6 +42,9 @@ COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
+# Sharp separat installieren (wird aus Build-Tracing ausgeschlossen wegen RAM)
+RUN npm install --no-save sharp@0.34.5 2>/dev/null || true
+
 USER nextjs
 
 EXPOSE 3000
