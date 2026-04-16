@@ -36,13 +36,19 @@ export async function GET(req: NextRequest) {
         ? (configData.value as Record<string, AdminProduct>)
         : {};
 
-    // Buchungen im Zeitraum laden (nur relevante Status)
+    // Buchungen im Zeitraum laden (alle aktiven/abgeschlossenen Status)
     const { data: bookings } = await supabase
       .from('bookings')
       .select('id, product_id, product_name, rental_from, rental_to, status, price_total')
-      .in('status', ['completed', 'shipped', 'confirmed', 'returned'])
+      .in('status', ['confirmed', 'shipped', 'picked_up', 'completed'])
       .lte('rental_from', periodEndStr)
       .gte('rental_to', periodStartStr);
+
+    // Anzahl Units pro Produkt (für korrekte Auslastung)
+    const { data: allUnits } = await supabase
+      .from('product_units')
+      .select('product_id, status')
+      .neq('status', 'retired');
 
     // Pro Produkt aggregieren
     const productResults: Array<{
@@ -89,7 +95,10 @@ export async function GET(req: NextRequest) {
         totalDuration += fullDuration;
       }
 
-      const utilization = days > 0 ? Math.min(100, (totalBookedDays / days) * 100) : 0;
+      // Anzahl verfügbarer Units für dieses Produkt (mindestens 1)
+      const unitCount = (allUnits ?? []).filter(u => u.product_id === product.id).length || 1;
+      // Auslastung = gebuchte Tage / (verfügbare Tage × Anzahl Units)
+      const utilization = days > 0 ? Math.min(100, (totalBookedDays / (days * unitCount)) * 100) : 0;
       const avgDuration = productBookings.length > 0 ? Math.round(totalDuration / productBookings.length) : 0;
 
       productResults.push({
