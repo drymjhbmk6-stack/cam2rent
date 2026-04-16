@@ -68,8 +68,8 @@ export async function GET(
 
 /**
  * PATCH /api/admin/booking/[id]
- * Body: { status: string }
- * Aktualisiert den Buchungsstatus.
+ * Body: { status?: string, customer_email?: string }
+ * Aktualisiert den Buchungsstatus oder Kundendaten.
  */
 export async function PATCH(
   req: NextRequest,
@@ -77,30 +77,38 @@ export async function PATCH(
 ) {
   const { id } = await params;
   const body = await req.json();
-  const { status, cancellation_reason } = body as { status?: string; cancellation_reason?: string };
-
-  if (!status) {
-    return NextResponse.json({ error: 'Status erforderlich.' }, { status: 400 });
-  }
-
-  const allowed = ['pending_verification', 'awaiting_payment', 'confirmed', 'shipped', 'picked_up', 'completed', 'cancelled', 'damaged'];
-  if (!allowed.includes(status)) {
-    return NextResponse.json({ error: 'Ungültiger Status.' }, { status: 400 });
-  }
+  const { status, cancellation_reason, customer_email } = body as { status?: string; cancellation_reason?: string; customer_email?: string };
 
   const supabase = createServiceClient();
+  const updates: Record<string, unknown> = {};
 
-  const updates: Record<string, unknown> = { status };
+  // E-Mail aktualisieren
+  if (customer_email !== undefined) {
+    updates.customer_email = customer_email || null;
+  }
 
-  // Bei Stornierung: Grund in Notizen speichern
-  if (status === 'cancelled' && cancellation_reason) {
-    const { data: existing } = await supabase
-      .from('bookings')
-      .select('notes')
-      .eq('id', id)
-      .maybeSingle();
-    const existingNotes = existing?.notes ? `${existing.notes} | ` : '';
-    updates.notes = `${existingNotes}Stornierungsgrund: ${cancellation_reason}`;
+  // Status aktualisieren
+  if (status) {
+    const allowed = ['pending_verification', 'awaiting_payment', 'confirmed', 'shipped', 'picked_up', 'completed', 'cancelled', 'damaged'];
+    if (!allowed.includes(status)) {
+      return NextResponse.json({ error: 'Ungültiger Status.' }, { status: 400 });
+    }
+    updates.status = status;
+
+    // Bei Stornierung: Grund in Notizen speichern
+    if (status === 'cancelled' && cancellation_reason) {
+      const { data: existing } = await supabase
+        .from('bookings')
+        .select('notes')
+        .eq('id', id)
+        .maybeSingle();
+      const existingNotes = existing?.notes ? `${existing.notes} | ` : '';
+      updates.notes = `${existingNotes}Stornierungsgrund: ${cancellation_reason}`;
+    }
+  }
+
+  if (Object.keys(updates).length === 0) {
+    return NextResponse.json({ error: 'Keine Änderungen.' }, { status: 400 });
   }
 
   const { error } = await supabase
@@ -109,8 +117,8 @@ export async function PATCH(
     .eq('id', id);
 
   if (error) {
-    console.error('Status update error:', error);
-    return NextResponse.json({ error: 'Status konnte nicht aktualisiert werden.' }, { status: 500 });
+    console.error('Booking update error:', error);
+    return NextResponse.json({ error: 'Aktualisierung fehlgeschlagen.' }, { status: 500 });
   }
 
   return NextResponse.json({ success: true });

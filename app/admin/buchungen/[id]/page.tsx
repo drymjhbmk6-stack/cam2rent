@@ -155,6 +155,9 @@ export default function BuchungDetailPage() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
   const [deleteError, setDeleteError] = useState('');
+  const [editingEmail, setEditingEmail] = useState(false);
+  const [emailDraft, setEmailDraft] = useState('');
+  const [emailSaving, setEmailSaving] = useState(false);
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [emailSending, setEmailSending] = useState(false);
   const [emailToast, setEmailToast] = useState<{ msg: string; type: 'ok' | 'err' } | null>(null);
@@ -780,12 +783,74 @@ export default function BuchungDetailPage() {
             <Section title="Kundendaten">
               <div className="space-y-3">
                 <InfoRow label="Name" value={booking.customer_name || customer?.full_name || '\u2013'} />
-                {(booking.customer_email || customer?.email) && (
-                  <div>
-                    <p className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider mb-1">E-Mail</p>
-                    <a href={`mailto:${booking.customer_email || customer?.email}`} className="text-sm font-body text-accent-blue hover:underline">{booking.customer_email || customer?.email}</a>
-                  </div>
-                )}
+                <div>
+                  <p className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider mb-1">E-Mail</p>
+                  {editingEmail ? (
+                    <div className="flex gap-2 items-center">
+                      <input
+                        type="email"
+                        value={emailDraft}
+                        onChange={e => setEmailDraft(e.target.value)}
+                        placeholder="E-Mail eingeben"
+                        className="flex-1 px-2.5 py-1.5 text-sm font-body rounded-lg border border-brand-border bg-brand-card text-brand-black focus:outline-none focus:border-accent-cyan"
+                        autoFocus
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            (async () => {
+                              setEmailSaving(true);
+                              try {
+                                const res = await fetch(`/api/admin/booking/${booking.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ customer_email: emailDraft.trim() }) });
+                                if (!res.ok) throw new Error('Fehler');
+                                setBooking({ ...booking, customer_email: emailDraft.trim() || null });
+                                setEditingEmail(false);
+                              } catch { alert('E-Mail konnte nicht gespeichert werden.'); }
+                              finally { setEmailSaving(false); }
+                            })();
+                          }
+                          if (e.key === 'Escape') setEditingEmail(false);
+                        }}
+                      />
+                      <button
+                        onClick={async () => {
+                          setEmailSaving(true);
+                          try {
+                            const res = await fetch(`/api/admin/booking/${booking.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ customer_email: emailDraft.trim() }) });
+                            if (!res.ok) throw new Error('Fehler');
+                            setBooking({ ...booking, customer_email: emailDraft.trim() || null });
+                            setEditingEmail(false);
+                          } catch { alert('E-Mail konnte nicht gespeichert werden.'); }
+                          finally { setEmailSaving(false); }
+                        }}
+                        disabled={emailSaving}
+                        className="px-2.5 py-1.5 text-xs font-heading font-semibold rounded-lg bg-accent-cyan text-white hover:bg-accent-cyan/80 disabled:opacity-40"
+                      >
+                        {emailSaving ? '...' : 'OK'}
+                      </button>
+                      <button
+                        onClick={() => setEditingEmail(false)}
+                        className="px-2.5 py-1.5 text-xs font-heading font-semibold rounded-lg bg-brand-border text-brand-muted hover:bg-brand-border/80"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      {(booking.customer_email || customer?.email) ? (
+                        <a href={`mailto:${booking.customer_email || customer?.email}`} className="text-sm font-body text-accent-blue hover:underline">{booking.customer_email || customer?.email}</a>
+                      ) : (
+                        <span className="text-sm font-body text-brand-muted">–</span>
+                      )}
+                      <button
+                        onClick={() => { setEmailDraft(booking.customer_email || customer?.email || ''); setEditingEmail(true); }}
+                        className="text-brand-muted hover:text-accent-cyan transition-colors"
+                        title="E-Mail bearbeiten"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                      </button>
+                    </div>
+                  )}
+                </div>
                 {customer?.phone && <InfoRow label="Telefon" value={customer.phone} />}
                 {customer?.address_street && (
                   <div>
