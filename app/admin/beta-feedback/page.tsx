@@ -22,6 +22,74 @@ const STAR_QUESTIONS = [
   { id: 'q_texts', label: 'Texte' },
 ];
 
+// Alle Fragen mit Labels + Typ für die Detail-Anzeige
+const ALL_QUESTIONS: { id: string; label: string; type: 'stars' | 'nps' | 'text' | 'choice' }[] = [
+  { id: 'q_design', label: 'Wie gefällt dir das Design insgesamt?', type: 'stars' },
+  { id: 'q_trust', label: 'Wie vertrauenswürdig wirkt die Seite auf dich?', type: 'stars' },
+  { id: 'q_first_feeling', label: 'Was war dein erster Gedanke beim Öffnen?', type: 'choice' },
+  { id: 'q_nav_ease', label: 'Wie einfach war es, sich auf der Seite zurechtzufinden?', type: 'stars' },
+  { id: 'q_mobile', label: 'Auf welchem Gerät testest du hauptsächlich?', type: 'choice' },
+  { id: 'q_nav_issues', label: 'Gab es Stellen, wo du nicht weiterwusstest?', type: 'text' },
+  { id: 'q_product_info', label: 'Waren die Produktinfos ausreichend und verständlich?', type: 'stars' },
+  { id: 'q_booking_ease', label: 'Wie einfach war der Buchungsvorgang?', type: 'stars' },
+  { id: 'q_pricing', label: 'Wie empfindest du die Preise?', type: 'choice' },
+  { id: 'q_texts', label: 'Sind die Texte verständlich und hilfreich?', type: 'stars' },
+  { id: 'q_missing_info', label: 'Hat dir irgendeine Information gefehlt?', type: 'choice' },
+  { id: 'q_recommend', label: 'Wie wahrscheinlich würdest du cam2rent an Freunde weiterempfehlen?', type: 'nps' },
+  { id: 'q_best', label: 'Was gefällt dir am besten an cam2rent?', type: 'text' },
+  { id: 'q_worst', label: 'Was sollten wir unbedingt verbessern?', type: 'text' },
+  { id: 'q_idea', label: 'Hast du eine Idee oder einen Wunsch?', type: 'text' },
+];
+
+function renderAnswer(value: unknown, type: 'stars' | 'nps' | 'text' | 'choice') {
+  if (value === null || value === undefined || value === '') {
+    return <span className="text-slate-600 italic">— keine Antwort —</span>;
+  }
+
+  if (type === 'stars' && typeof value === 'number') {
+    return (
+      <div className="flex items-center gap-2">
+        <span className="text-amber-400 text-base">{'★'.repeat(value)}{'☆'.repeat(5 - value)}</span>
+        <span className="text-xs text-slate-400">{value} / 5</span>
+      </div>
+    );
+  }
+
+  if (type === 'nps' && typeof value === 'number') {
+    const color = value >= 9 ? '#10b981' : value >= 7 ? '#f59e0b' : '#ef4444';
+    const label = value >= 9 ? 'Promoter' : value >= 7 ? 'Passiv' : 'Kritiker';
+    return (
+      <div className="flex items-center gap-2">
+        <span className="px-2 py-0.5 rounded-full text-xs font-semibold" style={{ background: `${color}20`, color }}>
+          {value} / 10
+        </span>
+        <span className="text-xs" style={{ color }}>{label}</span>
+      </div>
+    );
+  }
+
+  if (type === 'choice' && Array.isArray(value)) {
+    if (value.length === 0) return <span className="text-slate-600 italic">— keine Auswahl —</span>;
+    return (
+      <div className="flex flex-wrap gap-1.5">
+        {value.map((v, i) => (
+          <span key={i} className="px-2 py-0.5 rounded-full text-xs bg-cyan-900/40 text-cyan-300">{String(v)}</span>
+        ))}
+      </div>
+    );
+  }
+
+  if (type === 'choice' && typeof value === 'string') {
+    return <span className="px-2 py-0.5 rounded-full text-xs bg-cyan-900/40 text-cyan-300">{value}</span>;
+  }
+
+  if (type === 'text' && typeof value === 'string') {
+    return <p className="text-sm text-slate-200 whitespace-pre-wrap">{value}</p>;
+  }
+
+  return <span className="text-sm text-slate-300">{String(value)}</span>;
+}
+
 export default function BetaFeedbackAdmin() {
   const [feedbacks, setFeedbacks] = useState<Feedback[]>([]);
   const [loading, setLoading] = useState(true);
@@ -193,10 +261,31 @@ export default function BetaFeedbackAdmin() {
                     <span className="text-xs text-slate-500">{new Date(f.created_at).toLocaleDateString('de-DE')}</span>
                   </button>
                   {expandedId === f.id && (
-                    <div className="px-5 pb-4">
-                      <pre className="text-xs text-slate-400 bg-black/30 rounded-lg p-3 overflow-auto max-h-60">
-                        {JSON.stringify(f.answers, null, 2)}
-                      </pre>
+                    <div className="px-5 pb-5 space-y-3">
+                      {ALL_QUESTIONS.map((q) => {
+                        const val = f.answers?.[q.id];
+                        const hasAnswer = val !== null && val !== undefined && val !== '' && !(Array.isArray(val) && val.length === 0);
+                        return (
+                          <div key={q.id} className="rounded-lg p-3" style={{ background: '#0a0f1e', border: '1px solid #1e293b' }}>
+                            <p className="text-xs font-heading font-semibold text-slate-400 mb-1.5">{q.label}</p>
+                            <div>
+                              {hasAnswer ? renderAnswer(val, q.type) : <span className="text-slate-600 italic text-xs">— keine Antwort —</span>}
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {/* Zusätzliche Felder aus answers die nicht in ALL_QUESTIONS stehen */}
+                      {Object.keys(f.answers ?? {}).filter(k => !ALL_QUESTIONS.find(q => q.id === k)).length > 0 && (
+                        <details className="rounded-lg p-3" style={{ background: '#0a0f1e', border: '1px solid #1e293b' }}>
+                          <summary className="text-xs text-slate-500 cursor-pointer">Weitere Daten (Rohformat)</summary>
+                          <pre className="text-xs text-slate-400 mt-2 overflow-auto">
+                            {JSON.stringify(
+                              Object.fromEntries(Object.entries(f.answers ?? {}).filter(([k]) => !ALL_QUESTIONS.find(q => q.id === k))),
+                              null, 2
+                            )}
+                          </pre>
+                        </details>
+                      )}
                     </div>
                   )}
                 </div>
