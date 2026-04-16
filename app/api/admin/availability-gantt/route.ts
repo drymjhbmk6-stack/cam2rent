@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
     supabase
       .from('bookings')
       .select('id, product_id, product_name, rental_from, rental_to, days, status, delivery_mode, customer_name, unit_id, accessories')
-      .in('status', ['confirmed', 'shipped', 'active'])
+      .in('status', ['confirmed', 'shipped', 'picked_up', 'completed'])
       .lte('rental_from', extLast)
       .gte('rental_to', extFirst),
     supabase
