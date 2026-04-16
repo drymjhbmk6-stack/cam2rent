@@ -136,19 +136,41 @@ export default function AdminVerfuegbarkeitPage() {
 
   useEffect(() => { loadGantt(); }, [loadGantt]);
 
-  // Zum heutigen Tag scrollen nach Laden
+  // Zum heutigen Tag scrollen — alle overflow-Container gleichzeitig
   const scrolledToToday = useRef(false);
   useEffect(() => {
-    if (!ganttLoading && ganttData && todayColRef.current && !scrolledToToday.current) {
+    if (!ganttLoading && ganttData && !scrolledToToday.current) {
       scrolledToToday.current = true;
       setTimeout(() => {
-        todayColRef.current?.scrollIntoView({ inline: 'center', behavior: 'auto' });
-      }, 100);
+        scrollToTodayAll();
+      }, 200);
     }
   }, [ganttLoading, ganttData]);
 
+  function scrollToTodayAll() {
+    // Alle Zellen mit dem heutigen Datum finden (über data-attribute)
+    const todayCells = document.querySelectorAll('[data-today="true"]');
+    const scrollContainers = document.querySelectorAll('[data-gantt-scroll]');
+
+    // Jeden Scroll-Container zum heutigen Tag zentrieren
+    scrollContainers.forEach((container) => {
+      const todayCell = container.querySelector('[data-today="true"]') as HTMLElement | null;
+      if (todayCell) {
+        const containerRect = container.getBoundingClientRect();
+        const cellRect = todayCell.getBoundingClientRect();
+        const scrollLeft = container.scrollLeft + (cellRect.left - containerRect.left) - (containerRect.width / 2) + (cellRect.width / 2);
+        container.scrollTo({ left: Math.max(0, scrollLeft), behavior: 'smooth' });
+      }
+    });
+
+    // Falls keine Container gefunden, Fallback auf scrollIntoView
+    if (scrollContainers.length === 0 && todayCells.length > 0) {
+      todayCells[0]?.scrollIntoView({ inline: 'center', behavior: 'smooth' });
+    }
+  }
+
   function scrollToToday() {
-    todayColRef.current?.scrollIntoView({ inline: 'center', behavior: 'smooth' });
+    scrollToTodayAll();
   }
 
   // ISO-Kalenderwoche berechnen
@@ -470,7 +492,7 @@ export default function AdminVerfuegbarkeitPage() {
 
                     {/* Gantt-Tabelle */}
                     {isExpanded && (
-                      <div className="overflow-x-auto" style={{ borderTop: '1px solid #1e293b' }}>
+                      <div className="overflow-x-auto" data-gantt-scroll style={{ borderTop: '1px solid #1e293b' }}>
                         {product.units.length === 0 ? (
                           <div className="px-4 py-6 text-center text-xs" style={{ color: '#64748b' }}>
                             Noch keine Kameras mit Seriennummern angelegt.
@@ -521,7 +543,7 @@ export default function AdminVerfuegbarkeitPage() {
                                   const weekBg = kwIdx % 2 === 0 ? '#0f172a' : '#131c2e';
                                   return (
                                     <th key={d.dateStr}
-                                      ref={d.isToday ? todayColRef : undefined}
+                                      data-today={d.isToday || undefined}
                                       className="text-center px-0 py-1 font-heading font-semibold"
                                       style={{
                                         color: d.isToday ? '#f59e0b' : d.isWeekend ? '#475569' : '#64748b',
@@ -630,7 +652,7 @@ export default function AdminVerfuegbarkeitPage() {
                     <span className="text-xs font-body" style={{ color: '#64748b' }}>({acc.available_qty} Stück)</span>
                     <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold" style={{ background: '#1e293b', color: '#94a3b8' }}>{acc.category}</span>
                   </div>
-                  <div className="overflow-x-auto" style={{ borderTop: '1px solid #1e293b' }}>
+                  <div className="overflow-x-auto" data-gantt-scroll style={{ borderTop: '1px solid #1e293b' }}>
                     <table className="w-full text-[11px]" style={{ minWidth: `${80 + days.length * 36}px`, borderCollapse: 'collapse' }}>
                       <thead>
                         <tr>
@@ -645,7 +667,7 @@ export default function AdminVerfuegbarkeitPage() {
                         <tr style={{ borderBottom: '1px solid #1e293b' }}>
                           <th className="sticky left-0 z-10" style={{ background: '#0f172a' }}></th>
                           {days.map((d) => (
-                            <th key={d.dateStr} className="text-center px-0 py-1 font-heading font-semibold"
+                            <th key={d.dateStr} data-today={d.isToday || undefined} className="text-center px-0 py-1 font-heading font-semibold"
                               style={{ color: d.isToday ? '#f59e0b' : d.isWeekend ? '#475569' : '#64748b', minWidth: '34px', borderBottom: d.isToday ? '2px solid #f59e0b' : '1px solid #1e293b' }}>
                               <div className="text-[9px]">{d.dayName}</div>
                               <div style={{ fontWeight: d.isToday ? 800 : 600 }}>{d.day}</div>
@@ -727,7 +749,7 @@ export default function AdminVerfuegbarkeitPage() {
                     {s.badge && <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold" style={{ background: '#1e293b', color: '#94a3b8' }}>{s.badge}</span>}
                     <span className="text-xs font-body" style={{ color: '#64748b' }}>({s.bookings.length} Buchungen)</span>
                   </div>
-                  <div className="overflow-x-auto" style={{ borderTop: '1px solid #1e293b' }}>
+                  <div className="overflow-x-auto" data-gantt-scroll style={{ borderTop: '1px solid #1e293b' }}>
                     <table className="w-full text-[11px]" style={{ minWidth: `${80 + days.length * 36}px`, borderCollapse: 'collapse' }}>
                       <thead>
                         <tr>
@@ -742,7 +764,7 @@ export default function AdminVerfuegbarkeitPage() {
                         <tr style={{ borderBottom: '1px solid #1e293b' }}>
                           <th className="sticky left-0 z-10" style={{ background: '#0f172a' }}></th>
                           {days.map((d) => (
-                            <th key={d.dateStr} className="text-center px-0 py-1 font-heading font-semibold"
+                            <th key={d.dateStr} data-today={d.isToday || undefined} className="text-center px-0 py-1 font-heading font-semibold"
                               style={{ color: d.isToday ? '#f59e0b' : d.isWeekend ? '#475569' : '#64748b', minWidth: '34px', borderBottom: d.isToday ? '2px solid #f59e0b' : '1px solid #1e293b' }}>
                               <div className="text-[9px]">{d.dayName}</div>
                               <div style={{ fontWeight: d.isToday ? 800 : 600 }}>{d.day}</div>
