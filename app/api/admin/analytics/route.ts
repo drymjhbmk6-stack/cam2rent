@@ -194,11 +194,11 @@ export async function GET(req: NextRequest) {
       .gte('created_at', since)
       .neq('status', 'cancelled');
 
-    const base = sessionsWithHome || allSessions || 1;
+    const base = allSessions || 1;
 
     return NextResponse.json({
       funnel: [
-        { step: 'Startseite besucht', count: sessionsWithHome, pct: 100 },
+        { step: 'Startseite besucht', count: sessionsWithHome, pct: Math.round((sessionsWithHome / base) * 100) },
         { step: 'Produkt angesehen', count: sessionsWithProduct, pct: Math.round((sessionsWithProduct / base) * 100) },
         { step: 'Buchung gestartet', count: sessionsWithBooking, pct: Math.round((sessionsWithBooking / base) * 100) },
         { step: 'Checkout erreicht', count: sessionsWithCheckout, pct: Math.round((sessionsWithCheckout / base) * 100) },
@@ -239,16 +239,15 @@ export async function GET(req: NextRequest) {
       ? Math.round(bookings.reduce((s, b) => s + (b.price_total ?? 0), 0) / bookings.length * 100) / 100
       : 0;
 
-    // Warenkorbabbrueche (abandoned_carts)
-    const { count: abandonedTotal } = await supabase
-      .from('abandoned_carts')
-      .select('id', { count: 'exact', head: true })
-      .gte('created_at', since30);
-    const { count: abandonedRecovered } = await supabase
-      .from('abandoned_carts')
-      .select('id', { count: 'exact', head: true })
-      .eq('recovered', true)
-      .gte('created_at', since30);
+    // Warenkorbabbrueche (Tabelle existiert ggf. nicht)
+    let abandonedTotal = 0;
+    let abandonedRecovered = 0;
+    try {
+      const { count: at } = await supabase.from('abandoned_carts').select('id', { count: 'exact', head: true }).gte('created_at', since30);
+      const { count: ar } = await supabase.from('abandoned_carts').select('id', { count: 'exact', head: true }).eq('recovered', true).gte('created_at', since30);
+      abandonedTotal = at ?? 0;
+      abandonedRecovered = ar ?? 0;
+    } catch { /* Tabelle existiert nicht — ignorieren */ }
 
     // Neue Kunden letzter 30 Tage
     const newCustomers30d = [...customerMap.values()].filter((c) => c.first >= since30).length;
@@ -280,7 +279,7 @@ export async function GET(req: NextRequest) {
 
     const { data: bookingData } = await supabase
       .from('bookings')
-      .select('product_id, total_price, rental_start, rental_end, status')
+      .select('product_id, product_name, price_total, rental_from, rental_to, status')
       .gte('created_at', since)
       .neq('status', 'cancelled');
 
@@ -293,30 +292,45 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Count bookings & revenue per product
-    const bookingMap = new Map<string, { count: number; revenue: number; days: number }>();
+    // Count bookings & revenue per product (key by product_id AND slug for matching)
+    const bookingByIdMap = new Map<string, { count: number; revenue: number; days: number; name: string }>();
+    const slugToIdMap = new Map<string, string>();
     for (const row of bookingData ?? []) {
       const pid = row.product_id ?? 'unknown';
-      if (!bookingMap.has(pid)) bookingMap.set(pid, { count: 0, revenue: 0, days: 0 });
-      const b = bookingMap.get(pid)!;
+      if (!bookingByIdMap.has(pid)) bookingByIdMap.set(pid, { count: 0, revenue: 0, days: 0, name: row.product_name ?? pid });
+      const b = bookingByIdMap.get(pid)!;
       b.count++;
-      b.revenue += row.total_price ?? 0;
-      if (row.rental_start && row.rental_end) {
+      b.revenue += row.price_total ?? 0;
+      if (row.rental_from && row.rental_to) {
         const diff = Math.max(1, Math.ceil(
-          (new Date(row.rental_end).getTime() - new Date(row.rental_start).getTime()) / 86400000
+          (new Date(row.rental_to).getTime() - new Date(row.rental_from).getTime()) / 86400000
         ));
         b.days += diff;
       }
     }
 
-    // Combine: use slugs from viewMap
+    // Produkte aus admin_config laden für Slug→ID Zuordnung
+    const { data: configData } = await supabase
+      .from('admin_config')
+      .select('value')
+      .eq('key', 'products')
+      .single();
+    const productsConfig = configData?.value && typeof configData.value === 'object'
+      ? (configData.value as Record<string, { id: string; slug?: string; name: string }>)
+      : {};
+    for (const p of Object.values(productsConfig)) {
+      if (p.slug) slugToIdMap.set(p.slug, p.id);
+    }
+
+    // Combine: views per slug + bookings per product_id
     const products = Array.from(viewMap.entries())
       .sort((a, b) => b[1] - a[1])
       .slice(0, 10)
       .map(([slug, views]) => {
-        const booking = bookingMap.get(slug) ?? { count: 0, revenue: 0, days: 0 };
+        const productId = slugToIdMap.get(slug);
+        const booking = productId ? (bookingByIdMap.get(productId) ?? { count: 0, revenue: 0, days: 0, name: slug }) : { count: 0, revenue: 0, days: 0, name: slug };
         const utilization = Math.min(100, Math.round((booking.days / 30) * 100));
-        return { slug, views, bookings: booking.count, revenue: booking.revenue, utilization };
+        return { slug, name: booking.name, views, bookings: booking.count, revenue: booking.revenue, utilization };
       });
 
     return NextResponse.json({ products });
@@ -403,17 +417,17 @@ export async function GET(req: NextRequest) {
 
     const { data: todayBookings } = await supabase
       .from('bookings')
-      .select('total_price, created_at')
+      .select('price_total, created_at')
       .gte('created_at', todayStart.toISOString())
       .neq('status', 'cancelled');
 
     const { data: allBookings } = await supabase
       .from('bookings')
-      .select('total_price, created_at')
+      .select('price_total, created_at')
       .gte('created_at', since30)
       .neq('status', 'cancelled');
 
-    const todayRevenue = (todayBookings ?? []).reduce((s, b) => s + (b.total_price ?? 0), 0);
+    const todayRevenue = (todayBookings ?? []).reduce((s, b) => s + (b.price_total ?? 0), 0);
     const todayCount = (todayBookings ?? []).length;
 
     // Booking trend: per day
@@ -423,7 +437,7 @@ export async function GET(req: NextRequest) {
       if (!dayMap.has(day)) dayMap.set(day, { count: 0, revenue: 0 });
       const d = dayMap.get(day)!;
       d.count++;
-      d.revenue += row.total_price ?? 0;
+      d.revenue += row.price_total ?? 0;
     }
     const trend = Array.from(dayMap.entries())
       .sort((a, b) => a[0].localeCompare(b[0]))

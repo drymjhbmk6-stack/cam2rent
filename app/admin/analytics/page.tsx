@@ -146,16 +146,19 @@ function BarChart({ data, color = C.cyan, height = 80 }: { data: number[]; color
 
 function HourlyChart({ data }: { data: number[] }) {
   const max = Math.max(...data, 1);
-  const h = 100;
+  const h = 120;
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: h }}>
         {data.map((v, i) => (
-          <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0 }}>
+          <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+            {v > 0 && (
+              <div style={{ fontSize: 9, fontWeight: 700, color: C.cyan, lineHeight: 1 }}>{v}</div>
+            )}
             <div
               style={{
                 width: '100%',
-                height: Math.max(2, (v / max) * h),
+                height: Math.max(2, (v / max) * (h - 16)),
                 background: `linear-gradient(180deg, ${C.cyan}, ${C.cyan}55)`,
                 borderRadius: '3px 3px 0 0',
               }}
