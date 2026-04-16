@@ -450,16 +450,11 @@ export default function AdminSetsPage() {
               return (
                 <div key={set.id} className="bg-white dark:bg-slate-800/60 rounded-xl border border-brand-border dark:border-slate-700 overflow-hidden">
                   {/* Row */}
-                  <div className="flex items-center justify-between px-5 py-4">
-                    <div className="flex items-center gap-3 min-w-0 flex-wrap">
+                  <div className="px-5 py-4 space-y-3">
+                    {/* Zeile 1: Name + Badges */}
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-heading font-semibold text-sm text-brand-black dark:text-slate-200">{set.name}</span>
-                      {set.badge && (
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-heading font-semibold ${set.badgeColor}`}>
-                          {set.badge}
-                        </span>
-                      )}
                       <AvailBadge set={set} />
-                      {/* Kompatible Kameras */}
                       {set.product_ids?.length > 0 ? (
                         set.product_ids.map((pid) => {
                           const p = products[pid];
@@ -470,10 +465,16 @@ export default function AdminSetsPage() {
                       ) : (
                         <span className="text-[10px] font-body text-brand-muted">Alle Kameras</span>
                       )}
+                      {set.badge && (
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-heading font-semibold ${set.badgeColor}`}>
+                          {set.badge}
+                        </span>
+                      )}
                       {savedId === set.id && <span className="text-xs text-green-600 font-body">Gespeichert</span>}
                     </div>
-                    <div className="flex items-center gap-3 shrink-0">
-                      <span className="text-sm font-heading font-semibold text-brand-black dark:text-slate-200 hidden sm:block">
+                    {/* Zeile 2: Preis + Aktionen */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-heading font-semibold text-brand-black dark:text-slate-200 mr-auto">
                         {set.price} € {set.pricingMode === 'perDay' ? '/Tag' : 'einmalig'}
                       </span>
                       <button
