@@ -160,6 +160,12 @@ export default function ProductAccessorySets({ productId }: { productId: string 
                   </button>
                   {openSetId === set.id && (
                     <div className="px-4 pb-3 pt-1 border-t border-brand-border dark:border-gray-700">
+                      {set.image_url && (
+                        <div className="mb-3">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={set.image_url} alt={set.name} className="w-full rounded-lg object-contain bg-white" style={{ aspectRatio: '4/3' }} />
+                        </div>
+                      )}
                       {set.includedItems.length > 0 ? (
                         <ul className="space-y-1">
                           {set.includedItems.map((item, i) => (

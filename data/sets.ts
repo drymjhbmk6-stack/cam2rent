@@ -22,6 +22,8 @@ export interface RentalSet {
   pricingMode: 'perDay' | 'flat';
   price: number;
   available: boolean;
+  /** Set-Bild URL (optional) */
+  image_url?: string | null;
 }
 
 // ─── Statische Set-Definitionen ───────────────────────────────────────────────

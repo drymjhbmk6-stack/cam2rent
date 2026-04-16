@@ -968,6 +968,10 @@ export default function BuchenPage() {
                               <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${isSelected ? 'border-accent-blue' : 'border-brand-border'}`}>
                                 {isSelected && <div className="w-2 h-2 rounded-full bg-accent-blue" />}
                               </div>
+                              {set.image_url && (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={set.image_url} alt={set.name} className="w-16 h-12 object-contain rounded-lg bg-white border border-brand-border flex-shrink-0" />
+                              )}
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2">
                                   <span className="font-heading font-semibold text-sm text-brand-black">{set.name}</span>
