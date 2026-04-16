@@ -58,18 +58,18 @@ export default function AdminLoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-brand-bg flex items-center justify-center px-4">
+    <div className="min-h-screen flex items-center justify-center px-4" style={{ background: '#0A0A0A' }}>
       <div className="w-full max-w-sm">
         {/* Logo/Brand */}
         <div className="text-center mb-8">
-          <span className="font-heading font-bold text-2xl text-brand-black tracking-tight">
-            cam2rent
+          <span className="font-heading font-bold text-2xl tracking-tight" style={{ color: '#e2e8f0' }}>
+            cam<span style={{ color: '#06b6d4' }}>2</span>rent
           </span>
-          <p className="text-sm font-body text-brand-muted mt-1">Admin-Bereich</p>
+          <p className="text-sm font-body mt-1" style={{ color: '#64748b' }}>Admin-Bereich</p>
         </div>
 
-        <div className="bg-white rounded-2xl border border-brand-border shadow-sm p-8">
-          <h1 className="font-heading font-bold text-xl text-brand-black mb-6">
+        <div className="rounded-2xl border p-8" style={{ background: '#111827', borderColor: '#1e293b' }}>
+          <h1 className="font-heading font-bold text-xl mb-6" style={{ color: '#e2e8f0' }}>
             Anmelden
           </h1>
 
@@ -77,7 +77,8 @@ export default function AdminLoginPage() {
             <div>
               <label
                 htmlFor="password"
-                className="block text-sm font-heading font-semibold text-brand-black mb-2"
+                className="block text-sm font-heading font-semibold mb-2"
+                style={{ color: '#e2e8f0' }}
               >
                 Passwort
               </label>
@@ -90,7 +91,8 @@ export default function AdminLoginPage() {
                 required
                 autoFocus={!needs2FA}
                 disabled={needs2FA}
-                className="w-full px-4 py-3 border border-brand-border rounded-[10px] text-sm font-body text-brand-black placeholder:text-brand-muted focus:outline-none focus:ring-2 focus:ring-accent-blue focus:border-transparent disabled:bg-gray-50 disabled:text-brand-muted"
+                className="w-full px-4 py-3 rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-50"
+                style={{ background: '#0f172a', border: '1px solid #1e293b', color: '#e2e8f0' }}
               />
             </div>
 
@@ -99,7 +101,8 @@ export default function AdminLoginPage() {
               <div>
                 <label
                   htmlFor="totpCode"
-                  className="block text-sm font-heading font-semibold text-brand-black mb-2"
+                  className="block text-sm font-heading font-semibold mb-2"
+                  style={{ color: '#e2e8f0' }}
                 >
                   2FA-Code
                 </label>
@@ -114,16 +117,17 @@ export default function AdminLoginPage() {
                   onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, ''))}
                   placeholder="6-stelliger Code"
                   required
-                  className="w-full px-4 py-3 border border-brand-border rounded-[10px] text-sm font-body text-brand-black placeholder:text-brand-muted focus:outline-none focus:ring-2 focus:ring-accent-blue focus:border-transparent text-center tracking-[0.5em] font-mono text-lg"
+                  className="w-full px-4 py-3 rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-cyan-500 text-center tracking-[0.5em] font-mono text-lg"
+                  style={{ background: '#0f172a', border: '1px solid #1e293b', color: '#e2e8f0' }}
                 />
-                <p className="text-xs font-body text-brand-muted mt-2">
+                <p className="text-xs font-body mt-2" style={{ color: '#64748b' }}>
                   Code aus deiner Authenticator-App eingeben
                 </p>
               </div>
             )}
 
             {error && (
-              <p className="text-sm font-body text-red-600 bg-red-50 rounded-lg px-3 py-2">
+              <p className="text-sm font-body rounded-lg px-3 py-2" style={{ background: '#ef444420', color: '#f87171' }}>
                 {error}
               </p>
             )}
@@ -131,11 +135,12 @@ export default function AdminLoginPage() {
             <button
               type="submit"
               disabled={loading || !password || (needs2FA && totpCode.length !== 6)}
-              className="w-full py-3 bg-brand-black text-white font-heading font-semibold text-sm rounded-btn hover:bg-brand-dark transition-colors disabled:opacity-40"
+              className="w-full py-3 font-heading font-semibold text-sm rounded-btn transition-colors disabled:opacity-40"
+              style={{ background: '#06b6d4', color: '#0f172a' }}
             >
               {loading ? (
                 <span className="flex items-center justify-center gap-2">
-                  <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
                   Wird geprüft…
                 </span>
               ) : needs2FA ? (
@@ -147,7 +152,7 @@ export default function AdminLoginPage() {
           </form>
         </div>
 
-        <p className="text-center text-xs font-body text-brand-muted mt-6">
+        <p className="text-center text-xs font-body mt-6" style={{ color: '#475569' }}>
           Nur für autorisierte Mitarbeiter
         </p>
       </div>
