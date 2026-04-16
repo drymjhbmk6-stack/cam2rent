@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useProducts } from '@/components/ProductsProvider';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 
@@ -98,19 +98,30 @@ export default function AdminVerfuegbarkeitPage() {
   const { products: shopProducts } = useProducts();
   const [tab, setTab] = useState<Tab>('kameras');
 
-  // Gantt-State
-  const now = new Date();
-  const [currentMonth, setCurrentMonth] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
+  // Gantt-State — durchgehend scrollbar (6 Monate zurück + 6 Monate voraus)
+  const MONTHS_BACK = 6;
+  const MONTHS_FORWARD = 6;
   const [ganttData, setGanttData] = useState<GanttData | null>(null);
   const [ganttLoading, setGanttLoading] = useState(true);
   const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
   const [tooltip, setTooltip] = useState<{ x: number; y: number; content: string } | null>(null);
+  const todayColRef = useRef<HTMLTableCellElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-  // Gantt-Daten laden (Kameras + Zubehör + Sets)
+  // Zeitraum berechnen
+  const { rangeFrom, rangeTo } = useMemo(() => {
+    const now = new Date();
+    const from = new Date(now.getFullYear(), now.getMonth() - MONTHS_BACK, 1);
+    const to = new Date(now.getFullYear(), now.getMonth() + MONTHS_FORWARD + 1, 0);
+    const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    return { rangeFrom: fmt(from), rangeTo: fmt(to) };
+  }, []);
+
+  // Gantt-Daten laden (gesamter Zeitraum)
   const loadGantt = useCallback(async () => {
     setGanttLoading(true);
     try {
-      const res = await fetch(`/api/admin/availability-gantt?month=${currentMonth}`);
+      const res = await fetch(`/api/admin/availability-gantt?from=${rangeFrom}&to=${rangeTo}`);
       const data = await res.json();
       setGanttData(data);
       if (data.products) {
@@ -121,19 +132,24 @@ export default function AdminVerfuegbarkeitPage() {
     } finally {
       setGanttLoading(false);
     }
-  }, [currentMonth]);
+  }, [rangeFrom, rangeTo]);
 
   useEffect(() => { loadGantt(); }, [loadGantt]);
 
-  // Monat-Navigation
-  function changeMonth(delta: number) {
-    const [y, m] = currentMonth.split('-').map(Number);
-    const d = new Date(y, m - 1 + delta, 1);
-    setCurrentMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
-  }
+  // Zum heutigen Tag scrollen nach Laden
+  const scrolledToToday = useRef(false);
+  useEffect(() => {
+    if (!ganttLoading && ganttData && todayColRef.current && !scrolledToToday.current) {
+      scrolledToToday.current = true;
+      setTimeout(() => {
+        todayColRef.current?.scrollIntoView({ inline: 'center', behavior: 'auto' });
+      }, 100);
+    }
+  }, [ganttLoading, ganttData]);
 
-  const [curYear, curMon] = currentMonth.split('-').map(Number);
-  const monthLabel = `${MONTH_NAMES[curMon - 1]} ${curYear}`;
+  function scrollToToday() {
+    todayColRef.current?.scrollIntoView({ inline: 'center', behavior: 'smooth' });
+  }
 
   // ISO-Kalenderwoche berechnen
   function getISOWeek(date: Date): number {
@@ -149,20 +165,42 @@ export default function AdminVerfuegbarkeitPage() {
     return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
   }, []);
 
-  // Tage im Monat
+  // Alle Tage im Zeitraum generieren
   const days = useMemo(() => {
     if (!ganttData) return [];
-    return Array.from({ length: ganttData.daysInMonth }, (_, i) => {
-      const day = i + 1;
-      const dateStr = `${currentMonth}-${String(day).padStart(2, '0')}`;
-      const dateObj = new Date(curYear, curMon - 1, day);
-      const dayName = DAY_NAMES[dateObj.getDay()];
-      const isWeekend = dateObj.getDay() === 0 || dateObj.getDay() === 6;
-      const kw = getISOWeek(dateObj);
-      const isToday = dateStr === todayStr;
-      return { day, dateStr, dayName, isWeekend, kw, isToday };
-    });
-  }, [ganttData, currentMonth, curYear, curMon, todayStr]);
+    const result: { day: number; dateStr: string; dayName: string; isWeekend: boolean; kw: number; isToday: boolean; month: number; year: number; isFirstOfMonth: boolean }[] = [];
+    const start = new Date(rangeFrom);
+    const end = new Date(rangeTo);
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      result.push({
+        day: d.getDate(),
+        dateStr,
+        dayName: DAY_NAMES[d.getDay()],
+        isWeekend: d.getDay() === 0 || d.getDay() === 6,
+        kw: getISOWeek(new Date(d)),
+        isToday: dateStr === todayStr,
+        month: d.getMonth(),
+        year: d.getFullYear(),
+        isFirstOfMonth: d.getDate() === 1,
+      });
+    }
+    return result;
+  }, [ganttData, rangeFrom, rangeTo, todayStr]);
+
+  // Monats-Gruppen für Top-Header
+  const monthGroups = useMemo(() => {
+    const groups: { label: string; span: number }[] = [];
+    for (const d of days) {
+      const label = `${MONTH_NAMES[d.month]} ${d.year}`;
+      if (groups.length === 0 || groups[groups.length - 1].label !== label) {
+        groups.push({ label, span: 1 });
+      } else {
+        groups[groups.length - 1].span++;
+      }
+    }
+    return groups;
+  }, [days]);
 
   // KW-Gruppen für den Header-Balken
   const kwGroups = useMemo(() => {
@@ -375,28 +413,12 @@ export default function AdminVerfuegbarkeitPage() {
       {/* ──────── Kameras Tab: Gantt-Kalender ──────── */}
       {tab === 'kameras' && (
         <>
-          {/* Monatsnavigation */}
-          <div className="flex items-center justify-center gap-2 sm:gap-4 mb-5 flex-wrap">
-            <button onClick={() => changeMonth(-1)}
-              className="px-2 sm:px-3 py-1.5 rounded-lg text-sm font-heading font-semibold transition-colors hover:bg-gray-700"
-              style={{ color: '#94a3b8', border: '1px solid #334155' }}>
-              ←
-            </button>
-            <h2 className="font-heading font-bold text-base sm:text-lg" style={{ color: 'white' }}>
-              {monthLabel}
-            </h2>
-            <button onClick={() => changeMonth(1)}
-              className="px-2 sm:px-3 py-1.5 rounded-lg text-sm font-heading font-semibold transition-colors hover:bg-gray-700"
-              style={{ color: '#94a3b8', border: '1px solid #334155' }}>
-              →
-            </button>
-            <button onClick={() => {
-              const n = new Date();
-              setCurrentMonth(`${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}`);
-            }}
-              className="px-3 py-1.5 rounded-lg text-xs font-heading font-semibold transition-colors hover:bg-gray-700 ml-auto"
-              style={{ color: '#64748b', border: '1px solid #334155' }}>
-              Heute
+          {/* Heute-Button */}
+          <div className="flex items-center justify-end mb-3">
+            <button onClick={scrollToToday}
+              className="px-3 py-1.5 rounded-lg text-xs font-heading font-semibold transition-colors hover:bg-gray-700"
+              style={{ color: '#06b6d4', border: '1px solid #334155' }}>
+              → Heute
             </button>
           </div>
 
@@ -458,14 +480,28 @@ export default function AdminVerfuegbarkeitPage() {
                             </a>
                           </div>
                         ) : (
-                          <table className="w-full text-[11px]" style={{ minWidth: `${180 + days.length * 36}px`, borderCollapse: 'collapse' }}>
+                          <table className="w-full text-[11px]" style={{ minWidth: `${180 + days.length * 34}px`, borderCollapse: 'collapse' }}>
                             <thead>
-                              {/* KW-Balken */}
+                              {/* Monats-Balken */}
                               <tr>
-                                <th rowSpan={2} className="text-left px-3 py-2 font-heading font-semibold sticky left-0 z-10"
+                                <th rowSpan={3} className="text-left px-3 py-2 font-heading font-semibold sticky left-0 z-20"
                                   style={{ color: '#64748b', background: '#0f172a', minWidth: '160px', borderBottom: '1px solid #1e293b' }}>
                                   Seriennummer
                                 </th>
+                                {monthGroups.map((g, gi) => (
+                                  <th key={`m-${g.label}`} colSpan={g.span}
+                                    className="text-center font-heading font-bold text-[10px] py-1.5"
+                                    style={{
+                                      color: '#e2e8f0',
+                                      background: gi % 2 === 0 ? '#1e293b' : '#0f172a',
+                                      borderLeft: gi > 0 ? '2px solid #334155' : 'none',
+                                    }}>
+                                    {g.label}
+                                  </th>
+                                ))}
+                              </tr>
+                              {/* KW-Balken */}
+                              <tr>
                                 {kwGroups.map((g, gi) => (
                                   <th key={`kw-${g.kw}-${gi}`} colSpan={g.span}
                                     className="text-center font-heading font-bold text-[9px] py-1"
@@ -485,12 +521,14 @@ export default function AdminVerfuegbarkeitPage() {
                                   const weekBg = kwIdx % 2 === 0 ? '#0f172a' : '#131c2e';
                                   return (
                                     <th key={d.dateStr}
+                                      ref={d.isToday ? todayColRef : undefined}
                                       className="text-center px-0 py-1 font-heading font-semibold"
                                       style={{
                                         color: d.isToday ? '#f59e0b' : d.isWeekend ? '#475569' : '#64748b',
                                         minWidth: '34px',
                                         background: weekBg,
                                         borderBottom: d.isToday ? '2px solid #f59e0b' : '1px solid #1e293b',
+                                        borderLeft: d.isFirstOfMonth ? '2px solid #334155' : 'none',
                                       }}>
                                       <div className="text-[9px]">{d.dayName}</div>
                                       <div style={{ fontWeight: d.isToday ? 800 : 600 }}>{d.day}</div>
@@ -560,12 +598,13 @@ export default function AdminVerfuegbarkeitPage() {
       {/* ──────── Zubehör Tab: Gantt ──────── */}
       {tab === 'zubehoer' && (
         <>
-          {/* Monatsnavigation (gleich wie Kameras) */}
-          <div className="flex items-center gap-4 mb-5">
-            <button onClick={() => changeMonth(-1)} className="px-3 py-1.5 rounded-lg text-sm font-heading font-semibold transition-colors hover:bg-gray-700" style={{ color: '#94a3b8', border: '1px solid #334155' }}>← Zurück</button>
-            <h2 className="font-heading font-bold text-lg" style={{ color: 'white' }}>{monthLabel}</h2>
-            <button onClick={() => changeMonth(1)} className="px-3 py-1.5 rounded-lg text-sm font-heading font-semibold transition-colors hover:bg-gray-700" style={{ color: '#94a3b8', border: '1px solid #334155' }}>Weiter →</button>
-            <button onClick={() => { const n = new Date(); setCurrentMonth(`${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}`); }} className="px-3 py-1.5 rounded-lg text-xs font-heading font-semibold transition-colors hover:bg-gray-700 ml-auto" style={{ color: '#64748b', border: '1px solid #334155' }}>Heute</button>
+          {/* Heute-Button */}
+          <div className="flex items-center justify-end mb-3">
+            <button onClick={scrollToToday}
+              className="px-3 py-1.5 rounded-lg text-xs font-heading font-semibold transition-colors hover:bg-gray-700"
+              style={{ color: '#06b6d4', border: '1px solid #334155' }}>
+              → Heute
+            </button>
           </div>
 
           {ganttLoading ? (
@@ -659,11 +698,12 @@ export default function AdminVerfuegbarkeitPage() {
       {/* ──────── Sets Tab: Gantt ──────── */}
       {tab === 'sets' && (
         <>
-          <div className="flex items-center gap-4 mb-5">
-            <button onClick={() => changeMonth(-1)} className="px-3 py-1.5 rounded-lg text-sm font-heading font-semibold transition-colors hover:bg-gray-700" style={{ color: '#94a3b8', border: '1px solid #334155' }}>← Zurück</button>
-            <h2 className="font-heading font-bold text-lg" style={{ color: 'white' }}>{monthLabel}</h2>
-            <button onClick={() => changeMonth(1)} className="px-3 py-1.5 rounded-lg text-sm font-heading font-semibold transition-colors hover:bg-gray-700" style={{ color: '#94a3b8', border: '1px solid #334155' }}>Weiter →</button>
-            <button onClick={() => { const n = new Date(); setCurrentMonth(`${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}`); }} className="px-3 py-1.5 rounded-lg text-xs font-heading font-semibold transition-colors hover:bg-gray-700 ml-auto" style={{ color: '#64748b', border: '1px solid #334155' }}>Heute</button>
+          <div className="flex items-center justify-end mb-3">
+            <button onClick={scrollToToday}
+              className="px-3 py-1.5 rounded-lg text-xs font-heading font-semibold transition-colors hover:bg-gray-700"
+              style={{ color: '#06b6d4', border: '1px solid #334155' }}>
+              → Heute
+            </button>
           </div>
 
           {ganttLoading ? (
