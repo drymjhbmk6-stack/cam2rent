@@ -127,7 +127,7 @@ export default function ProductCard({ product, imageUrl }: ProductCardProps) {
             <button
               type="button"
               onClick={handleFavorite}
-              className="p-1.5 rounded-full bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm hover:bg-white dark:hover:bg-gray-800 text-brand-steel hover:text-brand-black dark:hover:text-gray-100 transition-colors shadow-sm"
+              className="p-2.5 rounded-full bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm hover:bg-white dark:hover:bg-gray-800 text-brand-steel hover:text-brand-black dark:hover:text-gray-100 transition-colors shadow-sm"
               aria-label={wishlisted ? 'Von Wunschliste entfernen' : 'Zur Wunschliste hinzufügen'}
               aria-pressed={wishlisted}
             >
@@ -136,7 +136,7 @@ export default function ProductCard({ product, imageUrl }: ProductCardProps) {
             <button
               type="button"
               onClick={() => addToCompare(product.id)}
-              className={`p-1.5 rounded-full backdrop-blur-sm transition-colors shadow-sm ${
+              className={`p-2.5 rounded-full backdrop-blur-sm transition-colors shadow-sm ${
                 comparing
                   ? 'bg-accent-blue text-white'
                   : 'bg-white/80 dark:bg-gray-800/80 hover:bg-white dark:hover:bg-gray-800 text-brand-steel hover:text-brand-black dark:hover:text-gray-100'
