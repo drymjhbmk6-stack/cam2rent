@@ -374,12 +374,11 @@ export default function KundenDetailPage() {
             </div>
           </div>
 
-          {/* Ausweis-Verifizierung */}
-          {(customer.id_front_url || customer.id_back_url || customer.verification_status === 'pending') && (
-            <div style={{
-              background: '#111827', borderRadius: 12, border: '1px solid #1e293b',
-              padding: 24, marginBottom: 20,
-            }}>
+          {/* Ausweis-Verifizierung — immer sichtbar */}
+          <div style={{
+            background: '#111827', borderRadius: 12, border: '1px solid #1e293b',
+            padding: 24, marginBottom: 20,
+          }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
                 <h2 style={{ fontSize: 16, fontWeight: 700, color: '#e2e8f0', margin: 0 }}>
                   Ausweis-Verifizierung
@@ -481,8 +480,8 @@ export default function KundenDetailPage() {
                 </div>
               )}
 
-              {/* Verifizierungs-Buttons */}
-              {customer.verification_status !== 'verified' && (
+              {/* Verifizierungs-Buttons — nur wenn Ausweis hochgeladen oder Status pending/rejected */}
+              {customer.verification_status !== 'verified' && (customer.id_front_url || customer.id_back_url || customer.verification_status === 'pending' || customer.verification_status === 'rejected') && (
                 <div style={{ display: 'flex', gap: 12 }}>
                   <button
                     onClick={() => handleVerify('verified')}
@@ -526,7 +525,6 @@ export default function KundenDetailPage() {
                 </div>
               )}
             </div>
-          )}
 
           {/* Stats Cards */}
           {stats && (
