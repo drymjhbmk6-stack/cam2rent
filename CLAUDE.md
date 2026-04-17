@@ -583,12 +583,13 @@ Read-only Katalog aller automatisch versendeten E-Mails mit Inline-Vorschau.
 
 ## Offene Punkte
 - ~~Google Reviews: erledigt — Places API (New) eingebunden~~
-- **Neu:** SQL-Migration `supabase-widerruf-consent.sql` muss in Supabase ausgeführt werden (Spalten `bookings.early_service_consent_at` + `early_service_consent_ip` für § 356 Abs. 4 BGB Zustimmung)
-- SQL-Migration `supabase-zubehoer-verfuegbarkeit.sql` ist erledigt (verschoben in `erledigte supabase/`)
+- ~~SQL-Migration `supabase-zubehoer-verfuegbarkeit.sql` (verschoben in `erledigte supabase/`)~~
+- ~~SQL-Migration `supabase-widerruf-consent.sql` ausgeführt (Spalten `bookings.early_service_consent_at` + `early_service_consent_ip` für § 356 Abs. 4 BGB Zustimmung)~~
+- ~~SQL-Migration `supabase-product-units.sql` ausgeführt (product_units Tabelle + unit_id in bookings)~~
+- ~~SQL-Migration `supabase-unit-assignment-lock.sql` ausgeführt (race-sichere Unit-Zuweisung via `assign_free_unit` RPC)~~
 - Bestehende 6 Kameras brauchen Admin-Specs (Technische Daten im Editor anlegen)
-- SQL-Migration `supabase-product-units.sql` muss in Supabase ausgeführt werden (product_units Tabelle + unit_id in bookings)
-- **Neu:** SQL-Migration `supabase-unit-assignment-lock.sql` muss in Supabase ausgeführt werden (race-sichere Unit-Zuweisung via `assign_free_unit` RPC)
 - Bestehende Kameras brauchen Seriennummern (im Kamera-Editor unter "Kameras / Seriennummern" anlegen)
+- **Cron-Härtung optional:** `CRON_DISABLE_URL_SECRET=true` in Coolify-Env setzen + Hetzner-Crontab auf Header-Auth umstellen (`-H "x-cron-secret: $CRON_SECRET"`), damit Secrets nicht mehr in Access-Logs landen.
 - **Sicherheit:** API-Keys rotieren (wurden in einer Session öffentlich geteilt)
 - **Go-Live:** `TEST_MODE = false` in `lib/contracts/contract-template.tsx` setzen
 - **Go-Live:** Stripe auf Live-Keys umstellen
