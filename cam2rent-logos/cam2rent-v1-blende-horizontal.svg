@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 140" width="480" height="140">
+  <defs>
+    <linearGradient id="g1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1E40AF"/>
+      <stop offset="100%" stop-color="#3B82F6"/>
+    </linearGradient>
+  </defs>
+  <!-- Blende / Aperture -->
+  <g transform="translate(70,70)">
+    <circle r="46" fill="none" stroke="url(#g1)" stroke-width="4"/>
+    <g fill="url(#g1)">
+      <polygon points="0,-36 31,-18 31,18"/>
+      <polygon points="31,18 0,36 -31,18" opacity="0.85"/>
+      <polygon points="-31,18 -31,-18 0,-36" opacity="0.7"/>
+    </g>
+    <circle r="8" fill="#fff"/>
+  </g>
+  <!-- Wortmarke -->
+  <g font-family="Inter, Helvetica, Arial, sans-serif" font-weight="700">
+    <text x="140" y="82" font-size="44" fill="#0F172A" letter-spacing="-1">Cam</text>
+    <text x="232" y="82" font-size="44" fill="url(#g1)" letter-spacing="-1">2</text>
+    <text x="258" y="82" font-size="44" fill="#0F172A" letter-spacing="-1">Rent</text>
+  </g>
+  <text x="140" y="106" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#64748B" letter-spacing="3">KAMERA &#183; VERLEIH &#183; BERLIN</text>
+</svg>
