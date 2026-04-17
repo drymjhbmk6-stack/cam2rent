@@ -31,9 +31,10 @@ export async function getHomePageData(): Promise<HomePageData> {
 
   // Alle Daten parallel laden
   const [heroResult, seasonalResult, bannerResult] = await Promise.all([
-    // Hero-Text
+    // Hero-Text — Tabelle muss mit /api/shop-content übereinstimmen,
+    // sonst zeigt die Startseite immer den Fallback (siehe Bug 2026-04-17).
     supabase
-      .from('shop_content')
+      .from('shop_page_content')
       .select('content, is_active')
       .eq('page', 'startseite')
       .eq('section', 'hero')
