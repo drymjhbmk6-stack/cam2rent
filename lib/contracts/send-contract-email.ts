@@ -26,8 +26,13 @@ export async function sendContractEmail(opts: ContractEmailOpts) {
 
         <!-- Header -->
         <tr><td style="background:#0a0a0a;border-radius:12px 12px 0 0;padding:28px 32px;">
-          <p style="margin:0;font-size:22px;font-weight:700;color:#ffffff;letter-spacing:-0.5px;">${BUSINESS.name}</p>
-          <p style="margin:4px 0 0;font-size:13px;color:#9ca3af;">Action-Cam Verleih</p>
+          <table cellpadding="0" cellspacing="0" border="0" role="presentation"><tr>
+            <td valign="middle" style="padding-right:14px;"><img src="https://cam2rent.de/favicon/icon-dark-64.png" width="44" height="44" alt="" style="display:block;border-radius:8px;border:0;"></td>
+            <td valign="middle">
+              <p style="margin:0;font-size:22px;font-weight:700;color:#ffffff;letter-spacing:-0.5px;line-height:1.1;">${BUSINESS.name}</p>
+              <p style="margin:4px 0 0;font-size:13px;color:#9ca3af;line-height:1.2;">Action-Cam Verleih</p>
+            </td>
+          </tr></table>
         </td></tr>
 
         <!-- Body -->

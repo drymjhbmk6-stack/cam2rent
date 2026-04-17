@@ -379,7 +379,7 @@ Neues Logo-Paket mit Kamera-Icon + blauem Farbverlauf (Primary #3B82F6, Dark #1E
   - `public/admin-icon-192.png` + `admin-icon-512.png` — PWA-Icons (Admin, dark)
   - `public/logo/` — vollständiges Paket (alle SVG-Varianten + PNG-Exports)
 - **PDFs:** Invoice, Mietvertrag, Legal, Haftungsbedingungen, Packliste nutzen inline `Svg`/`Rect`/`Circle`/`G` aus `@react-pdf/renderer` für das Kamera-Icon im Header (vektorbasiert, druckt sauber)
-- **E-Mails:** Header-Logo als gehostete PNG (`https://cam2rent.de/favicon/icon-dark-64.png`) in Resend-E-Mails (5 Header-Varianten in `lib/email.ts`)
+- **E-Mails:** Header-Logo als gehostete PNG (`https://cam2rent.de/favicon/icon-dark-64.png`) in allen 12 Resend-Headern (`lib/email.ts`, `lib/reminder-emails.ts`, `lib/contracts/send-contract-email.ts`)
 - **Wasserzeichen:** `lib/image-processing.ts` → `createLogoWatermark()` nutzt neues v4-Kameraicon + Wortmarke (Schwarz, 12% Opazität) auf Produktbildern
 - **Fix:** Ursprüngliche `cam2rent-v4-dark.svg` war identisch zu `-light.svg` (dunkler Text) — ersetzt durch echte Dark-Variante mit weißem Text + helleren Farbverlauf-Stops
 - **Farbpalette:**

@@ -323,8 +323,13 @@ export function buildCustomerEmail(d: BookingEmailData): { html: string; subject
 
         <!-- Header -->
         <tr><td style="background:#0a0a0a;border-radius:12px 12px 0 0;padding:28px 32px;">
-          <p style="margin:0;font-family:Arial,sans-serif;font-size:22px;font-weight:700;color:#ffffff;letter-spacing:-0.5px;">${BUSINESS.name}</p>
-          <p style="margin:4px 0 0;font-size:13px;color:#9ca3af;">Action-Cam Verleih</p>
+          <table cellpadding="0" cellspacing="0" border="0" role="presentation"><tr>
+            <td valign="middle" style="padding-right:14px;"><img src="https://cam2rent.de/favicon/icon-dark-64.png" width="44" height="44" alt="" style="display:block;border-radius:8px;border:0;"></td>
+            <td valign="middle">
+              <p style="margin:0;font-family:Arial,sans-serif;font-size:22px;font-weight:700;color:#ffffff;letter-spacing:-0.5px;line-height:1.1;">${BUSINESS.name}</p>
+              <p style="margin:4px 0 0;font-size:13px;color:#9ca3af;line-height:1.2;">Action-Cam Verleih</p>
+            </td>
+          </tr></table>
         </td></tr>
 
         <!-- Body -->
@@ -434,8 +439,13 @@ export function buildAdminEmail(d: BookingEmailData): { html: string; subject: s
       <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
 
         <tr><td style="background:#0a0a0a;border-radius:12px 12px 0 0;padding:20px 32px;">
-          <p style="margin:0;font-size:18px;font-weight:700;color:#ffffff;">Neue Buchung eingegangen</p>
-          <p style="margin:4px 0 0;font-size:13px;color:#9ca3af;">${d.bookingId}</p>
+          <table cellpadding="0" cellspacing="0" border="0" role="presentation"><tr>
+            <td valign="middle" style="padding-right:12px;"><img src="https://cam2rent.de/favicon/icon-dark-64.png" width="40" height="40" alt="" style="display:block;border-radius:8px;border:0;"></td>
+            <td valign="middle">
+              <p style="margin:0;font-size:18px;font-weight:700;color:#ffffff;line-height:1.1;">Neue Buchung eingegangen</p>
+              <p style="margin:4px 0 0;font-size:13px;color:#9ca3af;line-height:1.2;">${d.bookingId}</p>
+            </td>
+          </tr></table>
         </td></tr>
 
         <tr><td style="background:#ffffff;padding:32px;">
@@ -521,8 +531,13 @@ export function buildCancellationCustomerEmail(d: CancellationEmailData): { html
 
         <!-- Header -->
         <tr><td style="background:#0a0a0a;border-radius:12px 12px 0 0;padding:28px 32px;">
-          <p style="margin:0;font-size:22px;font-weight:700;color:#ffffff;letter-spacing:-0.5px;">${BUSINESS.name}</p>
-          <p style="margin:4px 0 0;font-size:13px;color:#9ca3af;">Action-Cam Verleih</p>
+          <table cellpadding="0" cellspacing="0" border="0" role="presentation"><tr>
+            <td valign="middle" style="padding-right:14px;"><img src="https://cam2rent.de/favicon/icon-dark-64.png" width="44" height="44" alt="" style="display:block;border-radius:8px;border:0;"></td>
+            <td valign="middle">
+              <p style="margin:0;font-size:22px;font-weight:700;color:#ffffff;letter-spacing:-0.5px;line-height:1.1;">${BUSINESS.name}</p>
+              <p style="margin:4px 0 0;font-size:13px;color:#9ca3af;line-height:1.2;">Action-Cam Verleih</p>
+            </td>
+          </tr></table>
         </td></tr>
 
         <!-- Body -->
@@ -712,8 +727,13 @@ export async function sendDamageReportConfirmation(data: DamageEmailData) {
     <tr><td align="center">
       <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
         <tr><td style="background:#0a0a0a;border-radius:12px 12px 0 0;padding:28px 32px;">
-          <p style="margin:0;font-size:22px;font-weight:700;color:#ffffff;letter-spacing:-0.5px;">${BUSINESS.name}</p>
-          <p style="margin:4px 0 0;font-size:13px;color:#9ca3af;">Action-Cam Verleih</p>
+          <table cellpadding="0" cellspacing="0" border="0" role="presentation"><tr>
+            <td valign="middle" style="padding-right:14px;"><img src="https://cam2rent.de/favicon/icon-dark-64.png" width="44" height="44" alt="" style="display:block;border-radius:8px;border:0;"></td>
+            <td valign="middle">
+              <p style="margin:0;font-size:22px;font-weight:700;color:#ffffff;letter-spacing:-0.5px;line-height:1.1;">${BUSINESS.name}</p>
+              <p style="margin:4px 0 0;font-size:13px;color:#9ca3af;line-height:1.2;">Action-Cam Verleih</p>
+            </td>
+          </tr></table>
         </td></tr>
         <tr><td style="background:#ffffff;padding:32px;">
           <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#0a0a0a;">Schadensmeldung eingegangen</h1>
@@ -824,8 +844,13 @@ export async function sendDamageResolution(data: DamageResolutionEmailData) {
     <tr><td align="center">
       <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
         <tr><td style="background:#0a0a0a;border-radius:12px 12px 0 0;padding:28px 32px;">
-          <p style="margin:0;font-size:22px;font-weight:700;color:#ffffff;letter-spacing:-0.5px;">${BUSINESS.name}</p>
-          <p style="margin:4px 0 0;font-size:13px;color:#9ca3af;">Action-Cam Verleih</p>
+          <table cellpadding="0" cellspacing="0" border="0" role="presentation"><tr>
+            <td valign="middle" style="padding-right:14px;"><img src="https://cam2rent.de/favicon/icon-dark-64.png" width="44" height="44" alt="" style="display:block;border-radius:8px;border:0;"></td>
+            <td valign="middle">
+              <p style="margin:0;font-size:22px;font-weight:700;color:#ffffff;letter-spacing:-0.5px;line-height:1.1;">${BUSINESS.name}</p>
+              <p style="margin:4px 0 0;font-size:13px;color:#9ca3af;line-height:1.2;">Action-Cam Verleih</p>
+            </td>
+          </tr></table>
         </td></tr>
         <tr><td style="background:#ffffff;padding:32px;">
           <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#0a0a0a;">Schadensmeldung bearbeitet</h1>
