@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { calcHaftungTieredPrice } from '@/lib/price-config';
 import SignatureStep, { type SignatureResult } from '@/components/booking/SignatureStep';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import SerialScanner from '@/components/admin/SerialScanner';
 
 // ─── Business-Daten (zentral definiert in lib/business-config.ts) ────────────
 const BIZ = {
@@ -212,6 +213,7 @@ export default function ManualBookingPage() {
     setCustomerSearchQuery('');
   }
   const [selectedProducts, setSelectedProducts] = useState<{ id: string; qty: number; accessories: string[]; sets: string[]; note: string; customPrice: string; haftung: string; serial: string }[]>([]);
+  const [scannerTarget, setScannerTarget] = useState<string | null>(null);
   const [addProductId, setAddProductId] = useState('');
   const [rentalFrom, setRentalFrom] = useState('');
   const [rentalTo, setRentalTo] = useState('');
@@ -934,12 +936,25 @@ export default function ManualBookingPage() {
                         </div>
                         <div className="flex-1">
                           <p className="text-xs font-semibold mb-1" style={{ color: '#64748b' }}>SERIENNUMMER</p>
-                          <input
-                            style={{ ...inputStyle, fontSize: 13 }}
-                            value={sp.serial}
-                            onChange={(e) => updateProductSerial(sp.id, e.target.value)}
-                            placeholder="z.B. C3531350615214"
-                          />
+                          <div className="flex items-center gap-2">
+                            <input
+                              style={{ ...inputStyle, fontSize: 13, flex: 1 }}
+                              value={sp.serial}
+                              onChange={(e) => updateProductSerial(sp.id, e.target.value)}
+                              placeholder="z.B. C3531350615214"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setScannerTarget(sp.id)}
+                              title="Seriennummer scannen"
+                              className="px-2.5 py-2 rounded-md transition-colors"
+                              style={{ background: '#06b6d4', color: 'white' }}
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7V5a2 2 0 012-2h2M17 3h2a2 2 0 012 2v2M21 17v2a2 2 0 01-2 2h-2M7 21H5a2 2 0 01-2-2v-2M7 8h10M7 12h10M7 16h10" />
+                              </svg>
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1359,6 +1374,15 @@ export default function ManualBookingPage() {
           </div>
         </div>
       )}
+
+      <SerialScanner
+        open={scannerTarget !== null}
+        onClose={() => setScannerTarget(null)}
+        onResult={(value) => {
+          if (scannerTarget) updateProductSerial(scannerTarget, value);
+        }}
+        title="Seriennummer der Kamera scannen"
+      />
     </div>
   );
 }

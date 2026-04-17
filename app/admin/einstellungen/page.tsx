@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { SpecDefinitionsManager } from '@/components/admin/SpecDefinitions';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import PushNotificationsSection from '@/components/admin/PushNotificationsSection';
 
 type DepositMode = 'kaution' | 'haftung';
 
@@ -783,6 +784,9 @@ export default function EinstellungenPage() {
 
       {/* Sektion 7: Admin-App installieren */}
       <AdminInstallSection />
+
+      {/* Sektion 8: Push-Benachrichtigungen */}
+      <PushNotificationsSection />
     </div>
   );
 }

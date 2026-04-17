@@ -1,19 +1,18 @@
 import { SupabaseClient } from '@supabase/supabase-js';
+import { sendPushToAdmins } from '@/lib/push';
 
 /**
  * Erstellt eine Admin-Benachrichtigung.
+ *
+ * Wenn VAPID konfiguriert ist und Admin-Geräte registrierte Push-
+ * Subscriptions haben, wird zusätzlich eine Web-Push-Notification
+ * verschickt (non-blocking — Push-Fehler unterbrechen den Workflow nicht).
  *
  * Beispiele:
  *   await createAdminNotification(supabase, {
  *     type: 'new_booking',
  *     title: 'Neue Buchung: BK-2026-00042',
  *     message: 'Max Mustermann hat eine GoPro Hero 12 gebucht.',
- *     link: '/admin/buchungen/abc-123',
- *   });
- *
- *   await createAdminNotification(supabase, {
- *     type: 'booking_cancelled',
- *     title: 'Buchung storniert: BK-2026-00042',
  *     link: '/admin/buchungen/abc-123',
  *   });
  */
@@ -37,5 +36,14 @@ export async function createAdminNotification(
 
   if (error) {
     console.error('[admin-notifications] Fehler beim Erstellen:', error.message);
+    return;
   }
+
+  // Push-Notification fire-and-forget: kein await, kein Throw bei Fehlern.
+  void sendPushToAdmins({
+    title: data.title,
+    body: data.message,
+    url: data.link || '/admin',
+    tag: data.type,
+  });
 }
