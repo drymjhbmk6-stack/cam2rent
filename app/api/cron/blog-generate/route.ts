@@ -99,6 +99,38 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Kein Anthropic API Key konfiguriert.' }, { status: 400 });
   }
 
+  // Re-Entry-Schutz: Wenn schon eine Generierung läuft und der Status
+  // nicht stale ist (< 15 Min alt), abbrechen — sonst würden bei jedem
+  // Cron-Tick parallel weitere Läufe starten. Stale-Locks (> 15 Min)
+  // werden ignoriert, weil sie auf einen abgebrochenen vorigen Lauf
+  // hindeuten (Function-Timeout).
+  const STALE_LOCK_MINUTES = 15;
+  const { data: statusRow } = await supabase
+    .from('admin_settings')
+    .select('value')
+    .eq('key', 'blog_generation_status')
+    .maybeSingle();
+
+  if (statusRow?.value) {
+    try {
+      const parsed = typeof statusRow.value === 'string' ? JSON.parse(statusRow.value) : statusRow.value;
+      if (parsed.status === 'generating' && parsed.started_at) {
+        const ageMs = Date.now() - new Date(parsed.started_at).getTime();
+        if (ageMs < STALE_LOCK_MINUTES * 60 * 1000) {
+          return NextResponse.json({
+            message: `Generierung läuft bereits (seit ${Math.floor(ageMs / 1000)}s).`,
+          });
+        }
+        // Stale Lock — alten generating-Schedule-Eintrag aufräumen,
+        // damit das Thema wieder in die Auswahl rein kann.
+        await supabase
+          .from('blog_schedule')
+          .update({ status: 'planned' })
+          .eq('status', 'generating');
+      }
+    } catch { /* ungültiger JSON — ignoriere alten Status */ }
+  }
+
   // Status-Flag: Generierung läuft
   async function setGenerationStatus(status: 'generating' | 'idle', topic?: string) {
     await supabase.from('admin_settings').upsert({
