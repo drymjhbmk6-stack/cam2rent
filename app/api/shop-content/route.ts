@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { revalidatePath } from 'next/cache';
 import { createServiceClient } from '@/lib/supabase';
 
 const DEFAULT_NEWS_BANNER = {
@@ -147,6 +148,13 @@ export async function PUT(req: NextRequest) {
     if (error) {
       console.error('Shop content upsert error:', error);
       return NextResponse.json({ error: 'Speichern fehlgeschlagen' }, { status: 500 });
+    }
+
+    // Cache der Seite invalidieren, die diese Section zeigt. Sonst zeigt
+    // die Startseite (ISR-gecached) auch nach dem Speichern noch den alten
+    // Text, bis die nächste Revalidierung greift.
+    if (page === 'startseite') {
+      revalidatePath('/');
     }
 
     return NextResponse.json(data);

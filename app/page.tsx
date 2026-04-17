@@ -11,6 +11,11 @@ import UnderConstructionBanner from '@/components/home/UnderConstructionBanner';
 import BetaFeedbackButton from '@/components/home/BetaFeedbackButton';
 import { getHomePageData } from '@/lib/get-homepage-data';
 
+// ISR-Cache: max. 60 Sek alt. Shop-Updater ruft revalidatePath('/') auf,
+// damit Änderungen sofort sichtbar sind — der Cache ist nur Schutz vor
+// DB-Last im Normalbetrieb.
+export const revalidate = 60;
+
 export default async function Home() {
   const data = await getHomePageData();
 

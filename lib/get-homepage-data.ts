@@ -55,11 +55,17 @@ export async function getHomePageData(): Promise<HomePageData> {
       .maybeSingle(),
   ]);
 
-  // Hero
-  const heroContent = heroResult.data?.content;
-  const hero = heroContent
-    ? { ...HERO_FALLBACK, ...heroContent, is_active: heroResult.data?.is_active !== false }
-    : HERO_FALLBACK;
+  // Hero — leere Strings sollen nicht die Fallbacks überschreiben,
+  // damit ein Admin der nur Überschrift ändert nicht versehentlich den
+  // CTA-Button leert.
+  const heroContent = (heroResult.data?.content ?? {}) as Partial<Omit<HomePageData['hero'], 'is_active'>>;
+  const hero = {
+    ueberschrift: heroContent.ueberschrift || HERO_FALLBACK.ueberschrift,
+    untertitel: heroContent.untertitel || HERO_FALLBACK.untertitel,
+    cta_text: heroContent.cta_text || HERO_FALLBACK.cta_text,
+    cta_link: heroContent.cta_link || HERO_FALLBACK.cta_link,
+    is_active: heroResult.data?.is_active !== false,
+  };
 
   // Saisonales Bild
   const now = new Date();
