@@ -127,6 +127,20 @@ export default function BlogDashboardPage() {
   const elapsedSeconds = isGenerating && genStatus.started_at
     ? Math.floor((Date.now() - new Date(genStatus.started_at).getTime()) / 1000)
     : 0;
+  // Generierung dauert normal 1-3 Min. Über 10 Min ist das ein Stale-Lock —
+  // der Cron-Prozess wurde abgebrochen, ohne den Status auf idle zu setzen.
+  const isStuck = isGenerating && elapsedSeconds > 600;
+
+  async function handleResetGeneration() {
+    if (!confirm('Generator-Status zurücksetzen? Der nächste Cron-Lauf startet eine neue Generierung.')) return;
+    try {
+      const res = await fetch('/api/admin/blog/reset-generation-status', { method: 'POST' });
+      if (!res.ok) throw new Error('Reset fehlgeschlagen');
+      await loadStatus();
+    } catch {
+      alert('Reset fehlgeschlagen. Bitte erneut versuchen.');
+    }
+  }
 
   const statCards = [
     { label: 'Gesamt', value: stats.total, color: '#e2e8f0' },
@@ -159,16 +173,37 @@ export default function BlogDashboardPage() {
           <div className="relative shrink-0">
             <div
               className="w-4 h-4 rounded-full"
-              style={{ background: isGenerating ? '#22c55e' : autoEnabled ? '#f59e0b' : '#ef4444' }}
+              style={{ background: isStuck ? '#ef4444' : isGenerating ? '#22c55e' : autoEnabled ? '#f59e0b' : '#ef4444' }}
             />
-            {isGenerating && (
+            {isGenerating && !isStuck && (
               <div className="absolute inset-0 w-4 h-4 rounded-full animate-ping" style={{ background: '#22c55e', opacity: 0.4 }} />
             )}
           </div>
 
           {/* Status-Text */}
           <div className="flex-1 min-w-0">
-            {isGenerating ? (
+            {isStuck ? (
+              <>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-heading font-semibold text-sm" style={{ color: '#ef4444' }}>
+                    Generierung hängt fest
+                  </span>
+                  <button
+                    onClick={handleResetGeneration}
+                    className="text-xs px-2 py-1 rounded-md font-heading font-semibold transition-colors"
+                    style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444' }}
+                  >
+                    Zurücksetzen
+                  </button>
+                </div>
+                {genStatus.topic && (
+                  <p className="text-xs mt-0.5 truncate" style={{ color: '#94a3b8' }}>Thema: {genStatus.topic}</p>
+                )}
+                <p className="text-[11px] mt-0.5" style={{ color: '#475569' }}>
+                  Läuft seit {Math.floor(elapsedSeconds / 60)} Min. — vermutlich Cron-Timeout, Status wurde nie auf idle gesetzt.
+                </p>
+              </>
+            ) : isGenerating ? (
               <>
                 <div className="flex items-center gap-2">
                   <span className="font-heading font-semibold text-sm" style={{ color: '#22c55e' }}>Generiert gerade...</span>
