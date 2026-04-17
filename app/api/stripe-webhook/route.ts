@@ -49,11 +49,13 @@ export async function POST(req: NextRequest) {
 
     const supabase = createServiceClient();
 
-    // Idempotenz: Prüfen ob Buchung bereits existiert
+    // Idempotenz: Prüfen ob Buchung bereits existiert.
+    // payment_intent_id wird in handleSingleBooking/handleCartBooking exakt
+    // als intent.id gespeichert — daher reicht ein Equality-Check.
     const { data: existing } = await supabase
       .from('bookings')
       .select('id')
-      .like('payment_intent_id', `${intent.id}%`)
+      .eq('payment_intent_id', intent.id)
       .limit(1)
       .maybeSingle();
 
