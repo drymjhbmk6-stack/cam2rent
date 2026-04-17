@@ -258,7 +258,7 @@ export default function AdminSetsPage() {
           name: `${set.name} (Kopie)`,
           description: set.description || null,
           badge: set.badge || null,
-          badge_color: badgeOption?.badgeColor ?? badgeOption?.color ?? null,
+          badge_color: badgeOption?.color ?? null,
           pricing_mode: set.pricingMode,
           price: set.price,
           available: set.available,
