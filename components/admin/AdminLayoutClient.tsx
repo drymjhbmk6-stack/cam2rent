@@ -312,11 +312,19 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
 
   return (
     <div className="min-h-screen flex" style={{ background: '#0a0f1e' }}>
-      {/* Mobile header with hamburger */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 flex items-center h-14 px-4" style={{ background: '#0f172a', borderBottom: '1px solid #1e293b' }}>
+      {/* Mobile header with hamburger — respektiert iOS Safe-Area-Top */}
+      <div
+        className="lg:hidden fixed top-0 left-0 right-0 z-50 flex items-center h-14 px-4"
+        style={{
+          background: '#0f172a',
+          borderBottom: '1px solid #1e293b',
+          paddingTop: 'env(safe-area-inset-top)',
+          height: 'calc(3.5rem + env(safe-area-inset-top))',
+        }}
+      >
         <button
           onClick={() => setSidebarOpen(true)}
-          className="p-2 rounded-lg transition-colors"
+          className="p-2 rounded-lg transition-colors shrink-0"
           style={{ color: '#06b6d4' }}
           aria-label="Menü öffnen"
         >
@@ -324,7 +332,7 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
-        <Link href="/admin" className="ml-3 flex-1" style={{ textDecoration: 'none' }}>
+        <Link href="/admin" className="ml-3 flex-1 min-w-0" style={{ textDecoration: 'none' }}>
           <span className="font-heading font-black text-base tracking-tight" style={{ color: 'white' }}>
             cam<span style={{ color: '#06b6d4' }}>2</span>rent
           </span>
@@ -332,7 +340,7 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
             Admin
           </span>
         </Link>
-        <div className="ml-auto">
+        <div className="ml-auto shrink-0">
           <NotificationDropdown position="mobile" />
         </div>
       </div>
@@ -379,8 +387,13 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
         />
       </aside>
 
-      {/* Main Content */}
-      <main className="admin-dark flex-1 min-w-0 overflow-auto lg:pt-0 pt-14" style={{ background: '#0a0f1e', color: '#e2e8f0' }}>
+      {/* Main Content — overflow-x-hidden verhindert Body-Scroll wenn
+          eine Unterseite zu breite Elemente hat. pt auf Mobile
+          berücksichtigt Safe-Area (Notch). */}
+      <main
+        className="admin-dark flex-1 min-w-0 overflow-y-auto overflow-x-hidden pt-[calc(3.5rem+env(safe-area-inset-top))] lg:pt-0"
+        style={{ background: '#0a0f1e', color: '#e2e8f0' }}
+      >
         {children}
       </main>
     </div>
