@@ -507,11 +507,18 @@ Jede Buchungsbestätigung enthält automatisch als PDF-Anhang:
 ### Test-Email Endpoint
 - `GET /api/admin/test-email?to=email@example.de` — sendet Test-Email und gibt bei Fehler konkrete Hinweise (Sandbox? Domain? API-Key?)
 
+### Security-/Stabilitäts-Fixes (2026-04-17)
+- **Shop-Updater Eingabe-Bug:** `loadSections` normalisiert jetzt alle 4 Sections (hero, news_banner, usps, reviews_config) beim Laden. Vorher: `updateSectionLocal` nutzte `prev.map`, wenn die DB-Row fehlte oder `content` leer war, verpufften Tastatureingaben. Jetzt garantiert die Load-Normalisierung die Existenz im State + Merge mit Feld-Defaults.
+- **IDOR Fix `/api/invoice/[bookingId]`:** Auth-Check wie in `/api/rental-contract`. Nur eingeloggter Besitzer der Buchung (oder Admin via `checkAdminAuth`) darf die Rechnung laden. Vorher war die URL ein DSGVO-Leak (Name, Adresse, Zahlungsdaten).
+- **Race Condition Unit-Zuweisung:** `assignUnitToBooking` nutzt jetzt die Postgres-Funktion `assign_free_unit` mit `pg_advisory_xact_lock` (serialisiert parallele Zuweisungen pro Produkt). Fallback auf die alte Logik, falls die Migration noch nicht ausgeführt wurde.
+- **Stripe-Webhook Idempotenz:** `.like()` → `.eq()` — `payment_intent_id` wird exakt gespeichert, Wildcard war unnötig.
+
 ## Offene Punkte
 - ~~Google Reviews: erledigt — Places API (New) eingebunden~~
 - SQL-Migration `supabase-zubehoer-verfuegbarkeit.sql` ist erledigt (verschoben in `erledigte supabase/`)
 - Bestehende 6 Kameras brauchen Admin-Specs (Technische Daten im Editor anlegen)
 - SQL-Migration `supabase-product-units.sql` muss in Supabase ausgeführt werden (product_units Tabelle + unit_id in bookings)
+- **Neu:** SQL-Migration `supabase-unit-assignment-lock.sql` muss in Supabase ausgeführt werden (race-sichere Unit-Zuweisung via `assign_free_unit` RPC)
 - Bestehende Kameras brauchen Seriennummern (im Kamera-Editor unter "Kameras / Seriennummern" anlegen)
 - **Sicherheit:** API-Keys rotieren (wurden in einer Session öffentlich geteilt)
 - **Go-Live:** `TEST_MODE = false` in `lib/contracts/contract-template.tsx` setzen
