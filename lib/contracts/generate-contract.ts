@@ -3,6 +3,29 @@ import { renderToBuffer, type DocumentProps } from '@react-pdf/renderer';
 import { createHash } from 'crypto';
 import { createServiceClient } from '@/lib/supabase';
 import { RentalContractPDF, buildContractText, type RentalContractData, type MietgegenstandItem } from './contract-template';
+import { DEFAULT_HAFTUNG, getEigenbeteiligung, type HaftungConfig } from '@/lib/price-config';
+
+/**
+ * Lädt die aktuelle Haftungs-Konfiguration aus admin_settings.
+ * Fallback: DEFAULT_HAFTUNG aus price-config.ts.
+ */
+async function loadHaftungConfig(): Promise<HaftungConfig> {
+  try {
+    const supabase = createServiceClient();
+    const { data } = await supabase
+      .from('admin_settings')
+      .select('value')
+      .eq('key', 'haftung_config')
+      .maybeSingle();
+    if (data?.value) {
+      const parsed = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
+      return { ...DEFAULT_HAFTUNG, ...parsed };
+    }
+  } catch {
+    // Fallback
+  }
+  return DEFAULT_HAFTUNG;
+}
 
 export interface GenerateContractResult {
   pdfBuffer: Buffer;
@@ -106,6 +129,7 @@ export async function generateContractPDF(opts: {
   signerName: string;
   ipAddress: string;
   eigenbeteiligung?: number;
+  productCategory?: string;
   serialNumber?: string;
 }): Promise<GenerateContractResult> {
   const now = new Date();
@@ -145,7 +169,14 @@ export async function generateContractPDF(opts: {
     : 'Premium-Schadenspauschale'
   );
 
-  const eb = opts.eigenbeteiligung ?? 200;
+  // Eigenbeteiligung dynamisch: explizit > Kategorie+haftung_config > Konfig-Default > 200
+  let eb: number;
+  if (opts.eigenbeteiligung !== undefined) {
+    eb = opts.eigenbeteiligung;
+  } else {
+    const haftungConfig = await loadHaftungConfig();
+    eb = getEigenbeteiligung(haftungConfig, opts.productCategory);
+  }
   const haftungDescription = opts.haftungDescription || (
     haftungOption === 'Ohne Schadenspauschale'
       ? 'Keine Schadenspauschale gewählt. Der Mieter haftet bis zur Höhe des Zeitwerts der Mietsache (Wiederbeschaffungswert).'

@@ -7,6 +7,7 @@ import { renderToBuffer, type DocumentProps } from '@react-pdf/renderer';
 import { createElement, type ReactElement } from 'react';
 import { RentalContractPDF, type RentalContractData } from '@/lib/contracts/contract-template';
 import { ensureBusinessConfig } from '@/lib/load-business-config';
+import { DEFAULT_HAFTUNG, getEigenbeteiligung, type HaftungConfig } from '@/lib/price-config';
 
 /**
  * GET /api/rental-contract/[bookingId]
@@ -153,11 +154,40 @@ export async function GET(
   const { data: taxSettings } = await supabase
     .from('admin_settings')
     .select('key, value')
-    .in('key', ['tax_mode', 'tax_rate']);
+    .in('key', ['tax_mode', 'tax_rate', 'haftung_config']);
 
   const taxMap: Record<string, string> = {};
-  for (const s of taxSettings ?? []) taxMap[s.key] = s.value;
+  let haftungConfig: HaftungConfig = DEFAULT_HAFTUNG;
+  for (const s of taxSettings ?? []) {
+    if (s.key === 'haftung_config') {
+      try {
+        const parsed = typeof s.value === 'string' ? JSON.parse(s.value) : s.value;
+        haftungConfig = { ...DEFAULT_HAFTUNG, ...parsed };
+      } catch {
+        // ignore – Default greift
+      }
+    } else {
+      taxMap[s.key] = s.value;
+    }
+  }
   const taxMode = (taxMap['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer';
+
+  // Produkt-Kategorie für dynamische Eigenbeteiligung
+  let productCategory: string | undefined;
+  if (booking.product_id) {
+    const { data: cfg } = await supabase
+      .from('admin_config')
+      .select('value')
+      .eq('key', 'products')
+      .maybeSingle();
+    try {
+      const products = typeof cfg?.value === 'string' ? JSON.parse(cfg.value) : cfg?.value;
+      productCategory = products?.[booking.product_id]?.category;
+    } catch {
+      // ignore
+    }
+  }
+  const eigenbeteiligung = getEigenbeteiligung(haftungConfig, productCategory);
 
   // Datumsformatierung
   const fmtDate = (iso: string) => {
@@ -216,8 +246,9 @@ export async function GET(
     haftungDescription: haftungLabel === 'Ohne Schadenspauschale'
       ? 'Keine Schadenspauschale gewählt. Haftung bis zum Wiederbeschaffungswert.'
       : haftungLabel === 'Basis-Schadenspauschale'
-      ? 'Ersatzpflicht auf max. 200 EUR je Schadensereignis begrenzt.'
+      ? `Ersatzpflicht auf max. ${eigenbeteiligung} EUR je Schadensereignis begrenzt.`
       : 'Volle Haftungsfreistellung – keine Selbstbeteiligung.',
+    eigenbeteiligung,
     stripePaymentIntentId: booking.payment_intent_id || '',
     signatureDataUrl,
     signatureMethod,

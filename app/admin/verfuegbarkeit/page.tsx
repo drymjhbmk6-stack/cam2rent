@@ -105,8 +105,6 @@ export default function AdminVerfuegbarkeitPage() {
   const [ganttLoading, setGanttLoading] = useState(true);
   const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
   const [tooltip, setTooltip] = useState<{ x: number; y: number; content: string } | null>(null);
-  const todayColRef = useRef<HTMLTableCellElement>(null);
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Zeitraum berechnen
   const { rangeFrom, rangeTo } = useMemo(() => {

@@ -13,8 +13,9 @@ import type { ComponentPropsWithoutRef } from 'react';
  * - Dark-Mode Support
  */
 
-function Heading1({ children }: ComponentPropsWithoutRef<'h1'>) {
-  return null; // H1 wird vom LegalPage-Wrapper gesetzt, im Markdown ignorieren
+function Heading1() {
+  // H1 wird vom LegalPage-Wrapper gesetzt, im Markdown ignorieren
+  return null;
 }
 
 function Heading2({ children }: ComponentPropsWithoutRef<'h2'>) {

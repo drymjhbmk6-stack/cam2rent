@@ -393,7 +393,7 @@ export default function AdminLegalEditPage() {
                 {/* Diff-Hinweis wenn nicht aktuelle Version */}
                 {!viewVersion.is_current && currentVersion && (
                   <div className="mb-4 px-4 py-3 rounded-xl text-xs font-body" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', color: '#f59e0b' }}>
-                    Dies ist eine ältere Version. Klicke „Wiederherstellen", um sie als neue aktuelle Version zu veröffentlichen.
+                    Dies ist eine ältere Version. Klicke „Wiederherstellen&rdquo;, um sie als neue aktuelle Version zu veröffentlichen.
                   </div>
                 )}
                 <div className="prose prose-sm max-w-none prose-headings:text-white prose-p:text-gray-300 prose-li:text-gray-300 prose-strong:text-white prose-a:text-cyan-400">

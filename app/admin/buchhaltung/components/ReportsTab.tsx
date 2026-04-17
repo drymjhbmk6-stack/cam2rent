@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { formatCurrency, fmtDateShort } from '@/lib/format-utils';
 import { getTaxModeLabel } from '@/lib/accounting/tax';
 import DateRangePicker, { type DateRange } from './shared/DateRangePicker';
@@ -14,19 +14,6 @@ interface EuerData {
   period: { from: string; to: string };
 }
 
-interface Expense {
-  id: string;
-  expense_date: string;
-  category: string;
-  description: string;
-  vendor: string | null;
-  net_amount: number;
-  tax_amount: number;
-  gross_amount: number;
-  receipt_url: string | null;
-  deleted_at: string | null;
-}
-
 interface RevenueItem {
   invoice_number: string;
   invoice_date: string;
@@ -35,13 +22,6 @@ interface RevenueItem {
   tax_amount: number;
   gross_amount: number;
 }
-
-const CATEGORY_LABELS: Record<string, string> = {
-  fees: 'Gebühren', shipping: 'Versandkosten', software: 'Software & Abos',
-  hardware: 'Hardware & Equipment', marketing: 'Marketing & Werbung', office: 'Bürobedarf',
-  travel: 'Reisekosten', insurance: 'Versicherungen', legal: 'Rechts- & Beratungskosten',
-  other: 'Sonstiges',
-};
 
 export default function ReportsTab() {
   const [subTab, setSubTab] = useState<'euer' | 'umsatzliste' | 'ustva'>('euer');

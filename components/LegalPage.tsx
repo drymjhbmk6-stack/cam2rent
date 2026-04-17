@@ -3,7 +3,9 @@ import LegalPageContent from '@/components/LegalPageContent';
 
 interface LegalPageProps {
   slug: string;
+  /** Fallback-Titel für Sites die DB-Inhalt nicht laden können (z.B. Build-Time). */
   fallbackTitle: string;
+  /** Fallback-Untertitel — derzeit nicht gerendert, aber Teil der API für Aufrufer. */
   fallbackSubtitle?: string;
   fallbackContent: React.ReactNode;
 }
@@ -13,7 +15,7 @@ interface LegalPageProps {
  * Fallback auf hardcoded JSX wenn DB-Inhalt nicht verfügbar.
  * Layout entspricht exakt dem bestehenden cam2rent Legal-Seiten-Stil.
  */
-export default async function LegalPage({ slug, fallbackTitle, fallbackSubtitle, fallbackContent }: LegalPageProps) {
+export default async function LegalPage({ slug, fallbackContent }: LegalPageProps) {
   const legal = await getLegalContent(slug);
 
   // Kein DB-Inhalt → Fallback (bestehende hardcoded Seite)
