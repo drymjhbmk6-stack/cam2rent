@@ -422,7 +422,7 @@ function ResultsView({
                   <div className="flex items-center justify-between mb-4">
                     <div>
                       <span className="text-xl font-heading font-bold text-brand-black dark:text-white">
-                        {product.pricePerDay} \u20ac
+                        {product.pricePerDay} €
                       </span>
                       <span className="text-sm text-brand-steel dark:text-gray-400 font-body"> / Tag</span>
                     </div>
