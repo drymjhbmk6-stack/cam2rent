@@ -1,14 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createServerClient } from '@supabase/ssr';
+import { cookies } from 'next/headers';
 import { renderToBuffer, type DocumentProps } from '@react-pdf/renderer';
 import { createElement, type ReactElement } from 'react';
 import { createServiceClient } from '@/lib/supabase';
+import { checkAdminAuth } from '@/lib/admin-auth';
 import { InvoicePDF, type InvoiceData } from '@/lib/invoice-pdf';
 import { ensureBusinessConfig } from '@/lib/load-business-config';
 import { BUSINESS } from '@/lib/business-config';
 import QRCode from 'qrcode';
 
 export async function GET(
-  req: NextRequest,
+  _req: NextRequest,
   { params }: { params: Promise<{ bookingId: string }> }
 ) {
   const { bookingId } = await params;
@@ -18,14 +21,35 @@ export async function GET(
     return NextResponse.json({ error: 'Fehlende Buchungsnummer.' }, { status: 400 });
   }
 
+  // Auth: Nur eingeloggter Besitzer der Buchung oder Admin darf die Rechnung sehen.
+  // Ohne diesen Check wäre die Rechnungs-URL ein IDOR (DSGVO-Leak: Name, Adresse, Zahlungsdetails).
+  const cookieStore = await cookies();
+  const supabaseAuth = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() { return cookieStore.getAll(); },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options));
+        },
+      },
+    }
+  );
+  const { data: { user } } = await supabaseAuth.auth.getUser();
+  const isAdmin = await checkAdminAuth();
+
+  if (!user && !isAdmin) {
+    return NextResponse.json({ error: 'Nicht angemeldet.' }, { status: 401 });
+  }
+
   const supabase = createServiceClient();
 
-  // Fetch booking
-  const { data: booking, error } = await supabase
-    .from('bookings')
-    .select('*')
-    .eq('id', bookingId)
-    .maybeSingle();
+  let query = supabase.from('bookings').select('*').eq('id', bookingId);
+  if (user && !isAdmin) {
+    query = query.eq('user_id', user.id);
+  }
+  const { data: booking, error } = await query.maybeSingle();
 
   if (error || !booking) {
     return NextResponse.json({ error: 'Buchung nicht gefunden.' }, { status: 404 });
