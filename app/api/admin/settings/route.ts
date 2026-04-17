@@ -1,5 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { checkAdminAuth } from '@/lib/admin-auth';
+
+// Keys die öffentlich (ohne Admin-Auth) gelesen werden dürfen — werden
+// von Shop-Seiten wie dem ProductCard (Markenfarben) oder der Startseite
+// (Banner) konsumiert. Alle anderen Keys erfordern Admin-Auth, damit
+// sensible Werte (totp_secret, business_config, api-keys, ...) nicht
+// durchsickern.
+const PUBLIC_SETTINGS_KEYS = new Set([
+  'brand_colors',
+  'camera_brands',
+  'show_construction_banner',
+  'construction_banner_message',
+  'accessory_categories',
+  'set_badges',
+  'spec_definitions',
+]);
 
 /**
  * GET /api/admin/settings?key=deposit_mode
@@ -10,6 +26,12 @@ export async function GET(req: NextRequest) {
 
   if (!key) {
     return NextResponse.json({ error: 'Key erforderlich.' }, { status: 400 });
+  }
+
+  if (!PUBLIC_SETTINGS_KEYS.has(key)) {
+    if (!(await checkAdminAuth())) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
   }
 
   const supabase = createServiceClient();

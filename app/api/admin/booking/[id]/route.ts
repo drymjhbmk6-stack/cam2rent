@@ -137,7 +137,10 @@ export async function DELETE(
   const body = await req.json();
   const { password } = body as { password?: string };
 
-  if (password !== 'Admin') {
+  // Bestätigung durch Admin-Passwort (zusätzlich zur Middleware-Auth).
+  // Verhindert versehentliches Löschen, z.B. wenn Admin-Tablet offen liegt.
+  const adminPassword = process.env.ADMIN_PASSWORD ?? '';
+  if (!adminPassword || password !== adminPassword) {
     return NextResponse.json({ error: 'Falsches Passwort.' }, { status: 403 });
   }
 

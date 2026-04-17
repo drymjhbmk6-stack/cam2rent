@@ -38,6 +38,43 @@ export async function middleware(request: NextRequest) {
     }
   }
 
+  // ── Admin-APIs (/api/admin/*) ─────────────────────────────────────────────
+  // Whitelist: Login + Logout müssen ohne Cookie erreichbar sein.
+  // GET auf /api/admin/settings und /api/admin/blog/categories wird von
+  // öffentlichen Seiten (Brand-Colors, Construction-Banner, Blog-Übersicht)
+  // konsumiert — die Routen-Handler enthalten eine Key-Whitelist bzw. sind
+  // von Natur aus unbedenklich.
+  if (pathname.startsWith('/api/admin')) {
+    const isGet = request.method === 'GET';
+    const isPublic =
+      pathname === '/api/admin/login' ||
+      pathname === '/api/admin/logout' ||
+      (isGet && pathname === '/api/admin/settings') ||
+      (isGet && pathname === '/api/admin/blog/categories');
+
+    if (!isPublic) {
+      const adminToken = request.cookies.get('admin_token')?.value ?? '';
+      const adminPassword = process.env.ADMIN_PASSWORD ?? '';
+
+      if (!adminPassword) {
+        return NextResponse.json(
+          { error: 'Admin-Passwort nicht konfiguriert.' },
+          { status: 500 }
+        );
+      }
+
+      const expectedToken = await computeAdminToken(adminPassword);
+      if (adminToken !== expectedToken) {
+        return NextResponse.json(
+          { error: 'Unauthorized' },
+          { status: 401 }
+        );
+      }
+    }
+
+    return NextResponse.next();
+  }
+
   // ── Admin-Bereich (/admin/*) ──────────────────────────────────────────────
   if (pathname.startsWith('/admin')) {
     // Login-Seite immer durchlassen
