@@ -142,12 +142,44 @@ ESLint + TypeScript werden auf dem Server beim Build geskippt (RAM-Limit CX23).
 - **Endgültig löschen:** "Endgültig löschen"-Button mit Admin-Passwort-Abfrage (Passwort: Admin) → löscht Buchung + Verträge + E-Mail-Logs aus DB
 - **DELETE-Endpoint:** `DELETE /api/admin/booking/[id]` mit `{ password }` im Body
 
-### Admin-Sidebar Struktur
-- **Produkte & Katalog:** Kameras, Sets, Zubehör, Verfügbarkeit
-- **Bestellungen:** Buchungen, Neue Buchung, Versand & Labels, Retouren, Schäden
-- **Kunden:** Kundenliste, Nachrichten, Bewertungen
-- **Preise & Marketing:** Versandpreise, Gutscheine, Rabatte, Shop Updater, Blog
-- **Finanzen & Daten:** Buchhaltung, Analytics, Aktivitätsprotokoll, Einkauf
+### Admin-Sidebar Struktur (neu 2026-04-17)
+Komplett neu strukturiert in 9 Gruppen, damit die tägliche Arbeit schneller erreichbar ist und Blog-Unterseiten direkt aus der Sidebar navigierbar sind.
+
+- **Dashboard** (standalone) → `/admin`
+- **Tagesgeschäft:** Buchungen, Manuelle Buchung, Kalender, Versand, Retouren, Schadensmeldungen
+- **Kunden & Kommunikation:** Kunden, Kundenanfragen, Produktbewertungen
+- **Katalog:** Kameras, Sets, Zubehör, Einkauf
+- **Preise & Aktionen:** Versand & Haftung (Tab-Seite), Gutscheine, Rabatte
+- **Content:** Startseite (Tab-Seite), Blog ▾ (aufklappbar, State in `localStorage.admin_blog_collapsed`, Auto-Expand bei `/admin/blog/*`)
+  - Blog-Unterpunkte: Blog-Dashboard, Artikel, Redaktionsplan, KI-Themen, Kommentare, Mediathek, Blog-Einstellungen
+- **Finanzen:** Buchhaltung
+- **Berichte:** Statistiken, E-Mail-Protokoll, Beta-Feedback, Admin-Protokoll
+- **System:** Rechtstexte, Einstellungen
+
+**Footer reduziert:** Benachrichtigungs-Glocke, Zum Shop, Abmelden (Einstellungen wurde in die System-Gruppe hochgezogen).
+
+**Sichtbarkeit:** Auf `/admin/blog/*` bleibt die Sidebar weiterhin komplett ausgeblendet (Blog hat eigene Navigation). Die Blog-Collapse in der Haupt-Sidebar dient nur als Einsprung von außerhalb.
+
+### Zusammengelegte Admin-Seiten (Tab-Seiten)
+Drei Seiten wurden zu Tab-Seiten zusammengeführt. Die Inhalte der Unterseiten wurden in wiederverwendbare Client-Komponenten unter `components/admin/` extrahiert — Funktionalität ist 1:1 unverändert.
+
+- **`/admin/startseite`** (neu): Tab-Seite mit `?tab=inhalte|bilder`
+  - Tab "Inhalte" → `components/admin/ShopUpdaterContent.tsx`
+  - Tab "Hero-Bilder" → `components/admin/SeasonalImagesContent.tsx`
+- **`/admin/preise`** (Hub → Tab-Seite): `?tab=versand|haftung`
+  - Tab "Versand" → `components/admin/VersandpreiseContent.tsx`
+  - Tab "Haftung & Kaution" → `components/admin/HaftungContent.tsx`
+- **`/admin/legal`** (erweitert um Tabs): `?tab=dokumente|vertrag`
+  - Tab "Dokumente" → `components/admin/LegalDocumentsContent.tsx`
+  - Tab "Vertragsparagraphen" → `components/admin/VertragsparagraphenContent.tsx`
+  - Direktlink `/admin/legal/vertragsparagraphen` bleibt erhalten.
+
+### Redirects (next.config.ts)
+Alte URLs leiten auf die neuen Tab-Seiten weiter (`permanent: false`, damit Bookmarks funktionieren, URLs aber nicht dauerhaft gecached werden):
+- `/admin/shop-updater` → `/admin/startseite?tab=inhalte`
+- `/admin/saisonale-bilder` → `/admin/startseite?tab=bilder`
+- `/admin/preise/versand` → `/admin/preise?tab=versand`
+- `/admin/preise/haftung` → `/admin/preise?tab=haftung`
 
 ### Dynamische Admin-Dropdowns
 Alle Dropdowns laden aus `admin_settings` und können neue Einträge hinzufügen:

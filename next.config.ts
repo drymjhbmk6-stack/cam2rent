@@ -59,6 +59,14 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  async redirects() {
+    return [
+      { source: '/admin/shop-updater', destination: '/admin/startseite?tab=inhalte', permanent: false },
+      { source: '/admin/saisonale-bilder', destination: '/admin/startseite?tab=bilder', permanent: false },
+      { source: '/admin/preise/versand', destination: '/admin/preise?tab=versand', permanent: false },
+      { source: '/admin/preise/haftung', destination: '/admin/preise?tab=haftung', permanent: false },
+    ];
+  },
 };
 
 export default nextConfig;

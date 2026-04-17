@@ -3,16 +3,16 @@
 import { Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import LegalDocumentsContent from '@/components/admin/LegalDocumentsContent';
-import VertragsparagraphenContent from '@/components/admin/VertragsparagraphenContent';
+import ShopUpdaterContent from '@/components/admin/ShopUpdaterContent';
+import SeasonalImagesContent from '@/components/admin/SeasonalImagesContent';
 
-type TabKey = 'dokumente' | 'vertrag';
+type TabKey = 'inhalte' | 'bilder';
 
 function TabButton({ tab, current, label }: { tab: TabKey; current: TabKey; label: string }) {
   const active = tab === current;
   return (
     <Link
-      href={tab === 'dokumente' ? '/admin/legal' : `/admin/legal?tab=${tab}`}
+      href={`/admin/startseite?tab=${tab}`}
       scroll={false}
       className="px-4 py-2 rounded-lg text-sm font-heading font-semibold transition-all"
       style={
@@ -26,27 +26,27 @@ function TabButton({ tab, current, label }: { tab: TabKey; current: TabKey; labe
   );
 }
 
-function LegalPageInner() {
+function StartseitePageInner() {
   const searchParams = useSearchParams();
-  const current: TabKey = searchParams.get('tab') === 'vertrag' ? 'vertrag' : 'dokumente';
+  const current: TabKey = searchParams.get('tab') === 'bilder' ? 'bilder' : 'inhalte';
 
   return (
     <div>
       <div className="px-4 sm:px-6 lg:px-8 pt-6 max-w-4xl mx-auto">
-        <div className="mb-4 flex items-center gap-2 flex-wrap">
-          <TabButton tab="dokumente" current={current} label="Dokumente" />
-          <TabButton tab="vertrag" current={current} label="Vertragsparagraphen" />
+        <div className="mb-6 flex items-center gap-2">
+          <TabButton tab="inhalte" current={current} label="Inhalte" />
+          <TabButton tab="bilder" current={current} label="Hero-Bilder" />
         </div>
       </div>
-      {current === 'dokumente' ? <LegalDocumentsContent /> : <VertragsparagraphenContent />}
+      {current === 'inhalte' ? <ShopUpdaterContent /> : <SeasonalImagesContent />}
     </div>
   );
 }
 
-export default function AdminLegalPage() {
+export default function StartseitePage() {
   return (
     <Suspense fallback={null}>
-      <LegalPageInner />
+      <StartseitePageInner />
     </Suspense>
   );
 }
