@@ -6,6 +6,7 @@ import { calcShipping } from '@/data/shipping';
 import type { ShippingMethod } from '@/data/shipping';
 import { DEFAULT_SHIPPING, type ShippingPriceConfig } from '@/lib/price-config';
 import { sendAdminNotification, type BookingEmailData } from '@/lib/email';
+import { getClientIp } from '@/lib/rate-limit';
 
 /**
  * Gruppiert Cart-Items nach Mietzeitraum.
@@ -41,6 +42,7 @@ export async function POST(req: NextRequest) {
       couponCode,
       durationDiscount,
       loyaltyDiscount,
+      earlyServiceConsentAt,
     } = body as {
       items: CartItem[];
       customerName: string;
@@ -52,7 +54,9 @@ export async function POST(req: NextRequest) {
       couponCode?: string;
       durationDiscount?: number;
       loyaltyDiscount?: number;
+      earlyServiceConsentAt?: string | null;
     };
+    const earlyServiceConsentIp = earlyServiceConsentAt ? getClientIp(req) : null;
 
     if (!userId) {
       return NextResponse.json(
@@ -174,6 +178,8 @@ export async function POST(req: NextRequest) {
         discount_amount: groupDiscountAmount,
         duration_discount: groupDurationDiscount,
         loyalty_discount: groupLoyaltyDiscount,
+        early_service_consent_at: earlyServiceConsentAt ?? null,
+        early_service_consent_ip: earlyServiceConsentIp,
       });
 
       if (error) {
@@ -206,6 +212,7 @@ export async function POST(req: NextRequest) {
         taxMode: 'kleinunternehmer',
         taxRate: 19,
         ustId: '',
+        earlyServiceConsentAt: earlyServiceConsentAt ?? null,
       };
       sendAdminNotification(emailData).catch((err) =>
         console.error('Admin notification error:', err)

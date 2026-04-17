@@ -485,6 +485,7 @@ export default function CheckoutPage() {
             street,
             zip,
             city,
+            earlyServiceConsentAt: (requiresEarlyServiceConsent && acceptsEarlyService) ? new Date().toISOString() : null,
           },
         }),
       });
@@ -507,6 +508,25 @@ export default function CheckoutPage() {
   const [pendingSuccess, setPendingSuccess] = useState<string | null>(null);
   const [acceptsTerms, setAcceptsTerms] = useState(false);
   const [acceptsWithdrawal, setAcceptsWithdrawal] = useState(false);
+  const [acceptsEarlyService, setAcceptsEarlyService] = useState(false);
+
+  // Prüft ob eine Buchung vor Ablauf der 14-tägigen Widerrufsfrist beginnt.
+  // § 356 Abs. 4 BGB greift nur in diesem Fall — sonst ist die Zustimmung
+  // rechtlich nicht notwendig (normaler Widerruf bis zur Leistungserbringung).
+  const earliestRentalFrom = useMemo(() => {
+    if (!items.length) return null;
+    const sorted = [...items].map((i) => i.rentalFrom).sort();
+    return sorted[0];
+  }, [items]);
+  const requiresEarlyServiceConsent = useMemo(() => {
+    if (!earliestRentalFrom) return false;
+    const from = new Date(earliestRentalFrom);
+    if (isNaN(from.getTime())) return false;
+    const now = new Date();
+    const diffMs = from.getTime() - now.getTime();
+    const diffDays = diffMs / (1000 * 60 * 60 * 24);
+    return diffDays < 14;
+  }, [earliestRentalFrom]);
   const [sameAsBilling, setSameAsBilling] = useState(true);
   const [shipStreet, setShipStreet] = useState('');
   const [shipZip, setShipZip] = useState('');
@@ -545,6 +565,7 @@ export default function CheckoutPage() {
           couponCode: appliedCoupon?.code ?? '',
           durationDiscount: effectiveDurationDiscount,
           loyaltyDiscount: effectiveLoyaltyDiscount,
+          earlyServiceConsentAt: (requiresEarlyServiceConsent && acceptsEarlyService) ? new Date().toISOString() : null,
         }),
       });
       const data = await res.json();
@@ -1025,6 +1046,15 @@ export default function CheckoutPage() {
                         kein Widerrufsrecht besteht.
                       </span>
                     </label>
+                    {requiresEarlyServiceConsent && (
+                      <label className="flex items-start gap-3 cursor-pointer">
+                        <input type="checkbox" checked={acceptsEarlyService} onChange={(e) => setAcceptsEarlyService(e.target.checked)}
+                          className="w-4 h-4 mt-0.5 rounded border-brand-border accent-accent-blue flex-shrink-0" />
+                        <span className="text-xs font-body text-brand-steel dark:text-gray-400 leading-relaxed">
+                          Ich verlange ausdrücklich, dass cam2rent vor Ablauf der 14-tägigen Widerrufsfrist mit der Ausführung der Dienstleistung (Versand/Bereitstellung der Mietgeräte) beginnt. Mir ist bekannt, dass mein Widerrufsrecht mit vollständiger Vertragserfüllung durch cam2rent erlischt (§ 356 Abs. 4 BGB).
+                        </span>
+                      </label>
+                    )}
                   </div>
                 )}
 
@@ -1032,7 +1062,7 @@ export default function CheckoutPage() {
                 {!pendingSuccess && isVerified && (
                   <button
                     onClick={handleProceedToPayment}
-                    disabled={isCreatingIntent || !acceptsTerms || !acceptsWithdrawal}
+                    disabled={isCreatingIntent || !acceptsTerms || !acceptsWithdrawal || (requiresEarlyServiceConsent && !acceptsEarlyService)}
                     className="w-full py-4 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold rounded-btn hover:bg-brand-dark disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
                   >
                     {isCreatingIntent ? (
@@ -1054,7 +1084,7 @@ export default function CheckoutPage() {
                     </div>
                     <button
                       onClick={handlePendingBooking}
-                      disabled={isCreatingIntent || !acceptsTerms || !acceptsWithdrawal}
+                      disabled={isCreatingIntent || !acceptsTerms || !acceptsWithdrawal || (requiresEarlyServiceConsent && !acceptsEarlyService)}
                       className="w-full py-4 bg-accent-blue text-white font-heading font-semibold rounded-btn hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
                     >
                       {isCreatingIntent ? (

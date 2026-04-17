@@ -172,6 +172,8 @@ export async function POST(req: NextRequest) {
     let r_loyaltyDiscount = loyaltyDiscount;
     let r_referralCode = referralCode;
     let r_shippingAddress = shippingAddress;
+    let r_earlyServiceConsentAt: string | null = null;
+    let r_earlyServiceConsentIp: string | null = null;
 
     if (!r_items?.length) {
       const { data: ctxRow } = await supabase
@@ -197,6 +199,8 @@ export async function POST(req: NextRequest) {
           if (ctx.street) {
             r_shippingAddress = [ctx.street, [ctx.zip, ctx.city].filter(Boolean).join(' ')].filter(Boolean).join(', ');
           }
+          if (ctx.earlyServiceConsentAt) r_earlyServiceConsentAt = ctx.earlyServiceConsentAt;
+          if (ctx.earlyServiceConsentIp) r_earlyServiceConsentIp = ctx.earlyServiceConsentIp;
         } catch {
           // ignore
         }
@@ -320,6 +324,8 @@ export async function POST(req: NextRequest) {
         discount_amount: groupDiscount,
         duration_discount: groupDurationDiscount,
         loyalty_discount: groupLoyaltyDiscount,
+        early_service_consent_at: r_earlyServiceConsentAt,
+        early_service_consent_ip: r_earlyServiceConsentIp,
       });
 
       if (error) {
@@ -589,6 +595,7 @@ export async function POST(req: NextRequest) {
               taxMode: (txMap['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer',
               taxRate: parseFloat(txMap['tax_rate'] || '19'),
               ustId: txMap['ust_id'] || '',
+              earlyServiceConsentAt: r_earlyServiceConsentAt,
             };
 
             await Promise.all([

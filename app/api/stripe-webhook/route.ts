@@ -142,6 +142,7 @@ export async function POST(req: NextRequest) {
             taxMode: (txMap['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer',
             taxRate: parseFloat(txMap['tax_rate'] || '19'),
             ustId: txMap['ust_id'] || '',
+            earlyServiceConsentAt: booking.early_service_consent_at ?? null,
           };
           Promise.all([
             sendBookingConfirmation(emailData),

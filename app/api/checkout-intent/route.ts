@@ -107,11 +107,16 @@ export async function POST(req: NextRequest) {
     // Checkout-Kontext serverseitig speichern (sessionStorage ist nach Stripe-Redirect unzuverlaessig)
     if (checkoutContext) {
       try {
+        // Client-IP zur Consent-Zustimmung ergänzen (Beweiskraft § 356 Abs. 4 BGB)
+        const ctxToStore: Record<string, unknown> = { ...checkoutContext };
+        if (ctxToStore.earlyServiceConsentAt) {
+          ctxToStore.earlyServiceConsentIp = ip;
+        }
         await supabase
           .from('admin_settings')
           .upsert({
             key: `checkout_${paymentIntent.id}`,
-            value: JSON.stringify(checkoutContext),
+            value: JSON.stringify(ctxToStore),
             updated_at: new Date().toISOString(),
           });
       } catch (ctxErr) {
