@@ -554,6 +554,7 @@ Jede Buchungsbestätigung enthält automatisch als PDF-Anhang:
 
 ## Offene Punkte
 - ~~Google Reviews: erledigt — Places API (New) eingebunden~~
+- **Neu:** SQL-Migration `supabase-widerruf-consent.sql` muss in Supabase ausgeführt werden (Spalten `bookings.early_service_consent_at` + `early_service_consent_ip` für § 356 Abs. 4 BGB Zustimmung)
 - SQL-Migration `supabase-zubehoer-verfuegbarkeit.sql` ist erledigt (verschoben in `erledigte supabase/`)
 - Bestehende 6 Kameras brauchen Admin-Specs (Technische Daten im Editor anlegen)
 - SQL-Migration `supabase-product-units.sql` muss in Supabase ausgeführt werden (product_units Tabelle + unit_id in bookings)
