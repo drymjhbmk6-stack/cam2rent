@@ -61,7 +61,8 @@ export default function AdminLoginPage() {
     <div className="min-h-screen flex items-center justify-center px-4" style={{ background: '#0A0A0A' }}>
       <div className="w-full max-w-sm">
         {/* Logo/Brand */}
-        <div className="text-center mb-8">
+        <div className="flex flex-col items-center mb-8">
+          <img src="/logo/mark.svg" alt="" aria-hidden="true" width={72} height={48} style={{ height: 52, width: 'auto', marginBottom: 12 }} />
           <span className="font-heading font-bold text-2xl tracking-tight" style={{ color: '#e2e8f0' }}>
             cam<span style={{ color: '#06b6d4' }}>2</span>rent
           </span>

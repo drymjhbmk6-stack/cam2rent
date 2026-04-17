@@ -18,18 +18,24 @@ const TARGET_HEIGHT = 900;
 
 /**
  * Erstellt das cam2rent Logo als SVG-Buffer für Wasserzeichen.
+ * Neues Markenzeichen (v4): Kamera-Icon mit Wortmarke "Cam2Rent".
  */
-function createLogoWatermark(opacity: number = 0.12, size: number = 120): Buffer {
-  const scale = size / 200;
+function createLogoWatermark(opacity: number = 0.12, size: number = 140): Buffer {
+  const height = Math.round((200 / 320) * size);
   return Buffer.from(`
-    <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${Math.round(180 * scale)}" viewBox="0 0 200 180">
-      <g opacity="${opacity}" fill="none" stroke="#000" stroke-width="6">
-        <rect x="30" y="50" width="140" height="95" rx="14"/>
-        <path d="M70 50 L70 35 Q70 28 77 28 L95 28 Q100 28 103 32 L112 50" stroke-linecap="round" stroke-linejoin="round"/>
-        <circle cx="100" cy="97" r="30"/>
-        <circle cx="100" cy="97" r="18" stroke-width="5"/>
+    <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${height}" viewBox="0 0 320 200">
+      <g opacity="${opacity}">
+        <g transform="translate(160,75)">
+          <rect x="-50" y="-22" width="100" height="60" rx="8" fill="#0F172A"/>
+          <rect x="-28" y="-32" width="24" height="12" rx="2" fill="#0F172A"/>
+          <circle cx="0" cy="8" r="18" fill="#F8FAFC"/>
+          <circle cx="0" cy="8" r="12" fill="none" stroke="#0F172A" stroke-width="1.5"/>
+          <circle cx="32" cy="-12" r="2.5" fill="#F8FAFC"/>
+        </g>
+        <g font-family="Inter, Helvetica, Arial, sans-serif" text-anchor="middle">
+          <text x="160" y="165" font-size="36" font-weight="800" letter-spacing="-1" fill="#0F172A">Cam2Rent</text>
+        </g>
       </g>
-      <text x="100" y="172" text-anchor="middle" font-family="sans-serif" font-weight="700" font-size="30" fill="rgba(0,0,0,${opacity})" transform="scale(${scale})" transform-origin="100 172">Cam2Rent</text>
     </svg>
   `);
 }
@@ -69,14 +75,16 @@ export async function processProductImage(inputBuffer: Buffer): Promise<{ buffer
       .resize(Math.round(origW * scale), Math.round(origH * scale), { fit: 'inside', withoutEnlargement: false })
       .toBuffer();
 
-    const logoWatermark = createLogoWatermark(0.12, 120);
+    const WM_WIDTH = 160;
+    const WM_HEIGHT = Math.round((200 / 320) * WM_WIDTH); // 100
+    const logoWatermark = createLogoWatermark(0.12, WM_WIDTH);
 
     const buffer = await sharp({
       create: { width: TARGET_WIDTH, height: TARGET_HEIGHT, channels: 3, background: { r: 255, g: 255, b: 255 } },
     })
       .composite([
         { input: resized, gravity: 'centre' },
-        { input: logoWatermark, gravity: 'southeast', top: TARGET_HEIGHT - 108, left: TARGET_WIDTH - 140 },
+        { input: logoWatermark, gravity: 'southeast', top: TARGET_HEIGHT - WM_HEIGHT - 20, left: TARGET_WIDTH - WM_WIDTH - 20 },
       ])
       .webp({ quality: 85 })
       .toBuffer();

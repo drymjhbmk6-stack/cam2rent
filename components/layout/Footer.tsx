@@ -69,13 +69,23 @@ export default function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-10 mb-12">
           {/* Spalte 1: Logo + Kontakt */}
           <div className="lg:col-span-1">
-            <div className="mb-4">
-              <span className="font-heading font-bold text-2xl tracking-tight">
-                Cam<span className="text-accent-blue">2</span>Rent
-              </span>
-              <p className="text-[11px] font-body text-brand-muted tracking-wide mt-0.5">
-                clever mieten statt kaufen
-              </p>
+            <div className="mb-4 flex items-center gap-2.5">
+              <img
+                src="/logo/mark.svg"
+                alt=""
+                aria-hidden="true"
+                width={44}
+                height={30}
+                className="h-8 w-auto shrink-0"
+              />
+              <div>
+                <span className="font-heading font-bold text-2xl tracking-tight">
+                  Cam<span className="text-accent-blue">2</span>Rent
+                </span>
+                <p className="text-[11px] font-body text-brand-muted tracking-wide mt-0.5">
+                  clever mieten statt kaufen
+                </p>
+              </div>
             </div>
             {/* Kontakt-Infos */}
             <div className="mt-1 space-y-1 text-sm font-body text-brand-muted">

@@ -52,12 +52,22 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-[72px]">
           {/* Logo */}
-          <Link href="/" className="flex flex-col leading-tight group">
-            <span className="font-heading font-bold text-2xl text-brand-black dark:text-gray-100 tracking-tight">
-              Cam<span className="text-accent-blue">2</span>Rent
-            </span>
-            <span className="text-[11px] font-body text-brand-steel dark:text-gray-400 tracking-wide -mt-0.5">
-              clever mieten statt kaufen
+          <Link href="/" className="flex items-center gap-2.5 group" aria-label="Cam2Rent – Startseite">
+            <img
+              src="/logo/mark.svg"
+              alt=""
+              aria-hidden="true"
+              width={44}
+              height={30}
+              className="h-8 w-auto shrink-0"
+            />
+            <span className="flex flex-col leading-tight">
+              <span className="font-heading font-bold text-2xl text-brand-black dark:text-gray-100 tracking-tight">
+                Cam<span className="text-accent-blue">2</span>Rent
+              </span>
+              <span className="text-[11px] font-body text-brand-steel dark:text-gray-400 tracking-wide -mt-0.5">
+                clever mieten statt kaufen
+              </span>
             </span>
           </Link>
 

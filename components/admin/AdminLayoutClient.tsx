@@ -275,15 +275,16 @@ function SidebarContent({ pathname, isDashboard, onNavClick, handleLogout }: {
   return (
     <>
       {/* Logo */}
-      <Link href="/admin" onClick={onNavClick} className="block px-5 py-5" style={{ borderBottom: '1px solid #1e293b', textDecoration: 'none' }}>
-        <div className="mb-0.5">
+      <Link href="/admin" onClick={onNavClick} className="flex items-center gap-2.5 px-5 py-5" style={{ borderBottom: '1px solid #1e293b', textDecoration: 'none' }}>
+        <img src="/logo/mark.svg" alt="" aria-hidden="true" width={40} height={27} style={{ height: 28, width: 'auto', flexShrink: 0 }} />
+        <div className="flex flex-col leading-tight">
           <span className="font-heading font-black text-lg tracking-tight" style={{ color: 'white' }}>
             cam<span style={{ color: '#06b6d4' }}>2</span>rent
           </span>
+          <span className="text-xs font-heading font-semibold tracking-widest uppercase" style={{ color: '#475569' }}>
+            Admin
+          </span>
         </div>
-        <span className="text-xs font-heading font-semibold tracking-widest uppercase" style={{ color: '#475569' }}>
-          Admin
-        </span>
       </Link>
 
       {/* Dashboard (standalone) */}
@@ -422,11 +423,12 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
-        <Link href="/admin" className="ml-3 flex-1 min-w-0" style={{ textDecoration: 'none' }}>
+        <Link href="/admin" className="ml-3 flex-1 min-w-0 flex items-center gap-2" style={{ textDecoration: 'none' }}>
+          <img src="/logo/mark.svg" alt="" aria-hidden="true" width={32} height={22} style={{ height: 22, width: 'auto', flexShrink: 0 }} />
           <span className="font-heading font-black text-base tracking-tight" style={{ color: 'white' }}>
             cam<span style={{ color: '#06b6d4' }}>2</span>rent
           </span>
-          <span className="text-xs font-heading font-semibold tracking-widest uppercase ml-2" style={{ color: '#475569' }}>
+          <span className="text-xs font-heading font-semibold tracking-widest uppercase" style={{ color: '#475569' }}>
             Admin
           </span>
         </Link>

@@ -44,7 +44,17 @@ export const metadata: Metadata = {
   metadataBase: new URL('https://cam2rent.de'),
   manifest: '/manifest.json',
   icons: {
-    apple: '/icon-192.png',
+    icon: [
+      { url: '/favicon.ico', sizes: 'any' },
+      { url: '/favicon/icon-light-32.png', type: 'image/png', sizes: '32x32' },
+      { url: '/favicon/icon-light-192.png', type: 'image/png', sizes: '192x192' },
+      { url: '/favicon/icon-light-512.png', type: 'image/png', sizes: '512x512' },
+    ],
+    apple: [
+      { url: '/favicon/icon-light-180.png', sizes: '180x180' },
+      { url: '/favicon/icon-light-192.png', sizes: '192x192' },
+    ],
+    shortcut: '/favicon.ico',
   },
   other: {
     'apple-mobile-web-app-capable': 'yes',

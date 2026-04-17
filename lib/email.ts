@@ -873,8 +873,13 @@ export function buildShippingEmail(d: ShippingEmailData): { html: string; subjec
       <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
 
         <tr><td style="background:#0a0a0a;border-radius:12px 12px 0 0;padding:20px 32px;">
-          <p style="margin:0;font-size:22px;font-weight:700;color:#ffffff;">Cam<span style="color:#3b82f6;">2</span>Rent</p>
-          <p style="margin:4px 0 0;font-size:12px;color:#9ca3af;letter-spacing:1px;">clever mieten statt kaufen</p>
+          <table cellpadding="0" cellspacing="0" border="0" role="presentation"><tr>
+            <td valign="middle" style="padding-right:12px;"><img src="https://cam2rent.de/favicon/icon-dark-64.png" width="40" height="40" alt="" style="display:block;border-radius:8px;border:0;"></td>
+            <td valign="middle">
+              <p style="margin:0;font-size:22px;font-weight:700;color:#ffffff;line-height:1.1;">Cam<span style="color:#3b82f6;">2</span>Rent</p>
+              <p style="margin:4px 0 0;font-size:12px;color:#9ca3af;letter-spacing:1px;line-height:1.2;">clever mieten statt kaufen</p>
+            </td>
+          </tr></table>
         </td></tr>
 
         <tr><td style="background:#f0fdf4;border-left:4px solid #16a34a;padding:20px 32px;">
@@ -966,8 +971,13 @@ export async function sendReferralReward(data: ReferralRewardEmailData) {
     <tr><td align="center">
       <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
         <tr><td style="background:#0a0a0a;border-radius:12px 12px 0 0;padding:20px 32px;">
-          <p style="margin:0;font-size:22px;font-weight:700;color:#ffffff;">Cam<span style="color:#3b82f6;">2</span>Rent</p>
-          <p style="margin:4px 0 0;font-size:12px;color:#9ca3af;letter-spacing:1px;">clever mieten statt kaufen</p>
+          <table cellpadding="0" cellspacing="0" border="0" role="presentation"><tr>
+            <td valign="middle" style="padding-right:12px;"><img src="https://cam2rent.de/favicon/icon-dark-64.png" width="40" height="40" alt="" style="display:block;border-radius:8px;border:0;"></td>
+            <td valign="middle">
+              <p style="margin:0;font-size:22px;font-weight:700;color:#ffffff;line-height:1.1;">Cam<span style="color:#3b82f6;">2</span>Rent</p>
+              <p style="margin:4px 0 0;font-size:12px;color:#9ca3af;letter-spacing:1px;line-height:1.2;">clever mieten statt kaufen</p>
+            </td>
+          </tr></table>
         </td></tr>
         <tr><td style="background:#f0fdf4;border-left:4px solid #16a34a;padding:20px 32px;">
           <p style="margin:0;font-size:17px;font-weight:700;color:#15803d;">Dein Empfehlungsbonus ist da!</p>
@@ -1021,8 +1031,13 @@ export async function sendNewMessageNotificationToAdmin(data: MessageNotificatio
     <tr><td align="center">
       <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
         <tr><td style="background:#0a0a0a;border-radius:12px 12px 0 0;padding:20px 32px;">
-          <p style="margin:0;font-size:22px;font-weight:700;color:#ffffff;">Cam<span style="color:#3b82f6;">2</span>Rent</p>
-          <p style="margin:4px 0 0;font-size:12px;color:#9ca3af;letter-spacing:1px;">Admin-Benachrichtigung</p>
+          <table cellpadding="0" cellspacing="0" border="0" role="presentation"><tr>
+            <td valign="middle" style="padding-right:12px;"><img src="https://cam2rent.de/favicon/icon-dark-64.png" width="40" height="40" alt="" style="display:block;border-radius:8px;border:0;"></td>
+            <td valign="middle">
+              <p style="margin:0;font-size:22px;font-weight:700;color:#ffffff;line-height:1.1;">Cam<span style="color:#3b82f6;">2</span>Rent</p>
+              <p style="margin:4px 0 0;font-size:12px;color:#9ca3af;letter-spacing:1px;line-height:1.2;">Admin-Benachrichtigung</p>
+            </td>
+          </tr></table>
         </td></tr>
         <tr><td style="background:#eff6ff;border-left:4px solid #3b82f6;padding:20px 32px;">
           <p style="margin:0;font-size:17px;font-weight:700;color:#1d4ed8;">Neue Kundennachricht</p>
@@ -1062,8 +1077,13 @@ export async function sendNewMessageNotificationToCustomer(data: MessageNotifica
     <tr><td align="center">
       <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
         <tr><td style="background:#0a0a0a;border-radius:12px 12px 0 0;padding:20px 32px;">
-          <p style="margin:0;font-size:22px;font-weight:700;color:#ffffff;">Cam<span style="color:#3b82f6;">2</span>Rent</p>
-          <p style="margin:4px 0 0;font-size:12px;color:#9ca3af;letter-spacing:1px;">clever mieten statt kaufen</p>
+          <table cellpadding="0" cellspacing="0" border="0" role="presentation"><tr>
+            <td valign="middle" style="padding-right:12px;"><img src="https://cam2rent.de/favicon/icon-dark-64.png" width="40" height="40" alt="" style="display:block;border-radius:8px;border:0;"></td>
+            <td valign="middle">
+              <p style="margin:0;font-size:22px;font-weight:700;color:#ffffff;line-height:1.1;">Cam<span style="color:#3b82f6;">2</span>Rent</p>
+              <p style="margin:4px 0 0;font-size:12px;color:#9ca3af;letter-spacing:1px;line-height:1.2;">clever mieten statt kaufen</p>
+            </td>
+          </tr></table>
         </td></tr>
         <tr><td style="background:#eff6ff;border-left:4px solid #3b82f6;padding:20px 32px;">
           <p style="margin:0;font-size:17px;font-weight:700;color:#1d4ed8;">Neue Antwort auf deine Nachricht</p>
@@ -1118,8 +1138,13 @@ export async function sendExtensionConfirmation(data: ExtensionEmailData) {
     <tr><td align="center">
       <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
         <tr><td style="background:#0a0a0a;border-radius:12px 12px 0 0;padding:20px 32px;">
-          <p style="margin:0;font-size:22px;font-weight:700;color:#ffffff;">Cam<span style="color:#3b82f6;">2</span>Rent</p>
-          <p style="margin:4px 0 0;font-size:12px;color:#9ca3af;letter-spacing:1px;">clever mieten statt kaufen</p>
+          <table cellpadding="0" cellspacing="0" border="0" role="presentation"><tr>
+            <td valign="middle" style="padding-right:12px;"><img src="https://cam2rent.de/favicon/icon-dark-64.png" width="40" height="40" alt="" style="display:block;border-radius:8px;border:0;"></td>
+            <td valign="middle">
+              <p style="margin:0;font-size:22px;font-weight:700;color:#ffffff;line-height:1.1;">Cam<span style="color:#3b82f6;">2</span>Rent</p>
+              <p style="margin:4px 0 0;font-size:12px;color:#9ca3af;letter-spacing:1px;line-height:1.2;">clever mieten statt kaufen</p>
+            </td>
+          </tr></table>
         </td></tr>
         <tr><td style="background:#f0fdf4;border-left:4px solid #16a34a;padding:20px 32px;">
           <p style="margin:0;font-size:17px;font-weight:700;color:#15803d;">Buchung erfolgreich verlängert!</p>

@@ -368,6 +368,27 @@ Tab-basiertes Cockpit mit 8 Tabs (Query-Parameter `?tab=...`):
 - `lib/accounting/__tests__/dunning.test.ts` — 10 Tests: Mahnstufen-Logik mit Standard-/benutzerdefinierten Fristen
 - `lib/accounting/__tests__/reconciliation.test.ts` — 10 Tests: Stripe-Match-Logik
 
+### Marken-Logos (v4, Stand 2026-04-17)
+Neues Logo-Paket mit Kamera-Icon + blauem Farbverlauf (Primary #3B82F6, Dark #1E40AF, Slate #0F172A).
+- **Quelle:** `cam2rent-logos/` (Repo-Ordner mit README, SVG-Varianten + PNG-Exports + Favicons)
+- **In der App verbaut:**
+  - `public/logo/mark.svg` (nur Kamera-Icon, 120×80) — Navbar, Footer, Admin-Sidebar, Admin-Mobile-Header, Admin-Login
+  - `public/logo.svg` — Referenz-Logo (v4) + Fallback
+  - `public/favicon.ico` + `public/favicon/` (16–1024 px, light/dark)
+  - `public/icon-192.png` + `icon-512.png` — PWA-Icons (Shop, light)
+  - `public/admin-icon-192.png` + `admin-icon-512.png` — PWA-Icons (Admin, dark)
+  - `public/logo/` — vollständiges Paket (alle SVG-Varianten + PNG-Exports)
+- **PDFs:** Invoice, Mietvertrag, Legal, Haftungsbedingungen, Packliste nutzen inline `Svg`/`Rect`/`Circle`/`G` aus `@react-pdf/renderer` für das Kamera-Icon im Header (vektorbasiert, druckt sauber)
+- **E-Mails:** Header-Logo als gehostete PNG (`https://cam2rent.de/favicon/icon-dark-64.png`) in Resend-E-Mails (5 Header-Varianten in `lib/email.ts`)
+- **Wasserzeichen:** `lib/image-processing.ts` → `createLogoWatermark()` nutzt neues v4-Kameraicon + Wortmarke (Schwarz, 12% Opazität) auf Produktbildern
+- **Fix:** Ursprüngliche `cam2rent-v4-dark.svg` war identisch zu `-light.svg` (dunkler Text) — ersetzt durch echte Dark-Variante mit weißem Text + helleren Farbverlauf-Stops
+- **Farbpalette:**
+  - Primary dark `#1E40AF` (Gradient-Start Light)
+  - Primary `#3B82F6` (Hauptblau)
+  - Primary light `#60A5FA` (Gradient-Ende Dark)
+  - Slate 900 `#0F172A` (Text, Objektiv)
+  - Slate 50 `#F8FAFC` (Text auf Dark, Hintergrund)
+
 ### next/image
 - ProductCard + ProductImageGallery nutzen `next/image` (WebP, Lazy Loading)
 - `next.config.ts`: Supabase + cam2rent.de Domains für Bilder erlaubt
@@ -375,8 +396,8 @@ Tab-basiertes Cockpit mit 8 Tabs (Query-Parameter `?tab=...`):
 ### Produktbild-Verarbeitung (automatisch beim Upload)
 - **API:** `POST /api/product-images` verarbeitet Bilder automatisch mit `sharp`
 - **Skalierung:** 1200x900px (4:3), Bild zentriert auf weißem Hintergrund
-- **Wasserzeichen:** cam2rent Logo (Kamera-Icon + Text) unten rechts (dezent, 12% Opazität)
-- **Logo:** `public/logo.svg` — SVG-Version des cam2rent Logos (Kamera-Icon + Text)
+- **Wasserzeichen:** cam2rent v4-Logo (Kamera-Icon + Wortmarke, 160×100 px) unten rechts (dezent, 12% Opazität, 20 px Rand)
+- **Logo:** `public/logo.svg` — aktualisiertes v4-Logo (Kamera-Icon mit blauem Farbverlauf + Wortmarke "Cam2Rent")
 - **Format:** Automatische Konvertierung zu WebP (85% Qualität)
 - **Max Upload:** 10 MB (wird komprimiert auf ~50-150 KB)
 - **Sharp im Docker:** `sharp` bleibt in `outputFileTracingExcludes` (RAM-Limit beim Build). Wird stattdessen im Dockerfile separat installiert (`npm install --platform=linuxmusl sharp`). Dynamischer Import mit Fallback wenn nicht verfügbar.

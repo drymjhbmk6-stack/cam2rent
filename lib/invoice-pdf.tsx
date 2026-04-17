@@ -5,6 +5,10 @@ import {
   View,
   Image,
   StyleSheet,
+  Svg,
+  Rect,
+  Circle,
+  G,
 } from '@react-pdf/renderer';
 import { BUSINESS } from '@/lib/business-config';
 import { fmtEuro, isoToDE } from '@/lib/format-utils';
@@ -79,13 +83,18 @@ const s = StyleSheet.create({
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     marginBottom: 6,
+  },
+  headerBrandGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   headerBrand: {
     fontSize: 20,
     fontFamily: 'Helvetica-Bold',
     color: C.black,
+    marginLeft: 8,
   },
   headerRight: {
     textAlign: 'right',
@@ -349,7 +358,18 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
 
         {/* ── Header ── */}
         <View style={s.headerRow}>
-          <Text style={s.headerBrand}>cam2rent</Text>
+          <View style={s.headerBrandGroup}>
+            <Svg width={34} height={22} viewBox="0 0 160 100">
+              <G transform="translate(80, 50)">
+                <Rect x={-40} y={-18} width={80} height={48} rx={6} fill={C.black} />
+                <Rect x={-22} y={-26} width={20} height={10} rx={2} fill={C.black} />
+                <Circle cx={0} cy={6} r={14} fill={C.white} />
+                <Circle cx={0} cy={6} r={9} fill={C.black} />
+                <Circle cx={26} cy={-10} r={2} fill={C.white} />
+              </G>
+            </Svg>
+            <Text style={s.headerBrand}>cam2rent</Text>
+          </View>
           <View style={s.headerRight}>
             <Text style={s.headerTitle}>Rechnung</Text>
             <Text style={s.headerInvoiceNr}>{invoiceNumber}</Text>
