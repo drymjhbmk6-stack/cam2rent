@@ -150,7 +150,8 @@ const FINANZEN_ITEMS: NavItem[] = [
 
 const BERICHTE_ITEMS: NavItem[] = [
   { href: '/admin/analytics', label: 'Statistiken', icon: iconChart },
-  { href: '/admin/emails', label: 'E-Mail-Protokoll', icon: iconMail },
+  { href: '/admin/emails/vorlagen', label: 'E-Mail-Vorlagen', icon: iconMail },
+  { href: '/admin/emails', label: 'E-Mail-Protokoll', exact: true, icon: iconMail },
   { href: '/admin/beta-feedback', label: 'Beta-Feedback', icon: iconFeedback },
   { href: '/admin/aktivitaetsprotokoll', label: 'Admin-Protokoll', icon: iconClipboard },
 ];

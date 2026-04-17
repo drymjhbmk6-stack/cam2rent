@@ -153,7 +153,7 @@ Komplett neu strukturiert in 9 Gruppen, damit die tägliche Arbeit schneller err
 - **Content:** Startseite (Tab-Seite), Blog ▾ (aufklappbar, State in `localStorage.admin_blog_collapsed`, Auto-Expand bei `/admin/blog/*`)
   - Blog-Unterpunkte: Blog-Dashboard, Artikel, Redaktionsplan, KI-Themen, Kommentare, Mediathek, Blog-Einstellungen
 - **Finanzen:** Buchhaltung
-- **Berichte:** Statistiken, E-Mail-Protokoll, Beta-Feedback, Admin-Protokoll
+- **Berichte:** Statistiken, E-Mail-Vorlagen, E-Mail-Protokoll, Beta-Feedback, Admin-Protokoll
 - **System:** Rechtstexte, Einstellungen
 
 **Footer reduziert:** Benachrichtigungs-Glocke, Zum Shop, Abmelden (Einstellungen wurde in die System-Gruppe hochgezogen).
@@ -538,6 +538,14 @@ Jede Buchungsbestätigung enthält automatisch als PDF-Anhang:
 
 ### Test-Email Endpoint
 - `GET /api/admin/test-email?to=email@example.de` — sendet Test-Email und gibt bei Fehler konkrete Hinweise (Sandbox? Domain? API-Key?)
+
+### E-Mail-Vorlagen-Übersicht (`/admin/emails/vorlagen`)
+Read-only Katalog aller automatisch versendeten E-Mails mit Inline-Vorschau.
+- **Katalog:** `lib/email-previews.ts` — `EMAIL_TEMPLATE_CATALOG` listet ~14 Templates mit id, Name, Trigger-Beschreibung, Empfänger (Kunde/Admin) und Render-Funktion
+- **Preview-Mechanismus:** `renderEmailPreview(sendFn, data)` in `lib/email.ts` nutzt `AsyncLocalStorage`, um `sendAndLog` im Capture-Modus auszuführen — kein tatsächlicher Versand, kein Log-Eintrag. Minimal-invasiv: keine Refaktorierung der 17 send-Funktionen nötig.
+- **APIs:** `GET /api/admin/email-templates` (Liste), `GET /api/admin/email-templates/preview?id=X&format=html|json` (gerenderte E-Mail mit Dummy-Daten)
+- **UI:** Karten-Liste mit Inline-Vorschau im Modal (iframe) + Button "Neuer Tab" für Fullscreen-Preview
+- **Keine Bearbeitung** in dieser Stufe — geplant ist Stufe 2 (Betreff/Textblock-Overrides in `admin_settings`) bei Bedarf
 
 ### Security-/Stabilitäts-Fixes (2026-04-17)
 - **Shop-Updater Eingabe-Bug:** `loadSections` normalisiert jetzt alle 4 Sections (hero, news_banner, usps, reviews_config) beim Laden. Vorher: `updateSectionLocal` nutzte `prev.map`, wenn die DB-Row fehlte oder `content` leer war, verpufften Tastatureingaben. Jetzt garantiert die Load-Normalisierung die Existenz im State + Merge mit Feld-Defaults.

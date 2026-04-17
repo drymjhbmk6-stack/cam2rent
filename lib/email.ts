@@ -1,6 +1,7 @@
 import { Resend } from 'resend';
 import { renderToBuffer, type DocumentProps } from '@react-pdf/renderer';
 import { createElement, type ReactElement } from 'react';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { InvoicePDF, type InvoiceData } from '@/lib/invoice-pdf';
 import { LegalDocumentPDF } from '@/lib/legal-pdf';
 import { BUSINESS } from '@/lib/business-config';
@@ -42,6 +43,34 @@ async function logEmail(params: {
   }
 }
 
+// ─── Preview-Capture ──────────────────────────────────────────────────────────
+// Ermöglicht das Rendern eines E-Mail-Templates ohne tatsächlichen Versand.
+// Wird für die Admin-Vorlagen-Vorschau unter /admin/emails/vorlagen genutzt.
+
+type PreviewCapture = { subject?: string; html?: string; to?: string; emailType?: string };
+const previewContext = new AsyncLocalStorage<PreviewCapture>();
+
+/**
+ * Ruft eine send-Funktion im Preview-Modus auf: kein Versand, kein Log —
+ * stattdessen werden Subject + HTML captured und zurückgegeben.
+ */
+export async function renderEmailPreview<T>(
+  sendFn: (data: T) => Promise<void>,
+  data: T,
+): Promise<{ subject: string; html: string }> {
+  const store: PreviewCapture = {};
+  await previewContext.run(store, async () => {
+    try {
+      await sendFn(data);
+    } catch (err) {
+      // Fehler in Attachment-Generierung (PDF etc.) ignorieren —
+      // capture kann trotzdem befüllt worden sein.
+      if (!store.html) throw err;
+    }
+  });
+  return { subject: store.subject ?? '', html: store.html ?? '' };
+}
+
 /** Sendet eine Email via Resend und loggt das Ergebnis */
 export async function sendAndLog(opts: {
   to: string;
@@ -51,6 +80,15 @@ export async function sendAndLog(opts: {
   emailType: string;
   attachments?: { filename: string; content: Buffer }[];
 }) {
+  // Preview-Modus: capture statt Versand
+  const capture = previewContext.getStore();
+  if (capture) {
+    capture.subject = opts.subject;
+    capture.html = opts.html;
+    capture.to = opts.to;
+    capture.emailType = opts.emailType;
+    return;
+  }
   try {
     const result = await resend.emails.send({
       from: `${BUSINESS.name} <${FROM_EMAIL}>`,
@@ -255,7 +293,7 @@ function shippingLabel(method: string | undefined, mode: string) {
 
 // ─── Customer email template ───────────────────────────────────────────────────
 
-function buildCustomerEmail(d: BookingEmailData): { html: string; subject: string } {
+export function buildCustomerEmail(d: BookingEmailData): { html: string; subject: string } {
   const subject = `Buchungsbestätigung ${d.bookingId} – ${BUSINESS.name}`;
 
   const accessoriesRow = d.accessories.length > 0
@@ -383,7 +421,7 @@ function buildCustomerEmail(d: BookingEmailData): { html: string; subject: strin
 
 // ─── Admin notification email ──────────────────────────────────────────────────
 
-function buildAdminEmail(d: BookingEmailData): { html: string; subject: string } {
+export function buildAdminEmail(d: BookingEmailData): { html: string; subject: string } {
   const subject = `Neue Buchung: ${d.bookingId} – ${d.productName}`;
 
   const html = `
@@ -458,7 +496,7 @@ function buildAdminEmail(d: BookingEmailData): { html: string; subject: string }
 
 // ─── Cancellation customer email ───────────────────────────────────────────────
 
-function buildCancellationCustomerEmail(d: CancellationEmailData): { html: string; subject: string } {
+export function buildCancellationCustomerEmail(d: CancellationEmailData): { html: string; subject: string } {
   const subject = `Stornierungsbestätigung ${d.bookingId} – ${BUSINESS.name}`;
 
   const refundRow = d.refundAmount > 0
@@ -558,7 +596,7 @@ function buildCancellationCustomerEmail(d: CancellationEmailData): { html: strin
 
 // ─── Cancellation admin email ──────────────────────────────────────────────────
 
-function buildCancellationAdminEmail(d: CancellationEmailData): { html: string; subject: string } {
+export function buildCancellationAdminEmail(d: CancellationEmailData): { html: string; subject: string } {
   const subject = `Stornierung: ${d.bookingId} – ${d.productName}`;
 
   const html = `
@@ -822,7 +860,7 @@ export async function sendDamageResolution(data: DamageResolutionEmailData) {
 
 // ─── Shipping confirmation ─────────────────────────────────────────────────────
 
-function buildShippingEmail(d: ShippingEmailData): { html: string; subject: string } {
+export function buildShippingEmail(d: ShippingEmailData): { html: string; subject: string } {
   const subject = `Deine Kamera ist unterwegs! – ${d.bookingId}`;
 
   const html = `
@@ -965,7 +1003,7 @@ export async function sendReferralReward(data: ReferralRewardEmailData) {
 
 // ─── Message notifications ─────────────────────────────────────────────────
 
-interface MessageNotificationData {
+export interface MessageNotificationData {
   customerName: string;
   customerEmail: string;
   subject: string;
