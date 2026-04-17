@@ -28,7 +28,10 @@ export default function CookieBanner() {
   if (!visible) return null;
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 p-4 sm:p-6 animate-slideUp">
+    <div
+      className="fixed bottom-0 left-0 right-0 z-[60] p-4 sm:p-6 animate-slideUp"
+      style={{ paddingBottom: `calc(1rem + env(safe-area-inset-bottom))` }}
+    >
       <div className="max-w-3xl mx-auto bg-brand-black border border-white/10 rounded-2xl p-5 sm:p-6 shadow-2xl">
         <div className="flex flex-col sm:flex-row sm:items-center gap-4">
           <div className="flex-1">

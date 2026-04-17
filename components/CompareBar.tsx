@@ -42,7 +42,10 @@ export default function CompareBar() {
         }
       `}</style>
 
-      <div className="bg-white dark:bg-brand-dark border-t border-brand-border dark:border-white/10 shadow-[0_-4px_24px_rgba(0,0,0,0.1)]">
+      <div
+        className="bg-white dark:bg-brand-dark border-t border-brand-border dark:border-white/10 shadow-[0_-4px_24px_rgba(0,0,0,0.1)]"
+        style={{ paddingBottom: `env(safe-area-inset-bottom)` }}
+      >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
           <div className="flex items-center gap-4">
             {/* Produkt-Thumbnails */}
