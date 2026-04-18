@@ -6,17 +6,23 @@ interface NotifyModalProps {
   isOpen: boolean;
   onClose: () => void;
   productName: string;
+  productId: string;
+  source?: 'card' | 'detail';
 }
 
-export default function NotifyModal({ isOpen, onClose, productName }: NotifyModalProps) {
+export default function NotifyModal({ isOpen, onClose, productName, productId, source }: NotifyModalProps) {
   const [email, setEmail] = useState('');
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isOpen) {
       setSubmitted(false);
       setEmail('');
+      setErrorMsg(null);
+      setSubmitting(false);
       setTimeout(() => inputRef.current?.focus(), 50);
     }
   }, [isOpen]);
@@ -33,11 +39,29 @@ export default function NotifyModal({ isOpen, onClose, productName }: NotifyModa
 
   if (!isOpen) return null;
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!email) return;
-    // UI only – keine Backend-Logik in Session 2
-    setSubmitted(true);
+    if (!email || submitting) return;
+    setSubmitting(true);
+    setErrorMsg(null);
+    try {
+      const res = await fetch('/api/waitlist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productId, email, source: source ?? 'card' }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setErrorMsg(data?.error || 'Speichern fehlgeschlagen. Bitte später erneut versuchen.');
+        setSubmitting(false);
+        return;
+      }
+      setSubmitted(true);
+    } catch {
+      setErrorMsg('Netzwerkfehler. Bitte später erneut versuchen.');
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -82,7 +106,7 @@ export default function NotifyModal({ isOpen, onClose, productName }: NotifyModa
                   Benachrichtige mich
                 </h2>
                 <p className="text-sm font-body text-brand-steel dark:text-gray-400 mt-0.5">
-                  Sobald <span className="font-medium text-brand-black dark:text-white">{productName}</span> wieder verfügbar ist, informieren wir dich.
+                  Sobald <span className="font-medium text-brand-black dark:text-white">{productName}</span> verfügbar ist, informieren wir dich.
                 </p>
               </div>
             </div>
@@ -102,12 +126,17 @@ export default function NotifyModal({ isOpen, onClose, productName }: NotifyModa
                 required
                 className="w-full px-4 py-2.5 border border-brand-border dark:border-white/10 rounded-[10px] font-body text-sm text-brand-black dark:text-white bg-white dark:bg-brand-black placeholder:text-brand-muted dark:placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-accent-blue focus:border-transparent transition mb-4"
               />
+              {errorMsg && (
+                <p className="text-xs font-body text-status-error mb-3" role="alert">
+                  {errorMsg}
+                </p>
+              )}
               <button
                 type="submit"
                 className="w-full px-4 py-2.5 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold text-sm rounded-[10px] hover:bg-brand-dark dark:hover:bg-accent-blue/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                disabled={!email}
+                disabled={!email || submitting}
               >
-                Benachrichtigen
+                {submitting ? 'Wird gespeichert…' : 'Benachrichtigen'}
               </button>
               <p className="text-xs font-body text-brand-muted dark:text-gray-500 mt-3 text-center">
                 Keine Werbung. Nur eine E-Mail, wenn das Produkt verfügbar ist.
@@ -124,7 +153,7 @@ export default function NotifyModal({ isOpen, onClose, productName }: NotifyModa
             </div>
             <h2 className="font-heading font-bold text-lg text-brand-black dark:text-white mb-2">Eingetragen!</h2>
             <p className="text-sm font-body text-brand-steel dark:text-gray-400 mb-5">
-              Wir schicken dir eine E-Mail, sobald <span className="font-medium text-brand-black dark:text-white">{productName}</span> wieder verfügbar ist.
+              Wir schicken dir eine E-Mail, sobald <span className="font-medium text-brand-black dark:text-white">{productName}</span> verfügbar ist.
             </p>
             <button
               type="button"

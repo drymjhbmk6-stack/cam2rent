@@ -100,6 +100,12 @@ export default function ProductCard({ product, imageUrl }: ProductCardProps) {
   const comparing = isInCompare(product.id);
   const primaryTag = product.tags[0];
 
+  // Waitlist-Modus: Kamera hat (noch) keine Seriennummer im Bestand.
+  // Statt "Jetzt mieten" → "Benachrichtige mich", damit Interesse
+  // vorab gemessen werden kann.
+  const waitlistMode = product.hasUnits === false;
+  const canRent = !waitlistMode && product.available;
+
   const handleFavorite = () => {
     if (!user) {
       window.location.href = '/login';
@@ -191,16 +197,24 @@ export default function ProductCard({ product, imageUrl }: ProductCardProps) {
           <div className="flex items-center gap-1.5 mb-4">
             <span
               className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                product.available ? 'bg-status-success' : 'bg-status-error'
+                waitlistMode
+                  ? 'bg-accent-blue'
+                  : product.available
+                    ? 'bg-status-success'
+                    : 'bg-status-error'
               }`}
               aria-hidden="true"
             />
             <span
               className={`text-xs font-body font-medium ${
-                product.available ? 'text-status-success' : 'text-status-error'
+                waitlistMode
+                  ? 'text-accent-blue'
+                  : product.available
+                    ? 'text-status-success'
+                    : 'text-status-error'
               }`}
             >
-              {product.available ? 'Verfügbar' : 'Ausgebucht'}
+              {waitlistMode ? 'Demnächst verfügbar' : product.available ? 'Verfügbar' : 'Ausgebucht'}
             </span>
           </div>
 
@@ -214,7 +228,7 @@ export default function ProductCard({ product, imageUrl }: ProductCardProps) {
               <span className="text-xs font-body text-brand-steel dark:text-gray-400">/ Tag</span>
             </div>
 
-            {product.available ? (
+            {canRent ? (
               <a
                 href={`/kameras/${product.slug}`}
                 className="block w-full text-center px-4 py-2.5 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold text-sm rounded-[10px] hover:bg-brand-dark dark:hover:bg-blue-600 transition-colors"
@@ -239,6 +253,8 @@ export default function ProductCard({ product, imageUrl }: ProductCardProps) {
         isOpen={notifyOpen}
         onClose={() => setNotifyOpen(false)}
         productName={product.name}
+        productId={product.id}
+        source="card"
       />
     </>
   );

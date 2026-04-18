@@ -388,6 +388,21 @@ Web-Push-Notifications für die Admin-PWA. Alle Events, die `createAdminNotifica
   3. SQL-Migration `supabase-push-subscriptions.sql` ausführen
   4. Admin-PWA installieren (Homescreen) → `/admin/einstellungen` → "Push aktivieren"
 
+### Warteliste für Kameras ohne Seriennummer (Stand 2026-04-18)
+Interesse an neuen Kameras testen, bevor sie eingekauft werden: Sobald für eine Kamera noch keine `product_unit` mit `status != 'retired'` angelegt ist, zeigt der Shop statt "Jetzt mieten" eine "Benachrichtige mich"-Box mit E-Mail-Formular.
+
+- **DB-Tabelle:** `waitlist_subscriptions` (id, product_id, email, source, created_at, notified_at, UNIQUE(product_id, email)) — Migration `supabase-waitlist.sql`, RLS aktiviert (nur Service-Role)
+- **API:** `POST /api/waitlist` (`{ productId, email, source }`) — idempotent bei Duplikaten, legt automatisch Admin-Notification `new_waitlist` an (inkl. Push)
+- **Admin-API:** `GET/DELETE /api/admin/waitlist` — durch Admin-Middleware geschützt
+- **Admin-Seite:** `/admin/warteliste` (neuer Eintrag in Sidebar-Gruppe "Kunden & Kommunikation", Bell-Icon) — zeigt Einträge gruppiert nach Kamera + Löschen
+- **Detection:** `lib/get-products.ts` lädt zusätzlich alle `product_units` (außer `retired`) und setzt `Product.hasUnits` (optional boolean). Waitlist-Modus = `hasUnits === false`.
+- **Shop-UI:**
+  - `ProductCard.tsx`: Statt "Jetzt mieten"/"Ausgebucht" → blauer "Benachrichtige mich"-Button + Badge "Demnächst verfügbar"
+  - Produktdetailseite `/kameras/[slug]`: Statt Kalender → neue Komponente `WaitlistCard.tsx` mit Bell-Icon + Formular
+- **`NotifyModal.tsx`** übernimmt jetzt `productId` + `source` (`'card' | 'detail'`) und postet echt gegen `/api/waitlist` — Loading-/Error-States ergänzt
+- **Notifications:** `new_waitlist`-Typ im `NotificationDropdown` (cyan Bell-Icon)
+- **Go-Live TODO:** SQL-Migration `supabase-waitlist.sql` ausführen
+
 ### Seriennummern-Scanner
 QR-/Barcode-Scanner für die Admin-PWA, nutzt native `BarcodeDetector`-API (Chrome/Edge/Safari ≥ 17), Fallback auf manuelle Texteingabe. Erkennt: QR, EAN-13/8, Code128, Code39, Code93, Codabar, DataMatrix, ITF, UPC.
 

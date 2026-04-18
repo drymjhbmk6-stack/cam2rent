@@ -9,6 +9,7 @@ import ProductBookingCalendar from '@/components/ProductBookingCalendar';
 import ProductAccessorySets from '@/components/ProductAccessorySets';
 import ProductImageGallery from '@/components/ProductImageGallery';
 import MarkdownContent from '@/components/MarkdownContent';
+import WaitlistCard from '@/components/WaitlistCard';
 import { getBrandStyle } from '@/lib/brand-colors';
 import BrandBadge from '@/components/BrandBadge';
 
@@ -51,6 +52,7 @@ export default async function KameraDetailPage({
   if (!product) notFound();
 
   const brandStyle = getBrandStyle(product.brand);
+  const waitlistMode = product.hasUnits === false;
 
   return (
     <div className="min-h-screen bg-brand-bg dark:bg-gray-950">
@@ -140,12 +142,28 @@ export default async function KameraDetailPage({
               <div className="flex items-center gap-2">
                 <span
                   className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
-                    product.available ? 'bg-status-success' : 'bg-status-error'
+                    waitlistMode
+                      ? 'bg-accent-blue'
+                      : product.available
+                        ? 'bg-status-success'
+                        : 'bg-status-error'
                   }`}
                   aria-hidden="true"
                 />
-                <span className={`text-sm font-body font-semibold ${product.available ? 'text-status-success' : 'text-status-error'}`}>
-                  {product.available ? 'Verfügbar' : 'Aktuell ausgebucht'}
+                <span
+                  className={`text-sm font-body font-semibold ${
+                    waitlistMode
+                      ? 'text-accent-blue'
+                      : product.available
+                        ? 'text-status-success'
+                        : 'text-status-error'
+                  }`}
+                >
+                  {waitlistMode
+                    ? 'Demnächst verfügbar'
+                    : product.available
+                      ? 'Verfügbar'
+                      : 'Aktuell ausgebucht'}
                 </span>
               </div>
 
@@ -161,12 +179,16 @@ export default async function KameraDetailPage({
                 </div>
               </div>
 
-              {/* Kalender + Versand/Abholung */}
-              <ProductBookingCalendar
-                productId={product.id}
-                productSlug={product.slug}
-                available={product.available}
-              />
+              {/* Kalender + Versand/Abholung — oder Warteliste wenn keine Seriennummer hinterlegt */}
+              {waitlistMode ? (
+                <WaitlistCard productId={product.id} productName={product.name} />
+              ) : (
+                <ProductBookingCalendar
+                  productId={product.id}
+                  productSlug={product.slug}
+                  available={product.available}
+                />
+              )}
             </div>
           </div>
         </div>

@@ -91,6 +91,13 @@ export interface Product {
   available: boolean;
   stock: number;
   slug: string;
+  /**
+   * True wenn mindestens eine aktive product_unit (Seriennummer) hinterlegt ist.
+   * Wenn false → Shop zeigt Warteliste statt "Jetzt mieten".
+   * Optional, weil statische Fallback-Produkte (data/products.ts) das Feld
+   * nicht setzen. Der DB-Pfad setzt es immer.
+   */
+  hasUnits?: boolean;
 }
 
 // ─── Specs helper ─────────────────────────────────────────────────────────────

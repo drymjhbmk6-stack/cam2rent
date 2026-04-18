@@ -20,6 +20,7 @@ function adminToProduct(
   admin: AdminProduct,
   staticFallback: Product | undefined,
   kautionTiers: KautionTiers,
+  hasUnits: boolean,
 ): Product {
   // Preistabelle: AdminProduct hat number[], Product hat PriceEntry[]
   const priceTable = admin.priceTable.map((price, i) => ({
@@ -78,6 +79,7 @@ function adminToProduct(
     available: admin.available,
     stock: admin.stock,
     slug: admin.slug,
+    hasUnits,
   };
 }
 
@@ -88,6 +90,7 @@ function adminToProduct(
 export async function getProducts(): Promise<Product[]> {
   let adminProducts: AdminProducts = {};
   let kautionTiers: KautionTiers = DEFAULT_KAUTION_TIERS;
+  const productsWithUnits = new Set<string>();
 
   try {
     const supabase = createServiceClient();
@@ -106,13 +109,27 @@ export async function getProducts(): Promise<Product[]> {
         }
       }
     }
+
+    // product_units prüfen: welches Produkt hat mindestens eine aktive Unit?
+    // Ausgemusterte Units (status='retired') zählen nicht — sonst wäre die
+    // Waitlist nutzlos, sobald alte Kameras verkauft werden.
+    const { data: unitRows } = await supabase
+      .from('product_units')
+      .select('product_id')
+      .neq('status', 'retired');
+
+    if (unitRows) {
+      for (const row of unitRows) {
+        if (row.product_id) productsWithUnits.add(row.product_id);
+      }
+    }
   } catch {
     return [];
   }
 
   // AdminProducts → Product konvertieren
   const result: Product[] = Object.values(adminProducts).map((admin) =>
-    adminToProduct(admin, undefined, kautionTiers),
+    adminToProduct(admin, undefined, kautionTiers, productsWithUnits.has(admin.id)),
   );
 
   return result;
