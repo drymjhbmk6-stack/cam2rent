@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { verifyCronAuth } from '@/lib/cron-auth';
+import { autoPost } from '@/lib/meta/auto-post';
 
 /** POST /api/cron/blog-publish - Geplante Posts veröffentlichen */
 export async function POST(req: NextRequest) {
@@ -135,6 +136,26 @@ export async function POST(req: NextRequest) {
       .from('blog_schedule')
       .delete()
       .in('id', scheduleIds);
+  }
+
+  // Social-Media-Auto-Post (non-blocking) für jeden neu veröffentlichten Artikel
+  for (const pub of allPublished) {
+    const { data: fullPost } = await supabase
+      .from('blog_posts')
+      .select('id, title, slug, excerpt, featured_image')
+      .eq('id', pub.id)
+      .single();
+    if (!fullPost) continue;
+    autoPost(
+      'blog_publish',
+      fullPost.id,
+      {
+        title: fullPost.title,
+        excerpt: (fullPost.excerpt ?? '').slice(0, 300),
+        slug: fullPost.slug,
+      },
+      { link_url: `https://cam2rent.de/blog/${fullPost.slug}` }
+    ).catch((err) => console.error('[blog-publish] auto-post failed', err));
   }
 
   return NextResponse.json({

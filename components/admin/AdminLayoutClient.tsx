@@ -98,6 +98,9 @@ const iconDashboard = (
 const iconBell = (
   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" /></svg>
 );
+const iconSocial = (
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg>
+);
 
 // ============================================================
 // Navigation groups
@@ -146,6 +149,15 @@ const BLOG_ITEMS: NavItem[] = [
   { href: '/admin/blog/kommentare', label: 'Kommentare', icon: iconMessage },
   { href: '/admin/blog/mediathek', label: 'Mediathek', icon: iconBlog },
   { href: '/admin/blog/einstellungen', label: 'Blog-Einstellungen', icon: iconCog },
+];
+
+const SOCIAL_ITEMS: NavItem[] = [
+  { href: '/admin/social', label: 'Übersicht', exact: true, icon: iconDashboard },
+  { href: '/admin/social/posts', label: 'Posts', icon: iconBuchungen },
+  { href: '/admin/social/neu', label: 'Neuer Post', icon: iconPlus },
+  { href: '/admin/social/redaktionsplan', label: 'Redaktionsplan', icon: iconCalendar },
+  { href: '/admin/social/vorlagen', label: 'Vorlagen', icon: iconStar },
+  { href: '/admin/social/einstellungen', label: 'Verbindungen', icon: iconCog },
 ];
 
 const FINANZEN_ITEMS: NavItem[] = [
@@ -199,6 +211,67 @@ function NavSection({ label, items, pathname, onNavClick }: { label: string; ite
       {items.map((item) => (
         <NavLinkItem key={item.href} item={item} pathname={pathname} onNavClick={onNavClick} />
       ))}
+    </div>
+  );
+}
+
+function SocialCollapse({ pathname, onNavClick }: { pathname: string; onNavClick?: () => void }) {
+  const isSocialPath = pathname.startsWith('/admin/social');
+  const [open, setOpen] = useState<boolean>(isSocialPath);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (isSocialPath) {
+      setOpen(true);
+      return;
+    }
+    try {
+      const raw = window.localStorage.getItem('admin_social_collapsed');
+      if (raw !== null) setOpen(raw === 'false');
+    } catch { /* empty */ }
+  }, [isSocialPath]);
+
+  useEffect(() => {
+    if (isSocialPath && !open) setOpen(true);
+  }, [isSocialPath, open]);
+
+  function toggle() {
+    const next = !open;
+    setOpen(next);
+    try {
+      window.localStorage.setItem('admin_social_collapsed', next ? 'false' : 'true');
+    } catch { /* empty */ }
+  }
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={toggle}
+        className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-heading font-semibold transition-all mx-1 text-left"
+        style={{ color: isSocialPath ? '#06b6d4' : '#94a3b8', background: isSocialPath ? 'rgba(6,182,212,0.15)' : 'transparent' }}
+        onMouseEnter={(e) => { if (!isSocialPath) (e.currentTarget as HTMLElement).style.color = '#e2e8f0'; }}
+        onMouseLeave={(e) => { if (!isSocialPath) (e.currentTarget as HTMLElement).style.color = '#94a3b8'; }}
+      >
+        <span style={{ color: isSocialPath ? '#06b6d4' : '#475569' }}>{iconSocial}</span>
+        <span className="flex-1">Social Media</span>
+        <span
+          style={{
+            color: isSocialPath ? '#06b6d4' : '#475569',
+            transform: open ? 'rotate(90deg)' : 'none',
+            transition: 'transform 0.15s ease',
+          }}
+        >
+          {iconChevron}
+        </span>
+      </button>
+      {open && (
+        <div className="ml-4 pl-2 mt-0.5 space-y-0" style={{ borderLeft: '1px solid #1e293b' }}>
+          {SOCIAL_ITEMS.map((item) => (
+            <NavLinkItem key={item.href} item={item} pathname={pathname} onNavClick={onNavClick} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -333,6 +406,7 @@ function SidebarContent({ pathname, isDashboard, onNavClick, handleLogout }: {
           </div>
           <NavLinkItem item={CONTENT_STARTSEITE} pathname={pathname} onNavClick={onNavClick} />
           <BlogCollapse pathname={pathname} onNavClick={onNavClick} />
+          <SocialCollapse pathname={pathname} onNavClick={onNavClick} />
         </div>
         <div style={{ height: 1, background: '#1e293b', margin: '6px 12px' }} />
 
