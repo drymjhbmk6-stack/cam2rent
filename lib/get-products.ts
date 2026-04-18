@@ -91,9 +91,10 @@ export async function getProducts(): Promise<Product[]> {
   let adminProducts: AdminProducts = {};
   let kautionTiers: KautionTiers = DEFAULT_KAUTION_TIERS;
   const productsWithUnits = new Set<string>();
+  let supabase: ReturnType<typeof createServiceClient>;
 
   try {
-    const supabase = createServiceClient();
+    supabase = createServiceClient();
     const { data } = await supabase
       .from('admin_config')
       .select('key, value')
@@ -109,10 +110,16 @@ export async function getProducts(): Promise<Product[]> {
         }
       }
     }
+  } catch {
+    return [];
+  }
 
-    // product_units prüfen: welches Produkt hat mindestens eine aktive Unit?
-    // Ausgemusterte Units (status='retired') zählen nicht — sonst wäre die
-    // Waitlist nutzlos, sobald alte Kameras verkauft werden.
+  // product_units prüfen: welches Produkt hat mindestens eine aktive Unit?
+  // Ausgemusterte Units (status='retired') zählen nicht — sonst wäre die
+  // Waitlist nutzlos, sobald alte Kameras verkauft werden.
+  // Separater try/catch, damit Produkte trotzdem geladen werden wenn
+  // product_units nicht erreichbar ist (z.B. Tabelle fehlt).
+  try {
     const { data: unitRows } = await supabase
       .from('product_units')
       .select('product_id')
@@ -124,7 +131,8 @@ export async function getProducts(): Promise<Product[]> {
       }
     }
   } catch {
-    return [];
+    // best-effort — hasUnits wird dann für alle Produkte `false` sein,
+    // was den Waitlist-Modus aktiviert. Akzeptabler Fallback.
   }
 
   // AdminProducts → Product konvertieren
