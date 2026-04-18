@@ -614,9 +614,7 @@ Read-only Katalog aller automatisch versendeten E-Mails mit Inline-Vorschau.
 - ~~SQL-Migration `supabase-widerruf-consent.sql` ausgeführt (Spalten `bookings.early_service_consent_at` + `early_service_consent_ip` für § 356 Abs. 4 BGB Zustimmung)~~
 - ~~SQL-Migration `supabase-product-units.sql` ausgeführt (product_units Tabelle + unit_id in bookings)~~
 - ~~SQL-Migration `supabase-unit-assignment-lock.sql` ausgeführt (race-sichere Unit-Zuweisung via `assign_free_unit` RPC)~~
-- **Neu (Push-Notifications Setup):**
-  - `npx web-push generate-vapid-keys` ausführen + Keys in Coolify-Env setzen (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`)
-  - SQL-Migration `supabase-push-subscriptions.sql` in Supabase ausführen
+- ~~SQL-Migration `supabase-push-subscriptions.sql` ausgeführt + VAPID-Keys in Coolify-Env gesetzt + Admin-PWA mit Push aktiviert~~
 - Bestehende 6 Kameras brauchen Admin-Specs (Technische Daten im Editor anlegen)
 - Bestehende Kameras brauchen Seriennummern (im Kamera-Editor unter "Kameras / Seriennummern" anlegen)
 - **Cron-Härtung optional:** `CRON_DISABLE_URL_SECRET=true` in Coolify-Env setzen + Hetzner-Crontab auf Header-Auth umstellen (`-H "x-cron-secret: $CRON_SECRET"`), damit Secrets nicht mehr in Access-Logs landen.
