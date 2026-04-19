@@ -99,8 +99,10 @@ export async function POST(req: NextRequest) {
   // Steuer berechnen
   const taxCalc = calculateTax(gross_amount || 0, taxMode, taxRate, 'gross');
 
-  // Gutschriftnummer generieren
-  const year = new Date().getFullYear();
+  // Gutschriftnummer generieren — Jahr in Berlin-Zeit, damit eine Gutschrift
+  // in der Silvester-Nacht zwischen 23-24 Uhr Berlin nicht schon ins
+  // Folgejahr rutscht (UTC ist dann noch 22-23 = altes Jahr).
+  const year = parseInt(new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' }).slice(0, 4), 10);
   const { data: lastCn } = await supabase
     .from('credit_notes')
     .select('credit_note_number')

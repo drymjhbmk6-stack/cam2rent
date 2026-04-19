@@ -144,10 +144,11 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Naechsten offenen Plan-Eintrag finden
-  const today = new Date();
-  const latest = new Date(today);
-  latest.setDate(latest.getDate() + daysBefore);
+  // Naechsten offenen Plan-Eintrag finden — Berlin-Zeit damit zwischen
+  // 22-24 Uhr nicht der naechste Tag als "heute" zaehlt.
+  const todayBerlin = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });
+  const [ly, lm, ld] = todayBerlin.split('-').map((n) => parseInt(n, 10));
+  const latest = new Date(Date.UTC(ly, lm - 1, ld + daysBefore));
   const latestDateStr = latest.toISOString().split('T')[0];
 
   const { data: entry, error: entryError } = await supabase

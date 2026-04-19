@@ -29,11 +29,15 @@ interface SendResult {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-/** Returns a date string in 'YYYY-MM-DD' format, offset by `days` from today (UTC). */
+/** Returns a date string in 'YYYY-MM-DD' format, offset by `days` from today in Berlin time. */
 function dateOffset(days: number): string {
-  const d = new Date();
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
+  // Erst Berlin-Datum von heute holen, dann Tage draufrechnen — sonst
+  // wuerde der Cron zwischen 22-24 Uhr Berlin den Reminder fuer den
+  // falschen Tag erzeugen (UTC-Datum ist dann noch der Vortag).
+  const todayBerlin = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });
+  const [y, m, d] = todayBerlin.split('-').map((n) => parseInt(n, 10));
+  const offset = new Date(Date.UTC(y, m - 1, d + days));
+  return offset.toISOString().slice(0, 10);
 }
 
 // ─── Main handler ────────────────────────────────────────────────────────────

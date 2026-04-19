@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
-import { getBerlinDayStartISO } from '@/lib/timezone';
+import { getBerlinDayStartISO, getBerlinHour, getBerlinDateKey } from '@/lib/timezone';
 
 function formatReferrer(ref: string | null): string {
   if (!ref) return 'direkt';
@@ -111,11 +111,11 @@ export async function GET(req: NextRequest) {
     const uniqueVisitors = new Set(rows.map((r) => r.visitor_id)).size;
     const sessions = new Set(rows.map((r) => r.session_id)).size;
 
-    // Hourly distribution
+    // Hourly distribution — Stunde in Europe/Berlin berechnen, damit der
+    // Chart auf UTC-Servern (Hetzner) nicht um 2h verschoben ist.
     const hourly = Array(24).fill(0);
     for (const row of rows) {
-      const h = new Date(row.created_at).getHours();
-      hourly[h]++;
+      hourly[getBerlinHour(row.created_at)]++;
     }
 
     // Top pages
@@ -163,7 +163,9 @@ export async function GET(req: NextRequest) {
 
     const dayMap = new Map<string, { views: number; visitors: Set<string>; sessions: Set<string> }>();
     for (const row of data ?? []) {
-      const day = row.created_at.slice(0, 10);
+      // Tag in Berlin-Zeit gruppieren — sonst landen 00:30-02:00 Berlin
+      // auf dem Vortag (UTC-Zeit liegt davor).
+      const day = getBerlinDateKey(row.created_at);
       if (!dayMap.has(day)) {
         dayMap.set(day, { views: 0, visitors: new Set(), sessions: new Set() });
       }
@@ -442,10 +444,10 @@ export async function GET(req: NextRequest) {
     const todayRevenue = (todayBookings ?? []).reduce((s, b) => s + (b.price_total ?? 0), 0);
     const todayCount = (todayBookings ?? []).length;
 
-    // Booking trend: per day
+    // Booking trend: per day — Berlin-Tag, nicht UTC-Tag
     const dayMap = new Map<string, { count: number; revenue: number }>();
     for (const row of allBookings ?? []) {
-      const day = row.created_at.slice(0, 10);
+      const day = getBerlinDateKey(row.created_at);
       if (!dayMap.has(day)) dayMap.set(day, { count: 0, revenue: 0 });
       const d = dayMap.get(day)!;
       d.count++;
@@ -508,10 +510,10 @@ export async function GET(req: NextRequest) {
 
     const blogPageViews30d = blogViews?.length ?? 0;
 
-    // Views pro Tag (letzte 30 Tage)
+    // Views pro Tag (letzte 30 Tage) — Berlin-Tag
     const dayMap = new Map<string, number>();
     for (const row of blogViews ?? []) {
-      const day = row.created_at.slice(0, 10);
+      const day = getBerlinDateKey(row.created_at);
       dayMap.set(day, (dayMap.get(day) ?? 0) + 1);
     }
     const viewTrend = Array.from(dayMap.entries())

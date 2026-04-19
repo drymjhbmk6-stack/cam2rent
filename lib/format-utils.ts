@@ -18,22 +18,27 @@ export function formatCurrency(amount: number): string {
 
 // ─── Datum ───────────────────────────────────────────────────────────────────
 
+// WICHTIG: Alle Formatierer nutzen explizit Europe/Berlin, damit sie auf
+// UTC-Servern (Hetzner) dasselbe Datum anzeigen wie dem Nutzer in DE.
+// Ohne die Option landen Zeiten 22:00-02:00 Berlin auf dem Vortag.
+const TZ = 'Europe/Berlin';
+
 /** ISO-String → "14.04.2026" */
 export function fmtDate(iso: string | Date): string {
   const d = typeof iso === 'string' ? new Date(iso) : iso;
-  return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: TZ });
 }
 
 /** ISO-String → "14. Apr. 2026" */
 export function fmtDateShort(iso: string | Date): string {
   const d = typeof iso === 'string' ? new Date(iso) : iso;
-  return d.toLocaleDateString('de-DE', { day: '2-digit', month: 'short', year: 'numeric' });
+  return d.toLocaleDateString('de-DE', { day: '2-digit', month: 'short', year: 'numeric', timeZone: TZ });
 }
 
 /** ISO-String → "14. April 2026" */
 export function fmtDateLong(iso: string | Date): string {
   const d = typeof iso === 'string' ? new Date(iso) : iso;
-  return d.toLocaleDateString('de-DE', { day: '2-digit', month: 'long', year: 'numeric' });
+  return d.toLocaleDateString('de-DE', { day: '2-digit', month: 'long', year: 'numeric', timeZone: TZ });
 }
 
 /** ISO-String → "14.04.2026, 10:30" */
@@ -42,6 +47,7 @@ export function fmtDateTime(iso: string | Date): string {
   return d.toLocaleDateString('de-DE', {
     day: '2-digit', month: '2-digit', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
+    timeZone: TZ,
   });
 }
 
@@ -51,6 +57,7 @@ export function fmtDateTimeShort(iso: string | Date): string {
   return d.toLocaleDateString('de-DE', {
     day: '2-digit', month: 'short', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
+    timeZone: TZ,
   });
 }
 

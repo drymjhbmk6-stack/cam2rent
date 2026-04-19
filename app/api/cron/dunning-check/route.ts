@@ -80,9 +80,10 @@ export async function GET(req: NextRequest) {
 
     if (existing) continue;
 
-    // Entwurf erstellen
-    const newDueDate = new Date();
-    newDueDate.setDate(newDueDate.getDate() + 7);
+    // Entwurf erstellen — neues Faelligkeitsdatum in Berlin-Zeit
+    const todayBerlin = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });
+    const [ny, nm, nd] = todayBerlin.split('-').map((n) => parseInt(n, 10));
+    const newDueDate = new Date(Date.UTC(ny, nm - 1, nd + 7));
 
     await supabase
       .from('dunning_notices')

@@ -31,8 +31,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ image: null });
   }
 
-  const now = new Date();
-  const key = yearMonthKey(now.getFullYear(), now.getMonth() + 1);
+  // Monat in Berlin-Zeit — sonst kippt der Monatswechsel zwischen 22-24 Uhr
+  // auf UTC-Servern einen Tag zu spaet (Dezember ist noch Dezember in Berlin,
+  // aber schon Januar in UTC... oder andersrum).
+  const berlinIso = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });
+  const [yStr, mStr] = berlinIso.split('-');
+  const year = parseInt(yStr, 10);
+  const month = parseInt(mStr, 10);
+  const key = yearMonthKey(year, month);
   const zoneImages = allImages[zone];
 
   if (!zoneImages || !zoneImages[key]) {
@@ -41,6 +47,6 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     image: zoneImages[key],
-    month: now.getMonth() + 1,
+    month,
   });
 }

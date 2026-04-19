@@ -213,8 +213,8 @@ export async function POST(
     }
 
     const docNames = attachments.map(a => a.filename.replace(/-.+\.pdf$/, '')).join(' und ');
-    const von = booking.rental_from ? new Date(booking.rental_from).toLocaleDateString('de-DE') : '';
-    const bis = booking.rental_to ? new Date(booking.rental_to).toLocaleDateString('de-DE') : '';
+    const von = booking.rental_from ? new Date(booking.rental_from).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' }) : '';
+    const bis = booking.rental_to ? new Date(booking.rental_to).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' }) : '';
 
     await resend.emails.send({
       from: process.env.RESEND_FROM_EMAIL || 'buchung@cam2rent.de',

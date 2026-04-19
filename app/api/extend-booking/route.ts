@@ -65,8 +65,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Buchung kann nicht verlängert werden.' }, { status: 400 });
   }
 
-  // Check rental hasn't ended
-  const today = new Date().toISOString().split('T')[0];
+  // Check rental hasn't ended — "heute" in Berlin-Zeit, sonst wuerde ein
+  // Kunde um 23:30 Berlin am Miet-Endtag die Verlaengerung abgelehnt kriegen
+  // (UTC ist 21:30 = noch "heute", aber Berlin ist auch "heute" — nur andersrum
+  // kann es zu frueh ablehnen: 00:30 Berlin des Folgetages = 22:30 UTC des Vortags).
+  const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });
   if (booking.rental_to < today) {
     return NextResponse.json({ error: 'Mietdauer ist bereits abgelaufen.' }, { status: 400 });
   }

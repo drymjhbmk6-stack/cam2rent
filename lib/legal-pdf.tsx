@@ -384,7 +384,7 @@ export function LegalDocumentPDF({ data }: { data: LegalPDFData }) {
   const dateStr = `${today.getDate().toString().padStart(2, '0')}.${(today.getMonth() + 1).toString().padStart(2, '0')}.${today.getFullYear()}`;
 
   const standDatum = data.publishedAt
-    ? new Date(data.publishedAt).toLocaleDateString('de-DE', { month: 'long', year: 'numeric' })
+    ? new Date(data.publishedAt).toLocaleDateString('de-DE', { month: 'long', year: 'numeric', timeZone: 'Europe/Berlin' })
     : dateStr;
 
   return (

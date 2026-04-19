@@ -9,22 +9,42 @@ import { type AdminProduct } from '@/lib/price-config';
 export async function GET() {
   try {
     const supabase = createServiceClient();
-    const now = new Date();
 
-    // Date helpers
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
-    const tomorrowStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString();
+    // Date helpers — alles in Berlin-Zeit berechnen, damit "heute"/"Woche"/
+    // "Monat" dem Nutzer entspricht und nicht dem UTC-Tag des Servers.
+    // Parse Berlin-Datum und baue daraus UTC-Timestamps (mit +01:00/+02:00).
+    const berlinIso = new Date().toLocaleString('sv-SE', { timeZone: 'Europe/Berlin' }); // "2026-04-20 23:45:00"
+    const [berlinDate, berlinTime] = berlinIso.split(' ');
+    const [bYear, bMonth, bDay] = berlinDate.split('-').map((n) => parseInt(n, 10));
+    // Offset-Helper: waehle +02:00 (CEST) oder +01:00 (CET) je nach aktueller Berlin-Zeit
+    const offset = (() => {
+      const utcFmt = new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', hour: '2-digit', hour12: false }).format(new Date());
+      const berlinHour = parseInt(berlinTime.split(':')[0], 10);
+      const utcHour = parseInt(utcFmt, 10);
+      const diff = (berlinHour - utcHour + 24) % 24;
+      return diff === 2 ? '+02:00' : '+01:00';
+    })();
+    const mkIso = (y: number, m: number, d: number) => {
+      const date = new Date(Date.UTC(y, m - 1, d));
+      const yy = date.getUTCFullYear();
+      const mm = String(date.getUTCMonth() + 1).padStart(2, '0');
+      const dd = String(date.getUTCDate()).padStart(2, '0');
+      return new Date(`${yy}-${mm}-${dd}T00:00:00${offset}`).toISOString();
+    };
+    const todayStart = mkIso(bYear, bMonth, bDay);
+    const tomorrowStart = mkIso(bYear, bMonth, bDay + 1);
 
-    // Week start (Monday)
-    const dayOfWeek = now.getDay();
+    // Week start (Monday) in Berlin-Zeit
+    const berlinNow = new Date(`${berlinDate}T12:00:00${offset}`);
+    const dayOfWeek = berlinNow.getUTCDay();
     const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-    const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - mondayOffset).toISOString();
+    const weekStart = mkIso(bYear, bMonth, bDay - mondayOffset);
 
     // Month start
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    const monthStart = mkIso(bYear, bMonth, 1);
 
     // 3 days from now
-    const threeDaysLater = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 3).toISOString();
+    const threeDaysLater = mkIso(bYear, bMonth, bDay + 3);
 
     // ── Run all queries in parallel ──────────────────────────────
 

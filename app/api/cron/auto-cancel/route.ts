@@ -18,7 +18,9 @@ export async function GET(req: NextRequest) {
   }
 
   const supabase = createServiceClient();
-  const today = new Date().toISOString().split('T')[0];
+  // Heute in Berlin-Zeit — sonst wuerde der Cron zwischen 22-24 Uhr Berlin
+  // schon fuer den naechsten Tag stornieren (UTC ist 1-2h zurueck)
+  const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });
 
   // Alle unbezahlten Buchungen deren Mietbeginn heute oder frueher ist
   const { data: bookings, error } = await supabase

@@ -46,7 +46,7 @@ export async function POST(
     .update({
       status: 'paid',
       payment_method: method || 'manual',
-      notes: note || `Manuell als bezahlt markiert am ${date || new Date().toISOString().split('T')[0]}`,
+      notes: note || `Manuell als bezahlt markiert am ${date || new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' })}`,
     })
     .eq('id', id);
 

@@ -152,7 +152,7 @@ export async function sendBookingConfirmation(data: BookingEmailData, contractPd
 
   // Generate PDF invoice as attachment
   const invoiceDate = new Date().toLocaleDateString('de-DE', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
+    day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Europe/Berlin',
   });
   const invoiceData: InvoiceData = {
     bookingId: data.bookingId,
@@ -402,7 +402,7 @@ export function buildCustomerEmail(d: BookingEmailData): { html: string; subject
               <p style="margin:0 0 4px;font-size:13px;color:#374151;">3–6 Tage vor Mietstart: 50 % Stornogebühren, Stornierung nur per E-Mail</p>
               <p style="margin:0 0 8px;font-size:13px;color:#374151;">≤ 2 Tage vor Mietstart: keine Rückerstattung möglich</p>
               <p style="margin:0 0 4px;font-size:12px;color:#9ca3af;">Gemäß § 312g Abs. 2 Nr. 9 BGB besteht für zeitgebundene Mietverträge kein gesetzliches Widerrufsrecht.</p>
-              ${d.earlyServiceConsentAt ? `<p style="margin:0;font-size:12px;color:#9ca3af;">Zustimmung zur vorzeitigen Leistungserbringung gemäß § 356 Abs. 4 BGB erteilt am ${new Date(d.earlyServiceConsentAt).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })} Uhr. Das Widerrufsrecht erlischt mit vollständiger Vertragserfüllung durch cam2rent.</p>` : ''}
+              ${d.earlyServiceConsentAt ? `<p style="margin:0;font-size:12px;color:#9ca3af;">Zustimmung zur vorzeitigen Leistungserbringung gemäß § 356 Abs. 4 BGB erteilt am ${new Date(d.earlyServiceConsentAt).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Berlin' })} Uhr. Das Widerrufsrecht erlischt mit vollständiger Vertragserfüllung durch cam2rent.</p>` : ''}
             </td></tr>
           </table>
 

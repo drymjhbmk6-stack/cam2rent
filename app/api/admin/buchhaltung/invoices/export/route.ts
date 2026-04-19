@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
     return new Response(csv, {
       headers: {
         'Content-Type': 'text/csv; charset=utf-8',
-        'Content-Disposition': `attachment; filename="rechnungen-export-${new Date().toISOString().split('T')[0]}.csv"`,
+        'Content-Disposition': `attachment; filename="rechnungen-export-${new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' })}.csv"`,
       },
     });
   }

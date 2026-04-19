@@ -19,10 +19,15 @@ export async function GET(req: NextRequest) {
     const daysParam = req.nextUrl.searchParams.get('days');
     const days = [30, 90, 365].includes(Number(daysParam)) ? Number(daysParam) : 30;
 
-    const now = new Date();
-    const periodStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - days);
+    // Heute in Berlin-Zeit, sonst kippt Periode um 22-24 Uhr auf den UTC-Tag
+    const todayBerlin = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });
+    const [tyStr, tmStr, tdStr] = todayBerlin.split('-');
+    const ty = parseInt(tyStr, 10);
+    const tm = parseInt(tmStr, 10);
+    const td = parseInt(tdStr, 10);
+    const periodStart = new Date(Date.UTC(ty, tm - 1, td - days));
     const periodStartStr = periodStart.toISOString().split('T')[0]; // DATE format
-    const periodEndStr = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString().split('T')[0];
+    const periodEndStr = todayBerlin;
 
     // Produkte aus admin_config laden
     const { data: configData } = await supabase

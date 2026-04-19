@@ -122,7 +122,8 @@ export async function POST(req: NextRequest) {
       };
       const label = methodLabels[body.payment_method] || body.payment_method;
       await supabase.from('expenses').insert({
-        expense_date: new Date().toISOString().split('T')[0],
+        // Berlin-Datum, damit Gebuehren-Ausgaben abends nicht auf den Folgetag rutschen
+        expense_date: new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' }),
         category: 'fees',
         description: `${label}-Gebühr für Buchung ${bookingId}`,
         vendor: label,

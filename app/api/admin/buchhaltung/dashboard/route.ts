@@ -105,23 +105,32 @@ export async function GET(req: NextRequest) {
       // invoices-Tabelle fehlt oder Spalten fehlen — kein Abbruch
     }
 
-    // Umsatzverlauf letzte 12 Monate
+    // Umsatzverlauf letzte 12 Monate — Monate in Berlin-Zeit berechnen,
+    // sonst schiebt sich der Dezember auf UTC-Servern bei Buchungen
+    // zwischen 23-24 Uhr UTC in den falschen Monat.
     const revenueChart: Array<{ month: string; revenue: number; net: number }> = [];
-    const now = new Date();
+    const berlinNow = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });
+    const [bYearStr, bMonthStr] = berlinNow.split('-');
+    const curYear = parseInt(bYearStr, 10);
+    const curMonth = parseInt(bMonthStr, 10) - 1; // 0-based
     for (let i = 11; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const mFrom = d.toISOString().split('T')[0];
-      const mTo = new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split('T')[0];
+      const year = curYear + Math.floor((curMonth - i) / 12);
+      const month = ((curMonth - i) % 12 + 12) % 12;
+      const firstDay = String(new Date(Date.UTC(year, month, 1)).getUTCDate()).padStart(2, '0');
+      const lastDay = String(new Date(Date.UTC(year, month + 1, 0)).getUTCDate()).padStart(2, '0');
+      const mFrom = `${year}-${String(month + 1).padStart(2, '0')}-${firstDay}`;
+      const mTo = `${year}-${String(month + 1).padStart(2, '0')}-${lastDay}`;
 
+      // Berlin-Zeit in UTC umrechnen fuer den DB-Filter
       const { data: monthBookings } = await supabase
         .from('bookings')
         .select('price_total')
         .neq('status', 'cancelled')
-        .gte('created_at', `${mFrom}T00:00:00`)
-        .lte('created_at', `${mTo}T23:59:59`);
+        .gte('created_at', `${mFrom}T00:00:00+01:00`)
+        .lte('created_at', `${mTo}T23:59:59+01:00`);
 
       const revenue = (monthBookings || []).reduce((sum, b) => sum + (b.price_total || 0), 0);
-      const monthName = d.toLocaleDateString('de-DE', { month: 'short', year: '2-digit' });
+      const monthName = new Date(Date.UTC(year, month, 15)).toLocaleDateString('de-DE', { month: 'short', year: '2-digit', timeZone: 'Europe/Berlin' });
       revenueChart.push({ month: monthName, revenue, net: revenue });
     }
 

@@ -144,9 +144,11 @@ export async function POST(req: NextRequest) {
   // Artikel werden X Tage VOR dem Veröffentlichungsdatum generiert,
   // damit der Admin sie vorher prüfen kann
   const daysBeforeGenerate = parseInt(String(blogSettings.schedule_days_before ?? '3')) || 3;
-  const todayDate = new Date();
-  const generateBeforeDate = new Date(todayDate);
-  generateBeforeDate.setDate(generateBeforeDate.getDate() + daysBeforeGenerate);
+  // Berlin-Datum als Basis, damit der Cron zwischen 22-24 Uhr Berlin
+  // nicht schon fuer den Folgetag generiert.
+  const todayBerlin = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });
+  const [gy, gm, gd] = todayBerlin.split('-').map((n) => parseInt(n, 10));
+  const generateBeforeDate = new Date(Date.UTC(gy, gm - 1, gd + daysBeforeGenerate));
   const generateBeforeDateStr = generateBeforeDate.toISOString().split('T')[0];
 
   let scheduleQuery = supabase
@@ -221,7 +223,8 @@ export async function POST(req: NextRequest) {
     shopProductsInfo = `\n\nAKTUELLE PRODUKTE IM CAM2RENT SHOP (verlinke diese wenn relevant):\n${productList}\n\nVerwende NUR diese Produkte oder allgemeine Themen. KEINE veralteten Modelle erfinden.`;
   }
 
-  const currentYear = new Date().getFullYear();
+  // Aktuelles Jahr in Berlin-Zeit — sonst fehlt in der Silvester-Nacht das neue Jahr
+  const currentYear = parseInt(new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' }).slice(0, 4), 10);
 
   const kiContext = (blogSettings.ki_context as string)
     ? `\n\nZUSÄTZLICHER KONTEXT VOM ADMIN:\n${blogSettings.ki_context}`
