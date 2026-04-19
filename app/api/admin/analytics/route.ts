@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
+import { getBerlinDayStartISO } from '@/lib/timezone';
 
 function formatReferrer(ref: string | null): string {
   if (!ref) return 'direkt';
@@ -64,13 +65,11 @@ export async function GET(req: NextRequest) {
 
     const visitors = Array.from(sessionMap.values());
 
-    // Today stats
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
+    // Today stats (Berlin-Mitternacht als UTC — sonst Timezone-Drift)
     const { data: todayData } = await supabase
       .from('page_views')
       .select('session_id, visitor_id')
-      .gte('created_at', todayStart.toISOString());
+      .gte('created_at', getBerlinDayStartISO());
 
     const totalViews = todayData?.length ?? 0;
     const uniqueVisitors = new Set(todayData?.map((r) => r.visitor_id)).size;
@@ -87,13 +86,10 @@ export async function GET(req: NextRequest) {
 
   // ── TODAY ─────────────────────────────────────────────────────────────────
   if (type === 'today') {
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-
     const { data } = await supabase
       .from('page_views')
       .select('session_id, visitor_id, path, device_type, created_at')
-      .gte('created_at', todayStart.toISOString());
+      .gte('created_at', getBerlinDayStartISO());
 
     const rows = data ?? [];
     const totalViews = rows.length;
@@ -411,14 +407,13 @@ export async function GET(req: NextRequest) {
 
   // ── BOOKINGS STATS ────────────────────────────────────────────────────────
   if (type === 'bookings') {
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
+    const todayStartISO = getBerlinDayStartISO();
     const since30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
     const { data: todayBookings } = await supabase
       .from('bookings')
       .select('price_total, created_at')
-      .gte('created_at', todayStart.toISOString())
+      .gte('created_at', todayStartISO)
       .neq('status', 'cancelled');
 
     const { data: allBookings } = await supabase
@@ -447,7 +442,7 @@ export async function GET(req: NextRequest) {
     const { data: todayViews } = await supabase
       .from('page_views')
       .select('session_id', { count: 'exact', head: false })
-      .gte('created_at', todayStart.toISOString());
+      .gte('created_at', todayStartISO);
     const sessionCount = new Set((todayViews ?? []).map((r) => r.session_id)).size;
     const conversionRate = sessionCount > 0 ? +((todayCount / sessionCount) * 100).toFixed(1) : 0;
     const avgBookingValue = todayCount > 0 ? +(todayRevenue / todayCount).toFixed(2) : 0;

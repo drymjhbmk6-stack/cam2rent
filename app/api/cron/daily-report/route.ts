@@ -4,6 +4,7 @@ import { createServiceClient } from '@/lib/supabase';
 import { verifyCronAuth } from '@/lib/cron-auth';
 import { BUSINESS } from '@/lib/business-config';
 import { fmtEuro } from '@/lib/format-utils';
+import { getBerlinDayStart } from '@/lib/timezone';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? BUSINESS.emailKontakt;
@@ -29,18 +30,12 @@ export async function GET(req: NextRequest) {
 
   const supabase = createServiceClient();
 
-  // Yesterday range
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  yesterday.setHours(0, 0, 0, 0);
-  const yesterdayEnd = new Date(yesterday);
-  yesterdayEnd.setHours(23, 59, 59, 999);
+  // Yesterday range — Berlin-Mitternacht als UTC, sonst Timezone-Drift
+  const yesterday = getBerlinDayStart(new Date(Date.now() - 24 * 60 * 60 * 1000));
+  const yesterdayEnd = new Date(yesterday.getTime() + 24 * 60 * 60 * 1000 - 1);
 
-  // Day before yesterday
-  const dayBefore = new Date(yesterday);
-  dayBefore.setDate(dayBefore.getDate() - 1);
-  const dayBeforeEnd = new Date(yesterday);
-  dayBeforeEnd.setHours(-1, 59, 59, 999);
+  // Day before yesterday (fuer Vergleichs-Prozente)
+  const dayBefore = getBerlinDayStart(new Date(Date.now() - 2 * 24 * 60 * 60 * 1000));
 
   const [ydViews, dbViews, ydBookings] = await Promise.all([
     supabase.from('page_views').select('session_id, visitor_id, path, device_type')

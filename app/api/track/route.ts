@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const supabase = createServiceClient();
-    await supabase.from('page_views').insert({
+    const { error } = await supabase.from('page_views').insert({
       visitor_id: body.visitor_id,
       session_id: body.session_id ?? '',
       path: body.path,
@@ -56,8 +56,13 @@ export async function POST(req: NextRequest) {
       utm_medium: body.utm_medium || null,
       utm_campaign: body.utm_campaign || null,
     });
-  } catch {
-    // Silently fail — tracking should never break the app
+    if (error) {
+      // Mit Log (nicht stumm) — hilft Fehlerdiagnose z.B. bei fehlender Tabelle
+      console.error('[track] page_views insert failed:', error.message);
+    }
+  } catch (err) {
+    // Tracking darf die App nie kaputt machen, aber geloggt wird es
+    console.error('[track] page_views insert threw:', err instanceof Error ? err.message : err);
   }
 
   return NextResponse.json({ ok: true });
