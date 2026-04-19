@@ -107,23 +107,68 @@ export default function NotificationDropdown({ position = 'sidebar' }: { positio
   const dropdownRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
-  const fetchNotifications = useCallback(async () => {
+  // Backoff-Zaehler: bei Fehlern (Supabase 522, Netz weg, etc.) verdoppeln
+  // wir das Poll-Intervall schrittweise — statt die toten Server mit
+  // 30s-Requests zu ueberfluten. Reset auf 30s bei Erfolg.
+  const failureCountRef = useRef(0);
+  const nextPollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const fetchNotifications = useCallback(async (): Promise<boolean> => {
+    // Nicht pollen wenn der Tab im Hintergrund ist — spart Supabase-Budget
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+      return true; // nicht als Fehler werten
+    }
     try {
-      const res = await fetch('/api/admin/notifications');
-      if (!res.ok) return;
+      // Request-Timeout 8s — sonst stapeln sich bei Supabase-Ausfall die Calls
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      const res = await fetch('/api/admin/notifications', { signal: controller.signal });
+      clearTimeout(timeoutId);
+      if (!res.ok) return false;
       const data = await res.json();
       setNotifications(data.notifications || []);
       setUnreadCount(data.unreadCount || 0);
+      return true;
     } catch {
-      // Stille Fehler beim Polling
+      return false;
     }
   }, []);
 
-  // Initiales Laden + Polling alle 30 Sekunden
+  // Adaptives Polling: 30s normal, bei Fehlern exponentiell bis 5 Min
   useEffect(() => {
-    fetchNotifications();
-    const interval = setInterval(fetchNotifications, 30000);
-    return () => clearInterval(interval);
+    let mounted = true;
+
+    async function tick() {
+      if (!mounted) return;
+      const ok = await fetchNotifications();
+      if (!mounted) return;
+      if (ok) {
+        failureCountRef.current = 0;
+      } else {
+        failureCountRef.current = Math.min(failureCountRef.current + 1, 4);
+      }
+      // 30s, 60s, 120s, 240s, 300s
+      const nextDelay = Math.min(30000 * Math.pow(2, failureCountRef.current), 300000);
+      nextPollTimeoutRef.current = setTimeout(tick, nextDelay);
+    }
+
+    tick();
+
+    // Bei Sichtbarkeits-Wechsel sofort neu pollen (resettet auch Backoff)
+    function onVisibilityChange() {
+      if (document.visibilityState === 'visible') {
+        failureCountRef.current = 0;
+        if (nextPollTimeoutRef.current) clearTimeout(nextPollTimeoutRef.current);
+        tick();
+      }
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      mounted = false;
+      if (nextPollTimeoutRef.current) clearTimeout(nextPollTimeoutRef.current);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
   }, [fetchNotifications]);
 
   // Dropdown schliessen bei Klick ausserhalb
