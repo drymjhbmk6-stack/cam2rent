@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import SocialPostPreview from '@/components/admin/SocialPostPreview';
 import { fmtDateTime } from '@/lib/format-utils';
+import { utcToBerlinLocalInput, berlinLocalInputToUTC } from '@/lib/timezone';
 
 interface SocialPost {
   id: string;
@@ -68,7 +69,7 @@ export default function PostDetail({ params }: { params: Promise<{ id: string }>
       setHashtagsText((p.hashtags ?? []).join(' '));
       setImageUrl(p.media_urls[0] ?? '');
       setLinkUrl(p.link_url ?? '');
-      setScheduledAt(p.scheduled_at ? p.scheduled_at.slice(0, 16) : '');
+      setScheduledAt(utcToBerlinLocalInput(p.scheduled_at));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unbekannter Fehler');
     } finally {
@@ -96,7 +97,7 @@ export default function PostDetail({ params }: { params: Promise<{ id: string }>
         media_urls,
         media_type: media_urls.length === 0 ? 'text' : 'image',
         link_url: linkUrl || null,
-        scheduled_at: scheduledAt || null,
+        scheduled_at: berlinLocalInputToUTC(scheduledAt),
       };
       const res = await fetch(`/api/admin/social/posts/${id}`, {
         method: 'PATCH',
@@ -152,7 +153,7 @@ export default function PostDetail({ params }: { params: Promise<{ id: string }>
       const res = await fetch(`/api/admin/social/posts/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'scheduled', scheduled_at: scheduledAt }),
+        body: JSON.stringify({ status: 'scheduled', scheduled_at: berlinLocalInputToUTC(scheduledAt) }),
       });
       if (!res.ok) throw new Error('Planen fehlgeschlagen');
       setNotice('Post geplant.');

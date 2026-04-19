@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import SocialPostPreview from '@/components/admin/SocialPostPreview';
+import { berlinLocalInputToUTC } from '@/lib/timezone';
 
 interface Template {
   id: string;
@@ -109,7 +110,11 @@ export default function NewPostPage() {
 
       const mediaUrls = imageUrl ? [imageUrl] : [];
       const status = schedule === 'now' ? 'scheduled' : schedule === 'later' ? 'scheduled' : 'draft';
-      const scheduled_at = schedule === 'now' ? new Date().toISOString() : schedule === 'later' ? scheduledAt : null;
+      const scheduled_at = schedule === 'now'
+        ? new Date().toISOString()
+        : schedule === 'later'
+        ? berlinLocalInputToUTC(scheduledAt)
+        : null;
 
       const body = {
         caption,

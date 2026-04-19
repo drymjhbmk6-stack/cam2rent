@@ -41,3 +41,29 @@ export function getBerlinDaysAgoISO(days: number): string {
   const date = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
   return getBerlinDayStart(date).toISOString();
 }
+
+/**
+ * Wandelt einen UTC-ISO-String ("2026-04-19T16:02:00Z") in das Format
+ * um, das ein <input type="datetime-local"> erwartet, als Berlin-Zeit.
+ * Rückgabe: "YYYY-MM-DDTHH:mm" (z.B. "2026-04-19T18:02").
+ */
+export function utcToBerlinLocalInput(utcIso: string | null | undefined): string {
+  if (!utcIso) return '';
+  const d = new Date(utcIso);
+  if (isNaN(d.getTime())) return '';
+  // sv-SE → "2026-04-19 18:02:00"
+  const berlin = d.toLocaleString('sv-SE', { timeZone: 'Europe/Berlin' });
+  return berlin.replace(' ', 'T').slice(0, 16);
+}
+
+/**
+ * Wandelt einen datetime-local Input-Wert ("2026-04-19T18:02"), der in
+ * Berlin-Zeit gemeint ist, in einen UTC-ISO-String zum Speichern.
+ */
+export function berlinLocalInputToUTC(localInput: string | null | undefined): string | null {
+  if (!localInput) return null;
+  const offset = getBerlinOffsetString();
+  const d = new Date(`${localInput}:00${offset}`);
+  if (isNaN(d.getTime())) return null;
+  return d.toISOString();
+}
