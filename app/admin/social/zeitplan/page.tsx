@@ -153,6 +153,15 @@ export default function ZeitplanPage() {
     }
   }
 
+  async function reschedule(id: string, scheduled_date: string, scheduled_time: string) {
+    await fetch(`/api/admin/social/editorial-plan/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scheduled_date, scheduled_time }),
+    });
+    loadAll();
+  }
+
   async function deleteEntry(id: string) {
     if (!confirm('Plan-Eintrag wirklich löschen?')) return;
     await fetch(`/api/admin/social/editorial-plan/${id}`, { method: 'DELETE' });
@@ -257,7 +266,8 @@ export default function ZeitplanPage() {
                   onDelete={() => deleteEntry(entry.id)}
                   onSkip={() => skipEntry(entry.id)}
                   onGenerate={() => generateNow(entry.id)}
-                  onPublish={() => entry.post_id && publishNow(entry.post_id, entry.platforms)} />
+                  onPublish={() => entry.post_id && publishNow(entry.post_id, entry.platforms)}
+                  onReschedule={(date, time) => reschedule(entry.id, date, time)} />
               ))}
             </div>
           </div>
@@ -267,15 +277,21 @@ export default function ZeitplanPage() {
   );
 }
 
-function PlanRow({ entry, onToggleReviewed, onDelete, onSkip, onGenerate, onPublish }: {
+function PlanRow({ entry, onToggleReviewed, onDelete, onSkip, onGenerate, onPublish, onReschedule }: {
   entry: PlanEntry;
   onToggleReviewed: () => void;
   onDelete: () => void;
   onSkip: () => void;
   onGenerate: () => void;
   onPublish: () => void;
+  onReschedule: (date: string, time: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [editingSchedule, setEditingSchedule] = useState(false);
+  const [editDate, setEditDate] = useState(entry.scheduled_date);
+  const [editTime, setEditTime] = useState(entry.scheduled_time.slice(0, 5));
+
+  const canReschedule = entry.status !== 'published' && entry.status !== 'skipped';
   const statusColor: Record<string, string> = {
     planned: 'bg-slate-800 text-slate-300',
     generating: 'bg-amber-900/40 text-amber-300 animate-pulse',
@@ -299,11 +315,57 @@ function PlanRow({ entry, onToggleReviewed, onDelete, onSkip, onGenerate, onPubl
     <div className="rounded-xl bg-slate-900/50 border border-slate-800 overflow-hidden">
       <div className="p-3 flex items-start gap-3">
         <div className="flex-shrink-0">
-          <div className="rounded-lg bg-slate-950/60 border border-slate-800 px-2 py-1 text-center min-w-[60px]">
-            <p className="text-[10px] text-slate-500 uppercase">{new Date(entry.scheduled_date).toLocaleDateString('de-DE', { month: 'short' })}</p>
-            <p className="text-lg font-bold text-slate-200 leading-none">{new Date(entry.scheduled_date).getDate()}</p>
-            <p className="text-[10px] text-slate-500">{entry.scheduled_time.slice(0, 5)}</p>
-          </div>
+          {!editingSchedule ? (
+            <button
+              type="button"
+              onClick={() => canReschedule && setEditingSchedule(true)}
+              disabled={!canReschedule}
+              className={`rounded-lg bg-slate-950/60 border border-slate-800 px-2 py-1 text-center min-w-[60px] transition-colors ${canReschedule ? 'hover:border-cyan-600 cursor-pointer' : 'cursor-default opacity-60'}`}
+              title={canReschedule ? 'Datum/Uhrzeit ändern' : ''}
+            >
+              <p className="text-[10px] text-slate-500 uppercase">{new Date(entry.scheduled_date).toLocaleDateString('de-DE', { month: 'short' })}</p>
+              <p className="text-lg font-bold text-slate-200 leading-none">{new Date(entry.scheduled_date).getDate()}</p>
+              <p className="text-[10px] text-slate-500">{entry.scheduled_time.slice(0, 5)}</p>
+            </button>
+          ) : (
+            <div className="rounded-lg bg-slate-950/60 border border-cyan-600 p-2 flex flex-col gap-1 min-w-[140px]">
+              <input
+                type="date"
+                value={editDate}
+                onChange={(e) => setEditDate(e.target.value)}
+                className="text-xs px-1.5 py-1 rounded bg-slate-900 border border-slate-700 text-slate-200"
+              />
+              <input
+                type="time"
+                value={editTime}
+                onChange={(e) => setEditTime(e.target.value)}
+                className="text-xs px-1.5 py-1 rounded bg-slate-900 border border-slate-700 text-slate-200"
+              />
+              <div className="flex gap-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onReschedule(editDate, editTime);
+                    setEditingSchedule(false);
+                  }}
+                  className="flex-1 px-1.5 py-1 text-[10px] rounded bg-cyan-600 text-white font-semibold hover:bg-cyan-500"
+                >
+                  ✓ Speichern
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditDate(entry.scheduled_date);
+                    setEditTime(entry.scheduled_time.slice(0, 5));
+                    setEditingSchedule(false);
+                  }}
+                  className="px-1.5 py-1 text-[10px] rounded bg-slate-700 text-slate-200 hover:bg-slate-600"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          )}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1 flex-wrap">
