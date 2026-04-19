@@ -217,12 +217,21 @@ export default function NewPostPage() {
               value={freePrompt}
               onChange={(e) => setFreePrompt(e.target.value)}
               rows={4}
-              placeholder={`Beschreib in eigenen Worten worum es geht, z.B.:
+              placeholder={`Beschreib in eigenen Worten worum es geht. Beispiele:
 
+ANKÜNDIGUNGEN:
 - Neue Website mit Dark-Mode und schnellerem Checkout ist online
 - Ab Mai bieten wir Versand nach Österreich + Schweiz
 - Dieses Wochenende 20% Rabatt auf alle Sets
-- Team-Update: Wir haben ein neues Reinigungsverfahren für unsere Kameras`}
+
+COMMUNITY-POSTS (Follower einbeziehen):
+- Teilt euer schönstes Foto mit #cam2rentmoments — die besten 3 gewinnen einen 20€-Gutschein
+- Welche Kamera ist euer Favorit für Skiurlaub? 🎿 GoPro | 🚀 DJI | 📸 Insta360
+- Zeigt uns eure wildeste Action-Aufnahme — wir re-posten die Top 5 diese Woche
+
+TEAM / BTS:
+- Neues Reinigungsverfahren: jede Kamera wird vor Versand 15 Min UV-desinfiziert
+- Lernt unser Team kennen: Max kümmert sich um Bestellungen bis 14 Uhr`}
               className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm font-mono text-xs"
             />
             <label className="flex items-center gap-2 mt-2 text-sm text-slate-200 cursor-pointer">

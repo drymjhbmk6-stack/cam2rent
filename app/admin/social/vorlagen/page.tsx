@@ -80,13 +80,28 @@ export default function TemplatesPage() {
           <h1 className="text-2xl font-bold text-white">Vorlagen</h1>
           <p className="text-sm text-slate-400">KI-Prompts für automatisch generierte Posts.</p>
         </div>
-        <button
-          type="button"
-          onClick={() => setCreating(true)}
-          className="px-4 py-2 rounded-lg bg-cyan-600 text-white font-semibold text-sm hover:bg-cyan-500"
-        >
-          + Neue Vorlage
-        </button>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={async () => {
+              const res = await fetch('/api/admin/social/templates/seed', { method: 'POST' });
+              const data = await res.json();
+              alert(data.message || `${data.imported} neue Standard-Vorlagen importiert (${data.skipped} bereits vorhanden).`);
+              load();
+            }}
+            className="px-3 py-2 rounded-lg bg-slate-800 text-slate-200 font-semibold text-sm hover:bg-slate-700 border border-slate-700"
+            title="Laedt offizielle Standard-Vorlagen (Community, Ankuendigung, Testimonial, etc.)"
+          >
+            ↓ Standard-Vorlagen importieren
+          </button>
+          <button
+            type="button"
+            onClick={() => setCreating(true)}
+            className="px-4 py-2 rounded-lg bg-cyan-600 text-white font-semibold text-sm hover:bg-cyan-500"
+          >
+            + Neue Vorlage
+          </button>
+        </div>
       </div>
 
       {loading && <p className="text-slate-400">Lade…</p>}
