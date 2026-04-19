@@ -12,6 +12,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import OpenAI, { toFile } from 'openai';
 import { seasonPromptBlock } from '@/lib/meta/season';
 import { resolveProductForPost, modernCameraHint, type ProductImageMatch } from '@/lib/meta/product-image-resolver';
+import { sanitizePromptInput } from '@/lib/prompt-sanitize';
 
 async function getApiKeys(): Promise<{ anthropic?: string; openai?: string }> {
   const supabase = createServiceClient();
@@ -73,10 +74,12 @@ export async function generateCaption(
     throw new Error('Anthropic API Key nicht konfiguriert (Blog → Einstellungen)');
   }
 
-  // Platzhalter ersetzen
+  // Platzhalter ersetzen — User-Input wird vorher sanitisiert,
+  // damit der Prompt nicht durch Delimiter-Injection gehijackt wird.
   let filledPrompt = promptTemplate;
   for (const [key, value] of Object.entries(variables)) {
-    filledPrompt = filledPrompt.replaceAll(`{${key}}`, String(value ?? ''));
+    const safe = sanitizePromptInput(value, 400);
+    filledPrompt = filledPrompt.replaceAll(`{${key}}`, safe);
   }
 
   const maxLength = options.maxLength ?? 500;
@@ -328,7 +331,8 @@ export async function generateFromTemplate(input: TemplateGenerationInput): Prom
   if (input.image_prompt && input.image_prompt.trim().length > 0) {
     let imagePrompt = input.image_prompt;
     for (const [key, value] of Object.entries(input.variables ?? {})) {
-      imagePrompt = imagePrompt.replaceAll(`{${key}}`, String(value ?? ''));
+      const safe = sanitizePromptInput(value, 400);
+      imagePrompt = imagePrompt.replaceAll(`{${key}}`, safe);
     }
     // Source-Text fuer Produkt-Matching: Template-Variablen + Caption-Ergebnis
     const sourceText = [

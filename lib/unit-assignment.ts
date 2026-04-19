@@ -46,13 +46,9 @@ export async function findFreeUnit(
 /**
  * Weist einer Buchung atomar eine freie Unit zu.
  *
- * Nutzt die Postgres-Funktion `assign_free_unit` mit Advisory Lock
+ * Nutzt die Postgres-Funktion `assign_free_unit` mit `pg_advisory_xact_lock`
  * (siehe supabase-unit-assignment-lock.sql). Das serialisiert parallele
  * Zuweisungen pro Produkt und verhindert Doppelvergaben.
- *
- * Fallback auf die alte (race-anfällige) Logik, falls die RPC-Funktion
- * in der DB noch nicht existiert — damit brechen bestehende Installationen
- * nicht, bis die Migration ausgeführt wird.
  *
  * @returns Die zugewiesene unit_id oder null falls keine frei
  */
@@ -71,17 +67,12 @@ export async function assignUnitToBooking(
     p_booking_id: bookingId,
   });
 
-  if (!error) {
-    return (data as string | null) ?? null;
+  if (error) {
+    // RPC muss verfügbar sein — sonst droht Race-Condition beim Fallback.
+    // Migration `supabase-unit-assignment-lock.sql` läuft beim Setup.
+    console.error('[unit-assignment] assign_free_unit RPC fehlgeschlagen:', error);
+    throw new Error(`Unit-Zuweisung fehlgeschlagen: ${error.message}`);
   }
 
-  // Fallback (Migration noch nicht ausgeführt): alte Logik verwenden.
-  // WICHTIG: Race-anfällig — nach Migration entfernen.
-  console.warn('[unit-assignment] RPC assign_free_unit nicht verfügbar, Fallback aktiv:', error.message);
-
-  const unitId = await findFreeUnit(productId, rentalFrom, rentalTo);
-  if (!unitId) return null;
-
-  await supabase.from('bookings').update({ unit_id: unitId }).eq('id', bookingId);
-  return unitId;
+  return (data as string | null) ?? null;
 }

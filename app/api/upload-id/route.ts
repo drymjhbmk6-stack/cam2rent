@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
+import { isAllowedImage } from '@/lib/file-type-check';
 
 const uploadLimiter = rateLimit({ maxAttempts: 5, windowMs: 60 * 60 * 1000 }); // 5 pro Stunde
 
@@ -86,6 +87,17 @@ export async function POST(req: NextRequest) {
       const filePath = `${userId}/${side}.${ext}`;
 
       const buffer = Buffer.from(await file.arrayBuffer());
+
+      // Magic-Byte-Check: vom Client gemeldeter MIME reicht nicht.
+      if (!isAllowedImage(buffer)) {
+        return NextResponse.json(
+          {
+            error: `${side === 'front' ? 'Vorderseite' : 'Rückseite'}: Datei ist kein gültiges Bild (JPG, PNG, WebP oder HEIC).`,
+          },
+          { status: 400 },
+        );
+      }
+
       const { error: uploadErr } = await supabase.storage
         .from('id-documents')
         .upload(filePath, buffer, {

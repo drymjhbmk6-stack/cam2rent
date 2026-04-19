@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import Anthropic from '@anthropic-ai/sdk';
+import { sanitizePromptInput, sanitizePromptInputList } from '@/lib/prompt-sanitize';
 
 const LENGTH_MAP: Record<string, string> = {
   kurz: 'ca. 500 Wörter',
@@ -38,16 +39,21 @@ async function getApiKey(): Promise<string | null> {
 export async function POST(req: NextRequest) {
   const body = await req.json();
   const {
-    topic,
-    keywords,
+    topic: rawTopic,
+    keywords: rawKeywords,
     tone = 'informativ',
     targetLength = 'mittel',
-    referenceProducts,
+    referenceProducts: rawReferenceProducts,
   } = body;
 
-  if (!topic) {
+  if (!rawTopic) {
     return NextResponse.json({ error: 'Thema ist erforderlich.' }, { status: 400 });
   }
+
+  // Prompt-Injection-Defense: User-Input neutralisieren, bevor er in Prompts landet
+  const topic = sanitizePromptInput(rawTopic, 300);
+  const keywords = sanitizePromptInputList(rawKeywords, 15, 80);
+  const referenceProducts = sanitizePromptInputList(rawReferenceProducts, 10, 150);
 
   const supabase = createServiceClient();
   const apiKey = await getApiKey();
@@ -74,11 +80,11 @@ export async function POST(req: NextRequest) {
   const currentYear = new Date().getFullYear();
 
   let productContext = '';
-  if (referenceProducts?.length) {
-    productContext = `\n\nReferenz-Produkte aus dem Shop (erwähne diese natürlich im Artikel):\n${referenceProducts.map((p: string) => `- ${p}`).join('\n')}`;
+  if (referenceProducts.length) {
+    productContext = `\n\nReferenz-Produkte aus dem Shop (erwähne diese natürlich im Artikel):\n${referenceProducts.map((p) => `- ${p}`).join('\n')}`;
   }
 
-  const keywordHint = keywords?.length
+  const keywordHint = keywords.length
     ? `\nWichtige Keywords für SEO: ${keywords.join(', ')}`
     : '';
 

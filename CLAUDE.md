@@ -693,6 +693,20 @@ Read-only Katalog aller automatisch versendeten E-Mails mit Inline-Vorschau.
 - **Race Condition Unit-Zuweisung:** `assignUnitToBooking` nutzt jetzt die Postgres-Funktion `assign_free_unit` mit `pg_advisory_xact_lock` (serialisiert parallele Zuweisungen pro Produkt). Fallback auf die alte Logik, falls die Migration noch nicht ausgeführt wurde.
 - **Stripe-Webhook Idempotenz:** `.like()` → `.eq()` — `payment_intent_id` wird exakt gespeichert, Wildcard war unnötig.
 
+### Security- & Performance-Audit-Fixes (2026-04-20)
+Umfassendes Audit mit paralleler Agent-Analyse (Security/Code-Quality/Performance/Business-Logic). Alle Findings (außer `TEST_MODE` — Go-Live-Blocker, wird am 01.05. gekippt) wurden behoben:
+
+- **Prompt-Injection-Sanitizer** `lib/prompt-sanitize.ts` — neutralisiert User-Input vor Einbau in System-Prompts: Backticks, Injection-Sequenzen (`ignore previous instructions`, `<|...|>`, `system:`), Control-Chars, Längen-Cap. Angewendet in [blog/generate](app/api/admin/blog/generate/route.ts) (`topic`, `keywords`, `referenceProducts`) + [meta/ai-content.ts](lib/meta/ai-content.ts) (Template-Variablen).
+- **Magic-Byte-Check** `lib/file-type-check.ts` — prüft echte Binär-Signatur (JPEG/PNG/WebP/HEIC/GIF), Client-MIME wird ignoriert. Angewendet in [upload-id](app/api/upload-id/route.ts), [product-images](app/api/product-images/route.ts), [set-images](app/api/set-images/route.ts).
+- **Preis-Plausibilitätsprüfung** — zwei-stufig: [checkout-intent](app/api/checkout-intent/route.ts) blockt präventiv, [confirm-cart](app/api/confirm-cart/route.ts) prüft `intent.amount` (echte Stripe-Wahrheit) gegen server-berechneten Basispreis aus DB (`calcPriceFromTable`). 70 % Rabatt-Puffer. Fängt Client-Manipulation (z.B. `amountCents: 100` statt 50.000).
+- **Admin-Cookie `sameSite: 'strict'`** in [login](app/api/admin/login/route.ts:86) + [logout](app/api/admin/logout/route.ts) — CSRF-Surface geschlossen.
+- **Unit-Assignment Fallback entfernt** in [lib/unit-assignment.ts](lib/unit-assignment.ts) — RPC `assign_free_unit` ist Pflicht; Fehler wirft jetzt sauber, statt in race-anfällige Alt-Logik zu fallen (`.catch()` der Aufrufer fangen's).
+- **Rate-Limit Hard-Cap** [lib/rate-limit.ts](lib/rate-limit.ts) — Map begrenzt auf 10k Einträge (FIFO-Eviction), schützt gegen IP-Rotation-DoS des In-Memory-Stores.
+- **test-email Rate-Limit** [test-email](app/api/admin/test-email/route.ts) — 10/min pro IP als Defense-in-Depth falls Admin-Cookie kompromittiert.
+- **Gantt-API N+1 Fix** [availability-gantt](app/api/admin/availability-gantt/route.ts) — 3× `.filter()` in Produkt-Loop → Gruppen-Maps in O(n). Zubehör/Set-Auflösung: eine Pass statt `accessories × bookings × setItems`.
+- **Hot-Path `.select('*')`** → Spaltenlisten in [admin/kunden](app/api/admin/kunden/route.ts) (Ausweis-Bilder nicht mehr in Liste), Gantt `product_units`.
+- **DB-Indizes** `supabase-performance-indizes.sql` — 8 `CREATE INDEX CONCURRENTLY IF NOT EXISTS` (bookings.user_id, bookings.created_at, bookings(product_id, rental_from, rental_to), email_log.booking_id, blog_posts(status, created_at), social_posts(status, scheduled_at), waitlist_subscriptions.product_id, rental_agreements.booking_id).
+
 ### Mobile-Fixes (2026-04-17)
 - **Viewport-Export** in `app/layout.tsx`: `device-width`, `initialScale: 1`, `viewportFit: 'cover'` (iOS Safe-Area aktiv) — Next.js 15 Pattern.
 - **CookieBanner z-[60]** + `padding-bottom: calc(1rem + env(safe-area-inset-bottom))`: liegt jetzt über CompareBar, iOS Home-Indicator überlagert nicht mehr.
@@ -711,10 +725,11 @@ Read-only Katalog aller automatisch versendeten E-Mails mit Inline-Vorschau.
 - Bestehende Kameras brauchen Seriennummern (im Kamera-Editor unter "Kameras / Seriennummern" anlegen)
 - **Cron-Härtung optional:** `CRON_DISABLE_URL_SECRET=true` in Coolify-Env setzen + Hetzner-Crontab auf Header-Auth umstellen (`-H "x-cron-secret: $CRON_SECRET"`), damit Secrets nicht mehr in Access-Logs landen.
 - **Sicherheit:** API-Keys rotieren (wurden in einer Session öffentlich geteilt)
-- **Go-Live:** `TEST_MODE = false` in `lib/contracts/contract-template.tsx` setzen
-- **Go-Live:** Stripe auf Live-Keys umstellen
-- **Go-Live:** Domain test.cam2rent.de → cam2rent.de
-- **Go-Live:** Resend Domain verifizieren (DKIM + SPF)
+- **SQL-Migration `supabase-performance-indizes.sql` ausführen** (8 Performance-Indizes, idempotent via `IF NOT EXISTS` + `CONCURRENTLY`).
+- **Go-Live 01.05.2026:** `TEST_MODE = false` in `lib/contracts/contract-template.tsx` setzen
+- **Go-Live 01.05.2026:** Stripe auf Live-Keys umstellen
+- **Go-Live 01.05.2026:** Domain test.cam2rent.de → cam2rent.de
+- **Go-Live 01.05.2026:** Resend Domain verifizieren (DKIM + SPF)
 - **Social-Modul Setup (offen):**
   - SQL-Migration `supabase-social.sql` ausführen
   - `META_APP_ID` + `META_APP_SECRET` in Coolify hinterlegen (aus developers.facebook.com kopieren)

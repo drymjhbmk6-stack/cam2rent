@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { sendAndLog } from '@/lib/email';
 import { BUSINESS } from '@/lib/business-config';
 import { checkAdminAuth } from '@/lib/admin-auth';
+import { rateLimit, getClientIp } from '@/lib/rate-limit';
+
+// Defense-in-Depth: Falls Admin-Cookie kompromittiert wäre,
+// kann der Endpoint nicht für E-Mail-Spam missbraucht werden.
+const testEmailLimiter = rateLimit({ maxAttempts: 10, windowMs: 60_000 });
 
 /**
  * GET /api/admin/test-email?to=your@email.de
@@ -11,6 +16,14 @@ import { checkAdminAuth } from '@/lib/admin-auth';
 export async function GET(req: NextRequest) {
   if (!(await checkAdminAuth())) {
     return NextResponse.json({ error: 'Nicht autorisiert.' }, { status: 401 });
+  }
+
+  const { success } = testEmailLimiter.check(getClientIp(req));
+  if (!success) {
+    return NextResponse.json(
+      { error: 'Zu viele Test-E-Mails. Bitte kurz warten.' },
+      { status: 429 },
+    );
   }
 
   const to = req.nextUrl.searchParams.get('to');

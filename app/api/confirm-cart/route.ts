@@ -6,7 +6,7 @@ import { detectSuspicious } from '@/lib/suspicious';
 import type { CartItem } from '@/components/CartProvider';
 import { calcShipping } from '@/data/shipping';
 import type { ShippingMethod } from '@/data/shipping';
-import { DEFAULT_SHIPPING, type ShippingPriceConfig } from '@/lib/price-config';
+import { DEFAULT_SHIPPING, type ShippingPriceConfig, calcPriceFromTable, type AdminProduct } from '@/lib/price-config';
 import { assignUnitToBooking } from '@/lib/unit-assignment';
 import { createAdminNotification } from '@/lib/admin-notifications';
 import { generateContractPDF } from '@/lib/contracts/generate-contract';
@@ -212,6 +212,46 @@ export async function POST(req: NextRequest) {
         { error: 'Keine Artikel gefunden. Bitte versuche es erneut.' },
         { status: 400 }
       );
+    }
+
+    // ── Second-Line-Defense: intent.amount (echter Stripe-Betrag) vs Server-Preis ──
+    // checkout-intent prüft schon präventiv, aber wenn der Payment Intent
+    // irgendwie doch mit zu wenig durchkommt, wird die Buchung hier geblockt.
+    try {
+      const { data: prodRow } = await supabase
+        .from('admin_config')
+        .select('value')
+        .eq('key', 'products')
+        .maybeSingle();
+      if (prodRow?.value && typeof prodRow.value === 'object') {
+        const productMap = prodRow.value as Record<string, AdminProduct>;
+        let expectedMinCents = 0;
+        let checked = false;
+        for (const it of r_items) {
+          const p = productMap[it.productId];
+          if (!p || !Array.isArray(p.priceTable)) continue;
+          expectedMinCents += Math.round(calcPriceFromTable(p, it.days) * 100);
+          checked = true;
+        }
+        if (checked) {
+          const floorCents = Math.floor(expectedMinCents * 0.3); // 70 % Rabatt-Puffer
+          if (intent.amount < floorCents) {
+            console.error('[confirm-cart] Preis-Plausibilität verletzt:', {
+              paymentIntent: payment_intent_id,
+              paidAmount: intent.amount,
+              expectedMinCents,
+              floorCents,
+            });
+            return NextResponse.json(
+              { error: 'Preis-Plausibilitätsprüfung fehlgeschlagen. Buchung wurde nicht bestätigt.' },
+              { status: 400 },
+            );
+          }
+        }
+      }
+    } catch (plausErr) {
+      console.error('Preis-Plausibilitätsprüfung fehlgeschlagen:', plausErr);
+      // Check ist Defense-in-Depth, keine harte Auth — nicht blocken
     }
 
     // Deposit-Vorautorisierung bestätigen

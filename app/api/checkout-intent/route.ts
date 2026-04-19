@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { createServiceClient } from '@/lib/supabase';
+import { calcPriceFromTable, type AdminProduct } from '@/lib/price-config';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 const checkoutLimiter = rateLimit({ maxAttempts: 10, windowMs: 60 * 1000 }); // 10 pro Min
@@ -38,6 +39,54 @@ export async function POST(req: NextRequest) {
     }
 
     const supabase = createServiceClient();
+
+    // ── Preis-Plausibilitätsprüfung (Defense gegen Client-Manipulation) ──
+    // Der Client liefert amountCents — der Server rechnet aus den DB-Produkten
+    // nach, ob das plausibel ist. Schutz gegen "Client schickt 1 € statt 500 €".
+    // Tolerant: bis 70 % Gesamtnachlass erlaubt (Rabatte + Coupons + Loyalty).
+    const items = (checkoutContext?.items as Array<{ productId: string; days: number; subtotal?: number }> | undefined) ?? [];
+    if (items.length > 0) {
+      try {
+        const { data: prodRow } = await supabase
+          .from('admin_config')
+          .select('value')
+          .eq('key', 'products')
+          .maybeSingle();
+
+        if (prodRow?.value && typeof prodRow.value === 'object') {
+          const productMap = prodRow.value as Record<string, AdminProduct>;
+          let expectedMinCents = 0;
+          let hasData = false;
+          for (const item of items) {
+            const product = productMap[item.productId];
+            if (!product || !Array.isArray(product.priceTable)) continue;
+            const base = calcPriceFromTable(product, item.days);
+            expectedMinCents += Math.round(base * 100);
+            hasData = true;
+          }
+
+          if (hasData) {
+            const floorCents = Math.floor(expectedMinCents * 0.3); // 70 % Rabatt-Puffer
+            if (amountCents < floorCents) {
+              console.error('[checkout-intent] Preis-Plausibilität verletzt:', {
+                userId,
+                amountCents,
+                expectedMinCents,
+                floorCents,
+                items: items.map((i) => ({ productId: i.productId, days: i.days, subtotal: i.subtotal })),
+              });
+              return NextResponse.json(
+                { error: 'Ungültige Preisangabe.' },
+                { status: 400 },
+              );
+            }
+          }
+        }
+      } catch (plausErr) {
+        console.error('Preis-Plausibilitätsprüfung fehlgeschlagen:', plausErr);
+        // Nicht hart blocken — Check ist Defense-in-Depth, nicht primäre Auth
+      }
+    }
 
     // Konto ist Pflicht — kein Gast-Checkout
     if (!userId) {

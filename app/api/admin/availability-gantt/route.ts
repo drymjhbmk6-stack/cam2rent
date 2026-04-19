@@ -79,7 +79,10 @@ export async function GET(req: NextRequest) {
   // Parallele Abfragen
   const [products, unitsResult, bookingsResult, blockedResult, accessoriesResult, setsResult] = await Promise.all([
     getProducts(),
-    supabase.from('product_units').select('*').order('created_at', { ascending: true }),
+    supabase
+      .from('product_units')
+      .select('id, product_id, serial_number, label, status')
+      .order('created_at', { ascending: true }),
     supabase
       .from('bookings')
       .select('id, product_id, product_name, rental_from, rental_to, days, status, delivery_mode, customer_name, unit_id, accessories')
@@ -106,13 +109,27 @@ export async function GET(req: NextRequest) {
   const bookings = bookingsResult.data ?? [];
   const blocked = blockedResult.data ?? [];
 
+  // Gruppierung in O(n) statt O(n*m) pro Produkt (N+1-Fix)
+  const unitsByProduct: Record<string, typeof units> = {};
+  for (const u of units) {
+    (unitsByProduct[u.product_id] ||= []).push(u);
+  }
+  const bookingsByProduct: Record<string, typeof bookings> = {};
+  for (const b of bookings) {
+    if (b.product_id) (bookingsByProduct[b.product_id] ||= []).push(b);
+  }
+  const blockedByProduct: Record<string, typeof blocked> = {};
+  for (const bl of blocked) {
+    (blockedByProduct[bl.product_id] ||= []).push(bl);
+  }
+
   // Daten nach Produkt gruppieren
   const productData = products
     .filter((p) => p.available !== false)
     .map((p) => {
-      const productUnits = units.filter((u) => u.product_id === p.id);
-      const productBookings = bookings.filter((b) => b.product_id === p.id);
-      const productBlocked = blocked.filter((bl) => bl.product_id === p.id);
+      const productUnits = unitsByProduct[p.id] ?? [];
+      const productBookings = bookingsByProduct[p.id] ?? [];
+      const productBlocked = blockedByProduct[p.id] ?? [];
 
       return {
         id: p.id,
@@ -161,18 +178,33 @@ export async function GET(req: NextRequest) {
       accessories: b.accessories as string[],
     }));
 
+  // Einmal pro Buchung auflösen: welche Accessory-IDs + Set-IDs sind betroffen?
+  // Dadurch O(bookings * setItems) statt O(accessories * bookings * setItems).
+  const bookingsByAccessory: Record<string, typeof accBookings> = {};
+  const bookingsBySet: Record<string, typeof accBookings> = {};
+  for (const b of accBookings) {
+    const touchedAccessories = new Set<string>();
+    const touchedSets = new Set<string>();
+    for (const id of b.accessories) {
+      const setItems = setAccessoryMap[id];
+      if (setItems) {
+        touchedSets.add(id);
+        for (const si of setItems) touchedAccessories.add(si.accessory_id);
+      } else {
+        touchedAccessories.add(id);
+      }
+    }
+    for (const accId of touchedAccessories) {
+      (bookingsByAccessory[accId] ||= []).push(b);
+    }
+    for (const setId of touchedSets) {
+      (bookingsBySet[setId] ||= []).push(b);
+    }
+  }
+
   // Pro Zubehörteil: Welche Buchungen nutzen es? (inkl. Set-Auflösung)
   const accessoryData = allAccessories.map((acc) => {
-    const relevantBookings = accBookings.filter((b) => {
-      // Direkt gebucht
-      if (b.accessories.includes(acc.id)) return true;
-      // Über ein Set gebucht
-      for (const accId of b.accessories) {
-        const setItems = setAccessoryMap[accId];
-        if (setItems?.some((si) => si.accessory_id === acc.id)) return true;
-      }
-      return false;
-    });
+    const relevantBookings = bookingsByAccessory[acc.id] ?? [];
 
     return {
       id: acc.id,
@@ -191,7 +223,7 @@ export async function GET(req: NextRequest) {
 
   // Pro Set: Welche Buchungen nutzen es?
   const setData = allSets.map((s) => {
-    const relevantBookings = accBookings.filter((b) => b.accessories.includes(s.id));
+    const relevantBookings = bookingsBySet[s.id] ?? [];
 
     return {
       id: s.id,

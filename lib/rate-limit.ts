@@ -15,6 +15,10 @@ interface RateLimitResult {
   remaining: number;
 }
 
+// Hard-Cap: Schützt gegen Memory-Exhaustion durch IP-Rotation.
+// Bei Überschreitung wird die älteste Entry rausgeworfen (LRU-artig).
+const MAX_STORE_SIZE = 10_000;
+
 export function rateLimit({ maxAttempts, windowMs }: RateLimitConfig) {
   const store = new Map<string, RateLimitEntry>();
 
@@ -44,6 +48,11 @@ export function rateLimit({ maxAttempts, windowMs }: RateLimitConfig) {
       const entry = store.get(key);
 
       if (!entry || now > entry.resetAt) {
+        // Bei Hard-Cap: älteste Entry zuerst löschen (Map-Insertion-Order = FIFO)
+        if (store.size >= MAX_STORE_SIZE) {
+          const oldestKey = store.keys().next().value;
+          if (oldestKey !== undefined) store.delete(oldestKey);
+        }
         store.set(key, { count: 1, resetAt: now + windowMs });
         return { success: true, remaining: maxAttempts - 1 };
       }

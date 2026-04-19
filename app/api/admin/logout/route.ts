@@ -9,7 +9,7 @@ export async function POST() {
   response.cookies.set('admin_token', '', {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
+    sameSite: 'strict',
     path: '/',
     maxAge: 0,
   });

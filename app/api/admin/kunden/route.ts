@@ -11,10 +11,10 @@ export async function GET(req: NextRequest) {
     const supabase = createServiceClient();
     const statusFilter = req.nextUrl.searchParams.get('status');
 
-    // Alle Profile laden
+    // Alle Profile laden — nur Listen-relevante Spalten (Ausweisbilder etc. nicht nötig)
     let query = supabase
       .from('profiles')
-      .select('*')
+      .select('id, full_name, phone, address_city, verification_status, verified_at, blacklisted, blacklist_reason, blacklisted_at, created_at')
       .order('created_at', { ascending: false });
 
     if (statusFilter === 'blacklisted') {

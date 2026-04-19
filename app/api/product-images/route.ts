@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { processProductImage } from '@/lib/image-processing';
+import { isAllowedImage } from '@/lib/file-type-check';
 
 const BUCKET = 'product-images';
 const MAX_SIZE = 10 * 1024 * 1024;
@@ -34,6 +35,12 @@ export async function POST(req: NextRequest) {
 
     const supabase = createServiceClient();
     const inputBuffer = Buffer.from(await file.arrayBuffer());
+
+    // Magic-Byte-Check: vom Client gemeldeter MIME reicht nicht.
+    if (!isAllowedImage(inputBuffer, ['jpeg', 'png', 'webp'])) {
+      return NextResponse.json({ error: 'Datei ist kein gültiges Bild (JPG, PNG oder WebP).' }, { status: 400 });
+    }
+
     const { buffer: processedBuffer, contentType } = await processProductImage(inputBuffer);
 
     const ext = contentType === 'image/webp' ? 'webp' : file.name.split('.').pop() || 'jpg';
