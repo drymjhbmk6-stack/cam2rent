@@ -23,8 +23,11 @@ ENV NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=$NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
 ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
 ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-ENV NODE_OPTIONS="--max-old-space-size=1536 --max-semi-space-size=64 --expose-gc"
-RUN node --max-old-space-size=1536 ./node_modules/.bin/next build
+ENV NODE_OPTIONS="--max-old-space-size=2560 --max-semi-space-size=64 --expose-gc"
+# Nur 1 Build-Worker (sonst multiplizieren sich Worker * 2 GB Heap = OOM auf CX23)
+ENV NEXT_PRIVATE_WORKER=1
+ENV NEXT_PRIVATE_CPU_PROF=0
+RUN node --max-old-space-size=2560 ./node_modules/.bin/next build
 
 # ── Stage 3: Production ──────────────────────────────────────────────────────
 FROM node:20-alpine AS runner
