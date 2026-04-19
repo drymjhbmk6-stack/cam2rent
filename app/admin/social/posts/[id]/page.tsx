@@ -4,6 +4,7 @@ import { useEffect, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import SocialPostPreview from '@/components/admin/SocialPostPreview';
+import MediaLibraryPicker from '@/components/admin/MediaLibraryPicker';
 import { fmtDateTime } from '@/lib/format-utils';
 import { utcToBerlinLocalInput, berlinLocalInputToUTC } from '@/lib/timezone';
 
@@ -53,6 +54,7 @@ export default function PostDetail({ params }: { params: Promise<{ id: string }>
   const [imageUrl, setImageUrl] = useState('');
   const [linkUrl, setLinkUrl] = useState('');
   const [scheduledAt, setScheduledAt] = useState('');
+  const [libraryOpen, setLibraryOpen] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -283,6 +285,16 @@ export default function PostDetail({ params }: { params: Promise<{ id: string }>
             className="flex-1 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm disabled:opacity-60"
           />
           {editable && (
+            <button
+              type="button"
+              onClick={() => setLibraryOpen(true)}
+              className="px-3 py-2 rounded-lg bg-slate-800 text-slate-200 font-medium text-sm hover:bg-slate-700 border border-slate-700 whitespace-nowrap"
+              title="Bild aus eigener Bibliothek waehlen"
+            >
+              📚 Bibliothek
+            </button>
+          )}
+          {editable && (
             <label className="px-3 py-2 rounded-lg bg-slate-800 text-slate-200 font-medium text-sm hover:bg-slate-700 border border-slate-700 cursor-pointer whitespace-nowrap">
               📷 Hochladen
               <input
@@ -409,6 +421,12 @@ export default function PostDetail({ params }: { params: Promise<{ id: string }>
           Löschen
         </button>
       </div>
+
+      <MediaLibraryPicker
+        open={libraryOpen}
+        onClose={() => setLibraryOpen(false)}
+        onSelect={(url) => setImageUrl(url)}
+      />
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import SocialPostPreview from '@/components/admin/SocialPostPreview';
+import MediaLibraryPicker from '@/components/admin/MediaLibraryPicker';
 import { berlinLocalInputToUTC } from '@/lib/timezone';
 
 interface Template {
@@ -36,6 +37,7 @@ export default function NewPostPage() {
   const [linkUrl, setLinkUrl] = useState('');
   const [schedule, setSchedule] = useState<'now' | 'later' | 'draft'>('draft');
   const [scheduledAt, setScheduledAt] = useState('');
+  const [libraryOpen, setLibraryOpen] = useState(false);
 
   const [selectedTemplate, setSelectedTemplate] = useState<string>('');
   const [templateVars, setTemplateVars] = useState<Record<string, string>>({});
@@ -296,6 +298,14 @@ TEAM / BTS:
             placeholder="Bild-URL oder Datei hochladen →"
             className="flex-1 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm"
           />
+          <button
+            type="button"
+            onClick={() => setLibraryOpen(true)}
+            className="px-3 py-2 rounded-lg bg-slate-800 text-slate-200 font-medium text-sm hover:bg-slate-700 border border-slate-700 whitespace-nowrap"
+            title="Bild aus eigener Bibliothek waehlen"
+          >
+            📚 Bibliothek
+          </button>
           <label className="px-3 py-2 rounded-lg bg-slate-800 text-slate-200 font-medium text-sm hover:bg-slate-700 border border-slate-700 cursor-pointer whitespace-nowrap">
             📷 Hochladen
             <input
@@ -331,7 +341,7 @@ TEAM / BTS:
           <img src={imageUrl} alt="" className="mt-2 max-h-60 rounded-lg border border-slate-800" />
         )}
         <p className="text-xs text-slate-500 mt-1">
-          Eigenes Foto hochladen (max 10 MB, JPG/PNG/WebP) oder URL eintragen.
+          Drei Quellen: 📚 Bibliothek (eigene Produkt-/Set-/Blog-Bilder), 📷 vom PC hochladen, oder KI-generiert (oben).
           Instagram verlangt ein Bild — für reine Text-Posts Instagram deaktivieren.
         </p>
       </section>
@@ -425,6 +435,12 @@ TEAM / BTS:
       >
         {busy ? 'Speichere…' : schedule === 'now' ? 'Jetzt veröffentlichen' : schedule === 'later' ? 'Planen' : 'Entwurf speichern'}
       </button>
+
+      <MediaLibraryPicker
+        open={libraryOpen}
+        onClose={() => setLibraryOpen(false)}
+        onSelect={(url) => setImageUrl(url)}
+      />
     </div>
   );
 }

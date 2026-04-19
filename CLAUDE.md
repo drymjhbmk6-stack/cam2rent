@@ -451,6 +451,12 @@ Claude bekommt sonst kein Datum mit und erfindet z.B. Ski-Posts im April. Drei S
 - **`generate-plan-entry.ts`** — übergibt `scheduled_date` als `postDate` und setzt saisonfremde Einträge auf `status='skipped'` statt zu generieren.
 - **`/api/admin/social/generate-plan`** (KI-Themenplanung) — Saison-Block im Topic-Prompt + defensives Nachfiltern pro Datum; droppt saisonfremde Ideen und zeigt das im Job-Status.
 
+#### Media-Library-Picker (Stand 2026-04-20)
+Drei Bildquellen im Post-Editor (`/admin/social/neu` + `/admin/social/posts/[id]`): KI (bestehend), 📚 Bibliothek (neu), 📷 vom PC.
+- **API:** `GET /api/admin/social/media-library` liefert kategorisierte Bildliste: Produkte (aus `admin_config.products`), Sets (`sets.image_url`), Blog (`blog_posts.featured_image`, 60 neueste), Social-Uploads (Storage `blog-images`, Prefix `social-`, 200 neueste).
+- **Komponente:** `components/admin/MediaLibraryPicker.tsx` — Modal mit 4 Tabs + Suche + Thumbnail-Grid (4 Spalten auf Desktop). Klick auf Thumbnail uebernimmt die URL ins Bild-Feld.
+- **Button:** "📚 Bibliothek" steht links neben "📷 Hochladen" in beiden Editoren. Beide Quellen gleichberechtigt.
+
 #### Bild-KI mit Produktbild als Referenz (Stand 2026-04-20)
 DALL-E 3 erfand sonst 20-Jahre-alte Kompaktkameras. Neu: Echte Shop-Produktbilder werden als Referenz an `gpt-image-1` (OpenAI, April 2025) übergeben, damit die generierte Szene die **exakte** Kamera enthält.
 - **`lib/meta/product-image-resolver.ts`** — `resolveProductForPost(text)` scored Topic+Angle+Keywords gegen alle Shop-Produkte (Name/Brand/Model/Slug/Token-Matching, Threshold 10 = mindestens Modell-Match). Liefert bis zu 3 Produktbilder als Referenz. Reine Marken-Erwähnungen matchen nicht (zu unscharf).
