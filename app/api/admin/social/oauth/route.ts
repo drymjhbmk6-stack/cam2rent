@@ -17,10 +17,18 @@ import {
 } from '@/lib/meta/graph-api';
 import { randomBytes } from 'crypto';
 
-function getRedirectUri(req: NextRequest): string {
+function getBaseUrl(req: NextRequest): string {
   const host = req.headers.get('x-forwarded-host') ?? req.headers.get('host') ?? 'cam2rent.de';
   const proto = req.headers.get('x-forwarded-proto') ?? 'https';
-  return `${proto}://${host}/api/admin/social/oauth`;
+  return `${proto}://${host}`;
+}
+
+function getRedirectUri(req: NextRequest): string {
+  return `${getBaseUrl(req)}/api/admin/social/oauth`;
+}
+
+function externalRedirect(req: NextRequest, path: string): NextResponse {
+  return NextResponse.redirect(`${getBaseUrl(req)}${path}`);
 }
 
 export async function GET(req: NextRequest) {
@@ -52,7 +60,7 @@ export async function GET(req: NextRequest) {
 
   // ── Schritt 2: Meta hat Fehler zurückgegeben ──────────────────────────
   if (error) {
-    return NextResponse.redirect(new URL(`/admin/social?error=${encodeURIComponent(error)}`, req.url));
+    return externalRedirect(req, `/admin/social?error=${encodeURIComponent(error)}`);
   }
 
   // ── Schritt 3: Callback mit Code ──────────────────────────────────────
@@ -65,7 +73,7 @@ export async function GET(req: NextRequest) {
       // Alle Pages holen
       const pages = await getUserPages(userToken);
       if (pages.length === 0) {
-        return NextResponse.redirect(new URL('/admin/social?error=no_pages', req.url));
+        return externalRedirect(req, '/admin/social?error=no_pages');
       }
 
       const supabase = createServiceClient();
@@ -114,10 +122,10 @@ export async function GET(req: NextRequest) {
         }
       }
 
-      return NextResponse.redirect(new URL('/admin/social?connected=1', req.url));
+      return externalRedirect(req, '/admin/social/einstellungen?connected=1');
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      return NextResponse.redirect(new URL(`/admin/social?error=${encodeURIComponent(msg)}`, req.url));
+      return externalRedirect(req, `/admin/social/einstellungen?error=${encodeURIComponent(msg)}`);
     }
   }
 
