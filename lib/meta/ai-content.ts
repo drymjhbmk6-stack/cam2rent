@@ -10,6 +10,7 @@
 import { createServiceClient } from '@/lib/supabase';
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
+import { seasonPromptBlock } from '@/lib/meta/season';
 
 async function getApiKeys(): Promise<{ anthropic?: string; openai?: string }> {
   const supabase = createServiceClient();
@@ -64,7 +65,7 @@ export interface GeneratedCaption {
 export async function generateCaption(
   promptTemplate: string,
   variables: Record<string, string | number | undefined> = {},
-  options: { maxLength?: number; defaultHashtags?: string[] } = {}
+  options: { maxLength?: number; defaultHashtags?: string[]; postDate?: Date } = {}
 ): Promise<GeneratedCaption> {
   const { anthropic: apiKey } = await getApiKeys();
   if (!apiKey) {
@@ -86,6 +87,7 @@ export async function generateCaption(
     : 'Ton: locker, einladend, mit 2-4 Emojis';
   const extraContext = socialSettings.ki_context?.trim() ? `\n\nZusatz-Kontext:\n${socialSettings.ki_context.trim()}` : '';
   const productContext = shopContext ? `\n\nAktuelle Kameras im Shop:\n${shopContext}` : '';
+  const seasonContext = `\n\n${seasonPromptBlock(options.postDate)}`;
 
   const systemPrompt = `Du bist ein Social-Media-Redakteur für cam2rent.de, einen deutschen Action-Cam-Verleih (GoPro, DJI, Insta360).
 Schreibe Instagram-/Facebook-Posts auf Deutsch. Ziele:
@@ -94,7 +96,7 @@ Schreibe Instagram-/Facebook-Posts auf Deutsch. Ziele:
 - KEINE Hashtags im Text selbst — die kommen separat
 - NIEMALS "Versicherung" oder "versichert" — immer "Haftungsschutz" oder "abgesichert"
 - Umlaute korrekt: ä ö ü (nicht ae oe ue)
-- Am Ende ein klarer CTA (z.B. "Jetzt auf cam2rent.de mieten", "Link in der Bio")${extraContext}${productContext}
+- Am Ende ein klarer CTA (z.B. "Jetzt auf cam2rent.de mieten", "Link in der Bio")${seasonContext}${extraContext}${productContext}
 
 Antworte ausschließlich im folgenden JSON-Format, ohne Markdown-Codefences:
 {"caption": "...", "hashtags": ["#tag1", "#tag2"]}`;
@@ -210,6 +212,7 @@ export interface TemplateGenerationInput {
   image_prompt?: string | null;
   default_hashtags?: string[];
   variables?: Record<string, string | number | undefined>;
+  postDate?: Date;
 }
 
 export interface TemplateGenerationResult {
@@ -221,6 +224,7 @@ export interface TemplateGenerationResult {
 export async function generateFromTemplate(input: TemplateGenerationInput): Promise<TemplateGenerationResult> {
   const { caption, hashtags } = await generateCaption(input.caption_prompt, input.variables ?? {}, {
     defaultHashtags: input.default_hashtags,
+    postDate: input.postDate,
   });
 
   let image_url: string | undefined;

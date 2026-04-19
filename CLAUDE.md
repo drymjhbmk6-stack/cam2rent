@@ -444,6 +444,13 @@ Vollautomatisches Posten auf Facebook-Page + Instagram-Business-Account über di
 - DALL-E 3 (Bilder, optional): ~2-5 €/Monat bei 30 Posts
 - **Summe: ~3-8 €/Monat** (KEINE bezahlten Ads — alles organisch)
 
+#### Saison-Guard (Stand 2026-04-20)
+Claude bekommt sonst kein Datum mit und erfindet z.B. Ski-Posts im April. Drei Stellen wurden gehärtet:
+- **`lib/meta/season.ts`** — `seasonPromptBlock(date)` + `isTopicOutOfSeason(text, date)` + `getSeasonContext(date)`. Kennt Winter (Dez-Feb), Frühling (Mär-Mai), Sommer (Jun-Aug), Herbst (Sep-Nov) mit passenden Aktivitäten + Verbotsliste (z.B. "Skitour" im Frühling/Sommer/Herbst).
+- **`generateCaption()` in `lib/meta/ai-content.ts`** — nimmt optional `postDate` und hängt den Saison-Block ("Heutiges Datum: …, Saison: Frühling. Verbot: Skitour, Schnee, …") an den System-Prompt. Standard: `new Date()`.
+- **`generate-plan-entry.ts`** — übergibt `scheduled_date` als `postDate` und setzt saisonfremde Einträge auf `status='skipped'` statt zu generieren.
+- **`/api/admin/social/generate-plan`** (KI-Themenplanung) — Saison-Block im Topic-Prompt + defensives Nachfiltern pro Datum; droppt saisonfremde Ideen und zeigt das im Job-Status.
+
 ### Warteliste für Kameras ohne Seriennummer (Stand 2026-04-18)
 Interesse an neuen Kameras testen, bevor sie eingekauft werden: Sobald für eine Kamera noch keine `product_unit` mit `status != 'retired'` angelegt ist, zeigt der Shop statt "Jetzt mieten" eine "Benachrichtige mich"-Box mit E-Mail-Formular.
 

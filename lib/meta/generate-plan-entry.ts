@@ -8,6 +8,7 @@
 import { createServiceClient } from '@/lib/supabase';
 import Anthropic from '@anthropic-ai/sdk';
 import { generateCaption, generateImage } from '@/lib/meta/ai-content';
+import { isTopicOutOfSeason, getSeasonContext } from '@/lib/meta/season';
 
 export interface GenerateEntryResult {
   success: boolean;
@@ -106,7 +107,20 @@ export async function generateEntryPost(entryId: string): Promise<GenerateEntryR
   await supabase.from('social_editorial_plan').update({ status: 'generating' }).eq('id', entryId);
 
   try {
-    const scheduledAt = new Date(`${entry.scheduled_date}T${(entry.scheduled_time || '10:00').slice(0, 5)}:00`).toISOString();
+    const scheduledDate = new Date(`${entry.scheduled_date}T${(entry.scheduled_time || '10:00').slice(0, 5)}:00`);
+    const scheduledAt = scheduledDate.toISOString();
+
+    // Saison-Check: saisonfremde Themen gar nicht erst generieren
+    const topicText = [entry.topic, entry.angle, (entry.keywords ?? []).join(' ')].filter(Boolean).join(' ');
+    if (isTopicOutOfSeason(topicText, scheduledDate)) {
+      const season = getSeasonContext(scheduledDate);
+      const msg = `Saisonfremdes Thema: "${entry.topic}" passt nicht zu ${season.seasonLabel} (${season.monthLabel}). Bitte Thema aendern oder verschieben.`;
+      await supabase.from('social_editorial_plan').update({
+        status: 'skipped',
+        error_message: msg,
+      }).eq('id', entryId);
+      return { success: false, error: msg };
+    }
 
     const captionPrompt = entry.prompt?.trim() || `Schreibe einen Social-Media-Post:
 Thema: ${entry.topic}
@@ -121,6 +135,7 @@ Max 500 Zeichen, klarer CTA am Ende.`;
     const generated = await generateCaption(captionPrompt, {}, {
       maxLength: 500,
       defaultHashtags: (entry.keywords ?? []).map((k: string) => k.startsWith('#') ? k : `#${k}`),
+      postDate: scheduledDate,
     });
 
     let finalCaption = generated.caption;

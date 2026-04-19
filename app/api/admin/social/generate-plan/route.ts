@@ -15,6 +15,7 @@ import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
 import Anthropic from '@anthropic-ai/sdk';
 import { generateCaption, generateImage } from '@/lib/meta/ai-content';
+import { seasonPromptBlock, isTopicOutOfSeason } from '@/lib/meta/season';
 
 interface GenerateRequest {
   days?: number;
@@ -99,7 +100,7 @@ async function getRecentTopics(daysBack = 180): Promise<string[]> {
     .filter(Boolean);
 }
 
-async function generateTopicList(apiKey: string, count: number): Promise<PostIdea[]> {
+async function generateTopicList(apiKey: string, count: number, startDate: Date): Promise<PostIdea[]> {
   const client = new Anthropic({ apiKey });
   const recentTopics = await getRecentTopics(180);
   const avoidBlock = recentTopics.length > 0
@@ -107,8 +108,12 @@ async function generateTopicList(apiKey: string, count: number): Promise<PostIde
 ${recentTopics.slice(0, 60).map((t, i) => `${i + 1}. ${t}`).join('\n')}`
     : '';
 
+  const seasonBlock = seasonPromptBlock(startDate);
+
   const prompt = `Du bist Social-Media-Stratege fuer cam2rent.de (Action-Cam-Verleih: GoPro, DJI, Insta360).
 Generiere exakt ${count} UNTERSCHIEDLICHE und FRISCHE Post-Ideen fuer Instagram + Facebook, die Kunden zum Mieten animieren.
+
+${seasonBlock}
 
 Verteile die Ideen ausgewogen auf diese Kategorien:
 - produkt: Kamera- oder Set-Spotlight (verschiedene Modelle durchwechseln)
@@ -119,7 +124,8 @@ Verteile die Ideen ausgewogen auf diese Kategorien:
 
 Wichtig:
 - Jede Idee muss sich DEUTLICH von den anderen unterscheiden
-- Variiere Winkel, Saison, Zielgruppe
+- Themen muessen zur OBEN genannten aktuellen Saison passen — keine Winter-Posts im Fruehling/Sommer/Herbst, kein Sommer-Content im Winter
+- Zielgruppen variieren, aber nur saison-plausibel (Wintersport nur Dez-Feb)
 - Keine generischen Floskeln${avoidBlock}
 
 Antworte AUSSCHLIESSLICH als JSON-Array:
@@ -169,12 +175,21 @@ async function runJob(config: Required<GenerateRequest>, apiKey: string): Promis
       message: 'Claude generiert Themen-Ideen…',
     });
 
-    const ideas = await generateTopicList(apiKey, totalPosts);
+    const startDate = config.start_date ? new Date(config.start_date) : new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const rawIdeas = await generateTopicList(apiKey, totalPosts, startDate);
 
     if (await isCancelled()) return;
 
-    const startDate = config.start_date ? new Date(config.start_date) : new Date(Date.now() + 24 * 60 * 60 * 1000);
-    const dates = spreadDates(ideas.length, startDate, config.posts_per_week, config.post_hour);
+    const dates = spreadDates(rawIdeas.length, startDate, config.posts_per_week, config.post_hour);
+
+    // Defensive Filterung: saisonfremde Ideen aussortieren, falls die KI
+    // die Verbotsliste ignoriert hat. Datum pro Idee, weil der Plan mehrere
+    // Wochen spannen kann und die Saison in der Mitte wechseln kann.
+    const ideas = rawIdeas.filter((idea, i) => {
+      const topicText = [idea.topic, idea.angle, (idea.keywords ?? []).join(' ')].filter(Boolean).join(' ');
+      return !isTopicOutOfSeason(topicText, dates[i]);
+    });
+    const droppedCount = rawIdeas.length - ideas.length;
 
     const { data: accounts } = await supabase.from('social_accounts').select('id, platform').eq('is_active', true);
     const fbAccount = accounts?.find((a) => a.platform === 'facebook');
@@ -183,7 +198,9 @@ async function runJob(config: Required<GenerateRequest>, apiKey: string): Promis
     await setJobStatus({
       step: 'posts',
       total: ideas.length,
-      message: 'Erstelle Posts…',
+      message: droppedCount > 0
+        ? `Erstelle Posts… (${droppedCount} saisonfremde Idee${droppedCount === 1 ? '' : 'n'} verworfen)`
+        : 'Erstelle Posts…',
       recent: [],
     });
 
@@ -204,6 +221,7 @@ Max 500 Zeichen, 2-3 Emoji, klarer CTA am Ende.`;
         const generated = await generateCaption(captionPrompt, {}, {
           maxLength: 500,
           defaultHashtags: idea.keywords.map((k) => k.startsWith('#') ? k : `#${k}`).concat(['#cam2rent', '#kameramieten']),
+          postDate: date,
         });
 
         let image_url: string | undefined;
