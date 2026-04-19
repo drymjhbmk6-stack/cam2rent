@@ -451,6 +451,14 @@ Claude bekommt sonst kein Datum mit und erfindet z.B. Ski-Posts im April. Drei S
 - **`generate-plan-entry.ts`** — übergibt `scheduled_date` als `postDate` und setzt saisonfremde Einträge auf `status='skipped'` statt zu generieren.
 - **`/api/admin/social/generate-plan`** (KI-Themenplanung) — Saison-Block im Topic-Prompt + defensives Nachfiltern pro Datum; droppt saisonfremde Ideen und zeigt das im Job-Status.
 
+#### Bild-KI mit Produktbild als Referenz (Stand 2026-04-20)
+DALL-E 3 erfand sonst 20-Jahre-alte Kompaktkameras. Neu: Echte Shop-Produktbilder werden als Referenz an `gpt-image-1` (OpenAI, April 2025) übergeben, damit die generierte Szene die **exakte** Kamera enthält.
+- **`lib/meta/product-image-resolver.ts`** — `resolveProductForPost(text)` scored Topic+Angle+Keywords gegen alle Shop-Produkte (Name/Brand/Model/Slug/Token-Matching, Threshold 10 = mindestens Modell-Match). Liefert bis zu 3 Produktbilder als Referenz. Reine Marken-Erwähnungen matchen nicht (zu unscharf).
+- **`generateImageWithProductReference()`** in `ai-content.ts` — `gpt-image-1` edit-Endpoint, lädt Produktbilder via `toFile()` und baut sie in eine neue Szene ein. Prompt zwingt die KI, Kamera-Design, Proportionen, Farbe, Linsen-Position aus der Vorlage zu übernehmen. Output als `b64_json`, landet via `uploadToSocialStorage()` im `blog-images`-Bucket.
+- **`generateSocialImage(scenePrompt, sourceText)`** — Smart-Wrapper: versucht erst `gpt-image-1` mit Referenz, fällt bei Fehler/ohne Match auf DALL-E 3 zurück. DALL-E bekommt dann den `modernCameraHint()` ("muss aussehen wie Hero 12 / Osmo Action 5 Pro / X4, NIEMALS retro Camcorder").
+- **Eingebaut in:** `generateFromTemplate` (Auto-Post-Trigger), `generate-plan-entry.ts` (manuelle + Cron-Einzel-Generierung), `/api/admin/social/generate-plan` (Bulk-Plan), `/api/cron/social-generate` (stündlicher Cron).
+- **Kosten:** `gpt-image-1` kostet ~$0.04-0.19 pro Bild (high quality). Bei 30 Posts/Monat ~1-6 €, DALL-E 3 vergleichbar. Fallback auf DALL-E bleibt erhalten, falls OpenAI gpt-image-1 blockt.
+
 ### Warteliste für Kameras ohne Seriennummer (Stand 2026-04-18)
 Interesse an neuen Kameras testen, bevor sie eingekauft werden: Sobald für eine Kamera noch keine `product_unit` mit `status != 'retired'` angelegt ist, zeigt der Shop statt "Jetzt mieten" eine "Benachrichtige mich"-Box mit E-Mail-Formular.
 

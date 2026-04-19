@@ -7,7 +7,7 @@
 
 import { createServiceClient } from '@/lib/supabase';
 import Anthropic from '@anthropic-ai/sdk';
-import { generateCaption, generateImage } from '@/lib/meta/ai-content';
+import { generateCaption, generateSocialImage } from '@/lib/meta/ai-content';
 import { isTopicOutOfSeason, getSeasonContext } from '@/lib/meta/season';
 
 export interface GenerateEntryResult {
@@ -146,7 +146,7 @@ Max 500 Zeichen, klarer CTA am Ende.`;
     let image_url: string | undefined;
     if (imagePrompt) {
       try {
-        image_url = await generateImage(imagePrompt);
+        image_url = await generateSocialImage(imagePrompt, topicText);
       } catch (e) {
         console.warn('[generate-entry] image failed:', e);
       }

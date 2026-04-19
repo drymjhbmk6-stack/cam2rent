@@ -9,8 +9,9 @@
 
 import { createServiceClient } from '@/lib/supabase';
 import Anthropic from '@anthropic-ai/sdk';
-import OpenAI from 'openai';
+import OpenAI, { toFile } from 'openai';
 import { seasonPromptBlock } from '@/lib/meta/season';
+import { resolveProductForPost, modernCameraHint, type ProductImageMatch } from '@/lib/meta/product-image-resolver';
 
 async function getApiKeys(): Promise<{ anthropic?: string; openai?: string }> {
   const supabase = createServiceClient();
@@ -145,7 +146,7 @@ Antworte ausschließlich im folgenden JSON-Format, ohne Markdown-Codefences:
  * diese Tricks helfen gegen Symmetrie-Perfektion, glossy surfaces, uncanny
  * lighting und Cartoon-artige Darstellung.
  */
-function enhanceForPhotoRealism(prompt: string): string {
+function enhanceForPhotoRealism(prompt: string, opts: { addModernCameraHint?: boolean } = {}): string {
   // Falls der User selbst schon einen Stil vorgibt (artistic, illustration,
   // watercolor, etc.), nicht überschreiben.
   const explicitStyle = /\b(illustration|drawing|painting|watercolor|cartoon|anime|digital art|3d render|cgi|sketch)\b/i.test(prompt);
@@ -160,20 +161,124 @@ function enhanceForPhotoRealism(prompt: string): string {
     'natural composition, asymmetric framing, real photograph',
   ].join('. ');
 
-  return `${prompt.trim()}. ${photoBooster}. High resolution 35mm photography, sharp focus, realistic depth of field.`;
+  const cameraGuard = opts.addModernCameraHint ? ` ${modernCameraHint()}` : '';
+  return `${prompt.trim()}. ${photoBooster}. High resolution 35mm photography, sharp focus, realistic depth of field.${cameraGuard}`;
+}
+
+async function uploadToSocialStorage(buffer: Buffer): Promise<string> {
+  const filename = `social-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.png`;
+  const supabase = createServiceClient();
+  const { error: uploadError } = await supabase.storage
+    .from('blog-images') // dasselbe Bucket wie Blog (vereinfacht Setup)
+    .upload(filename, buffer, { contentType: 'image/png', upsert: false });
+  if (uploadError) throw new Error(uploadError.message);
+  const { data: urlData } = supabase.storage.from('blog-images').getPublicUrl(filename);
+  return urlData.publicUrl;
+}
+
+async function fetchAsFile(url: string, idx: number): Promise<Awaited<ReturnType<typeof toFile>>> {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`Referenzbild ${url} konnte nicht geladen werden (${r.status})`);
+  const buf = Buffer.from(await r.arrayBuffer());
+  // Extension aus URL ableiten — gpt-image-1 akzeptiert png/jpeg/webp
+  const match = url.match(/\.(png|jpe?g|webp)(\?|$)/i);
+  const ext = (match?.[1] ?? 'png').toLowerCase().replace('jpg', 'jpeg');
+  const mime = `image/${ext}`;
+  return toFile(buf, `ref-${idx}.${ext === 'jpeg' ? 'jpg' : ext}`, { type: mime });
+}
+
+/**
+ * Generiert ein Post-Bild mit einem echten Produktbild als Referenz
+ * (gpt-image-1 edit-Endpoint). Die KI kopiert die exakte Kamera aus der
+ * Vorlage in die neue Szene — keine erfundenen Retro-Modelle mehr.
+ * Gibt die oeffentliche URL zurueck.
+ */
+export async function generateImageWithProductReference(
+  scenePrompt: string,
+  product: ProductImageMatch,
+  options: { size?: '1024x1024' | '1536x1024' | '1024x1536' } = {}
+): Promise<string> {
+  const { openai: apiKey } = await getApiKeys();
+  if (!apiKey) throw new Error('OpenAI API Key nicht konfiguriert (Blog → Einstellungen)');
+
+  const refFiles = await Promise.all(product.imageUrls.map((u, i) => fetchAsFile(u, i)));
+
+  const fullPrompt = [
+    `Create a photorealistic outdoor/action-sports scene: ${scenePrompt.trim()}.`,
+    `The scene MUST prominently feature the exact action camera shown in the reference image(s) — a ${product.brand} ${product.productName}.`,
+    'Preserve the camera design, proportions, color, lens placement and branding from the reference. Do not modify the camera shape.',
+    'Do NOT add any text, logos or watermarks to the image. No UI overlays.',
+    'Photojournalism style, natural light, shallow depth of field, shot on full-frame 35mm.',
+  ].join(' ');
+
+  const client = new OpenAI({ apiKey });
+  // gpt-image-1 edit: image kann ein File oder File[] sein
+  const response = await client.images.edit({
+    model: 'gpt-image-1',
+    image: refFiles.length === 1 ? refFiles[0] : refFiles,
+    prompt: fullPrompt,
+    size: options.size ?? '1024x1024',
+    quality: 'high',
+  });
+
+  const b64 = response.data?.[0]?.b64_json;
+  if (!b64) throw new Error('gpt-image-1 hat kein Bild geliefert');
+  const buffer = Buffer.from(b64, 'base64');
+  return uploadToSocialStorage(buffer);
+}
+
+/**
+ * Smart-Wrapper: Versucht erst ein passendes Produkt im Text zu finden und
+ * nutzt dann gpt-image-1 mit Produktbild als Referenz. Faellt auf DALL-E 3
+ * zurueck (inkl. Modern-Camera-Hinweis), wenn kein Produkt gematcht werden
+ * kann oder gpt-image-1 fehlschlaegt.
+ *
+ * `sourceText` = topic + angle + keywords (zum Matchen).
+ * `scenePrompt` = die reine Szenenbeschreibung fuer die KI.
+ */
+export async function generateSocialImage(
+  scenePrompt: string,
+  sourceText: string,
+  options: { size?: '1024x1024' | '1792x1024' | '1024x1792' } = {}
+): Promise<string> {
+  // Schritt 1: Passendes Produkt suchen
+  let match: ProductImageMatch | null = null;
+  try {
+    match = await resolveProductForPost(sourceText);
+  } catch (err) {
+    console.warn('[social-image] Produkt-Match fehlgeschlagen:', err);
+  }
+
+  // Schritt 2: Wenn Match → gpt-image-1 mit Referenz
+  if (match) {
+    try {
+      const sizeRef = options.size === '1792x1024' ? '1536x1024' : options.size === '1024x1792' ? '1024x1536' : '1024x1024';
+      return await generateImageWithProductReference(scenePrompt, match, { size: sizeRef });
+    } catch (err) {
+      console.warn('[social-image] gpt-image-1 fehlgeschlagen, fallback auf DALL-E:', err);
+    }
+  }
+
+  // Schritt 3: Fallback auf DALL-E 3 mit Modern-Camera-Hint
+  return generateImage(scenePrompt, { size: options.size, addModernCameraHint: true });
 }
 
 /**
  * Generiert ein Post-Bild via DALL-E 3 und speichert es in Supabase Storage.
  * Gibt die öffentliche URL zurück.
  */
-export async function generateImage(prompt: string, options: { size?: '1024x1024' | '1792x1024' | '1024x1792'; style?: 'natural' | 'vivid'; skipPhotoBooster?: boolean } = {}): Promise<string> {
+export async function generateImage(
+  prompt: string,
+  options: { size?: '1024x1024' | '1792x1024' | '1024x1792'; style?: 'natural' | 'vivid'; skipPhotoBooster?: boolean; addModernCameraHint?: boolean } = {}
+): Promise<string> {
   const { openai: apiKey } = await getApiKeys();
   if (!apiKey) {
     throw new Error('OpenAI API Key nicht konfiguriert (Blog → Einstellungen)');
   }
 
-  const finalPrompt = options.skipPhotoBooster ? prompt : enhanceForPhotoRealism(prompt);
+  const finalPrompt = options.skipPhotoBooster
+    ? prompt
+    : enhanceForPhotoRealism(prompt, { addModernCameraHint: options.addModernCameraHint });
 
   const client = new OpenAI({ apiKey });
   const response = await client.images.generate({
@@ -192,15 +297,7 @@ export async function generateImage(prompt: string, options: { size?: '1024x1024
   if (!imageRes.ok) throw new Error('Generiertes Bild konnte nicht heruntergeladen werden');
   const buffer = Buffer.from(await imageRes.arrayBuffer());
 
-  const filename = `social-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.png`;
-  const supabase = createServiceClient();
-  const { error: uploadError } = await supabase.storage
-    .from('blog-images') // dasselbe Bucket wie Blog (vereinfacht Setup)
-    .upload(filename, buffer, { contentType: 'image/png', upsert: false });
-  if (uploadError) throw new Error(uploadError.message);
-
-  const { data: urlData } = supabase.storage.from('blog-images').getPublicUrl(filename);
-  return urlData.publicUrl;
+  return uploadToSocialStorage(buffer);
 }
 
 /**
@@ -233,8 +330,13 @@ export async function generateFromTemplate(input: TemplateGenerationInput): Prom
     for (const [key, value] of Object.entries(input.variables ?? {})) {
       imagePrompt = imagePrompt.replaceAll(`{${key}}`, String(value ?? ''));
     }
+    // Source-Text fuer Produkt-Matching: Template-Variablen + Caption-Ergebnis
+    const sourceText = [
+      ...Object.values(input.variables ?? {}).map((v) => String(v ?? '')),
+      caption,
+    ].join(' ');
     try {
-      image_url = await generateImage(imagePrompt);
+      image_url = await generateSocialImage(imagePrompt, sourceText);
     } catch (err) {
       // Bild ist optional — Fehler nicht hart durchreichen
       console.warn('[social] Bildgenerierung fehlgeschlagen:', err);

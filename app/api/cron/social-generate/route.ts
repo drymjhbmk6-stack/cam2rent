@@ -17,7 +17,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { verifyCronAuth } from '@/lib/cron-auth';
 import Anthropic from '@anthropic-ai/sdk';
-import { generateCaption, generateImage } from '@/lib/meta/ai-content';
+import { generateCaption, generateSocialImage } from '@/lib/meta/ai-content';
 
 const STALE_LOCK_MINUTES = 10;
 
@@ -204,7 +204,8 @@ Max 500 Zeichen, klarer CTA am Ende.`;
     let image_url: string | undefined;
     if (imagePrompt) {
       try {
-        image_url = await generateImage(imagePrompt);
+        const sourceText = [entry.topic, entry.angle, (entry.keywords ?? []).join(' ')].filter(Boolean).join(' ');
+        image_url = await generateSocialImage(imagePrompt, sourceText);
       } catch (e) {
         console.warn('[social-generate] image failed:', e);
       }

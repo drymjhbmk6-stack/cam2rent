@@ -14,7 +14,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
 import Anthropic from '@anthropic-ai/sdk';
-import { generateCaption, generateImage } from '@/lib/meta/ai-content';
+import { generateCaption, generateSocialImage } from '@/lib/meta/ai-content';
 import { seasonPromptBlock, isTopicOutOfSeason } from '@/lib/meta/season';
 
 interface GenerateRequest {
@@ -228,7 +228,8 @@ Max 500 Zeichen, 2-3 Emoji, klarer CTA am Ende.`;
         if (config.with_images) {
           try {
             const imgPrompt = `A real photograph about: ${idea.topic}. ${idea.angle}. Outdoor/action sports context, natural moment, everyday scene. No text, logos, or watermarks.`;
-            image_url = await generateImage(imgPrompt);
+            const sourceText = [idea.topic, idea.angle, (idea.keywords ?? []).join(' ')].filter(Boolean).join(' ');
+            image_url = await generateSocialImage(imgPrompt, sourceText);
           } catch (e) {
             console.warn('[plan] Bild fehlgeschlagen:', e);
           }
