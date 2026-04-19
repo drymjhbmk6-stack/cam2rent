@@ -342,19 +342,20 @@ export function buildFacebookLoginUrl(redirectUri: string, state: string): strin
   url.searchParams.set('client_id', process.env.META_APP_ID ?? '');
   url.searchParams.set('redirect_uri', redirectUri);
   url.searchParams.set('state', state);
-  // Scope-Namen gemäß aktueller Meta Graph API v21 (Instagram-Permissions
-  // heißen seit 2024 'instagram_business_*'). `pages_manage_metadata` und
-  // `read_insights` werden nicht zwingend benötigt und sind bei neueren
-  // App-Typen ohne App-Review nicht verfügbar → weggelassen.
+  // Scopes für den klassischen Facebook-Login-Flow.
+  // Die `instagram_business_*`-Varianten funktionieren NUR über Instagram-Login
+  // (graph.instagram.com), NICHT über www.facebook.com OAuth — daher hier die
+  // klassischen Namen. Voraussetzung: Im Meta-Dashboard muss der IG-Use-Case
+  // auf "API setup with Facebook login" eingestellt sein.
   url.searchParams.set(
     'scope',
     [
       'pages_show_list',
       'pages_read_engagement',
       'pages_manage_posts',
-      'instagram_business_basic',
-      'instagram_business_content_publish',
-      'instagram_business_manage_insights',
+      'instagram_basic',
+      'instagram_content_publish',
+      'instagram_manage_insights',
       'business_management',
     ].join(',')
   );
