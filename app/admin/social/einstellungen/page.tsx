@@ -150,6 +150,9 @@ export default function SocialConnections() {
         </div>
       )}
 
+      {/* Auto-Post-Einstellungen */}
+      <AutoPostSettings />
+
       <div className="mt-8 rounded-xl bg-slate-900/50 border border-slate-800 p-5">
         <h2 className="font-semibold text-white mb-3">Voraussetzungen</h2>
         <ul className="text-sm text-slate-400 space-y-2 list-disc list-inside">
@@ -197,6 +200,116 @@ function AccountRow({ account, onDisconnect }: { account: SocialAccount; onDisco
       >
         Trennen
       </button>
+    </div>
+  );
+}
+
+interface AutoPostSettingsData {
+  auto_post_mode?: 'draft' | 'scheduled' | 'published';
+  auto_post_delay_minutes?: number;
+  enabled_triggers?: Record<string, boolean>;
+}
+
+function AutoPostSettings() {
+  const [settings, setSettings] = useState<AutoPostSettingsData>({ auto_post_mode: 'draft', auto_post_delay_minutes: 30 });
+  const [saved, setSaved] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/admin/social/settings')
+      .then((r) => r.json())
+      .then((d) => setSettings(d.settings ?? {}));
+  }, []);
+
+  function update<K extends keyof AutoPostSettingsData>(key: K, value: AutoPostSettingsData[K]) {
+    setSettings((prev) => ({ ...prev, [key]: value }));
+    setSaved(false);
+  }
+
+  function toggleTrigger(trigger: string) {
+    const prev = settings.enabled_triggers ?? {};
+    update('enabled_triggers', { ...prev, [trigger]: !(prev[trigger] ?? true) });
+  }
+
+  async function save() {
+    setBusy(true);
+    await fetch('/api/admin/social/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(settings),
+    });
+    setBusy(false);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  }
+
+  const triggers: Array<{ key: string; label: string }> = [
+    { key: 'blog_publish', label: 'Blog-Artikel veröffentlicht' },
+    { key: 'product_added', label: 'Neue Kamera angelegt' },
+    { key: 'set_added', label: 'Neues Set angelegt' },
+    { key: 'voucher_created', label: 'Neuer Gutschein erstellt' },
+  ];
+
+  return (
+    <div className="mt-8 rounded-xl bg-slate-900/50 border border-slate-800 p-5">
+      <h2 className="font-semibold text-white mb-3">Auto-Posting-Einstellungen</h2>
+      <p className="text-sm text-slate-400 mb-4">
+        Bestimmt, was passiert wenn ein Ereignis einen Social-Post auslöst (z.B. neuer Blogartikel).
+      </p>
+
+      <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">Modus</label>
+      <select
+        value={settings.auto_post_mode ?? 'draft'}
+        onChange={(e) => update('auto_post_mode', e.target.value as 'draft' | 'scheduled' | 'published')}
+        className="w-full mb-3 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm"
+      >
+        <option value="draft">Nur Entwurf — Admin muss freigeben</option>
+        <option value="scheduled">Planen — automatisch posten nach Verzögerung</option>
+        <option value="published">Sofort posten — ohne Freigabe</option>
+      </select>
+
+      {settings.auto_post_mode === 'scheduled' && (
+        <>
+          <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">Verzögerung (Minuten)</label>
+          <input
+            type="number"
+            min={1}
+            max={1440}
+            value={settings.auto_post_delay_minutes ?? 30}
+            onChange={(e) => update('auto_post_delay_minutes', Number(e.target.value))}
+            className="w-full mb-3 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm"
+          />
+          <p className="text-xs text-slate-500 mb-3">
+            Der Post wird N Minuten nach dem Trigger auf „geplant“ gesetzt. Der Cron veröffentlicht ihn dann.
+          </p>
+        </>
+      )}
+
+      <label className="block text-xs uppercase tracking-wider text-slate-500 mb-2">Aktive Trigger</label>
+      <div className="space-y-2 mb-4">
+        {triggers.map((t) => (
+          <label key={t.key} className="flex items-center gap-2 text-sm text-slate-200 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={settings.enabled_triggers?.[t.key] !== false}
+              onChange={() => toggleTrigger(t.key)}
+            />
+            {t.label}
+          </label>
+        ))}
+      </div>
+
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={save}
+          disabled={busy}
+          className="px-4 py-2 rounded-lg bg-cyan-600 text-white font-semibold text-sm hover:bg-cyan-500 disabled:opacity-50"
+        >
+          {busy ? 'Speichere…' : 'Speichern'}
+        </button>
+        {saved && <span className="text-sm text-emerald-400">✓ Gespeichert</span>}
+      </div>
     </div>
   );
 }

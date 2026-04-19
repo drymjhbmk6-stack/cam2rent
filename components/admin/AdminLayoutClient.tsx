@@ -155,8 +155,9 @@ const SOCIAL_ITEMS: NavItem[] = [
   { href: '/admin/social', label: 'Übersicht', exact: true, icon: iconDashboard },
   { href: '/admin/social/posts', label: 'Posts', icon: iconBuchungen },
   { href: '/admin/social/neu', label: 'Neuer Post', icon: iconPlus },
+  { href: '/admin/social/plan', label: 'KI-Plan', icon: iconStar },
   { href: '/admin/social/redaktionsplan', label: 'Redaktionsplan', icon: iconCalendar },
-  { href: '/admin/social/vorlagen', label: 'Vorlagen', icon: iconStar },
+  { href: '/admin/social/vorlagen', label: 'Vorlagen', icon: iconBlog },
   { href: '/admin/social/einstellungen', label: 'Verbindungen', icon: iconCog },
 ];
 
