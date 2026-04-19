@@ -122,6 +122,19 @@ export default function ZeitplanPage() {
     loadAll();
   }
 
+  async function generateNow(id: string) {
+    if (!confirm('Jetzt sofort den Post generieren? Kann 20-60 Sekunden dauern.')) return;
+    try {
+      const res = await fetch(`/api/admin/social/editorial-plan/${id}/generate`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error ?? 'Fehler');
+      loadAll();
+    } catch (err) {
+      alert('Generierung fehlgeschlagen: ' + (err instanceof Error ? err.message : String(err)));
+      loadAll();
+    }
+  }
+
   async function deleteEntry(id: string) {
     if (!confirm('Plan-Eintrag wirklich löschen?')) return;
     await fetch(`/api/admin/social/editorial-plan/${id}`, { method: 'DELETE' });
@@ -224,7 +237,8 @@ export default function ZeitplanPage() {
                 <PlanRow key={entry.id} entry={entry}
                   onToggleReviewed={() => toggleReviewed(entry)}
                   onDelete={() => deleteEntry(entry.id)}
-                  onSkip={() => skipEntry(entry.id)} />
+                  onSkip={() => skipEntry(entry.id)}
+                  onGenerate={() => generateNow(entry.id)} />
               ))}
             </div>
           </div>
@@ -234,11 +248,12 @@ export default function ZeitplanPage() {
   );
 }
 
-function PlanRow({ entry, onToggleReviewed, onDelete, onSkip }: {
+function PlanRow({ entry, onToggleReviewed, onDelete, onSkip, onGenerate }: {
   entry: PlanEntry;
   onToggleReviewed: () => void;
   onDelete: () => void;
   onSkip: () => void;
+  onGenerate: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const statusColor: Record<string, string> = {
@@ -296,6 +311,13 @@ function PlanRow({ entry, onToggleReviewed, onDelete, onSkip }: {
           )}
         </div>
         <div className="flex-shrink-0 flex flex-col gap-1 items-end">
+          {entry.status === 'planned' && (
+            <button type="button" onClick={onGenerate}
+              className="text-xs text-cyan-400 hover:text-cyan-300 font-semibold"
+              title="Jetzt sofort den Entwurf generieren (ohne auf den Cron zu warten)">
+              ⚡ Jetzt generieren
+            </button>
+          )}
           {entry.status === 'generated' && (
             <button type="button" onClick={onToggleReviewed}
               className="text-xs text-emerald-400 hover:text-emerald-300" title="Als gesehen markieren — erst dann wird im Semi-Modus veröffentlicht">
