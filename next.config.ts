@@ -9,10 +9,6 @@ const nextConfig: NextConfig = {
   // Große Pakete automatisch tree-shaken
   experimental: {
     optimizePackageImports: ['@supabase/supabase-js', 'date-fns', 'lucide-react'],
-    // CX23 hat nur 4 GB RAM — nur 1 Worker beim Page-Data-Collection-Step
-    // Sonst multiplizieren sich Worker x Heap und es gibt OOM.
-    workerThreads: false,
-    cpus: 1,
   },
   // Unnötige Dateien vom Output-Tracing ausschließen (spart RAM beim Build)
   outputFileTracingExcludes: {

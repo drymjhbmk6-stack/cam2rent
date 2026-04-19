@@ -24,9 +24,7 @@ ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
 ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY
 
 ENV NODE_OPTIONS="--max-old-space-size=2560 --max-semi-space-size=64 --expose-gc"
-# Nur 1 Build-Worker (sonst multiplizieren sich Worker * 2 GB Heap = OOM auf CX23)
-ENV NEXT_PRIVATE_WORKER=1
-ENV NEXT_PRIVATE_CPU_PROF=0
+# Build mit 2.5 GB Heap — reicht auf CX23 (4 GB RAM)
 RUN node --max-old-space-size=2560 ./node_modules/.bin/next build
 
 # ── Stage 3: Production ──────────────────────────────────────────────────────
