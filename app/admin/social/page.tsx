@@ -78,23 +78,26 @@ export default function SocialDashboard() {
     return () => clearInterval(interval);
   }, []);
 
-  useEffect(() => {
-    async function load() {
-      setLoading(true);
-      try {
-        const [accRes, postsRes] = await Promise.all([
-          fetch('/api/admin/social/accounts').then((r) => r.json()),
-          fetch('/api/admin/social/posts?limit=10').then((r) => r.json()),
-        ]);
-        setAccounts(accRes.accounts ?? []);
-        setPosts(postsRes.posts ?? []);
-      } catch {
-        // leer
-      } finally {
-        setLoading(false);
-      }
+  async function loadAll() {
+    setLoading(true);
+    try {
+      const [accRes, postsRes] = await Promise.all([
+        fetch('/api/admin/social/accounts').then((r) => r.json()),
+        fetch('/api/admin/social/posts?limit=10').then((r) => r.json()),
+      ]);
+      setAccounts(accRes.accounts ?? []);
+      setPosts(postsRes.posts ?? []);
+      await loadStatus();
+    } catch {
+      // leer
+    } finally {
+      setLoading(false);
     }
-    load();
+  }
+
+  useEffect(() => {
+    loadAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const hasAccounts = accounts.length > 0;
@@ -106,7 +109,21 @@ export default function SocialDashboard() {
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
       <AdminBackLink />
-      <h1 className="text-2xl font-bold text-white mb-1 mt-4">Social Media</h1>
+      <div className="flex items-start justify-between gap-3 mt-4 mb-1">
+        <h1 className="text-2xl font-bold text-white">Social Media</h1>
+        <button
+          type="button"
+          onClick={loadAll}
+          disabled={loading}
+          className="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-200 font-medium text-xs hover:bg-slate-700 border border-slate-700 disabled:opacity-50 flex items-center gap-1.5"
+          title="Alle Daten neu laden"
+        >
+          <svg className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          {loading ? 'Lädt…' : 'Neu laden'}
+        </button>
+      </div>
       <p className="text-sm text-slate-400 mb-6">
         Automatische Posts auf Facebook + Instagram.
       </p>
