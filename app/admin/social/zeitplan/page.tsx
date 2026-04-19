@@ -135,6 +135,24 @@ export default function ZeitplanPage() {
     }
   }
 
+  async function publishNow(postId: string, platforms: string[]) {
+    if (!confirm(`Post jetzt sofort auf ${platforms.join(' + ')} veröffentlichen?`)) return;
+    try {
+      const res = await fetch('/api/admin/social/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: postId }),
+      });
+      const data = await res.json();
+      if (data.errors?.length > 0) {
+        alert('Veröffentlicht mit Fehlern: ' + data.errors.map((e: { platform: string; message: string }) => `${e.platform}: ${e.message}`).join(' | '));
+      }
+      loadAll();
+    } catch (err) {
+      alert('Veröffentlichen fehlgeschlagen: ' + (err instanceof Error ? err.message : String(err)));
+    }
+  }
+
   async function deleteEntry(id: string) {
     if (!confirm('Plan-Eintrag wirklich löschen?')) return;
     await fetch(`/api/admin/social/editorial-plan/${id}`, { method: 'DELETE' });
@@ -238,7 +256,8 @@ export default function ZeitplanPage() {
                   onToggleReviewed={() => toggleReviewed(entry)}
                   onDelete={() => deleteEntry(entry.id)}
                   onSkip={() => skipEntry(entry.id)}
-                  onGenerate={() => generateNow(entry.id)} />
+                  onGenerate={() => generateNow(entry.id)}
+                  onPublish={() => entry.post_id && publishNow(entry.post_id, entry.platforms)} />
               ))}
             </div>
           </div>
@@ -248,12 +267,13 @@ export default function ZeitplanPage() {
   );
 }
 
-function PlanRow({ entry, onToggleReviewed, onDelete, onSkip, onGenerate }: {
+function PlanRow({ entry, onToggleReviewed, onDelete, onSkip, onGenerate, onPublish }: {
   entry: PlanEntry;
   onToggleReviewed: () => void;
   onDelete: () => void;
   onSkip: () => void;
   onGenerate: () => void;
+  onPublish: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const statusColor: Record<string, string> = {
@@ -318,9 +338,16 @@ function PlanRow({ entry, onToggleReviewed, onDelete, onSkip, onGenerate }: {
               ⚡ Jetzt generieren
             </button>
           )}
+          {entry.status === 'generated' && entry.post_id && (
+            <button type="button" onClick={onPublish}
+              className="text-xs text-emerald-400 hover:text-emerald-300 font-semibold"
+              title="Sofort auf FB/IG veröffentlichen (überspringt geplante Uhrzeit)">
+              🚀 Jetzt posten
+            </button>
+          )}
           {entry.status === 'generated' && (
             <button type="button" onClick={onToggleReviewed}
-              className="text-xs text-emerald-400 hover:text-emerald-300" title="Als gesehen markieren — erst dann wird im Semi-Modus veröffentlicht">
+              className="text-xs text-slate-400 hover:text-slate-200" title="Als gesehen markieren — erst dann wird im Semi-Modus veröffentlicht">
               {entry.reviewed ? '✓ gesehen' : 'Als gesehen markieren'}
             </button>
           )}
