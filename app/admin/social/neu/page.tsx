@@ -38,6 +38,8 @@ export default function NewPostPage() {
 
   const [selectedTemplate, setSelectedTemplate] = useState<string>('');
   const [templateVars, setTemplateVars] = useState<Record<string, string>>({});
+  const [freePrompt, setFreePrompt] = useState<string>('');
+  const [generateImage, setGenerateImage] = useState<boolean>(false);
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -65,9 +67,16 @@ export default function NewPostPage() {
     setError(null);
     try {
       const body: Record<string, unknown> = { variables: templateVars };
-      if (selectedTemplate) body.template_id = selectedTemplate;
-      else {
-        setError('Bitte zuerst eine Vorlage wählen oder einen eigenen Prompt eingeben.');
+      if (selectedTemplate) {
+        body.template_id = selectedTemplate;
+      } else if (freePrompt.trim().length > 5) {
+        // Freitext-Modus: KI bekommt direkt unsere Beschreibung als Caption-Prompt
+        body.caption_prompt = `Schreibe einen Social-Media-Post zu folgendem Thema/Ankündigung:\n\n${freePrompt.trim()}\n\nMax 500 Zeichen. Am Ende ein CTA passend zum Thema (z.B. "Mehr auf cam2rent.de", "Jetzt ausprobieren", "Schreibt uns eure Meinung").`;
+        if (generateImage) {
+          body.image_prompt = `Photorealistic, clean social media image related to: ${freePrompt.trim()}. Professional, inviting, modern. No text overlays.`;
+        }
+      } else {
+        setError('Wähle eine Vorlage ODER beschreibe mindestens 5 Zeichen lang worum es geht.');
         setBusy(false);
         return;
       }
@@ -199,13 +208,41 @@ export default function NewPostPage() {
           </div>
         )}
 
+        {!selectedTemplate && (
+          <div className="mb-3">
+            <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">
+              Eigenes Thema / Ankündigung
+            </label>
+            <textarea
+              value={freePrompt}
+              onChange={(e) => setFreePrompt(e.target.value)}
+              rows={4}
+              placeholder={`Beschreib in eigenen Worten worum es geht, z.B.:
+
+- Neue Website mit Dark-Mode und schnellerem Checkout ist online
+- Ab Mai bieten wir Versand nach Österreich + Schweiz
+- Dieses Wochenende 20% Rabatt auf alle Sets
+- Team-Update: Wir haben ein neues Reinigungsverfahren für unsere Kameras`}
+              className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm font-mono text-xs"
+            />
+            <label className="flex items-center gap-2 mt-2 text-sm text-slate-200 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={generateImage}
+                onChange={(e) => setGenerateImage(e.target.checked)}
+              />
+              Bild mit DALL-E generieren (+ca. 0,04 €, ca. 15 Sek extra)
+            </label>
+          </div>
+        )}
+
         <button
           type="button"
           onClick={handleGenerate}
-          disabled={busy || !selectedTemplate}
+          disabled={busy || (!selectedTemplate && freePrompt.trim().length < 5)}
           className="px-4 py-2 rounded-lg bg-cyan-600 text-white font-semibold text-sm hover:bg-cyan-500 disabled:opacity-50"
         >
-          {busy ? 'Generiere…' : 'KI-Text + Bild generieren'}
+          {busy ? 'Generiere…' : selectedTemplate ? 'KI-Text + Bild generieren' : 'KI-Post erstellen'}
         </button>
       </section>
 
