@@ -388,6 +388,62 @@ Web-Push-Notifications für die Admin-PWA. Alle Events, die `createAdminNotifica
   3. SQL-Migration `supabase-push-subscriptions.sql` ausführen
   4. Admin-PWA installieren (Homescreen) → `/admin/einstellungen` → "Push aktivieren"
 
+### Social-Media-Modul: FB + IG Auto-Posting (Stand 2026-04-19)
+Vollautomatisches Posten auf Facebook-Page + Instagram-Business-Account über die Meta Graph API. Rein organisches Publishing — keine bezahlten Ads. KI-generierte Captions (Claude) + optional Bilder (DALL-E 3).
+
+#### Architektur
+- **DB-Tabellen** (`supabase-social.sql`):
+  - `social_accounts` (id, platform, external_id, name, username, access_token, token_expires_at, linked_account_id, is_active)
+  - `social_posts` (caption, hashtags, media_urls, media_type, link_url, platforms, fb/ig_account_id, fb/ig_post_id, status, scheduled_at, published_at, source_type, source_id, template_id, ai_generated, ai_prompt, error_message, retry_count)
+  - `social_templates` (name, trigger_type, platforms, caption_prompt, image_prompt, default_hashtags, is_active) — 6 Seed-Vorlagen (Blog, Produkt, Set, Gutschein, Sommer, Winter)
+  - `social_schedule` (name, template_id, frequency, day_of_week, day_of_month, hour_of_day, minute, next_run_at) — Redaktionsplan für wiederkehrende Posts
+  - `social_insights` (post_id, platform, reach, impressions, likes, comments, shares, saves, clicks)
+  - RLS aktiv, nur Service-Role-Zugriff
+- **Lib (`lib/meta/`)**:
+  - `graph-api.ts` — Meta Graph API Client (v21.0): OAuth, FB-Posting (Text/Photo/Album), IG zwei-Stufen-Publishing (Container + Publish), Insights, Long-Lived-Token-Exchange
+  - `publisher.ts` — Orchestriert Cross-Posting FB+IG, Status-Tracking, Error-Handling pro Plattform (success/partial/failed)
+  - `ai-content.ts` — `generateCaption()` (Claude Sonnet 4.6), `generateImage()` (DALL-E 3, 1:1), `generateFromTemplate()` Helper. Nutzt `admin_settings.blog_settings.anthropic_api_key` + `openai_api_key`
+  - `auto-post.ts` — `autoPost(trigger, sourceId, variables)` non-blocking Helper. Erstellt Entwurf oder geplanten Post (Modus aus `admin_settings.social_settings.auto_post_mode`)
+- **Admin-APIs** (`/api/admin/social/*`): accounts, posts, posts/[id], templates, templates/[id], schedule, schedule/[id], oauth, publish, generate, insights
+- **Cron** (`/api/cron/social-publish`): Veröffentlicht fällige scheduled Posts, arbeitet Redaktionsplan-Einträge ab (KI-generiert), Re-Try fehlgeschlagener Posts (max 2). Crontab: `*/5 * * * *`
+
+#### OAuth-Flow
+- `/admin/social/einstellungen` → „Mit Facebook verbinden" → `/api/admin/social/oauth?action=start` → State-Cookie + Redirect zu Meta
+- Meta-Callback → `/api/admin/social/oauth?code=...` → exchangeCodeForToken → exchangeLongLivedUserToken → getUserPages → für jede Page IG-Account ermitteln + alle als `social_accounts` upserten (60d Gültigkeit)
+- Permissions: `pages_show_list`, `pages_read_engagement`, `pages_manage_posts`, `pages_manage_metadata`, `instagram_basic`, `instagram_content_publish`, `instagram_manage_insights`, `read_insights`, `business_management`
+
+#### Auto-Trigger
+- **Blog-Publish** (`/api/cron/blog-publish`): Hook ruft `autoPost('blog_publish', ...)` für jeden frisch veröffentlichten Artikel — non-blocking
+- **Geplant:** Produkt-Trigger (neue Kamera/Set), Gutschein-Trigger — Hook in Admin-Routen einzubauen
+
+#### Admin-UI
+- **Sidebar:** Neuer Eintrag „Social Media" als Collapse unter „Content" (parallel zu Blog), state in `localStorage.admin_social_collapsed`
+- **`/admin/social`** — Dashboard: KPI-Karten (Veröffentlicht/Geplant/Entwürfe/Fehler), verbundene Konten, letzte Posts
+- **`/admin/social/posts`** — Liste mit Status-Filter, Bild-Vorschau, KI-Badge, Source-Type-Badge
+- **`/admin/social/posts/[id]`** — Post-Editor: Caption/Hashtags/Bild/Link/Schedule bearbeiten, Sofort-Veröffentlichen, Insights-Sync, Löschen (lokal + remote optional)
+- **`/admin/social/neu`** — Neuer Post: Template-Auswahl + Variablen-Eingabe + KI-Generierung (Claude+DALL-E), Sofort/Plan/Entwurf
+- **`/admin/social/redaktionsplan`** — Wiederkehrende Posts (täglich/wöchentlich/monatlich + Uhrzeit), Pause/Aktivieren
+- **`/admin/social/vorlagen`** — Vorlagen-Verwaltung: Trigger-Typ, Caption-Prompt, Bild-Prompt, Default-Hashtags
+- **`/admin/social/einstellungen`** — Verbindungen-Seite mit OAuth-Button, Account-Liste pro Plattform, Trennen-Button
+
+#### Voraussetzungen für Go-Live
+1. **SQL-Migration** `supabase-social.sql` ausführen (5 Tabellen + Trigger + RLS + 6 Seed-Vorlagen)
+2. **Meta Developer App** (`developers.facebook.com`):
+   - App-Typ: Business
+   - Redirect-URI: `https://cam2rent.de/api/admin/social/oauth`
+   - Produkte: Facebook Login for Business + Instagram Graph API
+3. **Coolify Env-Variablen:** `META_APP_ID`, `META_APP_SECRET`
+4. **Business-Verifizierung** im Meta Business Manager (Handelsregister + Ausweis, 1-5 Werktage)
+5. **App Review** für Permissions `pages_manage_posts`, `instagram_content_publish` (2-7 Werktage, Screencast erforderlich)
+6. **Crontab Hetzner:** `*/5 * * * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/social-publish`
+7. **Instagram-Account** als Business-Konto + mit FB-Page verknüpft (sonst kann die API nicht posten)
+
+#### Kosten
+- Meta Graph API: kostenlos
+- Claude (Caption-Generierung): ~1-3 €/Monat bei 30 Posts
+- DALL-E 3 (Bilder, optional): ~2-5 €/Monat bei 30 Posts
+- **Summe: ~3-8 €/Monat** (KEINE bezahlten Ads — alles organisch)
+
 ### Warteliste für Kameras ohne Seriennummer (Stand 2026-04-18)
 Interesse an neuen Kameras testen, bevor sie eingekauft werden: Sobald für eine Kamera noch keine `product_unit` mit `status != 'retired'` angelegt ist, zeigt der Shop statt "Jetzt mieten" eine "Benachrichtige mich"-Box mit E-Mail-Formular.
 
@@ -638,3 +694,9 @@ Read-only Katalog aller automatisch versendeten E-Mails mit Inline-Vorschau.
 - **Go-Live:** Stripe auf Live-Keys umstellen
 - **Go-Live:** Domain test.cam2rent.de → cam2rent.de
 - **Go-Live:** Resend Domain verifizieren (DKIM + SPF)
+- **Social-Modul Setup (offen):**
+  - SQL-Migration `supabase-social.sql` ausführen
+  - `META_APP_ID` + `META_APP_SECRET` in Coolify hinterlegen (aus developers.facebook.com kopieren)
+  - Cron `*/5 * * * * curl -X POST -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/social-publish` in Hetzner-Crontab eintragen
+  - Meta Business-Verifizierung starten + App Review für `pages_manage_posts` + `instagram_content_publish` beantragen
+  - Erste FB+IG-Verbindung über `/admin/social/einstellungen` testen
