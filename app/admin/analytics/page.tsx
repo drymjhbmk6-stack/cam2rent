@@ -68,7 +68,7 @@ interface FilterPreset {
 }
 
 const DEFAULT_FILTERS: FilterState = {
-  timeRange: '30tage',
+  timeRange: 'heute',
   customFrom: '',
   customTo: '',
   product: 'alle',
@@ -177,6 +177,45 @@ function HourlyChart({ data }: { data: number[] }) {
   );
 }
 
+/**
+ * Balkendiagramm mit Label pro Balken. Labels werden nur an jedem N-ten
+ * Tick gezeigt, damit es bei 30 Tagen nicht eng wird.
+ */
+function LabeledBarChart({ items }: { items: Array<{ label: string; value: number }> }) {
+  const max = Math.max(...items.map((i) => i.value), 1);
+  const h = 120;
+  const step = items.length > 15 ? Math.ceil(items.length / 10) : 1;
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: items.length > 20 ? 1 : 3, height: h }}>
+        {items.map((it, i) => (
+          <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, minWidth: 0 }}>
+            {it.value > 0 && (
+              <div style={{ fontSize: 9, fontWeight: 700, color: C.cyan, lineHeight: 1 }}>{it.value}</div>
+            )}
+            <div
+              title={`${it.label}: ${it.value}`}
+              style={{
+                width: '100%',
+                height: Math.max(2, (it.value / max) * (h - 16)),
+                background: `linear-gradient(180deg, ${C.cyan}, ${C.cyan}55)`,
+                borderRadius: '3px 3px 0 0',
+              }}
+            />
+          </div>
+        ))}
+      </div>
+      <div style={{ display: 'flex', marginTop: 4 }}>
+        {items.map((it, i) => (
+          <div key={i} style={{ flex: 1, textAlign: 'center', fontSize: 9, color: C.textDark, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {i % step === 0 ? it.label : ''}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ProgressBar({ pct, color = C.cyan, height = 6 }: { pct: number; color?: string; height?: number }) {
   return (
     <div style={{ background: C.border, borderRadius: height, height, overflow: 'hidden', flex: 1 }}>
@@ -227,6 +266,77 @@ function getTimeRangeLabel(tr: TimeRange): string {
     custom: 'Benutzerdefiniert',
   };
   return labels[tr];
+}
+
+function getViewsChartTitle(tr: TimeRange): string {
+  switch (tr) {
+    case 'heute': return 'Aufrufe heute nach Stunde';
+    case '7tage': return 'Aufrufe der letzten 7 Tage';
+    case '30tage': return 'Aufrufe der letzten 30 Tage';
+    case 'monat': return 'Aufrufe diesen Monat';
+    case 'jahr': return 'Aufrufe dieses Jahr (nach Monat)';
+    case 'custom': return 'Aufrufe im gewählten Zeitraum';
+  }
+}
+
+/**
+ * Wandelt die History-API-Daten in Chart-Items um, passend zum Filter.
+ * - 7/30tage: letzte N Tage, ein Balken pro Tag (Label "DD.MM")
+ * - monat:    nur Tage des aktuellen Monats
+ * - jahr:     12 Monats-Balken (Label "Jan", "Feb", ...)
+ * - custom:   Fallback auf 30 Tage
+ */
+function buildFilteredViews(tr: TimeRange, history: Array<{ date: string; views: number }>): Array<{ label: string; value: number }> {
+  const byDate = new Map<string, number>();
+  for (const h of history) byDate.set(h.date, (byDate.get(h.date) ?? 0) + h.views);
+
+  const now = new Date();
+  const fmtDay = (d: Date) => {
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    return `${dd}.${mm}`;
+  };
+  const isoDay = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${dd}`;
+  };
+
+  if (tr === 'jahr') {
+    // 12 Monats-Buckets vom aktuellen Jahr
+    const monthNames = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+    const currentYear = now.getFullYear();
+    const buckets = Array.from({ length: 12 }, (_, i) => ({ label: monthNames[i], value: 0 }));
+    for (const h of history) {
+      const d = new Date(h.date);
+      if (d.getFullYear() === currentYear) buckets[d.getMonth()].value += h.views;
+    }
+    return buckets;
+  }
+
+  let days: number;
+  let start: Date;
+  if (tr === 'monat') {
+    start = new Date(now.getFullYear(), now.getMonth(), 1);
+    days = now.getDate();
+  } else if (tr === '7tage') {
+    days = 7;
+    start = new Date(now);
+    start.setDate(start.getDate() - (days - 1));
+  } else {
+    days = 30;
+    start = new Date(now);
+    start.setDate(start.getDate() - (days - 1));
+  }
+
+  const out: Array<{ label: string; value: number }> = [];
+  for (let i = 0; i < days; i++) {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    out.push({ label: fmtDay(d), value: byDate.get(isoDay(d)) ?? 0 });
+  }
+  return out;
 }
 
 function getStatusLabel(s: StatusFilter): string {
@@ -469,11 +579,25 @@ export default function AnalyticsPage() {
     setTodayData(todayRes);
   }, [apiRange]);
 
-  const fetchHistory = useCallback(async () => {
-    if (historyData) return;
-    const res = await fetch('/api/admin/analytics?type=history').then((r) => r.json());
+  // Tage fuer History-Fetch aus dem aktuellen Filter ableiten —
+  // heute: 0 (kein History-Fetch noetig), 7/30 direkt, monat: bis heute vom
+  // Monatsanfang (max 31), jahr: 365 (fuer Monats-Aggregation).
+  const historyDays = (() => {
+    const now = new Date();
+    if (filters.timeRange === 'heute') return 0;
+    if (filters.timeRange === '7tage') return 7;
+    if (filters.timeRange === '30tage') return 30;
+    if (filters.timeRange === 'monat') return now.getDate();
+    if (filters.timeRange === 'jahr') return 365;
+    return 30;
+  })();
+
+  const fetchHistory = useCallback(async (daysOverride?: number) => {
+    const days = daysOverride ?? 30;
+    if (days <= 0) return;
+    const res = await fetch(`/api/admin/analytics?type=history&days=${days}`).then((r) => r.json());
     setHistoryData(res);
-  }, [historyData]);
+  }, []);
 
   const fetchBookings = useCallback(async () => {
     if (bookingsData && funnelData && productsData) return;
@@ -506,11 +630,10 @@ export default function AnalyticsPage() {
 
   useEffect(() => {
     if (activeTab === 'bookings') fetchBookings();
-    if (activeTab === 'traffic') fetchTraffic();
-    if (activeTab === 'traffic') fetchHistory();
+    if (activeTab === 'traffic') { fetchTraffic(); fetchHistory(30); }
     if (activeTab === 'customers') {
       fetchTraffic();
-      fetchHistory();
+      fetchHistory(30);
       if (!customersData) {
         fetch('/api/admin/analytics?type=customers').then((r) => r.json()).then(setCustomersData).catch(() => {});
       }
@@ -521,6 +644,12 @@ export default function AnalyticsPage() {
       }
     }
   }, [activeTab, fetchBookings, fetchTraffic, fetchHistory]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Live-Tab: History-Range folgt dem Zeitraum-Filter (fuer den dynamischen Chart)
+  useEffect(() => {
+    if (activeTab !== 'live') return;
+    if (historyDays > 0) fetchHistory(historyDays);
+  }, [activeTab, historyDays, fetchHistory]);
 
   // ─── Filter logic (client-side filtering of history/trend data) ───────────
   const getFilteredHistory = useCallback(() => {
@@ -1028,11 +1157,21 @@ export default function AnalyticsPage() {
             )}
           </Card>
 
-          {/* Hourly Chart */}
+          {/* Aufrufe-Chart: dynamisch nach Zeitraum-Filter */}
           <Card>
-            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16 }}>Aufrufe heute nach Stunde</div>
-            {todayData ? <HourlyChart data={todayData.hourly ?? Array(24).fill(0)} /> : (
-              <div style={{ height: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.textDim }}>Laden...</div>
+            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16 }}>{getViewsChartTitle(filters.timeRange)}</div>
+            {filters.timeRange === 'heute' ? (
+              todayData ? (
+                <HourlyChart data={todayData.hourly ?? Array(24).fill(0)} />
+              ) : (
+                <div style={{ height: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.textDim }}>Laden...</div>
+              )
+            ) : (
+              historyData ? (
+                <LabeledBarChart items={buildFilteredViews(filters.timeRange, historyData.history ?? [])} />
+              ) : (
+                <div style={{ height: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.textDim }}>Laden...</div>
+              )
             )}
           </Card>
         </div>

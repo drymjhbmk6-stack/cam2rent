@@ -153,7 +153,9 @@ export async function GET(req: NextRequest) {
 
   // ── HISTORY ───────────────────────────────────────────────────────────────
   if (type === 'history') {
-    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const daysRaw = parseInt(req.nextUrl.searchParams.get('days') ?? '30', 10);
+    const days = Number.isFinite(daysRaw) ? Math.min(Math.max(daysRaw, 1), 400) : 30;
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
     const { data } = await supabase
       .from('page_views')
       .select('session_id, visitor_id, created_at')
