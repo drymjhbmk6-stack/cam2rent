@@ -10,6 +10,8 @@ import {
   publishFacebookTextPost,
   publishInstagramImage,
   publishInstagramCarousel,
+  getFacebookPermalink,
+  getInstagramPermalink,
   MetaApiError,
 } from '@/lib/meta/graph-api';
 
@@ -135,6 +137,10 @@ export async function publishPost(postId: string): Promise<PublishResult> {
   const errors: Array<{ platform: string; message: string }> = [];
   let fb_post_id: string | undefined;
   let ig_post_id: string | undefined;
+  let fb_permalink: string | null = null;
+  let ig_permalink: string | null = null;
+  let fbPageToken: string | undefined;
+  let igPageToken: string | undefined;
 
   // Post laden
   const { data: post, error: postError } = await supabase.from('social_posts').select('*').eq('id', postId).single();
@@ -170,6 +176,7 @@ export async function publishPost(postId: string): Promise<PublishResult> {
         fb_post_id = res.id;
       }
 
+      fbPageToken = acc.access_token;
       await supabase.from('social_accounts').update({ last_used_at: new Date().toISOString() }).eq('id', acc.id);
     } catch (err) {
       const msg = err instanceof MetaApiError ? `[${err.code}] ${err.message}` : err instanceof Error ? err.message : String(err);
@@ -197,11 +204,23 @@ export async function publishPost(postId: string): Promise<PublishResult> {
         ig_post_id = res.id;
       }
 
+      igPageToken = acc.access_token;
       await supabase.from('social_accounts').update({ last_used_at: new Date().toISOString() }).eq('id', acc.id);
     } catch (err) {
       const msg = err instanceof MetaApiError ? `[${err.code}] ${err.message}` : err instanceof Error ? err.message : String(err);
       errors.push({ platform: 'instagram', message: msg });
     }
+  }
+
+  // ── Permalinks holen (die echten URLs zu den Posts) ─────────────────────
+  // Instagram gibt nur eine Media-ID zurueck, der echte URL-Pfad mit Shortcode
+  // muss separat via ?fields=permalink geholt werden. Gleiche bei Facebook
+  // mit permalink_url.
+  if (fb_post_id && fbPageToken) {
+    fb_permalink = await getFacebookPermalink(fb_post_id, fbPageToken);
+  }
+  if (ig_post_id && igPageToken) {
+    ig_permalink = await getInstagramPermalink(ig_post_id, igPageToken);
   }
 
   // ── Status aktualisieren ───────────────────────────────────────────────
@@ -215,6 +234,8 @@ export async function publishPost(postId: string): Promise<PublishResult> {
       status,
       fb_post_id: fb_post_id ?? null,
       ig_post_id: ig_post_id ?? null,
+      fb_permalink,
+      ig_permalink,
       published_at: anySuccess ? new Date().toISOString() : null,
       error_message: errors.length > 0 ? errors.map((e) => `${e.platform}: ${e.message}`).join(' | ') : null,
     })

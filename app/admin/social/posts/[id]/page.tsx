@@ -21,6 +21,8 @@ interface SocialPost {
   ig_account_id?: string | null;
   fb_post_id?: string | null;
   ig_post_id?: string | null;
+  fb_permalink?: string | null;
+  ig_permalink?: string | null;
   status: string;
   scheduled_at?: string | null;
   published_at?: string | null;
@@ -228,9 +230,9 @@ export default function PostDetail({ params }: { params: Promise<{ id: string }>
           {post.platforms.includes('facebook') && (
             <span className="text-slate-200">
               <strong className="text-blue-400">FB</strong> {fbAccount?.name ?? '—'}
-              {post.fb_post_id && (
+              {post.fb_permalink && (
                 <a
-                  href={`https://www.facebook.com/${post.fb_post_id}`}
+                  href={post.fb_permalink}
                   target="_blank"
                   rel="noreferrer"
                   className="ml-2 text-cyan-400 hover:underline"
@@ -238,20 +240,26 @@ export default function PostDetail({ params }: { params: Promise<{ id: string }>
                   Auf FB ansehen ↗
                 </a>
               )}
+              {!post.fb_permalink && post.fb_post_id && (
+                <span className="ml-2 text-slate-500 text-xs">(Link wird beim nächsten Post erfasst)</span>
+              )}
             </span>
           )}
           {post.platforms.includes('instagram') && (
             <span className="text-slate-200">
               <strong className="text-pink-400">IG</strong> {igAccount?.name ?? '—'}
-              {post.ig_post_id && (
+              {post.ig_permalink && (
                 <a
-                  href={`https://www.instagram.com/p/${post.ig_post_id}`}
+                  href={post.ig_permalink}
                   target="_blank"
                   rel="noreferrer"
                   className="ml-2 text-cyan-400 hover:underline"
                 >
                   Auf IG ansehen ↗
                 </a>
+              )}
+              {!post.ig_permalink && post.ig_post_id && (
+                <span className="ml-2 text-slate-500 text-xs">(Link wird beim nächsten Post erfasst)</span>
               )}
             </span>
           )}

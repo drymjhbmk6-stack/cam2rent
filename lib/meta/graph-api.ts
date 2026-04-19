@@ -334,6 +334,36 @@ export async function deleteInstagramPost(mediaId: string, pageToken: string): P
 }
 
 // ──────────────────────────────────────────────────────────────────────────
+// Permalinks (der echte URL-zum-Post, den Meta nach Publish kennt)
+// ──────────────────────────────────────────────────────────────────────────
+
+/** Instagram: holt permalink (z.B. https://www.instagram.com/p/DAbC_123xy/) */
+export async function getInstagramPermalink(mediaId: string, pageToken: string): Promise<string | null> {
+  try {
+    const res = await graphFetch<{ permalink?: string }>(`/${mediaId}`, {
+      token: pageToken,
+      query: { fields: 'permalink' },
+    });
+    return res.permalink ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Facebook: holt permalink_url (z.B. https://www.facebook.com/xxx/posts/yyy) */
+export async function getFacebookPermalink(postId: string, pageToken: string): Promise<string | null> {
+  try {
+    const res = await graphFetch<{ permalink_url?: string }>(`/${postId}`, {
+      token: pageToken,
+      query: { fields: 'permalink_url' },
+    });
+    return res.permalink_url ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────
 // OAuth-Redirect-URL helpers
 // ──────────────────────────────────────────────────────────────────────────
 
