@@ -211,6 +211,14 @@ interface AutoPostSettingsData {
   default_tone?: string;
   ki_context?: string;
   default_hashtags?: string[];
+  // Auto-Generate (Redaktionsplan-Cron)
+  auto_generate?: boolean;
+  auto_generate_mode?: 'semi' | 'voll';
+  schedule_days_before?: number;
+  weekdays?: string[];
+  time_from?: string;
+  time_to?: string;
+  fact_check_enabled?: boolean;
 }
 
 function AutoPostSettings() {
@@ -339,6 +347,85 @@ AKTUELLE THEMEN (bei Bedarf mal einbauen):
           </label>
         ))}
       </div>
+
+      <div className="h-px bg-slate-800 mb-5" />
+
+      {/* ───── Auto-Generate (Redaktionsplan-Cron) ───── */}
+      <h3 className="font-semibold text-white mb-2">Automatische Generierung (Redaktionsplan)</h3>
+      <p className="text-xs text-slate-400 mb-3">
+        Steuert den Cron <code className="text-cyan-400">/api/cron/social-generate</code>, der Posts aus dem Redaktionsplan automatisch erstellt.
+      </p>
+
+      <label className="flex items-center gap-2 text-sm text-slate-200 cursor-pointer mb-3">
+        <input type="checkbox" checked={settings.auto_generate !== false}
+          onChange={(e) => update('auto_generate', e.target.checked)} />
+        Automatische Generierung aktiv
+      </label>
+
+      <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">Modus</label>
+      <select value={settings.auto_generate_mode ?? 'semi'}
+        onChange={(e) => update('auto_generate_mode', e.target.value as 'semi' | 'voll')}
+        className="w-full mb-3 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm">
+        <option value="semi">Semi — KI generiert Entwurf, Admin gibt frei (Häkchen)</option>
+        <option value="voll">Voll — KI generiert + veröffentlicht automatisch</option>
+      </select>
+
+      <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">Vorlaufzeit (Tage)</label>
+      <input type="number" min={0} max={7}
+        value={settings.schedule_days_before ?? 2}
+        onChange={(e) => update('schedule_days_before', Number(e.target.value))}
+        className="w-full mb-3 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm" />
+      <p className="text-xs text-slate-500 -mt-2 mb-3">
+        Posts werden N Tage vor dem geplanten Datum generiert (damit du Zeit zum Freigeben hast).
+      </p>
+
+      <label className="block text-xs uppercase tracking-wider text-slate-500 mb-2">Aktive Wochentage</label>
+      <div className="flex flex-wrap gap-2 mb-3">
+        {[
+          { k: 'mo', l: 'Mo' },
+          { k: 'di', l: 'Di' },
+          { k: 'mi', l: 'Mi' },
+          { k: 'do', l: 'Do' },
+          { k: 'fr', l: 'Fr' },
+          { k: 'sa', l: 'Sa' },
+          { k: 'so', l: 'So' },
+        ].map((d) => {
+          const active = (settings.weekdays ?? ['mo','di','mi','do','fr','sa','so']).includes(d.k);
+          return (
+            <button key={d.k} type="button"
+              onClick={() => {
+                const current = settings.weekdays ?? ['mo','di','mi','do','fr','sa','so'];
+                const next = current.includes(d.k) ? current.filter((x) => x !== d.k) : [...current, d.k];
+                update('weekdays', next);
+              }}
+              className="px-3 py-1.5 rounded-lg text-xs font-medium border"
+              style={active ? { background: 'rgba(6,182,212,0.2)', color: '#06b6d4', borderColor: '#06b6d4' } : { background: 'transparent', color: '#94a3b8', borderColor: '#334155' }}>
+              {d.l}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 mb-3">
+        <div>
+          <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">Zeit von</label>
+          <input type="time" value={settings.time_from ?? '09:00'}
+            onChange={(e) => update('time_from', e.target.value)}
+            className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm" />
+        </div>
+        <div>
+          <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">Zeit bis</label>
+          <input type="time" value={settings.time_to ?? '18:00'}
+            onChange={(e) => update('time_to', e.target.value)}
+            className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm" />
+        </div>
+      </div>
+
+      <label className="flex items-center gap-2 text-sm text-slate-200 cursor-pointer mb-5">
+        <input type="checkbox" checked={settings.fact_check_enabled !== false}
+          onChange={(e) => update('fact_check_enabled', e.target.checked)} />
+        3-stufiger Faktencheck aktiv (Brand + Stil-Pruefer)
+      </label>
 
       <div className="h-px bg-slate-800 mb-5" />
 

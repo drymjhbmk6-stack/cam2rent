@@ -22,10 +22,61 @@ interface SocialPost {
   created_at: string;
 }
 
+interface GenStatus {
+  status?: 'idle' | 'generating' | 'error';
+  started_at?: string;
+  last_success_at?: string;
+  error?: string;
+  entry_id?: string;
+}
+
+interface PlanCounts {
+  planned: number;
+  generated: number;
+  reviewed: number;
+  upcoming: Array<{ id: string; topic: string; scheduled_date: string; scheduled_time: string; status: string; reviewed: boolean }>;
+}
+
 export default function SocialDashboard() {
   const [accounts, setAccounts] = useState<SocialAccount[]>([]);
   const [posts, setPosts] = useState<SocialPost[]>([]);
   const [loading, setLoading] = useState(true);
+  const [genStatus, setGenStatus] = useState<GenStatus>({});
+  const [plan, setPlan] = useState<PlanCounts>({ planned: 0, generated: 0, reviewed: 0, upcoming: [] });
+  const [autoEnabled, setAutoEnabled] = useState(true);
+
+  async function loadStatus() {
+    try {
+      const [settingsRes, planRes] = await Promise.all([
+        fetch('/api/admin/social/settings').then((r) => r.json()),
+        fetch('/api/admin/social/editorial-plan').then((r) => r.json()),
+      ]);
+      const settings = settingsRes.settings ?? {};
+      setAutoEnabled(settings.auto_generate !== false);
+
+      // Gen-Status aus admin_settings laden (indirekt via API — einfacher: eigener endpoint waere besser, hier inline)
+      // Vereinfacht: Wir holen nur das, was in editorial-plan sichtbar ist
+      const planData = (planRes.plan ?? []) as Array<{ id: string; topic: string; scheduled_date: string; scheduled_time: string; status: string; reviewed: boolean; generated_at?: string }>;
+      setPlan({
+        planned: planData.filter((p) => p.status === 'planned').length,
+        generated: planData.filter((p) => p.status === 'generated').length,
+        reviewed: planData.filter((p) => p.status === 'reviewed' || (p.status === 'generated' && p.reviewed)).length,
+        upcoming: planData.filter((p) => ['planned', 'generated', 'reviewed'].includes(p.status)).slice(0, 8),
+      });
+
+      // Check ob irgendein Eintrag in 'generating' ist — dann wird gerade generiert
+      const isGenerating = planData.some((p) => p.status === 'generating');
+      setGenStatus({ status: isGenerating ? 'generating' : 'idle' });
+    } catch {
+      // leer
+    }
+  }
+
+  useEffect(() => {
+    loadStatus();
+    const interval = setInterval(loadStatus, 5000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     async function load() {
@@ -74,6 +125,9 @@ export default function SocialDashboard() {
           </Link>
         </div>
       )}
+
+      {/* Live-Ampel + KI-Bot-Status */}
+      {hasAccounts && <KiBotStatus autoEnabled={autoEnabled} genStatus={genStatus} plan={plan} />}
 
       {/* KPI-Karten */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
@@ -162,6 +216,80 @@ export default function SocialDashboard() {
         )}
       </section>
     </div>
+  );
+}
+
+function KiBotStatus({ autoEnabled, genStatus, plan }: { autoEnabled: boolean; genStatus: GenStatus; plan: PlanCounts }) {
+  const generating = genStatus.status === 'generating';
+  const error = genStatus.status === 'error';
+
+  let light: 'green' | 'yellow' | 'red' = 'green';
+  let label = 'KI-Bot aktiv';
+  let detail = 'Wartet auf nächsten Plan-Eintrag';
+
+  if (!autoEnabled) {
+    light = 'red';
+    label = 'Auto-Generierung deaktiviert';
+    detail = 'Aktiviere unter Einstellungen → "Automatische Generierung aktiv"';
+  } else if (error) {
+    light = 'red';
+    label = 'Fehler bei letzter Generierung';
+    detail = genStatus.error ?? 'Unbekannt';
+  } else if (generating) {
+    light = 'yellow';
+    label = 'KI generiert gerade';
+    detail = 'Ein Post wird erstellt (3-stufiger Faktencheck läuft)';
+  } else if (plan.planned > 0) {
+    light = 'green';
+    label = 'KI-Bot aktiv';
+    detail = `${plan.planned} Einträge im Plan, nächste Generierung stündlich`;
+  } else {
+    light = 'yellow';
+    label = 'Keine Einträge im Plan';
+    detail = 'Leg Themen an oder importiere in den Redaktionsplan';
+  }
+
+  const colors = {
+    green: { bg: 'rgba(22,163,74,0.1)', border: '#16a34a', dot: '#22c55e' },
+    yellow: { bg: 'rgba(202,138,4,0.1)', border: '#ca8a04', dot: '#eab308' },
+    red: { bg: 'rgba(220,38,38,0.1)', border: '#dc2626', dot: '#ef4444' },
+  }[light];
+
+  return (
+    <section className="mb-6 rounded-xl p-4 border" style={{ background: colors.bg, borderColor: colors.border }}>
+      <div className="flex items-center gap-3 mb-2">
+        <span className="inline-block w-3 h-3 rounded-full" style={{ background: colors.dot, animation: generating ? 'pulse 1.5s infinite' : undefined }} />
+        <h2 className="font-semibold text-white">{label}</h2>
+        <Link href="/admin/social/einstellungen" className="ml-auto text-xs text-slate-400 hover:text-slate-200">
+          Einstellungen →
+        </Link>
+      </div>
+      <p className="text-sm text-slate-300 mb-3">{detail}</p>
+
+      {/* Mini-Stats Plan */}
+      <div className="flex gap-4 text-xs">
+        <span className="text-slate-400">Geplant: <strong className="text-slate-200">{plan.planned}</strong></span>
+        <span className="text-slate-400">Generiert: <strong className="text-slate-200">{plan.generated}</strong></span>
+        <span className="text-slate-400">Freigegeben: <strong className="text-slate-200">{plan.reviewed}</strong></span>
+        <Link href="/admin/social/zeitplan" className="ml-auto text-cyan-400 hover:text-cyan-300">Zum Redaktionsplan →</Link>
+      </div>
+
+      {/* Upcoming */}
+      {plan.upcoming.length > 0 && (
+        <div className="mt-3 pt-3 border-t border-slate-800">
+          <p className="text-xs text-slate-500 uppercase tracking-wider mb-2">Nächste Einträge</p>
+          <ul className="space-y-1">
+            {plan.upcoming.slice(0, 5).map((u) => (
+              <li key={u.id} className="text-xs flex items-center gap-2">
+                <span className="text-slate-500 w-24">{new Date(u.scheduled_date).toLocaleDateString('de-DE', { day: '2-digit', month: 'short' })} {u.scheduled_time.slice(0, 5)}</span>
+                <span className="text-slate-300 flex-1 truncate">{u.topic}</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">{u.status}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
   );
 }
 
