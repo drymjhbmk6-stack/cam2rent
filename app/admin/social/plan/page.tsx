@@ -135,6 +135,13 @@ export default function KiPlanPage() {
     loadJobStatus();
   }
 
+  async function handleReset() {
+    if (!confirm('Job-Status zuruecksetzen? Bereits erstellte Posts bleiben erhalten — nur die Statusanzeige wird geloescht, damit du einen neuen Plan starten kannst.')) return;
+    await fetch('/api/admin/social/generate-plan?reset=1', { method: 'DELETE' });
+    setError(null);
+    loadJobStatus();
+  }
+
   async function handleClearAll() {
     if (!confirm(`Wirklich ALLE ${scheduled.length} geplanten Posts löschen?`)) return;
     for (const p of scheduled) {
@@ -159,7 +166,7 @@ export default function KiPlanPage() {
 
       {/* Job-Status Panel */}
       {job.status !== 'idle' && (
-        <JobStatusPanel job={job} progress={progress} onCancel={handleCancel} />
+        <JobStatusPanel job={job} progress={progress} onCancel={handleCancel} onReset={handleReset} />
       )}
 
       {/* Generator-Form */}
@@ -273,13 +280,21 @@ export default function KiPlanPage() {
   );
 }
 
-function JobStatusPanel({ job, progress, onCancel }: { job: JobStatus; progress: number; onCancel: () => void }) {
+function JobStatusPanel({ job, progress, onCancel, onReset }: { job: JobStatus; progress: number; onCancel: () => void; onReset: () => void }) {
   const running = job.status === 'running';
   const completed = job.status === 'completed';
   const failed = job.status === 'error' || job.status === 'cancelled';
 
-  const borderColor = running ? '#0891b2' : completed ? '#16a34a' : '#dc2626';
-  const bgColor = running ? 'rgba(6,182,212,0.08)' : completed ? 'rgba(22,163,74,0.08)' : 'rgba(220,38,38,0.08)';
+  // Staleness-Check: lief Job schon > 10 Min ohne Update, ist er
+  // wahrscheinlich in einem Serverless-Kill gestorben.
+  const stale = (() => {
+    if (!running || !job.started_at) return false;
+    const ageMs = Date.now() - new Date(job.started_at).getTime();
+    return ageMs > 10 * 60 * 1000;
+  })();
+
+  const borderColor = stale ? '#f59e0b' : running ? '#0891b2' : completed ? '#16a34a' : '#dc2626';
+  const bgColor = stale ? 'rgba(245,158,11,0.08)' : running ? 'rgba(6,182,212,0.08)' : completed ? 'rgba(22,163,74,0.08)' : 'rgba(220,38,38,0.08)';
 
   return (
     <section className="rounded-xl p-5 mb-6 border" style={{ borderColor, background: bgColor }}>
@@ -290,20 +305,38 @@ function JobStatusPanel({ job, progress, onCancel }: { job: JobStatus; progress:
             {completed && <span className="text-emerald-400">✓</span>}
             {failed && <span className="text-red-400">✗</span>}
             <h2 className="font-semibold text-white">
-              {running && 'Plan wird generiert'}
+              {running && !stale && 'Plan wird generiert'}
+              {running && stale && 'Job scheint haengen geblieben zu sein'}
               {completed && 'Fertig'}
               {job.status === 'error' && 'Fehler'}
               {job.status === 'cancelled' && 'Abgebrochen'}
             </h2>
           </div>
-          <p className="text-sm text-slate-300">{job.message}</p>
+          <p className="text-sm text-slate-300">{job.message || (failed ? 'Keine Details verfuegbar.' : '')}</p>
           {job.error && <p className="text-sm text-red-300 mt-1">⚠ {job.error}</p>}
+          {stale && (
+            <p className="text-sm text-amber-300 mt-1">
+              ⚠ Der Job laeuft seit &gt; 10 Min ohne Fortschritt — wahrscheinlich vom Server abgebrochen. Bitte zuruecksetzen und neu starten.
+            </p>
+          )}
         </div>
-        {running && (
-          <button type="button" onClick={onCancel} className="text-xs text-red-400 hover:text-red-300">
-            Abbrechen
-          </button>
-        )}
+        <div className="flex flex-col gap-2 items-end">
+          {running && !stale && (
+            <button type="button" onClick={onCancel} className="text-xs text-red-400 hover:text-red-300">
+              Abbrechen
+            </button>
+          )}
+          {(failed || completed || stale) && (
+            <button
+              type="button"
+              onClick={onReset}
+              className="text-xs px-2 py-1 rounded bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700"
+              title="Status zuruecksetzen, damit ein neuer Plan gestartet werden kann"
+            >
+              Zuruecksetzen
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Progress-Bar */}

@@ -17,6 +17,12 @@ import Anthropic from '@anthropic-ai/sdk';
 import { generateCaption, generateSocialImage } from '@/lib/meta/ai-content';
 import { seasonPromptBlock, isTopicOutOfSeason } from '@/lib/meta/season';
 
+// Node-Runtime + lange Laufzeit, damit der Hintergrund-Job nicht vom
+// Edge-/Serverless-Timeout abgebrochen wird. Der eigentliche HTTP-
+// Response kommt sofort (202), der Job laeuft dann weiter.
+export const runtime = 'nodejs';
+export const maxDuration = 300; // 5 Min — Obergrenze fuer den Fire-and-Forget-Teil
+
 interface GenerateRequest {
   days?: number;
   posts_per_week?: number;
@@ -286,12 +292,26 @@ Max 500 Zeichen, 2-3 Emoji, klarer CTA am Ende.`;
 // HANDLER
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Wie lange darf ein 'running' Job ohne Fortschritt bleiben, bevor er
+// als "stale" gilt und ueberschrieben werden darf? Next.js kann Background-
+// Promises nach dem HTTP-Response abbrechen — dann bleibt der Status
+// ewig "running" haengen.
+const STALE_JOB_MINUTES = 10;
+
+function isJobStale(job: JobStatus): boolean {
+  if (job.status !== 'running') return false;
+  if (!job.started_at) return true;
+  const ageMs = Date.now() - new Date(job.started_at).getTime();
+  return ageMs > STALE_JOB_MINUTES * 60 * 1000;
+}
+
 export async function POST(req: NextRequest) {
   if (!(await checkAdminAuth())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  // Laeuft schon ein Job?
+  // Laeuft schon ein Job? Nur blockieren wenn noch frisch — stale Jobs
+  // aus einem gecrashten Prozess duerfen ueberschrieben werden.
   const current = await getJobStatus();
-  if (current.status === 'running') {
+  if (current.status === 'running' && !isJobStale(current)) {
     return NextResponse.json({ error: 'Es laeuft bereits ein Plan-Job. Bitte warten oder abbrechen.' }, { status: 409 });
   }
 
@@ -339,9 +359,19 @@ export async function GET() {
   return NextResponse.json({ status });
 }
 
-export async function DELETE() {
+export async function DELETE(req: NextRequest) {
   if (!(await checkAdminAuth())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const url = new URL(req.url);
+  const reset = url.searchParams.get('reset') === '1';
   const current = await getJobStatus();
+
+  if (reset) {
+    // Kompletter Reset auf idle — nutzbar auch bei stuck/error/completed
+    const supabase = createServiceClient();
+    await supabase.from('admin_settings').delete().eq('key', JOB_KEY);
+    return NextResponse.json({ reset: true });
+  }
+
   if (current.status !== 'running') {
     return NextResponse.json({ error: 'Kein laufender Job' }, { status: 400 });
   }
