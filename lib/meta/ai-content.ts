@@ -23,6 +23,33 @@ async function getApiKeys(): Promise<{ anthropic?: string; openai?: string }> {
   }
 }
 
+interface SocialSettings {
+  default_tone?: string;
+  ki_context?: string;
+  default_hashtags?: string[];
+}
+
+async function getSocialSettings(): Promise<SocialSettings> {
+  const supabase = createServiceClient();
+  const { data } = await supabase.from('admin_settings').select('value').eq('key', 'social_settings').maybeSingle();
+  if (!data?.value) return {};
+  try {
+    return typeof data.value === 'string' ? JSON.parse(data.value) : (data.value as SocialSettings);
+  } catch {
+    return {};
+  }
+}
+
+async function getShopContext(): Promise<string> {
+  // Lädt Shop-Produkte für KI-Kontext (wie beim Blog-Generator)
+  const supabase = createServiceClient();
+  const { data: productConfig } = await supabase.from('admin_config').select('value').eq('key', 'products').single();
+  if (!productConfig?.value || typeof productConfig.value !== 'object') return '';
+  const products = productConfig.value as Record<string, { name: string; brand: string; slug: string }>;
+  const list = Object.values(products).slice(0, 20).map((p) => `- ${p.brand} ${p.name} (https://cam2rent.de/kameras/${p.slug})`);
+  return list.join('\n');
+}
+
 export interface GeneratedCaption {
   caption: string;
   hashtags: string[];
@@ -52,14 +79,22 @@ export async function generateCaption(
 
   const maxLength = options.maxLength ?? 500;
 
+  // Social-Settings + Shop-Kontext laden (sichtbar im Admin unter /admin/social/einstellungen)
+  const [socialSettings, shopContext] = await Promise.all([getSocialSettings(), getShopContext()]);
+  const toneInstruction = socialSettings.default_tone
+    ? `Ton: ${socialSettings.default_tone}`
+    : 'Ton: locker, einladend, mit 2-4 Emojis';
+  const extraContext = socialSettings.ki_context?.trim() ? `\n\nZusatz-Kontext:\n${socialSettings.ki_context.trim()}` : '';
+  const productContext = shopContext ? `\n\nAktuelle Kameras im Shop:\n${shopContext}` : '';
+
   const systemPrompt = `Du bist ein Social-Media-Redakteur für cam2rent.de, einen deutschen Action-Cam-Verleih (GoPro, DJI, Insta360).
 Schreibe Instagram-/Facebook-Posts auf Deutsch. Ziele:
-- Locker, einladend, Emoji gezielt einsetzen (2-4 pro Post)
+- ${toneInstruction}
 - Maximal ${maxLength} Zeichen im Haupttext
 - KEINE Hashtags im Text selbst — die kommen separat
 - NIEMALS "Versicherung" oder "versichert" — immer "Haftungsschutz" oder "abgesichert"
 - Umlaute korrekt: ä ö ü (nicht ae oe ue)
-- Am Ende ein klarer CTA (z.B. "Jetzt auf cam2rent.de mieten", "Link in der Bio")
+- Am Ende ein klarer CTA (z.B. "Jetzt auf cam2rent.de mieten", "Link in der Bio")${extraContext}${productContext}
 
 Antworte ausschließlich im folgenden JSON-Format, ohne Markdown-Codefences:
 {"caption": "...", "hashtags": ["#tag1", "#tag2"]}`;
@@ -95,8 +130,9 @@ Antworte ausschließlich im folgenden JSON-Format, ohne Markdown-Codefences:
     .map((h) => (typeof h === 'string' ? (h.startsWith('#') ? h : `#${h}`) : ''))
     .filter(Boolean);
 
-  // Mit Default-Hashtags mergen (unique)
-  const merged = Array.from(new Set([...hashtags, ...(options.defaultHashtags ?? [])]));
+  // Mit Default-Hashtags mergen (unique) — Caller + Social-Settings
+  const globalDefaults = socialSettings.default_hashtags ?? [];
+  const merged = Array.from(new Set([...hashtags, ...(options.defaultHashtags ?? []), ...globalDefaults]));
 
   return { caption: parsed.caption ?? textBlock.text.trim(), hashtags: merged };
 }

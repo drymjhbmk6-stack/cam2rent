@@ -158,7 +158,7 @@ const SOCIAL_ITEMS: NavItem[] = [
   { href: '/admin/social/plan', label: 'KI-Plan', icon: iconStar },
   { href: '/admin/social/redaktionsplan', label: 'Redaktionsplan', icon: iconCalendar },
   { href: '/admin/social/vorlagen', label: 'Vorlagen', icon: iconBlog },
-  { href: '/admin/social/einstellungen', label: 'Verbindungen', icon: iconCog },
+  { href: '/admin/social/einstellungen', label: 'Einstellungen', icon: iconCog },
 ];
 
 const FINANZEN_ITEMS: NavItem[] = [

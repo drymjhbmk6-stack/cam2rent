@@ -208,6 +208,9 @@ interface AutoPostSettingsData {
   auto_post_mode?: 'draft' | 'scheduled' | 'published';
   auto_post_delay_minutes?: number;
   enabled_triggers?: Record<string, boolean>;
+  default_tone?: string;
+  ki_context?: string;
+  default_hashtags?: string[];
 }
 
 function AutoPostSettings() {
@@ -286,7 +289,7 @@ function AutoPostSettings() {
       )}
 
       <label className="block text-xs uppercase tracking-wider text-slate-500 mb-2">Aktive Trigger</label>
-      <div className="space-y-2 mb-4">
+      <div className="space-y-2 mb-6">
         {triggers.map((t) => (
           <label key={t.key} className="flex items-center gap-2 text-sm text-slate-200 cursor-pointer">
             <input
@@ -298,6 +301,55 @@ function AutoPostSettings() {
           </label>
         ))}
       </div>
+
+      <div className="h-px bg-slate-800 mb-5" />
+
+      <h3 className="font-semibold text-white mb-2">KI-Konfiguration</h3>
+      <p className="text-xs text-slate-400 mb-4">
+        Diese Einstellungen nutzt Claude bei jeder automatisch generierten Caption
+        (Neuer Post, Plan-Generator, Auto-Trigger).
+      </p>
+
+      <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">Standard-Ton</label>
+      <input
+        type="text"
+        value={settings.default_tone ?? ''}
+        onChange={(e) => update('default_tone', e.target.value)}
+        placeholder="z.B. locker, mit Action-Cam-Insider-Slang und 2-4 Emojis"
+        className="w-full mb-3 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm"
+      />
+
+      <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">Zusatz-Kontext für die KI</label>
+      <textarea
+        value={settings.ki_context ?? ''}
+        onChange={(e) => update('ki_context', e.target.value)}
+        rows={8}
+        placeholder={`Aktuelle Themen und Aktionen, die die KI einbauen soll. Zum Beispiel:
+
+- Neue Kameras: GoPro Hero 14 ab Mai, Insta360 Ace Pro 3 Leak
+- Aktuelle Aktion: Sommer-Rabatt 10% mit Code SUMMER26
+- USPs: Versand deutschlandweit, Haftungsschutz ab 15€, 1-Tag-Miete möglich
+- Stilistische Hinweise: Duzen, keine Werbe-Floskeln`}
+        className="w-full mb-2 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm font-mono text-xs"
+      />
+      <p className="text-xs text-slate-500 mb-4">
+        Wird der KI bei jeder Generierung mitgegeben — für aktuelle Produkte, Preise, Aktionen etc.
+        Die Kameras aus deinem Shop werden automatisch geladen.
+      </p>
+
+      <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">
+        Globale Standard-Hashtags (immer mitgepostet)
+      </label>
+      <input
+        type="text"
+        value={(settings.default_hashtags ?? []).join(' ')}
+        onChange={(e) => {
+          const list = e.target.value.split(/[\s,]+/).map((h) => h.trim()).filter(Boolean).map((h) => (h.startsWith('#') ? h : `#${h}`));
+          update('default_hashtags', list);
+        }}
+        placeholder="#cam2rent #kameramieten #actioncam"
+        className="w-full mb-5 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm"
+      />
 
       <div className="flex items-center gap-3">
         <button
