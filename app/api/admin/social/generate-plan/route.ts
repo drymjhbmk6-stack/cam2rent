@@ -82,17 +82,45 @@ async function isCancelled(): Promise<boolean> {
   return s.status === 'cancelled';
 }
 
+async function getRecentTopics(daysBack = 180): Promise<string[]> {
+  // Holt bereits vergebene Post-Themen aus den letzten N Tagen — diese werden
+  // an Claude als "bitte NICHT wiederholen"-Liste mitgegeben, damit der Plan
+  // immer frische Ideen produziert.
+  const supabase = createServiceClient();
+  const since = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000).toISOString();
+  const { data } = await supabase
+    .from('social_posts')
+    .select('caption')
+    .gte('created_at', since)
+    .order('created_at', { ascending: false })
+    .limit(200);
+  return (data ?? [])
+    .map((p) => (p.caption as string | null)?.split('\n')[0]?.trim().slice(0, 140) ?? '')
+    .filter(Boolean);
+}
+
 async function generateTopicList(apiKey: string, count: number): Promise<PostIdea[]> {
   const client = new Anthropic({ apiKey });
+  const recentTopics = await getRecentTopics(180);
+  const avoidBlock = recentTopics.length > 0
+    ? `\n\nBEREITS BEHANDELTE THEMEN (max Ähnlichkeit 30%, also wirklich andere Inhalte wählen):
+${recentTopics.slice(0, 60).map((t, i) => `${i + 1}. ${t}`).join('\n')}`
+    : '';
+
   const prompt = `Du bist Social-Media-Stratege fuer cam2rent.de (Action-Cam-Verleih: GoPro, DJI, Insta360).
-Generiere exakt ${count} UNTERSCHIEDLICHE Post-Ideen fuer Instagram + Facebook, die Kunden zum Mieten animieren.
+Generiere exakt ${count} UNTERSCHIEDLICHE und FRISCHE Post-Ideen fuer Instagram + Facebook, die Kunden zum Mieten animieren.
 
 Verteile die Ideen ausgewogen auf diese Kategorien:
-- produkt: Kamera- oder Set-Spotlight
-- tipp: Nutzer-Tipps
-- inspiration: Anwendungsfaelle
-- aktion: Verleih-Tipps
-- behind_the_scenes: Einblicke
+- produkt: Kamera- oder Set-Spotlight (verschiedene Modelle durchwechseln)
+- tipp: Nutzer-Tipps (Technik, Location, Setup, Nachbearbeitung)
+- inspiration: Anwendungsfaelle (Sport, Reise, Event, Lifestyle)
+- aktion: Verleih-Tipps (mieten vs. kaufen, Spontantrips)
+- behind_the_scenes: Einblicke (Team, Pruefungen, Logistik)
+
+Wichtig:
+- Jede Idee muss sich DEUTLICH von den anderen unterscheiden
+- Variiere Winkel, Saison, Zielgruppe
+- Keine generischen Floskeln${avoidBlock}
 
 Antworte AUSSCHLIESSLICH als JSON-Array:
 [{"topic": "Titel max 60 Zeichen", "angle": "Kernaussage 1-2 Saetze", "category": "produkt|tipp|inspiration|aktion|behind_the_scenes", "keywords": ["tag1","tag2","tag3"]}]`;

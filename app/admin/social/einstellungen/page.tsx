@@ -246,6 +246,44 @@ function AutoPostSettings() {
     setTimeout(() => setSaved(false), 2000);
   }
 
+  function loadRecommended() {
+    if (settings.default_tone || settings.ki_context || (settings.default_hashtags ?? []).length > 0) {
+      if (!confirm('Vorhandene Einstellungen mit Empfehlungen überschreiben?')) return;
+    }
+    setSettings((prev) => ({
+      ...prev,
+      default_tone: 'Locker und authentisch, Duzen, 2-4 Emojis. Sprich Outdoor-/Action-Fans an ohne Werbefloskeln. Wenn du Zahlen/Preise/Eigenschaften nennst: klar und konkret, keine Superlativ-Inflation.',
+      ki_context: `UNTERNEHMEN:
+cam2rent.de ist ein deutscher Action-Cam-Verleih. Wir vermieten GoPro, DJI, Insta360 und Zubehör ab 1 Tag, mit Versand deutschlandweit oder Abholung.
+
+USPs (immer einbaubar):
+- Ab 1 Tag mietbar, flexibel bis 30+ Tage
+- Haftungsschutz ab 15€ (NIEMALS "Versicherung" sagen)
+- Versand deutschlandweit, Express möglich
+- Geprüft und gereinigt vor jedem Versand
+- Persönliche Beratung per WhatsApp
+
+STILISTISCH:
+- Duzen statt Siezen
+- Umlaute korrekt schreiben (ä ö ü)
+- Am Ende jedes Posts CTA (z.B. "Jetzt mieten auf cam2rent.de", "Link in der Bio", "Schreibt uns eure Meinung")
+- Variiere die CTAs zwischen Posts
+- Keine Hashtags im Fließtext — die kommen separat
+
+FRISCHE GEWÄHRLEISTEN:
+- Niemals zwei aufeinander folgende Posts zum selben Thema
+- Saison beachten: im Winter Ski/Snowboard/Indoor, im Sommer Surfen/Wandern/Festival
+- Spezifische Szenarien statt Allgemeinplätze ("GoPro im Nebel am Brocken" > "Action-Cam in der Natur")
+
+AKTUELLE THEMEN (bei Bedarf mal einbauen):
+- Neue Modelle: GoPro Hero 14, DJI Osmo Action 7, Insta360 Ace Pro 3 — Release-Erwartungen
+- Saison: [aktuell eintragen, z.B. "Sommer-Urlaubssaison beginnt"]
+- Aktionen: [aktuell eintragen, z.B. "10% Rabatt mit Code SUMMER26"]`,
+      default_hashtags: ['#cam2rent', '#kameramieten', '#actioncam', '#gopro', '#dji', '#insta360'],
+    }));
+    setSaved(false);
+  }
+
   const triggers: Array<{ key: string; label: string }> = [
     { key: 'blog_publish', label: 'Blog-Artikel veröffentlicht' },
     { key: 'product_added', label: 'Neue Kamera angelegt' },
@@ -304,7 +342,17 @@ function AutoPostSettings() {
 
       <div className="h-px bg-slate-800 mb-5" />
 
-      <h3 className="font-semibold text-white mb-2">KI-Konfiguration</h3>
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="font-semibold text-white">KI-Konfiguration</h3>
+        <button
+          type="button"
+          onClick={loadRecommended}
+          className="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-200 font-medium text-xs hover:bg-slate-700 border border-slate-700"
+          title="Fuellt die Felder mit optimalen cam2rent-Vorgaben"
+        >
+          ⚡ Empfohlene Einstellungen laden
+        </button>
+      </div>
       <p className="text-xs text-slate-400 mb-4">
         Diese Einstellungen nutzt Claude bei jeder automatisch generierten Caption
         (Neuer Post, Plan-Generator, Auto-Trigger).
