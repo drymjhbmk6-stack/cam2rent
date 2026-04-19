@@ -138,19 +138,45 @@ Antworte ausschließlich im folgenden JSON-Format, ohne Markdown-Codefences:
 }
 
 /**
+ * Verstärkt einen Prompt mit Foto-Realismus-Anweisungen, damit die Bilder
+ * weniger nach KI/CGI aussehen. DALL-E 3 hat von sich aus einen "KI-Look";
+ * diese Tricks helfen gegen Symmetrie-Perfektion, glossy surfaces, uncanny
+ * lighting und Cartoon-artige Darstellung.
+ */
+function enhanceForPhotoRealism(prompt: string): string {
+  // Falls der User selbst schon einen Stil vorgibt (artistic, illustration,
+  // watercolor, etc.), nicht überschreiben.
+  const explicitStyle = /\b(illustration|drawing|painting|watercolor|cartoon|anime|digital art|3d render|cgi|sketch)\b/i.test(prompt);
+  if (explicitStyle) return prompt;
+
+  const photoBooster = [
+    'Shot on iPhone 15 Pro, natural lighting, unposed candid moment',
+    'amateur photography style, slight lens imperfections',
+    'authentic, real-world scene, documentary style',
+    'NOT digital art, NOT 3D render, NOT illustration, NOT CGI',
+    'realistic skin textures, natural skin tones, no plastic look',
+    'natural composition, asymmetric framing, real photograph',
+  ].join('. ');
+
+  return `${prompt.trim()}. ${photoBooster}. High resolution 35mm photography, sharp focus, realistic depth of field.`;
+}
+
+/**
  * Generiert ein Post-Bild via DALL-E 3 und speichert es in Supabase Storage.
  * Gibt die öffentliche URL zurück.
  */
-export async function generateImage(prompt: string, options: { size?: '1024x1024' | '1792x1024' | '1024x1792'; style?: 'natural' | 'vivid' } = {}): Promise<string> {
+export async function generateImage(prompt: string, options: { size?: '1024x1024' | '1792x1024' | '1024x1792'; style?: 'natural' | 'vivid'; skipPhotoBooster?: boolean } = {}): Promise<string> {
   const { openai: apiKey } = await getApiKeys();
   if (!apiKey) {
     throw new Error('OpenAI API Key nicht konfiguriert (Blog → Einstellungen)');
   }
 
+  const finalPrompt = options.skipPhotoBooster ? prompt : enhanceForPhotoRealism(prompt);
+
   const client = new OpenAI({ apiKey });
   const response = await client.images.generate({
     model: 'dall-e-3',
-    prompt,
+    prompt: finalPrompt,
     n: 1,
     size: options.size ?? '1024x1024', // 1:1 für IG-Feed
     quality: 'hd',

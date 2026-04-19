@@ -209,7 +209,7 @@ Max 500 Zeichen, 2-3 Emoji, klarer CTA am Ende.`;
         let image_url: string | undefined;
         if (config.with_images) {
           try {
-            const imgPrompt = `Photorealistic social media image about: ${idea.topic}. ${idea.angle}. Professional, clean, outdoor/action sports context. No text overlays.`;
+            const imgPrompt = `A real photograph about: ${idea.topic}. ${idea.angle}. Outdoor/action sports context, natural moment, everyday scene. No text, logos, or watermarks.`;
             image_url = await generateImage(imgPrompt);
           } catch (e) {
             console.warn('[plan] Bild fehlgeschlagen:', e);

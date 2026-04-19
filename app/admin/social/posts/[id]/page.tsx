@@ -272,17 +272,51 @@ export default function PostDetail({ params }: { params: Promise<{ id: string }>
       </section>
 
       <section className="mb-4">
-        <label className="block text-sm font-semibold text-slate-200 mb-1">Bild-URL</label>
-        <input
-          type="text"
-          value={imageUrl}
-          onChange={(e) => setImageUrl(e.target.value)}
-          disabled={!editable}
-          className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm disabled:opacity-60"
-        />
+        <label className="block text-sm font-semibold text-slate-200 mb-1">Bild</label>
+        <div className="flex gap-2 mb-2">
+          <input
+            type="text"
+            value={imageUrl}
+            onChange={(e) => setImageUrl(e.target.value)}
+            disabled={!editable}
+            placeholder="Bild-URL oder Datei hochladen →"
+            className="flex-1 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm disabled:opacity-60"
+          />
+          {editable && (
+            <label className="px-3 py-2 rounded-lg bg-slate-800 text-slate-200 font-medium text-sm hover:bg-slate-700 border border-slate-700 cursor-pointer whitespace-nowrap">
+              📷 Hochladen
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const fd = new FormData();
+                  fd.append('file', file);
+                  const res = await fetch('/api/admin/social/upload-image', { method: 'POST', body: fd });
+                  const data = await res.json();
+                  if (res.ok && data.url) setImageUrl(data.url);
+                  else alert(data.error ?? 'Upload fehlgeschlagen');
+                  e.target.value = '';
+                }}
+              />
+            </label>
+          )}
+          {editable && imageUrl && (
+            <button
+              type="button"
+              onClick={() => setImageUrl('')}
+              className="px-3 py-2 rounded-lg bg-red-900/30 text-red-300 text-sm hover:bg-red-900/50 border border-red-900/60"
+              title="Bild entfernen"
+            >
+              ✕
+            </button>
+          )}
+        </div>
         {imageUrl && (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={imageUrl} alt="" className="mt-3 max-h-60 rounded-lg border border-slate-800" />
+          <img src={imageUrl} alt="" className="mt-2 max-h-60 rounded-lg border border-slate-800" />
         )}
       </section>
 

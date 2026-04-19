@@ -186,7 +186,7 @@ Keywords: ${(entry.keywords ?? []).join(', ')}
 Max 500 Zeichen, klarer CTA am Ende.`;
 
     const imagePrompt = entry.with_image
-      ? `Photorealistic social media image about: ${entry.topic}. ${entry.angle ?? ''}. Professional, clean, outdoor/action context. No text overlays.`
+      ? `A real photograph about: ${entry.topic}. ${entry.angle ?? ''}. Outdoor/action sports context, natural moment, everyday scene. No text, logos, or watermarks.`
       : undefined;
 
     // Caption + optional Bild generieren
