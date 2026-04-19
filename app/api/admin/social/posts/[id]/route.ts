@@ -25,6 +25,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     'caption', 'hashtags', 'media_urls', 'media_type', 'link_url',
     'platforms', 'fb_account_id', 'ig_account_id',
     'status', 'scheduled_at',
+    'fb_image_position', 'ig_image_position',
   ];
   const updates: Record<string, unknown> = {};
   for (const k of allowedFields) {

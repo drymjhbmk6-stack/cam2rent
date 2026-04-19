@@ -30,6 +30,88 @@ interface SocialPost {
   platforms: string[];
   fb_account_id?: string | null;
   ig_account_id?: string | null;
+  fb_image_position?: string | null;
+  ig_image_position?: string | null;
+}
+
+/**
+ * Parsed "50% 30%" → { x: 0.5, y: 0.3 } (0..1 Focal-Point).
+ * Fallback: center.
+ */
+function parseFocalPoint(value: string | null | undefined): { x: number; y: number } {
+  if (!value) return { x: 0.5, y: 0.5 };
+  const m = value.match(/(\d+(?:\.\d+)?)%\s+(\d+(?:\.\d+)?)%/);
+  if (!m) return { x: 0.5, y: 0.5 };
+  return {
+    x: Math.max(0, Math.min(1, parseFloat(m[1]) / 100)),
+    y: Math.max(0, Math.min(1, parseFloat(m[2]) / 100)),
+  };
+}
+
+/**
+ * Croppt ein Bild auf das Zielseitenverhaeltnis rund um den Focal-Point und
+ * laedt das Ergebnis in den blog-images-Bucket hoch. Gibt die public URL
+ * zurueck. Wenn sharp nicht verfuegbar ist oder Position=center, gibt die
+ * Original-URL zurueck (kein Crop noetig).
+ */
+async function cropImageForPlatform(
+  sourceUrl: string,
+  targetAspect: number, // width / height
+  position: string | null | undefined
+): Promise<string> {
+  // Center + default Aspect → kein Crop noetig
+  if (!position || position === 'center center' || position === '50% 50%') {
+    return sourceUrl;
+  }
+
+  try {
+    const { default: sharp } = await import('sharp');
+    const imgRes = await fetch(sourceUrl);
+    if (!imgRes.ok) return sourceUrl;
+    const inputBuffer = Buffer.from(await imgRes.arrayBuffer());
+
+    const img = sharp(inputBuffer);
+    const meta = await img.metadata();
+    const srcW = meta.width ?? 0;
+    const srcH = meta.height ?? 0;
+    if (!srcW || !srcH) return sourceUrl;
+
+    const srcAspect = srcW / srcH;
+    let cropW = srcW;
+    let cropH = srcH;
+    if (srcAspect > targetAspect) {
+      // Quelle breiter als Ziel → horizontal zuschneiden
+      cropW = Math.round(srcH * targetAspect);
+    } else if (srcAspect < targetAspect) {
+      // Quelle hoeher als Ziel → vertikal zuschneiden
+      cropH = Math.round(srcW / targetAspect);
+    } else {
+      return sourceUrl; // Passt schon
+    }
+
+    const focal = parseFocalPoint(position);
+    const maxLeft = srcW - cropW;
+    const maxTop = srcH - cropH;
+    const left = Math.round(Math.max(0, Math.min(maxLeft, focal.x * srcW - cropW / 2)));
+    const top = Math.round(Math.max(0, Math.min(maxTop, focal.y * srcH - cropH / 2)));
+
+    const outputBuffer = await img.extract({ left, top, width: cropW, height: cropH }).jpeg({ quality: 90 }).toBuffer();
+
+    const supabase = createServiceClient();
+    const filename = `social-crop-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
+    const { error: uploadError } = await supabase.storage
+      .from('blog-images')
+      .upload(filename, outputBuffer, { contentType: 'image/jpeg', upsert: false });
+    if (uploadError) {
+      console.warn('[publisher] Crop-Upload fehlgeschlagen:', uploadError.message);
+      return sourceUrl;
+    }
+    const { data: urlData } = supabase.storage.from('blog-images').getPublicUrl(filename);
+    return urlData?.publicUrl ?? sourceUrl;
+  } catch (err) {
+    console.warn('[publisher] Crop fehlgeschlagen, nutze Original:', err);
+    return sourceUrl;
+  }
 }
 
 interface SocialAccount {
@@ -79,7 +161,9 @@ export async function publishPost(postId: string): Promise<PublishResult> {
         const res = await publishFacebookTextPost(acc.external_id, acc.access_token, caption, typedPost.link_url ?? undefined);
         fb_post_id = res.id;
       } else if (typedPost.media_urls.length === 1) {
-        const res = await publishFacebookPhotoPost(acc.external_id, acc.access_token, typedPost.media_urls[0], caption);
+        // FB-Feed zeigt oft 4:5 portrait — crop auf 4:5 wenn Position != center
+        const fbUrl = await cropImageForPlatform(typedPost.media_urls[0], 4 / 5, typedPost.fb_image_position);
+        const res = await publishFacebookPhotoPost(acc.external_id, acc.access_token, fbUrl, caption);
         fb_post_id = res.post_id ?? res.id;
       } else {
         const res = await publishFacebookMultiPhotoPost(acc.external_id, acc.access_token, typedPost.media_urls, caption);
@@ -103,7 +187,10 @@ export async function publishPost(postId: string): Promise<PublishResult> {
       if (typedPost.media_urls.length === 0) {
         throw new Error('Instagram verlangt mindestens ein Bild');
       } else if (typedPost.media_urls.length === 1) {
-        const res = await publishInstagramImage(acc.external_id, acc.access_token, typedPost.media_urls[0], caption);
+        // IG-Feed erzwingt 1:1 — crop mit gewaehlter Position damit der
+        // Ausschnitt der Vorschau entspricht
+        const igUrl = await cropImageForPlatform(typedPost.media_urls[0], 1, typedPost.ig_image_position);
+        const res = await publishInstagramImage(acc.external_id, acc.access_token, igUrl, caption);
         ig_post_id = res.id;
       } else {
         const res = await publishInstagramCarousel(acc.external_id, acc.access_token, typedPost.media_urls, caption);

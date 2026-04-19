@@ -16,6 +16,8 @@ interface Props {
   igAccountName?: string;
   igAccountUsername?: string;
   platforms?: string[];
+  fbImagePosition?: string; // CSS object-position, z.B. "50% 50%"
+  igImagePosition?: string;
 }
 
 export default function SocialPostPreview(props: Props) {
@@ -49,7 +51,7 @@ function buildFullCaption(caption: string, hashtags?: string[]): string {
   return parts.join('\n');
 }
 
-function FacebookPreview({ caption, hashtags, imageUrl, linkUrl, fbAccountName }: Props) {
+function FacebookPreview({ caption, hashtags, imageUrl, linkUrl, fbAccountName, fbImagePosition }: Props) {
   const fullText = buildFullCaption(caption, hashtags);
   const shortText = fullText.length > 300 ? fullText.slice(0, 280) + '…' : fullText;
 
@@ -84,7 +86,12 @@ function FacebookPreview({ caption, hashtags, imageUrl, linkUrl, fbAccountName }
         {imageUrl && (
           <div className="bg-black">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={imageUrl} alt="" className="w-full max-h-[400px] object-cover" />
+            <img
+              src={imageUrl}
+              alt=""
+              className="w-full max-h-[400px] object-cover"
+              style={{ objectPosition: fbImagePosition ?? 'center center' }}
+            />
           </div>
         )}
 
@@ -113,7 +120,7 @@ function FacebookPreview({ caption, hashtags, imageUrl, linkUrl, fbAccountName }
   );
 }
 
-function InstagramPreview({ caption, hashtags, imageUrl, igAccountName, igAccountUsername }: Props) {
+function InstagramPreview({ caption, hashtags, imageUrl, igAccountName, igAccountUsername, igImagePosition }: Props) {
   const fullText = buildFullCaption(caption, hashtags);
   const captionHead = caption.trim().slice(0, 100);
   const hasMore = fullText.length > 100;
@@ -143,7 +150,12 @@ function InstagramPreview({ caption, hashtags, imageUrl, igAccountName, igAccoun
         <div className="aspect-square bg-slate-900 flex items-center justify-center">
           {imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={imageUrl} alt="" className="w-full h-full object-cover" />
+            <img
+              src={imageUrl}
+              alt=""
+              className="w-full h-full object-cover"
+              style={{ objectPosition: igImagePosition ?? 'center center' }}
+            />
           ) : (
             <div className="text-center text-slate-500 text-sm px-6">
               <p className="text-4xl mb-2">📷</p>

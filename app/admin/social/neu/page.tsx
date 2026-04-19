@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import SocialPostPreview from '@/components/admin/SocialPostPreview';
 import MediaLibraryPicker from '@/components/admin/MediaLibraryPicker';
+import ImagePositionPicker from '@/components/admin/ImagePositionPicker';
 import { berlinLocalInputToUTC } from '@/lib/timezone';
 
 interface Template {
@@ -38,6 +39,8 @@ export default function NewPostPage() {
   const [schedule, setSchedule] = useState<'now' | 'later' | 'draft'>('draft');
   const [scheduledAt, setScheduledAt] = useState('');
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [fbImagePosition, setFbImagePosition] = useState('50% 50%');
+  const [igImagePosition, setIgImagePosition] = useState('50% 50%');
 
   const [selectedTemplate, setSelectedTemplate] = useState<string>('');
   const [templateVars, setTemplateVars] = useState<Record<string, string>>({});
@@ -132,6 +135,8 @@ export default function NewPostPage() {
         source_type: 'manual',
         template_id: selectedTemplate || null,
         ai_generated: Boolean(selectedTemplate),
+        fb_image_position: fbImagePosition,
+        ig_image_position: igImagePosition,
       };
 
       const res = await fetch('/api/admin/social/posts', {
@@ -422,7 +427,37 @@ TEAM / BTS:
             igAccountName={igAccount?.name}
             igAccountUsername={igAccount?.username ?? undefined}
             platforms={platforms}
+            fbImagePosition={fbImagePosition}
+            igImagePosition={igImagePosition}
           />
+          {imageUrl && (
+            <div className="mt-3 flex flex-wrap gap-4 items-start p-3 rounded-lg bg-slate-900/60 border border-slate-800">
+              {platforms.includes('facebook') && (
+                <ImagePositionPicker
+                  label="Facebook-Ausschnitt"
+                  value={fbImagePosition}
+                  onChange={setFbImagePosition}
+                />
+              )}
+              {platforms.includes('instagram') && (
+                <ImagePositionPicker
+                  label="Instagram-Ausschnitt"
+                  value={igImagePosition}
+                  onChange={setIgImagePosition}
+                />
+              )}
+              {platforms.includes('facebook') && platforms.includes('instagram') && (
+                <button
+                  type="button"
+                  onClick={() => setFbImagePosition(igImagePosition)}
+                  className="self-end text-xs text-slate-400 hover:text-cyan-300 underline-offset-2 hover:underline"
+                  title="IG-Position auf Facebook uebernehmen"
+                >
+                  ← IG-Position uebernehmen
+                </button>
+              )}
+            </div>
+          )}
         </section>
       )}
 

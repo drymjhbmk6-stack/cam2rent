@@ -451,6 +451,14 @@ Claude bekommt sonst kein Datum mit und erfindet z.B. Ski-Posts im April. Drei S
 - **`generate-plan-entry.ts`** — übergibt `scheduled_date` als `postDate` und setzt saisonfremde Einträge auf `status='skipped'` statt zu generieren.
 - **`/api/admin/social/generate-plan`** (KI-Themenplanung) — Saison-Block im Topic-Prompt + defensives Nachfiltern pro Datum; droppt saisonfremde Ideen und zeigt das im Job-Status.
 
+#### Unabhaengige Bild-Positionierung pro Plattform (Stand 2026-04-20)
+FB und IG zeigen Bilder in unterschiedlichen Aspect-Ratios (FB 4:5 portrait, IG 1:1 square). Der Admin kann jetzt den Bildausschnitt pro Plattform getrennt setzen — Vorschau UND echter Post folgen der Wahl.
+- **DB-Migration:** `supabase-social-image-position.sql` — zwei TEXT-Spalten `fb_image_position` + `ig_image_position` auf `social_posts`, Default `'center center'`. Format: CSS object-position ("50% 30%").
+- **UI:** `components/admin/ImagePositionPicker.tsx` — 9-Punkt-Raster (3x3) zum Anklicken. In beiden Editoren (`/admin/social/neu` + `/admin/social/posts/[id]`) direkt unter der Vorschau. "← IG-Position uebernehmen"-Link wenn beide Plattformen aktiv.
+- **Preview:** `SocialPostPreview` nimmt `fbImagePosition` + `igImagePosition` und setzt sie als `style={{ objectPosition }}` auf das jeweilige `<img>`.
+- **Publish:** `lib/meta/publisher.ts` → `cropImageForPlatform(url, aspect, position)` laedt das Bild, croppt mit sharp rund um den Focal-Point und lud das Ergebnis in `blog-images/social-crop-*.jpg`. FB kriegt 4:5, IG 1:1. Bei Position='center center' wird das Original unveraendert uebergeben (kein unnoetiges Re-Upload).
+- **Go-Live TODO:** SQL-Migration ausfuehren.
+
 #### Media-Library-Picker (Stand 2026-04-20)
 Drei Bildquellen im Post-Editor (`/admin/social/neu` + `/admin/social/posts/[id]`): KI (bestehend), 📚 Bibliothek (neu), 📷 vom PC.
 - **API:** `GET /api/admin/social/media-library` liefert kategorisierte Bildliste: Produkte (aus `admin_config.products`), Sets (`sets.image_url`), Blog (`blog_posts.featured_image`, 60 neueste), Social-Uploads (Storage `blog-images`, Prefix `social-`, 200 neueste).

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import SocialPostPreview from '@/components/admin/SocialPostPreview';
 import MediaLibraryPicker from '@/components/admin/MediaLibraryPicker';
+import ImagePositionPicker from '@/components/admin/ImagePositionPicker';
 import { fmtDateTime } from '@/lib/format-utils';
 import { utcToBerlinLocalInput, berlinLocalInputToUTC } from '@/lib/timezone';
 
@@ -27,6 +28,8 @@ interface SocialPost {
   ai_generated: boolean;
   error_message?: string | null;
   created_at: string;
+  fb_image_position?: string | null;
+  ig_image_position?: string | null;
 }
 
 interface Account {
@@ -55,6 +58,8 @@ export default function PostDetail({ params }: { params: Promise<{ id: string }>
   const [linkUrl, setLinkUrl] = useState('');
   const [scheduledAt, setScheduledAt] = useState('');
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [fbImagePosition, setFbImagePosition] = useState('50% 50%');
+  const [igImagePosition, setIgImagePosition] = useState('50% 50%');
 
   async function load() {
     setLoading(true);
@@ -72,6 +77,8 @@ export default function PostDetail({ params }: { params: Promise<{ id: string }>
       setImageUrl(p.media_urls[0] ?? '');
       setLinkUrl(p.link_url ?? '');
       setScheduledAt(utcToBerlinLocalInput(p.scheduled_at));
+      setFbImagePosition(p.fb_image_position || '50% 50%');
+      setIgImagePosition(p.ig_image_position || '50% 50%');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unbekannter Fehler');
     } finally {
@@ -100,6 +107,8 @@ export default function PostDetail({ params }: { params: Promise<{ id: string }>
         media_type: media_urls.length === 0 ? 'text' : 'image',
         link_url: linkUrl || null,
         scheduled_at: berlinLocalInputToUTC(scheduledAt),
+        fb_image_position: fbImagePosition,
+        ig_image_position: igImagePosition,
       };
       const res = await fetch(`/api/admin/social/posts/${id}`, {
         method: 'PATCH',
@@ -368,7 +377,39 @@ export default function PostDetail({ params }: { params: Promise<{ id: string }>
             igAccountName={igAccount?.name}
             igAccountUsername={igAccount?.username ?? undefined}
             platforms={post.platforms}
+            fbImagePosition={fbImagePosition}
+            igImagePosition={igImagePosition}
           />
+          {imageUrl && (
+            <div className="mt-3 flex flex-wrap gap-4 items-start p-3 rounded-lg bg-slate-900/60 border border-slate-800">
+              {post.platforms.includes('facebook') && (
+                <ImagePositionPicker
+                  label="Facebook-Ausschnitt"
+                  value={fbImagePosition}
+                  onChange={setFbImagePosition}
+                  disabled={!editable}
+                />
+              )}
+              {post.platforms.includes('instagram') && (
+                <ImagePositionPicker
+                  label="Instagram-Ausschnitt"
+                  value={igImagePosition}
+                  onChange={setIgImagePosition}
+                  disabled={!editable}
+                />
+              )}
+              {editable && post.platforms.includes('facebook') && post.platforms.includes('instagram') && (
+                <button
+                  type="button"
+                  onClick={() => setFbImagePosition(igImagePosition)}
+                  className="self-end text-xs text-slate-400 hover:text-cyan-300 underline-offset-2 hover:underline"
+                  title="IG-Position auf Facebook uebernehmen"
+                >
+                  ← IG-Position uebernehmen
+                </button>
+              )}
+            </div>
+          )}
         </section>
       )}
 

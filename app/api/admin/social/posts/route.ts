@@ -50,6 +50,8 @@ export async function POST(req: NextRequest) {
     ai_generated = false,
     ai_prompt = null,
     ai_model = null,
+    fb_image_position = 'center center',
+    ig_image_position = 'center center',
   } = body;
 
   const supabase = createServiceClient();
@@ -72,6 +74,8 @@ export async function POST(req: NextRequest) {
       ai_generated,
       ai_prompt,
       ai_model,
+      fb_image_position,
+      ig_image_position,
       created_by: 'admin',
     })
     .select()
