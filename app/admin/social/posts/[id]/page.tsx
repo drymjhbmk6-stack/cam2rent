@@ -3,6 +3,7 @@
 import { useEffect, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import SocialPostPreview from '@/components/admin/SocialPostPreview';
 import { fmtDateTime } from '@/lib/format-utils';
 
 interface SocialPost {
@@ -30,6 +31,7 @@ interface Account {
   id: string;
   platform: 'facebook' | 'instagram';
   name: string;
+  username?: string | null;
   external_id: string;
 }
 
@@ -302,6 +304,23 @@ export default function PostDetail({ params }: { params: Promise<{ id: string }>
             value={scheduledAt}
             onChange={(e) => setScheduledAt(e.target.value)}
             className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm"
+          />
+        </section>
+      )}
+
+      {/* Vorschau */}
+      {(caption || imageUrl) && (
+        <section className="mb-6">
+          <h2 className="text-sm font-semibold text-slate-200 mb-3">Vorschau</h2>
+          <SocialPostPreview
+            caption={caption}
+            hashtags={hashtagsText.split(/[\s,]+/).map((h) => h.trim()).filter(Boolean).map((h) => (h.startsWith('#') ? h : `#${h}`))}
+            imageUrl={imageUrl}
+            linkUrl={linkUrl}
+            fbAccountName={fbAccount?.name}
+            igAccountName={igAccount?.name}
+            igAccountUsername={igAccount?.username ?? undefined}
+            platforms={post.platforms}
           />
         </section>
       )}

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import SocialPostPreview from '@/components/admin/SocialPostPreview';
 
 interface Template {
   id: string;
@@ -18,6 +19,7 @@ interface Account {
   id: string;
   platform: 'facebook' | 'instagram';
   name: string;
+  username?: string | null;
 }
 
 export default function NewPostPage() {
@@ -313,6 +315,23 @@ export default function NewPostPage() {
           </label>
         </div>
       </section>
+
+      {/* Vorschau */}
+      {(caption || imageUrl) && (
+        <section className="mb-6">
+          <h2 className="text-sm font-semibold text-slate-200 mb-3">Vorschau</h2>
+          <SocialPostPreview
+            caption={caption}
+            hashtags={hashtagsText.split(/[\s,]+/).map((h) => h.trim()).filter(Boolean).map((h) => (h.startsWith('#') ? h : `#${h}`))}
+            imageUrl={imageUrl}
+            linkUrl={linkUrl}
+            fbAccountName={fbAccount?.name}
+            igAccountName={igAccount?.name}
+            igAccountUsername={igAccount?.username ?? undefined}
+            platforms={platforms}
+          />
+        </section>
+      )}
 
       {/* Submit */}
       <button
