@@ -451,14 +451,23 @@ export default function AnalyticsPage() {
     return () => clearInterval(id);
   }, []);
 
+  // Mappt UI-TimeRange auf API-range-Parameter
+  const apiRange = (() => {
+    if (filters.timeRange === 'heute') return 'today';
+    if (filters.timeRange === '7tage') return '7d';
+    if (filters.timeRange === '30tage') return '30d';
+    if (filters.timeRange === 'monat') return 'month';
+    return 'today'; // jahr/custom fallback
+  })();
+
   const fetchLive = useCallback(async () => {
     const [liveRes, todayRes] = await Promise.all([
-      fetch('/api/admin/analytics?type=live').then((r) => r.json()),
+      fetch(`/api/admin/analytics?type=live&range=${apiRange}`).then((r) => r.json()),
       fetch('/api/admin/analytics?type=today').then((r) => r.json()),
     ]);
     setLiveData(liveRes);
     setTodayData(todayRes);
-  }, []);
+  }, [apiRange]);
 
   const fetchHistory = useCallback(async () => {
     if (historyData) return;
@@ -948,21 +957,21 @@ export default function AnalyticsPage() {
             <StatCard
               label="Gerade online"
               value={liveData?.active_count ?? '–'}
-              sub="aktive Besucher"
+              sub="aktive Besucher (letzte 5 Min)"
               color={C.cyanLight}
-              tooltip="Anzahl der Besucher, die in den letzten 5 Minuten aktiv auf der Seite waren."
+              tooltip="Anzahl der Besucher, die in den letzten 5 Minuten aktiv auf der Seite waren. Unabhängig vom Zeitraum-Filter."
             />
             <StatCard
-              label="Seitenaufrufe heute"
-              value={liveData?.total_views ?? todayData?.total_views ?? '–'}
+              label={`Seitenaufrufe — ${getTimeRangeLabel(filters.timeRange)}`}
+              value={liveData?.total_views ?? '–'}
               sub="Seitenaufrufe"
-              tooltip="Gesamtanzahl aller aufgerufenen Seiten seit Mitternacht. Jeder Klick auf eine Seite zählt als ein Aufruf."
+              tooltip="Gesamtanzahl aller aufgerufenen Seiten im gewählten Zeitraum."
             />
             <StatCard
-              label="Einzelne Besucher heute"
-              value={liveData?.unique_visitors ?? todayData?.unique_visitors ?? '–'}
+              label={`Einzelne Besucher — ${getTimeRangeLabel(filters.timeRange)}`}
+              value={liveData?.unique_visitors ?? '–'}
               sub="Einzelne Besucher"
-              tooltip="Anzahl verschiedener Personen, die heute die Seite besucht haben. Mehrfachbesuche derselben Person werden nur einmal gezählt."
+              tooltip="Anzahl verschiedener Personen, die im gewählten Zeitraum die Seite besucht haben. Mehrfachbesuche derselben Person werden nur einmal gezählt."
             />
             <StatCard
               label="Seiten pro Besuch"

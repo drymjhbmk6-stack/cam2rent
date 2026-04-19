@@ -65,15 +65,29 @@ export async function GET(req: NextRequest) {
 
     const visitors = Array.from(sessionMap.values());
 
-    // Today stats (Berlin-Mitternacht als UTC — sonst Timezone-Drift)
-    const { data: todayData } = await supabase
+    // Range-abhaengige Stats (respektiert ?range=today|7d|30d|month aus URL)
+    const range = req.nextUrl.searchParams.get('range') ?? 'today';
+    let startDateISO: string;
+    if (range === '7d') {
+      startDateISO = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    } else if (range === '30d') {
+      startDateISO = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    } else if (range === 'month') {
+      const now = new Date();
+      startDateISO = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
+    } else {
+      // today (default) — Berlin-Mitternacht als UTC
+      startDateISO = getBerlinDayStartISO();
+    }
+
+    const { data: rangeData } = await supabase
       .from('page_views')
       .select('session_id, visitor_id')
-      .gte('created_at', getBerlinDayStartISO());
+      .gte('created_at', startDateISO);
 
-    const totalViews = todayData?.length ?? 0;
-    const uniqueVisitors = new Set(todayData?.map((r) => r.visitor_id)).size;
-    const sessions = new Set(todayData?.map((r) => r.session_id)).size;
+    const totalViews = rangeData?.length ?? 0;
+    const uniqueVisitors = new Set(rangeData?.map((r) => r.visitor_id)).size;
+    const sessions = new Set(rangeData?.map((r) => r.session_id)).size;
 
     return NextResponse.json({
       active_count: visitors.length,
@@ -81,6 +95,7 @@ export async function GET(req: NextRequest) {
       total_views: totalViews,
       unique_visitors: uniqueVisitors,
       avg_pages_per_session: sessions > 0 ? +(totalViews / sessions).toFixed(1) : 0,
+      range,
     });
   }
 
