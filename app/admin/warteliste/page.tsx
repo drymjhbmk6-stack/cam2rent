@@ -10,6 +10,7 @@ interface WaitlistEntry {
   product_name: string;
   email: string;
   source: string | null;
+  use_case: string | null;
   created_at: string;
   notified_at: string | null;
 }
@@ -132,6 +133,7 @@ export default function Warteliste() {
                 <thead className="bg-slate-900/70 text-slate-400 text-xs uppercase tracking-wider">
                   <tr>
                     <th className="px-4 py-2 text-left font-medium">E-Mail</th>
+                    <th className="px-4 py-2 text-left font-medium">Nutzung</th>
                     <th className="px-4 py-2 text-left font-medium">Quelle</th>
                     <th className="px-4 py-2 text-left font-medium">Eingetragen</th>
                     <th className="px-4 py-2 text-left font-medium">Benachrichtigt</th>
@@ -148,6 +150,15 @@ export default function Warteliste() {
                         >
                           {entry.email}
                         </a>
+                      </td>
+                      <td className="px-4 py-2 text-slate-300">
+                        {entry.use_case ? (
+                          <span className="inline-block px-2 py-0.5 rounded-full bg-slate-800 text-slate-200 text-xs">
+                            {entry.use_case}
+                          </span>
+                        ) : (
+                          <span className="text-slate-500">—</span>
+                        )}
                       </td>
                       <td className="px-4 py-2 text-slate-400">
                         {entry.source ?? '—'}

@@ -14,7 +14,7 @@ import { createAdminNotification } from '@/lib/admin-notifications';
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export async function POST(req: NextRequest) {
-  let body: { productId?: string; email?: string; source?: string };
+  let body: { productId?: string; email?: string; source?: string; useCase?: string };
   try {
     body = await req.json();
   } catch {
@@ -24,6 +24,10 @@ export async function POST(req: NextRequest) {
   const productId = typeof body.productId === 'string' ? body.productId.trim() : '';
   const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
   const source = typeof body.source === 'string' ? body.source.slice(0, 32) : null;
+  const useCase =
+    typeof body.useCase === 'string' && body.useCase.trim()
+      ? body.useCase.trim().slice(0, 200)
+      : null;
 
   if (!productId) {
     return NextResponse.json({ error: 'Produkt fehlt.' }, { status: 400 });
@@ -52,7 +56,7 @@ export async function POST(req: NextRequest) {
   // Duplikat-sicher via unique-constraint (product_id, email)
   const { error } = await supabase
     .from('waitlist_subscriptions')
-    .insert({ product_id: productId, email, source });
+    .insert({ product_id: productId, email, source, use_case: useCase });
 
   if (error) {
     // 23505 = unique_violation → Interessent steht bereits auf der Liste
@@ -65,10 +69,11 @@ export async function POST(req: NextRequest) {
 
   // Admin-Benachrichtigung (non-blocking — aber wir awaiten, damit sie sicher
   // angelegt wird; Push ist innerhalb fire-and-forget)
+  const useCaseSuffix = useCase ? ` Nutzung: ${useCase}.` : '';
   await createAdminNotification(supabase, {
     type: 'new_waitlist',
     title: `Neuer Warteliste-Eintrag: ${productName}`,
-    message: `${email} möchte benachrichtigt werden, sobald ${productName} verfügbar ist.`,
+    message: `${email} möchte benachrichtigt werden, sobald ${productName} verfügbar ist.${useCaseSuffix}`,
     link: '/admin/warteliste',
   });
 

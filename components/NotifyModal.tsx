@@ -10,8 +10,22 @@ interface NotifyModalProps {
   source?: 'card' | 'detail';
 }
 
+const USE_CASE_OPTIONS = [
+  'Wassersport / Surfen / Tauchen',
+  'Skifahren / Snowboarden',
+  'Mountainbike / Cycling',
+  'Klettern / Wandern / Outdoor',
+  'Reisen / Urlaub',
+  'Motorsport / Motorrad',
+  'Familie / Events',
+  'Vlog / Content Creation',
+  'Sonstiges',
+] as const;
+
 export default function NotifyModal({ isOpen, onClose, productName, productId, source }: NotifyModalProps) {
   const [email, setEmail] = useState('');
+  const [useCase, setUseCase] = useState('');
+  const [useCaseOther, setUseCaseOther] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -21,6 +35,8 @@ export default function NotifyModal({ isOpen, onClose, productName, productId, s
     if (isOpen) {
       setSubmitted(false);
       setEmail('');
+      setUseCase('');
+      setUseCaseOther('');
       setErrorMsg(null);
       setSubmitting(false);
       setTimeout(() => inputRef.current?.focus(), 50);
@@ -44,11 +60,24 @@ export default function NotifyModal({ isOpen, onClose, productName, productId, s
     if (!email || submitting) return;
     setSubmitting(true);
     setErrorMsg(null);
+
+    // Use-Case zusammenbauen: "Sonstiges" → Freitext, sonst Dropdown-Wert.
+    // Leer lassen ist OK — Feld ist optional.
+    const resolvedUseCase =
+      useCase === 'Sonstiges'
+        ? useCaseOther.trim()
+        : useCase.trim();
+
     try {
       const res = await fetch('/api/waitlist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ productId, email, source: source ?? 'card' }),
+        body: JSON.stringify({
+          productId,
+          email,
+          source: source ?? 'card',
+          useCase: resolvedUseCase || undefined,
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -124,8 +153,37 @@ export default function NotifyModal({ isOpen, onClose, productName, productId, s
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="deine@email.de"
                 required
-                className="w-full px-4 py-2.5 border border-brand-border dark:border-white/10 rounded-[10px] font-body text-sm text-brand-black dark:text-white bg-white dark:bg-brand-black placeholder:text-brand-muted dark:placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-accent-blue focus:border-transparent transition mb-4"
+                className="w-full px-4 py-2.5 border border-brand-border dark:border-white/10 rounded-[10px] font-body text-base text-brand-black dark:text-white bg-white dark:bg-brand-black placeholder:text-brand-muted dark:placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-accent-blue focus:border-transparent transition mb-4"
               />
+
+              <label htmlFor="notify-use-case" className="block text-sm font-body font-medium text-brand-text dark:text-gray-300 mb-1.5">
+                Wofür würdest du die Kamera nutzen? <span className="font-normal text-brand-muted dark:text-gray-500">(optional)</span>
+              </label>
+              <select
+                id="notify-use-case"
+                value={useCase}
+                onChange={(e) => setUseCase(e.target.value)}
+                className="w-full px-4 py-2.5 border border-brand-border dark:border-white/10 rounded-[10px] font-body text-base text-brand-black dark:text-white bg-white dark:bg-brand-black focus:outline-none focus:ring-2 focus:ring-accent-blue focus:border-transparent transition mb-3"
+              >
+                <option value="">Bitte wählen…</option>
+                {USE_CASE_OPTIONS.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
+              </select>
+
+              {useCase === 'Sonstiges' && (
+                <input
+                  type="text"
+                  value={useCaseOther}
+                  onChange={(e) => setUseCaseOther(e.target.value.slice(0, 200))}
+                  placeholder="z.B. Drohnen-Perspektive, Paragliding…"
+                  maxLength={200}
+                  className="w-full px-4 py-2.5 border border-brand-border dark:border-white/10 rounded-[10px] font-body text-base text-brand-black dark:text-white bg-white dark:bg-brand-black placeholder:text-brand-muted dark:placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-accent-blue focus:border-transparent transition mb-3"
+                />
+              )}
+
               {errorMsg && (
                 <p className="text-xs font-body text-status-error mb-3" role="alert">
                   {errorMsg}
