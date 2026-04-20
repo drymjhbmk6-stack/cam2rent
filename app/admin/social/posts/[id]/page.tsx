@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import SocialPostPreview from '@/components/admin/SocialPostPreview';
 import MediaLibraryPicker from '@/components/admin/MediaLibraryPicker';
+import UnsplashPicker from '@/components/admin/UnsplashPicker';
 import ImagePositionPicker from '@/components/admin/ImagePositionPicker';
 import { fmtDateTime } from '@/lib/format-utils';
 import { utcToBerlinLocalInput, berlinLocalInputToUTC } from '@/lib/timezone';
@@ -60,6 +61,9 @@ export default function PostDetail({ params }: { params: Promise<{ id: string }>
   const [linkUrl, setLinkUrl] = useState('');
   const [scheduledAt, setScheduledAt] = useState('');
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [unsplashOpen, setUnsplashOpen] = useState(false);
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [imgError, setImgError] = useState('');
   const [fbImagePosition, setFbImagePosition] = useState('50% 50%');
   const [igImagePosition, setIgImagePosition] = useState('50% 50%');
 
@@ -190,6 +194,32 @@ export default function PostDetail({ params }: { params: Promise<{ id: string }>
     else alert('Löschen fehlgeschlagen');
   }
 
+  async function handleGenerateImage() {
+    if (aiGenerating || !editable) return;
+    if (!confirm(
+      'Neues KI-Bild generieren?\n\n' +
+      '• Kosten: ~0,04 € (DALL-E 3) bzw. bis ~0,19 € (gpt-image-1)\n' +
+      '• Dauer: 10-30 Sekunden\n' +
+      '• Das aktuelle Bild wird ersetzt.'
+    )) return;
+    setAiGenerating(true);
+    setImgError('');
+    try {
+      const res = await fetch('/api/admin/social/generate-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ caption }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error ?? 'Generierung fehlgeschlagen');
+      setImageUrl(data.url);
+    } catch (err) {
+      setImgError(err instanceof Error ? err.message : 'Unbekannter Fehler');
+    } finally {
+      setAiGenerating(false);
+    }
+  }
+
   async function handleSyncInsights() {
     setBusy(true);
     try {
@@ -304,6 +334,27 @@ export default function PostDetail({ params }: { params: Promise<{ id: string }>
           {editable && (
             <button
               type="button"
+              onClick={handleGenerateImage}
+              disabled={aiGenerating || !caption.trim()}
+              className="px-3 py-2 rounded-lg bg-cyan-600 text-white font-medium text-sm hover:bg-cyan-700 border border-cyan-700 whitespace-nowrap disabled:opacity-40"
+              title={!caption.trim() ? 'Bitte zuerst Caption eingeben' : 'Neues Bild via KI generieren (~0,04 € pro Bild)'}
+            >
+              {aiGenerating ? '⏳ Generiere…' : '🎨 KI neu'}
+            </button>
+          )}
+          {editable && (
+            <button
+              type="button"
+              onClick={() => setUnsplashOpen(true)}
+              className="px-3 py-2 rounded-lg bg-slate-800 text-slate-200 font-medium text-sm hover:bg-slate-700 border border-slate-700 whitespace-nowrap"
+              title="Stockfoto auf Unsplash suchen"
+            >
+              📸 Unsplash
+            </button>
+          )}
+          {editable && (
+            <button
+              type="button"
               onClick={() => setLibraryOpen(true)}
               className="px-3 py-2 rounded-lg bg-slate-800 text-slate-200 font-medium text-sm hover:bg-slate-700 border border-slate-700 whitespace-nowrap"
               title="Bild aus eigener Bibliothek waehlen"
@@ -343,6 +394,9 @@ export default function PostDetail({ params }: { params: Promise<{ id: string }>
             </button>
           )}
         </div>
+        {imgError && (
+          <p className="mt-1 text-xs text-red-300">{imgError}</p>
+        )}
         {imageUrl && (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={imageUrl} alt="" className="mt-2 max-h-60 rounded-lg border border-slate-800" />
@@ -475,6 +529,14 @@ export default function PostDetail({ params }: { params: Promise<{ id: string }>
         open={libraryOpen}
         onClose={() => setLibraryOpen(false)}
         onSelect={(url) => setImageUrl(url)}
+      />
+
+      <UnsplashPicker
+        open={unsplashOpen}
+        onClose={() => setUnsplashOpen(false)}
+        onSelect={(url) => setImageUrl(url)}
+        initialQuery={caption.trim().split(/\s+/).slice(0, 3).join(' ')}
+        orientation="squarish"
       />
     </div>
   );
