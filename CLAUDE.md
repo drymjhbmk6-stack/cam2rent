@@ -609,15 +609,15 @@ Bei Supabase-522 (Free-Tier-Compute-Overload) ist die Admin-UI + der Docker-Buil
 ### Warteliste für Kameras ohne Seriennummer (Stand 2026-04-18)
 Interesse an neuen Kameras testen, bevor sie eingekauft werden: Sobald für eine Kamera noch keine `product_unit` mit `status != 'retired'` angelegt ist, zeigt der Shop statt "Jetzt mieten" eine "Benachrichtige mich"-Box mit E-Mail-Formular.
 
-- **DB-Tabelle:** `waitlist_subscriptions` (id, product_id, email, source, created_at, notified_at, UNIQUE(product_id, email)) — Migration `supabase-waitlist.sql`, RLS aktiviert (nur Service-Role)
-- **API:** `POST /api/waitlist` (`{ productId, email, source }`) — idempotent bei Duplikaten, legt automatisch Admin-Notification `new_waitlist` an (inkl. Push)
+- **DB-Tabelle:** `waitlist_subscriptions` (id, product_id, email, source, use_case, created_at, notified_at, UNIQUE(product_id, email)) — Migrationen `supabase-waitlist.sql` + `supabase-waitlist-use-case.sql`, RLS aktiviert (nur Service-Role)
+- **API:** `POST /api/waitlist` (`{ productId, email, source, useCase? }`) — idempotent bei Duplikaten, legt automatisch Admin-Notification `new_waitlist` an (inkl. Push). Use-Case wird an die Notification-Message angehängt.
 - **Admin-API:** `GET/DELETE /api/admin/waitlist` — durch Admin-Middleware geschützt
-- **Admin-Seite:** `/admin/warteliste` (neuer Eintrag in Sidebar-Gruppe "Kunden & Kommunikation", Bell-Icon) — zeigt Einträge gruppiert nach Kamera + Löschen
+- **Admin-Seite:** `/admin/warteliste` (neuer Eintrag in Sidebar-Gruppe "Kunden & Kommunikation", Bell-Icon) — zeigt Einträge gruppiert nach Kamera + Spalte "Nutzung" als Pill + Löschen
 - **Detection:** `lib/get-products.ts` lädt zusätzlich alle `product_units` (außer `retired`) und setzt `Product.hasUnits` (optional boolean). Waitlist-Modus = `hasUnits === false`.
 - **Shop-UI:**
   - `ProductCard.tsx`: Statt "Jetzt mieten"/"Ausgebucht" → blauer "Benachrichtige mich"-Button + Badge "Demnächst verfügbar"
   - Produktdetailseite `/kameras/[slug]`: Statt Kalender → neue Komponente `WaitlistCard.tsx` mit Bell-Icon + Formular
-- **`NotifyModal.tsx`** übernimmt jetzt `productId` + `source` (`'card' | 'detail'`) und postet echt gegen `/api/waitlist` — Loading-/Error-States ergänzt
+- **`NotifyModal.tsx`** übernimmt `productId` + `source` (`'card' | 'detail'`) und postet gegen `/api/waitlist`. Enthält optionales Use-Case-Dropdown (Wassersport/Wintersport/MTB/Outdoor/Reisen/Motorsport/Familie/Vlog/Sonstiges) — bei "Sonstiges" erscheint ein Freitextfeld (max 200 Zeichen). Feld ist optional — leer lassen ist OK.
 - **Notifications:** `new_waitlist`-Typ im `NotificationDropdown` (cyan Bell-Icon)
 
 ### Seriennummern-Scanner
@@ -917,6 +917,7 @@ Umfassendes Audit mit paralleler Agent-Analyse (Security/Code-Quality/Performanc
 - **Sicherheit:** API-Keys rotieren (wurden in einer Session öffentlich geteilt)
 - **SQL-Migration `supabase-performance-indizes.sql` ausführen** (8 Performance-Indizes, idempotent via `IF NOT EXISTS` + `CONCURRENTLY`).
 - **SQL-Migration `supabase-social-image-position.sql` ausführen** (2 Spalten `fb_image_position` + `ig_image_position` auf `social_posts` für unabhängige FB/IG-Bild-Positionierung).
+- **SQL-Migration `supabase-waitlist-use-case.sql` ausführen** (Spalte `use_case` auf `waitlist_subscriptions` für optionalen Nutzungszweck-Dropdown).
 - **Go-Live 01.05.2026:** `TEST_MODE = false` in `lib/contracts/contract-template.tsx` setzen
 - **Go-Live 01.05.2026:** Stripe auf Live-Keys umstellen
 - **Go-Live 01.05.2026:** Domain test.cam2rent.de → cam2rent.de
