@@ -564,11 +564,13 @@ Ausführliche Dokumentation: `BLOG_SYSTEM_DOCS.md`
 
 ### Cron-Jobs (Hetzner Server)
 ```
-0 * * * * curl -s -X POST "https://test.cam2rent.de/api/cron/blog-generate?secret=<CRON_SECRET>"
+0 * * * *    curl -s -X POST "https://test.cam2rent.de/api/cron/blog-generate?secret=<CRON_SECRET>"
 */10 * * * * curl -s -X POST "https://test.cam2rent.de/api/cron/blog-publish?secret=<CRON_SECRET>"
+30 18 * * 0  curl -s -X POST -H "x-cron-secret: <CRON_SECRET>" "https://test.cam2rent.de/api/cron/weekly-report"
 ```
 - **Generate:** Jede Stunde. Bei Intervall "daily" kein Wochentag-Check. Max 5 Artikel/Tag.
 - **Publish:** Alle 10 Min. Voll-Modus: automatisch. Semi-Modus: nur wenn "Gesehen"-Haken gesetzt.
+- **Weekly-Report:** Jeden Sonntag 18:30 (Server-Zeit). Holt letzte-7-Tage-Metriken, baut PDF + HTML-Email und schickt an `admin_settings.weekly_report_config.email` (Default: `BUSINESS.emailKontakt`). Ein-/Ausschalter + Empfänger unter `/admin/einstellungen`. Kann deaktiviert werden, ohne den Crontab-Eintrag anfassen zu müssen.
 - **Auth:** `verifyCronAuth()` in `lib/cron-auth.ts` — akzeptiert Header (Authorization/x-cron-secret) UND URL-Parameter (?secret=)
 
 ### DB-Tabellen

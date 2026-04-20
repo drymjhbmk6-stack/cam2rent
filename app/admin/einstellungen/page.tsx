@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { SpecDefinitionsManager } from '@/components/admin/SpecDefinitions';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import PushNotificationsSection from '@/components/admin/PushNotificationsSection';
+import WeeklyReportSection from '@/components/admin/WeeklyReportSection';
 
 type DepositMode = 'kaution' | 'haftung';
 
@@ -787,6 +788,9 @@ export default function EinstellungenPage() {
 
       {/* Sektion 8: Push-Benachrichtigungen */}
       <PushNotificationsSection />
+
+      {/* Sektion 9: Wöchentlicher Bericht */}
+      <WeeklyReportSection />
     </div>
   );
 }

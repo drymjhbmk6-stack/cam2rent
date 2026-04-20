@@ -1343,3 +1343,116 @@ export async function sendAbandonedCartReminder(data: {
 
   await sendAndLog({ to: data.customerEmail, subject, html, emailType: 'abandoned_cart' });
 }
+
+
+// ─── Wochenbericht (PDF + HTML) ─────────────────────────────────────────────
+
+export async function sendWeeklyReport(toEmail?: string): Promise<void> {
+  const { collectWeeklyReportData } = await import("@/lib/weekly-report");
+  const { WeeklyReportPDF } = await import("@/lib/weekly-report-pdf");
+  const { renderToBuffer } = await import("@react-pdf/renderer");
+
+  const recipient = toEmail || ADMIN_EMAIL;
+  const data = await collectWeeklyReportData();
+
+  const pdfBuffer = await renderToBuffer(createElement(WeeklyReportPDF, { data }) as ReactElement<DocumentProps>);
+
+  const fmt = (iso: string) => new Date(iso).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Europe/Berlin" });
+  const subject = `cam2rent Wochenbericht KW ${data.weekNumber}/${data.year}`;
+
+  const revClass = data.finance.revenue >= data.finance.prevRevenue ? "color:#10b981" : "color:#ef4444";
+  const bookClass = data.bookings.newCount >= data.bookings.prevCount ? "color:#10b981" : "color:#ef4444";
+  const warningsBlock = data.warnings.length
+    ? `<div style="background:#fef3c7;border-left:4px solid #f59e0b;padding:14px 18px;border-radius:6px;margin:0 0 20px;">
+        <p style="margin:0 0 6px;font-size:13px;font-weight:700;color:#78350f;">⚠ Warnungen</p>
+        <ul style="margin:0;padding-left:18px;font-size:12px;color:#78350f;">
+          ${data.warnings.map((w) => `<li>${h(w)}</li>`).join("")}
+        </ul>
+      </div>`
+    : "";
+
+  const html = `<!DOCTYPE html>
+<html lang="de"><head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#f5f5f0;font-family:Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f0;padding:40px 16px;">
+<tr><td align="center">
+<table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+  <tr><td style="background:#0a0a0a;border-radius:12px 12px 0 0;padding:22px 32px;">
+    <table cellpadding="0" cellspacing="0" border="0" role="presentation"><tr>
+      <td valign="middle" style="padding-right:14px;"><img src="https://cam2rent.de/favicon/icon-dark-64.png" width="44" height="44" alt="" style="display:block;border-radius:8px;border:0;"></td>
+      <td valign="middle">
+        <p style="margin:0;font-size:22px;font-weight:700;color:#fff;line-height:1.1;">Wochenbericht</p>
+        <p style="margin:3px 0 0;font-size:13px;color:#9ca3af;">KW ${data.weekNumber}/${data.year} · ${fmt(data.periodStart)} – ${fmt(data.periodEnd)}</p>
+      </td>
+    </tr></table>
+  </td></tr>
+  <tr><td style="background:#fff;padding:28px 32px;">
+    ${warningsBlock}
+    <p style="margin:0 0 18px;font-size:14px;color:#374151;line-height:1.6;">
+      Hier die Zusammenfassung der letzten 7 Tage. Alle Details im PDF-Anhang.
+    </p>
+
+    <h3 style="margin:18px 0 8px;font-size:14px;color:#0a0a0a;">💶 Finanzen</h3>
+    <table width="100%" cellpadding="0" cellspacing="0">
+      <tr><td style="padding:3px 0;font-size:13px;color:#374151;">Umsatz Woche</td>
+          <td style="padding:3px 0;font-size:13px;font-weight:700;text-align:right;${revClass};">${fmtEuro(data.finance.revenue)}</td></tr>
+      <tr><td style="padding:3px 0;font-size:12px;color:#6b7280;">Vorwoche</td>
+          <td style="padding:3px 0;font-size:12px;color:#6b7280;text-align:right;">${fmtEuro(data.finance.prevRevenue)}</td></tr>
+      <tr><td style="padding:3px 0;font-size:13px;color:#374151;">Bezahlte Rechnungen</td>
+          <td style="padding:3px 0;font-size:13px;text-align:right;">${data.finance.invoicesPaid}</td></tr>
+      <tr><td style="padding:3px 0;font-size:13px;color:#374151;">Offene Rechnungen</td>
+          <td style="padding:3px 0;font-size:13px;text-align:right;">${data.finance.invoicesOpen} (überfällig: ${fmtEuro(data.finance.overdueAmount)})</td></tr>
+    </table>
+
+    <h3 style="margin:20px 0 8px;font-size:14px;color:#0a0a0a;">📅 Buchungen</h3>
+    <table width="100%" cellpadding="0" cellspacing="0">
+      <tr><td style="padding:3px 0;font-size:13px;color:#374151;">Neue Buchungen</td>
+          <td style="padding:3px 0;font-size:13px;font-weight:700;text-align:right;${bookClass};">${data.bookings.newCount} (Vorwoche: ${data.bookings.prevCount})</td></tr>
+      <tr><td style="padding:3px 0;font-size:13px;color:#374151;">Stornierungen</td>
+          <td style="padding:3px 0;font-size:13px;text-align:right;">${data.bookings.cancelledCount}</td></tr>
+      <tr><td style="padding:3px 0;font-size:13px;color:#374151;">Nächste 7 Tage</td>
+          <td style="padding:3px 0;font-size:13px;text-align:right;">${data.bookings.upcomingShipping.length} Versand · ${data.bookings.upcomingReturn.length} Rückgabe</td></tr>
+    </table>
+
+    <h3 style="margin:20px 0 8px;font-size:14px;color:#0a0a0a;">👤 Kunden & Operativ</h3>
+    <table width="100%" cellpadding="0" cellspacing="0">
+      <tr><td style="padding:3px 0;font-size:13px;color:#374151;">Neue Registrierungen</td>
+          <td style="padding:3px 0;font-size:13px;text-align:right;">${data.customers.newRegistrations}</td></tr>
+      <tr><td style="padding:3px 0;font-size:13px;color:#374151;">Offene Verifizierungen</td>
+          <td style="padding:3px 0;font-size:13px;text-align:right;">${data.customers.pendingVerifications}</td></tr>
+      <tr><td style="padding:3px 0;font-size:13px;color:#374151;">Neue Waitlist-Einträge</td>
+          <td style="padding:3px 0;font-size:13px;text-align:right;">${data.customers.newWaitlist}</td></tr>
+      <tr><td style="padding:3px 0;font-size:13px;color:#374151;">Neue Schäden</td>
+          <td style="padding:3px 0;font-size:13px;text-align:right;">${data.operations.newDamages}</td></tr>
+      <tr><td style="padding:3px 0;font-size:13px;color:#374151;">Kameras in Wartung</td>
+          <td style="padding:3px 0;font-size:13px;text-align:right;">${data.operations.camerasInMaintenance}</td></tr>
+    </table>
+
+    <h3 style="margin:20px 0 8px;font-size:14px;color:#0a0a0a;">📝 Content</h3>
+    <table width="100%" cellpadding="0" cellspacing="0">
+      <tr><td style="padding:3px 0;font-size:13px;color:#374151;">Blog-Artikel veröffentlicht</td>
+          <td style="padding:3px 0;font-size:13px;text-align:right;">${data.content.blogPublished.length}</td></tr>
+      <tr><td style="padding:3px 0;font-size:13px;color:#374151;">Social-Posts veröffentlicht</td>
+          <td style="padding:3px 0;font-size:13px;text-align:right;">${data.content.socialPublishedCount}</td></tr>
+    </table>
+
+    <p style="margin:24px 0 4px;font-size:12px;color:#6b7280;">📎 Vollständiger Bericht als PDF im Anhang.</p>
+    <p style="margin:0;font-size:12px;color:#6b7280;">
+      <a href="https://cam2rent.de/admin" style="color:#3b82f6;">→ Admin-Dashboard öffnen</a>
+    </p>
+  </td></tr>
+  <tr><td style="background:#f5f5f0;border-radius:0 0 12px 12px;padding:14px 32px;text-align:center;">
+    <p style="margin:0;font-size:11px;color:#9ca3af;">cam2rent · Automatischer Wochenbericht · <a href="https://cam2rent.de/admin/einstellungen" style="color:#9ca3af;">Einstellungen</a></p>
+  </td></tr>
+</table>
+</td></tr></table></body></html>`;
+
+  await sendAndLog({
+    to: recipient,
+    subject,
+    html,
+    emailType: "weekly_report",
+    attachments: [{ filename: `cam2rent-wochenbericht-KW${data.weekNumber}-${data.year}.pdf`, content: pdfBuffer }],
+  });
+}
+
