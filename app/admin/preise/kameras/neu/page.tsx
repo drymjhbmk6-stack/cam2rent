@@ -28,7 +28,7 @@ function createEmpty(): AdminProduct {
     id: '', name: '', brand: 'GoPro', slug: '', shortDescription: '',
     priceTable: Array(30).fill(0),
     perDayAfter30: 3, kautionTier: null, hasHaftungsoption: true,
-    available: true, stock: 1,
+    available: true, stock: 0,
     model: '', category: 'action-cam', tags: [], deposit: 0,
   };
 }
@@ -268,10 +268,10 @@ export default function AdminNeueKameraPage() {
                   </label>
                 </div>
                 <div>
-                  <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Lagerbestand</label>
-                  <input type="number" min="0" value={product.stock}
-                    onChange={(e) => setProduct((p) => ({ ...p, stock: parseInt(e.target.value) || 0 }))}
-                    className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
+                  <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Bestand (automatisch)</label>
+                  <div className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body bg-gray-50 text-brand-muted">
+                    0 Kameras — Seriennummern nach dem Speichern hinzufügen
+                  </div>
                 </div>
               </div>
             </div>
