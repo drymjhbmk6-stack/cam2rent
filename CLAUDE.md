@@ -95,13 +95,14 @@ ESLint + TypeScript werden auf dem Server beim Build geskippt (RAM-Limit CX23).
 - **API:** GET/PATCH `/api/admin/notifications`, POST `/api/admin/notifications/create`
 - **Helper:** `createAdminNotification(supabase, { type, title, message?, link? })` in `lib/admin-notifications.ts`
 - **UI:** `NotificationDropdown` in Admin-Sidebar + Mobile-Header, pollt alle 30s
-- **9 Events angeschlossen:**
+- **10 Events angeschlossen:**
   - `new_booking`: confirm-booking, confirm-cart, manual-booking, confirm-extension
   - `booking_cancelled`: cancel-booking, cron/auto-cancel
   - `new_damage`: damage-report
   - `new_message`: messages
   - `new_review`: reviews
-- **Typen mit Icons:** new_booking (cyan), booking_cancelled (rot), new_damage (amber), new_message (lila), new_customer (grün), overdue_return (rot), new_review (amber), payment_failed (rot)
+  - `new_waitlist`: api/waitlist
+- **Typen mit Icons:** new_booking (cyan), booking_cancelled (rot), new_damage (amber), new_message (lila), new_customer (grün), overdue_return (rot), new_review (amber), payment_failed (rot), new_waitlist (cyan)
 
 ### Buchungsflow
 5 Steps (Versand → Zubehör → Haftung → Zusammenfassung → Zahlung)
