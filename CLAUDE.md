@@ -737,11 +737,11 @@ Umfassendes Audit mit paralleler Agent-Analyse (Security/Code-Quality/Performanc
 - ~~`supabase-social.sql` + `-extended` + `-image-position` + `-permalinks`~~ (Social-Modul komplett)
 - ~~`supabase-waitlist.sql`~~ (Benachrichtige-mich-Liste)
 - ~~`supabase-coupon-atomic-increment.sql`~~ (Gutschein-Race-Fix)
-- ~~`supabase-invoice-numbers-gobd.sql`~~ (GoBD-Counter, Code-Umstellung folgt separat)
+- ~~`supabase-invoice-numbers-gobd.sql`~~ (GoBD-Counter angelegt, Code-Umstellung folgt separat zum Jahreswechsel mit Steuerberater-Rücksprache)
 - ~~`supabase-storage-rls.sql`~~ (Bucket-RLS contracts/id-documents/damage-photos)
+- ~~`supabase-performance-indizes.sql`~~ (8 Indizes: bookings.user_id, bookings.created_at, bookings(product_id,rental_from,rental_to), email_log.booking_id, blog_posts(status,created_at), social_posts(status,scheduled_at), waitlist_subscriptions.product_id, rental_agreements.booking_id)
 
 ### Noch offen
-- **`supabase-performance-indizes.sql` erneut ausführen** — Script ist jetzt ohne `CONCURRENTLY` umgebaut (lief vorher nur zu 1/8 durch, weil der Supabase SQL-Editor alles in eine Transaction wickelt und `CONCURRENTLY` nicht in Transactions laufen darf). Jetzt einmal wiederholen, dann sind alle 8 Indizes drin.
 - **Bestehende 6 Kameras brauchen Admin-Specs** (Technische Daten im Editor anlegen)
 - **Bestehende Kameras brauchen Seriennummern** (im Kamera-Editor unter "Kameras / Seriennummern" anlegen)
 - **Cron-Härtung optional:** `CRON_DISABLE_URL_SECRET=true` in Coolify-Env setzen + Hetzner-Crontab auf Header-Auth umstellen (`-H "x-cron-secret: $CRON_SECRET"`), damit Secrets nicht mehr in Access-Logs landen.
