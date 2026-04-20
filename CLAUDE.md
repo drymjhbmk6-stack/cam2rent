@@ -473,6 +473,16 @@ DALL-E 3 erfand sonst 20-Jahre-alte Kompaktkameras. Neu: Echte Shop-Produktbilde
 - **Eingebaut in:** `generateFromTemplate` (Auto-Post-Trigger), `generate-plan-entry.ts` (manuelle + Cron-Einzel-Generierung), `/api/admin/social/generate-plan` (Bulk-Plan), `/api/cron/social-generate` (stündlicher Cron).
 - **Kosten:** `gpt-image-1` kostet ~$0.04-0.19 pro Bild (high quality). Bei 30 Posts/Monat ~1-6 €, DALL-E 3 vergleichbar. Fallback auf DALL-E bleibt erhalten, falls OpenAI gpt-image-1 blockt.
 
+#### Post-Editor: KI-Neu-Generierung + Unsplash-Picker (Stand 2026-04-20)
+Im Social-Post-Editor (`/admin/social/posts/[id]` + `/admin/social/neu`) stehen fünf Bildquellen zur Verfügung: 🎨 KI neu, 📸 Unsplash, 📚 Bibliothek, 📷 Hochladen, ✕ entfernen.
+
+- **KI-Neu-Generierung:** `POST /api/admin/social/generate-image` — ruft intern `generateSocialImage(scenePrompt, caption)` auf (gpt-image-1 mit Produkt-Referenz, Fallback DALL-E 3). Rate-Limit: 20/h pro IP (Kosten-Schutz gegen Doppelklick-Spam). Button erfordert Caption (sonst grau). Confirm-Dialog mit Kosten-Hinweis (~0,04–0,19 €) vor dem Call.
+- **Unsplash-Picker:** `components/admin/UnsplashPicker.tsx` — Modal mit Suche + Thumbnail-Grid. Vorschlags-Suchbegriff = erste 3 Worte der Caption. Nutzt `orientation=squarish` für Social-geeignete 1:1-Formate.
+  - `GET /api/admin/social/unsplash?query=…&orientation=squarish` — Suche (12 Ergebnisse).
+  - `POST /api/admin/social/unsplash` — lädt Bild in `blog-images`-Bucket, triggert Unsplash-Download-Event (API-Richtlinien-Pflicht), gibt öffentliche Supabase-URL zurück.
+  - Recycelt den Access-Key aus `admin_settings.blog_settings.unsplash_access_key` — gleicher Key wie für Blog.
+  - Fotografen-Credit wird pro Thumbnail + im Modal-Footer angezeigt.
+
 ### Warteliste für Kameras ohne Seriennummer (Stand 2026-04-18)
 Interesse an neuen Kameras testen, bevor sie eingekauft werden: Sobald für eine Kamera noch keine `product_unit` mit `status != 'retired'` angelegt ist, zeigt der Shop statt "Jetzt mieten" eine "Benachrichtige mich"-Box mit E-Mail-Formular.
 
@@ -696,6 +706,23 @@ Read-only Katalog aller automatisch versendeten E-Mails mit Inline-Vorschau.
 - **APIs:** `GET /api/admin/email-templates` (Liste), `GET /api/admin/email-templates/preview?id=X&format=html|json` (gerenderte E-Mail mit Dummy-Daten)
 - **UI:** Karten-Liste mit Inline-Vorschau im Modal (iframe) + Button "Neuer Tab" für Fullscreen-Preview
 - **Keine Bearbeitung** in dieser Stufe — geplant ist Stufe 2 (Betreff/Textblock-Overrides in `admin_settings`) bei Bedarf
+
+### Wochenbericht (Stand 2026-04-20)
+Automatische E-Mail mit **PDF-Anhang** jeden Sonntag 18:30 Uhr Server-Zeit. Sammelt Kennzahlen der letzten 7 Tage + Vergleich zur Vorwoche.
+
+- **Datensammlung:** `lib/weekly-report.ts` → `collectWeeklyReportData()`. 14 parallele Supabase-Queries, typisiert als `WeeklyReportData`. Metriken:
+  - **Finanzen:** Umsatz vs. Vorwoche, bezahlte + offene Rechnungen, überfälliger Betrag
+  - **Buchungen:** neue vs. Vorwoche, Stornierungen, Top-5-Produkte, nächste 7 Tage Versand/Rückgabe
+  - **Kunden:** Neuregistrierungen, offene Verifizierungen, neue Waitlist-Einträge
+  - **Operativ:** neue Schäden, Kameras in Wartung
+  - **Content:** veröffentlichte Blog-Artikel + Social-Posts
+  - **Warnungen:** abgelaufene/bald ablaufende Social-Tokens (< 14 Tage)
+- **PDF:** `lib/weekly-report-pdf.tsx` — @react-pdf/renderer mit KPI-Karten, Produkt-/Versand-/Rückgabe-Tabellen, Warn-Box. Dateiname: `cam2rent-wochenbericht-KW{week}-{year}.pdf`.
+- **E-Mail:** `sendWeeklyReport(toEmail?)` in `lib/email.ts` — HTML-Zusammenfassung inline mit Trend-Anzeige (grün/rot) + PDF als Attachment. Loggt in `email_log` (emailType: `weekly_report`).
+- **Cron:** `GET/POST /api/cron/weekly-report` (verifyCronAuth). Respektiert `admin_settings.weekly_report_config.enabled` — kann per UI deaktiviert werden ohne den Crontab-Eintrag anzufassen.
+- **Test:** `POST /api/admin/weekly-report/test` → Sofort-Versand an konfigurierten Empfänger oder Body-Email.
+- **Admin-UI:** `components/admin/WeeklyReportSection.tsx` in `/admin/einstellungen`. Toggle (an/aus), Empfänger-Mail, „Test-Bericht jetzt senden"-Button.
+- **Setting-Key:** `admin_settings.weekly_report_config = { enabled: boolean, email: string }`. Default: aktiv, Empfänger = `BUSINESS.emailKontakt`.
 
 ### Security-/Stabilitäts-Fixes (2026-04-17)
 - **Shop-Updater Eingabe-Bug:** `loadSections` normalisiert jetzt alle 4 Sections (hero, news_banner, usps, reviews_config) beim Laden. Vorher: `updateSectionLocal` nutzte `prev.map`, wenn die DB-Row fehlte oder `content` leer war, verpufften Tastatureingaben. Jetzt garantiert die Load-Normalisierung die Existenz im State + Merge mit Feld-Defaults.
