@@ -33,7 +33,7 @@ export default async function LegalPage({ slug, fallbackContent }: LegalPageProp
   content = content.trim();
 
   const standText = legal.published_at
-    ? `Stand: ${new Date(legal.published_at).toLocaleDateString('de-DE', { month: 'long', year: 'numeric' })}`
+    ? `Stand: ${new Date(legal.published_at).toLocaleDateString('de-DE', { month: 'long', year: 'numeric', timeZone: 'Europe/Berlin' })}`
     : null;
 
   return (
