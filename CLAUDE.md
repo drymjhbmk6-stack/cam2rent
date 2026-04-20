@@ -723,23 +723,34 @@ Umfassendes Audit mit paralleler Agent-Analyse (Security/Code-Quality/Performanc
 - **ProductCard Favoriten-/Vergleich-Buttons** `p-1.5` → `p-2.5`: Touch-Targets jetzt ~44px (Apple HIG).
 
 ## Offene Punkte
-- ~~Google Reviews: erledigt — Places API (New) eingebunden~~
-- ~~SQL-Migration `supabase-zubehoer-verfuegbarkeit.sql` (verschoben in `erledigte supabase/`)~~
-- ~~SQL-Migration `supabase-widerruf-consent.sql` ausgeführt (Spalten `bookings.early_service_consent_at` + `early_service_consent_ip` für § 356 Abs. 4 BGB Zustimmung)~~
-- ~~SQL-Migration `supabase-product-units.sql` ausgeführt (product_units Tabelle + unit_id in bookings)~~
-- ~~SQL-Migration `supabase-unit-assignment-lock.sql` ausgeführt (race-sichere Unit-Zuweisung via `assign_free_unit` RPC)~~
-- ~~SQL-Migration `supabase-push-subscriptions.sql` ausgeführt + VAPID-Keys in Coolify-Env gesetzt + Admin-PWA mit Push aktiviert~~
-- Bestehende 6 Kameras brauchen Admin-Specs (Technische Daten im Editor anlegen)
-- Bestehende Kameras brauchen Seriennummern (im Kamera-Editor unter "Kameras / Seriennummern" anlegen)
+
+### Check-Tool
+- **`supabase-migrationen-status-check.sql`** — Read-only SQL-Script im Repo-Root. Listet je Migration "ERLEDIGT" oder "OFFEN". Nach jedem Deploy neuer Migrationen einfach nochmal laufen lassen und erledigte manuell nach `erledigte supabase/` verschieben.
+
+### Ausgeführte Migrationen (erledigt)
+- ~~Google Reviews: Places API (New) eingebunden~~
+- ~~`supabase-zubehoer-verfuegbarkeit.sql`~~
+- ~~`supabase-widerruf-consent.sql`~~ (§ 356 Abs. 4 BGB Consent)
+- ~~`supabase-product-units.sql`~~ (Seriennummern-Tracking)
+- ~~`supabase-unit-assignment-lock.sql`~~ (race-sichere Unit-Zuweisung)
+- ~~`supabase-push-subscriptions.sql`~~ + VAPID-Keys (Admin-PWA-Push live)
+- ~~`supabase-social.sql` + `-extended` + `-image-position` + `-permalinks`~~ (Social-Modul komplett)
+- ~~`supabase-waitlist.sql`~~ (Benachrichtige-mich-Liste)
+- ~~`supabase-coupon-atomic-increment.sql`~~ (Gutschein-Race-Fix)
+- ~~`supabase-invoice-numbers-gobd.sql`~~ (GoBD-Counter, Code-Umstellung folgt separat)
+- ~~`supabase-storage-rls.sql`~~ (Bucket-RLS contracts/id-documents/damage-photos)
+
+### Noch offen
+- **`supabase-performance-indizes.sql` erneut ausführen** — Script ist jetzt ohne `CONCURRENTLY` umgebaut (lief vorher nur zu 1/8 durch, weil der Supabase SQL-Editor alles in eine Transaction wickelt und `CONCURRENTLY` nicht in Transactions laufen darf). Jetzt einmal wiederholen, dann sind alle 8 Indizes drin.
+- **Bestehende 6 Kameras brauchen Admin-Specs** (Technische Daten im Editor anlegen)
+- **Bestehende Kameras brauchen Seriennummern** (im Kamera-Editor unter "Kameras / Seriennummern" anlegen)
 - **Cron-Härtung optional:** `CRON_DISABLE_URL_SECRET=true` in Coolify-Env setzen + Hetzner-Crontab auf Header-Auth umstellen (`-H "x-cron-secret: $CRON_SECRET"`), damit Secrets nicht mehr in Access-Logs landen.
 - **Sicherheit:** API-Keys rotieren (wurden in einer Session öffentlich geteilt)
-- **SQL-Migration `supabase-performance-indizes.sql` ausführen** (8 Performance-Indizes, idempotent via `IF NOT EXISTS` + `CONCURRENTLY`).
 - **Go-Live 01.05.2026:** `TEST_MODE = false` in `lib/contracts/contract-template.tsx` setzen
 - **Go-Live 01.05.2026:** Stripe auf Live-Keys umstellen
 - **Go-Live 01.05.2026:** Domain test.cam2rent.de → cam2rent.de
 - **Go-Live 01.05.2026:** Resend Domain verifizieren (DKIM + SPF)
-- **Social-Modul Setup (offen):**
-  - SQL-Migration `supabase-social.sql` ausführen
+- **Social-Modul Setup (Go-Live):**
   - `META_APP_ID` + `META_APP_SECRET` in Coolify hinterlegen (aus developers.facebook.com kopieren)
   - Cron `*/5 * * * * curl -X POST -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/social-publish` in Hetzner-Crontab eintragen
   - Meta Business-Verifizierung starten + App Review für `pages_manage_posts` + `instagram_content_publish` beantragen
