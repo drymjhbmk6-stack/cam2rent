@@ -494,6 +494,41 @@ Im Social-Post-Editor (`/admin/social/posts/[id]` + `/admin/social/neu`) stehen 
   - Recycelt den Access-Key aus `admin_settings.blog_settings.unsplash_access_key` — gleicher Key wie für Blog.
   - Fotografen-Credit wird pro Thumbnail + im Modal-Footer angezeigt.
 
+#### KI-Plan Staleness-Detection + Reset (Stand 2026-04-20)
+Der KI-Plan-Generator (`/admin/social/plan`) lief als Fire-and-Forget im Hintergrund. Wenn Next.js den Prozess killte (Deploy, OOM, Timeout), blieb `admin_settings.social_plan_job` ewig auf `status='running'` — User konnte keinen neuen Plan starten, UI zeigte „Läuft im Hintergrund…" für immer.
+- **Staleness-Detection in `/api/admin/social/generate-plan` POST:** Jobs > 10 Min alt gelten als stale und dürfen überschrieben werden (kein 409 mehr).
+- **DELETE `?reset=1`:** Kompletter Status-Reset auf idle — auch bei error/completed/cancelled/stale. Löscht nur die Status-Row in `admin_settings`, bereits erstellte Posts bleiben.
+- **UI:** `JobStatusPanel` zeigt amber-gelbes Banner bei stale + "Zurücksetzen"-Button bei allen Endzuständen. Fallback-Text „Keine Details verfügbar" statt leerer roter Box.
+- **Route-Config:** `export const runtime = 'nodejs'; export const maxDuration = 300;` — reduziert (aber eliminiert nicht) Serverless-Kills des Hintergrund-Teils.
+- **Sofort-Reset per SQL** falls Zombie-State vor Deploy: `DELETE FROM admin_settings WHERE key = 'social_plan_job';`
+
+#### Analytics-Dashboard Defaults + dynamischer Chart (Stand 2026-04-20)
+- **Default-Zeitraum:** `DEFAULT_FILTERS.timeRange` von `'30tage'` auf `'heute'` geändert — beim Öffnen von `/admin/analytics` ist sofort „Heute" aktiv.
+- **Bar-Chart folgt dem Filter:** Die Card „Aufrufe…" zeigt jetzt je nach Zeitraum-Filter:
+  - Heute → 24 Stunden-Balken (HourlyChart, wie bisher)
+  - 7 Tage / 30 Tage → pro-Tag-Balken über den gewählten Zeitraum
+  - Monat → pro-Tag-Balken vom 1. des Monats bis heute
+  - Jahr → 12 Monats-Balken (Jan-Dez)
+- **Neue Komponente:** `LabeledBarChart` (Balken mit Datum-Labels, Tick-Dichte passt sich an)
+- **Helper:** `getViewsChartTitle(tr)` + `buildFilteredViews(tr, history)` — aggregiert History-Daten in die passenden Buckets.
+- **API:** `/api/admin/analytics?type=history` akzeptiert jetzt `?days=N` (max 400, für Jahresansicht). Live-Tab fetcht History automatisch nach, wenn `timeRange !== 'heute'`.
+
+#### Timezone-Fix: Berlin-Zeit überall (Stand 2026-04-20)
+Der Hetzner-Server läuft in UTC. Ohne explizite `timeZone`-Option nutzen `toLocaleDateString`, `getHours`, `getDate`, `toISOString().slice(0,10)` die Server-Timezone → zwischen 22:00-02:00 Berlin landen Daten auf dem UTC-Tag (Vortag/Vorwoche/Vorjahr/Vormonat). Hat sich u.a. als „Aufrufe heute 22-24 Uhr obwohl erst 01:23" gezeigt.
+- **`lib/format-utils.ts`:** alle `fmtDate*`-Varianten nutzen jetzt `timeZone: 'Europe/Berlin'` → zentraler Fix für Rechnungen, Verträge, Admin-UI, E-Mails, alle PDFs.
+- **`lib/timezone.ts`:** neue Helper `getBerlinHour(date)` + `getBerlinDateKey(date)` für Server-Aggregation.
+- **`lib/booking-id.ts`:** Buchungsnummer (Jahr+KW) in Berlin-Zeit berechnet → Rechnungsnummer (abgeleitet) automatisch mitgefixt. Keine Silvester-/Wochenwechsel-Bugs mehr.
+- **Analytics:** Hourly-Chart, History-Gruppierung, Buchungstrend, Blog-Tagesaggregate nutzen Berlin-Stunde/-Tag.
+- **Buchhaltung:** Umsatzverlauf 12 Monate mit Berlin-Monatsgrenzen (Dezember-Umsatz rutschte sonst in Silvester-Nacht in Januar). Gutschriftnummer-Jahr in Berlin (Silvester-Bug).
+- **Buchungen/Mietdauer:** `extend-booking`, `cron/auto-cancel`, `dashboard-data`, `utilization` nutzen Berlin-„heute".
+- **Crons:** `reminder-emails`, `dunning-check`, `social-generate`, `blog-generate` berechnen „heute" + Offsets in Berlin.
+- **E-Mails:** `booking/send-email` Mietzeitraum-Anzeige, `lib/email.ts` Rechnungsdatum + BGB-Zustimmungszeit, `lib/legal-pdf.tsx` Stand-Datum, `components/LegalPage.tsx` Stand-Datum — alles Berlin.
+
+#### Resilienz gegen Supabase-Ausfälle (Stand 2026-04-20)
+Bei Supabase-522 (Free-Tier-Compute-Overload) ist die Admin-UI + der Docker-Build sonst sehr anfällig. Zwei Härtungen:
+- **NotificationDropdown Backoff:** Statt stur alle 30s zu pollen, verdoppelt sich das Intervall bei Fehlern (30s→60s→120s→240s→300s). Reset bei Erfolg. Polling pausiert wenn Tab im Hintergrund (`visibilityState`). 8s AbortController-Timeout verhindert gestapelte Pending-Calls. Entschärft 522-Kaskaden und senkt Free-Tier-Traffic drastisch.
+- **Legal-Page Build-Timeout-Fallback:** `lib/get-legal-content.ts` wrappt jede Supabase-Query in `Promise.race` mit 5s-Timeout. Bei Timeout/Fehler → `null` → `components/LegalPage.tsx` rendert die hardcoded JSX-Version. Vorher: `/agb` und `/haftungsbedingungen` haben den Docker-Build mit 60s×3 Retries komplett abgewürgt, wenn Supabase hängte.
+
 ### Warteliste für Kameras ohne Seriennummer (Stand 2026-04-18)
 Interesse an neuen Kameras testen, bevor sie eingekauft werden: Sobald für eine Kamera noch keine `product_unit` mit `status != 'retired'` angelegt ist, zeigt der Shop statt "Jetzt mieten" eine "Benachrichtige mich"-Box mit E-Mail-Formular.
 
@@ -787,6 +822,8 @@ Umfassendes Audit mit paralleler Agent-Analyse (Security/Code-Quality/Performanc
 - **Bestehende Kameras brauchen Seriennummern** (im Kamera-Editor unter "Kameras / Seriennummern" anlegen)
 - **Cron-Härtung optional:** `CRON_DISABLE_URL_SECRET=true` in Coolify-Env setzen + Hetzner-Crontab auf Header-Auth umstellen (`-H "x-cron-secret: $CRON_SECRET"`), damit Secrets nicht mehr in Access-Logs landen.
 - **Sicherheit:** API-Keys rotieren (wurden in einer Session öffentlich geteilt)
+- **SQL-Migration `supabase-performance-indizes.sql` ausführen** (8 Performance-Indizes, idempotent via `IF NOT EXISTS` + `CONCURRENTLY`).
+- **SQL-Migration `supabase-social-image-position.sql` ausführen** (2 Spalten `fb_image_position` + `ig_image_position` auf `social_posts` für unabhängige FB/IG-Bild-Positionierung).
 - **Go-Live 01.05.2026:** `TEST_MODE = false` in `lib/contracts/contract-template.tsx` setzen
 - **Go-Live 01.05.2026:** Stripe auf Live-Keys umstellen
 - **Go-Live 01.05.2026:** Domain test.cam2rent.de → cam2rent.de
