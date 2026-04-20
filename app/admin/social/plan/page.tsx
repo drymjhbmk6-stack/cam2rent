@@ -167,8 +167,10 @@ export default function KiPlanPage() {
 
       {error && error.trim() && <div className="mb-4 rounded-lg bg-red-900/30 border border-red-700 p-3 text-sm text-red-300">{error}</div>}
 
-      {/* Job-Status Panel */}
-      {job.status !== 'idle' && (
+      {/* Job-Status Panel — nur bei bekannten, aktiven Statuses rendern.
+          Verhindert leere rote Boxen wenn die API einen unerwarteten
+          oder leeren Status liefert. */}
+      {['running', 'completed', 'error', 'cancelled'].includes(job.status) && (
         <JobStatusPanel job={job} progress={progress} onCancel={handleCancel} onReset={handleReset} />
       )}
 
