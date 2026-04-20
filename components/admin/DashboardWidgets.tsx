@@ -198,8 +198,11 @@ function timeAgo(dateStr: string): string {
 
 function statusLabel(status: string): { label: string; color: string } {
   const map: Record<string, { label: string; color: string }> = {
+    pending_verification: { label: 'Warte auf Freigabe', color: C.yellow },
+    awaiting_payment: { label: 'Warte auf Zahlung', color: C.purple },
     confirmed: { label: 'Bestätigt', color: C.yellow },
     shipped: { label: 'Versendet', color: C.blue },
+    picked_up: { label: 'Abgeholt', color: C.green },
     completed: { label: 'Abgeschlossen', color: C.green },
     cancelled: { label: 'Storniert', color: C.red },
     damaged: { label: 'Beschädigt', color: C.red },
