@@ -125,7 +125,10 @@ export default function KiPlanPage() {
       if (!res.ok) throw new Error(data?.error ?? 'Fehler');
       loadJobStatus();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unbekannter Fehler');
+      const msg = err instanceof Error ? err.message : '';
+      // Falls der Server einen leeren Error-String liefert, trotzdem
+      // eine verständliche Meldung anzeigen (sonst: leere rote Box).
+      setError(msg.trim() || 'Unbekannter Fehler.');
     }
   }
 
@@ -162,7 +165,7 @@ export default function KiPlanPage() {
         Claude erstellt Themen-Ideen, Captions und Hashtags. Bilder optional via DALL-E.
       </p>
 
-      {error && <div className="mb-4 rounded-lg bg-red-900/30 border border-red-700 p-3 text-sm text-red-300">{error}</div>}
+      {error && error.trim() && <div className="mb-4 rounded-lg bg-red-900/30 border border-red-700 p-3 text-sm text-red-300">{error}</div>}
 
       {/* Job-Status Panel */}
       {job.status !== 'idle' && (
