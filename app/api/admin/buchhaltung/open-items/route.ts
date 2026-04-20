@@ -13,6 +13,7 @@ export async function GET() {
   const { data: invoices, error } = await supabase
     .from('invoices')
     .select('*')
+    .eq('is_test', false)
     .or('status.in.(open,overdue),payment_status.in.(open,overdue)')
     .order('invoice_date', { ascending: true });
 

@@ -8,6 +8,7 @@ import { LegalDocumentPDF } from '@/lib/legal-pdf';
 import { ensureBusinessConfig } from '@/lib/load-business-config';
 import { BUSINESS } from '@/lib/business-config';
 import QRCode from 'qrcode';
+import { getResendFromEmail } from '@/lib/env-mode';
 
 const LEGAL_SLUG_MAP: Record<string, string> = {
   agb: 'agb',
@@ -216,8 +217,9 @@ export async function POST(
     const von = booking.rental_from ? new Date(booking.rental_from).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' }) : '';
     const bis = booking.rental_to ? new Date(booking.rental_to).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' }) : '';
 
+    const fromEmail = await getResendFromEmail();
     await resend.emails.send({
-      from: process.env.RESEND_FROM_EMAIL || 'buchung@cam2rent.de',
+      from: fromEmail,
       to,
       subject: `Deine Dokumente — Buchung ${id}`,
       html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">

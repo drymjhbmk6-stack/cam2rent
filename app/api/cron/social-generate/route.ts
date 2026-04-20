@@ -18,6 +18,7 @@ import { createServiceClient } from '@/lib/supabase';
 import { verifyCronAuth } from '@/lib/cron-auth';
 import Anthropic from '@anthropic-ai/sdk';
 import { generateCaption, generateSocialImage } from '@/lib/meta/ai-content';
+import { isTestMode } from '@/lib/env-mode';
 
 const STALE_LOCK_MINUTES = 10;
 
@@ -97,6 +98,12 @@ async function factCheck(apiKey: string, caption: string): Promise<string> {
 
 export async function POST(req: NextRequest) {
   if (!verifyCronAuth(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  // Im Test-Modus keine KI-Generierung — spart Kosten und vermeidet dass
+  // Test-Content spaeter versehentlich live veroeffentlicht wird.
+  if (await isTestMode()) {
+    return NextResponse.json({ skipped: 'test_mode' });
+  }
 
   const supabase = createServiceClient();
   const settings = await getSocialSettings();

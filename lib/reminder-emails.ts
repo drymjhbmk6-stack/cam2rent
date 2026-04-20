@@ -1,12 +1,11 @@
 import { Resend } from 'resend';
 import { BUSINESS } from '@/lib/business-config';
 import { escapeHtml as h } from '@/lib/email';
+import { getResendFromEmail, getSiteUrl } from '@/lib/env-mode';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-const FROM_EMAIL = process.env.FROM_EMAIL ?? BUSINESS.email;
 const REPLY_TO = process.env.ADMIN_EMAIL ?? BUSINESS.emailKontakt;
-const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? BUSINESS.url;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -26,14 +25,15 @@ function fmtDate(iso: string): string {
   return `${d}.${m}.${y}`;
 }
 
-function buildBookingUrl(bookingId: string, custom?: string): string {
-  return custom ?? `${BASE_URL}/buchung/${bookingId}`;
+function buildBookingUrl(bookingId: string, custom: string | undefined, baseUrl: string): string {
+  return custom ?? `${baseUrl}/buchung/${bookingId}`;
 }
 
 /**
  * Wraps the body content into the standard cam2rent email layout.
  */
-function wrapLayout(body: string): string {
+function wrapLayout(body: string, baseUrl: string): string {
+  const BASE_URL = baseUrl;
   return `<!DOCTYPE html>
 <html lang="de">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -81,7 +81,9 @@ function ctaButton(href: string, label: string): string {
 // ─── 1. Return Reminder – 2 days before ──────────────────────────────────────
 
 export async function sendReturnReminder(data: ReminderEmailData): Promise<string | null> {
-  const url = buildBookingUrl(data.bookingId, data.bookingUrl);
+  const baseUrl = await getSiteUrl();
+  const fromEmail = await getResendFromEmail();
+  const url = buildBookingUrl(data.bookingId, data.bookingUrl, baseUrl);
   const subject = `Erinnerung: Deine Rückgabe steht bevor – ${h(data.productName)}`;
 
   const html = wrapLayout(`
@@ -96,10 +98,10 @@ export async function sendReturnReminder(data: ReminderEmailData): Promise<strin
     </p>
     ${ctaButton(url, 'Buchung ansehen')}
     <p style="margin:0;font-size:13px;color:#9ca3af;">Buchung: ${h(data.bookingId)}</p>
-  `);
+  `, baseUrl);
 
   const result = await resend.emails.send({
-    from: `cam2rent <${FROM_EMAIL}>`,
+    from: `cam2rent <${fromEmail}>`,
     replyTo: REPLY_TO,
     to: data.customerEmail,
     subject,
@@ -112,7 +114,9 @@ export async function sendReturnReminder(data: ReminderEmailData): Promise<strin
 // ─── 2. Return Due Today ─────────────────────────────────────────────────────
 
 export async function sendReturnDueToday(data: ReminderEmailData): Promise<string | null> {
-  const url = buildBookingUrl(data.bookingId, data.bookingUrl);
+  const baseUrl = await getSiteUrl();
+  const fromEmail = await getResendFromEmail();
+  const url = buildBookingUrl(data.bookingId, data.bookingUrl, baseUrl);
   const subject = `Heute bitte zurücksenden: ${h(data.productName)}`;
 
   const html = wrapLayout(`
@@ -127,10 +131,10 @@ export async function sendReturnDueToday(data: ReminderEmailData): Promise<strin
     </p>
     ${ctaButton(url, 'Buchung ansehen')}
     <p style="margin:0;font-size:13px;color:#9ca3af;">Buchung: ${h(data.bookingId)}</p>
-  `);
+  `, baseUrl);
 
   const result = await resend.emails.send({
-    from: `cam2rent <${FROM_EMAIL}>`,
+    from: `cam2rent <${fromEmail}>`,
     replyTo: REPLY_TO,
     to: data.customerEmail,
     subject,
@@ -143,7 +147,9 @@ export async function sendReturnDueToday(data: ReminderEmailData): Promise<strin
 // ─── 3. Overdue – 1 day after ────────────────────────────────────────────────
 
 export async function sendOverdueNotice(data: ReminderEmailData): Promise<string | null> {
-  const url = buildBookingUrl(data.bookingId, data.bookingUrl);
+  const baseUrl = await getSiteUrl();
+  const fromEmail = await getResendFromEmail();
+  const url = buildBookingUrl(data.bookingId, data.bookingUrl, baseUrl);
   const subject = `Rückgabe überfällig – ${h(data.productName)}`;
 
   const html = wrapLayout(`
@@ -160,10 +166,10 @@ export async function sendOverdueNotice(data: ReminderEmailData): Promise<string
     </p>
     ${ctaButton(url, 'Buchung ansehen')}
     <p style="margin:0;font-size:13px;color:#9ca3af;">Buchung: ${h(data.bookingId)}</p>
-  `);
+  `, baseUrl);
 
   const result = await resend.emails.send({
-    from: `cam2rent <${FROM_EMAIL}>`,
+    from: `cam2rent <${fromEmail}>`,
     replyTo: REPLY_TO,
     to: data.customerEmail,
     subject,
@@ -176,7 +182,9 @@ export async function sendOverdueNotice(data: ReminderEmailData): Promise<string
 // ─── 4. Second Overdue – 3 days after ────────────────────────────────────────
 
 export async function sendSecondOverdueNotice(data: ReminderEmailData): Promise<string | null> {
-  const url = buildBookingUrl(data.bookingId, data.bookingUrl);
+  const baseUrl = await getSiteUrl();
+  const fromEmail = await getResendFromEmail();
+  const url = buildBookingUrl(data.bookingId, data.bookingUrl, baseUrl);
   const subject = `Dringende Erinnerung: Rückgabe ausstehend – ${h(data.productName)}`;
 
   const html = wrapLayout(`
@@ -193,10 +201,10 @@ export async function sendSecondOverdueNotice(data: ReminderEmailData): Promise<
     </p>
     ${ctaButton(url, 'Jetzt Rückgabe einleiten')}
     <p style="margin:0;font-size:13px;color:#9ca3af;">Buchung: ${h(data.bookingId)}</p>
-  `);
+  `, baseUrl);
 
   const result = await resend.emails.send({
-    from: `cam2rent <${FROM_EMAIL}>`,
+    from: `cam2rent <${fromEmail}>`,
     replyTo: REPLY_TO,
     to: data.customerEmail,
     subject,
@@ -209,7 +217,9 @@ export async function sendSecondOverdueNotice(data: ReminderEmailData): Promise<
 // ─── 5. Review Request – 3 days after completed return ───────────────────────
 
 export async function sendReviewRequest(data: ReminderEmailData): Promise<string | null> {
-  const reviewUrl = `${BASE_URL}/umfrage/${h(data.bookingId)}`;
+  const baseUrl = await getSiteUrl();
+  const fromEmail = await getResendFromEmail();
+  const reviewUrl = `${baseUrl}/umfrage/${h(data.bookingId)}`;
   const subject = `Wie war dein Erlebnis mit ${h(data.productName)}?`;
 
   const html = wrapLayout(`
@@ -226,10 +236,10 @@ export async function sendReviewRequest(data: ReminderEmailData): Promise<string
     <p style="margin:16px 0 0;font-size:13px;color:#9ca3af;">
       Vielen Dank und bis zum nächsten Mal!<br>Dein cam2rent-Team
     </p>
-  `);
+  `, baseUrl);
 
   const result = await resend.emails.send({
-    from: `cam2rent <${FROM_EMAIL}>`,
+    from: `cam2rent <${fromEmail}>`,
     replyTo: REPLY_TO,
     to: data.customerEmail,
     subject,

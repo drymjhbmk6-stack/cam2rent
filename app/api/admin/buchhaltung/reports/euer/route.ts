@@ -36,10 +36,11 @@ export async function GET(req: NextRequest) {
     .maybeSingle();
   const taxMode = taxRow?.value || 'kleinunternehmer';
 
-  // Einnahmen aus Buchungen
+  // Einnahmen aus Buchungen — Test-Daten ausgeschlossen
   const { data: bookings } = await supabase
     .from('bookings')
     .select('price_rental, price_accessories, price_haftung, shipping_price, price_total, status')
+    .eq('is_test', false)
     .neq('status', 'cancelled')
     .gte('created_at', `${from}T00:00:00`)
     .lte('created_at', `${to}T23:59:59`);
@@ -53,6 +54,7 @@ export async function GET(req: NextRequest) {
   const { data: expenses } = await supabase
     .from('expenses')
     .select('category, gross_amount')
+    .eq('is_test', false)
     .gte('expense_date', from)
     .lte('expense_date', to);
 
@@ -65,6 +67,7 @@ export async function GET(req: NextRequest) {
   const { data: stripeTx } = await supabase
     .from('stripe_transactions')
     .select('fee')
+    .eq('is_test', false)
     .gte('stripe_created_at', `${from}T00:00:00`)
     .lte('stripe_created_at', `${to}T23:59:59`);
 

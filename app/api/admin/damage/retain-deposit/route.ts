@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
-import Stripe from 'stripe';
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+import { getStripe } from '@/lib/stripe';
 
 /**
  * POST /api/admin/damage/retain-deposit
@@ -51,6 +49,7 @@ export async function POST(req: NextRequest) {
     if (booking.deposit_intent_id && booking.deposit_status === 'held') {
       try {
         const amountCents = Math.round(amount * 100);
+        const stripe = await getStripe();
         await stripe.paymentIntents.capture(booking.deposit_intent_id, {
           amount_to_capture: amountCents,
         });

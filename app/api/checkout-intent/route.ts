@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import Stripe from 'stripe';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { createServiceClient } from '@/lib/supabase';
 import { calcPriceFromTable, type AdminProduct } from '@/lib/price-config';
+import { getStripe } from '@/lib/stripe';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 const checkoutLimiter = rateLimit({ maxAttempts: 10, windowMs: 60 * 1000 }); // 10 pro Min
 
 /**
@@ -123,6 +122,7 @@ export async function POST(req: NextRequest) {
       user_id: userId ?? '',
     };
 
+    const stripe = await getStripe();
     const paymentIntent = await stripe.paymentIntents.create({
       amount: amountCents,
       currency: 'eur',

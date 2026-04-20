@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
+import { getSendcloudKeys } from '@/lib/env-mode';
 
 /**
  * GET /api/konto/return-label/[id]
@@ -53,9 +54,8 @@ export async function GET(
   }
 
   // Sendcloud Label-PDF als Proxy laden
-  const pub = process.env.SENDCLOUD_PUBLIC_KEY!;
-  const sec = process.env.SENDCLOUD_SECRET_KEY!;
-  const auth = 'Basic ' + Buffer.from(`${pub}:${sec}`).toString('base64');
+  const { publicKey, secretKey } = await getSendcloudKeys();
+  const auth = 'Basic ' + Buffer.from(`${publicKey}:${secretKey}`).toString('base64');
 
   const labelRes = await fetch(booking.return_label_url, {
     headers: { Authorization: auth },

@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import Stripe from 'stripe';
 import { createServiceClient } from '@/lib/supabase';
 import { detectSuspicious } from '@/lib/suspicious';
 import { ensureBusinessConfig } from '@/lib/load-business-config';
@@ -16,8 +15,8 @@ import {
 import { generateContractPDF } from '@/lib/contracts/generate-contract';
 import { storeContract } from '@/lib/contracts/store-contract';
 import { confirmBookingBodySchema, firstZodError } from '@/lib/api-schemas';
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+import { getStripe } from '@/lib/stripe';
+import { isTestMode } from '@/lib/env-mode';
 
 // Confirm ist eine teure Operation (Stripe-Verify + DB + PDF + E-Mails).
 // 5/Minute pro IP — erlaubt Retry, blockt Spam.
@@ -52,6 +51,7 @@ export async function POST(req: NextRequest) {
     const { payment_intent_id, deposit_intent_id, contractSignature } = parsed.data;
 
     // 1. Verify payment with Stripe
+    const stripe = await getStripe();
     const intent = await stripe.paymentIntents.retrieve(payment_intent_id);
     if (intent.status !== 'succeeded') {
       return NextResponse.json(
@@ -201,9 +201,11 @@ export async function POST(req: NextRequest) {
     }
 
     // 6. Save booking
+    const testMode = await isTestMode();
     const { error } = await supabase.from('bookings').insert({
       id: bookingId,
       payment_intent_id,
+      is_test: testMode,
       product_id: meta.product_id,
       product_name: meta.product_name,
       rental_from: meta.rental_from,

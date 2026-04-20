@@ -19,6 +19,7 @@ import { createServiceClient } from '@/lib/supabase';
 import { verifyCronAuth } from '@/lib/cron-auth';
 import { publishPost } from '@/lib/meta/publisher';
 import { generateFromTemplate } from '@/lib/meta/ai-content';
+import { isTestMode } from '@/lib/env-mode';
 
 const MAX_RETRIES = 2;
 
@@ -171,6 +172,11 @@ async function processScheduleEntries() {
 export async function POST(req: NextRequest) {
   if (!verifyCronAuth(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // Im Test-Modus nicht auf Meta publishen — Live-Reichweite ungewollt.
+  if (await isTestMode()) {
+    return NextResponse.json({ skipped: 'test_mode' });
   }
 
   const [scheduled, schedule, retries] = await Promise.all([

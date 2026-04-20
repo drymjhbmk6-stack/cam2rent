@@ -6,11 +6,11 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/components/AuthProvider';
 import { getCancellationInfo } from '@/data/cancellation';
 import { useProducts } from '@/components/ProductsProvider';
-import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { fmtDate, formatCurrency } from '@/lib/format-utils';
+import { getStripePromise } from '@/lib/stripe-client';
 
-const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
+const stripePromise = getStripePromise();
 
 // Geschäftsdaten (Client-Komponente kann BUSINESS nicht importieren)
 const KONTAKT_EMAIL = 'kontakt@cam2rent.de';

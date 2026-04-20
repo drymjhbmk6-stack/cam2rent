@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
 import { logAudit } from '@/lib/audit';
+import { isTestMode } from '@/lib/env-mode';
 
 /**
  * POST /api/admin/buchhaltung/stripe-reconciliation/import-fees
@@ -42,6 +43,7 @@ export async function POST(req: NextRequest) {
 
     if (existing) continue;
 
+    const testMode = await isTestMode();
     const { error } = await supabase
       .from('expenses')
       .insert({
@@ -54,6 +56,7 @@ export async function POST(req: NextRequest) {
         gross_amount: tx.fee,
         source_type: 'stripe_fee',
         source_id: tx.id,
+        is_test: testMode,
       });
 
     if (!error) imported++;

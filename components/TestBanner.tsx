@@ -47,15 +47,33 @@ export function TestBanner() {
     setIsMounted(true);
 
     const dismissed = localStorage.getItem('cam2rent_beta_banner_dismissed');
+    if (dismissed) return;
 
-    const isBetaEnvironment =
-      process.env.NEXT_PUBLIC_IS_BETA === 'true' ||
-      (typeof window !== 'undefined' &&
-        window.location.hostname.startsWith('test.'));
-
-    if (isBetaEnvironment && !dismissed) {
-      setIsVisible(true);
-    }
+    // Haelt den Banner an den Admin-Modus gekoppelt — nicht an die Domain.
+    // `/api/env-mode` liefert den aktiven Modus (test|live); im Live-Modus
+    // wird der Banner ausgeblendet, auch wenn die Domain noch test.* ist.
+    let cancelled = false;
+    fetch('/api/env-mode', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { mode?: string } | null) => {
+        if (cancelled) return;
+        const envIsTest = data?.mode === 'test';
+        const hostIsTest =
+          typeof window !== 'undefined' &&
+          window.location.hostname.startsWith('test.');
+        const overrideBeta = process.env.NEXT_PUBLIC_IS_BETA === 'true';
+        if (envIsTest || hostIsTest || overrideBeta) setIsVisible(true);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        const hostIsTest =
+          typeof window !== 'undefined' &&
+          window.location.hostname.startsWith('test.');
+        if (hostIsTest || process.env.NEXT_PUBLIC_IS_BETA === 'true') setIsVisible(true);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleDismiss = () => {

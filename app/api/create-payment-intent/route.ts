@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import Stripe from 'stripe';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { createServiceClient } from '@/lib/supabase';
+import { getStripe } from '@/lib/stripe';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 const paymentLimiter = rateLimit({ maxAttempts: 10, windowMs: 60 * 1000 }); // 10 pro Min
 
 export async function POST(req: NextRequest) {
@@ -14,6 +13,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    const stripe = await getStripe();
     const body = await req.json();
     const { amountCents, depositCents, metadata } = body as {
       amountCents: number;

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { sendAndLog } from '@/lib/email';
 import { BUSINESS } from '@/lib/business-config';
+import { getSiteUrl } from '@/lib/env-mode';
 
 /**
  * POST /api/survey
@@ -151,7 +152,7 @@ export async function POST(req: NextRequest) {
 }
 
 async function sendCouponEmail(email: string, name: string, code: string) {
-  const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? BUSINESS.url;
+  const BASE_URL = await getSiteUrl();
   const subject = `Dein ${REWARD_DISCOUNT}% Gutschein als Dankeschön`;
 
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8"></head>

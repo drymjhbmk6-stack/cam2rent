@@ -3,13 +3,13 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { loadStripe } from '@stripe/stripe-js';
 import {
   Elements,
   PaymentElement,
   useStripe,
   useElements,
 } from '@stripe/react-stripe-js';
+import { getStripePromise } from '@/lib/stripe-client';
 import { useCart } from '@/components/CartProvider';
 import { useAuth } from '@/components/AuthProvider';
 import { createAuthBrowserClient } from '@/lib/supabase-auth';
@@ -22,9 +22,7 @@ import { useAccessories } from '@/components/AccessoriesProvider';
 import { getAccessoryPrice } from '@/data/accessories';
 import { BUSINESS } from '@/lib/business-config';
 
-const stripePromise = loadStripe(
-  process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!
-);
+const stripePromise = getStripePromise();
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
 import { logAudit } from '@/lib/audit';
+import { isTestMode } from '@/lib/env-mode';
 
 export async function GET() {
   if (!(await checkAdminAuth())) {
@@ -13,6 +14,7 @@ export async function GET() {
   const { data, error } = await supabase
     .from('expenses')
     .select('*')
+    .eq('is_test', false)
     .is('deleted_at', null)
     .order('expense_date', { ascending: false });
 
@@ -37,6 +39,7 @@ export async function POST(req: NextRequest) {
 
   const supabase = createServiceClient();
 
+  const testMode = await isTestMode();
   const { data, error } = await supabase
     .from('expenses')
     .insert({
@@ -48,6 +51,7 @@ export async function POST(req: NextRequest) {
       tax_amount: tax_amount || 0,
       gross_amount,
       notes: notes || null,
+      is_test: testMode,
     })
     .select()
     .single();

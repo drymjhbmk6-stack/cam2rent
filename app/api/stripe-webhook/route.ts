@@ -8,9 +8,8 @@ import {
   sendAdminNotification,
   type BookingEmailData,
 } from '@/lib/email';
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
-const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
+import { getStripe, getStripeWebhookSecretOrThrow } from '@/lib/stripe';
+import { isTestMode } from '@/lib/env-mode';
 
 /**
  * POST /api/stripe-webhook
@@ -32,6 +31,8 @@ export async function POST(req: NextRequest) {
 
   let event: Stripe.Event;
   try {
+    const stripe = await getStripe();
+    const webhookSecret = await getStripeWebhookSecretOrThrow();
     event = stripe.webhooks.constructEvent(body, sig, webhookSecret);
   } catch (err) {
     console.error('Webhook-Signatur ungueltig:', err);
@@ -186,9 +187,11 @@ async function handleSingleBooking(
     }
   }
 
+  const testMode = await isTestMode();
   const { error } = await supabase.from('bookings').insert({
     id: bookingId,
     payment_intent_id: intent.id,
+    is_test: testMode,
     product_id: meta.product_id,
     product_name: meta.product_name,
     rental_from: meta.rental_from,
@@ -322,9 +325,11 @@ async function handleCartBooking(
     : items.map((it) => it.productName).join(', ');
   const allAccessories = [...new Set(items.flatMap((it) => it.accessories))];
 
+  const testModeCart = await isTestMode();
   const { error } = await supabase.from('bookings').insert({
     id: bookingId,
     payment_intent_id: intent.id,
+    is_test: testModeCart,
     product_id: firstItem.productId,
     product_name: productName,
     rental_from: firstItem.rentalFrom,

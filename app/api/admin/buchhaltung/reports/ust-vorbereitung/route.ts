@@ -26,6 +26,7 @@ export async function GET(req: NextRequest) {
   const { data: bookings } = await supabase
     .from('bookings')
     .select('price_total')
+    .eq('is_test', false)
     .neq('status', 'cancelled')
     .gte('created_at', `${from}T00:00:00`)
     .lte('created_at', `${to}T23:59:59`);
@@ -37,6 +38,7 @@ export async function GET(req: NextRequest) {
   const { data: expenses } = await supabase
     .from('expenses')
     .select('tax_amount')
+    .eq('is_test', false)
     .gte('expense_date', from)
     .lte('expense_date', to)
     .is('deleted_at', null);

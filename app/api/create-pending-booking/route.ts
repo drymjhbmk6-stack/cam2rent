@@ -7,6 +7,7 @@ import type { ShippingMethod } from '@/data/shipping';
 import { DEFAULT_SHIPPING, type ShippingPriceConfig } from '@/lib/price-config';
 import { sendAdminNotification, type BookingEmailData } from '@/lib/email';
 import { getClientIp } from '@/lib/rate-limit';
+import { isTestMode } from '@/lib/env-mode';
 
 /**
  * Gruppiert Cart-Items nach Mietzeitraum.
@@ -151,9 +152,11 @@ export async function POST(req: NextRequest) {
         : groupItems.map((it) => it.productName).join(', ');
       const allAccessories = [...new Set(groupItems.flatMap((it) => it.accessories))];
 
+      const testMode = await isTestMode();
       const { error } = await supabase.from('bookings').insert({
         id: bookingId,
         payment_intent_id: gi === 0 ? `PENDING-${bookingId}` : `PENDING-${bookingId}_g${gi + 1}`,
+        is_test: testMode,
         product_id: firstItem.productId,
         product_name: productName,
         rental_from: firstItem.rentalFrom,

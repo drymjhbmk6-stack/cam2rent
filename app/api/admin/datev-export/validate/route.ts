@@ -20,6 +20,7 @@ export async function GET(req: NextRequest) {
   const { data: bookings } = await supabase
     .from('bookings')
     .select('id')
+    .eq('is_test', false)
     .neq('status', 'cancelled')
     .gte('created_at', `${from}T00:00:00`)
     .lte('created_at', `${to}T23:59:59`);
@@ -44,6 +45,7 @@ export async function GET(req: NextRequest) {
   const { data: cancelledBookings } = await supabase
     .from('bookings')
     .select('id')
+    .eq('is_test', false)
     .eq('status', 'cancelled')
     .gte('created_at', `${from}T00:00:00`)
     .lte('created_at', `${to}T23:59:59`);
@@ -53,6 +55,7 @@ export async function GET(req: NextRequest) {
     const { data: creditNotes } = await supabase
       .from('credit_notes')
       .select('booking_id')
+      .eq('is_test', false)
       .in('booking_id', cancelledIds)
       .neq('status', 'rejected');
 

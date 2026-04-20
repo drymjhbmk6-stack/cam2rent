@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
+import { getResendFromEmail } from '@/lib/env-mode';
 
 export async function POST(
   _req: NextRequest,
@@ -43,8 +44,9 @@ export async function POST(
     }
     const pdfBuffer = Buffer.from(await pdfRes.arrayBuffer());
 
+    const fromEmail = await getResendFromEmail();
     await resend.emails.send({
-      from: process.env.RESEND_FROM_EMAIL || 'buchung@cam2rent.de',
+      from: fromEmail,
       to: invoice.sent_to_email,
       subject: `Rechnung ${invoice.invoice_number} — cam2rent`,
       html: `<p>Hallo,</p><p>anbei findest du deine Rechnung ${invoice.invoice_number}.</p><p>Viele Grüße,<br/>cam2rent</p>`,

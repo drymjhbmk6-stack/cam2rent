@@ -6,9 +6,8 @@ import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { getPriceForDays } from '@/data/products';
 import { getProducts } from '@/lib/get-products';
 import { calcHaftungTieredPrice, DEFAULT_HAFTUNG } from '@/lib/price-config';
-import Stripe from 'stripe';
+import { getStripe } from '@/lib/stripe';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 const limiter = rateLimit({ maxAttempts: 5, windowMs: 60_000 });
 
 /**
@@ -137,6 +136,7 @@ export async function POST(req: NextRequest) {
   const amountCents = Math.round(totalDifference * 100);
 
   // Create Stripe PaymentIntent
+  const stripe = await getStripe();
   const paymentIntent = await stripe.paymentIntents.create({
     amount: amountCents,
     currency: 'eur',

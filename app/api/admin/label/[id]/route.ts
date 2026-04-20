@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { cookies } from 'next/headers';
+import { getSendcloudKeys } from '@/lib/env-mode';
 
 export async function GET(
   _req: NextRequest,
@@ -26,9 +27,8 @@ export async function GET(
     return NextResponse.json({ error: 'Kein Versandetikett vorhanden.' }, { status: 404 });
   }
 
-  const pub = process.env.SENDCLOUD_PUBLIC_KEY!;
-  const sec = process.env.SENDCLOUD_SECRET_KEY!;
-  const auth = 'Basic ' + Buffer.from(`${pub}:${sec}`).toString('base64');
+  const { publicKey, secretKey } = await getSendcloudKeys();
+  const auth = 'Basic ' + Buffer.from(`${publicKey}:${secretKey}`).toString('base64');
 
   const labelRes = await fetch(booking.label_url, { headers: { Authorization: auth } });
 

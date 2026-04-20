@@ -5,6 +5,7 @@ import { SpecDefinitionsManager } from '@/components/admin/SpecDefinitions';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import PushNotificationsSection from '@/components/admin/PushNotificationsSection';
 import WeeklyReportSection from '@/components/admin/WeeklyReportSection';
+import EnvModeSection from '@/components/admin/EnvModeSection';
 
 type DepositMode = 'kaution' | 'haftung';
 
@@ -253,6 +254,9 @@ export default function EinstellungenPage() {
       <p className="text-sm mb-8" style={{ color: '#64748b' }}>
         Sicherheit und Shop-Konfiguration
       </p>
+
+      {/* Sektion 0: Test-/Live-Modus (Env-Toggle) */}
+      <EnvModeSection />
 
       {/* Sektion 1: 2FA */}
       <div style={{ background: '#111827', borderRadius: 12, border: '1px solid #1e293b', padding: 24, marginBottom: 24 }}>

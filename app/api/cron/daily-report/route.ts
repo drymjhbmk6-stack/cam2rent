@@ -5,11 +5,10 @@ import { verifyCronAuth } from '@/lib/cron-auth';
 import { BUSINESS } from '@/lib/business-config';
 import { fmtEuro } from '@/lib/format-utils';
 import { getBerlinDayStart } from '@/lib/timezone';
+import { getSiteUrl, getResendFromEmail } from '@/lib/env-mode';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? BUSINESS.emailKontakt;
-const FROM_EMAIL = process.env.FROM_EMAIL ?? BUSINESS.email;
-const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? BUSINESS.url;
 
 function pct(a: number, b: number): string {
   if (b === 0) return '0%';
@@ -29,6 +28,8 @@ export async function GET(req: NextRequest) {
   }
 
   const supabase = createServiceClient();
+  const BASE_URL = await getSiteUrl();
+  const FROM_EMAIL = await getResendFromEmail();
 
   // Yesterday range — Berlin-Mitternacht als UTC, sonst Timezone-Drift
   const yesterday = getBerlinDayStart(new Date(Date.now() - 24 * 60 * 60 * 1000));

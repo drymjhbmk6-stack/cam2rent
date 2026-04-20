@@ -24,10 +24,11 @@ export async function GET(req: NextRequest) {
       .maybeSingle();
     const taxMode = taxRow?.value || 'kleinunternehmer';
 
-    // Buchungen im Zeitraum
+    // Buchungen im Zeitraum — Test-Daten ausgeschlossen (GoBD-konform)
     const { data: bookings, error: bookingsError } = await supabase
       .from('bookings')
       .select('id, product_name, price_total, status, created_at')
+      .eq('is_test', false)
       .gte('created_at', `${from}T00:00:00`)
       .lte('created_at', `${to}T23:59:59`)
       .order('created_at', { ascending: false });
@@ -50,6 +51,7 @@ export async function GET(req: NextRequest) {
     const { data: prevBookings } = await supabase
       .from('bookings')
       .select('price_total, status')
+      .eq('is_test', false)
       .gte('created_at', `${prevFrom.toISOString().split('T')[0]}T00:00:00`)
       .lte('created_at', `${prevTo.toISOString().split('T')[0]}T23:59:59`);
 
@@ -74,6 +76,7 @@ export async function GET(req: NextRequest) {
       const { data: invoices } = await supabase
         .from('invoices')
         .select('id, invoice_number, invoice_date, gross_amount, status, booking_id, sent_to_email')
+        .eq('is_test', false)
         .order('invoice_date', { ascending: false })
         .limit(10);
 
@@ -89,6 +92,7 @@ export async function GET(req: NextRequest) {
       const { data: openInvoices } = await supabase
         .from('invoices')
         .select('gross_amount')
+        .eq('is_test', false)
         .in('status', ['open', 'overdue']);
 
       openAmount = (openInvoices || []).reduce((sum, inv) => sum + (inv.gross_amount || 0), 0);
@@ -96,6 +100,7 @@ export async function GET(req: NextRequest) {
       const { data: paidInvoices } = await supabase
         .from('invoices')
         .select('id')
+        .eq('is_test', false)
         .eq('status', 'paid')
         .gte('invoice_date', from)
         .lte('invoice_date', to);
@@ -125,6 +130,7 @@ export async function GET(req: NextRequest) {
       const { data: monthBookings } = await supabase
         .from('bookings')
         .select('price_total')
+        .eq('is_test', false)
         .neq('status', 'cancelled')
         .gte('created_at', `${mFrom}T00:00:00+01:00`)
         .lte('created_at', `${mTo}T23:59:59+01:00`);

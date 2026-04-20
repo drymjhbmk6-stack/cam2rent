@@ -19,6 +19,7 @@ export async function GET(req: NextRequest) {
   let query = supabase
     .from('invoices')
     .select('*', { count: 'exact' })
+    .eq('is_test', false)
     .order('invoice_date', { ascending: false })
     .range(offset, offset + limit - 1);
 

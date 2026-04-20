@@ -7,9 +7,11 @@ import { LegalDocumentPDF } from '@/lib/legal-pdf';
 import { BUSINESS } from '@/lib/business-config';
 import { createServiceClient } from '@/lib/supabase';
 import { fmtDate, fmtEuro } from '@/lib/format-utils';
+import { getResendFromEmail, getTestModeEmailRedirect, isTestMode, getSiteUrl } from '@/lib/env-mode';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
+// Legacy-Export fuer Backwards-Compat. Neue Stellen nutzen `getResendFromEmail()`.
 export const FROM_EMAIL =
   process.env.FROM_EMAIL ?? BUSINESS.email;
 
@@ -47,6 +49,7 @@ async function logEmail(params: {
 }) {
   try {
     const supabase = createServiceClient();
+    const testMode = await isTestMode();
     await supabase.from('email_log').insert({
       booking_id: params.bookingId || null,
       customer_email: params.customerEmail,
@@ -55,6 +58,7 @@ async function logEmail(params: {
       status: params.status,
       resend_message_id: params.resendMessageId || null,
       error_message: params.errorMessage || null,
+      is_test: testMode,
     });
   } catch {
     // Fire-and-forget — kein Fehler soll die Email blockieren
@@ -108,11 +112,17 @@ export async function sendAndLog(opts: {
     return;
   }
   try {
+    const fromEmail = await getResendFromEmail();
+    const redirect = await getTestModeEmailRedirect();
+    const finalTo = redirect ?? opts.to;
+    const finalSubject = redirect
+      ? `[TEST → urspruenglich: ${opts.to}] ${opts.subject}`
+      : opts.subject;
     const result = await resend.emails.send({
-      from: `${BUSINESS.name} <${FROM_EMAIL}>`,
+      from: `${BUSINESS.name} <${fromEmail}>`,
       replyTo: ADMIN_EMAIL,
-      to: opts.to,
-      subject: opts.subject,
+      to: finalTo,
+      subject: finalSubject,
       html: opts.html,
       attachments: opts.attachments,
     });
@@ -1232,7 +1242,7 @@ export async function sendReviewRequest(data: {
   customerEmail: string;
   productName: string;
 }) {
-  const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? BUSINESS.url;
+  const BASE_URL = await getSiteUrl();
   const reviewUrl = `${BASE_URL}/konto/bewertung/${data.bookingId}`;
 
   const subject = `Wie war deine Erfahrung mit der ${data.productName}?`;
@@ -1279,7 +1289,7 @@ export async function sendAbandonedCartReminder(data: {
   couponCode?: string;
   discountPercent?: number;
 }) {
-  const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? BUSINESS.url;
+  const BASE_URL = await getSiteUrl();
 
   const subject = 'Du hast noch etwas im Warenkorb';
 

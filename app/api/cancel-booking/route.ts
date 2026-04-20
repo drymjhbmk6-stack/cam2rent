@@ -2,15 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { createServiceClient } from '@/lib/supabase';
-import Stripe from 'stripe';
 import { getRefundPercentage, isSelfServiceCancellable } from '@/data/cancellation';
 import {
   sendCancellationConfirmation,
   sendAdminCancellationNotification,
 } from '@/lib/email';
 import { createAdminNotification } from '@/lib/admin-notifications';
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+import { getStripe } from '@/lib/stripe';
 
 export async function POST(req: NextRequest) {
   const cookieStore = await cookies();
@@ -85,6 +83,7 @@ export async function POST(req: NextRequest) {
   // Process Stripe refund (if any amount to refund)
   if (refundAmountCents > 0) {
     try {
+      const stripe = await getStripe();
       await stripe.refunds.create({
         payment_intent: booking.payment_intent_id,
         amount: refundAmountCents,

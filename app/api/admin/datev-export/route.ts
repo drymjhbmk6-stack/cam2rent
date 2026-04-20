@@ -80,10 +80,11 @@ export async function GET(req: NextRequest) {
 
   const supabase = createServiceClient();
 
-  // Fetch bookings in date range
+  // Fetch bookings in date range — Test-Daten ausgeschlossen (GoBD)
   const { data: bookings, error: bookingsError } = await supabase
     .from('bookings')
     .select('id, product_name, customer_name, customer_email, price_total, price_rental, price_accessories, price_haftung, shipping_price, discount_amount, status, created_at')
+    .eq('is_test', false)
     .gte('created_at', `${from}T00:00:00`)
     .lte('created_at', `${to}T23:59:59`)
     .order('created_at', { ascending: true });

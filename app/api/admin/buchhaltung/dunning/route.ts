@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
 import { logAudit } from '@/lib/audit';
+import { getResendFromEmail } from '@/lib/env-mode';
 
 export async function POST(req: NextRequest) {
   if (!(await checkAdminAuth())) {
@@ -88,8 +89,9 @@ export async function POST(req: NextRequest) {
     try {
       const { Resend } = await import('resend');
       const resend = new Resend(process.env.RESEND_API_KEY);
+      const fromEmail = await getResendFromEmail();
       await resend.emails.send({
-        from: process.env.RESEND_FROM_EMAIL || 'buchung@cam2rent.de',
+        from: fromEmail,
         to: invoice.sent_to_email,
         subject: `Mahnung Stufe ${level} — Rechnung ${invoice.invoice_number}`,
         html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;">

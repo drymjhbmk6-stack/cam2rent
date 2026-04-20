@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import Stripe from 'stripe';
 import { createServiceClient } from '@/lib/supabase';
 import { generateBookingId } from '@/lib/booking-id';
 import { detectSuspicious } from '@/lib/suspicious';
@@ -18,8 +17,8 @@ import {
   sendReferralReward,
   type BookingEmailData,
 } from '@/lib/email';
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+import { getStripe } from '@/lib/stripe';
+import { isTestMode } from '@/lib/env-mode';
 
 const confirmCartLimiter = rateLimit({ maxAttempts: 5, windowMs: 60_000 });
 
@@ -106,6 +105,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 1. Verify payment with Stripe
+    const stripe = await getStripe();
     const intent = await stripe.paymentIntents.retrieve(payment_intent_id);
     if (intent.status !== 'succeeded') {
       return NextResponse.json(
@@ -345,9 +345,11 @@ export async function POST(req: NextRequest) {
       // payment_intent_id: erste Gruppe bekommt die originale ID, weitere bekommen Suffix
       const piId = gi === 0 ? payment_intent_id : `${payment_intent_id}_g${gi + 1}`;
 
+      const testMode = await isTestMode();
       const { error } = await supabase.from('bookings').insert({
         id: bookingId,
         payment_intent_id: piId,
+        is_test: testMode,
         product_id: firstItem.productId,
         product_name: productName,
         rental_from: firstItem.rentalFrom,

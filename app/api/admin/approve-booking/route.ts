@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import Stripe from 'stripe';
 import { createServiceClient } from '@/lib/supabase';
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+import { getStripe } from '@/lib/stripe';
+import { getSiteUrl } from '@/lib/env-mode';
 
 /**
  * POST /api/admin/approve-booking
@@ -52,6 +51,8 @@ export async function POST(req: NextRequest) {
 
     // 2. Stripe Checkout Session erstellen (Payment Link)
     const amountCents = Math.round(booking.price_total * 100);
+    const stripe = await getStripe();
+    const siteUrl = await getSiteUrl();
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       payment_method_types: ['card', 'paypal'],
@@ -70,8 +71,8 @@ export async function POST(req: NextRequest) {
         booking_id: bookingId,
         booking_type: 'pending_approval',
       },
-      success_url: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://test.cam2rent.de'}/buchung-bestaetigt?from=approval&booking_id=${bookingId}`,
-      cancel_url: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://test.cam2rent.de'}/konto/buchungen`,
+      success_url: `${siteUrl}/buchung-bestaetigt?from=approval&booking_id=${bookingId}`,
+      cancel_url: `${siteUrl}/konto/buchungen`,
       expires_at: Math.floor(Date.now() / 1000) + 60 * 60 * 72, // 72 Stunden gueltig
     });
 

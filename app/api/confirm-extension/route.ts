@@ -7,9 +7,7 @@ import { getProducts } from '@/lib/get-products';
 import { calcHaftungTieredPrice, DEFAULT_HAFTUNG } from '@/lib/price-config';
 import { sendExtensionConfirmation } from '@/lib/email';
 import { createAdminNotification } from '@/lib/admin-notifications';
-import Stripe from 'stripe';
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+import { getStripe } from '@/lib/stripe';
 
 /**
  * POST /api/confirm-extension
@@ -41,6 +39,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Verify PaymentIntent
+  const stripe = await getStripe();
   const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
   if (paymentIntent.status !== 'succeeded' && paymentIntent.status !== 'processing') {
     return NextResponse.json({ error: `Zahlung nicht abgeschlossen (Status: ${paymentIntent.status}).` }, { status: 400 });

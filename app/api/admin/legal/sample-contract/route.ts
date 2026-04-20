@@ -65,6 +65,7 @@ export async function GET() {
     signerName: 'Max Mustermann',
     ipAddress: '0.0.0.0',
     eigenbeteiligung: 200,
+    forceTestMode: true,
   });
 
   return new NextResponse(new Uint8Array(pdfBuffer), {

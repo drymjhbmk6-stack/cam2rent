@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { getSendcloudKeys } from '@/lib/env-mode';
 
 const SC_BASE = 'https://panel.sendcloud.sc/api/v2';
 
-function scAuth() {
-  const pub = process.env.SENDCLOUD_PUBLIC_KEY!;
-  const sec = process.env.SENDCLOUD_SECRET_KEY!;
-  return 'Basic ' + Buffer.from(`${pub}:${sec}`).toString('base64');
+async function scAuth() {
+  const { publicKey, secretKey } = await getSendcloudKeys();
+  return 'Basic ' + Buffer.from(`${publicKey}:${secretKey}`).toString('base64');
 }
 
 /**
@@ -18,8 +18,9 @@ export async function GET(req: NextRequest) {
 
   if (action === 'methods') {
     try {
+      const auth = await scAuth();
       const res = await fetch(`${SC_BASE}/shipping_methods?is_return=false`, {
-        headers: { Authorization: scAuth() },
+        headers: { Authorization: auth },
       });
       if (!res.ok) {
         const txt = await res.text();
@@ -70,10 +71,11 @@ export async function POST(req: NextRequest) {
     const weight = weightKg.toFixed(3);
 
     // ── 1. Versandetikett erstellen (cam2rent → Kunde) ────────────────────────
+    const authHeader = await scAuth();
     const outboundRes = await fetch(`${SC_BASE}/parcels`, {
       method: 'POST',
       headers: {
-        Authorization: scAuth(),
+        Authorization: authHeader,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -114,7 +116,7 @@ export async function POST(req: NextRequest) {
       const returnRes = await fetch(`${SC_BASE}/parcels`, {
         method: 'POST',
         headers: {
-          Authorization: scAuth(),
+          Authorization: authHeader,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({

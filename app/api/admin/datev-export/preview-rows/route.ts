@@ -34,6 +34,7 @@ export async function GET(req: NextRequest) {
   const { data: bookings } = await supabase
     .from('bookings')
     .select('id, product_name, customer_name, price_rental, price_accessories, price_haftung, shipping_price, discount_amount, status, created_at')
+    .eq('is_test', false)
     .gte('created_at', `${from}T00:00:00`)
     .lte('created_at', `${to}T23:59:59`)
     .order('created_at', { ascending: true })

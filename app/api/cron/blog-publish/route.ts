@@ -2,11 +2,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { verifyCronAuth } from '@/lib/cron-auth';
 import { autoPost } from '@/lib/meta/auto-post';
+import { isTestMode } from '@/lib/env-mode';
 
 /** POST /api/cron/blog-publish - Geplante Posts veröffentlichen */
 export async function POST(req: NextRequest) {
   if (!verifyCronAuth(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // Im Test-Modus keine Blog-Artikel veroeffentlichen — Shop-Indexierung
+  // waere sonst mit Test-Content belastet.
+  if (await isTestMode()) {
+    return NextResponse.json({ skipped: 'test_mode' });
   }
 
   const supabase = createServiceClient();

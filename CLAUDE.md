@@ -816,8 +816,30 @@ Jede Buchungsbestätigung enthält automatisch als PDF-Anhang:
 - **Duplikat-Schutz:** Pro Buchung max 1 Gutschein
 
 ### Mietvertrag Testmodus
-- **`lib/contracts/contract-template.tsx`**: `TEST_MODE = true` → Diagonales Wasserzeichen "MUSTER / TESTVERTRAG – NICHT GÜLTIG" auf jeder Seite
-- Auf `false` setzen für Go-Live!
+- Wird seit Env-Toggle (siehe unten) dynamisch aus `admin_settings.environment_mode` geladen. Im Test-Modus erscheint das diagonale Wasserzeichen "MUSTER / TESTVERTRAG – NICHT GÜLTIG" auf jeder Seite, im Live-Modus nicht. Kein manueller Code-Wechsel mehr noetig — Admin schaltet einfach unter `/admin/einstellungen` um.
+- Muster-Vertrag unter `/admin/legal/sample-contract` nutzt `forceTestMode: true`, hat das Wasserzeichen also immer.
+
+### Test-/Live-Modus Umschaltung (Stand 2026-04-20)
+Zentraler Switch im Admin (`/admin/einstellungen` → "Test-/Live-Modus") kippt die komplette Umgebung: Stripe-Keys, Stripe-Webhook-Secret, Resend-Absender, Sendcloud-Keys, Site-URL, Vertrags-Wasserzeichen, Auto-Publish (Blog + Social), Rechnungs-/Gutschrift-/Buchungsnummer-Praefix (`TEST-`), is_test-Flag auf allen relevanten Datensaetzen und Buchhaltungs-Filter.
+
+- **DB-Setting:** `admin_settings.environment_mode` = `{ "mode": "test" | "live" }` (Default: `test`)
+- **Lib:** `lib/env-mode.ts` — `getEnvMode()`, `isTestMode()`, `getStripeSecretKey()`, `getStripePublishableKey()`, `getStripeWebhookSecret()`, `getSendcloudKeys()`, `getSiteUrl()`, `getResendFromEmail()`, `getTestModeEmailRedirect()`, `getNumberPrefix()`, `setEnvMode()`, `invalidateEnvModeCache()`. 30s In-Memory-Cache, Fallback bei Fehler: `'test'` (safe default).
+- **Stripe-Factory:** `lib/stripe.ts` → `getStripe()` liefert eine `Stripe`-Instanz mit dem aktuellen Key. Alle 13 API-Routen migriert. `lib/stripe-client.ts` → `getStripePromise()` fuer Client-Seiten (Checkout) — laedt Publishable-Key async ueber `/api/env-mode`.
+- **Admin-API:** `GET /api/admin/env-mode` + `POST /api/admin/env-mode` (Passwort-Pflicht, Audit-Log). Oeffentlich: `GET /api/env-mode` fuer Client (Banner, Stripe-Publishable).
+- **Env-Var-Konvention:** `<NAME>_LIVE` / `<NAME>_TEST` (z.B. `STRIPE_SECRET_KEY_LIVE`); Fallback auf das bisherige `<NAME>` ohne Suffix (Backwards-Compat).
+- **UI:** `components/admin/EnvModeSection.tsx` (Switch mit Passwort-Modal), `components/admin/EnvModeBadge.tsx` (Badge oben in Admin-Sidebar + Mobile-Header, amber = TEST, rosa = LIVE, Polling 60s).
+- **TestBanner:** Zeigt sich jetzt wenn DB-Modus = `test` (bisher nur auf test.* Subdomain oder `NEXT_PUBLIC_IS_BETA`).
+
+#### Daten-Kontamination verhindert (GoBD-konform)
+- **Migration `supabase-env-toggle.sql`:** Spalte `is_test BOOLEAN NOT NULL DEFAULT FALSE` auf `bookings`, `invoices`, `credit_notes`, `expenses`, `email_log`, `admin_audit_log`, `stripe_transactions` + Partial-Indizes.
+- **Buchungsnummer:** Im Test-Modus `TEST-C2R-YYKW-NNN` Praefix; Counter separat fuer Test vs. Live (eq-Filter auf `is_test`), damit Live-Sequenz stabil bleibt.
+- **Gutschrift-Nummer:** Im Test-Modus `TEST-GS-YYYY-NNNNNN`, separater Counter.
+- **Stripe-Reconciliation:** `stripe_transactions.is_test` bei Sync-Import gesetzt.
+- **Expenses:** `is_test` wird bei Insert gesetzt (Stripe-Gebuehren-Import, manuelle Buchung, Admin-Ausgabe).
+- **Buchhaltungs-Queries:** Dashboard, Reports (EÜR, USt-VA, Revenue), DATEV-Export, Open-Items, Invoices-Liste, Dunning-Check, Credit-Notes, Expenses, Weekly-Report filtern alle per Default `.eq('is_test', false)`. Test-Daten erscheinen nicht in Berichten.
+- **Email-Log:** `is_test` wird bei jedem `sendAndLog`-Call gesetzt.
+- **Auto-Post:** `lib/meta/auto-post.ts` + `/api/cron/social-publish` + `/api/cron/social-generate` + `/api/cron/blog-publish` + `/api/cron/blog-generate` springen im Test-Modus frueh raus (keine Meta-API-Calls, keine OpenAI-Kosten).
+- **Optional: TEST_MODE_REDIRECT_EMAIL:** Env-Var; wenn gesetzt, werden im Test-Modus alle Kundenmails stattdessen an diese Adresse umgeleitet (Subject mit "[TEST → urspruenglich: ...]" Prefix).
 
 ### Analytics
 - **Blog-Tab** in Analytics: Artikel gesamt/veröffentlicht/Entwürfe, Blog-Aufrufe, Top-Artikel, Kommentare, Zeitplan-Zähler
@@ -918,10 +940,11 @@ Umfassendes Audit mit paralleler Agent-Analyse (Security/Code-Quality/Performanc
 - **SQL-Migration `supabase-performance-indizes.sql` ausführen** (8 Performance-Indizes, idempotent via `IF NOT EXISTS` + `CONCURRENTLY`).
 - **SQL-Migration `supabase-social-image-position.sql` ausführen** (2 Spalten `fb_image_position` + `ig_image_position` auf `social_posts` für unabhängige FB/IG-Bild-Positionierung).
 - **SQL-Migration `supabase-waitlist-use-case.sql` ausführen** (Spalte `use_case` auf `waitlist_subscriptions` für optionalen Nutzungszweck-Dropdown).
-- **Go-Live 01.05.2026:** `TEST_MODE = false` in `lib/contracts/contract-template.tsx` setzen
-- **Go-Live 01.05.2026:** Stripe auf Live-Keys umstellen
+- **SQL-Migration `supabase-env-toggle.sql` ausführen** (is_test-Flag auf bookings/invoices/credit_notes/expenses/email_log/admin_audit_log/stripe_transactions — fuer sauberen Test/Live-Wechsel).
+- **Go-Live 01.05.2026:** Test/Live-Switch auf Live umschalten (`/admin/einstellungen` → Test-/Live-Modus → "Live-Modus"). Ersetzt: TEST_MODE-Konstante, Stripe-Key-Wechsel, Vertrags-Wasserzeichen, Resend-Absender, Sendcloud-Keys.
 - **Go-Live 01.05.2026:** Domain test.cam2rent.de → cam2rent.de
 - **Go-Live 01.05.2026:** Resend Domain verifizieren (DKIM + SPF)
+- **Go-Live 01.05.2026:** `STRIPE_SECRET_KEY_LIVE`, `STRIPE_WEBHOOK_SECRET_LIVE`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY_LIVE`, `SENDCLOUD_PUBLIC_KEY_LIVE`, `SENDCLOUD_SECRET_KEY_LIVE`, `FROM_EMAIL_LIVE`, `NEXT_PUBLIC_SITE_URL_LIVE` in Coolify hinterlegen — die vorhandenen Envs koennen als Test-Fallback bleiben (siehe `lib/env-mode.ts`).
 - **Social-Modul Setup:**
   - ~~SQL-Migration `supabase-social.sql` ausführen~~ ✓
   - ~~`META_APP_ID` + `META_APP_SECRET` in Coolify hinterlegen~~ ✓

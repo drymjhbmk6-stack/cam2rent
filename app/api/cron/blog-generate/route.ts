@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase';
 import Anthropic from '@anthropic-ai/sdk';
 import { verifyCronAuth } from '@/lib/cron-auth';
 import OpenAI from 'openai';
+import { isTestMode } from '@/lib/env-mode';
 
 const LENGTH_MAP: Record<string, string> = {
   kurz: 'ca. 500 Wörter',
@@ -20,6 +21,11 @@ const TONE_MAP: Record<string, string> = {
 export async function POST(req: NextRequest) {
   if (!verifyCronAuth(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // Im Test-Modus keine Artikel generieren — spart Claude/DALL-E-Kosten.
+  if (await isTestMode()) {
+    return NextResponse.json({ skipped: 'test_mode' });
   }
 
   // force=true überspringt den Scheduler (für manuelle Tests)

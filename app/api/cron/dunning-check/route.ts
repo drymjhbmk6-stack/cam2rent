@@ -37,10 +37,11 @@ export async function GET(req: NextRequest) {
     parseFloat(cfg.accounting_dunning_fee_3 || '10'),
   ];
 
-  // Offene Rechnungen laden
+  // Offene Rechnungen laden — keine Test-Rechnungen mahnen
   const { data: invoices } = await supabase
     .from('invoices')
     .select('id, invoice_number, invoice_date, due_date, gross_amount, sent_to_email')
+    .eq('is_test', false)
     .or('status.in.(open,overdue),payment_status.in.(open,overdue)')
     .limit(100);
 

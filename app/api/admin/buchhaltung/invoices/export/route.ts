@@ -17,6 +17,7 @@ export async function GET(req: NextRequest) {
   let query = supabase
     .from('invoices')
     .select('*')
+    .eq('is_test', false)
     .order('invoice_date', { ascending: false });
 
   if (status) query = query.eq('status', status);

@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
 import { logAudit } from '@/lib/audit';
-import Stripe from 'stripe';
+import { getStripe } from '@/lib/stripe';
+import { getStripeSecretKey } from '@/lib/env-mode';
 
 export async function POST(
   _req: NextRequest,
@@ -54,9 +55,10 @@ export async function POST(
       .eq('id', creditNote.booking_id)
       .maybeSingle();
 
-    if (booking?.payment_intent_id && process.env.STRIPE_SECRET_KEY) {
+    const stripeKey = await getStripeSecretKey();
+    if (booking?.payment_intent_id && stripeKey) {
       try {
-        const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+        const stripe = await getStripe();
         const refund = await stripe.refunds.create({
           payment_intent: booking.payment_intent_id,
           amount: Math.round(creditNote.gross_amount * 100), // Cent

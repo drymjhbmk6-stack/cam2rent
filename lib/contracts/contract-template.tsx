@@ -78,6 +78,9 @@ export interface RentalContractData {
   exemplarId?: string;
   // Benutzerdefinierte Vertragsparagraphen aus DB (überschreibt hardcoded)
   customParagraphs?: { title: string; text: string }[];
+  // Test-Modus: MUSTER-Wasserzeichen anzeigen. Wird dynamisch aus
+  // admin_settings.environment_mode geladen (siehe generate-contract.ts).
+  testMode?: boolean;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -92,9 +95,10 @@ const NAVY = '#0f172a';
 const CYAN = '#06b6d4';
 const GRAY = '#6b7280';
 
-// Testmodus: Wasserzeichen auf dem Vertrag anzeigen
-// Auf false setzen wenn der Shop live geht
-const TEST_MODE = true;
+// Testmodus: Wird jetzt dynamisch pro Vertrag uebergeben (siehe
+// generate-contract.ts laedt den Modus aus admin_settings.environment_mode).
+// Der Wasserzeichen-Check in <RentalContractPDF data={...} /> nutzt
+// data.testMode (default true = Sicherheits-Default bis Umschaltung live).
 const DARK = '#1a1a1a';
 const LIGHT_BG = '#f8fafc';
 
@@ -338,7 +342,7 @@ export function RentalContractPDF({ data }: { data: RentalContractData }) {
     <Document>
       <Page size={[595.28, 841.89]} style={s.page} wrap>
         {/* Testmodus-Wasserzeichen */}
-        {TEST_MODE && (
+        {data.testMode !== false && (
           <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', zIndex: 999 }} fixed>
             <Text style={{ fontSize: 54, color: '#ef444430', fontWeight: 700, transform: 'rotate(-35deg)', textAlign: 'center', letterSpacing: 4 }}>
               MUSTER

@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import Stripe from 'stripe';
 import { createServiceClient } from '@/lib/supabase';
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+import { getStripe } from '@/lib/stripe';
 
 /**
  * POST /api/admin/deposit/release
@@ -38,6 +36,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Stripe: Hold aufheben
+    const stripe = await getStripe();
     await stripe.paymentIntents.cancel(booking.deposit_intent_id);
 
     // DB: Status aktualisieren

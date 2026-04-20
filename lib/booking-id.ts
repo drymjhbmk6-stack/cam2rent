@@ -1,8 +1,13 @@
 import { createServiceClient } from '@/lib/supabase';
+import { isTestMode } from '@/lib/env-mode';
 
 /**
  * Generiert eine Buchungsnummer im Format: C2R-YYKW-NNN
  * Beispiel: C2R-2615-001 (Jahr 2026, Kalenderwoche 15, Laufnummer 1)
+ *
+ * Im Test-Modus wird `TEST-` vorangestellt (z.B. `TEST-C2R-2615-001`),
+ * damit die fortlaufende Live-Nummerierung nicht von Test-Buchungen
+ * hochgezaehlt wird (GoBD-konform).
  *
  * Jahr + KW werden in Berlin-Zeit berechnet — sonst kippt die Nummer
  * zwischen 22:00-02:00 Berlin auf den UTC-Tag (Vorwoche bzw. -jahr)
@@ -14,12 +19,18 @@ export async function generateBookingId(): Promise<string> {
   const week = String(getISOWeekFromParts(berlin)).padStart(2, '0'); // "15"
 
   const supabase = createServiceClient();
+  const testMode = await isTestMode();
+
+  // Separater Counter fuer Test vs. Live, damit die Live-Sequenz nicht
+  // durch Testbuchungen verschoben wird.
   const { count } = await supabase
     .from('bookings')
-    .select('*', { count: 'exact', head: true });
+    .select('*', { count: 'exact', head: true })
+    .eq('is_test', testMode);
 
   const seq = String((count ?? 0) + 1).padStart(3, '0');
-  return `C2R-${year}${week}-${seq}`;
+  const base = `C2R-${year}${week}-${seq}`;
+  return testMode ? `TEST-${base}` : base;
 }
 
 interface BerlinParts { year: number; month: number; day: number }

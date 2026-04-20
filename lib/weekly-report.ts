@@ -112,21 +112,25 @@ export async function collectWeeklyReportData(now: Date = new Date()): Promise<W
   ] = await Promise.all([
     supabase.from('bookings')
       .select('id, product_name, price_total, status')
+      .eq('is_test', false)
       .gte('created_at', iso(periodStart))
       .lte('created_at', iso(periodEnd))
       .neq('status', 'cancelled'),
     supabase.from('bookings')
       .select('id, price_total')
+      .eq('is_test', false)
       .gte('created_at', iso(prevPeriodStart))
       .lte('created_at', iso(prevPeriodEnd))
       .neq('status', 'cancelled'),
     supabase.from('bookings')
       .select('id', { count: 'exact', head: true })
+      .eq('is_test', false)
       .gte('updated_at', iso(periodStart))
       .lte('updated_at', iso(periodEnd))
       .eq('status', 'cancelled'),
     supabase.from('bookings')
       .select('id, customer_name, product_name, rental_from')
+      .eq('is_test', false)
       .gte('rental_from', iso(periodEnd).slice(0, 10))
       .lte('rental_from', iso(upcomingEnd).slice(0, 10))
       .neq('status', 'cancelled')
@@ -134,6 +138,7 @@ export async function collectWeeklyReportData(now: Date = new Date()): Promise<W
       .limit(20),
     supabase.from('bookings')
       .select('id, customer_name, product_name, rental_to')
+      .eq('is_test', false)
       .gte('rental_to', iso(periodEnd).slice(0, 10))
       .lte('rental_to', iso(upcomingEnd).slice(0, 10))
       .neq('status', 'cancelled')
@@ -170,11 +175,13 @@ export async function collectWeeklyReportData(now: Date = new Date()): Promise<W
       .lte('published_at', iso(periodEnd)),
     supabase.from('invoices')
       .select('amount_gross, payment_status')
+      .eq('is_test', false)
       .eq('payment_status', 'paid')
       .gte('paid_at', iso(periodStart))
       .lte('paid_at', iso(periodEnd)),
     supabase.from('invoices')
       .select('amount_gross, due_date, payment_status')
+      .eq('is_test', false)
       .in('payment_status', ['unpaid', 'overdue']),
   ]);
 

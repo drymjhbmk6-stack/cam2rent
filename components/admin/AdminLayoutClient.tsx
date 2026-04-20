@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import NotificationDropdown from '@/components/admin/NotificationDropdown';
+import EnvModeBadge from '@/components/admin/EnvModeBadge';
 import { useAutoLogout } from '@/hooks/useAutoLogout';
 
 // 30 Minuten Inaktivität für Admin
@@ -364,6 +365,9 @@ function SidebarContent({ pathname, isDashboard, onNavClick, handleLogout }: {
             Admin
           </span>
         </div>
+        <div className="ml-auto">
+          <EnvModeBadge />
+        </div>
       </Link>
 
       {/* Dashboard (standalone) */}
@@ -512,7 +516,8 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
             Admin
           </span>
         </Link>
-        <div className="ml-auto shrink-0">
+        <div className="ml-auto shrink-0 flex items-center gap-2">
+          <EnvModeBadge />
           <NotificationDropdown position="mobile" />
         </div>
       </div>

@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
 import { logAudit } from '@/lib/audit';
-import Stripe from 'stripe';
+import type Stripe from 'stripe';
+import { getStripe } from '@/lib/stripe';
+import { getStripeSecretKey, isTestMode } from '@/lib/env-mode';
 
 export async function POST(req: NextRequest) {
   if (!(await checkAdminAuth())) {
@@ -16,11 +18,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'from und to erforderlich.' }, { status: 400 });
   }
 
-  if (!process.env.STRIPE_SECRET_KEY) {
+  if (!(await getStripeSecretKey())) {
     return NextResponse.json({ error: 'Stripe API-Key nicht konfiguriert.' }, { status: 500 });
   }
 
-  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+  const stripe = await getStripe();
+  const testMode = await isTestMode();
   const supabase = createServiceClient();
 
   // PaymentIntents von Stripe laden
@@ -90,6 +93,7 @@ export async function POST(req: NextRequest) {
             match_status: booking?.id ? 'matched' : 'unmatched',
             stripe_created_at: new Date(pi.created * 1000).toISOString(),
             synced_at: new Date().toISOString(),
+            is_test: testMode,
           },
           { onConflict: 'stripe_payment_intent_id' }
         );

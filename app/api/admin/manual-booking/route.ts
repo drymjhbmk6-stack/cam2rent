@@ -6,6 +6,7 @@ import { createAdminNotification } from '@/lib/admin-notifications';
 import { generateContractPDF } from '@/lib/contracts/generate-contract';
 import { storeContract } from '@/lib/contracts/store-contract';
 import { sendBookingConfirmation, sendAdminNotification, type BookingEmailData } from '@/lib/email';
+import { isTestMode } from '@/lib/env-mode';
 
 /**
  * POST /api/admin/manual-booking
@@ -56,9 +57,11 @@ export async function POST(req: NextRequest) {
       : `MANUAL-${bookingId}-${Date.now()}`;
     const bookingNotes = body.notes || null;
 
+    const testMode = await isTestMode();
     const insertData: Record<string, unknown> = {
       id: bookingId,
       payment_intent_id: paymentIntentId,
+      is_test: testMode,
       product_id,
       product_name,
       rental_from,
@@ -132,6 +135,7 @@ export async function POST(req: NextRequest) {
         gross_amount: fees,
         source_type: 'booking_fee',
         source_id: bookingId,
+        is_test: testMode,
       }).then(({ error }) => {
         if (error) console.error('Expense insert error:', error.message);
       });

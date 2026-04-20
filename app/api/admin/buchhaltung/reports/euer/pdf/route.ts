@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { checkAdminAuth } from '@/lib/admin-auth';
+import { getSiteUrl } from '@/lib/env-mode';
 
 // Placeholder — generiert eine einfache Text-Repräsentation der EÜR
 // Vollständige React-PDF-Implementierung kann in zukünftiger Session folgen
@@ -16,7 +17,7 @@ export async function GET(req: NextRequest) {
   }
 
   // EÜR-Daten über interne API laden
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+  const baseUrl = await getSiteUrl();
   const euerRes = await fetch(`${baseUrl}/api/admin/buchhaltung/reports/euer?from=${from}&to=${to}`, {
     headers: { cookie: req.headers.get('cookie') || '' },
   });

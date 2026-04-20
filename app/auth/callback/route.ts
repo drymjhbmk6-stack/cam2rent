@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import type { EmailOtpType } from '@supabase/supabase-js';
+import { getSiteUrl } from '@/lib/env-mode';
 
 /**
  * GET /auth/callback
@@ -47,7 +48,7 @@ export async function GET(request: NextRequest) {
   const forwardedProto = request.headers.get('x-forwarded-proto') ?? 'https';
   const baseUrl = forwardedHost
     ? `${forwardedProto}://${forwardedHost}`
-    : (process.env.NEXT_PUBLIC_SITE_URL ?? 'https://test.cam2rent.de');
+    : await getSiteUrl();
 
   // Fehler von Supabase (z.B. otp_expired)
   if (errorParam) {

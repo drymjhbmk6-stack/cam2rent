@@ -12,17 +12,17 @@ import { getPriceForDays, type Product } from '@/data/products';
 import { useProducts } from '@/components/ProductsProvider';
 import { getAccessoryPrice, type Accessory } from '@/data/accessories';
 import type { RentalSet } from '@/data/sets';
-import { loadStripe } from '@stripe/stripe-js';
 import AvailabilityCalendar, { type CalendarRange } from '@/components/AvailabilityCalendar';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { shippingConfig, calcShipping, type ShippingMethod } from '@/data/shipping';
 import { calcPriceFromKeyDays, calcPriceFromTable, calcHaftungTieredPrice, getEigenbeteiligung, type PriceConfig, type AdminProduct, type HaftungConfig } from '@/lib/price-config';
 import SignatureStep, { type SignatureResult } from '@/components/booking/SignatureStep';
+import { getStripePromise } from '@/lib/stripe-client';
 
 /** Inline type to replace react-day-picker's DateRange */
 type DateRange = { from: Date; to?: Date };
 
-const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
+const stripePromise = getStripePromise();
 
 // ─── Haftungsoptionen ─────────────────────────────────────────────────────────
 

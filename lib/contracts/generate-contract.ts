@@ -4,6 +4,7 @@ import { createHash } from 'crypto';
 import { createServiceClient } from '@/lib/supabase';
 import { RentalContractPDF, buildContractText, type RentalContractData, type MietgegenstandItem } from './contract-template';
 import { DEFAULT_HAFTUNG, getEigenbeteiligung, type HaftungConfig } from '@/lib/price-config';
+import { isTestMode } from '@/lib/env-mode';
 
 /**
  * Lädt die aktuelle Haftungs-Konfiguration aus admin_settings.
@@ -131,6 +132,8 @@ export async function generateContractPDF(opts: {
   eigenbeteiligung?: number;
   productCategory?: string;
   serialNumber?: string;
+  /** Override: true = immer Muster-Wasserzeichen, false = nie, undefined = aus env-mode */
+  forceTestMode?: boolean;
 }): Promise<GenerateContractResult> {
   const now = new Date();
   const signedAt = now.toISOString().replace('T', ' ').substring(0, 16);
@@ -188,6 +191,9 @@ export async function generateContractPDF(opts: {
   // Benutzerdefinierte Vertragsparagraphen aus DB laden
   const customParagraphs = await loadCustomParagraphs();
 
+  // Test-Modus: expliziter Override oder aus admin_settings.environment_mode
+  const testMode = opts.forceTestMode !== undefined ? opts.forceTestMode : await isTestMode();
+
   const data: RentalContractData = {
     bookingId: opts.bookingId,
     bookingNumber: opts.bookingNumber,
@@ -226,6 +232,7 @@ export async function generateContractPDF(opts: {
     contractHash: '',
     eigenbeteiligung: eb,
     customParagraphs: customParagraphs ?? undefined,
+    testMode,
     // Backwards compat
     productName: opts.productName,
     accessories: opts.accessories,

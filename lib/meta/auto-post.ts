@@ -10,6 +10,7 @@
 import { createServiceClient } from '@/lib/supabase';
 import { generateFromTemplate } from '@/lib/meta/ai-content';
 import { createAdminNotification } from '@/lib/admin-notifications';
+import { isTestMode } from '@/lib/env-mode';
 
 type TriggerType = 'blog_publish' | 'product_added' | 'set_added' | 'voucher_created';
 
@@ -65,6 +66,12 @@ export async function autoPost(
   opts: { link_url?: string } = {}
 ): Promise<void> {
   try {
+    // Im Test-Modus nichts auf Meta posten — waere sonst echte Reichweite.
+    if (await isTestMode()) {
+      console.info(`[auto-post] Test-Modus aktiv — Trigger "${trigger}" uebersprungen.`);
+      return;
+    }
+
     const settings = await getSocialSettings();
 
     // Trigger explizit deaktiviert?
