@@ -455,6 +455,83 @@ Vollautomatisches Posten auf Facebook-Page + Instagram-Business-Account über di
 - DALL-E 3 (Bilder, optional): ~2-5 €/Monat bei 30 Posts
 - **Summe: ~3-8 €/Monat** (KEINE bezahlten Ads — alles organisch)
 
+#### Blog-Prinzip auf Social übertragen (Stand 2026-04-19, Phase 2)
+Komplette Parallele zum Blog-System mit Themenpool, Serien, Redaktionsplan, Voll/Semi-Modus, 3-stufigem Faktencheck. Migration: `supabase-social-extended.sql`.
+
+**Neue Tabellen:**
+- `social_topics` (analog `blog_auto_topics`): Themenpool mit `used`-Flag, Kategorie (produkt/tipp/inspiration/aktion/bts/community/ankuendigung), Keywords, Plattformen, With-Image-Flag
+- `social_series` + `social_series_parts` (analog blog_series): Mehrteilige Post-Serien mit Fortschrittszähler
+- `social_editorial_plan` (analog blog_schedule): Konkreter Plan mit Datum/Uhrzeit + Status-Workflow `planned → generating → generated → reviewed → published`, inkl. `post_id`-Verknüpfung, Serien-Part-Link, `error_message` für Retry-Anzeige
+
+**Neue APIs** (alle `/api/admin/social/*`):
+- `topics` + `topics/[id]` (CRUD)
+- `series` + `series/[id]` (CRUD, nested parts)
+- `editorial-plan` + `editorial-plan/[id]` (CRUD, bei `scheduled_date`/`scheduled_time`-Änderung wird verknüpftes `social_posts.scheduled_at` mitaktualisiert)
+- `editorial-plan/[id]/generate` (POST) — sofort-Generierung ohne Scheduler-Check
+- `templates/seed` — idempotente Standard-Vorlagen-Import (Community/UGC, Ankündigung, Frage, Testimonial)
+- `upload-image` — Datei-Upload (multipart, max 10 MB) in Supabase Storage Bucket `blog-images`
+- `settings` — `admin_settings.social_settings` read/write
+- `generate-plan` (Background-Job mit Status-Polling via `admin_settings.social_plan_job`): Bulk-Generierung mit Cancel-Möglichkeit, Fortschritt live sichtbar
+
+**Neuer Cron `/api/cron/social-generate`** (stündlich, `0 * * * *`):
+- Scheduler-Checks: Wochentag + Zeitfenster aus `social_settings`
+- Vorlaufzeit `schedule_days_before` (default 2 Tage)
+- Re-Entry-Schutz 10 Min via `admin_settings.social_generation_status`
+- 3-stufiger Faktencheck (Brand-Wächter + Stil-Prüfer, `fact_check_enabled`)
+- Voll-Modus: Post direkt `scheduled` → `social-publish` postet automatisch
+- Semi-Modus: Post als `draft` → Admin muss freigeben
+- Kern-Logik extrahiert in `lib/meta/generate-plan-entry.ts`, wird auch vom Sofort-Generate-Button aufgerufen
+
+**Neue Admin-UI-Seiten:**
+- `/admin/social/themen` — Tabs Einzelthemen + Serien (anlegen/löschen/verwalten, Fortschrittsbalken)
+- `/admin/social/zeitplan` — 3-Spalten-Layout: Import-Datum + offene Themen + Serien | Plan-Liste mit Datum-Kachel
+  - Kachel klickbar → Inline-Edit für Datum + Uhrzeit
+  - Buttons: `⚡ Jetzt generieren` (bei `planned`), `🚀 Jetzt posten` (bei `generated`), `✓ gesehen`, `Überspringen`, `Löschen`, `Mehr` (Keywords/Prompt/Timestamps)
+  - Post-Preview mit Caption + Bearbeiten-Link wenn generiert
+- `/admin/social/plan` — KI-Bulk-Generator: N Tage, M Posts/Woche, Uhrzeit, Plattformen, with_images-Toggle
+  - Background-Job, Seite darf verlassen werden, Progress-Bar + Live-Log der letzten 10 Schritte
+  - Berücksichtigt letzte 200 Captions aus letzten 180 Tagen als "bereits behandelt" (Topic-Dedupe)
+
+**Dashboard erweitert** (`/admin/social`):
+- Live-Ampel (🟢/🟡/🔴) mit KI-Bot-Status, pollt alle 5 Sek
+- `Neu laden`-Button oben rechts
+- Nächste 5 Plan-Einträge als Teaser
+
+**Einstellungen erweitert** (`/admin/social/einstellungen`):
+- Block "Automatische Generierung" (Toggle + Modus Semi/Voll + Vorlaufzeit + Wochentage-Pills + Zeitfenster + Faktencheck-Toggle)
+- Block "KI-Konfiguration": Standard-Ton, Zusatz-Kontext (Textarea), Globale Standard-Hashtags
+- Button `⚡ Empfohlene Einstellungen laden` füllt Felder mit optimalen cam2rent-Vorgaben
+- Auto-Post-Modus (draft/scheduled/published) + Delay-Minuten + pro-Trigger-Toggle
+
+**Sidebar:** Social-Collapse um `Themen & Serien`, `Redaktionsplan` (= `/zeitplan`), `KI-Plan (Bulk)` erweitert.
+
+**Freitext-Modus im Neuer-Post-Editor:**
+- Wenn keine Vorlage gewählt: großes Textfeld für Ankündigungen/Community-Posts/Feature-Updates
+- Placeholder zeigt UGC-Beispiele (Foto-Contest, Umfrage, Team-Update)
+- Checkbox "Bild mit DALL-E generieren"
+- Button "KI-Post erstellen" → Claude schreibt fertigen Post inkl. Hashtags
+
+**Foto-Realismus-Booster** (`enhanceForPhotoRealism` in `ai-content.ts`):
+- Hängt automatisch Anti-KI-Hints an jeden DALL-E-Prompt (iPhone 15 Pro, 35mm, keine 3D/CGI/illustration, natural skin)
+- Greift nur wenn User-Prompt keinen expliziten Stil vorgibt
+- Deutlich realistischere Bilder (weniger KI-Marketing-Look)
+
+**Bild-Upload:**
+- Button `📷 Hochladen` in `/admin/social/neu` + `/admin/social/posts/[id]` neben der Bild-URL
+- Neue Standard-Vorlagen (via `/api/admin/social/templates/seed`): Community/UGC, Website-Ankündigung, Frage an die Community, Erfolgsgeschichte/Testimonial
+- Button "↓ Standard-Vorlagen importieren" in `/admin/social/vorlagen` (idempotent)
+
+#### Post-Permalinks (Stand 2026-04-19)
+Meta gibt nach Publish nur nummerische Media-IDs zurück. Instagram-URLs brauchen aber Shortcodes (`/p/DAbC_123xy/`), keine numerischen IDs. Unser Link-UI führte deshalb zu "Beitrag nicht verfügbar".
+- **Migration:** `supabase-social-permalinks.sql` — zwei Spalten `fb_permalink` + `ig_permalink` auf `social_posts`
+- **Graph-API-Helper:** `getFacebookPermalink(postId, token)` (nutzt `?fields=permalink_url`) + `getInstagramPermalink(mediaId, token)` (`?fields=permalink`)
+- **Publisher:** Nach erfolgreichem Publish werden pro Plattform die Permalinks geholt und in die DB gespeichert
+- **UI:** "Auf FB/IG ansehen"-Links nutzen den Permalink; Fallback-Hinweis bei alten Posts: "(Link wird beim nächsten Post erfasst)"
+- **Go-Live TODO:** SQL-Migration ausführen
+
+#### Dev-Mode vs. Live-Mode (Meta-App)
+Solange die App im "Development Mode" ist, sehen Posts nur App-Admins + Tester. Für öffentliche Sichtbarkeit muss die App auf "Live" geschaltet werden: Meta Developer Dashboard → Seitenpunkt "Veröffentlichen" → Button "App veröffentlichen". Voraussetzung: Datenschutz-URL, AGB-URL, Kategorie, App-Domain sind gesetzt (haben wir). Standard-Access auf Permissions reicht für eigene Kanäle — **kein App Review nötig** solange nur cam2rent-eigene FB-Page + IG-Business bespielt werden.
+
 #### Saison-Guard (Stand 2026-04-20)
 Claude bekommt sonst kein Datum mit und erfindet z.B. Ski-Posts im April. Drei Stellen wurden gehärtet:
 - **`lib/meta/season.ts`** — `seasonPromptBlock(date)` + `isTopicOutOfSeason(text, date)` + `getSeasonContext(date)`. Kennt Winter (Dez-Feb), Frühling (Mär-Mai), Sommer (Jun-Aug), Herbst (Sep-Nov) mit passenden Aktivitäten + Verbotsliste (z.B. "Skitour" im Frühling/Sommer/Herbst).
@@ -601,8 +678,24 @@ Steuer-Modus umschaltbar im Admin (/admin/einstellungen):
 - **next.config.ts:** `compress: true`, `optimizePackageImports` (supabase, date-fns, lucide-react)
 - **Middleware:** Admin-Token wird gecached statt bei jedem Request neu gehasht
 - **ESLint/TypeScript:** Beim Build geskippt (`ignoreDuringBuilds`) wegen RAM-Limit
-- **Dockerfile:** `NODE_OPTIONS=--max-old-space-size=1536 --max-semi-space-size=64` für Build
+- **Dockerfile:** `NODE_OPTIONS=--max-old-space-size=2560 --max-semi-space-size=64` für Build (nach Server-Upgrade auf CPX32 mit 8 GB RAM hochgesetzt)
 - **outputFileTracingExcludes:** @swc, @esbuild, typescript, eslint, sharp (spart RAM beim "Collecting build traces")
+- **Sitemap dynamic:** `app/sitemap.ts` nutzt `dynamic = 'force-dynamic'` + `revalidate = 3600` + `withTimeout(5s)` für DB-Calls. Wird nicht mehr beim Build generiert (sonst Build-Timeout bei langsamer Supabase).
+- **Server:** Hetzner Cloud CPX32 (4 vCPU AMD, 8 GB RAM) — Upgrade von CX23 am 2026-04-19 wegen Build-OOM bei großen Dependency-Trees (Social-Modul).
+
+## Timezone-Helper (`lib/timezone.ts`, Stand 2026-04-19)
+Kritischer Fix: `new Date().setHours(0,0,0,0).toISOString()` verschiebt das Datum um die Server-TZ-Differenz (Server läuft UTC, aber App denkt Berlin). Analytics-Queries für "heute" lieferten deshalb 0, weil sie ab 22:00 UTC des Vortags filterten.
+- `getBerlinDayStart(date?)` — Mitternacht in Berlin-Zeit als UTC-Date (mit Sommer-/Winterzeit-Handling via `Intl.DateTimeFormat timeZoneName='longOffset'`)
+- `getBerlinDayStartISO(date?)` — dasselbe als ISO-String für Supabase `.gte()`
+- `getBerlinDaysAgoISO(n)` — Start vor N Tagen in Berlin-TZ
+- `utcToBerlinLocalInput(iso)` — UTC-ISO → `YYYY-MM-DDTHH:mm` für `<input type="datetime-local">`
+- `berlinLocalInputToUTC(input)` — Umkehrung (Input ist in Berlin-Zeit gemeint) → UTC-ISO
+- Eingesetzt in `analytics/route.ts` (live/today/bookings), `daily-report/route.ts`, `editorial-plan/[id]/route.ts`, Post-Editor (neu + detail)
+
+## Analytics-Fixes (Stand 2026-04-19)
+- **Live-Tab respektiert Zeitraum-Filter**: API `type=live` nimmt `range=today|7d|30d|month`, Kacheln zeigen dynamische Labels ("Seitenaufrufe — 30 Tage"). `active_count` bleibt letzte 5 Min (Echtzeit).
+- **Timezone-Bug** in 3 Stellen (live/today/bookings) behoben, nutzt jetzt `getBerlinDayStartISO()`
+- **Track-Endpoint loggt DB-Fehler** (vorher silent catch) — bei fehlender Tabelle / RLS-Problem sofort in Coolify-Logs sichtbar
 
 ## Blog-System (KI-automatisiert)
 Vollautomatisches Blog-System mit Redaktionsplan, KI-Generierung und Cron-Jobs.
@@ -828,8 +921,16 @@ Umfassendes Audit mit paralleler Agent-Analyse (Security/Code-Quality/Performanc
 - **Go-Live 01.05.2026:** Stripe auf Live-Keys umstellen
 - **Go-Live 01.05.2026:** Domain test.cam2rent.de → cam2rent.de
 - **Go-Live 01.05.2026:** Resend Domain verifizieren (DKIM + SPF)
-- **Social-Modul Setup (Go-Live):**
-  - `META_APP_ID` + `META_APP_SECRET` in Coolify hinterlegen (aus developers.facebook.com kopieren)
-  - Cron `*/5 * * * * curl -X POST -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/social-publish` in Hetzner-Crontab eintragen
-  - Meta Business-Verifizierung starten + App Review für `pages_manage_posts` + `instagram_content_publish` beantragen
-  - Erste FB+IG-Verbindung über `/admin/social/einstellungen` testen
+- **Social-Modul Setup:**
+  - ~~SQL-Migration `supabase-social.sql` ausführen~~ ✓
+  - ~~`META_APP_ID` + `META_APP_SECRET` in Coolify hinterlegen~~ ✓
+  - ~~Cron `*/5 * * * *` `social-publish` + `0 * * * *` `social-generate` in Hetzner-Crontab eingetragen~~ ✓
+  - ~~Erste FB+IG-Verbindung OAuth~~ ✓
+  - ~~Meta-App auf "Live" geschaltet~~ ✓
+  - **SQL-Migration `supabase-social-extended.sql` ausführen** (Themenpool, Serien, Editorial-Plan — Phase 2)
+  - **SQL-Migration `supabase-social-permalinks.sql` ausführen** (2 Spalten für korrekte FB/IG-Post-URLs)
+  - **SQL-Migration `supabase-social-image-position.sql` ausführen** (unabhängige Bildposition pro Plattform)
+- **Supabase Auto-Pause-Risiko (Free Tier):** Projekt pausiert nach 7 Tagen Inaktivität trotz laufender Cron-Jobs möglich. Gegenmittel:
+  - UptimeRobot (gratis) alle 5 Min auf `/api/products` pingen lassen → hält DB wach + warnt bei Downtime
+  - Oder: Supabase Pro (~25 €/Monat) für garantiert keinen Auto-Pause + mehr Compute
+- **Server: Hetzner CPX32 seit 2026-04-19** (war CX23, Upgrade wegen Build-OOM). Rescale in-place, IP bleibt gleich.
