@@ -497,7 +497,6 @@ Interesse an neuen Kameras testen, bevor sie eingekauft werden: Sobald für eine
   - Produktdetailseite `/kameras/[slug]`: Statt Kalender → neue Komponente `WaitlistCard.tsx` mit Bell-Icon + Formular
 - **`NotifyModal.tsx`** übernimmt jetzt `productId` + `source` (`'card' | 'detail'`) und postet echt gegen `/api/waitlist` — Loading-/Error-States ergänzt
 - **Notifications:** `new_waitlist`-Typ im `NotificationDropdown` (cyan Bell-Icon)
-- **Go-Live TODO:** SQL-Migration `supabase-waitlist.sql` ausführen
 
 ### Seriennummern-Scanner
 QR-/Barcode-Scanner für die Admin-PWA, nutzt native `BarcodeDetector`-API (Chrome/Edge/Safari ≥ 17), Fallback auf manuelle Texteingabe. Erkennt: QR, EAN-13/8, Code128, Code39, Code93, Codabar, DataMatrix, ITF, UPC.
