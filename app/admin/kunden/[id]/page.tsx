@@ -100,8 +100,11 @@ const TABS = [
 
 const BOOKING_STATUS: Record<string, { label: string; color: string; bg: string }> = {
   pending: { label: 'Ausstehend', color: '#f59e0b', bg: '#f59e0b14' },
+  pending_verification: { label: 'Warte auf Freigabe', color: '#f59e0b', bg: '#f59e0b14' },
+  awaiting_payment: { label: 'Warte auf Zahlung', color: '#8b5cf6', bg: '#8b5cf614' },
   confirmed: { label: 'Bestätigt', color: '#06b6d4', bg: '#06b6d414' },
   shipped: { label: 'Versendet', color: '#8b5cf6', bg: '#8b5cf614' },
+  picked_up: { label: 'Abgeholt', color: '#10b981', bg: '#10b98114' },
   active: { label: 'Aktiv', color: '#10b981', bg: '#10b98114' },
   returned: { label: 'Zurückgegeben', color: '#64748b', bg: '#64748b14' },
   completed: { label: 'Abgeschlossen', color: '#10b981', bg: '#10b98114' },

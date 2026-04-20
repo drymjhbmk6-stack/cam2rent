@@ -1145,6 +1145,8 @@ function PriceRow({ label, amount }: { label: string; amount: number }) {
 
 function DepositBadge({ status }: { status: string }) {
   const map: Record<string, { label: string; color: string; bg: string }> = {
+    none: { label: 'Keine', color: '#94a3b8', bg: '#94a3b814' },
+    pending: { label: 'Ausstehend', color: '#8b5cf6', bg: '#8b5cf614' },
     held: { label: 'Gehalten', color: '#f59e0b', bg: '#f59e0b14' },
     released: { label: 'Freigegeben', color: '#10b981', bg: '#10b98114' },
     captured: { label: 'Eingezogen', color: '#ef4444', bg: '#ef444414' },

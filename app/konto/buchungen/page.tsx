@@ -38,8 +38,12 @@ interface Booking {
 }
 
 const statusConfig: Record<string, { label: string; className: string }> = {
+  pending_verification: { label: 'Warte auf Freigabe', className: 'bg-amber-100 text-amber-700' },
+  awaiting_payment: { label: 'Warte auf Zahlung', className: 'bg-purple-100 text-purple-700' },
   confirmed: { label: 'Aktiv', className: 'bg-green-100 text-green-700' },
   shipped: { label: 'Unterwegs', className: 'bg-blue-100 text-blue-700' },
+  picked_up: { label: 'Abgeholt', className: 'bg-green-100 text-green-700' },
+  returned: { label: 'Zurückgegeben', className: 'bg-brand-bg dark:bg-brand-black text-brand-steel dark:text-gray-400' },
   completed: { label: 'Abgeschlossen', className: 'bg-brand-bg dark:bg-brand-black text-brand-steel dark:text-gray-400' },
   cancelled: { label: 'Storniert', className: 'bg-red-100 text-red-600' },
   damaged: { label: 'Schaden gemeldet', className: 'bg-orange-100 text-orange-700' },

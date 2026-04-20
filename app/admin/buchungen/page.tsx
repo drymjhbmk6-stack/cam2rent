@@ -41,6 +41,8 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }
   awaiting_payment: { label: 'Warte auf Zahlung', color: '#8b5cf6', bg: '#8b5cf614' },
   confirmed: { label: 'Bestätigt', color: '#06b6d4', bg: '#06b6d414' },
   shipped: { label: 'Versendet', color: '#10b981', bg: '#10b98114' },
+  picked_up: { label: 'Abgeholt', color: '#10b981', bg: '#10b98114' },
+  returned: { label: 'Retourniert', color: '#8b5cf6', bg: '#8b5cf614' },
   completed: { label: 'Abgeschlossen', color: '#64748b', bg: '#64748b14' },
   cancelled: { label: 'Storniert', color: '#ef4444', bg: '#ef444414' },
   damaged: { label: 'Beschädigt', color: '#f97316', bg: '#f9731614' },

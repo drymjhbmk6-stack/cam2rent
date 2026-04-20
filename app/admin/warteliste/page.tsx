@@ -15,6 +15,16 @@ interface WaitlistEntry {
   notified_at: string | null;
 }
 
+const SOURCE_LABELS: Record<string, string> = {
+  card: 'Produktkarte',
+  detail: 'Detailseite',
+};
+
+function sourceLabel(source: string | null): string {
+  if (!source) return '—';
+  return SOURCE_LABELS[source] ?? source;
+}
+
 export default function Warteliste() {
   const [entries, setEntries] = useState<WaitlistEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -161,7 +171,7 @@ export default function Warteliste() {
                         )}
                       </td>
                       <td className="px-4 py-2 text-slate-400">
-                        {entry.source ?? '—'}
+                        {sourceLabel(entry.source)}
                       </td>
                       <td className="px-4 py-2 text-slate-300">
                         {fmtDateTime(entry.created_at)}
