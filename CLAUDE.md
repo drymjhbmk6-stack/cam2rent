@@ -112,6 +112,15 @@ ESLint + TypeScript werden auf dem Server beim Build geskippt (RAM-Limit CX23).
 - Buchungsbestätigung antwortet sofort — PDF + E-Mail laufen im Hintergrund
 - Kalender verhindert Buchung über ausgebuchte Tage hinweg (maxEndDate-Logik)
 
+### Widerrufsrecht-Zustimmung § 356 Abs. 4 BGB
+Wenn eine Buchung vor Ablauf der 14-tägigen Widerrufsfrist beginnt, muss der Kunde im Checkout ausdrücklich zustimmen, dass cam2rent vor Fristende mit der Leistung beginnt und dass sein Widerrufsrecht dadurch erlischt.
+- **Checkbox** (3. im Checkout, conditional): Nur sichtbar wenn frühester `rentalFrom` < 14 Tage von heute. Buchen-Button disabled bis angekreuzt.
+- **DB-Spalten** in `bookings` (Migration `supabase-widerruf-consent.sql`): `early_service_consent_at` (timestamptz) + `early_service_consent_ip` (text).
+- **APIs:** `checkout-intent` speichert IP zusätzlich im Checkout-Context; `confirm-cart` + `create-pending-booking` schreiben Timestamp + IP in `bookings`.
+- **Buchungsbestätigungs-E-Mail** enthält bei vorliegender Zustimmung einen zusätzlichen Satz in der Storno-Box: „Zustimmung zur vorzeitigen Leistungserbringung gemäß § 356 Abs. 4 BGB erteilt am TT.MM.JJJJ um HH:MM Uhr."
+- **Vertragsparagraph § 13** („Widerrufsrecht") um einen zweiten Absatz ergänzt, der auf § 356 Abs. 4 BGB und die Zustimmung im Buchungsprozess verweist.
+- Checkbox-Wortlaut: „Ich verlange ausdrücklich, dass cam2rent vor Ablauf der 14-tägigen Widerrufsfrist mit der Ausführung der Dienstleistung beginnt. Mir ist bekannt, dass mein Widerrufsrecht mit vollständiger Vertragserfüllung durch cam2rent erlischt (§ 356 Abs. 4 BGB)."
+
 ### Kalender-Logik (Versand)
 - **Startdatum:** Keine Sonn-/Feiertagssperre — Paket wird vorher von cam2rent verschickt. Nur 3 Tage Vorlaufzeit.
 - **Enddatum:** Gesperrt wenn **Folgetag** Sonntag oder Feiertag ist (Kunde muss am nächsten Tag Paket abgeben).
@@ -265,6 +274,7 @@ Alle Dropdowns laden aus `admin_settings` und können neue Einträge hinzufügen
 - Supabase E-Mail-Templates: Custom HTML mit cam2rent-Branding (im Dashboard konfiguriert)
 - Ausweis-Upload: `/konto/verifizierung` → `/api/upload-id` (FormData, Storage: `id-documents`)
 - Admin-Verifizierung: `/admin/kunden/[id]` → Ausweisbilder anzeigen + Verifizieren/Ablehnen Buttons
+  - Block ist **immer sichtbar** (auch wenn noch kein Ausweis hochgeladen — dann Hinweis „Keine Ausweisbilder hochgeladen" und keine Buttons)
   - API: `/api/admin/verify-customer` (POST)
   - API: `/api/admin/id-document-url` (GET, Signed URLs)
 - Profiles-Trigger: `handle_new_user()` erstellt automatisch Profil bei Registrierung
@@ -617,6 +627,7 @@ Versionierte Verwaltung aller Rechtstexte (AGB, Datenschutz, Impressum, Widerruf
 - **Versionshistorie:** Sidebar mit allen Versionen — Anzeigen (Modal), PDF pro Version, Wiederherstellen (erzeugt neue Version)
 - **Vertragsparagraphen-Editor** (`/admin/legal/vertragsparagraphen`): Alle 19 Paragraphen aufklappbar + editierbar, farbcodiert nach Rechtsquelle (AGB/Haftung/Widerruf/Datenschutz), gespeichert in `admin_settings.contract_paragraphs`
 - **KI-Prüfung Button:** Exportiert alle Rechtstexte + Vertragsparagraphen + letzten Vertrag + Business-Config als kopierbaren Prompt für Claude-Prüfung (`/api/admin/legal/export-prompt`)
+- **Muster-Vertrag-PDF:** Button „Muster-Vertrag als PDF öffnen" generiert einen Beispiel-Mietvertrag mit Dummy-Daten (Max Mustermann, GoPro Hero13 Black, 7 Tage). Nutzt dieselbe Pipeline wie echte Buchungen (`generateContractPDF`) inkl. der aktuell gespeicherten Vertragsparagraphen aus `admin_settings`. API: `GET /api/admin/legal/sample-contract`.
 - **Erinnerung bei Rechtstext-Änderung:** Beim Veröffentlichen einer Rechtsseite wird automatisch eine Admin-Notification erstellt mit Hinweis welche Vertragsparagraphen zu prüfen sind
 - **Sidebar-Navigation:** Eigene Sektion "Rechtliches" in Admin-Sidebar
 
@@ -628,6 +639,7 @@ Versionierte Verwaltung aller Rechtstexte (AGB, Datenschutz, Impressum, Widerruf
 - `POST /api/admin/legal/contract-paragraphs` — Vertragsparagraphen speichern
 - `DELETE /api/admin/legal/contract-paragraphs` — Auf Standard zurücksetzen
 - `GET /api/admin/legal/export-prompt` — Alle Rechtstexte + Vertrag als Prüf-Prompt
+- `GET /api/admin/legal/sample-contract` — Muster-Mietvertrag als PDF mit Dummy-Daten
 - `GET /api/legal?slug=agb` — Öffentliche API für Shop-Seiten (5 Min Cache)
 
 ### Buchungsbestätigungs-E-Mail — Automatische Anhänge
