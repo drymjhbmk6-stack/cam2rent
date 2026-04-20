@@ -36,6 +36,8 @@ export async function GET() {
 
     // Week start (Monday) in Berlin-Zeit
     const berlinNow = new Date(`${berlinDate}T12:00:00${offset}`);
+    // Alias für Bestands-Code-Stellen, die weiter unten `now` verwenden.
+    const now = berlinNow;
     const dayOfWeek = berlinNow.getUTCDay();
     const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
     const weekStart = mkIso(bYear, bMonth, bDay - mondayOffset);

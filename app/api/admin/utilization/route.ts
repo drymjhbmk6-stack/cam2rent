@@ -27,6 +27,8 @@ export async function GET(req: NextRequest) {
     const td = parseInt(tdStr, 10);
     const periodStart = new Date(Date.UTC(ty, tm - 1, td - days));
     const periodStartStr = periodStart.toISOString().split('T')[0]; // DATE format
+    // Berlin-Zeit-Jetzt für Überlappungs-Checks (siehe unten).
+    const now = new Date(Date.UTC(ty, tm - 1, td));
     const periodEndStr = todayBerlin;
 
     // Produkte aus admin_config laden

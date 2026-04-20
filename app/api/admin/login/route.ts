@@ -96,7 +96,11 @@ export async function POST(req: NextRequest) {
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'strict',
     path: '/',
-    maxAge: 60 * 60 * 24 * 7, // 7 Tage
+    // Kürzere Session (24h statt 7 Tagen) — falls das Admin-Tablet
+    // gestohlen wird oder das Cookie geleakt wird, ist das Fenster
+    // für Missbrauch deutlich kleiner. Bei aktiver Nutzung wird der
+    // Admin durch tägliches Re-Login kaum beeinträchtigt.
+    maxAge: 60 * 60 * 24, // 1 Tag
   });
 
   return response;

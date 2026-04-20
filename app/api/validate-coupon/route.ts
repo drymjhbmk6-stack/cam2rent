@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
+import { validateCouponBodySchema, firstZodError } from '@/lib/api-schemas';
 
 // Gutschein-Validation ist Brute-Force-anfällig (kurze Codes).
 // 5 Versuche/Minute pro IP — verhindert Code-Enumeration durch Bots.
@@ -23,14 +24,14 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const body = await req.json();
-  const code = (body.code ?? '').trim();
-  const cartTotal = body.cartTotal ?? 0;
-  const userEmail = (body.userEmail ?? '').trim();
-
-  if (!code) {
-    return NextResponse.json({ error: 'Bitte einen Code eingeben.' }, { status: 400 });
+  // Zod-Validierung: Code-Charset + Cart-Total-Range geprüft
+  const parsed = validateCouponBodySchema.safeParse(await req.json());
+  if (!parsed.success) {
+    return NextResponse.json({ error: firstZodError(parsed.error) }, { status: 400 });
   }
+  const code = parsed.data.code.trim();
+  const cartTotal = parsed.data.cartTotal ?? 0;
+  const userEmail = (parsed.data.userEmail ?? '').trim();
 
   const supabase = createServiceClient();
 

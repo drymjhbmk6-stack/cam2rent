@@ -17,9 +17,11 @@ export interface LegalContent {
  */
 const LEGAL_FETCH_TIMEOUT_MS = 5000;
 
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+function withTimeout<T>(promise: PromiseLike<T>, ms: number): Promise<T> {
+  // Supabase-Query-Builder sind PromiseLike, nicht echte Promises — hier
+  // in ein echtes Promise wrappen, damit Promise.race funktioniert.
   return Promise.race([
-    promise,
+    Promise.resolve(promise),
     new Promise<T>((_, reject) =>
       setTimeout(() => reject(new Error(`Supabase-Timeout nach ${ms}ms`)), ms)
     ),

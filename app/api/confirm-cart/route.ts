@@ -391,18 +391,44 @@ export async function POST(req: NextRequest) {
         .catch((err) => console.error(`Unit assignment error for ${bookingId}:`, err));
     }
 
-    // 5. Coupon used_count erhöhen
+    // 5. Coupon used_count atomar erhöhen.
+    // Die RPC `increment_coupon_if_available` nutzt SELECT ... FOR UPDATE
+    // und prüft max_uses/Gültigkeit unter Lock → race-sicher.
+    // Fallback auf das alte Muster falls die Migration
+    // `supabase-coupon-atomic-increment.sql` noch nicht ausgeführt wurde.
     if (r_couponCode) {
-      const { data: couponRow } = await supabase
-        .from('coupons')
-        .select('id, used_count')
-        .ilike('code', r_couponCode)
-        .maybeSingle();
-      if (couponRow) {
-        await supabase
+      try {
+        const { data: rpcData, error: rpcErr } = await supabase.rpc(
+          'increment_coupon_if_available',
+          { p_code: r_couponCode },
+        );
+        if (rpcErr) throw rpcErr;
+        const applied = Array.isArray(rpcData) ? rpcData[0]?.applied : rpcData?.applied;
+        if (!applied) {
+          // Gutschein war nicht (mehr) einlösbar — Zahlung ist aber schon durch.
+          // Keinen Fehler an den Kunden zurückgeben (Buchung normal weiter),
+          // sondern Admin informieren.
+          console.warn('[confirm-cart] Coupon-Einlösung fehlgeschlagen (Race oder aufgebraucht):', r_couponCode);
+          createAdminNotification(supabase, {
+            type: 'coupon_race',
+            title: 'Gutschein konnte nicht eingelöst werden',
+            message: `Gutschein "${r_couponCode}" war beim Einlösen nicht mehr verfügbar. Bitte manuell prüfen (Booking ${payment_intent_id}).`,
+          });
+        }
+      } catch (rpcErr) {
+        // Fallback: alte Logik (unsafer, aber rückwärtskompatibel)
+        console.error('[confirm-cart] RPC fehlgeschlagen, nutze Fallback-Increment:', rpcErr);
+        const { data: couponRow } = await supabase
           .from('coupons')
-          .update({ used_count: (couponRow.used_count ?? 0) + 1 })
-          .eq('id', couponRow.id);
+          .select('id, used_count')
+          .ilike('code', r_couponCode)
+          .maybeSingle();
+        if (couponRow) {
+          await supabase
+            .from('coupons')
+            .update({ used_count: (couponRow.used_count ?? 0) + 1 })
+            .eq('id', couponRow.id);
+        }
       }
     }
 

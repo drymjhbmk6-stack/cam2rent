@@ -7,6 +7,7 @@ import { generateBookingId } from '@/lib/booking-id';
 import { assignUnitToBooking } from '@/lib/unit-assignment';
 import { createAdminNotification } from '@/lib/admin-notifications';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
+import { calcPriceFromTable, type AdminProduct } from '@/lib/price-config';
 import {
   sendBookingConfirmation,
   sendAdminNotification,
@@ -14,6 +15,7 @@ import {
 } from '@/lib/email';
 import { generateContractPDF } from '@/lib/contracts/generate-contract';
 import { storeContract } from '@/lib/contracts/store-contract';
+import { confirmBookingBodySchema, firstZodError } from '@/lib/api-schemas';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
@@ -41,23 +43,13 @@ export async function POST(req: NextRequest) {
   }
   await ensureBusinessConfig();
   try {
-    const { payment_intent_id, deposit_intent_id, contractSignature } = (await req.json()) as {
-      payment_intent_id: string;
-      deposit_intent_id?: string;
-      contractSignature?: {
-        signatureDataUrl: string | null;
-        signatureMethod: 'canvas' | 'typed';
-        signerName: string;
-        agreedToTerms: boolean;
-      };
-    };
-
-    if (!payment_intent_id) {
-      return NextResponse.json(
-        { error: 'Fehlende Zahlungsreferenz.' },
-        { status: 400 }
-      );
+    // Zod-Validierung statt Type-Assertion: Schützt vor manipulierten
+    // Request-Bodies (z.B. Signatur-URL mit 10 MB, falsche Payment-Intent-IDs).
+    const parsed = confirmBookingBodySchema.safeParse(await req.json());
+    if (!parsed.success) {
+      return NextResponse.json({ error: firstZodError(parsed.error) }, { status: 400 });
     }
+    const { payment_intent_id, deposit_intent_id, contractSignature } = parsed.data;
 
     // 1. Verify payment with Stripe
     const intent = await stripe.paymentIntents.retrieve(payment_intent_id);
@@ -128,6 +120,49 @@ export async function POST(req: NextRequest) {
     const accessories = meta.accessories
       ? meta.accessories.split(',').filter(Boolean)
       : [];
+
+    // 4a. Preis-Plausibilitätsprüfung (Defense-in-Depth):
+    // intent.amount ist der echte bei Stripe gezahlte Betrag (nicht manipulierbar).
+    // Wir prüfen nur, ob er plausibel zu dem gebuchten Produkt + Dauer passt.
+    // 70% Rabatt-Puffer, damit Gutscheine und Admin-Sonderpreise nicht fälschlich
+    // blockiert werden. Nur bei massiven Abweichungen wird abgebrochen.
+    try {
+      if (meta.product_id && meta.days) {
+        const days = parseInt(meta.days, 10);
+        if (days > 0) {
+          const { data: prodRow } = await supabase
+            .from('admin_config')
+            .select('value')
+            .eq('key', 'products')
+            .maybeSingle();
+          if (prodRow?.value && typeof prodRow.value === 'object') {
+            const productMap = prodRow.value as Record<string, AdminProduct>;
+            const product = productMap[meta.product_id];
+            if (product && Array.isArray(product.priceTable)) {
+              const expectedCents = Math.round(calcPriceFromTable(product, days) * 100);
+              const floorCents = Math.floor(expectedCents * 0.3); // 70 % Rabatt-Puffer
+              if (intent.amount < floorCents) {
+                console.error('[confirm-booking] Preis-Plausibilität verletzt:', {
+                  paymentIntent: payment_intent_id,
+                  paidAmount: intent.amount,
+                  expectedCents,
+                  floorCents,
+                });
+                return NextResponse.json(
+                  { error: 'Preis-Plausibilitätsprüfung fehlgeschlagen. Buchung wurde nicht bestätigt.' },
+                  { status: 400 },
+                );
+              }
+            }
+          }
+        }
+      }
+    } catch (plausErr) {
+      // Plausibilitätsprüfung darf Buchungsbestätigung nicht blockieren, wenn
+      // die Berechnung selbst crasht (z.B. DB-Hiccup). Dann greift nur der
+      // Basis-Stripe-Verify oben.
+      console.error('[confirm-booking] Plausibilitätsprüfung fehlgeschlagen:', plausErr);
+    }
 
     // 4b. Lieferadresse aus Profil holen
     let shippingAddress: string | null = null;
