@@ -68,10 +68,35 @@ export function rateLimit({ maxAttempts, windowMs }: RateLimitConfig) {
   };
 }
 
+/**
+ * Extrahiert die Client-IP aus dem Request.
+ *
+ * Per default werden X-Forwarded-For / X-Real-IP NUR vertraut, wenn die App
+ * laut TRUST_PROXY_HEADERS=true hinter einem vertrauenswürdigen Reverse-Proxy
+ * läuft (Coolify/nginx auf dem Hetzner-Server). Das ist der Standardfall im
+ * Produktionsbetrieb — daher Default-an in Production.
+ *
+ * Ohne diesen Vertrauens-Switch könnten Angreifer beliebige IPs senden und
+ * IP-basiertes Rate-Limiting komplett umgehen (jede Request mit anderer
+ * gefälschter IP → eigener Rate-Limit-Bucket).
+ */
+function trustsProxyHeaders(): boolean {
+  const env = process.env.TRUST_PROXY_HEADERS;
+  if (env === 'true') return true;
+  if (env === 'false') return false;
+  // Default: in Production-NodeJS-Umgebung true (Coolify/nginx), sonst false.
+  return process.env.NODE_ENV === 'production';
+}
+
 export function getClientIp(req: NextRequest): string {
-  const forwarded = req.headers.get('x-forwarded-for');
-  if (forwarded) {
-    return forwarded.split(',')[0].trim();
+  if (trustsProxyHeaders()) {
+    const forwarded = req.headers.get('x-forwarded-for');
+    if (forwarded) {
+      // Vom Reverse-Proxy hinzugefügt: erstes Element ist die Original-IP.
+      return forwarded.split(',')[0].trim();
+    }
+    const realIp = req.headers.get('x-real-ip');
+    if (realIp) return realIp.trim();
   }
-  return req.headers.get('x-real-ip') ?? '127.0.0.1';
+  return '127.0.0.1';
 }

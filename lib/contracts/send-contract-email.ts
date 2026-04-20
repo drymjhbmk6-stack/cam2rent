@@ -1,4 +1,4 @@
-import { sendAndLog } from '@/lib/email';
+import { sendAndLog, escapeHtml as h } from '@/lib/email';
 import { BUSINESS } from '@/lib/business-config';
 
 interface ContractEmailOpts {
@@ -40,9 +40,9 @@ export async function sendContractEmail(opts: ContractEmailOpts) {
 
           <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#0a0a0a;">Dein Mietvertrag</h1>
           <p style="margin:0 0 24px;font-size:15px;color:#4b5563;">
-            Hallo ${opts.customerName || 'Kunde'},<br>
+            Hallo ${h(opts.customerName || 'Kunde')},<br>
             im Anhang findest du deinen digital unterzeichneten Mietvertrag für die Buchung
-            <strong>${opts.bookingNumber}</strong> (${opts.productName}, ${opts.rentalFrom} \u2013 ${opts.rentalTo}).
+            <strong>${h(opts.bookingNumber)}</strong> (${h(opts.productName)}, ${h(opts.rentalFrom)} \u2013 ${h(opts.rentalTo)}).
           </p>
 
           <p style="margin:0 0 24px;font-size:15px;color:#4b5563;">
@@ -53,9 +53,9 @@ export async function sendContractEmail(opts: ContractEmailOpts) {
           <table width="100%" cellpadding="0" cellspacing="0" style="background:#eff6ff;border-radius:10px;margin-bottom:24px;">
             <tr><td style="padding:16px 20px;">
               <p style="margin:0 0 6px;font-size:11px;font-weight:700;color:#3b82f6;text-transform:uppercase;letter-spacing:0.8px;">Buchungsdetails</p>
-              <p style="margin:0 0 4px;font-size:14px;color:#374151;"><strong>Kamera:</strong> ${opts.productName}</p>
-              <p style="margin:0 0 4px;font-size:14px;color:#374151;"><strong>Zeitraum:</strong> ${opts.rentalFrom} \u2013 ${opts.rentalTo}</p>
-              <p style="margin:0;font-size:14px;color:#374151;"><strong>Buchungsnummer:</strong> ${opts.bookingNumber}</p>
+              <p style="margin:0 0 4px;font-size:14px;color:#374151;"><strong>Kamera:</strong> ${h(opts.productName)}</p>
+              <p style="margin:0 0 4px;font-size:14px;color:#374151;"><strong>Zeitraum:</strong> ${h(opts.rentalFrom)} \u2013 ${h(opts.rentalTo)}</p>
+              <p style="margin:0;font-size:14px;color:#374151;"><strong>Buchungsnummer:</strong> ${h(opts.bookingNumber)}</p>
             </td></tr>
           </table>
 

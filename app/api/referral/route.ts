@@ -1,15 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createServerClient } from '@supabase/ssr';
+import { cookies } from 'next/headers';
 import { createServiceClient } from '@/lib/supabase';
 
 /**
  * GET /api/referral?userId=xxx
  *
- * Returns the user's referral code and stats.
+ * Gibt Referral-Code + Statistik des eingeloggten Users zurück.
+ * userId darf NUR die eigene User-ID sein — sonst IDOR über fremde
+ * Referral-Daten.
  */
 export async function GET(req: NextRequest) {
   const userId = req.nextUrl.searchParams.get('userId');
   if (!userId) {
     return NextResponse.json({ error: 'userId required' }, { status: 400 });
+  }
+
+  // Auth-Check: userId muss zum eingeloggten User passen.
+  const cookieStore = await cookies();
+  const authClient = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() { return cookieStore.getAll(); },
+        setAll() { /* no-op */ },
+      },
+    }
+  );
+  const { data: { user } } = await authClient.auth.getUser();
+  if (!user || user.id !== userId) {
+    return NextResponse.json({ error: 'Nicht autorisiert.' }, { status: 403 });
   }
 
   const supabase = createServiceClient();

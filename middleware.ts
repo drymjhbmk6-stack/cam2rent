@@ -19,6 +19,20 @@ async function computeAdminToken(password: string): Promise<string> {
   return cachedAdminToken;
 }
 
+/**
+ * Timing-safer String-Vergleich (Edge-Runtime-kompatibel).
+ * node:crypto/timingSafeEqual ist im Edge-Runtime nicht verfügbar,
+ * deshalb eine eigene konstanzzeit-Implementierung.
+ */
+function safeStringEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let result = 0;
+  for (let i = 0; i < a.length; i++) {
+    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return result === 0;
+}
+
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
@@ -64,7 +78,7 @@ export async function middleware(request: NextRequest) {
       }
 
       const expectedToken = await computeAdminToken(adminPassword);
-      if (adminToken !== expectedToken) {
+      if (!safeStringEqual(adminToken, expectedToken)) {
         return NextResponse.json(
           { error: 'Unauthorized' },
           { status: 401 }
@@ -87,7 +101,7 @@ export async function middleware(request: NextRequest) {
 
     if (adminPassword) {
       const expectedToken = await computeAdminToken(adminPassword);
-      if (adminToken !== expectedToken) {
+      if (!safeStringEqual(adminToken, expectedToken)) {
         const url = request.nextUrl.clone();
         url.pathname = '/admin/login';
         return NextResponse.redirect(url);

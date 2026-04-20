@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import Anthropic from '@anthropic-ai/sdk';
 import { sanitizePromptInput, sanitizePromptInputList } from '@/lib/prompt-sanitize';
+
+// Anthropic-Calls kosten Geld (~3-6 Cent pro Generierung). Auch wenn der
+// Endpoint admin-only ist (Middleware-Schutz), verhindert das hier einen
+// versehentlichen Kosten-Ansturm bei UI-Bugs (z.B. Doppelklick auf Generate).
+// 10 pro Stunde pro IP — reicht für legitime Admin-Nutzung.
+const generateLimiter = rateLimit({ maxAttempts: 10, windowMs: 60 * 60 * 1000 });
 
 const LENGTH_MAP: Record<string, string> = {
   kurz: 'ca. 500 Wörter',
@@ -37,6 +44,13 @@ async function getApiKey(): Promise<string | null> {
 
 /** POST /api/admin/blog/generate - Artikel mit KI generieren */
 export async function POST(req: NextRequest) {
+  const ip = getClientIp(req);
+  if (!generateLimiter.check(`bloggen:${ip}`).success) {
+    return NextResponse.json(
+      { error: 'Generierungs-Limit erreicht (10/Stunde). Bitte warte eine Stunde.' },
+      { status: 429 }
+    );
+  }
   const body = await req.json();
   const {
     topic: rawTopic,

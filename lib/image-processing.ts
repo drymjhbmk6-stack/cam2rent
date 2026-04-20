@@ -44,7 +44,13 @@ function createLogoWatermark(opacity: number = 0.12, size: number = 140): Buffer
  * Erstellt ein Text-Wasserzeichen (für Set-Name unten mittig).
  */
 function createTextWatermark(text: string, opacity: number = 0.55, fontSize: number = 32): Buffer {
-  const safeText = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  // Vollständiges XML-Escaping inkl. Quotes (Attribute-Injection-Schutz).
+  const safeText = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;');
   return Buffer.from(`
     <svg width="${TARGET_WIDTH}" height="${TARGET_HEIGHT}">
       <text x="${TARGET_WIDTH / 2}" y="${TARGET_HEIGHT - 24}" text-anchor="middle"

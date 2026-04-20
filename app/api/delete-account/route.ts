@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { createServiceClient } from '@/lib/supabase';
+import { rateLimit, getClientIp } from '@/lib/rate-limit';
+
+// Sehr restriktiv — Account-Löschung darf nicht im Sekundentakt
+// hintereinander versucht werden (Brute-Force auf Re-Auth-Passwort).
+const deleteAccountLimiter = rateLimit({ maxAttempts: 3, windowMs: 60 * 60 * 1000 });
 
 /**
  * POST /api/delete-account
@@ -11,6 +16,13 @@ import { createServiceClient } from '@/lib/supabase';
  * Anonymizes profile data, disables auth account, signs user out.
  */
 export async function POST(req: NextRequest) {
+  const ip = getClientIp(req);
+  if (!deleteAccountLimiter.check(`delacc:${ip}`).success) {
+    return NextResponse.json(
+      { error: 'Zu viele Anfragen. Bitte später erneut versuchen.' },
+      { status: 429 }
+    );
+  }
   const cookieStore = await cookies();
 
   // Verify session server-side

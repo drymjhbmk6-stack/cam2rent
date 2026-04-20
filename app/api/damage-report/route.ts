@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createServerClient } from '@supabase/ssr';
+import { cookies } from 'next/headers';
 import { createServiceClient } from '@/lib/supabase';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import {
@@ -6,6 +8,15 @@ import {
   sendAdminDamageNotification,
 } from '@/lib/email';
 import { createAdminNotification } from '@/lib/admin-notifications';
+
+// Extension-Whitelist für Foto-Uploads (Path-Traversal-Schutz).
+const PHOTO_MIME_TO_EXT: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/heic': 'heic',
+  'image/heif': 'heif',
+};
 
 const damageLimiter = rateLimit({ maxAttempts: 3, windowMs: 60 * 60 * 1000 }); // 3 pro Stunde
 
@@ -56,6 +67,30 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Buchung nicht gefunden.' }, { status: 404 });
     }
 
+    // Ownership-Check: nur der Kunde der Buchung (oder ein registrierter
+    // Kunde bei Gast-Buchungen über matching E-Mail) darf melden.
+    // Schadensberichte können finanzielle Konsequenzen haben — strikt prüfen.
+    const cookieStore = await cookies();
+    const authClient = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() { return cookieStore.getAll(); },
+          setAll() { /* no-op */ },
+        },
+      }
+    );
+    const { data: { user } } = await authClient.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: 'Bitte melde dich an.' }, { status: 401 });
+    }
+    const matchesUser = booking.user_id === user.id;
+    const matchesEmail = !booking.user_id && booking.customer_email === user.email;
+    if (!matchesUser && !matchesEmail) {
+      return NextResponse.json({ error: 'Nicht autorisiert.' }, { status: 403 });
+    }
+
     // Nur shipped/completed Buchungen
     if (!['shipped', 'completed'].includes(booking.status)) {
       return NextResponse.json(
@@ -81,7 +116,8 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const ext = photo.name.split('.').pop() || 'jpg';
+      // Extension aus MIME-Type ableiten (nicht aus photo.name — Path-Traversal-Schutz)
+      const ext = PHOTO_MIME_TO_EXT[photo.type] ?? 'jpg';
       const fileName = `${bookingId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
 
       const buffer = Buffer.from(await photo.arrayBuffer());

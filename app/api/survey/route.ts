@@ -63,11 +63,17 @@ export async function POST(req: NextRequest) {
       console.error('Survey save error:', error);
     }
 
-    // Gutschein erstellen wenn Rating >= 4 und Email vorhanden
+    // Gutschein erstellen wenn Rating >= 4 und Email vorhanden.
+    // Ownership-Schutz: Die Ziel-E-Mail wird immer AUS DER BUCHUNG genommen.
+    // Der `email`-Param aus dem Body wird ignoriert, damit niemand fremde
+    // Gutscheine via erratener Booking-ID auf eigene E-Mail ausstellen lassen
+    // kann. Parameter bleibt akzeptiert (Form-Kompat), aber serverseitig
+    // überschrieben.
     let couponCode: string | null = null;
     let emailSent = false;
     let emailError: string | null = null;
-    const targetEmail = email?.trim() || booking?.customer_email;
+    const targetEmail = booking?.customer_email?.trim() || '';
+    void email; // bewusst nicht genutzt (siehe Kommentar oben)
 
     if (rating >= 4 && targetEmail) {
       // Prüfen ob Buchung schon Gutschein bekommen hat (Duplikat-Schutz)

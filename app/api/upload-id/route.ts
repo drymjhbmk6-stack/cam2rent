@@ -6,6 +6,13 @@ import { isAllowedImage } from '@/lib/file-type-check';
 const uploadLimiter = rateLimit({ maxAttempts: 5, windowMs: 60 * 60 * 1000 }); // 5 pro Stunde
 
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
+const MIME_TO_EXT: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/heic': 'heic',
+  'image/heif': 'heif',
+};
 const MAX_SIZE = 5 * 1024 * 1024; // 5 MB
 
 /**
@@ -83,7 +90,9 @@ export async function POST(req: NextRequest) {
     const storagePaths: Record<string, string> = {};
 
     for (const { side, file } of uploads) {
-      const ext = file.name.split('.').pop() || 'jpg';
+      // Extension AUS dem MIME-Type ableiten (nicht aus file.name — sonst
+      // Path-Traversal möglich, z.B. file.name = "../../etc/passwd").
+      const ext = MIME_TO_EXT[file.type] ?? 'jpg';
       const filePath = `${userId}/${side}.${ext}`;
 
       const buffer = Buffer.from(await file.arrayBuffer());

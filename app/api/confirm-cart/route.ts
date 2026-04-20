@@ -11,6 +11,7 @@ import { assignUnitToBooking } from '@/lib/unit-assignment';
 import { createAdminNotification } from '@/lib/admin-notifications';
 import { generateContractPDF } from '@/lib/contracts/generate-contract';
 import { storeContract } from '@/lib/contracts/store-contract';
+import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import {
   sendBookingConfirmation,
   sendAdminNotification,
@@ -19,6 +20,8 @@ import {
 } from '@/lib/email';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+
+const confirmCartLimiter = rateLimit({ maxAttempts: 5, windowMs: 60_000 });
 
 /**
  * Gruppiert Cart-Items nach Mietzeitraum.
@@ -41,6 +44,13 @@ function groupByPeriod(items: CartItem[]) {
  * Erstellt separate Buchungen pro Mietzeitraum.
  */
 export async function POST(req: NextRequest) {
+  const ip = getClientIp(req);
+  if (!confirmCartLimiter.check(`cart:${ip}`).success) {
+    return NextResponse.json(
+      { error: 'Zu viele Anfragen. Bitte einen Moment warten.' },
+      { status: 429 }
+    );
+  }
   try {
     const body = await req.json();
     const {

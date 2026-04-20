@@ -236,7 +236,18 @@ export async function generateContractPDF(opts: {
   };
 
   const contractText = buildContractText(data);
-  const contractHash = createHash('sha256').update(contractText, 'utf8').digest('hex');
+  // Hash umfasst jetzt auch die Signatur-Daten — damit ist die Unterschrift
+  // kryptografisch an den Vertragsinhalt gebunden. Wenn das gespeicherte
+  // PDF nachträglich manipuliert wird (Vertragstext ODER Signatur), ergibt
+  // die Hash-Neuberechnung einen anderen Wert → Tampering nachweisbar.
+  const hashInput = [
+    contractText,
+    `SIG:${opts.signatureDataUrl ?? ''}`,
+    `METHOD:${opts.signatureMethod}`,
+    `SIGNED_AT:${signedAt}`,
+    `IP:${opts.ipAddress ?? ''}`,
+  ].join('\n---\n');
+  const contractHash = createHash('sha256').update(hashInput, 'utf8').digest('hex');
   data.contractHash = contractHash;
 
   const pdfBuffer = await renderToBuffer(

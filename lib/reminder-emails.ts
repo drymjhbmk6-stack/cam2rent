@@ -1,5 +1,6 @@
 import { Resend } from 'resend';
 import { BUSINESS } from '@/lib/business-config';
+import { escapeHtml as h } from '@/lib/email';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -81,20 +82,20 @@ function ctaButton(href: string, label: string): string {
 
 export async function sendReturnReminder(data: ReminderEmailData): Promise<string | null> {
   const url = buildBookingUrl(data.bookingId, data.bookingUrl);
-  const subject = `Erinnerung: Deine Rückgabe steht bevor – ${data.productName}`;
+  const subject = `Erinnerung: Deine Rückgabe steht bevor – ${h(data.productName)}`;
 
   const html = wrapLayout(`
     <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#0a0a0a;">Rückgabe in 2 Tagen</h1>
     <p style="margin:0 0 20px;font-size:15px;color:#4b5563;">
-      Hallo ${data.customerName},<br><br>
-      nur eine kurze Erinnerung: Dein Mietartikel <strong>${data.productName}</strong>
+      Hallo ${h(data.customerName)},<br><br>
+      nur eine kurze Erinnerung: Dein Mietartikel <strong>${h(data.productName)}</strong>
       muss bis zum <strong>${fmtDate(data.rentalTo)}</strong> zurückgesendet werden.
     </p>
     <p style="margin:0 0 8px;font-size:15px;color:#4b5563;">
       Bitte denke daran, das Paket rechtzeitig aufzugeben, damit es pünktlich bei uns ankommt.
     </p>
     ${ctaButton(url, 'Buchung ansehen')}
-    <p style="margin:0;font-size:13px;color:#9ca3af;">Buchung: ${data.bookingId}</p>
+    <p style="margin:0;font-size:13px;color:#9ca3af;">Buchung: ${h(data.bookingId)}</p>
   `);
 
   const result = await resend.emails.send({
@@ -112,20 +113,20 @@ export async function sendReturnReminder(data: ReminderEmailData): Promise<strin
 
 export async function sendReturnDueToday(data: ReminderEmailData): Promise<string | null> {
   const url = buildBookingUrl(data.bookingId, data.bookingUrl);
-  const subject = `Heute bitte zurücksenden: ${data.productName}`;
+  const subject = `Heute bitte zurücksenden: ${h(data.productName)}`;
 
   const html = wrapLayout(`
     <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#0a0a0a;">Heute ist Rückgabetag!</h1>
     <p style="margin:0 0 20px;font-size:15px;color:#4b5563;">
-      Hallo ${data.customerName},<br><br>
-      heute endet dein Mietzeitraum für <strong>${data.productName}</strong>.
+      Hallo ${h(data.customerName)},<br><br>
+      heute endet dein Mietzeitraum für <strong>${h(data.productName)}</strong>.
       Bitte sende den Artikel heute noch zurück.
     </p>
     <p style="margin:0 0 8px;font-size:15px;color:#4b5563;">
       Falls du den Artikel bereits zurückgesendet hast, kannst du diese E-Mail ignorieren.
     </p>
     ${ctaButton(url, 'Buchung ansehen')}
-    <p style="margin:0;font-size:13px;color:#9ca3af;">Buchung: ${data.bookingId}</p>
+    <p style="margin:0;font-size:13px;color:#9ca3af;">Buchung: ${h(data.bookingId)}</p>
   `);
 
   const result = await resend.emails.send({
@@ -143,13 +144,13 @@ export async function sendReturnDueToday(data: ReminderEmailData): Promise<strin
 
 export async function sendOverdueNotice(data: ReminderEmailData): Promise<string | null> {
   const url = buildBookingUrl(data.bookingId, data.bookingUrl);
-  const subject = `Rückgabe überfällig – ${data.productName}`;
+  const subject = `Rückgabe überfällig – ${h(data.productName)}`;
 
   const html = wrapLayout(`
     <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#e11d48;">Rückgabe überfällig</h1>
     <p style="margin:0 0 20px;font-size:15px;color:#4b5563;">
-      Hallo ${data.customerName},<br><br>
-      der Mietzeitraum für <strong>${data.productName}</strong> ist seit gestern
+      Hallo ${h(data.customerName)},<br><br>
+      der Mietzeitraum für <strong>${h(data.productName)}</strong> ist seit gestern
       (<strong>${fmtDate(data.rentalTo)}</strong>) abgelaufen.
       Bitte sende den Artikel umgehend an uns zurück.
     </p>
@@ -158,7 +159,7 @@ export async function sendOverdueNotice(data: ReminderEmailData): Promise<string
       Bei Fragen melde dich gerne bei uns.
     </p>
     ${ctaButton(url, 'Buchung ansehen')}
-    <p style="margin:0;font-size:13px;color:#9ca3af;">Buchung: ${data.bookingId}</p>
+    <p style="margin:0;font-size:13px;color:#9ca3af;">Buchung: ${h(data.bookingId)}</p>
   `);
 
   const result = await resend.emails.send({
@@ -176,13 +177,13 @@ export async function sendOverdueNotice(data: ReminderEmailData): Promise<string
 
 export async function sendSecondOverdueNotice(data: ReminderEmailData): Promise<string | null> {
   const url = buildBookingUrl(data.bookingId, data.bookingUrl);
-  const subject = `Dringende Erinnerung: Rückgabe ausstehend – ${data.productName}`;
+  const subject = `Dringende Erinnerung: Rückgabe ausstehend – ${h(data.productName)}`;
 
   const html = wrapLayout(`
     <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#e11d48;">Dringende Erinnerung</h1>
     <p style="margin:0 0 20px;font-size:15px;color:#4b5563;">
-      Hallo ${data.customerName},<br><br>
-      dein Mietzeitraum für <strong>${data.productName}</strong> ist seit dem
+      Hallo ${h(data.customerName)},<br><br>
+      dein Mietzeitraum für <strong>${h(data.productName)}</strong> ist seit dem
       <strong>${fmtDate(data.rentalTo)}</strong> abgelaufen – das sind bereits 3 Tage.
       Wir bitten dich dringend, den Artikel sofort zurückzusenden.
     </p>
@@ -191,7 +192,7 @@ export async function sendSecondOverdueNotice(data: ReminderEmailData): Promise<
       Schritte vor. Bei Problemen kontaktiere uns bitte umgehend.
     </p>
     ${ctaButton(url, 'Jetzt Rückgabe einleiten')}
-    <p style="margin:0;font-size:13px;color:#9ca3af;">Buchung: ${data.bookingId}</p>
+    <p style="margin:0;font-size:13px;color:#9ca3af;">Buchung: ${h(data.bookingId)}</p>
   `);
 
   const result = await resend.emails.send({
@@ -208,14 +209,14 @@ export async function sendSecondOverdueNotice(data: ReminderEmailData): Promise<
 // ─── 5. Review Request – 3 days after completed return ───────────────────────
 
 export async function sendReviewRequest(data: ReminderEmailData): Promise<string | null> {
-  const reviewUrl = `${BASE_URL}/umfrage/${data.bookingId}`;
-  const subject = `Wie war dein Erlebnis mit ${data.productName}?`;
+  const reviewUrl = `${BASE_URL}/umfrage/${h(data.bookingId)}`;
+  const subject = `Wie war dein Erlebnis mit ${h(data.productName)}?`;
 
   const html = wrapLayout(`
     <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#0a0a0a;">Wie war dein Erlebnis?</h1>
     <p style="margin:0 0 20px;font-size:15px;color:#4b5563;">
-      Hallo ${data.customerName},<br><br>
-      wir hoffen, du hattest eine tolle Zeit mit deiner <strong>${data.productName}</strong>!
+      Hallo ${h(data.customerName)},<br><br>
+      wir hoffen, du hattest eine tolle Zeit mit deiner <strong>${h(data.productName)}</strong>!
       Deine Meinung ist uns wichtig – teile doch deine Erfahrung mit anderen.
     </p>
     <p style="margin:0 0 8px;font-size:15px;color:#4b5563;">

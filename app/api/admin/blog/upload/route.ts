@@ -3,6 +3,11 @@ import { createServiceClient } from '@/lib/supabase';
 
 const MAX_SIZE = 5 * 1024 * 1024; // 5 MB
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const MIME_TO_EXT: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+};
 
 /** POST /api/admin/blog/upload - Manueller Bild-Upload */
 export async function POST(req: NextRequest) {
@@ -21,7 +26,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Maximale Dateigröße: 5 MB.' }, { status: 400 });
   }
 
-  const ext = file.name.split('.').pop() ?? 'jpg';
+  // Extension aus MIME-Type ableiten (nicht aus file.name — Path-Traversal-Schutz)
+  const ext = MIME_TO_EXT[file.type] ?? 'jpg';
   const filename = `blog-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
   const buffer = Buffer.from(await file.arrayBuffer());
 

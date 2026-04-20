@@ -6,6 +6,7 @@ import { ensureBusinessConfig } from '@/lib/load-business-config';
 import { generateBookingId } from '@/lib/booking-id';
 import { assignUnitToBooking } from '@/lib/unit-assignment';
 import { createAdminNotification } from '@/lib/admin-notifications';
+import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import {
   sendBookingConfirmation,
   sendAdminNotification,
@@ -15,6 +16,10 @@ import { generateContractPDF } from '@/lib/contracts/generate-contract';
 import { storeContract } from '@/lib/contracts/store-contract';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+
+// Confirm ist eine teure Operation (Stripe-Verify + DB + PDF + E-Mails).
+// 5/Minute pro IP — erlaubt Retry, blockt Spam.
+const confirmLimiter = rateLimit({ maxAttempts: 5, windowMs: 60_000 });
 
 /**
  * POST /api/confirm-booking
@@ -27,6 +32,13 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
  * Returns { success: true, booking_id: "BK-2026-00042" }
  */
 export async function POST(req: NextRequest) {
+  const ip = getClientIp(req);
+  if (!confirmLimiter.check(`confirm:${ip}`).success) {
+    return NextResponse.json(
+      { error: 'Zu viele Anfragen. Bitte einen Moment warten.' },
+      { status: 429 }
+    );
+  }
   await ensureBusinessConfig();
   try {
     const { payment_intent_id, deposit_intent_id, contractSignature } = (await req.json()) as {

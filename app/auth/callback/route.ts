@@ -16,12 +16,28 @@ import type { EmailOtpType } from '@supabase/supabase-js';
  * wird trotzdem zum Login weitergeleitet mit Erfolgsmeldung,
  * da die E-Mail-Bestätigung bereits durch Supabase erfolgt ist.
  */
+/**
+ * Erlaubt nur relative, hostlose URLs als `next`-Ziel (Open-Redirect-Schutz).
+ * Akzeptiert: "/konto", "/konto/buchungen?x=1", "/auth/passwort-aendern".
+ * Lehnt ab: "//evil.com", "https://evil.com", "javascript:…", Backslashes,
+ * Protocol-Relative-URLs, newlines, null-Bytes.
+ */
+function sanitizeNext(next: string | null | undefined, fallback: string): string {
+  if (!next || typeof next !== 'string') return fallback;
+  // Muss mit genau einem "/" starten, nicht "//" (Protocol-Relative) und kein ":" am Anfang
+  if (!next.startsWith('/') || next.startsWith('//') || next.startsWith('/\\')) return fallback;
+  // Keine Protokoll-Schema-Marker oder Steuerzeichen
+  if (/[\r\n\t\0]|[\u0000-\u001F]/.test(next)) return fallback;
+  if (next.toLowerCase().includes('javascript:')) return fallback;
+  return next;
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const code = searchParams.get('code');
   const token_hash = searchParams.get('token_hash');
   const type = searchParams.get('type') as EmailOtpType | null;
-  const next = searchParams.get('next') ?? '/konto';
+  const next = sanitizeNext(searchParams.get('next'), '/konto');
   const errorParam = searchParams.get('error');
   const errorCode = searchParams.get('error_code');
   const errorDescription = searchParams.get('error_description');

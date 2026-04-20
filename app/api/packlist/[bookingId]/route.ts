@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { renderToBuffer, type DocumentProps } from '@react-pdf/renderer';
 import { createElement, type ReactElement } from 'react';
+import { createServerClient } from '@supabase/ssr';
+import { cookies } from 'next/headers';
 import { createServiceClient } from '@/lib/supabase';
+import { checkAdminAuth } from '@/lib/admin-auth';
 import { PacklistPDF, type PacklistData } from '@/lib/packlist-pdf';
 import { ensureBusinessConfig } from '@/lib/load-business-config';
 
@@ -26,6 +29,27 @@ export async function GET(
 
   if (error || !booking) {
     return NextResponse.json({ error: 'Buchung nicht gefunden.' }, { status: 404 });
+  }
+
+  // Auth-Check: Admin ODER Besitzer der Buchung. Packlisten enthalten
+  // Kundenadressen — DSGVO-relevant.
+  const isAdmin = await checkAdminAuth();
+  if (!isAdmin) {
+    const cookieStore = await cookies();
+    const authClient = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() { return cookieStore.getAll(); },
+          setAll() { /* no-op */ },
+        },
+      }
+    );
+    const { data: { user } } = await authClient.auth.getUser();
+    if (!user || booking.user_id !== user.id) {
+      return NextResponse.json({ error: 'Nicht autorisiert.' }, { status: 403 });
+    }
   }
 
   // Kundenadresse

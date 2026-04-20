@@ -48,13 +48,12 @@ export default async function LegalPage({ slug, fallbackContent }: LegalPageProp
           </p>
         )}
 
+        {/* Nur Markdown-Rendering — kein rohes HTML mehr, um XSS auszuschließen.
+            Legacy-HTML-Dokumente fallen auf das hardcoded fallbackContent zurück. */}
         {legal.content_format === 'markdown' ? (
           <LegalPageContent>{content}</LegalPageContent>
         ) : (
-          <div
-            className="font-body text-brand-steel dark:text-gray-300"
-            dangerouslySetInnerHTML={{ __html: legal.content }}
-          />
+          <>{fallbackContent}</>
         )}
       </div>
     </div>

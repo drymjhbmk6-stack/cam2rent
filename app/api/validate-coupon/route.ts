@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 
-const limiter = rateLimit({ maxAttempts: 10, windowMs: 60_000 });
+// Gutschein-Validation ist Brute-Force-anfällig (kurze Codes).
+// 5 Versuche/Minute pro IP — verhindert Code-Enumeration durch Bots.
+const limiter = rateLimit({ maxAttempts: 5, windowMs: 60_000 });
 
 /**
  * POST /api/validate-coupon

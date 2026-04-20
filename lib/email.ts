@@ -16,6 +16,24 @@ export const FROM_EMAIL =
 export const ADMIN_EMAIL =
   process.env.ADMIN_EMAIL ?? BUSINESS.emailKontakt;
 
+/**
+ * HTML-Escaping für Werte, die direkt in E-Mail-Templates interpoliert werden.
+ * Verhindert XSS, wenn ein Kundenname (oder Produktname, Notizen, etc.)
+ * bösartige HTML-Tags enthält.
+ *
+ * Wird in den Templates als `h()` aliasiert eingesetzt.
+ */
+export function escapeHtml(val: unknown): string {
+  if (val === null || val === undefined) return '';
+  return String(val)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;');
+}
+const h = escapeHtml;
+
 // ─── Email Log Helper ────────────────────────────────────────────────────────
 
 async function logEmail(params: {
@@ -336,7 +354,7 @@ export function buildCustomerEmail(d: BookingEmailData): { html: string; subject
         <tr><td style="background:#ffffff;padding:32px;">
 
           <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#0a0a0a;">Deine Buchung ist bestätigt!</h1>
-          <p style="margin:0 0 24px;font-size:15px;color:#4b5563;">Hallo ${d.customerName || 'Kunde'},<br>vielen Dank für deine Buchung bei ${BUSINESS.name}. Hier sind alle Details:</p>
+          <p style="margin:0 0 24px;font-size:15px;color:#4b5563;">Hallo ${h(d.customerName || 'Kunde')},<br>vielen Dank für deine Buchung bei ${BUSINESS.name}. Hier sind alle Details:</p>
 
           <!-- Booking ID -->
           <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f0;border-radius:10px;margin-bottom:24px;">
@@ -351,7 +369,7 @@ export function buildCustomerEmail(d: BookingEmailData): { html: string; subject
             <tr>
               <td style="padding:16px 20px;border-bottom:1px solid #e5e7eb;">
                 <p style="margin:0 0 2px;font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:0.8px;">Kamera</p>
-                <p style="margin:0;font-size:15px;font-weight:600;color:#0a0a0a;">${d.productName}</p>
+                <p style="margin:0;font-size:15px;font-weight:600;color:#0a0a0a;">${h(d.productName)}</p>
               </td>
             </tr>
             <tr>
@@ -427,7 +445,7 @@ export function buildCustomerEmail(d: BookingEmailData): { html: string; subject
 // ─── Admin notification email ──────────────────────────────────────────────────
 
 export function buildAdminEmail(d: BookingEmailData): { html: string; subject: string } {
-  const subject = `Neue Buchung: ${d.bookingId} – ${d.productName}`;
+  const subject = `Neue Buchung: ${d.bookingId} – ${h(d.productName)}`;
 
   const html = `
 <!DOCTYPE html>
@@ -457,15 +475,15 @@ export function buildAdminEmail(d: BookingEmailData): { html: string; subject: s
             </tr>
             <tr>
               <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#6b7280;">Kunde</td>
-              <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#0a0a0a;">${d.customerName || '–'}</td>
+              <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#0a0a0a;">${h(d.customerName || '–')}</td>
             </tr>
             <tr>
               <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#6b7280;">E-Mail</td>
-              <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#0a0a0a;"><a href="mailto:${d.customerEmail}" style="color:#3b82f6;">${d.customerEmail}</a></td>
+              <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#0a0a0a;"><a href="mailto:${h(d.customerEmail)}" style="color:#3b82f6;">${h(d.customerEmail)}</a></td>
             </tr>
             <tr>
               <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#6b7280;">Kamera</td>
-              <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#0a0a0a;">${d.productName}</td>
+              <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#0a0a0a;">${h(d.productName)}</td>
             </tr>
             <tr>
               <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#6b7280;">Zeitraum</td>
@@ -544,7 +562,7 @@ export function buildCancellationCustomerEmail(d: CancellationEmailData): { html
         <tr><td style="background:#ffffff;padding:32px;">
 
           <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#0a0a0a;">Deine Buchung wurde storniert</h1>
-          <p style="margin:0 0 24px;font-size:15px;color:#4b5563;">Hallo ${d.customerName || 'Kunde'},<br>wir haben deine Stornierungsanfrage erhalten und deine Buchung wurde erfolgreich storniert.</p>
+          <p style="margin:0 0 24px;font-size:15px;color:#4b5563;">Hallo ${h(d.customerName || 'Kunde')},<br>wir haben deine Stornierungsanfrage erhalten und deine Buchung wurde erfolgreich storniert.</p>
 
           <!-- Booking ID -->
           <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f0;border-radius:10px;margin-bottom:24px;">
@@ -559,7 +577,7 @@ export function buildCancellationCustomerEmail(d: CancellationEmailData): { html
             <tr>
               <td style="padding:16px 20px;border-bottom:1px solid #e5e7eb;">
                 <p style="margin:0 0 2px;font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:0.8px;">Kamera</p>
-                <p style="margin:0;font-size:15px;font-weight:600;color:#0a0a0a;">${d.productName}</p>
+                <p style="margin:0;font-size:15px;font-weight:600;color:#0a0a0a;">${h(d.productName)}</p>
               </td>
             </tr>
             <tr>
@@ -586,7 +604,7 @@ export function buildCancellationCustomerEmail(d: CancellationEmailData): { html
           <table width="100%" cellpadding="0" cellspacing="0" style="background:#eff6ff;border-radius:10px;margin-bottom:24px;">
             <tr><td style="padding:20px 24px;">
               <p style="margin:0 0 8px;font-size:14px;font-weight:600;color:#0a0a0a;">Möchtest du neu buchen?</p>
-              <p style="margin:0 0 16px;font-size:13px;color:#4b5563;">Du kannst die ${d.productName} für andere Termine erneut buchen.</p>
+              <p style="margin:0 0 16px;font-size:13px;color:#4b5563;">Du kannst die ${h(d.productName)} für andere Termine erneut buchen.</p>
               <a href="${rebookUrl}" style="display:inline-block;padding:10px 20px;background:#0a0a0a;color:#ffffff;font-size:14px;font-weight:600;text-decoration:none;border-radius:8px;">Kamera erneut buchen</a>
             </td></tr>
           </table>
@@ -612,7 +630,7 @@ export function buildCancellationCustomerEmail(d: CancellationEmailData): { html
 // ─── Cancellation admin email ──────────────────────────────────────────────────
 
 export function buildCancellationAdminEmail(d: CancellationEmailData): { html: string; subject: string } {
-  const subject = `Stornierung: ${d.bookingId} – ${d.productName}`;
+  const subject = `Stornierung: ${d.bookingId} – ${h(d.productName)}`;
 
   const html = `
 <!DOCTYPE html>
@@ -636,15 +654,15 @@ export function buildCancellationAdminEmail(d: CancellationEmailData): { html: s
             </tr>
             <tr>
               <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#6b7280;">Kunde</td>
-              <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#0a0a0a;">${d.customerName || '–'}</td>
+              <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#0a0a0a;">${h(d.customerName || '–')}</td>
             </tr>
             <tr>
               <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#6b7280;">E-Mail</td>
-              <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#0a0a0a;"><a href="mailto:${d.customerEmail}" style="color:#3b82f6;">${d.customerEmail}</a></td>
+              <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#0a0a0a;"><a href="mailto:${h(d.customerEmail)}" style="color:#3b82f6;">${h(d.customerEmail)}</a></td>
             </tr>
             <tr>
               <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#6b7280;">Kamera</td>
-              <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#0a0a0a;">${d.productName}</td>
+              <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#0a0a0a;">${h(d.productName)}</td>
             </tr>
             <tr>
               <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#6b7280;">Zeitraum</td>
@@ -914,8 +932,8 @@ export function buildShippingEmail(d: ShippingEmailData): { html: string; subjec
 
         <tr><td style="background:#ffffff;padding:32px;">
           <p style="margin:0 0 20px;font-size:15px;color:#374151;">
-            Hallo ${d.customerName || 'dort'},<br><br>
-            deine <strong>${d.productName}</strong> ist unterwegs zu dir.
+            Hallo ${h(d.customerName || 'dort')},<br><br>
+            deine <strong>${h(d.productName)}</strong> ist unterwegs zu dir.
             Mit der Tracking-Nummer unten kannst du dein Paket jederzeit verfolgen.
           </p>
 
@@ -937,7 +955,7 @@ export function buildShippingEmail(d: ShippingEmailData): { html: string; subjec
             </tr>
             <tr>
               <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#6b7280;">Kamera</td>
-              <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#0a0a0a;">${d.productName}</td>
+              <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#0a0a0a;">${h(d.productName)}</td>
             </tr>
             <tr>
               <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#6b7280;">Mietbeginn</td>

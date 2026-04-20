@@ -56,6 +56,41 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Anonymisierung fehlgeschlagen.' }, { status: 500 });
   }
 
+  // E-Mail-Logs anonymisieren — die Resend-Empfänger-Adresse + Subject können
+  // PII enthalten und müssen nach DSGVO-Löschanfrage ebenfalls anonymisiert
+  // werden. Booking-Referenz bleibt erhalten (für GoBD-Aufbewahrung 10 Jahre),
+  // aber identifizierbare Adresse wird durch Anonym-Marker ersetzt.
+  try {
+    // E-Mails über Buchungen des Kunden
+    const { data: customerBookings } = await supabase
+      .from('bookings')
+      .select('id')
+      .eq('user_id', customerId);
+    const bookingIds = (customerBookings ?? []).map((b) => b.id);
+
+    if (bookingIds.length > 0) {
+      await supabase
+        .from('email_log')
+        .update({ recipient_email: 'anonymisiert@anonymisiert.local' })
+        .in('booking_id', bookingIds);
+    }
+
+    // Auth-User-E-Mail wird gleich überschrieben (deleted_${customerId}@anonymisiert.local).
+    // Auch direkte E-Mail-Logs ohne booking_id, die zur ursprünglichen
+    // Kunden-E-Mail gehörten, anonymisieren.
+    const { data: authUser } = await supabase.auth.admin.getUserById(customerId);
+    const oldEmail = authUser?.user?.email;
+    if (oldEmail && !oldEmail.endsWith('@anonymisiert.local')) {
+      await supabase
+        .from('email_log')
+        .update({ recipient_email: 'anonymisiert@anonymisiert.local' })
+        .eq('recipient_email', oldEmail);
+    }
+  } catch (logErr) {
+    // Anonymisierung des Hauptprofils gilt trotzdem als erfolgreich.
+    console.error('Email-log anonymize warning:', logErr);
+  }
+
   // Auth-Account deaktivieren
   try {
     await supabase.auth.admin.updateUserById(customerId, {

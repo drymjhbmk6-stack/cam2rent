@@ -2,6 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { createServiceClient } from '@/lib/supabase';
 import { verifyToken } from '@/lib/totp';
+import { timingSafeEqual } from 'crypto';
+
+/** Timing-safer String-Vergleich — sonst verrät Response-Zeit Teil-Treffer. */
+function safeEqualStrings(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  try {
+    return timingSafeEqual(Buffer.from(a), Buffer.from(b));
+  } catch {
+    return false;
+  }
+}
 
 const loginLimiter = rateLimit({ maxAttempts: 5, windowMs: 15 * 60 * 1000 }); // 5 pro 15 Min
 
@@ -50,7 +61,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  if (password !== adminPassword) {
+  if (!safeEqualStrings(password, adminPassword)) {
     return NextResponse.json({ error: 'Falsches Passwort.' }, { status: 401 });
   }
 
