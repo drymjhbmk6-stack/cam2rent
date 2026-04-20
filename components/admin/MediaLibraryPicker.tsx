@@ -77,7 +77,7 @@ export default function MediaLibraryPicker({ open, onClose, onSelect }: Props) {
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-slate-800">
-          <h3 className="font-semibold text-white">Aus Bibliothek waehlen</h3>
+          <h3 className="font-semibold text-white">Aus Bibliothek wählen</h3>
           <button
             type="button"
             onClick={onClose}

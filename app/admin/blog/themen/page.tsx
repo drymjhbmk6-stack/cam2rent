@@ -18,7 +18,7 @@ interface SeriesPart { id: string; part_number: number; topic: string; used: boo
 interface Series { id: string; title: string; slug: string; description: string; category_id: string | null; tone: string; target_length: string; total_parts: number; generated_parts: number; status: string; blog_categories?: { name: string; color: string } | null; blog_series_parts?: SeriesPart[]; }
 
 function toSlug(text: string): string {
-  return text.toLowerCase().replace(/[aeAE]/g, 'ae').replace(/[oeOE]/g, 'oe').replace(/[ueUE]/g, 'ue').replace(/ß/g, 'ss').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  return text.toLowerCase().replace(/[äÄ]/g, 'ae').replace(/[öÖ]/g, 'oe').replace(/[üÜ]/g, 'ue').replace(/ß/g, 'ss').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }
 
 export default function BlogThemenPage() {

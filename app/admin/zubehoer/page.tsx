@@ -6,6 +6,7 @@ import AdminBackLink from '@/components/admin/AdminBackLink';
 import { type AdminProduct } from '@/lib/price-config';
 import { getBrandStyle } from '@/lib/brand-colors';
 import { useBrandColors } from '@/hooks/useBrandColors';
+import { fmtEuro } from '@/lib/format-utils';
 
 interface Accessory {
   id: string;
@@ -462,7 +463,7 @@ function AccessoryCard({ acc, editId, editForm, setEditForm, savedId, savingId, 
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <span className="text-xs font-heading font-semibold text-brand-black hidden sm:block">
-              {acc.price} € {acc.pricing_mode === 'perDay' ? '/Tag' : 'einm.'}
+              {fmtEuro(acc.price)} {acc.pricing_mode === 'perDay' ? '/Tag' : 'einmalig'}
             </span>
             <button onClick={() => onDelete(acc.id, acc.name)} disabled={deletingId === acc.id}
               className="px-2 py-1 text-[10px] font-heading font-semibold text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-40">

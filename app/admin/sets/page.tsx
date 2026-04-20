@@ -6,6 +6,7 @@ import AdminBackLink from '@/components/admin/AdminBackLink';
 import BrandBadge from '@/components/BrandBadge';
 import { getBrandStyle } from '@/lib/brand-colors';
 import { useBrandColors } from '@/hooks/useBrandColors';
+import { fmtEuro } from '@/lib/format-utils';
 
 interface AccessoryItem { accessory_id: string; qty: number; }
 
@@ -475,7 +476,7 @@ export default function AdminSetsPage() {
                     {/* Zeile 2: Preis + Aktionen */}
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-sm font-heading font-semibold text-brand-black dark:text-slate-200 mr-auto">
-                        {set.price} € {set.pricingMode === 'perDay' ? '/Tag' : 'einmalig'}
+                        {fmtEuro(set.price)} {set.pricingMode === 'perDay' ? '/Tag' : 'einmalig'}
                       </span>
                       <button
                         onClick={() => handleDuplicate(set)}

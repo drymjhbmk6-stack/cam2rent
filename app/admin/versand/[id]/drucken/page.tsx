@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { use } from 'react';
 import { useAccessories } from '@/components/AccessoriesProvider';
 import AdminBackLink from '@/components/admin/AdminBackLink';
-import { fmtDate } from '@/lib/format-utils';
+import { fmtDate, fmtEuro } from '@/lib/format-utils';
 
 interface Booking {
   id: string;
@@ -250,7 +250,7 @@ export default function DruckenPage({ params }: { params: Promise<{ id: string }
         {/* Footer */}
         <div className="mt-8 pt-4 border-t border-gray-200 flex justify-between items-center">
           <p className="text-xs text-gray-400">cam2rent · Action-Kamera-Verleih · cam2rent.de</p>
-          <p className="text-xs text-gray-400">Buchung {booking.id} · Gesamtbetrag: {booking.price_total.toFixed(2)} € (inkl. {booking.deposit.toFixed(2)} € Kaution)</p>
+          <p className="text-xs text-gray-400">Buchung {booking.id} · Gesamtbetrag: {fmtEuro(booking.price_total)} (inkl. {fmtEuro(booking.deposit)} Kaution)</p>
         </div>
 
       </div>

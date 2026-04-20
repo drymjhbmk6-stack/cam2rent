@@ -336,7 +336,7 @@ function JobStatusPanel({ job, progress, onCancel, onReset }: { job: JobStatus; 
               type="button"
               onClick={onReset}
               className="text-xs px-2 py-1 rounded bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700"
-              title="Status zuruecksetzen, damit ein neuer Plan gestartet werden kann"
+              title="Status zurücksetzen, damit ein neuer Plan gestartet werden kann"
             >
               Zuruecksetzen
             </button>

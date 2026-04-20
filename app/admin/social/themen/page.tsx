@@ -141,7 +141,7 @@ function TopicsTab() {
 
           <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">Kernaussage</label>
           <textarea value={form.angle} onChange={(e) => setForm({ ...form, angle: e.target.value })}
-            placeholder="Was genau soll der Post vermitteln? (1-2 Saetze)"
+            placeholder="Was genau soll der Post vermitteln? (1-2 Sätze)"
             rows={2}
             className="w-full mb-3 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm" />
 

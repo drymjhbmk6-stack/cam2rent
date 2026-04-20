@@ -6,6 +6,7 @@ import { calcHaftungTieredPrice } from '@/lib/price-config';
 import SignatureStep, { type SignatureResult } from '@/components/booking/SignatureStep';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import SerialScanner from '@/components/admin/SerialScanner';
+import { fmtEuro } from '@/lib/format-utils';
 
 // ─── Business-Daten (zentral definiert in lib/business-config.ts) ────────────
 const BIZ = {
@@ -910,7 +911,7 @@ export default function ManualBookingPage() {
                         <span className="text-sm font-semibold w-6 text-center" style={{ color: '#e2e8f0' }}>{sp.qty}</span>
                         <button type="button" onClick={() => updateProductQty(sp.id, sp.qty + 1)} className="w-7 h-7 rounded flex items-center justify-center text-sm" style={{ background: '#1e293b', color: '#94a3b8' }}>+</button>
                       </div>
-                      {days > 0 && <span className="text-xs font-semibold" style={{ color: '#06b6d4' }}>{displayPrice.toFixed(2)} €</span>}
+                      {days > 0 && <span className="text-xs font-semibold" style={{ color: '#06b6d4' }}>{fmtEuro(displayPrice)}</span>}
                       <button type="button" onClick={() => removeProduct(sp.id)} className="text-xs p-1" style={{ color: '#ef4444' }}>✕</button>
                     </div>
 
@@ -927,7 +928,7 @@ export default function ManualBookingPage() {
                               min="0"
                               value={sp.customPrice}
                               onChange={(e) => updateProductCustomPrice(sp.id, e.target.value)}
-                              placeholder={days > 0 ? `${autoPrice.toFixed(2)} € (auto)` : 'Preis'}
+                              placeholder={days > 0 ? `${fmtEuro(autoPrice)} (auto)` : 'Preis'}
                             />
                             {hasCustomPrice && (
                               <button type="button" onClick={() => updateProductCustomPrice(sp.id, '')} className="text-xs" style={{ color: '#94a3b8' }}>✕</button>
@@ -979,7 +980,7 @@ export default function ManualBookingPage() {
                                 {unavail ? (
                                   <span className="ml-auto text-xs" style={{ color: '#ef4444' }}>nicht verfügbar</span>
                                 ) : (
-                                  <span className="ml-auto" style={{ color: '#06b6d4' }}>{price.toFixed(2)} €</span>
+                                  <span className="ml-auto" style={{ color: '#06b6d4' }}>{fmtEuro(price)}</span>
                                 )}
                               </label>
                             );
@@ -1007,7 +1008,7 @@ export default function ManualBookingPage() {
                                   <input type="radio" name={`upgrade-${sp.id}-${group}`} checked={isSelected} onChange={() => selectProductUpgrade(sp.id, acc.id, group)} className="accent-cyan-400" />
                                   <span style={{ color: '#e2e8f0' }}>{acc.name}</span>
                                   <span className="ml-auto" style={{ color: acc.is_upgrade_base ? '#22c55e' : '#06b6d4' }}>
-                                    {acc.is_upgrade_base ? 'inklusive' : `+${upgradePrice.toFixed(2)} €`}
+                                    {acc.is_upgrade_base ? 'inklusive' : `+${fmtEuro(upgradePrice)}`}
                                   </span>
                                 </label>
                               );
@@ -1034,7 +1035,7 @@ export default function ManualBookingPage() {
                                 {unavail ? (
                                   <span className="ml-auto" style={{ color: '#ef4444' }}>nicht verfügbar</span>
                                 ) : (
-                                  <span className="ml-auto" style={{ color: '#06b6d4' }}>{price.toFixed(2)} €</span>
+                                  <span className="ml-auto" style={{ color: '#06b6d4' }}>{fmtEuro(price)}</span>
                                 )}
                               </label>
                             );
@@ -1055,7 +1056,7 @@ export default function ManualBookingPage() {
                                 <input type="radio" name={`haftung-${sp.id}`} value={opt.value} checked={sp.haftung === opt.value} onChange={() => updateProductHaftung(sp.id, opt.value)} className="accent-cyan-400" />
                                 <span className="flex-1" style={{ color: '#e2e8f0' }}>{opt.label}</span>
                                 <span style={{ color: price > 0 ? '#06b6d4' : '#64748b' }}>
-                                  {price > 0 ? `${price.toFixed(2)} €` : 'Kostenlos'}
+                                  {price > 0 ? fmtEuro(price) : 'Kostenlos'}
                                 </span>
                               </label>
                             );
@@ -1226,47 +1227,47 @@ export default function ManualBookingPage() {
           <div className="space-y-2 text-sm">
             <div className="flex justify-between" style={{ color: '#e2e8f0' }}>
               <span>Kamera-Miete ({days || 0} {days === 1 ? 'Tag' : 'Tage'})</span>
-              <span>{rentalPrice.toFixed(2)} €</span>
+              <span>{fmtEuro(rentalPrice)}</span>
             </div>
             {setPrice > 0 && (
               <div className="flex justify-between" style={{ color: '#e2e8f0' }}>
                 <span>Sets ({selectedProducts.reduce((n, sp) => n + sp.sets.length, 0)}x)</span>
-                <span>{setPrice.toFixed(2)} €</span>
+                <span>{fmtEuro(setPrice)}</span>
               </div>
             )}
             {accessoryPrice > 0 && (
               <div className="flex justify-between" style={{ color: '#e2e8f0' }}>
                 <span>Zubehör ({selectedProducts.reduce((n, sp) => n + sp.accessories.length, 0)}x)</span>
-                <span>{accessoryPrice.toFixed(2)} €</span>
+                <span>{fmtEuro(accessoryPrice)}</span>
               </div>
             )}
             {haftungPrice > 0 && (
               <div className="flex justify-between" style={{ color: '#e2e8f0' }}>
                 <span>Haftungsschutz</span>
-                <span>{haftungPrice.toFixed(2)} €</span>
+                <span>{fmtEuro(haftungPrice)}</span>
               </div>
             )}
             {shippingPrice > 0 && (
               <div className="flex justify-between" style={{ color: '#e2e8f0' }}>
                 <span>Versand</span>
-                <span>{shippingPrice.toFixed(2)} €</span>
+                <span>{fmtEuro(shippingPrice)}</span>
               </div>
             )}
             <div style={{ height: 1, background: '#1e293b', margin: '8px 0' }} />
             <div className="flex justify-between font-heading font-bold text-base" style={{ color: '#06b6d4' }}>
               <span>Gesamt</span>
-              <span>{total.toFixed(2)} €</span>
+              <span>{fmtEuro(total)}</span>
             </div>
             {deposit > 0 && (depositMode === 'kaution') && (
               <div className="flex justify-between text-xs" style={{ color: '#64748b' }}>
                 <span>Kaution (vorgemerkt)</span>
-                <span>{deposit.toFixed(2)} €</span>
+                <span>{fmtEuro(deposit)}</span>
               </div>
             )}
             {paymentStatus === 'paid' && parseFloat(paymentFees) > 0 && (
               <div className="flex justify-between text-xs" style={{ color: '#ef4444' }}>
                 <span>Transaktionsgebühren ({paymentMethod === 'paypal' ? 'PayPal' : paymentMethod === 'stripe' ? 'Stripe' : 'Gebühr'})</span>
-                <span>-{parseFloat(paymentFees).toFixed(2)} €</span>
+                <span>-{fmtEuro(parseFloat(paymentFees))}</span>
               </div>
             )}
             <div className="flex justify-between text-xs" style={{ color: paymentStatus === 'paid' ? '#10b981' : '#f59e0b' }}>
