@@ -13,9 +13,10 @@ export const dynamic = 'force-dynamic';
  * GET/POST /api/cron/verification-auto-cancel
  *
  * Storniert Buchungen mit Express-Signup-Flag (verification_required=true),
- * wenn der Mietbeginn UNMITTELBAR bevorsteht (T-1 oder weniger) und der
- * Ausweis noch nicht freigegeben wurde. Erstattet die Zahlung komplett
- * ueber Stripe (Refund).
+ * wenn der Mietbeginn in maximal 2 Tagen startet (T-2) und der Ausweis noch
+ * nicht freigegeben wurde. T-2 ist gewaehlt, damit Standard-Versand (2 Tage
+ * Versanddauer) bei rechtzeitiger Verifizierung noch punktgenau den Mietbeginn
+ * trifft. Erstattet die Zahlung ueber Stripe (Refund).
  *
  * Idempotenz: Buchungen mit Status=cancelled werden uebersprungen.
  *
@@ -32,10 +33,14 @@ async function handle(req: NextRequest) {
   }
 
   const supabase = createServiceClient();
-  // T-1: Buchungen deren Mietbeginn = morgen ist (Berlin-Zeit)
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const tomorrowStr = tomorrow.toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });
+  // T-2: Buchungen deren Mietbeginn in max. 2 Tagen ist (Berlin-Zeit).
+  // Gibt dem Kunden genug Vorlauf, dass er nach den Reminder-Mails
+  // (T-5/T-4/T-3) noch reagieren koennte, und dem Admin, dass er Standard-
+  // Versand (2 Tage Laufzeit) rechtzeitig starten kann, wenn die
+  // Verifizierung vorher durchgeht.
+  const deadline = new Date();
+  deadline.setDate(deadline.getDate() + 2);
+  const deadlineStr = deadline.toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });
 
   let bookings: Array<{
     id: string;
@@ -54,7 +59,7 @@ async function handle(req: NextRequest) {
       .eq('verification_required', true)
       .is('verification_gate_passed_at', null)
       .eq('status', 'confirmed')
-      .lte('rental_from', tomorrowStr);
+      .lte('rental_from', deadlineStr);
     if (error) throw error;
     bookings = data ?? [];
   } catch (err) {

@@ -13,8 +13,8 @@ export const dynamic = 'force-dynamic';
  *
  * Taeglich auszufuehren (z.B. 08:00 Uhr Berlin-Zeit). Findet Buchungen mit
  * `verification_required=true` und noch offenem Ausweis-Check, deren
- * Mietbeginn in 5/3/1 Tagen ist, und sendet eine Erinnerungsmail mit Link
- * zum Ausweis-Upload.
+ * Mietbeginn in 5/4/3 Tagen ist, und sendet eine eskalierende Erinnerungsmail
+ * mit Link zum Ausweis-Upload. Der Auto-Storno greift dann bei T-2.
  *
  * Idempotenz: es wird im email_log geprueft, ob heute schon eine Erinnerung
  * fuer diese Buchung rausging — verhindert doppelte Mails bei Mehrfach-Cron.
@@ -96,12 +96,15 @@ async function handle(req: NextRequest) {
     // Tage bis Mietbeginn
     const rentalStart = new Date(b.rental_from);
     const diffDays = Math.ceil((rentalStart.getTime() - Date.now()) / 86_400_000);
-    // Nur an 5/3/1 Tagen erinnern — vorher zu frueh, bei <= 0 greift Auto-Cancel
-    if (![5, 3, 1].includes(diffDays)) { skipped++; continue; }
+    // Nur an 5/4/3 Tagen erinnern. Auto-Storno greift bei T-2.
+    if (![5, 4, 3].includes(diffDays)) { skipped++; continue; }
 
     const uploadUrl = `${baseUrl}/konto/verifizierung?booking=${encodeURIComponent(b.id)}`;
-    const urgency = diffDays === 1 ? 'MORGEN' : `in ${diffDays} Tagen`;
-    const subject = `Wichtig: Ausweis-Upload fuer deine Buchung ${b.id} (${urgency})`;
+    const urgency = `in ${diffDays} Tagen`;
+    const isFinal = diffDays === 3; // letzte Erinnerung vor Auto-Storno
+    const subject = isFinal
+      ? `LETZTE ERINNERUNG: Ausweis fuer Buchung ${b.id} — Storno in 24h`
+      : `Ausweis-Upload fuer deine Buchung ${b.id} (${urgency})`;
     const html = `<!DOCTYPE html>
 <html lang="de"><body style="margin:0;padding:0;background:#f5f5f0;font-family:'DM Sans',Arial,sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f0;padding:40px 16px;"><tr><td align="center">
@@ -110,11 +113,13 @@ async function handle(req: NextRequest) {
     <p style="margin:0;font-size:20px;font-weight:700;color:#ffffff;">${BUSINESS.name}</p>
   </td></tr>
   <tr><td style="background:#ffffff;padding:32px;">
-    <h1 style="margin:0 0 12px;font-size:20px;font-weight:700;color:#9a3412;">Ausweis fehlt — Versand bald blockiert</h1>
+    <h1 style="margin:0 0 12px;font-size:20px;font-weight:700;color:#9a3412;">${isFinal ? 'Letzte Erinnerung — morgen wird storniert' : 'Ausweis fehlt noch'}</h1>
     <p style="margin:0 0 12px;font-size:15px;color:#374151;">Hallo ${b.customer_name || 'Kunde'},</p>
-    <p style="margin:0 0 16px;font-size:15px;color:#374151;">deine Buchung <strong>${b.id}</strong> (${b.product_name || 'Kamera'}) startet <strong>${urgency}</strong>. Damit wir die Kamera versenden koennen, brauchen wir dringend eine Kopie deines Personalausweises.</p>
+    <p style="margin:0 0 16px;font-size:15px;color:#374151;">deine Buchung <strong>${b.id}</strong> (${b.product_name || 'Kamera'}) startet <strong>${urgency}</strong>. Damit wir die Kamera rechtzeitig versenden koennen, brauchen wir eine Kopie deines Personalausweises.</p>
     <p style="margin:0 0 24px;"><a href="${uploadUrl}" style="display:inline-block;padding:14px 28px;background:#ea580c;color:#ffffff;text-decoration:none;border-radius:8px;font-weight:700;font-size:15px;">Ausweis jetzt hochladen</a></p>
-    <p style="margin:0 0 8px;font-size:13px;color:#6b7280;">Ohne verifizierten Ausweis wird die Buchung ${diffDays === 1 ? 'heute' : 'kurz vor Mietbeginn'} automatisch storniert. Bei Stornierung aufgrund fehlendem Ausweis koennen wir die Zahlung ${diffDays === 1 ? 'nur teilweise' : 'vollstaendig'} erstatten.</p>
+    <p style="margin:0 0 8px;font-size:13px;color:#6b7280;">${isFinal
+      ? 'Wenn bis morgen Mittag kein Ausweis vorliegt, stornieren wir die Buchung automatisch und erstatten dir den vollen Betrag. Einfacher fuer alle, wenn du den Upload jetzt erledigst — dauert 30 Sekunden.'
+      : 'Ohne verifizierten Ausweis wird die Buchung kurz vor Mietbeginn automatisch storniert, weil wir sonst den Versandtermin nicht halten koennen. Bei rechtzeitigem Upload ist das kein Problem.'}</p>
     <p style="margin:16px 0 0;font-size:13px;color:#6b7280;">Fragen? Einfach auf diese Mail antworten.</p>
   </td></tr>
 </table></td></tr></table></body></html>`;

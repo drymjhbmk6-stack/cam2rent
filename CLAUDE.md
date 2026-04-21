@@ -123,8 +123,8 @@ Optionaler smootherer Neukunden-Flow, zwei Admin-Toggles unter `/admin/einstellu
 - **Admin-Versand-Seite** (`/admin/versand`): Buchungen ohne Ausweis bekommen amber Card-Border + Badge „Ausweis fehlt". API `/api/admin/versand-buchungen` liefert zusätzlich `verification_required`, `verification_gate_passed_at`, `customer_verification_status` — defensiv geladen, keine 500er wenn Migration fehlt.
 - **Admin-Freigabe:** `PATCH /api/admin/booking/[id]` akzeptiert `{ verification_gate: 'approve' | 'revoke' }` → setzt/löscht `verification_gate_passed_at`.
 - **Crons:**
-  - `/api/cron/verification-reminder` (täglich, z.B. 08:00): Erinnerungsmails an T-5/T-3/T-1, Duplikat-Schutz über `email_log`.
-  - `/api/cron/verification-auto-cancel` (täglich, z.B. 14:00): Storniert Buchungen am Vortag des Mietbeginns, erstattet via Stripe-Refund, hebt Deposit-Pre-Auth auf, schickt Absage-Mail.
+  - `/api/cron/verification-reminder` (täglich, z.B. 08:00): Erinnerungsmails an T-5/T-4/T-3, Duplikat-Schutz über `email_log`. T-3 ist die letzte Erinnerung vor Auto-Storno, Subject mit „LETZTE ERINNERUNG"-Prefix.
+  - `/api/cron/verification-auto-cancel` (täglich, z.B. 14:00): Storniert Buchungen bei **T-2** (Mietbeginn in max. 2 Tagen), erstattet via Stripe-Refund, hebt Deposit-Pre-Auth auf, schickt Absage-Mail. T-2 gewählt, damit Standard-Versand (2 Tage Laufzeit) den Termin noch halten kann, wenn Verifizierung kurz vor dem Cron durchgeht.
 - **Sicherheits-Gate:** `confirm-cart` + `confirm-booking` schreiben `verification_required=true` nur wenn `checkout-intent` das Flag in `metadata` bzw. Context gesetzt hat — ohne aktiven Feature-Flag bleibt alles 1:1 wie zuvor.
 - **Go-Live TODO:** SQL-Migration `supabase-verification-deferred.sql` ausführen + zwei Crontab-Einträge hinzufügen:
   ```
