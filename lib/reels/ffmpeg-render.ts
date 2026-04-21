@@ -60,6 +60,107 @@ function escapeDrawtext(s: string): string {
     .replace(/,/g, '\\,');
 }
 
+/**
+ * Bricht Text greedy in Zeilen mit max `maxCharsPerLine` Zeichen um.
+ * Zu lange Einzelworte werden nicht zerteilt (dann wird die Zeile etwas länger).
+ */
+function wrapText(raw: string, maxCharsPerLine: number): string[] {
+  const words = raw.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return [];
+  const lines: string[] = [];
+  let current = '';
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word;
+    if (candidate.length <= maxCharsPerLine || !current) {
+      current = candidate;
+    } else {
+      lines.push(current);
+      current = word;
+    }
+  }
+  if (current) lines.push(current);
+  return lines;
+}
+
+/**
+ * Wählt dynamisch Schriftgröße + Zeilen-Kapazität basierend auf Text-Länge.
+ * Wir gehen grob von 0.55×fontsize als durchschnittliche Zeichen-Breite aus.
+ * Safe-Area für Reels: ~84% der Bildbreite (16% Rand links/rechts).
+ */
+function pickFontSize(raw: string, maxFontSize: number, maxLines: number): { fontsize: number; maxCharsPerLine: number } {
+  const safeWidthPx = TARGET_W * 0.84;
+  const tryWith = (size: number) => {
+    const charsPerLine = Math.max(10, Math.floor(safeWidthPx / (size * 0.55)));
+    const lines = wrapText(raw, charsPerLine);
+    return { fontsize: size, maxCharsPerLine: charsPerLine, lineCount: lines.length };
+  };
+
+  let current = tryWith(maxFontSize);
+  // Verkleinere schrittweise bis die Zeilen-Anzahl unter maxLines liegt
+  const minSize = Math.max(32, Math.round(maxFontSize * 0.5));
+  while (current.lineCount > maxLines && current.fontsize > minSize) {
+    current = tryWith(current.fontsize - 4);
+  }
+  return { fontsize: current.fontsize, maxCharsPerLine: current.maxCharsPerLine };
+}
+
+/**
+ * Baut einen drawtext-Filter-String pro Zeile, vertikal gestapelt.
+ * yCenterExpr: FFmpeg-Ausdruck für die Y-Mitte des Text-Blocks (z.B. "(h-text_h)/2").
+ *              Wir rechnen selbst Offsets drauf — text_h nimmt FFmpeg pro Zeile einzeln.
+ */
+function buildStackedDrawtext(
+  text: string,
+  opts: {
+    fontsize: number;
+    maxLines: number;
+    yCenterPx: number;         // absolute Y-Mitte des Blocks (Pixel)
+    fontcolor?: string;
+    borderw?: number;
+    bordercolor?: string;
+    box?: boolean;
+    boxcolor?: string;
+    boxborderw?: number;
+  }
+): string {
+  const font = detectFontPath();
+  const picked = pickFontSize(text, opts.fontsize, opts.maxLines);
+  const lines = wrapText(text, picked.maxCharsPerLine);
+  if (lines.length === 0) return 'null';
+
+  const lineHeight = Math.round(picked.fontsize * 1.25);
+  const totalHeight = lineHeight * lines.length;
+  const topY = Math.round(opts.yCenterPx - totalHeight / 2);
+
+  const fc = opts.fontcolor ?? 'white';
+  const bw = opts.borderw ?? 3;
+  const bc = opts.bordercolor ?? 'black@0.7';
+  const useBox = opts.box === true;
+  const boxcolor = opts.boxcolor ?? 'black@0.55';
+  const boxborderw = opts.boxborderw ?? 20;
+
+  return lines
+    .map((line, i) => {
+      const y = topY + i * lineHeight;
+      const escaped = escapeDrawtext(line);
+      const parts = [
+        `drawtext=fontfile='${font}'`,
+        `text='${escaped}'`,
+        `fontsize=${picked.fontsize}`,
+        `fontcolor=${fc}`,
+        `borderw=${bw}`,
+        `bordercolor=${bc}`,
+        `x=(w-text_w)/2`,
+        `y=${y}`,
+      ];
+      if (useBox) {
+        parts.push(`box=1`, `boxcolor=${boxcolor}`, `boxborderw=${boxborderw}`);
+      }
+      return parts.join(':');
+    })
+    .join(',');
+}
+
 async function runFfmpeg(args: string[]): Promise<{ stderr: string }> {
   return new Promise((resolve, reject) => {
     const proc = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
@@ -93,21 +194,31 @@ function detectFontPath(): string {
  * - Text-Overlay unten mit schwarzem Hintergrund (80% Opazität)
  */
 function buildClipFilter(sceneText: string, duration: number): string {
-  const font = detectFontPath();
-  const text = escapeDrawtext(sceneText || '');
-
-  return [
+  const baseFilters = [
     `scale=${TARGET_W}:${TARGET_H}:force_original_aspect_ratio=increase`,
     `crop=${TARGET_W}:${TARGET_H}`,
     `fps=${TARGET_FPS}`,
     `trim=duration=${duration}`,
     `setpts=PTS-STARTPTS`,
-    text
-      ? `drawtext=fontfile='${font}':text='${text}':fontsize=56:fontcolor=white:borderw=3:bordercolor=black@0.8:x=(w-text_w)/2:y=h-text_h-180:box=1:boxcolor=black@0.55:boxborderw=24`
-      : 'null',
-  ]
-    .filter(Boolean)
-    .join(',');
+  ];
+
+  const trimmed = (sceneText || '').trim();
+  if (!trimmed) return baseFilters.join(',');
+
+  // Text-Overlay unten, mit schwarzem Hintergrund für Lesbarkeit.
+  // yCenter auf ca. 85% Höhe → Text sitzt im unteren Drittel.
+  const overlay = buildStackedDrawtext(trimmed, {
+    fontsize: 56,
+    maxLines: 3,
+    yCenterPx: Math.round(TARGET_H * 0.82),
+    borderw: 3,
+    bordercolor: 'black@0.8',
+    box: true,
+    boxcolor: 'black@0.55',
+    boxborderw: 20,
+  });
+
+  return [...baseFilters, overlay].filter((f) => f && f !== 'null').join(',');
 }
 
 /**
@@ -115,24 +226,37 @@ function buildClipFilter(sceneText: string, duration: number): string {
  * Nutzt `lavfi` color-Source, damit kein Input-Video nötig ist.
  */
 function buildCtaInput(text: { headline: string; subline?: string }, duration: number, bgColor: string): { args: string[]; filter: string } {
-  const font = detectFontPath();
-  const headline = escapeDrawtext(text.headline);
-  const subline = escapeDrawtext(text.subline ?? '');
-
   // Hex → FFmpeg color syntax (remove #)
   const col = bgColor.startsWith('#') ? `0x${bgColor.slice(1)}` : bgColor;
-
   const args = ['-f', 'lavfi', '-t', String(duration), '-i', `color=c=${col}:s=${TARGET_W}x${TARGET_H}:r=${TARGET_FPS}`];
 
-  const filter = [
-    `drawtext=fontfile='${font}':text='${headline}':fontsize=88:fontcolor=white:x=(w-text_w)/2:y=(h/2)-80:borderw=2:bordercolor=black@0.3`,
-    subline
-      ? `drawtext=fontfile='${font}':text='${subline}':fontsize=52:fontcolor=white@0.9:x=(w-text_w)/2:y=(h/2)+40`
-      : 'null',
-  ]
-    .filter((f) => f !== 'null')
-    .join(',');
+  // Headline auf 40% Höhe, Subline auf 58% Höhe — beide werden bei Bedarf umgebrochen/verkleinert.
+  const parts: string[] = [];
+  if (text.headline?.trim()) {
+    parts.push(
+      buildStackedDrawtext(text.headline, {
+        fontsize: 88,
+        maxLines: 3,
+        yCenterPx: Math.round(TARGET_H * 0.4),
+        borderw: 2,
+        bordercolor: 'black@0.3',
+      })
+    );
+  }
+  if (text.subline?.trim()) {
+    parts.push(
+      buildStackedDrawtext(text.subline, {
+        fontsize: 52,
+        maxLines: 2,
+        yCenterPx: Math.round(TARGET_H * 0.58),
+        fontcolor: 'white@0.9',
+        borderw: 2,
+        bordercolor: 'black@0.3',
+      })
+    );
+  }
 
+  const filter = parts.filter((p) => p && p !== 'null').join(',') || 'null';
   return { args, filter };
 }
 
@@ -204,10 +328,16 @@ export async function renderReel(input: RenderInput): Promise<RenderResult> {
         const outPath = path.join(workDir, `seg-${i}.mp4`);
         const col = (input.bgColorFrom ?? '#3B82F6').replace('#', '0x');
 
-        const font = detectFontPath();
-        const text = escapeDrawtext(scene.text_overlay || '');
-        const filter = text
-          ? `drawtext=fontfile='${font}':text='${text}':fontsize=84:fontcolor=white:x=(w-text_w)/2:y=(h-text_h)/2:borderw=2:bordercolor=black@0.2`
+        // Text zentriert, mit Auto-Wrap und dynamischer Schriftgröße
+        const trimmed = (scene.text_overlay || '').trim();
+        const filter = trimmed
+          ? buildStackedDrawtext(trimmed, {
+              fontsize: 84,
+              maxLines: 4,
+              yCenterPx: Math.round(TARGET_H / 2),
+              borderw: 2,
+              bordercolor: 'black@0.2',
+            })
           : 'null';
 
         const { stderr } = await runFfmpeg([
