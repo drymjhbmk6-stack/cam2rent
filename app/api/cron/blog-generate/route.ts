@@ -4,6 +4,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { verifyCronAuth } from '@/lib/cron-auth';
 import OpenAI from 'openai';
 import { isTestMode } from '@/lib/env-mode';
+import { buildBlogSystemPrompt, HUMANIZER_PASS } from '@/lib/blog/system-prompt';
 
 const LENGTH_MAP: Record<string, string> = {
   kurz: 'ca. 500 Wörter',
@@ -236,54 +237,15 @@ export async function POST(req: NextRequest) {
     ? `\n\nZUSÄTZLICHER KONTEXT VOM ADMIN:\n${blogSettings.ki_context}`
     : '';
 
-  const systemPrompt = `Du bist ein erfahrener Redakteur für cam2rent.de, einen deutschen Online-Verleih für Action-Kameras.
-
-AKTUELLES JAHR: ${currentYear}. Verwende NUR aktuelle Informationen und Produkte.${shopProductsInfo}${kiContext}
-
-Deine Aufgabe: Schreibe einen hochwertigen, redaktionellen Blog-Artikel auf Deutsch der NICHT nach KI klingt.
-
-STIL-REGELN:
-- Schreibe ${length} in ${toneDesc}m Stil
-- Schreibe wie ein erfahrener Journalist/Blogger — mit Persönlichkeit, nicht wie ein Lexikon
-- Kurze Absätze (max 3-4 Sätze), dann Absatzwechsel
-- Variiere die Satzlänge — kurze knackige Sätze mischen mit längeren
-- Verwende "du" statt "Sie", schreibe direkt und nahbar
-- Beginne Absätze NICHT immer gleich — variiere den Einstieg
-- Keine leeren Floskeln wie "In der heutigen Zeit" oder "Es ist wichtig zu beachten"
-- Beginne NICHT mit dem Titel im Content
-
-FORMATIERUNGS-REGELN (Markdown):
-- ## für Hauptüberschriften, ### für Unterüberschriften
-- **Fett** für Produktnamen und wichtige Begriffe
-- Nutze Blockquotes für farbige Info-Boxen im Artikel (werden automatisch gestylt):
-  - > **Tipp:** Text — für Miet-Hinweise und praktische Tipps (z.B. cam2rent erwähnen)
-  - > **Fazit:** Text — für Zwischen-Fazits nach wichtigen Abschnitten
-  - > **Wichtig:** Text — für Warnungen oder wichtige Hinweise
-  - > **Gut zu wissen:** Text — für interessante Zusatzinfos
-- Nutze MINDESTENS 2-3 Blockquote-Boxen pro Artikel für visuelle Abwechslung
-- Nutze Listen (- oder 1.) für Aufzählungen, aber nicht für alles
-- Tabellen bei direkten Vergleichen von 2+ Produkten mit Specs — Feature in Spalte 1, Produkte in weiteren Spalten
-- Lockere den Text auf mit Zwischenfragen an den Leser
-- Beginne den Artikel mit einem kurzen Lead-Absatz (2-3 Sätze, der das Thema auf den Punkt bringt)
-
-INHALTLICHE REGELN:
-- Schreibe SEO-freundlich mit natürlicher Keyword-Integration
-- NIEMALS "Versicherung" — nur "Haftungsschutz" oder "Haftungsbegrenzung"
-- Erwähne cam2rent.de natürlich, z.B. "Bei cam2rent kannst du die XY einfach mieten und testen"
-- Zielgruppe: Abenteurer, Reisende, Content Creator die Action-Cams mieten wollen
-- Schließe mit einem kurzen, prägnanten Fazit ab${keywordHint}${seriesHint}
-
-Antworte AUSSCHLIESSLICH im folgenden JSON-Format (kein Markdown-Codeblock, nur reines JSON):
-{
-  "title": "Artikel-Titel (max 60 Zeichen, SEO-optimiert)",
-  "slug": "url-freundlicher-slug",
-  "content": "Kompletter Artikel in Markdown",
-  "excerpt": "Kurzbeschreibung (max 160 Zeichen)",
-  "seoTitle": "SEO-Titel (max 60 Zeichen)",
-  "seoDescription": "Meta-Description (max 155 Zeichen)",
-  "suggestedTags": ["tag1", "tag2", "tag3"],
-  "imagePrompt": "Write a detailed DALL-E 3 prompt IN ENGLISH for a stunning photorealistic blog header. CRITICAL RULES: Do NOT render any cameras, electronics, gadgets or tech products — they always look fake. Instead, show the ACTIVITY or SCENERY the article is about (e.g. surfing, mountain biking, underwater diving, travel landscapes, skiing, hiking). Style: Shot on Sony A7IV, 35mm lens, f/2.8, golden hour lighting, shallow depth of field. No text, no logos, no UI elements, no hands holding devices. Think National Geographic or Red Bull magazine photo. The scene should evoke adventure, freedom and excitement."
-}`;
+  const systemPrompt = buildBlogSystemPrompt({
+    currentYear,
+    shopProductsInfo,
+    kiContext: (blogSettings.ki_context as string) ?? '',
+    length,
+    toneDesc,
+    keywordHint,
+    seriesHint,
+  });
 
   try {
     await setGenerationStatus('generating', topicData.topic);
@@ -311,7 +273,7 @@ Antworte AUSSCHLIESSLICH im folgenden JSON-Format (kein Markdown-Codeblock, nur 
     // ── Automatischer 3-stufiger Faktencheck ──────────────────────
     const REVIEW_PASSES = [
       { role: 'Faktenprüfer', instruction: 'Prüfe auf erfundene Specs, Preise, Features, Technologien. Korrigiere alles was nicht belegbar ist. Entferne konkrete Zahlen wenn du dir nicht sicher bist und ersetze sie durch allgemeine Formulierungen.' },
-      { role: 'Qualitätsredakteur', instruction: 'Prüfe auf übertriebene Superlative, Marketing-Lügen, Widersprüche, KI-typische Floskeln. Korrigiere den Ton auf ehrlich und nachvollziehbar.' },
+      HUMANIZER_PASS,
       { role: 'Chefredakteur', instruction: 'Letzte Prüfung: Würdest du das mit deinem Namen veröffentlichen? Korrigiere letzte Details. Stelle sicher dass "Versicherung" nirgends vorkommt — nur "Haftungsschutz".' },
     ];
 
