@@ -624,7 +624,7 @@ export default function CheckoutPage() {
               Schnell-Registrierung
             </h1>
             <p className="font-body text-sm text-brand-steel dark:text-gray-400 mb-5">
-              In 30 Sekunden Konto erstellen und direkt weiter zur Zahlung. Deinen Ausweis kannst du im Anschluss hochladen.
+              Konto anlegen, Ausweis hochladen, weiter zur Zahlung — in zwei Minuten erledigt.
             </p>
             <ExpressSignup />
           </div>

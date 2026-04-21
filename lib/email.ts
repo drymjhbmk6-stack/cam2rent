@@ -370,10 +370,10 @@ export function buildCustomerEmail(d: BookingEmailData): { html: string; subject
           ${d.verificationRequired ? `
           <table width="100%" cellpadding="0" cellspacing="0" style="background:#fff7ed;border:1px solid #fdba74;border-radius:10px;margin-bottom:24px;">
             <tr><td style="padding:16px 20px;">
-              <p style="margin:0 0 6px;font-size:12px;font-weight:700;color:#9a3412;text-transform:uppercase;letter-spacing:0.8px;">⚠ Ausweis-Upload erforderlich</p>
-              <p style="margin:0 0 10px;font-size:14px;color:#7c2d12;line-height:1.5;">Damit wir deine Kamera versenden koennen, benoetigen wir eine Kopie deines Personalausweises. Das dauert nur 1 Minute.</p>
-              <p style="margin:0;"><a href="${BUSINESS.url}/konto/verifizierung" style="display:inline-block;padding:10px 20px;background:#ea580c;color:#ffffff;text-decoration:none;border-radius:8px;font-weight:600;font-size:14px;">Ausweis jetzt hochladen</a></p>
-              <p style="margin:10px 0 0;font-size:12px;color:#9a3412;">Ohne verifizierten Ausweis kann die Buchung nicht versendet werden und wird kurz vor Mietbeginn automatisch storniert.</p>
+              <p style="margin:0 0 6px;font-size:12px;font-weight:700;color:#9a3412;text-transform:uppercase;letter-spacing:0.8px;">⚠ Ausweis-Check laeuft</p>
+              <p style="margin:0 0 10px;font-size:14px;color:#7c2d12;line-height:1.5;">Sobald wir deinen Personalausweis geprueft haben, schicken wir die Kamera los. Falls du ihn noch nicht hochgeladen hast, geht das hier:</p>
+              <p style="margin:0;"><a href="${BUSINESS.url}/konto/verifizierung" style="display:inline-block;padding:10px 20px;background:#ea580c;color:#ffffff;text-decoration:none;border-radius:8px;font-weight:600;font-size:14px;">Status ansehen / Ausweis hochladen</a></p>
+              <p style="margin:10px 0 0;font-size:12px;color:#9a3412;">Ohne gueltigen Ausweis koennen wir die Kamera nicht versenden — bitte vor Mietbeginn erledigen.</p>
             </td></tr>
           </table>` : ''}
 
