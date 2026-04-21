@@ -34,17 +34,33 @@ export interface ReelScript {
 
 async function getAnthropicKey(): Promise<string> {
   const supabase = createServiceClient();
-  const { data } = await supabase.from('admin_settings').select('value').eq('key', 'blog_settings').maybeSingle();
-  if (!data?.value) throw new Error('Anthropic API Key nicht konfiguriert (Blog → Einstellungen).');
-  // value kann sowohl als JSON-String als auch als Objekt zurueckkommen (je nach Supabase-Client-Version)
+  const { data, error } = await supabase.from('admin_settings').select('value').eq('key', 'blog_settings').maybeSingle();
+
+  if (error) {
+    throw new Error(`Anthropic Key: DB-Fehler beim Lesen von admin_settings — ${error.message}`);
+  }
+  if (!data) {
+    throw new Error('Anthropic Key: Zeile admin_settings.blog_settings fehlt. Blog → Einstellungen einmal speichern.');
+  }
+  if (data.value === null || data.value === undefined) {
+    throw new Error('Anthropic Key: admin_settings.blog_settings.value ist NULL. Blog → Einstellungen einmal speichern.');
+  }
+
+  // value kann String (gespeichert via JSON.stringify) oder Object (jsonb nativ) sein
   let settings: { anthropic_api_key?: string };
   try {
     settings = typeof data.value === 'string' ? JSON.parse(data.value) : (data.value as { anthropic_api_key?: string });
-  } catch {
-    throw new Error('Anthropic API Key: admin_settings.blog_settings ist kein valides JSON');
+  } catch (err) {
+    throw new Error(`Anthropic Key: blog_settings-JSON kaputt — ${err instanceof Error ? err.message : 'Parse-Error'}`);
   }
-  const key = settings?.anthropic_api_key?.trim();
-  if (!key) throw new Error('Anthropic API Key nicht konfiguriert (Blog → Einstellungen).');
+  if (!settings || typeof settings !== 'object') {
+    throw new Error(`Anthropic Key: blog_settings hat unerwarteten Typ ${typeof settings}`);
+  }
+  const key = settings.anthropic_api_key?.trim();
+  if (!key) {
+    const fieldsPresent = Object.keys(settings).join(', ') || '(leer)';
+    throw new Error(`Anthropic Key: Feld "anthropic_api_key" fehlt oder leer. Vorhandene Felder: ${fieldsPresent}`);
+  }
   return key;
 }
 
