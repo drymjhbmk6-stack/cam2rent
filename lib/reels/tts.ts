@@ -16,6 +16,35 @@ import { createServiceClient } from '@/lib/supabase';
 
 export type TTSVoice = 'alloy' | 'echo' | 'fable' | 'nova' | 'onyx' | 'shimmer';
 export type TTSModel = 'tts-1' | 'tts-1-hd';
+export type TTSStyle = 'calm' | 'normal' | 'energetic';
+
+/**
+ * Mapping Style → Speed-Faktor (OpenAI TTS akzeptiert 0.25–4.0).
+ *  - calm:      langsamer, ruhiger Ton
+ *  - normal:    leicht ueber Normal (1.05) — Standard fuer Reels
+ *  - energetic: schneller (1.15) — wirkt enthusiastischer
+ */
+export const STYLE_SPEED: Record<TTSStyle, number> = {
+  calm: 0.95,
+  normal: 1.05,
+  energetic: 1.15,
+};
+
+/**
+ * Normalisiert Markennamen vor dem TTS-Call, damit OpenAI die richtige
+ * Aussprache trifft. "cam2rent" wuerde im deutschen TTS-Kontext sonst
+ * zu "cam zwei rent" (die 2 als Zahlwort gesprochen).
+ *
+ * Phonetische Schreibung "cam to rent" → wird in beiden Sprachen
+ * korrekt englisch ausgesprochen.
+ */
+function normalizeForSpeech(text: string): string {
+  return text
+    // Domain mit ".de" → "punkt D E" (klingt natuerlicher als "punkt de")
+    .replace(/\bcam2rent\.de\b/gi, 'cam to rent punkt D E')
+    // Markenname allein → "cam to rent"
+    .replace(/\bcam2rent\b/gi, 'cam to rent');
+}
 
 async function getOpenAIKey(): Promise<string> {
   const supabase = createServiceClient();
@@ -46,10 +75,12 @@ export async function generateSpeech(text: string, opts: GenerateSpeechOptions =
   const apiKey = await getOpenAIKey();
   const client = new OpenAI({ apiKey });
 
+  const normalized = normalizeForSpeech(text);
+
   const response = await client.audio.speech.create({
     model: opts.model ?? 'tts-1',
     voice: opts.voice ?? 'nova',
-    input: text.slice(0, 4000), // OpenAI-Limit: 4096 Zeichen
+    input: normalized.slice(0, 4000), // OpenAI-Limit: 4096 Zeichen
     speed: opts.speed ?? 1.05,
     response_format: 'mp3',
   });

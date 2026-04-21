@@ -110,21 +110,29 @@ Regeln:
 - Niemals behaupten dass eine Kamera etwas kann was sie nicht kann
 - Hashtags: 5–10, klein geschrieben, ohne #-Zeichen im JSON`;
 
+const STYLE_GUIDANCE: Record<'calm' | 'normal' | 'energetic', string> = {
+  calm: 'Schreibe ruhig, beobachtend, fast meditativ. Keine Ausrufezeichen. Lange entspannte Saetze, langsam aufgebauter Sog.',
+  normal: 'Freundlich-aktiver Ton, sympathisch und konkret. Keine Marketing-Superlative.',
+  energetic: 'Schreibe voller Energie und Begeisterung. Kurze, druckvolle Saetze. 1-2 Ausrufezeichen pro Reel sind erlaubt (aber nicht in jedem Satz). Aktiv-verben, nicht passiv. Wirkt wie ein begeisterter Insider, nicht wie eine Werbeagentur.',
+};
+
 export async function generateReelScript(
   promptTemplate: string,
   variables: Record<string, string | number | undefined> = {},
-  opts: { postDate?: Date } = {}
+  opts: { postDate?: Date; voiceStyle?: 'calm' | 'normal' | 'energetic' } = {}
 ): Promise<ReelScript> {
   const apiKey = await getAnthropicKey();
   const client = new Anthropic({ apiKey });
 
   const userPrompt = fillPlaceholders(promptTemplate, variables);
   const season = seasonPromptBlock(opts.postDate ?? new Date());
+  const style = opts.voiceStyle ?? 'normal';
+  const styleBlock = `\n\nTon-Vorgabe (${style}):\n${STYLE_GUIDANCE[style]}`;
 
   const response = await client.messages.create({
     model: 'claude-sonnet-4-6',
     max_tokens: 2048,
-    system: `${SYSTEM_PROMPT}\n\n${season}`,
+    system: `${SYSTEM_PROMPT}\n\n${season}${styleBlock}`,
     messages: [{ role: 'user', content: userPrompt }],
   });
 

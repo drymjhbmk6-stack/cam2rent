@@ -21,11 +21,19 @@ interface Account {
   is_active: boolean;
 }
 
+interface MusicTrack {
+  id: string;
+  name: string;
+  mood: string | null;
+  is_default: boolean;
+}
+
 export default function NewReelPage() {
   const router = useRouter();
 
   const [templates, setTemplates] = useState<Template[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [musicTracks, setMusicTracks] = useState<MusicTrack[]>([]);
 
   const [topic, setTopic] = useState('');
   const [productName, setProductName] = useState('');
@@ -34,23 +42,29 @@ export default function NewReelPage() {
   const [fbAccountId, setFbAccountId] = useState('');
   const [igAccountId, setIgAccountId] = useState('');
   const [platforms, setPlatforms] = useState<string[]>(['facebook', 'instagram']);
+  const [musicId, setMusicId] = useState('');
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
     (async () => {
-      const [tRes, aRes] = await Promise.all([
+      const [tRes, aRes, mRes] = await Promise.all([
         fetch('/api/admin/reels/templates').then((r) => r.json()).catch(() => ({ templates: [] })),
         fetch('/api/admin/social/accounts').then((r) => r.json()).catch(() => ({ accounts: [] })),
+        fetch('/api/admin/reels/music').then((r) => r.json()).catch(() => ({ tracks: [] })),
       ]);
       setTemplates(tRes.templates ?? []);
       setAccounts(aRes.accounts ?? []);
+      setMusicTracks(mRes.tracks ?? []);
       if (tRes.templates?.[0]) setTemplateId(tRes.templates[0].id);
       const fb = (aRes.accounts ?? []).find((a: Account) => a.platform === 'facebook' && a.is_active);
       const ig = (aRes.accounts ?? []).find((a: Account) => a.platform === 'instagram' && a.is_active);
       if (fb) setFbAccountId(fb.id);
       if (ig) setIgAccountId(ig.id);
+      // Default-Track vorauswaehlen
+      const def = (mRes.tracks ?? []).find((t: MusicTrack) => t.is_default);
+      if (def) setMusicId(def.id);
     })();
   }, []);
 
@@ -78,6 +92,7 @@ export default function NewReelPage() {
           platforms,
           fbAccountId: platforms.includes('facebook') ? fbAccountId || null : null,
           igAccountId: platforms.includes('instagram') ? igAccountId || null : null,
+          musicId: musicId || null,
         }),
       });
       const body = await res.json();
@@ -185,6 +200,29 @@ export default function NewReelPage() {
               </label>
             ))}
           </div>
+        </div>
+
+        {/* Musik */}
+        <div>
+          <label className="block text-sm font-medium text-brand-dark dark:text-white mb-2">Hintergrund-Musik</label>
+          <select
+            value={musicId}
+            onChange={(e) => setMusicId(e.target.value)}
+            className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-base text-brand-dark dark:text-white"
+          >
+            <option value="">— keine Musik —</option>
+            {musicTracks.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}{t.mood ? ` (${t.mood})` : ''}{t.is_default ? ' · Standard' : ''}
+              </option>
+            ))}
+          </select>
+          {musicTracks.length === 0 && (
+            <p className="text-xs text-brand-steel dark:text-gray-500 mt-1">
+              Keine Tracks vorhanden. Füge welche unter{' '}
+              <Link href="/admin/social/reels/vorlagen" className="underline">Vorlagen → Musik-Bibliothek</Link> hinzu.
+            </p>
+          )}
         </div>
 
         {/* Accounts */}

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { fmtDateTime } from '@/lib/format-utils';
 
@@ -228,7 +229,7 @@ export default function ReelDetailPage({ params }: { params: Promise<{ id: strin
       {reel.render_log && reel.render_log.includes('[audio]') && (reel.render_log.includes('Voice-Track: AUS') && reel.render_log.includes('Musik: AUS')) && (
         <div className="mb-4 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
           <strong>Dieses Reel ist stumm.</strong> Weder Voice-Over noch Hintergrundmusik sind f&uuml;r die Generierung aktiviert gewesen. Unter{' '}
-          <a href="/admin/social/reels/vorlagen" className="underline font-medium">Vorlagen &rarr; Einstellungen</a> kannst du &bdquo;Voice-Over aktivieren&ldquo; anhaken oder eine Musik-URL hinterlegen. Danach &bdquo;Neu rendern&ldquo; klicken.
+          <Link href="/admin/social/reels/vorlagen" className="underline font-medium">Vorlagen &rarr; Einstellungen</Link> kannst du &bdquo;Voice-Over aktivieren&ldquo; anhaken oder eine Musik-URL hinterlegen. Danach &bdquo;Neu rendern&ldquo; klicken.
         </div>
       )}
 

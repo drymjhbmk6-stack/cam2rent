@@ -63,6 +63,7 @@ export async function POST(req: NextRequest) {
     platforms: Array.isArray(body.platforms) ? body.platforms.filter((p): p is string => typeof p === 'string') : undefined,
     fbAccountId: typeof body.fbAccountId === 'string' ? body.fbAccountId : null,
     igAccountId: typeof body.igAccountId === 'string' ? body.igAccountId : null,
+    musicId: typeof body.musicId === 'string' && body.musicId.length > 0 ? body.musicId : null,
     sourceType: 'manual',
     previewRequired: true,
   };

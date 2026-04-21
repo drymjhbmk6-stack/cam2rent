@@ -22,12 +22,23 @@ interface ReelsSettings {
   voice_enabled?: boolean;
   voice_name?: 'alloy' | 'echo' | 'fable' | 'nova' | 'onyx' | 'shimmer';
   voice_model?: 'tts-1' | 'tts-1-hd';
+  voice_style?: 'calm' | 'normal' | 'energetic';
   max_duration?: number;
-  default_music_url?: string;
   intro_enabled?: boolean;
   outro_enabled?: boolean;
   intro_duration?: number;
   outro_duration?: number;
+}
+
+interface MusicTrack {
+  id: string;
+  name: string;
+  url: string;
+  mood: string | null;
+  attribution: string | null;
+  is_default: boolean;
+  source: string | null;
+  storage_path: string | null;
 }
 
 export default function TemplatesPage() {
@@ -39,6 +50,14 @@ export default function TemplatesPage() {
   const [settings, setSettings] = useState<ReelsSettings>({});
   const [savingSettings, setSavingSettings] = useState(false);
   const [settingsFeedback, setSettingsFeedback] = useState('');
+
+  const [music, setMusic] = useState<MusicTrack[]>([]);
+  const [musicUploading, setMusicUploading] = useState(false);
+  const [musicError, setMusicError] = useState('');
+  const [newTrackName, setNewTrackName] = useState('');
+  const [newTrackMood, setNewTrackMood] = useState('upbeat');
+  const [newTrackAttribution, setNewTrackAttribution] = useState('');
+  const [newTrackUrl, setNewTrackUrl] = useState('');
 
   async function load() {
     const res = await fetch('/api/admin/reels/templates');
@@ -57,6 +76,86 @@ export default function TemplatesPage() {
         setSettings(parsed ?? {});
       }
     } catch { /* ignore */ }
+  }
+
+  async function loadMusic() {
+    try {
+      const res = await fetch('/api/admin/reels/music');
+      if (!res.ok) return;
+      const body = await res.json();
+      setMusic(body.tracks ?? []);
+    } catch { /* ignore */ }
+  }
+
+  async function handleUploadMusic(file: File) {
+    if (!newTrackName.trim()) {
+      setMusicError('Bitte Name eingeben bevor du hochlädst.');
+      return;
+    }
+    setMusicUploading(true);
+    setMusicError('');
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('name', newTrackName);
+    fd.append('mood', newTrackMood);
+    if (newTrackAttribution) fd.append('attribution', newTrackAttribution);
+
+    try {
+      const res = await fetch('/api/admin/reels/music', { method: 'POST', body: fd });
+      const body = await res.json();
+      if (!res.ok) {
+        setMusicError(body.error ?? 'Upload fehlgeschlagen');
+      } else {
+        setNewTrackName('');
+        setNewTrackAttribution('');
+        await loadMusic();
+      }
+    } catch (err) {
+      setMusicError(err instanceof Error ? err.message : 'Netzwerk-Fehler');
+    } finally {
+      setMusicUploading(false);
+    }
+  }
+
+  async function handleAddMusicUrl() {
+    if (!newTrackName.trim() || !newTrackUrl.trim()) {
+      setMusicError('Name und URL sind Pflicht');
+      return;
+    }
+    setMusicError('');
+    try {
+      const res = await fetch('/api/admin/reels/music', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newTrackName, url: newTrackUrl, mood: newTrackMood, attribution: newTrackAttribution, source: 'url' }),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        setMusicError(body.error ?? 'Hinzufuegen fehlgeschlagen');
+      } else {
+        setNewTrackName('');
+        setNewTrackUrl('');
+        setNewTrackAttribution('');
+        await loadMusic();
+      }
+    } catch (err) {
+      setMusicError(err instanceof Error ? err.message : 'Netzwerk-Fehler');
+    }
+  }
+
+  async function handleDeleteMusic(id: string) {
+    if (!confirm('Track wirklich löschen?')) return;
+    await fetch(`/api/admin/reels/music/${id}`, { method: 'DELETE' });
+    await loadMusic();
+  }
+
+  async function handleSetDefault(id: string) {
+    await fetch(`/api/admin/reels/music/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_default: true }),
+    });
+    await loadMusic();
   }
 
   async function saveSettings() {
@@ -79,6 +178,7 @@ export default function TemplatesPage() {
   useEffect(() => {
     load();
     loadSettings();
+    loadMusic();
   }, []);
 
   async function handleSave(id: string | null, data: Partial<Template>) {
@@ -145,17 +245,10 @@ export default function TemplatesPage() {
               className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-brand-dark dark:text-white"
             />
           </label>
-          <label className="block md:col-span-2">
-            <span className="block text-xs font-medium text-brand-steel dark:text-gray-400 mb-1">Hintergrund-Musik-URL (optional, MP3)</span>
-            <input
-              type="url"
-              placeholder="https://... .mp3"
-              value={settings.default_music_url ?? ''}
-              onChange={(e) => setSettings({ ...settings, default_music_url: e.target.value })}
-              className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-brand-dark dark:text-white"
-            />
-          </label>
         </div>
+        <p className="text-xs text-brand-steel dark:text-gray-500 mt-2">
+          Hintergrund-Musik wird jetzt pro Reel aus der Musik-Bibliothek (siehe unten) ausgewählt. Der als &bdquo;Standard&ldquo; markierte Track wird automatisch vorgewählt.
+        </p>
 
         <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
           <h3 className="text-sm font-semibold text-brand-dark dark:text-white mb-2">Branding</h3>
@@ -216,7 +309,7 @@ export default function TemplatesPage() {
           </label>
 
           {settings.voice_enabled && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
               <label className="block">
                 <span className="block text-xs font-medium text-brand-steel dark:text-gray-400 mb-1">Stimme</span>
                 <select
@@ -233,14 +326,26 @@ export default function TemplatesPage() {
                 </select>
               </label>
               <label className="block">
+                <span className="block text-xs font-medium text-brand-steel dark:text-gray-400 mb-1">Stil</span>
+                <select
+                  value={settings.voice_style ?? 'normal'}
+                  onChange={(e) => setSettings({ ...settings, voice_style: e.target.value as ReelsSettings['voice_style'] })}
+                  className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-brand-dark dark:text-white"
+                >
+                  <option value="calm">Ruhig (langsamer, fast meditativ)</option>
+                  <option value="normal">Normal (sympathisch-aktiv)</option>
+                  <option value="energetic">Energetisch (schnell, enthusiastisch)</option>
+                </select>
+              </label>
+              <label className="block">
                 <span className="block text-xs font-medium text-brand-steel dark:text-gray-400 mb-1">Modell</span>
                 <select
                   value={settings.voice_model ?? 'tts-1'}
                   onChange={(e) => setSettings({ ...settings, voice_model: e.target.value as ReelsSettings['voice_model'] })}
                   className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-brand-dark dark:text-white"
                 >
-                  <option value="tts-1">tts-1 (Standard, günstig — 0,003 €/Reel)</option>
-                  <option value="tts-1-hd">tts-1-hd (HD, besserer Klang — 0,006 €/Reel)</option>
+                  <option value="tts-1">tts-1 (Standard, 0,003 €/Reel)</option>
+                  <option value="tts-1-hd">tts-1-hd (HD, 0,006 €/Reel)</option>
                 </select>
               </label>
             </div>
@@ -257,6 +362,119 @@ export default function TemplatesPage() {
           </button>
           {settingsFeedback && <span className="text-xs text-brand-steel dark:text-gray-400">{settingsFeedback}</span>}
         </div>
+      </div>
+
+      {/* Musik-Bibliothek */}
+      <div className="mb-8 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+        <h2 className="text-lg font-heading font-bold text-brand-dark dark:text-white mb-1">Musik-Bibliothek</h2>
+        <p className="text-xs text-brand-steel dark:text-gray-500 mb-3">
+          MP3-Tracks die beim Generieren pro Reel ausgewählt werden können. Kostenlose Quellen: {' '}
+          <a href="https://pixabay.com/music/search/upbeat/" target="_blank" rel="noreferrer" className="underline">Pixabay</a>,{' '}
+          <a href="https://freemusicarchive.org/" target="_blank" rel="noreferrer" className="underline">FMA</a>,{' '}
+          <a href="https://www.bensound.com/" target="_blank" rel="noreferrer" className="underline">Bensound</a>.
+        </p>
+
+        {/* Neue Track anlegen */}
+        <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 mb-4 space-y-2">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+            <input
+              type="text"
+              placeholder="Track-Name (z.B. Upbeat Action)"
+              value={newTrackName}
+              onChange={(e) => setNewTrackName(e.target.value)}
+              className="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-brand-dark dark:text-white"
+            />
+            <select
+              value={newTrackMood}
+              onChange={(e) => setNewTrackMood(e.target.value)}
+              className="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-brand-dark dark:text-white"
+            >
+              <option value="upbeat">upbeat (treibend, energisch)</option>
+              <option value="driving">driving (Sport, Action)</option>
+              <option value="cinematic">cinematic (episch, filmisch)</option>
+              <option value="calm">calm (ruhig, Lifestyle)</option>
+              <option value="neutral">neutral</option>
+            </select>
+            <input
+              type="text"
+              placeholder="Attribution (optional, z.B. 'Music: XYZ')"
+              value={newTrackAttribution}
+              onChange={(e) => setNewTrackAttribution(e.target.value)}
+              className="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-brand-dark dark:text-white"
+            />
+          </div>
+          <div className="flex flex-col md:flex-row gap-2">
+            <label className="flex-1">
+              <span className="sr-only">Externe URL</span>
+              <input
+                type="url"
+                placeholder="Externe MP3-URL (optional)"
+                value={newTrackUrl}
+                onChange={(e) => setNewTrackUrl(e.target.value)}
+                className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-brand-dark dark:text-white"
+              />
+            </label>
+            <button
+              onClick={handleAddMusicUrl}
+              disabled={!newTrackName || !newTrackUrl}
+              className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-brand-dark dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 px-4 py-2 text-sm font-medium disabled:opacity-50"
+            >
+              URL speichern
+            </button>
+            <label className="rounded-lg bg-cyan-600 hover:bg-cyan-700 px-4 py-2 text-sm font-medium text-white cursor-pointer flex items-center justify-center">
+              {musicUploading ? 'Lade…' : 'MP3 hochladen'}
+              <input
+                type="file"
+                accept="audio/mpeg,audio/mp3,.mp3"
+                disabled={musicUploading}
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleUploadMusic(file);
+                  e.target.value = '';
+                }}
+              />
+            </label>
+          </div>
+          {musicError && <p className="text-xs text-red-600 dark:text-red-400">{musicError}</p>}
+        </div>
+
+        {/* Track-Liste */}
+        {music.length === 0 ? (
+          <p className="text-sm text-brand-steel dark:text-gray-400 text-center py-6">
+            Noch keine Tracks in der Bibliothek.
+          </p>
+        ) : (
+          <ul className="divide-y divide-gray-200 dark:divide-gray-700">
+            {music.map((t) => (
+              <li key={t.id} className="py-2 flex items-center gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-brand-dark dark:text-white truncate">{t.name}</span>
+                    {t.mood && <span className="text-xs bg-gray-100 dark:bg-gray-700 text-brand-steel dark:text-gray-300 rounded px-2 py-0.5">{t.mood}</span>}
+                    {t.is_default && <span className="text-xs bg-emerald-500 text-white rounded px-2 py-0.5">Standard</span>}
+                  </div>
+                  {t.attribution && <p className="text-xs text-brand-steel dark:text-gray-500">{t.attribution}</p>}
+                </div>
+                <audio src={t.url} controls preload="none" className="h-8" style={{ maxWidth: 200 }} />
+                {!t.is_default && (
+                  <button
+                    onClick={() => handleSetDefault(t.id)}
+                    className="text-xs text-cyan-600 dark:text-cyan-400 hover:underline whitespace-nowrap"
+                  >
+                    Als Standard
+                  </button>
+                )}
+                <button
+                  onClick={() => handleDeleteMusic(t.id)}
+                  className="text-xs text-red-600 dark:text-red-400 hover:underline"
+                >
+                  Löschen
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       {loading ? (

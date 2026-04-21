@@ -18,7 +18,7 @@ import { isTestMode } from '@/lib/env-mode';
 import { generateReelScript, type ReelScript } from './script-ai';
 import { findClipForQuery, type PexelsVideo, type PexelsVideoFile } from './pexels';
 import { renderReel } from './ffmpeg-render';
-import { generateSpeech, type TTSVoice, type TTSModel } from './tts';
+import { generateSpeech, STYLE_SPEED, type TTSVoice, type TTSModel, type TTSStyle } from './tts';
 
 export interface GenerateReelOptions {
   templateId?: string;
@@ -33,6 +33,7 @@ export interface GenerateReelOptions {
   sourceId?: string;
   previewRequired?: boolean;             // Default true
   postDate?: Date;
+  musicId?: string | null;               // Optional: ueberschreibt default_music_url
 }
 
 export interface GenerateReelResult {
@@ -55,6 +56,7 @@ interface ReelsSettings {
   voice_enabled?: boolean;
   voice_name?: TTSVoice;
   voice_model?: TTSModel;
+  voice_style?: TTSStyle;
   intro_enabled?: boolean;
   outro_enabled?: boolean;
   intro_duration?: number;
@@ -116,6 +118,29 @@ export async function generateReel(opts: GenerateReelOptions): Promise<GenerateR
   }
   const templateType = opts.templateType ?? tmpl.template_type;
 
+  // ── 1a. Musik-URL ermitteln: music_id überschreibt default_music_url ────
+  let resolvedMusicUrl: string | undefined;
+  let resolvedMusicId: string | null = null;
+  if (opts.musicId) {
+    const { data: track } = await supabase.from('social_reel_music').select('id, url').eq('id', opts.musicId).maybeSingle();
+    if (track?.url) {
+      resolvedMusicUrl = track.url;
+      resolvedMusicId = track.id;
+    }
+  }
+  if (!resolvedMusicUrl) {
+    // Kein explizites music_id → is_default Track suchen
+    const { data: def } = await supabase.from('social_reel_music').select('id, url').eq('is_default', true).maybeSingle();
+    if (def?.url) {
+      resolvedMusicUrl = def.url;
+      resolvedMusicId = def.id;
+    }
+  }
+  if (!resolvedMusicUrl) {
+    // Fallback auf globalen Legacy-Setting
+    resolvedMusicUrl = settings.default_music_url?.trim() || undefined;
+  }
+
   // ── 2. Draft-Row anlegen (damit wir bei Fehlern was zum Aktualisieren haben) ──
   const { data: inserted, error: insertError } = await supabase
     .from('social_reels')
@@ -133,6 +158,8 @@ export async function generateReel(opts: GenerateReelOptions): Promise<GenerateR
       ai_generated: true,
       ai_prompt: opts.topic,
       is_test: testMode,
+      music_id: resolvedMusicId,
+      music_url: resolvedMusicUrl ?? null,
     })
     .select('id')
     .single();
@@ -152,7 +179,7 @@ export async function generateReel(opts: GenerateReelOptions): Promise<GenerateR
         product_name: opts.productName ?? '',
         keywords: keywordsStr,
       },
-      { postDate: opts.postDate }
+      { postDate: opts.postDate, voiceStyle: settings.voice_style ?? 'normal' }
     );
 
     // Dauer-Cap (Reels dürfen max 90s auf IG, wir limitieren konservativ)
@@ -186,6 +213,8 @@ export async function generateReel(opts: GenerateReelOptions): Promise<GenerateR
       try {
         const voice = settings.voice_name ?? 'nova';
         const model = settings.voice_model ?? 'tts-1';
+        const style: TTSStyle = settings.voice_style ?? 'normal';
+        const speed = STYLE_SPEED[style];
         const texts: string[] = [
           ...script.scenes.map((s) => (s.voice_text?.trim() || s.text_overlay?.trim() || '')),
           (script.cta_frame.voice_text?.trim() || script.cta_frame.headline?.trim() || ''),
@@ -193,14 +222,12 @@ export async function generateReel(opts: GenerateReelOptions): Promise<GenerateR
         const generated: Buffer[] = [];
         for (const t of texts) {
           if (!t) {
-            // Platzhalter-Silence durch Renderer handled — aber wir brauchen den Index
             generated.push(Buffer.alloc(0));
             continue;
           }
-          const buf = await generateSpeech(t, { voice, model });
+          const buf = await generateSpeech(t, { voice, model, speed });
           generated.push(buf);
         }
-        // Nur setzen wenn mindestens ein Segment echte Audio hat
         if (generated.some((b) => b.length > 0)) {
           voiceSegments = generated;
         }
@@ -214,7 +241,7 @@ export async function generateReel(opts: GenerateReelOptions): Promise<GenerateR
       script,
       templateType,
       clips,
-      musicUrl: settings.default_music_url?.trim() || undefined,
+      musicUrl: resolvedMusicUrl,
       voiceSegments,
       bgColorFrom: tmpl.bg_color_from,
       bgColorTo: tmpl.bg_color_to,
