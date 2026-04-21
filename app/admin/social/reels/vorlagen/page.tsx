@@ -135,27 +135,30 @@ function TemplateForm({
   const [bgColorTo, setBgColorTo] = useState(initial?.bg_color_to ?? '#1E40AF');
   const [isActive, setIsActive] = useState(initial?.is_active ?? true);
 
+  const inputClass =
+    'w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-brand-dark dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500';
+
   return (
-    <div className="bg-cyan-50 dark:bg-cyan-950/30 rounded-xl border border-cyan-200 dark:border-cyan-900 p-4 space-y-3">
+    <div className="bg-white dark:bg-gray-800 rounded-xl border-2 border-cyan-400 dark:border-cyan-600 p-4 space-y-3 shadow-md">
       <input
         type="text"
         placeholder="Name"
         value={name}
         onChange={(e) => setName(e.target.value)}
-        className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-sm"
+        className={inputClass}
       />
       <input
         type="text"
         placeholder="Kurzbeschreibung"
         value={description ?? ''}
         onChange={(e) => setDescription(e.target.value)}
-        className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-sm"
+        className={inputClass}
       />
       <div className="grid grid-cols-2 gap-3">
         <select
           value={templateType}
           onChange={(e) => setTemplateType(e.target.value as 'stock_footage' | 'motion_graphics')}
-          className="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-sm"
+          className={inputClass}
         >
           <option value="stock_footage">Stock-Footage (Pexels)</option>
           <option value="motion_graphics">Motion-Graphics (Farbe + Text)</option>
@@ -165,7 +168,7 @@ function TemplateForm({
           placeholder="Dauer in s"
           value={defaultDuration}
           onChange={(e) => setDefaultDuration(Number(e.target.value))}
-          className="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-sm"
+          className={inputClass}
         />
       </div>
       <textarea
@@ -173,35 +176,40 @@ function TemplateForm({
         value={scriptPrompt}
         onChange={(e) => setScriptPrompt(e.target.value)}
         rows={6}
-        className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-sm font-mono"
+        className={`${inputClass} font-mono`}
       />
       <input
         type="text"
         placeholder="Standard-Hashtags (komma-getrennt)"
         value={hashtagsText}
         onChange={(e) => setHashtagsText(e.target.value)}
-        className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-sm"
+        className={inputClass}
       />
       {templateType === 'motion_graphics' && (
         <div className="grid grid-cols-2 gap-3">
-          <label className="text-sm flex items-center gap-2">
+          <label className="text-sm flex items-center gap-2 text-brand-dark dark:text-white">
             <span className="w-24">Farbe oben:</span>
-            <input type="color" value={bgColorFrom} onChange={(e) => setBgColorFrom(e.target.value)} />
-            <input type="text" value={bgColorFrom} onChange={(e) => setBgColorFrom(e.target.value)} className="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-2 py-1 text-xs flex-1" />
+            <input type="color" value={bgColorFrom} onChange={(e) => setBgColorFrom(e.target.value)} className="h-9 w-12 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900" />
+            <input type="text" value={bgColorFrom} onChange={(e) => setBgColorFrom(e.target.value)} className="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-brand-dark dark:text-white px-2 py-1 text-xs flex-1" />
           </label>
-          <label className="text-sm flex items-center gap-2">
+          <label className="text-sm flex items-center gap-2 text-brand-dark dark:text-white">
             <span className="w-24">Farbe CTA:</span>
-            <input type="color" value={bgColorTo} onChange={(e) => setBgColorTo(e.target.value)} />
-            <input type="text" value={bgColorTo} onChange={(e) => setBgColorTo(e.target.value)} className="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-2 py-1 text-xs flex-1" />
+            <input type="color" value={bgColorTo} onChange={(e) => setBgColorTo(e.target.value)} className="h-9 w-12 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900" />
+            <input type="text" value={bgColorTo} onChange={(e) => setBgColorTo(e.target.value)} className="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-brand-dark dark:text-white px-2 py-1 text-xs flex-1" />
           </label>
         </div>
       )}
-      <label className="flex items-center gap-2 text-sm">
+      <label className="flex items-center gap-2 text-sm text-brand-dark dark:text-white cursor-pointer">
         <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
         <span>Aktiv (kann im Generator ausgewählt werden)</span>
       </label>
-      <div className="flex justify-end gap-2">
-        <button onClick={onCancel} className="rounded border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm">Abbrechen</button>
+      <div className="flex justify-end gap-2 pt-2 border-t border-gray-200 dark:border-gray-700">
+        <button
+          onClick={onCancel}
+          className="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-brand-dark dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 px-4 py-2 text-sm"
+        >
+          Abbrechen
+        </button>
         <button
           onClick={() =>
             onSave({
@@ -216,7 +224,7 @@ function TemplateForm({
               is_active: isActive,
             })
           }
-          className="rounded bg-brand-orange hover:bg-brand-orange/90 px-4 py-2 text-sm text-white"
+          className="rounded-lg bg-brand-orange hover:bg-brand-orange/90 px-4 py-2 text-sm font-medium text-white shadow-sm"
         >
           Speichern
         </button>
