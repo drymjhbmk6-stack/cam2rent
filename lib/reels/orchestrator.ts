@@ -179,13 +179,24 @@ export async function generateReel(opts: GenerateReelOptions): Promise<GenerateR
     });
 
     // ── 6. Upload ───────────────────────────────────────────────────────────
+    // Supabase-Bucket-Limit ist 50 MB. Unsere CRF-23-Renders liegen typisch bei
+    // 10–20 MB fuer 20s — aber wir warnen bei >45 MB, damit wir das Problem
+    // frueh sehen falls ein laengeres Reel ueber die Grenze geht.
+    const sizeMb = videoBuffer.byteLength / (1024 * 1024);
+    if (sizeMb > 45) {
+      console.warn(`[reels/orchestrator] Video ist ${sizeMb.toFixed(1)} MB — Bucket-Limit 50 MB`);
+    }
+
     const videoPath = `${reelId}/video.mp4`;
     const thumbPath = `${reelId}/thumb.jpg`;
     const videoUrl = await uploadToBucket(videoPath, videoBuffer, 'video/mp4');
     const thumbnailUrl = await uploadToBucket(thumbPath, thumbnailBuffer, 'image/jpeg');
 
     if (!videoUrl) {
-      throw new Error('Video-Upload in Bucket "social-reels" fehlgeschlagen — Bucket angelegt und public?');
+      const hint = sizeMb > 45
+        ? ` Video ist ${sizeMb.toFixed(1)} MB — evtl. ueber Bucket-Limit (50 MB). Dauer in admin_settings.reels_settings.max_duration reduzieren.`
+        : ' Bucket "social-reels" angelegt und public? Service-Role-Key aktiv?';
+      throw new Error(`Video-Upload fehlgeschlagen.${hint}`);
     }
 
     // ── 7. DB aktualisieren ─────────────────────────────────────────────────

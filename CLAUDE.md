@@ -596,7 +596,7 @@ Vollautomatische Kurzvideos (9:16, 15–30 Sek) für Facebook- und Instagram-Ree
 
 **Go-Live TODO:**
 1. **SQL-Migration** `supabase/supabase-reels.sql` ausführen (3 Tabellen + Seed-Templates + Default-Settings)
-2. **Storage-Bucket** `social-reels` manuell in Supabase-Dashboard anlegen (Public: ON, MIME: video/mp4 + image/jpeg, 100 MB Limit)
+2. **Storage-Bucket** `social-reels` manuell in Supabase-Dashboard anlegen (Public: ON, MIME: video/mp4 + image/jpeg, 50 MB Limit reicht — unsere Reels liegen typisch bei 10–20 MB)
 3. **Pexels API-Key** registrieren (kostenlos, https://www.pexels.com/api/) und in `/admin/social/reels/vorlagen` → Einstellungen hinterlegen (oder als `PEXELS_API_KEY`-Env in Coolify)
 4. **Docker-Image neu bauen** (Dockerfile installiert jetzt `ffmpeg + ttf-dejavu` im Runner)
 5. **Crontab Hetzner:** `*/5 * * * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/reels-publish`
@@ -1094,7 +1094,7 @@ Systematischer Sweep ueber Admin- und Kundenkonto-UI nach Darstellungsfehlern. G
 - **SQL-Migration `supabase-waitlist-use-case.sql` ausführen** (Spalte `use_case` auf `waitlist_subscriptions` für optionalen Nutzungszweck-Dropdown).
 - **SQL-Migration `supabase-verification-deferred.sql` ausführen** (`verification_required` + `verification_gate_passed_at` auf `bookings` — Voraussetzung für Express-Signup-Flag).
 - **SQL-Migration `supabase-env-toggle.sql` ausführen** (is_test-Flag auf bookings/invoices/credit_notes/expenses/email_log/admin_audit_log/stripe_transactions — fuer sauberen Test/Live-Wechsel).
-- **Auto-Reels Go-Live:** (1) `supabase/supabase-reels.sql` ausführen (3 Tabellen + Seed-Vorlagen + `reels_settings`-Default). (2) Supabase Storage-Bucket `social-reels` manuell anlegen (Public ON, 100 MB, `video/mp4` + `image/jpeg`). (3) Pexels API-Key (kostenlos) registrieren + in `admin_settings.reels_settings.pexels_api_key` hinterlegen oder als `PEXELS_API_KEY`-Env. (4) Docker-Image neu bauen (Dockerfile installiert jetzt `ffmpeg + ttf-dejavu` in Runner-Stage — braucht ~50 MB extra Image-Größe). (5) Crontab-Eintrag: `*/5 * * * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/reels-publish`.
+- **Auto-Reels Go-Live:** (1) `supabase/supabase-reels.sql` ausführen (3 Tabellen + Seed-Vorlagen + `reels_settings`-Default). (2) Supabase Storage-Bucket `social-reels` manuell anlegen (Public ON, 50 MB reicht, `video/mp4` + `image/jpeg`). (3) Pexels API-Key (kostenlos) registrieren + in `admin_settings.reels_settings.pexels_api_key` hinterlegen oder als `PEXELS_API_KEY`-Env. (4) Docker-Image neu bauen (Dockerfile installiert jetzt `ffmpeg + ttf-dejavu` in Runner-Stage — braucht ~50 MB extra Image-Größe). (5) Crontab-Eintrag: `*/5 * * * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/reels-publish`.
 - **Go-Live 01.05.2026:** Test/Live-Switch auf Live umschalten (`/admin/einstellungen` → Test-/Live-Modus → "Live-Modus"). Ersetzt: TEST_MODE-Konstante, Stripe-Key-Wechsel, Vertrags-Wasserzeichen, Resend-Absender, Sendcloud-Keys.
 - **Go-Live 01.05.2026:** Domain test.cam2rent.de → cam2rent.de
 - **Go-Live 01.05.2026:** Resend Domain verifizieren (DKIM + SPF)
