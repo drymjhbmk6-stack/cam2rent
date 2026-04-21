@@ -118,6 +118,7 @@ export async function POST(request: NextRequest) {
       signatureMethod: method,
       signerName: custName,
       ipAddress: ip,
+      unitId: booking.unit_id ?? null,
     });
 
     // 7. Speichern

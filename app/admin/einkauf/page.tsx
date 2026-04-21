@@ -404,7 +404,10 @@ export default function EinkaufPage() {
               <option value="cancelled">Storniert</option>
             </select>
             <div style={{ flex: 1 }} />
-            <button onClick={() => setShowNewPurchase(true)} style={btnPrimary}>+ Neuer Einkauf</button>
+            <a href="/admin/einkauf/upload" style={{ ...btnPrimary, textDecoration: 'none', display: 'inline-block' }}>
+              📄 Rechnung hochladen (KI)
+            </a>
+            <button onClick={() => setShowNewPurchase(true)} style={btnSecondary}>+ Manuell</button>
           </div>
 
           {/* New Purchase Form */}

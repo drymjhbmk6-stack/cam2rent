@@ -70,6 +70,29 @@ async function resolveAccessoryNames(ids: string[]): Promise<Record<string, stri
  * Lädt benutzerdefinierte Vertragsparagraphen aus admin_settings.
  * Gibt null zurück wenn keine gespeichert sind (→ Fallback auf hardcoded).
  */
+/**
+ * Laedt den aktuellen Zeitwert eines Assets ueber die Unit-ID.
+ * Gibt null zurueck, wenn der Unit kein Asset zugeordnet ist (Altbestand).
+ * In dem Fall faellt der Vertrag auf opts.deposit als Wiederbeschaffungswert zurueck.
+ */
+async function loadAssetCurrentValue(unitId: string): Promise<number | null> {
+  try {
+    const supabase = createServiceClient();
+    const { data } = await supabase
+      .from('assets')
+      .select('current_value')
+      .eq('unit_id', unitId)
+      .eq('status', 'active')
+      .maybeSingle();
+    if (data && data.current_value != null) {
+      return Number(data.current_value);
+    }
+  } catch {
+    // Fallback: deposit
+  }
+  return null;
+}
+
 async function loadCustomParagraphs(): Promise<{ title: string; text: string }[] | null> {
   try {
     const supabase = createServiceClient();
@@ -132,6 +155,12 @@ export async function generateContractPDF(opts: {
   eigenbeteiligung?: number;
   productCategory?: string;
   serialNumber?: string;
+  /**
+   * Unit-ID der physischen Kamera. Wenn gesetzt, laedt der Contract den
+   * aktuellen asset.current_value als Wiederbeschaffungswert. Fallback:
+   * opts.deposit.
+   */
+  unitId?: string | null;
   /** Override: true = immer Muster-Wasserzeichen, false = nie, undefined = aus env-mode */
   forceTestMode?: boolean;
 }): Promise<GenerateContractResult> {
@@ -143,6 +172,12 @@ export async function generateContractPDF(opts: {
   // Zubehör-IDs zu lesbaren Namen auflösen
   const accessoryNameMap = await resolveAccessoryNames(opts.accessories);
 
+  // Zeitwert (Wiederbeschaffungswert) aus verknuepftem Asset laden, falls Unit
+  // bekannt. Fallback: opts.deposit (Kautions-Betrag des Produkts) fuer Altbestand
+  // ohne Asset-Verknuepfung.
+  const assetCurrentValue = opts.unitId ? await loadAssetCurrentValue(opts.unitId) : null;
+  const wiederbeschaffungswert = assetCurrentValue ?? opts.deposit ?? 0;
+
   // Items aus productName + accessories generieren falls nicht explizit übergeben
   const items: MietgegenstandItem[] = opts.items && opts.items.length > 0
     ? opts.items
@@ -153,7 +188,7 @@ export async function generateContractPDF(opts: {
           seriennr: opts.serialNumber || '',
           tage: opts.rentalDays,
           preis: opts.priceRental,
-          wiederbeschaffungswert: opts.deposit || 0,
+          wiederbeschaffungswert,
         },
         ...opts.accessories.map((acc, i) => ({
           position: i + 2,

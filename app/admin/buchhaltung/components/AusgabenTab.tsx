@@ -17,9 +17,10 @@ interface Expense {
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
-  fees: 'Gebühren', shipping: 'Versandkosten', software: 'Software & Abos',
+  stripe_fees: 'Zahlungsgebühren', shipping: 'Versandkosten', software: 'Software & Abos',
   hardware: 'Hardware & Equipment', marketing: 'Marketing & Werbung', office: 'Bürobedarf',
   travel: 'Reisekosten', insurance: 'Versicherungen', legal: 'Rechts- & Beratungskosten',
+  depreciation: 'Abschreibungen (AfA)', asset_purchase: 'GWG-Sofortabzug',
   other: 'Sonstiges',
 };
 

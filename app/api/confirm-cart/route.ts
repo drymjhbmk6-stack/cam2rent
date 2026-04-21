@@ -152,6 +152,7 @@ export async function POST(req: NextRequest) {
                 signatureDataUrl: contractSignature.signatureDataUrl,
                 signatureMethod: contractSignature.signatureMethod,
                 signerName: contractSignature.signerName, ipAddress: ip,
+                unitId: fullBooking.unit_id ?? null,
               });
               await storeContract(row.id, result.pdfBuffer, {
                 contractHash: result.contractHash, customerName: contractSignature.signerName,
@@ -603,9 +604,11 @@ export async function POST(req: NextRequest) {
 
             // Seriennummer laden falls Unit zugeordnet
             let serialNumber = '';
+            let bookingUnitId: string | null = null;
             try {
               const { data: bkRow } = await supabase.from('bookings').select('unit_id').eq('id', bookingIds[gi]).maybeSingle();
               if (bkRow?.unit_id) {
+                bookingUnitId = bkRow.unit_id;
                 const { data: unitRow } = await supabase.from('product_units').select('serial_number').eq('id', bkRow.unit_id).maybeSingle();
                 serialNumber = unitRow?.serial_number ?? '';
               }
@@ -638,6 +641,7 @@ export async function POST(req: NextRequest) {
                   signatureMethod: contractSignature.signatureMethod,
                   signerName: contractSignature.signerName,
                   ipAddress: ip,
+                  unitId: bookingUnitId,
                 });
                 contractPdfBuffer = result.pdfBuffer;
                 await storeContract(bookingIds[gi], result.pdfBuffer, {

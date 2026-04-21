@@ -165,6 +165,7 @@ const SOCIAL_ITEMS: NavItem[] = [
 
 const FINANZEN_ITEMS: NavItem[] = [
   { href: '/admin/buchhaltung', label: 'Buchhaltung', icon: iconFinance },
+  { href: '/admin/anlagen', label: 'Anlagenverzeichnis', icon: iconCamera },
 ];
 
 const BERICHTE_ITEMS: NavItem[] = [

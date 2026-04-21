@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
       .from('expenses')
       .insert({
         expense_date: tx.stripe_created_at ? tx.stripe_created_at.split('T')[0] : from,
-        category: 'fees',
+        category: 'stripe_fees',
         description: `Stripe-Gebühr für ${tx.stripe_payment_intent_id.slice(0, 20)}...`,
         vendor: 'Stripe',
         net_amount: tx.fee,

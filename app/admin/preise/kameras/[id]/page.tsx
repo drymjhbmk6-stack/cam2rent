@@ -101,6 +101,28 @@ export default function AdminKameraEditorPage() {
 
   useEffect(() => { loadUnits(); }, [loadUnits]);
 
+  // Verknuepfte Assets pro Unit laden (optional, wenn assets-Tabelle existiert)
+  const [unitAssets, setUnitAssets] = useState<Record<string, { id: string; purchase_price: number; current_value: number; purchase_date: string }>>({});
+  useEffect(() => {
+    fetch(`/api/admin/assets?include_test=1`)
+      .then((r) => r.ok ? r.json() : { assets: [] })
+      .then((data) => {
+        const map: Record<string, { id: string; purchase_price: number; current_value: number; purchase_date: string }> = {};
+        for (const a of data.assets ?? []) {
+          if (a.unit_id) {
+            map[a.unit_id] = {
+              id: a.id,
+              purchase_price: Number(a.purchase_price),
+              current_value: Number(a.current_value),
+              purchase_date: a.purchase_date,
+            };
+          }
+        }
+        setUnitAssets(map);
+      })
+      .catch(() => { /* assets-Tabelle evtl. noch nicht migriert */ });
+  }, [id]);
+
   // Stock automatisch aus aktiven Units berechnen
   const activeUnitCount = units.filter((u) => u.status !== 'retired').length;
   useEffect(() => {
@@ -626,6 +648,7 @@ export default function AdminKameraEditorPage() {
                             <th className="text-left text-xs font-heading font-semibold text-brand-muted py-2 px-2">Label</th>
                             <th className="text-left text-xs font-heading font-semibold text-brand-muted py-2 px-2">Status</th>
                             <th className="text-left text-xs font-heading font-semibold text-brand-muted py-2 px-2">Kaufdatum</th>
+                            <th className="text-left text-xs font-heading font-semibold text-brand-muted py-2 px-2">Anlage (Zeitwert)</th>
                             <th className="text-left text-xs font-heading font-semibold text-brand-muted py-2 px-2">Notizen</th>
                             <th className="text-right text-xs font-heading font-semibold text-brand-muted py-2 px-2">Aktionen</th>
                           </tr>
@@ -660,6 +683,7 @@ export default function AdminKameraEditorPage() {
                                       onChange={(e) => setEditUnitData((d) => ({ ...d, purchased_at: e.target.value }))}
                                       className="px-2 py-1 border border-brand-border rounded-lg text-xs font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
                                   </td>
+                                  <td className="py-2 px-2 text-xs text-brand-muted italic">–</td>
                                   <td className="py-2 px-2">
                                     <input type="text" value={editUnitData.notes ?? unit.notes ?? ''}
                                       onChange={(e) => setEditUnitData((d) => ({ ...d, notes: e.target.value }))}
@@ -683,6 +707,15 @@ export default function AdminKameraEditorPage() {
                                   </td>
                                   <td className="py-2 px-2 text-xs text-brand-muted">
                                     {unit.purchased_at ? new Date(unit.purchased_at).toLocaleDateString('de-DE') : '–'}
+                                  </td>
+                                  <td className="py-2 px-2 text-xs">
+                                    {unitAssets[unit.id] ? (
+                                      <a href={`/admin/anlagen/${unitAssets[unit.id].id}`} className="text-accent-blue hover:underline font-semibold">
+                                        {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(unitAssets[unit.id].current_value)}
+                                      </a>
+                                    ) : (
+                                      <a href="/admin/einkauf/upload" className="text-brand-muted hover:text-accent-blue underline-offset-2 hover:underline italic">noch nicht erfasst</a>
+                                    )}
                                   </td>
                                   <td className="py-2 px-2 text-xs text-brand-muted max-w-[150px] truncate">{unit.notes || '–'}</td>
                                   <td className="py-2 px-2 text-right whitespace-nowrap">

@@ -127,7 +127,7 @@ export async function POST(req: NextRequest) {
       await supabase.from('expenses').insert({
         // Berlin-Datum, damit Gebuehren-Ausgaben abends nicht auf den Folgetag rutschen
         expense_date: new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' }),
-        category: 'fees',
+        category: 'stripe_fees',
         description: `${label}-Gebühr für Buchung ${bookingId}`,
         vendor: label,
         net_amount: fees,
@@ -190,6 +190,7 @@ export async function POST(req: NextRequest) {
               signatureMethod: contractSignature.signatureMethod,
               signerName: contractSignature.signerName,
               ipAddress: ip,
+              unitId: body.unit_id ?? null,
             });
             contractPdfBuffer = contractResult.pdfBuffer;
 

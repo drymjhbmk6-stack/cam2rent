@@ -250,6 +250,51 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // ── AfA-Buchungen (Abschreibungen) ────────────────────────────────────────
+  // Wenn das asset-Modul aktiv ist und expenses.category='depreciation'-Eintraege
+  // im Zeitraum existieren, werden sie als DATEV-Zeilen exportiert:
+  // Soll AfA-Aufwandskonto (4830) an Anlagen-Bestandskonto (0420/0430/0400/0490).
+  try {
+    const { data: depExpenses } = await supabase
+      .from('expenses')
+      .select('id, expense_date, gross_amount, description, asset_id, assets:asset_id(kind)')
+      .eq('category', 'depreciation')
+      .eq('is_test', false)
+      .gte('expense_date', from)
+      .lte('expense_date', to);
+
+    const kontenMap: Record<string, string> = {
+      rental_camera: '0420',
+      rental_accessory: '0430',
+      office_equipment: '0400',
+      tool: '0490',
+      other: '0490',
+    };
+    const afaKonto = '4830';
+
+    for (const exp of depExpenses ?? []) {
+      const assetKind = (Array.isArray(exp.assets) ? exp.assets[0]?.kind : (exp.assets as { kind?: string } | null)?.kind) || 'other';
+      const bestandskonto = kontenMap[assetKind] ?? '0490';
+      const expDate = exp.expense_date.replace(/-/g, '').slice(4, 8) + exp.expense_date.slice(0, 4);
+      const line = buildLine(
+        formatAmount(Number(exp.gross_amount)),
+        'S',
+        afaKonto,
+        bestandskonto,
+        '',
+        exp.expense_date.slice(8, 10) + exp.expense_date.slice(5, 7), // TTMM
+        `AfA-${exp.id.slice(0, 6)}`,
+        escapeField(exp.description || 'Abschreibung'),
+      );
+      lines.push(line);
+      void expDate;
+    }
+  } catch (err) {
+    console.error('[datev-export] AfA-Abruf fehlgeschlagen', err);
+    // Nicht blockend: wenn assets-Tabelle noch nicht existiert oder keine AfA-Daten,
+    // bleibt der Export trotzdem gueltig.
+  }
+
   // Build CSV with UTF-8 BOM
   const csvContent = lines.join('\r\n');
   const bom = '\uFEFF';

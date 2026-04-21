@@ -10,6 +10,17 @@
 
 export type DetectedImageType = 'jpeg' | 'png' | 'webp' | 'heic' | 'heif' | 'gif' | null;
 
+export type DetectedFileType = DetectedImageType | 'pdf';
+
+export function detectFileType(buffer: Buffer | Uint8Array): DetectedFileType | null {
+  if (buffer.length < 4) return null;
+  // PDF: "%PDF-"
+  if (buffer[0] === 0x25 && buffer[1] === 0x50 && buffer[2] === 0x44 && buffer[3] === 0x46) {
+    return 'pdf';
+  }
+  return detectImageType(buffer);
+}
+
 export function detectImageType(buffer: Buffer | Uint8Array): DetectedImageType {
   if (buffer.length < 12) return null;
 

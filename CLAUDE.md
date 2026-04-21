@@ -674,6 +674,60 @@ Steuer-Modus umschaltbar im Admin (/admin/einstellungen):
 - Stripe Redirect-Flow (nicht in-Modal): Payment → Redirect zu /konto/buchungen?extend_confirm=1 → confirm-extension API
 - Extension-Context wird in sessionStorage gespeichert ('cam2rent_extension')
 
+## Anlagenbuchhaltung + KI-Rechnungs-OCR (Stand 2026-04-21)
+Volles Lager-/Anlagenmodul mit KI-gestuetzter Rechnungs-Analyse. Rechnung hochladen → Claude Vision extrahiert Lieferant, Positionen, Summen + schlaegt pro Position Anlagegut vs. Betriebsausgabe vor → Admin bestaetigt/korrigiert → System legt Assets bzw. Expenses an → Mietvertrag zieht aktuellen Zeitwert (asset.current_value) statt Kaution.
+
+### DB (`supabase-assets.sql`, idempotent)
+- **Neue Tabelle `assets`** (kind, name, serial_number, manufacturer, model, purchase_price, purchase_date, useful_life_months, depreciation_method, residual_value, current_value, last_depreciation_at, unit_id FK → product_units, supplier_id, purchase_id, status, is_test)
+- **`purchases` erweitert** um: payment_method, invoice_storage_path, invoice_date, ai_extracted_at, ai_raw_response, net_amount, tax_amount, is_test
+- **`purchase_items` erweitert** um: asset_id FK, expense_id FK, classification ('asset'|'expense'|'pending'|'ignored'), tax_rate, net_price, ai_suggestion
+- **`expenses` erweitert** um: asset_id FK, CHECK-Constraint um `'depreciation'` + `'asset_purchase'` ergaenzt
+- **Bug-Fix**: `UPDATE expenses SET category='stripe_fees' WHERE category='fees'` (war Race gegen CHECK-Constraint)
+- **Storage-Bucket `purchase-invoices`** (manuell anzulegen, Service-Role-only)
+
+### Libraries
+- **`lib/ai/invoice-extract.ts`** — `extractInvoice(buffer, mimeType)` → Claude Sonnet 4.6 mit Document-Input (PDF) oder Image-Input (JPG/PNG/WebP). System-Prompt gibt cam2rent-Kontext + Klassifikations-Regeln (Anlagegut > 100 EUR, Verbrauchsmaterial = Expense, GWG-Sofortabzug 800 EUR-Grenze). Response ist strukturiertes JSON. Kosten: ~0,01–0,03 €/Rechnung. API-Key aus `admin_settings.blog_settings.anthropic_api_key`.
+- **`lib/depreciation.ts`** — Pure-Function-Lib fuer lineare AfA: `monthlyDepreciationRate()`, `computeCurrentValue(asOf)`, `pendingDepreciationMonths()`, `isFullyDepreciated()`. Keine DB-Zugriffe.
+
+### API-Routen
+- **`POST /api/admin/purchases/upload`** (multipart, max 20 MB) → Magic-Byte-Check (PDF/JPG/PNG/WebP) → Storage-Upload in `purchase-invoices/YYYY/MM/<uuid>.<ext>` → `extractInvoice()` → Supplier finden/anlegen → `purchases` + `purchase_items` (classification='pending' + ai_suggestion). Rate-Limit 20/h pro IP. Respektiert is_test.
+- **`PATCH /api/admin/purchase-items/[id]`** mit Body `{ classification: 'asset'|'expense'|'ignored', ... }`. Bei 'asset': legt `assets`-Row + optional `product_units`-Row an. Bei 'expense': legt `expenses`-Row mit `source_type='purchase_item'` + source_id an (Idempotenz).
+- **`GET/POST /api/admin/assets`** — Listen/Anlegen (Filter: kind, status, purchase_id, unit_id, include_test).
+- **`GET/PATCH/DELETE /api/admin/assets/[id]`** — Detail mit AfA-Historie aus expenses WHERE asset_id. DELETE sperrt bei vorhandenen AfA-Buchungen → Admin muss "Veraeussern" nutzen.
+- **`POST /api/admin/assets/[id]/depreciation-catchup`** — Rueckwirkende AfA-Buchung fuer nachgetragenen Bestand.
+- **`GET/POST /api/cron/depreciation`** — Monatlicher AfA-Cron (verifyCronAuth). Fuer jedes aktive lineare Asset: wenn Monats-AfA noch nicht gebucht (source_id=`<asset_id>_YYYY-MM` als Idempotenz), expenses-Eintrag mit `category='depreciation'` anlegen, current_value mindert sich, last_depreciation_at wird gesetzt. Stoppt bei Erreichen des Restwerts. Im Test-Modus: nur is_test=true Assets, im Live-Modus: nur is_test=false.
+- **`GET /api/admin/invoices/purchase-pdf?path=...`** — Signed URL (5 Min) fuer Rechnungen im `purchase-invoices`-Bucket, Redirect.
+
+### Admin-UI
+- **`/admin/einkauf/upload`** (neu) — 4-Schritt-Flow: Drag-and-Drop → Claude-Analyse mit Live-Progress → Positions-Klassifizierung (pro Zeile Asset/Ausgabe/Ignorieren + Felder) → "Alle verbuchen" → Done.
+  - KI-Vorschlag wird als Badge angezeigt ("Anlagegut · 92% Sicherheit")
+  - Bei Asset: Art-Dropdown, Name, Nutzungsdauer, Seriennummer, Produkt-Verknuepfung (bei rental_camera)
+  - Bei Expense: Kategorie-Dropdown, Buchungsdatum
+- **`/admin/einkauf`** bekommt oberen Button "📄 Rechnung hochladen (KI)" primaer + "+ Manuell" sekundaer.
+- **`/admin/anlagen`** (neu) — Anlagenverzeichnis: KPI-Karten (Anschaffungswert gesamt, Zeitwert, abgeschrieben), Filter (kind, status, Suche), Tabelle mit Link zur Rechnung + Detail.
+- **`/admin/anlagen/[id]`** — Detail mit AfA-Historie, Aktionen "AfA nachholen", "Verkauft/Ausmustern/Verlust", Stammdaten, Unit-Verknuepfung. Zeigt berechneten Zeitwert vs. DB-Zeitwert wenn abweichend (AfA-Lauf ausstehend).
+- **`/admin/anlagen/nachtragen`** — Liste aller `product_units` ohne Asset-Verknuepfung. Pro Einheit Inline-Formular (Kaufpreis, Kaufdatum, Nutzungsdauer) → legt Asset an + ruft depreciation-catchup auf.
+- **`/admin/preise/kameras/[id]`** — Zusaetzliche Spalte "Anlage (Zeitwert)" in der Seriennummern-Tabelle. Bei verknuepftem Asset: Link auf Asset-Detail mit Zeitwert. Bei fehlendem Asset: Link "noch nicht erfasst" auf Upload-Seite. **Seriennummern-CRUD selbst bleibt 1:1 unveraendert** (keine Gefahr fuer Gantt, Packliste, Vertrag-SN, Uebergabeprotokoll).
+- **Sidebar (`AdminLayoutClient.tsx`)** — Neuer Menupunkt "Anlagenverzeichnis" in Gruppe "Finanzen" neben "Buchhaltung".
+
+### Mietvertrag — Zeitwert aus Asset
+- **`lib/contracts/generate-contract.ts`** bekommt neuen optionalen Parameter `unitId`. Wenn gesetzt, wird ueber `assets.unit_id` der aktuelle `current_value` geladen und als `wiederbeschaffungswert` in MietgegenstandItem geschrieben. Fallback: `opts.deposit` (Kautionsbetrag) → keine Regression fuer Altbestand ohne Asset-Verknuepfung.
+- **8 Aufrufer** (`confirm-booking`, `confirm-cart` 2x, `manual-booking`, `sign-contract`, `contracts/sign`, `sample-contract`) reichen `unitId` durch wo `booking.unit_id` bekannt. `sample-contract` bleibt ohne unitId → Muster-Vertrag zeigt Dummy-Kaution.
+- `product.deposit` bleibt weiter fuer Stripe-PreAuth (Kaution) zustaendig — **nicht mehr identisch mit Zeitwert**.
+
+### DATEV-Export
+- **AfA-Buchungen** werden als zusaetzliche Zeilen angehaengt: `S AfA-Konto 4830 AN Bestandskonto 0420/0430/0400/0490` (je nach asset.kind). Datenquelle: `expenses WHERE category='depreciation' AND expense_date IN [from, to]`.
+- Non-blocking: try/catch, wenn assets-Tabelle noch nicht migriert → Export funktioniert weiter ohne AfA-Zeilen.
+- Seed-Setting `datev_asset_accounts` wird durch `supabase-assets.sql` angelegt (kann in `/admin/buchhaltung` → Einstellungen ueberschrieben werden).
+
+### EUeR + Ausgaben-Tab
+- `CATEGORY_LABELS` in `app/api/admin/buchhaltung/reports/euer/route.ts` + `app/admin/buchhaltung/components/AusgabenTab.tsx` um `depreciation: 'Abschreibungen (AfA)'` + `asset_purchase: 'GWG-Sofortabzug'` ergaenzt.
+- Alter Key `fees:` → `stripe_fees:` umbenannt (war vorher inkonsistent gegen CHECK-Constraint).
+- **Pre-existing Bug mit-gefixt**: `app/api/admin/manual-booking/route.ts:130` + `app/api/admin/buchhaltung/stripe-reconciliation/import-fees/route.ts:51` schrieben `category: 'fees'`, das war gegen den CHECK-Constraint. Jetzt `'stripe_fees'`.
+
+### File-Type-Check erweitert
+- `lib/file-type-check.ts` bekommt neuen Export `detectFileType()` der PDF-Signatur (`%PDF-`) zusaetzlich erkennt. Bestehender `detectImageType()` unveraendert.
+
 ## Performance-Optimierungen
 - **API-Caching:** `/api/shop-content` + `/api/home-reviews` (10min Server-Cache), `/api/prices` (5min)
 - **next.config.ts:** `compress: true`, `optimizePackageImports` (supabase, date-fns, lucide-react)
@@ -953,6 +1007,11 @@ Systematischer Sweep ueber Admin- und Kundenkonto-UI nach Darstellungsfehlern. G
 ### Noch offen
 - **Bestehende 6 Kameras brauchen Admin-Specs** (Technische Daten im Editor anlegen)
 - **Bestehende Kameras brauchen Seriennummern** (im Kamera-Editor unter "Kameras / Seriennummern" anlegen)
+- **SQL-Migration `supabase/supabase-assets.sql` ausfuehren** (assets-Tabelle + Erweiterungen an purchases/purchase_items/expenses + Bug-Fix fuer category='fees' → 'stripe_fees'). Idempotent.
+- **Supabase Storage-Bucket `purchase-invoices` manuell anlegen** (Dashboard → Storage → New Bucket, Public: OFF, File size: 20 MB, MIME: application/pdf, image/jpeg, image/png, image/webp).
+- **Cron-Eintrag AfA monatlich in Hetzner-Crontab:**
+  `0 3 1 * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/depreciation`
+- **Bestand nachtragen:** Nach Live-Deploy in `/admin/anlagen/nachtragen` fuer jede Altbestand-Kamera Kaufdatum + Kaufpreis eintragen, dann laeuft der AfA-Catchup automatisch. Bis dahin zieht der Vertrag den Kautionsbetrag als Wiederbeschaffungswert (Fallback).
 - **Cron-Härtung optional:** `CRON_DISABLE_URL_SECRET=true` in Coolify-Env setzen + Hetzner-Crontab auf Header-Auth umstellen (`-H "x-cron-secret: $CRON_SECRET"`), damit Secrets nicht mehr in Access-Logs landen.
 - **Sicherheit:** API-Keys rotieren (wurden in einer Session öffentlich geteilt)
 - **SQL-Migration `supabase-performance-indizes.sql` ausführen** (8 Performance-Indizes, idempotent via `IF NOT EXISTS` + `CONCURRENTLY`).
