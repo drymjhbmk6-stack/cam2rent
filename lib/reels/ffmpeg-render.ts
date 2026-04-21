@@ -18,7 +18,7 @@
  */
 
 import { spawn } from 'child_process';
-import { writeFile, mkdir, rm, readFile } from 'fs/promises';
+import { writeFile, mkdir, rm, readFile, access } from 'fs/promises';
 import { tmpdir } from 'os';
 import path from 'path';
 import type { ReelScript } from './script-ai';
@@ -37,6 +37,14 @@ export interface RenderInput {
    * Reihenfolge: scenes[0], scenes[1], ..., cta_frame
    */
   voiceSegments?: Buffer[];
+  /**
+   * Intro/Outro-Frames mit cam2rent-Logo (Default beide AN, je 1.5s).
+   * Optional ueber reels_settings.intro_enabled / outro_enabled deaktivierbar.
+   */
+  introEnabled?: boolean;   // Default: true
+  outroEnabled?: boolean;   // Default: true
+  introDuration?: number;   // Default: 1.5s
+  outroDuration?: number;   // Default: 1.5s
 }
 
 export interface RenderResult {
@@ -268,6 +276,97 @@ function buildCtaInput(text: { headline: string; subline?: string }, duration: n
 }
 
 /**
+ * Findet den cam2rent-Logo-PNG-Pfad (weiss auf transparent, fuer dunkle Hintergruende).
+ * Fallback-Reihenfolge: public/logo/png/logo-mono-weiss-1200w.png → logo-dark-1200w.png → icon-512.png.
+ * Gibt null zurueck wenn nichts verfuegbar (dann nur Text-Intro).
+ */
+async function findLogoPath(): Promise<string | null> {
+  const candidates = [
+    'public/logo/png/logo-mono-weiss-1200w.png',
+    'public/logo/png/logo-dark-1200w.png',
+    'public/icon-512.png',
+  ];
+  for (const rel of candidates) {
+    const abs = path.join(process.cwd(), rel);
+    try {
+      await access(abs);
+      return abs;
+    } catch { /* try next */ }
+  }
+  return null;
+}
+
+/**
+ * Erzeugt einen Intro- oder Outro-Frame mit cam2rent-Logo auf dunklem Hintergrund.
+ * type='outro' fuegt zusaetzlich den Tagline-Text "cam2rent.de" darunter ein.
+ */
+async function buildBrandingFrame(
+  workDir: string,
+  type: 'intro' | 'outro',
+  duration: number,
+  outPath: string,
+  logoPath: string | null
+): Promise<{ log: string }> {
+  // cam2rent-Navy als Hintergrund
+  const bgColor = '0x0F172A';
+  const font = detectFontPath();
+
+  if (!logoPath) {
+    // Fallback: nur Wortmarke als Text
+    const text = escapeDrawtext('cam2rent.de');
+    const { stderr } = await runFfmpeg([
+      '-y',
+      '-hide_banner',
+      '-loglevel', 'error',
+      '-f', 'lavfi',
+      '-t', String(duration),
+      '-i', `color=c=${bgColor}:s=${TARGET_W}x${TARGET_H}:r=${TARGET_FPS}`,
+      '-vf', `drawtext=fontfile='${font}':text='${text}':expansion=none:fontsize=140:fontcolor=white:x=(w-text_w)/2:y=(h-text_h)/2`,
+      '-c:v', 'libx264',
+      '-preset', 'veryfast',
+      '-crf', '23',
+      '-pix_fmt', 'yuv420p',
+      outPath,
+    ]);
+    return { log: stderr };
+  }
+
+  // Mit Logo-PNG ueberlagern
+  // Logo auf ~700px Breite skalieren (genug Raum, aber nicht randlos)
+  // Leichter Fade-In beim Intro, Fade-Out beim Outro fuer smootheren Uebergang
+  const fadeFilter = type === 'intro'
+    ? `fade=t=in:st=0:d=0.3`
+    : `fade=t=out:st=${Math.max(0, duration - 0.3)}:d=0.3`;
+
+  const taglineText = type === 'outro' ? escapeDrawtext('Action-Cam mieten auf cam2rent.de') : '';
+  const taglineFilter = taglineText
+    ? `,drawtext=fontfile='${font}':text='${taglineText}':expansion=none:fontsize=48:fontcolor=white@0.85:x=(w-text_w)/2:y=h/2+240`
+    : '';
+
+  const filterComplex = [
+    `[1:v]scale=700:-1[logo]`,
+    `[0:v][logo]overlay=(W-w)/2:(H-h)/2-80${taglineFilter},${fadeFilter}`,
+  ].join(';');
+
+  const { stderr } = await runFfmpeg([
+    '-y',
+    '-hide_banner',
+    '-loglevel', 'error',
+    '-f', 'lavfi',
+    '-t', String(duration),
+    '-i', `color=c=${bgColor}:s=${TARGET_W}x${TARGET_H}:r=${TARGET_FPS}`,
+    '-i', logoPath,
+    '-filter_complex', filterComplex,
+    '-c:v', 'libx264',
+    '-preset', 'veryfast',
+    '-crf', '23',
+    '-pix_fmt', 'yuv420p',
+    outPath,
+  ]);
+  return { log: stderr };
+}
+
+/**
  * Haupt-Render-Funktion. Erzeugt MP4 + Thumbnail als Buffer im Speicher.
  */
 export async function renderReel(input: RenderInput): Promise<RenderResult> {
@@ -277,6 +376,20 @@ export async function renderReel(input: RenderInput): Promise<RenderResult> {
   try {
     const segmentFiles: string[] = [];
     let fullLog = '';
+
+    // ── Intro-Frame (cam2rent-Logo) ─────────────────────────────────────────
+    const introEnabled = input.introEnabled !== false; // Default: true
+    const outroEnabled = input.outroEnabled !== false; // Default: true
+    const introDuration = input.introDuration ?? 1.5;
+    const outroDuration = input.outroDuration ?? 1.5;
+    const logoPath = await findLogoPath();
+
+    if (introEnabled) {
+      const introPath = path.join(workDir, 'intro.mp4');
+      const { log } = await buildBrandingFrame(workDir, 'intro', introDuration, introPath, logoPath);
+      fullLog += `\n[intro] ${log}`;
+      segmentFiles.push(introPath);
+    }
 
     // ── Szenen-Segmente rendern ─────────────────────────────────────────────
     if (input.templateType === 'stock_footage') {
@@ -384,6 +497,14 @@ export async function renderReel(input: RenderInput): Promise<RenderResult> {
       segmentFiles.push(ctaPath);
     }
 
+    // ── Outro-Frame (cam2rent-Logo + Tagline) ───────────────────────────────
+    if (outroEnabled) {
+      const outroPath = path.join(workDir, 'outro.mp4');
+      const { log } = await buildBrandingFrame(workDir, 'outro', outroDuration, outroPath, logoPath);
+      fullLog += `\n[outro] ${log}`;
+      segmentFiles.push(outroPath);
+    }
+
     // ── Concat-Demuxer-Liste ────────────────────────────────────────────────
     const concatListPath = path.join(workDir, 'concat.txt');
     const concatContent = segmentFiles.map((p) => `file '${p.replace(/'/g, "\\'")}'`).join('\n');
@@ -420,6 +541,21 @@ export async function renderReel(input: RenderInput): Promise<RenderResult> {
         // Pro Voice-Segment: MP3 schreiben, dann auf Szenendauer padden/trimmen als WAV.
         // Leere Buffer (kein voice_text fuer diese Szene) → Silence der Szenendauer.
         const paddedPaths: string[] = [];
+
+        // Silence-Padding am Anfang fuer Intro (kein Voice waehrend Logo)
+        if (introEnabled) {
+          const silPath = path.join(workDir, 'voice-silence-intro.wav');
+          await runFfmpeg([
+            '-y',
+            '-hide_banner',
+            '-loglevel', 'error',
+            '-f', 'lavfi',
+            '-t', String(introDuration),
+            '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100',
+            silPath,
+          ]);
+          paddedPaths.push(silPath);
+        }
         for (let i = 0; i < input.voiceSegments.length; i++) {
           const dur = segDurations[i] ?? 3;
           const paddedPath = path.join(workDir, `voice-pad-${i}.wav`);
@@ -455,7 +591,10 @@ export async function renderReel(input: RenderInput): Promise<RenderResult> {
         }
 
         // Fehlende Szenen (wenn weniger voice-Segments als Szenen) mit Silence auffuellen
-        for (let i = paddedPaths.length; i < segDurations.length; i++) {
+        // Zaehlung: paddedPaths beginnt ggf. mit 1 Intro-Silence, also Offset beachten
+        const introOffset = introEnabled ? 1 : 0;
+        const sceneCount = segDurations.length;
+        for (let i = paddedPaths.length - introOffset; i < sceneCount; i++) {
           const dur = segDurations[i];
           const silPath = path.join(workDir, `voice-silence-${i}.wav`);
           await runFfmpeg([
@@ -465,6 +604,21 @@ export async function renderReel(input: RenderInput): Promise<RenderResult> {
             '-f', 'lavfi',
             '-t', String(dur),
             '-i', `anullsrc=channel_layout=stereo:sample_rate=44100`,
+            silPath,
+          ]);
+          paddedPaths.push(silPath);
+        }
+
+        // Silence-Padding am Ende fuer Outro
+        if (outroEnabled) {
+          const silPath = path.join(workDir, 'voice-silence-outro.wav');
+          await runFfmpeg([
+            '-y',
+            '-hide_banner',
+            '-loglevel', 'error',
+            '-f', 'lavfi',
+            '-t', String(outroDuration),
+            '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100',
             silPath,
           ]);
           paddedPaths.push(silPath);
@@ -626,7 +780,8 @@ export async function renderReel(input: RenderInput): Promise<RenderResult> {
     const videoBuffer = await readFile(finalPath);
     const thumbnailBuffer = await readFile(thumbPath);
 
-    const total = input.script.scenes.reduce((s, sc) => s + sc.duration, 0) + input.script.cta_frame.duration;
+    const contentDuration = input.script.scenes.reduce((s, sc) => s + sc.duration, 0) + input.script.cta_frame.duration;
+    const total = contentDuration + (introEnabled ? introDuration : 0) + (outroEnabled ? outroDuration : 0);
 
     return { videoBuffer, thumbnailBuffer, durationSeconds: total, log: fullLog };
   } finally {

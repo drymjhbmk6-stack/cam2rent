@@ -24,6 +24,10 @@ interface ReelsSettings {
   voice_model?: 'tts-1' | 'tts-1-hd';
   max_duration?: number;
   default_music_url?: string;
+  intro_enabled?: boolean;
+  outro_enabled?: boolean;
+  intro_duration?: number;
+  outro_duration?: number;
 }
 
 export default function TemplatesPage() {
@@ -151,6 +155,54 @@ export default function TemplatesPage() {
               className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-brand-dark dark:text-white"
             />
           </label>
+        </div>
+
+        <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+          <h3 className="text-sm font-semibold text-brand-dark dark:text-white mb-2">Branding</h3>
+          <div className="space-y-2">
+            <label className="flex items-center gap-2 text-sm text-brand-dark dark:text-white cursor-pointer">
+              <input
+                type="checkbox"
+                checked={settings.intro_enabled !== false}
+                onChange={(e) => setSettings({ ...settings, intro_enabled: e.target.checked })}
+              />
+              <span>Intro mit cam2rent-Logo (Anfang)</span>
+            </label>
+            <label className="flex items-center gap-2 text-sm text-brand-dark dark:text-white cursor-pointer">
+              <input
+                type="checkbox"
+                checked={settings.outro_enabled !== false}
+                onChange={(e) => setSettings({ ...settings, outro_enabled: e.target.checked })}
+              />
+              <span>Outro mit cam2rent-Logo + &bdquo;Action-Cam mieten auf cam2rent.de&ldquo; (Ende)</span>
+            </label>
+            <div className="grid grid-cols-2 gap-3 pl-6">
+              <label className="block">
+                <span className="block text-xs text-brand-steel dark:text-gray-400 mb-1">Intro-Dauer (Sek.)</span>
+                <input
+                  type="number"
+                  step="0.5"
+                  min={0.5}
+                  max={5}
+                  value={settings.intro_duration ?? 1.5}
+                  onChange={(e) => setSettings({ ...settings, intro_duration: Number(e.target.value) })}
+                  className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-2 py-1 text-sm text-brand-dark dark:text-white"
+                />
+              </label>
+              <label className="block">
+                <span className="block text-xs text-brand-steel dark:text-gray-400 mb-1">Outro-Dauer (Sek.)</span>
+                <input
+                  type="number"
+                  step="0.5"
+                  min={0.5}
+                  max={5}
+                  value={settings.outro_duration ?? 1.5}
+                  onChange={(e) => setSettings({ ...settings, outro_duration: Number(e.target.value) })}
+                  className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-2 py-1 text-sm text-brand-dark dark:text-white"
+                />
+              </label>
+            </div>
+          </div>
         </div>
 
         <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">

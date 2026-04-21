@@ -55,6 +55,10 @@ interface ReelsSettings {
   voice_enabled?: boolean;
   voice_name?: TTSVoice;
   voice_model?: TTSModel;
+  intro_enabled?: boolean;
+  outro_enabled?: boolean;
+  intro_duration?: number;
+  outro_duration?: number;
 }
 
 async function loadSettings(): Promise<ReelsSettings> {
@@ -214,6 +218,10 @@ export async function generateReel(opts: GenerateReelOptions): Promise<GenerateR
       voiceSegments,
       bgColorFrom: tmpl.bg_color_from,
       bgColorTo: tmpl.bg_color_to,
+      introEnabled: settings.intro_enabled !== false, // Default: true
+      outroEnabled: settings.outro_enabled !== false, // Default: true
+      introDuration: settings.intro_duration ?? 1.5,
+      outroDuration: settings.outro_duration ?? 1.5,
     });
 
     // ── 6. Upload ───────────────────────────────────────────────────────────
