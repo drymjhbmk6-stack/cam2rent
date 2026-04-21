@@ -258,6 +258,121 @@ export async function publishInstagramCarousel(igAccountId: string, pageToken: s
 }
 
 // ──────────────────────────────────────────────────────────────────────────
+// Reels — Facebook + Instagram
+// ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * Instagram Reels — Container mit media_type=REELS.
+ * Voraussetzung: `video_url` muss öffentlich erreichbar sein (Supabase Storage public bucket).
+ *
+ * Docs: https://developers.facebook.com/docs/instagram-api/guides/content-publishing#reels-posts
+ */
+export async function createInstagramReelContainer(
+  igAccountId: string,
+  pageToken: string,
+  videoUrl: string,
+  caption: string,
+  thumbOffsetMs?: number
+): Promise<{ id: string }> {
+  return graphFetch(`/${igAccountId}/media`, {
+    method: 'POST',
+    token: pageToken,
+    body: {
+      media_type: 'REELS',
+      video_url: videoUrl,
+      caption,
+      ...(thumbOffsetMs !== undefined ? { thumb_offset: thumbOffsetMs } : {}),
+      share_to_feed: true,
+    },
+  });
+}
+
+/**
+ * Ein-Stufen-Helper: IG Reel veröffentlichen.
+ * Video-Verarbeitung auf Meta-Seite dauert länger als bei Photos → höherer Timeout.
+ */
+export async function publishInstagramReel(
+  igAccountId: string,
+  pageToken: string,
+  videoUrl: string,
+  caption: string
+): Promise<{ id: string }> {
+  const container = await createInstagramReelContainer(igAccountId, pageToken, videoUrl, caption);
+  await waitForInstagramContainer(container.id, pageToken, 180_000); // bis zu 3 Min für Videos
+  return publishInstagramContainer(igAccountId, pageToken, container.id);
+}
+
+/**
+ * Facebook Reels — via resumable-upload-Flow auf /video_reels.
+ *
+ * Drei Phasen:
+ *   1. upload_phase=start     → liefert video_id + upload_url
+ *   2. POST an upload_url mit file_url (hosted) oder binary
+ *   3. upload_phase=finish    → veröffentlicht
+ *
+ * Docs: https://developers.facebook.com/docs/video-api/guides/reels-publishing
+ */
+export async function publishFacebookReel(
+  pageId: string,
+  pageToken: string,
+  videoUrl: string,
+  caption: string
+): Promise<{ id: string }> {
+  // Phase 1: Upload starten
+  const startRes = await graphFetch<{ video_id: string; upload_url: string }>(`/${pageId}/video_reels`, {
+    method: 'POST',
+    token: pageToken,
+    body: { upload_phase: 'start' },
+  });
+  const videoId = startRes.video_id;
+  const uploadUrl = startRes.upload_url;
+
+  // Phase 2: Video-Datei hochladen (hier via file_url, da Supabase Storage schon hosted)
+  const uploadRes = await fetch(uploadUrl, {
+    method: 'POST',
+    headers: {
+      Authorization: `OAuth ${pageToken}`,
+      file_url: videoUrl,
+    },
+  });
+  if (!uploadRes.ok) {
+    const body = await uploadRes.text().catch(() => '');
+    throw new MetaApiError(`FB Reel Upload fehlgeschlagen: ${body.slice(0, 200)}`, uploadRes.status);
+  }
+
+  // Phase 3: Finish (poll bis video_status=ready, dann publish)
+  const maxWaitMs = 180_000;
+  const start = Date.now();
+  while (Date.now() - start < maxWaitMs) {
+    const st = await graphFetch<{ status?: { video_status?: string; processing_phase?: { status?: string } } }>(`/${videoId}`, {
+      token: pageToken,
+      query: { fields: 'status' },
+    });
+    const vs = st.status?.video_status;
+    if (vs === 'ready' || vs === 'processed') break;
+    if (vs === 'error') {
+      throw new MetaApiError(`FB Reel Verarbeitung fehlgeschlagen`, 500);
+    }
+    await new Promise((r) => setTimeout(r, 3000));
+  }
+
+  const finishRes = await graphFetch<{ success?: boolean }>(`/${pageId}/video_reels`, {
+    method: 'POST',
+    token: pageToken,
+    query: {
+      video_id: videoId,
+      upload_phase: 'finish',
+      video_state: 'PUBLISHED',
+      description: caption,
+    },
+  });
+  if (finishRes.success === false) {
+    throw new MetaApiError('FB Reel Finish fehlgeschlagen', 500);
+  }
+  return { id: videoId };
+}
+
+// ──────────────────────────────────────────────────────────────────────────
 // Insights (Reach, Likes, Kommentare)
 // ──────────────────────────────────────────────────────────────────────────
 

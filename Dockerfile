@@ -35,6 +35,10 @@ ENV NODE_ENV=production
 ENV HOSTNAME=0.0.0.0
 ENV PORT=3000
 
+# ffmpeg + DejaVu-Schrift fuer Reel-Rendering
+# (lib/reels/ffmpeg-render.ts spawnt /usr/bin/ffmpeg, drawtext-Filter braucht TTF-Datei)
+RUN apk add --no-cache ffmpeg ttf-dejavu
+
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 

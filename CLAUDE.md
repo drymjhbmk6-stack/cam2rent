@@ -551,6 +551,58 @@ Meta gibt nach Publish nur nummerische Media-IDs zurück. Instagram-URLs brauche
 - **UI:** "Auf FB/IG ansehen"-Links nutzen den Permalink; Fallback-Hinweis bei alten Posts: "(Link wird beim nächsten Post erfasst)"
 - **Go-Live TODO:** SQL-Migration ausführen
 
+#### Auto-Reels: Stock-Footage + Motion-Graphics (Stand 2026-04-21)
+Vollautomatische Kurzvideos (9:16, 15–30 Sek) für Facebook- und Instagram-Reels. **Kein Auto-Publish** — jedes Reel landet standardmäßig als `pending_review` und muss vom Admin freigegeben werden, bevor es auf Meta geht.
+
+**Zwei Vorlagen-Typen:**
+- **Stock-Footage:** Pexels-API liefert kostenlose Action-Sport-Clips, FFmpeg stitcht 3–4 Szenen + Text-Overlays + CTA-Frame. Kosten ~0,02 €/Reel (nur Claude-Script).
+- **Motion-Graphics:** Pure FFmpeg-Color-Frames mit animierten Text-Overlays. 0 € externe Kosten, 100 % markenkonsistent. Für Ankündigungen/Rabatte.
+
+**Pipeline:**
+1. Claude (`claude-sonnet-4-6`) schreibt Skript als JSON (Szenen mit Pexels-Suchbegriffen, Text-Overlays, CTA, Caption, Hashtags) — `lib/reels/script-ai.ts`
+2. Pro Szene ein Pexels-Clip (`lib/reels/pexels.ts`, bevorzugt Portrait 9:16, Fallback Landscape)
+3. System-`ffmpeg` (installiert via `apk add ffmpeg ttf-dejavu` im Runner-Dockerfile) rendert: Scale+Crop auf 1080×1920, drawtext-Overlay, Color-Frame für CTA, Concat-Demuxer, stiller AAC-Track (oder Musik-Mix)
+4. MP4 + Thumbnail landen im Supabase Storage Bucket `social-reels` (public)
+5. DB-Row `social_reels` mit `status='pending_review'` — Admin sieht Preview und entscheidet
+
+**Admin-UI** (`/admin/social/reels`, neuer Eintrag in Social-Sidebar):
+- **Liste:** Thumbnail-Grid, Status-Filter, Auto-Refresh wenn was rendert
+- **Generator** `/neu`: Template + Topic + Keywords + FB/IG-Account-Auswahl → startet Background-Render
+- **Detail** `/[id]`: HTML5 Video-Player, Caption/Hashtags editierbar, Skript-Ansicht, Render-Log, Buttons: **Speichern**, **Freigeben**, **Einplanen** (datetime-local), **Jetzt veröffentlichen**, **Neu rendern**, **Löschen** (lokal + remote)
+- **Vorlagen** `/vorlagen`: CRUD für `social_reel_templates` (Skript-Prompt mit `{topic}`/`{product_name}`/`{keywords}`-Platzhaltern, Default-Dauer/Hashtags, Motion-Graphics-Farben)
+
+**Meta Graph API** — Reels-Upload (`lib/meta/graph-api.ts`):
+- **IG Reels:** `POST /{ig_id}/media` mit `media_type=REELS, video_url=...`, warten bis FINISHED (180s), dann `media_publish`
+- **FB Reels:** 3-Phasen-Upload `/{page_id}/video_reels` (start → upload mit `file_url`-Header → finish mit `video_state=PUBLISHED`)
+- Beide geben nach erfolgreichem Publish den Permalink zurück
+
+**DB (`supabase/supabase-reels.sql`):**
+- `social_reels` — Video + Script-JSON + Status-Workflow (draft → rendering → rendered → pending_review → approved → scheduled → publishing → published/partial/failed)
+- `social_reel_templates` — Vorlagen mit Skript-Prompt + Styling
+- `social_reel_plan` — Redaktionsplan (Datum + Uhrzeit + Topic + Template) für spätere Cron-gesteuerte Bulk-Generierung
+- Seed: 3 Start-Vorlagen (Produkt-Spotlight / Angebot / Saison-Tipp)
+- Seed: `admin_settings.reels_settings` mit `auto_generate=false, preview_required=true, pexels_api_key=''`
+
+**APIs:**
+- `GET/POST /api/admin/reels` — Liste / Generate (fire-and-forget, 202)
+- `GET/PATCH/DELETE /api/admin/reels/[id]`
+- `POST /api/admin/reels/[id]/approve` — setzt pending_review → approved oder scheduled
+- `POST /api/admin/reels/[id]/publish` — sofort auf Meta posten
+- `POST /api/admin/reels/[id]/rerender` — neuer Render mit gleichem Topic
+- `GET/POST /api/admin/reels/templates` + `PATCH/DELETE /api/admin/reels/templates/[id]`
+- `GET/POST /api/cron/reels-publish` — Cron für `scheduled`-Reels (max 5 pro Run, begrenzt wegen Render-Bandbreite)
+
+**Test-Modus:** `publishReel()` skippt im Test-Modus den Meta-Call und setzt nur den DB-Status. Cron skippt komplett. Kein Meta-Billing-Risiko während Entwicklung.
+
+**Go-Live TODO:**
+1. **SQL-Migration** `supabase/supabase-reels.sql` ausführen (3 Tabellen + Seed-Templates + Default-Settings)
+2. **Storage-Bucket** `social-reels` manuell in Supabase-Dashboard anlegen (Public: ON, MIME: video/mp4 + image/jpeg, 100 MB Limit)
+3. **Pexels API-Key** registrieren (kostenlos, https://www.pexels.com/api/) und in `/admin/social/reels/vorlagen` → Einstellungen hinterlegen (oder als `PEXELS_API_KEY`-Env in Coolify)
+4. **Docker-Image neu bauen** (Dockerfile installiert jetzt `ffmpeg + ttf-dejavu` im Runner)
+5. **Crontab Hetzner:** `*/5 * * * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/reels-publish`
+
+**Kosten-Übersicht:** ~0,02 €/Reel (Claude) + 0 € (Pexels + FFmpeg + Meta). Bei 30 Reels/Monat ≤ 1 €.
+
 #### Dev-Mode vs. Live-Mode (Meta-App)
 Solange die App im "Development Mode" ist, sehen Posts nur App-Admins + Tester. Für öffentliche Sichtbarkeit muss die App auf "Live" geschaltet werden: Meta Developer Dashboard → Seitenpunkt "Veröffentlichen" → Button "App veröffentlichen". Voraussetzung: Datenschutz-URL, AGB-URL, Kategorie, App-Domain sind gesetzt (haben wir). Standard-Access auf Permissions reicht für eigene Kanäle — **kein App Review nötig** solange nur cam2rent-eigene FB-Page + IG-Business bespielt werden.
 
@@ -1042,6 +1094,7 @@ Systematischer Sweep ueber Admin- und Kundenkonto-UI nach Darstellungsfehlern. G
 - **SQL-Migration `supabase-waitlist-use-case.sql` ausführen** (Spalte `use_case` auf `waitlist_subscriptions` für optionalen Nutzungszweck-Dropdown).
 - **SQL-Migration `supabase-verification-deferred.sql` ausführen** (`verification_required` + `verification_gate_passed_at` auf `bookings` — Voraussetzung für Express-Signup-Flag).
 - **SQL-Migration `supabase-env-toggle.sql` ausführen** (is_test-Flag auf bookings/invoices/credit_notes/expenses/email_log/admin_audit_log/stripe_transactions — fuer sauberen Test/Live-Wechsel).
+- **Auto-Reels Go-Live:** (1) `supabase/supabase-reels.sql` ausführen (3 Tabellen + Seed-Vorlagen + `reels_settings`-Default). (2) Supabase Storage-Bucket `social-reels` manuell anlegen (Public ON, 100 MB, `video/mp4` + `image/jpeg`). (3) Pexels API-Key (kostenlos) registrieren + in `admin_settings.reels_settings.pexels_api_key` hinterlegen oder als `PEXELS_API_KEY`-Env. (4) Docker-Image neu bauen (Dockerfile installiert jetzt `ffmpeg + ttf-dejavu` in Runner-Stage — braucht ~50 MB extra Image-Größe). (5) Crontab-Eintrag: `*/5 * * * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/reels-publish`.
 - **Go-Live 01.05.2026:** Test/Live-Switch auf Live umschalten (`/admin/einstellungen` → Test-/Live-Modus → "Live-Modus"). Ersetzt: TEST_MODE-Konstante, Stripe-Key-Wechsel, Vertrags-Wasserzeichen, Resend-Absender, Sendcloud-Keys.
 - **Go-Live 01.05.2026:** Domain test.cam2rent.de → cam2rent.de
 - **Go-Live 01.05.2026:** Resend Domain verifizieren (DKIM + SPF)
