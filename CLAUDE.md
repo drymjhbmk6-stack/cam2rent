@@ -580,7 +580,7 @@ Vollautomatische Kurzvideos (9:16, 15–30 Sek) für Facebook- und Instagram-Ree
 - `social_reels` — Video + Script-JSON + Status-Workflow (draft → rendering → rendered → pending_review → approved → scheduled → publishing → published/partial/failed)
 - `social_reel_templates` — Vorlagen mit Skript-Prompt + Styling
 - `social_reel_plan` — Redaktionsplan (Datum + Uhrzeit + Topic + Template) für spätere Cron-gesteuerte Bulk-Generierung
-- Seed: 3 Start-Vorlagen (Produkt-Spotlight / Angebot / Saison-Tipp)
+- Seed: 4 Start-Vorlagen (Produkt-Spotlight Stock / Angebot Motion / Saison-Tipp Stock / Ankündigung Motion). Die Ankündigungs-Vorlage kann separat via `supabase/supabase-reels-ankuendigung.sql` idempotent nachgelegt werden, falls Haupt-Seed schon gelaufen.
 - Seed: `admin_settings.reels_settings` mit `auto_generate=false, preview_required=true, pexels_api_key=''`
 
 **APIs:**

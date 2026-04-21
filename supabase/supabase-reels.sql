@@ -190,6 +190,16 @@ VALUES
   ARRAY['cam2rent', 'tipps']::TEXT[],
   'manual',
   TRUE
+),
+(
+  'Ankuendigung (Motion-Graphics)',
+  'Schlichtes 15-Sekunden-Reel für Ankündigungen (neue Kamera, Service-Update, News). Reine Motion-Graphics, keine Stock-Clips.',
+  'motion_graphics',
+  'Schreibe ein 15-Sekunden-Motion-Graphics-Skript für die cam2rent.de-Ankündigung "{topic}". Struktur: (1) Aufmerksamkeits-Hook 2s ("Neu bei cam2rent" oder ähnlich), (2) 3 Szenen à 3-4s die die Ankündigung in klaren Sätzen erklären (was ist neu, für wen, ab wann), (3) CTA 3s mit konkreter nächster Aktion ("Jetzt entdecken auf cam2rent.de"). Ton: freundlich-informativ, kein Marketing-Superlativ. Max 7 Worte pro Text-Overlay. Keywords: {keywords}.',
+  15,
+  ARRAY['cam2rent', 'ankuendigung', 'news']::TEXT[],
+  'manual',
+  TRUE
 )
 ON CONFLICT DO NOTHING;
 
