@@ -203,6 +203,8 @@ export async function POST(req: NextRequest) {
 
     // 6. Save booking
     const testMode = await isTestMode();
+    // Verifizierungsflag aus Stripe-Metadata (von checkout-intent gesetzt).
+    const verificationRequired = meta.verification_required === '1';
     const { error } = await supabase.from('bookings').insert({
       id: bookingId,
       payment_intent_id,
@@ -229,6 +231,8 @@ export async function POST(req: NextRequest) {
       customer_email: meta.customer_email || null,
       customer_name: meta.customer_name || null,
       shipping_address: shippingAddress,
+      // Nur setzen wenn true — so bleibt Insert ohne Migration ruckwaerts-kompatibel
+      ...(verificationRequired ? { verification_required: true } : {}),
     });
 
     if (error) {
@@ -400,6 +404,7 @@ export async function POST(req: NextRequest) {
         taxMode: (txMap['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer',
         taxRate: parseFloat(txMap['tax_rate'] || '19'),
         ustId: txMap['ust_id'] || '',
+        verificationRequired,
       };
 
       Promise.all([
@@ -411,8 +416,12 @@ export async function POST(req: NextRequest) {
     // Admin-Benachrichtigung (fire-and-forget)
     createAdminNotification(supabase, {
       type: 'new_booking',
-      title: `Neue Buchung: ${bookingId}`,
-      message: `${meta.customer_name} — ${meta.product_name} (${meta.days} Tage)`,
+      title: verificationRequired
+        ? `Neue Buchung (Ausweis prüfen!): ${bookingId}`
+        : `Neue Buchung: ${bookingId}`,
+      message: verificationRequired
+        ? `${meta.customer_name} — ${meta.product_name} (${meta.days} Tage) · Ausweis-Check steht aus`
+        : `${meta.customer_name} — ${meta.product_name} (${meta.days} Tage)`,
       link: `/admin/buchungen/${bookingId}`,
     });
 

@@ -3,6 +3,7 @@ import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { createServiceClient } from '@/lib/supabase';
 import { calcPriceFromTable, type AdminProduct } from '@/lib/price-config';
 import { getStripe } from '@/lib/stripe';
+import { getCheckoutConfig } from '@/lib/checkout-config';
 
 const checkoutLimiter = rateLimit({ maxAttempts: 10, windowMs: 60 * 1000 }); // 10 pro Min
 
@@ -108,19 +109,74 @@ export async function POST(req: NextRequest) {
         { status: 403 }
       );
     }
-    if (!profile || profile.verification_status !== 'verified') {
+
+    // Verifizierungspflicht VOR Zahlung:
+    //   - Default-Verhalten (Flag aus): Kunde muss verifiziert sein, sonst 403.
+    //   - Mit Flag `verificationDeferred`: unverifizierte Kunden duerfen zahlen.
+    //     Die Buchung wird dann in confirm-cart mit `verification_required=true`
+    //     markiert und erscheint in der Versand-Liste erst nach Freigabe.
+    const checkoutCfg = await getCheckoutConfig();
+    const isVerified = profile?.verification_status === 'verified';
+    const verificationRequired = !isVerified;
+
+    if (!isVerified && !checkoutCfg.verificationDeferred) {
       return NextResponse.json(
         { error: 'Dein Konto muss zuerst verifiziert werden. Bitte lade deinen Ausweis unter "Mein Konto" hoch.', code: 'NOT_VERIFIED' },
         { status: 403 }
       );
     }
 
-    const metadata = {
+    // Zusatz-Schranke: Express-Signup-Regeln (Max-Betrag, Vorlaufzeit) schuetzen
+    // gegen "Neukunde bucht 5000-EUR-Setup fuer morgen". Nur relevant, wenn
+    // verificationDeferred an ist — sonst greift oben bereits der harte 403.
+    if (verificationRequired && checkoutCfg.verificationDeferred) {
+      if (checkoutCfg.maxRentalValueForExpressSignup !== null) {
+        const maxCents = Math.round(checkoutCfg.maxRentalValueForExpressSignup * 100);
+        if (amountCents > maxCents) {
+          return NextResponse.json(
+            {
+              error: `Fuer diese Buchungshoehe bitte zuerst Ausweis unter "Mein Konto" verifizieren.`,
+              code: 'VERIFICATION_REQUIRED_FOR_AMOUNT',
+            },
+            { status: 403 }
+          );
+        }
+      }
+      if (checkoutCfg.minHoursBeforeRentalStart !== null) {
+        const items = (checkoutContext?.items as Array<{ rentalFrom?: string }> | undefined) ?? [];
+        const earliest = items
+          .map((i) => i.rentalFrom)
+          .filter((s): s is string => typeof s === 'string' && s.length > 0)
+          .sort()[0];
+        if (earliest) {
+          const start = new Date(earliest);
+          if (!isNaN(start.getTime())) {
+            const diffH = (start.getTime() - Date.now()) / 3_600_000;
+            if (diffH < checkoutCfg.minHoursBeforeRentalStart) {
+              return NextResponse.json(
+                {
+                  error: 'Fuer kurzfristige Buchungen bitte zuerst Ausweis verifizieren.',
+                  code: 'VERIFICATION_REQUIRED_FOR_SHORT_NOTICE',
+                },
+                { status: 403 }
+              );
+            }
+          }
+        }
+      }
+    }
+
+    const metadata: Record<string, string> = {
       booking_type: 'cart',
       customer_name: customerName,
       customer_email: customerEmail,
       user_id: userId ?? '',
     };
+    if (verificationRequired) {
+      // Stripe-Metadata hat nur String-Werte; wird in confirm-booking
+      // ausgelesen und in bookings.verification_required uebernommen.
+      metadata.verification_required = '1';
+    }
 
     const stripe = await getStripe();
     const paymentIntent = await stripe.paymentIntents.create({
@@ -160,6 +216,10 @@ export async function POST(req: NextRequest) {
         const ctxToStore: Record<string, unknown> = { ...checkoutContext };
         if (ctxToStore.earlyServiceConsentAt) {
           ctxToStore.earlyServiceConsentIp = ip;
+        }
+        // Flag wird in confirm-cart in die Buchung geschrieben
+        if (verificationRequired) {
+          ctxToStore.verificationRequired = true;
         }
         await supabase
           .from('admin_settings')

@@ -6,6 +6,7 @@ import AdminBackLink from '@/components/admin/AdminBackLink';
 import PushNotificationsSection from '@/components/admin/PushNotificationsSection';
 import WeeklyReportSection from '@/components/admin/WeeklyReportSection';
 import EnvModeSection from '@/components/admin/EnvModeSection';
+import CheckoutConfigSection from '@/components/admin/CheckoutConfigSection';
 
 type DepositMode = 'kaution' | 'haftung';
 
@@ -257,6 +258,9 @@ export default function EinstellungenPage() {
 
       {/* Sektion 0: Test-/Live-Modus (Env-Toggle) */}
       <EnvModeSection />
+
+      {/* Sektion 0b: Checkout-Verhalten */}
+      <CheckoutConfigSection />
 
       {/* Sektion 1: 2FA */}
       <div style={{ background: '#111827', borderRadius: 12, border: '1px solid #1e293b', padding: 24, marginBottom: 24 }}>

@@ -112,6 +112,27 @@ ESLint + TypeScript werden auf dem Server beim Build geskippt (RAM-Limit CX23).
 - Buchungsbestätigung antwortet sofort — PDF + E-Mail laufen im Hintergrund
 - Kalender verhindert Buchung über ausgebuchte Tage hinweg (maxEndDate-Logik)
 
+### Express-Signup + verzögerte Verifizierung (Stand 2026-04-21)
+Optionaler smootherer Neukunden-Flow, zwei Admin-Toggles unter `/admin/einstellungen`:
+
+- **`expressSignupEnabled`**: Neukunde kann direkt im Checkout Konto anlegen (E-Mail + Passwort + Name). Server-Route `/api/auth/express-signup` nutzt Admin-API mit `email_confirm: true`, damit der Client sofort per `signInWithPassword` eine Session bekommt. Rate-Limit 5/h pro IP. Bei bekannter E-Mail schaltet die UI automatisch auf Login um.
+- **`verificationDeferred`**: Unverifizierte Kunden dürfen bezahlen. Die Buchung wird mit `verification_required=true` geschrieben (Migration `supabase-verification-deferred.sql`), der Status bleibt `confirmed`. Der Ausweis-Upload erfolgt nach der Buchung; ohne Freigabe kommt die Kamera nicht zum Versand.
+- **Schutzschranken** in `lib/checkout-config.ts`: `maxRentalValueForExpressSignup` (Default 500 €) + `minHoursBeforeRentalStart` (Default 48 h). `checkout-intent` blockiert mit eigenem Code `VERIFICATION_REQUIRED_FOR_AMOUNT` / `_FOR_SHORT_NOTICE`, wenn die Regeln verletzt sind — fällt dann elegant auf den bestehenden `pending_verification`-Pfad zurück.
+- **UI:** `components/checkout/ExpressSignup.tsx` (Tabs Signup/Login) ersetzt das bisherige „Konto erforderlich"-Screen in `/checkout`, wenn Flag an. Für unverifizierte Kunden mit `verificationDeferred=true` erscheint statt „Buchung anfragen" der normale Zahlungs-Button mit amber-Hinweisbox zum Ausweis-Upload.
+- **E-Mail:** Buchungsbestätigung enthält bei `verificationRequired` einen roten CTA-Block „Ausweis jetzt hochladen" mit Link auf `/konto/verifizierung`.
+- **Admin-Versand-Seite** (`/admin/versand`): Buchungen ohne Ausweis bekommen amber Card-Border + Badge „Ausweis fehlt". API `/api/admin/versand-buchungen` liefert zusätzlich `verification_required`, `verification_gate_passed_at`, `customer_verification_status` — defensiv geladen, keine 500er wenn Migration fehlt.
+- **Admin-Freigabe:** `PATCH /api/admin/booking/[id]` akzeptiert `{ verification_gate: 'approve' | 'revoke' }` → setzt/löscht `verification_gate_passed_at`.
+- **Crons:**
+  - `/api/cron/verification-reminder` (täglich, z.B. 08:00): Erinnerungsmails an T-5/T-3/T-1, Duplikat-Schutz über `email_log`.
+  - `/api/cron/verification-auto-cancel` (täglich, z.B. 14:00): Storniert Buchungen am Vortag des Mietbeginns, erstattet via Stripe-Refund, hebt Deposit-Pre-Auth auf, schickt Absage-Mail.
+- **Sicherheits-Gate:** `confirm-cart` + `confirm-booking` schreiben `verification_required=true` nur wenn `checkout-intent` das Flag in `metadata` bzw. Context gesetzt hat — ohne aktiven Feature-Flag bleibt alles 1:1 wie zuvor.
+- **Go-Live TODO:** SQL-Migration `supabase-verification-deferred.sql` ausführen + zwei Crontab-Einträge hinzufügen:
+  ```
+  0 8  * * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/verification-reminder
+  0 14 * * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/verification-auto-cancel
+  ```
+- **Default-Verhalten:** Beide Flags sind OFF. Aktivierung unter `/admin/einstellungen` → „Checkout-Verhalten".
+
 ### Widerrufsrecht-Zustimmung § 356 Abs. 4 BGB
 Wenn eine Buchung vor Ablauf der 14-tägigen Widerrufsfrist beginnt, muss der Kunde im Checkout ausdrücklich zustimmen, dass cam2rent vor Fristende mit der Leistung beginnt und dass sein Widerrufsrecht dadurch erlischt.
 - **Checkbox** (3. im Checkout, conditional): Nur sichtbar wenn frühester `rentalFrom` < 14 Tage von heute. Buchen-Button disabled bis angekreuzt.
@@ -1019,6 +1040,7 @@ Systematischer Sweep ueber Admin- und Kundenkonto-UI nach Darstellungsfehlern. G
 - **SQL-Migration `supabase-performance-indizes.sql` ausführen** (8 Performance-Indizes, idempotent via `IF NOT EXISTS` + `CONCURRENTLY`).
 - **SQL-Migration `supabase-social-image-position.sql` ausführen** (2 Spalten `fb_image_position` + `ig_image_position` auf `social_posts` für unabhängige FB/IG-Bild-Positionierung).
 - **SQL-Migration `supabase-waitlist-use-case.sql` ausführen** (Spalte `use_case` auf `waitlist_subscriptions` für optionalen Nutzungszweck-Dropdown).
+- **SQL-Migration `supabase-verification-deferred.sql` ausführen** (`verification_required` + `verification_gate_passed_at` auf `bookings` — Voraussetzung für Express-Signup-Flag).
 - **SQL-Migration `supabase-env-toggle.sql` ausführen** (is_test-Flag auf bookings/invoices/credit_notes/expenses/email_log/admin_audit_log/stripe_transactions — fuer sauberen Test/Live-Wechsel).
 - **Go-Live 01.05.2026:** Test/Live-Switch auf Live umschalten (`/admin/einstellungen` → Test-/Live-Modus → "Live-Modus"). Ersetzt: TEST_MODE-Konstante, Stripe-Key-Wechsel, Vertrags-Wasserzeichen, Resend-Absender, Sendcloud-Keys.
 - **Go-Live 01.05.2026:** Domain test.cam2rent.de → cam2rent.de

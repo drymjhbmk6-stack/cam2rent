@@ -171,6 +171,7 @@ export interface BookingEmailData {
   taxRate?: number;
   ustId?: string;
   earlyServiceConsentAt?: string | null; // ISO-Timestamp § 356 Abs. 4 BGB
+  verificationRequired?: boolean; // Ausweis-Check steht noch aus (Express-Signup)
 }
 
 // ─── Send functions ───────────────────────────────────────────────────────────
@@ -365,6 +366,16 @@ export function buildCustomerEmail(d: BookingEmailData): { html: string; subject
 
           <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#0a0a0a;">Deine Buchung ist bestätigt!</h1>
           <p style="margin:0 0 24px;font-size:15px;color:#4b5563;">Hallo ${h(d.customerName || 'Kunde')},<br>vielen Dank für deine Buchung bei ${BUSINESS.name}. Hier sind alle Details:</p>
+
+          ${d.verificationRequired ? `
+          <table width="100%" cellpadding="0" cellspacing="0" style="background:#fff7ed;border:1px solid #fdba74;border-radius:10px;margin-bottom:24px;">
+            <tr><td style="padding:16px 20px;">
+              <p style="margin:0 0 6px;font-size:12px;font-weight:700;color:#9a3412;text-transform:uppercase;letter-spacing:0.8px;">⚠ Ausweis-Upload erforderlich</p>
+              <p style="margin:0 0 10px;font-size:14px;color:#7c2d12;line-height:1.5;">Damit wir deine Kamera versenden koennen, benoetigen wir eine Kopie deines Personalausweises. Das dauert nur 1 Minute.</p>
+              <p style="margin:0;"><a href="${BUSINESS.url}/konto/verifizierung" style="display:inline-block;padding:10px 20px;background:#ea580c;color:#ffffff;text-decoration:none;border-radius:8px;font-weight:600;font-size:14px;">Ausweis jetzt hochladen</a></p>
+              <p style="margin:10px 0 0;font-size:12px;color:#9a3412;">Ohne verifizierten Ausweis kann die Buchung nicht versendet werden und wird kurz vor Mietbeginn automatisch storniert.</p>
+            </td></tr>
+          </table>` : ''}
 
           <!-- Booking ID -->
           <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f0;border-radius:10px;margin-bottom:24px;">

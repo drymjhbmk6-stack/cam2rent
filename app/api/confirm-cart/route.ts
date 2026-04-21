@@ -185,6 +185,7 @@ export async function POST(req: NextRequest) {
     let r_shippingAddress = shippingAddress;
     let r_earlyServiceConsentAt: string | null = null;
     let r_earlyServiceConsentIp: string | null = null;
+    let r_verificationRequired = false;
 
     if (!r_items?.length) {
       const { data: ctxRow } = await supabase
@@ -212,6 +213,7 @@ export async function POST(req: NextRequest) {
           }
           if (ctx.earlyServiceConsentAt) r_earlyServiceConsentAt = ctx.earlyServiceConsentAt;
           if (ctx.earlyServiceConsentIp) r_earlyServiceConsentIp = ctx.earlyServiceConsentIp;
+          if (ctx.verificationRequired === true) r_verificationRequired = true;
         } catch {
           // ignore
         }
@@ -379,6 +381,9 @@ export async function POST(req: NextRequest) {
         loyalty_discount: groupLoyaltyDiscount,
         early_service_consent_at: r_earlyServiceConsentAt,
         early_service_consent_ip: r_earlyServiceConsentIp,
+        // Nur wenn explizit gesetzt — so bleibt das Insert auch ohne
+        // Migration `supabase-verification-deferred.sql` unveraendert.
+        ...(r_verificationRequired ? { verification_required: true } : {}),
       });
 
       if (error) {
@@ -678,6 +683,7 @@ export async function POST(req: NextRequest) {
               taxRate: parseFloat(txMap['tax_rate'] || '19'),
               ustId: txMap['ust_id'] || '',
               earlyServiceConsentAt: r_earlyServiceConsentAt,
+              verificationRequired: r_verificationRequired,
             };
 
             await Promise.all([
@@ -694,8 +700,12 @@ export async function POST(req: NextRequest) {
     // Admin-Benachrichtigung (fire-and-forget)
     createAdminNotification(supabase, {
       type: 'new_booking',
-      title: `Neue Buchung: ${bookingIds[0]}`,
-      message: `${r_name} — ${bookingIds.length} Buchung(en)`,
+      title: r_verificationRequired
+        ? `Neue Buchung (Ausweis prüfen!): ${bookingIds[0]}`
+        : `Neue Buchung: ${bookingIds[0]}`,
+      message: r_verificationRequired
+        ? `${r_name} — ${bookingIds.length} Buchung(en) · Ausweis-Check steht aus`
+        : `${r_name} — ${bookingIds.length} Buchung(en)`,
       link: `/admin/buchungen/${bookingIds[0]}`,
     });
 

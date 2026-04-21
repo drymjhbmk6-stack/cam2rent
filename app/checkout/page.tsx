@@ -21,6 +21,7 @@ import { calcDurationDiscount, calcLoyaltyDiscount, getActiveProductDiscount } f
 import { useAccessories } from '@/components/AccessoriesProvider';
 import { getAccessoryPrice } from '@/data/accessories';
 import { BUSINESS } from '@/lib/business-config';
+import ExpressSignup from '@/components/checkout/ExpressSignup';
 
 const stripePromise = getStripePromise();
 
@@ -256,6 +257,22 @@ export default function CheckoutPage() {
       .then((d) => {
         setTaxMode(d.taxMode || 'kleinunternehmer');
         setTaxRate(d.taxRate || 19);
+      })
+      .catch(() => {});
+  }, []);
+
+  // Checkout-Config (Feature-Flags) — wird einmal geladen
+  const [checkoutCfg, setCheckoutCfg] = useState<{
+    expressSignupEnabled: boolean;
+    verificationDeferred: boolean;
+    maxRentalValueForExpressSignup: number | null;
+    minHoursBeforeRentalStart: number | null;
+  } | null>(null);
+  useEffect(() => {
+    fetch('/api/checkout-config', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d) setCheckoutCfg(d);
       })
       .catch(() => {});
   }, []);
@@ -587,8 +604,34 @@ export default function CheckoutPage() {
 
   if (itemCount === 0) return null;
 
-  // Nicht eingeloggt: Eigene Seite mit Login/Registrierung
+  // Nicht eingeloggt: Express-Signup im Checkout (wenn Feature-Flag an) oder
+  // Fallback auf "Konto erforderlich"-Seite mit Login/Registrierungs-Links.
   if (!user) {
+    if (checkoutCfg?.expressSignupEnabled) {
+      return (
+        <div className="min-h-screen bg-brand-bg dark:bg-brand-black py-8">
+          <div className="max-w-md mx-auto px-4 sm:px-6 lg:px-8">
+            <Link
+              href="/warenkorb"
+              className="inline-flex items-center gap-1.5 text-sm text-brand-steel dark:text-gray-400 hover:text-brand-black dark:hover:text-white mb-5 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+              Zurück zum Warenkorb
+            </Link>
+            <h1 className="font-heading font-bold text-xl text-brand-black dark:text-white mb-1">
+              Schnell-Registrierung
+            </h1>
+            <p className="font-body text-sm text-brand-steel dark:text-gray-400 mb-5">
+              In 30 Sekunden Konto erstellen und direkt weiter zur Zahlung. Deinen Ausweis kannst du im Anschluss hochladen.
+            </p>
+            <ExpressSignup />
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="min-h-screen bg-brand-bg dark:bg-brand-black flex items-center justify-center px-4">
         <div className="bg-white dark:bg-brand-dark rounded-card shadow-card p-8 sm:p-12 max-w-md w-full text-center">
@@ -1074,8 +1117,37 @@ export default function CheckoutPage() {
                   </button>
                 )}
 
-                {/* Nicht verifiziert: Buchung anfragen */}
-                {!pendingSuccess && isVerified === false && (
+                {/* Nicht verifiziert + verificationDeferred an:
+                    Normale Zahlung, Ausweis-Upload erfolgt nach Buchung. */}
+                {!pendingSuccess && isVerified === false && checkoutCfg?.verificationDeferred && (
+                  <div>
+                    <div className="p-3 rounded-[10px] bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-xs font-body text-amber-800 dark:text-amber-300 mb-3 flex gap-2">
+                      <svg className="w-4 h-4 flex-shrink-0 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v4.5a.75.75 0 01-1.5 0v-4.5A.75.75 0 0110 5zm0 10a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                      </svg>
+                      <span>
+                        <strong>Wichtig:</strong> Nach der Zahlung senden wir dir einen Link zum Ausweis-Upload. Ohne gueltigen Ausweis koennen wir die Kamera nicht versenden.
+                      </span>
+                    </div>
+                    <button
+                      onClick={handleProceedToPayment}
+                      disabled={isCreatingIntent || !acceptsTerms || !acceptsWithdrawal || (requiresEarlyServiceConsent && !acceptsEarlyService)}
+                      className="w-full py-4 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold rounded-btn hover:bg-brand-dark disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                    >
+                      {isCreatingIntent ? (
+                        <>
+                          <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          Wird geladen…
+                        </>
+                      ) : (
+                        `Weiter zur Zahlung → ${fmt(total)}`
+                      )}
+                    </button>
+                  </div>
+                )}
+
+                {/* Nicht verifiziert + verificationDeferred AUS: Pending-Booking-Flow */}
+                {!pendingSuccess && isVerified === false && !checkoutCfg?.verificationDeferred && (
                   <div>
                     <div className="p-3 rounded-[10px] bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-xs font-body text-blue-700 dark:text-blue-300 mb-3">
                       Da dies deine erste Buchung ist, prüfen wir kurz deinen Ausweis. Du erhältst danach einen Zahlungslink per Email.

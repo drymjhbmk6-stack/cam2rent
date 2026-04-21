@@ -77,7 +77,12 @@ export async function PATCH(
 ) {
   const { id } = await params;
   const body = await req.json();
-  const { status, cancellation_reason, customer_email } = body as { status?: string; cancellation_reason?: string; customer_email?: string };
+  const { status, cancellation_reason, customer_email, verification_gate } = body as {
+    status?: string;
+    cancellation_reason?: string;
+    customer_email?: string;
+    verification_gate?: 'approve' | 'revoke';
+  };
 
   const supabase = createServiceClient();
   const updates: Record<string, unknown> = {};
@@ -85,6 +90,16 @@ export async function PATCH(
   // E-Mail aktualisieren
   if (customer_email !== undefined) {
     updates.customer_email = customer_email || null;
+  }
+
+  // Verification-Gate manuell freigeben / widerrufen
+  // (idempotent; bei unbekannter Spalte ignoriert Supabase still den Wert nicht —
+  //  daher wird die Migration `supabase-verification-deferred.sql` vorausgesetzt,
+  //  sobald Admin das Gate explizit benutzt).
+  if (verification_gate === 'approve') {
+    updates.verification_gate_passed_at = new Date().toISOString();
+  } else if (verification_gate === 'revoke') {
+    updates.verification_gate_passed_at = null;
   }
 
   // Status aktualisieren

@@ -28,6 +28,9 @@ interface Booking {
   return_label_url?: string | null;
   unit_id?: string | null;
   serial_number?: string | null;
+  verification_required?: boolean;
+  verification_gate_passed_at?: string | null;
+  customer_verification_status?: string | null;
 }
 
 interface ShippingMethod {
@@ -325,13 +328,30 @@ export default function AdminVersandPage() {
                     const { label, urgency } = shipStatus(b.rental_from, b.shipping_method);
                     const isOpen = expandedId === b.id;
                     const accs = Array.isArray(b.accessories) ? b.accessories : [];
+                    // Ausweis-Gate: Buchung haengt auf Ausweis-Check, wenn
+                    // verification_required=true UND noch nicht freigegeben.
+                    // Kunden-Verifizierungs-Status wird zusaetzlich beruecksichtigt
+                    // (wenn Profil inzwischen verifiziert ist, Gate auch offen).
+                    const isVerifyBlocked =
+                      !!b.verification_required
+                      && !b.verification_gate_passed_at
+                      && b.customer_verification_status !== 'verified';
+                    const cardBorder = isVerifyBlocked ? 'border-amber-400' : 'border-brand-border';
                     return (
-                      <div key={b.id} className="bg-white rounded-xl border border-brand-border overflow-hidden">
+                      <div key={b.id} className={`bg-white rounded-xl border overflow-hidden ${cardBorder}`}>
                         <div className="flex items-center justify-between px-5 py-4 gap-3 flex-wrap">
                           <div className="flex items-center gap-3 min-w-0">
                             <span className={`px-2.5 py-1 rounded-full text-xs font-heading font-semibold shrink-0 ${URGENCY_CHIP[urgency]}`}>
                               {label}
                             </span>
+                            {isVerifyBlocked && (
+                              <span className="px-2.5 py-1 rounded-full text-xs font-heading font-semibold shrink-0 bg-amber-100 text-amber-800 border border-amber-300 inline-flex items-center gap-1">
+                                <svg className="w-3 h-3" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                  <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v4.5a.75.75 0 01-1.5 0v-4.5A.75.75 0 0110 5zm0 10a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                                </svg>
+                                Ausweis fehlt
+                              </span>
+                            )}
                             <div className="min-w-0">
                               <p className="font-heading font-semibold text-sm text-brand-black truncate">{b.product_name}</p>
                               <p className="text-xs font-body text-brand-muted">{b.customer_name || '–'} · Mietbeginn: {fmtDate(b.rental_from)}</p>
