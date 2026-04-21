@@ -136,13 +136,29 @@ CREATE INDEX IF NOT EXISTS idx_purchase_items_classification ON purchase_items(c
 ALTER TABLE expenses ADD COLUMN IF NOT EXISTS asset_id UUID REFERENCES assets(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS idx_expenses_asset ON expenses(asset_id);
 
--- Datenbereinigung VOR dem CHECK-Constraint-Update:
--- Pre-existing Bug-Fix: 'fees' war in manual-booking + import-fees geschrieben,
--- aber nicht im CHECK-Constraint enthalten. Jetzt auf 'stripe_fees' umbiegen.
+-- WICHTIG: Alte CHECK-Constraints auf category ZUERST droppen, damit die
+-- folgenden UPDATE-Statements nicht gegen den alten (ggf. abweichenden)
+-- Constraint laufen. Fruehere Migrationen hatten ggf. andere Werte-Listen
+-- (z.B. 'fees' statt 'stripe_fees').
+DO $$
+DECLARE
+  con_name TEXT;
+BEGIN
+  FOR con_name IN
+    SELECT conname FROM pg_constraint
+    WHERE conrelid = 'public.expenses'::regclass
+      AND contype = 'c'
+      AND pg_get_constraintdef(oid) ILIKE '%category%'
+  LOOP
+    EXECUTE 'ALTER TABLE expenses DROP CONSTRAINT ' || quote_ident(con_name);
+  END LOOP;
+END $$;
+
+-- Datenbereinigung jetzt OHNE Constraint (keine Verletzung mehr moeglich):
+-- Pre-existing Bug-Fix: 'fees' auf 'stripe_fees' umbiegen.
 UPDATE expenses SET category = 'stripe_fees' WHERE category = 'fees';
 
--- Defensive: alle sonst nicht-erlaubten Kategorien auf 'other' zwingen, damit
--- der neue CHECK-Constraint greift. Betrifft Altbestand mit freien Werten.
+-- Defensive: alle sonst nicht-erlaubten Kategorien auf 'other' zwingen.
 UPDATE expenses
    SET category = 'other'
  WHERE category NOT IN (
@@ -152,8 +168,7 @@ UPDATE expenses
    'other'
  );
 
--- CHECK-Constraint erweitern: zusaetzliche Kategorien 'depreciation' + 'asset_purchase'.
-ALTER TABLE expenses DROP CONSTRAINT IF EXISTS expenses_category_check;
+-- Neuen CHECK-Constraint anlegen (inkl. 'depreciation' + 'asset_purchase').
 ALTER TABLE expenses ADD CONSTRAINT expenses_category_check CHECK (category IN (
   'stripe_fees', 'shipping', 'software', 'hardware', 'marketing',
   'office', 'travel', 'insurance', 'legal',
