@@ -18,6 +18,7 @@ import { shippingConfig, calcShipping, type ShippingMethod } from '@/data/shippi
 import { calcPriceFromKeyDays, calcPriceFromTable, calcHaftungTieredPrice, getEigenbeteiligung, type PriceConfig, type AdminProduct, type HaftungConfig } from '@/lib/price-config';
 import SignatureStep, { type SignatureResult } from '@/components/booking/SignatureStep';
 import { getStripePromise } from '@/lib/stripe-client';
+import ExpressSignup from '@/components/checkout/ExpressSignup';
 
 /** Inline type to replace react-day-picker's DateRange */
 type DateRange = { from: Date; to?: Date };
@@ -430,6 +431,17 @@ export default function BuchenPage() {
 
   // Mietvertrag-Signatur
   const [contractSignature, setContractSignature] = useState<SignatureResult | null>(null);
+
+  // Auth-Gate vor Mietvertrag — Kunde muss eingeloggt oder registriert sein
+  const [showAuthGate, setShowAuthGate] = useState(false);
+
+  // Falls Kunde sich während des Gates einloggt (z.B. via anderen Tab), schließen + weiter
+  useEffect(() => {
+    if (user && showAuthGate) {
+      setShowAuthGate(false);
+      setStep(5);
+    }
+  }, [user, showAuthGate]);
 
   useEffect(() => {
     fetch('/api/prices').then((r) => r.json()).then(setDynPrices).catch(() => {});
@@ -1686,14 +1698,25 @@ export default function BuchenPage() {
                 <div className="mt-8">
                   <button
                     type="button"
-                    onClick={() => setStep(5)}
+                    onClick={() => {
+                      if (!user) {
+                        setShowAuthGate(true);
+                      } else {
+                        setStep(5);
+                      }
+                    }}
                     className="w-full flex items-center justify-center gap-2 py-4 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold text-sm rounded-[10px] hover:bg-brand-dark transition-colors"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
-                    Weiter: Mietvertrag
+                    {user ? 'Weiter: Mietvertrag' : 'Weiter: Anmelden & Mietvertrag'}
                   </button>
+                  {!user && (
+                    <p className="mt-3 text-xs font-body text-brand-muted text-center">
+                      Für den Mietvertrag benötigen wir dein Konto — Anmeldung oder Registrierung im nächsten Schritt.
+                    </p>
+                  )}
                 </div>
               </div>
             )}
@@ -1966,6 +1989,57 @@ export default function BuchenPage() {
           </div>
         </div>
       </div>
+
+      {/* Auth-Gate Modal — vor dem Mietvertrag anmelden/registrieren */}
+      {showAuthGate && !user && (
+        <div
+          className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Anmelden oder registrieren"
+        >
+          <div className="relative w-full max-w-lg my-8">
+            <button
+              type="button"
+              onClick={() => setShowAuthGate(false)}
+              className="absolute -top-3 -right-3 z-10 w-9 h-9 rounded-full bg-white dark:bg-brand-dark shadow-lg flex items-center justify-center text-brand-steel hover:text-brand-black dark:hover:text-white transition-colors"
+              aria-label="Schließen"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+            <div className="bg-white dark:bg-brand-dark rounded-card shadow-card p-6 mb-4">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 rounded-full bg-accent-blue-soft flex items-center justify-center flex-shrink-0">
+                  <svg className="w-5 h-5 text-accent-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                </div>
+                <div>
+                  <h2 className="font-heading font-bold text-lg text-brand-black dark:text-white leading-tight">
+                    Letzter Schritt vor dem Mietvertrag
+                  </h2>
+                  <p className="text-sm font-body text-brand-steel dark:text-gray-400 mt-0.5">
+                    Melde dich an oder registriere dich, um den Vertrag zu unterschreiben.
+                  </p>
+                </div>
+              </div>
+              <p className="text-xs font-body text-brand-muted dark:text-gray-500">
+                Der Mietvertrag wird in deinem Konto gespeichert, damit du ihn jederzeit abrufen kannst. Deine Buchung bleibt währenddessen erhalten.
+              </p>
+            </div>
+
+            <ExpressSignup
+              onAuthenticated={() => {
+                setShowAuthGate(false);
+                setStep(5);
+              }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

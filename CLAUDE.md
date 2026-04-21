@@ -111,6 +111,7 @@ ESLint + TypeScript werden auf dem Server beim Build geskippt (RAM-Limit CX23).
 - **Set-Preis:** `getSetPrice()` prüft `pricing_mode ?? pricingMode` (API gibt camelCase `pricingMode` zurück)
 - Buchungsbestätigung antwortet sofort — PDF + E-Mail laufen im Hintergrund
 - Kalender verhindert Buchung über ausgebuchte Tage hinweg (maxEndDate-Logik)
+- **Auth-Gate vor Mietvertrag (Stand 2026-04-22):** Im Direkt-Buchungsflow (`/kameras/[slug]/buchen`) muss der Kunde spätestens nach der Zusammenfassung (Step 4) eingeloggt oder registriert sein, bevor er in Step 5 (SignatureStep) den Mietvertrag unterschreibt. Klick auf „Weiter: Mietvertrag" öffnet bei fehlender Session ein Modal mit der `ExpressSignup`-Komponente (Login + Registrierung). Nach Erfolg via `onAuthenticated`-Callback → Modal schließt, `setStep(5)`. Zusätzlich `useEffect`-Watch auf `user`, falls Login in anderem Tab erfolgt. Button-Label ändert sich zu „Weiter: Anmelden & Mietvertrag", Hinweistext darunter erklärt den Grund. Der Cart-Checkout (`/checkout`) ist hiervon unberührt — dort greift weiterhin das bestehende `expressSignupEnabled`-Feature-Flag.
 
 ### Express-Signup + verzögerte Verifizierung (Stand 2026-04-21)
 Optionaler smootherer Neukunden-Flow, zwei Admin-Toggles unter `/admin/einstellungen`:
