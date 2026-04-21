@@ -125,18 +125,23 @@ export default function RechnungUploadPage() {
       setInvoiceDate(data.extracted?.invoice_date ?? '');
       setTotals(data.extracted?.totals ?? { net: 0, tax: 0, gross: 0 });
 
-      const rows: PurchaseItemRow[] = (data.items ?? []).map((it: PurchaseItemRow) => ({
-        ...it,
-        draft: {
-          classification: (it.ai_suggestion?.suggested_classification as Classification) ?? 'expense',
-          kind: it.ai_suggestion?.suggested_kind,
-          name: it.product_name,
-          useful_life_months: it.ai_suggestion?.suggested_useful_life_months ?? 36,
-          residual_value: 0,
-          expense_category: it.ai_suggestion?.suggested_category ?? 'hardware',
-          expense_date: data.extracted?.invoice_date ?? new Date().toISOString().slice(0, 10),
-        },
-      }));
+      const rows: PurchaseItemRow[] = (data.items ?? []).map((it: PurchaseItemRow) => {
+        const netto = Number(it.net_price ?? 0);
+        return {
+          ...it,
+          draft: {
+            classification: (it.ai_suggestion?.suggested_classification as Classification) ?? 'expense',
+            kind: it.ai_suggestion?.suggested_kind,
+            name: it.product_name,
+            useful_life_months: it.ai_suggestion?.suggested_useful_life_months ?? 36,
+            // 30 % vom Nettopreis als realistischer Gebrauchtwert — stellt sicher,
+            // dass der Zeitwert im Mietvertrag nie auf 0 faellt.
+            residual_value: Math.round(netto * 0.3 * 100) / 100,
+            expense_category: it.ai_suggestion?.suggested_category ?? 'hardware',
+            expense_date: data.extracted?.invoice_date ?? new Date().toISOString().slice(0, 10),
+          },
+        };
+      });
       setItems(rows);
       setStage('classify');
       setProgress('');
@@ -337,6 +342,11 @@ export default function RechnungUploadPage() {
                         <input style={input} type="number" min={1} value={row.draft.useful_life_months ?? 36} onChange={(e) => updateDraft(row.id, { useful_life_months: Number(e.target.value) })} />
                       </div>
                       <div>
+                        <span style={label}>Restwert (EUR)</span>
+                        <input style={input} type="number" step="0.01" min={0} value={row.draft.residual_value ?? 0} onChange={(e) => updateDraft(row.id, { residual_value: Number(e.target.value) })} />
+                        <span style={{ fontSize: 10, color: '#64748b', marginTop: 2, display: 'block' }}>Default 30 % vom Kaufpreis — Zeitwert faellt nicht darunter</span>
+                      </div>
+                      <div>
                         <span style={label}>Seriennummer</span>
                         <input style={input} value={row.draft.serial_number ?? ''} onChange={(e) => updateDraft(row.id, { serial_number: e.target.value })} />
                       </div>
@@ -408,7 +418,6 @@ export default function RechnungUploadPage() {
                   onClick={() => {
                     setStage('upload');
                     setItems([]);
-                    setPurchaseId(null);
                     setError(null);
                   }}
                   style={{ padding: '10px 20px', borderRadius: 8, border: '1px solid #334155', background: 'transparent', color: '#e2e8f0', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}

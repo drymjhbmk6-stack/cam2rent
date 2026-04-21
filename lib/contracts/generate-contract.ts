@@ -175,8 +175,17 @@ export async function generateContractPDF(opts: {
   // Zeitwert (Wiederbeschaffungswert) aus verknuepftem Asset laden, falls Unit
   // bekannt. Fallback: opts.deposit (Kautions-Betrag des Produkts) fuer Altbestand
   // ohne Asset-Verknuepfung.
+  //
+  // Floor: der Wert darf NIE unter den Kautionsbetrag fallen. Grund — steuerliche
+  // AfA treibt den Buchwert irgendwann auf den Restwert (ggf. 0), der tatsaechliche
+  // Wiederbeschaffungspreis einer gebrauchten Kamera liegt aber immer deutlich
+  // darueber. Die Kaution ist eine realistische Untergrenze fuer den Ersatzwert
+  // bei Totalschaden.
   const assetCurrentValue = opts.unitId ? await loadAssetCurrentValue(opts.unitId) : null;
-  const wiederbeschaffungswert = assetCurrentValue ?? opts.deposit ?? 0;
+  const wiederbeschaffungswert = Math.max(
+    assetCurrentValue ?? 0,
+    opts.deposit ?? 0,
+  );
 
   // Items aus productName + accessories generieren falls nicht explizit übergeben
   const items: MietgegenstandItem[] = opts.items && opts.items.length > 0

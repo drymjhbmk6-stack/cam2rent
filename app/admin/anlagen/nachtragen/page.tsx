@@ -113,7 +113,10 @@ export default function NachtragenPage() {
           <h1 style={{ color: '#f1f5f9', fontSize: 28, fontWeight: 800, marginBottom: 6 }}>Bestand nachtragen</h1>
           <p style={{ color: '#94a3b8', fontSize: 14 }}>
             Fuer Kameras aus dem Altbestand (die noch keinen Asset-Eintrag haben) kannst du hier Kaufdatum und Kaufpreis nachtragen.
-            AfA wird automatisch rueckwirkend gebucht.
+            AfA wird automatisch rueckwirkend gebucht. Restwert ist standardmaessig
+            30 % vom Kaufpreis (realistischer Gebrauchtwert) — dadurch faellt der
+            Zeitwert im Mietvertrag nicht auf 0. Kann im Asset-Detail nachtraeglich
+            angepasst werden.
           </p>
         </div>
 

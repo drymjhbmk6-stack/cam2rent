@@ -97,7 +97,6 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     }
 
     const usefulLifeMonths = Number(body.useful_life_months) > 0 ? Number(body.useful_life_months) : 36;
-    const residualValue = Number(body.residual_value) >= 0 ? Number(body.residual_value) : 0;
     const depreciationMethod = body.depreciation_method === 'immediate'
       ? 'immediate'
       : body.depreciation_method === 'none'
@@ -110,6 +109,12 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     const purchasePrice = Number(body.purchase_price) > 0
       ? Number(body.purchase_price)
       : Math.round(netTotal * 100) / 100;
+
+    // Restwert: default 30 % vom Kaufpreis (realistischer Gebrauchtwert fuer
+    // Vermietgeraete). Kann manuell ueberschrieben werden.
+    const residualValue = body.residual_value != null && Number(body.residual_value) >= 0
+      ? Number(body.residual_value)
+      : Math.round(purchasePrice * 0.3 * 100) / 100;
 
     // Kaufdatum: aus Body, sonst aus Bestellung
     const purchaseDate = body.purchase_date || purchase?.order_date || new Date().toISOString().slice(0, 10);

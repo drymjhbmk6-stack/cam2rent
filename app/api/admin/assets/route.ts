@@ -46,7 +46,11 @@ export async function POST(req: NextRequest) {
   }
 
   const purchasePrice = Number(body.purchase_price);
-  const residualValue = Number(body.residual_value) >= 0 ? Number(body.residual_value) : 0;
+  // Restwert: default 30 % vom Kaufpreis (realistischer Gebrauchtwert fuer
+  // Vermietgeraete, stellt sicher dass der Zeitwert im Vertrag nie auf 0 faellt).
+  const residualValue = body.residual_value != null && Number(body.residual_value) >= 0
+    ? Number(body.residual_value)
+    : Math.round(purchasePrice * 0.3 * 100) / 100;
 
   const { data, error } = await supabase
     .from('assets')

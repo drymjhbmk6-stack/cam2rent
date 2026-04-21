@@ -712,8 +712,10 @@ Volles Lager-/Anlagenmodul mit KI-gestuetzter Rechnungs-Analyse. Rechnung hochla
 
 ### Mietvertrag — Zeitwert aus Asset
 - **`lib/contracts/generate-contract.ts`** bekommt neuen optionalen Parameter `unitId`. Wenn gesetzt, wird ueber `assets.unit_id` der aktuelle `current_value` geladen und als `wiederbeschaffungswert` in MietgegenstandItem geschrieben. Fallback: `opts.deposit` (Kautionsbetrag) → keine Regression fuer Altbestand ohne Asset-Verknuepfung.
+- **Floor gegen 0-€-Wertverfall:** `wiederbeschaffungswert = Math.max(asset.current_value, product.deposit)`. Wenn die AfA den Buchwert auf den Restwert treibt (z.B. nach 36 Monaten auf 0 €), bleibt die Kaution als realistische Untergrenze im Vertrag. Grund — steuerlich abgeschrieben ≠ tatsaechlicher Marktwert einer gebrauchten Kamera.
+- **Default-Restwert 30 % vom Kaufpreis** beim Anlegen neuer Assets (in `purchase-items/[id]` + `assets` POST). Kann manuell im Asset-Detail oder im Upload-Form ueberschrieben werden. Stellt sicher, dass der Buchwert nicht auf 0 faellt und spiegelt den typischen Gebrauchtpreis von Vermietgeraeten wider.
 - **8 Aufrufer** (`confirm-booking`, `confirm-cart` 2x, `manual-booking`, `sign-contract`, `contracts/sign`, `sample-contract`) reichen `unitId` durch wo `booking.unit_id` bekannt. `sample-contract` bleibt ohne unitId → Muster-Vertrag zeigt Dummy-Kaution.
-- `product.deposit` bleibt weiter fuer Stripe-PreAuth (Kaution) zustaendig — **nicht mehr identisch mit Zeitwert**.
+- `product.deposit` bleibt weiter fuer Stripe-PreAuth (Kaution) zustaendig — **nicht mehr identisch mit Zeitwert**, dient aber als Vertrags-Floor.
 
 ### DATEV-Export
 - **AfA-Buchungen** werden als zusaetzliche Zeilen angehaengt: `S AfA-Konto 4830 AN Bestandskonto 0420/0430/0400/0490` (je nach asset.kind). Datenquelle: `expenses WHERE category='depreciation' AND expense_date IN [from, to]`.
