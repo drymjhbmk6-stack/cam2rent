@@ -249,6 +249,17 @@ export async function generateReel(opts: GenerateReelOptions): Promise<GenerateR
     const needsReview = opts.previewRequired ?? settings.preview_required ?? true;
     const newStatus = needsReview ? 'pending_review' : 'rendered';
 
+    // Audio-Hinweis im render_log dokumentieren, damit im Detail-UI sichtbar
+    const audioStatus = voiceSegments
+      ? `Voice-Track: AN (Stimme=${settings.voice_name ?? 'nova'}, Modell=${settings.voice_model ?? 'tts-1'})`
+      : settings.voice_enabled
+        ? `Voice-Track: angefordert aber fehlgeschlagen (siehe Log)`
+        : `Voice-Track: AUS (Setting voice_enabled=false)`;
+    const musicStatus = settings.default_music_url?.trim()
+      ? `Musik: AN (${settings.default_music_url.trim()})`
+      : `Musik: AUS (keine default_music_url gesetzt)`;
+    const audioHeader = `[audio] ${audioStatus} · ${musicStatus}`;
+
     await supabase
       .from('social_reels')
       .update({
@@ -258,7 +269,7 @@ export async function generateReel(opts: GenerateReelOptions): Promise<GenerateR
         thumbnail_url: thumbnailUrl,
         duration_seconds: durationSeconds,
         script_json: script as unknown as Record<string, unknown>,
-        render_log: log.slice(-4000),
+        render_log: `${audioHeader}\n${log}`.slice(-4000),
         status: newStatus,
         error_message: null,
       })

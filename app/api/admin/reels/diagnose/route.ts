@@ -47,7 +47,7 @@ export async function GET() {
 
   // ── reels_settings (enthaelt Pexels-Key) ──────────────────────────────────
   const reelsResult = await supabase.from('admin_settings').select('value').eq('key', 'reels_settings').maybeSingle();
-  let reelsSettings: { valueType: string; parsedOk: boolean; keys: string[]; pexelsPresent: boolean; pexelsSource: 'db' | 'env' | 'none'; previewRequired: unknown; maxDuration: unknown } | { error: string } | { missing: true };
+  let reelsSettings: { valueType: string; parsedOk: boolean; keys: string[]; pexelsPresent: boolean; pexelsSource: 'db' | 'env' | 'none'; voiceEnabled: boolean; voiceName: unknown; voiceModel: unknown; musicUrlSet: boolean; introEnabled: boolean; outroEnabled: boolean; previewRequired: unknown; maxDuration: unknown } | { error: string } | { missing: true };
 
   if (reelsResult.error) {
     reelsSettings = { error: reelsResult.error.message };
@@ -62,12 +62,19 @@ export async function GET() {
     } catch { /* parsedOk stays false */ }
     const pex = typeof parsed.pexels_api_key === 'string' ? parsed.pexels_api_key.trim() : '';
     const pexelsSource = pex ? 'db' : (process.env.PEXELS_API_KEY?.trim() ? 'env' : 'none');
+    const musicUrl = typeof parsed.default_music_url === 'string' ? parsed.default_music_url.trim() : '';
     reelsSettings = {
       valueType: typeof reelsResult.data.value,
       parsedOk,
       keys: parsedOk ? Object.keys(parsed) : [],
       pexelsPresent: pexelsSource !== 'none',
       pexelsSource,
+      voiceEnabled: parsed.voice_enabled === true,
+      voiceName: parsed.voice_name ?? '(default: nova)',
+      voiceModel: parsed.voice_model ?? '(default: tts-1)',
+      musicUrlSet: musicUrl.length > 0,
+      introEnabled: parsed.intro_enabled !== false,
+      outroEnabled: parsed.outro_enabled !== false,
       previewRequired: parsed.preview_required,
       maxDuration: parsed.max_duration,
     };

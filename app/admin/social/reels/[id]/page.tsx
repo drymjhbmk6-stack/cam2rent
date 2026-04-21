@@ -224,6 +224,14 @@ export default function ReelDetailPage({ params }: { params: Promise<{ id: strin
         <div className="mb-4 rounded-lg bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 px-4 py-2 text-sm text-blue-800 dark:text-blue-200">{feedback}</div>
       )}
 
+      {/* Audio-Hinweis: wenn render_log ein "Voice-Track: AUS" oder "Musik: AUS" hat */}
+      {reel.render_log && reel.render_log.includes('[audio]') && (reel.render_log.includes('Voice-Track: AUS') && reel.render_log.includes('Musik: AUS')) && (
+        <div className="mb-4 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
+          <strong>Dieses Reel ist stumm.</strong> Weder Voice-Over noch Hintergrundmusik sind f&uuml;r die Generierung aktiviert gewesen. Unter{' '}
+          <a href="/admin/social/reels/vorlagen" className="underline font-medium">Vorlagen &rarr; Einstellungen</a> kannst du &bdquo;Voice-Over aktivieren&ldquo; anhaken oder eine Musik-URL hinterlegen. Danach &bdquo;Neu rendern&ldquo; klicken.
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Video-Preview links */}
         <div>
