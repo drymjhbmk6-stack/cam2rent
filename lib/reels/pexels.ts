@@ -40,9 +40,15 @@ export interface PexelsSearchResult {
 async function getApiKey(): Promise<string | null> {
   const supabase = createServiceClient();
   const { data } = await supabase.from('admin_settings').select('value').eq('key', 'reels_settings').maybeSingle();
-  const value = data?.value as { pexels_api_key?: string } | null | undefined;
-  const fromDb = value?.pexels_api_key?.trim();
-  if (fromDb) return fromDb;
+  if (data?.value) {
+    try {
+      const settings = typeof data.value === 'string' ? JSON.parse(data.value) : (data.value as { pexels_api_key?: string });
+      const fromDb = settings?.pexels_api_key?.trim();
+      if (fromDb) return fromDb;
+    } catch {
+      /* ignore parse error, fall through to env */
+    }
+  }
   return process.env.PEXELS_API_KEY?.trim() ?? null;
 }
 

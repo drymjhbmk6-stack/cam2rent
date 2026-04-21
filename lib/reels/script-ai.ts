@@ -35,8 +35,15 @@ export interface ReelScript {
 async function getAnthropicKey(): Promise<string> {
   const supabase = createServiceClient();
   const { data } = await supabase.from('admin_settings').select('value').eq('key', 'blog_settings').maybeSingle();
-  const value = data?.value as { anthropic_api_key?: string } | null | undefined;
-  const key = value?.anthropic_api_key?.trim();
+  if (!data?.value) throw new Error('Anthropic API Key nicht konfiguriert (Blog → Einstellungen).');
+  // value kann sowohl als JSON-String als auch als Objekt zurueckkommen (je nach Supabase-Client-Version)
+  let settings: { anthropic_api_key?: string };
+  try {
+    settings = typeof data.value === 'string' ? JSON.parse(data.value) : (data.value as { anthropic_api_key?: string });
+  } catch {
+    throw new Error('Anthropic API Key: admin_settings.blog_settings ist kein valides JSON');
+  }
+  const key = settings?.anthropic_api_key?.trim();
   if (!key) throw new Error('Anthropic API Key nicht konfiguriert (Blog → Einstellungen).');
   return key;
 }

@@ -56,9 +56,13 @@ interface ReelsSettings {
 async function loadSettings(): Promise<ReelsSettings> {
   const supabase = createServiceClient();
   const { data } = await supabase.from('admin_settings').select('value').eq('key', 'reels_settings').maybeSingle();
-  const v = data?.value;
-  if (!v || typeof v !== 'object') return {};
-  return v as ReelsSettings;
+  if (!data?.value) return {};
+  try {
+    // value kann String oder Objekt sein (je nach Supabase-Client-Version)
+    return typeof data.value === 'string' ? JSON.parse(data.value) : (data.value as ReelsSettings);
+  } catch {
+    return {};
+  }
 }
 
 interface TemplateRow {
