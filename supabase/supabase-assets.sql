@@ -136,8 +136,23 @@ CREATE INDEX IF NOT EXISTS idx_purchase_items_classification ON purchase_items(c
 ALTER TABLE expenses ADD COLUMN IF NOT EXISTS asset_id UUID REFERENCES assets(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS idx_expenses_asset ON expenses(asset_id);
 
--- CHECK-Constraint erweitern: zusaetzliche Kategorien 'depreciation' + 'asset_purchase'
--- Alt-Werte bleiben alle gueltig.
+-- Datenbereinigung VOR dem CHECK-Constraint-Update:
+-- Pre-existing Bug-Fix: 'fees' war in manual-booking + import-fees geschrieben,
+-- aber nicht im CHECK-Constraint enthalten. Jetzt auf 'stripe_fees' umbiegen.
+UPDATE expenses SET category = 'stripe_fees' WHERE category = 'fees';
+
+-- Defensive: alle sonst nicht-erlaubten Kategorien auf 'other' zwingen, damit
+-- der neue CHECK-Constraint greift. Betrifft Altbestand mit freien Werten.
+UPDATE expenses
+   SET category = 'other'
+ WHERE category NOT IN (
+   'stripe_fees', 'shipping', 'software', 'hardware', 'marketing',
+   'office', 'travel', 'insurance', 'legal',
+   'depreciation', 'asset_purchase',
+   'other'
+ );
+
+-- CHECK-Constraint erweitern: zusaetzliche Kategorien 'depreciation' + 'asset_purchase'.
 ALTER TABLE expenses DROP CONSTRAINT IF EXISTS expenses_category_check;
 ALTER TABLE expenses ADD CONSTRAINT expenses_category_check CHECK (category IN (
   'stripe_fees', 'shipping', 'software', 'hardware', 'marketing',
@@ -187,18 +202,7 @@ END $$;
 
 
 -- ────────────────────────────────────────────────────────────────
--- 6. Pre-existing Bug-Fix: category='fees' -> 'stripe_fees'
--- ────────────────────────────────────────────────────────────────
--- Falls irgendwann trotzdem ein 'fees'-Eintrag in der DB landete (Migration
--- wurde vor Code-Fix ausgefuehrt), umbiegen. Idempotent.
-
-UPDATE expenses
-   SET category = 'stripe_fees'
- WHERE category = 'fees';
-
-
--- ────────────────────────────────────────────────────────────────
--- 7. Default-DATEV-Konten-Erweiterung (optional, nur wenn Setting existiert)
+-- 6. Default-DATEV-Konten-Erweiterung (optional, nur wenn Setting existiert)
 -- ────────────────────────────────────────────────────────────────
 -- Wenn admin_settings.datev_expense_accounts existiert, neue Kategorien
 -- mit Standard-Konten nachtragen (SKR03/04-aehnlich, kann im Admin-UI
