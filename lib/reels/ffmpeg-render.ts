@@ -31,6 +31,12 @@ export interface RenderInput {
   musicUrl?: string;                                            // optional
   bgColorFrom?: string;                                         // motion_graphics
   bgColorTo?: string;
+  /**
+   * Optional: Array aus MP3-Buffern, einer pro Szene + 1 fuer CTA (letzte).
+   * Wenn gesetzt, wird der Voiceover als Audio-Track in das Video gemischt.
+   * Reihenfolge: scenes[0], scenes[1], ..., cta_frame
+   */
+  voiceSegments?: Buffer[];
 }
 
 export interface RenderResult {
@@ -146,6 +152,7 @@ function buildStackedDrawtext(
       const parts = [
         `drawtext=fontfile='${font}'`,
         `text='${escaped}'`,
+        `expansion=none`,
         `fontsize=${picked.fontsize}`,
         `fontcolor=${fc}`,
         `borderw=${bw}`,
@@ -400,12 +407,158 @@ export async function renderReel(input: RenderInput): Promise<RenderResult> {
     ]);
     fullLog += `\n[concat] ${concatLog}`;
 
-    // ── Audio optional dazu mischen ─────────────────────────────────────────
+    // ── Voice-Track aus TTS-Segmenten bauen (falls vorhanden) ────────────────
+    let voiceTrackPath: string | undefined;
+    if (input.voiceSegments && input.voiceSegments.length > 0) {
+      try {
+        // Jede Szenen-Dauer ermitteln (scenes + cta)
+        const segDurations = [
+          ...input.script.scenes.map((s) => s.duration),
+          input.script.cta_frame.duration,
+        ];
+
+        // Pro Voice-Segment: MP3 schreiben, dann auf Szenendauer padden/trimmen als WAV.
+        // Leere Buffer (kein voice_text fuer diese Szene) → Silence der Szenendauer.
+        const paddedPaths: string[] = [];
+        for (let i = 0; i < input.voiceSegments.length; i++) {
+          const dur = segDurations[i] ?? 3;
+          const paddedPath = path.join(workDir, `voice-pad-${i}.wav`);
+          const seg = input.voiceSegments[i];
+
+          if (!seg || seg.length === 0) {
+            // Nur Silence
+            await runFfmpeg([
+              '-y',
+              '-hide_banner',
+              '-loglevel', 'error',
+              '-f', 'lavfi',
+              '-t', String(dur),
+              '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100',
+              paddedPath,
+            ]);
+          } else {
+            const mp3Path = path.join(workDir, `voice-${i}.mp3`);
+            await writeFile(mp3Path, seg);
+            await runFfmpeg([
+              '-y',
+              '-hide_banner',
+              '-loglevel', 'error',
+              '-i', mp3Path,
+              '-af', `apad=whole_dur=${dur}`,
+              '-t', String(dur),
+              '-ar', '44100',
+              '-ac', '2',
+              paddedPath,
+            ]);
+          }
+          paddedPaths.push(paddedPath);
+        }
+
+        // Fehlende Szenen (wenn weniger voice-Segments als Szenen) mit Silence auffuellen
+        for (let i = paddedPaths.length; i < segDurations.length; i++) {
+          const dur = segDurations[i];
+          const silPath = path.join(workDir, `voice-silence-${i}.wav`);
+          await runFfmpeg([
+            '-y',
+            '-hide_banner',
+            '-loglevel', 'error',
+            '-f', 'lavfi',
+            '-t', String(dur),
+            '-i', `anullsrc=channel_layout=stereo:sample_rate=44100`,
+            silPath,
+          ]);
+          paddedPaths.push(silPath);
+        }
+
+        // Alles konkatenieren zum Voice-Track
+        const voiceListPath = path.join(workDir, 'voice-concat.txt');
+        await writeFile(voiceListPath, paddedPaths.map((p) => `file '${p.replace(/'/g, "\\'")}'`).join('\n'));
+        voiceTrackPath = path.join(workDir, 'voice-track.m4a');
+        const { stderr: vLog } = await runFfmpeg([
+          '-y',
+          '-hide_banner',
+          '-loglevel', 'error',
+          '-f', 'concat',
+          '-safe', '0',
+          '-i', voiceListPath,
+          '-c:a', 'aac',
+          '-b:a', '128k',
+          voiceTrackPath,
+        ]);
+        fullLog += `\n[voice-track] ${vLog}`;
+      } catch (err) {
+        fullLog += `\n[voice-track-skip] ${err instanceof Error ? err.message : 'unknown'}`;
+        voiceTrackPath = undefined;
+      }
+    }
+
+    // ── Audio final zusammenfuegen ──────────────────────────────────────────
     const finalPath = path.join(workDir, 'out-final.mp4');
-    if (input.musicUrl) {
+    const hasMusic = Boolean(input.musicUrl);
+    const hasVoice = Boolean(voiceTrackPath);
+
+    if (hasMusic && hasVoice) {
+      // Musik (-10dB) + Voice (0dB) mischen
       const musicPath = path.join(workDir, 'music.mp3');
       try {
-        await downloadToFile(input.musicUrl, musicPath);
+        await downloadToFile(input.musicUrl!, musicPath);
+        const { stderr: mixLog } = await runFfmpeg([
+          '-y',
+          '-hide_banner',
+          '-loglevel', 'error',
+          '-i', noAudioPath,
+          '-i', voiceTrackPath!,
+          '-i', musicPath,
+          '-filter_complex', '[2:a]volume=0.25[m];[1:a][m]amix=inputs=2:duration=first:dropout_transition=0[a]',
+          '-map', '0:v',
+          '-map', '[a]',
+          '-c:v', 'copy',
+          '-c:a', 'aac',
+          '-b:a', '128k',
+          '-shortest',
+          finalPath,
+        ]);
+        fullLog += `\n[mix-voice+music] ${mixLog}`;
+      } catch (err) {
+        fullLog += `\n[mix-fallback] ${err instanceof Error ? err.message : 'unknown'}`;
+        // Fallback: nur Voice, ohne Musik
+        await runFfmpeg([
+          '-y',
+          '-hide_banner',
+          '-loglevel', 'error',
+          '-i', noAudioPath,
+          '-i', voiceTrackPath!,
+          '-map', '0:v',
+          '-map', '1:a',
+          '-c:v', 'copy',
+          '-c:a', 'aac',
+          '-b:a', '128k',
+          '-shortest',
+          finalPath,
+        ]);
+      }
+    } else if (hasVoice) {
+      // Nur Voice
+      const { stderr } = await runFfmpeg([
+        '-y',
+        '-hide_banner',
+        '-loglevel', 'error',
+        '-i', noAudioPath,
+        '-i', voiceTrackPath!,
+        '-map', '0:v',
+        '-map', '1:a',
+        '-c:v', 'copy',
+        '-c:a', 'aac',
+        '-b:a', '128k',
+        '-shortest',
+        finalPath,
+      ]);
+      fullLog += `\n[voice-only] ${stderr}`;
+    } else if (hasMusic) {
+      // Nur Musik (wie vorher)
+      const musicPath = path.join(workDir, 'music.mp3');
+      try {
+        await downloadToFile(input.musicUrl!, musicPath);
         const { stderr: mixLog } = await runFfmpeg([
           '-y',
           '-hide_banner',
@@ -422,9 +575,7 @@ export async function renderReel(input: RenderInput): Promise<RenderResult> {
         ]);
         fullLog += `\n[mix] ${mixLog}`;
       } catch (err) {
-        // Musik-Fehler: fallback auf stummes Video
         fullLog += `\n[mix-skip] ${err instanceof Error ? err.message : 'unknown'}`;
-        // Einfaches AAC-Silent-Track drüberlegen, sonst akzeptieren Meta-APIs das Video nicht immer
         const { stderr } = await runFfmpeg([
           '-y',
           '-hide_banner',
@@ -441,7 +592,7 @@ export async function renderReel(input: RenderInput): Promise<RenderResult> {
         fullLog += `\n[silent] ${stderr}`;
       }
     } else {
-      // Stiller Track
+      // Stiller Track (wie vorher)
       const { stderr } = await runFfmpeg([
         '-y',
         '-hide_banner',

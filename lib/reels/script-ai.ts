@@ -16,6 +16,7 @@ export interface ReelScene {
   duration: number;               // Sekunden
   search_query: string;           // Pexels-Suchbegriff (Englisch für bessere Treffer)
   text_overlay: string;           // Kurzer Text auf dem Clip (max 8 Worte)
+  voice_text?: string;            // Optional: laengerer gesprochener Text (TTS)
   kind?: 'intro' | 'middle' | 'cta';
 }
 
@@ -26,6 +27,7 @@ export interface ReelScript {
   cta_frame: {
     headline: string;
     subline?: string;
+    voice_text?: string;          // Optional: gesprochener CTA-Text
     duration: number;
   };
   caption: string;
@@ -83,14 +85,15 @@ WICHTIG — du musst IMMER mit einem validen JSON-Objekt antworten, kein Markdow
   "duration": 20,
   "music_mood": "upbeat|calm|cinematic|driving|neutral",
   "scenes": [
-    { "duration": 2, "search_query": "englische pexels-suche", "text_overlay": "Kurzer DE-Text", "kind": "intro" },
-    { "duration": 5, "search_query": "...", "text_overlay": "...", "kind": "middle" },
-    { "duration": 5, "search_query": "...", "text_overlay": "...", "kind": "middle" },
-    { "duration": 5, "search_query": "...", "text_overlay": "...", "kind": "middle" }
+    { "duration": 2, "search_query": "englische pexels-suche", "text_overlay": "Kurzer DE-Text", "voice_text": "Natuerlicher Sprechsatz passend zur Szene", "kind": "intro" },
+    { "duration": 5, "search_query": "...", "text_overlay": "...", "voice_text": "...", "kind": "middle" },
+    { "duration": 5, "search_query": "...", "text_overlay": "...", "voice_text": "...", "kind": "middle" },
+    { "duration": 5, "search_query": "...", "text_overlay": "...", "voice_text": "...", "kind": "middle" }
   ],
   "cta_frame": {
     "headline": "Kurzer CTA-Titel",
     "subline": "Optional: Preis/Detail",
+    "voice_text": "Gesprochener Call-to-Action in einem Satz",
     "duration": 3
   },
   "caption": "3–5 Sätze, erste Person, authentisch, kein Marketing-Sprech",
@@ -99,6 +102,7 @@ WICHTIG — du musst IMMER mit einem validen JSON-Objekt antworten, kein Markdow
 
 Regeln:
 - Text-Overlays: maximal 8 Wörter, gut lesbar
+- voice_text: laengerer natuerlicher Sprechsatz pro Szene (1 Satz, so dass er in der Szenen-Dauer gesprochen werden kann — Faustregel: ~2.5 Worte pro Sekunde, also 5s = max 12 Worte)
 - Search-Queries IMMER auf Englisch (bessere Pexels-Treffer), konkret ("mountain biking pov", nicht "outdoor sport")
 - Summe aller Szenen-Dauern + CTA-Dauer = duration
 - Ton deutsch, aber ohne Anglizismen wie "Game-Changer" oder Ausrufezeichen-Flut

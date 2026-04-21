@@ -18,6 +18,7 @@ import { isTestMode } from '@/lib/env-mode';
 import { generateReelScript, type ReelScript } from './script-ai';
 import { findClipForQuery, type PexelsVideo, type PexelsVideoFile } from './pexels';
 import { renderReel } from './ffmpeg-render';
+import { generateSpeech, type TTSVoice, type TTSModel } from './tts';
 
 export interface GenerateReelOptions {
   templateId?: string;
@@ -51,6 +52,9 @@ interface ReelsSettings {
   default_template_id?: string | null;
   default_music_url?: string;
   max_duration?: number;
+  voice_enabled?: boolean;
+  voice_name?: TTSVoice;
+  voice_model?: TTSModel;
 }
 
 async function loadSettings(): Promise<ReelsSettings> {
@@ -172,12 +176,42 @@ export async function generateReel(opts: GenerateReelOptions): Promise<GenerateR
       }
     }
 
-    // ── 5. Rendern ──────────────────────────────────────────────────────────
+    // ── 5a. Voice-Over generieren (wenn aktiviert) ──────────────────────────
+    let voiceSegments: Buffer[] | undefined;
+    if (settings.voice_enabled) {
+      try {
+        const voice = settings.voice_name ?? 'nova';
+        const model = settings.voice_model ?? 'tts-1';
+        const texts: string[] = [
+          ...script.scenes.map((s) => (s.voice_text?.trim() || s.text_overlay?.trim() || '')),
+          (script.cta_frame.voice_text?.trim() || script.cta_frame.headline?.trim() || ''),
+        ];
+        const generated: Buffer[] = [];
+        for (const t of texts) {
+          if (!t) {
+            // Platzhalter-Silence durch Renderer handled — aber wir brauchen den Index
+            generated.push(Buffer.alloc(0));
+            continue;
+          }
+          const buf = await generateSpeech(t, { voice, model });
+          generated.push(buf);
+        }
+        // Nur setzen wenn mindestens ein Segment echte Audio hat
+        if (generated.some((b) => b.length > 0)) {
+          voiceSegments = generated;
+        }
+      } catch (err) {
+        console.warn('[reels/orchestrator] TTS-Fehler, Video wird ohne Voice gerendert:', err);
+      }
+    }
+
+    // ── 5b. Rendern ─────────────────────────────────────────────────────────
     const { videoBuffer, thumbnailBuffer, durationSeconds, log } = await renderReel({
       script,
       templateType,
       clips,
       musicUrl: settings.default_music_url?.trim() || undefined,
+      voiceSegments,
       bgColorFrom: tmpl.bg_color_from,
       bgColorTo: tmpl.bg_color_to,
     });

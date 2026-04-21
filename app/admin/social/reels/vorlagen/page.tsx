@@ -17,11 +17,24 @@ interface Template {
   is_active: boolean;
 }
 
+interface ReelsSettings {
+  pexels_api_key?: string;
+  voice_enabled?: boolean;
+  voice_name?: 'alloy' | 'echo' | 'fable' | 'nova' | 'onyx' | 'shimmer';
+  voice_model?: 'tts-1' | 'tts-1-hd';
+  max_duration?: number;
+  default_music_url?: string;
+}
+
 export default function TemplatesPage() {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+
+  const [settings, setSettings] = useState<ReelsSettings>({});
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [settingsFeedback, setSettingsFeedback] = useState('');
 
   async function load() {
     const res = await fetch('/api/admin/reels/templates');
@@ -30,8 +43,38 @@ export default function TemplatesPage() {
     setLoading(false);
   }
 
+  async function loadSettings() {
+    try {
+      const res = await fetch('/api/admin/settings?key=reels_settings');
+      if (!res.ok) return;
+      const body = await res.json();
+      if (body.value) {
+        const parsed = typeof body.value === 'string' ? JSON.parse(body.value) : body.value;
+        setSettings(parsed ?? {});
+      }
+    } catch { /* ignore */ }
+  }
+
+  async function saveSettings() {
+    setSavingSettings(true);
+    setSettingsFeedback('');
+    try {
+      const res = await fetch('/api/admin/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'reels_settings', value: JSON.stringify(settings) }),
+      });
+      setSettingsFeedback(res.ok ? 'Gespeichert.' : 'Fehler beim Speichern.');
+    } catch {
+      setSettingsFeedback('Netzwerk-Fehler.');
+    } finally {
+      setSavingSettings(false);
+    }
+  }
+
   useEffect(() => {
     load();
+    loadSettings();
   }, []);
 
   async function handleSave(id: string | null, data: Partial<Template>) {
@@ -71,6 +114,97 @@ export default function TemplatesPage() {
         >
           + Neue Vorlage
         </button>
+      </div>
+
+      {/* Einstellungen */}
+      <div className="mb-8 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+        <h2 className="text-lg font-heading font-bold text-brand-dark dark:text-white mb-3">Einstellungen</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <label className="block">
+            <span className="block text-xs font-medium text-brand-steel dark:text-gray-400 mb-1">Pexels API-Key (für Stock-Footage)</span>
+            <input
+              type="password"
+              placeholder="z.B. 5634abcd..."
+              value={settings.pexels_api_key ?? ''}
+              onChange={(e) => setSettings({ ...settings, pexels_api_key: e.target.value })}
+              className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-brand-dark dark:text-white"
+            />
+          </label>
+          <label className="block">
+            <span className="block text-xs font-medium text-brand-steel dark:text-gray-400 mb-1">Max. Reel-Dauer (Sekunden)</span>
+            <input
+              type="number"
+              min={5}
+              max={90}
+              value={settings.max_duration ?? 30}
+              onChange={(e) => setSettings({ ...settings, max_duration: Number(e.target.value) })}
+              className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-brand-dark dark:text-white"
+            />
+          </label>
+          <label className="block md:col-span-2">
+            <span className="block text-xs font-medium text-brand-steel dark:text-gray-400 mb-1">Hintergrund-Musik-URL (optional, MP3)</span>
+            <input
+              type="url"
+              placeholder="https://... .mp3"
+              value={settings.default_music_url ?? ''}
+              onChange={(e) => setSettings({ ...settings, default_music_url: e.target.value })}
+              className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-brand-dark dark:text-white"
+            />
+          </label>
+        </div>
+
+        <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+          <label className="flex items-center gap-2 text-sm font-medium text-brand-dark dark:text-white cursor-pointer">
+            <input
+              type="checkbox"
+              checked={settings.voice_enabled ?? false}
+              onChange={(e) => setSettings({ ...settings, voice_enabled: e.target.checked })}
+            />
+            <span>Voice-Over aktivieren (OpenAI TTS, ~0,005 € pro Reel)</span>
+          </label>
+
+          {settings.voice_enabled && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+              <label className="block">
+                <span className="block text-xs font-medium text-brand-steel dark:text-gray-400 mb-1">Stimme</span>
+                <select
+                  value={settings.voice_name ?? 'nova'}
+                  onChange={(e) => setSettings({ ...settings, voice_name: e.target.value as ReelsSettings['voice_name'] })}
+                  className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-brand-dark dark:text-white"
+                >
+                  <option value="nova">Nova (weiblich, jung, natürlich)</option>
+                  <option value="shimmer">Shimmer (weiblich, warm)</option>
+                  <option value="alloy">Alloy (neutral, sachlich)</option>
+                  <option value="echo">Echo (männlich, ruhig)</option>
+                  <option value="onyx">Onyx (männlich, tief)</option>
+                  <option value="fable">Fable (britisch, erzählend)</option>
+                </select>
+              </label>
+              <label className="block">
+                <span className="block text-xs font-medium text-brand-steel dark:text-gray-400 mb-1">Modell</span>
+                <select
+                  value={settings.voice_model ?? 'tts-1'}
+                  onChange={(e) => setSettings({ ...settings, voice_model: e.target.value as ReelsSettings['voice_model'] })}
+                  className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-brand-dark dark:text-white"
+                >
+                  <option value="tts-1">tts-1 (Standard, günstig — 0,003 €/Reel)</option>
+                  <option value="tts-1-hd">tts-1-hd (HD, besserer Klang — 0,006 €/Reel)</option>
+                </select>
+              </label>
+            </div>
+          )}
+        </div>
+
+        <div className="mt-4 flex items-center gap-3">
+          <button
+            onClick={saveSettings}
+            disabled={savingSettings}
+            className="rounded-lg bg-cyan-600 hover:bg-cyan-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+          >
+            {savingSettings ? 'Speichere…' : 'Einstellungen speichern'}
+          </button>
+          {settingsFeedback && <span className="text-xs text-brand-steel dark:text-gray-400">{settingsFeedback}</span>}
+        </div>
       </div>
 
       {loading ? (
