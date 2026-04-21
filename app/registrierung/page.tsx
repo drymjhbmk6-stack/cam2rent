@@ -14,6 +14,8 @@ export default function RegistrierungPage() {
   const [success, setSuccess] = useState(false);
   const [rateLimited, setRateLimited] = useState(false);
   const [resetMinutes, setResetMinutes] = useState(0);
+  const [emailExists, setEmailExists] = useState(false);
+  const [checkingEmail, setCheckingEmail] = useState(false);
 
   // Rate-Limit beim Laden prüfen
   useEffect(() => {
@@ -44,6 +46,32 @@ export default function RegistrierungPage() {
     return () => clearInterval(interval);
   }, [rateLimited, resetMinutes]);
 
+  // Prueft beim Verlassen des E-Mail-Felds, ob die Adresse bereits
+  // registriert ist. Supabase's signUp gibt diese Info nicht zuverlaessig
+  // zurueck (Privacy-Schutz), deshalb fragen wir die Admin-API.
+  const checkEmailExists = async () => {
+    const trimmed = email.trim().toLowerCase();
+    if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      setEmailExists(false);
+      return;
+    }
+    setCheckingEmail(true);
+    try {
+      const res = await fetch('/api/auth/check-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: trimmed }),
+      });
+      const data = await res.json().catch(() => ({}));
+      setEmailExists(!!data?.exists);
+    } catch {
+      // Netzwerkfehler → nicht blocken, Submit-Handler faengt es ab
+      setEmailExists(false);
+    } finally {
+      setCheckingEmail(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -73,7 +101,7 @@ export default function RegistrierungPage() {
 
     const supabase = createAuthBrowserClient();
 
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -86,16 +114,26 @@ export default function RegistrierungPage() {
 
     if (error) {
       if (error.message.includes('already registered')) {
-        setError('Diese E-Mail-Adresse ist bereits registriert.');
+        setError('Unter dieser E-Mail-Adresse gibt es bereits ein Konto. Bitte melde dich an oder nutze "Passwort vergessen".');
       } else if (error.status === 429 || error.message.includes('rate')) {
         setRateLimited(true);
         setResetMinutes(60);
       } else {
         setError(`Fehler: ${error.message}`);
       }
-    } else {
-      setSuccess(true);
+      return;
     }
+
+    // Supabase-Privacy-Falle: Bei bereits registrierter E-Mail gibt signUp
+    // keinen Fehler zurueck (Schutz gegen E-Mail-Enumeration), sondern ein
+    // User-Objekt mit leerem `identities`-Array. Das ist das dokumentierte
+    // Signal "E-Mail existiert schon".
+    if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+      setError('Unter dieser E-Mail-Adresse gibt es bereits ein Konto. Bitte melde dich an oder nutze "Passwort vergessen".');
+      return;
+    }
+
+    setSuccess(true);
   };
 
   if (success) {
@@ -200,12 +238,25 @@ export default function RegistrierungPage() {
               <input
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-4 py-3 rounded-[10px] border border-brand-border dark:border-white/10 bg-white dark:bg-brand-black text-brand-black dark:text-white placeholder-brand-muted dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent-blue focus:border-transparent transition-colors"
+                onChange={(e) => { setEmail(e.target.value); if (emailExists) setEmailExists(false); }}
+                onBlur={checkEmailExists}
+                className={`w-full px-4 py-3 rounded-[10px] border ${emailExists ? 'border-status-error' : 'border-brand-border dark:border-white/10'} bg-white dark:bg-brand-black text-brand-black dark:text-white placeholder-brand-muted dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent-blue focus:border-transparent transition-colors`}
                 placeholder="deine@email.de"
                 required
                 autoComplete="email"
               />
+              {checkingEmail && (
+                <p className="mt-1 text-xs text-brand-muted dark:text-gray-500">Pruefe E-Mail…</p>
+              )}
+              {emailExists && (
+                <div className="mt-2 p-3 rounded-[10px] bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 text-sm">
+                  Unter dieser E-Mail gibt es bereits ein Konto.{' '}
+                  <Link href={`/login?email=${encodeURIComponent(email)}`} className="underline font-semibold">
+                    Jetzt anmelden
+                  </Link>{' '}
+                  oder <Link href="/passwort-vergessen" className="underline font-semibold">Passwort zuruecksetzen</Link>.
+                </div>
+              )}
             </div>
 
             <div>
@@ -240,10 +291,10 @@ export default function RegistrierungPage() {
 
             <button
               type="submit"
-              disabled={loading || rateLimited}
+              disabled={loading || rateLimited || emailExists || checkingEmail}
               className="w-full py-3 px-6 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold rounded-btn hover:bg-brand-dark dark:hover:bg-accent-blue/90 disabled:opacity-60 disabled:cursor-not-allowed transition-colors mt-2"
             >
-              {loading ? 'Wird registriert…' : rateLimited ? 'Bitte warten…' : 'Konto erstellen'}
+              {loading ? 'Wird registriert…' : rateLimited ? 'Bitte warten…' : emailExists ? 'E-Mail bereits registriert' : 'Konto erstellen'}
             </button>
           </form>
 
