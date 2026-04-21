@@ -13,6 +13,7 @@ import OpenAI, { toFile } from 'openai';
 import { seasonPromptBlock } from '@/lib/meta/season';
 import { resolveProductForPost, modernCameraHint, type ProductImageMatch } from '@/lib/meta/product-image-resolver';
 import { sanitizePromptInput } from '@/lib/prompt-sanitize';
+import { buildSocialSystemPrompt } from '@/lib/meta/social-prompt';
 
 async function getApiKeys(): Promise<{ anthropic?: string; openai?: string }> {
   const supabase = createServiceClient();
@@ -88,22 +89,18 @@ export async function generateCaption(
   const [socialSettings, shopContext] = await Promise.all([getSocialSettings(), getShopContext()]);
   const toneInstruction = socialSettings.default_tone
     ? `Ton: ${socialSettings.default_tone}`
-    : 'Ton: locker, einladend, mit 2-4 Emojis';
+    : 'Ton: locker, persoenlich, sparsam mit Emojis';
   const extraContext = socialSettings.ki_context?.trim() ? `\n\nZusatz-Kontext:\n${socialSettings.ki_context.trim()}` : '';
   const productContext = shopContext ? `\n\nAktuelle Kameras im Shop:\n${shopContext}` : '';
   const seasonContext = `\n\n${seasonPromptBlock(options.postDate)}`;
 
-  const systemPrompt = `Du bist ein Social-Media-Redakteur für cam2rent.de, einen deutschen Action-Cam-Verleih (GoPro, DJI, Insta360).
-Schreibe Instagram-/Facebook-Posts auf Deutsch. Ziele:
-- ${toneInstruction}
-- Maximal ${maxLength} Zeichen im Haupttext
-- KEINE Hashtags im Text selbst — die kommen separat
-- NIEMALS "Versicherung" oder "versichert" — immer "Haftungsschutz" oder "abgesichert"
-- Umlaute korrekt: ä ö ü (nicht ae oe ue)
-- Am Ende ein klarer CTA (z.B. "Jetzt auf cam2rent.de mieten", "Link in der Bio")${seasonContext}${extraContext}${productContext}
-
-Antworte ausschließlich im folgenden JSON-Format, ohne Markdown-Codefences:
-{"caption": "...", "hashtags": ["#tag1", "#tag2"]}`;
+  const systemPrompt = buildSocialSystemPrompt({
+    maxLength,
+    toneInstruction,
+    seasonContext,
+    extraContext,
+    productContext,
+  });
 
   const client = new Anthropic({ apiKey });
   const response = await client.messages.create({
