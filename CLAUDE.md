@@ -920,6 +920,17 @@ Umfassendes Audit mit paralleler Agent-Analyse (Security/Code-Quality/Performanc
 - **Checkout-Inputs** `text-sm` → `text-base` (16px): verhindert iOS Safari Auto-Zoom beim Input-Fokus.
 - **ProductCard Favoriten-/Vergleich-Buttons** `p-1.5` → `p-2.5`: Touch-Targets jetzt ~44px (Apple HIG).
 
+### UI-Darstellungs-Sweep (2026-04-21)
+Systematischer Sweep ueber Admin- und Kundenkonto-UI nach Darstellungsfehlern. Gefixt:
+- **Status-Badges deutsch**: Dashboard-Widgets (Letzte Buchungen + Aktivitaets-Feed) + Buchungs-Liste + Kunden-Detail + Kundenkonto-Buchungen hatten unvollstaendige Status-Maps. Zeigten Rohwerte wie `picked_up`, `pending_verification`, `awaiting_payment`, `returned`. Alle Maps auf die DB-Enum-Werte vervollstaendigt.
+- **Kaution-Badge**: `DepositBadge` in Buchungsdetails kannte `held/released/captured`, aber nicht den DB-Default `none` + `pending`. Ergaenzt.
+- **Waitlist-Quelle**: Spalte „Quelle" in `/admin/warteliste` zeigte `card`/`detail` roh. Neu: `sourceLabel()` → „Produktkarte" / „Detailseite".
+- **Zahlenformat de-DE**: `toFixed(2) + ' €'` in sichtbarer UI durch `fmtEuro`/`formatCurrency` ersetzt (Zubehör-Liste, Sets-Liste, Analytics-Kundenwerte, Versand-Drucken, komplettes Manuelle-Buchung-Formular). Vorher „49.90 €", jetzt „49,90 €". API-Notizen bleiben unberuehrt.
+- **„einm." → „einmalig"** im Zubehoer-Badge — konsistent zu Sets.
+- **ae/oe/ue → echte Umlaute** in sichtbaren UI-Strings: Social-Themen-Placeholder „Saetze" → „Sätze", Social-Plan-Tooltip „zuruecksetzen" → „zurücksetzen", MediaLibraryPicker-Modal „waehlen" → „wählen".
+- **Slug-Regex-Bug**: `toSlug()` in `/admin/blog/themen` hatte `/[aeAE]/g` (matcht a/e/A/E statt Umlaute). Aus „Action-Kamera" wurde „aectioen…-kaemeraer". Korrigiert auf `/[äÄ]/`, `/[öÖ]/`, `/[üÜ]/`.
+- **Bewusst NICHT geaendert**: Das Wort „Versicherung" in AGB/Haftungsbedingungen/FAQ — dort ist es rechtlich zwingend („cam2rent ist KEINE Versicherung"). CLAUDE.md verbietet das Wort nur als Bezeichnung der Haftungsoptionen.
+
 ## Offene Punkte
 
 ### Check-Tool
