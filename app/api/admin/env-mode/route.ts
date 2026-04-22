@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { timingSafeEqual, createHash } from 'crypto';
 import { checkAdminAuth } from '@/lib/admin-auth';
 import { getEnvMode, setEnvMode, type EnvMode } from '@/lib/env-mode';
-import { createServiceClient } from '@/lib/supabase';
+import { logAudit } from '@/lib/audit';
 
 export async function GET() {
   const ok = await checkAdminAuth();
@@ -40,18 +40,14 @@ export async function POST(req: NextRequest) {
   const target = body.mode as EnvMode;
   await setEnvMode(target);
 
-  // Audit-Log
-  try {
-    const supabase = createServiceClient();
-    await supabase.from('admin_audit_log').insert({
-      action: 'env_mode_change',
-      entity_type: 'settings',
-      entity_id: 'environment_mode',
-      changes: { from: previous, to: target },
-    });
-  } catch {
-    // Log-Fehler ignorieren
-  }
+  await logAudit({
+    action: 'env_mode.change',
+    entityType: 'env_mode',
+    entityId: 'environment_mode',
+    entityLabel: `${previous} → ${target}`,
+    changes: { from: previous, to: target },
+    request: req,
+  });
 
   return NextResponse.json({ ok: true, mode: target });
 }

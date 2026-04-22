@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { logAudit } from '@/lib/audit';
 
 /**
  * POST /api/admin/verify-customer
@@ -36,6 +37,14 @@ export async function POST(req: NextRequest) {
       console.error('verify-customer error:', error);
       return NextResponse.json({ error: 'Aktualisierung fehlgeschlagen.' }, { status: 500 });
     }
+
+    await logAudit({
+      action: status === 'verified' ? 'customer.verify' : 'customer.reject_verification',
+      entityType: 'customer',
+      entityId: customerId,
+      changes: { status },
+      request: req,
+    });
 
     return NextResponse.json({ success: true, status });
   } catch (err) {

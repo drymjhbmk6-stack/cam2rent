@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
+import { logAudit } from '@/lib/audit';
 
 /**
  * POST /api/admin/anonymize-customer
@@ -101,6 +102,13 @@ export async function POST(req: NextRequest) {
   } catch (authErr) {
     console.error('Auth deactivation error:', authErr);
   }
+
+  await logAudit({
+    action: 'customer.anonymize',
+    entityType: 'customer',
+    entityId: customerId,
+    request: req,
+  });
 
   return NextResponse.json({ success: true });
 }

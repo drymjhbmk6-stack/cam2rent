@@ -17,6 +17,45 @@ interface AuditEntry {
 }
 
 const ACTION_LABELS: Record<string, string> = {
+  // Buchungen
+  'booking.cancel': 'Buchung storniert',
+  'booking.update': 'Buchung aktualisiert',
+  'booking.delete': 'Buchung endgültig gelöscht',
+  'booking.email_updated': 'Kunden-E-Mail geändert',
+  'booking.verification_gate': 'Verifizierungs-Gate',
+  // Kunden
+  'customer.block': 'Kunde gesperrt',
+  'customer.unblock': 'Kunde entsperrt',
+  'customer.anonymize': 'Kunde anonymisiert',
+  'customer.verify': 'Kunde verifiziert',
+  'customer.reject_verification': 'Verifizierung abgelehnt',
+  // Rechnungen/Buchhaltung
+  'invoice.mark_paid': 'Rechnung als bezahlt markiert',
+  'invoice.send': 'Rechnung versendet',
+  'credit_note.create_draft': 'Gutschrift-Entwurf erstellt',
+  'credit_note.approve': 'Gutschrift freigegeben',
+  'credit_note.reject': 'Gutschrift abgelehnt',
+  'dunning.create_draft': 'Mahn-Entwurf erstellt',
+  'dunning.send': 'Mahnung versendet',
+  // Ausgaben
+  'expense.create': 'Ausgabe erfasst',
+  'expense.update': 'Ausgabe aktualisiert',
+  'expense.delete': 'Ausgabe gelöscht',
+  // Stripe
+  'stripe.sync_run': 'Stripe-Sync ausgeführt',
+  'stripe.manual_match': 'Stripe manuell verknüpft',
+  'stripe.import_fees': 'Stripe-Gebühren importiert',
+  // Reels
+  'reel.generate': 'Reel generiert',
+  'reel.update': 'Reel aktualisiert',
+  'reel.approve': 'Reel freigegeben',
+  'reel.publish': 'Reel veröffentlicht',
+  'reel.rerender': 'Reel neu gerendert',
+  'reel.delete': 'Reel gelöscht',
+  // Einstellungen
+  'settings.update': 'Einstellungen geändert',
+  'env_mode.change': 'Test-/Live-Modus gewechselt',
+  // Legacy (Unterstrich-Namen, falls noch im Bestand)
   booking_cancelled: 'Buchung storniert',
   booking_confirmed: 'Buchung bestätigt',
   booking_updated: 'Buchung aktualisiert',
@@ -55,13 +94,28 @@ const ENTITY_LABELS: Record<string, string> = {
   discount: 'Rabatt',
   accessory: 'Zubehör',
   settings: 'Einstellungen',
+  env_mode: 'Test-/Live-Modus',
   damage: 'Schaden',
   return: 'Retoure',
   label: 'Versandlabel',
   note: 'Notiz',
   review: 'Bewertung',
   blog: 'Blog',
+  invoice: 'Rechnung',
+  credit_note: 'Gutschrift',
+  dunning: 'Mahnung',
+  expense: 'Ausgabe',
+  stripe: 'Stripe',
+  reel: 'Reel',
 };
+
+function humanizeAction(action: string): string {
+  if (ACTION_LABELS[action]) return ACTION_LABELS[action];
+  // Fallback: dotted naming z.B. "foo.bar_baz" → "foo · bar baz"
+  const [entity, verb] = action.includes('.') ? action.split('.') : [null, action];
+  const pretty = (verb || action).replace(/_/g, ' ');
+  return entity ? `${entity} · ${pretty}` : pretty;
+}
 
 function truncate(str: string, max: number): string {
   return str.length > max ? str.slice(0, max) + '...' : str;
@@ -345,7 +399,7 @@ export default function AktivitaetsprotokollPage() {
                             color: '#06b6d4',
                           }}
                         >
-                          {ACTION_LABELS[entry.action] || entry.action}
+                          {humanizeAction(entry.action)}
                         </span>
                       </td>
                       <td style={{ padding: '10px 16px', color: '#cbd5e1' }}>

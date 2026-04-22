@@ -1061,6 +1061,19 @@ Systematischer Sweep ueber Admin- und Kundenkonto-UI nach Darstellungsfehlern. G
 - **Slug-Regex-Bug**: `toSlug()` in `/admin/blog/themen` hatte `/[aeAE]/g` (matcht a/e/A/E statt Umlaute). Aus „Action-Kamera" wurde „aectioen…-kaemeraer". Korrigiert auf `/[äÄ]/`, `/[öÖ]/`, `/[üÜ]/`.
 - **Bewusst NICHT geaendert**: Das Wort „Versicherung" in AGB/Haftungsbedingungen/FAQ — dort ist es rechtlich zwingend („cam2rent ist KEINE Versicherung"). CLAUDE.md verbietet das Wort nur als Bezeichnung der Haftungsoptionen.
 
+### E-Mail-Protokoll + Aktivitätsprotokoll-Fix (Stand 2026-04-22)
+- **Kritischer Bug in `lib/audit.ts`**: Die Funktion schrieb in die Spalten `changes` + `ip_address`, die im DB-Schema (`admin_audit_log`) **nicht existieren** — die Tabelle hat stattdessen `details` (JSONB). Supabase-Insert schlug still fehl (try/catch schluckte den Fehler). Dadurch blieb das Aktivitätsprotokoll seit jeher leer, obwohl 15+ Routen `logAudit()` aufriefen. **Fix:** Mapping auf `details`, IP wird zusätzlich ins `details`-JSON aufgenommen. Fehler werden jetzt als `console.error` geloggt.
+- **E-Mail-Protokoll TYPE_LABELS** vervollständigt um alle tatsächlich versendeten E-Mail-Typen: `payment_link`, `contract_signed`, `manual_documents`, `weekly_report`, `verification_reminder`, `verification_auto_cancel`, `auto_cancel`, `auto_cancel_payment`, `review_reward_coupon`, `test`. Vorher wurden diese als Rohwert ("payment_link") angezeigt.
+- **Aktivitätsprotokoll ACTION_LABELS** auf das tatsächlich verwendete **Dotted-Naming** erweitert (`booking.cancel`, `invoice.mark_paid`, `credit_note.approve`, `expense.create`, `stripe.sync_run`, `reel.publish`, `env_mode.change`, ...). Legacy-Unterstrich-Namen bleiben als Fallback. Neuer Helper `humanizeAction()` erzeugt lesbares Fallback-Label für unbekannte Aktionen (`foo.bar_baz` → „foo · bar baz"). ENTITY_LABELS um `invoice`, `credit_note`, `dunning`, `expense`, `stripe`, `reel`, `env_mode` ergänzt.
+- **Neue Audit-Logs instrumentiert in:**
+  - `PATCH /api/admin/booking/[id]` — erkennt automatisch `booking.cancel`, `booking.verification_gate`, `booking.email_updated`, `booking.update`
+  - `DELETE /api/admin/booking/[id]` → `booking.delete`
+  - `POST /api/admin/verify-customer` → `customer.verify` / `customer.reject_verification`
+  - `POST /api/admin/anonymize-customer` → `customer.anonymize`
+  - `POST /api/admin/kunden/blacklist` → `customer.block` / `customer.unblock`
+  - `POST /api/admin/env-mode` → `env_mode.change` (Inline-Insert ersetzt durch `logAudit()`-Helper, da Inline-Insert denselben Spaltennamen-Bug hatte)
+  - `POST /api/admin/settings` → `settings.update` (transiente Status-Keys wie `social_plan_job` sind von der Protokollierung ausgenommen)
+
 ## Offene Punkte
 
 ### Check-Tool

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { logAudit } from '@/lib/audit';
 
 /**
  * POST /api/admin/kunden/blacklist
@@ -41,6 +42,14 @@ export async function POST(req: NextRequest) {
       console.error('Blacklist update error:', error);
       return NextResponse.json({ error: 'Fehler beim Aktualisieren.' }, { status: 500 });
     }
+
+    await logAudit({
+      action: blacklisted ? 'customer.block' : 'customer.unblock',
+      entityType: 'customer',
+      entityId: userId,
+      changes: blacklisted ? { reason } : undefined,
+      request: req,
+    });
 
     return NextResponse.json({ success: true });
   } catch (err) {

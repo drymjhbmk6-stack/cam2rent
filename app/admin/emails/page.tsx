@@ -22,6 +22,8 @@ const TYPE_LABELS: Record<string, { label: string; color: string; bg: string }> 
   booking_admin: { label: 'Buchung (Admin)', color: '#8b5cf6', bg: '#8b5cf614' },
   cancellation_customer: { label: 'Stornierung', color: '#ef4444', bg: '#ef444414' },
   cancellation_admin: { label: 'Stornierung (Admin)', color: '#ef4444', bg: '#ef444414' },
+  auto_cancel: { label: 'Auto-Storno', color: '#ef4444', bg: '#ef444414' },
+  auto_cancel_payment: { label: 'Auto-Storno (unbezahlt)', color: '#ef4444', bg: '#ef444414' },
   shipping_confirmation: { label: 'Versandbestätigung', color: '#10b981', bg: '#10b98114' },
   damage_report_customer: { label: 'Schadensmeldung', color: '#f97316', bg: '#f9731614' },
   damage_report_admin: { label: 'Schadensmeldung (Admin)', color: '#f97316', bg: '#f9731614' },
@@ -31,11 +33,19 @@ const TYPE_LABELS: Record<string, { label: string; color: string; bg: string }> 
   message_customer: { label: 'Nachricht (Kunde)', color: '#6366f1', bg: '#6366f114' },
   extension_confirmation: { label: 'Verlängerung', color: '#06b6d4', bg: '#06b6d414' },
   review_request: { label: 'Bewertungsanfrage', color: '#f59e0b', bg: '#f59e0b14' },
+  review_reward_coupon: { label: 'Bewertungs-Gutschein', color: '#f59e0b', bg: '#f59e0b14' },
   abandoned_cart: { label: 'Warenkorbabbruch', color: '#94a3b8', bg: '#94a3b814' },
   return_reminder_2d: { label: 'Rückgabe-Erinnerung (2T)', color: '#f59e0b', bg: '#f59e0b14' },
   return_reminder_0d: { label: 'Rückgabe heute', color: '#f97316', bg: '#f9731614' },
   overdue_1d: { label: 'Überfällig (1T)', color: '#ef4444', bg: '#ef444414' },
   overdue_3d: { label: 'Überfällig (3T)', color: '#dc2626', bg: '#dc262614' },
+  payment_link: { label: 'Zahlungs-Link', color: '#0ea5e9', bg: '#0ea5e914' },
+  contract_signed: { label: 'Vertrag unterschrieben', color: '#10b981', bg: '#10b98114' },
+  manual_documents: { label: 'Dokumente (manuell)', color: '#8b5cf6', bg: '#8b5cf614' },
+  weekly_report: { label: 'Wochenbericht', color: '#06b6d4', bg: '#06b6d414' },
+  verification_reminder: { label: 'Verifizierungs-Erinnerung', color: '#f59e0b', bg: '#f59e0b14' },
+  verification_auto_cancel: { label: 'Verifizierung: Auto-Storno', color: '#dc2626', bg: '#dc262614' },
+  test: { label: 'Test-E-Mail', color: '#94a3b8', bg: '#94a3b814' },
 };
 
 export default function AdminEmailLogPage() {

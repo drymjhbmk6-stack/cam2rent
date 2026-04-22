@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { logAudit } from '@/lib/audit';
 
 /**
  * GET /api/admin/booking/[id]
@@ -136,6 +137,20 @@ export async function PATCH(
     return NextResponse.json({ error: 'Aktualisierung fehlgeschlagen.' }, { status: 500 });
   }
 
+  // Audit-Log mit passendem Action-Namen
+  let action = 'booking.update';
+  if (status === 'cancelled') action = 'booking.cancel';
+  else if (verification_gate) action = 'booking.verification_gate';
+  else if (customer_email !== undefined && !status) action = 'booking.email_updated';
+
+  await logAudit({
+    action,
+    entityType: 'booking',
+    entityId: id,
+    changes: updates,
+    request: req,
+  });
+
   return NextResponse.json({ success: true });
 }
 
@@ -174,6 +189,13 @@ export async function DELETE(
     console.error('Booking delete error:', error);
     return NextResponse.json({ error: 'Buchung konnte nicht gelöscht werden.' }, { status: 500 });
   }
+
+  await logAudit({
+    action: 'booking.delete',
+    entityType: 'booking',
+    entityId: id,
+    request: req,
+  });
 
   return NextResponse.json({ success: true });
 }

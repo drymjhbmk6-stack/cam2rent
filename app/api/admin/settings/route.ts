@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
+import { logAudit } from '@/lib/audit';
+
+// Transiente Status-Keys (Cron-Health, Job-Status, Polling-Caches) nicht
+// ins Audit-Log schreiben — das würde das Protokoll fluten.
+const NON_AUDITABLE_KEYS = new Set([
+  'social_plan_job',
+  'social_generation_status',
+  'social_settings_touched',
+]);
 
 // Keys die öffentlich (ohne Admin-Auth) gelesen werden dürfen — werden
 // von Shop-Seiten wie dem ProductCard (Markenfarben) oder der Startseite
@@ -71,6 +80,16 @@ export async function POST(req: NextRequest) {
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  if (!NON_AUDITABLE_KEYS.has(key)) {
+    await logAudit({
+      action: 'settings.update',
+      entityType: 'settings',
+      entityId: key,
+      entityLabel: key,
+      request: req,
+    });
   }
 
   return NextResponse.json({ success: true });
