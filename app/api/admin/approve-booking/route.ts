@@ -122,17 +122,22 @@ export async function POST(req: NextRequest) {
     }
 
     // 3. Zahlungslink in Buchung speichern + Status aktualisieren
-    const { error: updateError } = await supabase
-      .from('bookings')
-      .update({
-        status: 'awaiting_payment',
-        stripe_payment_link_id: paymentLink.id,
-        notes: `Zahlungslink: ${paymentLink.url}`,
-      })
-      .eq('id', bookingId);
-
-    if (updateError) {
-      return NextResponse.json({ error: `DB-Update fehlgeschlagen: ${updateError.message}` }, { status: 500 });
+    // notes ist optional — manche aeltere DB-Schemas haben die Spalte nicht.
+    // Wir versuchen zuerst mit, fallen zurueck ohne.
+    const updatePrimary = {
+      status: 'awaiting_payment',
+      stripe_payment_link_id: paymentLink.id,
+      notes: `Zahlungslink: ${paymentLink.url}`,
+    };
+    let updateResult = await supabase.from('bookings').update(updatePrimary).eq('id', bookingId);
+    if (updateResult.error && /notes/i.test(updateResult.error.message)) {
+      console.warn('[approve-booking] notes-Spalte fehlt, retry ohne notes');
+      const { notes: _omit, ...fallback } = updatePrimary;
+      void _omit;
+      updateResult = await supabase.from('bookings').update(fallback).eq('id', bookingId);
+    }
+    if (updateResult.error) {
+      return NextResponse.json({ error: `DB-Update fehlgeschlagen: ${updateResult.error.message}` }, { status: 500 });
     }
 
     // 4. Email an Kunden senden (non-blocking — Payment Link ist schon sicher)

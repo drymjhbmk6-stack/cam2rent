@@ -140,13 +140,16 @@ async function handle(req: NextRequest) {
     }
 
     const reasonText = `Auto-Storno: unbezahlt, Deadline ${deadline.toISOString()} erreicht (${rule.days_before_rental}T vor Mietbeginn, ${rule.cutoff_hour_berlin}:00 Berlin).`;
-    const { error: upErr } = await supabase
+    // notes ist optional — Fallback ohne falls Spalte fehlt
+    let cancelUpdate = await supabase
       .from('bookings')
       .update({ status: 'cancelled', notes: reasonText })
       .eq('id', b.id);
-
-    if (upErr) {
-      results.push({ id: b.id, action: 'kept', error: upErr.message });
+    if (cancelUpdate.error && /notes/i.test(cancelUpdate.error.message)) {
+      cancelUpdate = await supabase.from('bookings').update({ status: 'cancelled' }).eq('id', b.id);
+    }
+    if (cancelUpdate.error) {
+      results.push({ id: b.id, action: 'kept', error: cancelUpdate.error.message });
       continue;
     }
 

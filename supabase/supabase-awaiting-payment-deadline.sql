@@ -10,6 +10,14 @@
 ALTER TABLE bookings ADD COLUMN IF NOT EXISTS stripe_payment_link_id TEXT;
 CREATE INDEX IF NOT EXISTS bookings_payment_link_idx ON bookings (stripe_payment_link_id);
 
+-- ── notes-Spalte sicherstellen ──────────────────────────────────────────────
+-- Manche aeltere bookings-Tabellen haben kein notes-Feld. Wir nutzen es fuer
+-- Admin-sichtbare Hinweise (Stornierungsgrund, Zahlungslink-Info, etc.).
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS notes TEXT;
+
+-- PostgREST-Schema-Cache invalidieren, damit die neuen Spalten sofort verfuegbar sind.
+NOTIFY pgrst, 'reload schema';
+
 -- ── Deadline-Regeln fuer Auto-Storno unbezahlter Buchungen ──────────────────
 -- Setting-Struktur:
 --   {
