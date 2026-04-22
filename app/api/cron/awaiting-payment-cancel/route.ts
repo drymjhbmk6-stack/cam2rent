@@ -3,97 +3,132 @@ import { createServiceClient } from '@/lib/supabase';
 import { verifyCronAuth } from '@/lib/cron-auth';
 import { isTestMode } from '@/lib/env-mode';
 import { getStripe } from '@/lib/stripe';
+import { getBerlinOffsetString } from '@/lib/timezone';
 
 export const runtime = 'nodejs';
 export const maxDuration = 180;
 
-interface CancelHoursSetting {
-  versand?: number;
-  abholung?: number;
+interface DeadlineRule {
+  days_before_rental: number;    // Wieviele Tage vor rental_from
+  cutoff_hour_berlin: number;    // Uhrzeit (0-23) an dem Stichtag, Berlin-Zeit
 }
 
+interface CancelRulesSetting {
+  versand?: DeadlineRule;
+  abholung?: DeadlineRule;
+}
+
+const DEFAULT_RULES: Required<CancelRulesSetting> = {
+  versand: { days_before_rental: 3, cutoff_hour_berlin: 18 },  // Mi 18 bei Fr-Miete = 2 volle Tage (Mi+Do)
+  abholung: { days_before_rental: 1, cutoff_hour_berlin: 18 }, // Do 18 bei Fr-Miete
+};
+
 /**
- * GET/POST /api/cron/awaiting-payment-cancel
- *
- * Storniert alle Buchungen im Status 'awaiting_payment' deren Mietbeginn naeher
- * rueckt als die konfigurierte Frist:
- *   - Versand:   Default 48h vor rental_from
- *   - Abholung:  Default 24h vor rental_from
- *
- * Schritte pro Buchung:
- *   1. Stripe Payment Link deaktivieren (damit der Kunde nicht mehr zahlen kann)
- *   2. Buchung auf status='cancelled' setzen, Grund in notes
- *   3. E-Mail an Kunden (Info zur Stornierung)
- *
- * Empfohlener Crontab (taeglich 00:05):
- *   5 0 * * * curl -s -X POST -H "x-cron-secret: CRON_SECRET" https://cam2rent.de/api/cron/awaiting-payment-cancel
- *
- * Einmal taeglich reicht aus: die Deadline ist ein absoluter Zeitpunkt.
- * Ob der Cron 2 Minuten oder 24h nach Deadline laeuft ist egal — der
- * Auto-Storno bleibt logisch korrekt. Weniger Stripe-API-Calls.
+ * Empfohlener Crontab:
+ *   Variante A (praeziser, wenn cron TZ= unterstuetzt):
+ *     TZ=Europe/Berlin
+ *     1 18 * * *  curl -s -X POST -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/awaiting-payment-cancel
+ *   Variante B (stuendlich, DST-proof):
+ *     5 * * * *  curl -s ...
  */
+
+/**
+ * Berechnet den Deadline-Zeitpunkt in UTC fuer eine gegebene Buchung.
+ *
+ *  deadline = (rental_from − daysBefore Tage) um cutoffHour Berlin-Zeit
+ *
+ * rental_from ist eine Date-Spalte (YYYY-MM-DD). Wir interpretieren sie als
+ * Berlin-Mitternacht des Mietbeginn-Tags und rechnen Berlin-Zeit zurueck.
+ */
+function computeDeadlineUTC(rentalFromStr: string, rule: DeadlineRule): Date {
+  const [yStr, mStr, dStr] = rentalFromStr.split('-');
+  const y = parseInt(yStr, 10);
+  const m = parseInt(mStr, 10);
+  const d = parseInt(dStr, 10);
+  if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) {
+    throw new Error(`Ungueltiges rental_from: ${rentalFromStr}`);
+  }
+
+  // Stichtag = rental_from - daysBefore Tage (im Berlin-Kalender)
+  // Wir nutzen Date.UTC fuer die Tagesarithmetik und lassen dann Berlin-Offset zum Deadline-Zeitpunkt ermitteln
+  const pivotUTC = new Date(Date.UTC(y, m - 1, d - rule.days_before_rental));
+  const pivotYear = pivotUTC.getUTCFullYear();
+  const pivotMonth = pivotUTC.getUTCMonth() + 1;
+  const pivotDay = pivotUTC.getUTCDate();
+  const dateStr = `${pivotYear}-${String(pivotMonth).padStart(2, '0')}-${String(pivotDay).padStart(2, '0')}`;
+
+  // Wir konstruieren "YYYY-MM-DDTHH:00:00+OFFSET" — der Offset wird zum
+  // Pivot-Datum ermittelt (CEST vs. CET). Ein kurzer Approximations-Pass reicht:
+  // erst mal Offset bei Pivot-Mittag als Approximation, dann finalen Offset
+  // am Deadline-Zeitpunkt selbst.
+  const approxAt = new Date(`${dateStr}T12:00:00Z`);
+  const offset = getBerlinOffsetString(approxAt);
+  const hh = String(rule.cutoff_hour_berlin).padStart(2, '0');
+  return new Date(`${dateStr}T${hh}:00:00${offset}`);
+}
+
 async function handle(req: NextRequest) {
   if (!verifyCronAuth(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   if (await isTestMode()) {
-    // Im Test-Modus keine echten Stripe-Calls
     return NextResponse.json({ skipped: 'test_mode' });
   }
 
   const supabase = createServiceClient();
 
-  // Deadline-Settings laden
-  let versandHours = 48;
-  let abholungHours = 24;
+  // Regeln laden
+  const rules: Required<CancelRulesSetting> = { ...DEFAULT_RULES };
   try {
-    const { data } = await supabase.from('admin_settings').select('value').eq('key', 'awaiting_payment_cancel_hours').maybeSingle();
+    const { data } = await supabase.from('admin_settings').select('value').eq('key', 'awaiting_payment_cancel_rules').maybeSingle();
     if (data?.value) {
-      const parsed: CancelHoursSetting = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
-      if (Number.isFinite(parsed.versand)) versandHours = Number(parsed.versand);
-      if (Number.isFinite(parsed.abholung)) abholungHours = Number(parsed.abholung);
+      const parsed: CancelRulesSetting = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
+      if (parsed.versand) rules.versand = { ...DEFAULT_RULES.versand, ...parsed.versand };
+      if (parsed.abholung) rules.abholung = { ...DEFAULT_RULES.abholung, ...parsed.abholung };
     }
   } catch { /* default */ }
 
-  // Alle offenen awaiting_payment-Buchungen laden
+  // Offene awaiting_payment-Buchungen laden
   const { data: pending, error } = await supabase
     .from('bookings')
     .select('id, rental_from, delivery_mode, customer_email, customer_name, product_name, price_total, stripe_payment_link_id, created_at')
     .eq('status', 'awaiting_payment')
     .order('rental_from', { ascending: true });
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-  if (!pending || pending.length === 0) {
-    return NextResponse.json({ checked: 0, cancelled: 0 });
-  }
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (!pending || pending.length === 0) return NextResponse.json({ checked: 0, cancelled: 0, rules });
 
-  const now = Date.now();
+  const nowMs = Date.now();
   const stripe = await getStripe();
-  const results: Array<{ id: string; action: 'cancelled' | 'kept'; reason?: string; error?: string }> = [];
+  const results: Array<{ id: string; action: 'cancelled' | 'kept'; reason?: string; error?: string; deadline?: string }> = [];
 
   for (const b of pending) {
-    const mode = b.delivery_mode ?? 'versand';
-    const hoursBefore = mode === 'abholung' ? abholungHours : versandHours;
-    const rentalStart = new Date(b.rental_from).getTime();
-    const deadline = rentalStart - hoursBefore * 60 * 60 * 1000;
+    const mode: 'versand' | 'abholung' = b.delivery_mode === 'abholung' ? 'abholung' : 'versand';
+    const rule = rules[mode];
 
-    // Grace-Period: mindestens 1h nach Erstellung warten (falls rental_from schon sehr nah ist)
+    let deadline: Date;
+    try {
+      deadline = computeDeadlineUTC(b.rental_from, rule);
+    } catch (err) {
+      results.push({ id: b.id, action: 'kept', error: err instanceof Error ? err.message : 'Deadline-Berechnung fehlgeschlagen' });
+      continue;
+    }
+
+    // Grace-Period: mindestens 1h nach Erstellung warten
     const createdMs = new Date(b.created_at).getTime();
     const minAgeMs = 60 * 60 * 1000;
 
-    if (now < deadline) {
-      results.push({ id: b.id, action: 'kept', reason: `${Math.round((deadline - now) / 3600_000)}h bis Deadline` });
+    if (nowMs < deadline.getTime()) {
+      results.push({ id: b.id, action: 'kept', reason: `${Math.round((deadline.getTime() - nowMs) / 3600_000)}h bis Deadline`, deadline: deadline.toISOString() });
       continue;
     }
-    if (now - createdMs < minAgeMs) {
-      results.push({ id: b.id, action: 'kept', reason: 'Grace-Period (< 1h alt)' });
+    if (nowMs - createdMs < minAgeMs) {
+      results.push({ id: b.id, action: 'kept', reason: 'Grace-Period (<1h alt)', deadline: deadline.toISOString() });
       continue;
     }
 
-    // Cancel-Flow
+    // Payment Link deaktivieren
     let stripeErr: string | undefined;
     if (b.stripe_payment_link_id) {
       try {
@@ -101,17 +136,13 @@ async function handle(req: NextRequest) {
       } catch (err) {
         stripeErr = err instanceof Error ? err.message : String(err);
         console.warn(`[awaiting-payment-cancel] Stripe deactivate fehlgeschlagen fuer ${b.id}:`, stripeErr);
-        // Trotzdem weiter stornieren — Link bleibt bei Stripe aktiv, ist aber egal
       }
     }
 
-    const cancelReason = `Auto-Storno: unbezahlt, Deadline (${hoursBefore}h vor Mietbeginn) erreicht.`;
+    const reasonText = `Auto-Storno: unbezahlt, Deadline ${deadline.toISOString()} erreicht (${rule.days_before_rental}T vor Mietbeginn, ${rule.cutoff_hour_berlin}:00 Berlin).`;
     const { error: upErr } = await supabase
       .from('bookings')
-      .update({
-        status: 'cancelled',
-        notes: cancelReason,
-      })
+      .update({ status: 'cancelled', notes: reasonText })
       .eq('id', b.id);
 
     if (upErr) {
@@ -119,7 +150,6 @@ async function handle(req: NextRequest) {
       continue;
     }
 
-    // E-Mail non-blocking
     if (b.customer_email) {
       try {
         const { sendAndLog } = await import('@/lib/email');
@@ -131,15 +161,12 @@ async function handle(req: NextRequest) {
               <h1 style="font-size: 22px; font-weight: 700; color: #1a1a1a;">Buchung ${b.id} storniert</h1>
               <p style="color: #64748b; font-size: 15px; line-height: 1.6;">
                 Hallo ${b.customer_name || 'dort'},<br/><br/>
-                leider konnten wir bis zur Frist keine Zahlung für deine Buchung "<strong>${b.product_name}</strong>" (Start ${b.rental_from}) verbuchen.
-                Die Buchung wurde daher automatisch storniert.
+                leider konnten wir bis zur Zahlungsfrist keine Zahlung für deine Buchung "<strong>${b.product_name}</strong>" (Start ${b.rental_from}) verbuchen. Die Buchung wurde daher automatisch storniert.
               </p>
               <p style="color: #64748b; font-size: 14px; line-height: 1.6;">
                 Wenn du dein Gerät trotzdem noch mieten möchtest, leg die Buchung einfach neu an — ab dem Zeitpunkt der Zahlung ist die Kamera wieder für dich reserviert.
               </p>
-              <p style="color: #94a3b8; font-size: 12px; margin-top: 24px;">
-                Viele Grüße<br/>cam2rent
-              </p>
+              <p style="color: #94a3b8; font-size: 12px; margin-top: 24px;">Viele Grüße<br/>cam2rent</p>
             </div>
           `,
           bookingId: b.id,
@@ -150,13 +177,13 @@ async function handle(req: NextRequest) {
       }
     }
 
-    results.push({ id: b.id, action: 'cancelled', reason: `${hoursBefore}h-Deadline`, error: stripeErr });
+    results.push({ id: b.id, action: 'cancelled', reason: `${rule.days_before_rental}T/${rule.cutoff_hour_berlin}h`, deadline: deadline.toISOString(), error: stripeErr });
   }
 
   return NextResponse.json({
     checked: pending.length,
     cancelled: results.filter((r) => r.action === 'cancelled').length,
-    settings: { versandHours, abholungHours },
+    rules,
     results,
   });
 }

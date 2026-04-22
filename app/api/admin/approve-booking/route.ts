@@ -136,27 +136,48 @@ export async function POST(req: NextRequest) {
     }
 
     // 4. Email an Kunden senden (non-blocking — Payment Link ist schon sicher)
-    // Deadline-Infos fuer die Mail ermitteln (aus Setting lesen, Default 48/24)
-    let cancelHoursVersand = 48;
-    let cancelHoursAbholung = 24;
+    // Deadline aus admin_settings.awaiting_payment_cancel_rules berechnen.
+    // Format: { versand: { days_before_rental, cutoff_hour_berlin }, abholung: {...} }
+    let rules = {
+      versand: { days_before_rental: 3, cutoff_hour_berlin: 18 },
+      abholung: { days_before_rental: 1, cutoff_hour_berlin: 18 },
+    };
     try {
-      const { data: deadlineSetting } = await supabase
+      const { data: ruleSetting } = await supabase
         .from('admin_settings')
         .select('value')
-        .eq('key', 'awaiting_payment_cancel_hours')
+        .eq('key', 'awaiting_payment_cancel_rules')
         .maybeSingle();
-      if (deadlineSetting?.value) {
-        const parsed = typeof deadlineSetting.value === 'string' ? JSON.parse(deadlineSetting.value) : deadlineSetting.value;
-        cancelHoursVersand = Number(parsed.versand) || 48;
-        cancelHoursAbholung = Number(parsed.abholung) || 24;
+      if (ruleSetting?.value) {
+        const parsed = typeof ruleSetting.value === 'string' ? JSON.parse(ruleSetting.value) : ruleSetting.value;
+        if (parsed?.versand) rules.versand = { ...rules.versand, ...parsed.versand };
+        if (parsed?.abholung) rules.abholung = { ...rules.abholung, ...parsed.abholung };
       }
     } catch { /* default */ }
 
-    const deliveryMode = booking.delivery_mode ?? 'versand';
-    const deadlineHours = deliveryMode === 'abholung' ? cancelHoursAbholung : cancelHoursVersand;
-    const deadlineLabel = deliveryMode === 'abholung'
-      ? `${deadlineHours} Stunden vor Mietbeginn`
-      : `${deadlineHours} Stunden vor Mietbeginn (bei Versand brauchen wir Vorlaufzeit)`;
+    const deliveryMode: 'versand' | 'abholung' = booking.delivery_mode === 'abholung' ? 'abholung' : 'versand';
+    const rule = rules[deliveryMode];
+
+    // Deadline berechnen fuer die E-Mail
+    let deadlineLabel = 'vor Mietbeginn';
+    try {
+      const [y, m, d] = String(booking.rental_from).split('-').map((s) => parseInt(s, 10));
+      const pivot = new Date(Date.UTC(y, m - 1, d - rule.days_before_rental));
+      const dateStr = `${pivot.getUTCFullYear()}-${String(pivot.getUTCMonth() + 1).padStart(2, '0')}-${String(pivot.getUTCDate()).padStart(2, '0')}`;
+      const { getBerlinOffsetString } = await import('@/lib/timezone');
+      const offset = getBerlinOffsetString(new Date(`${dateStr}T12:00:00Z`));
+      const deadlineDate = new Date(`${dateStr}T${String(rule.cutoff_hour_berlin).padStart(2, '0')}:00:00${offset}`);
+      // Formatieren in Berlin-Zeit
+      deadlineLabel = deadlineDate.toLocaleString('de-DE', {
+        timeZone: 'Europe/Berlin',
+        weekday: 'long',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      }) + ' Uhr';
+    } catch { /* fallback label */ }
 
     let emailSent = false;
     let emailError: string | null = null;
@@ -203,7 +224,7 @@ export async function POST(req: NextRequest) {
               </div>
 
               <p style="color: #94a3b8; font-size: 12px; text-align: center;">
-                Bitte bezahle spätestens ${deadlineLabel}. Erfolgt bis dahin keine Zahlung, wird die Buchung automatisch storniert.
+                Bitte bezahle spätestens bis <strong>${deadlineLabel}</strong>. Erfolgt bis dahin keine Zahlung, wird die Buchung automatisch storniert.
               </p>
             </div>
           `,

@@ -1,5 +1,5 @@
 -- ==============================================================
--- Payment-Link-Support + konfigurierbare Storno-Fristen
+-- Payment-Link-Support + Storno-Deadline-Regeln
 -- ==============================================================
 -- Idempotent.
 
@@ -10,17 +10,34 @@
 ALTER TABLE bookings ADD COLUMN IF NOT EXISTS stripe_payment_link_id TEXT;
 CREATE INDEX IF NOT EXISTS bookings_payment_link_idx ON bookings (stripe_payment_link_id);
 
--- ── Default-Setting fuer Storno-Fristen ────────────────────────────────────
--- Wird ausgewertet vom Cron /api/cron/awaiting-payment-cancel.
--- Wert in Stunden. Admin kann das spaeter im UI anpassen.
+-- ── Deadline-Regeln fuer Auto-Storno unbezahlter Buchungen ──────────────────
+-- Setting-Struktur:
+--   {
+--     versand: { days_before_rental: 3, cutoff_hour_berlin: 18 },
+--     abholung: { days_before_rental: 1, cutoff_hour_berlin: 18 }
+--   }
+--
+-- Bedeutung: Deadline = (rental_from - days_before_rental Tage) um cutoff_hour Berlin.
+--
+-- Beispiel Versand (Default 3 Tage, 18:00):
+--   rental_from = 2026-04-25 (Fr)
+--   → Deadline = 2026-04-22 (Di) 18:00 Berlin
+--   → 2 volle Tage (Mi + Do) fuer Versand-Vorbereitung
+--
+-- Beispiel Abholung (Default 1 Tag, 18:00):
+--   rental_from = 2026-04-25 (Fr)
+--   → Deadline = 2026-04-24 (Do) 18:00 Berlin
 INSERT INTO admin_settings (key, value)
 VALUES (
-  'awaiting_payment_cancel_hours',
+  'awaiting_payment_cancel_rules',
   jsonb_build_object(
-    'versand', 48,     -- Bei Versand: 48h vor Mietbeginn storno wenn unbezahlt
-    'abholung', 24     -- Bei Abholung: 24h vor Mietbeginn storno wenn unbezahlt
+    'versand', jsonb_build_object('days_before_rental', 3, 'cutoff_hour_berlin', 18),
+    'abholung', jsonb_build_object('days_before_rental', 1, 'cutoff_hour_berlin', 18)
   )
 )
 ON CONFLICT (key) DO NOTHING;
+
+-- Altes Setting (hours-basiert) laesst sich nicht sauber konvertieren,
+-- bleibt unangetastet. Neue Code-Version nutzt nur noch das neue Setting.
 
 COMMIT;

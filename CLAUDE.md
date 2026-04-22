@@ -1095,8 +1095,19 @@ Systematischer Sweep ueber Admin- und Kundenkonto-UI nach Darstellungsfehlern. G
 - **SQL-Migration `supabase-waitlist-use-case.sql` ausführen** (Spalte `use_case` auf `waitlist_subscriptions` für optionalen Nutzungszweck-Dropdown).
 - **SQL-Migration `supabase-verification-deferred.sql` ausführen** (`verification_required` + `verification_gate_passed_at` auf `bookings` — Voraussetzung für Express-Signup-Flag).
 - **SQL-Migration `supabase-env-toggle.sql` ausführen** (is_test-Flag auf bookings/invoices/credit_notes/expenses/email_log/admin_audit_log/stripe_transactions — fuer sauberen Test/Live-Wechsel).
-- **SQL-Migration `supabase-awaiting-payment-deadline.sql` ausführen** (Spalte `stripe_payment_link_id` auf `bookings` + Setting `awaiting_payment_cancel_hours` mit Defaults Versand=48h, Abholung=24h).
-- **Crontab (Auto-Storno unbezahlter Buchungen):** `5 0 * * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/awaiting-payment-cancel` — läuft täglich 00:05, storniert `awaiting_payment`-Buchungen deren Deadline erreicht ist (48h Versand / 24h Abholung vor Mietbeginn). Deaktiviert den Stripe Payment Link, setzt Status `cancelled`, schickt Storno-Mail. Grace-Period: 1h nach Buchungs-Erstellung. Einmal täglich reicht — die Deadline ist ein absoluter Zeitpunkt, die konkrete Run-Zeit ist für die Logik egal.
+- **SQL-Migration `supabase-awaiting-payment-deadline.sql` ausführen** (Spalte `stripe_payment_link_id` auf `bookings` + Setting `awaiting_payment_cancel_rules` mit Deadline-Regeln).
+- **Deadline-Regeln** in `admin_settings.awaiting_payment_cancel_rules`: `{ versand: { days_before_rental: 3, cutoff_hour_berlin: 18 }, abholung: { days_before_rental: 1, cutoff_hour_berlin: 18 } }`. Bedeutung: Deadline = `(rental_from − days_before_rental Tage)` um `cutoff_hour:00 Berlin-Zeit`. Versand-Default = **3 Tage vor Mietbeginn um 18:00 Berlin** (entspricht 2 vollen Versand-Tagen zwischen Deadline und Mietbeginn). Abholung-Default = **1 Tag vorher um 18:00 Berlin**. Sommer-/Winterzeit-Umstellung wird korrekt behandelt über `getBerlinOffsetString()`.
+- **Crontab (Auto-Storno unbezahlter Buchungen):** Zwei Varianten, je nachdem ob der Cron-Daemon `TZ=`-Prefix unterstützt:
+  - **Variante A (präziser, empfohlen):** Läuft täglich 18:01 Berlin, genau 1 Min nach der Deadline:
+    ```
+    TZ=Europe/Berlin
+    1 18 * * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/awaiting-payment-cancel
+    ```
+  - **Variante B (DST-proof ohne TZ-Support):** Stündlich, max 1h Verzögerung:
+    ```
+    5 * * * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/awaiting-payment-cancel
+    ```
+  Storniert `awaiting_payment`-Buchungen deren Deadline (siehe Regeln oben) erreicht ist. Deaktiviert den Stripe Payment Link via `stripe.paymentLinks.update(id, {active:false})`, setzt Status `cancelled`, schickt Storno-Mail. Grace-Period: 1h nach Buchungs-Erstellung.
 - **Auto-Reels Go-Live:** (1) `supabase/supabase-reels.sql` ausführen (3 Tabellen + Seed-Vorlagen + `reels_settings`-Default). (2) Supabase Storage-Bucket `social-reels` manuell anlegen (Public ON, 50 MB reicht, `video/mp4` + `image/jpeg`). (3) Pexels API-Key (kostenlos) registrieren + in `admin_settings.reels_settings.pexels_api_key` hinterlegen oder als `PEXELS_API_KEY`-Env. (4) Docker-Image neu bauen (Dockerfile installiert jetzt `ffmpeg + ttf-dejavu` in Runner-Stage — braucht ~50 MB extra Image-Größe). (5) Crontab-Eintrag: `*/5 * * * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/reels-publish`.
 - **Go-Live 01.05.2026:** Test/Live-Switch auf Live umschalten (`/admin/einstellungen` → Test-/Live-Modus → "Live-Modus"). Ersetzt: TEST_MODE-Konstante, Stripe-Key-Wechsel, Vertrags-Wasserzeichen, Resend-Absender, Sendcloud-Keys.
 - **Go-Live 01.05.2026:** Domain test.cam2rent.de → cam2rent.de
