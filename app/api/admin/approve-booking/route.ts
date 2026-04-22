@@ -69,48 +69,56 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 2. Stripe Checkout Session erstellen (Payment Link)
+    // 2. Stripe Product + Price + Payment Link erstellen
+    // Payment Links haben keinen expires_at — der Link bleibt gueltig bis wir
+    // ihn bei Storno deaktivieren. Der Cron /api/cron/awaiting-payment-cancel
+    // storniert unbezahlte Buchungen 48h (Versand) bzw. 24h (Abholung) vor
+    // Mietbeginn.
     const amountCents = Math.round(booking.price_total * 100);
     if (!Number.isFinite(amountCents) || amountCents <= 0) {
       return NextResponse.json({ error: `Ungültiger Betrag: ${amountCents} cents` }, { status: 400 });
     }
 
-    let session: { id: string; url: string | null };
+    let paymentLink: { id: string; url: string };
     try {
       const stripe = await getStripe();
       const siteUrl = await getSiteUrl();
       const days = booking.days ?? 1;
-      const productName = String(booking.product_name).slice(0, 200); // Stripe 250-char-Limit
-      session = await stripe.checkout.sessions.create({
-        mode: 'payment',
-        payment_method_types: ['card', 'paypal'],
-        line_items: [{
-          price_data: {
-            currency: 'eur',
-            unit_amount: amountCents,
-            product_data: {
-              name: `Buchung ${bookingId} — ${productName}`.slice(0, 250),
-              description: `${days} Tage Miete (${booking.rental_from} bis ${booking.rental_to})`.slice(0, 500),
-            },
-          },
-          quantity: 1,
-        }],
+      const productName = String(booking.product_name).slice(0, 200);
+
+      // 2a. Stripe Product anlegen
+      const stripeProduct = await stripe.products.create({
+        name: `Buchung ${bookingId} — ${productName}`.slice(0, 250),
+        description: `${days} Tage Miete (${booking.rental_from} bis ${booking.rental_to})`.slice(0, 500),
+        metadata: { booking_id: bookingId },
+      });
+
+      // 2b. Price
+      const stripePrice = await stripe.prices.create({
+        product: stripeProduct.id,
+        unit_amount: amountCents,
+        currency: 'eur',
+      });
+
+      // 2c. Payment Link
+      const pl = await stripe.paymentLinks.create({
+        line_items: [{ price: stripePrice.id, quantity: 1 }],
         metadata: {
           booking_id: bookingId,
           booking_type: 'pending_approval',
         },
-        success_url: `${siteUrl}/buchung-bestaetigt?from=approval&booking_id=${bookingId}`,
-        cancel_url: `${siteUrl}/konto/buchungen`,
-        expires_at: Math.floor(Date.now() / 1000) + 60 * 60 * 23, // 23 Stunden gueltig (Stripe-Max: 24h)
+        after_completion: {
+          type: 'redirect',
+          redirect: { url: `${siteUrl}/buchung-bestaetigt?from=approval&booking_id=${bookingId}` },
+        },
+        allow_promotion_codes: false,
+        payment_method_types: ['card', 'paypal'],
       });
+      paymentLink = { id: pl.id, url: pl.url };
     } catch (stripeErr) {
       const msg = stripeErr instanceof Error ? stripeErr.message : String(stripeErr);
       console.error('[approve-booking] Stripe-Fehler:', msg);
       return NextResponse.json({ error: `Stripe-Fehler: ${msg}` }, { status: 502 });
-    }
-
-    if (!session.url) {
-      return NextResponse.json({ error: 'Stripe lieferte keinen Payment-Link zurück.' }, { status: 502 });
     }
 
     // 3. Zahlungslink in Buchung speichern + Status aktualisieren
@@ -118,8 +126,8 @@ export async function POST(req: NextRequest) {
       .from('bookings')
       .update({
         status: 'awaiting_payment',
-        payment_intent_id: session.id,
-        notes: `Zahlungslink: ${session.url}`,
+        stripe_payment_link_id: paymentLink.id,
+        notes: `Zahlungslink: ${paymentLink.url}`,
       })
       .eq('id', bookingId);
 
@@ -127,7 +135,29 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `DB-Update fehlgeschlagen: ${updateError.message}` }, { status: 500 });
     }
 
-    // 4. Email an Kunden senden (non-blocking — Stripe-Session ist schon sicher)
+    // 4. Email an Kunden senden (non-blocking — Payment Link ist schon sicher)
+    // Deadline-Infos fuer die Mail ermitteln (aus Setting lesen, Default 48/24)
+    let cancelHoursVersand = 48;
+    let cancelHoursAbholung = 24;
+    try {
+      const { data: deadlineSetting } = await supabase
+        .from('admin_settings')
+        .select('value')
+        .eq('key', 'awaiting_payment_cancel_hours')
+        .maybeSingle();
+      if (deadlineSetting?.value) {
+        const parsed = typeof deadlineSetting.value === 'string' ? JSON.parse(deadlineSetting.value) : deadlineSetting.value;
+        cancelHoursVersand = Number(parsed.versand) || 48;
+        cancelHoursAbholung = Number(parsed.abholung) || 24;
+      }
+    } catch { /* default */ }
+
+    const deliveryMode = booking.delivery_mode ?? 'versand';
+    const deadlineHours = deliveryMode === 'abholung' ? cancelHoursAbholung : cancelHoursVersand;
+    const deadlineLabel = deliveryMode === 'abholung'
+      ? `${deadlineHours} Stunden vor Mietbeginn`
+      : `${deadlineHours} Stunden vor Mietbeginn (bei Versand brauchen wir Vorlaufzeit)`;
+
     let emailSent = false;
     let emailError: string | null = null;
     if (booking.customer_email) {
@@ -167,13 +197,13 @@ export async function POST(req: NextRequest) {
               </div>
 
               <div style="text-align: center; margin-bottom: 24px;">
-                <a href="${session.url}" style="display: inline-block; background: #3b82f6; color: white; font-weight: 700; font-size: 16px; padding: 14px 36px; border-radius: 10px; text-decoration: none;">
+                <a href="${paymentLink.url}" style="display: inline-block; background: #3b82f6; color: white; font-weight: 700; font-size: 16px; padding: 14px 36px; border-radius: 10px; text-decoration: none;">
                   Jetzt bezahlen
                 </a>
               </div>
 
               <p style="color: #94a3b8; font-size: 12px; text-align: center;">
-                Der Zahlungslink ist 23 Stunden gültig. Falls du nicht rechtzeitig bezahlst, wird die Buchung automatisch storniert.
+                Bitte bezahle spätestens ${deadlineLabel}. Erfolgt bis dahin keine Zahlung, wird die Buchung automatisch storniert.
               </p>
             </div>
           `,
@@ -189,7 +219,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      paymentUrl: session.url,
+      paymentUrl: paymentLink.url,
+      paymentLinkId: paymentLink.id,
       emailSent,
       emailError,
     });
