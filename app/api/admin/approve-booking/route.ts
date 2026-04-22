@@ -101,7 +101,7 @@ export async function POST(req: NextRequest) {
         },
         success_url: `${siteUrl}/buchung-bestaetigt?from=approval&booking_id=${bookingId}`,
         cancel_url: `${siteUrl}/konto/buchungen`,
-        expires_at: Math.floor(Date.now() / 1000) + 60 * 60 * 72, // 72 Stunden gueltig
+        expires_at: Math.floor(Date.now() / 1000) + 60 * 60 * 23, // 23 Stunden gueltig (Stripe-Max: 24h)
       });
     } catch (stripeErr) {
       const msg = stripeErr instanceof Error ? stripeErr.message : String(stripeErr);
@@ -173,7 +173,7 @@ export async function POST(req: NextRequest) {
               </div>
 
               <p style="color: #94a3b8; font-size: 12px; text-align: center;">
-                Der Zahlungslink ist 72 Stunden gültig. Falls du nicht rechtzeitig bezahlst, wird die Buchung automatisch storniert.
+                Der Zahlungslink ist 23 Stunden gültig. Falls du nicht rechtzeitig bezahlst, wird die Buchung automatisch storniert.
               </p>
             </div>
           `,
