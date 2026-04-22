@@ -23,6 +23,7 @@ const ACTION_LABELS: Record<string, string> = {
   'booking.delete': 'Buchung endgültig gelöscht',
   'booking.email_updated': 'Kunden-E-Mail geändert',
   'booking.verification_gate': 'Verifizierungs-Gate',
+  'booking.resend_payment_link': 'Zahlungs-Link erneut gesendet',
   // Kunden
   'customer.block': 'Kunde gesperrt',
   'customer.unblock': 'Kunde entsperrt',

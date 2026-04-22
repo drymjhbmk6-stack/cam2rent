@@ -53,6 +53,7 @@ interface BookingDetail {
   return_label_url: string | null;
   unit_id: string | null;
   serial_number: string | null;
+  stripe_payment_link_id: string | null;
 }
 
 interface RentalAgreement {
@@ -225,6 +226,37 @@ export default function BuchungDetailPage() {
         fetchBooking(); // E-Mail-Verlauf aktualisieren
       } else {
         const err = await res.json();
+        setEmailToast({ msg: err.error || 'Fehler beim Senden', type: 'err' });
+      }
+    } catch {
+      setEmailToast({ msg: 'Netzwerkfehler beim Senden', type: 'err' });
+    } finally {
+      setEmailSending(false);
+      setTimeout(() => setEmailToast(null), 4000);
+    }
+  }
+
+  async function handleResendPaymentLink() {
+    if (!booking) return;
+    const recipient = emailRecipient || booking.customer_email;
+    if (!recipient) {
+      setEmailToast({ msg: 'Keine Empfänger-E-Mail', type: 'err' });
+      setTimeout(() => setEmailToast(null), 4000);
+      return;
+    }
+    setEmailSending(true);
+    try {
+      const res = await fetch(`/api/admin/booking/${bookingId}/resend-payment-link`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: recipient }),
+      });
+      if (res.ok) {
+        setEmailToast({ msg: 'Zahlungs-Link erneut gesendet', type: 'ok' });
+        setShowEmailModal(false);
+        fetchBooking();
+      } else {
+        const err = await res.json().catch(() => ({}));
         setEmailToast({ msg: err.error || 'Fehler beim Senden', type: 'err' });
       }
     } catch {
@@ -1027,6 +1059,27 @@ export default function BuchungDetailPage() {
                 placeholder="E-Mail-Adresse"
                 className="w-full px-3 py-2.5 border border-brand-border dark:border-slate-600 rounded-xl text-sm font-body bg-white dark:bg-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-400 mb-4"
               />
+
+              {/* Quick-Action: Zahlungs-Link erneut senden */}
+              {booking.stripe_payment_link_id && (
+                <div className="mb-4 rounded-xl border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/30 p-3">
+                  <p className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider mb-1">Schnell-Aktion</p>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-heading font-semibold text-brand-black dark:text-white">Zahlungs-Link</p>
+                      <p className="text-xs font-body text-brand-muted">Erneut versenden ohne PDF-Anhänge</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleResendPaymentLink}
+                      disabled={emailSending || !emailRecipient}
+                      className="flex-shrink-0 px-3 py-2 text-xs font-heading font-semibold bg-sky-500 text-white rounded-btn hover:bg-sky-600 transition-colors disabled:opacity-40 whitespace-nowrap"
+                    >
+                      {emailSending ? '...' : '✉ Erneut senden'}
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Anhänge */}
               <div className="flex items-center justify-between mb-2">
