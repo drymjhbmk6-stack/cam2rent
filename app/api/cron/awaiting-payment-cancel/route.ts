@@ -25,8 +25,12 @@ interface CancelHoursSetting {
  *   2. Buchung auf status='cancelled' setzen, Grund in notes
  *   3. E-Mail an Kunden (Info zur Stornierung)
  *
- * Empfohlener Crontab (alle 30 Min):
- *   star/30 * * * * curl -s -X POST -H "x-cron-secret: CRON_SECRET" https://cam2rent.de/api/cron/awaiting-payment-cancel
+ * Empfohlener Crontab (taeglich 00:05):
+ *   5 0 * * * curl -s -X POST -H "x-cron-secret: CRON_SECRET" https://cam2rent.de/api/cron/awaiting-payment-cancel
+ *
+ * Einmal taeglich reicht aus: die Deadline ist ein absoluter Zeitpunkt.
+ * Ob der Cron 2 Minuten oder 24h nach Deadline laeuft ist egal — der
+ * Auto-Storno bleibt logisch korrekt. Weniger Stripe-API-Calls.
  */
 async function handle(req: NextRequest) {
   if (!verifyCronAuth(req)) {
