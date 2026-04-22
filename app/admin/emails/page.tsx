@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import Link from 'next/link';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { fmtDateTime } from '@/lib/format-utils';
@@ -57,6 +57,7 @@ export default function AdminEmailLogPage() {
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
     loadEmails();
@@ -183,48 +184,108 @@ export default function AdminEmailLogPage() {
                 <tbody>
                   {emails.map((email) => {
                     const typeInfo = TYPE_LABELS[email.email_type] ?? { label: email.email_type, color: '#94a3b8', bg: '#94a3b814' };
+                    const isExpanded = expandedId === email.id;
+                    const isFailed = email.status === 'failed';
                     return (
-                      <tr key={email.id} className="border-b border-brand-border/50 hover:bg-brand-bg/50 transition-colors">
-                        <td className="py-3 px-4 font-body text-brand-steel whitespace-nowrap">
-                          {fmtDateTime(email.sent_at)}
-                        </td>
-                        <td className="py-3 px-4">
-                          <span
-                            className="inline-flex px-2.5 py-0.5 rounded-full text-xs font-heading font-semibold"
-                            style={{ color: typeInfo.color, backgroundColor: typeInfo.bg }}
-                          >
-                            {typeInfo.label}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 font-body text-brand-black">
-                          {email.customer_email}
-                        </td>
-                        <td className="py-3 px-4 font-body text-brand-steel max-w-[250px] truncate" title={email.subject ?? ''}>
-                          {email.subject || '–'}
-                        </td>
-                        <td className="py-3 px-4">
-                          {email.booking_id ? (
-                            <Link href={`/admin/buchungen/${email.booking_id}`} className="font-body text-accent-blue hover:underline text-xs font-semibold">
-                              {email.booking_id}
-                            </Link>
-                          ) : (
-                            <span className="text-brand-muted">–</span>
-                          )}
-                        </td>
-                        <td className="py-3 px-4">
-                          {email.status === 'sent' ? (
-                            <span className="inline-flex items-center gap-1 text-xs font-heading font-semibold text-green-600">
-                              <span className="w-2 h-2 rounded-full bg-green-500" />
-                              Gesendet
+                      <Fragment key={email.id}>
+                        <tr
+                          onClick={() => setExpandedId(isExpanded ? null : email.id)}
+                          className={`border-b border-brand-border/50 hover:bg-brand-bg/50 transition-colors cursor-pointer ${isExpanded ? 'bg-brand-bg/40' : ''}`}
+                        >
+                          <td className="py-3 px-4 font-body text-brand-steel whitespace-nowrap">
+                            <div className="flex items-center gap-2">
+                              {/* Status-Punkt immer links sichtbar — auch wenn Tabelle abgeschnitten ist */}
+                              <span
+                                className={`w-2 h-2 rounded-full flex-shrink-0 ${isFailed ? 'bg-red-500' : 'bg-green-500'}`}
+                                title={isFailed ? 'Fehlgeschlagen' : 'Gesendet'}
+                              />
+                              {fmtDateTime(email.sent_at)}
+                            </div>
+                          </td>
+                          <td className="py-3 px-4">
+                            <span
+                              className="inline-flex px-2.5 py-0.5 rounded-full text-xs font-heading font-semibold"
+                              style={{ color: typeInfo.color, backgroundColor: typeInfo.bg }}
+                            >
+                              {typeInfo.label}
                             </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 text-xs font-heading font-semibold text-red-600" title={email.error_message ?? ''}>
-                              <span className="w-2 h-2 rounded-full bg-red-500" />
-                              Fehler
-                            </span>
-                          )}
-                        </td>
-                      </tr>
+                          </td>
+                          <td className="py-3 px-4 font-body text-brand-black">
+                            {email.customer_email}
+                          </td>
+                          <td className="py-3 px-4 font-body text-brand-steel max-w-[250px] truncate" title={email.subject ?? ''}>
+                            {email.subject || '–'}
+                          </td>
+                          <td className="py-3 px-4">
+                            {email.booking_id ? (
+                              <Link
+                                href={`/admin/buchungen/${email.booking_id}`}
+                                onClick={(e) => e.stopPropagation()}
+                                className="font-body text-accent-blue hover:underline text-xs font-semibold"
+                              >
+                                {email.booking_id}
+                              </Link>
+                            ) : (
+                              <span className="text-brand-muted">–</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4">
+                            {email.status === 'sent' ? (
+                              <span className="inline-flex items-center gap-1 text-xs font-heading font-semibold text-green-600">
+                                <span className="w-2 h-2 rounded-full bg-green-500" />
+                                Gesendet
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-xs font-heading font-semibold text-red-600">
+                                <span className="w-2 h-2 rounded-full bg-red-500" />
+                                Fehler
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                        {isExpanded && (
+                          <tr className="border-b border-brand-border/50 bg-brand-bg/30">
+                            <td colSpan={6} className="py-4 px-6">
+                              <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-xs font-body">
+                                <div>
+                                  <dt className="font-heading font-semibold text-brand-muted uppercase tracking-wider">Empfänger</dt>
+                                  <dd className="text-brand-black break-all mt-0.5">{email.customer_email || '–'}</dd>
+                                </div>
+                                <div>
+                                  <dt className="font-heading font-semibold text-brand-muted uppercase tracking-wider">Buchung</dt>
+                                  <dd className="text-brand-black mt-0.5">
+                                    {email.booking_id ? (
+                                      <Link href={`/admin/buchungen/${email.booking_id}`} className="text-accent-blue hover:underline">
+                                        {email.booking_id}
+                                      </Link>
+                                    ) : '–'}
+                                  </dd>
+                                </div>
+                                <div className="sm:col-span-2">
+                                  <dt className="font-heading font-semibold text-brand-muted uppercase tracking-wider">Betreff</dt>
+                                  <dd className="text-brand-black break-words mt-0.5">{email.subject || '–'}</dd>
+                                </div>
+                                <div>
+                                  <dt className="font-heading font-semibold text-brand-muted uppercase tracking-wider">Status</dt>
+                                  <dd className={`font-heading font-semibold mt-0.5 ${isFailed ? 'text-red-600' : 'text-green-600'}`}>
+                                    {isFailed ? 'Fehlgeschlagen' : 'Gesendet'}
+                                  </dd>
+                                </div>
+                                <div>
+                                  <dt className="font-heading font-semibold text-brand-muted uppercase tracking-wider">Resend-ID</dt>
+                                  <dd className="text-brand-steel break-all mt-0.5 font-mono">{email.resend_message_id || '–'}</dd>
+                                </div>
+                                {email.error_message && (
+                                  <div className="sm:col-span-2 bg-red-50 border border-red-200 rounded-lg p-3 mt-1">
+                                    <dt className="font-heading font-semibold text-red-700 uppercase tracking-wider text-xs">Fehlermeldung (Resend)</dt>
+                                    <dd className="text-red-900 break-words mt-1 font-mono text-xs whitespace-pre-wrap">{email.error_message}</dd>
+                                  </div>
+                                )}
+                              </dl>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
                     );
                   })}
                 </tbody>
