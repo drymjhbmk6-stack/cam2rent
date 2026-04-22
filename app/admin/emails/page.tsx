@@ -17,6 +17,32 @@ interface EmailEntry {
   error_message: string | null;
 }
 
+type ResendEvent =
+  | 'sent'
+  | 'delivered'
+  | 'delivery_delayed'
+  | 'complained'
+  | 'bounced'
+  | 'opened'
+  | 'clicked';
+
+interface ResendStatus {
+  loading: boolean;
+  last_event?: ResendEvent | null;
+  bounce?: { message?: string; type?: string; subType?: string } | null;
+  error?: string;
+}
+
+const RESEND_EVENT_LABELS: Record<ResendEvent, { label: string; color: string; hint: string }> = {
+  sent: { label: 'Von Resend angenommen', color: '#64748b', hint: 'Resend hat die Mail in die Warteschlange genommen, aber noch nicht an den Empfaenger-Mailserver ausgeliefert.' },
+  delivered: { label: 'Zugestellt', color: '#10b981', hint: 'Der Empfaenger-Mailserver hat die Mail angenommen. Kommt sie trotzdem nicht an, hat der Mailprovider (z.B. Outlook) sie still in Junk/Quarantaene geschoben.' },
+  delivery_delayed: { label: 'Zustellung verzoegert', color: '#f59e0b', hint: 'Empfaenger-Mailserver hat die Mail temporaer abgelehnt, Resend versucht es erneut.' },
+  complained: { label: 'Als Spam markiert', color: '#ef4444', hint: 'Der Empfaenger hat die Mail als Spam gemeldet.' },
+  bounced: { label: 'Bounced (unzustellbar)', color: '#ef4444', hint: 'Der Empfaenger-Mailserver hat die Mail dauerhaft abgelehnt — Details unten.' },
+  opened: { label: 'Geoeffnet', color: '#10b981', hint: 'Der Empfaenger hat die Mail geoeffnet.' },
+  clicked: { label: 'Link angeklickt', color: '#10b981', hint: 'Der Empfaenger hat einen Link angeklickt.' },
+};
+
 const TYPE_LABELS: Record<string, { label: string; color: string; bg: string }> = {
   booking_confirmation: { label: 'Buchungsbestätigung', color: '#06b6d4', bg: '#06b6d414' },
   booking_admin: { label: 'Buchung (Admin)', color: '#8b5cf6', bg: '#8b5cf614' },
@@ -58,6 +84,7 @@ export default function AdminEmailLogPage() {
   const [typeFilter, setTypeFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [resendStatusMap, setResendStatusMap] = useState<Record<string, ResendStatus>>({});
 
   useEffect(() => {
     loadEmails();
@@ -86,6 +113,37 @@ export default function AdminEmailLogPage() {
     e.preventDefault();
     setPage(1);
     loadEmails();
+  }
+
+  async function fetchResendStatus(logId: string) {
+    setResendStatusMap((prev) => ({ ...prev, [logId]: { loading: true } }));
+    try {
+      const res = await fetch(`/api/admin/email-log/${logId}/resend-status`);
+      const data = await res.json();
+      if (!res.ok) {
+        setResendStatusMap((prev) => ({ ...prev, [logId]: { loading: false, error: data.error || 'Abfrage fehlgeschlagen' } }));
+        return;
+      }
+      setResendStatusMap((prev) => ({
+        ...prev,
+        [logId]: {
+          loading: false,
+          last_event: data.last_event,
+          bounce: data.bounce,
+        },
+      }));
+    } catch {
+      setResendStatusMap((prev) => ({ ...prev, [logId]: { loading: false, error: 'Netzwerkfehler' } }));
+    }
+  }
+
+  function handleExpand(email: EmailEntry) {
+    const nextId = expandedId === email.id ? null : email.id;
+    setExpandedId(nextId);
+    // Beim Aufklappen automatisch den Resend-Zustellstatus nachladen
+    if (nextId && email.resend_message_id && !resendStatusMap[email.id]) {
+      fetchResendStatus(email.id);
+    }
   }
 
   const sentCount = emails.filter((e) => e.status === 'sent').length;
@@ -189,7 +247,7 @@ export default function AdminEmailLogPage() {
                     return (
                       <Fragment key={email.id}>
                         <tr
-                          onClick={() => setExpandedId(isExpanded ? null : email.id)}
+                          onClick={() => handleExpand(email)}
                           className={`border-b border-brand-border/50 hover:bg-brand-bg/50 transition-colors cursor-pointer ${isExpanded ? 'bg-brand-bg/40' : ''}`}
                         >
                           <td className="py-3 px-4 font-body text-brand-steel whitespace-nowrap">
@@ -275,6 +333,45 @@ export default function AdminEmailLogPage() {
                                   <dt className="font-heading font-semibold text-brand-muted uppercase tracking-wider">Resend-ID</dt>
                                   <dd className="text-brand-steel break-all mt-0.5 font-mono">{email.resend_message_id || '–'}</dd>
                                 </div>
+                                {email.resend_message_id && (() => {
+                                  const rs = resendStatusMap[email.id];
+                                  const eventInfo = rs?.last_event ? RESEND_EVENT_LABELS[rs.last_event] : null;
+                                  return (
+                                    <div className="sm:col-span-2 mt-1 bg-white dark:bg-slate-900 border border-brand-border dark:border-slate-700 rounded-lg p-3">
+                                      <div className="flex items-center justify-between gap-2 mb-1">
+                                        <dt className="font-heading font-semibold text-brand-muted uppercase tracking-wider text-xs">Zustellstatus (Resend)</dt>
+                                        <button
+                                          type="button"
+                                          onClick={(e) => { e.stopPropagation(); fetchResendStatus(email.id); }}
+                                          disabled={rs?.loading}
+                                          className="text-xs font-heading font-semibold text-accent-blue hover:underline disabled:opacity-40"
+                                        >
+                                          {rs?.loading ? 'Lädt...' : (rs ? 'Neu laden' : 'Prüfen')}
+                                        </button>
+                                      </div>
+                                      {rs?.loading && !rs?.last_event && (
+                                        <p className="text-brand-muted">Frage Resend...</p>
+                                      )}
+                                      {rs?.error && (
+                                        <p className="text-red-600">{rs.error}</p>
+                                      )}
+                                      {eventInfo && (
+                                        <>
+                                          <p className="font-heading font-semibold" style={{ color: eventInfo.color }}>
+                                            {eventInfo.label}
+                                          </p>
+                                          <p className="text-brand-muted mt-1 text-xs leading-relaxed">{eventInfo.hint}</p>
+                                          {rs?.bounce && (
+                                            <div className="mt-2 rounded bg-red-50 border border-red-200 p-2 font-mono text-xs text-red-900 whitespace-pre-wrap">
+                                              {rs.bounce.type && <div><strong>Typ:</strong> {rs.bounce.type}{rs.bounce.subType ? ` / ${rs.bounce.subType}` : ''}</div>}
+                                              {rs.bounce.message && <div className="break-words"><strong>Grund:</strong> {rs.bounce.message}</div>}
+                                            </div>
+                                          )}
+                                        </>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
                                 {email.error_message && (
                                   <div className="sm:col-span-2 bg-red-50 border border-red-200 rounded-lg p-3 mt-1">
                                     <dt className="font-heading font-semibold text-red-700 uppercase tracking-wider text-xs">Fehlermeldung (Resend)</dt>
