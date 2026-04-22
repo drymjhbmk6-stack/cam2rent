@@ -72,7 +72,7 @@ export async function POST(
   }
 
   const deliveryMode: 'versand' | 'abholung' = booking.delivery_mode === 'abholung' ? 'abholung' : 'versand';
-  const { subject, html } = await buildPaymentLinkEmail({
+  const { subject, html, text } = await buildPaymentLinkEmail({
     bookingId: booking.id,
     customerName: booking.customer_name,
     productName: String(booking.product_name ?? ''),
@@ -90,6 +90,7 @@ export async function POST(
       to: recipient,
       subject,
       html,
+      text,
       bookingId: booking.id,
       emailType: 'payment_link',
     });

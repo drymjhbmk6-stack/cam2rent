@@ -141,98 +141,31 @@ export async function POST(req: NextRequest) {
     }
 
     // 4. Email an Kunden senden (non-blocking — Payment Link ist schon sicher)
-    // Deadline aus admin_settings.awaiting_payment_cancel_rules berechnen.
-    // Format: { versand: { days_before_rental, cutoff_hour_berlin }, abholung: {...} }
-    let rules = {
-      versand: { days_before_rental: 3, cutoff_hour_berlin: 18 },
-      abholung: { days_before_rental: 1, cutoff_hour_berlin: 18 },
-    };
-    try {
-      const { data: ruleSetting } = await supabase
-        .from('admin_settings')
-        .select('value')
-        .eq('key', 'awaiting_payment_cancel_rules')
-        .maybeSingle();
-      if (ruleSetting?.value) {
-        const parsed = typeof ruleSetting.value === 'string' ? JSON.parse(ruleSetting.value) : ruleSetting.value;
-        if (parsed?.versand) rules.versand = { ...rules.versand, ...parsed.versand };
-        if (parsed?.abholung) rules.abholung = { ...rules.abholung, ...parsed.abholung };
-      }
-    } catch { /* default */ }
-
+    // Template + Deadline kommen aus dem zentralen Helper, damit Re-Send und
+    // initialer Versand identisch aussehen (und beide deliverability-gehaertet sind).
     const deliveryMode: 'versand' | 'abholung' = booking.delivery_mode === 'abholung' ? 'abholung' : 'versand';
-    const rule = rules[deliveryMode];
-
-    // Deadline berechnen fuer die E-Mail
-    let deadlineLabel = 'vor Mietbeginn';
-    try {
-      const [y, m, d] = String(booking.rental_from).split('-').map((s) => parseInt(s, 10));
-      const pivot = new Date(Date.UTC(y, m - 1, d - rule.days_before_rental));
-      const dateStr = `${pivot.getUTCFullYear()}-${String(pivot.getUTCMonth() + 1).padStart(2, '0')}-${String(pivot.getUTCDate()).padStart(2, '0')}`;
-      const { getBerlinOffsetString } = await import('@/lib/timezone');
-      const offset = getBerlinOffsetString(new Date(`${dateStr}T12:00:00Z`));
-      const deadlineDate = new Date(`${dateStr}T${String(rule.cutoff_hour_berlin).padStart(2, '0')}:00:00${offset}`);
-      // Formatieren in Berlin-Zeit
-      deadlineLabel = deadlineDate.toLocaleString('de-DE', {
-        timeZone: 'Europe/Berlin',
-        weekday: 'long',
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      }) + ' Uhr';
-    } catch { /* fallback label */ }
-
     let emailSent = false;
     let emailError: string | null = null;
     if (booking.customer_email) {
       try {
+        const { buildPaymentLinkEmail } = await import('@/lib/payment-link-email');
         const { sendAndLog } = await import('@/lib/email');
-        const priceFmt = Number(booking.price_total).toFixed(2);
-        const customerName = booking.customer_name || 'dort';
-        const days = booking.days ?? 1;
+        const { subject, html, text } = await buildPaymentLinkEmail({
+          bookingId,
+          customerName: booking.customer_name,
+          productName: String(booking.product_name ?? ''),
+          days: booking.days ?? 1,
+          rentalFrom: String(booking.rental_from ?? ''),
+          rentalTo: String(booking.rental_to ?? ''),
+          priceTotal: Number(booking.price_total ?? 0),
+          deliveryMode,
+          paymentUrl: paymentLink.url,
+        });
         await sendAndLog({
           to: booking.customer_email,
-          subject: `Deine Buchung ${bookingId} wurde freigegeben — jetzt bezahlen`,
-          html: `
-            <div style="font-family: 'DM Sans', Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px 16px;">
-              <div style="text-align: center; margin-bottom: 24px;">
-                <span style="font-weight: 900; font-size: 20px; letter-spacing: -0.5px;">
-                  cam<span style="color: #3b82f6;">2</span>rent
-                </span>
-              </div>
-
-              <h1 style="font-size: 22px; font-weight: 700; margin-bottom: 8px; color: #1a1a1a;">
-                Deine Buchung wurde freigegeben!
-              </h1>
-              <p style="color: #64748b; font-size: 15px; line-height: 1.6; margin-bottom: 24px;">
-                Hallo ${customerName},<br/>
-                dein Konto wurde erfolgreich verifiziert und deine Buchung <strong>${bookingId}</strong> ist bereit zur Bezahlung.
-              </p>
-
-              <div style="background: #f1f5f9; border-radius: 12px; padding: 20px; margin-bottom: 24px;">
-                <p style="margin: 0 0 4px; font-size: 13px; color: #94a3b8;">Buchungsdetails</p>
-                <p style="margin: 0; font-weight: 700; font-size: 16px; color: #1a1a1a;">${booking.product_name}</p>
-                <p style="margin: 4px 0 0; font-size: 14px; color: #64748b;">
-                  ${days} Tage &middot; ${booking.rental_from} bis ${booking.rental_to}
-                </p>
-                <p style="margin: 12px 0 0; font-weight: 700; font-size: 20px; color: #1a1a1a;">
-                  ${priceFmt} €
-                </p>
-              </div>
-
-              <div style="text-align: center; margin-bottom: 24px;">
-                <a href="${paymentLink.url}" style="display: inline-block; background: #3b82f6; color: white; font-weight: 700; font-size: 16px; padding: 14px 36px; border-radius: 10px; text-decoration: none;">
-                  Jetzt bezahlen
-                </a>
-              </div>
-
-              <p style="color: #94a3b8; font-size: 12px; text-align: center;">
-                Bitte bezahle spätestens bis <strong>${deadlineLabel}</strong>. Erfolgt bis dahin keine Zahlung, wird die Buchung automatisch storniert.
-              </p>
-            </div>
-          `,
+          subject,
+          html,
+          text,
           bookingId,
           emailType: 'payment_link',
         });

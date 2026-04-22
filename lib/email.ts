@@ -98,6 +98,7 @@ export async function sendAndLog(opts: {
   to: string;
   subject: string;
   html: string;
+  text?: string;
   bookingId?: string | null;
   emailType: string;
   attachments?: { filename: string; content: Buffer }[];
@@ -124,6 +125,7 @@ export async function sendAndLog(opts: {
       to: finalTo,
       subject: finalSubject,
       html: opts.html,
+      text: opts.text,
       attachments: opts.attachments,
     });
     await logEmail({
