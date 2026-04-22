@@ -31,6 +31,9 @@ interface ResendStatus {
   last_event?: ResendEvent | null;
   bounce?: { message?: string; type?: string; subType?: string } | null;
   error?: string;
+  restricted?: boolean;
+  hint?: string;
+  dashboardUrl?: string;
 }
 
 const RESEND_EVENT_LABELS: Record<ResendEvent, { label: string; color: string; hint: string }> = {
@@ -121,7 +124,16 @@ export default function AdminEmailLogPage() {
       const res = await fetch(`/api/admin/email-log/${logId}/resend-status`);
       const data = await res.json();
       if (!res.ok) {
-        setResendStatusMap((prev) => ({ ...prev, [logId]: { loading: false, error: data.error || 'Abfrage fehlgeschlagen' } }));
+        setResendStatusMap((prev) => ({
+          ...prev,
+          [logId]: {
+            loading: false,
+            error: data.error || 'Abfrage fehlgeschlagen',
+            restricted: data.restricted,
+            hint: data.hint,
+            dashboardUrl: data.dashboardUrl,
+          },
+        }));
         return;
       }
       setResendStatusMap((prev) => ({
@@ -130,6 +142,7 @@ export default function AdminEmailLogPage() {
           loading: false,
           last_event: data.last_event,
           bounce: data.bounce,
+          dashboardUrl: data.dashboardUrl,
         },
       }));
     } catch {
@@ -353,7 +366,26 @@ export default function AdminEmailLogPage() {
                                         <p className="text-brand-muted">Frage Resend...</p>
                                       )}
                                       {rs?.error && (
-                                        <p className="text-red-600">{rs.error}</p>
+                                        <div className={`rounded border p-2 ${rs.restricted ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200'}`}>
+                                          <p className={`font-heading font-semibold ${rs.restricted ? 'text-amber-800' : 'text-red-700'}`}>
+                                            {rs.restricted ? 'API-Key ist schreibgeschuetzt' : 'Fehler'}
+                                          </p>
+                                          <p className={`mt-1 text-xs font-mono break-words ${rs.restricted ? 'text-amber-900' : 'text-red-900'}`}>{rs.error}</p>
+                                          {rs.hint && (
+                                            <p className="mt-2 text-xs text-brand-steel leading-relaxed">{rs.hint}</p>
+                                          )}
+                                          {rs.dashboardUrl && (
+                                            <a
+                                              href={rs.dashboardUrl}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              onClick={(e) => e.stopPropagation()}
+                                              className="inline-flex items-center gap-1 mt-2 px-3 py-1.5 bg-sky-500 text-white text-xs font-heading font-semibold rounded-btn hover:bg-sky-600 transition-colors"
+                                            >
+                                              ↗ Im Resend-Dashboard öffnen
+                                            </a>
+                                          )}
+                                        </div>
                                       )}
                                       {eventInfo && (
                                         <>
@@ -366,6 +398,17 @@ export default function AdminEmailLogPage() {
                                               {rs.bounce.type && <div><strong>Typ:</strong> {rs.bounce.type}{rs.bounce.subType ? ` / ${rs.bounce.subType}` : ''}</div>}
                                               {rs.bounce.message && <div className="break-words"><strong>Grund:</strong> {rs.bounce.message}</div>}
                                             </div>
+                                          )}
+                                          {rs?.dashboardUrl && (
+                                            <a
+                                              href={rs.dashboardUrl}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              onClick={(e) => e.stopPropagation()}
+                                              className="inline-block mt-2 text-xs text-accent-blue hover:underline"
+                                            >
+                                              Im Resend-Dashboard öffnen ↗
+                                            </a>
                                           )}
                                         </>
                                       )}

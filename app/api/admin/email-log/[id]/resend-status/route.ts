@@ -44,20 +44,38 @@ export async function GET(
     );
   }
 
-  if (!process.env.RESEND_API_KEY) {
+  // Resend unterscheidet zwischen "Sending access"-Keys (nur POST /emails)
+  // und "Full access"-Keys. Unser Produktiv-Key ist meist restricted — damit
+  // koennen wir zwar senden, aber keinen Status abfragen.
+  // Workaround: optionaler RESEND_API_READ_KEY fuer Diagnose-Abfragen.
+  const readKey = process.env.RESEND_API_READ_KEY || process.env.RESEND_API_KEY;
+  if (!readKey) {
     return NextResponse.json({ error: 'RESEND_API_KEY nicht konfiguriert.' }, { status: 500 });
   }
 
+  const dashboardUrl = `https://resend.com/emails/${logEntry.resend_message_id}`;
+
   try {
-    const resend = new Resend(process.env.RESEND_API_KEY);
-    // Resend SDK expose only .emails.get() — liefert den aktuellen Event-Status
+    const resend = new Resend(readKey);
     const res = await resend.emails.get(logEntry.resend_message_id);
     if (res.error) {
-      return NextResponse.json({ error: res.error.message || 'Resend-API-Fehler' }, { status: 502 });
+      const msg = res.error.message || 'Resend-API-Fehler';
+      const restricted = /restricted|only send/i.test(msg);
+      return NextResponse.json(
+        {
+          error: msg,
+          restricted,
+          dashboardUrl,
+          hint: restricted
+            ? 'Dein RESEND_API_KEY hat nur Sende-Berechtigung. Setze einen zweiten "Full access"-Key als RESEND_API_READ_KEY in Coolify, oder oeffne den Event direkt im Resend-Dashboard ueber den Button unten.'
+            : undefined,
+        },
+        { status: 403 },
+      );
     }
     const data = res.data as unknown as Record<string, unknown> | null;
     if (!data) {
-      return NextResponse.json({ error: 'Keine Antwort von Resend.' }, { status: 502 });
+      return NextResponse.json({ error: 'Keine Antwort von Resend.', dashboardUrl }, { status: 502 });
     }
     return NextResponse.json({
       last_event: data.last_event ?? null,
@@ -65,9 +83,10 @@ export async function GET(
       to: data.to ?? null,
       subject: data.subject ?? null,
       bounce: data.bounce ?? null,
+      dashboardUrl,
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ error: `Resend-Fehler: ${msg}` }, { status: 502 });
+    return NextResponse.json({ error: `Resend-Fehler: ${msg}`, dashboardUrl }, { status: 502 });
   }
 }
