@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { getProducts } from '@/lib/get-products';
+import { RESERVING_BOOKING_STATUSES } from '@/lib/booking-statuses';
 
 interface BufferDays {
   versand_before: number;
@@ -70,7 +71,7 @@ export async function GET(
     .from('bookings')
     .select('rental_from, rental_to, delivery_mode')
     .eq('product_id', productId)
-    .in('status', ['confirmed', 'shipped', 'active'])
+    .in('status', [...RESERVING_BOOKING_STATUSES])
     .lte('rental_from', extLast)
     .gte('rental_to', extFirst);
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { getProducts } from '@/lib/get-products';
+import { RESERVING_BOOKING_STATUSES } from '@/lib/booking-statuses';
 
 /**
  * GET /api/check-availability?product_id=1&from=2026-04-10&to=2026-04-14
@@ -32,7 +33,7 @@ export async function GET(req: NextRequest) {
     .from('bookings')
     .select('*', { count: 'exact', head: true })
     .eq('product_id', productId)
-    .eq('status', 'confirmed')
+    .in('status', [...RESERVING_BOOKING_STATUSES])
     .lte('rental_from', to)   // booking starts on or before request end
     .gte('rental_to', from);  // booking ends on or after request start
 

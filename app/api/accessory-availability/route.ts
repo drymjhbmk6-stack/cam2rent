@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { RESERVING_BOOKING_STATUSES } from '@/lib/booking-statuses';
 
 interface BufferDays {
   versand_before: number;
@@ -75,7 +76,7 @@ export async function GET(req: NextRequest) {
   const { data: bookings } = await supabase
     .from('bookings')
     .select('accessories, rental_from, rental_to, delivery_mode')
-    .in('status', ['confirmed', 'shipped', 'active'])
+    .in('status', [...RESERVING_BOOKING_STATUSES])
     .not('accessories', 'eq', '{}');
 
   // 5. Pro Zubehör: wie viele sind im Zeitraum gebucht?
