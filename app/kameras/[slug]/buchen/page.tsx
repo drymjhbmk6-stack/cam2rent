@@ -485,7 +485,7 @@ export default function BuchenPage() {
   useEffect(() => {
     fetch('/api/accessories')
       .then((r) => r.json())
-      .then((data: { id: string; name: string; pricingMode: string; price: number; description?: string; group?: string; upgradeGroup?: string; isUpgradeBase?: boolean }[]) => {
+      .then((data: { id: string; name: string; pricingMode: string; price: number; description?: string; group?: string; upgradeGroup?: string; isUpgradeBase?: boolean; allowMultiQty?: boolean; maxQtyPerBooking?: number | null }[]) => {
         if (Array.isArray(data) && data.length > 0) {
           const mapped: Accessory[] = data.map((a) => ({
             id: a.id,
@@ -498,6 +498,8 @@ export default function BuchenPage() {
             group: a.group,
             upgradeGroup: a.upgradeGroup,
             isUpgradeBase: a.isUpgradeBase,
+            allowMultiQty: a.allowMultiQty ?? false,
+            maxQtyPerBooking: a.maxQtyPerBooking ?? null,
           }));
           setDbAccessories(mapped);
         }
