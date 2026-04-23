@@ -108,26 +108,27 @@ const iconSocial = (
 // ============================================================
 
 const TAGESGESCHAEFT_ITEMS: NavItem[] = [
+  { href: '/admin/tagesgeschaeft', label: 'Übersicht', exact: true, icon: iconDashboard },
   { href: '/admin/buchungen', label: 'Buchungen', icon: iconBuchungen },
   { href: '/admin/buchungen/neu', label: 'Manuelle Buchung', exact: true, icon: iconPlus },
   { href: '/admin/verfuegbarkeit', label: 'Kalender', icon: iconCalendar },
   { href: '/admin/versand', label: 'Versand', icon: iconTruck },
   { href: '/admin/retouren', label: 'Retouren', icon: iconReturn },
-  { href: '/admin/schaeden', label: 'Schadensmeldungen', icon: iconWarning },
 ];
 
 const KUNDEN_ITEMS: NavItem[] = [
+  { href: '/admin/kunden-uebersicht', label: 'Übersicht', exact: true, icon: iconDashboard },
   { href: '/admin/kunden', label: 'Kunden', icon: iconUsers },
   { href: '/admin/nachrichten', label: 'Kundenanfragen', icon: iconMessage },
   { href: '/admin/warteliste', label: 'Warteliste', icon: iconBell },
   { href: '/admin/bewertungen', label: 'Produktbewertungen', icon: iconStar },
+  { href: '/admin/schaeden', label: 'Schadensmeldungen', icon: iconWarning },
 ];
 
 const KATALOG_ITEMS: NavItem[] = [
   { href: '/admin/preise/kameras', label: 'Kameras', icon: iconCamera },
   { href: '/admin/sets', label: 'Sets', icon: iconSets },
   { href: '/admin/zubehoer', label: 'Zubehör', icon: iconAccessory },
-  { href: '/admin/einkauf', label: 'Einkauf', icon: iconCart },
 ];
 
 const PREISE_ITEMS: NavItem[] = [
@@ -136,11 +137,10 @@ const PREISE_ITEMS: NavItem[] = [
   { href: '/admin/rabatte', label: 'Rabatte', icon: iconDiscount },
 ];
 
-const CONTENT_STARTSEITE: NavItem = {
-  href: '/admin/startseite',
-  label: 'Startseite',
-  icon: iconHome,
-};
+const WEBSEITE_ITEMS: NavItem[] = [
+  { href: '/admin/startseite', label: 'Startseite', icon: iconHome },
+  { href: '/admin/legal', label: 'Rechtstexte', icon: iconLegal },
+];
 
 const BLOG_ITEMS: NavItem[] = [
   { href: '/admin/blog', label: 'Blog-Dashboard', exact: true, icon: iconDashboard },
@@ -166,6 +166,7 @@ const SOCIAL_ITEMS: NavItem[] = [
 
 const FINANZEN_ITEMS: NavItem[] = [
   { href: '/admin/buchhaltung', label: 'Buchhaltung', icon: iconFinance },
+  { href: '/admin/einkauf', label: 'Einkauf', icon: iconCart },
   { href: '/admin/anlagen', label: 'Anlagenverzeichnis', icon: iconCamera },
 ];
 
@@ -178,7 +179,6 @@ const BERICHTE_ITEMS: NavItem[] = [
 ];
 
 const SYSTEM_ITEMS: NavItem[] = [
-  { href: '/admin/legal', label: 'Rechtstexte', icon: iconLegal },
   { href: '/admin/einstellungen', label: 'Einstellungen', icon: iconCog },
 ];
 
@@ -216,6 +216,93 @@ function NavSection({ label, items, pathname, onNavClick }: { label: string; ite
       {items.map((item) => (
         <NavLinkItem key={item.href} item={item} pathname={pathname} onNavClick={onNavClick} />
       ))}
+    </div>
+  );
+}
+
+/**
+ * Aufklappbare Navigations-Gruppe.
+ * Collapse-State persistiert in localStorage (Key: `admin_group_${storageKey}_collapsed`).
+ * Auto-Expand: Wenn aktuelle URL matchPaths-Prefix enthaelt oder href eines Items ist.
+ */
+function NavGroupCollapse({
+  label,
+  icon,
+  items,
+  children,
+  matchPaths,
+  storageKey,
+  pathname,
+  onNavClick,
+}: {
+  label: string;
+  icon: React.ReactNode;
+  items?: NavItem[];
+  children?: React.ReactNode;
+  matchPaths: string[];
+  storageKey: string;
+  pathname: string;
+  onNavClick?: () => void;
+}) {
+  const isActivePath = matchPaths.some((p) => pathname === p || pathname.startsWith(`${p}/`))
+    || (items?.some((it) => it.exact ? pathname === it.href : pathname.startsWith(it.href)) ?? false);
+
+  const [open, setOpen] = useState<boolean>(isActivePath);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (isActivePath) {
+      setOpen(true);
+      return;
+    }
+    try {
+      const raw = window.localStorage.getItem(`admin_group_${storageKey}_collapsed`);
+      if (raw !== null) setOpen(raw === 'false');
+    } catch { /* empty */ }
+  }, [isActivePath, storageKey]);
+
+  useEffect(() => {
+    if (isActivePath && !open) setOpen(true);
+  }, [isActivePath, open]);
+
+  function toggle() {
+    const next = !open;
+    setOpen(next);
+    try {
+      window.localStorage.setItem(`admin_group_${storageKey}_collapsed`, next ? 'false' : 'true');
+    } catch { /* empty */ }
+  }
+
+  return (
+    <div className="mb-1">
+      <button
+        type="button"
+        onClick={toggle}
+        className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-heading font-semibold transition-all mx-1 text-left"
+        style={{ color: isActivePath ? '#06b6d4' : '#94a3b8', background: isActivePath ? 'rgba(6,182,212,0.15)' : 'transparent' }}
+        onMouseEnter={(e) => { if (!isActivePath) (e.currentTarget as HTMLElement).style.color = '#e2e8f0'; }}
+        onMouseLeave={(e) => { if (!isActivePath) (e.currentTarget as HTMLElement).style.color = '#94a3b8'; }}
+      >
+        <span style={{ color: isActivePath ? '#06b6d4' : '#475569' }}>{icon}</span>
+        <span className="flex-1">{label}</span>
+        <span
+          style={{
+            color: isActivePath ? '#06b6d4' : '#475569',
+            transform: open ? 'rotate(90deg)' : 'none',
+            transition: 'transform 0.15s ease',
+          }}
+        >
+          {iconChevron}
+        </span>
+      </button>
+      {open && (
+        <div className="ml-4 pl-2 mt-0.5 space-y-0" style={{ borderLeft: '1px solid #1e293b' }}>
+          {items?.map((item) => (
+            <NavLinkItem key={item.href} item={item} pathname={pathname} onNavClick={onNavClick} />
+          ))}
+          {children}
+        </div>
+      )}
     </div>
   );
 }
@@ -393,37 +480,83 @@ function SidebarContent({ pathname, isDashboard, onNavClick, handleLogout }: {
       {/* Divider */}
       <div style={{ height: 1, background: '#1e293b', margin: '4px 12px' }} />
 
-      {/* Navigation groups */}
+      {/* Navigation groups — alle aufklappbar (Collapse-State in localStorage) */}
       <nav className="flex-1 py-2 overflow-y-auto">
-        <NavSection label="Tagesgeschäft" items={TAGESGESCHAEFT_ITEMS} pathname={pathname} onNavClick={onNavClick} />
-        <div style={{ height: 1, background: '#1e293b', margin: '6px 12px' }} />
-
-        <NavSection label="Kunden & Kommunikation" items={KUNDEN_ITEMS} pathname={pathname} onNavClick={onNavClick} />
-        <div style={{ height: 1, background: '#1e293b', margin: '6px 12px' }} />
-
-        <NavSection label="Katalog" items={KATALOG_ITEMS} pathname={pathname} onNavClick={onNavClick} />
-        <div style={{ height: 1, background: '#1e293b', margin: '6px 12px' }} />
-
-        <NavSection label="Preise & Aktionen" items={PREISE_ITEMS} pathname={pathname} onNavClick={onNavClick} />
-        <div style={{ height: 1, background: '#1e293b', margin: '6px 12px' }} />
-
-        {/* Content (Startseite + Blog-Collapse) */}
-        <div className="mb-1">
-          <div style={{ fontSize: 10, fontWeight: 700, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.8px', padding: '10px 12px 4px' }}>
-            Content
-          </div>
-          <NavLinkItem item={CONTENT_STARTSEITE} pathname={pathname} onNavClick={onNavClick} />
+        <NavGroupCollapse
+          label="Tagesgeschäft"
+          icon={iconBuchungen}
+          items={TAGESGESCHAEFT_ITEMS}
+          matchPaths={['/admin/tagesgeschaeft', '/admin/buchungen', '/admin/verfuegbarkeit', '/admin/versand', '/admin/retouren']}
+          storageKey="tagesgeschaeft"
+          pathname={pathname}
+          onNavClick={onNavClick}
+        />
+        <NavGroupCollapse
+          label="Kunden & Kommunikation"
+          icon={iconUsers}
+          items={KUNDEN_ITEMS}
+          matchPaths={['/admin/kunden-uebersicht', '/admin/kunden', '/admin/nachrichten', '/admin/warteliste', '/admin/bewertungen', '/admin/schaeden']}
+          storageKey="kunden"
+          pathname={pathname}
+          onNavClick={onNavClick}
+        />
+        <NavGroupCollapse
+          label="Katalog"
+          icon={iconCamera}
+          items={KATALOG_ITEMS}
+          matchPaths={['/admin/preise/kameras', '/admin/sets', '/admin/zubehoer']}
+          storageKey="katalog"
+          pathname={pathname}
+          onNavClick={onNavClick}
+        />
+        <NavGroupCollapse
+          label="Preise & Aktionen"
+          icon={iconPriceTag}
+          items={PREISE_ITEMS}
+          matchPaths={['/admin/preise', '/admin/gutscheine', '/admin/rabatte']}
+          storageKey="preise"
+          pathname={pathname}
+          onNavClick={onNavClick}
+        />
+        <NavGroupCollapse
+          label="Content"
+          icon={iconBlog}
+          matchPaths={['/admin/blog', '/admin/social']}
+          storageKey="content"
+          pathname={pathname}
+          onNavClick={onNavClick}
+        >
           <BlogCollapse pathname={pathname} onNavClick={onNavClick} />
           <SocialCollapse pathname={pathname} onNavClick={onNavClick} />
-        </div>
+        </NavGroupCollapse>
+        <NavGroupCollapse
+          label="Webseite"
+          icon={iconHome}
+          items={WEBSEITE_ITEMS}
+          matchPaths={['/admin/startseite', '/admin/legal']}
+          storageKey="webseite"
+          pathname={pathname}
+          onNavClick={onNavClick}
+        />
+        <NavGroupCollapse
+          label="Finanzen"
+          icon={iconFinance}
+          items={FINANZEN_ITEMS}
+          matchPaths={['/admin/buchhaltung', '/admin/einkauf', '/admin/anlagen']}
+          storageKey="finanzen"
+          pathname={pathname}
+          onNavClick={onNavClick}
+        />
+        <NavGroupCollapse
+          label="Berichte"
+          icon={iconChart}
+          items={BERICHTE_ITEMS}
+          matchPaths={['/admin/analytics', '/admin/emails', '/admin/beta-feedback', '/admin/aktivitaetsprotokoll']}
+          storageKey="berichte"
+          pathname={pathname}
+          onNavClick={onNavClick}
+        />
         <div style={{ height: 1, background: '#1e293b', margin: '6px 12px' }} />
-
-        <NavSection label="Finanzen" items={FINANZEN_ITEMS} pathname={pathname} onNavClick={onNavClick} />
-        <div style={{ height: 1, background: '#1e293b', margin: '6px 12px' }} />
-
-        <NavSection label="Berichte" items={BERICHTE_ITEMS} pathname={pathname} onNavClick={onNavClick} />
-        <div style={{ height: 1, background: '#1e293b', margin: '6px 12px' }} />
-
         <NavSection label="System" items={SYSTEM_ITEMS} pathname={pathname} onNavClick={onNavClick} />
       </nav>
 
