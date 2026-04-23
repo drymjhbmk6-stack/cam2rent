@@ -128,39 +128,52 @@ export async function POST(req: NextRequest) {
       if (contractSignature?.agreedToTerms && contractSignature?.signerName) {
         const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
           || req.headers.get('x-real-ip') || 'unknown';
-        for (const row of existingRows) {
-          const { data: bk } = await supabase.from('bookings').select('contract_signed').eq('id', row.id).single();
-          if (bk && !bk.contract_signed) {
-            try {
-              const { data: fullBooking } = await supabase.from('bookings').select('*').eq('id', row.id).single();
-              if (!fullBooking) continue;
-              const fmtD = (iso: string) => { const [y, m, d] = (iso || '').split('T')[0].split('-'); return `${d}.${m}.${y}`; };
-              const { data: txS } = await supabase.from('admin_settings').select('key, value').in('key', ['tax_mode', 'tax_rate']);
-              const txM: Record<string, string> = {}; for (const s of txS ?? []) txM[s.key] = s.value;
-              const result = await generateContractPDF({
-                bookingId: row.id, bookingNumber: row.id,
-                customerName: contractSignature.signerName, customerEmail: fullBooking.customer_email || '',
-                productName: fullBooking.product_name || '',
-                accessories: Array.isArray(fullBooking.accessories) ? fullBooking.accessories : [],
-                rentalFrom: fmtD(fullBooking.rental_from), rentalTo: fmtD(fullBooking.rental_to),
-                rentalDays: fullBooking.days || 1,
-                priceRental: fullBooking.price_rental || 0, priceAccessories: fullBooking.price_accessories || 0,
-                priceHaftung: fullBooking.price_haftung || 0, priceShipping: fullBooking.shipping_price || 0,
-                priceTotal: fullBooking.price_total || 0, deposit: fullBooking.deposit || 0,
-                taxMode: (txM['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer',
-                taxRate: parseFloat(txM['tax_rate'] || '19'),
-                signatureDataUrl: contractSignature.signatureDataUrl,
-                signatureMethod: contractSignature.signatureMethod,
-                signerName: contractSignature.signerName, ipAddress: ip,
-                unitId: fullBooking.unit_id ?? null,
-              });
-              await storeContract(row.id, result.pdfBuffer, {
-                contractHash: result.contractHash, customerName: contractSignature.signerName,
-                ipAddress: ip, signedAt: new Date().toISOString(), signatureMethod: contractSignature.signatureMethod,
-              });
-              console.log('[confirm-cart] Vertrag gespeichert für', row.id);
-            } catch (err) { console.error('[confirm-cart] Contract generation (idempotent) error:', err); }
-          }
+        const ids = existingRows.map((r) => r.id);
+
+        // Batch: alle Buchungen auf einmal laden statt 2 Queries pro Row
+        const { data: fullBookings } = await supabase
+          .from('bookings')
+          .select('*')
+          .in('id', ids);
+
+        // Tax-Settings einmal pro Request laden, nicht pro Row
+        const { data: txS } = await supabase
+          .from('admin_settings')
+          .select('key, value')
+          .in('key', ['tax_mode', 'tax_rate']);
+        const txM: Record<string, string> = {};
+        for (const s of txS ?? []) txM[s.key] = s.value;
+        const taxModeIdem = (txM['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer';
+        const taxRateIdem = parseFloat(txM['tax_rate'] || '19');
+
+        const fmtD = (iso: string) => { const [y, m, d] = (iso || '').split('T')[0].split('-'); return `${d}.${m}.${y}`; };
+
+        for (const fullBooking of fullBookings ?? []) {
+          if (fullBooking.contract_signed) continue;
+          try {
+            const result = await generateContractPDF({
+              bookingId: fullBooking.id, bookingNumber: fullBooking.id,
+              customerName: contractSignature.signerName, customerEmail: fullBooking.customer_email || '',
+              productName: fullBooking.product_name || '',
+              accessories: Array.isArray(fullBooking.accessories) ? fullBooking.accessories : [],
+              rentalFrom: fmtD(fullBooking.rental_from), rentalTo: fmtD(fullBooking.rental_to),
+              rentalDays: fullBooking.days || 1,
+              priceRental: fullBooking.price_rental || 0, priceAccessories: fullBooking.price_accessories || 0,
+              priceHaftung: fullBooking.price_haftung || 0, priceShipping: fullBooking.shipping_price || 0,
+              priceTotal: fullBooking.price_total || 0, deposit: fullBooking.deposit || 0,
+              taxMode: taxModeIdem,
+              taxRate: taxRateIdem,
+              signatureDataUrl: contractSignature.signatureDataUrl,
+              signatureMethod: contractSignature.signatureMethod,
+              signerName: contractSignature.signerName, ipAddress: ip,
+              unitId: fullBooking.unit_id ?? null,
+            });
+            await storeContract(fullBooking.id, result.pdfBuffer, {
+              contractHash: result.contractHash, customerName: contractSignature.signerName,
+              ipAddress: ip, signedAt: new Date().toISOString(), signatureMethod: contractSignature.signatureMethod,
+            });
+            console.log('[confirm-cart] Vertrag gespeichert für', fullBooking.id);
+          } catch (err) { console.error('[confirm-cart] Contract generation (idempotent) error:', err); }
         }
       }
       return NextResponse.json({

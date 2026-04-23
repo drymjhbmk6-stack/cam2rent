@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Image from 'next/image';
 import type { AdminProduct } from '@/lib/price-config';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import BrandBadge from '@/components/BrandBadge';
@@ -538,8 +539,8 @@ export default function AdminSetsPage() {
                         <div className="flex items-center gap-4">
                           {set.image_url ? (
                             <div className="relative group">
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img src={set.image_url} alt={set.name} className="w-40 h-30 object-contain rounded-lg border border-brand-border" />
+                              <Image src={set.image_url} alt={set.name} width={160} height={120} className="w-40 h-30 object-contain rounded-lg border border-brand-border" unoptimized={set.image_url.startsWith('data:')} />
+
                               <button
                                 onClick={async () => {
                                   if (!confirm('Bild löschen?')) return;
