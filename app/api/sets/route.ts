@@ -62,15 +62,26 @@ export async function GET(req: NextRequest) {
         const available = items.length > 0
           ? computeAvailability(items, accMap)
           : (r.available ?? true);
+
+        // Display-Liste zusaetzlich nach Name aggregieren: zwei unterschiedliche
+        // accessory_ids mit identischem Namen werden als eine Zeile gezeigt
+        // (verhindert "2x Extra Akku" + "Extra Akku" bei Daten-Duplikaten).
+        // Die items-Struktur selbst bleibt id-genau, damit die Verfuegbarkeits-
+        // Rechnung pro Bestand korrekt bleibt.
+        const nameQty = new Map<string, number>();
+        for (const item of items) {
+          const name = accMap.get(item.accessory_id)?.name ?? item.accessory_id;
+          nameQty.set(name, (nameQty.get(name) ?? 0) + item.qty);
+        }
+        const includedItems = [...nameQty.entries()].map(
+          ([name, qty]) => (qty > 1 ? `${qty}x ${name}` : name),
+        );
+
         return {
           id: r.id,
           name: r.name ?? r.id,
           description: r.description ?? '',
-          includedItems: items.map((item) => {
-            const acc = accMap.get(item.accessory_id);
-            const name = acc?.name ?? item.accessory_id;
-            return item.qty > 1 ? `${item.qty}x ${name}` : name;
-          }),
+          includedItems,
           badge: r.badge ?? undefined,
           badgeColor: r.badge_color ?? undefined,
           sortOrder: r.sort_order ?? 999,
