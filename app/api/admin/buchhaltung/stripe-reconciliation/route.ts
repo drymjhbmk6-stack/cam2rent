@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
 
   let query = supabase
     .from('stripe_transactions')
-    .select('*')
+    .select('id, stripe_payment_intent_id, stripe_created_at, booking_id, amount, fee, net, match_status')
     .order('stripe_created_at', { ascending: false });
 
   if (from) query = query.gte('stripe_created_at', `${from}T00:00:00`);

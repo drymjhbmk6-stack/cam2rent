@@ -10,6 +10,38 @@ import {
 } from '@/lib/email';
 import { getStripe, getStripeWebhookSecretOrThrow } from '@/lib/stripe';
 import { isTestMode } from '@/lib/env-mode';
+import { createAdminNotification } from '@/lib/admin-notifications';
+
+/**
+ * Vergleicht die Summe einzelner Preiskomponenten gegen den von Stripe
+ * signierten Gesamtbetrag. Eine Abweichung > 5 Cent deutet auf manipulierte
+ * PaymentIntent-Metadata hin (Theorie: Angreifer setzt einzelne price_*-Felder
+ * im Metadata, intent.amount selbst ist Stripe-signiert). Wir blockieren NICHT
+ * den Webhook (Stripe wuerde dauerhaft retry), sondern legen eine
+ * Admin-Notification an, damit der Vorfall manuell geprueft werden kann.
+ */
+async function verifyAmountConsistency(
+  supabase: ReturnType<typeof createServiceClient>,
+  bookingId: string,
+  intentId: string,
+  expectedSumCents: number,
+  actualAmountCents: number,
+) {
+  const diffCents = Math.abs(expectedSumCents - actualAmountCents);
+  if (diffCents <= 5) return; // 5 Cent Toleranz fuer Float-Rundung
+  const msg = `PaymentIntent ${intentId}: Komponenten-Summe ${(expectedSumCents / 100).toFixed(2)} € weicht vom Stripe-Gesamtbetrag ${(actualAmountCents / 100).toFixed(2)} € ab (Differenz ${(diffCents / 100).toFixed(2)} €).`;
+  console.error(`[Webhook] PRICE-MISMATCH ${bookingId}: ${msg}`);
+  try {
+    await createAdminNotification(supabase, {
+      type: 'payment_failed',
+      title: `Preis-Plausibilitaet verletzt (${bookingId})`,
+      message: msg,
+      link: `/admin/buchungen/${bookingId}`,
+    });
+  } catch (e) {
+    console.error('[Webhook] Konnte Notification nicht anlegen:', e);
+  }
+}
 
 /**
  * POST /api/stripe-webhook
@@ -219,6 +251,15 @@ async function handleSingleBooking(
     return;
   }
 
+  // Plausibilitaet: Komponenten-Summe gegen Stripe-Gesamtbetrag pruefen
+  const expectedSumCents = Math.round(
+    (parseFloat(meta.price_rental ?? '0') +
+      parseFloat(meta.price_accessories ?? '0') +
+      parseFloat(meta.price_haftung ?? '0') +
+      parseFloat(meta.shipping_price ?? '0')) * 100,
+  );
+  await verifyAmountConsistency(supabase, bookingId, intent.id, expectedSumCents, intent.amount);
+
   console.log(`[Webhook] Einzelbuchung ${bookingId} nachgeholt.`);
 
   // Email senden
@@ -360,6 +401,16 @@ async function handleCartBooking(
     console.error(`[Webhook] Cart-Buchung ${bookingId} Fehler:`, error);
     return;
   }
+
+  // Plausibilitaet: Items-Summe + Versand - Rabatte gegen Stripe-Gesamtbetrag
+  const expectedSumCents = Math.round(
+    (items.reduce((s, it) => s + it.priceRental + it.priceAccessories + it.priceHaftung, 0) +
+      shippingPrice -
+      discountAmount -
+      durationDiscount -
+      loyaltyDiscount) * 100,
+  );
+  await verifyAmountConsistency(supabase, bookingId, intent.id, expectedSumCents, intent.amount);
 
   console.log(`[Webhook] Cart-Buchung ${bookingId} nachgeholt.`);
 

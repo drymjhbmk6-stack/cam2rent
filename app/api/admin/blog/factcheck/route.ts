@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import Anthropic from '@anthropic-ai/sdk';
+import { sanitizePromptInput } from '@/lib/prompt-sanitize';
 
 async function getApiKey(): Promise<string | null> {
   const supabase = createServiceClient();
@@ -57,9 +58,14 @@ QUALITÄT: 1-10
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { content, title } = body;
+  const rawContent = body?.content;
+  const rawTitle = body?.title;
 
-  if (!content) return NextResponse.json({ error: 'Content ist erforderlich.' }, { status: 400 });
+  if (!rawContent) return NextResponse.json({ error: 'Content ist erforderlich.' }, { status: 400 });
+
+  // Defense-in-Depth: User-Input vor Einbau in Claude-Prompt entschaerfen.
+  const content = sanitizePromptInput(rawContent, 50000);
+  const title = sanitizePromptInput(rawTitle, 200);
 
   const apiKey = await getApiKey();
   if (!apiKey) return NextResponse.json({ error: 'Anthropic API Key nicht konfiguriert.' }, { status: 400 });

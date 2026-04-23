@@ -5,6 +5,7 @@ import { verifyCronAuth } from '@/lib/cron-auth';
 import OpenAI from 'openai';
 import { isTestMode } from '@/lib/env-mode';
 import { buildBlogSystemPrompt, HUMANIZER_PASS } from '@/lib/blog/system-prompt';
+import { sanitizePromptInput, sanitizePromptInputList } from '@/lib/prompt-sanitize';
 
 const LENGTH_MAP: Record<string, string> = {
   kurz: 'ca. 500 Wörter',
@@ -201,12 +202,19 @@ export async function POST(req: NextRequest) {
 
   const length = LENGTH_MAP[topicData.target_length] ?? LENGTH_MAP.mittel;
   const toneDesc = TONE_MAP[topicData.tone] ?? TONE_MAP.informativ;
-  const keywordHint = topicData.keywords?.length
-    ? `\nWichtige Keywords für SEO: ${topicData.keywords.join(', ')}`
+
+  // Defense-in-Depth: User-Input (auch von Admin-Eingabe in Redaktionsplan)
+  // sanitizen, bevor wir es in Claude-Prompts einbauen.
+  const safeTopic = sanitizePromptInput(topicData.topic, 300);
+  const safePrompt = topicData.prompt ? sanitizePromptInput(topicData.prompt, 5000) : '';
+  const safeKeywords = sanitizePromptInputList(topicData.keywords, 30, 60);
+
+  const keywordHint = safeKeywords.length
+    ? `\nWichtige Keywords für SEO: ${safeKeywords.join(', ')}`
     : '';
 
-  const detailedPrompt = topicData.prompt
-    ? `\n\nAUSFÜHRLICHE ANWEISUNGEN VOM REDAKTEUR:\n${topicData.prompt}`
+  const detailedPrompt = safePrompt
+    ? `\n\nAUSFÜHRLICHE ANWEISUNGEN VOM REDAKTEUR:\n${safePrompt}`
     : '';
 
   const seriesHint = seriesContext
@@ -233,10 +241,6 @@ export async function POST(req: NextRequest) {
   // Aktuelles Jahr in Berlin-Zeit — sonst fehlt in der Silvester-Nacht das neue Jahr
   const currentYear = parseInt(new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' }).slice(0, 4), 10);
 
-  const kiContext = (blogSettings.ki_context as string)
-    ? `\n\nZUSÄTZLICHER KONTEXT VOM ADMIN:\n${blogSettings.ki_context}`
-    : '';
-
   const systemPrompt = buildBlogSystemPrompt({
     currentYear,
     shopProductsInfo,
@@ -253,7 +257,7 @@ export async function POST(req: NextRequest) {
     const message = await client.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 4096,
-      messages: [{ role: 'user', content: `Schreibe einen Blog-Artikel über: ${topicData.topic}${detailedPrompt}${keywordHint}${seriesHint}` }],
+      messages: [{ role: 'user', content: `Schreibe einen Blog-Artikel über: ${safeTopic}${detailedPrompt}${keywordHint}${seriesHint}` }],
       system: systemPrompt,
     });
 

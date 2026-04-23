@@ -109,9 +109,6 @@ export async function POST(req: NextRequest) {
 
   // Zusätzlicher Admin-Kontext aus Einstellungen
   const allSettings = await getBlogSettings();
-  const kiContext = allSettings?.ki_context
-    ? `\n\nZUSÄTZLICHER KONTEXT VOM ADMIN:\n${allSettings.ki_context}`
-    : '';
 
   const systemPrompt = buildBlogSystemPrompt({
     currentYear,
