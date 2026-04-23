@@ -2033,9 +2033,21 @@ export default function BuchenPage() {
                 <p className="text-sm font-heading font-semibold text-brand-black mb-3">{selectedSet.name}</p>
                 <div className="space-y-1.5">
                   {(() => {
+                    // Keys sind IMMER der reine Name (ohne "Nx "-Praefix),
+                    // damit Set-Item "2x Extra Akku" und Einzel-Auswahl
+                    // "Extra Akku" als derselbe Eintrag zusammengezaehlt
+                    // werden. Ohne diesen Split bleiben sie zwei Zeilen.
                     const counts: Record<string, number> = {};
+                    const QTY_PREFIX = /^(\d+)x\s+(.+)$/;
                     const filteredItems = getFilteredSetItems();
-                    for (const item of filteredItems) counts[item] = (counts[item] ?? 0) + 1;
+                    for (const item of filteredItems) {
+                      const m = QTY_PREFIX.exec(item);
+                      if (m) {
+                        counts[m[2]] = (counts[m[2]] ?? 0) + parseInt(m[1], 10);
+                      } else {
+                        counts[item] = (counts[item] ?? 0) + 1;
+                      }
+                    }
                     for (const accId of accessories) {
                       const acc = dbAccessories.find((a) => a.id === accId);
                       if (acc) counts[acc.name] = (counts[acc.name] ?? 0) + 1;
