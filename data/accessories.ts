@@ -67,6 +67,12 @@ export interface Accessory {
   /** Ist die Standard-/Inklusive-Option in der Upgrade-Gruppe (vorausgewählt, 0 € Aufpreis). */
   isUpgradeBase?: boolean;
 
+  /** Wenn true: Kunde kann im Buchungsflow per Stepper mehrere Stueck buchen. */
+  allowMultiQty?: boolean;
+
+  /** Optional: Obergrenze pro Buchung (bei allowMultiQty). NULL/undefined = nur Lagerbestand zaehlt. */
+  maxQtyPerBooking?: number | null;
+
   /** Maps to an SVG icon in the booking page. */
   iconId: AccessoryIconId;
 

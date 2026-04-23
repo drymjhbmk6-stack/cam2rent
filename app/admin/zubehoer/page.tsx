@@ -23,6 +23,8 @@ interface Accessory {
   internal: boolean;
   upgrade_group: string | null;
   is_upgrade_base: boolean;
+  allow_multi_qty?: boolean | null;
+  max_qty_per_booking?: number | null;
 }
 
 const CATEGORIES = ['Akku', 'Speicher', 'Halterung', 'Schutz', 'Audio', 'Stativ', 'Sonstiges'];
@@ -42,6 +44,8 @@ function emptyForm() {
     internal: false,
     upgrade_group: '',
     is_upgrade_base: false,
+    allow_multi_qty: false,
+    max_qty_per_booking: null as number | null,
   };
 }
 
@@ -124,6 +128,8 @@ export default function AdminZubehoerPage() {
       internal: acc.internal ?? false,
       upgrade_group: acc.upgrade_group ?? '',
       is_upgrade_base: acc.is_upgrade_base ?? false,
+      allow_multi_qty: acc.allow_multi_qty ?? false,
+      max_qty_per_booking: acc.max_qty_per_booking ?? null,
     });
   }
 
@@ -270,7 +276,7 @@ export default function AdminZubehoerPage() {
                   placeholder="https://…"
                   className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
               </div>
-              <div className="flex items-center gap-6">
+              <div className="flex items-center gap-6 flex-wrap">
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input type="checkbox" checked={newForm.available}
                     onChange={(e) => setNewForm((f) => ({ ...f, available: e.target.checked }))}
@@ -284,6 +290,29 @@ export default function AdminZubehoerPage() {
                   <span className="text-sm font-body text-brand-black">Nur intern</span>
                   <span className="text-[10px] text-brand-muted">(Kunde sieht es nicht)</span>
                 </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={newForm.allow_multi_qty}
+                    onChange={(e) => setNewForm((f) => ({ ...f, allow_multi_qty: e.target.checked }))}
+                    className="w-4 h-4 rounded border-brand-border accent-accent-blue" />
+                  <span className="text-sm font-body text-brand-black">Mehrfach-Auswahl</span>
+                  <span className="text-[10px] text-brand-muted">(Kunde kann Stueckzahl waehlen)</span>
+                </label>
+                {newForm.allow_multi_qty && (
+                  <label className="flex items-center gap-2">
+                    <span className="text-xs font-body text-brand-muted">Max pro Buchung</span>
+                    <input
+                      type="number"
+                      min="1"
+                      value={newForm.max_qty_per_booking ?? ''}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setNewForm((f) => ({ ...f, max_qty_per_booking: v === '' ? null : Math.max(1, parseInt(v, 10) || 1) }));
+                      }}
+                      placeholder="unbegr."
+                      className="w-20 px-2 py-1 border border-brand-border rounded-[8px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue"
+                    />
+                  </label>
+                )}
               </div>
               {/* Upgrade-Gruppe */}
               <div>
@@ -553,7 +582,7 @@ function AccessoryCard({ acc, editId, editForm, setEditForm, savedId, savingId, 
                           onChange={(e) => setEditForm((f) => ({ ...f, image_url: e.target.value }))}
                           className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body bg-white focus:outline-none focus:ring-2 focus:ring-accent-blue" />
                       </div>
-                      <div className="flex items-center gap-6">
+                      <div className="flex items-center gap-6 flex-wrap">
                         <label className="flex items-center gap-2 cursor-pointer">
                           <input type="checkbox" checked={editForm.available ?? true}
                             onChange={(e) => setEditForm((f) => ({ ...f, available: e.target.checked }))}
@@ -567,6 +596,29 @@ function AccessoryCard({ acc, editId, editForm, setEditForm, savedId, savingId, 
                           <span className="text-sm font-body text-brand-black">Nur intern</span>
                           <span className="text-[10px] text-brand-muted">(Kunde sieht es nicht)</span>
                         </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="checkbox" checked={(editForm as Record<string, unknown>).allow_multi_qty as boolean ?? false}
+                            onChange={(e) => setEditForm((f) => ({ ...f, allow_multi_qty: e.target.checked }))}
+                            className="w-4 h-4 rounded border-brand-border accent-accent-blue" />
+                          <span className="text-sm font-body text-brand-black">Mehrfach-Auswahl</span>
+                          <span className="text-[10px] text-brand-muted">(Kunde kann Stueckzahl waehlen)</span>
+                        </label>
+                        {(editForm as Record<string, unknown>).allow_multi_qty ? (
+                          <label className="flex items-center gap-2">
+                            <span className="text-xs font-body text-brand-muted">Max pro Buchung</span>
+                            <input
+                              type="number"
+                              min="1"
+                              value={((editForm as Record<string, unknown>).max_qty_per_booking as number | null) ?? ''}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                setEditForm((f) => ({ ...f, max_qty_per_booking: v === '' ? null : Math.max(1, parseInt(v, 10) || 1) }));
+                              }}
+                              placeholder="unbegr."
+                              className="w-20 px-2 py-1 border border-brand-border rounded-[8px] text-sm font-body bg-white focus:outline-none focus:ring-2 focus:ring-accent-blue"
+                            />
+                          </label>
+                        ) : null}
                       </div>
                       {/* Upgrade-Gruppe */}
                       <div>

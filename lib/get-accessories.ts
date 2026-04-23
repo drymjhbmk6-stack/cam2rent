@@ -19,6 +19,8 @@ interface DbAccessory {
   internal: boolean;
   upgrade_group: string | null;
   is_upgrade_base: boolean;
+  allow_multi_qty: boolean | null;
+  max_qty_per_booking: number | null;
 }
 
 function dbToAccessory(db: DbAccessory): Accessory {
@@ -34,6 +36,8 @@ function dbToAccessory(db: DbAccessory): Accessory {
     internal: db.internal ?? false,
     upgradeGroup: db.upgrade_group ?? undefined,
     isUpgradeBase: db.is_upgrade_base ?? false,
+    allowMultiQty: db.allow_multi_qty ?? false,
+    maxQtyPerBooking: db.max_qty_per_booking ?? null,
   };
 }
 

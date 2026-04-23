@@ -14,6 +14,9 @@ export async function PUT(
   const body = await req.json();
   const supabase = createServiceClient();
 
+  const maxQty = typeof body.max_qty_per_booking === 'number' && body.max_qty_per_booking > 0
+    ? Math.floor(body.max_qty_per_booking) : null;
+
   const { error } = await supabase
     .from('accessories')
     .update({
@@ -29,6 +32,8 @@ export async function PUT(
       internal: body.internal ?? false,
       upgrade_group: body.upgrade_group || null,
       is_upgrade_base: body.is_upgrade_base ?? false,
+      allow_multi_qty: body.allow_multi_qty ?? false,
+      max_qty_per_booking: maxQty,
     })
     .eq('id', id);
 
