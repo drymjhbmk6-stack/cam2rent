@@ -4,6 +4,23 @@ import type { RentalSet } from '@/data/sets';
 
 type AccessoryItem = { accessory_id: string; qty: number };
 
+/**
+ * Fasst doppelte accessory_items (gleiche accessory_id) zu einem Eintrag mit
+ * summierter qty zusammen. Schuetzt vor Admin-Konfigurationsfehlern (z.B.
+ * "3x Extra Akku" + "1x Extra Akku" statt "4x Extra Akku") und sorgt dafuer,
+ * dass die Verfuegbarkeits-Rechnung im Frontend die reale Gesamtmenge sieht.
+ */
+function aggregateItems(items: AccessoryItem[]): AccessoryItem[] {
+  const map = new Map<string, number>();
+  for (const item of items) {
+    if (!item?.accessory_id) continue;
+    const qty = typeof item.qty === 'number' && item.qty > 0 ? item.qty : 0;
+    if (qty === 0) continue;
+    map.set(item.accessory_id, (map.get(item.accessory_id) ?? 0) + qty);
+  }
+  return [...map.entries()].map(([accessory_id, qty]) => ({ accessory_id, qty }));
+}
+
 function computeAvailability(
   items: AccessoryItem[],
   accMap: Map<string, { available: boolean; available_qty: number }>
@@ -40,7 +57,8 @@ export async function GET(req: NextRequest) {
 
     const allSets: (RentalSet & { accessory_items: AccessoryItem[]; product_ids: string[] })[] =
       (setsRes.data ?? []).map((r) => {
-        const items: AccessoryItem[] = Array.isArray(r.accessory_items) ? r.accessory_items : [];
+        const rawItems: AccessoryItem[] = Array.isArray(r.accessory_items) ? r.accessory_items : [];
+        const items = aggregateItems(rawItems);
         const available = items.length > 0
           ? computeAvailability(items, accMap)
           : (r.available ?? true);
@@ -99,7 +117,7 @@ export async function POST(req: NextRequest) {
     const sort_order = (last?.sort_order ?? 0) + 1;
 
     let computedAvailable = available ?? true;
-    const items: AccessoryItem[] = accessory_items ?? [];
+    const items: AccessoryItem[] = aggregateItems(accessory_items ?? []);
     if (items.length > 0) {
       const accIds = items.map((i) => i.accessory_id);
       const { data: accs } = await supabase.from('accessories').select('id, available, available_qty').in('id', accIds);
@@ -149,12 +167,13 @@ export async function PATCH(req: NextRequest) {
     if (product_ids !== undefined) updates.product_ids = product_ids;
 
     if (accessory_items !== undefined) {
-      updates.accessory_items = accessory_items;
-      if (accessory_items.length > 0) {
-        const accIds = accessory_items.map((i) => i.accessory_id);
+      const aggregated = aggregateItems(accessory_items);
+      updates.accessory_items = aggregated;
+      if (aggregated.length > 0) {
+        const accIds = aggregated.map((i) => i.accessory_id);
         const { data: accs } = await supabase.from('accessories').select('id, available, available_qty').in('id', accIds);
         const accMap = new Map(accs?.map((a) => [a.id, a]) ?? []);
-        updates.available = computeAvailability(accessory_items, accMap);
+        updates.available = computeAvailability(aggregated, accMap);
       } else {
         if (available !== undefined) updates.available = available;
       }
