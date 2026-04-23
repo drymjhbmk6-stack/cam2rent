@@ -1902,15 +1902,31 @@ export default function BuchenPage() {
                       <span className="text-brand-steel">Miete</span>
                       <span className="text-brand-black">{fmt(breakdown.rentalPrice)} €</span>
                     </div>
-                    {breakdown.accessoryPrice > 0 && (
+                    {selectedSet ? (
                       <div className="flex justify-between text-sm font-body">
-                        <span className="text-brand-steel">Zubehör</span>
+                        <span className="text-brand-steel truncate pr-2">
+                          {selectedSet.name}
+                          {selectedSet.pricingMode === 'perDay' && (
+                            <span className="text-xs text-brand-muted ml-1">
+                              ({fmt(selectedSet.price)} € × {breakdown.days} {breakdown.days === 1 ? 'Tag' : 'Tage'})
+                            </span>
+                          )}
+                        </span>
+                        <span className="text-brand-black flex-shrink-0">{fmt(setPrice)} €</span>
+                      </div>
+                    ) : breakdown.accessoryPrice > 0 && (
+                      <div className="flex justify-between text-sm font-body">
+                        <span className="text-brand-steel">
+                          Zubehör{accessories.length > 0 ? ` (${accessories.length})` : ''}
+                        </span>
                         <span className="text-brand-black">{fmt(breakdown.accessoryPrice)} €</span>
                       </div>
                     )}
                     {breakdown.haftungPrice > 0 && (
                       <div className="flex justify-between text-sm font-body">
-                        <span className="text-brand-steel">Haftungsschutz</span>
+                        <span className="text-brand-steel">
+                          {haftungsoptionen.find((h) => h.id === haftung)?.name ?? 'Haftungsschutz'}
+                        </span>
                         <span className="text-brand-black">{breakdown.haftungPrice} €</span>
                       </div>
                     )}
