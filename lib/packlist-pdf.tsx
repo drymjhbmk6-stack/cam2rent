@@ -26,6 +26,8 @@ export interface PacklistData {
   deliveryMode: string;
   shippingMethod: string;
   accessories: string[];
+  /** Optional: Zubehoer mit Stueckzahl. Ersetzt accessories[]-Rendering. */
+  accessoryItems?: { accessory_id: string; qty: number }[];
   haftung: string;
 }
 
@@ -227,8 +229,13 @@ export function PacklistPDF({ data }: { data: PacklistData }) {
   // Kameras aufspalten (können kommagetrennt sein)
   const cameras = data.productName.split(',').map((n) => n.trim());
 
-  // Zubehör-Namen auflösen
-  const accItems = data.accessories.map((id) => accName(id));
+  // Zubehör-Namen auflösen (qty-aware wenn accessoryItems vorhanden)
+  const accItems = data.accessoryItems && data.accessoryItems.length > 0
+    ? data.accessoryItems.map((i) => {
+        const name = accName(i.accessory_id);
+        return i.qty > 1 ? `${i.qty}x ${name}` : name;
+      })
+    : data.accessories.map((id) => accName(id));
 
   // Haftung Label
   const haftungLabel = data.haftung === 'standard' ? 'Standard-Haftungsschutz'

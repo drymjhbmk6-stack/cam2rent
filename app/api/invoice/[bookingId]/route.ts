@@ -8,6 +8,7 @@ import { checkAdminAuth } from '@/lib/admin-auth';
 import { InvoicePDF, type InvoiceData } from '@/lib/invoice-pdf';
 import { ensureBusinessConfig } from '@/lib/load-business-config';
 import { BUSINESS } from '@/lib/business-config';
+import { normalizeAccessoryItems } from '@/lib/booking-accessories';
 import QRCode from 'qrcode';
 
 export async function GET(
@@ -87,6 +88,18 @@ export async function GET(
 
   const invoiceNumber = booking.id.replace(/^(C2R|BK)-/, 'RE-');
 
+  // Zubehoer qty-aware laden + Namen aufloesen
+  const accItems = normalizeAccessoryItems(booking.accessory_items, booking.accessories);
+  let accessoryNamesMap: Record<string, string> = {};
+  if (accItems.length > 0) {
+    const accIds = accItems.map((i) => i.accessory_id);
+    const { data: accRows } = await supabase
+      .from('accessories')
+      .select('id, name')
+      .in('id', accIds);
+    accessoryNamesMap = Object.fromEntries((accRows ?? []).map((a) => [a.id, a.name ?? a.id]));
+  }
+
   const data: InvoiceData = {
     bookingId: booking.id,
     invoiceNumber,
@@ -102,6 +115,8 @@ export async function GET(
     shippingMethod: booking.shipping_method ?? undefined,
     haftung: booking.haftung ?? 'none',
     accessories: Array.isArray(booking.accessories) ? booking.accessories : [],
+    accessoryItems: accItems,
+    accessoryNames: accessoryNamesMap,
     priceRental: booking.price_rental ?? 0,
     priceAccessories: booking.price_accessories ?? 0,
     priceHaftung: booking.price_haftung ?? 0,

@@ -163,6 +163,11 @@ export interface BookingEmailData {
   shippingMethod?: string;
   haftung: string;          // 'none' | 'standard' | 'premium'
   accessories: string[];
+  /** Optional: Zubehoer mit Stueckzahl. Wenn gesetzt, werden accessoryNames
+   *  fuer die Buchungsbestaetigungs-Mail qty-aware aufgeloest. */
+  accessoryItems?: { accessory_id: string; qty: number }[];
+  /** Optional: Map accessory_id -> Name (vom Aufrufer resolvt). */
+  accessoryNames?: Record<string, string>;
   priceRental: number;
   priceAccessories: number;
   priceHaftung: number;

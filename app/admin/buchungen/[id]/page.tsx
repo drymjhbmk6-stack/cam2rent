@@ -21,6 +21,7 @@ interface BookingDetail {
   shipping_address: string | null;
   haftung: string | null;
   accessories: string[] | null;
+  accessory_items?: { accessory_id: string; qty: number }[] | null;
   price_rental: number;
   price_accessories: number;
   price_haftung: number;
@@ -659,16 +660,26 @@ export default function BuchungDetailPage() {
             </Section>
 
             {/* Zubehör */}
-            {booking.accessories && booking.accessories.length > 0 && (
-              <Section title="Zubehör & Set">
-                <div className="flex flex-wrap gap-2">
-                  {booking.accessories.map((a, i) => {
-                    const name = a.replace(/-[a-z0-9]{6,}$/, '').split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-                    return <span key={i} className="px-2.5 py-1 bg-brand-bg rounded-full text-xs font-body text-brand-steel">{name}</span>;
-                  })}
-                </div>
-              </Section>
-            )}
+            {(() => {
+              // Qty-aware Anzeige: accessory_items hat Vorrang, sonst Fallback
+              // auf accessories[] mit qty=1 je Eintrag.
+              const items: { accessory_id: string; qty: number }[] = Array.isArray(booking.accessory_items) && booking.accessory_items.length > 0
+                ? booking.accessory_items as { accessory_id: string; qty: number }[]
+                : (Array.isArray(booking.accessories) ? booking.accessories : []).map((id: string) => ({ accessory_id: id, qty: 1 }));
+              if (items.length === 0) return null;
+              return (
+                <Section title="Zubehör & Set">
+                  <div className="flex flex-wrap gap-2">
+                    {items.map((it, i) => {
+                      const rawName = accessoryMap[it.accessory_id]
+                        ?? it.accessory_id.replace(/-[a-z0-9]{6,}$/, '').split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                      const label = it.qty > 1 ? `${it.qty}× ${rawName}` : rawName;
+                      return <span key={i} className="px-2.5 py-1 bg-brand-bg rounded-full text-xs font-body text-brand-steel">{label}</span>;
+                    })}
+                  </div>
+                </Section>
+              );
+            })()}
 
             {/* Versand & Tracking */}
             <Section title="Versand & Tracking">

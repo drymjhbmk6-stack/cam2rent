@@ -11,6 +11,7 @@ import {
 import { getStripe, getStripeWebhookSecretOrThrow } from '@/lib/stripe';
 import { isTestMode } from '@/lib/env-mode';
 import { createAdminNotification } from '@/lib/admin-notifications';
+import { parseMetadataAccessoryItems, itemsToLegacyIds } from '@/lib/booking-accessories';
 
 /**
  * Vergleicht die Summe einzelner Preiskomponenten gegen den von Stripe
@@ -199,9 +200,12 @@ async function handleSingleBooking(
 ) {
   const bookingId = await generateBookingId();
 
-  const accessories = meta.accessories
-    ? meta.accessories.split(',').filter(Boolean)
-    : [];
+  // Neue qty-aware Darstellung aus metadata.accessory_items (id:qty,...).
+  // Fallback auf meta.accessories (reine IDs) wenn Metadata alt ist.
+  const accessoryItems = parseMetadataAccessoryItems(meta.accessory_items, meta.accessories);
+  const accessories = accessoryItems.length > 0
+    ? itemsToLegacyIds(accessoryItems)
+    : (meta.accessories ? meta.accessories.split(',').filter(Boolean) : []);
 
   // Lieferadresse aus Profil
   let shippingAddress: string | null = null;
@@ -234,6 +238,7 @@ async function handleSingleBooking(
     shipping_price: parseFloat(meta.shipping_price ?? '0'),
     haftung: meta.haftung,
     accessories,
+    accessory_items: accessoryItems.length > 0 ? accessoryItems : null,
     price_rental: parseFloat(meta.price_rental ?? '0'),
     price_accessories: parseFloat(meta.price_accessories ?? '0'),
     price_haftung: parseFloat(meta.price_haftung ?? '0'),
@@ -278,6 +283,7 @@ async function handleSingleBooking(
       shippingMethod: meta.shipping_method,
       haftung: meta.haftung,
       accessories,
+      accessoryItems: accessoryItems.length > 0 ? accessoryItems : undefined,
       priceRental: parseFloat(meta.price_rental ?? '0'),
       priceAccessories: parseFloat(meta.price_accessories ?? '0'),
       priceHaftung: parseFloat(meta.price_haftung ?? '0'),

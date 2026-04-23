@@ -60,6 +60,9 @@ export async function POST(req: NextRequest) {
       customerEmail: booking.customer_email || '',
       productName: booking.product_name || '',
       accessories: Array.isArray(booking.accessories) ? booking.accessories : [],
+      accessoryItems: Array.isArray(booking.accessory_items) && booking.accessory_items.length > 0
+        ? booking.accessory_items as { accessory_id: string; qty: number }[]
+        : undefined,
       rentalFrom: fmtD(booking.rental_from),
       rentalTo: fmtD(booking.rental_to),
       rentalDays: booking.days || 1,

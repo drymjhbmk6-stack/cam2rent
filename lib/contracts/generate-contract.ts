@@ -129,6 +129,9 @@ export async function generateContractPDF(opts: {
   customerVerifiedAt?: string;
   productName: string;
   accessories: string[];
+  /** Optional: Zubehoer mit Stueckzahl. Wenn gesetzt, werden Eintraege mit
+   *  qty>1 als "Nx Name" in den Mietgegenstaenden aufgefuehrt. */
+  accessoryItems?: { accessory_id: string; qty: number }[];
   items?: MietgegenstandItem[];
   rentalFrom: string;
   rentalTo: string;
@@ -187,7 +190,12 @@ export async function generateContractPDF(opts: {
     opts.deposit ?? 0,
   );
 
-  // Items aus productName + accessories generieren falls nicht explizit übergeben
+  // Items aus productName + accessories generieren falls nicht explizit übergeben.
+  // Bei qty>1 wird der Bezeichner zu "Nx Name" (aus accessoryItems wenn vorhanden).
+  const accessoryEntries: { id: string; qty: number }[] = opts.accessoryItems && opts.accessoryItems.length > 0
+    ? opts.accessoryItems.map((i) => ({ id: i.accessory_id, qty: i.qty }))
+    : opts.accessories.map((id) => ({ id, qty: 1 }));
+
   const items: MietgegenstandItem[] = opts.items && opts.items.length > 0
     ? opts.items
     : [
@@ -199,14 +207,17 @@ export async function generateContractPDF(opts: {
           preis: opts.priceRental,
           wiederbeschaffungswert,
         },
-        ...opts.accessories.map((acc, i) => ({
-          position: i + 2,
-          bezeichnung: accessoryNameMap[acc] || acc,
-          seriennr: '',
-          tage: opts.rentalDays,
-          preis: 0,
-          wiederbeschaffungswert: 0,
-        })),
+        ...accessoryEntries.map((entry, i) => {
+          const baseName = accessoryNameMap[entry.id] || entry.id;
+          return {
+            position: i + 2,
+            bezeichnung: entry.qty > 1 ? `${entry.qty}x ${baseName}` : baseName,
+            seriennr: '',
+            tage: opts.rentalDays,
+            preis: 0,
+            wiederbeschaffungswert: 0,
+          };
+        }),
       ].filter(item => item.bezeichnung);
 
   // Haftungsoption bestimmen

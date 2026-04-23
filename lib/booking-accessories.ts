@@ -75,3 +75,31 @@ export function itemsToLegacyIds(items: BookingAccessoryItem[]): string[] {
 export function totalQty(items: BookingAccessoryItem[]): number {
   return items.reduce((sum, i) => sum + i.qty, 0);
 }
+
+/**
+ * Parst das Stripe-Metadata-Format "id1:2,id2:1,id3:3" zu Items.
+ * Fallback auf Legacy-Format (reine IDs ohne qty) mit qty=1.
+ */
+export function parseMetadataAccessoryItems(
+  metaAccessoryItems?: string,
+  metaAccessories?: string,
+): BookingAccessoryItem[] {
+  if (metaAccessoryItems && metaAccessoryItems.trim()) {
+    const out: BookingAccessoryItem[] = [];
+    for (const part of metaAccessoryItems.split(',').map((s) => s.trim()).filter(Boolean)) {
+      const [id, qtyStr] = part.split(':');
+      if (!id) continue;
+      const qty = Math.max(1, parseInt(qtyStr ?? '1', 10) || 1);
+      out.push({ accessory_id: id.trim(), qty });
+    }
+    if (out.length > 0) return out;
+  }
+  if (metaAccessories && metaAccessories.trim()) {
+    return metaAccessories
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map((id) => ({ accessory_id: id, qty: 1 }));
+  }
+  return [];
+}

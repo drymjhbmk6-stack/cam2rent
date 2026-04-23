@@ -30,6 +30,12 @@ export interface InvoiceData {
   shippingMethod?: string;
   haftung: string;
   accessories: string[];
+  /** Optional: Zubehoer mit Stueckzahl (qty-aware). Wenn nicht gesetzt, wird
+   *  accessories[] mit qty=1 pro Eintrag als Fallback verwendet. */
+  accessoryItems?: { accessory_id: string; qty: number }[];
+  /** Optional: Map accessory_id -> Name (vom Aufrufer resolvt, damit der
+   *  PDF-Code keine ID-Slugs wie "akku-abc123" zeigt). */
+  accessoryNames?: Record<string, string>;
   priceRental: number;
   priceAccessories: number;
   priceHaftung: number;
@@ -291,18 +297,26 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
     });
   }
 
-  // Zubehör
-  if (data.accessories.length > 0) {
-    for (const accId of data.accessories) {
-      const name = accId.replace(/-[a-z0-9]{6,}$/, '').split('-').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+  // Zubehör (qty-aware). Wenn accessoryItems mitgegeben wurden, nutzen wir die
+  // echten Stueckzahlen. Sonst: Legacy-Fallback (string[] mit qty=1 pro Eintrag).
+  const accItemsForInvoice: { accessory_id: string; qty: number }[] =
+    data.accessoryItems && data.accessoryItems.length > 0
+      ? data.accessoryItems
+      : data.accessories.map((id) => ({ accessory_id: id, qty: 1 }));
+  if (accItemsForInvoice.length > 0) {
+    const totalUnits = accItemsForInvoice.reduce((s, i) => s + i.qty, 0);
+    for (const item of accItemsForInvoice) {
+      const resolvedName = data.accessoryNames?.[item.accessory_id]
+        ?? item.accessory_id.replace(/-[a-z0-9]{6,}$/, '').split('-').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+      const linePrice = data.priceAccessories > 0 && totalUnits > 0
+        ? (data.priceAccessories * item.qty) / totalUnits
+        : 0;
       items.push({
         pos: pos++,
-        description: name,
+        description: resolvedName,
         subline: 'Zubehör',
-        qty: '1',
-        total: data.priceAccessories > 0 && data.accessories.length > 0
-          ? data.priceAccessories / data.accessories.length
-          : 0,
+        qty: String(item.qty),
+        total: linePrice,
       });
     }
   }

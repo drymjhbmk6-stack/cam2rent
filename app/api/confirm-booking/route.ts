@@ -7,6 +7,7 @@ import { assignUnitToBooking } from '@/lib/unit-assignment';
 import { createAdminNotification } from '@/lib/admin-notifications';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { calcPriceFromTable, type AdminProduct } from '@/lib/price-config';
+import { parseMetadataAccessoryItems, itemsToLegacyIds } from '@/lib/booking-accessories';
 import {
   sendBookingConfirmation,
   sendAdminNotification,
@@ -89,6 +90,9 @@ export async function POST(req: NextRequest) {
                 customerEmail: fullBooking.customer_email || '',
                 productName: fullBooking.product_name || '',
                 accessories: Array.isArray(fullBooking.accessories) ? fullBooking.accessories : [],
+                accessoryItems: Array.isArray(fullBooking.accessory_items) && fullBooking.accessory_items.length > 0
+                  ? fullBooking.accessory_items as { accessory_id: string; qty: number }[]
+                  : undefined,
                 rentalFrom: fmtD(fullBooking.rental_from), rentalTo: fmtD(fullBooking.rental_to),
                 rentalDays: fullBooking.days || 1,
                 priceRental: fullBooking.price_rental || 0, priceAccessories: fullBooking.price_accessories || 0,
@@ -118,9 +122,10 @@ export async function POST(req: NextRequest) {
 
     // 4. Parse Stripe metadata
     const meta = intent.metadata;
-    const accessories = meta.accessories
-      ? meta.accessories.split(',').filter(Boolean)
-      : [];
+    const accessoryItems = parseMetadataAccessoryItems(meta.accessory_items, meta.accessories);
+    const accessories = accessoryItems.length > 0
+      ? itemsToLegacyIds(accessoryItems)
+      : (meta.accessories ? meta.accessories.split(',').filter(Boolean) : []);
 
     // 4a. Preis-Plausibilitätsprüfung (Defense-in-Depth):
     // intent.amount ist der echte bei Stripe gezahlte Betrag (nicht manipulierbar).
@@ -219,6 +224,7 @@ export async function POST(req: NextRequest) {
       shipping_price: parseFloat(meta.shipping_price ?? '0'),
       haftung: meta.haftung,
       accessories,
+      accessory_items: accessoryItems.length > 0 ? accessoryItems : null,
       price_rental: parseFloat(meta.price_rental ?? '0'),
       price_accessories: parseFloat(meta.price_accessories ?? '0'),
       price_haftung: parseFloat(meta.price_haftung ?? '0'),
@@ -347,6 +353,7 @@ export async function POST(req: NextRequest) {
           customerCity: custCity,
           productName: meta.product_name || '',
           accessories,
+          accessoryItems: accessoryItems.length > 0 ? accessoryItems : undefined,
           serialNumber,
           rentalFrom: fmtDate(meta.rental_from),
           rentalTo: fmtDate(meta.rental_to),
@@ -395,6 +402,7 @@ export async function POST(req: NextRequest) {
         shippingMethod: meta.shipping_method,
         haftung: meta.haftung,
         accessories,
+        accessoryItems: accessoryItems.length > 0 ? accessoryItems : undefined,
         priceRental: parseFloat(meta.price_rental ?? '0'),
         priceAccessories: parseFloat(meta.price_accessories ?? '0'),
         priceHaftung: parseFloat(meta.price_haftung ?? '0'),

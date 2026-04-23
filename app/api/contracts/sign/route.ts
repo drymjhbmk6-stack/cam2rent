@@ -103,6 +103,9 @@ export async function POST(request: NextRequest) {
       customerCity: profile?.address_city,
       productName: booking.product_name || '',
       accessories: Array.isArray(booking.accessories) ? booking.accessories : [],
+      accessoryItems: Array.isArray(booking.accessory_items) && booking.accessory_items.length > 0
+        ? booking.accessory_items as { accessory_id: string; qty: number }[]
+        : undefined,
       rentalFrom,
       rentalTo,
       rentalDays: booking.days || 1,

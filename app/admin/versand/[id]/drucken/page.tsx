@@ -17,6 +17,7 @@ interface Booking {
   shipping_method: string | null;
   shipping_address: string | null;
   accessories: string[];
+  accessory_items?: { accessory_id: string; qty: number }[] | null;
   haftung: string;
   price_total: number;
   deposit: number;
@@ -50,7 +51,12 @@ export default function DruckenPage({ params }: { params: Promise<{ id: string }
   if (error || !booking) return <div className="p-8 text-center text-red-600">{error}</div>;
 
   const today = new Date().toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
-  const accList = Array.isArray(booking.accessories) ? booking.accessories : [];
+  // qty-aware: wenn accessory_items da ist, zeige eine Zeile pro Stueck (damit
+  // der Packer jede Einheit einzeln abhaken kann).
+  const rawItems: { accessory_id: string; qty: number }[] = Array.isArray(booking.accessory_items) && booking.accessory_items.length > 0
+    ? booking.accessory_items as { accessory_id: string; qty: number }[]
+    : (Array.isArray(booking.accessories) ? booking.accessories : []).map((id: string) => ({ accessory_id: id, qty: 1 }));
+  const accList: string[] = rawItems.flatMap((it) => Array.from({ length: it.qty }, () => it.accessory_id));
 
   return (
     <>
@@ -169,7 +175,7 @@ export default function DruckenPage({ params }: { params: Promise<{ id: string }
 
             {/* Zubehör */}
             {accList.map((accId, i) => (
-              <div key={accId} className={`flex items-center justify-between px-5 py-4 border-b border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
+              <div key={`${accId}-${i}`} className={`flex items-center justify-between px-5 py-4 border-b border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
                 <div>
                   <p className="font-semibold text-sm">{accName(accId)}</p>
                   <p className="text-xs text-gray-400">Zubehör</p>
