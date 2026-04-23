@@ -41,16 +41,24 @@ export async function GET(req: NextRequest) {
   // Einnahmen aus Buchungen — Test-Daten ausgeschlossen
   const { data: bookings } = await supabase
     .from('bookings')
-    .select('price_rental, price_accessories, price_haftung, shipping_price, price_total, status')
+    .select('price_rental, price_accessories, price_haftung, shipping_price, price_total, discount_amount, duration_discount, loyalty_discount, status, delivery_mode')
     .eq('is_test', false)
     .neq('status', 'cancelled')
     .gte('created_at', `${from}T00:00:00`)
     .lte('created_at', `${to}T23:59:59`);
 
-  const rental = (bookings || []).reduce((sum, b) => sum + (b.price_rental || 0) + (b.price_accessories || 0), 0);
+  const rental = (bookings || []).reduce((sum, b) => sum + (b.price_rental || 0), 0);
+  const accessories = (bookings || []).reduce((sum, b) => sum + (b.price_accessories || 0), 0);
   const haftung = (bookings || []).reduce((sum, b) => sum + (b.price_haftung || 0), 0);
   const shipping = (bookings || []).reduce((sum, b) => sum + (b.shipping_price || 0), 0);
-  const incomeTotal = rental + haftung + shipping;
+  const discounts = (bookings || []).reduce(
+    (sum, b) => sum + (b.discount_amount || 0) + (b.duration_discount || 0) + (b.loyalty_discount || 0),
+    0,
+  );
+  const bookingCount = (bookings || []).length;
+  const pickupCount = (bookings || []).filter((b) => b.delivery_mode === 'abholung').length;
+  const shippedCount = bookingCount - pickupCount;
+  const incomeTotal = rental + accessories + haftung + shipping - discounts;
 
   // Ausgaben
   const { data: expenses } = await supabase
@@ -89,10 +97,17 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     income: {
       rental,
+      accessories,
       haftung,
       shipping,
+      discounts,
       other: 0,
       total: incomeTotal,
+    },
+    bookingStats: {
+      count: bookingCount,
+      pickup: pickupCount,
+      shipped: shippedCount,
     },
     expenses: {
       categories,

@@ -7,7 +7,16 @@ import DateRangePicker, { type DateRange } from './shared/DateRangePicker';
 import ExportButton from './shared/ExportButton';
 
 interface EuerData {
-  income: { rental: number; haftung: number; shipping: number; other: number; total: number };
+  income: {
+    rental: number;
+    accessories: number;
+    haftung: number;
+    shipping: number;
+    discounts: number;
+    other: number;
+    total: number;
+  };
+  bookingStats?: { count: number; pickup: number; shipped: number };
   expenses: { categories: Array<{ category: string; label: string; amount: number }>; total: number };
   profit: number;
   taxMode: string;
@@ -91,15 +100,37 @@ function EuerReport() {
             <h3 style={{ color: '#e2e8f0', fontSize: 18, fontWeight: 700, margin: 0 }}>Einnahmen-Überschuss-Rechnung {data.period.from.slice(0, 4)}</h3>
             <span style={{ fontSize: 13, color: '#64748b' }}>{getTaxModeLabel(data.taxMode as 'kleinunternehmer' | 'regelbesteuerung')}</span>
           </div>
+          {data.bookingStats && data.bookingStats.count > 0 && (
+            <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', padding: '10px 14px', background: '#0f172a', border: '1px solid #1e293b', borderRadius: 8, marginBottom: 20, fontSize: 13 }}>
+              <span style={{ color: '#94a3b8' }}>
+                Buchungen: <span style={{ color: '#e2e8f0', fontWeight: 700 }}>{data.bookingStats.count}</span>
+              </span>
+              <span style={{ color: '#94a3b8' }}>
+                davon Versand: <span style={{ color: '#e2e8f0', fontWeight: 700 }}>{data.bookingStats.shipped}</span>
+              </span>
+              <span style={{ color: '#94a3b8' }}>
+                davon Abholung: <span style={{ color: '#e2e8f0', fontWeight: 700 }}>{data.bookingStats.pickup}</span>
+              </span>
+            </div>
+          )}
+
           <Section title="Einnahmen" color="#10b981">
-            <EuerRow label="Mieterlöse" amount={data.income.rental} />
-            <EuerRow label="Haftungsschutz" amount={data.income.haftung} />
-            <EuerRow label="Versandkostenpauschalen" amount={data.income.shipping} />
-            <EuerRow label="Sonstige Einnahmen" amount={data.income.other} />
+            <EuerRow label="Kamera-Miete" amount={data.income.rental} />
+            {data.income.accessories > 0 && <EuerRow label="Zubehör & Sets" amount={data.income.accessories} />}
+            {data.income.haftung > 0 && <EuerRow label="Haftungsschutz" amount={data.income.haftung} />}
+            {data.income.shipping > 0 && <EuerRow label="Versandkostenpauschalen" amount={data.income.shipping} />}
+            {data.income.other > 0 && <EuerRow label="Sonstige Einnahmen" amount={data.income.other} />}
+            {data.income.discounts > 0 && (
+              <EuerRow label="Gewährte Rabatte (Gutscheine, Dauer-/Treue-Rabatte)" amount={-data.income.discounts} negative />
+            )}
             <TotalRow label="Summe Einnahmen" amount={data.income.total} />
           </Section>
           <Section title="Ausgaben" color="#ef4444">
-            {data.expenses.categories.map(cat => <EuerRow key={cat.category} label={cat.label} amount={cat.amount} />)}
+            {data.expenses.categories.length === 0 ? (
+              <div style={{ color: '#64748b', fontSize: 13, padding: '8px 0' }}>Keine Ausgaben im Zeitraum erfasst.</div>
+            ) : (
+              data.expenses.categories.map(cat => <EuerRow key={cat.category} label={cat.label} amount={cat.amount} />)
+            )}
             <TotalRow label="Summe Ausgaben" amount={data.expenses.total} />
           </Section>
           <div style={{ borderTop: '3px solid #06b6d4', paddingTop: 16, marginTop: 8 }}>
@@ -129,11 +160,11 @@ function Section({ title, color, children }: { title: string; color: string; chi
   );
 }
 
-function EuerRow({ label, amount }: { label: string; amount: number }) {
+function EuerRow({ label, amount, negative }: { label: string; amount: number; negative?: boolean }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontSize: 14 }}>
       <span style={{ color: '#94a3b8' }}>{label}</span>
-      <span style={{ color: '#e2e8f0', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{formatCurrency(amount)}</span>
+      <span style={{ color: negative ? '#ef4444' : '#e2e8f0', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{formatCurrency(amount)}</span>
     </div>
   );
 }
