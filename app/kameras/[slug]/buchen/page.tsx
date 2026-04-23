@@ -1535,11 +1535,11 @@ export default function BuchenPage() {
                     </span>
                   </div>
 
-                  {selectedSet ? (
+                  {selectedSet && (
                     <div className="flex justify-between items-center text-sm font-body">
                       <span className="text-brand-steel">
                         {selectedSet.name}
-                        {selectedSet.pricingMode === 'perDay' && (
+                        {selectedSet.pricingMode === 'perDay' && selectedSet.price > 0 && (
                           <span className="text-xs text-brand-muted ml-1">
                             ({fmt(selectedSet.price)} € × {breakdown.days} {breakdown.days === 1 ? 'Tag' : 'Tage'})
                           </span>
@@ -1549,10 +1549,11 @@ export default function BuchenPage() {
                         {fmt(setPrice)} €
                       </span>
                     </div>
-                  ) : accessories.length > 0 && (
+                  )}
+                  {breakdown.accessoryPrice > 0 && (
                     <div className="flex justify-between items-center text-sm font-body">
                       <span className="text-brand-steel">
-                        Zubehör ({accessories.length} {accessories.length === 1 ? 'Artikel' : 'Artikel'})
+                        Zubehör{accessories.length > 0 ? ` (${accessories.length} ${accessories.length === 1 ? 'Artikel' : 'Artikel'})` : ''}
                       </span>
                       <span className="font-semibold text-brand-black">
                         {fmt(breakdown.accessoryPrice)} €
@@ -1902,11 +1903,11 @@ export default function BuchenPage() {
                       <span className="text-brand-steel">Miete</span>
                       <span className="text-brand-black">{fmt(breakdown.rentalPrice)} €</span>
                     </div>
-                    {selectedSet ? (
+                    {selectedSet && (
                       <div className="flex justify-between text-sm font-body">
                         <span className="text-brand-steel truncate pr-2">
                           {selectedSet.name}
-                          {selectedSet.pricingMode === 'perDay' && (
+                          {selectedSet.pricingMode === 'perDay' && selectedSet.price > 0 && (
                             <span className="text-xs text-brand-muted ml-1">
                               ({fmt(selectedSet.price)} € × {breakdown.days} {breakdown.days === 1 ? 'Tag' : 'Tage'})
                             </span>
@@ -1914,7 +1915,8 @@ export default function BuchenPage() {
                         </span>
                         <span className="text-brand-black flex-shrink-0">{fmt(setPrice)} €</span>
                       </div>
-                    ) : breakdown.accessoryPrice > 0 && (
+                    )}
+                    {breakdown.accessoryPrice > 0 && (
                       <div className="flex justify-between text-sm font-body">
                         <span className="text-brand-steel">
                           Zubehör{accessories.length > 0 ? ` (${accessories.length})` : ''}
