@@ -50,16 +50,28 @@ export default function AnlagenPage() {
   const [filterKind, setFilterKind] = useState<string>('');
   const [filterStatus, setFilterStatus] = useState<string>('active');
   const [search, setSearch] = useState('');
+  const [isTestMode, setIsTestMode] = useState(false);
+
+  useEffect(() => {
+    // Im Test-Modus zusaetzlich Test-Assets anzeigen — sonst sieht man die
+    // gerade nachgetragenen Altbestand-Assets nicht (die werden mit
+    // is_test=true gespeichert).
+    fetch('/api/env-mode')
+      .then((r) => r.json())
+      .then((d) => setIsTestMode(d?.mode === 'test'))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams();
     if (filterKind) params.set('kind', filterKind);
     if (filterStatus) params.set('status', filterStatus);
+    if (isTestMode) params.set('include_test', '1');
     fetch(`/api/admin/assets?${params.toString()}`)
       .then((r) => r.json())
       .then((d) => setAssets(d.assets ?? []))
       .finally(() => setLoading(false));
-  }, [filterKind, filterStatus]);
+  }, [filterKind, filterStatus, isTestMode]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
