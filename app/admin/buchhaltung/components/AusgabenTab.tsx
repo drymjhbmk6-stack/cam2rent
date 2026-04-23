@@ -33,6 +33,8 @@ export default function AusgabenTab() {
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: 'ok' | 'err' } | null>(null);
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const fetchExpenses = useCallback(async () => {
     setLoading(true);
@@ -96,7 +98,63 @@ export default function AusgabenTab() {
     }
   }
 
+  function toggleSelect(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll(ids: string[]) {
+    setSelectedIds((prev) => {
+      const allSelected = ids.every((id) => prev.has(id));
+      if (allSelected) {
+        const next = new Set(prev);
+        for (const id of ids) next.delete(id);
+        return next;
+      }
+      const next = new Set(prev);
+      for (const id of ids) next.add(id);
+      return next;
+    });
+  }
+
+  async function handleBulkDelete() {
+    const count = selectedIds.size;
+    if (count === 0) return;
+    if (!confirm(`${count} Ausgabe${count === 1 ? '' : 'n'} wirklich löschen?`)) return;
+    setBulkDeleting(true);
+    try {
+      // Parallel loeschen; bei Fehlern nach erstem fail zumindest die bisherigen
+      // Ergebnisse behalten.
+      const results = await Promise.allSettled(
+        [...selectedIds].map((id) =>
+          fetch(`/api/admin/buchhaltung/expenses/${id}`, { method: 'DELETE' }).then((r) => {
+            if (!r.ok) throw new Error(`${id}: ${r.status}`);
+            return id;
+          }),
+        ),
+      );
+      const ok = results.filter((r) => r.status === 'fulfilled').length;
+      const failed = results.length - ok;
+      setToast({
+        msg: failed > 0 ? `${ok} geloescht, ${failed} fehlgeschlagen` : `${ok} Ausgabe${ok === 1 ? '' : 'n'} geloescht`,
+        type: failed > 0 ? 'err' : 'ok',
+      });
+      setTimeout(() => setToast(null), 3500);
+      setSelectedIds(new Set());
+      fetchExpenses();
+    } finally {
+      setBulkDeleting(false);
+    }
+  }
+
   const filtered = categoryFilter ? expenses.filter(e => e.category === categoryFilter) : expenses;
+  const visibleIds = filtered.map((e) => e.id);
+  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
+  const someVisibleSelected = visibleIds.some((id) => selectedIds.has(id));
 
   const inputStyle: React.CSSProperties = {
     padding: '8px 12px', background: '#0f172a', border: '1px solid #1e293b',
@@ -109,11 +167,51 @@ export default function AusgabenTab() {
         <div style={{ position: 'fixed', top: 20, right: 20, zIndex: 999, padding: '12px 20px', borderRadius: 8, background: '#10b981', color: '#fff', fontWeight: 600, fontSize: 14 }}>{toast.msg}</div>
       )}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
-        <div style={{ display: 'flex', gap: 12 }}>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
           <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} style={{ ...inputStyle, cursor: 'pointer', width: 'auto', minWidth: 180 }}>
             <option value="">Alle Kategorien</option>
             {Object.entries(CATEGORY_LABELS).map(([val, label]) => <option key={val} value={val}>{label}</option>)}
           </select>
+          {selectedIds.size > 0 && (
+            <>
+              <span style={{ color: '#94a3b8', fontSize: 13 }}>
+                {selectedIds.size} ausgewählt
+              </span>
+              <button
+                onClick={handleBulkDelete}
+                disabled={bulkDeleting}
+                style={{
+                  padding: '8px 14px',
+                  borderRadius: 8,
+                  fontWeight: 600,
+                  fontSize: 13,
+                  cursor: bulkDeleting ? 'default' : 'pointer',
+                  background: '#ef4444',
+                  color: '#fff',
+                  border: 'none',
+                  opacity: bulkDeleting ? 0.6 : 1,
+                }}
+              >
+                {bulkDeleting ? 'Lösche...' : `${selectedIds.size} löschen`}
+              </button>
+              <button
+                onClick={() => setSelectedIds(new Set())}
+                disabled={bulkDeleting}
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: 8,
+                  fontWeight: 600,
+                  fontSize: 13,
+                  cursor: bulkDeleting ? 'default' : 'pointer',
+                  background: 'transparent',
+                  color: '#94a3b8',
+                  border: '1px solid #1e293b',
+                }}
+              >
+                Auswahl aufheben
+              </button>
+            </>
+          )}
         </div>
         <button onClick={() => { resetForm(); setShowForm(!showForm); }} style={{ padding: '8px 16px', borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: 'pointer', background: '#06b6d4', color: '#0f172a', border: 'none' }}>
           {showForm ? 'Abbrechen' : '+ Ausgabe erfassen'}
@@ -167,6 +265,16 @@ export default function AusgabenTab() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ borderBottom: '1px solid #1e293b' }}>
+                <th style={{ ...thStyle, width: 32, paddingLeft: 14 }}>
+                  <input
+                    type="checkbox"
+                    checked={allVisibleSelected}
+                    ref={(el) => { if (el) el.indeterminate = !allVisibleSelected && someVisibleSelected; }}
+                    onChange={() => toggleSelectAll(visibleIds)}
+                    aria-label="Alle auswählen"
+                    style={{ cursor: 'pointer' }}
+                  />
+                </th>
                 <th style={thStyle}>Datum</th>
                 <th style={thStyle}>Kategorie</th>
                 <th style={thStyle}>Beschreibung</th>
@@ -177,12 +285,21 @@ export default function AusgabenTab() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={6} style={{ padding: 32, textAlign: 'center', color: '#64748b' }}>Lade...</td></tr>
+                <tr><td colSpan={7} style={{ padding: 32, textAlign: 'center', color: '#64748b' }}>Lade...</td></tr>
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={6} style={{ padding: 32, textAlign: 'center', color: '#64748b' }}>Noch keine Ausgaben erfasst</td></tr>
+                <tr><td colSpan={7} style={{ padding: 32, textAlign: 'center', color: '#64748b' }}>Noch keine Ausgaben erfasst</td></tr>
               ) : (
                 filtered.map(exp => (
-                  <tr key={exp.id} style={{ borderBottom: '1px solid #1e293b20' }}>
+                  <tr key={exp.id} style={{ borderBottom: '1px solid #1e293b20', background: selectedIds.has(exp.id) ? 'rgba(6,182,212,0.05)' : undefined }}>
+                    <td style={{ padding: '10px 8px', paddingLeft: 14 }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(exp.id)}
+                        onChange={() => toggleSelect(exp.id)}
+                        aria-label={`${exp.description} auswählen`}
+                        style={{ cursor: 'pointer' }}
+                      />
+                    </td>
                     <td style={{ padding: '10px 8px', color: '#94a3b8' }}>{fmtDateShort(exp.expense_date)}</td>
                     <td style={{ padding: '10px 8px' }}>
                       <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600, background: '#1e293b', color: '#94a3b8' }}>
