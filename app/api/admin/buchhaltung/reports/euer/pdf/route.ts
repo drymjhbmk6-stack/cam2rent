@@ -48,7 +48,18 @@ export async function GET(req: NextRequest) {
     `davon Abholung;${data.bookingStats?.pickup ?? 0}`,
     '',
     'AUSGABEN',
-    ...(data.expenses.categories || []).map((c: { label: string; amount: number }) => `${c.label};${fmt(c.amount)}`),
+    ...(data.expenses.categories || []).flatMap((c: {
+      label: string;
+      amount: number;
+      items?: Array<{ date: string; vendor: string; description: string; amount: number }>;
+    }) => {
+      const lines: string[] = [`${c.label};${fmt(c.amount)}`];
+      for (const it of c.items ?? []) {
+        const desc = [it.vendor, it.description].filter(Boolean).join(' · ').replace(/;/g, ',');
+        lines.push(`  ${it.date || ''};${desc};${fmt(it.amount)}`);
+      }
+      return lines;
+    }),
     `Summe Ausgaben;${fmt(data.expenses.total)}`,
     '',
     `GEWINN VOR STEUERN;${fmt(data.profit)}`,

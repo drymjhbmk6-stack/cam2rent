@@ -6,6 +6,14 @@ import { getTaxModeLabel } from '@/lib/accounting/tax';
 import DateRangePicker, { type DateRange } from './shared/DateRangePicker';
 import ExportButton from './shared/ExportButton';
 
+interface ExpenseItem {
+  id: string;
+  date: string;
+  description: string;
+  vendor: string;
+  amount: number;
+}
+
 interface EuerData {
   income: {
     rental: number;
@@ -17,7 +25,10 @@ interface EuerData {
     total: number;
   };
   bookingStats?: { count: number; pickup: number; shipped: number };
-  expenses: { categories: Array<{ category: string; label: string; amount: number }>; total: number };
+  expenses: {
+    categories: Array<{ category: string; label: string; amount: number; items?: ExpenseItem[] }>;
+    total: number;
+  };
   profit: number;
   taxMode: string;
   period: { from: string; to: string };
@@ -129,7 +140,7 @@ function EuerReport() {
             {data.expenses.categories.length === 0 ? (
               <div style={{ color: '#64748b', fontSize: 13, padding: '8px 0' }}>Keine Ausgaben im Zeitraum erfasst.</div>
             ) : (
-              data.expenses.categories.map(cat => <EuerRow key={cat.category} label={cat.label} amount={cat.amount} />)
+              data.expenses.categories.map(cat => <ExpenseCategoryRow key={cat.category} cat={cat} />)
             )}
             <TotalRow label="Summe Ausgaben" amount={data.expenses.total} />
           </Section>
@@ -165,6 +176,89 @@ function EuerRow({ label, amount, negative }: { label: string; amount: number; n
     <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontSize: 14 }}>
       <span style={{ color: '#94a3b8' }}>{label}</span>
       <span style={{ color: negative ? '#ef4444' : '#e2e8f0', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{formatCurrency(amount)}</span>
+    </div>
+  );
+}
+
+/**
+ * Aufklappbare Ausgaben-Kategorie: Klick auf die Zeile zeigt die einzelnen
+ * Expense-Posten (Datum, Anbieter, Beschreibung, Betrag) darunter.
+ */
+function ExpenseCategoryRow({ cat }: {
+  cat: { category: string; label: string; amount: number; items?: ExpenseItem[] };
+}) {
+  const [open, setOpen] = useState(false);
+  const hasItems = (cat.items?.length ?? 0) > 0;
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => hasItems && setOpen(!open)}
+        style={{
+          width: '100%',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          padding: '6px 0',
+          fontSize: 14,
+          background: 'transparent',
+          border: 'none',
+          color: 'inherit',
+          cursor: hasItems ? 'pointer' : 'default',
+          textAlign: 'left',
+        }}
+      >
+        <span style={{ color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 6 }}>
+          {hasItems && (
+            <span style={{
+              display: 'inline-block',
+              width: 10,
+              color: '#475569',
+              transform: open ? 'rotate(90deg)' : 'none',
+              transition: 'transform 0.15s',
+              fontSize: 10,
+            }}>▶</span>
+          )}
+          {cat.label}
+          {hasItems && <span style={{ color: '#475569', fontSize: 11 }}>({cat.items!.length})</span>}
+        </span>
+        <span style={{ color: '#e2e8f0', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+          {formatCurrency(cat.amount)}
+        </span>
+      </button>
+      {open && hasItems && (
+        <div style={{
+          marginLeft: 16,
+          marginTop: 4,
+          marginBottom: 8,
+          paddingLeft: 12,
+          borderLeft: '2px solid #1e293b',
+        }}>
+          {cat.items!.map((it) => (
+            <div
+              key={it.id}
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '90px 1fr auto',
+                gap: 10,
+                padding: '4px 0',
+                fontSize: 12,
+                color: '#64748b',
+                borderBottom: '1px solid #0f172a',
+              }}
+            >
+              <span>{it.date ? fmtDateShort(it.date) : '–'}</span>
+              <span style={{ color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {it.vendor ? `${it.vendor} · ` : ''}{it.description || '—'}
+              </span>
+              <span style={{ color: '#cbd5e1', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+                {formatCurrency(it.amount)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
