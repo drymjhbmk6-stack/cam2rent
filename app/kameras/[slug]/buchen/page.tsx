@@ -507,14 +507,22 @@ export default function BuchenPage() {
             map[a.id] = { remaining: a.available_qty_remaining, compatible: a.compatible };
           }
           setAccAvailability(map);
-          // Nicht mehr verfügbare Auswahlen entfernen
+          // Nicht mehr verfügbare Auswahlen entfernen. Set-qty wird dabei
+          // mit abgezogen: wenn ein gewaehltes Set das Zubehoer bereits
+          // komplett belegt, kann es nicht zusaetzlich einzeln gebucht werden.
           setAccessories((prev) => prev.filter((id) => {
             const a = map[id];
-            return !a || (a.remaining > 0 && a.compatible);
+            if (!a) return true;
+            if (!a.compatible) return false;
+            const setQty = selectedSet?.accessory_items?.find((i) => i.accessory_id === id)?.qty ?? 0;
+            return a.remaining - setQty > 0;
           }));
         }
       })
       .catch(() => {});
+    // selectedSet absichtlich nicht als Dependency — Set-Wechsel cleart
+    // accessories bereits via setAccessories([]) im Radio-Handler.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [range, deliveryMode, product?.id]);
 
   const toggleAccessory = useCallback((id: string) => {
@@ -617,6 +625,16 @@ export default function BuchenPage() {
       setRange({ from: fromDate });
     }
   }, []);
+
+  // Wie oft ist dieses Accessory bereits durch das gewaehlte Set belegt?
+  // Wichtig fuer die Einzel-Zubehoer-Verfuegbarkeit: das Set nimmt Stueckzahlen
+  // aus dem Lager heraus, die nicht zusaetzlich ueber die Checkboxen buchbar
+  // sein duerfen.
+  const getSetQty = useCallback((accId: string): number => {
+    if (!selectedSet?.accessory_items) return 0;
+    const item = selectedSet.accessory_items.find((i) => i.accessory_id === accId);
+    return item?.qty ?? 0;
+  }, [selectedSet]);
 
   // Set-Items filtern: Wenn ein Upgrade gewählt wurde, Base-Item ersetzen
   const getFilteredSetItems = useCallback((): string[] => {
@@ -1078,7 +1096,12 @@ export default function BuchenPage() {
                       const checked = accessories.includes(acc.id);
                       const days = breakdown?.days ?? 0;
                       const avail = accAvailability[acc.id];
-                      const isBookedOut = avail && avail.remaining <= 0;
+                      const setQty = getSetQty(acc.id);
+                      // Effektive Restmenge: API-Restmenge abzueglich der durch das
+                      // gewaehlte Set bereits belegten Stueckzahl.
+                      const effectiveRemaining = (avail?.remaining ?? Number.POSITIVE_INFINITY) - setQty;
+                      const blockedBySet = setQty > 0 && effectiveRemaining <= 0;
+                      const isBookedOut = !!avail && effectiveRemaining <= 0;
                       const disabled = isBookedOut;
                       return (
                         <label key={acc.id} className={`flex flex-col px-4 py-2.5 transition-colors ${disabled ? 'opacity-50 cursor-not-allowed bg-brand-bg dark:bg-gray-800' : checked ? 'bg-accent-blue-soft/30 cursor-pointer' : 'bg-white dark:bg-gray-900 hover:bg-brand-bg dark:hover:bg-gray-800 cursor-pointer'}`}>
@@ -1099,7 +1122,11 @@ export default function BuchenPage() {
                             )}
                           </div>
                           {isBookedOut && (
-                            <span className="text-xs text-status-error mt-1 ml-7">Für diesen Zeitraum nicht verfügbar</span>
+                            <span className="text-xs text-status-error mt-1 ml-7">
+                              {blockedBySet
+                                ? `Bereits ${setQty}× im gewählten Set enthalten — Bestand ausgeschöpft`
+                                : 'Für diesen Zeitraum nicht verfügbar'}
+                            </span>
                           )}
                         </label>
                       );

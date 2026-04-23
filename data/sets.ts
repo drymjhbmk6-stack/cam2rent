@@ -13,6 +13,8 @@ export interface RentalSet {
   description: string;
   /** Kurze Liste der enthaltenen Artikel (für UI-Anzeige) */
   includedItems: string[];
+  /** Maschinenlesbare Liste der enthaltenen Artikel mit Anzahl (aus DB) */
+  accessory_items?: { accessory_id: string; qty: number }[];
   /** Optionales Badge (z.B. "Beliebt") */
   badge?: string;
   badgeColor?: string;
