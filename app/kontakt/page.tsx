@@ -17,7 +17,7 @@ export default function KontaktPage() {
           dringend kennzeichnen.
         </p>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-10">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-10">
           <div className="bg-brand-bg dark:bg-brand-black rounded-card p-5">
             <div className="flex items-center gap-3 mb-3">
               <span className="text-xl">📧</span>
@@ -47,6 +47,24 @@ export default function KontaktPage() {
             </a>
             <p className="font-body text-brand-muted dark:text-gray-500 text-xs mt-1">
               Mo–Fr: 10:00 – 17:00 Uhr · Bitte Bestellnummer bereithalten
+            </p>
+          </div>
+
+          <div className="bg-brand-bg dark:bg-brand-black rounded-card p-5">
+            <div className="flex items-center gap-3 mb-3">
+              <span className="text-xl">💬</span>
+              <h2 className="font-heading font-semibold text-brand-black dark:text-white">WhatsApp</h2>
+            </div>
+            <a
+              href={BUSINESS.whatsappUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-body text-accent-blue hover:underline text-sm"
+            >
+              Chat starten
+            </a>
+            <p className="font-body text-brand-muted dark:text-gray-500 text-xs mt-1">
+              Antwort meist innerhalb weniger Stunden — auch am Wochenende
             </p>
           </div>
         </div>
@@ -83,11 +101,11 @@ export default function KontaktPage() {
               <tbody className="text-brand-steel dark:text-gray-400">
                 <tr className="border-b border-brand-border/50 dark:border-white/5">
                   <td className="py-2 px-3">Montag – Freitag</td>
-                  <td className="py-2 px-3">10:00 – 17:00 Uhr (Telefon & E-Mail)</td>
+                  <td className="py-2 px-3">10:00 – 17:00 Uhr (Telefon, WhatsApp & E-Mail)</td>
                 </tr>
                 <tr className="border-b border-brand-border/50 dark:border-white/5">
                   <td className="py-2 px-3">Samstag & Sonntag</td>
-                  <td className="py-2 px-3">Nur per E-Mail</td>
+                  <td className="py-2 px-3">Nur per WhatsApp & E-Mail</td>
                 </tr>
               </tbody>
             </table>
