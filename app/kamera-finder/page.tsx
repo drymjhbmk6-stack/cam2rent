@@ -181,27 +181,72 @@ const questions: Question[] = [
 
 /* ───────────────────────── Recommendation logic ──────────────────────────── */
 
-function parseWaterproofDepth(wp: string): number {
-  const match = wp.match(/(\d+)/);
-  return match ? parseInt(match[1], 10) : 0;
+/**
+ * Sucht den Wert einer Spec sowohl in adminSpecs als auch in den statischen
+ * product.specs. Matching erfolgt fuzzy per Substring-Vergleich ueber mehrere
+ * Kandidaten — so greifen auch Admin-Specs mit deutschen oder frei gewaehlten
+ * IDs/Namen (Wasserdicht, Aufloesung, Akku-Kapazitaet, ...).
+ */
+function findSpecValue(product: Product, candidates: string[]): string {
+  // 1) adminSpecs (flexibel, aus DB gepflegt)
+  if (product.adminSpecs) {
+    for (const spec of product.adminSpecs) {
+      const hay = `${spec.id ?? ''} ${spec.name ?? ''}`.toLowerCase();
+      if (candidates.some((c) => hay.includes(c.toLowerCase()))) {
+        return String(spec.value ?? '');
+      }
+    }
+  }
+  // 2) Legacy product.specs mit festen Keys
+  const rec = product.specs as unknown as Record<string, string>;
+  for (const key of Object.keys(rec)) {
+    if (candidates.some((c) => key.toLowerCase().includes(c.toLowerCase()))) {
+      const v = rec[key];
+      if (v) return String(v);
+    }
+  }
+  return '';
 }
 
-function parseResolutionRank(res: string): number {
-  const lower = res.toLowerCase();
-  if (lower.includes('8k')) return 3;
-  if (lower.includes('5.3k') || lower.includes('5k')) return 2;
-  if (lower.includes('4k')) return 1;
+function parseFirstInt(s: string, fallback = 0): number {
+  const match = s.match(/(\d+)/);
+  return match ? parseInt(match[1], 10) : fallback;
+}
+
+function parseWaterproofDepth(product: Product): number {
+  return parseFirstInt(findSpecValue(product, ['waterproof', 'wasser', 'tauch', 'depth', 'tiefe']));
+}
+
+function parseResolutionRank(product: Product): number {
+  const raw = findSpecValue(product, ['resolution', 'aufloesung', 'auflösung', 'video']).toLowerCase()
+    || product.name.toLowerCase();
+  if (raw.includes('8k')) return 3;
+  if (raw.includes('5.3k') || raw.includes('5k')) return 2;
+  if (raw.includes('4k')) return 1;
   return 0;
 }
 
-function parseFps(fps: string): number {
-  const match = fps.match(/(\d+)/);
-  return match ? parseInt(match[1], 10) : 30;
+function parseFps(product: Product): number {
+  return parseFirstInt(findSpecValue(product, ['fps', 'bildrate', 'framerate', 'frames']), 30);
 }
 
-function parseBattery(battery: string): number {
-  const match = battery.match(/(\d+)/);
-  return match ? parseInt(match[1], 10) : 0;
+function parseBattery(product: Product): number {
+  return parseFirstInt(findSpecValue(product, ['battery', 'akku', 'mah']));
+}
+
+/** Produkt-Klasse ableiten aus category + name. Liefert einen groben
+ *  Fallback fuer das Scoring, wenn adminSpecs noch unvollstaendig gepflegt
+ *  sind — damit auch ohne Specs jede Kamera einen eigenen Profil-Score
+ *  bekommt und die Empfehlung spuerbar variiert.
+ */
+type CamClass = '360' | 'action' | 'gimbal' | 'other';
+function detectCamClass(product: Product): CamClass {
+  const n = product.name.toLowerCase();
+  const c = (product.category ?? '').toLowerCase();
+  if (c.includes('360') || n.includes('360') || n.includes('insta360') || n.includes(' x4') || n.includes(' x5')) return '360';
+  if (n.includes('pocket') || n.includes('gimbal')) return 'gimbal';
+  if (c.includes('action') || n.includes('gopro') || n.includes('osmo action') || n.includes('hero') || n.includes('ace pro')) return 'action';
+  return 'other';
 }
 
 interface ScoredProduct {
@@ -217,35 +262,43 @@ function computeRecommendations(answers: Answers, products: Product[]): ScoredPr
       let score = 0;
       const reasons: string[] = [];
 
-      const depth = parseWaterproofDepth(product.specs.waterproof);
-      const resRank = parseResolutionRank(product.specs.resolution);
-      const fps = parseFps(product.specs.fps);
-      const battery = parseBattery(product.specs.battery);
+      const depth = parseWaterproofDepth(product);
+      const resRank = parseResolutionRank(product);
+      const fps = parseFps(product);
+      const battery = parseBattery(product);
+      const camClass = detectCamClass(product);
 
       // --- Usage ---
       switch (answers.usage) {
         case 'sport':
-          if (fps >= 120) { score += 30; reasons.push(`${product.specs.fps} für flüssige Action-Aufnahmen`); }
-          else if (fps >= 60) { score += 15; reasons.push(`${product.specs.fps} für Sport-Videos`); }
-          if (product.specs.resolution.toLowerCase().includes('360')) { score += 10; reasons.push('360\u00b0-Perspektive ideal für dynamische Szenen'); }
+          if (fps >= 120) { score += 30; reasons.push(`${fps} fps fuer fluessige Action-Aufnahmen`); }
+          else if (fps >= 60) { score += 15; reasons.push(`${fps} fps fuer Sport-Videos`); }
+          if (camClass === 'action') { score += 25; reasons.push('Robuste Action-Cam, ideal fuer Sport'); }
+          if (camClass === '360') { score += 10; reasons.push('360°-Perspektive fuer dynamische Szenen'); }
           break;
         case 'travel':
-          if (battery >= 1900) { score += 25; reasons.push(`${product.specs.battery} Akku für lange Drehtage`); }
-          else if (battery >= 1770) { score += 15; reasons.push('Gute Akkulaufzeit für unterwegs'); }
-          if (resRank >= 2) { score += 10; reasons.push('Hohe Auflösung für beeindruckende Reisevideos'); }
+          if (battery >= 1900) { score += 25; reasons.push(`${battery} mAh Akku fuer lange Drehtage`); }
+          else if (battery >= 1500) { score += 15; reasons.push('Gute Akkulaufzeit fuer unterwegs'); }
+          if (resRank >= 2) { score += 10; reasons.push('Hohe Aufloesung fuer Reisevideos'); }
+          if (camClass === '360') { score += 15; reasons.push('360°-Aufnahmen fuer einzigartige Reise-Erinnerungen'); }
+          if (camClass === 'gimbal') { score += 20; reasons.push('Gimbal fuer ruhige Vlog-Shots'); }
           break;
         case 'underwater':
-          if (depth >= 40) { score += 35; reasons.push(`Wasserdicht bis ${depth}m \u2013 perfekt zum Tauchen`); }
-          else if (depth >= 10) { score += 20; reasons.push(`Wasserdicht bis ${depth}m für Unterwasseraufnahmen`); }
+          if (depth >= 40) { score += 35; reasons.push(`Wasserdicht bis ${depth} m – perfekt zum Tauchen`); }
+          else if (depth >= 10) { score += 20; reasons.push(`Wasserdicht bis ${depth} m fuer Unterwasseraufnahmen`); }
+          if (camClass === 'action') { score += 15; reasons.push('Action-Cam-Gehaeuse fuer Wassereinsatz'); }
+          if (camClass === 'gimbal') { score -= 25; }
           break;
         case 'timelapse':
-          if (resRank >= 2) { score += 25; reasons.push('Hohe Auflösung für detailreiche Zeitraffer'); }
-          if (battery >= 1900) { score += 15; reasons.push('Langer Akku für ausgedehnte Zeitraffer-Aufnahmen'); }
+          if (resRank >= 2) { score += 25; reasons.push('Hohe Aufloesung fuer detailreiche Zeitraffer'); }
+          if (battery >= 1900) { score += 15; reasons.push('Langer Akku fuer ausgedehnte Zeitraffer'); }
+          if (camClass === '360') { score += 10; reasons.push('360°-Zeitraffer sind beeindruckend'); }
           break;
         case 'events':
-          if (battery >= 1800) { score += 20; reasons.push('Langer Akku für Event-Aufnahmen'); }
-          if (resRank >= 1) { score += 10; reasons.push('Gute Videoqualität für Erinnerungen'); }
-          if (product.specs.resolution.toLowerCase().includes('360')) { score += 15; reasons.push('360\u00b0-Video fängt die ganze Atmosphäre ein'); }
+          if (battery >= 1800) { score += 20; reasons.push('Langer Akku fuer Event-Aufnahmen'); }
+          if (resRank >= 1) { score += 10; reasons.push('Gute Videoqualitaet fuer Erinnerungen'); }
+          if (camClass === '360') { score += 25; reasons.push('360°-Video faengt die ganze Atmosphaere ein'); }
+          if (camClass === 'gimbal') { score += 15; reasons.push('Stabile Aufnahmen auf Feiern'); }
           break;
         default:
           score += 10;
@@ -256,22 +309,27 @@ function computeRecommendations(answers: Answers, products: Product[]): ScoredPr
       // --- Waterproof ---
       switch (answers.waterproof) {
         case 'deep':
-          if (depth >= 40) { score += 30; reasons.push(`Bis ${depth}m Tauchtiefe ohne Gehaeuse`); }
-          else if (depth >= 10) { score += 15; }
+          if (depth >= 40) { score += 30; reasons.push(`Bis ${depth} m Tauchtiefe ohne Gehaeuse`); }
+          else if (depth >= 10) { score += 15; reasons.push(`Wasserdicht bis ${depth} m`); }
+          else if (camClass === 'action') { score += 5; reasons.push('Action-Cam mit optionalem Tauchgehaeuse'); }
+          else { score -= 15; }
           break;
         case 'splash':
-          if (depth >= 10) { score += 15; }
+          if (depth >= 10) { score += 15; reasons.push('Spritzwassergeschuetzt'); }
+          else if (camClass === 'action' || camClass === '360') { score += 8; }
           break;
         case 'none':
+          score += 3;
           break;
       }
 
       // --- Quality ---
       switch (answers.quality) {
         case '4k_plus':
-          if (resRank >= 3) { score += 25; reasons.push(`${product.specs.resolution} \u2013 gestochen scharfe Aufnahmen`); }
-          else if (resRank >= 2) { score += 20; }
-          else if (resRank >= 1) { score += 10; }
+          if (resRank >= 3) { score += 25; reasons.push('8K – gestochen scharfe Aufnahmen'); }
+          else if (resRank >= 2) { score += 20; reasons.push('5K+ Aufloesung'); }
+          else if (resRank >= 1) { score += 10; reasons.push('4K Aufloesung'); }
+          else { score -= 5; }
           break;
         case 'hd':
           score += 10;
@@ -285,16 +343,16 @@ function computeRecommendations(answers: Answers, products: Product[]): ScoredPr
       const ppd = product.pricePerDay;
       switch (answers.budget) {
         case 'low':
-          if (ppd <= 12) { score += 20; reasons.push(`Nur ${ppd} \u20ac/Tag`); }
-          else { score -= 10; }
+          if (ppd <= 12) { score += 20; reasons.push(`Nur ${ppd} €/Tag`); }
+          else { score -= 15; }
           break;
         case 'mid':
-          if (ppd >= 12 && ppd <= 16) { score += 20; reasons.push(`${ppd} \u20ac/Tag \u2013 im Budget`); }
-          else if (ppd < 12) { score += 10; }
+          if (ppd >= 12 && ppd <= 16) { score += 20; reasons.push(`${ppd} €/Tag – im Budget`); }
+          else if (ppd < 12) { score += 10; reasons.push(`Guenstig mit ${ppd} €/Tag`); }
           else { score -= 5; }
           break;
         case 'high':
-          if (ppd > 16) { score += 15; }
+          if (ppd > 16) { score += 15; reasons.push(`Premium-Ausstattung (${ppd} €/Tag)`); }
           else { score += 5; }
           break;
         case 'any':
@@ -304,8 +362,15 @@ function computeRecommendations(answers: Answers, products: Product[]): ScoredPr
       // --- Availability bonus ---
       if (product.available) {
         score += 10;
-        reasons.push('Sofort verfügbar');
+        reasons.push('Sofort verfuegbar');
       }
+
+      // Tie-Breaker: bei gleichem Score streuen wir leicht pro Product-ID,
+      // damit nicht immer die erste Kamera in der Liste als "Beste" gewinnt,
+      // wenn die Specs noch unvollstaendig sind.
+      let seed = 0;
+      for (let i = 0; i < product.id.length; i++) seed = (seed * 31 + product.id.charCodeAt(i)) | 0;
+      score += (Math.abs(seed) % 5) / 10;
 
       return { product, score, reasons };
     });
