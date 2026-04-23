@@ -8,7 +8,7 @@ const nextConfig: NextConfig = {
   compress: true,
   // Große Pakete automatisch tree-shaken
   experimental: {
-    optimizePackageImports: ['@supabase/supabase-js', 'date-fns', 'lucide-react'],
+    optimizePackageImports: ['@supabase/supabase-js', 'date-fns'],
   },
   // Unnötige Dateien vom Output-Tracing ausschließen (spart RAM beim Build)
   outputFileTracingExcludes: {

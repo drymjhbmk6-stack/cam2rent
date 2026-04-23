@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { createAdminNotification } from '@/lib/admin-notifications';
+import { rateLimit, getClientIp } from '@/lib/rate-limit';
+
+const waitlistLimiter = rateLimit({ maxAttempts: 10, windowMs: 60 * 60 * 1000 }); // 10/h
 
 /**
  * POST /api/waitlist
@@ -14,6 +17,11 @@ import { createAdminNotification } from '@/lib/admin-notifications';
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export async function POST(req: NextRequest) {
+  const ip = getClientIp(req);
+  if (!waitlistLimiter.check(ip).success) {
+    return NextResponse.json({ error: 'Zu viele Anfragen. Bitte versuche es später erneut.' }, { status: 429 });
+  }
+
   let body: { productId?: string; email?: string; source?: string; useCase?: string };
   try {
     body = await req.json();

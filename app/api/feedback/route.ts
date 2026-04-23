@@ -2,8 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { createServiceClient } from '@/lib/supabase';
+import { rateLimit, getClientIp } from '@/lib/rate-limit';
+
+const feedbackLimiter = rateLimit({ maxAttempts: 10, windowMs: 60 * 60 * 1000 }); // 10/h
 
 export async function POST(req: NextRequest) {
+  const ip = getClientIp(req);
+  if (!feedbackLimiter.check(ip).success) {
+    return NextResponse.json({ error: 'Zu viele Anfragen. Bitte versuche es später erneut.' }, { status: 429 });
+  }
+
   const cookieStore = await cookies();
   const supabaseAuth = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

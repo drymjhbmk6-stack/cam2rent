@@ -3,7 +3,7 @@ import { createServiceClient } from '@/lib/supabase';
 
 /**
  * GET /api/admin/id-document-url?path=userId/front.jpg
- * Gibt eine temporäre Signed URL für ein Ausweis-Bild zurück (60 Min gültig).
+ * Gibt eine temporäre Signed URL für ein Ausweis-Bild zurück (5 Min gültig).
  */
 export async function GET(req: NextRequest) {
   try {
@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
 
     const { data, error } = await supabase.storage
       .from('id-documents')
-      .createSignedUrl(filePath, 3600); // 60 Minuten gueltig
+      .createSignedUrl(filePath, 300); // 5 Min — DSGVO: kurzlebig, harmonisiert mit /api/admin/kunden/id-document
 
     if (error || !data?.signedUrl) {
       console.error('Signed URL error:', error);

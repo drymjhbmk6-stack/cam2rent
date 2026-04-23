@@ -3,6 +3,9 @@ import { createServiceClient } from '@/lib/supabase';
 import { sendAndLog } from '@/lib/email';
 import { BUSINESS } from '@/lib/business-config';
 import { getSiteUrl } from '@/lib/env-mode';
+import { rateLimit, getClientIp } from '@/lib/rate-limit';
+
+const surveyLimiter = rateLimit({ maxAttempts: 20, windowMs: 60 * 60 * 1000 }); // 20/h
 
 /**
  * POST /api/survey
@@ -27,6 +30,11 @@ function generateCouponCode(bookingId: string): string {
 }
 
 export async function POST(req: NextRequest) {
+  const ip = getClientIp(req);
+  if (!surveyLimiter.check(ip).success) {
+    return NextResponse.json({ error: 'Zu viele Anfragen. Bitte versuche es später erneut.' }, { status: 429 });
+  }
+
   try {
     const { bookingId, rating, feedback, email } = await req.json() as {
       bookingId: string;
