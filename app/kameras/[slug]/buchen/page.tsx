@@ -630,11 +630,32 @@ export default function BuchenPage() {
   // Wichtig fuer die Einzel-Zubehoer-Verfuegbarkeit: das Set nimmt Stueckzahlen
   // aus dem Lager heraus, die nicht zusaetzlich ueber die Checkboxen buchbar
   // sein duerfen.
+  //
+  // Matching in zwei Stufen:
+  // 1. Direkter accessory_id-Match (normalfall).
+  // 2. Name-Match: wenn der Zubehoer-Katalog zwei unterschiedliche Eintraege
+  //    mit identischem Namen enthaelt (Daten-Duplikate in der DB), sollen
+  //    Set-Belegung und Einzel-Checkbox trotzdem als dasselbe Item zaehlen.
+  //    Sonst wird der Einzel-Eintrag nicht geblockt, obwohl das Set ihn
+  //    bereits mit belegt.
   const getSetQty = useCallback((accId: string): number => {
     if (!selectedSet?.accessory_items) return 0;
-    const item = selectedSet.accessory_items.find((i) => i.accessory_id === accId);
-    return item?.qty ?? 0;
-  }, [selectedSet]);
+    const targetName = dbAccessories.find((a) => a.id === accId)?.name ?? null;
+    let total = 0;
+    for (const item of selectedSet.accessory_items) {
+      if (item.accessory_id === accId) {
+        total += item.qty;
+        continue;
+      }
+      if (targetName) {
+        const setAccName = dbAccessories.find((a) => a.id === item.accessory_id)?.name;
+        if (setAccName && setAccName === targetName) {
+          total += item.qty;
+        }
+      }
+    }
+    return total;
+  }, [selectedSet, dbAccessories]);
 
   // Set-Items filtern: Wenn ein Upgrade gewählt wurde, Base-Item ersetzen
   const getFilteredSetItems = useCallback((): string[] => {
