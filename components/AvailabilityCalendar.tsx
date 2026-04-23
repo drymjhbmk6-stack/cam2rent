@@ -14,6 +14,8 @@ interface DayInfo {
 
 interface AvailabilityData {
   days: DayInfo[];
+  /** Vorlaufzeit in Tagen (Admin-Puffer "vorher" fuer aktuellen deliveryMode) */
+  leadTimeDays?: number;
 }
 
 export type DeliveryMode = 'versand' | 'abholung';
@@ -170,17 +172,23 @@ export default function AvailabilityCalendar({
     return null; // Kein gebuchter Tag gefunden — kein Limit
   })();
 
+  // Admin-konfigurierte Vorlaufzeit (aus /api/availability), Fallback wenn
+  // Setting fehlt: 3 Tage Versand, 1 Tag Abholung.
+  const minDaysAhead = data?.leadTimeDays ?? (deliveryMode === 'abholung' ? 1 : 3);
+  const minDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + minDaysAhead);
+
+  function isBeforeLeadTime(dateStr: string): boolean {
+    return parseDate(dateStr) < minDate;
+  }
+
   function isDaySelectable(dateStr: string, info: DayInfo | undefined): boolean {
     if (!info) return false;
     const effectiveStatus = info.status === 'partial' ? 'available' : info.status;
     if (effectiveStatus !== 'available') return false;
-    const minDaysAhead = deliveryMode === 'abholung' ? 2 : 3;
-    const minDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + minDaysAhead);
-    const dayDate = parseDate(dateStr);
-    if (dayDate < minDate) return false;
+    if (isBeforeLeadTime(dateStr)) return false;
     // Versand-Enddatum: gesperrt wenn Folgetag Sonn-/Feiertag
     if (deliveryMode === 'versand' && isChoosingEnd) {
-      if (isBlockedEndDateForShipping(dayDate)) return false;
+      if (isBlockedEndDateForShipping(parseDate(dateStr))) return false;
     }
     // Enddatum darf nicht hinter einem gebuchten Tag liegen
     if (isChoosingEnd && maxEndDate && dateStr >= maxEndDate) return false;
@@ -324,17 +332,29 @@ export default function AvailabilityCalendar({
             );
           }
 
-          const displayStatus = getDisplayStatus(info);
+          let displayStatus = getDisplayStatus(info);
           const selectable = isDaySelectable(dateStr, info);
           const inRange = isInRange(dateStr);
           const isStart = isRangeStart(dateStr);
           const isEnd = isRangeEnd(dateStr);
+
+          // Vorlauf-Sperre (heute + leadTimeDays) — nur visuell, damit freie
+          // Tage im Vorlauf-Fenster nicht faelschlich als "Verfuegbar" angezeigt
+          // werden. Status selbst aus der API bleibt unveraendert.
+          const preLeadBlock = displayStatus === 'available' && isBeforeLeadTime(dateStr);
+          if (preLeadBlock) displayStatus = 'blocked';
           const cfg = STATUS_CONFIG[displayStatus];
 
           const dayDate = parseDate(dateStr);
-          const blockReason = deliveryMode === 'versand' && isChoosingEnd && !selectable
-            ? getShippingBlockReason(dayDate, true)
-            : null;
+          let blockReason: string | null = null;
+          if (deliveryMode === 'versand' && isChoosingEnd && !selectable) {
+            blockReason = getShippingBlockReason(dayDate, true);
+          }
+          if (!blockReason && preLeadBlock) {
+            blockReason = deliveryMode === 'abholung'
+              ? `Abholung erst ab ${minDaysAhead === 1 ? 'morgen' : `${minDaysAhead} Tagen`} moeglich`
+              : `Versand-Vorlauf: ${minDaysAhead} Tage — frueheste Miete am ${minDate.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })}`;
+          }
 
           let bgClass = cfg.bg;
           let textClass = cfg.text;

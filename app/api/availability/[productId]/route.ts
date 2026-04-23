@@ -170,5 +170,10 @@ export async function GET(
     days.push({ date: dateStr, status, available, total: totalStock });
   }
 
-  return NextResponse.json({ days });
+  // Vorlaufzeit fuer die neue Buchung (ab heute): entspricht dem
+  // admin-konfigurierten "Puffer vorher" fuer den aktuellen Lieferungs-Modus.
+  // Frontend rendert Tage innerhalb dieser Frist visuell als gesperrt.
+  const leadTimeDays = viewerMode === 'abholung' ? buf.abholung_before : buf.versand_before;
+
+  return NextResponse.json({ days, leadTimeDays });
 }
