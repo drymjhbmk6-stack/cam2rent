@@ -161,7 +161,8 @@ function calcBreakdown(
   haftung: HaftungId,
   shippingMethod: ShippingMethod,
   deliveryMode: DeliveryMode,
-  dynPrices?: PriceConfig | null
+  dynPrices?: PriceConfig | null,
+  accessoryQty?: Record<string, number>,
 ): Breakdown {
   // Inclusive day count: Mo→Mo = 1 Tag, Mo→Di = 2 Tage, Mo→So = 7 Tage
   const days = to && to.getTime() !== from.getTime()
@@ -180,7 +181,9 @@ function calcBreakdown(
 
   const accessoryPrice = accessories.reduce((sum, id) => {
     const acc = dbAccessories.find((a) => a.id === id);
-    return sum + (acc ? getAccessoryPrice(acc, days) : 0);
+    if (!acc) return sum;
+    const qty = accessoryQty?.[id] ?? 1;
+    return sum + getAccessoryPrice(acc, days) * qty;
   }, 0);
 
   // Haftungspreis: gestaffelt nach Wochen
@@ -403,6 +406,16 @@ export default function BuchenPage() {
     }
     return [];
   });
+  // Stueckzahl pro accessory_id. Default 1 (wenn im accessories-Array, aber hier
+  // nicht eingetragen). Nur relevant fuer Items mit allowMultiQty — normale
+  // Items haben immer qty=1.
+  const [accessoryQty, setAccessoryQty] = useState<Record<string, number>>(() => {
+    const init: Record<string, number> = {};
+    if (preselectedAccessories) {
+      for (const id of preselectedAccessories.split(',').filter(Boolean)) init[id] = 1;
+    }
+    return init;
+  });
   const [haftung, setHaftung] = useState<HaftungId>('none');
   // Pflicht-Bestätigungen bei "Keine Haftungsbegrenzung"
   const [confirmLiability, setConfirmLiability] = useState(false);
@@ -529,6 +542,28 @@ export default function BuchenPage() {
     setAccessories((prev) =>
       prev.includes(id) ? prev.filter((a) => a !== id) : [...prev, id]
     );
+    setAccessoryQty((prev) => {
+      const next = { ...prev };
+      if (id in next) delete next[id];
+      else next[id] = 1;
+      return next;
+    });
+  }, []);
+
+  // Stueckzahl fuer ein Zubehoer setzen (Multi-Qty-Stepper). qty <= 0 entfernt
+  // das Accessory komplett, qty >= 1 nimmt es auf und speichert die Anzahl.
+  const setAccessoryCount = useCallback((id: string, qty: number) => {
+    const clamped = Math.max(0, Math.floor(qty));
+    setAccessories((prev) => {
+      if (clamped <= 0) return prev.filter((a) => a !== id);
+      return prev.includes(id) ? prev : [...prev, id];
+    });
+    setAccessoryQty((prev) => {
+      const next = { ...prev };
+      if (clamped <= 0) delete next[id];
+      else next[id] = clamped;
+      return next;
+    });
   }, []);
 
   // Upgrade-Gruppe: Waehlt eine Option aus und entfernt andere aus der gleichen Gruppe
@@ -567,6 +602,18 @@ export default function BuchenPage() {
       }
 
       // 2. Create Stripe PaymentIntent
+      // Format fuer accessory_items im Stripe-Metadata: "id:qty,id:qty,..."
+      // (kompakt, passt unter das 500-Byte-Limit pro Metadata-Value)
+      const accessoryItemsMeta = accessories
+        .map((id) => `${id}:${accessoryQty[id] ?? 1}`)
+        .join(',');
+      // Preis-Aufschluesselung fuer die Buchungs-Metadata. Bei Set + zusaetzlich
+      // gewaehltem Zubehoer werden beide Betraege addiert, damit die Komponenten-
+      // Summe gegen intent.amount weiter aufgeht (Webhook-Plausibilitaet).
+      const priceAccessoriesMeta = selectedSet
+        ? setPrice + breakdown.accessoryPrice
+        : breakdown.accessoryPrice;
+
       const res = await fetch('/api/create-payment-intent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -582,11 +629,12 @@ export default function BuchenPage() {
             shipping_method: deliveryMode === 'versand' ? shippingMethod : 'abholung',
             shipping_price: String(breakdown.shippingPrice),
             haftung,
-            accessories: selectedSet ? '' : accessories.join(','),
+            accessories: accessories.join(','),
+            accessory_items: accessoryItemsMeta,
             deposit: String(product!.deposit),
             // Price breakdown for booking record
             price_rental: String(breakdown.rentalPrice),
-            price_accessories: selectedSet ? String(setPrice) : String(breakdown.accessoryPrice),
+            price_accessories: String(priceAccessoriesMeta),
             price_haftung: String(breakdown.haftungPrice),
             user_id: user?.id ?? '',
             customer_email: user?.email ?? '',
@@ -690,7 +738,7 @@ export default function BuchenPage() {
 
   // breakdown exists as soon as a start date is picked (to=undefined → 1 Tag)
   const breakdown = range?.from
-    ? calcBreakdown(product, range.from, range.to, accessories, dbAccessories, haftung, shippingMethod, deliveryMode, dynPrices)
+    ? calcBreakdown(product, range.from, range.to, accessories, dbAccessories, haftung, shippingMethod, deliveryMode, dynPrices, accessoryQty)
     : null;
 
   // Haftungsoptionen dynamisch (Eigenbeteiligung je nach Produktkategorie)
@@ -1015,7 +1063,7 @@ export default function BuchenPage() {
                         return (
                           <div key={set.id} className={`transition-colors ${isSelected ? 'bg-accent-blue-soft/30' : 'bg-white dark:bg-gray-900'}`}>
                             <label className="flex items-center gap-3 px-4 py-3 cursor-pointer">
-                              <input type="radio" name="rentalSet" checked={isSelected} onChange={() => { setSelectedSet(set); setAccessories([]); }} className="sr-only" />
+                              <input type="radio" name="rentalSet" checked={isSelected} onChange={() => { setSelectedSet(set); setAccessories([]); setAccessoryQty({}); }} className="sr-only" />
                               <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${isSelected ? 'border-accent-blue' : 'border-brand-border'}`}>
                                 {isSelected && <div className="w-2 h-2 rounded-full bg-accent-blue" />}
                               </div>
@@ -1124,6 +1172,70 @@ export default function BuchenPage() {
                       const blockedBySet = setQty > 0 && effectiveRemaining <= 0;
                       const isBookedOut = !!avail && effectiveRemaining <= 0;
                       const disabled = isBookedOut;
+                      const unitPrice = getAccessoryPrice(acc, days);
+                      const isMulti = acc.allowMultiQty === true;
+
+                      if (isMulti) {
+                        const currentQty = accessoryQty[acc.id] ?? 0;
+                        const hardCap = acc.maxQtyPerBooking ?? Number.POSITIVE_INFINITY;
+                        const maxPossible = Math.max(0, Math.min(hardCap, effectiveRemaining));
+                        const canIncrement = !disabled && currentQty < maxPossible;
+                        const canDecrement = currentQty > 0;
+                        const lineTotal = unitPrice * currentQty;
+                        return (
+                          <div key={acc.id} className={`flex flex-col px-4 py-2.5 transition-colors ${disabled ? 'opacity-50 bg-brand-bg dark:bg-gray-800' : currentQty > 0 ? 'bg-accent-blue-soft/30' : 'bg-white dark:bg-gray-900'}`}>
+                            <div className="flex items-center gap-3">
+                              <span className={`font-heading font-semibold text-sm flex-1 ${disabled ? 'text-brand-muted' : 'text-brand-black dark:text-gray-100'}`}>
+                                {acc.name}
+                                <span className="ml-2 text-xs font-body text-brand-muted">
+                                  ({fmt(unitPrice)} €{acc.pricingMode === 'perDay' ? '/Tag' : ''} je Stk.)
+                                </span>
+                              </span>
+                              <div className="flex items-center gap-2 flex-shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => setAccessoryCount(acc.id, currentQty - 1)}
+                                  disabled={!canDecrement}
+                                  aria-label={`${acc.name} Anzahl verringern`}
+                                  className="w-7 h-7 rounded-lg border border-brand-border flex items-center justify-center text-brand-black hover:bg-brand-bg disabled:opacity-30 disabled:cursor-not-allowed"
+                                >
+                                  −
+                                </button>
+                                <span className="min-w-[1.5rem] text-center text-sm font-heading font-semibold text-brand-black dark:text-gray-100">
+                                  {currentQty}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => setAccessoryCount(acc.id, currentQty + 1)}
+                                  disabled={!canIncrement}
+                                  aria-label={`${acc.name} Anzahl erhoehen`}
+                                  className="w-7 h-7 rounded-lg border border-brand-border flex items-center justify-center text-brand-black hover:bg-brand-bg disabled:opacity-30 disabled:cursor-not-allowed"
+                                >
+                                  +
+                                </button>
+                                {currentQty > 0 && (
+                                  <span className="ml-2 font-heading font-semibold text-sm text-accent-blue w-16 text-right">
+                                    +{fmt(lineTotal)} €
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            {isBookedOut && (
+                              <span className="text-xs text-status-error mt-1">
+                                {blockedBySet
+                                  ? `Bereits ${setQty}× im gewählten Set enthalten — Bestand ausgeschöpft`
+                                  : 'Für diesen Zeitraum nicht verfügbar'}
+                              </span>
+                            )}
+                            {!isBookedOut && currentQty >= maxPossible && Number.isFinite(maxPossible) && maxPossible > 0 && (
+                              <span className="text-xs text-brand-muted mt-1">
+                                Max {maxPossible} Stück{setQty > 0 ? ` (Set belegt bereits ${setQty}×)` : ''}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      }
+
                       return (
                         <label key={acc.id} className={`flex flex-col px-4 py-2.5 transition-colors ${disabled ? 'opacity-50 cursor-not-allowed bg-brand-bg dark:bg-gray-800' : checked ? 'bg-accent-blue-soft/30 cursor-pointer' : 'bg-white dark:bg-gray-900 hover:bg-brand-bg dark:hover:bg-gray-800 cursor-pointer'}`}>
                           <div className="flex items-center gap-3">
@@ -1138,7 +1250,7 @@ export default function BuchenPage() {
                             <span className={`font-heading font-semibold text-sm flex-1 ${disabled ? 'text-brand-muted' : 'text-brand-black dark:text-gray-100'}`}>{acc.name}</span>
                             {!disabled && (
                               <span className="font-heading font-semibold text-sm text-accent-blue flex-shrink-0">
-                                +{fmt(getAccessoryPrice(acc, days))} €{acc.pricingMode === 'perDay' ? ' pro Tag' : ''}
+                                +{fmt(unitPrice)} €{acc.pricingMode === 'perDay' ? ' pro Tag' : ''}
                               </span>
                             )}
                           </div>
@@ -1601,7 +1713,10 @@ export default function BuchenPage() {
                   {breakdown.accessoryPrice > 0 && (
                     <div className="flex justify-between items-center text-sm font-body">
                       <span className="text-brand-steel">
-                        Zubehör{accessories.length > 0 ? ` (${accessories.length} ${accessories.length === 1 ? 'Artikel' : 'Artikel'})` : ''}
+                        Zubehör{(() => {
+                          const total = accessories.reduce((s, id) => s + (accessoryQty[id] ?? 1), 0);
+                          return total > 0 ? ` (${total} ${total === 1 ? 'Artikel' : 'Artikel'})` : '';
+                        })()}
                       </span>
                       <span className="font-semibold text-brand-black">
                         {fmt(breakdown.accessoryPrice)} €
@@ -1722,21 +1837,23 @@ export default function BuchenPage() {
                     <ul className="space-y-2">
                       {accessories.map((id) => {
                         const acc = dbAccessories.find((a) => a.id === id)!;
-                        const accPrice = getAccessoryPrice(acc, breakdown.days);
+                        const unitPrice = getAccessoryPrice(acc, breakdown.days);
+                        const qty = accessoryQty[id] ?? 1;
+                        const lineTotal = unitPrice * qty;
                         return (
                           <li key={id} className="flex items-center justify-between gap-2 text-sm font-body">
                             <div className="flex items-center gap-2 text-brand-text">
                               <svg viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5 text-status-success flex-shrink-0" aria-hidden="true">
                                 <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
                               </svg>
-                              <span>{acc.name}</span>
+                              <span>{qty > 1 ? `${qty}× ${acc.name}` : acc.name}</span>
                               <span className="text-brand-muted text-xs">
                                 {acc.pricingMode === 'flat'
                                   ? 'einmalig'
                                   : `× ${breakdown.days} ${breakdown.days === 1 ? 'Tag' : 'Tage'}`}
                               </span>
                             </div>
-                            <span className="font-semibold text-brand-black">{fmt(accPrice)} €</span>
+                            <span className="font-semibold text-brand-black">{fmt(lineTotal)} €</span>
                           </li>
                         );
                       })}
@@ -1967,7 +2084,10 @@ export default function BuchenPage() {
                     {breakdown.accessoryPrice > 0 && (
                       <div className="flex justify-between text-sm font-body">
                         <span className="text-brand-steel">
-                          Zubehör{accessories.length > 0 ? ` (${accessories.length})` : ''}
+                          Zubehör{(() => {
+                            const total = accessories.reduce((s, id) => s + (accessoryQty[id] ?? 1), 0);
+                            return total > 0 ? ` (${total})` : '';
+                          })()}
                         </span>
                         <span className="text-brand-black">{fmt(breakdown.accessoryPrice)} €</span>
                       </div>
@@ -2050,7 +2170,7 @@ export default function BuchenPage() {
                     }
                     for (const accId of accessories) {
                       const acc = dbAccessories.find((a) => a.id === accId);
-                      if (acc) counts[acc.name] = (counts[acc.name] ?? 0) + 1;
+                      if (acc) counts[acc.name] = (counts[acc.name] ?? 0) + (accessoryQty[accId] ?? 1);
                     }
                     return Object.entries(counts).map(([name, qty]) => (
                       <div key={name} className="flex items-center gap-2">
