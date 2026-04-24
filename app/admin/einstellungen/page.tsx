@@ -262,6 +262,32 @@ export default function EinstellungenPage() {
       {/* Sektion 0b: Checkout-Verhalten */}
       <CheckoutConfigSection />
 
+      {/* Sektion: Mitarbeiter-Verwaltung (Link auf Unterseite) */}
+      <a
+        href="/admin/einstellungen/mitarbeiter"
+        className="block mb-6 rounded-xl p-5 transition-colors"
+        style={{ background: '#111827', border: '1px solid #1e293b', textDecoration: 'none' }}
+      >
+        <div className="flex items-center gap-3">
+          <div style={{ width: 40, height: 40, borderRadius: 10, background: '#06b6d414', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <svg className="w-5 h-5" style={{ color: '#06b6d4' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+            </svg>
+          </div>
+          <div className="flex-1">
+            <h2 className="font-heading font-semibold text-base" style={{ color: '#e2e8f0' }}>
+              Mitarbeiter
+            </h2>
+            <p className="text-xs" style={{ color: '#64748b' }}>
+              Accounts anlegen und Zugriffsrechte pro Person konfigurieren
+            </p>
+          </div>
+          <svg className="w-5 h-5" style={{ color: '#475569' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </div>
+      </a>
+
       {/* Sektion 1: 2FA */}
       <div style={{ background: '#111827', borderRadius: 12, border: '1px solid #1e293b', padding: 24, marginBottom: 24 }}>
         <div className="flex items-center gap-3 mb-4">

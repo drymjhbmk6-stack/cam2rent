@@ -1,10 +1,19 @@
+import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
+import { deleteSession, isSessionToken } from '@/lib/admin-users';
 
 /**
  * POST /api/admin/logout
- * Löscht das admin_token Cookie.
+ * Loescht das admin_token Cookie. Bei Session-Tokens wird zusaetzlich der
+ * Eintrag in admin_sessions entfernt.
  */
 export async function POST() {
+  const jar = await cookies();
+  const token = jar.get('admin_token')?.value;
+  if (token && isSessionToken(token)) {
+    await deleteSession(token).catch(() => {});
+  }
+
   const response = NextResponse.json({ success: true });
   response.cookies.set('admin_token', '', {
     httpOnly: true,

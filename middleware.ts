@@ -1,9 +1,13 @@
 import { createServerClient } from '@supabase/ssr';
+import { createClient } from '@supabase/supabase-js';
 import { NextResponse, type NextRequest } from 'next/server';
 
+// ============================================================
+// Admin-Token-Pruefung (Legacy ENV + Session-Token)
+// ============================================================
+
 /**
- * Berechnet den erwarteten Admin-Token als SHA-256-Hash des Passworts.
- * Gecached damit nicht bei jedem Request neu gehasht wird.
+ * SHA-256-Hash des Legacy-ENV-Passworts (cached).
  */
 let cachedAdminToken: string | null = null;
 let cachedAdminPassword: string | null = null;
@@ -21,7 +25,7 @@ async function computeAdminToken(password: string): Promise<string> {
 
 /**
  * Timing-safer String-Vergleich (Edge-Runtime-kompatibel).
- * node:crypto/timingSafeEqual ist im Edge-Runtime nicht verfügbar,
+ * node:crypto/timingSafeEqual ist im Edge-Runtime nicht verfuegbar,
  * deshalb eine eigene konstanzzeit-Implementierung.
  */
 function safeStringEqual(a: string, b: string): boolean {
@@ -33,12 +37,113 @@ function safeStringEqual(a: string, b: string): boolean {
   return result === 0;
 }
 
+/**
+ * In-Memory-Cache fuer Session-Lookups (60s), damit nicht jeder Admin-Request
+ * einen Supabase-Roundtrip ausloest. Middleware laeuft im Node-Runtime.
+ */
+interface SessionCacheEntry {
+  permissions: string[];
+  role: 'owner' | 'employee';
+  isActive: boolean;
+  expiresAt: number; // DB-Session-Ablauf
+  cacheUntil: number;
+}
+const sessionCache = new Map<string, SessionCacheEntry>();
+const SESSION_CACHE_TTL_MS = 60 * 1000;
+
+async function lookupSession(token: string): Promise<SessionCacheEntry | null> {
+  const now = Date.now();
+  const cached = sessionCache.get(token);
+  if (cached && cached.cacheUntil > now && cached.expiresAt > now && cached.isActive) {
+    return cached;
+  }
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return null;
+  try {
+    const sb = createClient(url, key, { auth: { persistSession: false } });
+    const { data } = await sb
+      .from('admin_sessions')
+      .select('expires_at, admin_users!inner(is_active, role, permissions)')
+      .eq('token', token)
+      .maybeSingle();
+    if (!data) {
+      sessionCache.delete(token);
+      return null;
+    }
+    const expiresAt = new Date(data.expires_at).getTime();
+    if (expiresAt < now) {
+      sessionCache.delete(token);
+      return null;
+    }
+    const u = Array.isArray(data.admin_users) ? data.admin_users[0] : data.admin_users;
+    if (!u || !u.is_active) return null;
+    const entry: SessionCacheEntry = {
+      permissions: Array.isArray(u.permissions) ? (u.permissions as string[]) : [],
+      role: u.role,
+      isActive: u.is_active,
+      expiresAt,
+      cacheUntil: now + SESSION_CACHE_TTL_MS,
+    };
+    sessionCache.set(token, entry);
+    // LRU-Schutz: Cache nicht unbegrenzt wachsen lassen
+    if (sessionCache.size > 500) {
+      const firstKey = sessionCache.keys().next().value;
+      if (firstKey) sessionCache.delete(firstKey);
+    }
+    return entry;
+  } catch {
+    return null;
+  }
+}
+
+// Permission-Mapping (duplikatfrei zu lib/admin-users.ts — Edge-sicher ohne Import).
+interface PermRule { prefix: string; perm: string }
+const PATH_PERMISSIONS: PermRule[] = [
+  { prefix: '/admin/einstellungen/mitarbeiter', perm: 'mitarbeiter_verwalten' },
+  { prefix: '/admin/buchungen', perm: 'tagesgeschaeft' },
+  { prefix: '/admin/verfuegbarkeit', perm: 'tagesgeschaeft' },
+  { prefix: '/admin/versand', perm: 'tagesgeschaeft' },
+  { prefix: '/admin/retouren', perm: 'tagesgeschaeft' },
+  { prefix: '/admin/schaeden', perm: 'tagesgeschaeft' },
+  { prefix: '/admin/kunden', perm: 'kunden' },
+  { prefix: '/admin/nachrichten', perm: 'kunden' },
+  { prefix: '/admin/bewertungen', perm: 'kunden' },
+  { prefix: '/admin/warteliste', perm: 'kunden' },
+  { prefix: '/admin/preise/kameras', perm: 'katalog' },
+  { prefix: '/admin/sets', perm: 'katalog' },
+  { prefix: '/admin/zubehoer', perm: 'katalog' },
+  { prefix: '/admin/einkauf', perm: 'katalog' },
+  { prefix: '/admin/anlagen', perm: 'finanzen' },
+  { prefix: '/admin/preise', perm: 'preise' },
+  { prefix: '/admin/gutscheine', perm: 'preise' },
+  { prefix: '/admin/rabatte', perm: 'preise' },
+  { prefix: '/admin/startseite', perm: 'content' },
+  { prefix: '/admin/blog', perm: 'content' },
+  { prefix: '/admin/social', perm: 'content' },
+  { prefix: '/admin/buchhaltung', perm: 'finanzen' },
+  { prefix: '/admin/analytics', perm: 'berichte' },
+  { prefix: '/admin/emails', perm: 'berichte' },
+  { prefix: '/admin/beta-feedback', perm: 'berichte' },
+  { prefix: '/admin/aktivitaetsprotokoll', perm: 'berichte' },
+  { prefix: '/admin/legal', perm: 'system' },
+  { prefix: '/admin/einstellungen', perm: 'system' },
+];
+
+function requiredPermission(pathname: string): string | null {
+  if (pathname === '/admin' || pathname === '/admin/') return null;
+  if (pathname === '/admin/login') return null;
+  for (const rule of PATH_PERMISSIONS) {
+    if (pathname === rule.prefix || pathname.startsWith(rule.prefix + '/')) return rule.perm;
+  }
+  return null;
+}
+
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
   // ── Wartungsmodus ─────────────────────────────────────────────────────────
   if (process.env.MAINTENANCE_MODE === 'true') {
-    // Wartungsseite, Admin, API und statische Dateien durchlassen
     const isExcluded =
       pathname === '/wartung' ||
       pathname.startsWith('/admin') ||
@@ -53,11 +158,6 @@ export async function middleware(request: NextRequest) {
   }
 
   // ── Admin-APIs (/api/admin/*) ─────────────────────────────────────────────
-  // Whitelist: Login + Logout müssen ohne Cookie erreichbar sein.
-  // GET auf /api/admin/settings und /api/admin/blog/categories wird von
-  // öffentlichen Seiten (Brand-Colors, Construction-Banner, Blog-Übersicht)
-  // konsumiert — die Routen-Handler enthalten eine Key-Whitelist bzw. sind
-  // von Natur aus unbedenklich.
   if (pathname.startsWith('/api/admin')) {
     const isGet = request.method === 'GET';
     const isPublic =
@@ -68,21 +168,29 @@ export async function middleware(request: NextRequest) {
 
     if (!isPublic) {
       const adminToken = request.cookies.get('admin_token')?.value ?? '';
-      const adminPassword = process.env.ADMIN_PASSWORD ?? '';
-
-      if (!adminPassword) {
-        return NextResponse.json(
-          { error: 'Admin-Passwort nicht konfiguriert.' },
-          { status: 500 }
-        );
+      if (!adminToken) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
       }
 
-      const expectedToken = await computeAdminToken(adminPassword);
-      if (!safeStringEqual(adminToken, expectedToken)) {
-        return NextResponse.json(
-          { error: 'Unauthorized' },
-          { status: 401 }
-        );
+      // Session-Token (Multi-User)
+      if (adminToken.startsWith('sess_')) {
+        const session = await lookupSession(adminToken);
+        if (!session) {
+          return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+      } else {
+        // Legacy-ENV-Token
+        const adminPassword = process.env.ADMIN_PASSWORD ?? '';
+        if (!adminPassword) {
+          return NextResponse.json(
+            { error: 'Admin-Passwort nicht konfiguriert.' },
+            { status: 500 }
+          );
+        }
+        const expectedToken = await computeAdminToken(adminPassword);
+        if (!safeStringEqual(adminToken, expectedToken)) {
+          return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
       }
     }
 
@@ -91,23 +199,42 @@ export async function middleware(request: NextRequest) {
 
   // ── Admin-Bereich (/admin/*) ──────────────────────────────────────────────
   if (pathname.startsWith('/admin')) {
-    // Login-Seite immer durchlassen
     if (pathname === '/admin/login') {
       return NextResponse.next();
     }
 
     const adminToken = request.cookies.get('admin_token')?.value ?? '';
-    const adminPassword = process.env.ADMIN_PASSWORD ?? '';
 
-    if (adminPassword) {
-      const expectedToken = await computeAdminToken(adminPassword);
-      if (!safeStringEqual(adminToken, expectedToken)) {
+    // Session-Token (Multi-User)
+    if (adminToken.startsWith('sess_')) {
+      const session = await lookupSession(adminToken);
+      if (!session) {
         const url = request.nextUrl.clone();
         url.pathname = '/admin/login';
         return NextResponse.redirect(url);
       }
+      // Permission-Check
+      const needed = requiredPermission(pathname);
+      if (needed && session.role !== 'owner' && !session.permissions.includes(needed)) {
+        const url = request.nextUrl.clone();
+        url.pathname = '/admin';
+        url.searchParams.set('forbidden', needed);
+        return NextResponse.redirect(url);
+      }
+      return NextResponse.next();
     }
 
+    // Legacy-ENV-Token (hat automatisch alle Rechte)
+    const adminPassword = process.env.ADMIN_PASSWORD ?? '';
+    if (!adminPassword) {
+      return NextResponse.next();
+    }
+    const expectedToken = await computeAdminToken(adminPassword);
+    if (!safeStringEqual(adminToken, expectedToken)) {
+      const url = request.nextUrl.clone();
+      url.pathname = '/admin/login';
+      return NextResponse.redirect(url);
+    }
     return NextResponse.next();
   }
 

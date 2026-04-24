@@ -1043,6 +1043,23 @@ Umfassendes Audit mit paralleler Agent-Analyse (Security/Code-Quality/Performanc
 - **Hot-Path `.select('*')`** → Spaltenlisten in [admin/kunden](app/api/admin/kunden/route.ts) (Ausweis-Bilder nicht mehr in Liste), Gantt `product_units`.
 - **DB-Indizes** `supabase-performance-indizes.sql` — 8 `CREATE INDEX CONCURRENTLY IF NOT EXISTS` (bookings.user_id, bookings.created_at, bookings(product_id, rental_from, rental_to), email_log.booking_id, blog_posts(status, created_at), social_posts(status, scheduled_at), waitlist_subscriptions.product_id, rental_agreements.booking_id).
 
+### Mitarbeiterkonten + granulare Permissions (Stand 2026-04-24)
+Zwei Login-Arten für den Admin-Bereich: weiterhin das Master-Passwort (ENV `ADMIN_PASSWORD`, virtueller „Owner" mit allen Rechten) als Bootstrap/Notfall-Zugang — ODER E-Mail+Passwort eines in der DB hinterlegten Mitarbeiters. Der Admin entscheidet pro Mitarbeiter, welche Bereiche sichtbar sind.
+
+- **DB-Migration `supabase/supabase-admin-users.sql`** (idempotent): Tabellen `admin_users` (id, email UNIQUE, password_hash, name, role `owner|employee`, permissions JSONB, is_active, last_login_at, created_by) + `admin_sessions` (token PRIMARY KEY, user_id FK, expires_at, last_used_at, user_agent, ip_address). RLS aktiviert (nur Service-Role).
+- **Passwort-Hashing:** Node-`crypto.scrypt` mit 16-Byte-Salt und 64-Byte-Hash. Format: `scrypt$1$<salt-hex>$<hash-hex>`. Kein zusätzliches Paket nötig.
+- **Lib `lib/admin-users.ts`:** CRUD + `hashPassword`, `verifyPassword`, `createSession`, `getUserBySession`, `deleteAllSessionsForUser`, `legacyEnvUser()`, `hasPermission()`, `requiredPermissionForPath()`. Änderung an Rolle/Permissions/Passwort oder Deaktivierung invalidiert alle Sessions des Users automatisch.
+- **9 Permission-Keys:** `tagesgeschaeft`, `kunden`, `katalog`, `preise`, `content`, `finanzen`, `berichte`, `system`, `mitarbeiter_verwalten`. Owner haben immer alle. Leeres Permission-Array = Mitarbeiter sieht nur Dashboard.
+- **`lib/admin-auth.ts`** liefert `getCurrentAdminUser()` (Session-Token-Lookup ODER Legacy-Hash — timing-safe) und `currentUserHasPermission(perm)`. `checkAdminAuth()` bleibt als Boolean-Alias erhalten — alle bestehenden API-Routen laufen weiter.
+- **Login-API `/api/admin/login`:** akzeptiert `{ email?, password, totpCode? }`. Mit E-Mail → DB-Lookup + scrypt-Verify + Session-Cookie `sess_<random>`. Ohne E-Mail → Legacy-ENV-Passwort (mit 2FA). Beide setzen `admin_token`-Cookie mit `sameSite: 'strict'`. Legacy-Cookie weiterhin 24h (aus 04-20-Audit), Session-Cookie 7 Tage. Rate-Limit 5/15 Min pro IP.
+- **Logout** löscht bei Session-Tokens auch den DB-Eintrag (Session-Revocation).
+- **Middleware** prüft Cookie: Session-Token → DB-Lookup (60s-Cache mit LRU-Eviction bei 500 Einträgen) → Permission-Check pro Admin-Pfad via `PATH_PERMISSIONS`-Tabelle. Bei fehlender Berechtigung Redirect auf `/admin?forbidden=<perm>`. Legacy-Token hat weiterhin alle Rechte. Legacy-Vergleich nutzt edge-kompatibles `safeStringEqual` (konstanzzeit).
+- **Admin-UI `/admin/einstellungen/mitarbeiter`:** Liste aller Accounts mit Rolle-Badge, Permissions als Pills, letzter Login. Anlegen: Name+E-Mail+Passwort+Rolle+Permissions-Grid (Toggle-Karten mit Hinweistext). Bearbeiten: alles änderbar + optional neues Passwort. Löschen mit Bestätigung. Schutzschranken: nur Owner können Owner ernennen, letzter aktiver Owner kann nicht gelöscht/herabgestuft/deaktiviert werden, User kann sich nicht selbst löschen, der virtuelle `legacy-env`-User kann nicht angefasst werden.
+- **Sidebar** holt `/api/admin/me` und filtert alle Nav-Items nach Permissions (Gruppen-Header werden komplett ausgeblendet, wenn keine Items sichtbar sind — z.B. ganze „Finanzen"-Sektion verschwindet für Mitarbeiter ohne `finanzen`-Permission). Dashboard sieht jeder eingeloggte Admin.
+- **Audit-Log** schreibt ab jetzt den tatsächlichen `admin_user_id` + `admin_user_name` der eingeloggten Session in `admin_audit_log`. Spalten-Mapping (`details` statt `changes`, IP im JSONB) ist damit auch mit eingeloggtem User korrekt.
+- **APIs:** `GET /api/admin/me`, `GET/POST /api/admin/employees`, `PATCH/DELETE /api/admin/employees/[id]`. Alle geschützt durch `hasPermission(me, 'mitarbeiter_verwalten')`.
+- **Go-Live TODO:** `supabase-admin-users.sql` ausführen → unter `/admin/einstellungen/mitarbeiter` ersten echten Owner anlegen → Mitarbeiter als `employee` mit gewünschten Bereichen. Das ENV-`ADMIN_PASSWORD` bleibt als Notfall-Login aktiv und sollte auf einen zufälligen, unbekannten Wert gedreht werden, sobald echte Owner-Accounts existieren.
+
 ### Mobile-Fixes (2026-04-17)
 - **Viewport-Export** in `app/layout.tsx`: `device-width`, `initialScale: 1`, `viewportFit: 'cover'` (iOS Safe-Area aktiv) — Next.js 15 Pattern.
 - **CookieBanner z-[60]** + `padding-bottom: calc(1rem + env(safe-area-inset-bottom))`: liegt jetzt über CompareBar, iOS Home-Indicator überlagert nicht mehr.
@@ -1094,6 +1111,7 @@ Systematischer Sweep ueber Admin- und Kundenkonto-UI nach Darstellungsfehlern. G
 - ~~`supabase-performance-indizes.sql`~~ (8 Indizes: bookings.user_id, bookings.created_at, bookings(product_id,rental_from,rental_to), email_log.booking_id, blog_posts(status,created_at), social_posts(status,scheduled_at), waitlist_subscriptions.product_id, rental_agreements.booking_id)
 
 ### Noch offen
+- **SQL-Migration `supabase/supabase-admin-users.sql` ausführen** (Mitarbeiterkonten + Permissions, idempotent). Danach unter `/admin/einstellungen/mitarbeiter` ersten Owner + Mitarbeiter anlegen.
 - **Bestehende 6 Kameras brauchen Admin-Specs** (Technische Daten im Editor anlegen)
 - **Bestehende Kameras brauchen Seriennummern** (im Kamera-Editor unter "Kameras / Seriennummern" anlegen)
 - **SQL-Migration `supabase/supabase-assets.sql` ausfuehren** (assets-Tabelle + Erweiterungen an purchases/purchase_items/expenses + Bug-Fix fuer category='fees' → 'stripe_fees'). Idempotent.
