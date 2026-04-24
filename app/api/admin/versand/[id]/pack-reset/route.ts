@@ -1,18 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
-import { checkAdminAuth } from '@/lib/admin-auth';
+import { getCurrentAdminUser } from '@/lib/admin-auth';
 
 /**
  * POST /api/admin/versand/[id]/pack-reset
  * Setzt den Pack-Workflow auf Anfang zurueck. Foto wird aus Storage geloescht.
- * Genutzt wenn etwas falsch gepackt wurde und neu angefangen werden soll.
+ * Nur fuer Owner — Mitarbeiter duerfen einen 4-Augen-bestaetigten Workflow
+ * nicht eigenhaendig zuruecksetzen (sonst koennten sie spaeter gepackte Pakete
+ * unbemerkt wieder zur Disposition stellen).
  */
 export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  if (!(await checkAdminAuth())) {
+  const user = await getCurrentAdminUser();
+  if (!user) {
     return NextResponse.json({ error: 'Nicht autorisiert.' }, { status: 401 });
+  }
+  if (user.role !== 'owner') {
+    return NextResponse.json(
+      { error: 'Nur der Admin/Owner darf den Pack-Workflow zuruecksetzen.' },
+      { status: 403 },
+    );
   }
 
   const { id } = await params;

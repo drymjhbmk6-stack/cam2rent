@@ -667,15 +667,42 @@ export default function BuchungDetailPage() {
                 ? booking.accessory_items as { accessory_id: string; qty: number }[]
                 : (Array.isArray(booking.accessories) ? booking.accessories : []).map((id: string) => ({ accessory_id: id, qty: 1 }));
               if (items.length === 0) return null;
+
+              // Sets von Einzel-Zubehoer trennen — Sets werden als ausklappbare
+              // Karte mit Sub-Items dargestellt, einzelnes Zubehoer bleibt als
+              // Pille.
+              const setEntries = items.filter((it) => setMap[it.accessory_id]);
+              const accEntries = items.filter((it) => !setMap[it.accessory_id]);
+
+              const resolveAccName = (id: string) =>
+                accessoryMap[id]
+                ?? id.replace(/-[a-z0-9]{6,}$/, '').split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+
               return (
                 <Section title="Zubehör & Set">
-                  <div className="flex flex-wrap gap-2">
-                    {items.map((it, i) => {
-                      const rawName = accessoryMap[it.accessory_id]
-                        ?? it.accessory_id.replace(/-[a-z0-9]{6,}$/, '').split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-                      const label = it.qty > 1 ? `${it.qty}× ${rawName}` : rawName;
-                      return <span key={i} className="px-2.5 py-1 bg-brand-bg rounded-full text-xs font-body text-brand-steel">{label}</span>;
+                  <div className="space-y-3">
+                    {setEntries.map((it, i) => {
+                      const setInfo = setMap[it.accessory_id];
+                      const subItems = setInfo.items ?? [];
+                      return (
+                        <ExpandableSet
+                          key={`set-${i}`}
+                          name={setInfo.name}
+                          qty={it.qty}
+                          subItems={subItems}
+                          resolveName={resolveAccName}
+                        />
+                      );
                     })}
+                    {accEntries.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {accEntries.map((it, i) => {
+                          const rawName = resolveAccName(it.accessory_id);
+                          const label = it.qty > 1 ? `${it.qty}× ${rawName}` : rawName;
+                          return <span key={`acc-${i}`} className="px-2.5 py-1 bg-brand-bg rounded-full text-xs font-body text-brand-steel">{label}</span>;
+                        })}
+                      </div>
+                    )}
                   </div>
                 </Section>
               );
@@ -1193,6 +1220,60 @@ function Section({ title, children }: { title: string; children: React.ReactNode
     <div className="bg-white rounded-xl border border-brand-border p-5">
       <h2 className="font-heading font-bold text-base text-brand-black mb-4">{title}</h2>
       {children}
+    </div>
+  );
+}
+
+function ExpandableSet({
+  name, qty, subItems, resolveName,
+}: {
+  name: string;
+  qty: number;
+  subItems: { accessory_id: string; qty: number }[];
+  resolveName: (id: string) => string;
+}) {
+  const [open, setOpen] = useState(true);
+  const totalSubItems = subItems.reduce((s, it) => s + (it.qty || 1), 0);
+  return (
+    <div className="border border-brand-border rounded-lg overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between gap-3 px-3.5 py-2.5 bg-brand-bg hover:bg-brand-border/40 transition-colors text-left"
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 text-xs font-bold">📦</span>
+          <span className="font-heading font-semibold text-sm text-brand-black truncate">
+            {qty > 1 ? `${qty}× ` : ''}{name}
+          </span>
+          <span className="text-xs text-brand-muted whitespace-nowrap">
+            ({totalSubItems} Teile)
+          </span>
+        </div>
+        <svg
+          className={`w-4 h-4 text-brand-muted shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
+          fill="none" stroke="currentColor" viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      {open && (
+        <ul className="px-3.5 py-2 bg-white divide-y divide-brand-border/60">
+          {subItems.length === 0 ? (
+            <li className="text-xs text-brand-muted italic py-1">Set hat keine Sub-Items definiert.</li>
+          ) : (
+            subItems.map((sub, i) => {
+              const subQty = (sub.qty || 1) * (qty || 1);
+              return (
+                <li key={i} className="flex items-center justify-between py-1.5 text-sm font-body text-brand-steel">
+                  <span>{resolveName(sub.accessory_id)}</span>
+                  <span className="text-xs font-semibold text-brand-muted">{subQty}×</span>
+                </li>
+              );
+            })
+          )}
+        </ul>
+      )}
     </div>
   );
 }

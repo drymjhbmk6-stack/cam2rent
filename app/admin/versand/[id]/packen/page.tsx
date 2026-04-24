@@ -138,7 +138,7 @@ export default function PackenPage({ params }: { params: Promise<{ id: string }>
           <CheckStep booking={booking} items={items} me={me} onDone={reload} />
         )}
         {status === 'checked' && (
-          <DoneStep booking={booking} onReset={reload} />
+          <DoneStep booking={booking} me={me} onReset={reload} />
         )}
       </div>
     </div>
@@ -476,9 +476,14 @@ function CheckStep({
 
 // ─── Step 3: Fertig ──────────────────────────────────────────────────────────
 
-function DoneStep({ booking, onReset }: { booking: BookingDetail; onReset: () => void }) {
+function DoneStep({ booking, me, onReset }: { booking: BookingDetail; me: CurrentAdminUser | null; onReset: () => void }) {
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [resetting, setResetting] = useState(false);
+  const [resetError, setResetError] = useState('');
   const pdfUrl = `/api/packlist/${booking.id}`;
+  // Workflow-Reset darf nur der Admin/Owner. Mitarbeiter sehen den Button
+  // gar nicht erst (Server prueft zusaetzlich, falls jemand die UI umgeht).
+  const canReset = me?.role === 'owner';
 
   useEffect(() => {
     if (!booking.pack_photo_url) return;
@@ -490,8 +495,20 @@ function DoneStep({ booking, onReset }: { booking: BookingDetail; onReset: () =>
 
   async function resetWorkflow() {
     if (!confirm('Pack-Workflow neu starten? Alle Signaturen + Foto werden gelöscht.')) return;
-    await fetch(`/api/admin/versand/${booking.id}/pack-reset`, { method: 'POST' });
-    onReset();
+    setResetting(true);
+    setResetError('');
+    try {
+      const res = await fetch(`/api/admin/versand/${booking.id}/pack-reset`, { method: 'POST' });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || 'Reset fehlgeschlagen.');
+      }
+      onReset();
+    } catch (e) {
+      setResetError(e instanceof Error ? e.message : 'Fehler.');
+    } finally {
+      setResetting(false);
+    }
   }
 
   return (
@@ -547,12 +564,19 @@ function DoneStep({ booking, onReset }: { booking: BookingDetail; onReset: () =>
         ) : null}
       </div>
 
-      <button
-        onClick={resetWorkflow}
-        className="mt-4 text-xs text-slate-500 hover:text-red-400 underline"
-      >
-        Workflow zurücksetzen (neu packen)
-      </button>
+      {canReset && (
+        <div className="mt-4">
+          <button
+            onClick={resetWorkflow}
+            disabled={resetting}
+            className="text-xs text-slate-500 hover:text-red-400 underline disabled:opacity-50"
+          >
+            {resetting ? 'Setze zurück…' : 'Workflow zurücksetzen (neu packen)'}
+          </button>
+          <p className="text-[11px] text-slate-600 mt-1">Nur für Owner. Löscht Signaturen + Foto und startet den Pack-Workflow neu.</p>
+          {resetError && <p className="text-xs text-red-400 mt-1">{resetError}</p>}
+        </div>
+      )}
 
       <div className="mt-6 pt-4 border-t border-slate-800 text-xs text-slate-500">
         <Link href="/admin/versand" className="hover:text-cyan-400">← Zurück zur Versand-Übersicht</Link>
