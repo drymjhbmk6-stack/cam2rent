@@ -409,15 +409,17 @@ export default function AdminZubehoerPage() {
                 <h2 className="font-heading font-bold text-sm text-brand-black">Buchbar für Kunden</h2>
                 <span className="text-xs text-brand-muted font-body">({accessories.filter((a) => !a.internal && (!filterCategory || a.category === filterCategory)).length})</span>
               </div>
-              <div className="space-y-1">
+              <div className="space-y-5">
                 {groupByCategory(accessories.filter((a) => !a.internal && (!filterCategory || a.category === filterCategory))).map(({ category, items }) => (
                   <div key={category}>
-                    <p className="text-[10px] font-heading font-bold text-brand-muted uppercase tracking-wider mt-3 mb-1 px-1">{category}</p>
-                    {items.map((acc) => (
-                      <AccessoryCard key={acc.id} acc={acc} editId={editId} editForm={editForm} setEditForm={setEditForm}
-                        savedId={savedId} savingId={savingId} deletingId={deletingId} productList={productList}
-                        onStartEdit={startEdit} onSetEditId={setEditId} onSave={handleSave} onDelete={handleDelete} />
-                    ))}
+                    <p className="text-[10px] font-heading font-bold text-brand-muted uppercase tracking-wider mb-2 px-1">{category}</p>
+                    <div className="space-y-2.5">
+                      {items.map((acc) => (
+                        <AccessoryCard key={acc.id} acc={acc} editId={editId} editForm={editForm} setEditForm={setEditForm}
+                          savedId={savedId} savingId={savingId} deletingId={deletingId} productList={productList}
+                          onStartEdit={startEdit} onSetEditId={setEditId} onSave={handleSave} onDelete={handleDelete} />
+                      ))}
+                    </div>
                   </div>
                 ))}
                 {accessories.filter((a) => !a.internal && (!filterCategory || a.category === filterCategory)).length === 0 && (
@@ -433,15 +435,17 @@ export default function AdminZubehoerPage() {
                 <h2 className="font-heading font-bold text-sm text-brand-black">Intern (Kunde sieht es nicht)</h2>
                 <span className="text-xs text-brand-muted font-body">({accessories.filter((a) => a.internal && (!filterCategory || a.category === filterCategory)).length})</span>
               </div>
-              <div className="space-y-1">
+              <div className="space-y-5">
                 {groupByCategory(accessories.filter((a) => a.internal && (!filterCategory || a.category === filterCategory))).map(({ category, items }) => (
                   <div key={category}>
-                    <p className="text-[10px] font-heading font-bold text-brand-muted uppercase tracking-wider mt-3 mb-1 px-1">{category}</p>
-                    {items.map((acc) => (
-                      <AccessoryCard key={acc.id} acc={acc} editId={editId} editForm={editForm} setEditForm={setEditForm}
-                        savedId={savedId} savingId={savingId} deletingId={deletingId} productList={productList}
-                        onStartEdit={startEdit} onSetEditId={setEditId} onSave={handleSave} onDelete={handleDelete} />
-                    ))}
+                    <p className="text-[10px] font-heading font-bold text-brand-muted uppercase tracking-wider mb-2 px-1">{category}</p>
+                    <div className="space-y-2.5">
+                      {items.map((acc) => (
+                        <AccessoryCard key={acc.id} acc={acc} editId={editId} editForm={editForm} setEditForm={setEditForm}
+                          savedId={savedId} savingId={savingId} deletingId={deletingId} productList={productList}
+                          onStartEdit={startEdit} onSetEditId={setEditId} onSave={handleSave} onDelete={handleDelete} />
+                      ))}
+                    </div>
                   </div>
                 ))}
                 {accessories.filter((a) => a.internal && (!filterCategory || a.category === filterCategory)).length === 0 && (
