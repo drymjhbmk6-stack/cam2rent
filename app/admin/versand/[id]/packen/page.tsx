@@ -636,24 +636,30 @@ function SignatureBlock({
         onChange={(e) => setName(e.target.value)}
         className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-sm text-slate-100 mb-3"
       />
-      <div className="bg-white rounded-lg overflow-hidden">
+      <p className="text-xs text-slate-300 mb-1.5">Hier mit Finger oder Stift unterschreiben:</p>
+      <div className="bg-white rounded-lg overflow-hidden border-2 border-slate-300 shadow-inner" style={{ height: 160 }}>
         <SignatureCanvas
           ref={sigRef}
           penColor="#0a0a0a"
-          canvasProps={{ className: 'w-full', style: { height: 140, background: 'transparent' } }}
+          canvasProps={{
+            className: 'w-full h-full block',
+            style: { width: '100%', height: '100%', background: '#ffffff', display: 'block', touchAction: 'none' },
+          }}
           onEnd={() => setHasDrawn(true)}
         />
       </div>
-      <button
-        type="button"
-        onClick={() => { sigRef.current?.clear(); setHasDrawn(false); }}
-        className="mt-2 text-xs text-slate-500 hover:text-cyan-400"
-      >
-        Signatur löschen
-      </button>
-      {!hasDrawn && (
-        <p className="text-xs text-slate-500 mt-1">Bitte unterschreiben.</p>
-      )}
+      <div className="flex items-center justify-between mt-2">
+        <button
+          type="button"
+          onClick={() => { sigRef.current?.clear(); setHasDrawn(false); }}
+          className="text-xs text-slate-400 hover:text-cyan-400 underline-offset-2 hover:underline"
+        >
+          Signatur löschen
+        </button>
+        {!hasDrawn && (
+          <p className="text-xs text-amber-400">Bitte unterschreiben.</p>
+        )}
+      </div>
     </div>
   );
 }
