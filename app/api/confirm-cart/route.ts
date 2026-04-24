@@ -143,6 +143,27 @@ export async function POST(req: NextRequest) {
             supabase.from('admin_settings').select('key, value').in('key', ['tax_mode', 'tax_rate']),
           ]);
 
+          // Falls der Webhook die Buchung zuerst angelegt hat, fehlt moeglicherweise
+          // die unit_id — dann wird der Zeitwert aus dem Asset nicht gefunden und
+          // landet im Vertrag als 0 €. Hier nachholen, bevor wir den Vertrag erzeugen.
+          const needsUnit = (fullBookings ?? []).filter(
+            (fb) => !fb.unit_id && fb.product_id && fb.rental_from && fb.rental_to && fb.status !== 'cancelled',
+          );
+          if (needsUnit.length > 0) {
+            await Promise.all(
+              needsUnit.map(async (fb) => {
+                try {
+                  const unitId = await assignUnitToBooking(
+                    fb.id, fb.product_id, fb.rental_from, fb.rental_to,
+                  );
+                  if (unitId) fb.unit_id = unitId;
+                } catch (e) {
+                  console.error('[confirm-cart] unit-assign idem failed', fb.id, e);
+                }
+              }),
+            );
+          }
+
           const txM: Record<string, string> = {};
           for (const s of txS ?? []) txM[s.key] = s.value;
           const taxModeIdem = (txM['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer';

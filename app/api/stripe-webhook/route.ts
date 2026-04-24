@@ -12,6 +12,7 @@ import { getStripe, getStripeWebhookSecretOrThrow } from '@/lib/stripe';
 import { isTestMode } from '@/lib/env-mode';
 import { createAdminNotification } from '@/lib/admin-notifications';
 import { parseMetadataAccessoryItems, itemsToLegacyIds } from '@/lib/booking-accessories';
+import { assignUnitToBooking } from '@/lib/unit-assignment';
 
 /**
  * Vergleicht die Summe einzelner Preiskomponenten gegen den von Stripe
@@ -265,6 +266,17 @@ async function handleSingleBooking(
   );
   await verifyAmountConsistency(supabase, bookingId, intent.id, expectedSumCents, intent.amount);
 
+  // Unit zuweisen, damit Asset-Zeitwert im Mietvertrag aufgeloest werden kann
+  // (siehe lib/contracts/generate-contract.ts → loadAssetCurrentValue via unit_id).
+  // Fehler ignorieren — non-blocking.
+  if (meta.product_id && meta.rental_from && meta.rental_to) {
+    try {
+      await assignUnitToBooking(bookingId, meta.product_id, meta.rental_from, meta.rental_to);
+    } catch (e) {
+      console.error('[Webhook] unit-assign single failed', bookingId, e);
+    }
+  }
+
   console.log(`[Webhook] Einzelbuchung ${bookingId} nachgeholt.`);
 
   // Email senden
@@ -417,6 +429,15 @@ async function handleCartBooking(
       loyaltyDiscount) * 100,
   );
   await verifyAmountConsistency(supabase, bookingId, intent.id, expectedSumCents, intent.amount);
+
+  // Unit zuweisen (fuer Asset-Zeitwert im Vertrag)
+  if (firstItem.productId && firstItem.rentalFrom && firstItem.rentalTo) {
+    try {
+      await assignUnitToBooking(bookingId, firstItem.productId, firstItem.rentalFrom, firstItem.rentalTo);
+    } catch (e) {
+      console.error('[Webhook] unit-assign cart failed', bookingId, e);
+    }
+  }
 
   console.log(`[Webhook] Cart-Buchung ${bookingId} nachgeholt.`);
 
