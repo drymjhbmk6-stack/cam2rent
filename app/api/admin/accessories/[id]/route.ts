@@ -16,6 +16,10 @@ export async function PUT(
 
   const maxQty = typeof body.max_qty_per_booking === 'number' && body.max_qty_per_booking > 0
     ? Math.floor(body.max_qty_per_booking) : null;
+  const replacementValue = (() => {
+    const n = parseFloat(String(body.replacement_value ?? ''));
+    return Number.isFinite(n) && n >= 0 ? n : 0;
+  })();
 
   const { error } = await supabase
     .from('accessories')
@@ -34,6 +38,7 @@ export async function PUT(
       is_upgrade_base: body.is_upgrade_base ?? false,
       allow_multi_qty: body.allow_multi_qty ?? false,
       max_qty_per_booking: maxQty,
+      replacement_value: replacementValue,
     })
     .eq('id', id);
 

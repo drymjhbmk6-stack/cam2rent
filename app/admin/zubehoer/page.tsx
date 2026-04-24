@@ -25,6 +25,9 @@ interface Accessory {
   is_upgrade_base: boolean;
   allow_multi_qty?: boolean | null;
   max_qty_per_booking?: number | null;
+  // String-Variante wird im Formular verwendet (input type="number" liefert string),
+  // number kommt aus der DB. API nimmt beides entgegen und konvertiert.
+  replacement_value?: number | string | null;
 }
 
 const CATEGORIES = ['Akku', 'Speicher', 'Halterung', 'Schutz', 'Audio', 'Stativ', 'Sonstiges'];
@@ -46,6 +49,7 @@ function emptyForm() {
     is_upgrade_base: false,
     allow_multi_qty: false,
     max_qty_per_booking: null as number | null,
+    replacement_value: '',
   };
 }
 
@@ -130,6 +134,7 @@ export default function AdminZubehoerPage() {
       is_upgrade_base: acc.is_upgrade_base ?? false,
       allow_multi_qty: acc.allow_multi_qty ?? false,
       max_qty_per_booking: acc.max_qty_per_booking ?? null,
+      replacement_value: acc.replacement_value != null ? String(acc.replacement_value) : '',
     });
   }
 
@@ -268,6 +273,18 @@ export default function AdminZubehoerPage() {
                 <input type="number" min="0" value={newForm.available_qty}
                   onChange={(e) => setNewForm((f) => ({ ...f, available_qty: parseInt(e.target.value) || 0 }))}
                   className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
+              </div>
+              <div>
+                <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">
+                  Wiederbeschaffungswert (€)
+                  <span className="ml-1 text-brand-muted font-normal normal-case">— Zeitwert im Mietvertrag</span>
+                </label>
+                <input
+                  type="number" min="0" step="0.01" value={newForm.replacement_value}
+                  onChange={(e) => setNewForm((f) => ({ ...f, replacement_value: e.target.value }))}
+                  placeholder="z.B. 40.00"
+                  className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue"
+                />
               </div>
               <div className="sm:col-span-2">
                 <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Bild-URL (optional)</label>
@@ -575,6 +592,19 @@ function AccessoryCard({ acc, editId, editForm, setEditForm, savedId, savingId, 
                         <input type="number" min="0" value={editForm.available_qty ?? 1}
                           onChange={(e) => setEditForm((f) => ({ ...f, available_qty: parseInt(e.target.value) || 0 }))}
                           className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body bg-white focus:outline-none focus:ring-2 focus:ring-accent-blue" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">
+                          Wiederbeschaffungswert (€)
+                          <span className="ml-1 text-brand-muted font-normal normal-case">— Zeitwert im Mietvertrag</span>
+                        </label>
+                        <input
+                          type="number" min="0" step="0.01"
+                          value={(editForm.replacement_value as string | number | null | undefined) ?? ''}
+                          onChange={(e) => setEditForm((f) => ({ ...f, replacement_value: e.target.value }))}
+                          placeholder="z.B. 40.00"
+                          className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body bg-white focus:outline-none focus:ring-2 focus:ring-accent-blue"
+                        />
                       </div>
                       <div className="sm:col-span-2">
                         <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Bild-URL (optional)</label>

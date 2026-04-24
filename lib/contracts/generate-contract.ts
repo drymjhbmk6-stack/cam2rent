@@ -37,34 +37,78 @@ export interface GenerateContractResult {
 /**
  * Löst Zubehör-IDs und Set-IDs in lesbare Namen auf.
  */
-async function resolveAccessoryNames(ids: string[]): Promise<Record<string, string>> {
+/**
+ * Loest IDs zu Namen + Wiederbeschaffungswert auf.
+ * Fuer Zubehoer: direkter Wert aus accessories.replacement_value.
+ * Fuer Sets: Summe der enthaltenen accessory_items × deren replacement_value.
+ */
+interface AccessoryInfo {
+  name: string;
+  replacementValue: number; // EUR pro Stueck (bei Sets: Gesamtwert des Sets)
+  isSet: boolean;
+}
+
+async function resolveAccessoryInfo(ids: string[]): Promise<Record<string, AccessoryInfo>> {
   if (ids.length === 0) return {};
   const supabase = createServiceClient();
-  const nameMap: Record<string, string> = {};
+  const infoMap: Record<string, AccessoryInfo> = {};
 
-  // Zubehör laden
+  // Zubehoer mit Zeitwert laden
   const { data: accessories } = await supabase
     .from('accessories')
-    .select('id, name')
+    .select('id, name, replacement_value')
     .in('id', ids);
   for (const a of accessories || []) {
-    nameMap[a.id] = a.name;
+    infoMap[a.id] = {
+      name: a.name,
+      replacementValue: a.replacement_value != null ? Number(a.replacement_value) : 0,
+      isSet: false,
+    };
   }
 
-  // Sets laden (für IDs die nicht in accessories gefunden wurden)
-  const missingIds = ids.filter(id => !nameMap[id]);
+  // Sets laden und Gesamt-Zeitwert aus accessory_items berechnen
+  const missingIds = ids.filter((id) => !infoMap[id]);
   if (missingIds.length > 0) {
     const { data: sets } = await supabase
       .from('sets')
-      .select('id, name')
+      .select('id, name, accessory_items')
       .in('id', missingIds);
-    for (const s of sets || []) {
-      nameMap[s.id] = s.name;
+    // Zeitwerte aller im Set enthaltenen Zubehoere laden
+    const setAccessoryIds = new Set<string>();
+    for (const s of sets ?? []) {
+      const items = Array.isArray(s.accessory_items) ? s.accessory_items : [];
+      for (const it of items) {
+        if (it?.accessory_id) setAccessoryIds.add(String(it.accessory_id));
+      }
+    }
+    let accValues: Record<string, number> = {};
+    if (setAccessoryIds.size > 0) {
+      const { data: accs } = await supabase
+        .from('accessories')
+        .select('id, replacement_value')
+        .in('id', [...setAccessoryIds]);
+      accValues = Object.fromEntries(
+        (accs ?? []).map((a) => [a.id, a.replacement_value != null ? Number(a.replacement_value) : 0]),
+      );
+    }
+    for (const s of sets ?? []) {
+      const items = Array.isArray(s.accessory_items) ? s.accessory_items as { accessory_id: string; qty: number }[] : [];
+      const setTotal = items.reduce((sum, it) => {
+        const val = accValues[it.accessory_id] ?? 0;
+        const qty = typeof it.qty === 'number' ? it.qty : 1;
+        return sum + val * qty;
+      }, 0);
+      infoMap[s.id] = {
+        name: s.name ?? s.id,
+        replacementValue: setTotal,
+        isSet: true,
+      };
     }
   }
 
-  return nameMap;
+  return infoMap;
 }
+
 
 /**
  * Lädt benutzerdefinierte Vertragsparagraphen aus admin_settings.
@@ -172,8 +216,8 @@ export async function generateContractPDF(opts: {
   const contractDate = `${now.getUTCDate().toString().padStart(2, '0')}.${(now.getUTCMonth() + 1).toString().padStart(2, '0')}.${now.getUTCFullYear()}`;
   const contractTime = `${now.getUTCHours().toString().padStart(2, '0')}:${now.getUTCMinutes().toString().padStart(2, '0')}`;
 
-  // Zubehör-IDs zu lesbaren Namen auflösen
-  const accessoryNameMap = await resolveAccessoryNames(opts.accessories);
+  // Zubehör-IDs zu Namen + Zeitwert aufloesen (Zubehoer direkt, Sets als Summe)
+  const accessoryInfoMap = await resolveAccessoryInfo(opts.accessories);
 
   // Zeitwert (Wiederbeschaffungswert) aus verknuepftem Asset laden, falls Unit
   // bekannt. Fallback: opts.deposit (Kautions-Betrag des Produkts) fuer Altbestand
@@ -208,14 +252,19 @@ export async function generateContractPDF(opts: {
           wiederbeschaffungswert,
         },
         ...accessoryEntries.map((entry, i) => {
-          const baseName = accessoryNameMap[entry.id] || entry.id;
+          const info = accessoryInfoMap[entry.id];
+          const baseName = info?.name ?? entry.id;
+          // Sets enthalten bereits den Gesamt-Zeitwert pro Set-Einheit.
+          // Zubehoer: Wert pro Stueck × qty.
+          const unitValue = info?.replacementValue ?? 0;
+          const lineValue = unitValue * entry.qty;
           return {
             position: i + 2,
             bezeichnung: entry.qty > 1 ? `${entry.qty}x ${baseName}` : baseName,
             seriennr: '',
             tage: opts.rentalDays,
             preis: 0,
-            wiederbeschaffungswert: 0,
+            wiederbeschaffungswert: lineValue,
           };
         }),
       ].filter(item => item.bezeichnung);

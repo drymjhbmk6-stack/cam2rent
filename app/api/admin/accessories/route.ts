@@ -18,7 +18,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { name, category, description, pricing_mode, price, available_qty, available, image_url, compatible_product_ids, internal, upgrade_group, is_upgrade_base, allow_multi_qty, max_qty_per_booking } = body;
+  const { name, category, description, pricing_mode, price, available_qty, available, image_url, compatible_product_ids, internal, upgrade_group, is_upgrade_base, allow_multi_qty, max_qty_per_booking, replacement_value } = body;
 
   if (!name || !category) {
     return NextResponse.json({ error: 'name und category erforderlich.' }, { status: 400 });
@@ -45,10 +45,14 @@ export async function POST(req: NextRequest) {
 
   const maxQty = typeof max_qty_per_booking === 'number' && max_qty_per_booking > 0
     ? Math.floor(max_qty_per_booking) : null;
+  const replacementValue = (() => {
+    const n = parseFloat(String(replacement_value ?? ''));
+    return Number.isFinite(n) && n >= 0 ? n : 0;
+  })();
 
   const { data, error } = await supabase
     .from('accessories')
-    .insert({ id, name, category, description: description ?? null, pricing_mode: pricing_mode ?? 'perDay', price: parseFloat(price) || 0, available_qty: parseInt(available_qty) || 1, available: available ?? true, image_url: image_url ?? null, sort_order, compatible_product_ids: compatible_product_ids ?? [], internal: internal ?? false, upgrade_group: upgrade_group || null, is_upgrade_base: is_upgrade_base ?? false, allow_multi_qty: allow_multi_qty ?? false, max_qty_per_booking: maxQty })
+    .insert({ id, name, category, description: description ?? null, pricing_mode: pricing_mode ?? 'perDay', price: parseFloat(price) || 0, available_qty: parseInt(available_qty) || 1, available: available ?? true, image_url: image_url ?? null, sort_order, compatible_product_ids: compatible_product_ids ?? [], internal: internal ?? false, upgrade_group: upgrade_group || null, is_upgrade_base: is_upgrade_base ?? false, allow_multi_qty: allow_multi_qty ?? false, max_qty_per_booking: maxQty, replacement_value: replacementValue })
     .select()
     .single();
 

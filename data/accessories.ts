@@ -73,6 +73,9 @@ export interface Accessory {
   /** Optional: Obergrenze pro Buchung (bei allowMultiQty). NULL/undefined = nur Lagerbestand zaehlt. */
   maxQtyPerBooking?: number | null;
 
+  /** Wiederbeschaffungswert (Neupreis) in EUR — Obergrenze der Ersatzpflicht bei Totalschaden im Vertrag. */
+  replacementValue?: number;
+
   /** Maps to an SVG icon in the booking page. */
   iconId: AccessoryIconId;
 

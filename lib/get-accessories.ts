@@ -21,6 +21,7 @@ interface DbAccessory {
   is_upgrade_base: boolean;
   allow_multi_qty: boolean | null;
   max_qty_per_booking: number | null;
+  replacement_value: number | null;
 }
 
 function dbToAccessory(db: DbAccessory): Accessory {
@@ -38,6 +39,7 @@ function dbToAccessory(db: DbAccessory): Accessory {
     isUpgradeBase: db.is_upgrade_base ?? false,
     allowMultiQty: db.allow_multi_qty ?? false,
     maxQtyPerBooking: db.max_qty_per_booking ?? null,
+    replacementValue: db.replacement_value != null ? Number(db.replacement_value) : 0,
   };
 }
 
