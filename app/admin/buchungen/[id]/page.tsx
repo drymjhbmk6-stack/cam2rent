@@ -980,8 +980,16 @@ export default function BuchungDetailPage() {
                 )}
                 {booking.delivery_mode === 'versand' && (
                   <>
-                    <button onClick={openPackliste} className="block w-full text-center px-4 py-2 text-sm font-heading font-semibold bg-cyan-600 text-white rounded-btn hover:bg-cyan-700 transition-colors">Versand-Packliste</button>
-                    <a href={`/api/packlist/${booking.id}`} target="_blank" className="block w-full text-center px-4 py-2 text-sm font-heading font-semibold bg-amber-500 text-white rounded-btn hover:bg-amber-600 transition-colors">Packliste PDF</a>
+                    {/* Digitaler Pack-Workflow: hier wird die PDF erst nach
+                        Packen + Kontrolle (4-Augen) erzeugt — mit allen
+                        Haakchen + Unterschriften. */}
+                    <a href={`/admin/versand/${booking.id}/packen`} className="block w-full text-center px-4 py-2 text-sm font-heading font-semibold bg-cyan-600 text-white rounded-btn hover:bg-cyan-700 transition-colors">
+                      📦 Paket packen (digital)
+                    </a>
+                    {/* Legacy/Sonderfall: leere PDF zum Ausdrucken + manuelles Abhaken */}
+                    <button onClick={openPackliste} className="block w-full text-center px-4 py-2 text-sm font-heading font-semibold bg-slate-200 dark:bg-slate-700 text-brand-black dark:text-slate-100 rounded-btn hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors">
+                      📋 Manuelle Packliste (leer, zum Ausdrucken)
+                    </button>
                   </>
                 )}
                 {booking.delivery_mode === 'abholung' && (
