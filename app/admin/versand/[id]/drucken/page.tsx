@@ -18,6 +18,8 @@ interface Booking {
   shipping_address: string | null;
   accessories: string[];
   accessory_items?: { accessory_id: string; qty: number }[] | null;
+  serial_number?: string | null;
+  resolved_items?: { id: string; name: string; qty: number; isFromSet?: boolean; setName?: string }[];
   haftung: string;
   price_total: number;
   deposit: number;
@@ -165,7 +167,12 @@ export default function DruckenPage({ params }: { params: Promise<{ id: string }
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 bg-white">
               <div>
                 <p className="font-bold text-base">{booking.product_name}</p>
-                <p className="text-xs text-gray-500 mt-0.5">Kamera · Seriennummer prüfen</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Kamera · Seriennummer:{' '}
+                  <span className="font-mono font-semibold text-gray-900">
+                    {booking.serial_number ?? '— (keine Unit zugeordnet)'}
+                  </span>
+                </p>
               </div>
               <div className="flex gap-10">
                 <div className="w-7 h-7 border-2 border-gray-400 rounded flex items-center justify-center text-gray-300 text-lg font-bold print:border-gray-600">☐</div>
@@ -173,19 +180,30 @@ export default function DruckenPage({ params }: { params: Promise<{ id: string }
               </div>
             </div>
 
-            {/* Zubehör */}
-            {accList.map((accId, i) => (
-              <div key={`${accId}-${i}`} className={`flex items-center justify-between px-5 py-4 border-b border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
-                <div>
-                  <p className="font-semibold text-sm">{accName(accId)}</p>
-                  <p className="text-xs text-gray-400">Zubehör</p>
+            {/* Zubehör — Sets werden mit "Im Set: X"-Sublabel expandiert */}
+            {(() => {
+              // Resolved-Items aus API bevorzugen (loest Sets auf), sonst Legacy-Fallback.
+              const items = (booking.resolved_items && booking.resolved_items.length > 0)
+                ? booking.resolved_items
+                : accList.map((id) => ({ id, name: accName(id), qty: 1, isFromSet: false, setName: undefined }));
+              // qty>1 → eine Zeile pro Stueck (Packer hakt jede Einheit ab)
+              const expanded = items.flatMap((it) => Array.from({ length: it.qty }, () => it));
+              if (expanded.length === 0) return null;
+              return expanded.map((it, i) => (
+                <div key={`${it.id}-${i}`} className={`flex items-center justify-between px-5 py-4 border-b border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
+                  <div>
+                    <p className="font-semibold text-sm">{it.name}</p>
+                    <p className="text-xs text-gray-400">
+                      {it.isFromSet && it.setName ? `Im Set: ${it.setName}` : 'Zubehör'}
+                    </p>
+                  </div>
+                  <div className="flex gap-10">
+                    <div className="w-7 h-7 border-2 border-gray-400 rounded flex items-center justify-center text-gray-300 text-lg font-bold print:border-gray-600">☐</div>
+                    <div className="w-7 h-7 border-2 border-gray-400 rounded flex items-center justify-center text-gray-300 text-lg font-bold print:border-gray-600">☐</div>
+                  </div>
                 </div>
-                <div className="flex gap-10">
-                  <div className="w-7 h-7 border-2 border-gray-400 rounded flex items-center justify-center text-gray-300 text-lg font-bold print:border-gray-600">☐</div>
-                  <div className="w-7 h-7 border-2 border-gray-400 rounded flex items-center justify-center text-gray-300 text-lg font-bold print:border-gray-600">☐</div>
-                </div>
-              </div>
-            ))}
+              ));
+            })()}
 
             {/* Rücksendungs-Unterlagen */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-white">

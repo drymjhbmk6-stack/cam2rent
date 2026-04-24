@@ -28,6 +28,13 @@ export interface PacklistData {
   accessories: string[];
   /** Optional: Zubehoer mit Stueckzahl. Ersetzt accessories[]-Rendering. */
   accessoryItems?: { accessory_id: string; qty: number }[];
+  /** Optional: Bereits aufgeloeste Item-Namen mit Stueckzahl. Wenn vorhanden,
+   *  hat das Vorrang vor accessoryItems/accessories — wird typischerweise von
+   *  der Booking-API geliefert (loest Sets in einzelne Zubehoere auf). */
+  resolvedItems?: { name: string; qty: number }[];
+  /** Seriennummer der gebuchten Kamera. Wenn vorhanden, wird sie statt der
+   *  leeren Eintrage-Linie ausgegeben. */
+  serialNumber?: string | null;
   haftung: string;
 }
 
@@ -229,13 +236,17 @@ export function PacklistPDF({ data }: { data: PacklistData }) {
   // Kameras aufspalten (können kommagetrennt sein)
   const cameras = data.productName.split(',').map((n) => n.trim());
 
-  // Zubehör-Namen auflösen (qty-aware wenn accessoryItems vorhanden)
-  const accItems = data.accessoryItems && data.accessoryItems.length > 0
-    ? data.accessoryItems.map((i) => {
-        const name = accName(i.accessory_id);
-        return i.qty > 1 ? `${i.qty}x ${name}` : name;
-      })
-    : data.accessories.map((id) => accName(id));
+  // Zubehör-Namen auflösen.
+  // Vorrang: resolvedItems (vom Server bereits expandiert, inkl. Set-Items),
+  // dann accessoryItems (qty-aware), zuletzt accessories[] (Legacy, qty=1).
+  const accItems = data.resolvedItems && data.resolvedItems.length > 0
+    ? data.resolvedItems.map((i) => (i.qty > 1 ? `${i.qty}x ${i.name}` : i.name))
+    : data.accessoryItems && data.accessoryItems.length > 0
+      ? data.accessoryItems.map((i) => {
+          const name = accName(i.accessory_id);
+          return i.qty > 1 ? `${i.qty}x ${name}` : name;
+        })
+      : data.accessories.map((id) => accName(id));
 
   // Haftung Label
   const haftungLabel = data.haftung === 'standard' ? 'Standard-Haftungsschutz'
@@ -316,7 +327,13 @@ export function PacklistPDF({ data }: { data: PacklistData }) {
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'flex-end', marginBottom: 10 }}>
               <Text style={{ fontSize: 10 }}>Seriennummer: </Text>
-              <View style={[s.writeLine, s.writeLineLong]} />
+              {data.serialNumber ? (
+                <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: C.navy }}>
+                  {data.serialNumber}
+                </Text>
+              ) : (
+                <View style={[s.writeLine, s.writeLineLong]} />
+              )}
             </View>
 
             {haftungLabel && (

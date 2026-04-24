@@ -65,6 +65,67 @@ export async function GET(
     }
   }
 
+  // Seriennummer aus zugewiesener Unit
+  let serialNumber: string | null = null;
+  if (booking.unit_id) {
+    const { data: unit } = await supabase
+      .from('product_units')
+      .select('serial_number')
+      .eq('id', booking.unit_id)
+      .maybeSingle();
+    serialNumber = unit?.serial_number ?? null;
+  }
+
+  // Zubehoer + Sets aufloesen — gleiche Logik wie /api/admin/booking/[id],
+  // damit Packliste auch Set-Inhalte expandiert anzeigt.
+  type Resolved = { name: string; qty: number };
+  const resolvedItems: Resolved[] = [];
+  const rawItems: { accessory_id: string; qty: number }[] = Array.isArray(booking.accessory_items) && booking.accessory_items.length > 0
+    ? booking.accessory_items as { accessory_id: string; qty: number }[]
+    : (Array.isArray(booking.accessories) ? booking.accessories as string[] : []).map((aid) => ({ accessory_id: aid, qty: 1 }));
+
+  if (rawItems.length > 0) {
+    const allIds = [...new Set(rawItems.map((r) => r.accessory_id))];
+    const [{ data: accs }, { data: sets }] = await Promise.all([
+      supabase.from('accessories').select('id, name').in('id', allIds),
+      supabase.from('sets').select('id, name, accessory_items').in('id', allIds),
+    ]);
+    const accNameMap = Object.fromEntries((accs ?? []).map((a) => [a.id, a.name as string]));
+    const setMap: Record<string, { name: string; items: { accessory_id: string; qty: number }[] }> = {};
+    for (const s of sets ?? []) {
+      setMap[s.id] = {
+        name: s.name as string,
+        items: Array.isArray(s.accessory_items) ? (s.accessory_items as { accessory_id: string; qty: number }[]) : [],
+      };
+    }
+    const setSubIds = new Set<string>();
+    for (const setInfo of Object.values(setMap)) {
+      for (const it of setInfo.items) {
+        if (!accNameMap[it.accessory_id]) setSubIds.add(it.accessory_id);
+      }
+    }
+    if (setSubIds.size > 0) {
+      const { data: subAccs } = await supabase.from('accessories').select('id, name').in('id', [...setSubIds]);
+      for (const a of subAccs ?? []) accNameMap[a.id] = a.name as string;
+    }
+    for (const item of rawItems) {
+      const setInfo = setMap[item.accessory_id];
+      if (setInfo) {
+        for (const sub of setInfo.items) {
+          resolvedItems.push({
+            name: accNameMap[sub.accessory_id] ?? sub.accessory_id,
+            qty: (sub.qty || 1) * item.qty,
+          });
+        }
+      } else {
+        resolvedItems.push({
+          name: accNameMap[item.accessory_id] ?? item.accessory_id,
+          qty: item.qty,
+        });
+      }
+    }
+  }
+
   const data: PacklistData = {
     bookingId: booking.id,
     customerName: booking.customer_name ?? '',
@@ -77,6 +138,8 @@ export async function GET(
     deliveryMode: booking.delivery_mode ?? 'versand',
     shippingMethod: booking.shipping_method ?? 'standard',
     accessories: Array.isArray(booking.accessories) ? booking.accessories : [],
+    resolvedItems,
+    serialNumber,
     haftung: booking.haftung ?? 'none',
   };
 

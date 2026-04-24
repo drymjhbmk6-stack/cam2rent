@@ -36,6 +36,69 @@ export async function GET(
   }
   booking.serial_number = serialNumber;
 
+  // Zubehoer + Sets aufloesen — fuer Packliste, Uebergabeprotokoll, Vertrag.
+  // accessory_items hat Vorrang (qty-aware), sonst accessories[] mit qty=1.
+  // Fuer jedes Element wird der Name aus accessories ODER sets aufgeloest.
+  // Bei Sets werden zusaetzlich die enthaltenen accessory_items expandiert,
+  // damit die Packliste das vollstaendige Inventar zeigt.
+  type ResolvedItem = { id: string; name: string; qty: number; isFromSet?: boolean; setName?: string };
+  const rawItems: { accessory_id: string; qty: number }[] = Array.isArray(booking.accessory_items) && booking.accessory_items.length > 0
+    ? (booking.accessory_items as { accessory_id: string; qty: number }[])
+    : (Array.isArray(booking.accessories) ? booking.accessories as string[] : []).map((aid) => ({ accessory_id: aid, qty: 1 }));
+
+  const resolved: ResolvedItem[] = [];
+  if (rawItems.length > 0) {
+    const allIds = [...new Set(rawItems.map((r) => r.accessory_id))];
+    const [{ data: accs }, { data: sets }] = await Promise.all([
+      supabase.from('accessories').select('id, name').in('id', allIds),
+      supabase.from('sets').select('id, name, accessory_items').in('id', allIds),
+    ]);
+    const accNameMap = Object.fromEntries((accs ?? []).map((a) => [a.id, a.name as string]));
+    const setMap: Record<string, { name: string; items: { accessory_id: string; qty: number }[] }> = {};
+    for (const s of sets ?? []) {
+      setMap[s.id] = {
+        name: s.name as string,
+        items: Array.isArray(s.accessory_items) ? (s.accessory_items as { accessory_id: string; qty: number }[]) : [],
+      };
+    }
+
+    // Set-Sub-Item-Namen separat nachladen (wenn nicht schon im accNameMap)
+    const setSubIds = new Set<string>();
+    for (const setInfo of Object.values(setMap)) {
+      for (const it of setInfo.items) {
+        if (!accNameMap[it.accessory_id]) setSubIds.add(it.accessory_id);
+      }
+    }
+    if (setSubIds.size > 0) {
+      const { data: subAccs } = await supabase.from('accessories').select('id, name').in('id', [...setSubIds]);
+      for (const a of subAccs ?? []) accNameMap[a.id] = a.name as string;
+    }
+
+    for (const item of rawItems) {
+      const setInfo = setMap[item.accessory_id];
+      if (setInfo) {
+        // Set-Container-Zeile zur Orientierung, dann Sub-Items expandiert
+        resolved.push({ id: item.accessory_id, name: setInfo.name, qty: item.qty });
+        for (const sub of setInfo.items) {
+          resolved.push({
+            id: sub.accessory_id,
+            name: accNameMap[sub.accessory_id] ?? sub.accessory_id,
+            qty: (sub.qty || 1) * item.qty,
+            isFromSet: true,
+            setName: setInfo.name,
+          });
+        }
+      } else {
+        resolved.push({
+          id: item.accessory_id,
+          name: accNameMap[item.accessory_id] ?? item.accessory_id,
+          qty: item.qty,
+        });
+      }
+    }
+  }
+  booking.resolved_items = resolved;
+
   // Kundenprofil laden
   let customer = null;
   if (booking.user_id) {
