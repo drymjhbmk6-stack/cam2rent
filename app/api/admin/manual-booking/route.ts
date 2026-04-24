@@ -72,6 +72,15 @@ export async function POST(req: NextRequest) {
       shipping_price: parseFloat(shipping_price || '0'),
       haftung: haftung || 'none',
       accessories: accessories || [],
+      // accessory_items qty-aware: nimmt bevorzugt body.accessory_items, sonst
+      // baut es eine Eins-zu-Eins-Liste aus accessories[] (qty=1 pro Eintrag).
+      // So loesen Rechnung, Mietvertrag und Packliste auch hier Sets korrekt
+      // in ihre Einzelteile auf.
+      accessory_items: Array.isArray(body.accessory_items) && body.accessory_items.length > 0
+        ? body.accessory_items
+        : (Array.isArray(accessories) && accessories.length > 0
+            ? (accessories as string[]).map((id) => ({ accessory_id: id, qty: 1 }))
+            : null),
       price_rental: parseFloat(price_rental || '0'),
       price_accessories: parseFloat(price_accessories || '0'),
       price_haftung: parseFloat(price_haftung || '0'),

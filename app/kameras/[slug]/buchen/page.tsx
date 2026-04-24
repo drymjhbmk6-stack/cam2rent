@@ -1922,6 +1922,20 @@ export default function BuchenPage() {
                           try {
                             sessionStorage.setItem('cam2rent_contract_signature', JSON.stringify(contractSignature));
                           } catch { /* sessionStorage nicht verfügbar */ }
+                          // Accessoires + Set in eine qty-aware Liste packen.
+                          // Set wird als pseudo-Zubehoer (qty=1) gespeichert —
+                          // die Booking-API/Packliste expandieren das beim
+                          // Lesen ueber sets.accessory_items in die Einzelteile.
+                          const baseAccessoryItems = accessories.map((id) => ({
+                            accessory_id: id,
+                            qty: accessoryQty[id] ?? 1,
+                          }));
+                          const finalAccessoryItems = selectedSet
+                            ? [{ accessory_id: selectedSet.id, qty: 1 }, ...baseAccessoryItems]
+                            : baseAccessoryItems;
+                          const finalAccessories = selectedSet
+                            ? [selectedSet.id, ...accessories]
+                            : accessories;
                           addItem({
                             id: crypto.randomUUID(),
                             productId: product.id,
@@ -1930,7 +1944,8 @@ export default function BuchenPage() {
                             rentalFrom: format(range.from, 'yyyy-MM-dd'),
                             rentalTo: format(range.to ?? range.from, 'yyyy-MM-dd'),
                             days: breakdown.days,
-                            accessories: selectedSet ? [] : accessories,
+                            accessories: finalAccessories,
+                            accessoryItems: finalAccessoryItems,
                             haftung,
                             priceRental: breakdown.rentalPrice,
                             priceAccessories: selectedSet ? setPrice : breakdown.accessoryPrice,

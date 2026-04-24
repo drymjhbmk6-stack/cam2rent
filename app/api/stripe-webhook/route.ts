@@ -204,6 +204,13 @@ async function handleSingleBooking(
   // Neue qty-aware Darstellung aus metadata.accessory_items (id:qty,...).
   // Fallback auf meta.accessories (reine IDs) wenn Metadata alt ist.
   const accessoryItems = parseMetadataAccessoryItems(meta.accessory_items, meta.accessories);
+  // Wenn ein Set gewaehlt wurde, kommt die Set-ID als eigene meta.set_id —
+  // sie ist NICHT in meta.accessory_items enthalten. Damit Rechnung,
+  // Mietvertrag und Packliste das Set spaeter aufloesen koennen, prependen
+  // wir es als pseudo-Zubehoer mit qty=1.
+  if (typeof meta.set_id === 'string' && meta.set_id.trim()) {
+    accessoryItems.unshift({ accessory_id: meta.set_id.trim(), qty: 1 });
+  }
   const accessories = accessoryItems.length > 0
     ? itemsToLegacyIds(accessoryItems)
     : (meta.accessories ? meta.accessories.split(',').filter(Boolean) : []);
@@ -382,7 +389,27 @@ async function handleCartBooking(
   const productName = items.length === 1
     ? firstItem.productName
     : items.map((it) => it.productName).join(', ');
-  const allAccessories = [...new Set(items.flatMap((it) => it.accessories))];
+
+  // Zubehoer + Set qty-aware aggregieren (siehe confirm-cart fuer Details).
+  type AccItem = { accessory_id: string; qty: number };
+  const aggMap = new Map<string, number>();
+  for (const it of items) {
+    if (Array.isArray(it.accessoryItems) && it.accessoryItems.length > 0) {
+      for (const ai of it.accessoryItems as AccItem[]) {
+        if (!ai?.accessory_id) continue;
+        const q = typeof ai.qty === 'number' && ai.qty > 0 ? Math.floor(ai.qty) : 1;
+        aggMap.set(ai.accessory_id, (aggMap.get(ai.accessory_id) ?? 0) + q);
+      }
+    } else {
+      for (const id of it.accessories ?? []) {
+        if (!id) continue;
+        aggMap.set(id, (aggMap.get(id) ?? 0) + 1);
+      }
+    }
+  }
+  const cartAccessoryItems: AccItem[] = [...aggMap.entries()]
+    .map(([accessory_id, qty]) => ({ accessory_id, qty }));
+  const allAccessories = itemsToLegacyIds(cartAccessoryItems);
 
   const testModeCart = await isTestMode();
   const { error } = await supabase.from('bookings').insert({
@@ -399,6 +426,7 @@ async function handleCartBooking(
     shipping_price: shippingPrice,
     haftung: firstItem.haftung,
     accessories: allAccessories,
+    accessory_items: cartAccessoryItems.length > 0 ? cartAccessoryItems : null,
     price_rental: items.reduce((s, it) => s + it.priceRental, 0),
     price_accessories: items.reduce((s, it) => s + it.priceAccessories, 0),
     price_haftung: items.reduce((s, it) => s + it.priceHaftung, 0),

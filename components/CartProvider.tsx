@@ -18,7 +18,19 @@ export interface CartItem {
   rentalFrom: string;   // yyyy-MM-dd
   rentalTo: string;     // yyyy-MM-dd
   days: number;
+  /**
+   * Legacy: nur Zubehoer-IDs (string-Array). Bleibt aus Abwaerts-Kompat
+   * weiter bestehen, aber `accessoryItems` ist die authoritative Quelle.
+   * Wenn ein Set gewaehlt wurde, enthaelt das Array zusaetzlich die Set-ID.
+   */
   accessories: string[];
+  /**
+   * Neu (qty-aware). Enthaelt einen Eintrag pro Zubehoer mit Stueckzahl
+   * sowie — falls ein Set gewaehlt wurde — einen Eintrag mit der Set-ID.
+   * Optional fuer Abwaertskompat mit alten localStorage-Carts; neue
+   * Items setzen das Feld immer.
+   */
+  accessoryItems?: { accessory_id: string; qty: number }[];
   haftung: 'none' | 'standard' | 'premium';
   priceRental: number;
   priceAccessories: number;

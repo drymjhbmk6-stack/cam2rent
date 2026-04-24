@@ -20,6 +20,7 @@ import {
 } from '@/lib/email';
 import { getStripe } from '@/lib/stripe';
 import { isTestMode } from '@/lib/env-mode';
+import { type BookingAccessoryItem, itemsToLegacyIds } from '@/lib/booking-accessories';
 
 const confirmCartLimiter = rateLimit({ maxAttempts: 5, windowMs: 60_000 });
 
@@ -419,7 +420,29 @@ export async function POST(req: NextRequest) {
       const productName = groupItems.length === 1
         ? firstItem.productName
         : groupItems.map((it) => it.productName).join(', ');
-      const allAccessories = [...new Set(groupItems.flatMap((it) => it.accessories))];
+
+      // Zubehoer + Set qty-aware aggregieren. Vorrang: accessoryItems
+      // (neuer Cart-Stand). Fallback: accessories[]-Array (alter Cart aus
+      // localStorage) -> qty=1 pro Eintrag. Mehrere Items mit gleicher
+      // accessory_id werden zu einem Eintrag mit summierter qty gemerged.
+      const aggMap = new Map<string, number>();
+      for (const it of groupItems) {
+        if (Array.isArray(it.accessoryItems) && it.accessoryItems.length > 0) {
+          for (const ai of it.accessoryItems) {
+            if (!ai?.accessory_id) continue;
+            const q = typeof ai.qty === 'number' && ai.qty > 0 ? Math.floor(ai.qty) : 1;
+            aggMap.set(ai.accessory_id, (aggMap.get(ai.accessory_id) ?? 0) + q);
+          }
+        } else {
+          for (const id of it.accessories ?? []) {
+            if (!id) continue;
+            aggMap.set(id, (aggMap.get(id) ?? 0) + 1);
+          }
+        }
+      }
+      const groupAccessoryItems: BookingAccessoryItem[] = [...aggMap.entries()]
+        .map(([accessory_id, qty]) => ({ accessory_id, qty }));
+      const allAccessories = itemsToLegacyIds(groupAccessoryItems);
 
       // payment_intent_id: erste Gruppe bekommt die originale ID, weitere bekommen Suffix
       const piId = gi === 0 ? payment_intent_id : `${payment_intent_id}_g${gi + 1}`;
@@ -439,6 +462,7 @@ export async function POST(req: NextRequest) {
         shipping_price: groupShipping,
         haftung: firstItem.haftung,
         accessories: allAccessories,
+        accessory_items: groupAccessoryItems.length > 0 ? groupAccessoryItems : null,
         price_rental: groupItems.reduce((s, it) => s + it.priceRental, 0),
         price_accessories: groupItems.reduce((s, it) => s + it.priceAccessories, 0),
         price_haftung: groupItems.reduce((s, it) => s + it.priceHaftung, 0),

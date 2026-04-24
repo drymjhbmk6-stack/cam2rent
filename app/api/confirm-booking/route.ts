@@ -123,6 +123,12 @@ export async function POST(req: NextRequest) {
     // 4. Parse Stripe metadata
     const meta = intent.metadata;
     const accessoryItems = parseMetadataAccessoryItems(meta.accessory_items, meta.accessories);
+    // Wenn ein Set gewaehlt wurde, kommt die Set-ID als eigene meta.set_id.
+    // Damit Rechnung, Mietvertrag und Packliste das Set aufloesen koennen,
+    // prependen wir es als pseudo-Zubehoer mit qty=1.
+    if (typeof meta.set_id === 'string' && meta.set_id.trim()) {
+      accessoryItems.unshift({ accessory_id: meta.set_id.trim(), qty: 1 });
+    }
     const accessories = accessoryItems.length > 0
       ? itemsToLegacyIds(accessoryItems)
       : (meta.accessories ? meta.accessories.split(',').filter(Boolean) : []);
