@@ -412,7 +412,7 @@ export default function AdminZubehoerPage() {
               <div className="space-y-5">
                 {groupByCategory(accessories.filter((a) => !a.internal && (!filterCategory || a.category === filterCategory))).map(({ category, items }) => (
                   <div key={category}>
-                    <p className="text-[10px] font-heading font-bold text-brand-muted uppercase tracking-wider mb-2 px-1">{category}</p>
+                    <p className="text-sm font-heading font-bold text-brand-black dark:text-slate-100 uppercase tracking-wider mb-2.5 px-1">{category}</p>
                     <div className="space-y-2.5">
                       {items.map((acc) => (
                         <AccessoryCard key={acc.id} acc={acc} editId={editId} editForm={editForm} setEditForm={setEditForm}
@@ -438,7 +438,7 @@ export default function AdminZubehoerPage() {
               <div className="space-y-5">
                 {groupByCategory(accessories.filter((a) => a.internal && (!filterCategory || a.category === filterCategory))).map(({ category, items }) => (
                   <div key={category}>
-                    <p className="text-[10px] font-heading font-bold text-brand-muted uppercase tracking-wider mb-2 px-1">{category}</p>
+                    <p className="text-sm font-heading font-bold text-brand-black dark:text-slate-100 uppercase tracking-wider mb-2.5 px-1">{category}</p>
                     <div className="space-y-2.5">
                       {items.map((acc) => (
                         <AccessoryCard key={acc.id} acc={acc} editId={editId} editForm={editForm} setEditForm={setEditForm}
