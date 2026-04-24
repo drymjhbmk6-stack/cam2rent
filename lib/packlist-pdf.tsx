@@ -41,10 +41,16 @@ export interface PacklistData {
   packedBy?: string | null;
   packedAt?: string | null;                 // ISO
   packedSignatureDataUrl?: string | null;
+  /** Vom Packer abgehakte Item-Keys (camera, ${id}::${i}, return-label). */
+  packedItems?: string[] | null;
+  /** Zustand-Check vom Packer (Sektion 3). */
+  packedCondition?: { tested?: boolean; noVisibleDamage?: boolean; note?: string } | null;
   /** Fertig signiert vom Kontrolleur (Schritt 2). */
   checkedBy?: string | null;
   checkedAt?: string | null;                // ISO
   checkedSignatureDataUrl?: string | null;
+  /** Vom Kontrolleur abgehakte Item-Keys (selbe Schluessel wie packedItems). */
+  checkedItems?: string[] | null;
   checkedNotes?: string | null;
   /** Storage-Pfad des Verpackungs-Fotos. Wird als Hinweistext ausgegeben,
    *  das Foto selbst landet NICHT im PDF (Datenschutz + Dateigroesse). */
@@ -241,10 +247,11 @@ const s = StyleSheet.create({
 
 function Checkbox({ checked = false }: { checked?: boolean }) {
   if (!checked) return <View style={s.checkbox} />;
+  // Gefuelltes Quadrat statt Glyph — viele PDF-Renderer (Browser, Druck)
+  // verschlucken das ✓ in der Helvetica-Standard-Schrift. Das Innen-Square
+  // ist im Druck garantiert sichtbar.
   return (
-    <View style={[s.checkbox, { alignItems: 'center', justifyContent: 'center' }]}>
-      <Text style={{ fontSize: 8, color: C.cyan, fontFamily: 'Helvetica-Bold' }}>✓</Text>
-    </View>
+    <View style={[s.checkbox, { backgroundColor: C.navy, borderColor: C.navy }]} />
   );
 }
 
@@ -269,6 +276,18 @@ export function PacklistPDF({ data }: { data: PacklistData }) {
   // Haftung Label
   const haftungLabel = data.haftung === 'standard' ? 'Standard-Haftungsschutz'
     : data.haftung === 'premium' ? 'Premium-Haftungsschutz' : null;
+
+  // Workflow-Status: Sind die Schritte fertig signiert? Die UI erzwingt, dass
+  // alle Items abgehakt sein muessen bevor man signieren kann -> wenn der
+  // Packer signiert hat, sind alle Items vom Packer geprueft. Genauso fuer
+  // den Kontrolleur. Im PDF zeigen wir das kombinierte Ergebnis.
+  const packerDone = !!data.packedSignatureDataUrl;
+  const checkerDone = !!data.checkedSignatureDataUrl;
+  const itemsAcknowledged = packerDone || checkerDone;
+  const cond = data.packedCondition ?? {};
+  const condTested = !!cond.tested;
+  const condNoDamage = !!cond.noVisibleDamage;
+  const condNote = typeof cond.note === 'string' ? cond.note.trim() : '';
 
   return (
     <Document>
@@ -376,7 +395,7 @@ export function PacklistPDF({ data }: { data: PacklistData }) {
                   <Text style={s.colNr}>{i + 1}</Text>
                   <Text style={s.colBez}>{name}</Text>
                   <View style={[s.colOk, { alignItems: 'center' }]}>
-                    <Checkbox />
+                    <Checkbox checked={itemsAcknowledged} />
                   </View>
                 </View>
               ))
@@ -393,7 +412,7 @@ export function PacklistPDF({ data }: { data: PacklistData }) {
               <Text style={s.colNr}>+</Text>
               <Text style={[s.colBez, { fontFamily: 'Helvetica-Bold' }]}>Rücksendeetikett beilegen</Text>
               <View style={[s.colOk, { alignItems: 'center' }]}>
-                <Checkbox />
+                <Checkbox checked={itemsAcknowledged} />
               </View>
             </View>
 
@@ -401,20 +420,24 @@ export function PacklistPDF({ data }: { data: PacklistData }) {
 
             {/* ── 3. Zustand bei Verpackung ── */}
             <Text style={s.sectionTitle}>3. Zustand bei Verpackung</Text>
-            <View style={s.checkRow}><Checkbox /><Text style={s.checkLabel}>Gerät funktionstüchtig getestet</Text></View>
-            <View style={s.checkRow}><Checkbox /><Text style={s.checkLabel}>Keine sichtbaren Schäden</Text></View>
+            <View style={s.checkRow}><Checkbox checked={condTested} /><Text style={s.checkLabel}>Gerät funktionstüchtig getestet</Text></View>
+            <View style={s.checkRow}><Checkbox checked={condNoDamage} /><Text style={s.checkLabel}>Keine sichtbaren Schäden</Text></View>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-              <Checkbox />
+              <Checkbox checked={condNote.length > 0} />
               <Text style={s.checkLabel}>Sonstiges: </Text>
-              <View style={[s.writeLine, { width: 220 }]} />
+              {condNote ? (
+                <Text style={[s.checkLabel, { fontFamily: 'Helvetica-Bold' }]}>{condNote}</Text>
+              ) : (
+                <View style={[s.writeLine, { width: 220 }]} />
+              )}
             </View>
 
             <View style={s.divider} />
 
             {/* ── 4. Verpackungskontrolle ── */}
             <Text style={s.sectionTitle}>4. Verpackungskontrolle</Text>
-            <View style={s.checkRow}><Checkbox checked /><Text style={s.checkLabel}>Gerät sicher verpackt</Text></View>
-            <View style={s.checkRow}><Checkbox checked /><Text style={s.checkLabel}>Zubehör vollständig</Text></View>
+            <View style={s.checkRow}><Checkbox checked={checkerDone} /><Text style={s.checkLabel}>Gerät sicher verpackt</Text></View>
+            <View style={s.checkRow}><Checkbox checked={checkerDone} /><Text style={s.checkLabel}>Zubehör vollständig</Text></View>
             <View style={s.checkRow}><Checkbox checked={!!data.photoStoragePath} /><Text style={s.checkLabel}>Foto-Nachweis vom Kontrolleur erstellt</Text></View>
             {data.checkedNotes && (
               <Text style={{ fontSize: 9, color: C.grayText, marginTop: 4, marginLeft: 16 }}>

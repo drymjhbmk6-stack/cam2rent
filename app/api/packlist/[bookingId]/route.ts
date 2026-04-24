@@ -141,13 +141,17 @@ export async function GET(
     resolvedItems,
     serialNumber,
     haftung: booking.haftung ?? 'none',
-    // Pack-Workflow-Daten (Sektion 5: zwei Unterschriften)
+    // Pack-Workflow-Daten (Sektion 3 + 5: Haakchen aus dem digitalen Flow)
     packedBy: booking.pack_packed_by ?? null,
     packedAt: booking.pack_packed_at ?? null,
     packedSignatureDataUrl: booking.pack_packed_signature ?? null,
+    packedItems: Array.isArray(booking.pack_packed_items) ? booking.pack_packed_items : null,
+    packedCondition: booking.pack_packed_condition && typeof booking.pack_packed_condition === 'object'
+      ? booking.pack_packed_condition : null,
     checkedBy: booking.pack_checked_by ?? null,
     checkedAt: booking.pack_checked_at ?? null,
     checkedSignatureDataUrl: booking.pack_checked_signature ?? null,
+    checkedItems: Array.isArray(booking.pack_checked_items) ? booking.pack_checked_items : null,
     checkedNotes: booking.pack_checked_notes ?? null,
     photoStoragePath: booking.pack_photo_url ?? null,
   };
