@@ -26,7 +26,10 @@ export default function AdminLoginPage() {
 
     try {
       const body: Record<string, string> = { password };
-      if (email.trim()) body.email = email.trim();
+      // Nur als E-Mail werten wenn es wie eine aussieht (@ + Domain).
+      // So ist "Admin@" oder Teil-Eingaben kein Hindernis fuer den Master-Login.
+      const trimmed = email.trim();
+      if (trimmed && /.+@.+\..+/.test(trimmed)) body.email = trimmed;
       if (needs2FA && totpCode) {
         body.totpCode = totpCode;
       }
@@ -76,18 +79,18 @@ export default function AdminLoginPage() {
             Anmelden
           </h1>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4" noValidate>
             <div>
               <label
                 htmlFor="email"
                 className="block text-sm font-heading font-semibold mb-2"
                 style={{ color: '#e2e8f0' }}
               >
-                E-Mail <span className="font-normal text-xs" style={{ color: '#64748b' }}>(leer lassen für Master-Passwort)</span>
+                E-Mail <span className="font-normal text-xs" style={{ color: '#64748b' }}>(nur für Mitarbeiter — sonst leer lassen)</span>
               </label>
               <input
                 id="email"
-                type="email"
+                type="text"
                 autoComplete="username"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
