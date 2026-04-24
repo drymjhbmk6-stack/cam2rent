@@ -114,6 +114,9 @@ export default function EinkaufPage() {
   // Einkauf state
   const [filterSupplier, setFilterSupplier] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
+  const [filterYear, setFilterYear] = useState<string>('');     // '' = alle, sonst '2025'
+  const [filterMonth, setFilterMonth] = useState<string>('');   // '' = alle, sonst '1'..'12'
+  const [purchaseSearch, setPurchaseSearch] = useState('');     // Volltext (Produkt, Rechnungsnummer, Notiz)
   const [expandedPurchase, setExpandedPurchase] = useState<string | null>(null);
   const [showNewPurchase, setShowNewPurchase] = useState(false);
   const [purchaseForm, setPurchaseForm] = useState({
@@ -246,9 +249,26 @@ export default function EinkaufPage() {
     (s.email && s.email.toLowerCase().includes(supplierSearch.toLowerCase()))
   );
 
-  const filteredPurchases = purchases.filter(p =>
-    (!filterStatus || p.status === filterStatus)
-  );
+  // Verfuegbare Jahre aus den Daten (fuer Year-Dropdown)
+  const availableYears = [...new Set(purchases.map(p => new Date(p.order_date).getFullYear()))]
+    .sort((a, b) => b - a);
+
+  const filteredPurchases = purchases.filter(p => {
+    if (filterStatus && p.status !== filterStatus) return false;
+    const d = new Date(p.order_date);
+    if (filterYear && String(d.getFullYear()) !== filterYear) return false;
+    if (filterMonth && String(d.getMonth() + 1) !== filterMonth) return false;
+    if (purchaseSearch.trim()) {
+      const q = purchaseSearch.toLowerCase().trim();
+      const haystack = [
+        p.invoice_number ?? '',
+        p.notes ?? '',
+        ...((p.purchase_items ?? []).map(it => it.product_name ?? '')),
+      ].join(' ').toLowerCase();
+      if (!haystack.includes(q)) return false;
+    }
+    return true;
+  });
 
   // ─── Render ─────────────────────────────────────────────────────────────
 
@@ -396,19 +416,68 @@ export default function EinkaufPage() {
               <option value="">Alle Lieferanten</option>
               {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
-            <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ ...S.select, maxWidth: 180 }}>
+            <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ ...S.select, maxWidth: 160 }}>
               <option value="">Alle Status</option>
               <option value="ordered">Bestellt</option>
               <option value="shipped">Versendet</option>
               <option value="delivered">Geliefert</option>
               <option value="cancelled">Storniert</option>
             </select>
-            <div style={{ flex: 1 }} />
+            <select value={filterYear} onChange={e => setFilterYear(e.target.value)} style={{ ...S.select, maxWidth: 120 }}>
+              <option value="">Alle Jahre</option>
+              {availableYears.map(y => <option key={y} value={String(y)}>{y}</option>)}
+            </select>
+            <select value={filterMonth} onChange={e => setFilterMonth(e.target.value)} style={{ ...S.select, maxWidth: 140 }}>
+              <option value="">Alle Monate</option>
+              <option value="1">Januar</option>
+              <option value="2">Februar</option>
+              <option value="3">März</option>
+              <option value="4">April</option>
+              <option value="5">Mai</option>
+              <option value="6">Juni</option>
+              <option value="7">Juli</option>
+              <option value="8">August</option>
+              <option value="9">September</option>
+              <option value="10">Oktober</option>
+              <option value="11">November</option>
+              <option value="12">Dezember</option>
+            </select>
+            <input
+              type="text"
+              value={purchaseSearch}
+              onChange={e => setPurchaseSearch(e.target.value)}
+              placeholder="Suche: Produkt, Rechnungsnr., Notiz..."
+              style={{ ...S.select, minWidth: 220, flex: 1 }}
+            />
+            {(filterSupplier || filterStatus || filterYear || filterMonth || purchaseSearch) && (
+              <button
+                onClick={() => {
+                  setFilterSupplier('');
+                  setFilterStatus('');
+                  setFilterYear('');
+                  setFilterMonth('');
+                  setPurchaseSearch('');
+                }}
+                style={{ ...btnSecondary, padding: '6px 12px', fontSize: 12 }}
+              >
+                ✕ Filter zurücksetzen
+              </button>
+            )}
             <a href="/admin/einkauf/upload" style={{ ...btnPrimary, textDecoration: 'none', display: 'inline-block' }}>
               📄 Rechnung hochladen (KI)
             </a>
             <button onClick={() => setShowNewPurchase(true)} style={btnSecondary}>+ Manuell</button>
           </div>
+
+          {/* Trefferanzahl + Filter-Summe */}
+          {(filterSupplier || filterStatus || filterYear || filterMonth || purchaseSearch) && (
+            <div style={{ marginBottom: 12, fontSize: 12, color: '#94a3b8' }}>
+              {filteredPurchases.length} {filteredPurchases.length === 1 ? 'Treffer' : 'Treffer'} ·{' '}
+              Summe: <span style={{ color: '#22d3ee', fontWeight: 600 }}>
+                {filteredPurchases.reduce((s, p) => s + (p.total_amount ?? 0), 0).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}
+              </span>
+            </div>
+          )}
 
           {/* New Purchase Form */}
           {showNewPurchase && (
