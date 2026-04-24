@@ -7,7 +7,8 @@ import { fmtEuro } from '@/lib/format-utils';
 import { getBerlinDayStart } from '@/lib/timezone';
 import { getSiteUrl, getResendFromEmail } from '@/lib/env-mode';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Platzhalter-Key, damit Modul-Import beim Build ohne RESEND_API_KEY nicht kippt.
+const resend = new Resend(process.env.RESEND_API_KEY || 're_build_placeholder');
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? BUSINESS.emailKontakt;
 
 function pct(a: number, b: number): string {

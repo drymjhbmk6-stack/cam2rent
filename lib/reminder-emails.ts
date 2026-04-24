@@ -3,7 +3,8 @@ import { BUSINESS } from '@/lib/business-config';
 import { escapeHtml as h } from '@/lib/email';
 import { getResendFromEmail, getSiteUrl } from '@/lib/env-mode';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Platzhalter-Key, damit Modul-Import beim Build ohne RESEND_API_KEY nicht kippt.
+const resend = new Resend(process.env.RESEND_API_KEY || 're_build_placeholder');
 
 const REPLY_TO = process.env.ADMIN_EMAIL ?? BUSINESS.emailKontakt;
 

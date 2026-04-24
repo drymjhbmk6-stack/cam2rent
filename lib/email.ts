@@ -9,7 +9,11 @@ import { createServiceClient } from '@/lib/supabase';
 import { fmtDate, fmtEuro } from '@/lib/format-utils';
 import { getResendFromEmail, getTestModeEmailRedirect, isTestMode, getSiteUrl } from '@/lib/env-mode';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Resend wirft im Konstruktor wenn der Key fehlt (ab v6). Zur Build-Zeit
+// liegt RESEND_API_KEY in Coolify nicht als ARG an → Platzhalter, damit
+// der Modul-Import beim `next build` nicht kippt. Zur Laufzeit setzt
+// Coolify den echten Key per ENV, dann funktioniert der Versand.
+const resend = new Resend(process.env.RESEND_API_KEY || 're_build_placeholder');
 
 // Legacy-Export fuer Backwards-Compat. Neue Stellen nutzen `getResendFromEmail()`.
 export const FROM_EMAIL =
