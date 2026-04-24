@@ -21,15 +21,12 @@
 --      purchases.net_amount/tax_amount zur Doku
 --
 -- TEST/LIVE-Modus:
---   Aktuell ist `is_test = TRUE` gesetzt, damit der Import den Test-Modus nicht
---   verlaesst. Wenn die Daten bei dir Live sein sollen:
---     1. ENTWEDER vor dem Ausfuehren `is_test = FALSE` mit Find-and-Replace
---        setzen
---     2. ODER nach dem Test alle 30 Eintraege via:
---        UPDATE purchases SET is_test = FALSE
---          WHERE invoice_number IN (SELECT invoice_number FROM tmp_invoices);
---        UPDATE expenses SET is_test = FALSE
---          WHERE source_type = 'purchase_invoice';
+--   `is_test = FALSE` ist gesetzt, weil die Rechnungen aus der Excel ECHT sind
+--   (Kameras + Zubehoer fuer den realen Geschaeftsbetrieb). Damit erscheinen
+--   sie sofort in EUeR, Buchhaltungs-Dashboard, DATEV-Export usw., auch wenn
+--   das Frontend gerade noch im Test-Modus laeuft. Buchhaltungs-Reports
+--   filtern hardcoded `is_test=false` (GoBD-konform), damit Test-Buchungen
+--   nicht in Live-Reports landen.
 --
 -- Audit-Quelle pro Eintrag: notes-Spalte enthaelt "Auto-Import 2025-Excel · ..."
 -- ════════════════════════════════════════════════════════════════════════════
@@ -129,7 +126,7 @@ new_purchases AS (
     i.tax_amt,
     'delivered',
     'Auto-Import 2025-Excel · ' || i.filename,
-    TRUE                                                  -- is_test = TRUE
+    FALSE                                                 -- is_test = FALSE (echte Daten)
   FROM input_data i
   JOIN suppliers s ON s.name = i.supplier
   WHERE i.is_refund = FALSE
@@ -201,7 +198,7 @@ new_expenses_original AS (
     'Auto-Import 2025-Excel · Rechnung ' || i.invoice_no || ' · ' || i.filename,
     'purchase_invoice',
     i.invoice_no,
-    TRUE                                                  -- is_test = TRUE
+    FALSE                                                 -- is_test = FALSE (echte Daten)
   FROM input_data i
   JOIN new_purchases np ON np.invoice_number = i.invoice_no
                        AND np.total_amount = i.gross_amt
