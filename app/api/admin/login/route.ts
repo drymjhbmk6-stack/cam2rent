@@ -2,20 +2,26 @@ import { NextRequest, NextResponse } from 'next/server';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { createServiceClient } from '@/lib/supabase';
 import { verifyToken } from '@/lib/totp';
+import {
+  createSession,
+  getAdminUserByEmail,
+  verifyPassword,
+} from '@/lib/admin-users';
 
 const loginLimiter = rateLimit({ maxAttempts: 5, windowMs: 15 * 60 * 1000 }); // 5 pro 15 Min
 
 /**
  * POST /api/admin/login
- * Body: { password: string, totpCode?: string }
+ * Body: { email?: string, password: string, totpCode?: string }
  *
- * 1. Prüft Passwort gegen ADMIN_PASSWORD
- * 2. Falls 2FA aktiv und kein totpCode → { requires2FA: true }
- * 3. Falls 2FA aktiv und totpCode → verifizieren
- * 4. Bei Erfolg: httpOnly-Cookie setzen
+ * Zwei Login-Modi:
+ *   a) Multi-User: email + password -> admin_users-Tabelle (scrypt-Hash)
+ *   b) Legacy: nur password -> prueft gegen ADMIN_PASSWORD (Bootstrap / Notfall)
+ *
+ * 2FA (TOTP) gilt nur fuer den Legacy-Owner-Login.
  */
 
-async function computeAdminToken(password: string): Promise<string> {
+async function computeLegacyAdminToken(password: string): Promise<string> {
   const msgBuffer = new TextEncoder().encode(password + '_cam2rent_admin');
   const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
   return Array.from(new Uint8Array(hashBuffer))
@@ -33,7 +39,8 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { password, totpCode } = (await req.json()) as {
+  const { email, password, totpCode } = (await req.json()) as {
+    email?: string;
     password?: string;
     totpCode?: string;
   };
@@ -42,6 +49,34 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Passwort fehlt.' }, { status: 400 });
   }
 
+  const userAgent = req.headers.get('user-agent');
+
+  // ── Variante A: Multi-User-Login (E-Mail + Passwort gegen admin_users) ─────
+  if (email && email.trim()) {
+    const user = await getAdminUserByEmail(email);
+    if (!user || !user.is_active) {
+      return NextResponse.json({ error: 'Falsche E-Mail oder Passwort.' }, { status: 401 });
+    }
+    const ok = await verifyPassword(password, user.password_hash);
+    if (!ok) {
+      return NextResponse.json({ error: 'Falsche E-Mail oder Passwort.' }, { status: 401 });
+    }
+    const { token, expiresAt } = await createSession(user.id, { userAgent, ipAddress: ip });
+    const response = NextResponse.json({
+      success: true,
+      user: { id: user.id, email: user.email, name: user.name, role: user.role },
+    });
+    response.cookies.set('admin_token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      path: '/',
+      expires: expiresAt,
+    });
+    return response;
+  }
+
+  // ── Variante B: Legacy ENV-Passwort (Bootstrap / Notfall-Owner) ────────────
   const adminPassword = process.env.ADMIN_PASSWORD ?? '';
   if (!adminPassword) {
     return NextResponse.json(
@@ -54,7 +89,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Falsches Passwort.' }, { status: 401 });
   }
 
-  // Prüfe ob 2FA aktiviert ist
+  // 2FA fuer Legacy-Login
   const supabase = createServiceClient();
   const { data: totpSetting } = await supabase
     .from('admin_settings')
@@ -63,30 +98,21 @@ export async function POST(req: NextRequest) {
     .maybeSingle();
 
   if (totpSetting?.value) {
-    // 2FA ist aktiv
-    if (!totpCode) {
-      // Kein Code mitgesendet → Frontend soll 2FA-Feld zeigen
-      return NextResponse.json({ requires2FA: true });
-    }
-
-    // Code verifizieren
+    if (!totpCode) return NextResponse.json({ requires2FA: true });
     const valid = verifyToken(totpSetting.value, totpCode);
     if (!valid) {
       return NextResponse.json({ error: 'Ungültiger 2FA-Code.' }, { status: 401 });
     }
   }
 
-  // Alles OK → Cookie setzen
-  const token = await computeAdminToken(adminPassword);
-
-  const response = NextResponse.json({ success: true });
+  const token = await computeLegacyAdminToken(adminPassword);
+  const response = NextResponse.json({ success: true, user: { role: 'owner', name: 'Admin (ENV)' } });
   response.cookies.set('admin_token', token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
+    sameSite: 'strict',
     path: '/',
     maxAge: 60 * 60 * 24 * 7, // 7 Tage
   });
-
   return response;
 }

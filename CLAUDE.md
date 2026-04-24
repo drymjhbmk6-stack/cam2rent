@@ -601,6 +601,24 @@ Read-only Katalog aller automatisch versendeten E-Mails mit Inline-Vorschau.
 - **Race Condition Unit-Zuweisung:** `assignUnitToBooking` nutzt jetzt die Postgres-Funktion `assign_free_unit` mit `pg_advisory_xact_lock` (serialisiert parallele Zuweisungen pro Produkt). Fallback auf die alte Logik, falls die Migration noch nicht ausgeführt wurde.
 - **Stripe-Webhook Idempotenz:** `.like()` → `.eq()` — `payment_intent_id` wird exakt gespeichert, Wildcard war unnötig.
 
+### Mitarbeiterkonten + granulare Permissions (Stand 2026-04-24)
+Zwei Login-Arten für den Admin-Bereich: weiterhin das Master-Passwort (ENV `ADMIN_PASSWORD`, virtueller „Owner" mit allen Rechten) als Bootstrap/Notfall-Zugang — ODER E-Mail+Passwort eines in der DB hinterlegten Mitarbeiters. Der Admin entscheidet pro Mitarbeiter, welche Bereiche sichtbar sind.
+
+- **DB-Migration `supabase/supabase-admin-users.sql`** (idempotent): Tabellen `admin_users` (id, email UNIQUE, password_hash, name, role `owner|employee`, permissions JSONB, is_active, last_login_at, created_by) + `admin_sessions` (token PRIMARY KEY, user_id FK, expires_at, last_used_at, user_agent, ip_address). RLS aktiviert (nur Service-Role).
+- **Passwort-Hashing:** Node-`crypto.scrypt` mit 16-Byte-Salt und 64-Byte-Hash. Format: `scrypt$1$<salt-hex>$<hash-hex>`. Kein zusätzliches Paket nötig.
+- **Lib `lib/admin-users.ts`:** CRUD + `hashPassword`, `verifyPassword`, `createSession`, `getUserBySession`, `deleteAllSessionsForUser`, `legacyEnvUser()`, `hasPermission()`, `requiredPermissionForPath()`. Änderung an Rolle/Permissions/Passwort oder Deaktivierung invalidiert alle Sessions des Users automatisch.
+- **9 Permission-Keys:** `tagesgeschaeft`, `kunden`, `katalog`, `preise`, `content`, `finanzen`, `berichte`, `system`, `mitarbeiter_verwalten`. Owner haben immer alle. Leeres Permission-Array = Mitarbeiter sieht nur Dashboard.
+- **`lib/admin-auth.ts`** liefert `getCurrentAdminUser()` (Session-Token-Lookup ODER Legacy-Hash) und `currentUserHasPermission(perm)`. `checkAdminAuth()` bleibt als Boolean-Alias erhalten — alle bestehenden API-Routen laufen weiter.
+- **Login-API `/api/admin/login`:** akzeptiert `{ email?, password, totpCode? }`. Mit E-Mail → DB-Lookup + scrypt-Verify + Session-Cookie `sess_<random>`. Ohne E-Mail → Legacy-ENV-Passwort (mit 2FA). Beide setzen `admin_token`-Cookie mit `sameSite: 'strict'`, 7 Tage. Rate-Limit 5/15 Min pro IP.
+- **Logout** löscht bei Session-Tokens auch den DB-Eintrag (Session-Revocation).
+- **Middleware** prüft Cookie: Session-Token → DB-Lookup (60s-Cache mit LRU-Eviction bei 500 Einträgen) → Permission-Check pro Admin-Pfad via `PATH_PERMISSIONS`-Tabelle. Bei fehlender Berechtigung Redirect auf `/admin?forbidden=<perm>`. Legacy-Token hat weiterhin alle Rechte.
+- **Admin-UI `/admin/einstellungen/mitarbeiter`:** Liste aller Accounts mit Rolle-Badge, Permissions als Pills, letzter Login. Anlegen: Name+E-Mail+Passwort+Rolle+Permissions-Grid (Toggle-Karten mit Hinweistext). Bearbeiten: alles änderbar + optional neues Passwort. Löschen mit Bestätigung. Schutzschranken: nur Owner können Owner ernennen, letzter aktiver Owner kann nicht gelöscht/herabgestuft/deaktiviert werden, User kann sich nicht selbst löschen, der virtuelle `legacy-env`-User kann nicht angefasst werden.
+- **Sidebar** holt `/api/admin/me` und filtert alle Nav-Items nach Permissions (Gruppen-Header werden komplett ausgeblendet, wenn keine Items sichtbar sind — z.B. ganze „Finanzen"-Sektion verschwindet für Mitarbeiter ohne `finanzen`-Permission). Dashboard sieht jeder eingeloggte Admin.
+- **Audit-Log** schreibt ab jetzt den tatsächlichen `admin_user_id` + `admin_user_name` der eingeloggten Session in `admin_audit_log`. Spalten-Mapping korrigiert (`details` statt `changes`, IP wandert in den JSONB).
+- **APIs:** `GET /api/admin/me`, `GET/POST /api/admin/employees`, `PATCH/DELETE /api/admin/employees/[id]`. Alle geschützt durch `hasPermission(me, 'mitarbeiter_verwalten')`.
+- **Login-UI** hat ein optionales E-Mail-Feld oben („leer lassen für Master-Passwort"). Autocomplete auf `username`/`current-password` für Password-Manager.
+- **Go-Live TODO:** `supabase-admin-users.sql` ausführen → unter `/admin/einstellungen/mitarbeiter` ersten echten Owner anlegen → Mitarbeiter als `employee` mit gewünschten Bereichen. Das ENV-`ADMIN_PASSWORD` bleibt als Notfall-Login aktiv und sollte auf einen zufälligen, unbekannten Wert gedreht werden, sobald echte Owner-Accounts existieren.
+
 ### Mobile-Fixes (2026-04-17)
 - **Viewport-Export** in `app/layout.tsx`: `device-width`, `initialScale: 1`, `viewportFit: 'cover'` (iOS Safe-Area aktiv) — Next.js 15 Pattern.
 - **CookieBanner z-[60]** + `padding-bottom: calc(1rem + env(safe-area-inset-bottom))`: liegt jetzt über CompareBar, iOS Home-Indicator überlagert nicht mehr.
@@ -615,6 +633,7 @@ Read-only Katalog aller automatisch versendeten E-Mails mit Inline-Vorschau.
 - ~~SQL-Migration `supabase-product-units.sql` ausgeführt (product_units Tabelle + unit_id in bookings)~~
 - ~~SQL-Migration `supabase-unit-assignment-lock.sql` ausgeführt (race-sichere Unit-Zuweisung via `assign_free_unit` RPC)~~
 - ~~SQL-Migration `supabase-push-subscriptions.sql` ausgeführt + VAPID-Keys in Coolify-Env gesetzt + Admin-PWA mit Push aktiviert~~
+- **SQL-Migration `supabase/supabase-admin-users.sql` ausführen** (Mitarbeiterkonten + Permissions, idempotent). Danach unter `/admin/einstellungen/mitarbeiter` ersten Owner + Mitarbeiter anlegen.
 - Bestehende 6 Kameras brauchen Admin-Specs (Technische Daten im Editor anlegen)
 - Bestehende Kameras brauchen Seriennummern (im Kamera-Editor unter "Kameras / Seriennummern" anlegen)
 - **Cron-Härtung optional:** `CRON_DISABLE_URL_SECRET=true` in Coolify-Env setzen + Hetzner-Crontab auf Header-Auth umstellen (`-H "x-cron-secret: $CRON_SECRET"`), damit Secrets nicht mehr in Access-Logs landen.

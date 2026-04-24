@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 
 export default function AdminLoginPage() {
   const router = useRouter();
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [totpCode, setTotpCode] = useState('');
   const [needs2FA, setNeeds2FA] = useState(false);
@@ -25,6 +26,7 @@ export default function AdminLoginPage() {
 
     try {
       const body: Record<string, string> = { password };
+      if (email.trim()) body.email = email.trim();
       if (needs2FA && totpCode) {
         body.totpCode = totpCode;
       }
@@ -77,6 +79,26 @@ export default function AdminLoginPage() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label
+                htmlFor="email"
+                className="block text-sm font-heading font-semibold mb-2"
+                style={{ color: '#e2e8f0' }}
+              >
+                E-Mail <span className="font-normal text-xs" style={{ color: '#64748b' }}>(leer lassen für Master-Passwort)</span>
+              </label>
+              <input
+                id="email"
+                type="email"
+                autoComplete="username"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="mitarbeiter@cam2rent.de"
+                disabled={needs2FA}
+                className="w-full px-4 py-3 rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-50"
+                style={{ background: '#0f172a', border: '1px solid #1e293b', color: '#e2e8f0' }}
+              />
+            </div>
+            <div>
+              <label
                 htmlFor="password"
                 className="block text-sm font-heading font-semibold mb-2"
                 style={{ color: '#e2e8f0' }}
@@ -86,9 +108,10 @@ export default function AdminLoginPage() {
               <input
                 id="password"
                 type="password"
+                autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Admin-Passwort eingeben"
+                placeholder="Passwort eingeben"
                 required
                 autoFocus={!needs2FA}
                 disabled={needs2FA}

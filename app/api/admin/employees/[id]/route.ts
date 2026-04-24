@@ -1,0 +1,144 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { getCurrentAdminUser } from '@/lib/admin-auth';
+import {
+  countOwners,
+  deleteAdminUser,
+  deleteAllSessionsForUser,
+  getAdminUserById,
+  hasPermission,
+  PERMISSION_KEYS,
+  type PermissionKey,
+  updateAdminUser,
+} from '@/lib/admin-users';
+import { logAudit } from '@/lib/audit';
+
+export const runtime = 'nodejs';
+
+/**
+ * PATCH  /api/admin/employees/[id]   — name/email/role/permissions/is_active/password
+ * DELETE /api/admin/employees/[id]   — Mitarbeiter loeschen
+ */
+
+export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const me = await getCurrentAdminUser();
+  if (!hasPermission(me, 'mitarbeiter_verwalten')) {
+    return NextResponse.json({ error: 'Keine Berechtigung.' }, { status: 403 });
+  }
+  const { id } = await ctx.params;
+  if (id === 'legacy-env') {
+    return NextResponse.json({ error: 'Der ENV-Admin kann nicht bearbeitet werden.' }, { status: 400 });
+  }
+  const target = await getAdminUserById(id);
+  if (!target) return NextResponse.json({ error: 'Mitarbeiter nicht gefunden.' }, { status: 404 });
+
+  const body = (await req.json().catch(() => null)) as {
+    name?: string;
+    email?: string;
+    role?: 'owner' | 'employee';
+    permissions?: string[];
+    is_active?: boolean;
+    password?: string;
+  } | null;
+  if (!body) return NextResponse.json({ error: 'Ungültige Anfrage.' }, { status: 400 });
+
+  const patch: {
+    name?: string; email?: string; role?: 'owner' | 'employee';
+    permissions?: PermissionKey[]; is_active?: boolean; password?: string;
+  } = {};
+
+  if (body.name !== undefined) patch.name = body.name;
+  if (body.email !== undefined) patch.email = body.email;
+  if (body.password !== undefined) {
+    if (!body.password || body.password.length < 8) {
+      return NextResponse.json({ error: 'Passwort muss mindestens 8 Zeichen haben.' }, { status: 400 });
+    }
+    patch.password = body.password;
+  }
+
+  // Rolle/Aktiv-Aenderung an Owner: letzten Owner schuetzen
+  if (body.role !== undefined || body.is_active !== undefined) {
+    if (target.role === 'owner') {
+      const owners = await countOwners();
+      const willDemote = body.role !== undefined && body.role !== 'owner';
+      const willDeactivate = body.is_active === false;
+      if (owners <= 1 && (willDemote || willDeactivate)) {
+        return NextResponse.json(
+          { error: 'Der letzte aktive Owner kann nicht herabgestuft oder deaktiviert werden.' },
+          { status: 400 }
+        );
+      }
+    }
+    // Nur Owner duerfen einen anderen zu Owner machen
+    if (body.role === 'owner' && me?.role !== 'owner') {
+      return NextResponse.json({ error: 'Nur Owner dürfen Owner ernennen.' }, { status: 403 });
+    }
+    if (body.role !== undefined) patch.role = body.role;
+    if (body.is_active !== undefined) patch.is_active = body.is_active;
+  }
+
+  if (body.permissions !== undefined) {
+    patch.permissions = body.permissions.filter((p): p is PermissionKey =>
+      (PERMISSION_KEYS as readonly string[]).includes(p)
+    );
+  }
+
+  try {
+    const updated = await updateAdminUser(id, patch);
+    await logAudit({
+      action: 'admin_user.update',
+      entityType: 'admin_user',
+      entityId: updated.id,
+      entityLabel: `${updated.name} (${updated.email})`,
+      changes: Object.keys(patch).reduce<Record<string, unknown>>((acc, k) => {
+        if (k === 'password') acc[k] = '[changed]';
+        else acc[k] = (patch as Record<string, unknown>)[k];
+        return acc;
+      }, {}),
+      request: req,
+    });
+    return NextResponse.json({ user: updated });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Unbekannter Fehler.';
+    return NextResponse.json({ error: msg }, { status: 400 });
+  }
+}
+
+export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const me = await getCurrentAdminUser();
+  if (!hasPermission(me, 'mitarbeiter_verwalten')) {
+    return NextResponse.json({ error: 'Keine Berechtigung.' }, { status: 403 });
+  }
+  const { id } = await ctx.params;
+  if (id === 'legacy-env') {
+    return NextResponse.json({ error: 'Der ENV-Admin kann nicht gelöscht werden.' }, { status: 400 });
+  }
+  if (me?.id === id) {
+    return NextResponse.json({ error: 'Du kannst dich nicht selbst löschen.' }, { status: 400 });
+  }
+  const target = await getAdminUserById(id);
+  if (!target) return NextResponse.json({ error: 'Mitarbeiter nicht gefunden.' }, { status: 404 });
+  if (target.role === 'owner') {
+    const owners = await countOwners();
+    if (owners <= 1) {
+      return NextResponse.json(
+        { error: 'Der letzte aktive Owner kann nicht gelöscht werden.' },
+        { status: 400 }
+      );
+    }
+  }
+  try {
+    await deleteAllSessionsForUser(id);
+    await deleteAdminUser(id);
+    await logAudit({
+      action: 'admin_user.delete',
+      entityType: 'admin_user',
+      entityId: id,
+      entityLabel: `${target.name} (${target.email})`,
+      request: req,
+    });
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Unbekannter Fehler.';
+    return NextResponse.json({ error: msg }, { status: 400 });
+  }
+}

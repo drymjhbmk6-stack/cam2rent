@@ -1,4 +1,5 @@
 import { createServiceClient } from '@/lib/supabase';
+import { getCurrentAdminUser } from '@/lib/admin-auth';
 
 interface AuditParams {
   action: string;
@@ -7,6 +8,7 @@ interface AuditParams {
   entityLabel?: string;
   changes?: Record<string, unknown>;
   adminUserName?: string;
+  adminUserId?: string | null;
   request?: Request;
 }
 
@@ -14,8 +16,11 @@ interface AuditParams {
  * Zentrale Audit-Log-Funktion.
  * Schreibt in die bestehende `admin_audit_log`-Tabelle.
  *
- * Action-Naming: {entityType}.{verb}
- * z.B. 'invoice.send', 'credit_note.approve', 'dunning.create_draft'
+ * Spalten in der Tabelle: admin_user_id, admin_user_name, action, entity_type,
+ * entity_id, entity_label, details JSONB, created_at.
+ *
+ * Der eingeloggte Admin wird (wenn nicht explizit uebergeben) ueber den Cookie
+ * aus dem Request-Context ermittelt — funktioniert daher nur in API-Routen.
  */
 export async function logAudit(params: AuditParams): Promise<void> {
   try {
@@ -29,17 +34,33 @@ export async function logAudit(params: AuditParams): Promise<void> {
         null;
     }
 
+    let adminUserId = params.adminUserId ?? null;
+    let adminUserName = params.adminUserName ?? null;
+    if (!adminUserId || !adminUserName) {
+      try {
+        const me = await getCurrentAdminUser();
+        if (me) {
+          if (!adminUserId) adminUserId = me.id === 'legacy-env' ? null : me.id;
+          if (!adminUserName) adminUserName = me.name;
+        }
+      } catch {
+        // Cookie-Zugriff kann in bestimmten Runtimes fehlschlagen
+      }
+    }
+
+    const details: Record<string, unknown> = { ...(params.changes ?? {}) };
+    if (ipAddress) details.ip = ipAddress;
+
     await supabase.from('admin_audit_log').insert({
       action: params.action,
       entity_type: params.entityType,
       entity_id: params.entityId || null,
       entity_label: params.entityLabel || null,
-      changes: params.changes || null,
-      admin_user_name: params.adminUserName || 'admin',
-      ip_address: ipAddress,
+      details: Object.keys(details).length > 0 ? details : null,
+      admin_user_id: adminUserId,
+      admin_user_name: adminUserName ?? 'admin',
     });
   } catch (err) {
-    // Audit-Logging darf niemals den Hauptprozess blockieren
     console.error('Audit-Log Fehler:', err);
   }
 }

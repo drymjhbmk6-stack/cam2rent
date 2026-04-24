@@ -9,7 +9,30 @@ import { useAutoLogout } from '@/hooks/useAutoLogout';
 // 30 Minuten Inaktivität für Admin
 const ADMIN_TIMEOUT_MS = 30 * 60 * 1000;
 
-type NavItem = { href: string; label: string; exact?: boolean; icon: React.ReactNode };
+type PermKey =
+  | 'tagesgeschaeft' | 'kunden' | 'katalog' | 'preise'
+  | 'content' | 'finanzen' | 'berichte' | 'system' | 'mitarbeiter_verwalten';
+
+type NavItem = {
+  href: string;
+  label: string;
+  exact?: boolean;
+  icon: React.ReactNode;
+  perm?: PermKey; // wenn gesetzt: nur sichtbar wenn User diese Permission hat (Owner sieht immer)
+};
+
+interface MeInfo {
+  id: string;
+  role: 'owner' | 'employee';
+  permissions: PermKey[];
+}
+
+function canSee(me: MeInfo | null, item: NavItem): boolean {
+  if (!item.perm) return true;
+  if (!me) return true; // solange unbekannt: zeigen (verhindert Flackern)
+  if (me.role === 'owner') return true;
+  return me.permissions.includes(item.perm);
+}
 
 // ============================================================
 // SVG Icons
@@ -101,64 +124,66 @@ const iconDashboard = (
 // ============================================================
 
 const TAGESGESCHAEFT_ITEMS: NavItem[] = [
-  { href: '/admin/buchungen', label: 'Buchungen', icon: iconBuchungen },
-  { href: '/admin/buchungen/neu', label: 'Manuelle Buchung', exact: true, icon: iconPlus },
-  { href: '/admin/verfuegbarkeit', label: 'Kalender', icon: iconCalendar },
-  { href: '/admin/versand', label: 'Versand', icon: iconTruck },
-  { href: '/admin/retouren', label: 'Retouren', icon: iconReturn },
-  { href: '/admin/schaeden', label: 'Schadensmeldungen', icon: iconWarning },
+  { href: '/admin/buchungen', label: 'Buchungen', icon: iconBuchungen, perm: 'tagesgeschaeft' },
+  { href: '/admin/buchungen/neu', label: 'Manuelle Buchung', exact: true, icon: iconPlus, perm: 'tagesgeschaeft' },
+  { href: '/admin/verfuegbarkeit', label: 'Kalender', icon: iconCalendar, perm: 'tagesgeschaeft' },
+  { href: '/admin/versand', label: 'Versand', icon: iconTruck, perm: 'tagesgeschaeft' },
+  { href: '/admin/retouren', label: 'Retouren', icon: iconReturn, perm: 'tagesgeschaeft' },
+  { href: '/admin/schaeden', label: 'Schadensmeldungen', icon: iconWarning, perm: 'tagesgeschaeft' },
 ];
 
 const KUNDEN_ITEMS: NavItem[] = [
-  { href: '/admin/kunden', label: 'Kunden', icon: iconUsers },
-  { href: '/admin/nachrichten', label: 'Kundenanfragen', icon: iconMessage },
-  { href: '/admin/bewertungen', label: 'Produktbewertungen', icon: iconStar },
+  { href: '/admin/kunden', label: 'Kunden', icon: iconUsers, perm: 'kunden' },
+  { href: '/admin/nachrichten', label: 'Kundenanfragen', icon: iconMessage, perm: 'kunden' },
+  { href: '/admin/bewertungen', label: 'Produktbewertungen', icon: iconStar, perm: 'kunden' },
 ];
 
 const KATALOG_ITEMS: NavItem[] = [
-  { href: '/admin/preise/kameras', label: 'Kameras', icon: iconCamera },
-  { href: '/admin/sets', label: 'Sets', icon: iconSets },
-  { href: '/admin/zubehoer', label: 'Zubehör', icon: iconAccessory },
-  { href: '/admin/einkauf', label: 'Einkauf', icon: iconCart },
+  { href: '/admin/preise/kameras', label: 'Kameras', icon: iconCamera, perm: 'katalog' },
+  { href: '/admin/sets', label: 'Sets', icon: iconSets, perm: 'katalog' },
+  { href: '/admin/zubehoer', label: 'Zubehör', icon: iconAccessory, perm: 'katalog' },
+  { href: '/admin/einkauf', label: 'Einkauf', icon: iconCart, perm: 'katalog' },
 ];
 
 const PREISE_ITEMS: NavItem[] = [
-  { href: '/admin/preise', label: 'Versand & Haftung', exact: true, icon: iconPriceTag },
-  { href: '/admin/gutscheine', label: 'Gutscheine', icon: iconTicket },
-  { href: '/admin/rabatte', label: 'Rabatte', icon: iconDiscount },
+  { href: '/admin/preise', label: 'Versand & Haftung', exact: true, icon: iconPriceTag, perm: 'preise' },
+  { href: '/admin/gutscheine', label: 'Gutscheine', icon: iconTicket, perm: 'preise' },
+  { href: '/admin/rabatte', label: 'Rabatte', icon: iconDiscount, perm: 'preise' },
 ];
 
 const CONTENT_STARTSEITE: NavItem = {
   href: '/admin/startseite',
   label: 'Startseite',
   icon: iconHome,
+  perm: 'content',
 };
 
 const BLOG_ITEMS: NavItem[] = [
-  { href: '/admin/blog', label: 'Blog-Dashboard', exact: true, icon: iconDashboard },
-  { href: '/admin/blog/artikel', label: 'Artikel', icon: iconBuchungen },
-  { href: '/admin/blog/zeitplan', label: 'Redaktionsplan', icon: iconCalendar },
-  { href: '/admin/blog/themen', label: 'KI-Themen', icon: iconStar },
-  { href: '/admin/blog/kommentare', label: 'Kommentare', icon: iconMessage },
-  { href: '/admin/blog/mediathek', label: 'Mediathek', icon: iconBlog },
-  { href: '/admin/blog/einstellungen', label: 'Blog-Einstellungen', icon: iconCog },
+  { href: '/admin/blog', label: 'Blog-Dashboard', exact: true, icon: iconDashboard, perm: 'content' },
+  { href: '/admin/blog/artikel', label: 'Artikel', icon: iconBuchungen, perm: 'content' },
+  { href: '/admin/blog/zeitplan', label: 'Redaktionsplan', icon: iconCalendar, perm: 'content' },
+  { href: '/admin/blog/themen', label: 'KI-Themen', icon: iconStar, perm: 'content' },
+  { href: '/admin/blog/kommentare', label: 'Kommentare', icon: iconMessage, perm: 'content' },
+  { href: '/admin/blog/mediathek', label: 'Mediathek', icon: iconBlog, perm: 'content' },
+  { href: '/admin/blog/einstellungen', label: 'Blog-Einstellungen', icon: iconCog, perm: 'content' },
 ];
 
 const FINANZEN_ITEMS: NavItem[] = [
-  { href: '/admin/buchhaltung', label: 'Buchhaltung', icon: iconFinance },
+  { href: '/admin/buchhaltung', label: 'Buchhaltung', icon: iconFinance, perm: 'finanzen' },
 ];
 
 const BERICHTE_ITEMS: NavItem[] = [
-  { href: '/admin/analytics', label: 'Statistiken', icon: iconChart },
-  { href: '/admin/emails/vorlagen', label: 'E-Mail-Vorlagen', icon: iconMail },
-  { href: '/admin/emails', label: 'E-Mail-Protokoll', exact: true, icon: iconMail },
-  { href: '/admin/beta-feedback', label: 'Beta-Feedback', icon: iconFeedback },
-  { href: '/admin/aktivitaetsprotokoll', label: 'Admin-Protokoll', icon: iconClipboard },
+  { href: '/admin/analytics', label: 'Statistiken', icon: iconChart, perm: 'berichte' },
+  { href: '/admin/emails/vorlagen', label: 'E-Mail-Vorlagen', icon: iconMail, perm: 'berichte' },
+  { href: '/admin/emails', label: 'E-Mail-Protokoll', exact: true, icon: iconMail, perm: 'berichte' },
+  { href: '/admin/beta-feedback', label: 'Beta-Feedback', icon: iconFeedback, perm: 'berichte' },
+  { href: '/admin/aktivitaetsprotokoll', label: 'Admin-Protokoll', icon: iconClipboard, perm: 'berichte' },
 ];
 
 const SYSTEM_ITEMS: NavItem[] = [
-  { href: '/admin/legal', label: 'Rechtstexte', icon: iconLegal },
-  { href: '/admin/einstellungen', label: 'Einstellungen', icon: iconCog },
+  { href: '/admin/legal', label: 'Rechtstexte', icon: iconLegal, perm: 'system' },
+  { href: '/admin/einstellungen/mitarbeiter', label: 'Mitarbeiter', icon: iconUsers, perm: 'mitarbeiter_verwalten' },
+  { href: '/admin/einstellungen', label: 'Einstellungen', exact: true, icon: iconCog, perm: 'system' },
 ];
 
 // ============================================================
@@ -186,20 +211,23 @@ function NavLinkItem({ item, pathname, onNavClick }: { item: NavItem; pathname: 
   );
 }
 
-function NavSection({ label, items, pathname, onNavClick }: { label: string; items: NavItem[]; pathname: string; onNavClick?: () => void }) {
+function NavSection({ label, items, pathname, onNavClick, me }: { label: string; items: NavItem[]; pathname: string; onNavClick?: () => void; me: MeInfo | null }) {
+  const visible = items.filter((i) => canSee(me, i));
+  if (visible.length === 0) return null;
   return (
     <div className="mb-1">
       <div style={{ fontSize: 10, fontWeight: 700, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.8px', padding: '10px 12px 4px' }}>
         {label}
       </div>
-      {items.map((item) => (
+      {visible.map((item) => (
         <NavLinkItem key={item.href} item={item} pathname={pathname} onNavClick={onNavClick} />
       ))}
     </div>
   );
 }
 
-function BlogCollapse({ pathname, onNavClick }: { pathname: string; onNavClick?: () => void }) {
+function BlogCollapse({ pathname, onNavClick, me }: { pathname: string; onNavClick?: () => void; me: MeInfo | null }) {
+  const visibleItems = BLOG_ITEMS.filter((i) => canSee(me, i));
   const isBlogPath = pathname.startsWith('/admin/blog');
   const [open, setOpen] = useState<boolean>(isBlogPath);
 
@@ -233,6 +261,8 @@ function BlogCollapse({ pathname, onNavClick }: { pathname: string; onNavClick?:
     }
   }
 
+  if (visibleItems.length === 0) return null;
+
   return (
     <div>
       <button
@@ -257,7 +287,7 @@ function BlogCollapse({ pathname, onNavClick }: { pathname: string; onNavClick?:
       </button>
       {open && (
         <div className="ml-4 pl-2 mt-0.5 space-y-0" style={{ borderLeft: '1px solid #1e293b' }}>
-          {BLOG_ITEMS.map((item) => (
+          {visibleItems.map((item) => (
             <NavLinkItem key={item.href} item={item} pathname={pathname} onNavClick={onNavClick} />
           ))}
         </div>
@@ -266,12 +296,14 @@ function BlogCollapse({ pathname, onNavClick }: { pathname: string; onNavClick?:
   );
 }
 
-function SidebarContent({ pathname, isDashboard, onNavClick, handleLogout }: {
+function SidebarContent({ pathname, isDashboard, onNavClick, handleLogout, me }: {
   pathname: string;
   isDashboard: boolean;
   onNavClick?: () => void;
   handleLogout: () => void;
+  me: MeInfo | null;
 }) {
+  const contentHasAnything = canSee(me, CONTENT_STARTSEITE) || BLOG_ITEMS.some((i) => canSee(me, i));
   return (
     <>
       {/* Logo */}
@@ -310,35 +342,39 @@ function SidebarContent({ pathname, isDashboard, onNavClick, handleLogout }: {
 
       {/* Navigation groups */}
       <nav className="flex-1 py-2 overflow-y-auto">
-        <NavSection label="Tagesgeschäft" items={TAGESGESCHAEFT_ITEMS} pathname={pathname} onNavClick={onNavClick} />
+        <NavSection label="Tagesgeschäft" items={TAGESGESCHAEFT_ITEMS} pathname={pathname} onNavClick={onNavClick} me={me} />
         <div style={{ height: 1, background: '#1e293b', margin: '6px 12px' }} />
 
-        <NavSection label="Kunden & Kommunikation" items={KUNDEN_ITEMS} pathname={pathname} onNavClick={onNavClick} />
+        <NavSection label="Kunden & Kommunikation" items={KUNDEN_ITEMS} pathname={pathname} onNavClick={onNavClick} me={me} />
         <div style={{ height: 1, background: '#1e293b', margin: '6px 12px' }} />
 
-        <NavSection label="Katalog" items={KATALOG_ITEMS} pathname={pathname} onNavClick={onNavClick} />
+        <NavSection label="Katalog" items={KATALOG_ITEMS} pathname={pathname} onNavClick={onNavClick} me={me} />
         <div style={{ height: 1, background: '#1e293b', margin: '6px 12px' }} />
 
-        <NavSection label="Preise & Aktionen" items={PREISE_ITEMS} pathname={pathname} onNavClick={onNavClick} />
+        <NavSection label="Preise & Aktionen" items={PREISE_ITEMS} pathname={pathname} onNavClick={onNavClick} me={me} />
         <div style={{ height: 1, background: '#1e293b', margin: '6px 12px' }} />
 
         {/* Content (Startseite + Blog-Collapse) */}
-        <div className="mb-1">
-          <div style={{ fontSize: 10, fontWeight: 700, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.8px', padding: '10px 12px 4px' }}>
-            Content
-          </div>
-          <NavLinkItem item={CONTENT_STARTSEITE} pathname={pathname} onNavClick={onNavClick} />
-          <BlogCollapse pathname={pathname} onNavClick={onNavClick} />
-        </div>
+        {contentHasAnything && (
+          <>
+            <div className="mb-1">
+              <div style={{ fontSize: 10, fontWeight: 700, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.8px', padding: '10px 12px 4px' }}>
+                Content
+              </div>
+              {canSee(me, CONTENT_STARTSEITE) && <NavLinkItem item={CONTENT_STARTSEITE} pathname={pathname} onNavClick={onNavClick} />}
+              <BlogCollapse pathname={pathname} onNavClick={onNavClick} me={me} />
+            </div>
+            <div style={{ height: 1, background: '#1e293b', margin: '6px 12px' }} />
+          </>
+        )}
+
+        <NavSection label="Finanzen" items={FINANZEN_ITEMS} pathname={pathname} onNavClick={onNavClick} me={me} />
         <div style={{ height: 1, background: '#1e293b', margin: '6px 12px' }} />
 
-        <NavSection label="Finanzen" items={FINANZEN_ITEMS} pathname={pathname} onNavClick={onNavClick} />
+        <NavSection label="Berichte" items={BERICHTE_ITEMS} pathname={pathname} onNavClick={onNavClick} me={me} />
         <div style={{ height: 1, background: '#1e293b', margin: '6px 12px' }} />
 
-        <NavSection label="Berichte" items={BERICHTE_ITEMS} pathname={pathname} onNavClick={onNavClick} />
-        <div style={{ height: 1, background: '#1e293b', margin: '6px 12px' }} />
-
-        <NavSection label="System" items={SYSTEM_ITEMS} pathname={pathname} onNavClick={onNavClick} />
+        <NavSection label="System" items={SYSTEM_ITEMS} pathname={pathname} onNavClick={onNavClick} me={me} />
       </nav>
 
       {/* Footer */}
@@ -381,11 +417,21 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
   const pathname = usePathname();
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [me, setMe] = useState<MeInfo | null>(null);
 
   const handleLogout = useCallback(async () => {
     await fetch('/api/admin/logout', { method: 'POST' });
     router.push('/admin/login');
   }, [router]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/admin/me')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (!cancelled && d?.user) setMe(d.user as MeInfo); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [pathname]);
 
   const isLoginOrBlog = pathname === '/admin/login' || pathname.startsWith('/admin/blog');
 
@@ -476,6 +522,7 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
           isDashboard={isDashboard}
           onNavClick={closeSidebar}
           handleLogout={handleLogout}
+          me={me}
         />
       </aside>
 
