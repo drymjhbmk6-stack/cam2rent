@@ -139,9 +139,13 @@ export default function AktivitaetsprotokollPage() {
   // Filters
   const [filterAction, setFilterAction] = useState('');
   const [filterEntityType, setFilterEntityType] = useState('');
+  const [filterAdmin, setFilterAdmin] = useState('');
   const [filterSearch, setFilterSearch] = useState('');
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
+
+  // Bekannte Admin-User fuer das Mitarbeiter-Filter-Dropdown
+  const [availableAdmins, setAvailableAdmins] = useState<{ id: string; name: string }[]>([]);
 
   // Expanded row
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -152,6 +156,7 @@ export default function AktivitaetsprotokollPage() {
     params.set('page', String(page));
     if (filterAction) params.set('action', filterAction);
     if (filterEntityType) params.set('entityType', filterEntityType);
+    if (filterAdmin) params.set('adminUserId', filterAdmin);
     if (filterSearch) params.set('search', filterSearch);
     if (filterDateFrom) params.set('dateFrom', filterDateFrom);
     if (filterDateTo) params.set('dateTo', filterDateTo);
@@ -163,13 +168,14 @@ export default function AktivitaetsprotokollPage() {
         setEntries(data.entries);
         setTotal(data.total);
         setTotalPages(data.totalPages);
+        if (Array.isArray(data.availableAdmins)) setAvailableAdmins(data.availableAdmins);
       }
     } catch {
       // silent
     } finally {
       setLoading(false);
     }
-  }, [page, filterAction, filterEntityType, filterSearch, filterDateFrom, filterDateTo]);
+  }, [page, filterAction, filterEntityType, filterAdmin, filterSearch, filterDateFrom, filterDateTo]);
 
   useEffect(() => {
     fetchEntries();
@@ -183,6 +189,7 @@ export default function AktivitaetsprotokollPage() {
   function handleReset() {
     setFilterAction('');
     setFilterEntityType('');
+    setFilterAdmin('');
     setFilterSearch('');
     setFilterDateFrom('');
     setFilterDateTo('');
@@ -285,6 +292,23 @@ export default function AktivitaetsprotokollPage() {
               <option value="">Alle Typen</option>
               {entityOptions.map((e) => (
                 <option key={e} value={e}>{ENTITY_LABELS[e]}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: 11, color: '#64748b', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              Mitarbeiter
+            </label>
+            <select
+              value={filterAdmin}
+              onChange={(e) => setFilterAdmin(e.target.value)}
+              style={selectStyle}
+            >
+              <option value="">Alle Mitarbeiter</option>
+              {availableAdmins.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}{a.id === 'legacy-env' ? ' (Master-Passwort)' : ''}
+                </option>
               ))}
             </select>
           </div>
