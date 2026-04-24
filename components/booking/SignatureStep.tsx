@@ -4,7 +4,18 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import SignatureCanvas from 'react-signature-canvas';
 import { BUSINESS } from '@/lib/business-config';
 
+interface ContractParagraph {
+  title: string;
+  text: string;
+}
+
 // ─── Vertragstext (Plaintext für die UI-Anzeige) ────────────────────────────
+// Baut den vollständigen Vertragstext zusammen aus:
+//   1. Header: Parteien, Mietgegenstand, Mietzeitraum, Entgelt (dynamisch aus props)
+//   2. Vertragsbedingungen: die Paragraphen aus admin_settings.contract_paragraphs
+//      (oder Fallback auf Defaults). Dadurch stimmt der Buchungsflow-Text mit
+//      dem Mietvertrag-PDF ueberein — aus einer Quelle, nicht hartcodiert.
+//   3. Einwilligungserklärung (konstant)
 
 function buildDisplayText(opts: {
   customerName: string;
@@ -16,9 +27,15 @@ function buildDisplayText(opts: {
   rentalDays: number;
   priceTotal: number;
   deposit: number;
+  paragraphs: ContractParagraph[];
 }) {
-  const fmt = (n: number) => n.toFixed(2).replace('.', ',') + ' \u20ac';
-  return `KAMERA-MIETVERTRAG
+  const fmt = (n: number) => n.toFixed(2).replace('.', ',') + ' €';
+  const divider = '─'.repeat(40);
+  const accessoriesLine = opts.accessories.length > 0
+    ? `\nZubehör: ${opts.accessories.join(', ')}`
+    : '';
+
+  const header = `KAMERA-MIETVERTRAG
 
 Vertragsparteien
 
@@ -31,59 +48,32 @@ Mieter:
 ${opts.customerName}
 ${opts.customerEmail}
 
-\u00a7 1 \u2013 Mietgegenstand
-(1) Der Vermieter vermietet dem Mieter folgende(s) Gerät(e):
-${opts.productName}${opts.accessories.length > 0 ? `\nZubehör: ${opts.accessories.join(', ')}` : ''}
-(2) Der Mietgegenstand ist Eigentum des Vermieters.
-(3) Weitervermietung an Dritte ist untersagt.
+Mietgegenstand:
+${opts.productName}${accessoriesLine}
 
-\u00a7 2 \u2013 Mietzeitraum
-Mietbeginn: ${opts.rentalFrom}
-Mietende: ${opts.rentalTo}
-Mietdauer: ${opts.rentalDays} Tag${opts.rentalDays !== 1 ? 'e' : ''}
+Mietzeitraum:
+${opts.rentalFrom} bis ${opts.rentalTo} (${opts.rentalDays} Tag${opts.rentalDays !== 1 ? 'e' : ''})
 
-\u00a7 3 \u2013 Mietpreis und Zahlung
+Entgelt:
 Gesamtbetrag: ${fmt(opts.priceTotal)}
-Zahlung erfolgt über Stripe per Kreditkarte oder SEPA-Lastschrift.
+Kaution / Vorautorisierung: ${fmt(opts.deposit)}
+Zahlung erfolgt über Stripe (Kreditkarte / SEPA-Lastschrift).
 
-\u00a7 4 \u2013 Kaution (Vorautorisierung)
-Vorautorisierung: ${fmt(opts.deposit)}
-Wird nach ordnungsgemäßer Rückgabe vollständig freigegeben.
-Bei Schäden oder Verlust kann die Vorautorisierung eingezogen werden.
+${divider}
 
-\u00a7 5 \u2013 Versand und Übergabe
-Mietgegenstand wird per Paketdienstleister versendet.
-Mängel innerhalb von 24 Stunden nach Empfang per E-Mail an ${BUSINESS.email} melden.
+VERTRAGSBEDINGUNGEN
+`;
 
-\u00a7 6 \u2013 Sorgfaltspflicht
-Der Mieter behandelt den Mietgegenstand sorgsam und schützt ihn vor Wasser, Stößen und Überhitzung.
-Keine eigenmächtigen Reparaturversuche.
+  const paragraphsBlock = opts.paragraphs.map((p, i) => {
+    // Titel enthaelt meist schon die "§ N" Nummer (z.B. "§ 1 Vertragsgegenstand");
+    // falls nicht, setzen wir sie davor, damit die Anzeige zum PDF passt.
+    const hasSectionMark = /^\s*§\s*\d+/.test(p.title);
+    const title = hasSectionMark ? p.title.trim() : `§ ${i + 1} – ${p.title.trim()}`;
+    return `\n${title}\n${p.text.trim()}\n`;
+  }).join('');
 
-\u00a7 7 \u2013 Haftung bei Schäden und Verlust
-Der Mieter haftet für alle Schäden während des Mietzeitraums.
-Bei Totalschaden/Verlust: Ersatz des Wiederbeschaffungswertes.
-
-\u00a7 8 \u2013 Verspätete Rückgabe
-Pro angefangenem Tag: regulärer Tagespreis + 5,00 \u20ac Bearbeitungsgebühr.
-Ab 3 Werktagen Verspätung ohne Absprache: Strafanzeige möglich.
-
-\u00a7 9 \u2013 Stornierung
-Mehr als 7 Tage vor Mietbeginn: 100% Erstattung.
-3\u20137 Tage vorher: 50% Erstattung.
-Weniger als 3 Tage: keine Erstattung.
-
-\u00a7 10 \u2013 Datenschutz
-Datenverarbeitung gemäß DSGVO. Details: ${BUSINESS.url}/datenschutz
-
-\u00a7 11 \u2013 Haftungsbeschränkung des Vermieters
-Haftung des Vermieters bei leichter Fahrlässigkeit auf vorhersehbare Schäden begrenzt.
-Keine Haftung für Datenverluste auf Speicherkarten.
-
-\u00a7 12 \u2013 Schlussbestimmungen
-Deutsches Recht. Gerichtsstand: ${BUSINESS.city}.
-Salvatorische Klausel. Änderungen bedürfen der Textform.
-
-\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+  const footer = `
+${divider}
 
 Einwilligungserklärung:
 Mit meiner digitalen Unterschrift bestätige ich:
@@ -92,6 +82,8 @@ Mit meiner digitalen Unterschrift bestätige ich:
 3. Ich bin volljährig (mindestens 18 Jahre) und geschäftsfähig.
 4. Meine Kontakt- und Zahlungsdaten sind korrekt.
 5. Diese digitale Signatur gilt gemäß eIDAS-Verordnung (EU) 2014/910 als rechtsgültige elektronische Signatur.`;
+
+  return header + paragraphsBlock + footer;
 }
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -141,19 +133,44 @@ export default function SignatureStep({
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [scrolledToBottom, setScrolledToBottom] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [paragraphs, setParagraphs] = useState<ContractParagraph[] | null>(null);
+  const [paragraphsLoading, setParagraphsLoading] = useState(true);
 
-  // Vertragstext
-  const contractText = buildDisplayText({
-    customerName,
-    customerEmail,
-    productName,
-    accessories,
-    rentalFrom,
-    rentalTo,
-    rentalDays,
-    priceTotal,
-    deposit,
-  });
+  // Paragraphen aus admin_settings laden (oeffentlicher Endpoint).
+  // Quelle: /api/contract-paragraphs — liefert die custom-Paragraphen
+  // oder Fallback auf die hardcoded Defaults.
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/contract-paragraphs')
+      .then((r) => r.json())
+      .then((d) => {
+        if (cancelled) return;
+        if (Array.isArray(d?.paragraphs)) {
+          setParagraphs(d.paragraphs);
+        }
+      })
+      .catch(() => { /* Fallback: Leere Liste -> UI-Fallback unten */ })
+      .finally(() => {
+        if (!cancelled) setParagraphsLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Vertragstext — baut sich erst wenn Paragraphen geladen sind.
+  const contractText = paragraphs
+    ? buildDisplayText({
+        customerName,
+        customerEmail,
+        productName,
+        accessories,
+        rentalFrom,
+        rentalTo,
+        rentalDays,
+        priceTotal,
+        deposit,
+        paragraphs,
+      })
+    : '';
 
   // Scroll-Erkennung
   const handleScroll = useCallback(() => {
@@ -172,14 +189,15 @@ export default function SignatureStep({
     if (el.scrollHeight <= el.clientHeight + 10) {
       setScrolledToBottom(true);
     }
-  }, []);
+  }, [contractText]);
 
   // Unterschrift-Validierung
   const hasSignature = useTypedName ? typedName.trim().length >= 2 : hasDrawn;
-  const isValid = hasSignature && agreedToTerms && scrolledToBottom;
+  const isValid = hasSignature && agreedToTerms && scrolledToBottom && !paragraphsLoading;
 
   // Fehlende Bedingungen für Tooltip
   const missingItems: string[] = [];
+  if (paragraphsLoading) missingItems.push('Vertrag wird geladen');
   if (!scrolledToBottom) missingItems.push('Vertrag bis zum Ende lesen');
   if (!hasSignature) missingItems.push('Unterschreiben');
   if (!agreedToTerms) missingItems.push('Checkbox bestätigen');
@@ -226,14 +244,16 @@ export default function SignatureStep({
           onScroll={handleScroll}
           className="overflow-y-auto max-h-72 border border-brand-border dark:border-gray-700 rounded-lg p-4 text-sm text-slate-600 dark:text-gray-300 bg-white dark:bg-gray-900 whitespace-pre-wrap font-mono leading-relaxed"
         >
-          {contractText}
+          {paragraphsLoading
+            ? 'Vertrag wird geladen...'
+            : contractText || 'Vertragstext konnte nicht geladen werden. Bitte Seite neu laden.'}
         </div>
         {/* Scroll-Gradient */}
-        {!scrolledToBottom && (
+        {!scrolledToBottom && !paragraphsLoading && (
           <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-white dark:from-gray-900 to-transparent rounded-b-lg pointer-events-none" />
         )}
         {/* Scroll-Hinweis */}
-        {!scrolledToBottom && (
+        {!scrolledToBottom && !paragraphsLoading && (
           <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-3 py-1.5 bg-brand-black/80 text-white text-xs rounded-full pointer-events-none">
             <svg className="w-3.5 h-3.5 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
@@ -371,7 +391,7 @@ export default function SignatureStep({
           {!isValid && missingItems.length > 0 && (
             <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-brand-black text-white text-xs rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
               Bitte: {missingItems.map((item, i) => (
-                <span key={i}>{i > 0 ? ', ' : ''}{'\u2460\u2461\u2462'[i]} {item}</span>
+                <span key={i}>{i > 0 ? ', ' : ''}{'①②③④'[i] ?? ''} {item}</span>
               ))}
             </div>
           )}
