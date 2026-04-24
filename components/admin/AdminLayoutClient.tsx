@@ -266,6 +266,8 @@ function NavGroupCollapse({
   onNavClick,
   me,
   hasVisibleChildren,
+  open,
+  onToggle,
 }: {
   label: string;
   icon: React.ReactNode;
@@ -277,37 +279,13 @@ function NavGroupCollapse({
   onNavClick?: () => void;
   me: MeInfo | null;
   hasVisibleChildren?: boolean;
+  open: boolean;
+  onToggle: () => void;
 }) {
   const isActivePath = matchPaths.some((p) => pathname === p || pathname.startsWith(`${p}/`))
     || (items?.some((it) => it.exact ? pathname === it.href : pathname.startsWith(it.href)) ?? false);
 
-  const [open, setOpen] = useState<boolean>(isActivePath);
-
   const visibleItems = items ? items.filter((i) => canSee(me, i)) : undefined;
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    if (isActivePath) {
-      setOpen(true);
-      return;
-    }
-    try {
-      const raw = window.localStorage.getItem(`admin_group_${storageKey}_collapsed`);
-      if (raw !== null) setOpen(raw === 'false');
-    } catch { /* empty */ }
-  }, [isActivePath, storageKey]);
-
-  useEffect(() => {
-    if (isActivePath && !open) setOpen(true);
-  }, [isActivePath, open]);
-
-  function toggle() {
-    const next = !open;
-    setOpen(next);
-    try {
-      window.localStorage.setItem(`admin_group_${storageKey}_collapsed`, next ? 'false' : 'true');
-    } catch { /* empty */ }
-  }
 
   // Gesamte Gruppe ausblenden wenn weder eigene Items noch Kinder sichtbar sind.
   const hasOwnItems = visibleItems && visibleItems.length > 0;
@@ -315,10 +293,10 @@ function NavGroupCollapse({
   if (!hasSomething) return null;
 
   return (
-    <div className="mb-1">
+    <div className="mb-1" data-storage-key={storageKey}>
       <button
         type="button"
-        onClick={toggle}
+        onClick={onToggle}
         className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-heading font-semibold transition-all mx-1 text-left"
         style={{ color: isActivePath ? '#06b6d4' : '#94a3b8', background: isActivePath ? 'rgba(6,182,212,0.15)' : 'transparent' }}
         onMouseEnter={(e) => { if (!isActivePath) (e.currentTarget as HTMLElement).style.color = '#e2e8f0'; }}
@@ -487,6 +465,62 @@ function SidebarContent({ pathname, isDashboard, onNavClick, handleLogout, me }:
 }) {
   const blogVisible = BLOG_ITEMS.some((i) => canSee(me, i));
   const socialVisible = SOCIAL_ITEMS.some((i) => canSee(me, i));
+
+  // Accordion: genau eine Gruppe darf offen sein. Bei Pfadwechsel wird die
+  // zugehoerige Gruppe automatisch ausgeklappt; Klick auf eine andere
+  // schliesst die bisherige.
+  const GROUP_MATCH: Record<string, string[]> = {
+    tagesgeschaeft: ['/admin/tagesgeschaeft', '/admin/buchungen', '/admin/verfuegbarkeit', '/admin/versand', '/admin/retouren'],
+    kunden: ['/admin/kunden-uebersicht', '/admin/kunden', '/admin/nachrichten', '/admin/warteliste', '/admin/kunden-material', '/admin/bewertungen', '/admin/schaeden'],
+    katalog: ['/admin/preise/kameras', '/admin/sets', '/admin/zubehoer'],
+    preise: ['/admin/preise', '/admin/gutscheine', '/admin/rabatte'],
+    content: ['/admin/blog', '/admin/social'],
+    webseite: ['/admin/startseite', '/admin/legal'],
+    finanzen: ['/admin/buchhaltung', '/admin/einkauf', '/admin/anlagen'],
+    berichte: ['/admin/analytics', '/admin/emails', '/admin/beta-feedback', '/admin/aktivitaetsprotokoll'],
+  };
+
+  function groupForPath(p: string): string | null {
+    // Laengste Uebereinstimmung gewinnt (z.B. /admin/preise/kameras -> katalog statt preise)
+    let best: { key: string; len: number } | null = null;
+    for (const [key, paths] of Object.entries(GROUP_MATCH)) {
+      for (const prefix of paths) {
+        if (p === prefix || p.startsWith(prefix + '/')) {
+          if (!best || prefix.length > best.len) best = { key, len: prefix.length };
+        }
+      }
+    }
+    return best?.key ?? null;
+  }
+
+  const pathGroup = groupForPath(pathname);
+  const [openGroup, setOpenGroup] = useState<string | null>(pathGroup);
+
+  // Initial: aus localStorage laden (falls nichts aus Pfad kommt)
+  useEffect(() => {
+    if (typeof window === 'undefined' || pathGroup) return;
+    try {
+      const raw = window.localStorage.getItem('admin_sidebar_open_group');
+      if (raw) setOpenGroup(raw);
+    } catch { /* empty */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Pfadwechsel: passende Gruppe ausklappen (andere schliessen)
+  useEffect(() => {
+    if (pathGroup && pathGroup !== openGroup) setOpenGroup(pathGroup);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathGroup]);
+
+  function toggleGroup(key: string) {
+    const next = openGroup === key ? null : key;
+    setOpenGroup(next);
+    try {
+      if (next) window.localStorage.setItem('admin_sidebar_open_group', next);
+      else window.localStorage.removeItem('admin_sidebar_open_group');
+    } catch { /* empty */ }
+  }
+
   return (
     <>
       {/* Logo */}
@@ -526,57 +560,67 @@ function SidebarContent({ pathname, isDashboard, onNavClick, handleLogout, me }:
       {/* Divider */}
       <div style={{ height: 1, background: '#1e293b', margin: '4px 12px' }} />
 
-      {/* Navigation groups — alle aufklappbar (Collapse-State in localStorage) */}
+      {/* Navigation groups — Accordion: es ist immer nur eine Gruppe offen */}
       <nav className="flex-1 py-2 overflow-y-auto">
         <NavGroupCollapse
           label="Tagesgeschäft"
           icon={iconBuchungen}
           items={TAGESGESCHAEFT_ITEMS}
-          matchPaths={['/admin/tagesgeschaeft', '/admin/buchungen', '/admin/verfuegbarkeit', '/admin/versand', '/admin/retouren']}
+          matchPaths={GROUP_MATCH.tagesgeschaeft}
           storageKey="tagesgeschaeft"
           pathname={pathname}
           onNavClick={onNavClick}
           me={me}
+          open={openGroup === 'tagesgeschaeft'}
+          onToggle={() => toggleGroup('tagesgeschaeft')}
         />
         <NavGroupCollapse
           label="Kunden & Kommunikation"
           icon={iconUsers}
           items={KUNDEN_ITEMS}
-          matchPaths={['/admin/kunden-uebersicht', '/admin/kunden', '/admin/nachrichten', '/admin/warteliste', '/admin/kunden-material', '/admin/bewertungen', '/admin/schaeden']}
+          matchPaths={GROUP_MATCH.kunden}
           storageKey="kunden"
           pathname={pathname}
           onNavClick={onNavClick}
           me={me}
+          open={openGroup === 'kunden'}
+          onToggle={() => toggleGroup('kunden')}
         />
         <NavGroupCollapse
           label="Katalog"
           icon={iconCamera}
           items={KATALOG_ITEMS}
-          matchPaths={['/admin/preise/kameras', '/admin/sets', '/admin/zubehoer']}
+          matchPaths={GROUP_MATCH.katalog}
           storageKey="katalog"
           pathname={pathname}
           onNavClick={onNavClick}
           me={me}
+          open={openGroup === 'katalog'}
+          onToggle={() => toggleGroup('katalog')}
         />
         <NavGroupCollapse
           label="Preise & Aktionen"
           icon={iconPriceTag}
           items={PREISE_ITEMS}
-          matchPaths={['/admin/preise', '/admin/gutscheine', '/admin/rabatte']}
+          matchPaths={GROUP_MATCH.preise}
           storageKey="preise"
           pathname={pathname}
           onNavClick={onNavClick}
           me={me}
+          open={openGroup === 'preise'}
+          onToggle={() => toggleGroup('preise')}
         />
         <NavGroupCollapse
           label="Content"
           icon={iconBlog}
-          matchPaths={['/admin/blog', '/admin/social']}
+          matchPaths={GROUP_MATCH.content}
           storageKey="content"
           pathname={pathname}
           onNavClick={onNavClick}
           me={me}
           hasVisibleChildren={blogVisible || socialVisible}
+          open={openGroup === 'content'}
+          onToggle={() => toggleGroup('content')}
         >
           <BlogCollapse pathname={pathname} onNavClick={onNavClick} me={me} />
           <SocialCollapse pathname={pathname} onNavClick={onNavClick} me={me} />
@@ -585,31 +629,37 @@ function SidebarContent({ pathname, isDashboard, onNavClick, handleLogout, me }:
           label="Webseite"
           icon={iconHome}
           items={WEBSEITE_ITEMS}
-          matchPaths={['/admin/startseite', '/admin/legal']}
+          matchPaths={GROUP_MATCH.webseite}
           storageKey="webseite"
           pathname={pathname}
           onNavClick={onNavClick}
           me={me}
+          open={openGroup === 'webseite'}
+          onToggle={() => toggleGroup('webseite')}
         />
         <NavGroupCollapse
           label="Finanzen"
           icon={iconFinance}
           items={FINANZEN_ITEMS}
-          matchPaths={['/admin/buchhaltung', '/admin/einkauf', '/admin/anlagen']}
+          matchPaths={GROUP_MATCH.finanzen}
           storageKey="finanzen"
           pathname={pathname}
           onNavClick={onNavClick}
           me={me}
+          open={openGroup === 'finanzen'}
+          onToggle={() => toggleGroup('finanzen')}
         />
         <NavGroupCollapse
           label="Berichte"
           icon={iconChart}
           items={BERICHTE_ITEMS}
-          matchPaths={['/admin/analytics', '/admin/emails', '/admin/beta-feedback', '/admin/aktivitaetsprotokoll']}
+          matchPaths={GROUP_MATCH.berichte}
           storageKey="berichte"
           pathname={pathname}
           onNavClick={onNavClick}
           me={me}
+          open={openGroup === 'berichte'}
+          onToggle={() => toggleGroup('berichte')}
         />
         <div style={{ height: 1, background: '#1e293b', margin: '6px 12px' }} />
         <NavSection label="System" items={SYSTEM_ITEMS} pathname={pathname} onNavClick={onNavClick} me={me} />
