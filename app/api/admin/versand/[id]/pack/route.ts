@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
-import { checkAdminAuth } from '@/lib/admin-auth';
+import { getCurrentAdminUser } from '@/lib/admin-auth';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 
 /**
@@ -21,7 +21,8 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  if (!(await checkAdminAuth())) {
+  const user = await getCurrentAdminUser();
+  if (!user) {
     return NextResponse.json({ error: 'Nicht autorisiert.' }, { status: 401 });
   }
   if (!limiter.check(getClientIp(req)).success) {
@@ -43,12 +44,18 @@ export async function POST(
     return NextResponse.json({ error: 'Signatur fehlt.' }, { status: 400 });
   }
 
+  // Mitarbeiter-Account-User-ID fuer harte 4-Augen-Pruefung mitschreiben.
+  // Beim Master-Passwort-Login ist user.id = 'legacy-env' (kein UUID) -> NULL,
+  // dann faellt die Check-API auf den weichen Namensvergleich zurueck.
+  const packedByUserId = user.id !== 'legacy-env' ? user.id : null;
+
   const supabase = createServiceClient();
   const { error } = await supabase
     .from('bookings')
     .update({
       pack_status: 'packed',
       pack_packed_by: packedBy,
+      pack_packed_by_user_id: packedByUserId,
       pack_packed_at: new Date().toISOString(),
       pack_packed_signature: signatureDataUrl,
       pack_packed_items: packedItems,
@@ -57,6 +64,7 @@ export async function POST(
       // setzen wir die Kontroll-Felder zurueck — sonst wuerde der Status
       // 'checked' direkt aus der vorherigen Runde stehen bleiben.
       pack_checked_by: null,
+      pack_checked_by_user_id: null,
       pack_checked_at: null,
       pack_checked_signature: null,
       pack_checked_items: null,

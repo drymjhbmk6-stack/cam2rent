@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
-import { checkAdminAuth } from '@/lib/admin-auth';
+import { getCurrentAdminUser } from '@/lib/admin-auth';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { detectImageType, isAllowedImage } from '@/lib/file-type-check';
 
@@ -25,7 +25,8 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  if (!(await checkAdminAuth())) {
+  const user = await getCurrentAdminUser();
+  if (!user) {
     return NextResponse.json({ error: 'Nicht autorisiert.' }, { status: 401 });
   }
   if (!limiter.check(getClientIp(req)).success) {
@@ -33,6 +34,7 @@ export async function POST(
   }
 
   const { id } = await params;
+  const checkedByUserId = user.id !== 'legacy-env' ? user.id : null;
 
   let formData: FormData;
   try {
@@ -69,10 +71,13 @@ export async function POST(
   }
 
   // 4-Augen-Pruefung: Kontrolleur darf nicht der Packer sein.
+  // Bevorzugt User-ID-Vergleich (Mitarbeiterkonto). Wenn fuer eine Seite keine
+  // User-ID vorhanden ist (Master-Passwort-Login = legacy-env), Notfall-Fallback
+  // auf Namensvergleich.
   const supabase = createServiceClient();
   const { data: booking } = await supabase
     .from('bookings')
-    .select('pack_status, pack_packed_by')
+    .select('pack_status, pack_packed_by, pack_packed_by_user_id')
     .eq('id', id)
     .maybeSingle();
 
@@ -84,11 +89,24 @@ export async function POST(
       error: 'Das Paket wurde noch nicht von einem Packer fertig gemeldet.',
     }, { status: 409 });
   }
-  const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
-  if (booking.pack_packed_by && norm(booking.pack_packed_by) === norm(checkedBy)) {
-    return NextResponse.json({
-      error: 'Kontrolleur und Packer muessen unterschiedliche Personen sein (4-Augen-Prinzip).',
-    }, { status: 403 });
+
+  if (booking.pack_packed_by_user_id && checkedByUserId) {
+    // Beide Seiten mit Mitarbeiter-Account: harter ID-Vergleich (nicht umgehbar).
+    if (booking.pack_packed_by_user_id === checkedByUserId) {
+      return NextResponse.json({
+        error: 'Kontrolleur und Packer muessen unterschiedliche Mitarbeiter sein (4-Augen-Prinzip).',
+      }, { status: 403 });
+    }
+  } else {
+    // Mindestens eine Seite hat kein Mitarbeiter-Konto -> Notfall-Fallback auf
+    // Namensvergleich. Schwaecher, aber besser als gar nichts; und ohne diesen
+    // Fallback wuerde der bestehende Master-Passwort-Workflow blockiert.
+    const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
+    if (booking.pack_packed_by && norm(booking.pack_packed_by) === norm(checkedBy)) {
+      return NextResponse.json({
+        error: 'Kontrolleur und Packer muessen unterschiedliche Personen sein (4-Augen-Prinzip).',
+      }, { status: 403 });
+    }
   }
 
   // Foto pruefen + hochladen
@@ -126,6 +144,7 @@ export async function POST(
     .update({
       pack_status: 'checked',
       pack_checked_by: checkedBy,
+      pack_checked_by_user_id: checkedByUserId,
       pack_checked_at: new Date().toISOString(),
       pack_checked_signature: signatureDataUrl,
       pack_checked_items: checkedItems,

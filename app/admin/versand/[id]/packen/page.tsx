@@ -28,11 +28,20 @@ interface BookingDetail {
   resolved_items?: ResolvedItem[];
   pack_status?: string | null;
   pack_packed_by?: string | null;
+  pack_packed_by_user_id?: string | null;
   pack_packed_at?: string | null;
   pack_packed_items?: string[] | null;
   pack_checked_by?: string | null;
+  pack_checked_by_user_id?: string | null;
   pack_checked_at?: string | null;
   pack_photo_url?: string | null;
+}
+
+interface CurrentAdminUser {
+  id: string;
+  name: string;
+  role: 'owner' | 'employee';
+  isEmployeeAccount: boolean; // true wenn echter Mitarbeiter-Account (nicht legacy-env Master-Passwort)
 }
 
 // Stueckzahl aus resolved_items expandieren — eine Zeile pro physisches Stueck
@@ -57,6 +66,7 @@ function expandItems(b: BookingDetail): { key: string; label: string; subLabel: 
 export default function PackenPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const [booking, setBooking] = useState<BookingDetail | null>(null);
+  const [me, setMe] = useState<CurrentAdminUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -73,6 +83,23 @@ export default function PackenPage({ params }: { params: Promise<{ id: string }>
   };
 
   useEffect(reload, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Aktuell eingeloggten Admin-User holen — fuer Name-Prefill + Anzeige, ob
+  // der harte ID-basierte 4-Augen-Check greift.
+  useEffect(() => {
+    fetch('/api/admin/me')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d?.user) return;
+        setMe({
+          id: d.user.id,
+          name: d.user.name ?? '',
+          role: d.user.role,
+          isEmployeeAccount: d.user.id !== 'legacy-env',
+        });
+      })
+      .catch(() => {});
+  }, []);
 
   if (loading) return <div className="p-8 text-center text-gray-500">Lädt…</div>;
   if (error || !booking) return <div className="p-8 text-center text-red-600">{error}</div>;
@@ -105,10 +132,10 @@ export default function PackenPage({ params }: { params: Promise<{ id: string }>
           </div>
         )}
         {status === 'pending' && (
-          <PackStep booking={booking} items={items} onDone={reload} />
+          <PackStep booking={booking} items={items} me={me} onDone={reload} />
         )}
         {status === 'packed' && (
-          <CheckStep booking={booking} items={items} onDone={reload} />
+          <CheckStep booking={booking} items={items} me={me} onDone={reload} />
         )}
         {status === 'checked' && (
           <DoneStep booking={booking} onReset={reload} />
@@ -175,10 +202,11 @@ function BookingInfo({ booking }: { booking: BookingDetail }) {
 // ─── Step 1: Packen ──────────────────────────────────────────────────────────
 
 function PackStep({
-  booking, items, onDone,
+  booking, items, me, onDone,
 }: {
   booking: BookingDetail;
   items: { key: string; label: string; subLabel: string }[];
+  me: CurrentAdminUser | null;
   onDone: () => void;
 }) {
   const [checked, setChecked] = useState<Record<string, boolean>>({});
@@ -186,10 +214,20 @@ function PackStep({
   const [noVisible, setNoVisible] = useState(false);
   const [note, setNote] = useState('');
   const [name, setName] = useState('');
+  const [namePrefilled, setNamePrefilled] = useState(false);
   const sigRef = useRef<SignatureCanvas>(null);
   const [hasDrawn, setHasDrawn] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState('');
+
+  // Name aus Mitarbeiter-Konto vorausfuellen — bleibt editierbar fuer den Fall,
+  // dass jemand anderes (z.B. Aushilfe ohne eigenen Account) am Geraet packt.
+  useEffect(() => {
+    if (me?.isEmployeeAccount && me.name && !name && !namePrefilled) {
+      setName(me.name);
+      setNamePrefilled(true);
+    }
+  }, [me, name, namePrefilled]);
 
   const allChecked = items.every((it) => checked[it.key]);
   const canSubmit = allChecked && tested && noVisible && name.trim().length >= 2 && hasDrawn && !submitting;
@@ -251,6 +289,9 @@ function PackStep({
         sigRef={sigRef}
         hasDrawn={hasDrawn}
         setHasDrawn={setHasDrawn}
+        accountHint={me?.isEmployeeAccount
+          ? `Eingeloggt als ${me.name} — der harte 4-Augen-Check über dein Mitarbeiterkonto ist aktiv.`
+          : undefined}
       />
 
       {err && <p className="text-sm text-red-400 mt-3">{err}</p>}
@@ -272,14 +313,16 @@ function PackStep({
 // ─── Step 2: Kontrollieren ───────────────────────────────────────────────────
 
 function CheckStep({
-  booking, items, onDone,
+  booking, items, me, onDone,
 }: {
   booking: BookingDetail;
   items: { key: string; label: string; subLabel: string }[];
+  me: CurrentAdminUser | null;
   onDone: () => void;
 }) {
   const [checked, setChecked] = useState<Record<string, boolean>>({});
   const [name, setName] = useState('');
+  const [namePrefilled, setNamePrefilled] = useState(false);
   const [notes, setNotes] = useState('');
   const sigRef = useRef<SignatureCanvas>(null);
   const [hasDrawn, setHasDrawn] = useState(false);
@@ -288,9 +331,27 @@ function CheckStep({
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState('');
 
+  // Name aus Mitarbeiter-Konto vorausfuellen.
+  useEffect(() => {
+    if (me?.isEmployeeAccount && me.name && !name && !namePrefilled) {
+      setName(me.name);
+      setNamePrefilled(true);
+    }
+  }, [me, name, namePrefilled]);
+
   const allChecked = items.every((it) => checked[it.key]);
-  const isSamePerson = name.trim().length >= 2 && booking.pack_packed_by &&
+
+  // 4-Augen-Pruefung clientseitig (nur UX-Hinweis — finale Pruefung serverseitig):
+  // 1) Wenn Mitarbeiter-Account: User-ID-Vergleich gegen Packer.
+  // 2) Sonst Namensvergleich als Notfall-Fallback.
+  const idMatchesPacker = !!(me?.isEmployeeAccount && booking.pack_packed_by_user_id &&
+    me.id === booking.pack_packed_by_user_id);
+  const nameMatchesPacker = name.trim().length >= 2 && !!booking.pack_packed_by &&
     name.trim().toLowerCase() === booking.pack_packed_by.trim().toLowerCase();
+  // ID-Treffer ist hart — Block. Name-Treffer nur wenn der Packer ohne Account
+  // gepackt hat (sonst koennte ein anderer Mitarbeiter mit gleichem Namen
+  // berechtigt sein und wir wuerden ihn faelschlich blocken).
+  const isSamePerson = idMatchesPacker || (!booking.pack_packed_by_user_id && nameMatchesPacker);
   const canSubmit = allChecked && name.trim().length >= 2 && !isSamePerson && hasDrawn && !!photo && !submitting;
 
   function onPhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -381,9 +442,15 @@ function CheckStep({
         sigRef={sigRef}
         hasDrawn={hasDrawn}
         setHasDrawn={setHasDrawn}
+        accountHint={me?.isEmployeeAccount
+          ? `Eingeloggt als ${me.name} — der harte 4-Augen-Check über dein Mitarbeiterkonto ist aktiv.`
+          : 'Kein Mitarbeiter-Account erkannt — der 4-Augen-Check fällt auf den Namensvergleich zurück.'}
       />
 
-      {isSamePerson && (
+      {idMatchesPacker && (
+        <p className="text-sm text-red-400 mt-3">⚠ Du bist mit deinem Mitarbeiterkonto auch als Packer eingetragen. Eine zweite Person muss kontrollieren.</p>
+      )}
+      {!idMatchesPacker && isSamePerson && (
         <p className="text-sm text-red-400 mt-3">⚠ Du bist als Packer eingetragen. Eine zweite Person muss kontrollieren.</p>
       )}
       {!allChecked && (
@@ -546,7 +613,7 @@ function Check({ label, checked, onChange }: { label: string; checked: boolean; 
 // ─── Signature-Block (Name + Canvas) ─────────────────────────────────────────
 
 function SignatureBlock({
-  title, name, setName, sigRef, hasDrawn, setHasDrawn,
+  title, name, setName, sigRef, hasDrawn, setHasDrawn, accountHint,
 }: {
   title: string;
   name: string;
@@ -554,10 +621,14 @@ function SignatureBlock({
   sigRef: React.RefObject<SignatureCanvas | null>;
   hasDrawn: boolean;
   setHasDrawn: (v: boolean) => void;
+  accountHint?: string;
 }) {
   return (
     <div className="mt-6 border-t border-slate-800 pt-4">
       <label className="block text-sm font-semibold text-slate-300 mb-2">{title}</label>
+      {accountHint && (
+        <p className="text-xs text-cyan-400 mb-2">{accountHint}</p>
+      )}
       <input
         type="text"
         placeholder="Vor- und Nachname"

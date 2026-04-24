@@ -357,6 +357,20 @@ Alle Dropdowns laden aus `admin_settings` und können neue Einträge hinzufügen
 - Übergabeprotokoll: Vermieter/Mieter nebeneinander, Checkboxen kompakt
 - Packliste: Info-Blöcke nebeneinander, Zustand+Verpackung zusammengefasst
 
+### Digitales Pack-Workflow (Versand) mit 4-Augen-Prinzip (Stand 2026-04-24)
+3-Schritt-Flow auf `/admin/versand/[id]/packen`: Packer haakt jedes Item digital ab + unterschreibt → Kontrolleur (zweite Person, hart erzwungen!) prüft + macht Foto + unterschreibt → System generiert Packlisten-PDF mit beiden Signaturen.
+
+- **DB-Migration:** `supabase/supabase-packing-workflow.sql` — Spalten `pack_status`, `pack_packed_by`, `pack_packed_by_user_id` (UUID), `pack_packed_at`, `pack_packed_signature`, `pack_packed_items`, `pack_packed_condition`, `pack_checked_by`, `pack_checked_by_user_id` (UUID), `pack_checked_at`, `pack_checked_signature`, `pack_checked_items`, `pack_checked_notes`, `pack_photo_url` auf `bookings`. Storage-Bucket `packing-photos` (privat, 10 MB, image/*) muss manuell angelegt werden.
+- **APIs:** `POST /api/admin/versand/[id]/pack` (Step 1), `POST /api/admin/versand/[id]/check` (Step 2, multipart mit Foto, Magic-Byte-Check JPEG/PNG/WebP/HEIC, max 10 MB), `GET /api/admin/versand/[id]/photo-url` (Signed URL 5 Min), `POST /api/admin/versand/[id]/pack-reset`.
+- **4-Augen-Pruefung User-ID-basiert:** `getCurrentAdminUser()` schreibt `pack_packed_by_user_id` bzw. `pack_checked_by_user_id` mit der `admin_users.id`. Master-Passwort-Login (`legacy-env`) speichert NULL. Check-API blockt hart wenn beide IDs gesetzt + identisch sind. Wenn mindestens eine Seite NULL ist (Master-Passwort), Notfall-Fallback auf Namensvergleich. Mitarbeiter koennen also nicht durch ein anderes Pseudonym im Namensfeld umgehen.
+- **UI:** `/admin/versand/[id]/packen` — Stepper, Item-Checkliste (Akkus/Karten einzeln expandiert über `qty`), Signatur-Canvas, Foto-Upload mit `capture="environment"` für Mobile, Preview. Name wird aus Mitarbeiter-Konto vorausgefüllt + Hinweis-Badge zeigt "Hartes 4-Augen ueber Mitarbeiterkonto aktiv". Bestehender Master-Passwort-Workflow läuft mit Namensvergleich-Fallback weiter.
+- **Versand-Liste** (`/admin/versand`): Status-Badge `📦 Paket packen` (offen) / `⚠ Wartet auf Kontrolle` (packed) / `✓ Versand-Pack fertig (PDF öffnen)` (checked).
+- **PDF** (`lib/packlist-pdf.tsx`): Sektion 4 ohne Paketnummer-Feld, Sektion 5 zwei Unterschriften-Bloecke mit Canvas + Timestamps + Foto-Hinweistext (Foto bleibt nur intern als Nachweis).
+- **Go-Live TODO:**
+  1. SQL-Migration `supabase/supabase-packing-workflow.sql` ausführen
+  2. Storage-Bucket `packing-photos` manuell anlegen (Public OFF, 10 MB, `image/jpeg + png + webp + heic + heif`)
+  3. Mitarbeiter-Accounts unter `/admin/einstellungen/mitarbeiter` anlegen — sobald beide (Packer + Kontrolleur) eigenes Konto haben, greift die harte ID-Pruefung automatisch.
+
 ### Buchhaltungs-Cockpit (`/admin/buchhaltung`)
 Tab-basiertes Cockpit mit 8 Tabs (Query-Parameter `?tab=...`):
 

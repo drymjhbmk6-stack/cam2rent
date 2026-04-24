@@ -19,18 +19,20 @@ ALTER TABLE bookings ADD COLUMN IF NOT EXISTS pack_status TEXT;
 -- (Kontrolleur signiert + Foto). NULL = noch nicht angefangen.
 
 -- Schritt 1: Packer
-ALTER TABLE bookings ADD COLUMN IF NOT EXISTS pack_packed_by        TEXT;
-ALTER TABLE bookings ADD COLUMN IF NOT EXISTS pack_packed_at        TIMESTAMPTZ;
-ALTER TABLE bookings ADD COLUMN IF NOT EXISTS pack_packed_signature TEXT;       -- DataURL der Canvas-Signatur
-ALTER TABLE bookings ADD COLUMN IF NOT EXISTS pack_packed_items     JSONB;      -- Liste abgehakter Item-Schluessel
-ALTER TABLE bookings ADD COLUMN IF NOT EXISTS pack_packed_condition JSONB;      -- Zustand-Checkboxen + Notiz
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS pack_packed_by         TEXT;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS pack_packed_by_user_id UUID;       -- Mitarbeiter-Account aus admin_users (NULL bei Master-Passwort-Login)
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS pack_packed_at         TIMESTAMPTZ;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS pack_packed_signature  TEXT;       -- DataURL der Canvas-Signatur
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS pack_packed_items      JSONB;      -- Liste abgehakter Item-Schluessel
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS pack_packed_condition  JSONB;      -- Zustand-Checkboxen + Notiz
 
 -- Schritt 2: Kontrolleur
-ALTER TABLE bookings ADD COLUMN IF NOT EXISTS pack_checked_by        TEXT;
-ALTER TABLE bookings ADD COLUMN IF NOT EXISTS pack_checked_at        TIMESTAMPTZ;
-ALTER TABLE bookings ADD COLUMN IF NOT EXISTS pack_checked_signature TEXT;
-ALTER TABLE bookings ADD COLUMN IF NOT EXISTS pack_checked_items     JSONB;
-ALTER TABLE bookings ADD COLUMN IF NOT EXISTS pack_checked_notes     TEXT;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS pack_checked_by         TEXT;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS pack_checked_by_user_id UUID;      -- Mitarbeiter-Account aus admin_users (NULL bei Master-Passwort-Login)
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS pack_checked_at         TIMESTAMPTZ;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS pack_checked_signature  TEXT;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS pack_checked_items      JSONB;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS pack_checked_notes      TEXT;
 
 -- Foto-Nachweis (vom Kontrolleur am Ende hochgeladen)
 ALTER TABLE bookings ADD COLUMN IF NOT EXISTS pack_photo_url TEXT;
@@ -40,6 +42,10 @@ COMMENT ON COLUMN bookings.pack_status IS
   'Versand-Packing-Workflow: NULL=offen, packed=Packer fertig, checked=Kontrolleur fertig (PDF-bereit).';
 COMMENT ON COLUMN bookings.pack_photo_url IS
   'Pfad in Storage-Bucket packing-photos. Foto vom gepackten Paket als 4-Augen-Nachweis. Wird im Admin via Signed URL angezeigt.';
+COMMENT ON COLUMN bookings.pack_packed_by_user_id IS
+  '4-Augen-Tracking: admin_users.id des Packers. NULL nur bei Master-Passwort-Login (Notfall-Fallback auf Namensvergleich).';
+COMMENT ON COLUMN bookings.pack_checked_by_user_id IS
+  '4-Augen-Tracking: admin_users.id des Kontrolleurs. Server prueft id != pack_packed_by_user_id wenn beide gesetzt.';
 
 -- ── Storage-Bucket muss MANUELL angelegt werden im Supabase-Dashboard: ─────
 -- Name: packing-photos

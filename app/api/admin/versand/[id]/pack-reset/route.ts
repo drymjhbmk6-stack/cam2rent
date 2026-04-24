@@ -33,11 +33,13 @@ export async function POST(
     .update({
       pack_status: null,
       pack_packed_by: null,
+      pack_packed_by_user_id: null,
       pack_packed_at: null,
       pack_packed_signature: null,
       pack_packed_items: null,
       pack_packed_condition: null,
       pack_checked_by: null,
+      pack_checked_by_user_id: null,
       pack_checked_at: null,
       pack_checked_signature: null,
       pack_checked_items: null,
