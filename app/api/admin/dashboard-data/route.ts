@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
-import { type AdminProduct } from '@/lib/price-config';
+import { computeCameraUtilization } from '@/lib/camera-utilization';
 
 /**
  * GET /api/admin/dashboard-data
@@ -36,8 +36,6 @@ export async function GET() {
 
     // Week start (Monday) in Berlin-Zeit
     const berlinNow = new Date(`${berlinDate}T12:00:00${offset}`);
-    // Alias für Bestands-Code-Stellen, die weiter unten `now` verwenden.
-    const now = berlinNow;
     const dayOfWeek = berlinNow.getUTCDay();
     const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
     const weekStart = mkIso(bYear, bMonth, bDay - mondayOffset);
@@ -246,65 +244,8 @@ export async function GET() {
       }));
     }
 
-    // ── Camera Utilization (30 Tage) ─────────────────────────────
-
-    const utilDays = 30;
-    const utilPeriodStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - utilDays);
-    const utilPeriodStartStr = utilPeriodStart.toISOString().split('T')[0];
-    const utilPeriodEndStr = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString().split('T')[0];
-
-    const { data: utilConfigData } = await supabase
-      .from('admin_config')
-      .select('value')
-      .eq('key', 'products')
-      .single();
-
-    const utilProductsMap: Record<string, AdminProduct> =
-      utilConfigData?.value && typeof utilConfigData.value === 'object' && Object.keys(utilConfigData.value as object).length > 0
-        ? (utilConfigData.value as Record<string, AdminProduct>)
-        : {};
-
-    const { data: utilBookings } = await supabase
-      .from('bookings')
-      .select('id, product_id, product_name, rental_from, rental_to, status, price_total')
-      .in('status', ['completed', 'shipped', 'confirmed', 'returned'])
-      .lte('rental_from', utilPeriodEndStr)
-      .gte('rental_to', utilPeriodStartStr);
-
-    const utilizationProducts: Array<{
-      id: string; name: string; brand: string; utilization: number;
-      bookedDays: number; totalDays: number; revenue: number;
-      avgDuration: number; bookingCount: number;
-    }> = [];
-
-    for (const product of Object.values(utilProductsMap)) {
-      const pBookings = (utilBookings ?? []).filter(
-        (b) => b.product_id === product.id || b.product_name === product.name
-      );
-      let totalBooked = 0;
-      let totalRev = 0;
-      let totalDur = 0;
-      for (const booking of pBookings) {
-        const rStart = new Date(booking.rental_from);
-        const rEnd = new Date(booking.rental_to);
-        const effStart = rStart < utilPeriodStart ? utilPeriodStart : rStart;
-        const effEnd = rEnd > now ? now : rEnd;
-        totalBooked += Math.max(0, Math.ceil((effEnd.getTime() - effStart.getTime()) / 86400000) + 1);
-        totalRev += booking.price_total || 0;
-        totalDur += Math.max(1, Math.ceil((rEnd.getTime() - rStart.getTime()) / 86400000) + 1);
-      }
-      utilizationProducts.push({
-        id: product.id,
-        name: product.name,
-        brand: product.brand,
-        utilization: Math.round(Math.min(100, (totalBooked / utilDays) * 100) * 10) / 10,
-        bookedDays: totalBooked,
-        totalDays: utilDays,
-        revenue: Math.round(totalRev * 100) / 100,
-        avgDuration: pBookings.length > 0 ? Math.round(totalDur / pBookings.length) : 0,
-        bookingCount: pBookings.length,
-      });
-    }
+    // ── Camera Utilization (30 Tage) — zentrale Lib, gleiche Logik wie /api/admin/utilization
+    const utilizationProducts = await computeCameraUtilization(supabase, 30);
 
     // ── Build response ───────────────────────────────────────────
 
