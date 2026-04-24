@@ -36,6 +36,12 @@ CREATE TABLE IF NOT EXISTS admin_users (
   created_by UUID REFERENCES admin_users(id) ON DELETE SET NULL
 );
 
+-- Optionaler Login-Username zusaetzlich zur E-Mail (case-insensitive eindeutig)
+ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS username TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_admin_users_username_lower
+  ON admin_users (LOWER(username))
+  WHERE username IS NOT NULL;
+
 CREATE INDEX IF NOT EXISTS idx_admin_users_email ON admin_users (email);
 CREATE INDEX IF NOT EXISTS idx_admin_users_active ON admin_users (is_active) WHERE is_active;
 

@@ -38,6 +38,7 @@ export async function POST(req: NextRequest) {
 
   const body = (await req.json().catch(() => null)) as {
     email?: string;
+    username?: string | null;
     name?: string;
     password?: string;
     role?: 'owner' | 'employee';
@@ -45,7 +46,7 @@ export async function POST(req: NextRequest) {
   } | null;
 
   if (!body) return NextResponse.json({ error: 'Ungültige Anfrage.' }, { status: 400 });
-  const { email, name, password, role, permissions } = body;
+  const { email, username, name, password, role, permissions } = body;
   if (!email || !name || !password) {
     return NextResponse.json({ error: 'E-Mail, Name und Passwort sind Pflicht.' }, { status: 400 });
   }
@@ -61,6 +62,7 @@ export async function POST(req: NextRequest) {
   try {
     const user = await createAdminUser({
       email,
+      username: username ?? null,
       name,
       password,
       role: targetRole,

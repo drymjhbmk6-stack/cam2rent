@@ -34,6 +34,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   const body = (await req.json().catch(() => null)) as {
     name?: string;
     email?: string;
+    username?: string | null;
     role?: 'owner' | 'employee';
     permissions?: string[];
     is_active?: boolean;
@@ -42,12 +43,13 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   if (!body) return NextResponse.json({ error: 'Ungültige Anfrage.' }, { status: 400 });
 
   const patch: {
-    name?: string; email?: string; role?: 'owner' | 'employee';
+    name?: string; email?: string; username?: string | null; role?: 'owner' | 'employee';
     permissions?: PermissionKey[]; is_active?: boolean; password?: string;
   } = {};
 
   if (body.name !== undefined) patch.name = body.name;
   if (body.email !== undefined) patch.email = body.email;
+  if (body.username !== undefined) patch.username = body.username;
   if (body.password !== undefined) {
     if (!body.password || body.password.length < 8) {
       return NextResponse.json({ error: 'Passwort muss mindestens 8 Zeichen haben.' }, { status: 400 });

@@ -26,10 +26,10 @@ export default function AdminLoginPage() {
 
     try {
       const body: Record<string, string> = { password };
-      // Nur als E-Mail werten wenn es wie eine aussieht (@ + Domain).
-      // So ist "Admin@" oder Teil-Eingaben kein Hindernis fuer den Master-Login.
+      // Single-Field: enthaelt es ein '@' → wird vom Server als E-Mail behandelt,
+      // sonst als Benutzername. Komplett leer → Master-Passwort-Modus.
       const trimmed = email.trim();
-      if (trimmed && /.+@.+\..+/.test(trimmed)) body.email = trimmed;
+      if (trimmed) body.loginId = trimmed;
       if (needs2FA && totpCode) {
         body.totpCode = totpCode;
       }
@@ -82,19 +82,19 @@ export default function AdminLoginPage() {
           <form onSubmit={handleSubmit} className="space-y-4" noValidate>
             <div>
               <label
-                htmlFor="email"
+                htmlFor="loginId"
                 className="block text-sm font-heading font-semibold mb-2"
                 style={{ color: '#e2e8f0' }}
               >
-                E-Mail <span className="font-normal text-xs" style={{ color: '#64748b' }}>(nur für Mitarbeiter — sonst leer lassen)</span>
+                Benutzername oder E-Mail <span className="font-normal text-xs" style={{ color: '#64748b' }}>(für Master-Passwort leer lassen)</span>
               </label>
               <input
-                id="email"
+                id="loginId"
                 type="text"
                 autoComplete="username"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="mitarbeiter@cam2rent.de"
+                placeholder="z.B. admin oder admin@cam2rent.de"
                 disabled={needs2FA}
                 className="w-full px-4 py-3 rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-50"
                 style={{ background: '#0f172a', border: '1px solid #1e293b', color: '#e2e8f0' }}

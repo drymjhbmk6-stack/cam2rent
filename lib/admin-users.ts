@@ -129,6 +129,7 @@ export async function verifyPassword(password: string, stored: string): Promise<
 export interface AdminUser {
   id: string;
   email: string;
+  username: string | null;
   name: string;
   role: 'owner' | 'employee';
   permissions: PermissionKey[];
@@ -148,6 +149,7 @@ export function legacyEnvUser(): AdminUser {
   return {
     id: 'legacy-env',
     email: 'admin@cam2rent.de',
+    username: 'admin',
     name: 'Admin (ENV-Passwort)',
     role: 'owner',
     permissions: [...PERMISSION_KEYS],
@@ -157,6 +159,14 @@ export function legacyEnvUser(): AdminUser {
     last_login_at: null,
     created_by: null,
   };
+}
+
+/**
+ * Pruefung ob ein Username erlaubt ist.
+ * - 3-32 Zeichen, nur a-z, 0-9, . _ - (kein @ → so unterscheiden wir von E-Mail).
+ */
+export function isValidUsername(input: string): boolean {
+  return /^[a-zA-Z0-9._-]{3,32}$/.test(input);
 }
 
 /** Hat der User die angegebene Permission? Owner haben automatisch alles. */
@@ -171,6 +181,7 @@ function sanitizeUser(row: AdminUserRow | Record<string, unknown>): AdminUser {
   return {
     id: r.id,
     email: r.email,
+    username: r.username ?? null,
     name: r.name,
     role: r.role,
     permissions: Array.isArray(r.permissions) ? (r.permissions as PermissionKey[]) : [],
@@ -182,6 +193,8 @@ function sanitizeUser(row: AdminUserRow | Record<string, unknown>): AdminUser {
   };
 }
 
+const SELECT_COLS = 'id, email, username, name, role, permissions, is_active, created_at, updated_at, last_login_at, created_by, password_hash';
+
 // ============================================================
 // CRUD auf admin_users
 // ============================================================
@@ -190,7 +203,7 @@ export async function listAdminUsers(): Promise<AdminUser[]> {
   const supabase = createServiceClient();
   const { data, error } = await supabase
     .from('admin_users')
-    .select('id, email, name, role, permissions, is_active, created_at, updated_at, last_login_at, created_by, password_hash')
+    .select(SELECT_COLS)
     .order('created_at', { ascending: true });
   if (error) throw error;
   return (data ?? []).map(sanitizeUser);
@@ -200,7 +213,7 @@ export async function getAdminUserById(id: string): Promise<AdminUser | null> {
   const supabase = createServiceClient();
   const { data } = await supabase
     .from('admin_users')
-    .select('id, email, name, role, permissions, is_active, created_at, updated_at, last_login_at, created_by, password_hash')
+    .select(SELECT_COLS)
     .eq('id', id)
     .maybeSingle();
   return data ? sanitizeUser(data) : null;
@@ -210,16 +223,45 @@ export async function getAdminUserByEmail(email: string): Promise<AdminUserRow |
   const supabase = createServiceClient();
   const { data } = await supabase
     .from('admin_users')
-    .select('id, email, name, role, permissions, is_active, created_at, updated_at, last_login_at, created_by, password_hash')
+    .select(SELECT_COLS)
     .ilike('email', email.trim())
     .maybeSingle();
   return (data as AdminUserRow | null) ?? null;
+}
+
+export async function getAdminUserByUsername(username: string): Promise<AdminUserRow | null> {
+  const supabase = createServiceClient();
+  const { data } = await supabase
+    .from('admin_users')
+    .select(SELECT_COLS)
+    .ilike('username', username.trim())
+    .maybeSingle();
+  return (data as AdminUserRow | null) ?? null;
+}
+
+/**
+ * Sucht einen User per E-Mail oder Username.
+ * Routing: enthaelt der Eingabe-String '@', wird per E-Mail gesucht, sonst per Username.
+ */
+export async function getAdminUserByLoginId(input: string): Promise<AdminUserRow | null> {
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+  if (trimmed.includes('@')) return getAdminUserByEmail(trimmed);
+  return getAdminUserByUsername(trimmed);
+}
+
+function normalizeUsername(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  return trimmed;
 }
 
 export interface CreateAdminUserInput {
   email: string;
   name: string;
   password: string;
+  username?: string | null;
   role?: 'owner' | 'employee';
   permissions?: PermissionKey[];
   createdBy?: string | null;
@@ -229,6 +271,10 @@ export async function createAdminUser(input: CreateAdminUserInput): Promise<Admi
   const email = input.email.trim().toLowerCase();
   if (!email || !email.includes('@')) throw new Error('Ungültige E-Mail-Adresse.');
   if (!input.name.trim()) throw new Error('Name darf nicht leer sein.');
+  const username = normalizeUsername(input.username);
+  if (username && !isValidUsername(username)) {
+    throw new Error('Benutzername: 3–32 Zeichen, nur Buchstaben/Zahlen/._-');
+  }
   const hash = await hashPassword(input.password);
   const permissions = (input.permissions ?? []).filter((p) => PERMISSION_KEYS.includes(p));
   const role = input.role ?? 'employee';
@@ -238,6 +284,7 @@ export async function createAdminUser(input: CreateAdminUserInput): Promise<Admi
     .from('admin_users')
     .insert({
       email,
+      username,
       name: input.name.trim(),
       password_hash: hash,
       role,
@@ -245,10 +292,15 @@ export async function createAdminUser(input: CreateAdminUserInput): Promise<Admi
       is_active: true,
       created_by: input.createdBy && input.createdBy !== 'legacy-env' ? input.createdBy : null,
     })
-    .select('id, email, name, role, permissions, is_active, created_at, updated_at, last_login_at, created_by, password_hash')
+    .select(SELECT_COLS)
     .single();
   if (error) {
-    if (error.code === '23505') throw new Error('Diese E-Mail wird bereits verwendet.');
+    if (error.code === '23505') {
+      const msg = error.message?.includes('username')
+        ? 'Dieser Benutzername wird bereits verwendet.'
+        : 'Diese E-Mail wird bereits verwendet.';
+      throw new Error(msg);
+    }
     throw error;
   }
   return sanitizeUser(data);
@@ -257,6 +309,7 @@ export async function createAdminUser(input: CreateAdminUserInput): Promise<Admi
 export interface UpdateAdminUserInput {
   name?: string;
   email?: string;
+  username?: string | null;
   role?: 'owner' | 'employee';
   permissions?: PermissionKey[];
   is_active?: boolean;
@@ -267,6 +320,13 @@ export async function updateAdminUser(id: string, input: UpdateAdminUserInput): 
   const patch: Record<string, unknown> = {};
   if (input.name !== undefined) patch.name = input.name.trim();
   if (input.email !== undefined) patch.email = input.email.trim().toLowerCase();
+  if (input.username !== undefined) {
+    const u = normalizeUsername(input.username);
+    if (u && !isValidUsername(u)) {
+      throw new Error('Benutzername: 3–32 Zeichen, nur Buchstaben/Zahlen/._-');
+    }
+    patch.username = u;
+  }
   if (input.role !== undefined) patch.role = input.role;
   if (input.permissions !== undefined) patch.permissions = input.permissions.filter((p) => PERMISSION_KEYS.includes(p));
   if (input.is_active !== undefined) patch.is_active = input.is_active;
@@ -277,10 +337,15 @@ export async function updateAdminUser(id: string, input: UpdateAdminUserInput): 
     .from('admin_users')
     .update(patch)
     .eq('id', id)
-    .select('id, email, name, role, permissions, is_active, created_at, updated_at, last_login_at, created_by, password_hash')
+    .select(SELECT_COLS)
     .single();
   if (error) {
-    if (error.code === '23505') throw new Error('Diese E-Mail wird bereits verwendet.');
+    if (error.code === '23505') {
+      const msg = error.message?.includes('username')
+        ? 'Dieser Benutzername wird bereits verwendet.'
+        : 'Diese E-Mail wird bereits verwendet.';
+      throw new Error(msg);
+    }
     throw error;
   }
 
@@ -361,7 +426,7 @@ export async function getUserBySession(token: string): Promise<AdminUser | null>
   const supabase = createServiceClient();
   const { data } = await supabase
     .from('admin_sessions')
-    .select('token, user_id, expires_at, admin_users!inner(id, email, name, role, permissions, is_active, created_at, updated_at, last_login_at, created_by, password_hash)')
+    .select('token, user_id, expires_at, admin_users!inner(id, email, username, name, role, permissions, is_active, created_at, updated_at, last_login_at, created_by, password_hash)')
     .eq('token', token)
     .maybeSingle();
   if (!data) return null;

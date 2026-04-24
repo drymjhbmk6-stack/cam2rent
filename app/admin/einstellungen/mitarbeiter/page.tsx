@@ -43,6 +43,7 @@ const PERMISSION_HINTS: Record<PermissionKey, string> = {
 interface AdminUser {
   id: string;
   email: string;
+  username: string | null;
   name: string;
   role: 'owner' | 'employee';
   permissions: PermissionKey[];
@@ -74,6 +75,7 @@ export default function MitarbeiterPage() {
   const [showNew, setShowNew] = useState(false);
   const [newName, setNewName] = useState('');
   const [newEmail, setNewEmail] = useState('');
+  const [newUsername, setNewUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [newRole, setNewRole] = useState<'owner' | 'employee'>('employee');
   const [newPerms, setNewPerms] = useState<PermissionKey[]>([]);
@@ -83,6 +85,7 @@ export default function MitarbeiterPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editEmail, setEditEmail] = useState('');
+  const [editUsername, setEditUsername] = useState('');
   const [editRole, setEditRole] = useState<'owner' | 'employee'>('employee');
   const [editPerms, setEditPerms] = useState<PermissionKey[]>([]);
   const [editActive, setEditActive] = useState(true);
@@ -123,6 +126,7 @@ export default function MitarbeiterPage() {
         body: JSON.stringify({
           name: newName,
           email: newEmail,
+          username: newUsername.trim() || null,
           password: newPassword,
           role: newRole,
           permissions: newPerms,
@@ -134,7 +138,7 @@ export default function MitarbeiterPage() {
         return;
       }
       setShowNew(false);
-      setNewName(''); setNewEmail(''); setNewPassword(''); setNewRole('employee'); setNewPerms([]);
+      setNewName(''); setNewEmail(''); setNewUsername(''); setNewPassword(''); setNewRole('employee'); setNewPerms([]);
       await load();
     } finally {
       setSaving(false);
@@ -145,6 +149,7 @@ export default function MitarbeiterPage() {
     setEditingId(u.id);
     setEditName(u.name);
     setEditEmail(u.email);
+    setEditUsername(u.username ?? '');
     setEditRole(u.role);
     setEditPerms(u.permissions);
     setEditActive(u.is_active);
@@ -159,6 +164,7 @@ export default function MitarbeiterPage() {
       const patch: Record<string, unknown> = {
         name: editName,
         email: editEmail,
+        username: editUsername.trim() || null,
         role: editRole,
         permissions: editPerms,
         is_active: editActive,
@@ -250,6 +256,7 @@ export default function MitarbeiterPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Input label="Name" value={newName} onChange={setNewName} placeholder="Max Mustermann" />
             <Input label="E-Mail" type="email" value={newEmail} onChange={setNewEmail} placeholder="max@cam2rent.de" />
+            <Input label="Benutzername (optional, für kürzeren Login)" value={newUsername} onChange={setNewUsername} placeholder="z.B. max" />
             <Input label="Start-Passwort (mind. 8 Zeichen)" type="text" value={newPassword} onChange={setNewPassword} placeholder="Kann später geändert werden" />
             <div>
               <label className="block text-xs font-heading font-semibold mb-1" style={{ color: '#94a3b8' }}>Rolle</label>
@@ -317,6 +324,7 @@ export default function MitarbeiterPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <Input label="Name" value={editName} onChange={setEditName} />
                   <Input label="E-Mail" type="email" value={editEmail} onChange={setEditEmail} />
+                  <Input label="Benutzername (optional)" value={editUsername} onChange={setEditUsername} placeholder="z.B. max" />
                   <Input
                     label="Neues Passwort (leer lassen = unverändert)"
                     type="text"
@@ -389,7 +397,12 @@ export default function MitarbeiterPage() {
                       </span>
                     )}
                   </div>
-                  <div className="text-sm mt-1" style={{ color: '#94a3b8' }}>{u.email}</div>
+                  <div className="text-sm mt-1" style={{ color: '#94a3b8' }}>
+                    {u.email}
+                    {u.username && (
+                      <span style={{ color: '#06b6d4', marginLeft: 8 }}>· @{u.username}</span>
+                    )}
+                  </div>
                   <div className="text-xs mt-2" style={{ color: '#64748b' }}>
                     Letzter Login: {fmtDate(u.last_login_at)} · Angelegt: {fmtDate(u.created_at)}
                   </div>

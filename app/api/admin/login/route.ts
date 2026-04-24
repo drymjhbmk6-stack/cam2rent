@@ -5,7 +5,7 @@ import { verifyToken } from '@/lib/totp';
 import { timingSafeEqual } from 'crypto';
 import {
   createSession,
-  getAdminUserByEmail,
+  getAdminUserByLoginId,
   verifyPassword,
 } from '@/lib/admin-users';
 
@@ -50,11 +50,14 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { email, password, totpCode } = (await req.json()) as {
+  const body = (await req.json()) as {
     email?: string;
+    username?: string;
+    loginId?: string;
     password?: string;
     totpCode?: string;
   };
+  const { email, username, loginId, password, totpCode } = body;
 
   if (!password) {
     return NextResponse.json({ error: 'Passwort fehlt.' }, { status: 400 });
@@ -62,20 +65,24 @@ export async function POST(req: NextRequest) {
 
   const userAgent = req.headers.get('user-agent');
 
-  // ── Variante A: Multi-User-Login (E-Mail + Passwort gegen admin_users) ─────
-  if (email && email.trim()) {
-    const user = await getAdminUserByEmail(email);
+  // E-Mail oder Benutzername — beides moeglich, beides optional.
+  // Wenn nichts kommt, faellt der Flow auf Legacy-ENV-Passwort.
+  const loginIdentifier = (loginId || email || username || '').trim();
+
+  // ── Variante A: Multi-User-Login (E-Mail/Benutzername + Passwort) ──────────
+  if (loginIdentifier) {
+    const user = await getAdminUserByLoginId(loginIdentifier);
     if (!user || !user.is_active) {
-      return NextResponse.json({ error: 'Falsche E-Mail oder Passwort.' }, { status: 401 });
+      return NextResponse.json({ error: 'Falscher Login oder Passwort.' }, { status: 401 });
     }
     const ok = await verifyPassword(password, user.password_hash);
     if (!ok) {
-      return NextResponse.json({ error: 'Falsche E-Mail oder Passwort.' }, { status: 401 });
+      return NextResponse.json({ error: 'Falscher Login oder Passwort.' }, { status: 401 });
     }
     const { token, expiresAt } = await createSession(user.id, { userAgent, ipAddress: ip });
     const response = NextResponse.json({
       success: true,
-      user: { id: user.id, email: user.email, name: user.name, role: user.role },
+      user: { id: user.id, email: user.email, username: user.username, name: user.name, role: user.role },
     });
     response.cookies.set('admin_token', token, {
       httpOnly: true,
