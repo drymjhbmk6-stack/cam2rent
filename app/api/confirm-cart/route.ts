@@ -125,9 +125,11 @@ export async function POST(req: NextRequest) {
 
     if (existingRows && existingRows.length > 0) {
       // Buchungen existieren bereits — aber Vertrag noch signieren falls nötig.
-      // PDF + Storage-Upload laufen via after() nach der Response weiter —
-      // dadurch spinner < 1 Sek, aber in Serverless-Umgebungen wird das
-      // Background-Work zuverlaessig ausgefuehrt (im Gegensatz zu fire-and-forget).
+      // WICHTIG: Wir warten synchron auf PDF + Storage + contract_signed=true,
+      // BEVOR wir die Response rausgeben. So sieht der Kunde zwar 2-4 Sek
+      // Spinner, aber der Vertrag ist danach GARANTIERT gespeichert.
+      // `after()` + fire-and-forget fielen in der Serverless-Umgebung still
+      // aus und lieferten E-Mails ohne Vertrag + "contract_signed=false".
       console.log('[confirm-cart] Idempotent: existingRows=', existingRows.length, 'contractSignature=', contractSignature ? 'vorhanden' : 'FEHLT');
       if (contractSignature?.agreedToTerms && contractSignature?.signerName) {
         const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
@@ -135,53 +137,86 @@ export async function POST(req: NextRequest) {
         const ids = existingRows.map((r) => r.id);
         const sig = contractSignature;
 
-        after(async () => {
-          try {
-            const [{ data: fullBookings }, { data: txS }] = await Promise.all([
-              supabase.from('bookings').select('*').in('id', ids),
-              supabase.from('admin_settings').select('key, value').in('key', ['tax_mode', 'tax_rate']),
-            ]);
+        try {
+          const [{ data: fullBookings }, { data: txS }] = await Promise.all([
+            supabase.from('bookings').select('*').in('id', ids),
+            supabase.from('admin_settings').select('key, value').in('key', ['tax_mode', 'tax_rate']),
+          ]);
 
-            const txM: Record<string, string> = {};
-            for (const s of txS ?? []) txM[s.key] = s.value;
-            const taxModeIdem = (txM['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer';
-            const taxRateIdem = parseFloat(txM['tax_rate'] || '19');
-            const fmtD = (iso: string) => { const [y, m, d] = (iso || '').split('T')[0].split('-'); return `${d}.${m}.${y}`; };
+          const txM: Record<string, string> = {};
+          for (const s of txS ?? []) txM[s.key] = s.value;
+          const taxModeIdem = (txM['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer';
+          const taxRateIdem = parseFloat(txM['tax_rate'] || '19');
+          const fmtD = (iso: string) => { const [y, m, d] = (iso || '').split('T')[0].split('-'); return `${d}.${m}.${y}`; };
 
-            for (const fullBooking of fullBookings ?? []) {
-              if (fullBooking.contract_signed) continue;
-              try {
-                const result = await generateContractPDF({
-                  bookingId: fullBooking.id, bookingNumber: fullBooking.id,
-                  customerName: sig.signerName, customerEmail: fullBooking.customer_email || '',
-                  productName: fullBooking.product_name || '',
-                  accessories: Array.isArray(fullBooking.accessories) ? fullBooking.accessories : [],
-                  accessoryItems: Array.isArray(fullBooking.accessory_items) && fullBooking.accessory_items.length > 0
-                    ? fullBooking.accessory_items as { accessory_id: string; qty: number }[]
-                    : undefined,
-                  rentalFrom: fmtD(fullBooking.rental_from), rentalTo: fmtD(fullBooking.rental_to),
-                  rentalDays: fullBooking.days || 1,
-                  priceRental: fullBooking.price_rental || 0, priceAccessories: fullBooking.price_accessories || 0,
-                  priceHaftung: fullBooking.price_haftung || 0, priceShipping: fullBooking.shipping_price || 0,
-                  priceTotal: fullBooking.price_total || 0, deposit: fullBooking.deposit || 0,
-                  taxMode: taxModeIdem,
-                  taxRate: taxRateIdem,
-                  signatureDataUrl: sig.signatureDataUrl,
-                  signatureMethod: sig.signatureMethod,
-                  signerName: sig.signerName, ipAddress: ip,
-                  unitId: fullBooking.unit_id ?? null,
+          // Alle Vertraege parallel generieren + speichern
+          await Promise.all(
+            (fullBookings ?? [])
+              .filter((fb) => !fb.contract_signed)
+              .map(async (fullBooking) => {
+                try {
+                  const result = await generateContractPDF({
+                    bookingId: fullBooking.id, bookingNumber: fullBooking.id,
+                    customerName: sig.signerName, customerEmail: fullBooking.customer_email || '',
+                    productName: fullBooking.product_name || '',
+                    accessories: Array.isArray(fullBooking.accessories) ? fullBooking.accessories : [],
+                    accessoryItems: Array.isArray(fullBooking.accessory_items) && fullBooking.accessory_items.length > 0
+                      ? fullBooking.accessory_items as { accessory_id: string; qty: number }[]
+                      : undefined,
+                    rentalFrom: fmtD(fullBooking.rental_from), rentalTo: fmtD(fullBooking.rental_to),
+                    rentalDays: fullBooking.days || 1,
+                    priceRental: fullBooking.price_rental || 0, priceAccessories: fullBooking.price_accessories || 0,
+                    priceHaftung: fullBooking.price_haftung || 0, priceShipping: fullBooking.shipping_price || 0,
+                    priceTotal: fullBooking.price_total || 0, deposit: fullBooking.deposit || 0,
+                    taxMode: taxModeIdem,
+                    taxRate: taxRateIdem,
+                    signatureDataUrl: sig.signatureDataUrl,
+                    signatureMethod: sig.signatureMethod,
+                    signerName: sig.signerName, ipAddress: ip,
+                    unitId: fullBooking.unit_id ?? null,
+                  });
+                  await storeContract(fullBooking.id, result.pdfBuffer, {
+                    contractHash: result.contractHash, customerName: sig.signerName,
+                    ipAddress: ip, signedAt: new Date().toISOString(), signatureMethod: sig.signatureMethod,
+                  });
+                  console.log('[confirm-cart] Vertrag gespeichert für', fullBooking.id);
+                } catch (err) { console.error('[confirm-cart] Contract generation (idempotent) error:', err); }
+              }),
+          );
+
+          // Wenn der Webhook schon eine E-Mail OHNE Vertrag geschickt hat
+          // (Cart-Flow wo Webhook zuerst war), senden wir jetzt eine zweite
+          // E-Mail MIT Vertrag im Anhang. Die Nachfolge-Mail kennzeichnen wir
+          // in email_log via emailType='contract_signed' (separate Kategorie).
+          after(async () => {
+            try {
+              const { sendAndLog } = await import('@/lib/email');
+              for (const fb of fullBookings ?? []) {
+                if (fb.contract_signed) continue; // war schon vorher signiert → keine Nachfolge-Mail
+                if (!fb.customer_email) continue;
+                // Storage-Pfad des Vertrags
+                const year = new Date().getUTCFullYear();
+                const storagePath = `${year}/${fb.id}.pdf`;
+                const { data: file } = await supabase.storage.from('contracts').download(storagePath);
+                if (!file) continue;
+                const arrayBuffer = await file.arrayBuffer();
+                const pdfBuffer = Buffer.from(arrayBuffer);
+                await sendAndLog({
+                  to: fb.customer_email,
+                  subject: `Dein unterschriebener Mietvertrag ${fb.id}`,
+                  html: `<p>Hallo ${fb.customer_name ?? ''},</p><p>im Anhang findest du deinen digital unterschriebenen Mietvertrag f&uuml;r die Buchung <strong>${fb.id}</strong>.</p><p>Bei Fragen melde dich gerne.</p>`,
+                  emailType: 'contract_signed' as const,
+                  attachments: [{ filename: `Mietvertrag-${fb.id}.pdf`, content: pdfBuffer }],
+                  bookingId: fb.id,
                 });
-                await storeContract(fullBooking.id, result.pdfBuffer, {
-                  contractHash: result.contractHash, customerName: sig.signerName,
-                  ipAddress: ip, signedAt: new Date().toISOString(), signatureMethod: sig.signatureMethod,
-                });
-                console.log('[confirm-cart] Vertrag gespeichert für', fullBooking.id);
-              } catch (err) { console.error('[confirm-cart] Contract generation (idempotent) error:', err); }
+              }
+            } catch (err) {
+              console.error('[confirm-cart] contract follow-up mail error:', err);
             }
-          } catch (err) {
-            console.error('[confirm-cart] Idempotent background error:', err);
-          }
-        });
+          });
+        } catch (err) {
+          console.error('[confirm-cart] Idempotent synchron error:', err);
+        }
       }
       return NextResponse.json({
         success: true,
@@ -602,12 +637,14 @@ export async function POST(req: NextRequest) {
         .eq('key', `checkout_${payment_intent_id}`)
     ).catch(() => {});
 
-    // 12. Vertrag generieren + E-Mails senden (HINTERGRUND via after())
-    // Wichtig: after() statt fire-and-forget IIFE, damit der Serverless-Prozess
-    // das Background-Work zuverlaessig ausfuehrt und nicht nach der Response
-    // killt (sonst kein Vertrag in Storage + contract_signed=false).
+    // 12. Vertrag generieren + E-Mails senden — SYNCHRON vor der Response.
+    // Grund: Serverless-Umgebung killt fire-and-forget/after() teils vorzeitig,
+    // dadurch landete der Vertrag nicht in Storage und die Bestaetigungs-E-Mail
+    // kam ohne Vertrag. Hier warten wir lieber 2-4 Sek, bevor wir antworten —
+    // dafuer ist alles garantiert durch (contract_signed=true, PDF in Storage,
+    // E-Mail mit Vertrag-Anhang raus).
     if (r_email) {
-      after(async () => {
+      await (async () => {
         try {
           for (let gi = 0; gi < periodGroups.length; gi++) {
             const groupItems = periodGroups[gi];
@@ -717,7 +754,7 @@ export async function POST(req: NextRequest) {
         } catch (err) {
           console.error('Background email/contract error:', err);
         }
-      });
+      })();
     }
 
     // Admin-Benachrichtigung (fire-and-forget)

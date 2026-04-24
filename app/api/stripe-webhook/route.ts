@@ -450,7 +450,13 @@ async function handleCartBooking(
     }
   }
 
-  // Email senden
+  // Admin-Notification schicken — so weiss der Admin sofort dass eine
+  // Buchung reingekommen ist, auch wenn der Client-Redirect scheiterte.
+  // Kunden-Bestaetigungs-E-Mail SCHICKT DER WEBHOOK NICHT — das macht
+  // confirm-cart, weil nur dort die contractSignature verfuegbar ist und
+  // der Mietvertrag mit in die E-Mail gepackt werden muss. Sonst bekaeme
+  // der Kunde eine Bestaetigungs-E-Mail ohne Vertrag (Webhook war
+  // schneller als confirm-cart), und der PDF-Anhang fehlt dauerhaft.
   if (customerEmail) {
     const emailData: BookingEmailData = {
       bookingId,
@@ -474,10 +480,7 @@ async function handleCartBooking(
       taxRate: parseFloat(txMap['tax_rate'] || '19'),
       ustId: txMap['ust_id'] || '',
     };
-    Promise.all([
-      sendBookingConfirmation(emailData),
-      sendAdminNotification(emailData),
-    ]).catch((err) => console.error('[Webhook] Email-Fehler:', err));
+    sendAdminNotification(emailData).catch((err) => console.error('[Webhook] Admin-Email-Fehler:', err));
   }
 
   // Checkout-Kontext aufraeumen
