@@ -262,7 +262,7 @@ function PackStep({
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 sm:p-6 mb-6">
-      <h2 className="text-lg font-bold mb-1">Schritt 1: Paket packen</h2>
+      <h2 className="text-lg font-bold mb-1 text-slate-100">Schritt 1: Paket packen</h2>
       <p className="text-sm text-slate-400 mb-5">
         Pack jedes Item einzeln ein und hake es ab. Am Ende unterschreiben — danach übergibst du das Paket einer zweiten Person zur Kontrolle.
       </p>
@@ -391,14 +391,16 @@ function CheckStep({
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 sm:p-6 mb-6">
-      <h2 className="text-lg font-bold mb-1">Schritt 2: Kontrolle (4-Augen-Prinzip)</h2>
-      <p className="text-sm text-slate-400 mb-2">
+      <h2 className="text-lg font-bold mb-1 text-slate-100">Schritt 2: Kontrolle (4-Augen-Prinzip)</h2>
+      <p className="text-sm text-slate-400 mb-5">
         Das Paket wurde von <span className="text-slate-200 font-semibold">{booking.pack_packed_by ?? 'Unbekannt'}</span> gepackt.
         Prüfe als zweite Person, ob alles vollständig ist, mache ein Foto und unterschreibe.
       </p>
-      <p className="text-xs text-amber-400 mb-5">
-        ⚠ Du musst eine andere Person sein als der Packer.
-      </p>
+      {idMatchesPacker && (
+        <p className="text-xs text-amber-400 mb-5">
+          ⚠ Du bist gerade mit dem Mitarbeiterkonto vom Packer eingeloggt. Eine zweite Person muss sich einloggen, um die Kontrolle zu signieren.
+        </p>
+      )}
 
       <ItemList items={items} checked={checked} onToggle={(k) => setChecked((p) => ({ ...p, [k]: !p[k] }))} />
 
