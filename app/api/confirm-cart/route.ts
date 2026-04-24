@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { after } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { generateBookingId } from '@/lib/booking-id';
 import { detectSuspicious } from '@/lib/suspicious';
@@ -124,9 +125,9 @@ export async function POST(req: NextRequest) {
 
     if (existingRows && existingRows.length > 0) {
       // Buchungen existieren bereits — aber Vertrag noch signieren falls nötig.
-      // Wichtig: booking_ids SOFORT zurueckgeben, PDF-Generierung + Storage-
-      // Upload laufen fire-and-forget im Hintergrund, damit die
-      // "Buchung bestaetigt"-Seite nicht sekundenlang auf den Spinner starren muss.
+      // PDF + Storage-Upload laufen via after() nach der Response weiter —
+      // dadurch spinner < 1 Sek, aber in Serverless-Umgebungen wird das
+      // Background-Work zuverlaessig ausgefuehrt (im Gegensatz zu fire-and-forget).
       console.log('[confirm-cart] Idempotent: existingRows=', existingRows.length, 'contractSignature=', contractSignature ? 'vorhanden' : 'FEHLT');
       if (contractSignature?.agreedToTerms && contractSignature?.signerName) {
         const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
@@ -134,8 +135,7 @@ export async function POST(req: NextRequest) {
         const ids = existingRows.map((r) => r.id);
         const sig = contractSignature;
 
-        // fire-and-forget — blockiert die Response NICHT
-        void (async () => {
+        after(async () => {
           try {
             const [{ data: fullBookings }, { data: txS }] = await Promise.all([
               supabase.from('bookings').select('*').in('id', ids),
@@ -181,7 +181,7 @@ export async function POST(req: NextRequest) {
           } catch (err) {
             console.error('[confirm-cart] Idempotent background error:', err);
           }
-        })();
+        });
       }
       return NextResponse.json({
         success: true,
@@ -602,9 +602,12 @@ export async function POST(req: NextRequest) {
         .eq('key', `checkout_${payment_intent_id}`)
     ).catch(() => {});
 
-    // 12. Vertrag generieren + E-Mails senden (HINTERGRUND — blockiert Response nicht)
+    // 12. Vertrag generieren + E-Mails senden (HINTERGRUND via after())
+    // Wichtig: after() statt fire-and-forget IIFE, damit der Serverless-Prozess
+    // das Background-Work zuverlaessig ausfuehrt und nicht nach der Response
+    // killt (sonst kein Vertrag in Storage + contract_signed=false).
     if (r_email) {
-      (async () => {
+      after(async () => {
         try {
           for (let gi = 0; gi < periodGroups.length; gi++) {
             const groupItems = periodGroups[gi];
@@ -714,7 +717,7 @@ export async function POST(req: NextRequest) {
         } catch (err) {
           console.error('Background email/contract error:', err);
         }
-      })();
+      });
     }
 
     // Admin-Benachrichtigung (fire-and-forget)
