@@ -3,6 +3,9 @@
 /.pnp
 .pnp.*
 .yarn/*
+
+# scratchpad / temporaere Helferdateien
+/tmp/
 !.yarn/patches
 !.yarn/releases
 !.yarn/plugins
