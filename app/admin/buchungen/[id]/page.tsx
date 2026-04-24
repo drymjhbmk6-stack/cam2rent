@@ -987,7 +987,7 @@ export default function BuchungDetailPage() {
                       📦 Paket packen (digital)
                     </a>
                     {/* Legacy/Sonderfall: leere PDF zum Ausdrucken + manuelles Abhaken */}
-                    <button onClick={openPackliste} className="block w-full text-center px-4 py-2 text-sm font-heading font-semibold bg-slate-200 dark:bg-slate-700 text-brand-black dark:text-slate-100 rounded-btn hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors">
+                    <button onClick={openPackliste} className="block w-full text-center px-4 py-2 text-sm font-heading font-semibold bg-slate-500 text-white rounded-btn hover:bg-slate-600 transition-colors">
                       📋 Manuelle Packliste (leer, zum Ausdrucken)
                     </button>
                   </>
