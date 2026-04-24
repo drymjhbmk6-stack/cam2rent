@@ -31,6 +31,7 @@ interface Booking {
   verification_required?: boolean;
   verification_gate_passed_at?: string | null;
   customer_verification_status?: string | null;
+  pack_status?: string | null;
 }
 
 interface ShippingMethod {
@@ -395,13 +396,34 @@ export default function AdminVersandPage() {
 
                             {/* Aktionen */}
                             <div className="flex flex-wrap gap-2">
+                              {/* Neuer Pack-Workflow (4-Augen-Prinzip mit Foto-Nachweis) */}
+                              {(() => {
+                                const ps = b.pack_status;
+                                const cls = ps === 'checked'
+                                  ? 'bg-green-50 border-green-300 text-green-700 hover:bg-green-100'
+                                  : ps === 'packed'
+                                    ? 'bg-amber-50 border-amber-300 text-amber-800 hover:bg-amber-100'
+                                    : 'bg-cyan-500 border-cyan-500 text-white hover:bg-cyan-600';
+                                const label = ps === 'checked'
+                                  ? '✓ Versand-Pack fertig (PDF öffnen)'
+                                  : ps === 'packed'
+                                    ? '⚠ Wartet auf Kontrolle'
+                                    : '📦 Paket packen (digital)';
+                                return (
+                                  <a href={`/admin/versand/${b.id}/packen`}
+                                    className={`flex items-center gap-1.5 px-4 py-2 border rounded-btn text-sm font-heading font-semibold transition-colors ${cls}`}>
+                                    {label}
+                                  </a>
+                                );
+                              })()}
+                              {/* Legacy: Lieferschein + manuelle Packliste bleiben fuer Sonderfaelle */}
                               <a href={`/admin/versand/${b.id}/drucken`} target="_blank" rel="noopener noreferrer"
-                                className="flex items-center gap-1.5 px-4 py-2 bg-white border border-brand-border rounded-btn text-sm font-heading font-semibold text-brand-black hover:bg-brand-bg transition-colors">
+                                className="flex items-center gap-1.5 px-4 py-2 bg-white border border-brand-border rounded-btn text-xs font-heading font-semibold text-brand-muted hover:bg-brand-bg transition-colors">
                                 🖨 Lieferschein
                               </a>
                               <button onClick={() => openPackliste(b)}
-                                className="flex items-center gap-1.5 px-4 py-2 bg-cyan-50 border border-cyan-300 rounded-btn text-sm font-heading font-semibold text-cyan-700 hover:bg-cyan-100 transition-colors">
-                                📋 Packliste
+                                className="flex items-center gap-1.5 px-4 py-2 bg-white border border-brand-border rounded-btn text-xs font-heading font-semibold text-brand-muted hover:bg-brand-bg transition-colors">
+                                📋 Manuelle Packliste
                               </button>
                               {b.label_url ? (
                                 <a href={`/api/admin/label/${b.id}`} target="_blank" rel="noopener noreferrer"

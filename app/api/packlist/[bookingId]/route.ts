@@ -141,6 +141,15 @@ export async function GET(
     resolvedItems,
     serialNumber,
     haftung: booking.haftung ?? 'none',
+    // Pack-Workflow-Daten (Sektion 5: zwei Unterschriften)
+    packedBy: booking.pack_packed_by ?? null,
+    packedAt: booking.pack_packed_at ?? null,
+    packedSignatureDataUrl: booking.pack_packed_signature ?? null,
+    checkedBy: booking.pack_checked_by ?? null,
+    checkedAt: booking.pack_checked_at ?? null,
+    checkedSignatureDataUrl: booking.pack_checked_signature ?? null,
+    checkedNotes: booking.pack_checked_notes ?? null,
+    photoStoragePath: booking.pack_photo_url ?? null,
   };
 
   const pdfBuffer = await renderToBuffer(

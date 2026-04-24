@@ -8,6 +8,7 @@ import {
   Rect,
   Circle,
   G,
+  Image,
 } from '@react-pdf/renderer';
 import { BUSINESS } from '@/lib/business-config';
 import { isoToDE } from '@/lib/format-utils';
@@ -36,6 +37,18 @@ export interface PacklistData {
    *  leeren Eintrage-Linie ausgegeben. */
   serialNumber?: string | null;
   haftung: string;
+  /** Fertig signiert vom Packer (Schritt 1 des Pack-Workflows). */
+  packedBy?: string | null;
+  packedAt?: string | null;                 // ISO
+  packedSignatureDataUrl?: string | null;
+  /** Fertig signiert vom Kontrolleur (Schritt 2). */
+  checkedBy?: string | null;
+  checkedAt?: string | null;                // ISO
+  checkedSignatureDataUrl?: string | null;
+  checkedNotes?: string | null;
+  /** Storage-Pfad des Verpackungs-Fotos. Wird als Hinweistext ausgegeben,
+   *  das Foto selbst landet NICHT im PDF (Datenschutz + Dateigroesse). */
+  photoStoragePath?: string | null;
 }
 
 // ─── Colors (identisch mit Rechnung) ─────────────────────────────────────────
@@ -226,8 +239,13 @@ const s = StyleSheet.create({
 
 // ─── Checkbox Component ──────────────────────────────────────────────────────
 
-function Checkbox() {
-  return <View style={s.checkbox} />;
+function Checkbox({ checked = false }: { checked?: boolean }) {
+  if (!checked) return <View style={s.checkbox} />;
+  return (
+    <View style={[s.checkbox, { alignItems: 'center', justifyContent: 'center' }]}>
+      <Text style={{ fontSize: 8, color: C.cyan, fontFamily: 'Helvetica-Bold' }}>✓</Text>
+    </View>
+  );
 }
 
 // ─── PDF Document ────────────────────────────────────────────────────────────
@@ -395,32 +413,64 @@ export function PacklistPDF({ data }: { data: PacklistData }) {
 
             {/* ── 4. Verpackungskontrolle ── */}
             <Text style={s.sectionTitle}>4. Verpackungskontrolle</Text>
-            <View style={s.checkRow}><Checkbox /><Text style={s.checkLabel}>Gerät sicher verpackt</Text></View>
-            <View style={s.checkRow}><Checkbox /><Text style={s.checkLabel}>Zubehör vollständig</Text></View>
-            <View style={s.checkRow}><Checkbox /><Text style={s.checkLabel}>Paketinhalt dokumentiert (Foto/Video)</Text></View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-              <Checkbox />
-              <Text style={s.checkLabel}>Paketnummer: </Text>
-              <View style={[s.writeLine, { width: 200 }]} />
-            </View>
+            <View style={s.checkRow}><Checkbox checked /><Text style={s.checkLabel}>Gerät sicher verpackt</Text></View>
+            <View style={s.checkRow}><Checkbox checked /><Text style={s.checkLabel}>Zubehör vollständig</Text></View>
+            <View style={s.checkRow}><Checkbox checked={!!data.photoStoragePath} /><Text style={s.checkLabel}>Foto-Nachweis vom Kontrolleur erstellt</Text></View>
+            {data.checkedNotes && (
+              <Text style={{ fontSize: 9, color: C.grayText, marginTop: 4, marginLeft: 16 }}>
+                Notiz Kontrolleur: {data.checkedNotes}
+              </Text>
+            )}
+            {data.photoStoragePath && (
+              <Text style={{ fontSize: 8, color: C.grayText, marginTop: 4, marginLeft: 16 }}>
+                Foto-Pfad: {data.photoStoragePath} (nur intern abrufbar via Admin-Detail)
+              </Text>
+            )}
 
             <View style={s.divider} />
 
             {/* ── 5. Bestätigung ── */}
-            <Text style={s.sectionTitle}>5. Bestätigung</Text>
-            <Text style={{ fontSize: 9, color: C.grayText, lineHeight: 1.5, marginBottom: 4 }}>
-              Der Unterzeichner bestätigt die vollständige und ordnungsgemäße Verpackung des oben genannten Equipments.
-              Die Kontrolle wurde durch eine zweite Person gegengezeichnet.
+            <Text style={s.sectionTitle}>5. Bestätigung (4-Augen-Prinzip)</Text>
+            <Text style={{ fontSize: 9, color: C.grayText, lineHeight: 1.5, marginBottom: 8 }}>
+              Beide Unterzeichner bestätigen die vollständige und ordnungsgemäße Verpackung
+              des oben genannten Equipments. Die Kontrolle erfolgte durch eine zweite,
+              unabhängige Person.
             </Text>
 
             <View style={s.sigRow}>
               <View style={s.sigBlock}>
+                {data.packedSignatureDataUrl ? (
+                  // eslint-disable-next-line jsx-a11y/alt-text
+                  <Image src={data.packedSignatureDataUrl} style={{ width: 180, height: 50, marginBottom: 2 }} />
+                ) : (
+                  <View style={s.sigLine} />
+                )}
                 <View style={s.sigLine} />
-                <Text style={s.sigLabel}>(Packer, Ort/Datum)</Text>
+                <Text style={s.sigLabel}>
+                  Packer: {data.packedBy || '_______________'}
+                </Text>
+                {data.packedAt && (
+                  <Text style={[s.sigLabel, { fontSize: 8 }]}>
+                    {new Date(data.packedAt).toLocaleString('de-DE', { timeZone: 'Europe/Berlin' })}
+                  </Text>
+                )}
               </View>
               <View style={s.sigBlock}>
+                {data.checkedSignatureDataUrl ? (
+                  // eslint-disable-next-line jsx-a11y/alt-text
+                  <Image src={data.checkedSignatureDataUrl} style={{ width: 180, height: 50, marginBottom: 2 }} />
+                ) : (
+                  <View style={s.sigLine} />
+                )}
                 <View style={s.sigLine} />
-                <Text style={s.sigLabel}>(Kontrolleur, Ort/Datum)</Text>
+                <Text style={s.sigLabel}>
+                  Kontrolleur: {data.checkedBy || '_______________'}
+                </Text>
+                {data.checkedAt && (
+                  <Text style={[s.sigLabel, { fontSize: 8 }]}>
+                    {new Date(data.checkedAt).toLocaleString('de-DE', { timeZone: 'Europe/Berlin' })}
+                  </Text>
+                )}
               </View>
             </View>
 

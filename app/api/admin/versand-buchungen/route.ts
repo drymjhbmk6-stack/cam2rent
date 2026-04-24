@@ -12,7 +12,7 @@ export async function GET() {
   const { data: bookings, error } = await supabase
     .from('bookings')
     .select(
-      'id, product_id, product_name, rental_from, rental_to, days, customer_name, customer_email, user_id, shipping_method, shipping_address, status, tracking_number, tracking_url, shipped_at, accessories, haftung, price_total, deposit, return_condition, return_notes, returned_at, created_at, label_url, return_label_url, unit_id'
+      'id, product_id, product_name, rental_from, rental_to, days, customer_name, customer_email, user_id, shipping_method, shipping_address, status, tracking_number, tracking_url, shipped_at, accessories, haftung, price_total, deposit, return_condition, return_notes, returned_at, created_at, label_url, return_label_url, unit_id, pack_status'
     )
     .eq('delivery_mode', 'versand')
     .in('status', ['confirmed', 'shipped'])
