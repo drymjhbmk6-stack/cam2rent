@@ -21,13 +21,14 @@ interface LibraryResponse {
   sets: MediaItem[];
   blog: MediaItem[];
   social: MediaItem[];
+  ugc: MediaItem[];
 }
 
 export async function GET() {
   if (!(await checkAdminAuth())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const supabase = createServiceClient();
-  const result: LibraryResponse = { products: [], sets: [], blog: [], social: [] };
+  const result: LibraryResponse = { products: [], sets: [], blog: [], social: [], ugc: [] };
 
   // 1) Shop-Produkte — alle images aus admin_config.products
   try {
@@ -99,6 +100,37 @@ export async function GET() {
     }
   } catch (err) {
     console.warn('[media-library] storage failed:', err);
+  }
+
+  // 5) Kundenmaterial — nur freigegebene Bilder (keine Videos), mit Einwilligung
+  //    fuer Social- oder Website-Nutzung. Signed URLs (24h), da Bucket privat.
+  try {
+    const { data } = await supabase
+      .from('customer_ugc_submissions')
+      .select('id, customer_name, file_paths, file_kinds, consent_use_social, consent_use_website, caption, created_at')
+      .in('status', ['approved', 'featured'])
+      .or('consent_use_social.eq.true,consent_use_website.eq.true')
+      .order('created_at', { ascending: false })
+      .limit(100);
+
+    for (const s of data ?? []) {
+      const paths: string[] = s.file_paths ?? [];
+      const kinds: string[] = s.file_kinds ?? [];
+      for (let i = 0; i < paths.length; i++) {
+        if (kinds[i] !== 'image') continue; // Videos ueberspringen
+        const { data: urlData } = await supabase.storage
+          .from('customer-ugc')
+          .createSignedUrl(paths[i], 60 * 60 * 24);
+        if (!urlData?.signedUrl) continue;
+        result.ugc.push({
+          url: urlData.signedUrl,
+          label: s.customer_name ?? 'Kunde',
+          sublabel: s.caption ? `Kunde: ${s.caption.slice(0, 40)}` : 'Kundenmaterial',
+        });
+      }
+    }
+  } catch (err) {
+    console.warn('[media-library] ugc failed:', err);
   }
 
   return NextResponse.json(result);

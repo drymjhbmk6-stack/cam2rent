@@ -53,6 +53,12 @@ const ACTION_LABELS: Record<string, string> = {
   'reel.publish': 'Reel veröffentlicht',
   'reel.rerender': 'Reel neu gerendert',
   'reel.delete': 'Reel gelöscht',
+  // Kundenmaterial (UGC)
+  'ugc.approve': 'Kundenmaterial freigegeben',
+  'ugc.reject': 'Kundenmaterial abgelehnt',
+  'ugc.feature': 'Kundenmaterial veröffentlicht',
+  'ugc.update': 'Kundenmaterial aktualisiert',
+  'ugc.delete': 'Kundenmaterial gelöscht',
   // Einstellungen
   'settings.update': 'Einstellungen geändert',
   'env_mode.change': 'Test-/Live-Modus gewechselt',
@@ -108,6 +114,7 @@ const ENTITY_LABELS: Record<string, string> = {
   expense: 'Ausgabe',
   stripe: 'Stripe',
   reel: 'Reel',
+  customer_ugc: 'Kundenmaterial',
 };
 
 function humanizeAction(action: string): string {

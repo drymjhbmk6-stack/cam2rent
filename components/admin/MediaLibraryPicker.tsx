@@ -2,8 +2,8 @@
 
 /**
  * Modal zum Auswaehlen eines Bildes aus der eigenen Bibliothek (Produkte,
- * Sets, Blog, bereits hochgeladene Social-Bilder). Wird im Social-Editor
- * als dritte Bild-Quelle angeboten (neben KI + PC-Upload).
+ * Sets, Blog, bereits hochgeladene Social-Bilder, freigegebenes Kundenmaterial).
+ * Wird im Social-Editor als weitere Bild-Quelle angeboten (neben KI + PC-Upload).
  */
 
 import { useEffect, useState } from 'react';
@@ -14,13 +14,14 @@ interface MediaItem {
   sublabel?: string;
 }
 
-type Tab = 'products' | 'sets' | 'blog' | 'social';
+type Tab = 'products' | 'sets' | 'blog' | 'social' | 'ugc';
 
 const TAB_LABELS: Record<Tab, string> = {
   products: 'Produkte',
   sets: 'Sets',
   blog: 'Blog',
   social: 'Social-Uploads',
+  ugc: 'Kundenmaterial',
 };
 
 interface Props {
@@ -32,7 +33,7 @@ interface Props {
 export default function MediaLibraryPicker({ open, onClose, onSelect }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [data, setData] = useState<Record<Tab, MediaItem[]>>({ products: [], sets: [], blog: [], social: [] });
+  const [data, setData] = useState<Record<Tab, MediaItem[]>>({ products: [], sets: [], blog: [], social: [], ugc: [] });
   const [tab, setTab] = useState<Tab>('products');
   const [search, setSearch] = useState('');
 

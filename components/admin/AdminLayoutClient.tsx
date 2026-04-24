@@ -122,6 +122,9 @@ const iconDashboard = (
 const iconBell = (
   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" /></svg>
 );
+const iconGallery = (
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+);
 const iconSocial = (
   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg>
 );
@@ -144,6 +147,7 @@ const KUNDEN_ITEMS: NavItem[] = [
   { href: '/admin/kunden', label: 'Kunden', icon: iconUsers, perm: 'kunden' },
   { href: '/admin/nachrichten', label: 'Kundenanfragen', icon: iconMessage, perm: 'kunden' },
   { href: '/admin/warteliste', label: 'Warteliste', icon: iconBell, perm: 'kunden' },
+  { href: '/admin/kunden-material', label: 'Kundenmaterial', icon: iconGallery, perm: 'kunden' },
   { href: '/admin/bewertungen', label: 'Produktbewertungen', icon: iconStar, perm: 'kunden' },
   { href: '/admin/schaeden', label: 'Schadensmeldungen', icon: iconWarning, perm: 'kunden' },
 ];
@@ -538,7 +542,7 @@ function SidebarContent({ pathname, isDashboard, onNavClick, handleLogout, me }:
           label="Kunden & Kommunikation"
           icon={iconUsers}
           items={KUNDEN_ITEMS}
-          matchPaths={['/admin/kunden-uebersicht', '/admin/kunden', '/admin/nachrichten', '/admin/warteliste', '/admin/bewertungen', '/admin/schaeden']}
+          matchPaths={['/admin/kunden-uebersicht', '/admin/kunden', '/admin/nachrichten', '/admin/warteliste', '/admin/kunden-material', '/admin/bewertungen', '/admin/schaeden']}
           storageKey="kunden"
           pathname={pathname}
           onNavClick={onNavClick}

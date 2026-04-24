@@ -46,7 +46,8 @@ const PATH_PERMISSIONS: PermRule[] = [
   { prefix: '/admin/versand', perm: 'tagesgeschaeft' },
   { prefix: '/admin/retouren', perm: 'tagesgeschaeft' },
   { prefix: '/admin/schaeden', perm: 'tagesgeschaeft' },
-  // Kunden
+  // Kunden — spezifisch vor generisch (kunden-material darf nicht an /admin/kunden haengenbleiben)
+  { prefix: '/admin/kunden-material', perm: 'kunden' },
   { prefix: '/admin/kunden', perm: 'kunden' },
   { prefix: '/admin/nachrichten', perm: 'kunden' },
   { prefix: '/admin/bewertungen', perm: 'kunden' },

@@ -10,7 +10,9 @@
 
 export type DetectedImageType = 'jpeg' | 'png' | 'webp' | 'heic' | 'heif' | 'gif' | null;
 
-export type DetectedFileType = DetectedImageType | 'pdf';
+export type DetectedVideoType = 'mp4' | 'mov' | 'webm' | null;
+
+export type DetectedFileType = DetectedImageType | DetectedVideoType | 'pdf';
 
 export function detectFileType(buffer: Buffer | Uint8Array): DetectedFileType | null {
   if (buffer.length < 4) return null;
@@ -87,5 +89,71 @@ export function isAllowedImage(
   allowed: DetectedImageType[] = ['jpeg', 'png', 'webp', 'heic', 'heif'],
 ): boolean {
   const detected = detectImageType(buffer);
+  return detected !== null && allowed.includes(detected);
+}
+
+/**
+ * Video-Magic-Byte-Erkennung (MP4/MOV/WebM).
+ * MP4/MOV teilen sich das ISO-BMFF-Format ("ftyp"-Box bei Offset 4).
+ * Der Brand-Code dahinter unterscheidet die Varianten.
+ */
+export function detectVideoType(buffer: Buffer | Uint8Array): DetectedVideoType {
+  if (buffer.length < 12) return null;
+
+  // WebM: 1A 45 DF A3 (EBML Header)
+  if (
+    buffer[0] === 0x1a &&
+    buffer[1] === 0x45 &&
+    buffer[2] === 0xdf &&
+    buffer[3] === 0xa3
+  ) {
+    return 'webm';
+  }
+
+  // ISO-BMFF: "ftyp" bei Offset 4
+  if (
+    buffer[4] === 0x66 &&
+    buffer[5] === 0x74 &&
+    buffer[6] === 0x79 &&
+    buffer[7] === 0x70
+  ) {
+    const brand = String.fromCharCode(buffer[8], buffer[9], buffer[10], buffer[11]);
+    // QuickTime MOV
+    if (brand === 'qt  ') return 'mov';
+    // Diverse MP4-Brands
+    if (
+      brand === 'mp41' ||
+      brand === 'mp42' ||
+      brand === 'isom' ||
+      brand === 'iso2' ||
+      brand === 'iso4' ||
+      brand === 'iso5' ||
+      brand === 'iso6' ||
+      brand === 'avc1' ||
+      brand === 'dash' ||
+      brand === 'f4v ' ||
+      brand === 'M4V ' ||
+      brand === 'M4A '
+    ) {
+      return 'mp4';
+    }
+    // HEIC-Brands wurden schon in detectImageType abgefangen, alles andere mit ftyp
+    // behandeln wir als MP4-kompatibel (konservativ — das sind Containerformate,
+    // die Browser/FFmpeg dekodieren).
+    const heifBrands = ['heic', 'heix', 'hevc', 'hevx', 'mif1', 'msf1', 'heim', 'heis'];
+    if (!heifBrands.includes(brand)) return 'mp4';
+  }
+
+  return null;
+}
+
+/**
+ * Prueft, ob der Buffer ein echtes Video (einer der erlaubten Typen) ist.
+ */
+export function isAllowedVideo(
+  buffer: Buffer | Uint8Array,
+  allowed: DetectedVideoType[] = ['mp4', 'mov', 'webm'],
+): boolean {
+  const detected = detectVideoType(buffer);
   return detected !== null && allowed.includes(detected);
 }

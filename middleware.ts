@@ -106,6 +106,7 @@ const PATH_PERMISSIONS: PermRule[] = [
   { prefix: '/admin/versand', perm: 'tagesgeschaeft' },
   { prefix: '/admin/retouren', perm: 'tagesgeschaeft' },
   { prefix: '/admin/schaeden', perm: 'tagesgeschaeft' },
+  { prefix: '/admin/kunden-material', perm: 'kunden' },
   { prefix: '/admin/kunden', perm: 'kunden' },
   { prefix: '/admin/nachrichten', perm: 'kunden' },
   { prefix: '/admin/bewertungen', perm: 'kunden' },

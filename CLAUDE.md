@@ -695,6 +695,27 @@ Interesse an neuen Kameras testen, bevor sie eingekauft werden: Sobald für eine
 - **`NotifyModal.tsx`** übernimmt `productId` + `source` (`'card' | 'detail'`) und postet gegen `/api/waitlist`. Enthält optionales Use-Case-Dropdown (Wassersport/Wintersport/MTB/Outdoor/Reisen/Motorsport/Familie/Vlog/Sonstiges) — bei "Sonstiges" erscheint ein Freitextfeld (max 200 Zeichen). Feld ist optional — leer lassen ist OK.
 - **Notifications:** `new_waitlist`-Typ im `NotificationDropdown` (cyan Bell-Icon)
 
+### Kundenmaterial-Anreize (UGC) (Stand 2026-04-24)
+Kunden laden nach ihrer Miete Fotos/Videos hoch, erteilen granulare Nutzungsrechte, Admin moderiert. Freigabe löst automatisch einen 15%-Rabattgutschein aus (analog zum DANKE-Coupon-Flow). Wenn cam2rent das Material tatsächlich auf Social/Blog/Website veröffentlicht, gibt's on-top einen 25%-Bonus-Gutschein.
+
+- **DB-Tabelle:** `customer_ugc_submissions` (Migration `supabase/supabase-customer-ugc.sql`) mit granularen Consent-Feldern (Website, Social, Blog, Marketing, Name-sichtbar), Consent-IP, Status-Workflow `pending → approved → featured → rejected/withdrawn`, reward + bonus coupon codes, featured_channel (`social|blog|website|other`). Unique-Index garantiert eine aktive Submission pro Buchung.
+- **Storage-Bucket:** `customer-ugc` (privat, Service-Role-only) — muss manuell im Supabase-Dashboard angelegt werden (50 MB pro Datei, MIME `image/*`, `video/mp4`, `video/quicktime`, `video/webm`).
+- **File-Type-Check:** `lib/file-type-check.ts` um `detectVideoType()` + `isAllowedVideo()` erweitert (MP4/MOV/WebM Magic-Byte-Signaturen). Client-MIME wird ignoriert.
+- **Kunden-UI:** `/konto/buchungen/[id]/material` — 2-stufiger Flow (Upload + Consent). Button "Material hochladen & Rabatt sichern" in `/konto/buchungen` bei Status `picked_up|shipped|returned|completed`. Zeigt bei bereits aktiver Einreichung den Status + Gutschein-Code + Widerrufs-Button.
+- **Kunden-APIs:** `POST /api/customer-ugc/upload` (FormData, Bearer-Token-Auth, Rate-Limit 5/h), `GET /api/customer-ugc/[bookingId]` (Status + Preview-URLs), `POST /api/customer-ugc/withdraw/[id]` (löscht Dateien, ausgegebene Gutscheine bleiben gültig).
+- **Admin-UI:** `/admin/kunden-material` (Sidebar in "Kunden & Kommunikation", Icon Foto-Gallery) — Status-Filter-Kacheln (Wartet/Freigegeben/Veröffentlicht/Abgelehnt/Zurückgezogen), Moderations-Modal mit Medien-Grid, Consent-Übersicht, Auto-Open via `?open=<submissionId>` aus Notification-Link. Buttons: Freigeben + Gutschein, Ablehnen (mit Begründungs-Prompt), Feature für Social/Blog/Website (mit Bonus-Gutschein), Endgültig löschen.
+- **Admin-APIs:** `GET /api/admin/customer-ugc?status=<filter>`, `GET/PATCH/DELETE /api/admin/customer-ugc/[id]`, `POST /api/admin/customer-ugc/[id]/approve` (erstellt `UGC-XXX-XXXX`-Gutschein + E-Mail), `POST .../reject` (Begründung pflicht, Dateien-Delete optional), `POST .../feature` (channel-Parameter, erstellt `BONUS-XXX-XXXX`-Gutschein + E-Mail).
+- **Lib:** `lib/customer-ugc.ts` — `loadUgcSettings()`, `createUgcCoupon()`, E-Mail-Helper `sendUgcApprovedEmail`/`sendUgcFeaturedEmail`/`sendUgcRejectedEmail` (E-Mail-Typen `ugc_approved`/`ugc_featured`/`ugc_rejected` in `TYPE_LABELS`).
+- **Einstellungen:** `admin_settings.customer_ugc_rewards` steuert Rabatt-Prozente, Mindestbestellwerte, Gültigkeiten, max Dateien (5) + Größe (50 MB), Enabled-Flag. Default im Seed.
+- **MediaLibraryPicker:** Neuer Tab "Kundenmaterial" zeigt approved/featured Bilder (mit Social- oder Website-Consent) — Admin kann UGC direkt in Social-Posts übernehmen. Signed URLs (24h).
+- **Notifications:** `new_ugc`-Typ (amber Gallery-Icon), Link direkt auf Admin-Moderations-Modal.
+- **Audit-Log:** `ugc.approve`/`reject`/`feature`/`update`/`delete` in ACTION_LABELS, Entity `customer_ugc`.
+- **Rechtliche Einwilligung:** Upload-Formular mit Pflicht-Checkbox zu § 22 KUG + § 31 UrhG (einfaches, zeitlich unbegrenztes, widerrufliches Nutzungsrecht). Widerrufsrecht wirkt nur für künftige Nutzung — bereits ausgegebene Gutscheine bleiben gültig.
+- **Go-Live TODO:**
+  1. SQL-Migration `supabase/supabase-customer-ugc.sql` ausführen
+  2. Supabase Storage-Bucket `customer-ugc` manuell anlegen (Public OFF, 50 MB, `image/*`, `video/mp4`, `video/quicktime`, `video/webm`)
+  3. Bei Bedarf Rabatt-Staffelung unter `admin_settings.customer_ugc_rewards` anpassen
+
 ### Seriennummern-Scanner
 QR-/Barcode-Scanner für die Admin-PWA, nutzt native `BarcodeDetector`-API (Chrome/Edge/Safari ≥ 17), Fallback auf manuelle Texteingabe. Erkennt: QR, EAN-13/8, Code128, Code39, Code93, Codabar, DataMatrix, ITF, UPC.
 
@@ -1111,6 +1132,8 @@ Systematischer Sweep ueber Admin- und Kundenkonto-UI nach Darstellungsfehlern. G
 - ~~`supabase-performance-indizes.sql`~~ (8 Indizes: bookings.user_id, bookings.created_at, bookings(product_id,rental_from,rental_to), email_log.booking_id, blog_posts(status,created_at), social_posts(status,scheduled_at), waitlist_subscriptions.product_id, rental_agreements.booking_id)
 
 ### Noch offen
+- **SQL-Migration `supabase/supabase-customer-ugc.sql` ausführen** (Kundenmaterial-Tabelle + Default-Settings, idempotent).
+- **Storage-Bucket `customer-ugc` manuell anlegen** (Supabase-Dashboard, Public OFF, 50 MB pro Datei, MIME `image/*` + `video/mp4` + `video/quicktime` + `video/webm`) — Voraussetzung für Kunden-Material-Upload.
 - **SQL-Migration `supabase/supabase-admin-users.sql` ausführen** (Mitarbeiterkonten + Permissions, idempotent). Danach unter `/admin/einstellungen/mitarbeiter` ersten Owner + Mitarbeiter anlegen.
 - **Bestehende 6 Kameras brauchen Admin-Specs** (Technische Daten im Editor anlegen)
 - **Bestehende Kameras brauchen Seriennummern** (im Kamera-Editor unter "Kameras / Seriennummern" anlegen)
