@@ -34,6 +34,13 @@ interface AvailabilityCalendarProps {
   initialTo?: string | null;
   /** Called whenever the range changes */
   onRangeChange?: (range: CalendarRange, days: number) => void;
+  /**
+   * Zusaetzliche Reservierungen, die clientseitig auf die DB-Verfuegbarkeit
+   * draufaddiert werden — z.B. Cart-Items die noch nicht als Buchung in der
+   * DB sind. Format: `{ "2026-04-29": 1, ... }`. Reduziert pro Tag das
+   * `available`-Feld und kippt Status auf 'booked' wenn nichts mehr frei ist.
+   */
+  extraHolds?: Record<string, number>;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -72,6 +79,7 @@ export default function AvailabilityCalendar({
   initialFrom,
   initialTo,
   onRangeChange,
+  extraHolds,
 }: AvailabilityCalendarProps) {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
@@ -147,10 +155,24 @@ export default function AvailabilityCalendar({
   const startOffset = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1;
   const daysInMonth = new Date(year, month + 1, 0).getDate();
 
+  // Cart-Holds clientseitig in die Verfuegbarkeit einrechnen, damit der
+  // Kalender Tage als ausgebucht zeigt, die der Kunde gerade selbst im
+  // Warenkorb haelt — auch wenn die Buchung noch nicht in der DB ist.
+  const effectiveDays: DayInfo[] = (data?.days ?? []).map((d) => {
+    const held = extraHolds?.[d.date] ?? 0;
+    if (held <= 0) return d;
+    const newAvailable = Math.max(0, d.available - held);
+    let newStatus: DayInfo['status'] = d.status;
+    if (d.status === 'available' || d.status === 'partial') {
+      if (newAvailable === 0) newStatus = 'booked';
+      else if (newAvailable < d.total) newStatus = 'partial';
+      else newStatus = 'available';
+    }
+    return { ...d, available: newAvailable, status: newStatus };
+  });
+
   const dayMap = new Map<string, DayInfo>();
-  if (data?.days) {
-    for (const d of data.days) dayMap.set(d.date, d);
-  }
+  for (const d of effectiveDays) dayMap.set(d.date, d);
 
   // Check if a day is selectable
   const isChoosingEnd = !!rangeFrom && !rangeTo;
@@ -158,9 +180,9 @@ export default function AvailabilityCalendar({
   // Wenn Startdatum gewählt: finde den nächsten gebuchten/gesperrten Tag
   // Alle Tage danach sind nicht wählbar (verhindert Überbuchungen)
   const maxEndDate = (() => {
-    if (!isChoosingEnd || !data?.days) return null;
+    if (!isChoosingEnd || effectiveDays.length === 0) return null;
     // Sortierte Tage nach dem Startdatum durchgehen
-    const sorted = [...data.days]
+    const sorted = [...effectiveDays]
       .filter((d) => d.date > rangeFrom!)
       .sort((a, b) => a.date.localeCompare(b.date));
     for (const d of sorted) {
@@ -224,8 +246,8 @@ export default function AvailabilityCalendar({
 
   // Prüft ob zwischen zwei Daten gebuchte/gesperrte Tage liegen
   function hasBookedDaysBetween(from: string, to: string): boolean {
-    if (!data?.days) return false;
-    return data.days.some((d) => {
+    if (effectiveDays.length === 0) return false;
+    return effectiveDays.some((d) => {
       if (d.date <= from || d.date >= to) return false;
       const effectiveStatus = d.status === 'partial' ? 'available' : d.status;
       return effectiveStatus !== 'available';

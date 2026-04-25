@@ -374,7 +374,7 @@ export default function BuchenPage() {
   const { slug } = useParams<{ slug: string }>();
   const router = useRouter();
   const { user } = useAuth();
-  const { addItem } = useCart();
+  const { addItem, items: cartItems } = useCart();
   const { products } = useProducts();
   const product = products.find((p) => p.slug === slug);
 
@@ -925,6 +925,19 @@ export default function BuchenPage() {
                     initialFrom={preFrom}
                     initialTo={preTo}
                     onRangeChange={handleCalendarRangeChange}
+                    extraHolds={(() => {
+                      const holds: Record<string, number> = {};
+                      for (const it of cartItems) {
+                        if (it.productId !== product.id) continue;
+                        const start = new Date(it.rentalFrom);
+                        const end = new Date(it.rentalTo);
+                        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+                          const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                          holds[key] = (holds[key] ?? 0) + 1;
+                        }
+                      }
+                      return holds;
+                    })()}
                   />
                 )}
 

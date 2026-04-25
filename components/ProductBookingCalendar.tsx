@@ -1,14 +1,29 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import AvailabilityCalendar, { type DeliveryMode, type CalendarRange } from './AvailabilityCalendar';
+import { useCart } from './CartProvider';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function parseDate(dateStr: string): Date {
   const [y, m, d] = dateStr.split('-').map(Number);
   return new Date(y, m - 1, d);
+}
+
+/** Liefert alle yyyy-MM-dd Tage zwischen `from` und `to` (beide inklusive). */
+function datesInRange(from: string, to: string): string[] {
+  const out: string[] = [];
+  const start = parseDate(from);
+  const end = parseDate(to);
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    out.push(`${y}-${m}-${day}`);
+  }
+  return out;
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -27,6 +42,21 @@ export default function ProductBookingCalendar({
   const [rangeTo, setRangeTo] = useState<string | null>(null);
   const [rentalDays, setRentalDays] = useState(0);
 
+  // Cart-Items fuer dieses Produkt: jeden gebuchten Tag clientseitig als
+  // belegt anzeigen, damit der Kunde nicht versucht zwei sich ueberlappende
+  // Buchungen anzulegen, wenn nur eine Einheit existiert.
+  const { items: cartItems } = useCart();
+  const extraHolds = useMemo(() => {
+    const holds: Record<string, number> = {};
+    for (const it of cartItems) {
+      if (it.productId !== productId) continue;
+      for (const date of datesInRange(it.rentalFrom, it.rentalTo)) {
+        holds[date] = (holds[date] ?? 0) + 1;
+      }
+    }
+    return holds;
+  }, [cartItems, productId]);
+
   const handleRangeChange = (range: CalendarRange, days: number) => {
     setRangeFrom(range.from);
     setRangeTo(range.to);
@@ -39,6 +69,7 @@ export default function ProductBookingCalendar({
         productId={productId}
         deliveryMode={deliveryMode}
         onRangeChange={handleRangeChange}
+        extraHolds={extraHolds}
       />
 
       {/* Delivery mode selection */}
