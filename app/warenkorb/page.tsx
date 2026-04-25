@@ -213,6 +213,19 @@ export default function WarenkorbPage() {
                         </span>
                       ))}
                     </div>
+
+                    {/* Versand-Info — nur wenn EIN Artikel im Cart, sonst */}
+                    {/* uebernimmt die rechte Summary die einmalige Anzeige */}
+                    {itemCount === 1 && (
+                      <div className="mt-3 pt-3 border-t border-brand-border dark:border-white/10 flex justify-between items-center text-sm">
+                        <span className="text-brand-text dark:text-gray-300">
+                          + Versand (Standard)
+                        </span>
+                        <span className="font-medium text-brand-black dark:text-white">
+                          {shipping.isFree ? 'Gratis' : fmtEuro(shipping.price)}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
