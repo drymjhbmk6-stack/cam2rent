@@ -1106,7 +1106,9 @@ export default function BuchenPage() {
                   const upgradeGroups = [...new Set(dbAccessories.filter((a) => a.upgradeGroup).map((a) => a.upgradeGroup!))];
                   const days = breakdown?.days ?? 0;
                   return upgradeGroups.map((group) => {
-                    const groupAccs = dbAccessories.filter((a) => a.upgradeGroup === group);
+                    const groupAccs = dbAccessories
+                      .filter((a) => a.upgradeGroup === group)
+                      .sort((a, b) => getAccessoryPrice(a, days) - getAccessoryPrice(b, days));
                     if (groupAccs.length === 0) return null;
                     const baseAcc = groupAccs.find((a) => a.isUpgradeBase);
                     const basePrice = baseAcc ? getAccessoryPrice(baseAcc, days) : 0;
