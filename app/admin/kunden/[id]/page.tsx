@@ -213,11 +213,22 @@ export default function KundenDetailPage() {
   }, [customer?.id_front_url, customer?.id_back_url]);
 
   async function handleVerify(status: 'verified' | 'rejected') {
+    // Bei Ablehnung optional eine Begruendung erfassen, die in der Reject-
+    // Mail an den Kunden zitiert wird. Leer lassen ist OK -> Standardtext.
+    let reason: string | undefined;
+    if (status === 'rejected') {
+      const input = window.prompt(
+        'Optional: Grund fuer die Ablehnung (wird dem Kunden in der E-Mail mitgeteilt). Leer lassen fuer Standardtext.',
+        '',
+      );
+      if (input === null) return; // Abgebrochen
+      reason = input.trim() || undefined;
+    }
     setVerifyLoading(true);
     await fetch('/api/admin/verify-customer', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ customerId, status }),
+      body: JSON.stringify({ customerId, status, ...(reason ? { reason } : {}) }),
     });
     setVerifyLoading(false);
     fetchData();

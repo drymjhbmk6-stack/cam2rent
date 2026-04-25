@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/components/AuthProvider';
 import { useSearchParams } from 'next/navigation';
+import { createAuthBrowserClient } from '@/lib/supabase-auth';
 
 function ReferralSection({ userId }: { userId: string }) {
   const [referralCode, setReferralCode] = useState<string | null>(null);
@@ -165,8 +166,54 @@ function KontoOverview() {
   const displayName =
     user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'dort';
 
+  // Verifizierungs-Status nachladen, damit wir bei rejected einen
+  // Hinweisbanner zeigen koennen mit Link auf den Re-Upload.
+  const [verificationStatus, setVerificationStatus] = useState<string | null>(null);
+  useEffect(() => {
+    if (!user?.id) return;
+    const supabase = createAuthBrowserClient();
+    supabase
+      .from('profiles')
+      .select('verification_status')
+      .eq('id', user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.verification_status) setVerificationStatus(data.verification_status);
+      });
+  }, [user?.id]);
+
   return (
     <div className="space-y-6">
+      {/* Verifizierung abgelehnt — Hinweisbanner mit Re-Upload-Link */}
+      {verificationStatus === 'rejected' && (
+        <div className="p-4 rounded-[10px] bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+          <div className="flex items-start gap-3">
+            <div className="flex-shrink-0 w-10 h-10 rounded-[10px] bg-red-100 dark:bg-red-900/40 flex items-center justify-center text-status-error">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="font-heading font-semibold text-status-error text-sm mb-1">
+                Ausweis-Verifizierung abgelehnt
+              </h3>
+              <p className="text-xs text-red-700 dark:text-red-300 mb-3">
+                Dein hochgeladener Ausweis konnte nicht freigegeben werden. Bitte lade Vorder- und Rückseite erneut hoch — gut ausgeleuchtet, alle Ecken sichtbar.
+              </p>
+              <Link
+                href="/konto/verifizierung"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] bg-status-error text-white text-xs font-heading font-semibold hover:bg-red-700 transition-colors"
+              >
+                Ausweis erneut hochladen
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Success messages */}
       {successMsg === 'passwort-geaendert' && (
         <div className="p-4 rounded-[10px] bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-status-success text-sm">
