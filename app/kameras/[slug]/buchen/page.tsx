@@ -233,7 +233,7 @@ function StepIndicator({ current }: { current: 1 | 2 | 3 | 4 | 5 | 6 }) {
                   ? 'bg-status-success border-status-success text-white'
                   : step.n === current
                   ? 'bg-accent-blue border-accent-blue text-white'
-                  : 'bg-white border-brand-border text-brand-muted'
+                  : 'bg-white dark:bg-gray-900 border-brand-border dark:border-gray-700 text-brand-muted dark:text-gray-500'
               }`}
               aria-current={step.n === current ? 'step' : undefined}
             >
@@ -247,7 +247,7 @@ function StepIndicator({ current }: { current: 1 | 2 | 3 | 4 | 5 | 6 }) {
             </div>
             <span
               className={`text-xs font-body hidden sm:block whitespace-nowrap ${
-                step.n === current ? 'text-accent-blue font-semibold' : 'text-brand-muted'
+                step.n === current ? 'text-accent-blue font-semibold' : 'text-brand-muted dark:text-gray-500'
               }`}
             >
               {step.label}
@@ -256,7 +256,7 @@ function StepIndicator({ current }: { current: 1 | 2 | 3 | 4 | 5 | 6 }) {
           {i < steps.length - 1 && (
             <div
               className={`w-12 sm:w-20 h-0.5 mx-2 mb-4 transition-colors ${
-                step.n < current ? 'bg-status-success' : 'bg-brand-border'
+                step.n < current ? 'bg-status-success' : 'bg-brand-border dark:bg-gray-700'
               }`}
               aria-hidden="true"
             />
@@ -308,8 +308,8 @@ function PaymentStep({ total, onBack }: { total: number; onBack: () => void }) {
 
   return (
     <form onSubmit={handleSubmit}>
-      <h2 className="font-heading font-bold text-lg text-brand-black mb-1">Zahlung</h2>
-      <p className="text-sm font-body text-brand-steel mb-6">
+      <h2 className="font-heading font-bold text-lg text-brand-black dark:text-gray-100 mb-1">Zahlung</h2>
+      <p className="text-sm font-body text-brand-steel dark:text-gray-400 mb-6">
         Gib deine Zahlungsdaten ein. Deine Verbindung ist SSL-verschlüsselt.
       </p>
 
@@ -328,7 +328,7 @@ function PaymentStep({ total, onBack }: { total: number; onBack: () => void }) {
           type="button"
           onClick={onBack}
           disabled={isLoading}
-          className="px-6 py-3 text-brand-steel font-heading font-semibold text-sm rounded-[10px] border border-brand-border hover:bg-brand-bg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          className="px-6 py-3 text-brand-steel dark:text-gray-400 font-heading font-semibold text-sm rounded-[10px] border border-brand-border dark:border-gray-700 hover:bg-brand-bg dark:hover:bg-gray-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           Zurück
         </button>
@@ -353,15 +353,15 @@ function PaymentStep({ total, onBack }: { total: number; onBack: () => void }) {
         </button>
       </div>
 
-      <p className="text-xs font-body text-brand-muted mt-5 flex items-center gap-1.5 justify-center">
+      <p className="text-xs font-body text-brand-muted dark:text-gray-500 mt-5 flex items-center gap-1.5 justify-center">
         <svg viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5 flex-shrink-0" aria-hidden="true">
           <path fillRule="evenodd" d="M10 1a4.5 4.5 0 00-4.5 4.5V9H5a2 2 0 00-2 2v6a2 2 0 002 2h10a2 2 0 002-2v-6a2 2 0 00-2-2h-.5V5.5A4.5 4.5 0 0010 1zm3 8V5.5a3 3 0 10-6 0V9h6z" clipRule="evenodd" />
         </svg>
         Sichere Zahlung über Stripe – Deine Daten werden nie auf unseren Servern gespeichert.
       </p>
 
-      <div className="mt-5 p-4 bg-brand-bg rounded-[10px] text-xs text-brand-muted space-y-1">
-        <p><strong className="text-brand-steel">Stornierung:</strong> Kostenlos bis 7 Tage vor Mietstart · 50 % Gebühr 3–6 Tage vorher (nur per E-Mail) · keine Erstattung ≤ 2 Tage vorher.</p>
+      <div className="mt-5 p-4 bg-brand-bg dark:bg-gray-800 rounded-[10px] text-xs text-brand-muted dark:text-gray-500 space-y-1">
+        <p><strong className="text-brand-steel dark:text-gray-400">Stornierung:</strong> Kostenlos bis 7 Tage vor Mietstart · 50 % Gebühr 3–6 Tage vorher (nur per E-Mail) · keine Erstattung ≤ 2 Tage vorher.</p>
         <p>Gemäß § 312g Abs. 2 Nr. 9 BGB besteht für zeitgebundene Mietverträge kein gesetzliches Widerrufsrecht.</p>
       </div>
     </form>
@@ -728,9 +728,9 @@ export default function BuchenPage() {
 
   if (!product) {
     return (
-      <div className="min-h-screen bg-brand-bg flex items-center justify-center">
+      <div className="min-h-screen bg-brand-bg dark:bg-gray-800 flex items-center justify-center">
         <div className="text-center">
-          <p className="font-heading font-bold text-brand-black text-xl mb-4">Kamera nicht gefunden</p>
+          <p className="font-heading font-bold text-brand-black dark:text-gray-100 text-xl mb-4">Kamera nicht gefunden</p>
           <Link href="/kameras" className="text-accent-blue hover:underline font-body">
             Zurück zur Übersicht
           </Link>
@@ -762,9 +762,9 @@ export default function BuchenPage() {
   const effectiveTotal = breakdown ? breakdown.total + setPrice : 0;
 
   return (
-    <div className="min-h-screen bg-brand-bg">
+    <div className="min-h-screen bg-brand-bg dark:bg-gray-800">
       {/* ── Header ── */}
-      <div className="bg-white border-b border-brand-border">
+      <div className="bg-white dark:bg-gray-900 border-b border-brand-border dark:border-gray-700">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           {/* Breadcrumb */}
           <nav aria-label="Brotkrume" className="mb-5">
@@ -775,26 +775,26 @@ export default function BuchenPage() {
                 { href: `/kameras/${product.slug}`, label: product.name },
               ].map((crumb) => (
                 <li key={crumb.href} className="flex items-center gap-2">
-                  <Link href={crumb.href} className="text-brand-steel hover:text-accent-blue transition-colors">
+                  <Link href={crumb.href} className="text-brand-steel dark:text-gray-400 hover:text-accent-blue transition-colors">
                     {crumb.label}
                   </Link>
-                  <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 text-brand-muted" aria-hidden="true">
+                  <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 text-brand-muted dark:text-gray-500" aria-hidden="true">
                     <path fillRule="evenodd" d="M6.22 3.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 010-1.06z" clipRule="evenodd" />
                   </svg>
                 </li>
               ))}
               <li>
-                <span className="text-brand-black font-medium" aria-current="page">Buchen</span>
+                <span className="text-brand-black dark:text-gray-100 font-medium" aria-current="page">Buchen</span>
               </li>
             </ol>
           </nav>
 
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div>
-              <h1 className="font-heading font-bold text-xl sm:text-2xl text-brand-black">
+              <h1 className="font-heading font-bold text-xl sm:text-2xl text-brand-black dark:text-gray-100">
                 {product.name} mieten
               </h1>
-              <p className="text-sm font-body text-brand-steel mt-0.5">
+              <p className="text-sm font-body text-brand-steel dark:text-gray-400 mt-0.5">
                 ab {product.pricePerDay} € / Tag
               </p>
             </div>
@@ -808,15 +808,15 @@ export default function BuchenPage() {
         <div className={`${step >= 4 ? '' : 'lg:grid lg:grid-cols-[1fr_300px] lg:gap-8'}`}>
 
           {/* ── Main card ── */}
-          <div className="bg-white rounded-card shadow-card p-6 sm:p-8">
+          <div className="bg-white dark:bg-gray-900 rounded-card shadow-card p-6 sm:p-8">
 
             {/* ════ STEP 1: Abholung / Versand + Datum ════ */}
             {step === 1 && (
               <div>
-                <h2 className="font-heading font-bold text-lg text-brand-black mb-1">
+                <h2 className="font-heading font-bold text-lg text-brand-black dark:text-gray-100 mb-1">
                   Übergabe & Zeitraum
                 </h2>
-                <p className="text-sm font-body text-brand-steel mb-6">
+                <p className="text-sm font-body text-brand-steel dark:text-gray-400 mb-6">
                   Wähle zuerst die Übergabeart, dann die reinen Miettage.
                 </p>
 
@@ -824,18 +824,18 @@ export default function BuchenPage() {
                 <div className="space-y-3 mb-6">
                   {/* Versand */}
                   <label className={`block rounded-xl border-2 cursor-pointer transition-all overflow-hidden ${
-                    deliveryMode === 'versand' ? 'border-accent-blue' : 'border-brand-border hover:border-brand-muted'
+                    deliveryMode === 'versand' ? 'border-accent-blue' : 'border-brand-border dark:border-gray-700 hover:border-brand-muted'
                   }`}>
                     <div className={`flex items-start gap-3 p-4 ${deliveryMode === 'versand' ? 'bg-accent-blue-soft/30' : ''}`}>
                       <input type="radio" name="deliveryMode" value="versand" checked={deliveryMode === 'versand'}
                         onChange={() => { setDeliveryMode('versand'); setRange(undefined); }} className="mt-0.5 accent-accent-blue" />
                       <div>
-                        <p className="font-heading font-semibold text-sm text-brand-black">Versand</p>
-                        <p className="text-xs text-brand-steel mt-0.5">Wir liefern zu dir nach Hause</p>
+                        <p className="font-heading font-semibold text-sm text-brand-black dark:text-gray-100">Versand</p>
+                        <p className="text-xs text-brand-steel dark:text-gray-400 mt-0.5">Wir liefern zu dir nach Hause</p>
                       </div>
                     </div>
                     {deliveryMode === 'versand' && (
-                      <div className="px-4 pb-4 pt-2 border-t border-brand-border/50" onClick={(e) => e.preventDefault()}>
+                      <div className="px-4 pb-4 pt-2 border-t border-brand-border dark:border-gray-700/50" onClick={(e) => e.preventDefault()}>
                         <div className="grid grid-cols-2 gap-2">
                           {([
                             { id: 'standard' as ShippingMethod, label: 'Standard', sub: '3–5 Werktage', price: dynPrices?.shipping?.standardPrice ?? shippingConfig.standardPrice },
@@ -845,17 +845,17 @@ export default function BuchenPage() {
                               key={opt.id}
                               onClick={(e) => e.stopPropagation()}
                               className={`flex flex-col gap-1 p-3 rounded-lg border cursor-pointer transition-colors ${
-                                shippingMethod === opt.id ? 'border-accent-blue bg-accent-blue/5' : 'border-brand-border'
+                                shippingMethod === opt.id ? 'border-accent-blue bg-accent-blue/5' : 'border-brand-border dark:border-gray-700'
                               }`}
                             >
                               <div className="flex items-center gap-2">
                                 <input type="radio" name="shippingMethod" value={opt.id} checked={shippingMethod === opt.id}
                                   onChange={() => setShippingMethod(opt.id)} className="accent-accent-blue flex-shrink-0" />
-                                <span className="font-heading font-semibold text-sm text-brand-black">{opt.label}</span>
+                                <span className="font-heading font-semibold text-sm text-brand-black dark:text-gray-100">{opt.label}</span>
                               </div>
                               <div className="flex items-center justify-between pl-6">
-                                <span className="text-xs text-brand-muted">{opt.sub}</span>
-                                <span className="text-sm font-semibold text-brand-black">{fmtEuro(opt.price)}</span>
+                                <span className="text-xs text-brand-muted dark:text-gray-500">{opt.sub}</span>
+                                <span className="text-sm font-semibold text-brand-black dark:text-gray-100">{fmtEuro(opt.price)}</span>
                               </div>
                             </label>
                           ))}
@@ -866,22 +866,22 @@ export default function BuchenPage() {
 
                   {/* Abholung */}
                   <label className={`block rounded-xl border-2 cursor-pointer transition-all overflow-hidden ${
-                    deliveryMode === 'abholung' ? 'border-accent-blue' : 'border-brand-border hover:border-brand-muted'
+                    deliveryMode === 'abholung' ? 'border-accent-blue' : 'border-brand-border dark:border-gray-700 hover:border-brand-muted'
                   }`}>
                     <div className={`flex items-start gap-3 p-4 ${deliveryMode === 'abholung' ? 'bg-accent-blue-soft/30' : ''}`}>
                       <input type="radio" name="deliveryMode" value="abholung" checked={deliveryMode === 'abholung'}
                         onChange={() => { setDeliveryMode('abholung'); setRange(undefined); }} className="mt-0.5 accent-accent-blue" />
                       <div>
-                        <p className="font-heading font-semibold text-sm text-brand-black">Selbst abholen</p>
-                        <p className="text-xs text-brand-steel mt-0.5">Du holst die Kamera bei uns ab und bringst sie zurück</p>
+                        <p className="font-heading font-semibold text-sm text-brand-black dark:text-gray-100">Selbst abholen</p>
+                        <p className="text-xs text-brand-steel dark:text-gray-400 mt-0.5">Du holst die Kamera bei uns ab und bringst sie zurück</p>
                       </div>
                     </div>
                     {deliveryMode === 'abholung' && (
-                      <div className="px-4 pb-4 pt-2 border-t border-brand-border/50" onClick={(e) => e.preventDefault()}>
-                        <div className="bg-brand-bg rounded-lg p-3">
-                          <p className="font-body font-semibold text-sm text-brand-black">cam2rent</p>
-                          <p className="text-xs text-brand-steel mt-1">Heimsbrunner Str. 12, 12349 Berlin</p>
-                          <p className="text-xs text-brand-muted mt-2">Abholung nach Terminvereinbarung.</p>
+                      <div className="px-4 pb-4 pt-2 border-t border-brand-border dark:border-gray-700/50" onClick={(e) => e.preventDefault()}>
+                        <div className="bg-brand-bg dark:bg-gray-800 rounded-lg p-3">
+                          <p className="font-body font-semibold text-sm text-brand-black dark:text-gray-100">cam2rent</p>
+                          <p className="text-xs text-brand-steel dark:text-gray-400 mt-1">Heimsbrunner Str. 12, 12349 Berlin</p>
+                          <p className="text-xs text-brand-muted dark:text-gray-500 mt-2">Abholung nach Terminvereinbarung.</p>
                         </div>
                       </div>
                     )}
@@ -909,7 +909,7 @@ export default function BuchenPage() {
                 </div>
 
                 {/* ── Kalender (Verfügbarkeit + Auswahl) ── */}
-                <p className="text-xs font-body font-semibold text-brand-steel uppercase tracking-wider mb-3">
+                <p className="text-xs font-body font-semibold text-brand-steel dark:text-gray-400 uppercase tracking-wider mb-3">
                   Miettage wählen
                 </p>
                 {product?.id && (
@@ -924,7 +924,7 @@ export default function BuchenPage() {
 
                 {/* ── Range preview ── */}
                 {range?.from && (
-                  <div className="mt-6 rounded-xl border border-brand-border overflow-hidden">
+                  <div className="mt-6 rounded-xl border border-brand-border dark:border-gray-700 overflow-hidden">
                     {/* Logistics header for Abholung */}
                     {deliveryMode === 'abholung' && (
                       <div className="bg-accent-teal-soft px-4 py-2.5 flex items-center justify-between flex-wrap gap-2">
@@ -944,30 +944,30 @@ export default function BuchenPage() {
                     )}
 
                     {/* Rental period */}
-                    <div className="bg-brand-bg px-4 py-3">
+                    <div className="bg-brand-bg dark:bg-gray-800 px-4 py-3">
                       <div className="flex items-center gap-4 flex-wrap">
                         <div>
-                          <p className="text-xs font-body text-brand-muted uppercase tracking-wider mb-1">
+                          <p className="text-xs font-body text-brand-muted dark:text-gray-500 uppercase tracking-wider mb-1">
                             Mietbeginn
                           </p>
-                          <p className="font-heading font-semibold text-brand-black">
+                          <p className="font-heading font-semibold text-brand-black dark:text-gray-100">
                             {format(range.from, 'EEE, dd. MMM yyyy', { locale: de })}
                           </p>
                         </div>
                         {range.to && range.to.getTime() !== range.from.getTime() ? (
                           <>
-                            <span className="text-brand-muted" aria-hidden="true">→</span>
+                            <span className="text-brand-muted dark:text-gray-500" aria-hidden="true">→</span>
                             <div>
-                              <p className="text-xs font-body text-brand-muted uppercase tracking-wider mb-1">
+                              <p className="text-xs font-body text-brand-muted dark:text-gray-500 uppercase tracking-wider mb-1">
                                 Mietende
                               </p>
-                              <p className="font-heading font-semibold text-brand-black">
+                              <p className="font-heading font-semibold text-brand-black dark:text-gray-100">
                                 {format(range.to, 'EEE, dd. MMM yyyy', { locale: de })}
                               </p>
                             </div>
                           </>
                         ) : (
-                          <p className="text-xs font-body text-brand-muted italic">
+                          <p className="text-xs font-body text-brand-muted dark:text-gray-500 italic">
                             Nur 1 Tag – oder weiteren Tag wählen
                           </p>
                         )}
@@ -977,7 +977,7 @@ export default function BuchenPage() {
                             <span className="px-3 py-1.5 bg-accent-blue-soft text-accent-blue font-heading font-semibold text-sm rounded-full">
                               {breakdown.days} {breakdown.days === 1 ? 'Tag' : 'Tage'}
                             </span>
-                            <span className="font-heading font-bold text-brand-black">
+                            <span className="font-heading font-bold text-brand-black dark:text-gray-100">
                               {fmt(breakdown.rentalPrice)} €
                             </span>
                           </div>
@@ -1034,10 +1034,10 @@ export default function BuchenPage() {
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
                   Zurück zu Versand & Datum
                 </button>
-                <h2 className="font-heading font-bold text-lg text-brand-black mb-1">
+                <h2 className="font-heading font-bold text-lg text-brand-black dark:text-gray-100 mb-1">
                   Zubehör
                 </h2>
-                <p className="text-sm font-body text-brand-steel mb-6">
+                <p className="text-sm font-body text-brand-steel dark:text-gray-400 mb-6">
                   Alles optional. Füge hinzu was du brauchst.
                 </p>
 
@@ -1045,10 +1045,10 @@ export default function BuchenPage() {
                 {/* ── Set selection ── */}
                 {availableSets.length > 0 && (
                   <div className="mb-6">
-                    <p className="text-xs font-body font-semibold text-brand-steel uppercase tracking-wider mb-2">
+                    <p className="text-xs font-body font-semibold text-brand-steel dark:text-gray-400 uppercase tracking-wider mb-2">
                       Wähle dein Set (Pflicht)
                     </p>
-                    <div className="rounded-xl border border-brand-border overflow-hidden divide-y divide-brand-border">
+                    <div className="rounded-xl border border-brand-border dark:border-gray-700 overflow-hidden divide-y divide-brand-border dark:divide-gray-700">
 
                       {availableSets.map((set) => {
                         const isSelected = selectedSet?.id === set.id;
@@ -1067,22 +1067,22 @@ export default function BuchenPage() {
                           <div key={set.id} className={`transition-colors ${isSelected ? 'bg-accent-blue-soft/30' : 'bg-white dark:bg-gray-900'}`}>
                             <label className="flex items-center gap-3 px-4 py-3 cursor-pointer">
                               <input type="radio" name="rentalSet" checked={isSelected} onChange={() => { setSelectedSet(set); setAccessories([]); setAccessoryQty({}); }} className="sr-only" />
-                              <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${isSelected ? 'border-accent-blue' : 'border-brand-border'}`}>
+                              <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${isSelected ? 'border-accent-blue' : 'border-brand-border dark:border-gray-700'}`}>
                                 {isSelected && <div className="w-2 h-2 rounded-full bg-accent-blue" />}
                               </div>
                               {set.image_url && (
                                 // eslint-disable-next-line @next/next/no-img-element
-                                <img src={set.image_url} alt={set.name} className="w-16 h-12 object-contain rounded-lg bg-white border border-brand-border flex-shrink-0" />
+                                <img src={set.image_url} alt={set.name} className="w-16 h-12 object-contain rounded-lg bg-white dark:bg-gray-900 border border-brand-border dark:border-gray-700 flex-shrink-0" />
                               )}
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2">
-                                  <span className="font-heading font-semibold text-sm text-brand-black">{set.name}</span>
+                                  <span className="font-heading font-semibold text-sm text-brand-black dark:text-gray-100">{set.name}</span>
                                   {set.badge && (
                                     <span className={`px-1.5 py-0.5 rounded-full text-xs font-heading font-semibold ${set.badgeColor}`}>{set.badge}</span>
                                   )}
                                 </div>
                                 {set.includedItems.length > 0 && (
-                                  <p className="text-xs text-brand-muted mt-0.5">{set.includedItems.join(' · ')}</p>
+                                  <p className="text-xs text-brand-muted dark:text-gray-500 mt-0.5">{set.includedItems.join(' · ')}</p>
                                 )}
                               </div>
                               <span className="font-heading font-semibold text-sm text-accent-blue flex-shrink-0">+{fmt(price)} €</span>
@@ -1107,7 +1107,7 @@ export default function BuchenPage() {
                     const selectedId = groupAccs.find((a) => accessories.includes(a.id))?.id ?? baseAcc?.id ?? null;
                     return (
                       <div key={group} className="mb-6">
-                        <p className="text-xs font-body font-semibold text-brand-steel uppercase tracking-wider mb-2">{group}</p>
+                        <p className="text-xs font-body font-semibold text-brand-steel dark:text-gray-400 uppercase tracking-wider mb-2">{group}</p>
                         <div className="rounded-xl border border-brand-border dark:border-gray-700 overflow-hidden divide-y divide-brand-border dark:divide-gray-700">
                           {groupAccs.filter((acc) => {
                             const avail = accAvailability[acc.id];
@@ -1122,10 +1122,10 @@ export default function BuchenPage() {
                               <label key={acc.id} className={`flex items-center gap-3 px-4 py-3 transition-colors ${disabled ? 'opacity-50 cursor-not-allowed bg-brand-bg dark:bg-gray-800' : isSelected ? 'bg-accent-blue-soft/30 cursor-pointer' : 'bg-white dark:bg-gray-900 hover:bg-brand-bg dark:hover:bg-gray-800 cursor-pointer'}`}>
                                 <input type="radio" name={`upgrade-${group}`} checked={isSelected} disabled={disabled}
                                   onChange={() => !disabled && selectUpgrade(acc.id, group)} className="sr-only" />
-                                <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${isSelected ? 'border-accent-blue' : 'border-brand-border'}`}>
+                                <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${isSelected ? 'border-accent-blue' : 'border-brand-border dark:border-gray-700'}`}>
                                   {isSelected && <div className="w-2 h-2 rounded-full bg-accent-blue" />}
                                 </div>
-                                <span className={`font-heading font-semibold text-sm flex-1 ${disabled ? 'text-brand-muted' : 'text-brand-black dark:text-gray-100'}`}>{acc.name}</span>
+                                <span className={`font-heading font-semibold text-sm flex-1 ${disabled ? 'text-brand-muted dark:text-gray-500' : 'text-brand-black dark:text-gray-100'}`}>{acc.name}</span>
                                 {acc.isUpgradeBase ? (
                                   <span className="text-xs font-heading font-semibold text-status-success">inklusive</span>
                                 ) : !disabled ? (
@@ -1160,7 +1160,7 @@ export default function BuchenPage() {
                   if (categories.length === 0) return null;
                   return categories.map(([cat, catAccs]) => (
                 <div key={cat} className="mb-6">
-                  <p className="text-xs font-body font-semibold text-brand-steel uppercase tracking-wider mb-2">
+                  <p className="text-xs font-body font-semibold text-brand-steel dark:text-gray-400 uppercase tracking-wider mb-2">
                     {cat}
                   </p>
                   <div className="rounded-xl border border-brand-border dark:border-gray-700 overflow-hidden divide-y divide-brand-border dark:divide-gray-700">
@@ -1188,9 +1188,9 @@ export default function BuchenPage() {
                         return (
                           <div key={acc.id} className={`flex flex-col px-4 py-2.5 transition-colors ${disabled ? 'opacity-50 bg-brand-bg dark:bg-gray-800' : currentQty > 0 ? 'bg-accent-blue-soft/30' : 'bg-white dark:bg-gray-900'}`}>
                             <div className="flex items-center gap-3">
-                              <span className={`font-heading font-semibold text-sm flex-1 ${disabled ? 'text-brand-muted' : 'text-brand-black dark:text-gray-100'}`}>
+                              <span className={`font-heading font-semibold text-sm flex-1 ${disabled ? 'text-brand-muted dark:text-gray-500' : 'text-brand-black dark:text-gray-100'}`}>
                                 {acc.name}
-                                <span className="ml-2 text-xs font-body text-brand-muted">
+                                <span className="ml-2 text-xs font-body text-brand-muted dark:text-gray-500">
                                   ({fmt(unitPrice)} €{acc.pricingMode === 'perDay' ? '/Tag' : ''} je Stk.)
                                 </span>
                               </span>
@@ -1200,7 +1200,7 @@ export default function BuchenPage() {
                                   onClick={() => setAccessoryCount(acc.id, currentQty - 1)}
                                   disabled={!canDecrement}
                                   aria-label={`${acc.name} Anzahl verringern`}
-                                  className="w-7 h-7 rounded-lg border border-brand-border flex items-center justify-center text-brand-black hover:bg-brand-bg disabled:opacity-30 disabled:cursor-not-allowed"
+                                  className="w-7 h-7 rounded-lg border border-brand-border dark:border-gray-700 flex items-center justify-center text-brand-black dark:text-gray-100 hover:bg-brand-bg dark:hover:bg-gray-800 disabled:opacity-30 disabled:cursor-not-allowed"
                                 >
                                   −
                                 </button>
@@ -1212,7 +1212,7 @@ export default function BuchenPage() {
                                   onClick={() => setAccessoryCount(acc.id, currentQty + 1)}
                                   disabled={!canIncrement}
                                   aria-label={`${acc.name} Anzahl erhöhen`}
-                                  className="w-7 h-7 rounded-lg border border-brand-border flex items-center justify-center text-brand-black hover:bg-brand-bg disabled:opacity-30 disabled:cursor-not-allowed"
+                                  className="w-7 h-7 rounded-lg border border-brand-border dark:border-gray-700 flex items-center justify-center text-brand-black dark:text-gray-100 hover:bg-brand-bg dark:hover:bg-gray-800 disabled:opacity-30 disabled:cursor-not-allowed"
                                 >
                                   +
                                 </button>
@@ -1231,7 +1231,7 @@ export default function BuchenPage() {
                               </span>
                             )}
                             {!isBookedOut && currentQty >= maxPossible && Number.isFinite(maxPossible) && maxPossible > 0 && (
-                              <span className="text-xs text-brand-muted mt-1">
+                              <span className="text-xs text-brand-muted dark:text-gray-500 mt-1">
                                 Max {maxPossible} Stück{setQty > 0 ? ` (Set belegt bereits ${setQty}×)` : ''}
                               </span>
                             )}
@@ -1243,14 +1243,14 @@ export default function BuchenPage() {
                         <label key={acc.id} className={`flex flex-col px-4 py-2.5 transition-colors ${disabled ? 'opacity-50 cursor-not-allowed bg-brand-bg dark:bg-gray-800' : checked ? 'bg-accent-blue-soft/30 cursor-pointer' : 'bg-white dark:bg-gray-900 hover:bg-brand-bg dark:hover:bg-gray-800 cursor-pointer'}`}>
                           <div className="flex items-center gap-3">
                             <input type="checkbox" checked={checked} onChange={() => !disabled && toggleAccessory(acc.id)} disabled={disabled} className="sr-only" />
-                            <div className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 ${disabled ? 'border-brand-muted bg-brand-bg' : checked ? 'border-accent-blue bg-accent-blue' : 'border-brand-border bg-white'}`}>
+                            <div className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 ${disabled ? 'border-brand-muted bg-brand-bg dark:bg-gray-800' : checked ? 'border-accent-blue bg-accent-blue' : 'border-brand-border dark:border-gray-700 bg-white dark:bg-gray-900'}`}>
                               {checked && !disabled && (
                                 <svg viewBox="0 0 20 20" fill="white" className="w-3 h-3">
                                   <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
                                 </svg>
                               )}
                             </div>
-                            <span className={`font-heading font-semibold text-sm flex-1 ${disabled ? 'text-brand-muted' : 'text-brand-black dark:text-gray-100'}`}>{acc.name}</span>
+                            <span className={`font-heading font-semibold text-sm flex-1 ${disabled ? 'text-brand-muted dark:text-gray-500' : 'text-brand-black dark:text-gray-100'}`}>{acc.name}</span>
                             {!disabled && (
                               <span className="font-heading font-semibold text-sm text-accent-blue flex-shrink-0">
                                 +{fmt(unitPrice)} €{acc.pricingMode === 'perDay' ? ' pro Tag' : ''}
@@ -1276,7 +1276,7 @@ export default function BuchenPage() {
                   <button
                     type="button"
                     onClick={() => setStep(1)}
-                    className="px-6 py-3 text-brand-steel font-heading font-semibold text-sm rounded-[10px] border border-brand-border hover:bg-brand-bg transition-colors"
+                    className="px-6 py-3 text-brand-steel dark:text-gray-400 font-heading font-semibold text-sm rounded-[10px] border border-brand-border dark:border-gray-700 hover:bg-brand-bg dark:hover:bg-gray-800 transition-colors"
                   >
                     ← Versand & Datum
                   </button>
@@ -1302,20 +1302,20 @@ export default function BuchenPage() {
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
                   Zurück zu Zubehör
                 </button>
-                <h2 className="font-heading font-bold text-lg text-brand-black mb-1">
+                <h2 className="font-heading font-bold text-lg text-brand-black dark:text-gray-100 mb-1">
                   Haftungsschutz
                 </h2>
-                <p className="text-sm font-body text-brand-steel mb-6">
+                <p className="text-sm font-body text-brand-steel dark:text-gray-400 mb-6">
                   Wähle deinen Haftungsschutz für die Mietdauer.
                 </p>
 
                 {product.offersHaftungsoption ? (
                   <div>
                     <div className="flex items-center gap-2 mb-3">
-                      <p className="text-xs font-body font-semibold text-brand-steel uppercase tracking-wider">
+                      <p className="text-xs font-body font-semibold text-brand-steel dark:text-gray-400 uppercase tracking-wider">
                         Haftungsschutz
                       </p>
-                      <span className="text-xs font-body text-brand-muted">(Pauschal pro Buchung)</span>
+                      <span className="text-xs font-body text-brand-muted dark:text-gray-500">(Pauschal pro Buchung)</span>
                     </div>
                     <div className="space-y-3">
                       {haftungsoptionen.map((opt) => {
@@ -1326,7 +1326,7 @@ export default function BuchenPage() {
                             className={`flex items-start gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all ${
                               selected
                                 ? 'border-accent-blue bg-accent-blue-soft/30'
-                                : 'border-brand-border bg-white hover:border-brand-muted'
+                                : 'border-brand-border dark:border-gray-700 bg-white dark:bg-gray-900 hover:border-brand-muted'
                             }`}
                           >
                             <input
@@ -1346,7 +1346,7 @@ export default function BuchenPage() {
                             {/* Radio indicator */}
                             <div
                               className={`mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all ${
-                                selected ? 'border-accent-blue' : 'border-brand-border bg-white'
+                                selected ? 'border-accent-blue' : 'border-brand-border dark:border-gray-700 bg-white dark:bg-gray-900'
                               }`}
                               aria-hidden="true"
                             >
@@ -1357,7 +1357,7 @@ export default function BuchenPage() {
 
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                                <p className="font-heading font-semibold text-sm text-brand-black">
+                                <p className="font-heading font-semibold text-sm text-brand-black dark:text-gray-100">
                                   {opt.name}
                                 </p>
                                 {opt.badge && (
@@ -1366,10 +1366,10 @@ export default function BuchenPage() {
                                   </span>
                                 )}
                               </div>
-                              <p className="text-xs font-body text-brand-steel mb-1">
+                              <p className="text-xs font-body text-brand-steel dark:text-gray-400 mb-1">
                                 {opt.description}
                               </p>
-                              <p className={`text-xs font-body font-semibold ${selected ? 'text-accent-blue' : 'text-brand-muted'}`}>
+                              <p className={`text-xs font-body font-semibold ${selected ? 'text-accent-blue' : 'text-brand-muted dark:text-gray-500'}`}>
                                 Eigenbeteiligung: {opt.liability.replace('Max. ', '').replace(' Eigenbeteiligung', '')}
                               </p>
                             </div>
@@ -1384,10 +1384,10 @@ export default function BuchenPage() {
                                   ? calcHaftungTieredPrice(h?.premium ?? 25, h?.premiumIncrement ?? 10, days)
                                   : 0;
                                 return p === 0
-                                  ? <p className="font-heading font-bold text-sm text-brand-muted">0 €</p>
-                                  : <p className="font-heading font-bold text-sm text-brand-black">+{p} €</p>;
+                                  ? <p className="font-heading font-bold text-sm text-brand-muted dark:text-gray-500">0 €</p>
+                                  : <p className="font-heading font-bold text-sm text-brand-black dark:text-gray-100">+{p} €</p>;
                               })()}
-                              <p className="text-xs font-body text-brand-muted">
+                              <p className="text-xs font-body text-brand-muted dark:text-gray-500">
                                 {(breakdown?.days ?? 1) <= 7 ? 'erste Woche' : `${Math.ceil((breakdown?.days ?? 1) / 7)} Wochen`}
                               </p>
                             </div>
@@ -1426,7 +1426,7 @@ export default function BuchenPage() {
                               className={`mt-0.5 w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-all ${
                                 confirmLiability
                                   ? 'border-status-error bg-status-error'
-                                  : 'border-status-error/50 bg-white group-hover:border-status-error'
+                                  : 'border-status-error/50 bg-white dark:bg-gray-900 group-hover:border-status-error'
                               }`}
                               aria-hidden="true"
                             >
@@ -1456,7 +1456,7 @@ export default function BuchenPage() {
                               className={`mt-0.5 w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-all ${
                                 confirmRead
                                   ? 'border-status-error bg-status-error'
-                                  : 'border-status-error/50 bg-white group-hover:border-status-error'
+                                  : 'border-status-error/50 bg-white dark:bg-gray-900 group-hover:border-status-error'
                               }`}
                               aria-hidden="true"
                             >
@@ -1502,7 +1502,7 @@ export default function BuchenPage() {
                     </div>
 
                     {/* Link to full Haftungsbedingungen (always visible) */}
-                    <p className="text-xs font-body text-brand-muted mt-3">
+                    <p className="text-xs font-body text-brand-muted dark:text-gray-500 mt-3">
                       Vollständige{' '}
                       <Link href="/agb#haftung" target="_blank" className="text-accent-blue hover:underline">
                         Haftungsbedingungen
@@ -1545,7 +1545,7 @@ export default function BuchenPage() {
                         className={`mt-0.5 w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-all ${
                           confirmLiability
                             ? 'border-accent-amber bg-accent-amber'
-                            : 'border-amber-600/50 bg-white group-hover:border-accent-amber'
+                            : 'border-amber-600/50 bg-white dark:bg-gray-900 group-hover:border-accent-amber'
                         }`}
                         aria-hidden="true"
                       >
@@ -1575,7 +1575,7 @@ export default function BuchenPage() {
                   <button
                     type="button"
                     onClick={() => setStep(2)}
-                    className="px-6 py-3 text-brand-steel font-heading font-semibold text-sm rounded-[10px] border border-brand-border hover:bg-brand-bg transition-colors"
+                    className="px-6 py-3 text-brand-steel dark:text-gray-400 font-heading font-semibold text-sm rounded-[10px] border border-brand-border dark:border-gray-700 hover:bg-brand-bg dark:hover:bg-gray-800 transition-colors"
                   >
                     ← Zubehör
                   </button>
@@ -1635,9 +1635,9 @@ export default function BuchenPage() {
                 </p>
 
                 {/* Block 1: Zeitraum & Versand */}
-                <div className="rounded-xl border border-brand-border overflow-hidden mb-5">
-                  <div className="flex justify-between items-center px-4 py-2 bg-brand-bg/50 dark:bg-white/5 border-b border-brand-border">
-                    <span className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider">Zeitraum & Versand</span>
+                <div className="rounded-xl border border-brand-border dark:border-gray-700 overflow-hidden mb-5">
+                  <div className="flex justify-between items-center px-4 py-2 bg-brand-bg dark:bg-gray-800/50 dark:bg-white/5 border-b border-brand-border dark:border-gray-700">
+                    <span className="text-xs font-heading font-semibold text-brand-muted dark:text-gray-500 uppercase tracking-wider">Zeitraum & Versand</span>
                     <button type="button" onClick={() => { setReturnToSummary(true); setStep(1); }} className="text-xs font-heading font-semibold text-accent-blue hover:underline">Ändern →</button>
                   </div>
                   {/* Abholung top row */}
@@ -1653,14 +1653,14 @@ export default function BuchenPage() {
                   )}
 
                   {/* Rental period */}
-                  <div className="bg-brand-bg px-4 py-3">
-                    <p className="font-heading font-semibold text-brand-black">{product.name}</p>
-                    <p className="text-sm font-body text-brand-steel mt-0.5">
+                  <div className="bg-brand-bg dark:bg-gray-800 px-4 py-3">
+                    <p className="font-heading font-semibold text-brand-black dark:text-gray-100">{product.name}</p>
+                    <p className="text-sm font-body text-brand-steel dark:text-gray-400 mt-0.5">
                       {breakdown.days === 1
                         ? `Miete: ${format(range.from, 'dd. MMM yyyy', { locale: de })} • 1 Tag`
                         : `Miete: ${format(range.from, 'dd. MMM', { locale: de })} – ${format(range.to!, 'dd. MMM yyyy', { locale: de })} • ${breakdown.days} Tage`}
                     </p>
-                    <p className="text-xs font-body text-brand-muted mt-1">
+                    <p className="text-xs font-body text-brand-muted dark:text-gray-500 mt-1">
                       {deliveryMode === 'abholung' ? 'Selbst abholen & zurückbringen' : 'Lieferung per Versand'}
                     </p>
                   </div>
@@ -1690,38 +1690,38 @@ export default function BuchenPage() {
                 {/* Price breakdown */}
                 <div className="space-y-2.5 mb-5">
                   <div className="flex justify-between items-center text-sm font-body">
-                    <span className="text-brand-steel">
+                    <span className="text-brand-steel dark:text-gray-400">
                       Miete ({breakdown.days} {breakdown.days === 1 ? 'Tag' : 'Tage'})
                     </span>
-                    <span className="font-semibold text-brand-black">
+                    <span className="font-semibold text-brand-black dark:text-gray-100">
                       {fmt(breakdown.rentalPrice)} €
                     </span>
                   </div>
 
                   {selectedSet && (
                     <div className="flex justify-between items-center text-sm font-body">
-                      <span className="text-brand-steel">
+                      <span className="text-brand-steel dark:text-gray-400">
                         {selectedSet.name}
                         {selectedSet.pricingMode === 'perDay' && selectedSet.price > 0 && (
-                          <span className="text-xs text-brand-muted ml-1">
+                          <span className="text-xs text-brand-muted dark:text-gray-500 ml-1">
                             ({fmt(selectedSet.price)} € × {breakdown.days} {breakdown.days === 1 ? 'Tag' : 'Tage'})
                           </span>
                         )}
                       </span>
-                      <span className="font-semibold text-brand-black">
+                      <span className="font-semibold text-brand-black dark:text-gray-100">
                         {fmt(setPrice)} €
                       </span>
                     </div>
                   )}
                   {breakdown.accessoryPrice > 0 && (
                     <div className="flex justify-between items-center text-sm font-body">
-                      <span className="text-brand-steel">
+                      <span className="text-brand-steel dark:text-gray-400">
                         Zubehör{(() => {
                           const total = accessories.reduce((s, id) => s + (accessoryQty[id] ?? 1), 0);
                           return total > 0 ? ` (${total} ${total === 1 ? 'Artikel' : 'Artikel'})` : '';
                         })()}
                       </span>
-                      <span className="font-semibold text-brand-black">
+                      <span className="font-semibold text-brand-black dark:text-gray-100">
                         {fmt(breakdown.accessoryPrice)} €
                       </span>
                     </div>
@@ -1729,10 +1729,10 @@ export default function BuchenPage() {
 
                   {breakdown.haftungPrice > 0 && (
                     <div className="flex justify-between items-center text-sm font-body">
-                      <span className="text-brand-steel">
+                      <span className="text-brand-steel dark:text-gray-400">
                         {haftungsoptionen.find((h) => h.id === haftung)?.name}
                       </span>
-                      <span className="font-semibold text-brand-black">
+                      <span className="font-semibold text-brand-black dark:text-gray-100">
                         {breakdown.haftungPrice} €
                       </span>
                     </div>
@@ -1740,16 +1740,16 @@ export default function BuchenPage() {
 
                   {deliveryMode === 'versand' && (
                     <div className="flex justify-between items-center text-sm font-body">
-                      <span className="text-brand-steel flex items-center gap-1.5">
+                      <span className="text-brand-steel dark:text-gray-400 flex items-center gap-1.5">
                         Versand
-                        <span className="text-xs px-1.5 py-0.5 rounded bg-brand-bg text-brand-muted font-heading">
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-brand-bg dark:bg-gray-800 text-brand-muted dark:text-gray-500 font-heading">
                           {shippingMethod === 'express' ? 'Express' : 'Standard'}
                         </span>
                       </span>
                       {breakdown.shippingIsFree ? (
                         <span className="font-semibold text-status-success text-sm">Kostenlos</span>
                       ) : (
-                        <span className="font-semibold text-brand-black">
+                        <span className="font-semibold text-brand-black dark:text-gray-100">
                           {fmt(breakdown.shippingPrice)} €
                         </span>
                       )}
@@ -1757,21 +1757,21 @@ export default function BuchenPage() {
                   )}
 
                   {taxMode === 'regelbesteuerung' ? (
-                    <div className="flex justify-between items-center text-sm font-body border-t border-brand-border pt-2.5">
-                      <span className="text-brand-steel">Enthaltene MwSt. ({taxRate}%)</span>
-                      <span className="text-brand-steel">
+                    <div className="flex justify-between items-center text-sm font-body border-t border-brand-border dark:border-gray-700 pt-2.5">
+                      <span className="text-brand-steel dark:text-gray-400">Enthaltene MwSt. ({taxRate}%)</span>
+                      <span className="text-brand-steel dark:text-gray-400">
                         {fmt(effectiveTotal - effectiveTotal / (1 + taxRate / 100))} €
                       </span>
                     </div>
                   ) : (
-                    <div className="border-t border-brand-border pt-2.5">
-                      <span className="text-xs text-brand-muted">Gem. §19 UStG keine MwSt.</span>
+                    <div className="border-t border-brand-border dark:border-gray-700 pt-2.5">
+                      <span className="text-xs text-brand-muted dark:text-gray-500">Gem. §19 UStG keine MwSt.</span>
                     </div>
                   )}
 
                   <div className="flex justify-between items-center border-t-2 border-brand-black pt-2.5">
-                    <span className="font-heading font-bold text-brand-black">Gesamt</span>
-                    <span className="font-heading font-bold text-xl text-brand-black">
+                    <span className="font-heading font-bold text-brand-black dark:text-gray-100">Gesamt</span>
+                    <span className="font-heading font-bold text-xl text-brand-black dark:text-gray-100">
                       {fmt(effectiveTotal)} €
                     </span>
                   </div>
@@ -1781,7 +1781,7 @@ export default function BuchenPage() {
                 {breakdown.haftungPrice > 0 && product.offersHaftungsoption && (
                   <div className="mb-5 bg-brand-bg dark:bg-white/5 rounded-xl p-4">
                     <div className="flex justify-between items-center mb-2">
-                      <p className="text-xs font-body font-semibold text-brand-steel uppercase tracking-wider">
+                      <p className="text-xs font-body font-semibold text-brand-steel dark:text-gray-400 uppercase tracking-wider">
                         Haftungsschutz
                       </p>
                       <button type="button" onClick={() => { setReturnToSummary(true); setStep(3); }} className="text-xs font-heading font-semibold text-accent-blue hover:underline">Ändern →</button>
@@ -1790,12 +1790,12 @@ export default function BuchenPage() {
                       const opt = haftungsoptionen.find((h) => h.id === haftung)!;
                       return (
                         <div className="flex items-start gap-2.5">
-                          <svg viewBox="0 0 20 20" fill="currentColor" className={`w-4 h-4 flex-shrink-0 mt-0.5 ${haftung === 'none' ? 'text-brand-muted' : 'text-status-success'}`} aria-hidden="true">
+                          <svg viewBox="0 0 20 20" fill="currentColor" className={`w-4 h-4 flex-shrink-0 mt-0.5 ${haftung === 'none' ? 'text-brand-muted dark:text-gray-500' : 'text-status-success'}`} aria-hidden="true">
                             <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
                           </svg>
                           <div>
-                            <p className="text-sm font-body font-semibold text-brand-black">{opt.name}</p>
-                            <p className="text-xs font-body text-brand-steel mt-0.5">{opt.liability}</p>
+                            <p className="text-sm font-body font-semibold text-brand-black dark:text-gray-100">{opt.name}</p>
+                            <p className="text-xs font-body text-brand-steel dark:text-gray-400 mt-0.5">{opt.liability}</p>
                           </div>
                         </div>
                       );
@@ -1808,13 +1808,13 @@ export default function BuchenPage() {
                 {selectedSet ? (
                   <div className="mb-5 bg-brand-bg dark:bg-white/5 rounded-xl p-4">
                     <div className="flex justify-between items-center mb-2">
-                      <p className="text-xs font-body font-semibold text-brand-steel uppercase tracking-wider">
+                      <p className="text-xs font-body font-semibold text-brand-steel dark:text-gray-400 uppercase tracking-wider">
                         Set & Zubehör
                       </p>
                       <button type="button" onClick={() => { setReturnToSummary(true); setStep(2); }} className="text-xs font-heading font-semibold text-accent-blue hover:underline">Ändern →</button>
                     </div>
                     <div className="flex items-center gap-2 mb-2">
-                      <p className="font-heading font-semibold text-sm text-brand-black">{selectedSet.name}</p>
+                      <p className="font-heading font-semibold text-sm text-brand-black dark:text-gray-100">{selectedSet.name}</p>
                       {selectedSet.badge && (
                         <span className={`px-1.5 py-0.5 rounded-full text-xs font-heading font-semibold ${selectedSet.badgeColor}`}>
                           {selectedSet.badge}
@@ -1823,7 +1823,7 @@ export default function BuchenPage() {
                     </div>
                     <ul className="space-y-1.5">
                       {getFilteredSetItems().map((item) => (
-                        <li key={item} className="flex items-center gap-2 text-sm font-body text-brand-steel">
+                        <li key={item} className="flex items-center gap-2 text-sm font-body text-brand-steel dark:text-gray-400">
                           <svg viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5 text-status-success flex-shrink-0" aria-hidden="true">
                             <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
                           </svg>
@@ -1833,8 +1833,8 @@ export default function BuchenPage() {
                     </ul>
                   </div>
                 ) : accessories.length > 0 && (
-                  <div className="mb-5 bg-brand-bg rounded-xl p-4">
-                    <p className="text-xs font-body font-semibold text-brand-steel uppercase tracking-wider mb-2">
+                  <div className="mb-5 bg-brand-bg dark:bg-gray-800 rounded-xl p-4">
+                    <p className="text-xs font-body font-semibold text-brand-steel dark:text-gray-400 uppercase tracking-wider mb-2">
                       Gewähltes Zubehör
                     </p>
                     <ul className="space-y-2">
@@ -1845,18 +1845,18 @@ export default function BuchenPage() {
                         const lineTotal = unitPrice * qty;
                         return (
                           <li key={id} className="flex items-center justify-between gap-2 text-sm font-body">
-                            <div className="flex items-center gap-2 text-brand-text">
+                            <div className="flex items-center gap-2 text-brand-text dark:text-gray-300">
                               <svg viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5 text-status-success flex-shrink-0" aria-hidden="true">
                                 <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
                               </svg>
                               <span>{qty > 1 ? `${qty}× ${acc.name}` : acc.name}</span>
-                              <span className="text-brand-muted text-xs">
+                              <span className="text-brand-muted dark:text-gray-500 text-xs">
                                 {acc.pricingMode === 'flat'
                                   ? 'einmalig'
                                   : `× ${breakdown.days} ${breakdown.days === 1 ? 'Tag' : 'Tage'}`}
                               </span>
                             </div>
-                            <span className="font-semibold text-brand-black">{fmt(lineTotal)} €</span>
+                            <span className="font-semibold text-brand-black dark:text-gray-100">{fmt(lineTotal)} €</span>
                           </li>
                         );
                       })}
@@ -1882,7 +1882,7 @@ export default function BuchenPage() {
                     {user ? 'Weiter: Mietvertrag' : 'Weiter: Anmelden & Mietvertrag'}
                   </button>
                   {!user && (
-                    <p className="mt-3 text-xs font-body text-brand-muted text-center">
+                    <p className="mt-3 text-xs font-body text-brand-muted dark:text-gray-500 text-center">
                       Für den Mietvertrag benötigen wir dein Konto — Anmeldung oder Registrierung im nächsten Schritt.
                     </p>
                   )}
@@ -1911,7 +1911,7 @@ export default function BuchenPage() {
                       <button
                         type="button"
                         onClick={() => setStep(4)}
-                        className="px-6 py-3 text-brand-steel font-heading font-semibold text-sm rounded-[10px] border border-brand-border hover:bg-brand-bg transition-colors"
+                        className="px-6 py-3 text-brand-steel dark:text-gray-400 font-heading font-semibold text-sm rounded-[10px] border border-brand-border dark:border-gray-700 hover:bg-brand-bg dark:hover:bg-gray-800 transition-colors"
                       >
                         Zurück
                       </button>
@@ -1988,13 +1988,13 @@ export default function BuchenPage() {
 
           {/* ── Sidebar (nur auf Steps 1-3, nicht auf Zusammenfassung/Vertrag) ── */}
           <div className={`mt-6 lg:mt-0 lg:sticky lg:top-24 lg:self-start flex flex-col gap-4 ${step >= 4 ? 'hidden' : ''}`}>
-            <div className="bg-white rounded-card shadow-card p-5">
-              <h3 className="font-heading font-semibold text-base text-brand-black mb-4">
+            <div className="bg-white dark:bg-gray-900 rounded-card shadow-card p-5">
+              <h3 className="font-heading font-semibold text-base text-brand-black dark:text-gray-100 mb-4">
                 Deine Buchung
               </h3>
 
               {/* Product */}
-              <div className="flex items-center gap-3 pb-4 border-b border-brand-border">
+              <div className="flex items-center gap-3 pb-4 border-b border-brand-border dark:border-gray-700">
                 <div className="w-12 h-12 rounded-xl bg-accent-blue-soft flex items-center justify-center flex-shrink-0">
                   <svg viewBox="0 0 80 60" fill="none" className="w-8 h-6" aria-hidden="true">
                     <rect x="8" y="18" width="64" height="36" rx="6" fill="#3b82f6" fillOpacity="0.2" stroke="#3b82f6" strokeWidth="2" />
@@ -2003,13 +2003,13 @@ export default function BuchenPage() {
                   </svg>
                 </div>
                 <div className="min-w-0">
-                  <p className="font-heading font-semibold text-sm text-brand-black truncate">{product.name}</p>
-                  <p className="text-xs font-body text-brand-steel">{product.brand}</p>
+                  <p className="font-heading font-semibold text-sm text-brand-black dark:text-gray-100 truncate">{product.name}</p>
+                  <p className="text-xs font-body text-brand-steel dark:text-gray-400">{product.brand}</p>
                 </div>
               </div>
 
               {/* Delivery mode chip */}
-              <div className="py-3 border-b border-brand-border">
+              <div className="py-3 border-b border-brand-border dark:border-gray-700">
                 <div className="flex items-center gap-2">
                   <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-heading font-semibold ${
                     deliveryMode === 'abholung'
@@ -2032,7 +2032,7 @@ export default function BuchenPage() {
               </div>
 
               {/* Dates */}
-              <div className="py-4 border-b border-brand-border space-y-2">
+              <div className="py-4 border-b border-brand-border dark:border-gray-700 space-y-2">
                 {/* Abholung: show pickup date */}
                 {deliveryMode === 'abholung' && range?.from && (
                   <div className="flex justify-between text-xs font-body">
@@ -2044,14 +2044,14 @@ export default function BuchenPage() {
                 )}
 
                 <div className="flex justify-between text-sm font-body">
-                  <span className="text-brand-steel">Mietbeginn</span>
-                  <span className="font-medium text-brand-black">
+                  <span className="text-brand-steel dark:text-gray-400">Mietbeginn</span>
+                  <span className="font-medium text-brand-black dark:text-gray-100">
                     {range?.from ? format(range.from, 'dd. MMM yyyy', { locale: de }) : '–'}
                   </span>
                 </div>
                 <div className="flex justify-between text-sm font-body">
-                  <span className="text-brand-steel">Mietende</span>
-                  <span className="font-medium text-brand-black">
+                  <span className="text-brand-steel dark:text-gray-400">Mietende</span>
+                  <span className="font-medium text-brand-black dark:text-gray-100">
                     {range?.from
                       ? format(range.to ?? range.from, 'dd. MMM yyyy', { locale: de })
                       : '–'}
@@ -2070,8 +2070,8 @@ export default function BuchenPage() {
 
                 {breakdown && (
                   <div className="flex justify-between text-sm font-body pt-1">
-                    <span className="text-brand-steel">Miettage</span>
-                    <span className="font-medium text-brand-black">
+                    <span className="text-brand-steel dark:text-gray-400">Miettage</span>
+                    <span className="font-medium text-brand-black dark:text-gray-100">
                       {breakdown.days} {breakdown.days === 1 ? 'Tag' : 'Tage'}
                     </span>
                   </div>
@@ -2083,63 +2083,63 @@ export default function BuchenPage() {
                 {breakdown ? (
                   <>
                     <div className="flex justify-between text-sm font-body">
-                      <span className="text-brand-steel">Miete</span>
-                      <span className="text-brand-black">{fmt(breakdown.rentalPrice)} €</span>
+                      <span className="text-brand-steel dark:text-gray-400">Miete</span>
+                      <span className="text-brand-black dark:text-gray-100">{fmt(breakdown.rentalPrice)} €</span>
                     </div>
                     {selectedSet && (
                       <div className="flex justify-between text-sm font-body">
-                        <span className="text-brand-steel truncate pr-2">
+                        <span className="text-brand-steel dark:text-gray-400 truncate pr-2">
                           {selectedSet.name}
                           {selectedSet.pricingMode === 'perDay' && selectedSet.price > 0 && (
-                            <span className="text-xs text-brand-muted ml-1">
+                            <span className="text-xs text-brand-muted dark:text-gray-500 ml-1">
                               ({fmt(selectedSet.price)} € × {breakdown.days} {breakdown.days === 1 ? 'Tag' : 'Tage'})
                             </span>
                           )}
                         </span>
-                        <span className="text-brand-black flex-shrink-0">{fmt(setPrice)} €</span>
+                        <span className="text-brand-black dark:text-gray-100 flex-shrink-0">{fmt(setPrice)} €</span>
                       </div>
                     )}
                     {breakdown.accessoryPrice > 0 && (
                       <div className="flex justify-between text-sm font-body">
-                        <span className="text-brand-steel">
+                        <span className="text-brand-steel dark:text-gray-400">
                           Zubehör{(() => {
                             const total = accessories.reduce((s, id) => s + (accessoryQty[id] ?? 1), 0);
                             return total > 0 ? ` (${total})` : '';
                           })()}
                         </span>
-                        <span className="text-brand-black">{fmt(breakdown.accessoryPrice)} €</span>
+                        <span className="text-brand-black dark:text-gray-100">{fmt(breakdown.accessoryPrice)} €</span>
                       </div>
                     )}
                     {breakdown.haftungPrice > 0 && (
                       <div className="flex justify-between text-sm font-body">
-                        <span className="text-brand-steel">
+                        <span className="text-brand-steel dark:text-gray-400">
                           {haftungsoptionen.find((h) => h.id === haftung)?.name ?? 'Haftungsschutz'}
                         </span>
-                        <span className="text-brand-black">{breakdown.haftungPrice} €</span>
+                        <span className="text-brand-black dark:text-gray-100">{breakdown.haftungPrice} €</span>
                       </div>
                     )}
                     {deliveryMode === 'versand' && (
                       <div className="flex justify-between text-sm font-body">
-                        <span className="text-brand-steel">Versand</span>
+                        <span className="text-brand-steel dark:text-gray-400">Versand</span>
                         {breakdown.shippingIsFree ? (
                           <span className="text-status-success font-semibold text-xs">Kostenlos</span>
                         ) : (
-                          <span className="text-brand-black">{fmt(breakdown.shippingPrice)} €</span>
+                          <span className="text-brand-black dark:text-gray-100">{fmt(breakdown.shippingPrice)} €</span>
                         )}
                       </div>
                     )}
-                    <div className="border-t border-brand-border pt-3 mt-2 flex justify-between items-center">
-                      <span className="font-heading font-bold text-brand-black">Gesamt</span>
-                      <span className="font-heading font-bold text-lg text-brand-black">
+                    <div className="border-t border-brand-border dark:border-gray-700 pt-3 mt-2 flex justify-between items-center">
+                      <span className="font-heading font-bold text-brand-black dark:text-gray-100">Gesamt</span>
+                      <span className="font-heading font-bold text-lg text-brand-black dark:text-gray-100">
                         {fmt(effectiveTotal)} €
                       </span>
                     </div>
-                    <p className="text-xs font-body text-brand-muted pt-1">
+                    <p className="text-xs font-body text-brand-muted dark:text-gray-500 pt-1">
                       Kaution {product.deposit} € wird separat reserviert
                     </p>
                   </>
                 ) : (
-                  <p className="text-sm font-body text-brand-muted text-center py-4">
+                  <p className="text-sm font-body text-brand-muted dark:text-gray-500 text-center py-4">
                     Wähle einen Zeitraum um den Preis zu sehen.
                   </p>
                 )}
@@ -2147,14 +2147,14 @@ export default function BuchenPage() {
 
               {/* Haftungsoption chip */}
               {step >= 3 && (
-                <div className="mt-4 pt-4 border-t border-brand-border">
-                  <p className="text-xs font-body text-brand-muted mb-1.5">Haftungsschutz</p>
+                <div className="mt-4 pt-4 border-t border-brand-border dark:border-gray-700">
+                  <p className="text-xs font-body text-brand-muted dark:text-gray-500 mb-1.5">Haftungsschutz</p>
                   <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-heading font-semibold ${
                     haftung === 'premium'
                       ? 'bg-accent-teal-soft text-accent-teal'
                       : haftung === 'standard'
                       ? 'bg-accent-blue-soft text-accent-blue'
-                      : 'bg-brand-bg text-brand-muted'
+                      : 'bg-brand-bg dark:bg-gray-800 text-brand-muted dark:text-gray-500'
                   }`}>
                     {haftung === 'none' ? 'Keine Begrenzung' : haftungsoptionen.find((h) => h.id === haftung)?.name}
                   </span>
@@ -2164,11 +2164,11 @@ export default function BuchenPage() {
 
             {/* Im Paket enthalten — Sidebar */}
             {selectedSet && step >= 2 && (
-              <div className="mt-4 bg-white rounded-card shadow-card p-5">
-                <p className="text-xs font-body font-semibold text-brand-steel uppercase tracking-wider mb-3">
+              <div className="mt-4 bg-white dark:bg-gray-900 rounded-card shadow-card p-5">
+                <p className="text-xs font-body font-semibold text-brand-steel dark:text-gray-400 uppercase tracking-wider mb-3">
                   Im Paket enthalten
                 </p>
-                <p className="text-sm font-heading font-semibold text-brand-black mb-3">{selectedSet.name}</p>
+                <p className="text-sm font-heading font-semibold text-brand-black dark:text-gray-100 mb-3">{selectedSet.name}</p>
                 <div className="space-y-1.5">
                   {(() => {
                     // Keys sind IMMER der reine Name (ohne "Nx "-Praefix),
@@ -2195,7 +2195,7 @@ export default function BuchenPage() {
                         <svg viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5 text-status-success flex-shrink-0">
                           <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
                         </svg>
-                        <span className="text-sm font-body text-brand-black">{qty > 1 ? `${qty}x ` : ''}{name}</span>
+                        <span className="text-sm font-body text-brand-black dark:text-gray-100">{qty > 1 ? `${qty}x ` : ''}{name}</span>
                       </div>
                     ));
                   })()}
@@ -2218,7 +2218,7 @@ export default function BuchenPage() {
             <button
               type="button"
               onClick={() => setShowAuthGate(false)}
-              className="absolute -top-3 -right-3 z-10 w-9 h-9 rounded-full bg-white dark:bg-brand-dark shadow-lg flex items-center justify-center text-brand-steel hover:text-brand-black dark:hover:text-white transition-colors"
+              className="absolute -top-3 -right-3 z-10 w-9 h-9 rounded-full bg-white dark:bg-brand-dark shadow-lg flex items-center justify-center text-brand-steel dark:text-gray-400 hover:text-brand-black dark:hover:text-white transition-colors"
               aria-label="Schließen"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
