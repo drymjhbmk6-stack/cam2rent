@@ -682,14 +682,16 @@ export async function POST(req: NextRequest) {
         .eq('key', `checkout_${payment_intent_id}`)
     ).catch(() => {});
 
-    // 12. Vertrag generieren + E-Mails senden — SYNCHRON vor der Response.
-    // Grund: Serverless-Umgebung killt fire-and-forget/after() teils vorzeitig,
-    // dadurch landete der Vertrag nicht in Storage und die Bestaetigungs-E-Mail
-    // kam ohne Vertrag. Hier warten wir lieber 2-4 Sek, bevor wir antworten —
-    // dafuer ist alles garantiert durch (contract_signed=true, PDF in Storage,
-    // E-Mail mit Vertrag-Anhang raus).
+    // 12. Vertrag generieren + E-Mails senden — ASYNC nach Response.
+    // Wir laufen auf Hetzner Coolify (Docker), nicht auf Vercel-Serverless,
+    // d.h. der Node-Prozess wird nach dem Response NICHT gekillt. `after()`
+    // von Next.js 15 garantiert die Ausfuehrung. Damit antwortet die Route
+    // sofort (~150 ms) statt nach 2-4 Sek; Vertrag + Mails kommen kurz danach.
+    // Falls eines davon scheitert, sieht es der Admin im E-Mail-Protokoll
+    // bzw. an der Buchung (contract_signed=false). Idempotenz-Block oben
+    // faengt Re-Versuche bei Re-Aufruf des /confirm-cart Endpoints.
     if (r_email) {
-      await (async () => {
+      after(async () => {
         try {
           for (let gi = 0; gi < periodGroups.length; gi++) {
             const groupItems = periodGroups[gi];
@@ -799,7 +801,7 @@ export async function POST(req: NextRequest) {
         } catch (err) {
           console.error('Background email/contract error:', err);
         }
-      })();
+      });
     }
 
     // Admin-Benachrichtigung (fire-and-forget)

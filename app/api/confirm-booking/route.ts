@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { after } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { detectSuspicious } from '@/lib/suspicious';
 import { ensureBusinessConfig } from '@/lib/load-business-config';
@@ -306,126 +307,136 @@ export async function POST(req: NextRequest) {
     const txMap: Record<string, string> = {};
     for (const s of taxSettings ?? []) txMap[s.key] = s.value;
 
-    // 8. Vertrag generieren (wenn Signaturdaten vorhanden)
+    // 8. + 9. Vertrag-PDF + Storage + Bestaetigungs-Mails — alles ASYNC nach
+    // Response. Wir laufen auf Hetzner Coolify (Docker), nicht Vercel-
+    // Serverless: `after()` von Next.js 15 garantiert die Ausfuehrung. Die
+    // Route antwortet sofort (Buchungsnummer sichtbar), Vertrag + Mails
+    // laufen kurz danach.
     const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
       || req.headers.get('x-real-ip')
       || 'unknown';
 
-    const fmtDate = (iso: string) => {
-      if (!iso) return '';
-      const [y, m, d] = iso.split('-');
-      return `${d}.${m}.${y}`;
-    };
+    after(async () => {
+      const fmtDate = (iso: string) => {
+        if (!iso) return '';
+        const [y, m, d] = iso.split('-');
+        return `${d}.${m}.${y}`;
+      };
 
-    // Seriennummer laden falls Unit zugeordnet
-    let serialNumber = '';
-    let bookingUnitId: string | null = null;
-    try {
-      const { data: bkRow } = await supabase.from('bookings').select('unit_id').eq('id', bookingId).maybeSingle();
-      if (bkRow?.unit_id) {
-        bookingUnitId = bkRow.unit_id;
-        const { data: unitRow } = await supabase.from('product_units').select('serial_number').eq('id', bkRow.unit_id).maybeSingle();
-        serialNumber = unitRow?.serial_number ?? '';
-      }
-    } catch { /* ignore */ }
-
-    let contractPdfBuffer: Buffer | undefined;
-    if (contractSignature?.agreedToTerms && contractSignature?.signerName) {
+      // Seriennummer laden falls Unit zugeordnet
+      let serialNumber = '';
+      let bookingUnitId: string | null = null;
       try {
-        // Kundenprofil für Adresse laden
-        let custStreet = '';
-        let custZip = '';
-        let custCity = '';
-        if (meta.user_id) {
-          const { data: addrProfile } = await supabase
-            .from('profiles')
-            .select('address_street, address_zip, address_city')
-            .eq('id', meta.user_id)
-            .maybeSingle();
-          if (addrProfile?.address_street) {
-            custStreet = addrProfile.address_street;
-            custZip = addrProfile.address_zip || '';
-            custCity = addrProfile.address_city || '';
-          }
+        const { data: bkRow } = await supabase.from('bookings').select('unit_id').eq('id', bookingId).maybeSingle();
+        if (bkRow?.unit_id) {
+          bookingUnitId = bkRow.unit_id;
+          const { data: unitRow } = await supabase.from('product_units').select('serial_number').eq('id', bkRow.unit_id).maybeSingle();
+          serialNumber = unitRow?.serial_number ?? '';
         }
+      } catch { /* ignore */ }
 
-        const result = await generateContractPDF({
+      let contractPdfBuffer: Buffer | undefined;
+      if (contractSignature?.agreedToTerms && contractSignature?.signerName) {
+        try {
+          // Kundenprofil für Adresse laden
+          let custStreet = '';
+          let custZip = '';
+          let custCity = '';
+          if (meta.user_id) {
+            const { data: addrProfile } = await supabase
+              .from('profiles')
+              .select('address_street, address_zip, address_city')
+              .eq('id', meta.user_id)
+              .maybeSingle();
+            if (addrProfile?.address_street) {
+              custStreet = addrProfile.address_street;
+              custZip = addrProfile.address_zip || '';
+              custCity = addrProfile.address_city || '';
+            }
+          }
+
+          const result = await generateContractPDF({
+            bookingId,
+            bookingNumber: bookingId,
+            customerName: contractSignature.signerName,
+            customerEmail,
+            customerStreet: custStreet,
+            customerZip: custZip,
+            customerCity: custCity,
+            productName: meta.product_name || '',
+            accessories,
+            accessoryItems: accessoryItems.length > 0 ? accessoryItems : undefined,
+            serialNumber,
+            rentalFrom: fmtDate(meta.rental_from),
+            rentalTo: fmtDate(meta.rental_to),
+            rentalDays: parseInt(meta.days, 10),
+            priceRental: parseFloat(meta.price_rental ?? '0'),
+            priceAccessories: parseFloat(meta.price_accessories ?? '0'),
+            priceHaftung: parseFloat(meta.price_haftung ?? '0'),
+            priceShipping: parseFloat(meta.shipping_price ?? '0'),
+            priceTotal: intent.amount / 100,
+            deposit: parseFloat(meta.deposit ?? '0'),
+            taxMode: (txMap['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer',
+            taxRate: parseFloat(txMap['tax_rate'] || '19'),
+            signatureDataUrl: contractSignature.signatureDataUrl,
+            signatureMethod: contractSignature.signatureMethod,
+            signerName: contractSignature.signerName,
+            ipAddress: ip,
+            unitId: bookingUnitId,
+          });
+
+          contractPdfBuffer = result.pdfBuffer;
+
+          // Vertrag in Supabase speichern
+          await storeContract(bookingId, result.pdfBuffer, {
+            contractHash: result.contractHash,
+            customerName: contractSignature.signerName,
+            ipAddress: ip,
+            signedAt: new Date().toISOString(),
+            signatureMethod: contractSignature.signatureMethod,
+          });
+        } catch (err) {
+          console.error('Contract generation error (after):', err);
+        }
+      }
+
+      // Bestaetigungs- + Admin-Mail mit Vertrag-Anhang
+      if (customerEmail) {
+        const emailData: BookingEmailData = {
           bookingId,
-          bookingNumber: bookingId,
-          customerName: contractSignature.signerName,
+          customerName,
           customerEmail,
-          customerStreet: custStreet,
-          customerZip: custZip,
-          customerCity: custCity,
-          productName: meta.product_name || '',
+          productName: meta.product_name,
+          rentalFrom: meta.rental_from,
+          rentalTo: meta.rental_to,
+          days: parseInt(meta.days, 10),
+          deliveryMode: (meta.delivery_mode as 'versand' | 'abholung') ?? 'versand',
+          shippingMethod: meta.shipping_method,
+          haftung: meta.haftung,
           accessories,
           accessoryItems: accessoryItems.length > 0 ? accessoryItems : undefined,
-          serialNumber,
-          rentalFrom: fmtDate(meta.rental_from),
-          rentalTo: fmtDate(meta.rental_to),
-          rentalDays: parseInt(meta.days, 10),
           priceRental: parseFloat(meta.price_rental ?? '0'),
           priceAccessories: parseFloat(meta.price_accessories ?? '0'),
           priceHaftung: parseFloat(meta.price_haftung ?? '0'),
-          priceShipping: parseFloat(meta.shipping_price ?? '0'),
           priceTotal: intent.amount / 100,
           deposit: parseFloat(meta.deposit ?? '0'),
+          shippingPrice: parseFloat(meta.shipping_price ?? '0'),
           taxMode: (txMap['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer',
           taxRate: parseFloat(txMap['tax_rate'] || '19'),
-          signatureDataUrl: contractSignature.signatureDataUrl,
-          signatureMethod: contractSignature.signatureMethod,
-          signerName: contractSignature.signerName,
-          ipAddress: ip,
-          unitId: bookingUnitId,
-        });
+          ustId: txMap['ust_id'] || '',
+          verificationRequired,
+        };
 
-        contractPdfBuffer = result.pdfBuffer;
-
-        // Vertrag in Supabase speichern
-        await storeContract(bookingId, result.pdfBuffer, {
-          contractHash: result.contractHash,
-          customerName: contractSignature.signerName,
-          ipAddress: ip,
-          signedAt: new Date().toISOString(),
-          signatureMethod: contractSignature.signatureMethod,
-        });
-      } catch (err) {
-        console.error('Contract generation error:', err);
+        try {
+          await Promise.all([
+            sendBookingConfirmation(emailData, contractPdfBuffer),
+            sendAdminNotification(emailData),
+          ]);
+        } catch (err) {
+          console.error('Email send error (after):', err);
+        }
       }
-    }
-
-    // 9. Send confirmation emails with Rechnung + Vertrag (fire-and-forget)
-    if (customerEmail) {
-      const emailData: BookingEmailData = {
-        bookingId,
-        customerName,
-        customerEmail,
-        productName: meta.product_name,
-        rentalFrom: meta.rental_from,
-        rentalTo: meta.rental_to,
-        days: parseInt(meta.days, 10),
-        deliveryMode: (meta.delivery_mode as 'versand' | 'abholung') ?? 'versand',
-        shippingMethod: meta.shipping_method,
-        haftung: meta.haftung,
-        accessories,
-        accessoryItems: accessoryItems.length > 0 ? accessoryItems : undefined,
-        priceRental: parseFloat(meta.price_rental ?? '0'),
-        priceAccessories: parseFloat(meta.price_accessories ?? '0'),
-        priceHaftung: parseFloat(meta.price_haftung ?? '0'),
-        priceTotal: intent.amount / 100,
-        deposit: parseFloat(meta.deposit ?? '0'),
-        shippingPrice: parseFloat(meta.shipping_price ?? '0'),
-        taxMode: (txMap['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer',
-        taxRate: parseFloat(txMap['tax_rate'] || '19'),
-        ustId: txMap['ust_id'] || '',
-        verificationRequired,
-      };
-
-      Promise.all([
-        sendBookingConfirmation(emailData, contractPdfBuffer),
-        sendAdminNotification(emailData),
-      ]).catch((err) => console.error('Email send error:', err));
-    }
+    });
 
     // Admin-Benachrichtigung (fire-and-forget)
     createAdminNotification(supabase, {
