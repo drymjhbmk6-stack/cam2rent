@@ -86,6 +86,22 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
 
   try {
     const updated = await updateAdminUser(id, patch);
+    // Sicherheits-Invalidierung: bei Deaktivierung, Passwort-Wechsel, Rollen-/
+    // Permission-Aenderung muessen alle bestehenden Sessions sofort enden,
+    // damit ein deaktivierter oder herabgestufter Mitarbeiter nicht mit alter
+    // Session weiterarbeiten kann.
+    const mustInvalidate =
+      patch.is_active === false ||
+      patch.password !== undefined ||
+      patch.role !== undefined ||
+      patch.permissions !== undefined;
+    if (mustInvalidate) {
+      try {
+        await deleteAllSessionsForUser(id);
+      } catch (e) {
+        console.error('[employees PATCH] Session-Invalidation fehlgeschlagen:', e);
+      }
+    }
     await logAudit({
       action: 'admin_user.update',
       entityType: 'admin_user',

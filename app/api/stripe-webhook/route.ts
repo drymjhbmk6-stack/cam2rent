@@ -179,10 +179,19 @@ export async function POST(req: NextRequest) {
             ustId: txMap['ust_id'] || '',
             earlyServiceConsentAt: booking.early_service_consent_at ?? null,
           };
-          Promise.all([
+          // allSettled: Webhook MUSS 200 zurueckgeben (sonst Stripe-Retry → Doppelbuchung).
+          // Aber Fehler einzeln loggen, damit nicht ein Fehler den anderen Versand maskiert.
+          Promise.allSettled([
             sendBookingConfirmation(emailData),
             sendAdminNotification(emailData),
-          ]).catch((err) => console.error('[Webhook] Email-Fehler:', err));
+          ]).then((results) => {
+            results.forEach((r, i) => {
+              if (r.status === 'rejected') {
+                const which = i === 0 ? 'sendBookingConfirmation' : 'sendAdminNotification';
+                console.error(`[Webhook] Email-Fehler (${which}):`, r.reason);
+              }
+            });
+          });
         }
       }
     }

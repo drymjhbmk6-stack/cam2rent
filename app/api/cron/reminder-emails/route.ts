@@ -119,7 +119,16 @@ export async function GET(req: NextRequest) {
 
     const sentSet = new Set((alreadySent ?? []).map((r) => r.booking_id));
 
-    // 3. Send emails for bookings not yet notified
+    // 3. Send emails for bookings not yet notified — Logs sammeln, am Ende batchen
+    type LogRow = {
+      booking_id: string;
+      customer_email: string;
+      email_type: string;
+      status: 'sent' | 'failed';
+      resend_message_id: string | null;
+    };
+    const logRows: LogRow[] = [];
+
     for (const booking of bookings) {
       if (sentSet.has(booking.id)) continue;
 
@@ -142,8 +151,7 @@ export async function GET(req: NextRequest) {
         errorMsg = err instanceof Error ? err.message : String(err);
       }
 
-      // 4. Log the result
-      await supabase.from('email_log').insert({
+      logRows.push({
         booking_id: booking.id,
         customer_email: booking.customer_email,
         email_type: job.emailType,
@@ -158,6 +166,14 @@ export async function GET(req: NextRequest) {
         messageId,
         error: errorMsg,
       });
+    }
+
+    // 4. Batch-Insert aller Log-Rows fuer diesen Job statt N einzelner Inserts
+    if (logRows.length) {
+      const { error: logErr } = await supabase.from('email_log').insert(logRows);
+      if (logErr) {
+        console.error(`[reminder-emails] Log-Insert-Fehler (${job.emailType}):`, logErr);
+      }
     }
   }
 

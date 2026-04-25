@@ -133,7 +133,7 @@ function IconBudget() {
 
 const questions: Question[] = [
   {
-    title: 'Was moechtest du hauptsaechlich filmen?',
+    title: 'Was möchtest du hauptsächlich filmen?',
     options: [
       { label: 'Sport & Action', icon: <IconSport />, value: 'sport' },
       { label: 'Reise & Vlog', icon: <IconTravel />, value: 'travel' },
@@ -285,19 +285,19 @@ function computeRecommendations(answers: Answers, products: Product[]): ScoredPr
           break;
         case 'underwater':
           if (depth >= 40) { score += 35; reasons.push(`Wasserdicht bis ${depth} m – perfekt zum Tauchen`); }
-          else if (depth >= 10) { score += 20; reasons.push(`Wasserdicht bis ${depth} m fuer Unterwasseraufnahmen`); }
-          if (camClass === 'action') { score += 15; reasons.push('Action-Cam-Gehaeuse fuer Wassereinsatz'); }
+          else if (depth >= 10) { score += 20; reasons.push(`Wasserdicht bis ${depth} m für Unterwasseraufnahmen`); }
+          if (camClass === 'action') { score += 15; reasons.push('Action-Cam-Gehäuse für Wassereinsatz'); }
           if (camClass === 'gimbal') { score -= 25; }
           break;
         case 'timelapse':
-          if (resRank >= 2) { score += 25; reasons.push('Hohe Aufloesung fuer detailreiche Zeitraffer'); }
-          if (battery >= 1900) { score += 15; reasons.push('Langer Akku fuer ausgedehnte Zeitraffer'); }
+          if (resRank >= 2) { score += 25; reasons.push('Hohe Auflösung für detailreiche Zeitraffer'); }
+          if (battery >= 1900) { score += 15; reasons.push('Langer Akku für ausgedehnte Zeitraffer'); }
           if (camClass === '360') { score += 10; reasons.push('360°-Zeitraffer sind beeindruckend'); }
           break;
         case 'events':
-          if (battery >= 1800) { score += 20; reasons.push('Langer Akku fuer Event-Aufnahmen'); }
-          if (resRank >= 1) { score += 10; reasons.push('Gute Videoqualitaet fuer Erinnerungen'); }
-          if (camClass === '360') { score += 25; reasons.push('360°-Video faengt die ganze Atmosphaere ein'); }
+          if (battery >= 1800) { score += 20; reasons.push('Langer Akku für Event-Aufnahmen'); }
+          if (resRank >= 1) { score += 10; reasons.push('Gute Videoqualität für Erinnerungen'); }
+          if (camClass === '360') { score += 25; reasons.push('360°-Video fängt die ganze Atmosphäre ein'); }
           if (camClass === 'gimbal') { score += 15; reasons.push('Stabile Aufnahmen auf Feiern'); }
           break;
         default:
@@ -309,13 +309,13 @@ function computeRecommendations(answers: Answers, products: Product[]): ScoredPr
       // --- Waterproof ---
       switch (answers.waterproof) {
         case 'deep':
-          if (depth >= 40) { score += 30; reasons.push(`Bis ${depth} m Tauchtiefe ohne Gehaeuse`); }
+          if (depth >= 40) { score += 30; reasons.push(`Bis ${depth} m Tauchtiefe ohne Gehäuse`); }
           else if (depth >= 10) { score += 15; reasons.push(`Wasserdicht bis ${depth} m`); }
-          else if (camClass === 'action') { score += 5; reasons.push('Action-Cam mit optionalem Tauchgehaeuse'); }
+          else if (camClass === 'action') { score += 5; reasons.push('Action-Cam mit optionalem Tauchgehäuse'); }
           else { score -= 15; }
           break;
         case 'splash':
-          if (depth >= 10) { score += 15; reasons.push('Spritzwassergeschuetzt'); }
+          if (depth >= 10) { score += 15; reasons.push('Spritzwassergeschützt'); }
           else if (camClass === 'action' || camClass === '360') { score += 8; }
           break;
         case 'none':
@@ -327,8 +327,8 @@ function computeRecommendations(answers: Answers, products: Product[]): ScoredPr
       switch (answers.quality) {
         case '4k_plus':
           if (resRank >= 3) { score += 25; reasons.push('8K – gestochen scharfe Aufnahmen'); }
-          else if (resRank >= 2) { score += 20; reasons.push('5K+ Aufloesung'); }
-          else if (resRank >= 1) { score += 10; reasons.push('4K Aufloesung'); }
+          else if (resRank >= 2) { score += 20; reasons.push('5K+ Auflösung'); }
+          else if (resRank >= 1) { score += 10; reasons.push('4K Auflösung'); }
           else { score -= 5; }
           break;
         case 'hd':
@@ -348,7 +348,7 @@ function computeRecommendations(answers: Answers, products: Product[]): ScoredPr
           break;
         case 'mid':
           if (ppd >= 12 && ppd <= 16) { score += 20; reasons.push(`${ppd} €/Tag – im Budget`); }
-          else if (ppd < 12) { score += 10; reasons.push(`Guenstig mit ${ppd} €/Tag`); }
+          else if (ppd < 12) { score += 10; reasons.push(`Günstig mit ${ppd} €/Tag`); }
           else { score -= 5; }
           break;
         case 'high':
@@ -362,7 +362,7 @@ function computeRecommendations(answers: Answers, products: Product[]): ScoredPr
       // --- Availability bonus ---
       if (product.available) {
         score += 10;
-        reasons.push('Sofort verfuegbar');
+        reasons.push('Sofort verfügbar');
       }
 
       // Tie-Breaker: bei gleichem Score streuen wir leicht pro Product-ID,

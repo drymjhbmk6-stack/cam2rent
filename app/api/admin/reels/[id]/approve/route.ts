@@ -25,11 +25,30 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   }
 
   const supabase = createServiceClient();
-  const { data: reel } = await supabase.from('social_reels').select('status').eq('id', id).single();
+  const { data: reel } = await supabase
+    .from('social_reels')
+    .select('status, error_message, video_url')
+    .eq('id', id)
+    .single();
   if (!reel) return NextResponse.json({ error: 'Nicht gefunden' }, { status: 404 });
 
   if (reel.status === 'published' || reel.status === 'publishing') {
     return NextResponse.json({ error: `Reel ist bereits ${reel.status}` }, { status: 400 });
+  }
+  // Whitelist statt Blacklist: nur fertig gerenderte Reels duerfen freigegeben werden.
+  // Sonst kann ein Reel ohne fertige Video-Datei zur Veroeffentlichung eingeplant werden,
+  // was im reels-publish-Cron zu einem Meta-API-Fehler fuehrt.
+  if (!['rendered', 'pending_review', 'approved', 'scheduled', 'failed', 'partial'].includes(reel.status)) {
+    return NextResponse.json(
+      { error: `Reel hat Status "${reel.status}" und ist noch nicht bereit zur Freigabe.` },
+      { status: 400 },
+    );
+  }
+  if (!reel.video_url) {
+    return NextResponse.json(
+      { error: 'Reel hat noch keine Video-Datei — Render abwarten oder neu starten.' },
+      { status: 400 },
+    );
   }
 
   const update: Record<string, unknown> = {

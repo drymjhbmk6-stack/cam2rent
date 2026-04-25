@@ -105,9 +105,9 @@ export default function NachtragenPage() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0a0f1e', padding: '24px 20px' }}>
+    <div style={{ minHeight: '100dvh', background: '#0a0f1e', padding: '24px 20px' }}>
       <div style={{ maxWidth: 1400, margin: '0 auto' }}>
-        <AdminBackLink href="/admin/anlagen" label="Zurueck zum Anlagenverzeichnis" />
+        <AdminBackLink href="/admin/anlagen" label="Zurück zum Anlagenverzeichnis" />
 
         <div style={{ marginTop: 16, marginBottom: 24 }}>
           <h1 style={{ color: '#f1f5f9', fontSize: 28, fontWeight: 800, marginBottom: 6 }}>Bestand nachtragen</h1>
@@ -151,8 +151,8 @@ export default function NachtragenPage() {
                     <span style={label}>Art</span>
                     <select style={input} value={d.kind} onChange={(e) => setDraft(unit.id, 'kind', e.target.value)}>
                       <option value="rental_camera">Vermietkamera</option>
-                      <option value="rental_accessory">Zubehoer</option>
-                      <option value="office_equipment">Buero</option>
+                      <option value="rental_accessory">Zubehör</option>
+                      <option value="office_equipment">Büro</option>
                       <option value="tool">Werkzeug</option>
                       <option value="other">Sonstiges</option>
                     </select>
@@ -162,7 +162,7 @@ export default function NachtragenPage() {
                     <input style={input} value={d.name} onChange={(e) => setDraft(unit.id, 'name', e.target.value)} />
                   </div>
                   <div>
-                    <span style={label}>Kaufpreis brutto (EUR)</span>
+                    <span style={label}>Kaufpreis brutto (€)</span>
                     <input style={input} type="number" step="0.01" value={d.purchase_price} onChange={(e) => setDraft(unit.id, 'purchase_price', e.target.value)} />
                   </div>
                   <div>

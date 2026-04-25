@@ -65,7 +65,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   software: 'Software',
   hardware: 'Hardware',
   marketing: 'Marketing',
-  office: 'Buero',
+  office: 'Büro',
   travel: 'Reisen',
   insurance: 'Versicherungen',
   legal: 'Rechtsberatung',
@@ -197,7 +197,7 @@ export default function RechnungUploadPage() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0a0f1e', padding: '24px 20px' }}>
+    <div style={{ minHeight: '100dvh', background: '#0a0f1e', padding: '24px 20px' }}>
       <div style={{ maxWidth: 1200, margin: '0 auto' }}>
         <AdminBackLink href="/admin/einkauf" label="Zurueck zu Einkauf" />
 
@@ -342,9 +342,9 @@ export default function RechnungUploadPage() {
                         <input style={input} type="number" min={1} value={row.draft.useful_life_months ?? 36} onChange={(e) => updateDraft(row.id, { useful_life_months: Number(e.target.value) })} />
                       </div>
                       <div>
-                        <span style={label}>Restwert (EUR)</span>
-                        <input style={input} type="number" step="0.01" min={0} value={row.draft.residual_value ?? 0} onChange={(e) => updateDraft(row.id, { residual_value: Number(e.target.value) })} />
-                        <span style={{ fontSize: 10, color: '#64748b', marginTop: 2, display: 'block' }}>Default 30 % vom Kaufpreis — Zeitwert faellt nicht darunter</span>
+                        <span style={label}>Restwert (€)</span>
+                        <input style={input} type="number" inputMode="decimal" step="0.01" min={0} value={row.draft.residual_value ?? 0} onChange={(e) => updateDraft(row.id, { residual_value: Number(e.target.value) })} />
+                        <span style={{ fontSize: 10, color: '#64748b', marginTop: 2, display: 'block' }}>Default 30 % vom Kaufpreis — Zeitwert fällt nicht darunter</span>
                       </div>
                       <div>
                         <span style={label}>Seriennummer</span>

@@ -113,6 +113,7 @@ export async function GET(
       if (signedUrlData?.signedUrl) {
         try {
           const pdfRes = await fetch(signedUrlData.signedUrl);
+          if (!pdfRes.ok) throw new Error(`storage fetch HTTP ${pdfRes.status}`);
           const pdfBuffer = await pdfRes.arrayBuffer();
           const pdfBytes = new Uint8Array(pdfBuffer);
           const contractNumber = bookingId.replace('BK-', 'MV-');

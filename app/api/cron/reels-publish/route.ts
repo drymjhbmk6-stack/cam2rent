@@ -40,14 +40,49 @@ async function handle(req: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (!due || due.length === 0) return NextResponse.json({ processed: 0 });
 
-  const results = [];
+  // Plausibilitaetscheck: scheduled_at darf nicht zu weit in der Vergangenheit liegen
+  // (z.B. Tippfehler 2026-04-01 statt 2026-05-01). Mehr als 7 Tage = ueberspringen +
+  // Fehler dokumentieren, damit Admin entscheidet.
+  const STALE_LIMIT_MS = 7 * 24 * 60 * 60 * 1000;
+  const nowMs = Date.now();
+  const stale: string[] = [];
+  const fresh: typeof due = [];
   for (const reel of due) {
+    const scheduledMs = new Date(reel.scheduled_at).getTime();
+    if (Number.isFinite(scheduledMs) && nowMs - scheduledMs > STALE_LIMIT_MS) {
+      stale.push(reel.id);
+    } else {
+      fresh.push(reel);
+    }
+  }
+  if (stale.length) {
+    await supabase
+      .from('social_reels')
+      .update({
+        status: 'failed',
+        error_message:
+          'scheduled_at lag mehr als 7 Tage in der Vergangenheit — Cron hat den Reel uebersprungen. Bitte Datum pruefen.',
+      })
+      .in('id', stale);
+  }
+
+  const results = [];
+  for (const reel of fresh) {
     try {
       const r = await publishReel(reel.id);
       results.push({ id: reel.id, success: r.success, errors: r.errors });
     } catch (err) {
       results.push({ id: reel.id, success: false, errors: [{ platform: 'system', message: err instanceof Error ? err.message : String(err) }] });
     }
+  }
+  if (stale.length) {
+    results.push(
+      ...stale.map((id) => ({
+        id,
+        success: false,
+        errors: [{ platform: 'system', message: 'scheduled_at zu alt (>7 Tage), uebersprungen' }],
+      })),
+    );
   }
 
   return NextResponse.json({ processed: results.length, results });

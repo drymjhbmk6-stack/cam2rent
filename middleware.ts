@@ -131,10 +131,94 @@ const PATH_PERMISSIONS: PermRule[] = [
   { prefix: '/admin/einstellungen', perm: 'system' },
 ];
 
+// Spiegel der UI-Permissions auf API-Pfade. Bisher schuetzte die Middleware nur
+// Seiten-Navigation — die APIs liefen mit reinem "eingeloggt"-Check, sodass jeder
+// Mitarbeiter via direkter API-Anfrage Daten lesen/aendern konnte.
+//
+// Konvention: prefix `/api/admin/...` matcht das jeweilige Modul. Alles, was hier
+// keinen Eintrag hat, bleibt erreichbar fuer alle eingeloggten Admins (z.B. /me,
+// /notifications, /push, /dashboard-data, /availability-gantt — bewusst global).
+const API_PATH_PERMISSIONS: PermRule[] = [
+  // Mitarbeiterverwaltung
+  { prefix: '/api/admin/employees', perm: 'mitarbeiter_verwalten' },
+  // Tagesgeschaeft
+  { prefix: '/api/admin/booking', perm: 'tagesgeschaeft' },
+  { prefix: '/api/admin/alle-buchungen', perm: 'tagesgeschaeft' },
+  { prefix: '/api/admin/manual-booking', perm: 'tagesgeschaeft' },
+  { prefix: '/api/admin/update-booking-status', perm: 'tagesgeschaeft' },
+  { prefix: '/api/admin/approve-booking', perm: 'tagesgeschaeft' },
+  { prefix: '/api/admin/return-booking', perm: 'tagesgeschaeft' },
+  { prefix: '/api/admin/return-checklist', perm: 'tagesgeschaeft' },
+  { prefix: '/api/admin/return-label', perm: 'tagesgeschaeft' },
+  { prefix: '/api/admin/ship-booking', perm: 'tagesgeschaeft' },
+  { prefix: '/api/admin/sign-contract', perm: 'tagesgeschaeft' },
+  { prefix: '/api/admin/find-free-unit', perm: 'tagesgeschaeft' },
+  { prefix: '/api/admin/versand', perm: 'tagesgeschaeft' },
+  { prefix: '/api/admin/versand-buchungen', perm: 'tagesgeschaeft' },
+  { prefix: '/api/admin/damage', perm: 'tagesgeschaeft' },
+  { prefix: '/api/admin/sendcloud', perm: 'tagesgeschaeft' },
+  { prefix: '/api/admin/label', perm: 'tagesgeschaeft' },
+  // Kunden & Kommunikation
+  { prefix: '/api/admin/kunden', perm: 'kunden' },
+  { prefix: '/api/admin/customer', perm: 'kunden' },
+  { prefix: '/api/admin/customer-notes', perm: 'kunden' },
+  { prefix: '/api/admin/customer-ugc', perm: 'kunden' },
+  { prefix: '/api/admin/anonymize-customer', perm: 'kunden' },
+  { prefix: '/api/admin/verify-customer', perm: 'kunden' },
+  { prefix: '/api/admin/id-document-url', perm: 'kunden' },
+  { prefix: '/api/admin/waitlist', perm: 'kunden' },
+  { prefix: '/api/admin/nachrichten', perm: 'kunden' },
+  { prefix: '/api/admin/reviews', perm: 'kunden' },
+  // Katalog
+  { prefix: '/api/admin/accessories', perm: 'katalog' },
+  { prefix: '/api/admin/product-units', perm: 'katalog' },
+  { prefix: '/api/admin/suppliers', perm: 'katalog' },
+  { prefix: '/api/admin/purchase-items', perm: 'katalog' },
+  // Preise & Aktionen
+  { prefix: '/api/admin/coupons', perm: 'preise' },
+  // Content
+  { prefix: '/api/admin/blog', perm: 'content' },
+  { prefix: '/api/admin/social', perm: 'content' },
+  { prefix: '/api/admin/reels', perm: 'content' },
+  { prefix: '/api/admin/seasonal-images', perm: 'content' },
+  // Finanzen
+  { prefix: '/api/admin/anlagen', perm: 'finanzen' },
+  { prefix: '/api/admin/assets', perm: 'finanzen' },
+  { prefix: '/api/admin/buchhaltung', perm: 'finanzen' },
+  { prefix: '/api/admin/datev-export', perm: 'finanzen' },
+  { prefix: '/api/admin/invoices', perm: 'finanzen' },
+  { prefix: '/api/admin/purchases', perm: 'finanzen' },
+  { prefix: '/api/admin/deposit', perm: 'finanzen' },
+  // Berichte
+  { prefix: '/api/admin/analytics', perm: 'berichte' },
+  { prefix: '/api/admin/email-log', perm: 'berichte' },
+  { prefix: '/api/admin/email-templates', perm: 'berichte' },
+  { prefix: '/api/admin/audit-log', perm: 'berichte' },
+  { prefix: '/api/admin/utilization', perm: 'berichte' },
+  { prefix: '/api/admin/weekly-report', perm: 'berichte' },
+  // System
+  { prefix: '/api/admin/legal', perm: 'system' },
+  { prefix: '/api/admin/env-mode', perm: 'system' },
+  { prefix: '/api/admin/test-email', perm: 'system' },
+  { prefix: '/api/admin/business-config', perm: 'system' },
+  { prefix: '/api/admin/checkout-config', perm: 'system' },
+  { prefix: '/api/admin/config', perm: 'system' },
+  { prefix: '/api/admin/2fa', perm: 'system' },
+  // /api/admin/settings: GET ist public (siehe isPublic oben), POST braucht system
+  { prefix: '/api/admin/settings', perm: 'system' },
+];
+
 function requiredPermission(pathname: string): string | null {
   if (pathname === '/admin' || pathname === '/admin/') return null;
   if (pathname === '/admin/login') return null;
   for (const rule of PATH_PERMISSIONS) {
+    if (pathname === rule.prefix || pathname.startsWith(rule.prefix + '/')) return rule.perm;
+  }
+  return null;
+}
+
+function requiredApiPermission(pathname: string): string | null {
+  for (const rule of API_PATH_PERMISSIONS) {
     if (pathname === rule.prefix || pathname.startsWith(rule.prefix + '/')) return rule.perm;
   }
   return null;
@@ -179,8 +263,18 @@ export async function middleware(request: NextRequest) {
         if (!session) {
           return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
+        // Permission-Check fuer API-Routen — sonst koennte ein Mitarbeiter mit
+        // nur 'tagesgeschaeft' direkt /api/admin/buchhaltung/... aufrufen,
+        // obwohl die Sidebar das UI versteckt.
+        const neededApi = requiredApiPermission(pathname);
+        if (neededApi && session.role !== 'owner' && !session.permissions.includes(neededApi)) {
+          return NextResponse.json(
+            { error: 'Forbidden', required: neededApi },
+            { status: 403 }
+          );
+        }
       } else {
-        // Legacy-ENV-Token
+        // Legacy-ENV-Token (hat alle Rechte, keine Permission-Pruefung noetig)
         const adminPassword = process.env.ADMIN_PASSWORD ?? '';
         if (!adminPassword) {
           return NextResponse.json(

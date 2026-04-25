@@ -477,7 +477,8 @@ function Input({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full rounded-lg px-3 py-2 text-sm"
+        // text-base (16 px) verhindert iOS-Auto-Zoom beim Fokus
+        className="w-full rounded-lg px-3 py-2 text-base"
         style={{ background: '#0a0f1e', color: '#e2e8f0', border: '1px solid #1e293b' }}
       />
     </div>

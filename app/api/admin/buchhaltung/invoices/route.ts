@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
+import { sanitizeSearchInput } from '@/lib/search-sanitize';
 
 export async function GET(req: NextRequest) {
   if (!(await checkAdminAuth())) {
@@ -28,9 +29,12 @@ export async function GET(req: NextRequest) {
   }
 
   if (search) {
-    query = query.or(
-      `invoice_number.ilike.%${search}%,booking_id.ilike.%${search}%,sent_to_email.ilike.%${search}%`
-    );
+    const safe = sanitizeSearchInput(search);
+    if (safe) {
+      query = query.or(
+        `invoice_number.ilike.%${safe}%,booking_id.ilike.%${safe}%,sent_to_email.ilike.%${safe}%`
+      );
+    }
   }
 
   const { data, count, error } = await query;

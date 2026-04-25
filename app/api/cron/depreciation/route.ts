@@ -78,6 +78,18 @@ async function runDepreciation(req: NextRequest) {
     skipped?: string;
   }> = [];
 
+  // Bulk-Load aller bereits gebuchten AfA-Source-IDs ueber alle Assets — ein Query
+  // statt eines SELECT pro Asset×Monat (war N×M).
+  const assetIds = (assets ?? []).map((a) => a.id);
+  const { data: allDepExpenses } = assetIds.length
+    ? await supabase
+        .from('expenses')
+        .select('source_id')
+        .eq('source_type', 'depreciation')
+        .in('asset_id', assetIds)
+    : { data: [] as Array<{ source_id: string }> };
+  const bookedSourceIds = new Set((allDepExpenses ?? []).map((e) => e.source_id));
+
   for (const asset of assets ?? []) {
     if (isFullyDepreciated(asset)) {
       results.push({
@@ -118,15 +130,8 @@ async function runDepreciation(req: NextRequest) {
       const expenseDate = lastDayOfMonthIso(yyyyMm);
       const sourceId = `${asset.id}_${yyyyMm}`;
 
-      // Idempotenz: pruefe ob fuer diesen Monat schon gebucht
-      const { data: existing } = await supabase
-        .from('expenses')
-        .select('id')
-        .eq('source_type', 'depreciation')
-        .eq('source_id', sourceId)
-        .maybeSingle();
-
-      if (existing) {
+      // Idempotenz: Memory-Lookup statt SELECT pro Monat
+      if (bookedSourceIds.has(sourceId)) {
         lastMonth = yyyyMm;
         continue;
       }

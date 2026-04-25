@@ -1,0 +1,15 @@
+# cam2rent.de — robots.txt
+User-agent: *
+Allow: /
+
+# Privater Bereich, Checkout-Flows und API nicht indexieren
+Disallow: /admin/
+Disallow: /api/
+Disallow: /checkout
+Disallow: /konto/
+Disallow: /auth/
+Disallow: /login
+Disallow: /umfrage/
+
+# Sitemap-Hinweis (Production)
+Sitemap: https://cam2rent.de/sitemap.xml

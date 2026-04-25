@@ -380,6 +380,9 @@ Antworte NUR mit dem korrigierten Artikel-Text in Markdown. Keine Erklärungen, 
         const imgUrl = imgResponse.data?.[0]?.url;
         if (imgUrl) {
           const imgFetch = await fetch(imgUrl);
+          if (!imgFetch.ok) {
+            throw new Error(`Bild-Download von OpenAI fehlgeschlagen: HTTP ${imgFetch.status}`);
+          }
           const imgBuffer = Buffer.from(await imgFetch.arrayBuffer());
           const imgFilename = `blog-ai-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.png`;
           const { error: uploadErr } = await supabase.storage

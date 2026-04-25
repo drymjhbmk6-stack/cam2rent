@@ -38,22 +38,19 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ cancelled: 0, message: 'Keine Buchungen zu stornieren.' });
   }
 
-  const cancelledIds: string[] = [];
+  // Batch-Update statt N einzelner UPDATE-Queries
+  const allIds = bookings.map((b) => b.id);
+  const { error: bulkUpdateErr } = await supabase
+    .from('bookings')
+    .update({ status: 'cancelled' })
+    .in('id', allIds);
+  if (bulkUpdateErr) {
+    console.error('Auto-cancel bulk update error:', bulkUpdateErr);
+    return NextResponse.json({ error: bulkUpdateErr.message }, { status: 500 });
+  }
+  const cancelledIds: string[] = [...allIds];
 
   for (const booking of bookings) {
-    // Status auf cancelled setzen
-    const { error: updateError } = await supabase
-      .from('bookings')
-      .update({ status: 'cancelled' })
-      .eq('id', booking.id);
-
-    if (updateError) {
-      console.error(`Auto-cancel ${booking.id} error:`, updateError);
-      continue;
-    }
-
-    cancelledIds.push(booking.id);
-
     // Admin-Benachrichtigung (fire-and-forget)
     createAdminNotification(supabase, {
       type: 'booking_cancelled',

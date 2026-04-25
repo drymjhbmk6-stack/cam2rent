@@ -47,21 +47,30 @@ export async function GET(req: NextRequest) {
 
   let draftsCreated = 0;
 
+  // Bulk-Load aller bestehenden Mahnungen fuer die geprueften Rechnungen — ein Query
+  // statt 2 SELECTs pro Invoice (war N+1).
+  const invoiceIds = (invoices || []).map((i) => i.id);
+  const { data: allDunnings } = invoiceIds.length
+    ? await supabase
+        .from('dunning_notices')
+        .select('invoice_id, level')
+        .in('invoice_id', invoiceIds)
+    : { data: [] as Array<{ invoice_id: string; level: number }> };
+  const dunningsByInvoice = new Map<string, number[]>();
+  (allDunnings ?? []).forEach((d) => {
+    const arr = dunningsByInvoice.get(d.invoice_id) ?? [];
+    arr.push(d.level);
+    dunningsByInvoice.set(d.invoice_id, arr);
+  });
+
   for (const inv of invoices || []) {
     const dueDate = inv.due_date ? new Date(inv.due_date) : new Date(inv.invoice_date);
     const daysOverdue = Math.floor((now.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
 
     if (daysOverdue < days[0]) continue; // Noch nicht fällig für Stufe 1
 
-    // Höchste existierende Mahnstufe
-    const { data: existingDunnings } = await supabase
-      .from('dunning_notices')
-      .select('level')
-      .eq('invoice_id', inv.id)
-      .order('level', { ascending: false })
-      .limit(1);
-
-    const currentLevel = existingDunnings?.[0]?.level || 0;
+    const levels = dunningsByInvoice.get(inv.id) ?? [];
+    const currentLevel = levels.length ? Math.max(...levels) : 0;
 
     // Nächste fällige Stufe bestimmen
     let nextLevel = 0;
@@ -71,15 +80,8 @@ export async function GET(req: NextRequest) {
 
     if (nextLevel === 0) continue;
 
-    // Prüfe ob Entwurf für diese Stufe schon existiert
-    const { data: existing } = await supabase
-      .from('dunning_notices')
-      .select('id')
-      .eq('invoice_id', inv.id)
-      .eq('level', nextLevel)
-      .maybeSingle();
-
-    if (existing) continue;
+    // Prüfe ob Entwurf für diese Stufe schon existiert (Memory-Lookup)
+    if (levels.includes(nextLevel)) continue;
 
     // Entwurf erstellen — neues Faelligkeitsdatum in Berlin-Zeit
     const todayBerlin = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });

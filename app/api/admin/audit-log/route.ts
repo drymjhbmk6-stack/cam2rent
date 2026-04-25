@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
+import { sanitizeSearchInput } from '@/lib/search-sanitize';
 
 export async function GET(request: NextRequest) {
   if (!(await checkAdminAuth())) {
@@ -42,9 +43,12 @@ export async function GET(request: NextRequest) {
     }
   }
   if (search) {
-    query = query.or(
-      `entity_label.ilike.%${search}%,admin_user_name.ilike.%${search}%,entity_id.ilike.%${search}%`
-    );
+    const safe = sanitizeSearchInput(search);
+    if (safe) {
+      query = query.or(
+        `entity_label.ilike.%${safe}%,admin_user_name.ilike.%${safe}%,entity_id.ilike.%${safe}%`
+      );
+    }
   }
   if (dateFrom) {
     query = query.gte('created_at', `${dateFrom}T00:00:00`);

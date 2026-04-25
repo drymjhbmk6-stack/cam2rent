@@ -465,9 +465,9 @@ export default function PostDetail({ params }: { params: Promise<{ id: string }>
                   type="button"
                   onClick={() => setFbImagePosition(igImagePosition)}
                   className="self-end text-xs text-slate-400 hover:text-cyan-300 underline-offset-2 hover:underline"
-                  title="IG-Position auf Facebook uebernehmen"
+                  title="IG-Position auf Facebook übernehmen"
                 >
-                  ← IG-Position uebernehmen
+                  ← IG-Position übernehmen
                 </button>
               )}
             </div>

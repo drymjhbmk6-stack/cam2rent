@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { sanitizeSearchInput } from '@/lib/search-sanitize';
 
 /**
  * GET  /api/admin/blog/posts  → Alle Posts (mit Filter)
@@ -25,7 +26,8 @@ export async function GET(req: NextRequest) {
     query = query.eq('category_id', category);
   }
   if (search) {
-    query = query.or(`title.ilike.%${search}%,content.ilike.%${search}%`);
+    const safe = sanitizeSearchInput(search);
+    if (safe) query = query.or(`title.ilike.%${safe}%,content.ilike.%${safe}%`);
   }
 
   const { data, error } = await query;

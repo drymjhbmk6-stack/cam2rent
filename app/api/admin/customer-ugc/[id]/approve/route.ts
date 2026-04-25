@@ -52,17 +52,28 @@ export async function POST(req: NextRequest, { params }: { params: Params }) {
     });
   }
 
-  const { error: updateErr } = await supabase
+  // Atomarer Status-Wechsel: nur wenn noch 'pending', sonst hat ein paralleler Klick
+  // schon umgestellt und wir wuerden einen zweiten Coupon ausstellen.
+  const { data: updateRows, error: updateErr } = await supabase
     .from('customer_ugc_submissions')
     .update({
       status: 'approved',
       reward_coupon_code: couponCode,
       reviewed_at: new Date().toISOString(),
     })
-    .eq('id', id);
+    .eq('id', id)
+    .eq('status', 'pending')
+    .select('id');
 
   if (updateErr) {
     return NextResponse.json({ error: updateErr.message }, { status: 500 });
+  }
+  if (!updateRows || updateRows.length === 0) {
+    // Status hat sich zwischen unserem Read und Update geaendert (paralleler Klick).
+    return NextResponse.json(
+      { error: 'Einreichung wurde parallel bearbeitet — bitte Liste neu laden.' },
+      { status: 409 },
+    );
   }
 
   if (couponCode && submission.customer_email) {

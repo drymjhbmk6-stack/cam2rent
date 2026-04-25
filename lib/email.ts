@@ -132,6 +132,12 @@ export async function sendAndLog(opts: {
       text: opts.text,
       attachments: opts.attachments,
     });
+    // Resend liefert bei API-Fehlern (Rate-Limit, ungueltige Adresse, Outage) einen
+    // Response-Body { data: null, error: {...} } und wirft NICHT — also explizit pruefen,
+    // sonst landen fehlgeschlagene Mails als "sent" im Log.
+    if (result.error) {
+      throw new Error(result.error.message ?? 'Resend send failed');
+    }
     await logEmail({
       bookingId: opts.bookingId,
       customerEmail: opts.to,

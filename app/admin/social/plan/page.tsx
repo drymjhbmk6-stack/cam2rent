@@ -317,7 +317,7 @@ function JobStatusPanel({ job, progress, onCancel, onReset }: { job: JobStatus; 
               {job.status === 'cancelled' && 'Abgebrochen'}
             </h2>
           </div>
-          <p className="text-sm text-slate-300">{job.message || (failed ? 'Keine Details verfuegbar.' : '')}</p>
+          <p className="text-sm text-slate-300">{job.message || (failed ? 'Keine Details verfügbar.' : '')}</p>
           {job.error && <p className="text-sm text-red-300 mt-1">⚠ {job.error}</p>}
           {stale && (
             <p className="text-sm text-amber-300 mt-1">

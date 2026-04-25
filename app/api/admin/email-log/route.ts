@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { sanitizeSearchInput } from '@/lib/search-sanitize';
 
 /**
  * GET /api/admin/email-log
@@ -28,7 +29,14 @@ export async function GET(req: NextRequest) {
   if (typeFilter) query = query.eq('email_type', typeFilter);
   if (statusFilter) query = query.eq('status', statusFilter);
   if (bookingId) query = query.eq('booking_id', bookingId);
-  if (search) query = query.or(`customer_email.ilike.%${search}%,booking_id.ilike.%${search}%,subject.ilike.%${search}%`);
+  if (search) {
+    const safe = sanitizeSearchInput(search);
+    if (safe) {
+      query = query.or(
+        `customer_email.ilike.%${safe}%,booking_id.ilike.%${safe}%,subject.ilike.%${safe}%`,
+      );
+    }
+  }
 
   const { data, count, error } = await query;
 

@@ -28,8 +28,8 @@ interface Asset {
 
 const KIND_LABELS: Record<Asset['kind'], { label: string; color: string; bg: string }> = {
   rental_camera: { label: 'Vermietkamera', color: '#06b6d4', bg: 'rgba(6,182,212,0.15)' },
-  rental_accessory: { label: 'Zubehoer', color: '#8b5cf6', bg: 'rgba(139,92,246,0.15)' },
-  office_equipment: { label: 'Buero', color: '#f59e0b', bg: 'rgba(245,158,11,0.15)' },
+  rental_accessory: { label: 'Zubehör', color: '#8b5cf6', bg: 'rgba(139,92,246,0.15)' },
+  office_equipment: { label: 'Büro', color: '#f59e0b', bg: 'rgba(245,158,11,0.15)' },
   tool: { label: 'Werkzeug', color: '#10b981', bg: 'rgba(16,185,129,0.15)' },
   other: { label: 'Sonstiges', color: '#64748b', bg: 'rgba(100,116,139,0.15)' },
 };
@@ -95,7 +95,7 @@ export default function AnlagenPage() {
   }, [filtered]);
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0a0f1e', padding: '24px 20px' }}>
+    <div style={{ minHeight: '100dvh', background: '#0a0f1e', padding: '24px 20px' }}>
       <div style={{ maxWidth: 1400, margin: '0 auto' }}>
         <AdminBackLink />
 

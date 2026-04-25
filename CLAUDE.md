@@ -1072,6 +1072,27 @@ Sticky Banner ganz oben (z-50) mit Hinweis „TESTUMGEBUNG — Keine echten Buch
 - **Race Condition Unit-Zuweisung:** `assignUnitToBooking` nutzt jetzt die Postgres-Funktion `assign_free_unit` mit `pg_advisory_xact_lock` (serialisiert parallele Zuweisungen pro Produkt). Fallback auf die alte Logik, falls die Migration noch nicht ausgeführt wurde.
 - **Stripe-Webhook Idempotenz:** `.like()` → `.eq()` — `payment_intent_id` wird exakt gespeichert, Wildcard war unnötig.
 
+### Security- & Reliability-Audit-Fixes (2026-04-25)
+Zweite Audit-Runde nach 04-20-Sweep. Vier parallele Agents (Security/Performance/UI/Reliability) auf dem aktuellen Production-Stand, Findings verifiziert.
+
+- **API-Permission-Enforcement (CRITICAL)**: Bisher schuetzte die Middleware nur die UI-Routen `/admin/*` per `requiredPermission()`. Die `/api/admin/*`-APIs liefen nur gegen `checkAdminAuth()` — d.h. ein Mitarbeiter mit `tagesgeschaeft`-Permission konnte via direktem API-Aufruf jede Buchhaltungs-/Anlagen-/Mitarbeiter-Route nutzen, weil die Sidebar nur die UI-Eintraege versteckt hat. Fix: Neue Tabelle `API_PATH_PERMISSIONS` in `middleware.ts` spiegelt die UI-Permissions auf API-Pfade, der API-Block prueft Session-Permissions vor `NextResponse.next()`. Legacy-ENV-Token bekommt weiter alle Rechte (Bootstrap), Sonderpfade (`/me`, `/notifications`, `/push`, `/dashboard-data`, `/availability-gantt`) bleiben fuer alle Admins offen.
+- **Resend-Send-Errors werden geprueft (CRITICAL)** in `lib/email.ts`: `resend.emails.send()` liefert bei Rate-Limit/ungueltiger Adresse/Outage `{data: null, error}` und wirft NICHT — bisher wurde der Fall stillschweigend als „sent" geloggt. Jetzt `if (result.error) throw new Error(...)`, bestehender catch loggt `status: 'failed'`.
+- **Stripe-Webhook nutzt `Promise.allSettled` (CRITICAL)**: Beide `Promise.all([...]).catch(...)`-Stellen in `app/api/stripe-webhook/route.ts` haben einen Mail-Fehler den anderen Send maskieren lassen und am Ende ohne Forensik geendet. Jetzt allSettled mit per-Send-Logging.
+- **PATCH employees invalidiert Sessions (HIGH)** in `app/api/admin/employees/[id]/route.ts`: Bei `is_active=false`, Passwort-Wechsel, Rolle- oder Permission-Aenderung wird `deleteAllSessionsForUser()` aufgerufen, bisher nur in DELETE. Ein deaktivierter Mitarbeiter kann jetzt nicht mehr 7 Tage mit alter Session weiterarbeiten.
+- **Magic-Byte-Check in `social/upload-image` (HIGH)**: Der `blog-images`-Bucket ist oeffentlich. Bisher reichte `file.type.startsWith('image/')` (Client-MIME). Jetzt `detectImageType(buffer)` vor Upload + content-type aus echtem Format.
+- **Reels-Approve nur nach Render-Fertigstellung (HIGH)** in `app/api/admin/reels/[id]/approve/route.ts`: Whitelist-Check gegen `status` (`rendered|pending_review|approved|scheduled|failed|partial`) + `video_url`-Check. Verhindert Meta-API-Fehler im Publish-Cron.
+- **UGC-Approve atomar (MEDIUM)** in `app/api/admin/customer-ugc/[id]/approve/route.ts`: `UPDATE` mit zusaetzlichem `.eq('status','pending')` + `select` → bei Race (Doppelklick) wird der zweite Call mit 409 abgewiesen statt einen zweiten Coupon zu erstellen.
+- **N+1 in 4 Cron-Routen behoben**:
+  - `cron/dunning-check`: 2 SELECTs pro Invoice → 1 Bulk-Load + Memory-Lookup
+  - `cron/auto-cancel`: UPDATE pro Buchung → ein Bulk-UPDATE
+  - `cron/reminder-emails`: `email_log.insert` pro Mail → Batch-Insert pro Job
+  - `cron/depreciation`: SELECT pro Asset×Monat → Bulk-Load aller `source_id` + Memory-Set
+- **`fetch().ok`-Check** ergaenzt in `cron/blog-generate` (DALL-E-Bild-Download) und `rental-contract/[bookingId]` (Storage-PDF-Download). Vorher: 404 fuehrte zu leerem/korruptem Buffer.
+- **`reels-publish` Plausibilitaets-Check**: Reels mit `scheduled_at > 7 Tage in der Vergangenheit` (Tippfehler-Schutz) werden auf `status='failed'` gesetzt statt sofort publiziert.
+- **PostgREST `.or()`-Sanitizer** `lib/search-sanitize.ts`: User-Input fuer Suche wird vor Interpolation in `.or('col.ilike.%X%,col2.ilike.%X%')` von Komma/Klammern/Backslash/Steuerzeichen gesaeubert + auf 100 Zeichen gecappt. Verhindert Filter-Injection (zusaetzliche `and(...)`-Bloecke) und DB-Last bei 10k-Char-Inputs. Eingebaut in: `audit-log`, `email-log`, `blog/posts`, `buchhaltung/invoices` (+export).
+- **UI-Sweep**: 100vh→100dvh in 5 Anlagen-/Einkauf-Seiten (iOS-Safari Adressleisten-Bug), `text-sm`→`text-base` in Mitarbeiter-Form-Inputs (iOS-Auto-Zoom), Umlauten-Fixes in `/admin/anlagen`, `/admin/einkauf/upload`, `/admin/social/{neu,posts/[id],plan}` und `/kamera-finder` (Customer-UI: 9 Stellen `moechte`/`hauptsaechlich`/`Gehaeuse`/`Aufloesung`/`Atmosphaere`/`Spritzwassergeschuetzt`/`Guenstig`/`verfuegbar`), `EUR`→`€` und `inputMode="decimal"` in Anlagen-/Einkauf-Forms.
+- **`public/robots.txt`** angelegt — verbietet Crawl von `/admin/`, `/api/`, `/checkout`, `/konto/`, `/auth/`, `/login`, `/umfrage/`. Verlinkt Sitemap.
+
 ### Security- & Performance-Audit-Fixes (2026-04-20)
 Umfassendes Audit mit paralleler Agent-Analyse (Security/Code-Quality/Performance/Business-Logic). Alle Findings (außer `TEST_MODE` — Go-Live-Blocker, wird am 01.05. gekippt) wurden behoben:
 

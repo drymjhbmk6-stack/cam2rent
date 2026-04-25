@@ -105,17 +105,17 @@ export default function AssetDetailPage(props: { params: Promise<{ id: string }>
     setAsset(d2.asset);
   }
 
-  if (loading) return <div style={{ minHeight: '100vh', background: '#0a0f1e', padding: 40, color: '#64748b' }}>Lade…</div>;
-  if (!asset) return <div style={{ minHeight: '100vh', background: '#0a0f1e', padding: 40, color: '#ef4444' }}>Asset nicht gefunden</div>;
+  if (loading) return <div style={{ minHeight: '100dvh', background: '#0a0f1e', padding: 40, color: '#64748b' }}>Lade…</div>;
+  if (!asset) return <div style={{ minHeight: '100dvh', background: '#0a0f1e', padding: 40, color: '#ef4444' }}>Asset nicht gefunden</div>;
 
   const monthlyRate = asset.depreciation_method === 'linear'
     ? (Number(asset.purchase_price) - Number(asset.residual_value ?? 0)) / Number(asset.useful_life_months)
     : 0;
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0a0f1e', padding: '24px 20px' }}>
+    <div style={{ minHeight: '100dvh', background: '#0a0f1e', padding: '24px 20px' }}>
       <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-        <AdminBackLink href="/admin/anlagen" label="Zurueck zum Anlagenverzeichnis" />
+        <AdminBackLink href="/admin/anlagen" label="Zurück zum Anlagenverzeichnis" />
 
         <div style={{ marginTop: 16, marginBottom: 24 }}>
           <h1 style={{ color: '#f1f5f9', fontSize: 28, fontWeight: 800, marginBottom: 6 }}>{asset.name}</h1>
