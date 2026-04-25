@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import type React from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/components/AuthProvider';
@@ -448,21 +448,20 @@ export default function BuchenPage() {
 
   // Auth-Gate vor Mietvertrag — Kunde muss eingeloggt oder registriert sein
   const [showAuthGate, setShowAuthGate] = useState(false);
-  // True sobald die Auth-Phase im ExpressSignup durch ist und der Upload-Step
-  // läuft. Verhindert, dass der useEffect unten den Gate frühzeitig schließt
-  // und ExpressSignup damit unmounted, bevor der User seinen Ausweis hochladen
-  // konnte.
-  const [signupInUpload, setSignupInUpload] = useState(false);
+  // Ref (statt State!) damit das Flag synchron sichtbar ist, BEVOR React den
+  // user-State-Wechsel propagiert. Mit useState lief der useEffect ggf. mit
+  // signupInUpload=false (Batching), und das Modal schloss vor dem Upload-Step.
+  const signupInUploadRef = useRef(false);
 
   // Falls Kunde sich während des Gates in einem anderen Tab einloggt, schließen
   // und zu Step 5 weitergehen — aber nur, wenn ExpressSignup nicht gerade
   // selbst seinen Upload-Step rendert.
   useEffect(() => {
-    if (user && showAuthGate && !signupInUpload) {
+    if (user && showAuthGate && !signupInUploadRef.current) {
       setShowAuthGate(false);
       setStep(5);
     }
-  }, [user, showAuthGate, signupInUpload]);
+  }, [user, showAuthGate]);
 
   useEffect(() => {
     fetch('/api/prices').then((r) => r.json()).then(setDynPrices).catch(() => {});
@@ -2257,9 +2256,9 @@ export default function BuchenPage() {
             </div>
 
             <ExpressSignup
-              onAuthCompleted={() => setSignupInUpload(true)}
+              onAuthCompleted={() => { signupInUploadRef.current = true; }}
               onAuthenticated={() => {
-                setSignupInUpload(false);
+                signupInUploadRef.current = false;
                 setShowAuthGate(false);
                 setStep(5);
               }}
