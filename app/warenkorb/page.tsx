@@ -219,7 +219,7 @@ export default function WarenkorbPage() {
                     {itemCount === 1 && (
                       <div className="mt-3 pt-3 border-t border-brand-border dark:border-white/10 flex justify-between items-center text-sm">
                         <span className="text-brand-text dark:text-gray-300">
-                          + Versand (Standard)
+                          + Hin- und Rückversand (Standard)
                         </span>
                         <span className="font-medium text-brand-black dark:text-white">
                           {shipping.isFree ? 'Gratis' : fmtEuro(shipping.price)}
@@ -292,7 +292,7 @@ export default function WarenkorbPage() {
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-brand-text dark:text-gray-300">
-                    Versand (Standard)
+                    Hin- und Rückversand (Standard)
                   </span>
                   <span className="text-brand-black dark:text-white font-medium">
                     {shipping.isFree ? 'Gratis' : fmtEuro(shipping.price)}
@@ -308,7 +308,7 @@ export default function WarenkorbPage() {
                 </div>
               </div>
               <p className="text-xs text-brand-muted dark:text-gray-500 mb-5">
-                Versandart kann im Checkout geändert werden (Express oder Abholung).
+                Versandart (Express oder Abholung) kann im Checkout geändert werden.
               </p>
 
               <button
