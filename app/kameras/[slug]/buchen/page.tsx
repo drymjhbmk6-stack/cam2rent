@@ -830,8 +830,8 @@ export default function BuchenPage() {
                       <input type="radio" name="deliveryMode" value="versand" checked={deliveryMode === 'versand'}
                         onChange={() => { setDeliveryMode('versand'); setRange(undefined); }} className="mt-0.5 accent-accent-blue" />
                       <div>
-                        <p className="font-heading font-semibold text-sm text-brand-black dark:text-gray-100">Versand</p>
-                        <p className="text-xs text-brand-steel dark:text-gray-400 mt-0.5">Wir liefern zu dir nach Hause</p>
+                        <p className="font-heading font-semibold text-sm text-brand-black dark:text-gray-100">Hin- und Rückversand</p>
+                        <p className="text-xs text-brand-steel dark:text-gray-400 mt-0.5">Wir liefern zu dir nach Hause und holen die Kamera nach Mietende wieder ab</p>
                       </div>
                     </div>
                     {deliveryMode === 'versand' && (
@@ -1740,8 +1740,8 @@ export default function BuchenPage() {
 
                   {deliveryMode === 'versand' && (
                     <div className="flex justify-between items-center text-sm font-body">
-                      <span className="text-brand-steel dark:text-gray-400 flex items-center gap-1.5">
-                        Versand
+                      <span className="text-brand-steel dark:text-gray-400 flex items-center gap-1.5 flex-wrap">
+                        Hin- und Rückversand
                         <span className="text-xs px-1.5 py-0.5 rounded bg-brand-bg dark:bg-gray-800 text-brand-muted dark:text-gray-500 font-heading">
                           {shippingMethod === 'express' ? 'Express' : 'Standard'}
                         </span>
@@ -2026,7 +2026,7 @@ export default function BuchenPage() {
                         <path fillRule="evenodd" d="M1 6h14v6.5A1.5 1.5 0 0113.5 14h-11A1.5 1.5 0 011 12.5V6zm2.5 2a.5.5 0 000 1h5a.5.5 0 000-1h-5z" clipRule="evenodd" />
                       </svg>
                     )}
-                    {deliveryMode === 'abholung' ? 'Selbst abholen' : 'Versand'}
+                    {deliveryMode === 'abholung' ? 'Selbst abholen' : 'Hin- und Rückversand'}
                   </span>
                 </div>
               </div>
@@ -2120,7 +2120,7 @@ export default function BuchenPage() {
                     )}
                     {deliveryMode === 'versand' && (
                       <div className="flex justify-between text-sm font-body">
-                        <span className="text-brand-steel dark:text-gray-400">Versand</span>
+                        <span className="text-brand-steel dark:text-gray-400">Hin- und Rückversand</span>
                         {breakdown.shippingIsFree ? (
                           <span className="text-status-success font-semibold text-xs">Kostenlos</span>
                         ) : (
