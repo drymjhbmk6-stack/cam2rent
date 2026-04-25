@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Image from 'next/image';
 import { type Product, getMergedSpecs } from '@/data/products';
+import { fmtEuro } from '@/lib/format-utils';
 import NotifyModal from '@/components/NotifyModal';
 import SpecIcon from '@/components/SpecIcon';
 import { useFavorites } from '@/components/FavoritesProvider';
@@ -223,7 +224,7 @@ export default function ProductCard({ product, imageUrl }: ProductCardProps) {
             <div className="flex items-baseline gap-1 mb-4">
               <span className="text-xs font-body text-brand-steel dark:text-gray-400">ab</span>
               <span className="font-heading font-bold text-xl text-brand-black dark:text-gray-100">
-                {product.pricePerDay.toFixed(2).replace('.', ',')} €
+                {fmtEuro(product.pricePerDay)}
               </span>
               <span className="text-xs font-body text-brand-steel dark:text-gray-400">/ Tag</span>
             </div>

@@ -71,17 +71,29 @@ export async function POST(req: NextRequest) {
 
   const supabase = createServiceClient();
 
-  // Existiert diese E-Mail bereits?
+  // Existiert diese E-Mail bereits? Bevorzugt ueber RPC (siehe
+  // supabase/supabase-check-email-rpc.sql); listUsers nur als Fallback solange
+  // die Migration noch nicht draussen ist. Falls beide nichts liefern, faellt
+  // createUser unten als "already registered" zurueck — das ist ohnehin die
+  // Wahrheit der Auth-API.
   try {
-    const { data: listData } = await supabase.auth.admin.listUsers({ perPage: 1000 });
-    const existing = listData?.users?.find(
-      (u) => u.email?.toLowerCase() === email,
-    );
-    if (existing) {
+    const { data: rpcData, error: rpcErr } = await supabase.rpc('check_email_exists', { p_email: email });
+    if (!rpcErr && rpcData === true) {
       return NextResponse.json({ exists: true, message: 'E-Mail bereits registriert. Bitte einloggen.' });
     }
+    if (rpcErr && !/does not exist|could not find/i.test(rpcErr.message)) {
+      console.error('[express-signup] check_email_exists-RPC-Fehler:', rpcErr);
+    }
+    if (rpcErr && /does not exist|could not find/i.test(rpcErr.message)) {
+      // Migration nicht durch — auf Legacy-Pfad fallen
+      const { data: listData } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+      const existing = listData?.users?.find((u) => u.email?.toLowerCase() === email);
+      if (existing) {
+        return NextResponse.json({ exists: true, message: 'E-Mail bereits registriert. Bitte einloggen.' });
+      }
+    }
   } catch (err) {
-    console.error('[express-signup] listUsers fehlgeschlagen:', err);
+    console.error('[express-signup] Email-Pruefung fehlgeschlagen:', err);
     // Kein harter Fehler — createUser wuerde eh mit "already registered" antworten
   }
 

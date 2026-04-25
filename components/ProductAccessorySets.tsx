@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { RentalSet } from '@/data/sets';
+import { fmtEuro } from '@/lib/format-utils';
 
 interface AccItem {
   id: string;
@@ -96,7 +97,7 @@ export default function ProductAccessorySets({ productId }: { productId: string 
                     <div key={acc.id} className="flex items-center justify-between px-4 py-2.5 bg-white dark:bg-gray-800 rounded-xl border border-brand-border dark:border-gray-700">
                       <span className="font-heading font-semibold text-sm text-brand-black dark:text-gray-100">{acc.name}</span>
                       <span className="text-sm font-heading font-bold text-accent-blue flex-shrink-0">
-                        {acc.isUpgradeBase ? 'inklusive' : `+${(acc.price - (baseAcc?.price ?? 0)).toFixed(2).replace('.', ',')} €`}
+                        {acc.isUpgradeBase ? 'inklusive' : `+${fmtEuro(acc.price - (baseAcc?.price ?? 0))}`}
                       </span>
                     </div>
                   ))}
@@ -114,7 +115,7 @@ export default function ProductAccessorySets({ productId }: { productId: string 
                   <div key={acc.id} className="flex items-center justify-between px-4 py-2.5 bg-white dark:bg-gray-800 rounded-xl border border-brand-border dark:border-gray-700">
                     <span className="font-heading font-semibold text-sm text-brand-black dark:text-gray-100">{acc.name}</span>
                     <span className="text-sm font-heading font-bold text-accent-blue flex-shrink-0">
-                      +{acc.price.toFixed(2).replace('.', ',')} €{acc.pricingMode === 'perDay' ? ' pro Tag' : ''}
+                      +{fmtEuro(acc.price)}{acc.pricingMode === 'perDay' ? ' pro Tag' : ''}
                     </span>
                   </div>
                 ))}
@@ -152,7 +153,7 @@ export default function ProductAccessorySets({ productId }: { productId: string 
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
                       <span className="text-sm font-heading font-bold text-accent-blue">
-                        {set.price.toFixed(2).replace('.', ',')} €{set.pricingMode === 'perDay' ? ' pro Tag' : ''}
+                        {fmtEuro(set.price)}{set.pricingMode === 'perDay' ? ' pro Tag' : ''}
                       </span>
                       <svg className={`w-4 h-4 text-brand-muted transition-transform ${openSetId === set.id ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />

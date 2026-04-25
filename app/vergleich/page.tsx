@@ -7,6 +7,7 @@ import { type Product } from '@/data/products';
 import { useProducts } from '@/components/ProductsProvider';
 import { Suspense } from 'react';
 import { getBrandStyle } from '@/lib/brand-colors';
+import { fmtEuro } from '@/lib/format-utils';
 import { useBrandColors } from '@/hooks/useBrandColors';
 
 // Spec-Zeilen-Konfiguration
@@ -19,7 +20,7 @@ interface SpecRow {
 }
 
 const specRows: SpecRow[] = [
-  { key: 'price', label: 'Preis pro Tag', getValue: (p) => `ab ${p.pricePerDay.toFixed(2).replace('.', ',')} \u20AC`, bestMode: 'lowest-price' },
+  { key: 'price', label: 'Preis pro Tag', getValue: (p) => `ab ${fmtEuro(p.pricePerDay)}`, bestMode: 'lowest-price' },
   { key: 'resolution', label: 'Auflösung', getValue: (p) => p.specs.resolution, bestMode: 'highest-number' },
   { key: 'fps', label: 'FPS', getValue: (p) => p.specs.fps, bestMode: 'highest-number' },
   { key: 'waterproof', label: 'Wasserdicht', getValue: (p) => p.specs.waterproof, bestMode: 'highest-number' },

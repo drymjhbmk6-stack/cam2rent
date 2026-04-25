@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { fmtEuro } from '@/lib/format-utils';
 
 interface KameraResult {
   id: string;
@@ -236,7 +237,7 @@ export default function SearchModal({
                               {k.name}
                             </p>
                             <p className="text-xs font-body text-brand-steel dark:text-gray-400">
-                              {k.brand} &middot; ab {k.pricePerDay.toFixed(2).replace('.', ',')} &euro;/Tag
+                              {k.brand} &middot; ab {fmtEuro(k.pricePerDay)}/Tag
                               {!k.available && (
                                 <span className="ml-1.5 text-status-error">
                                   &middot; nicht verfügbar

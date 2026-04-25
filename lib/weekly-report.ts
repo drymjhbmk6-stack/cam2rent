@@ -110,18 +110,23 @@ export async function collectWeeklyReportData(now: Date = new Date()): Promise<W
     invoicesPaidData,
     invoicesOpenData,
   ] = await Promise.all([
+    // Limit als Safety-Net: bei normalem Betrieb < 100 Buchungen/Woche.
+    // Wenn das gerissen wird (Filter-Bug oder Datenexplosion), soll der
+    // Wochenbericht nicht den Server in OOM treiben.
     supabase.from('bookings')
       .select('id, product_name, price_total, status')
       .eq('is_test', false)
       .gte('created_at', iso(periodStart))
       .lte('created_at', iso(periodEnd))
-      .neq('status', 'cancelled'),
+      .neq('status', 'cancelled')
+      .limit(2000),
     supabase.from('bookings')
       .select('id, price_total')
       .eq('is_test', false)
       .gte('created_at', iso(prevPeriodStart))
       .lte('created_at', iso(prevPeriodEnd))
-      .neq('status', 'cancelled'),
+      .neq('status', 'cancelled')
+      .limit(2000),
     supabase.from('bookings')
       .select('id', { count: 'exact', head: true })
       .eq('is_test', false)
@@ -178,11 +183,13 @@ export async function collectWeeklyReportData(now: Date = new Date()): Promise<W
       .eq('is_test', false)
       .eq('payment_status', 'paid')
       .gte('paid_at', iso(periodStart))
-      .lte('paid_at', iso(periodEnd)),
+      .lte('paid_at', iso(periodEnd))
+      .limit(2000),
     supabase.from('invoices')
       .select('amount_gross, due_date, payment_status')
       .eq('is_test', false)
-      .in('payment_status', ['unpaid', 'overdue']),
+      .in('payment_status', ['unpaid', 'overdue'])
+      .limit(2000),
   ]);
 
   const currBookings = bookingsCurr.data ?? [];

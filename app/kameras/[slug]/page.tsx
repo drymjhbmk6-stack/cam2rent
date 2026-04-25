@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import type { Metadata } from 'next';
 import { getPriceForDays, getMergedSpecs } from '@/data/products';
+import { fmtEuro } from '@/lib/format-utils';
 import { getProducts } from '@/lib/get-products';
 import ProductReviews from '@/components/ProductReviews';
 import SpecIcon from '@/components/SpecIcon';
@@ -173,7 +174,7 @@ export default async function KameraDetailPage({
                 <div className="flex items-baseline gap-1">
                   <span className="text-xs font-body text-accent-blue/70 dark:text-blue-300/70">ab</span>
                   <span className="font-heading font-bold text-lg text-accent-blue dark:text-blue-300">
-                    {getPriceForDays(product, 1).toFixed(2).replace('.', ',')} €
+                    {fmtEuro(getPriceForDays(product, 1))}
                   </span>
                   <span className="text-xs font-body text-accent-blue/70 dark:text-blue-300/70">/ Tag</span>
                 </div>

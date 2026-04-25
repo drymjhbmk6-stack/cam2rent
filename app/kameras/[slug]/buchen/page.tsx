@@ -16,6 +16,7 @@ import AvailabilityCalendar, { type CalendarRange } from '@/components/Availabil
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { shippingConfig, calcShipping, type ShippingMethod } from '@/data/shipping';
 import { calcPriceFromKeyDays, calcPriceFromTable, calcHaftungTieredPrice, getEigenbeteiligung, type PriceConfig, type AdminProduct, type HaftungConfig } from '@/lib/price-config';
+import { fmtEuro } from '@/lib/format-utils';
 import SignatureStep, { type SignatureResult } from '@/components/booking/SignatureStep';
 import { getStripePromise } from '@/lib/stripe-client';
 import ExpressSignup from '@/components/checkout/ExpressSignup';
@@ -854,7 +855,7 @@ export default function BuchenPage() {
                               </div>
                               <div className="flex items-center justify-between pl-6">
                                 <span className="text-xs text-brand-muted">{opt.sub}</span>
-                                <span className="text-sm font-semibold text-brand-black">{opt.price.toFixed(2).replace('.', ',')} €</span>
+                                <span className="text-sm font-semibold text-brand-black">{fmtEuro(opt.price)}</span>
                               </div>
                             </label>
                           ))}

@@ -436,7 +436,6 @@ export default function ManualBookingPage() {
     const today = new Date();
     const dateStr = `${today.getDate().toString().padStart(2, '0')}.${(today.getMonth() + 1).toString().padStart(2, '0')}.${today.getFullYear()}`;
     const fmtD = (iso: string) => { const [y, m, d] = iso.split('-'); return `${d}.${m}.${y}`; };
-    const fmtP = (n: number) => n.toFixed(2).replace('.', ',') + ' €';
 
     // Positionen sammeln (alle Produkte)
     const items: { description: string; amount: number }[] = [];
@@ -552,11 +551,11 @@ export default function ManualBookingPage() {
   <table>
     <thead><tr><th>Beschreibung</th><th>Betrag</th></tr></thead>
     <tbody>
-      ${items.map(item => `<tr><td>${item.description}</td><td${item.amount === 0 ? ' class="zero-amount"' : ''}>${item.amount > 0 ? fmtP(item.amount) : '–'}</td></tr>`).join('\n      ')}
+      ${items.map(item => `<tr><td>${item.description}</td><td${item.amount === 0 ? ' class="zero-amount"' : ''}>${item.amount > 0 ? fmtEuro(item.amount) : '–'}</td></tr>`).join('\n      ')}
     </tbody>
   </table>
-  <table style="margin-top:4px"><tbody><tr class="total-row"><td>Gesamtbetrag</td><td>${fmtP(total)}</td></tr></tbody></table>
-  ${(depositMode === 'kaution') && deposit > 0 ? `<div style="font-size:8pt;color:#6b7280;margin-top:6px;text-align:right">* Enthält Kaution ${fmtP(deposit)} – wird nach Rückgabe erstattet</div>` : ''}
+  <table style="margin-top:4px"><tbody><tr class="total-row"><td>Gesamtbetrag</td><td>${fmtEuro(total)}</td></tr></tbody></table>
+  ${(depositMode === 'kaution') && deposit > 0 ? `<div style="font-size:8pt;color:#6b7280;margin-top:6px;text-align:right">* Enthält Kaution ${fmtEuro(deposit)} – wird nach Rückgabe erstattet</div>` : ''}
   ${remark ? `<div class="note" style="margin-top:16px"><strong>Bemerkung:</strong><br>${remark.replace(/\n/g, '<br>')}</div>` : ''}
   <div class="note"${remark ? ' style="margin-top:8px"' : ''}>${BIZ.taxHinweis}</div>
   ${paymentStatus === 'unpaid' ? `<div class="note" style="margin-top:12px;border:1px solid #d97706;background:#fffbeb">

@@ -1072,6 +1072,16 @@ Sticky Banner ganz oben (z-50) mit Hinweis „TESTUMGEBUNG — Keine echten Buch
 - **Race Condition Unit-Zuweisung:** `assignUnitToBooking` nutzt jetzt die Postgres-Funktion `assign_free_unit` mit `pg_advisory_xact_lock` (serialisiert parallele Zuweisungen pro Produkt). Fallback auf die alte Logik, falls die Migration noch nicht ausgeführt wurde.
 - **Stripe-Webhook Idempotenz:** `.like()` → `.eq()` — `payment_intent_id` wird exakt gespeichert, Wildcard war unnötig.
 
+### Audit-Fixes (2026-04-25 Sweep 4 — uebriggebliebene Punkte)
+Vier Themen, die nach Sweep 3 als „bewusst nicht gefixt" markiert waren, jetzt nachgezogen.
+
+- **`fmtEuro`-Sweep (UI-Konsistenz)** — `lib/format-utils.ts` ist die einzige Quelle der Wahrheit fuer Euro-Formatierung. Alle ~14 verbliebenen `.toFixed(2).replace('.', ',') + ' €'`-Stellen ueber 11 Files (`app/admin/buchungen/{id,neu}`, `app/kameras/[slug]/{page,buchen}`, `app/konto/favoriten`, `app/set-konfigurator`, `app/vergleich`, `components/{ProductCard, ProductAccessorySets, SearchModal}`, `components/booking/SignatureStep`) durch `fmtEuro(...)` ersetzt. Lokale `fmt(n)`-Helper, die nur Komma-Konvertierung ohne `€` machen, blieben — sie sind semantisch verschieden.
+- **Asset-Disposal Booking-Check (HIGH)** in `app/api/admin/assets/[id]/route.ts`: Bei Status-Wechsel auf `disposed`/`sold`/`lost` wird vor dem Update geprueft, ob die `unit_id` noch in einer aktiven Buchung (`confirmed`/`shipped`/`picked_up`) hängt. Wenn ja → 409 mit Buchungsnummer, sonst Update. Verhindert Datenkonsistenzbruch zwischen Anlagenverzeichnis (Status: weg) und Buchung (Vertrag verweist noch auf die Seriennummer).
+- **User-Enumeration via `auth.admin.listUsers` ersetzt (HIGH, neue SQL-Migration)** — Migration `supabase/supabase-check-email-rpc.sql` legt eine `SECURITY DEFINER`-Funktion `public.check_email_exists(p_email)` an (nur fuer `service_role`-Grant). Stable, indexierbar, kein Daten-Leak. `app/api/auth/check-email` und `app/api/auth/express-signup` rufen jetzt zuerst die RPC auf und fallen nur dann auf den alten `listUsers`-Pfad zurueck, wenn die Funktion noch nicht existiert (Migration nicht durch). check-email Rate-Limit von 30/min auf 10/min reduziert.
+- **Weekly-Report Memory-Schutz + Cron-Lock (MEDIUM)** in `lib/weekly-report.ts` + `app/api/cron/weekly-report/route.ts`: 4 unbeschraenkte Bookings/Invoices-Queries bekamen `.limit(2000)` als Safety-Net — bei normalem Betrieb < 100 Eintraege/Woche, der Cap schuetzt nur vor OOM bei Filter-Bug oder Datenexplosion. Plus `acquireCronLock('weekly-report')` damit Sonntag-18:30-Tick + Coolify-Redeploy nicht denselben Bericht zweimal verschicken.
+
+**Go-Live TODO:** SQL-Migration `supabase/supabase-check-email-rpc.sql` ausfuehren (idempotent, dauert &lt; 1 s).
+
 ### Security- & Reliability-Audit-Fixes (2026-04-25 Sweep 3)
 Dritte Audit-Runde — Findings nach Sweep 2 verifiziert (manuelle Stichproben), Halluzinationen rausgefiltert. Falsch-Befunde: scrypt-N=1 (Agent verwechselte Format-Versions-Praefix mit Cost-Faktor — Node-Default ist N=16384, OWASP-konform), Auto-Cancel-Refund-Race (DB-Update kommt tatsaechlich VOR Stripe-Refund), NotificationDropdown Visibility-Reset (war schon implementiert).
 

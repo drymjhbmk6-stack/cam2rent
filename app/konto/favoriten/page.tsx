@@ -7,6 +7,7 @@ import { type Product } from '@/data/products';
 import { useProducts } from '@/components/ProductsProvider';
 import Link from 'next/link';
 import { getBrandStyle } from '@/lib/brand-colors';
+import { fmtEuro } from '@/lib/format-utils';
 import { useBrandColors } from '@/hooks/useBrandColors';
 
 export default function FavoritenPage() {
@@ -111,7 +112,7 @@ export default function FavoritenPage() {
                     <div className="flex items-baseline gap-1">
                       <span className="text-xs text-brand-steel dark:text-gray-400">ab</span>
                       <span className="font-heading font-bold text-lg text-brand-black dark:text-white">
-                        {product.pricePerDay.toFixed(2).replace('.', ',')} €
+                        {fmtEuro(product.pricePerDay)}
                       </span>
                       <span className="text-xs text-brand-steel dark:text-gray-400">/ Tag</span>
                     </div>

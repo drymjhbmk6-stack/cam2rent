@@ -65,6 +65,37 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   }
 
   const supabase = createServiceClient();
+
+  // Wenn das Asset aus dem aktiven Bestand fliegen soll (verkauft/verloren/aus-
+  // gemustert), darf seine Unit nicht mehr in einer aktiven Buchung haengen.
+  // Sonst wuerde der Mietvertrag noch auf eine Seriennummer verweisen, die laut
+  // Anlagenverzeichnis nicht mehr existiert — Bilanz und Ausgabe-/Versanddaten
+  // wuerden auseinanderlaufen.
+  const newStatus = updates.status as string | undefined;
+  if (newStatus && ['disposed', 'sold', 'lost'].includes(newStatus)) {
+    const { data: assetRow } = await supabase
+      .from('assets')
+      .select('unit_id')
+      .eq('id', id)
+      .maybeSingle();
+    if (assetRow?.unit_id) {
+      const { data: activeBookings } = await supabase
+        .from('bookings')
+        .select('id, status')
+        .eq('unit_id', assetRow.unit_id)
+        .in('status', ['confirmed', 'shipped', 'picked_up'])
+        .limit(1);
+      if (activeBookings && activeBookings.length > 0) {
+        return NextResponse.json(
+          {
+            error: `Asset hat noch ${activeBookings.length === 1 ? 'eine aktive Buchung' : 'aktive Buchungen'} (Buchung ${activeBookings[0].id}). Erst nach Rueckgabe ausmustern.`,
+          },
+          { status: 409 },
+        );
+      }
+    }
+  }
+
   const { data, error } = await supabase
     .from('assets')
     .update(updates)

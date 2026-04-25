@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { BUSINESS } from '@/lib/business-config';
+import { fmtEuro as fmtEuroCanonical } from '@/lib/format-utils';
 
 interface BookingDetail {
   id: string;
@@ -135,7 +136,7 @@ function fmtDateTime(iso: string) {
 
 function fmtEuro(n: number | null | undefined) {
   if (n == null) return '0,00 €';
-  return n.toFixed(2).replace('.', ',') + ' €';
+  return fmtEuroCanonical(n);
 }
 
 export default function BuchungDetailPage() {

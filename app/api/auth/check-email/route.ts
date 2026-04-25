@@ -7,15 +7,19 @@ import { rateLimit, getClientIp } from '@/lib/rate-limit';
  * Body: { email: string }
  * Response: { exists: boolean }
  *
- * Nutzt Admin-API, um zu pruefen ob eine E-Mail bereits registriert ist.
- * Wird vom Client beim Verlassen des E-Mail-Felds in /registrierung und
- * im ExpressSignup aufgerufen, damit wir den User frueh informieren und
- * nicht erst nach Submit die Supabase-Privacy-Falle aufdecken muessen.
+ * Prueft ueber die RPC `public.check_email_exists(p_email)`, ob eine E-Mail in
+ * `auth.users` existiert. Vorher wurde `supabase.auth.admin.listUsers({
+ * perPage: 1000 })` benutzt — das skalierte nicht und liess sich per
+ * IP-Rotation enumerieren.
  *
- * Rate-Limit 30/min pro IP — verhindert E-Mail-Enumeration durch Scraping.
+ * Migration: `supabase/supabase-check-email-rpc.sql` ausfuehren, danach laeuft
+ * der RPC-Pfad. Bevor die Migration durch ist, faellt der Code auf den alten
+ * listUsers-Weg zurueck, damit der Endpoint nicht bricht.
+ *
+ * Rate-Limit 10/min pro IP — verhindert weitere Enumeration. (Vorher 30/min.)
  */
 
-const limiter = rateLimit({ maxAttempts: 30, windowMs: 60 * 1000 });
+const limiter = rateLimit({ maxAttempts: 10, windowMs: 60 * 1000 });
 
 export async function POST(req: NextRequest) {
   const ip = getClientIp(req);
@@ -36,15 +40,34 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ exists: false });
   }
 
+  const supabase = createServiceClient();
+
+  // Bevorzugt: RPC (skaliert + kein Daten-Leak). Wenn die Migration noch
+  // nicht ausgefuehrt ist, liefert Supabase einen "function does not exist"-
+  // Fehler — wir fallen dann auf den alten Weg zurueck, damit der Endpoint
+  // nicht bricht und sich Bestandsumgebungen ohne Migration weiter benutzen
+  // lassen.
   try {
-    const supabase = createServiceClient();
+    const { data, error } = await supabase.rpc('check_email_exists', { p_email: email });
+    if (!error && typeof data === 'boolean') {
+      return NextResponse.json({ exists: data });
+    }
+    if (error && !/does not exist|could not find/i.test(error.message)) {
+      console.error('[check-email] RPC-Fehler:', error);
+      return NextResponse.json({ exists: false });
+    }
+  } catch (err) {
+    console.error('[check-email] RPC-Aufruf fehlgeschlagen:', err);
+  }
+
+  // Fallback (nur bis Migration ausgefuehrt): listUsers — mit dem Bewusstsein,
+  // dass das die alte ineffiziente Loesung ist.
+  try {
     const { data } = await supabase.auth.admin.listUsers({ perPage: 1000 });
     const exists = !!data?.users?.some((u) => u.email?.toLowerCase() === email);
     return NextResponse.json({ exists });
   } catch (err) {
-    console.error('[check-email] listUsers fehlgeschlagen:', err);
-    // Im Fehlerfall lieber "exists: false" zurueckgeben — der Submit-Weg
-    // hat als Fallback noch die identities-Detection + Server-Error.
+    console.error('[check-email] listUsers-Fallback fehlgeschlagen:', err);
     return NextResponse.json({ exists: false });
   }
 }

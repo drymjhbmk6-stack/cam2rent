@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import SignatureCanvas from 'react-signature-canvas';
 import { BUSINESS } from '@/lib/business-config';
+import { fmtEuro } from '@/lib/format-utils';
 
 interface ContractParagraph {
   title: string;
@@ -29,7 +30,7 @@ function buildDisplayText(opts: {
   deposit: number;
   paragraphs: ContractParagraph[];
 }) {
-  const fmt = (n: number) => n.toFixed(2).replace('.', ',') + ' €';
+  const fmt = (n: number) => fmtEuro(n);
   const divider = '─'.repeat(40);
   const accessoriesLine = opts.accessories.length > 0
     ? `\nZubehör: ${opts.accessories.join(', ')}`

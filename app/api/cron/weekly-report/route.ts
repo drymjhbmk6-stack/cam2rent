@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyCronAuth } from '@/lib/cron-auth';
 import { createServiceClient } from '@/lib/supabase';
 import { sendWeeklyReport } from '@/lib/email';
+import { acquireCronLock, releaseCronLock } from '@/lib/cron-lock';
 
 /**
  * Wöchentlicher Zusammenfassungs-Bericht.
@@ -57,6 +58,12 @@ async function runWeeklyReport() {
     return NextResponse.json({ ok: true, skipped: 'disabled via admin_settings' });
   }
 
+  // Re-Entry-Schutz: Sonntag 18:30 ist eine sehr schmale Zeitscheibe.
+  // Coolify-Redeploy + Crontab-Tick koennten den Bericht zweimal verschicken.
+  const lock = await acquireCronLock('weekly-report');
+  if (!lock.acquired) {
+    return NextResponse.json({ ok: true, skipped: lock.reason });
+  }
   try {
     await sendWeeklyReport(config.email);
     return NextResponse.json({ ok: true, sentTo: config.email ?? 'default' });
@@ -66,5 +73,7 @@ async function runWeeklyReport() {
       { error: err instanceof Error ? err.message : 'Unbekannter Fehler' },
       { status: 500 },
     );
+  } finally {
+    await releaseCronLock('weekly-report');
   }
 }
