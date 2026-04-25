@@ -29,6 +29,12 @@ type Body = {
   email?: string;
   password?: string;
   fullName?: string;
+  firstName?: string;
+  lastName?: string;
+  phone?: string | null;
+  street?: string;
+  zip?: string;
+  city?: string;
 };
 
 function validateEmail(email: string): boolean {
@@ -60,13 +66,31 @@ export async function POST(req: NextRequest) {
 
   const email = (body.email ?? '').trim().toLowerCase();
   const password = body.password ?? '';
-  const fullName = (body.fullName ?? '').trim().slice(0, 120);
+  const firstName = (body.firstName ?? '').trim().slice(0, 60);
+  const lastName = (body.lastName ?? '').trim().slice(0, 60);
+  // Backwards-Compat: alter Aufruf mit nur fullName möglich
+  const fullName = firstName || lastName
+    ? `${firstName} ${lastName}`.trim()
+    : (body.fullName ?? '').trim().slice(0, 120);
+  const phone = (body.phone ?? '')?.toString().trim().slice(0, 30) || null;
+  const street = (body.street ?? '').trim().slice(0, 120);
+  const zip = (body.zip ?? '').trim();
+  const city = (body.city ?? '').trim().slice(0, 80);
 
   if (!email || !validateEmail(email)) {
     return NextResponse.json({ error: 'invalid_email' }, { status: 400 });
   }
   if (!password || password.length < 8 || password.length > 128) {
     return NextResponse.json({ error: 'invalid_password', message: 'Passwort muss 8–128 Zeichen haben.' }, { status: 400 });
+  }
+  // Adress-Validierung nur wenn der Caller die neuen Felder mitschickt.
+  // Alte Aufrufer (nur fullName) sollen weiterhin akzeptiert werden, damit
+  // wir keinen Backward-Compat-Bruch riskieren.
+  const hasAddress = !!(street || zip || city);
+  if (hasAddress) {
+    if (!street) return NextResponse.json({ error: 'invalid_street' }, { status: 400 });
+    if (!/^\d{5}$/.test(zip)) return NextResponse.json({ error: 'invalid_zip' }, { status: 400 });
+    if (!city) return NextResponse.json({ error: 'invalid_city' }, { status: 400 });
   }
 
   const supabase = createServiceClient();
@@ -129,6 +153,10 @@ export async function POST(req: NextRequest) {
         {
           id: userId,
           full_name: fullName || null,
+          phone: phone,
+          address_street: street || null,
+          address_zip: zip || null,
+          address_city: city || null,
           verification_status: 'unverified',
         },
         { onConflict: 'id', ignoreDuplicates: false },

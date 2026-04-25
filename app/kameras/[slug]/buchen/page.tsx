@@ -448,14 +448,21 @@ export default function BuchenPage() {
 
   // Auth-Gate vor Mietvertrag — Kunde muss eingeloggt oder registriert sein
   const [showAuthGate, setShowAuthGate] = useState(false);
+  // True sobald die Auth-Phase im ExpressSignup durch ist und der Upload-Step
+  // läuft. Verhindert, dass der useEffect unten den Gate frühzeitig schließt
+  // und ExpressSignup damit unmounted, bevor der User seinen Ausweis hochladen
+  // konnte.
+  const [signupInUpload, setSignupInUpload] = useState(false);
 
-  // Falls Kunde sich während des Gates einloggt (z.B. via anderen Tab), schließen + weiter
+  // Falls Kunde sich während des Gates in einem anderen Tab einloggt, schließen
+  // und zu Step 5 weitergehen — aber nur, wenn ExpressSignup nicht gerade
+  // selbst seinen Upload-Step rendert.
   useEffect(() => {
-    if (user && showAuthGate) {
+    if (user && showAuthGate && !signupInUpload) {
       setShowAuthGate(false);
       setStep(5);
     }
-  }, [user, showAuthGate]);
+  }, [user, showAuthGate, signupInUpload]);
 
   useEffect(() => {
     fetch('/api/prices').then((r) => r.json()).then(setDynPrices).catch(() => {});
@@ -2248,7 +2255,9 @@ export default function BuchenPage() {
             </div>
 
             <ExpressSignup
+              onAuthCompleted={() => setSignupInUpload(true)}
               onAuthenticated={() => {
+                setSignupInUpload(false);
                 setShowAuthGate(false);
                 setStep(5);
               }}

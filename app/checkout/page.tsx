@@ -277,6 +277,16 @@ export default function CheckoutPage() {
       .catch(() => {});
   }, []);
 
+  // Express-Signup-Sichtbarkeit losgelöst von `user`-State steuern, sonst
+  // unmounted die Komponente sobald `signInWithPassword` den User setzt und
+  // der Ausweis-Upload-Step verschwindet, bevor er gerendert wurde.
+  const [showExpressSignup, setShowExpressSignup] = useState(false);
+  useEffect(() => {
+    if (!user && checkoutCfg?.expressSignupEnabled && !showExpressSignup) {
+      setShowExpressSignup(true);
+    }
+  }, [user, checkoutCfg, showExpressSignup]);
+
   // Fetch user booking count + verification status
   const [isVerified, setIsVerified] = useState<boolean | null>(null);
   useEffect(() => {
@@ -604,32 +614,42 @@ export default function CheckoutPage() {
 
   if (itemCount === 0) return null;
 
-  // Nicht eingeloggt: Express-Signup im Checkout (wenn Feature-Flag an) oder
-  // Fallback auf "Konto erforderlich"-Seite mit Login/Registrierungs-Links.
+  // Express-Signup wird angezeigt, sobald wir auf der Seite landen ohne Login
+  // (Flag-gesteuert). Bleibt sichtbar bis ExpressSignup `onAuthenticated`
+  // feuert — d.h. inkl. Ausweis-Upload-Step. Erst dann fällt der Flow zurück
+  // zur normalen Checkout-Maske.
+  if (showExpressSignup) {
+    return (
+      <div className="min-h-screen bg-brand-bg dark:bg-brand-black py-8">
+        <div className="max-w-md mx-auto px-4 sm:px-6 lg:px-8">
+          <Link
+            href="/warenkorb"
+            className="inline-flex items-center gap-1.5 text-sm text-brand-steel dark:text-gray-400 hover:text-brand-black dark:hover:text-white mb-5 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Zurück zum Warenkorb
+          </Link>
+          <h1 className="font-heading font-bold text-xl text-brand-black dark:text-white mb-1">
+            Schnell-Registrierung
+          </h1>
+          <p className="font-body text-sm text-brand-steel dark:text-gray-400 mb-5">
+            Konto anlegen, Ausweis hochladen, weiter zur Zahlung — in zwei Minuten erledigt.
+          </p>
+          <ExpressSignup onAuthenticated={() => setShowExpressSignup(false)} />
+        </div>
+      </div>
+    );
+  }
+
+  // Nicht eingeloggt: ohne Express-Flag → "Konto erforderlich"-Fallback
   if (!user) {
     if (checkoutCfg?.expressSignupEnabled) {
-      return (
-        <div className="min-h-screen bg-brand-bg dark:bg-brand-black py-8">
-          <div className="max-w-md mx-auto px-4 sm:px-6 lg:px-8">
-            <Link
-              href="/warenkorb"
-              className="inline-flex items-center gap-1.5 text-sm text-brand-steel dark:text-gray-400 hover:text-brand-black dark:hover:text-white mb-5 transition-colors"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-              Zurück zum Warenkorb
-            </Link>
-            <h1 className="font-heading font-bold text-xl text-brand-black dark:text-white mb-1">
-              Schnell-Registrierung
-            </h1>
-            <p className="font-body text-sm text-brand-steel dark:text-gray-400 mb-5">
-              Konto anlegen, Ausweis hochladen, weiter zur Zahlung — in zwei Minuten erledigt.
-            </p>
-            <ExpressSignup />
-          </div>
-        </div>
-      );
+      // Edge-Fall: Flag an, aber Effekt hat showExpressSignup noch nicht gesetzt
+      // (sehr kurzer Render-Frame). Lass uns nichts anzeigen, der Effekt
+      // springt gleich an.
+      return null;
     }
 
     return (
