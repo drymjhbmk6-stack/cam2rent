@@ -175,5 +175,9 @@ export async function GET(
   // Frontend rendert Tage innerhalb dieser Frist visuell als gesperrt.
   const leadTimeDays = viewerMode === 'abholung' ? buf.abholung_before : buf.versand_before;
 
-  return NextResponse.json({ days, leadTimeDays });
+  return NextResponse.json({
+    days,
+    leadTimeDays,
+    bufferConfig: buf,
+  });
 }

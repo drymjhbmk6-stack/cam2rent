@@ -12,10 +12,19 @@ interface DayInfo {
   total: number;
 }
 
+interface BufferConfig {
+  versand_before: number;
+  versand_after: number;
+  abholung_before: number;
+  abholung_after: number;
+}
+
 interface AvailabilityData {
   days: DayInfo[];
   /** Vorlaufzeit in Tagen (Admin-Puffer "vorher" fuer aktuellen deliveryMode) */
   leadTimeDays?: number;
+  /** Admin-konfigurierte Puffertage pro Lieferungsmodus */
+  bufferConfig?: BufferConfig;
 }
 
 export type DeliveryMode = 'versand' | 'abholung';
@@ -35,12 +44,13 @@ interface AvailabilityCalendarProps {
   /** Called whenever the range changes */
   onRangeChange?: (range: CalendarRange, days: number) => void;
   /**
-   * Zusaetzliche Reservierungen, die clientseitig auf die DB-Verfuegbarkeit
-   * draufaddiert werden — z.B. Cart-Items die noch nicht als Buchung in der
-   * DB sind. Format: `{ "2026-04-29": 1, ... }`. Reduziert pro Tag das
-   * `available`-Feld und kippt Status auf 'booked' wenn nichts mehr frei ist.
+   * Zusaetzliche Reservierungen aus Cart-Items o.ae., die noch nicht in der
+   * DB sind. Pro Range wird mit den Admin-Puffertagen expandiert (server-
+   * konsistent), genau so wie /api/availability es fuer DB-Buchungen tut.
+   * Reduziert die `available`-Zahl pro Tag und kippt Status auf 'booked',
+   * wenn nichts mehr frei ist.
    */
-  extraHolds?: Record<string, number>;
+  extraHoldRanges?: Array<{ from: string; to: string; deliveryMode?: DeliveryMode }>;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -79,7 +89,7 @@ export default function AvailabilityCalendar({
   initialFrom,
   initialTo,
   onRangeChange,
-  extraHolds,
+  extraHoldRanges,
 }: AvailabilityCalendarProps) {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
@@ -155,11 +165,33 @@ export default function AvailabilityCalendar({
   const startOffset = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1;
   const daysInMonth = new Date(year, month + 1, 0).getDate();
 
-  // Cart-Holds clientseitig in die Verfuegbarkeit einrechnen, damit der
-  // Kalender Tage als ausgebucht zeigt, die der Kunde gerade selbst im
-  // Warenkorb haelt — auch wenn die Buchung noch nicht in der DB ist.
+  // Cart-Holds clientseitig in die Verfuegbarkeit einrechnen — inkl. der
+  // Admin-Puffertage, damit dieselbe Logik wie auf dem Server (siehe
+  // /api/availability) angewendet wird. Verhindert dass der Kunde versucht,
+  // einen Tag innerhalb der Versand-Pufferzone seiner eigenen Cart-Buchung
+  // zu reservieren.
+  const buf = data?.bufferConfig;
+  const extraHolds: Record<string, number> = {};
+  if (buf && extraHoldRanges?.length) {
+    const viewerBefore = deliveryMode === 'abholung' ? buf.abholung_before : buf.versand_before;
+    const viewerAfter = deliveryMode === 'abholung' ? buf.abholung_after : buf.versand_after;
+    for (const r of extraHoldRanges) {
+      const bMode = r.deliveryMode ?? 'versand';
+      const bBefore = bMode === 'abholung' ? buf.abholung_before : buf.versand_before;
+      const bAfter = bMode === 'abholung' ? buf.abholung_after : buf.versand_after;
+      const start = parseDate(r.from);
+      const end = parseDate(r.to);
+      start.setDate(start.getDate() - bBefore - viewerAfter);
+      end.setDate(end.getDate() + bAfter + viewerBefore);
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        const key = fmtDate(d.getFullYear(), d.getMonth(), d.getDate());
+        extraHolds[key] = (extraHolds[key] ?? 0) + 1;
+      }
+    }
+  }
+
   const effectiveDays: DayInfo[] = (data?.days ?? []).map((d) => {
-    const held = extraHolds?.[d.date] ?? 0;
+    const held = extraHolds[d.date] ?? 0;
     if (held <= 0) return d;
     const newAvailable = Math.max(0, d.available - held);
     let newStatus: DayInfo['status'] = d.status;

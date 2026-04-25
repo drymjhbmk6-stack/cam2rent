@@ -925,19 +925,9 @@ export default function BuchenPage() {
                     initialFrom={preFrom}
                     initialTo={preTo}
                     onRangeChange={handleCalendarRangeChange}
-                    extraHolds={(() => {
-                      const holds: Record<string, number> = {};
-                      for (const it of cartItems) {
-                        if (it.productId !== product.id) continue;
-                        const start = new Date(it.rentalFrom);
-                        const end = new Date(it.rentalTo);
-                        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-                          const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-                          holds[key] = (holds[key] ?? 0) + 1;
-                        }
-                      }
-                      return holds;
-                    })()}
+                    extraHoldRanges={cartItems
+                      .filter((it) => it.productId === product.id)
+                      .map((it) => ({ from: it.rentalFrom, to: it.rentalTo }))}
                   />
                 )}
 

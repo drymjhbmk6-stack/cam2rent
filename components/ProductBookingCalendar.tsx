@@ -12,20 +12,6 @@ function parseDate(dateStr: string): Date {
   return new Date(y, m - 1, d);
 }
 
-/** Liefert alle yyyy-MM-dd Tage zwischen `from` und `to` (beide inklusive). */
-function datesInRange(from: string, to: string): string[] {
-  const out: string[] = [];
-  const start = parseDate(from);
-  const end = parseDate(to);
-  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    out.push(`${y}-${m}-${day}`);
-  }
-  return out;
-}
-
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function ProductBookingCalendar({
@@ -42,20 +28,18 @@ export default function ProductBookingCalendar({
   const [rangeTo, setRangeTo] = useState<string | null>(null);
   const [rentalDays, setRentalDays] = useState(0);
 
-  // Cart-Items fuer dieses Produkt: jeden gebuchten Tag clientseitig als
-  // belegt anzeigen, damit der Kunde nicht versucht zwei sich ueberlappende
-  // Buchungen anzulegen, wenn nur eine Einheit existiert.
+  // Cart-Items fuer dieses Produkt als zusaetzliche Hold-Ranges. Der Calendar
+  // expandiert sie intern mit Admin-Puffertagen, damit nicht nur die reinen
+  // Mietzeitraeume sondern auch Versand-/Abholungs-Puffer um die Cart-
+  // Buchung herum als belegt angezeigt werden (server-konsistent).
   const { items: cartItems } = useCart();
-  const extraHolds = useMemo(() => {
-    const holds: Record<string, number> = {};
-    for (const it of cartItems) {
-      if (it.productId !== productId) continue;
-      for (const date of datesInRange(it.rentalFrom, it.rentalTo)) {
-        holds[date] = (holds[date] ?? 0) + 1;
-      }
-    }
-    return holds;
-  }, [cartItems, productId]);
+  const extraHoldRanges = useMemo(
+    () =>
+      cartItems
+        .filter((it) => it.productId === productId)
+        .map((it) => ({ from: it.rentalFrom, to: it.rentalTo })),
+    [cartItems, productId],
+  );
 
   const handleRangeChange = (range: CalendarRange, days: number) => {
     setRangeFrom(range.from);
@@ -69,7 +53,7 @@ export default function ProductBookingCalendar({
         productId={productId}
         deliveryMode={deliveryMode}
         onRangeChange={handleRangeChange}
-        extraHolds={extraHolds}
+        extraHoldRanges={extraHoldRanges}
       />
 
       {/* Delivery mode selection */}
