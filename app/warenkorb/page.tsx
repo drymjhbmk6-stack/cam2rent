@@ -1,15 +1,36 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCart } from '@/components/CartProvider';
 import { fmtDate, fmtEuro } from '@/lib/format-utils';
+import { calcShipping, shippingConfig as defaultShippingConfig, type ShippingConfig } from '@/data/shipping';
 
 export default function WarenkorbPage() {
   const { items, removeItem, cartTotal, itemCount } = useCart();
   const router = useRouter();
   const [showDateModal, setShowDateModal] = useState(false);
+
+  // Dynamische Shipping-Config aus DB nachladen, damit der hier angezeigte
+  // Versandpreis exakt dem entspricht, was im Checkout berechnet wird.
+  // Fallback: Werte aus data/shipping.ts.
+  const [dynShipping, setDynShipping] = useState<ShippingConfig>(defaultShippingConfig);
+  useEffect(() => {
+    fetch('/api/prices')
+      .then((r) => r.json())
+      .then((d) => {
+        if (d?.shipping) setDynShipping(d.shipping);
+      })
+      .catch(() => {});
+  }, []);
+
+  // Default: Versand + Standard. Im Checkout kann der Kunde umstellen.
+  const shipping = useMemo(
+    () => calcShipping(cartTotal, 'standard', 'versand', dynShipping),
+    [cartTotal, dynShipping],
+  );
+  const grandTotal = cartTotal + shipping.price;
 
   // Artikel nach Mietzeitraum gruppieren
   const periodGroups = useMemo(() => {
@@ -249,18 +270,32 @@ export default function WarenkorbPage() {
                 )}
               </div>
 
-              <div className="border-t border-brand-border dark:border-white/10 pt-3 mb-1">
-                <div className="flex justify-between">
+              <div className="border-t border-brand-border dark:border-white/10 pt-3 space-y-2 mb-3">
+                <div className="flex justify-between text-sm">
+                  <span className="text-brand-text dark:text-gray-300">Zwischensumme</span>
+                  <span className="text-brand-black dark:text-white font-medium">
+                    {fmtEuro(cartTotal)}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-brand-text dark:text-gray-300">
+                    Versand (Standard)
+                  </span>
+                  <span className="text-brand-black dark:text-white font-medium">
+                    {shipping.isFree ? 'Gratis' : fmtEuro(shipping.price)}
+                  </span>
+                </div>
+                <div className="flex justify-between pt-2 border-t border-brand-border dark:border-white/10">
                   <span className="font-heading font-semibold text-brand-black dark:text-white">
-                    Zwischensumme
+                    Gesamt
                   </span>
                   <span className="font-heading font-bold text-brand-black dark:text-white">
-                    {fmtEuro(cartTotal)}
+                    {fmtEuro(grandTotal)}
                   </span>
                 </div>
               </div>
               <p className="text-xs text-brand-muted dark:text-gray-500 mb-5">
-                Versand wird im nächsten Schritt berechnet.
+                Versandart kann im Checkout geändert werden (Express oder Abholung).
               </p>
 
               <button
