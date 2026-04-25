@@ -139,7 +139,7 @@ export default function KiPlanPage() {
   }
 
   async function handleReset() {
-    if (!confirm('Job-Status zuruecksetzen? Bereits erstellte Posts bleiben erhalten — nur die Statusanzeige wird geloescht, damit du einen neuen Plan starten kannst.')) return;
+    if (!confirm('Job-Status zurücksetzen? Bereits erstellte Posts bleiben erhalten — nur die Statusanzeige wird gelöscht, damit du einen neuen Plan starten kannst.')) return;
     await fetch('/api/admin/social/generate-plan?reset=1', { method: 'DELETE' });
     setError(null);
     loadJobStatus();
@@ -311,7 +311,7 @@ function JobStatusPanel({ job, progress, onCancel, onReset }: { job: JobStatus; 
             {failed && <span className="text-red-400">✗</span>}
             <h2 className="font-semibold text-white">
               {running && !stale && 'Plan wird generiert'}
-              {running && stale && 'Job scheint haengen geblieben zu sein'}
+              {running && stale && 'Job scheint hängen geblieben zu sein'}
               {completed && 'Fertig'}
               {job.status === 'error' && 'Fehler'}
               {job.status === 'cancelled' && 'Abgebrochen'}
@@ -321,7 +321,7 @@ function JobStatusPanel({ job, progress, onCancel, onReset }: { job: JobStatus; 
           {job.error && <p className="text-sm text-red-300 mt-1">⚠ {job.error}</p>}
           {stale && (
             <p className="text-sm text-amber-300 mt-1">
-              ⚠ Der Job laeuft seit &gt; 10 Min ohne Fortschritt — wahrscheinlich vom Server abgebrochen. Bitte zuruecksetzen und neu starten.
+              ⚠ Der Job läuft seit &gt; 10 Min ohne Fortschritt — wahrscheinlich vom Server abgebrochen. Bitte zurücksetzen und neu starten.
             </p>
           )}
         </div>

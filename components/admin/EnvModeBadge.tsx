@@ -13,19 +13,61 @@ export default function EnvModeBadge() {
 
   useEffect(() => {
     let cancelled = false;
+    let timer: number | null = null;
+    // Backoff-Sequenz wie NotificationDropdown — bei API-Fehler oder Tab im
+    // Hintergrund seltener pollen, damit Outages nicht 60 unnoetige Requests/h
+    // pro Admin-Tab erzeugen.
+    const INTERVALS = [60_000, 120_000, 240_000, 480_000];
+    let failures = 0;
+
+    const schedule = () => {
+      if (cancelled) return;
+      const ms = INTERVALS[Math.min(failures, INTERVALS.length - 1)];
+      timer = window.setTimeout(load, ms);
+    };
+
     const load = async () => {
+      if (cancelled) return;
+      // Tab im Hintergrund: nicht pollen, neuer Trigger ueber visibilitychange.
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+        schedule();
+        return;
+      }
       try {
         const res = await fetch('/api/admin/env-mode', { cache: 'no-store' });
-        if (!res.ok) return;
-        const data = await res.json();
-        if (!cancelled && (data?.mode === 'test' || data?.mode === 'live')) {
-          setMode(data.mode);
+        if (!res.ok) {
+          failures++;
+        } else {
+          const data = await res.json();
+          if (!cancelled && (data?.mode === 'test' || data?.mode === 'live')) {
+            setMode(data.mode);
+          }
+          failures = 0;
         }
-      } catch { /* silent */ }
+      } catch {
+        failures++;
+      }
+      schedule();
     };
+
+    const onVisible = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        failures = 0;
+        if (timer !== null) {
+          window.clearTimeout(timer);
+          timer = null;
+        }
+        load();
+      }
+    };
+
     load();
-    const id = window.setInterval(load, 60_000);
-    return () => { cancelled = true; window.clearInterval(id); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      cancelled = true;
+      if (timer !== null) window.clearTimeout(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, []);
 
   if (!mode) return null;

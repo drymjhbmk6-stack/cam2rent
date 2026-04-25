@@ -1210,7 +1210,7 @@ export default function BuchenPage() {
                                   type="button"
                                   onClick={() => setAccessoryCount(acc.id, currentQty + 1)}
                                   disabled={!canIncrement}
-                                  aria-label={`${acc.name} Anzahl erhoehen`}
+                                  aria-label={`${acc.name} Anzahl erhöhen`}
                                   className="w-7 h-7 rounded-lg border border-brand-border flex items-center justify-center text-brand-black hover:bg-brand-bg disabled:opacity-30 disabled:cursor-not-allowed"
                                 >
                                   +

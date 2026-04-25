@@ -4,6 +4,7 @@ import { verifyCronAuth } from '@/lib/cron-auth';
 import { isTestMode } from '@/lib/env-mode';
 import { getStripe } from '@/lib/stripe';
 import { getBerlinOffsetString } from '@/lib/timezone';
+import { acquireCronLock, releaseCronLock } from '@/lib/cron-lock';
 
 export const runtime = 'nodejs';
 export const maxDuration = 180;
@@ -75,6 +76,14 @@ async function handle(req: NextRequest) {
   if (await isTestMode()) {
     return NextResponse.json({ skipped: 'test_mode' });
   }
+
+  // Re-Entry-Schutz: doppelte Cron-Trigger duerfen nicht zweimal Stornos +
+  // Stripe-Deaktivierungen aufrufen.
+  const lock = await acquireCronLock('awaiting-payment-cancel');
+  if (!lock.acquired) {
+    return NextResponse.json({ skipped: lock.reason });
+  }
+  try {
 
   const supabase = createServiceClient();
 
@@ -189,6 +198,9 @@ async function handle(req: NextRequest) {
     rules,
     results,
   });
+  } finally {
+    await releaseCronLock('awaiting-payment-cancel');
+  }
 }
 
 export async function GET(req: NextRequest) { return handle(req); }

@@ -3,19 +3,24 @@ import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { createServiceClient } from '@/lib/supabase';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
+import { isAllowedImage, detectImageType } from '@/lib/file-type-check';
 import {
   sendDamageReportConfirmation,
   sendAdminDamageNotification,
 } from '@/lib/email';
 import { createAdminNotification } from '@/lib/admin-notifications';
 
-// Extension-Whitelist für Foto-Uploads (Path-Traversal-Schutz).
-const PHOTO_MIME_TO_EXT: Record<string, string> = {
-  'image/jpeg': 'jpg',
-  'image/png': 'png',
-  'image/webp': 'webp',
-  'image/heic': 'heic',
-  'image/heif': 'heif',
+// Endgueltiges Mapping vom Magic-Byte-Resultat auf Extension + MIME.
+// Vorher wurde die Endung aus dem Client-MIME (`photo.type`) abgeleitet — der ist
+// frei manipulierbar. Eine .exe mit `Content-Type: image/jpeg` wuerde dann als
+// .jpg gespeichert und mit `image/jpeg` ausgeliefert.
+const DETECTED_TO_EXT: Record<string, { ext: string; mime: string }> = {
+  jpeg: { ext: 'jpg', mime: 'image/jpeg' },
+  png: { ext: 'png', mime: 'image/png' },
+  webp: { ext: 'webp', mime: 'image/webp' },
+  heic: { ext: 'heic', mime: 'image/heic' },
+  heif: { ext: 'heif', mime: 'image/heif' },
+  gif: { ext: 'gif', mime: 'image/gif' },
 };
 
 const damageLimiter = rateLimit({ maxAttempts: 3, windowMs: 60 * 60 * 1000 }); // 3 pro Stunde
@@ -116,15 +121,26 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      // Extension aus MIME-Type ableiten (nicht aus photo.name — Path-Traversal-Schutz)
-      const ext = PHOTO_MIME_TO_EXT[photo.type] ?? 'jpg';
+      // Magic-Byte-Check: Datei wirklich auf binaer-Signatur pruefen statt auf den
+      // Client-gemeldeten MIME-Type zu vertrauen. Die Buchung kann finanzielle
+      // Konsequenzen haben (Haftungsfall) → keine getarnten Files in den Bucket.
+      const buffer = Buffer.from(await photo.arrayBuffer());
+      if (!isAllowedImage(buffer)) {
+        return NextResponse.json(
+          { error: `Datei "${photo.name}" ist kein gueltiges Bild (JPEG/PNG/WebP/HEIC/GIF erwartet).` },
+          { status: 400 },
+        );
+      }
+      const detected = detectImageType(buffer);
+      const detectedInfo = detected ? DETECTED_TO_EXT[detected] : undefined;
+      const ext = detectedInfo?.ext ?? 'jpg';
+      const realMime = detectedInfo?.mime ?? 'image/jpeg';
       const fileName = `${bookingId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
 
-      const buffer = Buffer.from(await photo.arrayBuffer());
       const { error: uploadErr } = await supabase.storage
         .from('damage-photos')
         .upload(fileName, buffer, {
-          contentType: photo.type || 'image/jpeg',
+          contentType: realMime,
           upsert: false,
         });
 

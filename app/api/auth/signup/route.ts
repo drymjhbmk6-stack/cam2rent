@@ -1,67 +1,53 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { rateLimit, getClientIp } from '@/lib/rate-limit';
 
 /**
- * Registrierungs-Rate-Limiter
- * Supabase Free Tier: max 4 Signups pro Stunde
- * Wir limitieren auf 3, um Puffer zu haben.
+ * Registrierungs-Rate-Limiter — pro IP.
+ *
+ * Supabase Free Tier limitiert global auf 4 Signups/Stunde. Wir hatten frueher
+ * einen GLOBALEN In-Memory-Counter — das war eine DoS-Falle: ein Angreifer
+ * konnte alle 3 Slots/h aus einer einzigen IP heraus aufbrauchen und damit
+ * jeden anderen legitimen Signup fuer eine Stunde blockieren.
+ * Loesung: per-IP-Limit ueber den bestehenden `lib/rate-limit.ts`-Helper.
+ *
+ * 3 Signups/IP/Stunde ist grosszuegig fuer normale Nutzung (eine Familie
+ * registriert selten mehr als 3 Konten), aber dicht genug, dass IP-Rotation
+ * spuerbar bleibt.
  */
-const MAX_SIGNUPS_PER_HOUR = 3;
-const WINDOW_MS = 60 * 60 * 1000; // 1 Stunde
-
-const signupTimestamps: number[] = [];
-
-function cleanOldEntries() {
-  const cutoff = Date.now() - WINDOW_MS;
-  while (signupTimestamps.length > 0 && signupTimestamps[0] < cutoff) {
-    signupTimestamps.shift();
-  }
-}
-
-function getSecondsUntilReset(): number {
-  if (signupTimestamps.length === 0) return 0;
-  const oldest = signupTimestamps[0];
-  const resetAt = oldest + WINDOW_MS;
-  return Math.max(0, Math.ceil((resetAt - Date.now()) / 1000));
-}
+const SIGNUPS_PER_IP_PER_HOUR = 3;
+const limiter = rateLimit({ maxAttempts: SIGNUPS_PER_IP_PER_HOUR, windowMs: 60 * 60 * 1000 });
 
 /**
  * GET /api/auth/signup
- * Prüft ob Registrierung aktuell möglich ist
+ * Status-Hint fuer das UI — keine Counter-Erhoehung. Nutzt einen anderen
+ * Bucket-Key, damit der GET-Aufruf nicht das eigentliche POST-Kontingent frisst.
  */
-export async function GET() {
-  cleanOldEntries();
-  const remaining = MAX_SIGNUPS_PER_HOUR - signupTimestamps.length;
+const statusLimiter = rateLimit({ maxAttempts: 60, windowMs: 60 * 60 * 1000 });
+export async function GET(req: NextRequest) {
+  const ip = getClientIp(req);
+  const { success, remaining } = statusLimiter.check(`signup-status:${ip}`);
   return NextResponse.json({
-    allowed: remaining > 0,
+    allowed: success,
     remaining: Math.max(0, remaining),
-    resetInSeconds: remaining <= 0 ? getSecondsUntilReset() : 0,
   });
 }
 
 /**
  * POST /api/auth/signup
- * Wird NACH erfolgreicher Supabase-Registrierung aufgerufen, um den Zähler zu erhöhen.
- * Wird VOR der Registrierung aufgerufen mit ?check=1 um das Limit zu prüfen.
+ * Vor- ODER Nach-Signup-Counter-Increment. Returnt 429 wenn die IP ihr
+ * Stunden-Kontingent erschoepft hat.
  */
-export async function POST() {
-  cleanOldEntries();
-
-  if (signupTimestamps.length >= MAX_SIGNUPS_PER_HOUR) {
-    const resetIn = getSecondsUntilReset();
-    const minutes = Math.ceil(resetIn / 60);
-    return NextResponse.json({
-      error: `Aktuell sind zu viele Registrierungen eingegangen. Bitte versuche es in ${minutes} Minuten erneut.`,
-      rateLimited: true,
-      resetInSeconds: resetIn,
-    }, { status: 429 });
+export async function POST(req: NextRequest) {
+  const ip = getClientIp(req);
+  const { success, remaining } = limiter.check(`signup:${ip}`);
+  if (!success) {
+    return NextResponse.json(
+      {
+        error: 'Zu viele Registrierungsversuche von dieser IP. Bitte in einer Stunde erneut versuchen.',
+        rateLimited: true,
+      },
+      { status: 429 },
+    );
   }
-
-  // Zähler erhöhen
-  signupTimestamps.push(Date.now());
-  const remaining = MAX_SIGNUPS_PER_HOUR - signupTimestamps.length;
-
-  return NextResponse.json({
-    success: true,
-    remaining: Math.max(0, remaining),
-  });
+  return NextResponse.json({ success: true, remaining });
 }

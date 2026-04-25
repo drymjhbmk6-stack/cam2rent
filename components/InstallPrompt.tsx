@@ -55,7 +55,7 @@ export default function InstallPrompt() {
 
   return (
     <div className="fixed bottom-4 left-4 right-4 z-50 sm:left-auto sm:right-4 sm:max-w-sm animate-fadeIn">
-      <div className="bg-white rounded-2xl shadow-2xl border border-brand-border p-4">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-brand-border dark:border-slate-700 p-4">
         <div className="flex items-start gap-3">
           {/* App icon */}
           <div className="w-12 h-12 rounded-xl bg-accent-blue flex items-center justify-center flex-shrink-0">
@@ -90,7 +90,7 @@ export default function InstallPrompt() {
           <button
             onClick={handleDismiss}
             className="p-1 text-brand-muted hover:text-brand-text transition-colors flex-shrink-0"
-            aria-label="Schliessen"
+            aria-label="Schließen"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path

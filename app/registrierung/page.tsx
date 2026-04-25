@@ -254,7 +254,7 @@ export default function RegistrierungPage() {
                   <Link href={`/login?email=${encodeURIComponent(email)}`} className="underline font-semibold">
                     Jetzt anmelden
                   </Link>{' '}
-                  oder <Link href="/passwort-vergessen" className="underline font-semibold">Passwort zuruecksetzen</Link>.
+                  oder <Link href="/passwort-vergessen" className="underline font-semibold">Passwort zurücksetzen</Link>.
                 </div>
               )}
             </div>

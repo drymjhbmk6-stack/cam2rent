@@ -5,6 +5,7 @@ import { sendAndLog } from '@/lib/email';
 import { createAdminNotification } from '@/lib/admin-notifications';
 import { getStripe } from '@/lib/stripe';
 import { BUSINESS } from '@/lib/business-config';
+import { acquireCronLock, releaseCronLock } from '@/lib/cron-lock';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -31,6 +32,14 @@ async function handle(req: NextRequest) {
   if (!verifyCronAuth(req)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
+
+  // Re-Entry-Schutz: ohne Lock koennten Doppel-Triggers zweifach Stornos +
+  // Refunds + Mails ausloesen.
+  const lock = await acquireCronLock('verification-auto-cancel');
+  if (!lock.acquired) {
+    return NextResponse.json({ skipped: lock.reason });
+  }
+  try {
 
   const supabase = createServiceClient();
   // T-2: Buchungen deren Mietbeginn in max. 2 Tagen ist (Berlin-Zeit).
@@ -176,4 +185,7 @@ async function handle(req: NextRequest) {
     ids: cancelledIds,
     errors: errors.length > 0 ? errors : undefined,
   });
+  } finally {
+    await releaseCronLock('verification-auto-cancel');
+  }
 }

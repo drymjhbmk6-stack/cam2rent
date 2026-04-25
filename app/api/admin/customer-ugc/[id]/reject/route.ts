@@ -54,7 +54,10 @@ export async function POST(req: NextRequest, { params }: { params: Params }) {
     if (rmErr) console.error('[ugc-reject] Storage-Remove-Fehler:', rmErr.message);
   }
 
-  const { error: updateErr } = await supabase
+  // Atomarer Status-Wechsel: nur wenn noch 'pending'. Ohne den Guard koennten
+  // zwei parallele Reject-Klicks beide durchgehen → doppelter Storage-Remove,
+  // doppelte Mail. (Selber Bug wie der UGC-Approve-Race, der schon gefixt ist.)
+  const { data: updateRows, error: updateErr } = await supabase
     .from('customer_ugc_submissions')
     .update({
       status: 'rejected',
@@ -62,10 +65,18 @@ export async function POST(req: NextRequest, { params }: { params: Params }) {
       reviewed_at: new Date().toISOString(),
       ...(deleteFiles ? { file_paths: [] } : {}),
     })
-    .eq('id', id);
+    .eq('id', id)
+    .eq('status', 'pending')
+    .select('id');
 
   if (updateErr) {
     return NextResponse.json({ error: updateErr.message }, { status: 500 });
+  }
+  if (!updateRows || updateRows.length === 0) {
+    return NextResponse.json(
+      { error: 'Einreichung wurde parallel bearbeitet — bitte Liste neu laden.' },
+      { status: 409 },
+    );
   }
 
   if (notifyCustomer && submission.customer_email) {

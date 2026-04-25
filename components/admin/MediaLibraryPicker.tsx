@@ -83,7 +83,7 @@ export default function MediaLibraryPicker({ open, onClose, onSelect }: Props) {
             type="button"
             onClick={onClose}
             className="text-slate-400 hover:text-white text-xl leading-none"
-            aria-label="Schliessen"
+            aria-label="Schließen"
           >
             &times;
           </button>

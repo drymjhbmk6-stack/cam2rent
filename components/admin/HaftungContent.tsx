@@ -88,7 +88,7 @@ export default function HaftungContent() {
         <div className="space-y-6">
 
           {/* Haftungsoptionen */}
-          <div className="bg-white rounded-2xl border border-brand-border p-6">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-brand-border dark:border-slate-700 p-6">
             <h2 className="font-heading font-bold text-base text-brand-black mb-1">Haftungsoptionen</h2>
             <p className="text-xs font-body text-brand-muted mb-5">
               Pauschalpreis pro Buchung — nur für Kameras mit aktivierter Haftungsoption
@@ -168,7 +168,7 @@ export default function HaftungContent() {
               <div className="bg-brand-bg rounded-xl border border-brand-border p-4 space-y-4">
                 <div className="flex items-center justify-between">
                   <p className="font-heading font-semibold text-sm text-brand-black">Premium-Haftungsschutz</p>
-                  <span className="text-xs font-body text-brand-muted bg-white border border-brand-border px-2 py-0.5 rounded-full">Keine Eigenbeteiligung</span>
+                  <span className="text-xs font-body text-brand-muted bg-white dark:bg-slate-900 border border-brand-border dark:border-slate-700 px-2 py-0.5 rounded-full">Keine Eigenbeteiligung</span>
                 </div>
                 <Field label="Preis" value={haftung.premium} onChange={(v) => setHaftung((h) => ({ ...h, premium: v }))} />
               </div>
@@ -180,7 +180,7 @@ export default function HaftungContent() {
           </div>
 
           {/* Kaution Tiers */}
-          <div className="bg-white rounded-2xl border border-brand-border p-6">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-brand-border dark:border-slate-700 p-6">
             <h2 className="font-heading font-bold text-base text-brand-black mb-1">Kaution-Stufen</h2>
             <p className="text-xs font-body text-brand-muted mb-5">
               3 Stufen — jede Kamera kann einer Stufe zugeordnet werden (statt Haftungsoption)

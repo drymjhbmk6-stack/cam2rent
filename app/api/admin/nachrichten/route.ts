@@ -59,16 +59,24 @@ export async function GET() {
     }
   }
 
-  // Get last message preview
-  const enriched = await Promise.all((conversations ?? []).map(async (conv) => {
-    const { data: lastMsg } = await supabase
+  // Letzte Nachricht pro Conversation — eine Bulk-Query, dann groupBy + max(created_at).
+  // Vorher: 1 SELECT pro Conversation = N+1.
+  type LastMsgRow = { conversation_id: string; body: string; sender_type: string; created_at: string };
+  const lastMsgMap = new Map<string, LastMsgRow>();
+  if (conversationIds.length > 0) {
+    const { data: msgs } = await supabase
       .from('messages')
-      .select('body, sender_type, created_at')
-      .eq('conversation_id', conv.id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single();
+      .select('conversation_id, body, sender_type, created_at')
+      .in('conversation_id', conversationIds)
+      .order('created_at', { ascending: false });
+    for (const m of (msgs ?? []) as LastMsgRow[]) {
+      // dank ORDER BY created_at DESC ist der erste Eintrag pro conv = neueste Nachricht
+      if (!lastMsgMap.has(m.conversation_id)) lastMsgMap.set(m.conversation_id, m);
+    }
+  }
 
+  const enriched = (conversations ?? []).map((conv) => {
+    const lastMsg = lastMsgMap.get(conv.id);
     return {
       ...conv,
       customer: profileMap[conv.customer_id] || { full_name: 'Unbekannt', email: '' },
@@ -79,7 +87,7 @@ export async function GET() {
         created_at: lastMsg.created_at,
       } : null,
     };
-  }));
+  });
 
   return NextResponse.json({ conversations: enriched });
 }

@@ -20,6 +20,7 @@ import { verifyCronAuth } from '@/lib/cron-auth';
 import { publishPost } from '@/lib/meta/publisher';
 import { generateFromTemplate } from '@/lib/meta/ai-content';
 import { isTestMode } from '@/lib/env-mode';
+import { acquireCronLock, releaseCronLock } from '@/lib/cron-lock';
 
 const MAX_RETRIES = 2;
 
@@ -179,13 +180,34 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ skipped: 'test_mode' });
   }
 
-  const [scheduled, schedule, retries] = await Promise.all([
-    processScheduledPosts(),
-    processScheduleEntries(),
-    processRetries(),
-  ]);
+  // Re-Entry-Schutz: doppelte Cron-Trigger duerfen nicht zweimal denselben
+  // Post auf FB/IG publizieren.
+  const lock = await acquireCronLock('social-publish');
+  if (!lock.acquired) {
+    return NextResponse.json({ skipped: lock.reason });
+  }
 
-  return NextResponse.json({ scheduled, schedule, retries });
+  try {
+    // allSettled statt all: ein Fehler in einer Phase darf die anderen nicht
+    // mit-killen. processScheduleEntries() kann z.B. an einem Template-Fehler
+    // werfen, processRetries() soll trotzdem laufen.
+    const settled = await Promise.allSettled([
+      processScheduledPosts(),
+      processScheduleEntries(),
+      processRetries(),
+    ]);
+
+    const [scheduled, schedule, retries] = settled.map((r, i) => {
+      if (r.status === 'fulfilled') return r.value;
+      const phase = ['scheduled', 'schedule', 'retries'][i];
+      console.error(`[social-publish] Phase '${phase}' fehlgeschlagen:`, r.reason);
+      return { error: r.reason instanceof Error ? r.reason.message : String(r.reason) };
+    });
+
+    return NextResponse.json({ scheduled, schedule, retries });
+  } finally {
+    await releaseCronLock('social-publish');
+  }
 }
 
 export const GET = POST;

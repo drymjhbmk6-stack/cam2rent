@@ -138,8 +138,10 @@ export async function POST(
     return NextResponse.json({ error: `Foto-Upload fehlgeschlagen: ${uploadError.message}` }, { status: 500 });
   }
 
-  // Buchung updaten
-  const { error: updateError } = await supabase
+  // Buchung updaten — atomar gegen Doppelklick: nur wenn Status noch 'packed' ist.
+  // Ohne diesen Guard koennten zwei parallele Kontrolleure beide einen Check
+  // durchfuehren und doppelte Foto-/Signatur-Daten in dieselbe Buchung schreiben.
+  const { data: updateRows, error: updateError } = await supabase
     .from('bookings')
     .update({
       pack_status: 'checked',
@@ -151,11 +153,21 @@ export async function POST(
       pack_checked_notes: notes || null,
       pack_photo_url: storagePath,
     })
-    .eq('id', id);
+    .eq('id', id)
+    .eq('pack_status', 'packed')
+    .select('id');
 
   if (updateError) {
     console.error('[versand/check] update error:', updateError);
     return NextResponse.json({ error: updateError.message }, { status: 500 });
+  }
+  if (!updateRows || updateRows.length === 0) {
+    // Status hat sich zwischen Read und Update geaendert — paralleler Kontrolleur war schneller.
+    // Foto in Storage hinterlassen, da bereits hochgeladen — wird beim naechsten Pack-Reset entfernt.
+    return NextResponse.json(
+      { error: 'Paket wurde parallel von einem anderen Kontrolleur abgeschlossen — bitte Liste neu laden.' },
+      { status: 409 },
+    );
   }
 
   return NextResponse.json({ success: true, status: 'checked' });

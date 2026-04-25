@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { verifyCronAuth } from '@/lib/cron-auth';
+import { acquireCronLock, releaseCronLock } from '@/lib/cron-lock';
 
 /**
  * GET /api/cron/dunning-check
@@ -11,6 +12,15 @@ export async function GET(req: NextRequest) {
   if (!verifyCronAuth(req)) {
     return NextResponse.json({ error: 'Nicht autorisiert.' }, { status: 401 });
   }
+
+  // Re-Entry-Schutz: doppelte Cron-Trigger sollen sich nicht doppelt durch die
+  // Mahn-Liste arbeiten — sonst entstehen mehrfach Entwurfs-Mahnungen.
+  const lock = await acquireCronLock('dunning-check');
+  if (!lock.acquired) {
+    return NextResponse.json({ skipped: lock.reason });
+  }
+
+  try {
 
   const supabase = createServiceClient();
   const now = new Date();
@@ -114,4 +124,7 @@ export async function GET(req: NextRequest) {
     checkedInvoices: (invoices || []).length,
     timestamp: now.toISOString(),
   });
+  } finally {
+    await releaseCronLock('dunning-check');
+  }
 }

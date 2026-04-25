@@ -270,6 +270,21 @@ async function handleSingleBooking(
 
   if (error) {
     console.error(`[Webhook] Einzelbuchung ${bookingId} Fehler:`, error);
+    // KRITISCH: Geld ist bei Stripe eingegangen, aber DB-Insert ist gescheitert
+    // (z.B. duplicate-key, NULL-Constraint). Wenn wir das nur loggen, gibts keine
+    // Buchung, kein Vertrag, keine Mail — aber der Kunde hat bezahlt. Stripe macht
+    // keinen Retry, weil wir 200 zurueckgeben. Daher: Admin sofort benachrichtigen,
+    // damit manuell rekonstruiert werden kann.
+    try {
+      await createAdminNotification(supabase, {
+        type: 'payment_failed',
+        title: `Zahlung eingegangen, Buchungs-Insert fehlgeschlagen: ${bookingId}`,
+        message: `PaymentIntent ${intent.id} (${(intent.amount / 100).toFixed(2)} €) — DB-Fehler: ${error.message}. Buchung manuell anlegen oder Refund pruefen.`,
+        link: `/admin/buchungen`,
+      });
+    } catch (notifErr) {
+      console.error('[Webhook] Admin-Notification fuer Insert-Fehler fehlgeschlagen:', notifErr);
+    }
     return;
   }
 

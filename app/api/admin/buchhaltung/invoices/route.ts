@@ -43,33 +43,28 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // Kundennamen aus Buchungen anreichern
-  const invoices = await Promise.all((data || []).map(async (inv) => {
-    let customerName = '';
-    let customerEmail = inv.sent_to_email || '';
+  // Kundennamen aus Buchungen anreichern — Bulk-Lookup statt 1 Query/Invoice (war N+1).
+  const bookingIds = (data || []).map((i) => i.booking_id).filter((id): id is string => !!id);
+  const bookingMap = new Map<string, { customer_name: string | null; customer_email: string | null }>();
+  if (bookingIds.length) {
+    const { data: bookings } = await supabase
+      .from('bookings')
+      .select('id, customer_name, customer_email')
+      .in('id', bookingIds);
+    (bookings ?? []).forEach((b) => bookingMap.set(b.id, b));
+  }
 
-    if (inv.booking_id) {
-      const { data: booking } = await supabase
-        .from('bookings')
-        .select('customer_name, customer_email')
-        .eq('id', inv.booking_id)
-        .maybeSingle();
-
-      if (booking) {
-        customerName = booking.customer_name || '';
-        customerEmail = customerEmail || booking.customer_email || '';
-      }
-    }
-
+  const invoices = (data || []).map((inv) => {
+    const booking = inv.booking_id ? bookingMap.get(inv.booking_id) : undefined;
     return {
       ...inv,
-      customer_name: customerName,
-      customer_email: customerEmail,
+      customer_name: booking?.customer_name || '',
+      customer_email: inv.sent_to_email || booking?.customer_email || '',
       tax_mode: inv.tax_mode || 'kleinunternehmer',
       tax_rate: inv.tax_rate || 0,
       status: inv.status || 'paid',
     };
-  }));
+  });
 
   return NextResponse.json({
     invoices,

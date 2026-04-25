@@ -4,6 +4,7 @@ import { createServiceClient } from '@/lib/supabase';
 import { sendAndLog } from '@/lib/email';
 import { BUSINESS } from '@/lib/business-config';
 import { getSiteUrl } from '@/lib/env-mode';
+import { acquireCronLock, releaseCronLock } from '@/lib/cron-lock';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -30,6 +31,13 @@ async function handle(req: NextRequest) {
   if (!verifyCronAuth(req)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
+
+  // Re-Entry-Schutz: doppelte Cron-Trigger duerfen nicht zweimal Mails senden.
+  const lock = await acquireCronLock('verification-reminder');
+  if (!lock.acquired) {
+    return NextResponse.json({ skipped: lock.reason });
+  }
+  try {
 
   const supabase = createServiceClient();
 
@@ -145,4 +153,7 @@ async function handle(req: NextRequest) {
     total: bookings.length,
     errors: errors.length > 0 ? errors : undefined,
   });
+  } finally {
+    await releaseCronLock('verification-reminder');
+  }
 }
