@@ -2214,8 +2214,13 @@ export default function BuchenPage() {
         </div>
       </div>
 
-      {/* Auth-Gate Modal — vor dem Mietvertrag anmelden/registrieren */}
-      {showAuthGate && !user && (
+      {/* Auth-Gate Modal — vor dem Mietvertrag anmelden/registrieren.
+          Bewusst KEIN `!user`-Check hier: sobald signInWithPassword die
+          Session setzt, würde das Modal sonst unmounten und ExpressSignup
+          käme nicht zum Upload-Step. Schließen erfolgt entweder ueber
+          onAuthenticated (nach Upload/Skip), den X-Button, oder den
+          useEffect oben (cross-tab Login). */}
+      {showAuthGate && (
         <div
           className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto"
           role="dialog"
