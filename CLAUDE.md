@@ -1195,31 +1195,29 @@ Systematischer Sweep ueber Admin- und Kundenkonto-UI nach Darstellungsfehlern. G
 - ~~`supabase-unit-assignment-lock.sql`~~ (race-sichere Unit-Zuweisung)
 - ~~`supabase-push-subscriptions.sql`~~ + VAPID-Keys (Admin-PWA-Push live)
 - ~~`supabase-social.sql` + `-extended` + `-image-position` + `-permalinks`~~ (Social-Modul komplett)
-- ~~`supabase-waitlist.sql`~~ (Benachrichtige-mich-Liste)
+- ~~`supabase-waitlist.sql`~~ + ~~`supabase-waitlist-use-case.sql`~~ (Benachrichtige-mich-Liste + Use-Case)
 - ~~`supabase-coupon-atomic-increment.sql`~~ (Gutschein-Race-Fix)
 - ~~`supabase-invoice-numbers-gobd.sql`~~ (GoBD-Counter angelegt, Code-Umstellung folgt separat zum Jahreswechsel mit Steuerberater-Rücksprache)
 - ~~`supabase-storage-rls.sql`~~ (Bucket-RLS contracts/id-documents/damage-photos)
 - ~~`supabase-performance-indizes.sql`~~ (8 Indizes: bookings.user_id, bookings.created_at, bookings(product_id,rental_from,rental_to), email_log.booking_id, blog_posts(status,created_at), social_posts(status,scheduled_at), waitlist_subscriptions.product_id, rental_agreements.booking_id)
+- ~~`supabase-customer-ugc.sql`~~ + Storage-Bucket `customer-ugc` angelegt (Kundenmaterial-Modul live)
+- ~~`supabase-admin-users.sql`~~ (Mitarbeiterkonten + 9 Permissions live — Permission-Enforcement aus Sweep 2 greift jetzt)
+- ~~`supabase-assets.sql`~~ + Storage-Bucket `purchase-invoices` (Anlagenverzeichnis + KI-Rechnungs-OCR live)
+- ~~`supabase-reels.sql`~~ + Storage-Bucket `social-reels` (Auto-Reels-Modul live)
+- ~~`supabase-verification-deferred.sql`~~ (Express-Signup-Flag)
+- ~~`supabase-env-toggle.sql`~~ (`is_test`-Flag auf 7 Tabellen — Test/Live-Wechsel sauber)
+- ~~`supabase-awaiting-payment-deadline.sql`~~ (`stripe_payment_link_id` + Deadline-Regeln)
+- ~~`supabase-check-email-rpc.sql`~~ (Anti-Enumeration RPC, ersetzt `listUsers` in 2 Auth-Routen)
 
 ### Noch offen
-- **SQL-Migration `supabase/supabase-customer-ugc.sql` ausführen** (Kundenmaterial-Tabelle + Default-Settings, idempotent).
-- **Storage-Bucket `customer-ugc` manuell anlegen** (Supabase-Dashboard, Public OFF, 50 MB pro Datei, MIME `image/*` + `video/mp4` + `video/quicktime` + `video/webm`) — Voraussetzung für Kunden-Material-Upload.
-- **SQL-Migration `supabase/supabase-admin-users.sql` ausführen** (Mitarbeiterkonten + Permissions, idempotent). Danach unter `/admin/einstellungen/mitarbeiter` ersten Owner + Mitarbeiter anlegen.
 - **Bestehende 6 Kameras brauchen Admin-Specs** (Technische Daten im Editor anlegen)
 - **Bestehende Kameras brauchen Seriennummern** (im Kamera-Editor unter "Kameras / Seriennummern" anlegen)
-- **SQL-Migration `supabase/supabase-assets.sql` ausfuehren** (assets-Tabelle + Erweiterungen an purchases/purchase_items/expenses + Bug-Fix fuer category='fees' → 'stripe_fees'). Idempotent.
-- **Supabase Storage-Bucket `purchase-invoices` manuell anlegen** (Dashboard → Storage → New Bucket, Public: OFF, File size: 20 MB, MIME: application/pdf, image/jpeg, image/png, image/webp).
+- **Ersten Owner anlegen** unter `/admin/einstellungen/mitarbeiter` (jetzt wo `admin-users.sql` durch ist). Danach `ADMIN_PASSWORD`-ENV auf einen zufaelligen Wert drehen, damit der Master-Login nur noch Notfall-Backup ist.
+- **Bestand nachtragen:** Nach Live-Deploy in `/admin/anlagen/nachtragen` fuer jede Altbestand-Kamera Kaufdatum + Kaufpreis eintragen, dann laeuft der AfA-Catchup automatisch. Bis dahin zieht der Vertrag den Kautionsbetrag als Wiederbeschaffungswert (Fallback).
 - **Cron-Eintrag AfA monatlich in Hetzner-Crontab:**
   `0 3 1 * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/depreciation`
-- **Bestand nachtragen:** Nach Live-Deploy in `/admin/anlagen/nachtragen` fuer jede Altbestand-Kamera Kaufdatum + Kaufpreis eintragen, dann laeuft der AfA-Catchup automatisch. Bis dahin zieht der Vertrag den Kautionsbetrag als Wiederbeschaffungswert (Fallback).
 - **Cron-Härtung optional:** `CRON_DISABLE_URL_SECRET=true` in Coolify-Env setzen + Hetzner-Crontab auf Header-Auth umstellen (`-H "x-cron-secret: $CRON_SECRET"`), damit Secrets nicht mehr in Access-Logs landen.
 - **Sicherheit:** API-Keys rotieren (wurden in einer Session öffentlich geteilt)
-- **SQL-Migration `supabase-performance-indizes.sql` ausführen** (8 Performance-Indizes, idempotent via `IF NOT EXISTS` + `CONCURRENTLY`).
-- **SQL-Migration `supabase-social-image-position.sql` ausführen** (2 Spalten `fb_image_position` + `ig_image_position` auf `social_posts` für unabhängige FB/IG-Bild-Positionierung).
-- **SQL-Migration `supabase-waitlist-use-case.sql` ausführen** (Spalte `use_case` auf `waitlist_subscriptions` für optionalen Nutzungszweck-Dropdown).
-- **SQL-Migration `supabase-verification-deferred.sql` ausführen** (`verification_required` + `verification_gate_passed_at` auf `bookings` — Voraussetzung für Express-Signup-Flag).
-- **SQL-Migration `supabase-env-toggle.sql` ausführen** (is_test-Flag auf bookings/invoices/credit_notes/expenses/email_log/admin_audit_log/stripe_transactions — fuer sauberen Test/Live-Wechsel).
-- **SQL-Migration `supabase-awaiting-payment-deadline.sql` ausführen** (Spalte `stripe_payment_link_id` auf `bookings` + Setting `awaiting_payment_cancel_rules` mit Deadline-Regeln).
 - **Deadline-Regeln** in `admin_settings.awaiting_payment_cancel_rules`: `{ versand: { days_before_rental: 3, cutoff_hour_berlin: 18 }, abholung: { days_before_rental: 1, cutoff_hour_berlin: 18 } }`. Bedeutung: Deadline = `(rental_from − days_before_rental Tage)` um `cutoff_hour:00 Berlin-Zeit`. Versand-Default = **3 Tage vor Mietbeginn um 18:00 Berlin** (entspricht 2 vollen Versand-Tagen zwischen Deadline und Mietbeginn). Abholung-Default = **1 Tag vorher um 18:00 Berlin**. Sommer-/Winterzeit-Umstellung wird korrekt behandelt über `getBerlinOffsetString()`.
 - **Crontab (Auto-Storno unbezahlter Buchungen):** Zwei Varianten, je nachdem ob der Cron-Daemon `TZ=`-Prefix unterstützt:
   - **Variante A (präziser, empfohlen):** Läuft täglich 18:01 Berlin, genau 1 Min nach der Deadline:
@@ -1232,7 +1230,7 @@ Systematischer Sweep ueber Admin- und Kundenkonto-UI nach Darstellungsfehlern. G
     5 * * * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/awaiting-payment-cancel
     ```
   Storniert `awaiting_payment`-Buchungen deren Deadline (siehe Regeln oben) erreicht ist. Deaktiviert den Stripe Payment Link via `stripe.paymentLinks.update(id, {active:false})`, setzt Status `cancelled`, schickt Storno-Mail. Grace-Period: 1h nach Buchungs-Erstellung.
-- **Auto-Reels Go-Live:** (1) `supabase/supabase-reels.sql` ausführen (3 Tabellen + Seed-Vorlagen + `reels_settings`-Default). (2) Supabase Storage-Bucket `social-reels` manuell anlegen (Public ON, 50 MB reicht, `video/mp4` + `image/jpeg`). (3) Pexels API-Key (kostenlos) registrieren + in `admin_settings.reels_settings.pexels_api_key` hinterlegen oder als `PEXELS_API_KEY`-Env. (4) Docker-Image neu bauen (Dockerfile installiert jetzt `ffmpeg + ttf-dejavu` in Runner-Stage — braucht ~50 MB extra Image-Größe). (5) Crontab-Eintrag: `*/5 * * * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/reels-publish`.
+- **Auto-Reels Restschritte:** (1) Pexels API-Key (kostenlos) registrieren + in `admin_settings.reels_settings.pexels_api_key` hinterlegen oder als `PEXELS_API_KEY`-Env. (2) Docker-Image neu bauen (Dockerfile installiert jetzt `ffmpeg + ttf-dejavu` in Runner-Stage — braucht ~50 MB extra Image-Größe). (3) Crontab-Eintrag: `*/5 * * * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/reels-publish`.
 - **Go-Live 01.05.2026:** Test/Live-Switch auf Live umschalten (`/admin/einstellungen` → Test-/Live-Modus → "Live-Modus"). Ersetzt: TEST_MODE-Konstante, Stripe-Key-Wechsel, Vertrags-Wasserzeichen, Resend-Absender, Sendcloud-Keys.
 - **Go-Live 01.05.2026:** Domain test.cam2rent.de → cam2rent.de
 - **Go-Live 01.05.2026:** Resend Domain verifizieren (DKIM + SPF)
