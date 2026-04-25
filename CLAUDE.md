@@ -1210,14 +1210,10 @@ Systematischer Sweep ueber Admin- und Kundenkonto-UI nach Darstellungsfehlern. G
 - ~~`supabase-check-email-rpc.sql`~~ (Anti-Enumeration RPC, ersetzt `listUsers` in 2 Auth-Routen)
 
 ### Noch offen
-- **Bestehende 6 Kameras brauchen Admin-Specs** (Technische Daten im Editor anlegen)
-- **Bestehende Kameras brauchen Seriennummern** (im Kamera-Editor unter "Kameras / Seriennummern" anlegen)
-- **Ersten Owner anlegen** unter `/admin/einstellungen/mitarbeiter` (jetzt wo `admin-users.sql` durch ist). Danach `ADMIN_PASSWORD`-ENV auf einen zufaelligen Wert drehen, damit der Master-Login nur noch Notfall-Backup ist.
-- **Bestand nachtragen:** Nach Live-Deploy in `/admin/anlagen/nachtragen` fuer jede Altbestand-Kamera Kaufdatum + Kaufpreis eintragen, dann laeuft der AfA-Catchup automatisch. Bis dahin zieht der Vertrag den Kautionsbetrag als Wiederbeschaffungswert (Fallback).
 - **Cron-Eintrag AfA monatlich in Hetzner-Crontab:**
   `0 3 1 * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/depreciation`
 - **Cron-Härtung optional:** `CRON_DISABLE_URL_SECRET=true` in Coolify-Env setzen + Hetzner-Crontab auf Header-Auth umstellen (`-H "x-cron-secret: $CRON_SECRET"`), damit Secrets nicht mehr in Access-Logs landen.
-- **Sicherheit:** API-Keys rotieren (wurden in einer Session öffentlich geteilt)
+- **Sicherheit:** API-Keys rotieren (wurden in einer Session öffentlich geteilt). Nachdem der erste echte Owner unter `/admin/einstellungen/mitarbeiter` angelegt ist, zusätzlich `ADMIN_PASSWORD`-ENV in Coolify auf einen zufaelligen Wert drehen — der Master-Login soll nur noch Notfall-Backup sein.
 - **Deadline-Regeln** in `admin_settings.awaiting_payment_cancel_rules`: `{ versand: { days_before_rental: 3, cutoff_hour_berlin: 18 }, abholung: { days_before_rental: 1, cutoff_hour_berlin: 18 } }`. Bedeutung: Deadline = `(rental_from − days_before_rental Tage)` um `cutoff_hour:00 Berlin-Zeit`. Versand-Default = **3 Tage vor Mietbeginn um 18:00 Berlin** (entspricht 2 vollen Versand-Tagen zwischen Deadline und Mietbeginn). Abholung-Default = **1 Tag vorher um 18:00 Berlin**. Sommer-/Winterzeit-Umstellung wird korrekt behandelt über `getBerlinOffsetString()`.
 - **Crontab (Auto-Storno unbezahlter Buchungen):** Zwei Varianten, je nachdem ob der Cron-Daemon `TZ=`-Prefix unterstützt:
   - **Variante A (präziser, empfohlen):** Läuft täglich 18:01 Berlin, genau 1 Min nach der Deadline:
