@@ -41,7 +41,7 @@ export async function GET() {
   // Use service role to query bookings by user_id OR customer_email
   const supabase = createServiceClient();
   const selectFields =
-    'id, product_id, product_name, rental_from, rental_to, days, price_total, status, delivery_mode, haftung, created_at, tracking_number, tracking_url, shipped_at, return_label_url, contract_signed, contract_signed_at, original_rental_to, extended_at';
+    'id, product_id, product_name, rental_from, rental_to, days, price_total, status, delivery_mode, haftung, created_at, tracking_number, tracking_url, shipped_at, return_label_url, contract_signed, contract_signed_at, original_rental_to, extended_at, stripe_payment_link_id';
 
   // Suche per user_id UND per E-Mail (für noch nicht verknüpfte Gast-Buchungen)
   const { data: bookings, error } = await supabase

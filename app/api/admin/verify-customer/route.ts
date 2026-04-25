@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { logAudit } from '@/lib/audit';
 import { sendVerificationRejected } from '@/lib/email';
+import { approvePendingBooking } from '@/lib/booking-approve';
 
 /**
  * POST /api/admin/verify-customer
@@ -42,6 +43,28 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Aktualisierung fehlgeschlagen.' }, { status: 500 });
     }
 
+    // Bei Verifizierung: alle pending_verification-Buchungen des Kunden
+    // automatisch freigeben (Stripe-Payment-Link erzeugen, Status auf
+    // awaiting_payment), ABER ohne Mail an den Kunden — er sieht die
+    // Buchung in seinem Konto und kann dort direkt bezahlen.
+    const autoApproved: Array<{ id: string }> = [];
+    if (status === 'verified') {
+      const { data: pendingBookings } = await supabase
+        .from('bookings')
+        .select('id')
+        .eq('user_id', customerId)
+        .eq('status', 'pending_verification');
+
+      for (const b of pendingBookings ?? []) {
+        const result = await approvePendingBooking(b.id, { sendEmail: false });
+        if (result.success) {
+          autoApproved.push({ id: b.id });
+        } else {
+          console.warn('[verify-customer] Auto-Approve fehlgeschlagen fuer', b.id, result.error);
+        }
+      }
+    }
+
     // Bei Ablehnung: E-Mail an Kunden mit Re-Upload-Link
     if (status === 'rejected') {
       try {
@@ -73,7 +96,7 @@ export async function POST(req: NextRequest) {
       request: req,
     });
 
-    return NextResponse.json({ success: true, status });
+    return NextResponse.json({ success: true, status, autoApproved });
   } catch (err) {
     console.error('POST /api/admin/verify-customer error:', err);
     return NextResponse.json({ error: 'Serverfehler.' }, { status: 500 });

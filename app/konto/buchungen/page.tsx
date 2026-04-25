@@ -23,7 +23,7 @@ interface Booking {
   rental_to: string;
   days: number;
   price_total: number;
-  status: 'confirmed' | 'shipped' | 'completed' | 'cancelled';
+  status: 'pending_verification' | 'awaiting_payment' | 'confirmed' | 'shipped' | 'picked_up' | 'returned' | 'completed' | 'cancelled' | 'damaged';
   delivery_mode: string;
   haftung: string;
   created_at: string;
@@ -35,6 +35,7 @@ interface Booking {
   contract_signed_at: string | null;
   original_rental_to: string | null;
   extended_at: string | null;
+  stripe_payment_link_id: string | null;
 }
 
 const statusConfig: Record<string, { label: string; className: string }> = {
@@ -682,6 +683,34 @@ export default function BuchungenPage() {
                       <p className="text-sm font-bold text-brand-black dark:text-white">{formatCurrency(booking.price_total)}</p>
                     </div>
                   </div>
+
+                  {/* Awaiting payment — Jetzt-bezahlen-Button (Stripe Payment Link). */}
+                  {booking.status === 'awaiting_payment' && booking.stripe_payment_link_id && (
+                    <a
+                      href={`/api/booking/${booking.id}/pay?redirect=1`}
+                      className="mb-3 flex items-center justify-center gap-2 w-full py-3 bg-accent-blue text-white font-heading font-semibold rounded-btn hover:bg-blue-700 transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                      </svg>
+                      Jetzt bezahlen — {formatCurrency(booking.price_total)}
+                    </a>
+                  )}
+
+                  {/* Pending verification — Hinweis dass Konto erst geprueft wird */}
+                  {booking.status === 'pending_verification' && (
+                    <div className="mb-3 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg flex items-start gap-2.5">
+                      <svg className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <div className="text-xs">
+                        <span className="font-semibold text-amber-800 dark:text-amber-300">Wartet auf Freigabe</span>
+                        <span className="text-amber-700 dark:text-amber-400">
+                          {' '}— Sobald wir deinen Ausweis geprüft haben, kannst du die Buchung hier direkt bezahlen.
+                        </span>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Extension info */}
                   {booking.extended_at && booking.original_rental_to && (
