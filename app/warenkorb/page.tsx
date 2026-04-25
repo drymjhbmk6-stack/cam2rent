@@ -284,25 +284,25 @@ export default function WarenkorbPage() {
               </div>
 
               <div className="border-t border-brand-border dark:border-white/10 pt-3 space-y-2 mb-3">
-                <div className="flex justify-between text-sm">
+                <div className="flex justify-between items-baseline gap-2 text-sm">
                   <span className="text-brand-text dark:text-gray-300">Zwischensumme</span>
-                  <span className="text-brand-black dark:text-white font-medium">
+                  <span className="text-brand-black dark:text-white font-medium whitespace-nowrap flex-shrink-0">
                     {fmtEuro(cartTotal)}
                   </span>
                 </div>
-                <div className="flex justify-between text-sm">
+                <div className="flex justify-between items-baseline gap-2 text-sm">
                   <span className="text-brand-text dark:text-gray-300">
                     Hin- und Rückversand (Standard)
                   </span>
-                  <span className="text-brand-black dark:text-white font-medium">
+                  <span className="text-brand-black dark:text-white font-medium whitespace-nowrap flex-shrink-0">
                     {shipping.isFree ? 'Gratis' : fmtEuro(shipping.price)}
                   </span>
                 </div>
-                <div className="flex justify-between pt-2 border-t border-brand-border dark:border-white/10">
+                <div className="flex justify-between items-baseline gap-2 pt-2 border-t border-brand-border dark:border-white/10">
                   <span className="font-heading font-semibold text-brand-black dark:text-white">
                     Gesamt
                   </span>
-                  <span className="font-heading font-bold text-brand-black dark:text-white">
+                  <span className="font-heading font-bold text-brand-black dark:text-white whitespace-nowrap flex-shrink-0">
                     {fmtEuro(grandTotal)}
                   </span>
                 </div>
