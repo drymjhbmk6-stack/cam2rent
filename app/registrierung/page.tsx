@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import ExpressSignup from '@/components/checkout/ExpressSignup';
@@ -16,6 +16,20 @@ import { useAuth } from '@/components/AuthProvider';
  * direkt einloggen. Spam-Schutz: Rate-Limit 5/h pro IP.
  */
 export default function RegistrierungPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-brand-bg dark:bg-brand-black flex items-center justify-center">
+          <div className="w-8 h-8 border-2 border-accent-blue border-t-transparent rounded-full animate-spin" />
+        </div>
+      }
+    >
+      <RegistrierungInner />
+    </Suspense>
+  );
+}
+
+function RegistrierungInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get('redirect') || '/konto';
