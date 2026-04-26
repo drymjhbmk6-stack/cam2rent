@@ -15,10 +15,14 @@ interface Template {
   bg_color_to: string;
   trigger_type: string | null;
   is_active: boolean;
+  // Phase 2.2: Ken-Burns-Modus pro Template
+  motion_style?: 'static' | 'kenburns' | 'mixed';
 }
 
 interface ReelsSettings {
   pexels_api_key?: string;
+  // Phase 1.5: zweite Stock-Footage-Quelle. Solange leer → Pexels-only.
+  pixabay_api_key?: string;
   voice_enabled?: boolean;
   voice_name?: 'alloy' | 'echo' | 'fable' | 'nova' | 'onyx' | 'shimmer';
   voice_model?: 'tts-1' | 'tts-1-hd';
@@ -235,6 +239,18 @@ export default function TemplatesPage() {
             />
           </label>
           <label className="block">
+            <span className="block text-xs font-medium text-brand-steel dark:text-gray-400 mb-1">
+              Pixabay API-Key <span className="text-brand-steel/70">(optional, zweite Quelle)</span>
+            </span>
+            <input
+              type="password"
+              placeholder="z.B. 12345678-abcdef..."
+              value={settings.pixabay_api_key ?? ''}
+              onChange={(e) => setSettings({ ...settings, pixabay_api_key: e.target.value })}
+              className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-brand-dark dark:text-white"
+            />
+          </label>
+          <label className="block">
             <span className="block text-xs font-medium text-brand-steel dark:text-gray-400 mb-1">Max. Reel-Dauer (Sekunden)</span>
             <input
               type="number"
@@ -248,6 +264,8 @@ export default function TemplatesPage() {
         </div>
         <p className="text-xs text-brand-steel dark:text-gray-500 mt-2">
           Hintergrund-Musik wird jetzt pro Reel aus der Musik-Bibliothek (siehe unten) ausgewählt. Der als &bdquo;Standard&ldquo; markierte Track wird automatisch vorgewählt.
+          Pixabay als zweite Stock-Footage-Quelle ist optional — solange leer, wird ausschließlich Pexels abgefragt. Mit Key
+          wird pro Reel deterministisch zwischen beiden gewechselt (verhindert Wiederholung der Clips).
         </p>
 
         <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
@@ -537,6 +555,7 @@ function TemplateForm({
   const [hashtagsText, setHashtagsText] = useState((initial?.default_hashtags ?? []).join(', '));
   const [bgColorFrom, setBgColorFrom] = useState(initial?.bg_color_from ?? '#3B82F6');
   const [bgColorTo, setBgColorTo] = useState(initial?.bg_color_to ?? '#1E40AF');
+  const [motionStyle, setMotionStyle] = useState<'static' | 'kenburns' | 'mixed'>(initial?.motion_style ?? 'kenburns');
   const [isActive, setIsActive] = useState(initial?.is_active ?? true);
 
   const inputClass =
@@ -603,6 +622,20 @@ function TemplateForm({
           </label>
         </div>
       )}
+      {templateType === 'stock_footage' && (
+        <label className="block text-sm">
+          <span className="block text-xs font-medium text-brand-steel dark:text-gray-400 mb-1">Bewegung in Stock-Clips (Ken-Burns)</span>
+          <select
+            value={motionStyle}
+            onChange={(e) => setMotionStyle(e.target.value as 'static' | 'kenburns' | 'mixed')}
+            className={inputClass}
+          >
+            <option value="kenburns">Ken-Burns (Zoom + Pan, deterministisch zufällig pro Szene)</option>
+            <option value="mixed">Mixed (~50/50 Static / Ken-Burns)</option>
+            <option value="static">Static (kein Effekt — alter Look)</option>
+          </select>
+        </label>
+      )}
       <label className="flex items-center gap-2 text-sm text-brand-dark dark:text-white cursor-pointer">
         <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
         <span>Aktiv (kann im Generator ausgewählt werden)</span>
@@ -625,6 +658,7 @@ function TemplateForm({
               default_hashtags: hashtagsText.split(',').map((s) => s.trim()).filter(Boolean),
               bg_color_from: bgColorFrom,
               bg_color_to: bgColorTo,
+              motion_style: motionStyle,
               is_active: isActive,
             })
           }

@@ -13,6 +13,8 @@ const EDITABLE = new Set([
   'default_hashtags',
   'bg_color_from',
   'bg_color_to',
+  // Phase 2.2: Ken-Burns-Modus
+  'motion_style',
   'trigger_type',
   'is_active',
 ]);

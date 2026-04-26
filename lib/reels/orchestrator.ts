@@ -85,6 +85,8 @@ interface TemplateRow {
   default_hashtags: string[];
   bg_color_from: string;
   bg_color_to: string;
+  // Phase 2.2: optional, kann fehlen wenn Template aus alter Migration stammt
+  motion_style?: 'static' | 'kenburns' | 'mixed';
 }
 
 async function loadTemplate(templateId: string | undefined): Promise<TemplateRow | null> {
@@ -248,7 +250,10 @@ export async function generateReel(opts: GenerateReelOptions): Promise<GenerateR
     }
 
     // ── 5b. Rendern ─────────────────────────────────────────────────────────
-    const { videoBuffer, thumbnailBuffer, durationSeconds, log } = await renderReel({
+    // Phase 2.2: motionStyle aus Template (oder Default 'kenburns'), reelId als
+    // Seed fuer deterministische Ken-Burns-Variante pro Szene.
+    const motionStyleResolved: 'static' | 'kenburns' | 'mixed' = tmpl.motion_style ?? 'kenburns';
+    const { videoBuffer, thumbnailBuffer, durationSeconds, log, qualityMetrics } = await renderReel({
       script,
       templateType,
       clips,
@@ -260,6 +265,8 @@ export async function generateReel(opts: GenerateReelOptions): Promise<GenerateR
       outroEnabled: settings.outro_enabled !== false, // Default: true
       introDuration: settings.intro_duration ?? 1.5,
       outroDuration: settings.outro_duration ?? 1.5,
+      motionStyle: motionStyleResolved,
+      reelId,
     });
 
     // ── 6. Upload ───────────────────────────────────────────────────────────
@@ -302,20 +309,30 @@ export async function generateReel(opts: GenerateReelOptions): Promise<GenerateR
       ? `[stock-sources] ${Object.entries(sourceCounts).map(([k, v]) => `${k}=${v}`).join(' · ')}`
       : '[stock-sources] none (motion_graphics)';
 
-    await supabase
+    // Phase 2.5: Strukturierte Metriken in eigene Spalte. Defensiv: wenn
+    // die Migration `quality_metrics` noch nicht ausgefuehrt ist, fangen
+    // wir den Fehler ab und fallen auf das alte UPDATE zurueck.
+    const updatePayload: Record<string, unknown> = {
+      caption: script.caption,
+      hashtags: script.hashtags,
+      video_url: videoUrl,
+      thumbnail_url: thumbnailUrl,
+      duration_seconds: durationSeconds,
+      script_json: script as unknown as Record<string, unknown>,
+      render_log: `${audioHeader}\n${sourceSummary}\n${log}`.slice(-4000),
+      status: newStatus,
+      error_message: null,
+      quality_metrics: qualityMetrics as unknown as Record<string, unknown>,
+    };
+    const { error: updateError } = await supabase
       .from('social_reels')
-      .update({
-        caption: script.caption,
-        hashtags: script.hashtags,
-        video_url: videoUrl,
-        thumbnail_url: thumbnailUrl,
-        duration_seconds: durationSeconds,
-        script_json: script as unknown as Record<string, unknown>,
-        render_log: `${audioHeader}\n${sourceSummary}\n${log}`.slice(-4000),
-        status: newStatus,
-        error_message: null,
-      })
+      .update(updatePayload)
       .eq('id', reelId);
+    if (updateError && updateError.message?.includes('quality_metrics')) {
+      // Migration noch nicht durch — retry ohne quality_metrics-Feld
+      delete updatePayload.quality_metrics;
+      await supabase.from('social_reels').update(updatePayload).eq('id', reelId);
+    }
 
     return { reelId, status: newStatus, script, videoUrl, thumbnailUrl };
   } catch (err) {

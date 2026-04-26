@@ -20,6 +20,18 @@ interface ReelScript {
   cta_frame: { headline: string; subline?: string; duration: number };
 }
 
+interface ReelQualityMetrics {
+  file_size_bytes?: number;
+  duration_seconds?: number;
+  avg_bitrate_kbps?: number;
+  segment_count?: number;
+  source_resolutions?: Array<{ index: number; width: number; height: number; source: string }>;
+  stock_sources?: Record<string, number>;
+  render_duration_seconds?: number;
+  font_used?: string;
+  motion_style?: 'static' | 'kenburns' | 'mixed';
+}
+
 interface Reel {
   id: string;
   caption: string;
@@ -31,6 +43,7 @@ interface Reel {
   template_type: 'stock_footage' | 'motion_graphics';
   script_json: ReelScript | null;
   render_log: string | null;
+  quality_metrics?: ReelQualityMetrics | null;
   platforms: string[];
   fb_account_id: string | null;
   ig_account_id: string | null;
@@ -73,6 +86,7 @@ export default function ReelDetailPage({ params }: { params: Promise<{ id: strin
   const [scheduledAt, setScheduledAt] = useState('');
   const [showScript, setShowScript] = useState(false);
   const [showLog, setShowLog] = useState(false);
+  const [showMetrics, setShowMetrics] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
 
@@ -380,6 +394,83 @@ export default function ReelDetailPage({ params }: { params: Promise<{ id: strin
                 <p className="text-xs text-brand-steel dark:text-gray-500">CTA · {reel.script_json.cta_frame.duration}s</p>
               </div>
             </div>
+          )}
+        </div>
+      )}
+
+      {/* Phase 2.5: Render-Metriken (collapsible). Nur sichtbar, wenn die
+          Migration `quality_metrics` durch ist und der Render mit Phase-2-Pipeline lief. */}
+      {reel.quality_metrics && Object.keys(reel.quality_metrics).length > 0 && (
+        <div className="mt-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+          <button onClick={() => setShowMetrics((s) => !s)} className="flex items-center justify-between w-full text-left">
+            <span className="text-sm font-medium text-brand-dark dark:text-white">Render-Metriken</span>
+            <span className="text-xs text-brand-steel dark:text-gray-500">{showMetrics ? 'einklappen' : 'aufklappen'}</span>
+          </button>
+          {showMetrics && (
+            <dl className="mt-3 grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-2 text-xs">
+              {typeof reel.quality_metrics.file_size_bytes === 'number' && (
+                <div>
+                  <dt className="text-brand-steel dark:text-gray-500">Datei-Größe</dt>
+                  <dd className="text-brand-dark dark:text-white font-medium">
+                    {(reel.quality_metrics.file_size_bytes / (1024 * 1024)).toFixed(1)} MB
+                  </dd>
+                </div>
+              )}
+              {typeof reel.quality_metrics.avg_bitrate_kbps === 'number' && (
+                <div>
+                  <dt className="text-brand-steel dark:text-gray-500">Ø Bitrate</dt>
+                  <dd className="text-brand-dark dark:text-white font-medium">{reel.quality_metrics.avg_bitrate_kbps} kbit/s</dd>
+                </div>
+              )}
+              {typeof reel.quality_metrics.duration_seconds === 'number' && (
+                <div>
+                  <dt className="text-brand-steel dark:text-gray-500">Dauer</dt>
+                  <dd className="text-brand-dark dark:text-white font-medium">{reel.quality_metrics.duration_seconds.toFixed(1)} s</dd>
+                </div>
+              )}
+              {typeof reel.quality_metrics.segment_count === 'number' && (
+                <div>
+                  <dt className="text-brand-steel dark:text-gray-500">Segmente</dt>
+                  <dd className="text-brand-dark dark:text-white font-medium">{reel.quality_metrics.segment_count}</dd>
+                </div>
+              )}
+              {typeof reel.quality_metrics.render_duration_seconds === 'number' && (
+                <div>
+                  <dt className="text-brand-steel dark:text-gray-500">Render-Zeit</dt>
+                  <dd className="text-brand-dark dark:text-white font-medium">{reel.quality_metrics.render_duration_seconds.toFixed(1)} s</dd>
+                </div>
+              )}
+              {reel.quality_metrics.motion_style && (
+                <div>
+                  <dt className="text-brand-steel dark:text-gray-500">Motion-Style</dt>
+                  <dd className="text-brand-dark dark:text-white font-medium">{reel.quality_metrics.motion_style}</dd>
+                </div>
+              )}
+              {reel.quality_metrics.font_used && (
+                <div>
+                  <dt className="text-brand-steel dark:text-gray-500">Schrift</dt>
+                  <dd className="text-brand-dark dark:text-white font-medium">{reel.quality_metrics.font_used}</dd>
+                </div>
+              )}
+              {reel.quality_metrics.stock_sources && Object.keys(reel.quality_metrics.stock_sources).length > 0 && (
+                <div className="col-span-2 md:col-span-3">
+                  <dt className="text-brand-steel dark:text-gray-500">Stock-Quellen</dt>
+                  <dd className="text-brand-dark dark:text-white font-medium">
+                    {Object.entries(reel.quality_metrics.stock_sources).map(([k, v]) => `${k}=${v}`).join(' · ')}
+                  </dd>
+                </div>
+              )}
+              {reel.quality_metrics.source_resolutions && reel.quality_metrics.source_resolutions.length > 0 && (
+                <div className="col-span-2 md:col-span-3">
+                  <dt className="text-brand-steel dark:text-gray-500">Quell-Auflösungen</dt>
+                  <dd className="text-brand-dark dark:text-white font-mono text-[10px]">
+                    {reel.quality_metrics.source_resolutions
+                      .map((r) => `Seg-${r.index}: ${r.source} ${r.width}×${r.height}`)
+                      .join(' · ')}
+                  </dd>
+                </div>
+              )}
+            </dl>
           )}
         </div>
       )}

@@ -45,6 +45,9 @@ export async function POST(req: NextRequest) {
       default_hashtags: Array.isArray(body.default_hashtags) ? body.default_hashtags : [],
       bg_color_from: typeof body.bg_color_from === 'string' ? body.bg_color_from : '#3B82F6',
       bg_color_to: typeof body.bg_color_to === 'string' ? body.bg_color_to : '#1E40AF',
+      motion_style: ['static', 'kenburns', 'mixed'].includes(body.motion_style)
+        ? body.motion_style
+        : 'kenburns',
       trigger_type: typeof body.trigger_type === 'string' ? body.trigger_type : 'manual',
       is_active: body.is_active !== false,
     })

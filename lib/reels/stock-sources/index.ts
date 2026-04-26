@@ -24,8 +24,11 @@ const ALL_SOURCES: StockSource[] = [pexelsSource, pixabaySource];
  * Stabiler 32-bit-Hash eines Strings (FNV-1a).
  * Wir brauchen Determinismus — bei einem Re-Render mit gleicher reelId muss
  * dieselbe Primaerquelle gewaehlt werden, damit die Reproduzierbarkeit haelt.
+ *
+ * Wird auch von ffmpeg-render.ts fuer die deterministische Ken-Burns-
+ * Varianten-Auswahl pro Segment benutzt (Phase 2.2).
  */
-function stableHash(str: string): number {
+export function stableHash(str: string): number {
   let hash = 0x811c9dc5;
   for (let i = 0; i < str.length; i++) {
     hash ^= str.charCodeAt(i);

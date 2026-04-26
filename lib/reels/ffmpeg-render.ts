@@ -23,6 +23,9 @@ import { tmpdir } from 'os';
 import path from 'path';
 import type { ReelScript } from './script-ai';
 import type { StockClip } from './stock-sources/types';
+import { stableHash } from './stock-sources';
+
+export type MotionStyle = 'static' | 'kenburns' | 'mixed';
 
 export interface RenderInput {
   script: ReelScript;
@@ -48,6 +51,31 @@ export interface RenderInput {
   outroEnabled?: boolean;   // Default: true
   introDuration?: number;   // Default: 1.5s
   outroDuration?: number;   // Default: 1.5s
+  /**
+   * Phase 2.2: Steuert den Ken-Burns-Effekt auf Stock-Clips.
+   *   'static'   — kein Effekt (Status quo vor Phase 2).
+   *   'kenburns' — pro Szene zufaellig Zoom-In / Zoom-Out / Pan-left / Pan-right.
+   *   'mixed'    — pro Szene zufaellig 'static' oder 'kenburns'.
+   * Default: 'kenburns'. Kommt vom Template (`social_reel_templates.motion_style`).
+   */
+  motionStyle?: MotionStyle;
+  /**
+   * Phase 2.2: Seed fuer die deterministische Effekt-Auswahl. Identische reelId
+   * + sceneIdx → gleiche Variante bei Re-Render. Typisch: `social_reels.id`.
+   */
+  reelId?: string;
+}
+
+export interface ReelQualityMetrics {
+  file_size_bytes: number;
+  duration_seconds: number;
+  avg_bitrate_kbps: number;
+  segment_count: number;
+  source_resolutions: Array<{ index: number; width: number; height: number; source: string }>;
+  stock_sources: Record<string, number>;
+  render_duration_seconds: number;
+  font_used: string;
+  motion_style: MotionStyle;
 }
 
 export interface RenderResult {
@@ -55,6 +83,8 @@ export interface RenderResult {
   thumbnailBuffer: Buffer;
   durationSeconds: number;
   log: string; // FFmpeg-Stderr für Debugging
+  /** Phase 2.5: strukturierte Render-Metriken fuer DB-Spalte `quality_metrics`. */
+  qualityMetrics: ReelQualityMetrics;
 }
 
 const TARGET_W = 1080;
@@ -73,6 +103,13 @@ const TARGET_FPS = 30;
 // Pfad hinterlegt werden (Phase 2 oder spaeter).
 const FONT_PATH_PRIMARY = '/usr/share/fonts/cam2rent/InterTight.ttf';
 const FONT_PATH_FALLBACK = '/usr/share/fonts/TTF/DejaVuSans-Bold.ttf';
+
+// Phase 2.3: Pre-rendered CTA-Brand-Assets im Repo (siehe scripts/reels/generate-cta-assets.mjs).
+// Werden vom Renderer als Overlay-Inputs benutzt — robuster als geq-Filter (Gradient) oder
+// drawbox (kann keine Border-Radius). Pfade absolut ueber process.cwd(), damit sie sowohl
+// im Docker-Standalone-Output als auch im local-dev-Mode aufloesen.
+const CTA_GRADIENT_PATH = path.join(process.cwd(), 'assets', 'reels', 'cta-gradient.png');
+const CTA_URL_PILL_PATH = path.join(process.cwd(), 'assets', 'reels', 'cta-url-pill.png');
 
 // Phase 1 (1.2/1.3): Vereinheitlichte Video-Encode-Argumente fuer ALLE Pro-Segment-Encodes.
 // Profile high + Level 4.0 + GOP=60 + sc_threshold=0 stellen sicher, dass alle Segmente
@@ -243,12 +280,94 @@ function detectFontPath(): string {
 }
 
 /**
+ * Phase 2.2: Wuerfelt eine Ken-Burns-Variante deterministisch aus seed+sceneIdx.
+ * Kombination aus reelId + Index garantiert: gleicher Re-Render → gleiche Variante.
+ *
+ * 'static'    — kein Effekt
+ * 'zoom-in'   — Skalierung 1.0 → 1.08, zentriert
+ * 'zoom-out'  — Skalierung 1.08 → 1.0, zentriert
+ * 'pan-left'  — leichte horizontale Bewegung von rechts nach links bei Zoom 1.04
+ * 'pan-right' — analog umgekehrt
+ */
+type KenBurnsVariant = 'static' | 'zoom-in' | 'zoom-out' | 'pan-left' | 'pan-right';
+
+function pickKenBurnsVariant(
+  motionStyle: MotionStyle,
+  seed: string,
+  sceneIdx: number
+): KenBurnsVariant {
+  if (motionStyle === 'static') return 'static';
+  const h = stableHash(`${seed}:${sceneIdx}`);
+  if (motionStyle === 'mixed') {
+    // 50/50 ob ueberhaupt Effekt
+    if ((h & 1) === 0) return 'static';
+  }
+  // 4 Varianten (zoom-in, zoom-out, pan-left, pan-right)
+  const variants: KenBurnsVariant[] = ['zoom-in', 'zoom-out', 'pan-left', 'pan-right'];
+  return variants[(h >>> 1) % variants.length];
+}
+
+/**
+ * Phase 2.2: Baut den zoompan-Filter-String fuer eine bestimmte Ken-Burns-Variante.
+ *
+ * Wir machen vorab `scale=2160x3840`, damit der zoompan Inner-Frame-Crop sauber
+ * bleibt (sonst entstehen Pixel-Artefakte am Rand bei Sub-Pixel-Verschiebungen).
+ * Output ist immer 1080x1920 @ 30 fps.
+ *
+ * Bei zoom-in startet zoom bei 1.0 und steigt linear bis 1.08 ueber durationFrames.
+ * Bei zoom-out: zoom startet bei 1.08, faellt auf 1.0 (mit `1.08-...`-Ausdruck).
+ * Pan-left/right: zoom konstant bei 1.04, x bewegt sich von einem Rand zum anderen.
+ *
+ * `iw` und `ih` referenzieren beim zoompan die hochskalierte Quelle (2160×3840).
+ * Das Output-Pixel-Format `s=1080x1920` enthaelt den finalen Frame nach Zoom.
+ */
+function buildKenBurnsFilter(variant: KenBurnsVariant, durationSec: number): string | null {
+  if (variant === 'static') return null;
+  const frames = Math.max(1, Math.round(durationSec * TARGET_FPS));
+  // Vorab-Upscale damit zoompan keine Pixel-Stretching-Artefakte erzeugt
+  const preScale = `scale=${TARGET_W * 2}:${TARGET_H * 2}:flags=bicubic`;
+  const sOut = `${TARGET_W}x${TARGET_H}`;
+
+  switch (variant) {
+    case 'zoom-in': {
+      // 1.0 → 1.08 linear, zentriert
+      const z = `'1.0+0.08*on/${frames}'`;
+      return `${preScale},zoompan=z=${z}:d=${frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${sOut}:fps=${TARGET_FPS}`;
+    }
+    case 'zoom-out': {
+      // 1.08 → 1.0 linear, zentriert
+      const z = `'1.08-0.08*on/${frames}'`;
+      return `${preScale},zoompan=z=${z}:d=${frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${sOut}:fps=${TARGET_FPS}`;
+    }
+    case 'pan-right': {
+      // zoom 1.04 fest, x von links (0) nach rechts (iw - iw/zoom)
+      const z = `'1.04'`;
+      const x = `'(iw-iw/zoom)*on/${frames}'`;
+      const y = `'ih/2-(ih/zoom/2)'`;
+      return `${preScale},zoompan=z=${z}:d=${frames}:x=${x}:y=${y}:s=${sOut}:fps=${TARGET_FPS}`;
+    }
+    case 'pan-left': {
+      // zoom 1.04 fest, x von rechts nach links
+      const z = `'1.04'`;
+      const x = `'(iw-iw/zoom)*(1-on/${frames})'`;
+      const y = `'ih/2-(ih/zoom/2)'`;
+      return `${preScale},zoompan=z=${z}:d=${frames}:x=${x}:y=${y}:s=${sOut}:fps=${TARGET_FPS}`;
+    }
+  }
+}
+
+/**
  * Baut einen FFmpeg-Filterkomplex für einen Stock-Footage-Clip:
  * - Auf 1080x1920 croppen (cover), 30fps
  * - Auf Szenen-Dauer trimmen
- * - Text-Overlay unten mit schwarzem Hintergrund (80% Opazität)
+ * - Phase 2.2: optional Ken-Burns (Zoom oder Pan) auf der gecroppten Quelle
+ * - Text-Overlay unten mit schwarzem Hintergrund (55% Opazität)
  */
-function buildClipFilter(sceneText: string, duration: number): string {
+function buildClipFilter(
+  sceneText: string,
+  duration: number,
+  kenBurns: KenBurnsVariant = 'static'
+): string {
   const baseFilters = [
     `scale=${TARGET_W}:${TARGET_H}:force_original_aspect_ratio=increase`,
     `crop=${TARGET_W}:${TARGET_H}`,
@@ -256,6 +375,12 @@ function buildClipFilter(sceneText: string, duration: number): string {
     `trim=duration=${duration}`,
     `setpts=PTS-STARTPTS`,
   ];
+
+  // Phase 2.2: Ken-Burns kommt NACH dem Crop, damit zoompan auf einem 1080x1920-
+  // Frame-Stack arbeitet (statt auf der Original-Quelle, die andere Aspect-Ratio
+  // haben kann).
+  const kbFilter = buildKenBurnsFilter(kenBurns, duration);
+  if (kbFilter) baseFilters.push(kbFilter);
 
   const trimmed = (sceneText || '').trim();
   if (!trimmed) return baseFilters.join(',');
@@ -277,42 +402,127 @@ function buildClipFilter(sceneText: string, duration: number): string {
 }
 
 /**
- * CTA-Frame aus solid-color-Hintergrund + drawtext.
- * Nutzt `lavfi` color-Source, damit kein Input-Video nötig ist.
+ * Phase 2.3: Voll gebrandeter CTA-Frame.
+ *
+ * Layout (von oben nach unten):
+ *   - cta-gradient.png als Hintergrund (1080x1920, Navy → Blue)
+ *   - Logo bei y=140, ~400px Breite, zentriert
+ *   - Headline bei y=TARGET_H*0.46 (Inter Tight, 88pt, weiss)
+ *   - Subline bei y=TARGET_H*0.60 (Inter Tight, 52pt, Cyan #06B6D4)
+ *   - URL-Pill (cta-url-pill.png) bei y=TARGET_H-260, 720x140 zentriert
+ *   - "cam2rent.de"-Text auf der Pill, 44pt, Dark Navy
+ *
+ * Fallback bei fehlenden Assets: einfacher Color-BG + drawtext (alter Look).
+ *
+ * Nutzt filter_complex mit drei Bild-Inputs. Output-Stream-Label: `[out]`.
  */
-function buildCtaInput(text: { headline: string; subline?: string }, duration: number, bgColor: string): { args: string[]; filter: string } {
-  // Hex → FFmpeg color syntax (remove #)
-  const col = bgColor.startsWith('#') ? `0x${bgColor.slice(1)}` : bgColor;
-  const args = ['-f', 'lavfi', '-t', String(duration), '-i', `color=c=${col}:s=${TARGET_W}x${TARGET_H}:r=${TARGET_FPS}`];
+function buildCtaFrameInput(
+  text: { headline: string; subline?: string },
+  duration: number,
+  logoPath: string | null,
+  fallbackBgColor: string
+): { inputArgs: string[]; filterComplex: string; outLabel: string } {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const fs = require('node:fs') as typeof import('node:fs');
+  const hasGradient = fs.existsSync(CTA_GRADIENT_PATH);
+  const hasPill = fs.existsSync(CTA_URL_PILL_PATH);
+  const hasLogo = Boolean(logoPath);
+  const fullBranded = hasGradient && hasPill && hasLogo;
 
-  // Headline auf 40% Höhe, Subline auf 58% Höhe — beide werden bei Bedarf umgebrochen/verkleinert.
-  const parts: string[] = [];
-  if (text.headline?.trim()) {
-    parts.push(
-      buildStackedDrawtext(text.headline, {
+  if (!fullBranded) {
+    // Fallback: alter Color-BG + drawtext (Status quo vor Phase 2.3).
+    const col = fallbackBgColor.startsWith('#') ? `0x${fallbackBgColor.slice(1)}` : fallbackBgColor;
+    const inputArgs = ['-f', 'lavfi', '-t', String(duration), '-i', `color=c=${col}:s=${TARGET_W}x${TARGET_H}:r=${TARGET_FPS}`];
+    const parts: string[] = [];
+    if (text.headline?.trim()) {
+      parts.push(
+        buildStackedDrawtext(text.headline, {
+          fontsize: 88,
+          maxLines: 3,
+          yCenterPx: Math.round(TARGET_H * 0.42),
+          borderw: 2,
+          bordercolor: 'black@0.3',
+        })
+      );
+    }
+    if (text.subline?.trim()) {
+      parts.push(
+        buildStackedDrawtext(text.subline, {
+          fontsize: 52,
+          maxLines: 2,
+          yCenterPx: Math.round(TARGET_H * 0.58),
+          fontcolor: 'white@0.9',
+          borderw: 2,
+          bordercolor: 'black@0.3',
+        })
+      );
+    }
+    const filter = parts.filter((p) => p && p !== 'null').join(',') || 'null';
+    return { inputArgs, filterComplex: `[0:v]${filter},format=yuv420p[out]`, outLabel: '[out]' };
+  }
+
+  // Voll gebrandeter Pfad — drei Bild-Inputs:
+  //   [0:v] = Gradient (1080x1920 PNG)
+  //   [1:v] = Logo (weiss auf transparent)
+  //   [2:v] = URL-Pill (weiss mit alpha + Shadow)
+  // Audio wird durch -an im Caller verworfen — keine lavfi-Audio-Source noetig.
+  const inputArgs: string[] = [
+    '-loop', '1', '-t', String(duration), '-r', String(TARGET_FPS), '-i', CTA_GRADIENT_PATH,
+    '-loop', '1', '-t', String(duration), '-r', String(TARGET_FPS), '-i', logoPath as string,
+    '-loop', '1', '-t', String(duration), '-r', String(TARGET_FPS), '-i', CTA_URL_PILL_PATH,
+  ];
+
+  // Headline + Subline drawtext-Filter
+  const headlineDraw = text.headline?.trim()
+    ? buildStackedDrawtext(text.headline, {
         fontsize: 88,
         maxLines: 3,
-        yCenterPx: Math.round(TARGET_H * 0.4),
-        borderw: 2,
-        bordercolor: 'black@0.3',
+        yCenterPx: Math.round(TARGET_H * 0.46),
+        fontcolor: 'white',
+        borderw: 0,
       })
-    );
-  }
-  if (text.subline?.trim()) {
-    parts.push(
-      buildStackedDrawtext(text.subline, {
+    : null;
+  const sublineDraw = text.subline?.trim()
+    ? buildStackedDrawtext(text.subline, {
         fontsize: 52,
         maxLines: 2,
-        yCenterPx: Math.round(TARGET_H * 0.58),
-        fontcolor: 'white@0.9',
-        borderw: 2,
-        bordercolor: 'black@0.3',
+        yCenterPx: Math.round(TARGET_H * 0.60),
+        fontcolor: '0x06B6D4', // cam2rent Cyan
+        borderw: 0,
       })
-    );
-  }
+    : null;
 
-  const filter = parts.filter((p) => p && p !== 'null').join(',') || 'null';
-  return { args, filter };
+  // URL-Pill-Text (statisch "cam2rent.de" — Pill-PNG ist Layout, Text via drawtext flexibel)
+  const font = detectFontPath();
+  const urlText = escapeDrawtext('cam2rent.de');
+  const pillTopY = TARGET_H - 260; // Pill-Position
+  const pillCenterY = pillTopY + 70; // Pill ist 140 hoch (mit Shadow), effektive Mitte
+  const urlDraw = `drawtext=fontfile='${font}':text='${urlText}':expansion=none:fontsize=44:fontcolor=0x0F172A:x=(w-text_w)/2:y=${pillCenterY}-text_h/2`;
+
+  // Filter-Chain bauen
+  // [0:v] Gradient ist schon 1080x1920 → kein Scale noetig
+  // [1:v] Logo wird auf 400 Breite skaliert
+  // [2:v] Pill wird auf 720 Breite skaliert (entspricht Pill-PNG-Dimensionen)
+  const chain: string[] = [];
+  chain.push(`[0:v]format=yuv420p,scale=${TARGET_W}:${TARGET_H}[bg]`);
+  chain.push(`[1:v]scale=400:-1[logo]`);
+  chain.push(`[bg][logo]overlay=(W-w)/2:140[v1]`);
+
+  let prevLabel = '[v1]';
+  if (headlineDraw) {
+    chain.push(`${prevLabel}${headlineDraw}[v2]`);
+    prevLabel = '[v2]';
+  }
+  if (sublineDraw) {
+    chain.push(`${prevLabel}${sublineDraw}[v3]`);
+    prevLabel = '[v3]';
+  }
+  chain.push(`[2:v]scale=720:-1[pill]`);
+  chain.push(`${prevLabel}[pill]overlay=(W-w)/2:${pillTopY}[v4]`);
+  chain.push(`[v4]${urlDraw},format=yuv420p[out]`);
+
+  const filterComplex = chain.join(';');
+  return { inputArgs, filterComplex, outLabel: '[out]' };
 }
 
 /**
@@ -351,6 +561,31 @@ async function buildBrandingFrame(
   const bgColor = '0x0F172A';
   const font = detectFontPath();
 
+  // Phase 2.4: Outro nutzt jetzt das gleiche gebrandete Layout wie der CTA
+  // (Gradient + Logo + URL-Pill + feste Subline). CTA und Outro verschmelzen
+  // visuell zu einem zweiteiligen Endbild mit konsistenter Farbsprache.
+  if (type === 'outro') {
+    const cta = buildCtaFrameInput(
+      { headline: '', subline: 'Action-Cam mieten in Berlin' },
+      duration,
+      logoPath,
+      '#0F172A',
+    );
+    const { stderr } = await runFfmpeg([
+      '-y',
+      '-hide_banner',
+      '-loglevel', 'error',
+      ...cta.inputArgs,
+      '-filter_complex', cta.filterComplex,
+      '-map', cta.outLabel,
+      ...STD_VIDEO_ENCODE_ARGS,
+      '-an',
+      outPath,
+    ]);
+    return { log: stderr };
+  }
+
+  // ── Intro-Frame (unveraendert): cam2rent-Logo zentriert auf Navy ─────────
   if (!logoPath) {
     // Fallback: nur Wortmarke als Text
     const text = escapeDrawtext('cam2rent.de');
@@ -370,21 +605,11 @@ async function buildBrandingFrame(
     return { log: stderr };
   }
 
-  // Mit Logo-PNG ueberlagern
-  // Logo auf ~700px Breite skalieren (genug Raum, aber nicht randlos)
-  // Leichter Fade-In beim Intro, Fade-Out beim Outro fuer smootheren Uebergang
-  const fadeFilter = type === 'intro'
-    ? `fade=t=in:st=0:d=0.3`
-    : `fade=t=out:st=${Math.max(0, duration - 0.3)}:d=0.3`;
-
-  const taglineText = type === 'outro' ? escapeDrawtext('Action-Cam mieten auf cam2rent.de') : '';
-  const taglineFilter = taglineText
-    ? `,drawtext=fontfile='${font}':text='${taglineText}':expansion=none:fontsize=48:fontcolor=white@0.85:x=(w-text_w)/2:y=h/2+240`
-    : '';
-
+  // Mit Logo-PNG ueberlagern, leichter Fade-In am Anfang
+  const fadeFilter = `fade=t=in:st=0:d=0.3`;
   const filterComplex = [
     `[1:v]scale=700:-1[logo]`,
-    `[0:v][logo]overlay=(W-w)/2:(H-h)/2-80${taglineFilter},${fadeFilter}`,
+    `[0:v][logo]overlay=(W-w)/2:(H-h)/2-80,${fadeFilter}`,
   ].join(';');
 
   // Phase 1 (1.2): STD_VIDEO_ENCODE_ARGS fuer Concat-Kompatibilitaet
@@ -405,14 +630,94 @@ async function buildBrandingFrame(
 }
 
 /**
+ * Phase 2.1: Body-Segmente + CTA mit xfade-Crossfade zu einem File mergen.
+ *
+ * Strategie: Zwischen jedem Paar aufeinanderfolgender Segmente ein 0.4s-fade.
+ * Damit verkuerzt sich die Gesamtdauer um (N-1) * 0.4 — der Voice-Track muss
+ * darauf angepasst sein (Caller setzt effectiveSceneDurations entsprechend).
+ *
+ * Filter-Aufbau (bei N=4 Segmenten, also 3 Crossfades):
+ *   [0:v][1:v]xfade=fade:duration=0.4:offset=O0[v01]
+ *   [v01][2:v]xfade=fade:duration=0.4:offset=O1[v012]
+ *   [v012][3:v]xfade=fade:duration=0.4:offset=O2[out]
+ *
+ * Offsets: O_k = sum(durations[0..k]) - 0.4 — der Übergang startet 0.4s vor
+ * dem Ende des bisherigen Streams, sodass beide Streams sich überlappen.
+ *
+ * Re-Encode ist hier zwingend (xfade braucht Pixel-Zugriff). Die Ausgabe
+ * nutzt STD_VIDEO_ENCODE_ARGS, damit sie bitstream-kompatibel zu Intro+Outro
+ * ist und der Final-Concat mit `-c copy` laeuft.
+ */
+async function buildBodyCtaWithCrossfade(
+  segments: { path: string; duration: number }[],
+  outPath: string,
+  xfadeDuration: number,
+): Promise<{ log: string }> {
+  if (segments.length === 0) {
+    throw new Error('buildBodyCtaWithCrossfade: keine Segmente uebergeben');
+  }
+  if (segments.length === 1) {
+    // Nur ein Segment — direkt kopieren, kein xfade noetig.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const fs = require('node:fs') as typeof import('node:fs');
+    fs.copyFileSync(segments[0].path, outPath);
+    return { log: '[xfade] only 1 segment, no crossfade — copied directly' };
+  }
+
+  const inputArgs: string[] = [];
+  for (const seg of segments) {
+    inputArgs.push('-i', seg.path);
+  }
+
+  const transitions: string[] = [];
+  let prevLabel = '[0:v]';
+  let cumulative = 0;
+  for (let i = 1; i < segments.length; i++) {
+    cumulative += segments[i - 1].duration;
+    const offset = (cumulative - xfadeDuration).toFixed(3);
+    const isLast = i === segments.length - 1;
+    const nextLabel = isLast ? '[xout]' : `[v${i}]`;
+    transitions.push(
+      `${prevLabel}[${i}:v]xfade=transition=fade:duration=${xfadeDuration}:offset=${offset}${nextLabel}`
+    );
+    prevLabel = nextLabel;
+    cumulative -= xfadeDuration; // Ab dem 2. Übergang ist die kumulierte Dauer um xfade kürzer
+  }
+
+  // format=yuv420p am Ende stellt sicher, dass die Pixel-Format-Kompatibilität zur
+  // STD_VIDEO_ENCODE_ARGS yuv420p-Pipeline gegeben ist.
+  const filterComplex = transitions.join(';') + ';[xout]format=yuv420p[out]';
+
+  const { stderr } = await runFfmpeg([
+    '-y',
+    '-hide_banner',
+    '-loglevel', 'error',
+    ...inputArgs,
+    '-filter_complex', filterComplex,
+    '-map', '[out]',
+    ...STD_VIDEO_ENCODE_ARGS,
+    '-an',
+    outPath,
+  ]);
+  return { log: stderr };
+}
+
+/**
  * Haupt-Render-Funktion. Erzeugt MP4 + Thumbnail als Buffer im Speicher.
  */
 export async function renderReel(input: RenderInput): Promise<RenderResult> {
+  const renderStartedAt = Date.now();
   const workDir = path.join(tmpdir(), `reel-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
   await mkdir(workDir, { recursive: true });
 
   try {
+    // Phase 2.1: Trennung in zwei Listen.
+    //   - segmentFiles: das was am Ende per Concat-Demuxer (-c copy) zusammenkommt.
+    //                   Nach Phase 2.1 enthaelt das nur noch [intro?, body-cta, outro?].
+    //   - bodyAndCtaSegments: Body-Szenen + CTA mit Dauer-Info, werden vor dem
+    //                   Final-Concat per xfade-Crossfade zu einem File gemerged.
     const segmentFiles: string[] = [];
+    const bodyAndCtaSegments: { path: string; duration: number }[] = [];
     let fullLog = '';
 
     // ── Intro-Frame (cam2rent-Logo) ─────────────────────────────────────────
@@ -430,6 +735,10 @@ export async function renderReel(input: RenderInput): Promise<RenderResult> {
     }
 
     // ── Szenen-Segmente rendern ─────────────────────────────────────────────
+    // Phase 2.2: Ken-Burns-Variante deterministisch pro Szene auswuerfeln.
+    const motionStyle: MotionStyle = input.motionStyle ?? 'kenburns';
+    const motionSeed = input.reelId ?? `${Date.now()}`;
+
     if (input.templateType === 'stock_footage') {
       if (!input.clips || input.clips.length === 0) {
         throw new Error('Stock-Footage-Reel braucht Clips');
@@ -447,7 +756,12 @@ export async function renderReel(input: RenderInput): Promise<RenderResult> {
         // Phase 1.5: Quell-Info im Log fuer spaetere quality_metrics-Auswertung.
         fullLog += `\n[seg-${i}] source=${clip.source} ext_id=${clip.externalId} res=${clip.width}x${clip.height}`;
 
-        const filter = buildClipFilter(scene.text_overlay, scene.duration);
+        // Phase 2.2: Ken-Burns-Variante pro Szene (deterministisch).
+        const kenBurns = pickKenBurnsVariant(motionStyle, motionSeed, i);
+        if (kenBurns !== 'static') {
+          fullLog += ` motion=${kenBurns}`;
+        }
+        const filter = buildClipFilter(scene.text_overlay, scene.duration, kenBurns);
         // Phase 1 (1.2): STD_VIDEO_ENCODE_ARGS — alle Pro-Segment-Encodes identisch,
         // damit der finale Concat mit `-c copy` ohne Re-Encode laeuft.
         const { stderr } = await runFfmpeg([
@@ -461,25 +775,34 @@ export async function renderReel(input: RenderInput): Promise<RenderResult> {
           outPath,
         ]);
         fullLog += `\n[seg-${i}] ${stderr}`;
-        segmentFiles.push(outPath);
+        // Phase 2.1: Body-Segmente landen NICHT in segmentFiles, sondern in bodyAndCtaSegments
+        // (xfade-Merge am Ende, Concat dann mit -c copy).
+        bodyAndCtaSegments.push({ path: outPath, duration: scene.duration });
       }
 
-      // CTA-Frame (Farbe aus Template oder Fallback cam2rent-Blau)
+      // CTA-Frame (Phase 2.3: voll gebrandet mit Gradient + Logo + URL-Pill,
+      // Fallback auf alten Color-BG bei fehlenden Assets).
       const ctaPath = path.join(workDir, `seg-cta.mp4`);
-      const cta = buildCtaInput(input.script.cta_frame, input.script.cta_frame.duration, input.bgColorFrom ?? '#1E40AF');
+      const cta = buildCtaFrameInput(
+        input.script.cta_frame,
+        input.script.cta_frame.duration,
+        logoPath,
+        input.bgColorFrom ?? '#1E40AF',
+      );
       // Phase 1 (1.2): STD_VIDEO_ENCODE_ARGS
       const { stderr: ctaLog } = await runFfmpeg([
         '-y',
         '-hide_banner',
         '-loglevel', 'error',
-        ...cta.args,
-        '-vf', cta.filter,
+        ...cta.inputArgs,
+        '-filter_complex', cta.filterComplex,
+        '-map', cta.outLabel,
         ...STD_VIDEO_ENCODE_ARGS,
         '-an',
         ctaPath,
       ]);
       fullLog += `\n[cta] ${ctaLog}`;
-      segmentFiles.push(ctaPath);
+      bodyAndCtaSegments.push({ path: ctaPath, duration: input.script.cta_frame.duration });
     } else {
       // ── Motion-Graphics — jede Szene ist ein Color-Frame mit drawtext ─────
       for (let i = 0; i < input.script.scenes.length; i++) {
@@ -513,26 +836,48 @@ export async function renderReel(input: RenderInput): Promise<RenderResult> {
           outPath,
         ]);
         fullLog += `\n[mg-${i}] ${stderr}`;
-        segmentFiles.push(outPath);
+        bodyAndCtaSegments.push({ path: outPath, duration: scene.duration });
       }
 
-      // CTA am Ende
+      // CTA am Ende (Phase 2.3: gleicher gebrandeter Look wie im Stock-Pfad)
       const ctaPath = path.join(workDir, `seg-cta.mp4`);
-      const cta = buildCtaInput(input.script.cta_frame, input.script.cta_frame.duration, input.bgColorTo ?? '#0F172A');
+      const cta = buildCtaFrameInput(
+        input.script.cta_frame,
+        input.script.cta_frame.duration,
+        logoPath,
+        input.bgColorTo ?? '#0F172A',
+      );
       // Phase 1 (1.2): STD_VIDEO_ENCODE_ARGS
       const { stderr: ctaLog } = await runFfmpeg([
         '-y',
         '-hide_banner',
         '-loglevel', 'error',
-        ...cta.args,
-        '-vf', cta.filter,
+        ...cta.inputArgs,
+        '-filter_complex', cta.filterComplex,
+        '-map', cta.outLabel,
         ...STD_VIDEO_ENCODE_ARGS,
         '-an',
         ctaPath,
       ]);
       fullLog += `\n[cta] ${ctaLog}`;
-      segmentFiles.push(ctaPath);
+      bodyAndCtaSegments.push({ path: ctaPath, duration: input.script.cta_frame.duration });
     }
+
+    // ── Body+CTA mit Crossfade zu einem File mergen (Phase 2.1) ─────────────
+    // Re-Encode hier zwingend (xfade braucht Pixel-Zugriff), aber die Ausgabe
+    // nutzt STD_VIDEO_ENCODE_ARGS — bleibt damit bitstream-kompatibel zu
+    // Intro+Outro. Final-Concat (3 Files) laeuft danach mit -c copy.
+    const useXfade = bodyAndCtaSegments.length >= 2;
+    const XFADE_DURATION = useXfade ? 0.4 : 0;
+    const bodyCtaPath = path.join(workDir, 'body-cta.mp4');
+    const { log: bodyCtaLog } = await buildBodyCtaWithCrossfade(
+      bodyAndCtaSegments,
+      bodyCtaPath,
+      XFADE_DURATION,
+    );
+    fullLog += `\n[body-cta] xfade=${XFADE_DURATION}s segments=${bodyAndCtaSegments.length} ${bodyCtaLog}`;
+    // Body-CTA-Block kommt zwischen Intro und Outro in der Concat-Liste
+    segmentFiles.push(bodyCtaPath);
 
     // ── Outro-Frame (cam2rent-Logo + Tagline) ───────────────────────────────
     if (outroEnabled) {
@@ -571,11 +916,15 @@ export async function renderReel(input: RenderInput): Promise<RenderResult> {
     let voiceTrackPath: string | undefined;
     if (input.voiceSegments && input.voiceSegments.length > 0) {
       try {
-        // Jede Szenen-Dauer ermitteln (scenes + cta)
-        const segDurations = [
-          ...input.script.scenes.map((s) => s.duration),
-          input.script.cta_frame.duration,
-        ];
+        // Phase 2.1: Voice-Sync nach Crossfade.
+        // Jeder xfade-Uebergang verkuerzt die Gesamt-Body+CTA-Dauer um XFADE_DURATION.
+        // Damit Voice-Segmente den Szenen folgen, kuerzen wir alle ausser dem letzten
+        // um XFADE_DURATION. Ohne xfade (1 Segment) bleiben die Originaldauern.
+        const segDurations = bodyAndCtaSegments.map((s, i, arr) =>
+          i < arr.length - 1 && XFADE_DURATION > 0
+            ? Math.max(0.5, s.duration - XFADE_DURATION)
+            : s.duration
+        );
 
         // Pro Voice-Segment: MP3 schreiben, dann auf Szenendauer padden/trimmen als WAV.
         // Leere Buffer (kein voice_text fuer diese Szene) → Silence der Szenendauer.
@@ -803,16 +1152,15 @@ export async function renderReel(input: RenderInput): Promise<RenderResult> {
     }
 
     // ── Thumbnail (erstes Body-Segment) ─────────────────────────────────────
-    // Phase 1 (1.1): Vorher zog `-ss 1 -i finalPath` den Frame mitten aus dem
-    // 1.5s-Intro = jedes Thumbnail zeigte das Logo. Jetzt: erstes Body-Segment
-    // bei 0.8s — mittig in der ersten Action-Szene, vermeidet Fade-In-Effekte.
-    // Reihenfolge in segmentFiles: [intro?, ...bodies, cta, outro?].
-    const introOffset = introEnabled ? 1 : 0;
-    const outroOffset = outroEnabled ? 1 : 0;
-    const ctaIndexInSegs = segmentFiles.length - 1 - outroOffset;
-    const firstBodyIndex = introOffset;
-    const hasBodySegment = firstBodyIndex < ctaIndexInSegs;
-    const thumbSource = hasBodySegment ? segmentFiles[firstBodyIndex] : finalPath;
+    // Phase 1 (1.1) + Phase 2.1: Snapshot kommt aus dem ersten Body-Segment-File
+    // (nicht aus body-cta.mp4 oder finalPath), bei -ss 0.8 mittig in der ersten
+    // Action-Szene. Bei 0 Body-Segmenten (theoretisch unmoeglich, da CTA immer da
+    // ist) → Fallback auf finalPath bei -ss 1.
+    const lastIdx = bodyAndCtaSegments.length - 1;
+    // bodyAndCtaSegments hat mindestens den CTA an letzter Stelle. Wenn lastIdx >= 1,
+    // ist Index 0 ein echtes Body-Segment.
+    const hasBodySegment = lastIdx >= 1;
+    const thumbSource = hasBodySegment ? bodyAndCtaSegments[0].path : finalPath;
     const thumbSeek = hasBodySegment ? '0.8' : '1';
     const thumbPath = path.join(workDir, 'thumb.jpg');
     const { stderr: thumbLog } = await runFfmpeg([
@@ -825,15 +1173,48 @@ export async function renderReel(input: RenderInput): Promise<RenderResult> {
       '-q:v', '3',
       thumbPath,
     ]);
-    fullLog += `\n[thumb] source=${hasBodySegment ? `body[${firstBodyIndex}]` : 'final'} seek=${thumbSeek}s ${thumbLog}`;
+    fullLog += `\n[thumb] source=${hasBodySegment ? `body[0]` : 'final'} seek=${thumbSeek}s ${thumbLog}`;
 
     const videoBuffer = await readFile(finalPath);
     const thumbnailBuffer = await readFile(thumbPath);
 
-    const contentDuration = input.script.scenes.reduce((s, sc) => s + sc.duration, 0) + input.script.cta_frame.duration;
+    // Phase 2.1: Gesamt-Dauer mit xfade-Verkuerzung. Pro Crossfade verschwinden
+    // XFADE_DURATION Sekunden aus der Body+CTA-Strecke.
+    const xfadeShrink = useXfade ? (bodyAndCtaSegments.length - 1) * XFADE_DURATION : 0;
+    const contentDuration = bodyAndCtaSegments.reduce((s, seg) => s + seg.duration, 0) - xfadeShrink;
     const total = contentDuration + (introEnabled ? introDuration : 0) + (outroEnabled ? outroDuration : 0);
 
-    return { videoBuffer, thumbnailBuffer, durationSeconds: total, log: fullLog };
+    // Phase 2.5: Strukturierte Quality-Metriken (siehe ReelQualityMetrics-Type).
+    const fileSizeBytes = videoBuffer.byteLength;
+    const avgBitrateKbps = total > 0
+      ? Math.round((fileSizeBytes * 8) / 1000 / total)
+      : 0;
+    const stockSources: Record<string, number> = {};
+    const sourceResolutions: ReelQualityMetrics['source_resolutions'] = [];
+    if (input.clips) {
+      input.clips.forEach((clip, i) => {
+        stockSources[clip.source] = (stockSources[clip.source] ?? 0) + 1;
+        sourceResolutions.push({
+          index: i,
+          width: clip.width,
+          height: clip.height,
+          source: clip.source,
+        });
+      });
+    }
+    const qualityMetrics: ReelQualityMetrics = {
+      file_size_bytes: fileSizeBytes,
+      duration_seconds: total,
+      avg_bitrate_kbps: avgBitrateKbps,
+      segment_count: bodyAndCtaSegments.length,
+      source_resolutions: sourceResolutions,
+      stock_sources: stockSources,
+      render_duration_seconds: Math.round((Date.now() - renderStartedAt) / 100) / 10,
+      font_used: detectFontPath() === FONT_PATH_PRIMARY ? 'Inter Tight' : 'DejaVuSans-Bold',
+      motion_style: motionStyle,
+    };
+
+    return { videoBuffer, thumbnailBuffer, durationSeconds: total, log: fullLog, qualityMetrics };
   } finally {
     // Temp-Verzeichnis aufräumen (best-effort)
     await rm(workDir, { recursive: true, force: true }).catch(() => {});
