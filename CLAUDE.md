@@ -633,6 +633,16 @@ Vollautomatische Kurzvideos (9:16, 15–30 Sek) für Facebook- und Instagram-Ree
 
 **Kosten-Übersicht:** ~0,02 €/Reel (Claude) + 0 € (Pexels + FFmpeg + Meta). Bei 30 Reels/Monat ≤ 1 €.
 
+**Skript-Prompt geschärft (Stand 2026-04-26):** `lib/reels/script-ai.ts` SYSTEM_PROMPT komplett überarbeitet:
+- **Hook-Regeln:** Szene 1 max 4 Wörter, FRAGE/ZAHL/IMPERATIV/UNVOLLSTÄNDIGER SATZ, verbotene Eröffnungen ("Bereit für…", "Du…", "Hier ist…", Superlative).
+- **CTA-Regeln:** Headline NIE "Jetzt mieten" — muss eine von vier Achsen treffen (Zeit/Preis/Use-Case/Knappheit). Subline beginnt immer mit Verb im Imperativ. voice_text nennt einmal die Domain.
+- **Caption-Regeln:** Erste Person, erster Satz Mini-Story (kein Sales-Hook), letzter Satz weicher Hinweis auf cam2rent.de, keine Emojis im Caption-Text.
+- **Pexels-Search-Queries:** explizite Gut/Schlecht-Beispiele (zu generisch + zu spezifisch).
+- **Scene-Count nach Dauer:** 15s = 3-4 Szenen, 30s = 6-7 Szenen.
+- **Variations-Pflicht:** Neuer Helper `buildVariationBlock()` lädt die letzten 10 Reels (status `rendered+`) aus `social_reels` und hängt deren Hooks/CTAs/Caption-Eröffnungen als „NICHT wiederholen"-Liste an den System-Prompt — Claude kopiert sich nicht selbst. Defensiv: bei DB-Fehler stiller Fallback ohne Block.
+- **`kind`-Enum:** umgestellt von `'intro'|'middle'|'cta'` auf `'hook'|'body'|'transition'`. Alte DB-Werte bleiben durch Union-Type lesbar (Backwards-Compat, in der UI wird `kind` aktuell nirgends ausgelesen — nur als Hint für Claude).
+- **Letzte Prüfung:** 7-Punkt-Checkliste am Ende des Prompts erzwingt Selbst-Validierung.
+
 #### Dev-Mode vs. Live-Mode (Meta-App)
 Solange die App im "Development Mode" ist, sehen Posts nur App-Admins + Tester. Für öffentliche Sichtbarkeit muss die App auf "Live" geschaltet werden: Meta Developer Dashboard → Seitenpunkt "Veröffentlichen" → Button "App veröffentlichen". Voraussetzung: Datenschutz-URL, AGB-URL, Kategorie, App-Domain sind gesetzt (haben wir). Standard-Access auf Permissions reicht für eigene Kanäle — **kein App Review nötig** solange nur cam2rent-eigene FB-Page + IG-Business bespielt werden.
 
