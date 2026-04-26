@@ -18,7 +18,7 @@ export default function KontaktPage() {
         </p>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-10">
-          <div className="bg-brand-bg dark:bg-brand-black rounded-card p-5">
+          <div className="bg-brand-bg dark:bg-brand-dark rounded-card p-5">
             <div className="flex items-center gap-3 mb-3">
               <span className="text-xl">📧</span>
               <h2 className="font-heading font-semibold text-brand-black dark:text-white">E-Mail</h2>
@@ -34,7 +34,7 @@ export default function KontaktPage() {
             </p>
           </div>
 
-          <div className="bg-brand-bg dark:bg-brand-black rounded-card p-5">
+          <div className="bg-brand-bg dark:bg-brand-dark rounded-card p-5">
             <div className="flex items-center gap-3 mb-3">
               <span className="text-xl">📞</span>
               <h2 className="font-heading font-semibold text-brand-black dark:text-white">Telefon</h2>
@@ -50,7 +50,7 @@ export default function KontaktPage() {
             </p>
           </div>
 
-          <div className="bg-brand-bg dark:bg-brand-black rounded-card p-5">
+          <div className="bg-brand-bg dark:bg-brand-dark rounded-card p-5">
             <div className="flex items-center gap-3 mb-3">
               <span className="text-xl">💬</span>
               <h2 className="font-heading font-semibold text-brand-black dark:text-white">WhatsApp</h2>
@@ -73,7 +73,7 @@ export default function KontaktPage() {
           <h2 className="font-heading font-semibold text-lg text-brand-black dark:text-white mb-4">
             Standort
           </h2>
-          <div className="bg-brand-bg dark:bg-brand-black rounded-card p-5">
+          <div className="bg-brand-bg dark:bg-brand-dark rounded-card p-5">
             <div className="font-body text-brand-steel dark:text-gray-400 space-y-1">
               <p className="font-semibold text-brand-black dark:text-white">{BUSINESS.legalName} – {BUSINESS.owner}</p>
               <p>{BUSINESS.street}</p>
@@ -135,7 +135,7 @@ export default function KontaktPage() {
               <Link
                 key={link.href}
                 href={link.href}
-                className="bg-brand-bg dark:bg-brand-black rounded-card p-3 text-center font-body text-sm text-brand-steel dark:text-gray-400 hover:text-accent-blue hover:bg-accent-blue-soft dark:hover:bg-accent-blue/10 transition-colors"
+                className="bg-brand-bg dark:bg-brand-dark rounded-card p-3 text-center font-body text-sm text-brand-steel dark:text-gray-400 hover:text-accent-blue hover:bg-accent-blue-soft dark:hover:bg-accent-blue/10 transition-colors"
               >
                 {link.label}
               </Link>
@@ -168,7 +168,7 @@ function ContactForm() {
             id="name"
             name="name"
             required
-            className="w-full px-3 py-2.5 text-sm font-body border border-brand-border dark:border-white/10 rounded-btn bg-white dark:bg-brand-black text-brand-black dark:text-white placeholder:text-brand-muted dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent-blue/30 focus:border-accent-blue"
+            className="w-full px-3 py-2.5 text-sm font-body border border-brand-border dark:border-white/10 rounded-btn bg-white dark:bg-brand-dark text-brand-black dark:text-white placeholder:text-brand-muted dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent-blue/30 focus:border-accent-blue"
             placeholder="Dein Name"
           />
         </div>
@@ -181,7 +181,7 @@ function ContactForm() {
             id="email"
             name="email"
             required
-            className="w-full px-3 py-2.5 text-sm font-body border border-brand-border dark:border-white/10 rounded-btn bg-white dark:bg-brand-black text-brand-black dark:text-white placeholder:text-brand-muted dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent-blue/30 focus:border-accent-blue"
+            className="w-full px-3 py-2.5 text-sm font-body border border-brand-border dark:border-white/10 rounded-btn bg-white dark:bg-brand-dark text-brand-black dark:text-white placeholder:text-brand-muted dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent-blue/30 focus:border-accent-blue"
             placeholder="deine@email.de"
           />
         </div>
@@ -195,7 +195,7 @@ function ContactForm() {
           type="text"
           id="betreff"
           name="betreff"
-          className="w-full px-3 py-2.5 text-sm font-body border border-brand-border dark:border-white/10 rounded-btn bg-white dark:bg-brand-black text-brand-black dark:text-white placeholder:text-brand-muted dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent-blue/30 focus:border-accent-blue"
+          className="w-full px-3 py-2.5 text-sm font-body border border-brand-border dark:border-white/10 rounded-btn bg-white dark:bg-brand-dark text-brand-black dark:text-white placeholder:text-brand-muted dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent-blue/30 focus:border-accent-blue"
           placeholder="z.B. Frage zur Buchung BK-2026-..."
         />
       </div>
@@ -209,7 +209,7 @@ function ContactForm() {
           name="message"
           required
           rows={5}
-          className="w-full px-3 py-2.5 text-sm font-body border border-brand-border dark:border-white/10 rounded-btn bg-white dark:bg-brand-black text-brand-black dark:text-white placeholder:text-brand-muted dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent-blue/30 focus:border-accent-blue resize-y"
+          className="w-full px-3 py-2.5 text-sm font-body border border-brand-border dark:border-white/10 rounded-btn bg-white dark:bg-brand-dark text-brand-black dark:text-white placeholder:text-brand-muted dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent-blue/30 focus:border-accent-blue resize-y"
           placeholder="Deine Nachricht..."
         />
       </div>
