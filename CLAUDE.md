@@ -633,6 +633,15 @@ Vollautomatische Kurzvideos (9:16, 15–30 Sek) für Facebook- und Instagram-Ree
 
 **Kosten-Übersicht:** ~0,02 €/Reel (Claude) + 0 € (Pexels + FFmpeg + Meta). Bei 30 Reels/Monat ≤ 1 €.
 
+**Phase 1 Quick-Wins (Stand 2026-04-26):** Visuelle Verbesserungen in `lib/reels/ffmpeg-render.ts` + neuer Multi-Source-Stack unter `lib/reels/stock-sources/`. Ausführliche Doku: `docs/reels/phase-1-summary.md`.
+- **Thumbnail-Bug** (Z. 800ff): Snapshot kommt jetzt aus dem **ersten Body-Segment** bei `-ss 0.8`, nicht mehr aus `finalPath` bei `-ss 1`. Das alte Verhalten zeigte immer das Intro-Logo.
+- **Doppel-Encode eliminiert**: Neue Konstante `STD_VIDEO_ENCODE_ARGS` (libx264 high@4.0, GOP=60, sc_threshold=0, preset=medium, crf=20) — alle 5 Pro-Segment-Encodes (Intro/Outro/Stock-Body/Stock-CTA/MG-Body/MG-CTA) sind bitstream-kompatibel. Concat läuft jetzt mit `-c copy -movflags +faststart` (Stream-Copy statt Re-Encode → ~30 % schneller).
+- **Auflösungs-Floor** auf Stock-Clips: `pickBestVideoFile` (Pexels) + `pickBestPixabayFile` ignorieren Varianten unter 1080 px in der kürzeren Dimension. Sub-1080p-Clips werden übersprungen, der nächste Treffer probiert.
+- **Multi-Source Stock Footage** (neu): `lib/reels/stock-sources/{types,pexels,pixabay,index}.ts` als Adapter-Architektur. `findClipForQuery({ seed, excludeIds, minHeight })` wählt deterministisch via `reelId`-Hash zwischen Pexels und Pixabay. Bei nur einem konfigurierten Key (Pexels) bleibt das Verhalten unverändert. `lib/reels/pexels.ts` ist jetzt schmaler Re-Export für Backward-Compat. `render_log` enthält pro Reel `[stock-sources] pexels=N pixabay=M` + pro Segment `[seg-i] source=… ext_id=… res=W×H`.
+- **Inter Tight als Marken-Schrift**: `assets/fonts/InterTight.ttf` (Variable Font, OFL) wird vom Dockerfile nach `/usr/share/fonts/cam2rent/` kopiert + `fc-cache -fv`. `detectFontPath()` cached die Wahl beim ersten Render und fällt auf DejaVuSans-Bold zurück, falls Inter Tight nicht installiert ist. **Hinweis:** Variable Font rendert im FreeType-Default als Regular (wght=400). Echtes ExtraBold benötigt eine statische TTF, kann später unter gleichem Pfad hinterlegt werden.
+- **Migration**: `supabase/supabase-reels-pixabay-key.sql` (idempotent, ergänzt `pixabay_api_key`-Default im `reels_settings`-JSON).
+- **.env.example**: `PIXABAY_API_KEY=` ergänzt.
+
 **Skript-Prompt geschärft (Stand 2026-04-26):** `lib/reels/script-ai.ts` SYSTEM_PROMPT komplett überarbeitet:
 - **Hook-Regeln:** Szene 1 max 4 Wörter, FRAGE/ZAHL/IMPERATIV/UNVOLLSTÄNDIGER SATZ, verbotene Eröffnungen ("Bereit für…", "Du…", "Hier ist…", Superlative).
 - **CTA-Regeln:** Headline NIE "Jetzt mieten" — muss eine von vier Achsen treffen (Zeit/Preis/Use-Case/Knappheit). Subline beginnt immer mit Verb im Imperativ. voice_text nennt einmal die Domain.
@@ -1276,7 +1285,7 @@ Admin-Seite `/admin/newsletter` (in Sidebar-Gruppe „Rabatte & Aktionen", Permi
     5 * * * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/awaiting-payment-cancel
     ```
   Storniert `awaiting_payment`-Buchungen deren Deadline (siehe Regeln oben) erreicht ist. Deaktiviert den Stripe Payment Link via `stripe.paymentLinks.update(id, {active:false})`, setzt Status `cancelled`, schickt Storno-Mail. Grace-Period: 1h nach Buchungs-Erstellung.
-- **Auto-Reels Restschritte:** (1) Pexels API-Key (kostenlos) registrieren + in `admin_settings.reels_settings.pexels_api_key` hinterlegen oder als `PEXELS_API_KEY`-Env. (2) Docker-Image neu bauen (Dockerfile installiert jetzt `ffmpeg + ttf-dejavu` in Runner-Stage — braucht ~50 MB extra Image-Größe). (3) Crontab-Eintrag: `*/5 * * * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/reels-publish`.
+- **Auto-Reels Restschritte:** (1) Pexels API-Key (kostenlos) registrieren + in `admin_settings.reels_settings.pexels_api_key` hinterlegen oder als `PEXELS_API_KEY`-Env. (2) Docker-Image neu bauen (Dockerfile installiert jetzt `ffmpeg + ttf-dejavu + fontconfig` und kopiert `assets/fonts/InterTight.ttf` ins Image). (3) Crontab-Eintrag: `*/5 * * * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/reels-publish`. (4) **Phase 1 Quick-Wins:** SQL-Migration `supabase/supabase-reels-pixabay-key.sql` ausführen + optional `PIXABAY_API_KEY` als zweite Stock-Footage-Quelle in `admin_settings.reels_settings.pixabay_api_key` oder als Env hinterlegen (Free-Tier 5000 req/h, kostenlos: pixabay.com/api/docs/).
 - **Go-Live 01.05.2026:** Test/Live-Switch auf Live umschalten (`/admin/einstellungen` → Test-/Live-Modus → "Live-Modus"). Ersetzt: TEST_MODE-Konstante, Stripe-Key-Wechsel, Vertrags-Wasserzeichen, Resend-Absender, Sendcloud-Keys.
 - **Go-Live 01.05.2026:** Domain test.cam2rent.de → cam2rent.de
 - **Go-Live 01.05.2026:** Resend Domain verifizieren (DKIM + SPF)

@@ -22,12 +22,15 @@ import { writeFile, mkdir, rm, readFile, access } from 'fs/promises';
 import { tmpdir } from 'os';
 import path from 'path';
 import type { ReelScript } from './script-ai';
-import type { PexelsVideo, PexelsVideoFile } from './pexels';
+import type { StockClip } from './stock-sources/types';
 
 export interface RenderInput {
   script: ReelScript;
   templateType: 'stock_footage' | 'motion_graphics';
-  clips?: Array<{ video: PexelsVideo; file: PexelsVideoFile }>; // nur für stock_footage
+  // Phase 1.5: StockClip ist die plattform-neutrale Form (Pexels + Pixabay).
+  // Alter Pexels-spezifischer Typ ist im Re-Export `lib/reels/pexels.ts`
+  // weiterhin verfuegbar fuer Backward-Compat.
+  clips?: StockClip[]; // nur für stock_footage
   musicUrl?: string;                                            // optional
   bgColorFrom?: string;                                         // motion_graphics
   bgColorTo?: string;
@@ -57,9 +60,39 @@ export interface RenderResult {
 const TARGET_W = 1080;
 const TARGET_H = 1920;
 const TARGET_FPS = 30;
-// Alpine: /usr/share/fonts/TTF/DejaVuSans-Bold.ttf (nach `apk add ttf-dejavu`)
-// Debian/Ubuntu: /usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf
-const FONT_PATH_PRIMARY = '/usr/share/fonts/TTF/DejaVuSans-Bold.ttf';
+
+// Phase 1 (1.6): Inter Tight ist die primaere Marken-Schrift im Reel.
+// Liegt im Repo unter assets/fonts/InterTight.ttf (Variable Font, OFL) und wird
+// vom Dockerfile nach /usr/share/fonts/cam2rent/ kopiert. DejaVuSans-Bold bleibt
+// als Fallback fuer lokale Dev-Renders ohne den Font-Install.
+//
+// Hinweis Variable Font: FreeType nutzt bei drawtext die Default-Instance (wght=400 = Regular).
+// Mit `borderw=3` aus buildStackedDrawtext sieht der Output trotzdem deutlich kraeftiger aus
+// als DejaVuSans-Bold und ist sichtbar moderner / brand-konsistent. Wenn echtes ExtraBold
+// gewuenscht ist, kann eine statische Inter-Tight-ExtraBold-TTF spaeter unter gleichem
+// Pfad hinterlegt werden (Phase 2 oder spaeter).
+const FONT_PATH_PRIMARY = '/usr/share/fonts/cam2rent/InterTight.ttf';
+const FONT_PATH_FALLBACK = '/usr/share/fonts/TTF/DejaVuSans-Bold.ttf';
+
+// Phase 1 (1.2/1.3): Vereinheitlichte Video-Encode-Argumente fuer ALLE Pro-Segment-Encodes.
+// Profile high + Level 4.0 + GOP=60 + sc_threshold=0 stellen sicher, dass alle Segmente
+// bitstream-kompatibel sind und der Concat-Step mit `-c copy` ohne Re-Encode auskommt.
+// preset=medium / crf=20 ersetzt veryfast/23 — sichtbar weniger Block-Artefakte in
+// Bewegungs-Szenen, ~2x langsamer pro Segment, durch Wegfall des Concat-Re-Encodes
+// netto aber nicht langsamer als der vorige Status.
+// Datei-Groesse 30s-Reels: typisch 8-15 MB (gesund unter 50 MB Bucket-Limit).
+const STD_VIDEO_ENCODE_ARGS: string[] = [
+  '-c:v', 'libx264',
+  '-profile:v', 'high',
+  '-level', '4.0',
+  '-pix_fmt', 'yuv420p',
+  '-r', String(TARGET_FPS),
+  '-g', String(TARGET_FPS * 2),       // GOP = 2 Sekunden
+  '-keyint_min', String(TARGET_FPS * 2),
+  '-sc_threshold', '0',
+  '-preset', 'medium',
+  '-crf', '20',
+];
 
 /**
  * Escaping für FFmpeg drawtext-Filter. Quelle: https://ffmpeg.org/ffmpeg-filters.html#drawtext
@@ -196,10 +229,17 @@ async function downloadToFile(url: string, destPath: string): Promise<void> {
   await writeFile(destPath, buf);
 }
 
+// Phase 1 (1.6): Font-Pfad einmalig per existsSync probieren (Init-Phase, kein Hot-Path).
+// Wenn Inter Tight verfuegbar ist (Production-Image), nutzen wir die — sonst Fallback auf
+// DejaVu, damit lokale Dev-Renders + Pre-Inter-Tight-Builds weiter funktionieren.
+let cachedFontPath: string | null = null;
 function detectFontPath(): string {
-  // Wir prüfen nicht synchron; FFmpeg gibt klaren Fehler wenn Schrift fehlt.
-  // Docker-Image installiert beide Pfade nicht — wir nutzen den Alpine-Standard nach `apk add ttf-dejavu`.
-  return FONT_PATH_PRIMARY;
+  if (cachedFontPath) return cachedFontPath;
+  // require statt import: detectFontPath ist sync, fs/promises waere awaitable
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const fs = require('node:fs') as typeof import('node:fs');
+  cachedFontPath = fs.existsSync(FONT_PATH_PRIMARY) ? FONT_PATH_PRIMARY : FONT_PATH_FALLBACK;
+  return cachedFontPath;
 }
 
 /**
@@ -314,6 +354,7 @@ async function buildBrandingFrame(
   if (!logoPath) {
     // Fallback: nur Wortmarke als Text
     const text = escapeDrawtext('cam2rent.de');
+    // Phase 1 (1.2): STD_VIDEO_ENCODE_ARGS fuer Concat-Kompatibilitaet
     const { stderr } = await runFfmpeg([
       '-y',
       '-hide_banner',
@@ -322,10 +363,8 @@ async function buildBrandingFrame(
       '-t', String(duration),
       '-i', `color=c=${bgColor}:s=${TARGET_W}x${TARGET_H}:r=${TARGET_FPS}`,
       '-vf', `drawtext=fontfile='${font}':text='${text}':expansion=none:fontsize=140:fontcolor=white:x=(w-text_w)/2:y=(h-text_h)/2`,
-      '-c:v', 'libx264',
-      '-preset', 'veryfast',
-      '-crf', '23',
-      '-pix_fmt', 'yuv420p',
+      ...STD_VIDEO_ENCODE_ARGS,
+      '-an',
       outPath,
     ]);
     return { log: stderr };
@@ -348,6 +387,7 @@ async function buildBrandingFrame(
     `[0:v][logo]overlay=(W-w)/2:(H-h)/2-80${taglineFilter},${fadeFilter}`,
   ].join(';');
 
+  // Phase 1 (1.2): STD_VIDEO_ENCODE_ARGS fuer Concat-Kompatibilitaet
   const { stderr } = await runFfmpeg([
     '-y',
     '-hide_banner',
@@ -357,10 +397,8 @@ async function buildBrandingFrame(
     '-i', `color=c=${bgColor}:s=${TARGET_W}x${TARGET_H}:r=${TARGET_FPS}`,
     '-i', logoPath,
     '-filter_complex', filterComplex,
-    '-c:v', 'libx264',
-    '-preset', 'veryfast',
-    '-crf', '23',
-    '-pix_fmt', 'yuv420p',
+    ...STD_VIDEO_ENCODE_ARGS,
+    '-an',
     outPath,
   ]);
   return { log: stderr };
@@ -404,20 +442,22 @@ export async function renderReel(input: RenderInput): Promise<RenderResult> {
 
         const srcPath = path.join(workDir, `clip-${i}.mp4`);
         const outPath = path.join(workDir, `seg-${i}.mp4`);
-        await downloadToFile(clip.file.link, srcPath);
+        // Phase 1.5: clip.downloadUrl statt clip.file.link (StockClip-Typ).
+        await downloadToFile(clip.downloadUrl, srcPath);
+        // Phase 1.5: Quell-Info im Log fuer spaetere quality_metrics-Auswertung.
+        fullLog += `\n[seg-${i}] source=${clip.source} ext_id=${clip.externalId} res=${clip.width}x${clip.height}`;
 
         const filter = buildClipFilter(scene.text_overlay, scene.duration);
+        // Phase 1 (1.2): STD_VIDEO_ENCODE_ARGS — alle Pro-Segment-Encodes identisch,
+        // damit der finale Concat mit `-c copy` ohne Re-Encode laeuft.
         const { stderr } = await runFfmpeg([
           '-y',
           '-hide_banner',
           '-loglevel', 'error',
           '-i', srcPath,
           '-vf', filter,
+          ...STD_VIDEO_ENCODE_ARGS,
           '-an',
-          '-c:v', 'libx264',
-          '-preset', 'veryfast',
-          '-crf', '23',
-          '-pix_fmt', 'yuv420p',
           outPath,
         ]);
         fullLog += `\n[seg-${i}] ${stderr}`;
@@ -427,16 +467,15 @@ export async function renderReel(input: RenderInput): Promise<RenderResult> {
       // CTA-Frame (Farbe aus Template oder Fallback cam2rent-Blau)
       const ctaPath = path.join(workDir, `seg-cta.mp4`);
       const cta = buildCtaInput(input.script.cta_frame, input.script.cta_frame.duration, input.bgColorFrom ?? '#1E40AF');
+      // Phase 1 (1.2): STD_VIDEO_ENCODE_ARGS
       const { stderr: ctaLog } = await runFfmpeg([
         '-y',
         '-hide_banner',
         '-loglevel', 'error',
         ...cta.args,
         '-vf', cta.filter,
-        '-c:v', 'libx264',
-        '-preset', 'veryfast',
-        '-crf', '23',
-        '-pix_fmt', 'yuv420p',
+        ...STD_VIDEO_ENCODE_ARGS,
+        '-an',
         ctaPath,
       ]);
       fullLog += `\n[cta] ${ctaLog}`;
@@ -460,6 +499,7 @@ export async function renderReel(input: RenderInput): Promise<RenderResult> {
             })
           : 'null';
 
+        // Phase 1 (1.2): STD_VIDEO_ENCODE_ARGS
         const { stderr } = await runFfmpeg([
           '-y',
           '-hide_banner',
@@ -468,10 +508,8 @@ export async function renderReel(input: RenderInput): Promise<RenderResult> {
           '-t', String(scene.duration),
           '-i', `color=c=${col}:s=${TARGET_W}x${TARGET_H}:r=${TARGET_FPS}`,
           '-vf', filter,
-          '-c:v', 'libx264',
-          '-preset', 'veryfast',
-          '-crf', '23',
-          '-pix_fmt', 'yuv420p',
+          ...STD_VIDEO_ENCODE_ARGS,
+          '-an',
           outPath,
         ]);
         fullLog += `\n[mg-${i}] ${stderr}`;
@@ -481,16 +519,15 @@ export async function renderReel(input: RenderInput): Promise<RenderResult> {
       // CTA am Ende
       const ctaPath = path.join(workDir, `seg-cta.mp4`);
       const cta = buildCtaInput(input.script.cta_frame, input.script.cta_frame.duration, input.bgColorTo ?? '#0F172A');
+      // Phase 1 (1.2): STD_VIDEO_ENCODE_ARGS
       const { stderr: ctaLog } = await runFfmpeg([
         '-y',
         '-hide_banner',
         '-loglevel', 'error',
         ...cta.args,
         '-vf', cta.filter,
-        '-c:v', 'libx264',
-        '-preset', 'veryfast',
-        '-crf', '23',
-        '-pix_fmt', 'yuv420p',
+        ...STD_VIDEO_ENCODE_ARGS,
+        '-an',
         ctaPath,
       ]);
       fullLog += `\n[cta] ${ctaLog}`;
@@ -511,6 +548,11 @@ export async function renderReel(input: RenderInput): Promise<RenderResult> {
     await writeFile(concatListPath, concatContent);
 
     // ── Endvideo zusammenbauen ──────────────────────────────────────────────
+    // Phase 1 (1.2): Stream-Copy-Concat (kein Re-Encode).
+    // Vorher: libx264 -preset veryfast -crf 23 → jeder Bitstream wurde nochmal
+    // durch den Encoder geschickt = Generationenverlust + ~40% Render-Zeit-Penalty.
+    // Jetzt: alle Pro-Segmente haben identische Encode-Args (STD_VIDEO_ENCODE_ARGS),
+    // also kann der Concat-Demuxer die Bitstreams direkt aneinanderhaengen.
     const noAudioPath = path.join(workDir, 'out-noaudio.mp4');
     const { stderr: concatLog } = await runFfmpeg([
       '-y',
@@ -519,11 +561,8 @@ export async function renderReel(input: RenderInput): Promise<RenderResult> {
       '-f', 'concat',
       '-safe', '0',
       '-i', concatListPath,
-      '-c:v', 'libx264',
-      '-preset', 'veryfast',
-      '-crf', '23',
-      '-pix_fmt', 'yuv420p',
-      '-r', String(TARGET_FPS),
+      '-c', 'copy',
+      '-movflags', '+faststart',
       noAudioPath,
     ]);
     fullLog += `\n[concat] ${concatLog}`;
@@ -763,19 +802,30 @@ export async function renderReel(input: RenderInput): Promise<RenderResult> {
       fullLog += `\n[silent] ${stderr}`;
     }
 
-    // ── Thumbnail (Frame bei 1s) ────────────────────────────────────────────
+    // ── Thumbnail (erstes Body-Segment) ─────────────────────────────────────
+    // Phase 1 (1.1): Vorher zog `-ss 1 -i finalPath` den Frame mitten aus dem
+    // 1.5s-Intro = jedes Thumbnail zeigte das Logo. Jetzt: erstes Body-Segment
+    // bei 0.8s — mittig in der ersten Action-Szene, vermeidet Fade-In-Effekte.
+    // Reihenfolge in segmentFiles: [intro?, ...bodies, cta, outro?].
+    const introOffset = introEnabled ? 1 : 0;
+    const outroOffset = outroEnabled ? 1 : 0;
+    const ctaIndexInSegs = segmentFiles.length - 1 - outroOffset;
+    const firstBodyIndex = introOffset;
+    const hasBodySegment = firstBodyIndex < ctaIndexInSegs;
+    const thumbSource = hasBodySegment ? segmentFiles[firstBodyIndex] : finalPath;
+    const thumbSeek = hasBodySegment ? '0.8' : '1';
     const thumbPath = path.join(workDir, 'thumb.jpg');
     const { stderr: thumbLog } = await runFfmpeg([
       '-y',
       '-hide_banner',
       '-loglevel', 'error',
-      '-ss', '1',
-      '-i', finalPath,
+      '-ss', thumbSeek,
+      '-i', thumbSource,
       '-frames:v', '1',
       '-q:v', '3',
       thumbPath,
     ]);
-    fullLog += `\n[thumb] ${thumbLog}`;
+    fullLog += `\n[thumb] source=${hasBodySegment ? `body[${firstBodyIndex}]` : 'final'} seek=${thumbSeek}s ${thumbLog}`;
 
     const videoBuffer = await readFile(finalPath);
     const thumbnailBuffer = await readFile(thumbPath);

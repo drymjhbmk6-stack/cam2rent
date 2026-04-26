@@ -35,9 +35,14 @@ ENV NODE_ENV=production
 ENV HOSTNAME=0.0.0.0
 ENV PORT=3000
 
-# ffmpeg + DejaVu-Schrift fuer Reel-Rendering
+# ffmpeg + DejaVu-Schrift (Fallback) + fontconfig fuer Reel-Rendering
 # (lib/reels/ffmpeg-render.ts spawnt /usr/bin/ffmpeg, drawtext-Filter braucht TTF-Datei)
-RUN apk add --no-cache ffmpeg ttf-dejavu
+RUN apk add --no-cache ffmpeg ttf-dejavu fontconfig
+
+# Phase 1 (1.6): Inter Tight als primaere Marken-Schrift fuer Reels (drawtext).
+# Variable Font (OFL-Lizenz, Google Fonts). Liegt im Repo unter assets/fonts/.
+COPY assets/fonts/InterTight.ttf /usr/share/fonts/cam2rent/InterTight.ttf
+RUN fc-cache -fv
 
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs

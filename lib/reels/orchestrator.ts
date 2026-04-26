@@ -16,7 +16,8 @@
 import { createServiceClient } from '@/lib/supabase';
 import { isTestMode } from '@/lib/env-mode';
 import { generateReelScript, type ReelScript } from './script-ai';
-import { findClipForQuery, type PexelsVideo, type PexelsVideoFile } from './pexels';
+// Phase 1.5: Multi-Source-Stock-Footage (Pexels + Pixabay) statt direktem Pexels-Aufruf.
+import { findClipForQuery, type StockClip } from './stock-sources';
 import { renderReel } from './ffmpeg-render';
 import { generateSpeech, STYLE_SPEED, type TTSVoice, type TTSModel, type TTSStyle } from './tts';
 
@@ -193,17 +194,27 @@ export async function generateReel(opts: GenerateReelOptions): Promise<GenerateR
     }
 
     // ── 4. Clips suchen (nur stock_footage) ─────────────────────────────────
-    let clips: Array<{ video: PexelsVideo; file: PexelsVideoFile }> | undefined;
+    // Phase 1.5: Multi-Source — pickt Pexels oder Pixabay deterministisch via reelId-Hash
+    // (gleicher Reel = gleiche Primaerquelle bei Re-Render). Quell-Verteilung wird
+    // sichtbar, sobald PIXABAY_API_KEY in admin_settings.reels_settings gesetzt ist.
+    let clips: StockClip[] | undefined;
+    const sourceCounts: Record<string, number> = {};
     if (templateType === 'stock_footage') {
       clips = [];
-      const seen = new Set<number>();
-      for (const scene of script.scenes) {
-        const match = await findClipForQuery(scene.search_query, seen);
-        if (!match) {
-          throw new Error(`Kein Pexels-Clip für Suchbegriff "${scene.search_query}" gefunden`);
+      const seen = new Set<string>();
+      for (let sceneIdx = 0; sceneIdx < script.scenes.length; sceneIdx++) {
+        const scene = script.scenes[sceneIdx];
+        const clip = await findClipForQuery(scene.search_query, {
+          seed: `${reelId}:${sceneIdx}`,
+          excludeIds: seen,
+          minHeight: 1080,
+        });
+        if (!clip) {
+          throw new Error(`Kein Stock-Clip fuer Suchbegriff "${scene.search_query}" gefunden (Pexels + Pixabay)`);
         }
-        clips.push(match);
-        seen.add(match.video.id);
+        clips.push(clip);
+        seen.add(clip.externalId);
+        sourceCounts[clip.source] = (sourceCounts[clip.source] ?? 0) + 1;
       }
     }
 
@@ -286,6 +297,10 @@ export async function generateReel(opts: GenerateReelOptions): Promise<GenerateR
       ? `Musik: AN (${settings.default_music_url.trim()})`
       : `Musik: AUS (keine default_music_url gesetzt)`;
     const audioHeader = `[audio] ${audioStatus} · ${musicStatus}`;
+    // Phase 1.5: Quell-Verteilung im Log dokumentieren (Pexels vs. Pixabay).
+    const sourceSummary = Object.entries(sourceCounts).length > 0
+      ? `[stock-sources] ${Object.entries(sourceCounts).map(([k, v]) => `${k}=${v}`).join(' · ')}`
+      : '[stock-sources] none (motion_graphics)';
 
     await supabase
       .from('social_reels')
@@ -296,7 +311,7 @@ export async function generateReel(opts: GenerateReelOptions): Promise<GenerateR
         thumbnail_url: thumbnailUrl,
         duration_seconds: durationSeconds,
         script_json: script as unknown as Record<string, unknown>,
-        render_log: `${audioHeader}\n${log}`.slice(-4000),
+        render_log: `${audioHeader}\n${sourceSummary}\n${log}`.slice(-4000),
         status: newStatus,
         error_message: null,
       })
