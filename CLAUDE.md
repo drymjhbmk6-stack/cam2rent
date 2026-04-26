@@ -1223,7 +1223,27 @@ Fünf neue Frontend-Module, die die Startseite lebendig halten — alle nutzen v
 - **`components/home/HomeSeasonalAction.tsx`** — Aktions-Karte zwischen Hero und Produkten (Gradient-Banner mit Badge, Titel, Untertitel, Coupon-Code, Gültig-bis-Datum, CTA-Button). Versteckt sich automatisch wenn deaktiviert oder abgelaufen. Admin-UI: `components/admin/SeasonalActionAdmin.tsx` in der Shop-Updater-Inhalte-Seite. Speicherung: `admin_settings.seasonal_action`. API: `GET /api/seasonal-action` (cached 60s).
 - **`components/home/HomeFresh.tsx`** — Zwei-Spalten-Block "Frisch im Shop" (erste 3 Produkte mit `hasUnits=true`) + "Demnächst verfügbar" (Produkte mit `hasUnits=false` → Wartelisten-Kandidaten). Versteckt sich, wenn beide leer.
 - **`components/home/NewsletterSignup.tsx`** — Newsletter-Anmeldung mit Double-Opt-In (DSGVO-konform). DB: `newsletter_subscribers` (Migration `supabase-newsletter.sql`). Flow: POST → Bestätigungsmail → GET-Confirm-Link → confirmed=true. Bestätigungsseite: `/newsletter/bestaetigt?status=ok|already|expired|invalid|error`. Rate-Limit: 5/h pro IP. E-Mail-Typ: `newsletter_confirm`.
-- **`components/home/CustomerPushPrompt.tsx`** — Dezenter Prompt unten rechts (8s Delay), aktiviert Web-Push für Endkunden. DB: `customer_push_subscriptions` (Migration `supabase-customer-push.sql`). Lib: `lib/customer-push.ts` → `sendPushToCustomers(payload, { topic? })`. Trigger noch nicht angeschlossen — Infrastruktur steht für später ("Neue Kamera im Shop", "Saison-Aktion gestartet"). Nutzt dieselben VAPID-Keys wie Admin-Push. Public-Vapid-Endpoint: `GET /api/customer-push/vapid-key`.
+- **`components/home/CustomerPushPrompt.tsx`** — Dezenter Prompt unten rechts (8s Delay), aktiviert Web-Push für Endkunden. DB: `customer_push_subscriptions` (Migration `supabase-customer-push.sql`). Lib: `lib/customer-push.ts` → `sendPushToCustomers(payload, { topic? })`. Nutzt dieselben VAPID-Keys wie Admin-Push. Public-Vapid-Endpoint: `GET /api/customer-push/vapid-key`.
+
+### Newsletter-Verwaltung (Stand 2026-04-26)
+Admin-Seite `/admin/newsletter` (in Sidebar-Gruppe „Rabatte & Aktionen", Permission `preise`). Drei Tabs:
+
+- **Tab „Abonnenten"** — Liste mit Statistik-Kacheln (Total / Aktiv / Ausstehend / Abgemeldet), Filter (Alle / Bestätigt / Ausstehend / Abgemeldet), E-Mail-Suche, Pagination. Pro Eintrag: manuell Ab-/Reaktivieren oder endgültig Löschen.
+- **Tab „Versand"** — Composer mit Betreff + HTML-Inhalt + iframe-Vorschau. Test-Versand an einzelne Adresse + Live-Versand an alle bestätigten + nicht-abgemeldeten Empfänger. Kampagnen werden in 25er-Chunks verschickt (gegen Resend-Burst-Limit), 500 ms Pause zwischen Chunks. Header + Pflicht-Footer (Abmelde-Link + Datenschutz) werden automatisch ergänzt.
+- **Tab „Kunden-Push"** — Custom-Push an alle Endkunden-Geräte (Titel, Body, Klick-URL). Geht über `lib/customer-push.ts` → `sendPushToCustomers()`. Audit-Log `customer_push.send`.
+
+**APIs:**
+- `GET /api/admin/newsletter/subscribers?confirmed=&q=&page=&limit=` — Liste + Stats
+- `PATCH/DELETE /api/admin/newsletter/subscribers/[id]` — Einzeleintrag bearbeiten/löschen
+- `POST /api/admin/newsletter/send` — Body `{ subject, bodyHtml, mode: 'test'|'live', testEmail? }`
+- `POST /api/admin/customer-push/send` — Body `{ title, body?, url?, topic? }`
+- `GET /api/newsletter/unsubscribe?token=...` — One-Click-Abmeldung (kein Login)
+
+**Lib:** `lib/newsletter.ts` → `sendNewsletterToAllConfirmed()` + `sendNewsletterTest()` + `buildNewsletterEmailHtml()`. Wrappt User-HTML in cam2rent-Layout, jeder Empfänger bekommt seinen eigenen Unsubscribe-Token-Link.
+
+**E-Mail-Typen:** `newsletter_confirm`, `newsletter_campaign`, `newsletter_test` — alle in `app/admin/emails/page.tsx` TYPE_LABELS gelistet.
+
+**Audit-Log-Aktionen:** `newsletter.send_campaign`, `newsletter.update_subscriber`, `newsletter.delete_subscriber`, `customer_push.send`.
 
 ### Noch offen
 - **SQL-Migration `supabase/supabase-newsletter.sql` ausführen** (Newsletter mit Double-Opt-In). Idempotent.

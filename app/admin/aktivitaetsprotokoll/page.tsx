@@ -59,6 +59,11 @@ const ACTION_LABELS: Record<string, string> = {
   'ugc.feature': 'Kundenmaterial veröffentlicht',
   'ugc.update': 'Kundenmaterial aktualisiert',
   'ugc.delete': 'Kundenmaterial gelöscht',
+  // Newsletter
+  'newsletter.send_campaign': 'Newsletter-Kampagne versendet',
+  'newsletter.update_subscriber': 'Newsletter-Abonnent geändert',
+  'newsletter.delete_subscriber': 'Newsletter-Abonnent gelöscht',
+  'customer_push.send': 'Push an Kunden gesendet',
   // Einstellungen
   'settings.update': 'Einstellungen geändert',
   'env_mode.change': 'Test-/Live-Modus gewechselt',

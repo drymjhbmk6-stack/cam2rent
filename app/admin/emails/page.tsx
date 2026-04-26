@@ -78,6 +78,9 @@ const TYPE_LABELS: Record<string, { label: string; color: string; bg: string }> 
   ugc_approved: { label: 'Kundenmaterial: Freigabe + Gutschein', color: '#10b981', bg: '#10b98114' },
   ugc_featured: { label: 'Kundenmaterial: Feature-Bonus', color: '#9333ea', bg: '#9333ea14' },
   ugc_rejected: { label: 'Kundenmaterial: Absage', color: '#ef4444', bg: '#ef444414' },
+  newsletter_confirm: { label: 'Newsletter: Bestätigung', color: '#3b82f6', bg: '#3b82f614' },
+  newsletter_campaign: { label: 'Newsletter: Kampagne', color: '#3b82f6', bg: '#3b82f614' },
+  newsletter_test: { label: 'Newsletter: Test', color: '#94a3b8', bg: '#94a3b814' },
   test: { label: 'Test-E-Mail', color: '#94a3b8', bg: '#94a3b814' },
 };
 
