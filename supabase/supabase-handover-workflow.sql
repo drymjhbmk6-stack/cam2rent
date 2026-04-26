@@ -29,4 +29,17 @@ CREATE INDEX IF NOT EXISTS idx_bookings_handover_completed_at
   WHERE handover_data IS NOT NULL;
 
 COMMENT ON COLUMN bookings.handover_data IS
-  'Digitales Übergabeprotokoll als JSONB: { completedAt, location, condition: { tested, noDamage, photosTaken, otherNote }, items: [{name, ok}], signatures: { landlord: {dataUrl, name, signedAt, ip}, renter: {...} } }';
+  'Digitales Übergabeprotokoll als JSONB: { completedAt, location, condition: { tested, noDamage, otherNote }, items: [{name, ok}], photoPath, signatures: { landlord: {dataUrl, name, signedAt, ip}, renter: {...} } }';
+
+-- ────────────────────────────────────────────────────────────────────────────
+-- Storage-Bucket fuer Uebergabe-Fotos (manuell anlegen)
+-- ────────────────────────────────────────────────────────────────────────────
+-- Das Foto wird beim digitalen Uebergabeprotokoll hochgeladen und ist
+-- Pflicht (mindestens 1 Foto pro Uebergabe). Bucket muss MANUELL im
+-- Supabase-Dashboard angelegt werden:
+--   Name:    handover-photos
+--   Public:  OFF
+--   MIME:    image/jpeg, image/png, image/webp, image/heic, image/heif
+--   Max:     10 MB pro Datei
+--   RLS:     Nur Service-Role
+-- ────────────────────────────────────────────────────────────────────────────

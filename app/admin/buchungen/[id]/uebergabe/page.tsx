@@ -31,8 +31,9 @@ interface BookingDetail {
 interface HandoverData {
   completedAt: string;
   location: string;
-  condition: { tested: boolean; noDamage: boolean; photosTaken: boolean; otherNote?: string };
+  condition: { tested: boolean; noDamage: boolean; otherNote?: string };
   items: Array<{ name: string; ok: boolean }>;
+  photoPath?: string;
   signatures: {
     landlord: { dataUrl: string; name: string; signedAt: string };
     renter: { dataUrl: string; name: string; signedAt: string };
@@ -98,8 +99,9 @@ function Wizard({ booking }: { booking: BookingDetail }) {
   const [location, setLocation] = useState('');
   const [tested, setTested] = useState(false);
   const [noDamage, setNoDamage] = useState(false);
-  const [photosTaken, setPhotosTaken] = useState(false);
   const [otherNote, setOtherNote] = useState('');
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [itemChecks, setItemChecks] = useState<Record<string, boolean>>(() => {
     const init: Record<string, boolean> = {};
     for (const it of items) init[it.key] = false;
@@ -116,7 +118,7 @@ function Wizard({ booking }: { booking: BookingDetail }) {
   const [submitError, setSubmitError] = useState('');
 
   const allItemsChecked = items.every((it) => itemChecks[it.key]);
-  const canProceedFromStep1 = allItemsChecked && location.trim().length > 0 && tested && noDamage;
+  const canProceedFromStep1 = allItemsChecked && location.trim().length > 0 && tested && noDamage && !!photoFile;
 
   // Vermieter-Name aus admin/me vorausfüllen
   useEffect(() => {
@@ -131,23 +133,27 @@ function Wizard({ booking }: { booking: BookingDetail }) {
   async function submitAll() {
     if (!landlordSig || !landlordName.trim()) { setSubmitError('Vermieter-Signatur + Name erforderlich.'); return; }
     if (!renterSig || !renterName.trim()) { setSubmitError('Mieter-Signatur + Name erforderlich.'); return; }
+    if (!photoFile) { setSubmitError('Foto ist Pflicht.'); return; }
 
     setSaving(true);
     setSubmitError('');
     try {
       const itemsArray = items.map((it) => ({ name: it.label, ok: !!itemChecks[it.key] }));
+      const formData = new FormData();
+      formData.append('photo', photoFile);
+      formData.append('data', JSON.stringify({
+        location: location.trim(),
+        condition: { tested, noDamage, otherNote: otherNote.trim() || undefined },
+        items: itemsArray,
+        signatures: {
+          landlord: { dataUrl: landlordSig, name: landlordName.trim() },
+          renter: { dataUrl: renterSig, name: renterName.trim() },
+        },
+      }));
+
       const res = await fetch(`/api/admin/handover/${booking.id}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          location: location.trim(),
-          condition: { tested, noDamage, photosTaken, otherNote: otherNote.trim() || undefined },
-          items: itemsArray,
-          signatures: {
-            landlord: { dataUrl: landlordSig, name: landlordName.trim() },
-            renter: { dataUrl: renterSig, name: renterName.trim() },
-          },
-        }),
+        body: formData,
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -181,7 +187,8 @@ function Wizard({ booking }: { booking: BookingDetail }) {
           <Step1 {...{
             items, itemChecks, setItemChecks,
             location, setLocation,
-            tested, setTested, noDamage, setNoDamage, photosTaken, setPhotosTaken,
+            tested, setTested, noDamage, setNoDamage,
+            photoFile, setPhotoFile, photoPreview, setPhotoPreview,
             otherNote, setOtherNote,
             canProceed: canProceedFromStep1,
             onNext: () => setStep('landlord'),
@@ -289,14 +296,26 @@ function Step1(props: {
   setTested: (v: boolean) => void;
   noDamage: boolean;
   setNoDamage: (v: boolean) => void;
-  photosTaken: boolean;
-  setPhotosTaken: (v: boolean) => void;
+  photoFile: File | null;
+  setPhotoFile: (f: File | null) => void;
+  photoPreview: string | null;
+  setPhotoPreview: (u: string | null) => void;
   otherNote: string;
   setOtherNote: (v: string) => void;
   canProceed: boolean;
   onNext: () => void;
 }) {
   const toggle = (key: string) => props.setItemChecks((prev) => ({ ...prev, [key]: !prev[key] }));
+
+  function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    if (f.size > 10 * 1024 * 1024) { alert('Foto zu gross (max 10 MB).'); return; }
+    props.setPhotoFile(f);
+    const reader = new FileReader();
+    reader.onload = () => props.setPhotoPreview(reader.result as string);
+    reader.readAsDataURL(f);
+  }
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
       <h2 className="font-bold text-lg mb-1">1. Zustand bei Übergabe</h2>
@@ -347,11 +366,43 @@ function Step1(props: {
             <input type="checkbox" checked={props.noDamage} onChange={(e) => props.setNoDamage(e.target.checked)} className="w-5 h-5 accent-cyan-500" />
             <span className="text-sm">Keine sichtbaren Schäden</span>
           </label>
-          <label className="flex items-center gap-3 p-3 rounded-lg bg-slate-950 border border-slate-800 cursor-pointer">
-            <input type="checkbox" checked={props.photosTaken} onChange={(e) => props.setPhotosTaken(e.target.checked)} className="w-5 h-5 accent-cyan-500" />
-            <span className="text-sm">Fotos / Videos zur Dokumentation erstellt</span>
-          </label>
         </div>
+      </div>
+
+      {/* Foto-Upload (Pflicht) */}
+      <div className="mb-5">
+        <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1.5">Foto der Übergabe *</label>
+        <p className="text-xs text-slate-500 mb-2">Pflicht: mindestens ein Foto vom Mietgegenstand bei der Übergabe (Zustand dokumentieren).</p>
+        <input
+          id="handover-photo"
+          type="file"
+          accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+          capture="environment"
+          onChange={onFile}
+          className="hidden"
+        />
+        {props.photoPreview ? (
+          <div className="space-y-2">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={props.photoPreview} alt="Übergabe-Foto" className="w-full max-h-64 object-contain rounded-lg bg-slate-950 border border-slate-800" />
+            <button
+              type="button"
+              onClick={() => { props.setPhotoFile(null); props.setPhotoPreview(null); }}
+              className="text-xs text-slate-400 hover:text-slate-200 underline"
+            >
+              Foto entfernen / neu aufnehmen
+            </button>
+          </div>
+        ) : (
+          <label htmlFor="handover-photo" className="flex flex-col items-center justify-center w-full p-8 rounded-lg bg-slate-950 border-2 border-dashed border-slate-700 cursor-pointer hover:border-cyan-500 transition-colors">
+            <svg className="w-8 h-8 mb-2 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            <span className="text-sm font-medium text-slate-200">Foto aufnehmen / hochladen</span>
+            <span className="text-xs text-slate-500 mt-1">JPEG, PNG, WebP, HEIC · max 10 MB</span>
+          </label>
+        )}
       </div>
 
       {/* Sonstige Anmerkungen */}
@@ -489,6 +540,14 @@ function DoneStep({ bookingId }: { bookingId: string }) {
 
 function DoneView({ booking, handover }: { booking: BookingDetail; handover: HandoverData }) {
   const completedDate = new Date(handover.completedAt).toLocaleString('de-DE', { timeZone: 'Europe/Berlin' });
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!handover.photoPath) return;
+    fetch(`/api/admin/handover/${booking.id}/photo-url`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d?.url) setPhotoUrl(d.url); })
+      .catch(() => {});
+  }, [booking.id, handover.photoPath]);
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
@@ -526,12 +585,23 @@ function DoneView({ booking, handover }: { booking: BookingDetail; handover: Han
             <ul className="text-sm space-y-1">
               <li>{handover.condition.tested ? '✓' : '✗'} Funktionsfähig getestet</li>
               <li>{handover.condition.noDamage ? '✓' : '✗'} Keine sichtbaren Schäden</li>
-              <li>{handover.condition.photosTaken ? '✓' : '✗'} Fotos / Videos erstellt</li>
               {handover.condition.otherNote && (
                 <li className="text-amber-300 mt-1">Anmerkung: {handover.condition.otherNote}</li>
               )}
             </ul>
           </div>
+
+          {handover.photoPath && (
+            <div className="mb-4">
+              <div className="text-xs uppercase tracking-wider text-slate-500 mb-1">Foto der Übergabe</div>
+              {photoUrl ? (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img src={photoUrl} alt="Übergabe-Foto" className="w-full max-h-72 object-contain rounded-lg bg-slate-950 border border-slate-800" />
+              ) : (
+                <div className="text-xs text-slate-500">Foto wird geladen…</div>
+              )}
+            </div>
+          )}
 
           <div className="grid sm:grid-cols-2 gap-4 mb-2">
             <div>
