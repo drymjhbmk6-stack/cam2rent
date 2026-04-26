@@ -31,6 +31,7 @@ import {
   sendExtensionConfirmation,
   sendReviewRequest,
   sendAbandonedCartReminder,
+  sendVerificationRejected,
   type BookingEmailData,
   type CancellationEmailData,
   type ShippingEmailData,
@@ -40,6 +41,11 @@ import {
   type MessageNotificationData,
   type ExtensionEmailData,
 } from '@/lib/email';
+import {
+  sendUgcApprovedEmail,
+  sendUgcFeaturedEmail,
+  sendUgcRejectedEmail,
+} from '@/lib/customer-ugc';
 
 export type EmailRecipient = 'customer' | 'admin';
 
@@ -224,14 +230,14 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateMeta[] = [
   },
   // Nachrichten
   {
-    id: 'message_to_admin',
+    id: 'message_admin',
     name: 'Neue Nachricht — Admin',
     description: 'Wenn ein Kunde im Messenger (unter Buchungsdetails / Kontaktformular) schreibt.',
     recipient: 'admin',
     render: () => renderEmailPreview(sendNewMessageNotificationToAdmin, dummyMessage),
   },
   {
-    id: 'message_to_customer',
+    id: 'message_customer',
     name: 'Neue Nachricht — Kunde',
     description: 'Wenn der Admin auf eine Kundennachricht antwortet.',
     recipient: 'customer',
@@ -273,6 +279,59 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateMeta[] = [
       cartTotal: 84,
       couponCode: 'COMEBACK10',
       discountPercent: 10,
+    }),
+  },
+  // Verifizierung
+  {
+    id: 'verification_rejected',
+    name: 'Ausweis-Verifizierung abgelehnt',
+    description: 'Wenn der Admin einen hochgeladenen Ausweis ablehnt — Kunde wird gebeten, den Ausweis erneut hochzuladen (mit optionaler Begründung).',
+    recipient: 'customer',
+    render: () => renderEmailPreview(sendVerificationRejected, {
+      customerName: 'Max Mustermann',
+      customerEmail: 'max.mustermann@example.de',
+      reason: 'Bild war unscharf — bitte gut ausgeleuchtet und alle Ecken sichtbar erneut hochladen.',
+    }),
+  },
+  // Kundenmaterial / UGC
+  {
+    id: 'ugc_approved',
+    name: 'Kundenmaterial freigegeben + Gutschein',
+    description: 'Wenn der Admin eingereichtes Kundenmaterial freigibt — Kunde erhält 15 % Rabatt-Gutschein als Dankeschön.',
+    recipient: 'customer',
+    render: () => renderEmailPreview(sendUgcApprovedEmail, {
+      to: 'max.mustermann@example.de',
+      name: 'Max Mustermann',
+      code: 'UGC-MUSTER-1234',
+      discountPercent: 15,
+      validityDays: 90,
+      minOrderValue: 50,
+    }),
+  },
+  {
+    id: 'ugc_featured',
+    name: 'Kundenmaterial veröffentlicht (Bonus)',
+    description: 'Wenn cam2rent das Material auf Social/Blog/Website veröffentlicht — Kunde bekommt zusätzlich einen Bonus-Gutschein (25 %).',
+    recipient: 'customer',
+    render: () => renderEmailPreview(sendUgcFeaturedEmail, {
+      to: 'max.mustermann@example.de',
+      name: 'Max Mustermann',
+      code: 'BONUS-MUSTER-5678',
+      discountPercent: 25,
+      validityDays: 180,
+      minOrderValue: 50,
+      channel: 'social',
+    }),
+  },
+  {
+    id: 'ugc_rejected',
+    name: 'Kundenmaterial abgelehnt',
+    description: 'Wenn der Admin eingereichtes Kundenmaterial ablehnt — Kunde wird höflich informiert (mit Begründung).',
+    recipient: 'customer',
+    render: () => renderEmailPreview(sendUgcRejectedEmail, {
+      to: 'max.mustermann@example.de',
+      name: 'Max Mustermann',
+      reason: 'Material erfüllt leider nicht unsere Qualitätskriterien (Bilder zu klein, schlecht ausgeleuchtet).',
     }),
   },
 ];
