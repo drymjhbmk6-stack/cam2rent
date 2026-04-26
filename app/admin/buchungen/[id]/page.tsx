@@ -1021,7 +1021,21 @@ export default function BuchungDetailPage() {
                   </>
                 )}
                 {booking.delivery_mode === 'abholung' && (
-                  <button onClick={openÜbergabeprotokoll} className="block w-full text-center px-4 py-2 text-sm font-heading font-semibold bg-cyan-600 text-white rounded-btn hover:bg-cyan-700 transition-colors">Übergabeprotokoll</button>
+                  <>
+                    <Link
+                      href={`/admin/buchungen/${booking.id}/uebergabe`}
+                      className="block w-full text-center px-4 py-2 text-sm font-heading font-semibold bg-cyan-600 text-white rounded-btn hover:bg-cyan-700 transition-colors"
+                    >
+                      📝 Übergabeprotokoll (digital)
+                    </Link>
+                    {/* Legacy/Sonderfall: leeres PDF zum Ausdrucken + manuelles Abhaken */}
+                    <button
+                      onClick={openÜbergabeprotokoll}
+                      className="block w-full text-center px-4 py-2 text-sm font-heading font-semibold bg-slate-500 text-white rounded-btn hover:bg-slate-600 transition-colors"
+                    >
+                      📋 Leeres Protokoll (zum Ausdrucken)
+                    </button>
+                  </>
                 )}
                 <Link href="/admin/schaeden" className="block w-full text-center px-4 py-2 text-sm font-heading font-semibold bg-orange-500 text-white rounded-btn hover:bg-orange-600 transition-colors">Schadensbericht erstellen</Link>
               </div>
