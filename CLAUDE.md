@@ -201,25 +201,31 @@ Komplett neu strukturiert in 9 Gruppen, damit die tägliche Arbeit schneller err
 **Sichtbarkeit:** Auf `/admin/blog/*` bleibt die Sidebar weiterhin komplett ausgeblendet (Blog hat eigene Navigation). Die Blog-Collapse in der Haupt-Sidebar dient nur als Einsprung von außerhalb.
 
 ### Zusammengelegte Admin-Seiten (Tab-Seiten)
-Drei Seiten wurden zu Tab-Seiten zusammengeführt. Die Inhalte der Unterseiten wurden in wiederverwendbare Client-Komponenten unter `components/admin/` extrahiert — Funktionalität ist 1:1 unverändert.
+Mehrere Seiten wurden zu Tab-Seiten zusammengeführt. Die Inhalte der Unterseiten wurden in wiederverwendbare Client-Komponenten unter `components/admin/` extrahiert — Funktionalität ist 1:1 unverändert.
 
-- **`/admin/startseite`** (neu): Tab-Seite mit `?tab=inhalte|bilder`
-  - Tab "Inhalte" → `components/admin/ShopUpdaterContent.tsx`
-  - Tab "Hero-Bilder" → `components/admin/SeasonalImagesContent.tsx`
-- **`/admin/preise`** (Hub → Tab-Seite): `?tab=versand|haftung`
+- **`/admin/einstellungen`** (Settings-Hub, Stand 2026-04-26): Tab-Seite mit `?tab=allgemein|versand|haftung|vertrag|blog-ki|social-ki`
+  - Tab "Allgemein" (Default) → `components/admin/EinstellungenAllgemein.tsx` (Test/Live-Modus, Checkout, Mitarbeiter-Link, 2FA, Kaution-Modus, Umsatzsteuer, Warenkorb-Erinnerung, Spec-Definitionen, Puffer-Tage, Geschäftsdaten, Admin-PWA, Push, Wochenbericht)
   - Tab "Versand" → `components/admin/VersandpreiseContent.tsx`
   - Tab "Haftung & Kaution" → `components/admin/HaftungContent.tsx`
-- **`/admin/legal`** (erweitert um Tabs): `?tab=dokumente|vertrag`
-  - Tab "Dokumente" → `components/admin/LegalDocumentsContent.tsx`
   - Tab "Vertragsparagraphen" → `components/admin/VertragsparagraphenContent.tsx`
-  - Direktlink `/admin/legal/vertragsparagraphen` bleibt erhalten.
+  - Tab "Blog-KI" → `components/admin/BlogEinstellungenContent.tsx`
+  - Tab "Social-KI" → `components/admin/SocialEinstellungenContent.tsx`
+  - Sub-Page `/admin/einstellungen/mitarbeiter` bleibt unverändert
+- **`/admin/startseite`**: Tab-Seite mit `?tab=inhalte|bilder` (Content, kein Settings)
+  - Tab "Inhalte" → `components/admin/ShopUpdaterContent.tsx`
+  - Tab "Hero-Bilder" → `components/admin/SeasonalImagesContent.tsx`
+- **`/admin/legal`**: Single-Tab-Seite (Dokumente). Vertragsparagraphen sind in `/admin/einstellungen?tab=vertrag` umgezogen.
 
 ### Redirects (next.config.ts)
 Alte URLs leiten auf die neuen Tab-Seiten weiter (`permanent: false`, damit Bookmarks funktionieren, URLs aber nicht dauerhaft gecached werden):
 - `/admin/shop-updater` → `/admin/startseite?tab=inhalte`
 - `/admin/saisonale-bilder` → `/admin/startseite?tab=bilder`
-- `/admin/preise/versand` → `/admin/preise?tab=versand`
-- `/admin/preise/haftung` → `/admin/preise?tab=haftung`
+- `/admin/preise` → `/admin/einstellungen?tab=versand` (Seite wurde aufgelöst)
+- `/admin/preise/versand` → `/admin/einstellungen?tab=versand`
+- `/admin/preise/haftung` → `/admin/einstellungen?tab=haftung`
+- `/admin/legal/vertragsparagraphen` → `/admin/einstellungen?tab=vertrag`
+- `/admin/blog/einstellungen` → `/admin/einstellungen?tab=blog-ki`
+- `/admin/social/einstellungen` → `/admin/einstellungen?tab=social-ki`
 
 ### Dynamische Admin-Dropdowns
 Alle Dropdowns laden aus `admin_settings` und können neue Einträge hinzufügen:

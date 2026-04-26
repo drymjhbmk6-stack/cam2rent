@@ -63,8 +63,13 @@ const nextConfig: NextConfig = {
     return [
       { source: '/admin/shop-updater', destination: '/admin/startseite?tab=inhalte', permanent: false },
       { source: '/admin/saisonale-bilder', destination: '/admin/startseite?tab=bilder', permanent: false },
-      { source: '/admin/preise/versand', destination: '/admin/preise?tab=versand', permanent: false },
-      { source: '/admin/preise/haftung', destination: '/admin/preise?tab=haftung', permanent: false },
+      // Settings-Konsolidierung — alle Konfigurationen unter /admin/einstellungen
+      { source: '/admin/preise', destination: '/admin/einstellungen?tab=versand', permanent: false },
+      { source: '/admin/preise/versand', destination: '/admin/einstellungen?tab=versand', permanent: false },
+      { source: '/admin/preise/haftung', destination: '/admin/einstellungen?tab=haftung', permanent: false },
+      { source: '/admin/legal/vertragsparagraphen', destination: '/admin/einstellungen?tab=vertrag', permanent: false },
+      { source: '/admin/blog/einstellungen', destination: '/admin/einstellungen?tab=blog-ki', permanent: false },
+      { source: '/admin/social/einstellungen', destination: '/admin/einstellungen?tab=social-ki', permanent: false },
     ];
   },
   // Security-Headers (ohne CSP — dafür braucht es eine separate Analyse

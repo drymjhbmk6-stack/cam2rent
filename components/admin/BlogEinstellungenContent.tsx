@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import AdminBackLink from '@/components/admin/AdminBackLink';
 
 const inputStyle: React.CSSProperties = {
   width: '100%', background: '#0f172a', border: '1px solid #334155',
@@ -57,7 +56,11 @@ const DEFAULTS: BlogSettings = {
   ki_context: '',
 };
 
-export default function BlogEinstellungenPage() {
+/**
+ * Blog-KI-Einstellungen — wird in /admin/einstellungen?tab=blog-ki geladen.
+ * Frueher die komplette /admin/blog/einstellungen-Seite.
+ */
+export default function BlogEinstellungenContent() {
   const [settings, setSettings] = useState<BlogSettings>(DEFAULTS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -118,7 +121,6 @@ export default function BlogEinstellungenPage() {
 
   return (
     <div className="p-4 sm:p-8 max-w-2xl">
-      <AdminBackLink href="/admin/blog" label="Zurück zum Blog" />
       <h1 className="font-heading font-bold text-xl sm:text-2xl mb-1" style={{ color: 'white' }}>Blog-Einstellungen</h1>
       <p className="text-sm mb-6" style={{ color: '#64748b' }}>API-Keys, KI-Konfiguration und Zeitplanung</p>
 

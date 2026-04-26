@@ -159,7 +159,6 @@ const KATALOG_ITEMS: NavItem[] = [
 ];
 
 const PREISE_ITEMS: NavItem[] = [
-  { href: '/admin/preise', label: 'Versand & Haftung', exact: true, icon: iconPriceTag, perm: 'preise' },
   { href: '/admin/gutscheine', label: 'Gutscheine', icon: iconTicket, perm: 'preise' },
   { href: '/admin/rabatte', label: 'Rabatte', icon: iconDiscount, perm: 'preise' },
 ];
@@ -176,7 +175,6 @@ const BLOG_ITEMS: NavItem[] = [
   { href: '/admin/blog/themen', label: 'KI-Themen', icon: iconStar, perm: 'content' },
   { href: '/admin/blog/kommentare', label: 'Kommentare', icon: iconMessage, perm: 'content' },
   { href: '/admin/blog/mediathek', label: 'Mediathek', icon: iconBlog, perm: 'content' },
-  { href: '/admin/blog/einstellungen', label: 'Blog-Einstellungen', icon: iconCog, perm: 'content' },
 ];
 
 const SOCIAL_ITEMS: NavItem[] = [
@@ -188,7 +186,6 @@ const SOCIAL_ITEMS: NavItem[] = [
   { href: '/admin/social/zeitplan', label: 'Redaktionsplan', icon: iconCalendar, perm: 'content' },
   { href: '/admin/social/plan', label: 'KI-Plan (Bulk)', icon: iconBlog, perm: 'content' },
   { href: '/admin/social/vorlagen', label: 'Vorlagen', icon: iconClipboard, perm: 'content' },
-  { href: '/admin/social/einstellungen', label: 'Einstellungen', icon: iconCog, perm: 'content' },
 ];
 
 const FINANZEN_ITEMS: NavItem[] = [
@@ -473,7 +470,7 @@ function SidebarContent({ pathname, isDashboard, onNavClick, handleLogout, me }:
     tagesgeschaeft: ['/admin/tagesgeschaeft', '/admin/buchungen', '/admin/verfuegbarkeit', '/admin/versand', '/admin/retouren'],
     kunden: ['/admin/kunden-uebersicht', '/admin/kunden', '/admin/nachrichten', '/admin/warteliste', '/admin/kunden-material', '/admin/bewertungen', '/admin/schaeden'],
     katalog: ['/admin/preise/kameras', '/admin/sets', '/admin/zubehoer'],
-    preise: ['/admin/preise', '/admin/gutscheine', '/admin/rabatte'],
+    preise: ['/admin/gutscheine', '/admin/rabatte'],
     content: ['/admin/blog', '/admin/social'],
     webseite: ['/admin/startseite', '/admin/legal'],
     finanzen: ['/admin/buchhaltung', '/admin/einkauf', '/admin/anlagen'],

@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import AdminBackLink from '@/components/admin/AdminBackLink';
 import { fmtDateTime } from '@/lib/format-utils';
 
 interface SocialAccount {
@@ -18,7 +17,11 @@ interface SocialAccount {
   created_at: string;
 }
 
-export default function SocialConnections() {
+/**
+ * Social-KI-Einstellungen — wird in /admin/einstellungen?tab=social-ki geladen.
+ * Frueher die komplette /admin/social/einstellungen-Seite.
+ */
+export default function SocialEinstellungenContent() {
   const [accounts, setAccounts] = useState<SocialAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState(false);
@@ -77,7 +80,6 @@ export default function SocialConnections() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
-      <AdminBackLink />
       <h1 className="text-2xl font-bold text-white mb-1 mt-4">Social Media — Verbindungen</h1>
       <p className="text-sm text-slate-400 mb-6">
         Verbinde deine Facebook-Seite + Instagram Business Account, damit cam2rent automatisch posten kann.

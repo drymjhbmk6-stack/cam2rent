@@ -1,52 +1,13 @@
 'use client';
 
-import { Suspense } from 'react';
-import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
 import LegalDocumentsContent from '@/components/admin/LegalDocumentsContent';
-import VertragsparagraphenContent from '@/components/admin/VertragsparagraphenContent';
 
-type TabKey = 'dokumente' | 'vertrag';
-
-function TabButton({ tab, current, label }: { tab: TabKey; current: TabKey; label: string }) {
-  const active = tab === current;
-  return (
-    <Link
-      href={tab === 'dokumente' ? '/admin/legal' : `/admin/legal?tab=${tab}`}
-      scroll={false}
-      className="px-4 py-2 rounded-lg text-sm font-heading font-semibold transition-all"
-      style={
-        active
-          ? { background: 'rgba(6,182,212,0.15)', color: '#06b6d4', border: '1px solid rgba(6,182,212,0.3)' }
-          : { background: '#1e293b', color: '#94a3b8', border: '1px solid #334155' }
-      }
-    >
-      {label}
-    </Link>
-  );
-}
-
-function LegalPageInner() {
-  const searchParams = useSearchParams();
-  const current: TabKey = searchParams.get('tab') === 'vertrag' ? 'vertrag' : 'dokumente';
-
-  return (
-    <div>
-      <div className="px-4 sm:px-6 lg:px-8 pt-6 max-w-4xl mx-auto">
-        <div className="mb-4 flex items-center gap-2 flex-wrap">
-          <TabButton tab="dokumente" current={current} label="Dokumente" />
-          <TabButton tab="vertrag" current={current} label="Vertragsparagraphen" />
-        </div>
-      </div>
-      {current === 'dokumente' ? <LegalDocumentsContent /> : <VertragsparagraphenContent />}
-    </div>
-  );
-}
-
+/**
+ * Admin-Seite fuer die Rechtstext-Verwaltung (AGB, Datenschutz, Impressum,
+ * Widerruf, Haftungsbedingungen). Frueher gab es hier zusaetzlich einen
+ * Vertragsparagraphen-Tab — der ist jetzt nach /admin/einstellungen?tab=vertrag
+ * umgezogen (Konsolidierung aller Settings).
+ */
 export default function AdminLegalPage() {
-  return (
-    <Suspense fallback={null}>
-      <LegalPageInner />
-    </Suspense>
-  );
+  return <LegalDocumentsContent />;
 }
