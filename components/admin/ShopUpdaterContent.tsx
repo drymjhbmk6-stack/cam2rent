@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import SeasonalActionAdmin from '@/components/admin/SeasonalActionAdmin';
 
 // ============================================================
 // Types
@@ -631,6 +632,8 @@ export default function ShopUpdaterContent() {
               onChange={(c) => updateSectionLocal('reviews_config', { content: c })}
             />
           </SectionCard>
+
+          <SeasonalActionAdmin />
         </div>
       )}
     </div>
