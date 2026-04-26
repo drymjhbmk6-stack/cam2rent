@@ -289,6 +289,8 @@ export default function CheckoutPage() {
 
   // Fetch user booking count + verification status
   const [isVerified, setIsVerified] = useState<boolean | null>(null);
+  // Pending-Booking-Erfolg (frueh deklariert, weil weiter oben useEffect drauf zugreift)
+  const [pendingSuccess, setPendingSuccess] = useState<string | null>(null);
   useEffect(() => {
     if (!user) { setIsVerified(null); return; }
     const supabase = createAuthBrowserClient();
@@ -350,9 +352,11 @@ export default function CheckoutPage() {
   }, [user]);
 
   // Redirect if cart empty (erst nach Hydratisierung prüfen)
+  // Aber NICHT wenn die Pending-Buchung gerade erfolgreich war — dann haben
+  // wir den Warenkorb bewusst geleert, der Nutzer soll die Bestaetigung sehen.
   useEffect(() => {
-    if (hydrated && itemCount === 0) router.replace('/warenkorb');
-  }, [hydrated, itemCount, router]);
+    if (hydrated && itemCount === 0 && !pendingSuccess) router.replace('/warenkorb');
+  }, [hydrated, itemCount, router, pendingSuccess]);
 
   // Artikel nach Mietzeitraum gruppieren
   const periodGroups = useMemo(() => {
@@ -530,7 +534,7 @@ export default function CheckoutPage() {
   };
 
   // Unverified: Buchung ohne Zahlung anlegen
-  const [pendingSuccess, setPendingSuccess] = useState<string | null>(null);
+  // pendingSuccess-State steht weiter oben (wird vom Empty-Cart-Redirect-Effect gebraucht)
   const [acceptsTerms, setAcceptsTerms] = useState(false);
   const [acceptsWithdrawal, setAcceptsWithdrawal] = useState(false);
   const [acceptsEarlyService, setAcceptsEarlyService] = useState(false);
@@ -1058,24 +1062,59 @@ export default function CheckoutPage() {
                   )}
                 </div>
 
-                {/* Pending Booking Erfolg */}
+                {/* Pending Booking Erfolg — Modal mit 3 Stichpunkten "Was passiert jetzt".
+                    Bewusst Modal statt inline, weil clearCart() den Warenkorb leert
+                    und die Seite sonst sofort auf /warenkorb umleiten wuerde. */}
                 {pendingSuccess && (
-                  <div className="p-5 rounded-[10px] bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-center">
-                    <div className="w-12 h-12 rounded-full bg-status-success/10 flex items-center justify-center mx-auto mb-3">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-6 h-6 text-status-success">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
+                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+                    <div className="bg-white dark:bg-brand-dark rounded-card shadow-2xl max-w-md w-full p-6 sm:p-8">
+                      <div className="w-14 h-14 rounded-full bg-status-success/10 flex items-center justify-center mx-auto mb-4">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-7 h-7 text-status-success">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
+                      <h3 className="font-heading font-bold text-xl text-center text-brand-black dark:text-white mb-2">
+                        Buchung eingereicht!
+                      </h3>
+                      <p className="text-sm font-body text-center text-brand-steel dark:text-gray-400 mb-5">
+                        Buchungsnummer <strong>{pendingSuccess}</strong>
+                      </p>
+
+                      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-[10px] p-4 mb-5">
+                        <p className="font-heading font-semibold text-sm text-brand-black dark:text-white mb-3">
+                          Was passiert jetzt?
+                        </p>
+                        <ol className="space-y-2.5 text-sm font-body text-brand-steel dark:text-gray-300">
+                          <li className="flex gap-3">
+                            <span className="flex-shrink-0 w-5 h-5 rounded-full bg-accent-blue text-white text-xs font-bold flex items-center justify-center">1</span>
+                            <span><strong>Wir prüfen deinen Ausweis</strong> — meist innerhalb weniger Stunden.</span>
+                          </li>
+                          <li className="flex gap-3">
+                            <span className="flex-shrink-0 w-5 h-5 rounded-full bg-accent-blue text-white text-xs font-bold flex items-center justify-center">2</span>
+                            <span>Du bekommst einen <strong>Zahlungslink per E-Mail</strong>.</span>
+                          </li>
+                          <li className="flex gap-3">
+                            <span className="flex-shrink-0 w-5 h-5 rounded-full bg-accent-blue text-white text-xs font-bold flex items-center justify-center">3</span>
+                            <span>Nach Bezahlung <strong>versenden wir die Kamera</strong> rechtzeitig zu deinem Mietbeginn.</span>
+                          </li>
+                        </ol>
+                      </div>
+
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <a
+                          href="/konto/buchungen"
+                          className="flex-1 px-4 py-3 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold text-sm rounded-btn text-center hover:bg-brand-dark transition-colors"
+                        >
+                          Zu meinen Buchungen
+                        </a>
+                        <a
+                          href="/"
+                          className="flex-1 px-4 py-3 border border-brand-border dark:border-white/10 text-brand-black dark:text-white font-heading font-semibold text-sm rounded-btn text-center hover:bg-brand-bg dark:hover:bg-white/5 transition-colors"
+                        >
+                          Zur Startseite
+                        </a>
+                      </div>
                     </div>
-                    <h3 className="font-heading font-bold text-lg text-brand-black dark:text-white mb-1">Buchung eingereicht!</h3>
-                    <p className="text-sm font-body text-brand-steel dark:text-gray-400 mb-2">
-                      Deine Buchung <strong>{pendingSuccess}</strong> wartet auf Freigabe.
-                    </p>
-                    <p className="text-xs font-body text-brand-muted dark:text-gray-500">
-                      Wir prüfen deinen Ausweis und senden dir einen Zahlungslink per Email.
-                    </p>
-                    <a href="/konto/buchungen" className="inline-block mt-4 px-6 py-2.5 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold text-sm rounded-btn">
-                      Meine Buchungen
-                    </a>
                   </div>
                 )}
 
