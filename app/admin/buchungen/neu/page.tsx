@@ -593,6 +593,16 @@ export default function ManualBookingPage() {
     if (!customerName.trim()) { setError('Name ist ein Pflichtfeld.'); return; }
     if (selectedProducts.length === 0) { setError('Mindestens ein Produkt auswählen.'); return; }
     if (!rentalFrom || !rentalTo || days <= 0) { setError('Gültiger Mietzeitraum nötig.'); return; }
+    // Pro Produkt muss mindestens ein Set gewaehlt sein (analog zum Kunden-
+    // Buchungsflow). Verhindert versehentliche "kein Zubehoer dabei"-Versaende.
+    const productsWithoutSet = selectedProducts.filter((sp) => sp.sets.length === 0);
+    if (productsWithoutSet.length > 0) {
+      const names = productsWithoutSet
+        .map((sp) => productList.find((pl) => pl.id === sp.id)?.name ?? sp.id)
+        .join(', ');
+      setError(`Bitte mindestens ein Set wählen für: ${names}`);
+      return;
+    }
 
     setSaving(true);
     try {
@@ -962,7 +972,12 @@ export default function ManualBookingPage() {
                     {/* Sets für dieses Produkt */}
                     {compatSets.length > 0 && (
                       <div className="mb-3">
-                        <p className="text-xs font-semibold mb-2" style={{ color: '#64748b' }}>SETS</p>
+                        <p className="text-xs font-semibold mb-2 flex items-center gap-1.5" style={{ color: sp.sets.length === 0 ? '#f59e0b' : '#64748b' }}>
+                          SETS
+                          {sp.sets.length === 0 && (
+                            <span style={{ color: '#f59e0b', fontWeight: 600 }}>* — bitte mindestens ein Set wählen</span>
+                          )}
+                        </p>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
                           {compatSets.map((set) => {
                             const checked = sp.sets.includes(set.id);
