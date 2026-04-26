@@ -9,6 +9,8 @@ import { sendAdminNotification, type BookingEmailData } from '@/lib/email';
 import { getClientIp } from '@/lib/rate-limit';
 import { isTestMode } from '@/lib/env-mode';
 import { type BookingAccessoryItem, itemsToLegacyIds } from '@/lib/booking-accessories';
+import { generateContractPDF } from '@/lib/contracts/generate-contract';
+import { storeContract } from '@/lib/contracts/store-contract';
 
 /**
  * Gruppiert Cart-Items nach Mietzeitraum.
@@ -45,6 +47,7 @@ export async function POST(req: NextRequest) {
       durationDiscount,
       loyaltyDiscount,
       earlyServiceConsentAt,
+      contractSignature,
     } = body as {
       items: CartItem[];
       customerName: string;
@@ -57,8 +60,15 @@ export async function POST(req: NextRequest) {
       durationDiscount?: number;
       loyaltyDiscount?: number;
       earlyServiceConsentAt?: string | null;
+      contractSignature?: {
+        signatureDataUrl: string | null;
+        signatureMethod: 'canvas' | 'typed';
+        signerName: string;
+        agreedToTerms: boolean;
+      };
     };
-    const earlyServiceConsentIp = earlyServiceConsentAt ? getClientIp(req) : null;
+    const ip = getClientIp(req);
+    const earlyServiceConsentIp = earlyServiceConsentAt ? ip : null;
 
     if (!userId) {
       return NextResponse.json(
@@ -92,21 +102,48 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Lieferadresse aus Profil
+    // Lieferadresse + komplette Adresse fuer Vertrag aus Profil
     let shippingAddress: string | null = null;
-    if (deliveryMode === 'versand') {
+    let custStreet = '';
+    let custZip = '';
+    let custCity = '';
+    {
       const { data: profile } = await supabase
         .from('profiles')
         .select('address_street, address_zip, address_city')
         .eq('id', userId)
         .maybeSingle();
       if (profile?.address_street) {
-        shippingAddress = [
-          profile.address_street,
-          [profile.address_zip, profile.address_city].filter(Boolean).join(' '),
-        ].filter(Boolean).join(', ');
+        custStreet = profile.address_street;
+        custZip = profile.address_zip || '';
+        custCity = profile.address_city || '';
+        if (deliveryMode === 'versand') {
+          shippingAddress = [
+            profile.address_street,
+            [profile.address_zip, profile.address_city].filter(Boolean).join(' '),
+          ].filter(Boolean).join(', ');
+        }
       }
     }
+
+    // Tax-Settings fuer den Mietvertrag
+    let taxMode: 'kleinunternehmer' | 'regelbesteuerung' = 'kleinunternehmer';
+    let taxRate = 19;
+    {
+      const { data: txS } = await supabase
+        .from('admin_settings')
+        .select('key, value')
+        .in('key', ['tax_mode', 'tax_rate']);
+      const txM: Record<string, string> = {};
+      for (const s of txS ?? []) txM[s.key] = s.value;
+      taxMode = (txM['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer';
+      taxRate = parseFloat(txM['tax_rate'] || '19');
+    }
+
+    const fmtD = (iso: string) => {
+      const [y, m, d] = (iso || '').split('T')[0].split('-');
+      return `${d}.${m}.${y}`;
+    };
 
     // Versand-Config aus DB laden
     let shippingCfg: ShippingPriceConfig = DEFAULT_SHIPPING;
@@ -212,6 +249,60 @@ export async function POST(req: NextRequest) {
           { error: 'Buchung konnte nicht gespeichert werden.' },
           { status: 500 }
         );
+      }
+
+      // Mietvertrag erzeugen + speichern, falls der Kunde im Buchungs-Flow
+      // unterschrieben hat. Ohne diesen Block landet die Buchung in der Admin-UI
+      // als "Mietvertrag — Ausstehend", obwohl der Kunde bereits unterschrieben
+      // hat. Synchron, damit ein nachfolgendes Auto-Approve nach Verifizierung
+      // den Vertrag bereits findet.
+      if (contractSignature?.agreedToTerms && contractSignature?.signerName) {
+        try {
+          const groupPriceRental = groupItems.reduce((s, it) => s + it.priceRental, 0);
+          const groupPriceAccessories = groupItems.reduce((s, it) => s + it.priceAccessories, 0);
+          const groupPriceHaftung = groupItems.reduce((s, it) => s + it.priceHaftung, 0);
+          const groupDeposit = groupItems.reduce((s, it) => s + it.deposit, 0);
+          const result = await generateContractPDF({
+            bookingId,
+            bookingNumber: bookingId,
+            customerName: contractSignature.signerName,
+            customerEmail,
+            customerStreet: custStreet,
+            customerZip: custZip,
+            customerCity: custCity,
+            productName,
+            accessories: allAccessories,
+            accessoryItems: groupAccessoryItems.length > 0 ? groupAccessoryItems : undefined,
+            rentalFrom: fmtD(firstItem.rentalFrom),
+            rentalTo: fmtD(firstItem.rentalTo),
+            rentalDays: firstItem.days,
+            deliveryMode,
+            priceRental: groupPriceRental,
+            priceAccessories: groupPriceAccessories,
+            priceHaftung: groupPriceHaftung,
+            priceShipping: groupShipping,
+            priceTotal: Math.max(0, priceTotal),
+            deposit: groupDeposit,
+            taxMode,
+            taxRate,
+            signatureDataUrl: contractSignature.signatureDataUrl,
+            signatureMethod: contractSignature.signatureMethod,
+            signerName: contractSignature.signerName,
+            ipAddress: ip,
+          });
+          await storeContract(bookingId, result.pdfBuffer, {
+            contractHash: result.contractHash,
+            customerName: contractSignature.signerName,
+            ipAddress: ip,
+            signedAt: new Date().toISOString(),
+            signatureMethod: contractSignature.signatureMethod,
+          });
+        } catch (err) {
+          // Vertrag-Erzeugung schlaegt nicht die ganze Buchung kaputt — der
+          // Admin kann den Vertrag spaeter unter /admin/buchungen/[id]/vertrag-
+          // unterschreiben nachholen.
+          console.error('[create-pending-booking] Vertrag-Generierung fehlgeschlagen:', err);
+        }
       }
 
       // Admin benachrichtigen (non-blocking)

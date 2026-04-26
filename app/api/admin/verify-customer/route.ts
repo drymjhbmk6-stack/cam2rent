@@ -45,8 +45,9 @@ export async function POST(req: NextRequest) {
 
     // Bei Verifizierung: alle pending_verification-Buchungen des Kunden
     // automatisch freigeben (Stripe-Payment-Link erzeugen, Status auf
-    // awaiting_payment), ABER ohne Mail an den Kunden — er sieht die
-    // Buchung in seinem Konto und kann dort direkt bezahlen.
+    // awaiting_payment) UND Zahlungslink-Mail rausschicken — sonst weiss
+    // der Kunde nicht, dass er jetzt bezahlen kann, und der Admin haette
+    // keinen Anhaltspunkt, dass er manuell senden muss.
     const autoApproved: Array<{ id: string }> = [];
     if (status === 'verified') {
       const { data: pendingBookings } = await supabase
@@ -56,7 +57,7 @@ export async function POST(req: NextRequest) {
         .eq('status', 'pending_verification');
 
       for (const b of pendingBookings ?? []) {
-        const result = await approvePendingBooking(b.id, { sendEmail: false });
+        const result = await approvePendingBooking(b.id, { sendEmail: true });
         if (result.success) {
           autoApproved.push({ id: b.id });
         } else {

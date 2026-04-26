@@ -957,6 +957,25 @@ export default function BuchungDetailPage() {
                         {statusUpdating ? 'Wird gesendet...' : 'Freigeben + Zahlungslink senden'}
                       </button>
                     )}
+                    {booking.status === 'awaiting_payment' && booking.stripe_payment_link_id && (
+                      <button
+                        onClick={handleResendPaymentLink}
+                        disabled={emailSending || !booking.customer_email}
+                        className="w-full px-4 py-2.5 text-sm font-heading font-semibold bg-amber-500 text-white rounded-btn hover:bg-amber-600 transition-colors disabled:opacity-40"
+                      >
+                        {emailSending ? 'Wird gesendet...' : `✉ Zahlungslink ${booking.customer_email ? 'an ' + booking.customer_email : ''} senden`}
+                      </button>
+                    )}
+                    {booking.status === 'awaiting_payment' && !booking.stripe_payment_link_id && (
+                      <p className="text-sm font-body text-amber-700">
+                        Kein Zahlungslink hinterlegt. Bitte Status auf &bdquo;Warte auf Freigabe&ldquo; setzen, dann erneut freigeben.
+                      </p>
+                    )}
+                    {booking.status === 'awaiting_payment' && booking.stripe_payment_link_id && !booking.customer_email && (
+                      <p className="text-xs font-body text-amber-700 mt-2">
+                        Hinterlege erst eine Kunden-E-Mail unter &bdquo;Kundendaten&ldquo;, damit der Link versendet werden kann.
+                      </p>
+                    )}
                   </div>
                 )}
 

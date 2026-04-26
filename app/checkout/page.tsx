@@ -577,6 +577,15 @@ export default function CheckoutPage() {
     setIsCreatingIntent(true);
     setIntentError('');
 
+    // Signatur aus dem Buchungsflow (Step 5 in /kameras/[slug]/buchen) uebernehmen,
+    // sonst landet die Buchung als "Mietvertrag ausstehend" in der DB obwohl der
+    // Kunde bereits unterschrieben hat.
+    let contractSignature: unknown = undefined;
+    try {
+      const sigRaw = sessionStorage.getItem('cam2rent_contract_signature');
+      if (sigRaw) contractSignature = JSON.parse(sigRaw);
+    } catch { /* ignore */ }
+
     try {
       const customerName = `${firstName} ${lastName}`.trim();
       const res = await fetch('/api/create-pending-booking', {
@@ -595,6 +604,7 @@ export default function CheckoutPage() {
           durationDiscount: effectiveDurationDiscount,
           loyaltyDiscount: effectiveLoyaltyDiscount,
           earlyServiceConsentAt: (requiresEarlyServiceConsent && acceptsEarlyService) ? new Date().toISOString() : null,
+          contractSignature,
         }),
       });
       const data = await res.json();
@@ -602,6 +612,7 @@ export default function CheckoutPage() {
         throw new Error(data.error ?? 'Buchung konnte nicht erstellt werden.');
       }
       setPendingSuccess(data.booking_id);
+      try { sessionStorage.removeItem('cam2rent_contract_signature'); } catch { /* ignore */ }
       clearCart();
     } catch (err) {
       setIntentError(
