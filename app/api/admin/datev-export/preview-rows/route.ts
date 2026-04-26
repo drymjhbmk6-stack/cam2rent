@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
 
   for (const b of bookings || []) {
     const date = new Date(b.created_at);
-    const datum = date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const datum = date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Europe/Berlin' });
     const isCancelled = b.status === 'cancelled';
 
     const rental = (b.price_rental || 0) + (b.price_accessories || 0) - (b.discount_amount || 0);

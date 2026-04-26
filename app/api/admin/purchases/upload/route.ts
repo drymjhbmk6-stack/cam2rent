@@ -78,9 +78,14 @@ export async function POST(req: NextRequest) {
     // 1. Storage-Upload (Bucket 'purchase-invoices' muss im Supabase-UI
     //    angelegt sein, siehe supabase-assets.sql).
     const ext = detected === 'pdf' ? 'pdf' : detected;
-    const now = new Date();
-    const yyyy = String(now.getFullYear());
-    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    // Storage-Pfad nach Berlin-Jahr/Monat, sonst rutscht eine Rechnung am
+    // 01.01. 00:30 Berlin (= 31.12. 23:30 UTC) in den falschen Ordner.
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      year: 'numeric', month: '2-digit',
+      timeZone: 'Europe/Berlin',
+    }).formatToParts(new Date());
+    const yyyy = parts.find((p) => p.type === 'year')?.value ?? '1970';
+    const mm = parts.find((p) => p.type === 'month')?.value ?? '01';
     const storagePath = `${yyyy}/${mm}/${crypto.randomUUID()}.${ext}`;
 
     const { error: uploadErr } = await supabase.storage

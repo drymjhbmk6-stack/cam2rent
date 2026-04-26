@@ -190,8 +190,12 @@ function TableRow({ cells, alt, header }: { cells: string[]; alt?: boolean; head
 // ─── PDF-Dokument ───────────────────────────────────────────────────────────
 
 export function HaftungsbedingungenPDF() {
-  const today = new Date();
-  const dateStr = `${today.getDate().toString().padStart(2, '0')}.${(today.getMonth() + 1).toString().padStart(2, '0')}.${today.getFullYear()}`;
+  // Berlin-Zeit, sonst zeigt der Footer auf UTC-Servern zwischen 00-02 Uhr
+  // Berlin den falschen Tag.
+  const dateStr = new Date().toLocaleDateString('de-DE', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    timeZone: 'Europe/Berlin',
+  });
 
   return (
     <Document>

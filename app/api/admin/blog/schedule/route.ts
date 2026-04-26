@@ -125,8 +125,8 @@ export async function POST(req: NextRequest) {
       : '';
 
     const today = new Date();
-    const currentMonth = today.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' });
-    const currentYear = today.getFullYear();
+    const currentMonth = today.toLocaleDateString('de-DE', { month: 'long', year: 'numeric', timeZone: 'Europe/Berlin' });
+    const currentYear = parseInt(today.toLocaleDateString('en-CA', { year: 'numeric', timeZone: 'Europe/Berlin' }), 10);
 
     const totalPosts = weeks * postsPerWeek;
 

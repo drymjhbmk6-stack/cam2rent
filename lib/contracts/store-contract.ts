@@ -19,7 +19,12 @@ export async function storeContract(
   }
 ): Promise<string> {
   const supabase = createServiceClient();
-  const year = new Date().getUTCFullYear();
+  // Jahr in Berlin-Zeit, damit Vertraege rund um Silvester (z.B. 01.01. 00:30
+  // Berlin = 31.12. 23:30 UTC) im richtigen Jahres-Ordner landen.
+  const year = parseInt(
+    new Date().toLocaleDateString('en-CA', { year: 'numeric', timeZone: 'Europe/Berlin' }),
+    10,
+  );
   const storagePath = `${year}/${bookingId}.pdf`;
 
   // 1. PDF in Supabase Storage hochladen

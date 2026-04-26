@@ -102,6 +102,7 @@ export async function GET(
     contractHash = agreement.contract_hash;
     signedAt = new Date(agreement.signed_at).toLocaleString('de-DE', {
       day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+      timeZone: 'Europe/Berlin',
     });
 
     // PDF aus Storage laden wenn vorhanden
@@ -147,6 +148,7 @@ export async function GET(
     signedAt = booking.contract_signed_at
       ? new Date(booking.contract_signed_at).toLocaleString('de-DE', {
           day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+          timeZone: 'Europe/Berlin',
         })
       : '';
   }
@@ -199,6 +201,7 @@ export async function GET(
 
   const contractDate = new Date().toLocaleDateString('de-DE', {
     day: '2-digit', month: '2-digit', year: 'numeric',
+    timeZone: 'Europe/Berlin',
   });
 
   const haftungLabel = booking.haftung === 'standard' ? 'Basis-Schadenspauschale'

@@ -97,7 +97,7 @@ export async function POST(
 
         const invoiceNumber = booking.id.replace(/^(C2R|BK)-/, 'RE-');
         const raw = booking.created_at ? new Date(booking.created_at) : new Date();
-        const invoiceDate = raw.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        const invoiceDate = raw.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Europe/Berlin' });
 
         const invoiceData: InvoiceData = {
           bookingId: booking.id,

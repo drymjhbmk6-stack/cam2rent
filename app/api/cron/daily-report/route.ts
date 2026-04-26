@@ -79,7 +79,7 @@ export async function GET(req: NextRequest) {
     else desktop++;
   }
 
-  const dateStr = yesterday.toLocaleDateString('de-DE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  const dateStr = yesterday.toLocaleDateString('de-DE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Europe/Berlin' });
 
   const html = `<!DOCTYPE html>
 <html lang="de">

@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
   const lines = ['Datum;Stripe-PI;Buchungs-Nr.;Brutto;Gebühr;Netto;Status;Match-Status'];
   for (const tx of data || []) {
     lines.push([
-      tx.stripe_created_at ? new Date(tx.stripe_created_at).toLocaleDateString('de-DE') : '',
+      tx.stripe_created_at ? new Date(tx.stripe_created_at).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' }) : '',
       tx.stripe_payment_intent_id || '',
       tx.booking_id || '',
       (tx.amount || 0).toFixed(2).replace('.', ','),

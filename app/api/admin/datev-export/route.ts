@@ -45,10 +45,15 @@ const DEFAULT_CONFIG: DatevConfig = {
 };
 
 function formatDateDATEV(isoDate: string): string {
-  // DATEV format: DDMM (day + month, no separators)
-  const d = new Date(isoDate);
-  const day = String(d.getDate()).padStart(2, '0');
-  const month = String(d.getMonth() + 1).padStart(2, '0');
+  // DATEV format: DDMM (day + month, no separators).
+  // Berlin-Zeit: sonst rutscht eine Buchung am 01.01. 00:30 Berlin
+  // (= 31.12. 23:30 UTC) auf der Server-Seite in den Vortag/Vormonat.
+  const parts = new Intl.DateTimeFormat('de-DE', {
+    day: '2-digit', month: '2-digit',
+    timeZone: 'Europe/Berlin',
+  }).formatToParts(new Date(isoDate));
+  const day = parts.find((p) => p.type === 'day')?.value ?? '01';
+  const month = parts.find((p) => p.type === 'month')?.value ?? '01';
   return `${day}${month}`;
 }
 

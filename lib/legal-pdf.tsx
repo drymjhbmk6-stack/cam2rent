@@ -381,7 +381,12 @@ export interface LegalPDFData {
 export function LegalDocumentPDF({ data }: { data: LegalPDFData }) {
   const tokens = parseMarkdown(data.content);
   const today = new Date();
-  const dateStr = `${today.getDate().toString().padStart(2, '0')}.${(today.getMonth() + 1).toString().padStart(2, '0')}.${today.getFullYear()}`;
+  // Berlin-Zeit: sonst zeigt der Footer auf UTC-Servern zwischen 00-02 Uhr
+  // Berlin den falschen Tag (UTC ist noch der Vortag).
+  const dateStr = today.toLocaleDateString('de-DE', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    timeZone: 'Europe/Berlin',
+  });
 
   const standDatum = data.publishedAt
     ? new Date(data.publishedAt).toLocaleDateString('de-DE', { month: 'long', year: 'numeric', timeZone: 'Europe/Berlin' })
