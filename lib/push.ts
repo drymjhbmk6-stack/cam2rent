@@ -1,5 +1,6 @@
 import webpush from 'web-push';
 import { createServiceClient } from '@/lib/supabase';
+import type { PermissionKey } from '@/lib/admin-users';
 
 /**
  * Web-Push Hilfsfunktionen für Admin-PWA-Notifications.
@@ -42,8 +43,16 @@ export interface PushPayload {
  *
  * Fehler werden geloggt, aber niemals geworfen — Push ist non-blocking
  * und darf andere Workflows (z.B. Buchungsbestätigung) nicht abbrechen.
+ *
+ * Permission-Filter: Wenn `requiredPermission` gesetzt ist, gehen Pushes
+ * nur an Geraete, deren Mitarbeiter die Permission hat (Owner immer).
+ * Subscriptions ohne `admin_user_id` (Legacy-ENV-Login) gelten als Owner
+ * und bekommen alles — Backward-Compat fuer Bestands-Setups.
  */
-export async function sendPushToAdmins(payload: PushPayload): Promise<void> {
+export async function sendPushToAdmins(
+  payload: PushPayload,
+  opts?: { requiredPermission?: PermissionKey },
+): Promise<void> {
   if (!configureVapid()) {
     // VAPID-Keys nicht konfiguriert — Push ist optional, kein Fehler.
     return;
@@ -53,7 +62,7 @@ export async function sendPushToAdmins(payload: PushPayload): Promise<void> {
     const supabase = createServiceClient();
     const { data: subs, error } = await supabase
       .from('push_subscriptions')
-      .select('id, endpoint, p256dh, auth');
+      .select('id, endpoint, p256dh, auth, admin_user_id, admin_users(role, permissions, is_active)');
 
     if (error) {
       console.error('[push] Subscriptions-Load-Fehler:', error.message);
@@ -61,6 +70,21 @@ export async function sendPushToAdmins(payload: PushPayload): Promise<void> {
     }
 
     if (!subs || subs.length === 0) return;
+
+    // Permission-Filter
+    const required = opts?.requiredPermission;
+    const filtered = subs.filter((s) => {
+      // Legacy-Subscription (keine User-Bindung) → wie Owner behandeln
+      if (!s.admin_user_id) return true;
+      const u = Array.isArray(s.admin_users) ? s.admin_users[0] : s.admin_users;
+      if (!u || u.is_active === false) return false;
+      if (u.role === 'owner') return true;
+      if (!required) return true; // ohne Filter: alle aktiven User
+      const perms = Array.isArray(u.permissions) ? (u.permissions as string[]) : [];
+      return perms.includes(required);
+    });
+
+    if (filtered.length === 0) return;
 
     const notificationPayload = JSON.stringify({
       title: payload.title,
@@ -74,7 +98,7 @@ export async function sendPushToAdmins(payload: PushPayload): Promise<void> {
     const expiredIds: string[] = [];
 
     await Promise.allSettled(
-      subs.map(async (sub) => {
+      filtered.map(async (sub) => {
         try {
           await webpush.sendNotification(
             {

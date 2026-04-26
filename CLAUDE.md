@@ -434,8 +434,9 @@ Tab-basiertes Cockpit mit 8 Tabs (Query-Parameter `?tab=...`):
 Web-Push-Notifications für die Admin-PWA. Alle Events, die `createAdminNotification()` triggern (neue Buchung, Stornierung, Schaden, Nachricht, Bewertung), erzeugen automatisch auch eine Push-Notification — auch wenn die PWA gerade nicht offen ist.
 
 - **Library:** `web-push` (npm) für VAPID-Push
-- **DB:** `push_subscriptions` (id, endpoint UNIQUE, p256dh, auth, user_agent, device_label, created_at, last_used_at) — Migration `supabase-push-subscriptions.sql`
-- **Lib:** `lib/push.ts` → `sendPushToAdmins({ title, body, url, tag })` — non-blocking, räumt expired Subscriptions automatisch auf (404/410)
+- **DB:** `push_subscriptions` (id, endpoint UNIQUE, p256dh, auth, user_agent, device_label, admin_user_id FK → admin_users, created_at, last_used_at) — Migrationen `supabase-push-subscriptions.sql` + `supabase-push-per-user.sql`
+- **Lib:** `lib/push.ts` → `sendPushToAdmins({ title, body, url, tag }, { requiredPermission? })` — non-blocking, räumt expired Subscriptions automatisch auf (404/410)
+- **Per-User-Filter (Stand 2026-04-26):** `createAdminNotification()` mappt jeden `type` auf eine Permission (`new_booking → tagesgeschaeft`, `new_ugc → kunden`, `payment_failed → finanzen`, etc.) und sendet Push nur an Mitarbeiter, deren Account diese Permission hat. Owner kriegen immer alles. Subscriptions ohne `admin_user_id` (Legacy-ENV-Login) werden als Owner behandelt — Backward-Compat.
 - **APIs:**
   - `GET  /api/admin/push/vapid-key` (öffentlicher Key fürs Subscribe im Browser)
   - `POST /api/admin/push/subscribe` (speichert Endpoint per upsert)
@@ -1216,6 +1217,8 @@ Systematischer Sweep ueber Admin- und Kundenkonto-UI nach Darstellungsfehlern. G
 - ~~`supabase-check-email-rpc.sql`~~ (Anti-Enumeration RPC, ersetzt `listUsers` in 2 Auth-Routen)
 
 ### Noch offen
+- **SQL-Migration `supabase/supabase-push-per-user.sql` ausführen** (eine Spalte `admin_user_id` auf `push_subscriptions` für Permission-gefilterte Pushes). Idempotent, sicher auch ohne Mitarbeiter-Accounts.
+- Nach der Migration: alle Mitarbeiter müssen einmal Push neu aktivieren unter `/admin/einstellungen` → "Push aktivieren", damit ihre Subscription mit dem Mitarbeiter-Account verknüpft wird (sonst kriegen sie weiterhin alle Notifications wie ein Owner).
 - **Cron-Eintrag AfA monatlich in Hetzner-Crontab:**
   `0 3 1 * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/depreciation`
 - **Cron-Härtung optional:** `CRON_DISABLE_URL_SECRET=true` in Coolify-Env setzen + Hetzner-Crontab auf Header-Auth umstellen (`-H "x-cron-secret: $CRON_SECRET"`), damit Secrets nicht mehr in Access-Logs landen.

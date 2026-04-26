@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { getCurrentAdminUser } from '@/lib/admin-auth';
 
 /**
  * POST /api/admin/push/subscribe
@@ -13,6 +14,11 @@ import { createServiceClient } from '@/lib/supabase';
  *
  * Endpoint ist UNIQUE — bei Re-Subscription wird die alte Zeile per
  * upsert() aktualisiert. Damit gibt es nie Duplikate.
+ *
+ * Wird unter dem Mitarbeiter-Cookie aufgerufen, schreibt admin_user_id mit,
+ * damit Notifications spaeter nach Permission gefiltert werden koennen.
+ * Beim Legacy-ENV-Login (ohne echten Mitarbeiter-Account) bleibt das Feld
+ * NULL — solche Geraete bekommen weiterhin alle Notifications (Owner-Verhalten).
  */
 export async function POST(req: NextRequest) {
   try {
@@ -29,6 +35,11 @@ export async function POST(req: NextRequest) {
 
     const userAgent = req.headers.get('user-agent')?.slice(0, 200) || null;
 
+    const me = await getCurrentAdminUser();
+    // Legacy-ENV-User hat die feste ID 'legacy-env' und keinen DB-Eintrag —
+    // FK wuerde scheitern, also auf NULL setzen (Backward-Compat-Pfad).
+    const adminUserId = me && me.id !== 'legacy-env' ? me.id : null;
+
     const supabase = createServiceClient();
     const { error } = await supabase
       .from('push_subscriptions')
@@ -39,6 +50,7 @@ export async function POST(req: NextRequest) {
           auth: sub.keys.auth,
           user_agent: userAgent,
           device_label: deviceLabel,
+          admin_user_id: adminUserId,
         },
         { onConflict: 'endpoint' }
       );
