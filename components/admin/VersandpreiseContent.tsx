@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import BufferDaysSection from '@/components/admin/BufferDaysSection';
 import { DEFAULT_SHIPPING, type ShippingPriceConfig } from '@/lib/price-config';
 
 export default function VersandpreiseContent() {
@@ -98,6 +99,10 @@ export default function VersandpreiseContent() {
           >
             {saving ? 'Speichern…' : saved ? '✓ Gespeichert' : 'Speichern'}
           </button>
+        </div>
+
+        <div className="mt-6">
+          <BufferDaysSection />
         </div>
       </div>
     </div>

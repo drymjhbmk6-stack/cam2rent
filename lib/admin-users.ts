@@ -62,6 +62,7 @@ const PATH_PERMISSIONS: PermRule[] = [
   { prefix: '/admin/preise', perm: 'preise' },
   { prefix: '/admin/gutscheine', perm: 'preise' },
   { prefix: '/admin/rabatte', perm: 'preise' },
+  { prefix: '/admin/warenkorb-erinnerung', perm: 'preise' },
   // Content
   { prefix: '/admin/startseite', perm: 'content' },
   { prefix: '/admin/blog', perm: 'content' },

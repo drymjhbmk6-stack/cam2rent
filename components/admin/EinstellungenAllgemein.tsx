@@ -41,15 +41,6 @@ export default function EinstellungenAllgemein() {
   const [taxSaving, setTaxSaving] = useState(false);
   const [taxSuccess, setTaxSuccess] = useState('');
 
-  // Abandoned Cart State
-  const [acEnabled, setAcEnabled] = useState(true);
-  const [acDelay, setAcDelay] = useState('24');
-  const [acDiscountEnabled, setAcDiscountEnabled] = useState(false);
-  const [acDiscountPercent, setAcDiscountPercent] = useState('5');
-  const [acLoading, setAcLoading] = useState(true);
-  const [acSaving, setAcSaving] = useState(false);
-  const [acSuccess, setAcSuccess] = useState('');
-
   useEffect(() => {
     // 2FA Status laden
     fetch('/api/admin/2fa/status')
@@ -79,23 +70,6 @@ export default function EinstellungenAllgemein() {
         setTaxLoading(false);
       })
       .catch(() => setTaxLoading(false));
-
-    // Abandoned Cart Einstellungen laden
-    Promise.all([
-      fetch('/api/admin/settings?key=abandoned_cart_enabled').then((r) => r.json()),
-      fetch('/api/admin/settings?key=abandoned_cart_delay_hours').then((r) => r.json()),
-      fetch('/api/admin/settings?key=abandoned_cart_discount_enabled').then((r) => r.json()),
-      fetch('/api/admin/settings?key=abandoned_cart_discount_percent').then((r) => r.json()),
-    ])
-      .then(([enabled, delay, discEnabled, discPercent]) => {
-        if (enabled.value !== null) setAcEnabled(enabled.value === 'true');
-        if (delay.value) setAcDelay(delay.value);
-        if (discEnabled.value !== null) setAcDiscountEnabled(discEnabled.value === 'true');
-        if (discPercent.value) setAcDiscountPercent(discPercent.value);
-        setAcLoading(false);
-      })
-      .catch(() => setAcLoading(false));
-
   }, []);
 
   async function startSetup() {
@@ -182,40 +156,6 @@ export default function EinstellungenAllgemein() {
       // Fehler
     } finally {
       setDepositSaving(false);
-    }
-  }
-
-  async function saveAbandonedCart() {
-    setAcSaving(true);
-    setAcSuccess('');
-    try {
-      await Promise.all([
-        fetch('/api/admin/settings', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ key: 'abandoned_cart_enabled', value: String(acEnabled) }),
-        }),
-        fetch('/api/admin/settings', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ key: 'abandoned_cart_delay_hours', value: acDelay }),
-        }),
-        fetch('/api/admin/settings', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ key: 'abandoned_cart_discount_enabled', value: String(acDiscountEnabled) }),
-        }),
-        fetch('/api/admin/settings', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ key: 'abandoned_cart_discount_percent', value: acDiscountPercent }),
-        }),
-      ]);
-      setAcSuccess('Gespeichert!');
-      setTimeout(() => setAcSuccess(''), 3000);
-    } catch {
-    } finally {
-      setAcSaving(false);
     }
   }
 
@@ -643,156 +583,7 @@ export default function EinstellungenAllgemein() {
         )}
       </div>
 
-      {/* Sektion 4: Warenkorb-Erinnerung */}
-      <div style={{ background: '#111827', borderRadius: 12, border: '1px solid #1e293b', padding: 24, marginTop: 24 }}>
-        <div className="flex items-center gap-3 mb-4">
-          <div style={{ width: 40, height: 40, borderRadius: 10, background: '#8b5cf614', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <svg className="w-5 h-5" style={{ color: '#8b5cf6' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 100 4 2 2 0 000-4z" />
-            </svg>
-          </div>
-          <div>
-            <h2 className="font-heading font-semibold text-base" style={{ color: '#e2e8f0' }}>
-              Warenkorb-Erinnerung
-            </h2>
-            <p className="text-xs" style={{ color: '#64748b' }}>
-              Automatische E-Mail an Kunden die ihren Warenkorb nicht abgeschlossen haben
-            </p>
-          </div>
-          {!acLoading && (
-            <span
-              className="ml-auto text-xs font-semibold px-3 py-1 rounded-full"
-              style={acEnabled
-                ? { background: '#10b98114', color: '#10b981' }
-                : { background: '#64748b14', color: '#64748b' }
-              }
-            >
-              {acEnabled ? 'Aktiv' : 'Inaktiv'}
-            </span>
-          )}
-        </div>
-
-        {acLoading ? (
-          <div style={{ color: '#64748b', fontSize: 14 }}>Laden...</div>
-        ) : (
-          <div className="space-y-4">
-            {/* An/Aus Toggle */}
-            <label className="flex items-center gap-3 cursor-pointer">
-              <div
-                onClick={() => setAcEnabled(!acEnabled)}
-                className="relative w-11 h-6 rounded-full transition-colors cursor-pointer"
-                style={{ background: acEnabled ? '#8b5cf6' : '#334155' }}
-              >
-                <div
-                  className="absolute top-0.5 w-5 h-5 rounded-full bg-white transition-transform"
-                  style={{ left: acEnabled ? 22 : 2 }}
-                />
-              </div>
-              <span className="text-sm" style={{ color: '#e2e8f0' }}>
-                Warenkorb-Erinnerungen aktivieren
-              </span>
-            </label>
-
-            {acEnabled && (
-              <>
-                {/* Verzögerung */}
-                <div>
-                  <label className="block text-xs mb-1.5" style={{ color: '#64748b' }}>
-                    Erinnerung senden nach
-                  </label>
-                  <select
-                    value={acDelay}
-                    onChange={(e) => setAcDelay(e.target.value)}
-                    style={{
-                      background: '#0f172a',
-                      border: '1px solid #475569',
-                      borderRadius: 8,
-                      padding: '8px 12px',
-                      color: '#e2e8f0',
-                      fontSize: 14,
-                      width: 200,
-                    }}
-                  >
-                    <option value="3">3 Stunden</option>
-                    <option value="6">6 Stunden</option>
-                    <option value="12">12 Stunden</option>
-                    <option value="24">24 Stunden</option>
-                    <option value="48">48 Stunden</option>
-                  </select>
-                </div>
-
-                {/* Rabatt Toggle */}
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <div
-                    onClick={() => setAcDiscountEnabled(!acDiscountEnabled)}
-                    className="relative w-11 h-6 rounded-full transition-colors cursor-pointer"
-                    style={{ background: acDiscountEnabled ? '#10b981' : '#334155' }}
-                  >
-                    <div
-                      className="absolute top-0.5 w-5 h-5 rounded-full bg-white transition-transform"
-                      style={{ left: acDiscountEnabled ? 22 : 2 }}
-                    />
-                  </div>
-                  <span className="text-sm" style={{ color: '#e2e8f0' }}>
-                    Rabatt-Gutschein in Erinnerungsmail anbieten
-                  </span>
-                </label>
-
-                {acDiscountEnabled && (
-                  <div>
-                    <label className="block text-xs mb-1.5" style={{ color: '#64748b' }}>
-                      Rabatt in Prozent
-                    </label>
-                    <select
-                      value={acDiscountPercent}
-                      onChange={(e) => setAcDiscountPercent(e.target.value)}
-                      style={{
-                        background: '#0f172a',
-                        border: '1px solid #475569',
-                        borderRadius: 8,
-                        padding: '8px 12px',
-                        color: '#e2e8f0',
-                        fontSize: 14,
-                        width: 160,
-                      }}
-                    >
-                      <option value="5">5 %</option>
-                      <option value="10">10 %</option>
-                      <option value="15">15 %</option>
-                      <option value="20">20 %</option>
-                    </select>
-                    <p className="text-xs mt-2" style={{ color: '#64748b' }}>
-                      Es wird automatisch ein Gutscheincode COMEBACK{acDiscountPercent} erstellt.
-                    </p>
-                  </div>
-                )}
-              </>
-            )}
-
-            <div className="flex items-center gap-3 pt-2">
-              <button
-                onClick={saveAbandonedCart}
-                disabled={acSaving}
-                className="px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
-                style={{ background: '#8b5cf6', color: 'white' }}
-              >
-                {acSaving ? 'Speichern...' : 'Speichern'}
-              </button>
-              {acSuccess && (
-                <span className="text-sm" style={{ color: '#10b981' }}>{acSuccess}</span>
-              )}
-            </div>
-
-            <div className="mt-3 p-3 rounded-lg text-xs" style={{ background: '#8b5cf608', border: '1px solid #8b5cf620', color: '#94a3b8' }}>
-              <strong style={{ color: '#a78bfa' }}>Hinweis:</strong> Die Erinnerung wird nur an eingeloggte Kunden
-              gesendet, die Artikel im Warenkorb haben aber den Checkout nicht abschließen.
-              Pro Warenkorb wird maximal eine Erinnerung versendet.
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Sektion 5: Technische Daten Definitionen */}
+      {/* Sektion 4: Technische Daten Definitionen */}
       <div className="rounded-2xl p-6" style={{ background: '#0f172a', border: '1px solid #1e293b' }}>
         <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: '#06b6d4', color: 'white' }}>
@@ -806,8 +597,6 @@ export default function EinstellungenAllgemein() {
         <SpecDefinitionsManager />
       </div>
 
-      {/* Sektion 6: Puffer-Tage */}
-      <BufferDaysSection />
 
       {/* Sektion 6: Geschaeftsdaten */}
       <BusinessDataSection />
@@ -824,142 +613,6 @@ export default function EinstellungenAllgemein() {
   );
 }
 
-/* ─── Puffer-Tage Sektion ────────────────────────────────────────────────── */
-
-function BufferDaysSection() {
-  const [versandBefore, setVersandBefore] = useState('2');
-  const [versandAfter, setVersandAfter] = useState('2');
-  const [abholungBefore, setAbholungBefore] = useState('0');
-  const [abholungAfter, setAbholungAfter] = useState('1');
-  const [bufferLoading, setBufferLoading] = useState(true);
-  const [bufferSaving, setBufferSaving] = useState(false);
-  const [bufferSuccess, setBufferSuccess] = useState('');
-
-  useEffect(() => {
-    fetch('/api/admin/settings?key=booking_buffer_days')
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.value) {
-          const v = typeof d.value === 'string' ? JSON.parse(d.value) : d.value;
-          if (v.versand_before !== undefined) setVersandBefore(String(v.versand_before));
-          if (v.versand_after !== undefined) setVersandAfter(String(v.versand_after));
-          if (v.abholung_before !== undefined) setAbholungBefore(String(v.abholung_before));
-          if (v.abholung_after !== undefined) setAbholungAfter(String(v.abholung_after));
-        }
-        setBufferLoading(false);
-      })
-      .catch(() => setBufferLoading(false));
-  }, []);
-
-  async function saveBuffer() {
-    setBufferSaving(true);
-    setBufferSuccess('');
-    try {
-      await fetch('/api/admin/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          key: 'booking_buffer_days',
-          value: JSON.stringify({
-            versand_before: parseInt(versandBefore) || 0,
-            versand_after: parseInt(versandAfter) || 0,
-            abholung_before: parseInt(abholungBefore) || 0,
-            abholung_after: parseInt(abholungAfter) || 0,
-          }),
-        }),
-      });
-      setBufferSuccess('Gespeichert!');
-      setTimeout(() => setBufferSuccess(''), 3000);
-    } catch {
-      // Fehler
-    } finally {
-      setBufferSaving(false);
-    }
-  }
-
-  const numInputStyle: React.CSSProperties = {
-    width: 80, background: '#0a0f1e', border: '1px solid #1e293b',
-    borderRadius: 8, padding: '8px 12px', color: '#e2e8f0', fontSize: 14, textAlign: 'center',
-  };
-
-  return (
-    <div style={{ background: '#111827', borderRadius: 12, border: '1px solid #1e293b', padding: 24, marginTop: 24 }}>
-      <div className="flex items-center gap-3 mb-4">
-        <div style={{ width: 40, height: 40, borderRadius: 10, background: '#f59e0b14', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <svg className="w-5 h-5" style={{ color: '#f59e0b' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-        </div>
-        <div>
-          <h2 className="font-heading font-semibold text-base" style={{ color: '#e2e8f0' }}>
-            Puffer-Tage (Verfügbarkeit)
-          </h2>
-          <p className="text-xs" style={{ color: '#64748b' }}>
-            Tage vor und nach der Miete, in denen Produkte und Zubehör blockiert bleiben
-          </p>
-        </div>
-      </div>
-
-      {bufferLoading ? (
-        <div style={{ color: '#64748b', fontSize: 14 }}>Laden...</div>
-      ) : (
-        <div className="space-y-5">
-          {/* Versand */}
-          <div>
-            <div className="text-sm font-semibold mb-3" style={{ color: '#e2e8f0' }}>
-              📦 Versand
-            </div>
-            <div className="flex flex-wrap items-center gap-4">
-              <div className="flex items-center gap-2">
-                <input style={numInputStyle} type="number" min="0" max="14" value={versandBefore} onChange={(e) => setVersandBefore(e.target.value)} />
-                <span className="text-xs" style={{ color: '#94a3b8' }}>Tage vorher blockiert</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <input style={numInputStyle} type="number" min="0" max="14" value={versandAfter} onChange={(e) => setVersandAfter(e.target.value)} />
-                <span className="text-xs" style={{ color: '#94a3b8' }}>Tage nachher blockiert</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Abholung */}
-          <div>
-            <div className="text-sm font-semibold mb-3" style={{ color: '#e2e8f0' }}>
-              🏪 Abholung
-            </div>
-            <div className="flex flex-wrap items-center gap-4">
-              <div className="flex items-center gap-2">
-                <input style={numInputStyle} type="number" min="0" max="14" value={abholungBefore} onChange={(e) => setAbholungBefore(e.target.value)} />
-                <span className="text-xs" style={{ color: '#94a3b8' }}>Tage vorher blockiert</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <input style={numInputStyle} type="number" min="0" max="14" value={abholungAfter} onChange={(e) => setAbholungAfter(e.target.value)} />
-                <span className="text-xs" style={{ color: '#94a3b8' }}>Tage nachher blockiert</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3 pt-2">
-            <button
-              onClick={saveBuffer}
-              disabled={bufferSaving}
-              className="px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
-              style={{ background: '#f59e0b', color: '#0a0a0a' }}
-            >
-              {bufferSaving ? 'Speichern...' : 'Speichern'}
-            </button>
-            {bufferSuccess && (
-              <span className="text-sm" style={{ color: '#10b981' }}>{bufferSuccess}</span>
-            )}
-          </div>
-
-          <div className="p-3 rounded-lg text-xs" style={{ background: '#f59e0b08', border: '1px solid #f59e0b20', color: '#94a3b8' }}>
-            <strong style={{ color: '#fbbf24' }}>Beispiel Versand (2/2):</strong> Kunde mietet 10.–15. April → Kamera und Zubehör sind vom 8.–17. April blockiert (2 Tage Versandpuffer vor und nach der Miete).
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
 
 /* ─── Geschaeftsdaten Sektion ────────────────────────────────────────────── */
 

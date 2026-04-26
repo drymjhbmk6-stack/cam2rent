@@ -161,6 +161,7 @@ const KATALOG_ITEMS: NavItem[] = [
 const PREISE_ITEMS: NavItem[] = [
   { href: '/admin/gutscheine', label: 'Gutscheine', icon: iconTicket, perm: 'preise' },
   { href: '/admin/rabatte', label: 'Rabatte', icon: iconDiscount, perm: 'preise' },
+  { href: '/admin/warenkorb-erinnerung', label: 'Warenkorb-Erinnerung', icon: iconCart, perm: 'preise' },
 ];
 
 const WEBSEITE_ITEMS: NavItem[] = [
@@ -470,7 +471,7 @@ function SidebarContent({ pathname, isDashboard, onNavClick, handleLogout, me }:
     tagesgeschaeft: ['/admin/tagesgeschaeft', '/admin/buchungen', '/admin/verfuegbarkeit', '/admin/versand', '/admin/retouren'],
     kunden: ['/admin/kunden-uebersicht', '/admin/kunden', '/admin/nachrichten', '/admin/warteliste', '/admin/kunden-material', '/admin/bewertungen', '/admin/schaeden'],
     katalog: ['/admin/preise/kameras', '/admin/sets', '/admin/zubehoer'],
-    preise: ['/admin/gutscheine', '/admin/rabatte'],
+    preise: ['/admin/gutscheine', '/admin/rabatte', '/admin/warenkorb-erinnerung'],
     content: ['/admin/blog', '/admin/social'],
     webseite: ['/admin/startseite', '/admin/legal'],
     finanzen: ['/admin/buchhaltung', '/admin/einkauf', '/admin/anlagen'],
@@ -596,7 +597,7 @@ function SidebarContent({ pathname, isDashboard, onNavClick, handleLogout, me }:
           onToggle={() => toggleGroup('katalog')}
         />
         <NavGroupCollapse
-          label="Preise & Aktionen"
+          label="Rabatte & Aktionen"
           icon={iconPriceTag}
           items={PREISE_ITEMS}
           matchPaths={GROUP_MATCH.preise}
