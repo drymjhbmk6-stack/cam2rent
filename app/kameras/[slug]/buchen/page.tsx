@@ -385,6 +385,14 @@ export default function BuchenPage() {
   const hasPreselection = !!(preFrom && preTo);
   const [step, setStep] = useState<1 | 2 | 3 | 4 | 5 | 6>(hasPreselection ? 2 : 1);
   const [returnToSummary, setReturnToSummary] = useState(false);
+
+  // Bei jedem Step-Wechsel ans Seitenende scrollen — sonst landet der Kunde
+  // mitten in der Seite und sieht den neuen Inhalt nicht.
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [step]);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [isCreatingIntent, setIsCreatingIntent] = useState(false);
   const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>(
