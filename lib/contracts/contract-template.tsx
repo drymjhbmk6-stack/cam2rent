@@ -522,7 +522,7 @@ export function RentalContractPDF({ data }: { data: RentalContractData }) {
           </View>
           <View style={s.detailRow}>
             <Text style={s.signatureLabel}>Datum & Uhrzeit:</Text>
-            <Text style={s.signatureValue}>{data.signedAt} (UTC)</Text>
+            <Text style={s.signatureValue}>{data.signedAt} (Europe/Berlin)</Text>
           </View>
           <View style={s.detailRow}>
             <Text style={s.signatureLabel}>IP-Adresse:</Text>

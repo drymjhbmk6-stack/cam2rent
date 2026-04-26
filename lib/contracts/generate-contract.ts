@@ -212,9 +212,24 @@ export async function generateContractPDF(opts: {
   forceTestMode?: boolean;
 }): Promise<GenerateContractResult> {
   const now = new Date();
-  const signedAt = now.toISOString().replace('T', ' ').substring(0, 16);
-  const contractDate = `${now.getUTCDate().toString().padStart(2, '0')}.${(now.getUTCMonth() + 1).toString().padStart(2, '0')}.${now.getUTCFullYear()}`;
-  const contractTime = `${now.getUTCHours().toString().padStart(2, '0')}:${now.getUTCMinutes().toString().padStart(2, '0')}`;
+  // Vertragsdaten in Berlin-Zeit, sonst zeigt die PDF zwischen 22-00 Uhr den
+  // UTC-Vortag und der Kunde wundert sich ueber falsche Uhrzeit/Datum.
+  const berlinParts = new Intl.DateTimeFormat('de-DE', {
+    timeZone: 'Europe/Berlin',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(now);
+  const partsMap: Record<string, string> = {};
+  for (const part of berlinParts) {
+    if (part.type !== 'literal') partsMap[part.type] = part.value;
+  }
+  const contractDate = `${partsMap.day}.${partsMap.month}.${partsMap.year}`;
+  const contractTime = `${partsMap.hour === '24' ? '00' : partsMap.hour}:${partsMap.minute}`;
+  const signedAt = `${partsMap.year}-${partsMap.month}-${partsMap.day} ${partsMap.hour === '24' ? '00' : partsMap.hour}:${partsMap.minute}`;
 
   // Zubehör-IDs zu Namen + Zeitwert aufloesen (Zubehoer direkt, Sets als Summe)
   const accessoryInfoMap = await resolveAccessoryInfo(opts.accessories);
