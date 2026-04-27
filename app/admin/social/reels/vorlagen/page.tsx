@@ -358,12 +358,12 @@ export default function TemplatesPage() {
               <label className="block">
                 <span className="block text-xs font-medium text-brand-steel dark:text-gray-400 mb-1">Modell</span>
                 <select
-                  value={settings.voice_model ?? 'tts-1'}
+                  value={settings.voice_model ?? 'tts-1-hd'}
                   onChange={(e) => setSettings({ ...settings, voice_model: e.target.value as ReelsSettings['voice_model'] })}
                   className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-brand-dark dark:text-white"
                 >
+                  <option value="tts-1-hd">tts-1-hd (HD, empfohlen, 0,006 €/Reel)</option>
                   <option value="tts-1">tts-1 (Standard, 0,003 €/Reel)</option>
-                  <option value="tts-1-hd">tts-1-hd (HD, 0,006 €/Reel)</option>
                 </select>
               </label>
             </div>

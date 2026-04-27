@@ -1052,12 +1052,18 @@ export async function renderReel(input: RenderInput): Promise<RenderResult> {
           } else {
             const mp3Path = path.join(workDir, `voice-${i}.mp3`);
             await writeFile(mp3Path, seg);
+            // Voice-Track hart auf Szenen-Dauer pad/trim. Wenn die TTS-Audio
+            // laenger ist als die Szene, hoerten wir vorher einen Mid-Word-Cut
+            // als unangenehmen "Klick". Mit afade-out (250ms vor Ende) klingt
+            // der Halbsatz natuerlicher aus. Bei Voice <= Szene macht das
+            // afade nur den letzten 250ms der Stille leiser — unhoerbar.
+            const fadeStart = Math.max(0, dur - 0.25);
             await runFfmpeg([
               '-y',
               '-hide_banner',
               '-loglevel', 'error',
               '-i', mp3Path,
-              '-af', `apad=whole_dur=${dur}`,
+              '-af', `apad=whole_dur=${dur},afade=t=out:st=${fadeStart}:d=0.25`,
               '-t', String(dur),
               '-ar', '44100',
               '-ac', '2',

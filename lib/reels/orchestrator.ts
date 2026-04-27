@@ -260,7 +260,7 @@ export async function generateReel(opts: GenerateReelOptions): Promise<GenerateR
       await phaseLog(reelId, 'voice_generation_start');
       try {
         const voice = settings.voice_name ?? 'nova';
-        const model = settings.voice_model ?? 'tts-1';
+        const model = settings.voice_model ?? 'tts-1-hd';
         const style: TTSStyle = settings.voice_style ?? 'normal';
         const speed = STYLE_SPEED[style];
         const texts: string[] = [

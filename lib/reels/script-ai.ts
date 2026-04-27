@@ -97,15 +97,15 @@ JSON-Schema:
       "duration": number,                // Sekunden, 2-6 pro Szene
       "search_query": string,            // ENGLISCH! Pexels-Suchbegriff, 2-4 Wörter
       "text_overlay": string,            // Deutsch, max 8 Wörter, Szene 1 max 4 Wörter
-      "voice_text": string,              // Deutsch, ~12 Wörter pro 5 Sekunden
+      "voice_text": string,              // Deutsch, MAX 1.8 Wörter pro Sekunde Szenen-Dauer (also 4s Szene = max 7 Wörter, 5s = max 9, 6s = max 10). Lieber 1 Wort weniger als zu lang — Audio wird sonst hart abgeschnitten.
       "kind": "hook" | "body" | "transition"
     }
   ],
   "cta_frame": {
     "headline": string,                  // Deutsch, max 5 Wörter, konkret
     "subline": string,                   // Deutsch, max 8 Wörter, beginnt mit Verb
-    "voice_text": string,                // Deutsch, max 10 Wörter
-    "duration": number                   // 2-3 Sekunden
+    "voice_text": string,                // Deutsch, MAX 1.8 Wörter pro Sekunde cta_frame.duration (also 3s = max 5 Wörter, 4s = max 7). "cam2rent punkt de" zaehlt als 3 Woerter.
+    "duration": number                   // 3-4 Sekunden — gib genug Zeit fuer voice_text, lieber 4s als 2s
   },
   "caption": string,                     // Deutsch, 3-5 Sätze, erste Person, kein Marketing
   "hashtags": string[]                   // 5-10, klein, ohne #
@@ -145,7 +145,9 @@ Verbotene Hook-Eröffnungen:
 - "Hier ist..." (Listicle-Vibe, nervt)
 - "Das beste/größte/krasseste..." (Superlative ohne Substanz)
 
-voice_text in Szene 1: max 8 Wörter, endet mit ?, ! oder Doppelpunkt. Soll Spannung aufbauen, nicht erklären.
+voice_text in Szene 1: max 5 Wörter, endet mit ?, ! oder Doppelpunkt. Soll Spannung aufbauen, nicht erklären.
+
+WICHTIG für ALLE voice_text (Szenen + CTA): NIEMALS mehr als 1.8 Wörter pro Sekunde Szenen-Dauer. Der TTS-Track wird sonst hart bei Szenen-Ende abgeschnitten — mitten im Wort. Lieber einen kurzen, klaren Satz als einen langen, der zerfetzt wird. Zähle die Wörter pro Szene aktiv mit.
 
 CTA-REGELN:
 
@@ -162,7 +164,7 @@ subline:
 - Beispiele: "Reservier dir deine Cam." | "Hol sie dir aus Berlin." | "Plan dein nächstes Wochenende."
 - Kein "Jetzt..." am Anfang.
 
-voice_text im CTA: nennt einmal die Domain "cam2rent.de" oder "cam2rent punkt de". Maximal 10 Wörter.
+voice_text im CTA: nennt einmal die Domain "cam2rent.de" oder "cam2rent punkt de". Bei cta_frame.duration=3s max 5 Wörter, bei 4s max 7 Wörter. "cam2rent punkt de" zaehlt als 3 Woerter mit. Beispiel (4s, 5 Woerter inkl. Domain): "Sicher dir cam2rent punkt de."
 
 CAPTION-REGELN:
 
@@ -212,6 +214,7 @@ Bevor du JSON ausgibst, check intern:
 5. Passen die Aktivitäten zur Saison (siehe Saison-Logik)?
 6. Ist die Caption in erster Person und ohne Marketing-Floskeln?
 7. Keine erfundenen Specs?
+8. Hat KEIN voice_text mehr als 1.8 Woerter pro Sekunde Szenen-Dauer? (Pro Szene Woerter-Dauer-Verhaeltnis nochmal kontrollieren — wenn ueberzogen, 1-2 Woerter rauskuerzen.)
 
 Wenn ja → Output. Wenn nein → korrigieren.`;
 

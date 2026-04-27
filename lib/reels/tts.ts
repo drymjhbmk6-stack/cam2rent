@@ -64,7 +64,7 @@ async function getOpenAIKey(): Promise<string> {
 
 export interface GenerateSpeechOptions {
   voice?: TTSVoice;           // Default: 'nova' (weiblich, jung, natuerlich)
-  model?: TTSModel;           // Default: 'tts-1' (guenstiger)
+  model?: TTSModel;           // Default: 'tts-1-hd' (besserer Klang, +0.003 $/Reel)
   speed?: number;             // 0.25–4.0, Default 1.05 (Reels sind flott)
 }
 
@@ -78,7 +78,7 @@ export async function generateSpeech(text: string, opts: GenerateSpeechOptions =
   const normalized = normalizeForSpeech(text);
 
   const response = await client.audio.speech.create({
-    model: opts.model ?? 'tts-1',
+    model: opts.model ?? 'tts-1-hd',
     voice: opts.voice ?? 'nova',
     input: normalized.slice(0, 4000), // OpenAI-Limit: 4096 Zeichen
     speed: opts.speed ?? 1.05,
