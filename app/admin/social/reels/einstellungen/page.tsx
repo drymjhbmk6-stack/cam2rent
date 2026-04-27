@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 
 interface ReelsSettings {
@@ -17,11 +17,29 @@ interface ReelsSettings {
   outro_duration?: number;
 }
 
+const VOICE_OPTIONS: Array<{ value: NonNullable<ReelsSettings['voice_name']>; label: string; desc: string }> = [
+  { value: 'nova', label: 'Nova', desc: 'weiblich, jung, natürlich' },
+  { value: 'shimmer', label: 'Shimmer', desc: 'weiblich, warm' },
+  { value: 'alloy', label: 'Alloy', desc: 'neutral, sachlich' },
+  { value: 'echo', label: 'Echo', desc: 'männlich, ruhig' },
+  { value: 'onyx', label: 'Onyx', desc: 'männlich, tief' },
+  { value: 'fable', label: 'Fable', desc: 'britisch, erzählend' },
+];
+
+const DEFAULT_SAMPLE_TEXT = 'Hey, schau mal — die GoPro Hero 13 für dein nächstes Abenteuer. Action, Wasser, Outdoor. Mieten auf cam2rent.de.';
+
 export default function ReelsEinstellungenPage() {
   const [settings, setSettings] = useState<ReelsSettings>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState('');
+
+  // Voice-Preview State
+  const [previewText, setPreviewText] = useState(DEFAULT_SAMPLE_TEXT);
+  const [previewBusy, setPreviewBusy] = useState<string | null>(null); // welche Voice gerade lädt
+  const [previewError, setPreviewError] = useState('');
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const blobUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -58,6 +76,52 @@ export default function ReelsEinstellungenPage() {
       setSaving(false);
     }
   }
+
+  /** Spielt eine Voice-Sample ab. Vorherige URL wird revoked, damit kein Memory-Leak. */
+  async function previewVoice(voice: NonNullable<ReelsSettings['voice_name']>) {
+    setPreviewBusy(voice);
+    setPreviewError('');
+    try {
+      const res = await fetch('/api/admin/reels/voice-preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          voice,
+          style: settings.voice_style ?? 'normal',
+          model: settings.voice_model ?? 'tts-1-hd',
+          text: previewText.trim() || DEFAULT_SAMPLE_TEXT,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setPreviewError(body.error ?? `Fehler ${res.status}`);
+        return;
+      }
+      const blob = await res.blob();
+      // Vorherige URL freigeben
+      if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
+      const url = URL.createObjectURL(blob);
+      blobUrlRef.current = url;
+      if (!audioRef.current) audioRef.current = new Audio();
+      audioRef.current.src = url;
+      await audioRef.current.play();
+    } catch (err) {
+      setPreviewError(err instanceof Error ? err.message : 'Fehler');
+    } finally {
+      setPreviewBusy(null);
+    }
+  }
+
+  // Cleanup Blob-URL beim Unmount
+  useEffect(() => {
+    return () => {
+      if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.src = '';
+      }
+    };
+  }, []);
 
   return (
     <div className="p-4 md:p-8 max-w-4xl mx-auto">
@@ -133,7 +197,7 @@ export default function ReelsEinstellungenPage() {
                   checked={settings.outro_enabled !== false}
                   onChange={(e) => setSettings({ ...settings, outro_enabled: e.target.checked })}
                 />
-                <span>Outro mit cam2rent-Logo + „Action-Cam mieten auf cam2rent.de" (Ende)</span>
+                <span>Outro mit cam2rent-Logo + „Action-Cam mieten auf cam2rent.de&ldquo; (Ende)</span>
               </label>
               <div className="grid grid-cols-2 gap-3 pl-6">
                 <Field label="Intro-Dauer (Sek.)">
@@ -210,6 +274,63 @@ export default function ReelsEinstellungenPage() {
                     <option value="tts-1">tts-1 (Standard)</option>
                   </select>
                 </Field>
+              </div>
+            )}
+
+            {/* Voice-Preview */}
+            {settings.voice_enabled && (
+              <div className="mt-6 rounded-lg bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 p-4 space-y-3">
+                <div>
+                  <h3 className="text-sm font-medium text-brand-dark dark:text-white">🔊 Stimmen anhören</h3>
+                  <p className="text-xs text-brand-steel dark:text-gray-400 mt-1">
+                    Aktueller Stil: <strong>{settings.voice_style ?? 'normal'}</strong> · Modell: <strong>{settings.voice_model ?? 'tts-1-hd'}</strong>. Klick auf eine Stimme spielt einen kurzen Test ab (~0,003 € pro Klick).
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-brand-dark dark:text-white mb-1">Test-Text (optional, max 200 Zeichen)</label>
+                  <textarea
+                    value={previewText}
+                    onChange={(e) => setPreviewText(e.target.value.slice(0, 200))}
+                    rows={2}
+                    placeholder={DEFAULT_SAMPLE_TEXT}
+                    className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-1.5 text-xs text-brand-dark dark:text-white"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                  {VOICE_OPTIONS.map((v) => {
+                    const isCurrent = (settings.voice_name ?? 'nova') === v.value;
+                    const isBusy = previewBusy === v.value;
+                    return (
+                      <button
+                        key={v.value}
+                        type="button"
+                        onClick={() => previewVoice(v.value)}
+                        disabled={previewBusy !== null}
+                        className={`text-left rounded-lg border px-3 py-2 transition disabled:opacity-50 disabled:cursor-not-allowed ${
+                          isCurrent
+                            ? 'border-brand-orange bg-brand-orange/5'
+                            : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 hover:border-brand-orange/50'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="text-base">{isBusy ? '⏳' : '▶'}</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs font-medium text-brand-dark dark:text-white truncate">
+                              {v.label}{isCurrent && <span className="ml-1 text-[10px] text-brand-orange">(aktiv)</span>}
+                            </div>
+                            <div className="text-[10px] text-brand-steel dark:text-gray-500 truncate">{v.desc}</div>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {previewError && (
+                  <p className="text-xs text-red-600 dark:text-red-400">{previewError}</p>
+                )}
               </div>
             )}
           </Card>
