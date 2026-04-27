@@ -20,7 +20,7 @@ import { generateReelScript, type ReelScript } from './script-ai';
 // Phase 1.5: Multi-Source-Stock-Footage (Pexels + Pixabay) statt direktem Pexels-Aufruf.
 import { findClipForQuery, type StockClip } from './stock-sources';
 import { renderReel } from './ffmpeg-render';
-import { generateSpeech, STYLE_SPEED, type TTSVoice, type TTSModel, type TTSStyle } from './tts';
+import { generateSpeechFromSettings, type TTSProvider, type TTSVoice, type TTSModel, type TTSStyle, type ElevenLabsModel } from './tts';
 
 export interface GenerateReelOptions {
   templateId?: string;
@@ -56,9 +56,18 @@ interface ReelsSettings {
   default_music_url?: string;
   max_duration?: number;
   voice_enabled?: boolean;
+  voice_provider?: TTSProvider;
   voice_name?: TTSVoice;
   voice_model?: TTSModel;
   voice_style?: TTSStyle;
+  elevenlabs_api_key?: string;
+  elevenlabs_voice_id?: string;
+  elevenlabs_voice_name?: string;
+  elevenlabs_model_id?: ElevenLabsModel;
+  elevenlabs_stability?: number;
+  elevenlabs_similarity_boost?: number;
+  elevenlabs_style?: number;
+  elevenlabs_speaker_boost?: boolean;
   intro_enabled?: boolean;
   outro_enabled?: boolean;
   intro_duration?: number;
@@ -257,12 +266,9 @@ export async function generateReel(opts: GenerateReelOptions): Promise<GenerateR
     // ── 5a. Voice-Over generieren (wenn aktiviert) ──────────────────────────
     let voiceSegments: Buffer[] | undefined;
     if (settings.voice_enabled) {
-      await phaseLog(reelId, 'voice_generation_start');
+      const provider: TTSProvider = settings.voice_provider ?? 'openai';
+      await phaseLog(reelId, 'voice_generation_start', `provider=${provider}`);
       try {
-        const voice = settings.voice_name ?? 'nova';
-        const model = settings.voice_model ?? 'tts-1-hd';
-        const style: TTSStyle = settings.voice_style ?? 'normal';
-        const speed = STYLE_SPEED[style];
         const texts: string[] = [
           ...script.scenes.map((s) => (s.voice_text?.trim() || s.text_overlay?.trim() || '')),
           (script.cta_frame.voice_text?.trim() || script.cta_frame.headline?.trim() || ''),
@@ -273,7 +279,7 @@ export async function generateReel(opts: GenerateReelOptions): Promise<GenerateR
             generated.push(Buffer.alloc(0));
             continue;
           }
-          const buf = await generateSpeech(t, { voice, model, speed });
+          const buf = await generateSpeechFromSettings(t, settings);
           generated.push(buf);
         }
         if (generated.some((b) => b.length > 0)) {
@@ -402,8 +408,15 @@ export async function generateReel(opts: GenerateReelOptions): Promise<GenerateR
     const newStatus = needsReview ? 'pending_review' : 'rendered';
 
     // Audio-Hinweis im render_log dokumentieren, damit im Detail-UI sichtbar
+    const provider = settings.voice_provider ?? 'openai';
+    const voiceLabel = provider === 'elevenlabs'
+      ? (settings.elevenlabs_voice_name || settings.elevenlabs_voice_id || 'unknown')
+      : (settings.voice_name ?? 'nova');
+    const modelLabel = provider === 'elevenlabs'
+      ? (settings.elevenlabs_model_id ?? 'eleven_multilingual_v2')
+      : (settings.voice_model ?? 'tts-1');
     const audioStatus = voiceSegments
-      ? `Voice-Track: AN (Stimme=${settings.voice_name ?? 'nova'}, Modell=${settings.voice_model ?? 'tts-1'})`
+      ? `Voice-Track: AN (${provider}: Stimme=${voiceLabel}, Modell=${modelLabel})`
       : settings.voice_enabled
         ? `Voice-Track: angefordert aber fehlgeschlagen (siehe Log)`
         : `Voice-Track: AUS (Setting voice_enabled=false)`;
