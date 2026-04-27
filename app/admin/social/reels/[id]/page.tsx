@@ -102,9 +102,7 @@ export default function ReelDetailPage({ params }: { params: Promise<{ id: strin
   const [caption, setCaption] = useState('');
   const [hashtagsText, setHashtagsText] = useState('');
   const [scheduledAt, setScheduledAt] = useState('');
-  const [showScript, setShowScript] = useState(false);
-  const [showLog, setShowLog] = useState(false);
-  const [showMetrics, setShowMetrics] = useState(false);
+  const [activeTab, setActiveTab] = useState<'preview' | 'content' | 'scenes' | 'render'>('preview');
   // Phase 3.2: Szenen-Editor
   const [segments, setSegments] = useState<ReelSegment[]>([]);
   const [segmentsMissing, setSegmentsMissing] = useState(false); // Migration nicht durch
@@ -308,7 +306,6 @@ export default function ReelDetailPage({ params }: { params: Promise<{ id: strin
 
   const statusBadge = STATUS_LABELS[reel.status] ?? { label: reel.status, color: 'bg-gray-200 text-gray-700' };
 
-  const canPublishNow = reel.status === 'approved' || reel.status === 'scheduled' || reel.status === 'pending_review' || reel.status === 'failed';
   const canApprove = reel.status === 'pending_review' || reel.status === 'rendered' || reel.status === 'draft';
   const isReady = Boolean(reel.video_url);
 
@@ -367,6 +364,32 @@ export default function ReelDetailPage({ params }: { params: Promise<{ id: strin
         </div>
       )}
 
+      {/* Tab-Navigation */}
+      <div className="border-b border-gray-200 dark:border-gray-700 mb-6">
+        <nav className="flex gap-1 overflow-x-auto" aria-label="Tabs">
+          {[
+            { key: 'preview', label: 'Vorschau' },
+            { key: 'content', label: 'Inhalt' },
+            { key: 'scenes', label: `Szenen${segments.length > 0 ? ` (${segments.length})` : ''}` },
+            { key: 'render', label: `Render & Skript${reel.error_message ? ' ⚠' : ''}` },
+          ].map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setActiveTab(t.key as typeof activeTab)}
+              className={`whitespace-nowrap px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                activeTab === t.key
+                  ? 'border-brand-orange text-brand-orange'
+                  : 'border-transparent text-brand-steel dark:text-gray-400 hover:text-brand-dark dark:hover:text-white'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </nav>
+      </div>
+
+      {/* Tab: Vorschau — Video links, Nächster-Schritt-Block rechts */}
+      {activeTab === 'preview' && (
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Video-Preview links */}
         <div>
@@ -398,16 +421,136 @@ export default function ReelDetailPage({ params }: { params: Promise<{ id: strin
           )}
         </div>
 
-        {/* Bearbeiten / Freigabe rechts */}
+        {/* Nächster Schritt rechts — kontextabhängig basierend auf reel.status */}
         <div className="space-y-4">
+          <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
+            <h3 className="text-sm font-semibold text-brand-dark dark:text-white mb-3">Nächster Schritt</h3>
+
+            {reel.status === 'failed' && (
+              <div className="space-y-3">
+                <div className="rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 px-3 py-2 text-sm text-red-800 dark:text-red-200">
+                  <strong>Render fehlgeschlagen.</strong>
+                  {reel.error_message && <p className="mt-1 text-xs">{reel.error_message}</p>}
+                </div>
+                <button
+                  onClick={handleRerender}
+                  disabled={saving}
+                  className="w-full rounded-lg bg-brand-orange hover:bg-brand-orange/90 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+                >
+                  Neu rendern
+                </button>
+              </div>
+            )}
+
+            {(reel.status === 'rendering' || reel.status === 'publishing') && (
+              <p className="text-sm text-brand-steel dark:text-gray-400">
+                {reel.status === 'rendering' ? 'Render läuft im Hintergrund. Status oben aktualisiert sich automatisch.' : 'Wird gerade gepostet…'}
+              </p>
+            )}
+
+            {canApprove && isReady && (
+              <div className="space-y-3">
+                <p className="text-sm text-brand-steel dark:text-gray-400">Reel ist gerendert und bereit zur Freigabe.</p>
+                <button
+                  onClick={() => handleApprove(false)}
+                  disabled={saving}
+                  className="w-full rounded-lg bg-emerald-600 hover:bg-emerald-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+                >
+                  Freigeben (manuell veröffentlichen)
+                </button>
+                <div className="border-t border-gray-200 dark:border-gray-700 pt-3">
+                  <label className="block text-xs font-medium text-brand-dark dark:text-white mb-1">Stattdessen einplanen für:</label>
+                  <input
+                    type="datetime-local"
+                    value={scheduledAt}
+                    onChange={(e) => setScheduledAt(e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-brand-dark dark:text-white mb-2"
+                  />
+                  <button
+                    onClick={() => handleApprove(true)}
+                    disabled={saving || !scheduledAt}
+                    className="w-full rounded-lg bg-violet-600 hover:bg-violet-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Einplanen
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {(reel.status === 'approved' || reel.status === 'scheduled') && isReady && (
+              <div className="space-y-3">
+                {reel.status === 'scheduled' && reel.scheduled_at && (
+                  <p className="text-sm text-brand-steel dark:text-gray-400">
+                    Geplant für <strong className="text-brand-dark dark:text-white">{fmtDateTime(reel.scheduled_at)}</strong>. Cron postet automatisch.
+                  </p>
+                )}
+                {reel.status === 'approved' && (
+                  <p className="text-sm text-brand-steel dark:text-gray-400">Freigegeben — bereit zum sofortigen Posten.</p>
+                )}
+                <button
+                  onClick={handlePublishNow}
+                  disabled={publishing}
+                  className="w-full rounded-lg bg-brand-orange hover:bg-brand-orange/90 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+                >
+                  {publishing ? 'Wird gepostet…' : 'Jetzt veröffentlichen'}
+                </button>
+              </div>
+            )}
+
+            {reel.status === 'published' && (
+              <div className="space-y-2">
+                <p className="text-sm text-emerald-700 dark:text-emerald-300 font-medium">✓ Veröffentlicht{reel.published_at && ` am ${fmtDateTime(reel.published_at)}`}.</p>
+                {reel.fb_permalink && (
+                  <a href={reel.fb_permalink} target="_blank" rel="noopener noreferrer" className="block text-sm text-blue-600 dark:text-cyan-400 hover:underline">
+                    Auf Facebook ansehen →
+                  </a>
+                )}
+                {reel.ig_permalink && (
+                  <a href={reel.ig_permalink} target="_blank" rel="noopener noreferrer" className="block text-sm text-pink-600 dark:text-pink-400 hover:underline">
+                    Auf Instagram ansehen →
+                  </a>
+                )}
+                {!reel.fb_permalink && !reel.ig_permalink && (
+                  <p className="text-xs text-brand-steel dark:text-gray-500 italic">(Permalinks werden beim nächsten Post erfasst)</p>
+                )}
+              </div>
+            )}
+
+            {reel.status === 'partial' && (
+              <div className="space-y-2">
+                <p className="text-sm text-orange-700 dark:text-orange-300">Teilweise veröffentlicht — eine Plattform hat einen Fehler zurückgegeben.</p>
+                {reel.error_message && <p className="text-xs text-brand-steel dark:text-gray-400">{reel.error_message}</p>}
+                <button
+                  onClick={handlePublishNow}
+                  disabled={publishing}
+                  className="w-full rounded-lg bg-brand-orange hover:bg-brand-orange/90 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+                >
+                  {publishing ? 'Wird gepostet…' : 'Erneut veröffentlichen'}
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Plattform-Hinweis */}
+          <p className="text-xs text-brand-steel dark:text-gray-500">
+            Plattformen: {reel.platforms.join(', ').toUpperCase() || '—'}
+          </p>
+        </div>
+      </div>
+      )}
+
+      {/* Tab: Inhalt — Caption, Hashtags, Schedule, Speichern */}
+      {activeTab === 'content' && (
+        <div className="max-w-2xl space-y-4">
           <div>
             <label className="block text-sm font-medium text-brand-dark dark:text-white mb-1">Caption</label>
             <textarea
               value={caption}
               onChange={(e) => setCaption(e.target.value)}
-              rows={6}
-              className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-brand-dark dark:text-white"
+              rows={8}
+              className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-base text-brand-dark dark:text-white"
             />
+            <p className="text-xs text-brand-steel dark:text-gray-500 mt-1">{caption.length} Zeichen</p>
           </div>
 
           <div>
@@ -416,113 +559,84 @@ export default function ReelDetailPage({ params }: { params: Promise<{ id: strin
               type="text"
               value={hashtagsText}
               onChange={(e) => setHashtagsText(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-brand-dark dark:text-white"
+              className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-base text-brand-dark dark:text-white"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-brand-dark dark:text-white mb-1">Einplanen für (optional)</label>
+            <label className="block text-sm font-medium text-brand-dark dark:text-white mb-1">Geplanter Veröffentlichungs-Zeitpunkt</label>
             <input
               type="datetime-local"
               value={scheduledAt}
               onChange={(e) => setScheduledAt(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-brand-dark dark:text-white"
+              className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-base text-brand-dark dark:text-white"
             />
-            <p className="text-xs text-brand-steel dark:text-gray-500 mt-1">Leer lassen und &bdquo;Freigeben&ldquo; klicken, um manuell via &bdquo;Jetzt ver&ouml;ffentlichen&ldquo; zu posten.</p>
+            <p className="text-xs text-brand-steel dark:text-gray-500 mt-1">Wird angewendet, wenn du im Vorschau-Tab &bdquo;Einplanen&ldquo; klickst.</p>
           </div>
 
-          <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-200 dark:border-gray-700">
+          <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
             <button
               onClick={handleSave}
               disabled={saving}
-              className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-4 py-2 text-sm font-medium text-brand-dark dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
+              className="rounded-lg bg-brand-orange hover:bg-brand-orange/90 px-5 py-2 text-sm font-medium text-white disabled:opacity-50"
             >
-              Speichern
+              {saving ? 'Speichert…' : 'Speichern'}
             </button>
-
-            {canApprove && isReady && (
-              <>
-                <button
-                  onClick={() => handleApprove(false)}
-                  disabled={saving}
-                  className="rounded-lg bg-emerald-600 hover:bg-emerald-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-                >
-                  Freigeben
-                </button>
-                {scheduledAt && (
-                  <button
-                    onClick={() => handleApprove(true)}
-                    disabled={saving}
-                    className="rounded-lg bg-violet-600 hover:bg-violet-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-                  >
-                    Einplanen
-                  </button>
-                )}
-              </>
-            )}
-
-            {canPublishNow && isReady && (
-              <button
-                onClick={handlePublishNow}
-                disabled={publishing}
-                className="rounded-lg bg-brand-orange hover:bg-brand-orange/90 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-              >
-                {publishing ? 'Wird gepostet…' : 'Jetzt veröffentlichen'}
-              </button>
-            )}
           </div>
 
-          {reel.fb_permalink && (
-            <p className="text-xs">
-              <a href={reel.fb_permalink} target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-cyan-400 hover:underline">
-                Auf Facebook ansehen →
-              </a>
-            </p>
-          )}
-          {reel.ig_permalink && (
-            <p className="text-xs">
-              <a href={reel.ig_permalink} target="_blank" rel="noopener noreferrer" className="text-pink-600 dark:text-pink-400 hover:underline">
-                Auf Instagram ansehen →
-              </a>
-            </p>
-          )}
-        </div>
-      </div>
-
-      {/* Skript anzeigen */}
-      {reel.script_json && (
-        <div className="mt-8 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
-          <button onClick={() => setShowScript((s) => !s)} className="flex items-center justify-between w-full text-left">
-            <span className="text-sm font-medium text-brand-dark dark:text-white">KI-Skript ({reel.script_json.scenes.length} Szenen · Musik: {reel.script_json.music_mood ?? 'neutral'})</span>
-            <span className="text-xs text-brand-steel dark:text-gray-500">{showScript ? 'einklappen' : 'aufklappen'}</span>
-          </button>
-          {showScript && (
-            <div className="mt-4 space-y-3 text-sm">
-              {reel.script_json.scenes.map((s, i) => (
-                <div key={i} className="border-l-2 border-cyan-500 pl-3">
-                  <p className="font-medium text-brand-dark dark:text-white">{s.text_overlay || <em className="text-brand-steel">(kein Text)</em>}</p>
-                  <p className="text-xs text-brand-steel dark:text-gray-500">
-                    Szene {i + 1} · {s.duration}s · Pexels: <code>{s.search_query}</code>
-                  </p>
-                </div>
-              ))}
-              <div className="border-l-2 border-brand-orange pl-3">
-                <p className="font-medium text-brand-dark dark:text-white">{reel.script_json.cta_frame.headline}</p>
-                {reel.script_json.cta_frame.subline && (
-                  <p className="text-xs text-brand-steel dark:text-gray-400">{reel.script_json.cta_frame.subline}</p>
-                )}
-                <p className="text-xs text-brand-steel dark:text-gray-500">CTA · {reel.script_json.cta_frame.duration}s</p>
-              </div>
-            </div>
-          )}
+          <div className="pt-4 border-t border-gray-200 dark:border-gray-700 text-xs text-brand-steel dark:text-gray-500 space-y-1">
+            <p><strong className="text-brand-dark dark:text-white">Plattformen:</strong> {reel.platforms.join(', ').toUpperCase() || '—'}</p>
+            {reel.fb_account_id && <p><strong className="text-brand-dark dark:text-white">FB-Account-ID:</strong> {reel.fb_account_id}</p>}
+            {reel.ig_account_id && <p><strong className="text-brand-dark dark:text-white">IG-Account-ID:</strong> {reel.ig_account_id}</p>}
+          </div>
         </div>
       )}
 
+      {/* Tab: Render & Skript — Skript, Metriken, Log */}
+      {activeTab === 'render' && (
+      <div className="space-y-4">
+      {reel.script_json && (
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+          <h2 className="text-sm font-medium text-brand-dark dark:text-white mb-3">KI-Skript ({reel.script_json.scenes.length} Szenen · Musik: {reel.script_json.music_mood ?? 'neutral'})</h2>
+          <div className="space-y-3 text-sm">
+            {reel.script_json.scenes.map((s, i) => (
+              <div key={i} className="border-l-2 border-cyan-500 pl-3">
+                <p className="font-medium text-brand-dark dark:text-white">{s.text_overlay || <em className="text-brand-steel">(kein Text)</em>}</p>
+                <p className="text-xs text-brand-steel dark:text-gray-500">
+                  Szene {i + 1} · {s.duration}s · Pexels: <code>{s.search_query}</code>
+                </p>
+              </div>
+            ))}
+            <div className="border-l-2 border-brand-orange pl-3">
+              <p className="font-medium text-brand-dark dark:text-white">{reel.script_json.cta_frame.headline}</p>
+              {reel.script_json.cta_frame.subline && (
+                <p className="text-xs text-brand-steel dark:text-gray-400">{reel.script_json.cta_frame.subline}</p>
+              )}
+              <p className="text-xs text-brand-steel dark:text-gray-500">CTA · {reel.script_json.cta_frame.duration}s</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {!reel.script_json && (
+        <p className="text-sm text-brand-steel dark:text-gray-500 italic">Kein KI-Skript vorhanden.</p>
+      )}
+      </div>
+      )}
+
+      {/* Tab: Szenen — Phase 3.2 Segment-Editor */}
+      {activeTab === 'scenes' && (
+      <div className="space-y-4">
+      {segmentsMissing && (
+        <div className="rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
+          <strong>Migration ausstehend:</strong> Tabelle <code>social_reel_segments</code> noch nicht angelegt. Szenen-Editor wird nach <code>supabase/supabase-reel-segments.sql</code> verfügbar.
+        </div>
+      )}
       {/* Phase 3.2: Szenen-Editor — Liste persistierter Segmente mit
           Body-Tausch-Buttons. Nur sichtbar wenn Migration `social_reel_segments`
           durch ist und der Reel mit Phase-3-Pipeline gerendert wurde. */}
       {segments.length > 0 && (
-        <div className="mt-8 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-medium text-brand-dark dark:text-white">Szenen ({segments.length})</h2>
             <span className="text-xs text-brand-steel dark:text-gray-500">Body-Szenen einzeln austauschbar</span>
@@ -606,12 +720,14 @@ export default function ReelDetailPage({ params }: { params: Promise<{ id: strin
 
       {/* Hinweis falls Reel noch ohne persistierte Segmente */}
       {segments.length === 0 && !segmentsMissing && reel.status !== 'rendering' && reel.status !== 'failed' && (
-        <div className="mt-4 text-xs text-brand-steel dark:text-gray-500 italic">
+        <div className="text-xs text-brand-steel dark:text-gray-500 italic">
           Dieses Reel wurde vor Phase 3 gerendert — Szenen-Editor steht erst nach einem Neu-Render zur Verfügung.
         </div>
       )}
+      </div>
+      )}
 
-      {/* Query-Modal */}
+      {/* Query-Modal — tab-unabhängig, da Modal */}
       {queryModalSegment && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-gray-800 rounded-xl max-w-md w-full p-6">
@@ -646,16 +762,15 @@ export default function ReelDetailPage({ params }: { params: Promise<{ id: strin
         </div>
       )}
 
-      {/* Phase 2.5: Render-Metriken (collapsible). Nur sichtbar, wenn die
+      {/* Tab: Render & Skript (Block 2) — Metriken + Log */}
+      {activeTab === 'render' && (
+      <div className="space-y-4 mt-4">
+      {/* Phase 2.5: Render-Metriken. Nur sichtbar, wenn die
           Migration `quality_metrics` durch ist und der Render mit Phase-2-Pipeline lief. */}
       {reel.quality_metrics && Object.keys(reel.quality_metrics).length > 0 && (
-        <div className="mt-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
-          <button onClick={() => setShowMetrics((s) => !s)} className="flex items-center justify-between w-full text-left">
-            <span className="text-sm font-medium text-brand-dark dark:text-white">Render-Metriken</span>
-            <span className="text-xs text-brand-steel dark:text-gray-500">{showMetrics ? 'einklappen' : 'aufklappen'}</span>
-          </button>
-          {showMetrics && (
-            <dl className="mt-3 grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-2 text-xs">
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+          <h2 className="text-sm font-medium text-brand-dark dark:text-white mb-3">Render-Metriken</h2>
+          <dl className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-2 text-xs">
               {typeof reel.quality_metrics.file_size_bytes === 'number' && (
                 <div>
                   <dt className="text-brand-steel dark:text-gray-500">Datei-Größe</dt>
@@ -719,20 +834,21 @@ export default function ReelDetailPage({ params }: { params: Promise<{ id: strin
                 </div>
               )}
             </dl>
-          )}
         </div>
       )}
 
-      {/* Render-Log (nur bei Fehler oder Debug) */}
+      {/* Render-Log */}
       {reel.render_log && (
-        <div className="mt-4">
-          <button onClick={() => setShowLog((s) => !s)} className="text-xs text-brand-steel dark:text-gray-500 hover:underline">
-            {showLog ? 'Render-Log einklappen' : 'Render-Log anzeigen'}
-          </button>
-          {showLog && (
-            <pre className="mt-2 text-[10px] bg-gray-100 dark:bg-gray-900 rounded p-3 overflow-x-auto text-brand-steel dark:text-gray-500 max-h-60">{reel.render_log}</pre>
-          )}
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+          <h2 className="text-sm font-medium text-brand-dark dark:text-white mb-2">Render-Log</h2>
+          <pre className="text-[10px] bg-gray-100 dark:bg-gray-900 rounded p-3 overflow-x-auto text-brand-steel dark:text-gray-500 max-h-96">{reel.render_log}</pre>
         </div>
+      )}
+
+      {!reel.quality_metrics && !reel.render_log && (
+        <p className="text-sm text-brand-steel dark:text-gray-500 italic">Keine Render-Daten vorhanden.</p>
+      )}
+      </div>
       )}
 
       {confirmDelete && (

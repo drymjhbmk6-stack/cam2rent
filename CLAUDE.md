@@ -1273,7 +1273,26 @@ Implementierung: `components/admin/AdminLayoutClient.tsx` — neue Komponente `R
 - `vorlagen/page.tsx` zeigt nur noch Templates + Musikbibliothek + Link "Einstellungen" oben rechts
 - Sidebar-Link `/admin/social/reels/zeitplan` ist drin, **Seite existiert aber noch nicht** → Schritt 5 muss diese Seite anlegen
 
-**Schritt 2 — Detailseite mit Tabs (TODO)**
+**Schritt 2 — Detailseite mit Tabs ✓**
+Datei `app/admin/social/reels/[id]/page.tsx` von 1-Wand-Layout (756 Z.) auf 4-Tab-Struktur umgebaut. State + Handler 1:1 erhalten, JSX neu strukturiert.
+- **Header (immer sichtbar):** Back-Link, Titel, Status-Badge, TEST-Badge, „erstellt am", rechts: „Render abbrechen" (nur bei `rendering`/`publishing`), „Neu rendern", „Löschen". Toast (`feedback`) + `<ReelRenderStatus>`-Banner + Audio-Stumm-Hinweis bleiben über den Tabs.
+- **Neue State-Variable:** `activeTab: 'preview' | 'content' | 'scenes' | 'render'` — Default `'preview'`. Alte `showScript/showLog/showMetrics` entfallen (Inhalte sind in den Tabs jetzt immer aufgeklappt).
+- **Tab „Vorschau":** Video links (9:16), rechts kontextabhängiger „Nächster Schritt"-Block basierend auf `reel.status`:
+  - `failed` → rote Fehlerbox + „Neu rendern"-Button
+  - `rendering`/`publishing` → Hinweistext (Status oben aktualisiert)
+  - `pending_review`/`rendered`/`draft` (canApprove + isReady) → „Freigeben"-Button (manuell veröffentlichen) + datetime-local + „Einplanen"
+  - `approved` → „Jetzt veröffentlichen"
+  - `scheduled` → geplanter Zeitpunkt + „Jetzt veröffentlichen"
+  - `published` → grüne Bestätigung + FB/IG-Permalink-Links
+  - `partial` → orange Hinweis + „Erneut veröffentlichen"
+- **Tab „Inhalt":** Caption-Textarea (8 Zeilen + Zeichenzähler) + Hashtags-Input + datetime-local + „Speichern"-Button. Plattformen + Account-IDs read-only unten.
+- **Tab „Szenen":** Migration-Banner falls `segmentsMissing`, dann bestehender Phase-3.2-Segment-Grid (Body-Tausch-Buttons) + Hinweis falls Reel pre-Phase-3.
+- **Tab „Render & Skript":** KI-Skript (immer aufgeklappt, nicht mehr collapsible), Render-Metriken (immer aufgeklappt), Render-Log (immer aufgeklappt), Fallback-Hinweis falls weder Metriken noch Log vorhanden. Tab-Badge mit ⚠ wenn `error_message` gesetzt.
+- **Tab-Counter:** „Szenen (N)" zeigt Anzahl persistierter Segmente.
+- **Modals (Delete + Query)** bleiben tab-unabhängig am Ende des Components.
+- Variable `canPublishNow` entfernt (durch direkte Status-Checks pro Tab-Block ersetzt).
+
+**Schritt 3 — Neues-Reel-Wizard (TODO)**
 Datei: `app/admin/social/reels/[id]/page.tsx` (aktuell 756 Zeilen Wand). State + Handler 1:1 erhalten, JSX neu strukturieren:
 - **Header (immer sichtbar):** Back-Link, Titel, Status-Badge, TEST-Badge, „erstellt am", rechts: „Neu rendern" + „Löschen"
 - **Toast** für `feedback`-Message, **`<ReelRenderStatus>`-Banner** (existiert) während Render
