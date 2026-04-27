@@ -427,7 +427,7 @@ export async function generateReel(opts: GenerateReelOptions): Promise<GenerateR
       hashtags: script.hashtags,
       video_url: videoUrl,
       thumbnail_url: thumbnailUrl,
-      duration_seconds: durationSeconds,
+      duration_seconds: Math.round(durationSeconds),
       script_json: script as unknown as Record<string, unknown>,
       render_log: `${audioHeader}\n${sourceSummary}\n${segmentsSummary}\n${log}`.slice(-4000),
       status: newStatus,
