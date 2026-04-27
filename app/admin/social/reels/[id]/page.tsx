@@ -4,6 +4,7 @@ import { useEffect, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import ReelRenderStatus from '@/components/admin/ReelRenderStatus';
 import { fmtDateTime } from '@/lib/format-utils';
 
 interface ReelScene {
@@ -354,6 +355,9 @@ export default function ReelDetailPage({ params }: { params: Promise<{ id: strin
       {feedback && (
         <div className="mb-4 rounded-lg bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 px-4 py-2 text-sm text-blue-800 dark:text-blue-200">{feedback}</div>
       )}
+
+      {/* Live-Status waehrend Render — parst render_log und zeigt aktuelle Phase */}
+      <ReelRenderStatus status={reel.status} renderLog={reel.render_log} createdAt={reel.created_at} />
 
       {/* Audio-Hinweis: wenn render_log ein "Voice-Track: AUS" oder "Musik: AUS" hat */}
       {reel.render_log && reel.render_log.includes('[audio]') && (reel.render_log.includes('Voice-Track: AUS') && reel.render_log.includes('Musik: AUS')) && (
