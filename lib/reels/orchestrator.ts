@@ -417,10 +417,11 @@ export async function generateReel(opts: GenerateReelOptions): Promise<GenerateR
     // Phase 3.1: Persistierungs-Status im Log dokumentieren.
     const segmentsSummary = `[segments] persisted=${segmentsPersisted}/${persistedSegments.length}`;
 
-    // Phase 2.5: Strukturierte Metriken in eigene Spalte. Defensiv: wenn
-    // die Migration `quality_metrics` noch nicht ausgefuehrt ist, fangen
-    // wir den Fehler ab und fallen auf das alte UPDATE zurueck.
-    const updatePayload: Record<string, unknown> = {
+    // Kritisches Update: Status + Video + Caption muessen gesetzt werden,
+    // sonst bleibt das Reel auf 'rendering' haengen. quality_metrics ist
+    // optional und wird in einem zweiten Schritt geschrieben — falls die
+    // Migration noch nicht durch ist, soll der Hauptzustand trotzdem stehen.
+    const criticalPayload: Record<string, unknown> = {
       caption: script.caption,
       hashtags: script.hashtags,
       video_url: videoUrl,
@@ -430,16 +431,30 @@ export async function generateReel(opts: GenerateReelOptions): Promise<GenerateR
       render_log: `${audioHeader}\n${sourceSummary}\n${segmentsSummary}\n${log}`.slice(-4000),
       status: newStatus,
       error_message: null,
-      quality_metrics: qualityMetrics as unknown as Record<string, unknown>,
     };
     const { error: updateError } = await supabase
       .from('social_reels')
-      .update(updatePayload)
+      .update(criticalPayload)
       .eq('id', reelId);
-    if (updateError && updateError.message?.includes('quality_metrics')) {
-      // Migration noch nicht durch — retry ohne quality_metrics-Feld
-      delete updatePayload.quality_metrics;
-      await supabase.from('social_reels').update(updatePayload).eq('id', reelId);
+    if (updateError) {
+      await phaseLog(reelId, 'final_update_failed', updateError.message?.slice(0, 100) ?? 'unknown');
+      throw new Error(`Final UPDATE failed: ${updateError.message ?? 'unknown'}`);
+    }
+    await phaseLog(reelId, 'render_complete', `status=${newStatus}`);
+
+    // Optional: Quality-Metrics in eigener Spalte. Wenn die Migration noch
+    // nicht ausgefuehrt ist (Spalte fehlt), wird der Fehler nur geloggt — der
+    // Reel ist trotzdem im richtigen Status.
+    try {
+      const { error: metricsError } = await supabase
+        .from('social_reels')
+        .update({ quality_metrics: qualityMetrics as unknown as Record<string, unknown> })
+        .eq('id', reelId);
+      if (metricsError && !metricsError.message?.includes('quality_metrics')) {
+        console.warn('[reels/orchestrator] quality_metrics-Update fehlgeschlagen:', metricsError.message);
+      }
+    } catch (err) {
+      console.warn('[reels/orchestrator] quality_metrics-Update Exception:', err);
     }
 
     return { reelId, status: newStatus, script, videoUrl, thumbnailUrl };
