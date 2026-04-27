@@ -110,7 +110,14 @@ ESLint + TypeScript werden auf dem Server beim Build geskippt (RAM-Limit CX23).
   - `new_message`: messages
   - `new_review`: reviews
   - `new_waitlist`: api/waitlist
-- **Typen mit Icons:** new_booking (cyan), booking_cancelled (rot), new_damage (amber), new_message (lila), new_customer (grün), overdue_return (rot), new_review (amber), payment_failed (rot), new_waitlist (cyan)
+- **Typen mit Icons:** new_booking (cyan), booking_cancelled (rot), new_damage (amber), new_message (lila), new_customer (grün), overdue_return (rot), new_review (amber), payment_failed (rot), new_waitlist (cyan), blog_ready (grün), social_ready (lila), reel_ready (pink)
+
+### Content-Review-Pushes (Stand 2026-04-27)
+Drei zusaetzliche Notification-Typen feuern, sobald frisch generierter KI-Content auf Admin-Review wartet — Permission-gefiltert auf `content`. Idee: keine eigene UI noetig, lebt parasitaer auf der bestehenden Push-Pipeline (`createAdminNotification` → `sendPushToAdmins`).
+- **`blog_ready`** (gruen, Doc-Icon) — aus `app/api/cron/blog-generate/route.ts` direkt nach Insert. Feuert wenn `postStatus !== 'published'` (also Semi-Modus `draft` ODER Zeitplan-Eintrag `scheduled`); im Voll-Modus (`postStatus='published'`) keine Push, weil bereits live. Link auf `/admin/blog/artikel/[id]`. Titel je nach Status (`Neuer Blog-Artikel zum Reviewen` vs. `Geplanter Blog-Artikel generiert`).
+- **`social_ready`** (lila, Share-Icon) — aus drei Stellen, die einen `social_posts.status='draft'` erzeugen koennen: `app/api/cron/social-generate/route.ts`, `lib/meta/generate-plan-entry.ts` (manuelles Sofort-Generate aus Redaktionsplan) und `lib/meta/auto-post.ts` (Trigger nach Blog-Publish/neuem Produkt/Set/Gutschein). Nur im Draft-Modus, im `scheduled`-Modus (Voll-Auto-Post) keine Push. `auto-post.ts` hatte vorher einen TODO-Kommentar mit Misuse von `type: 'new_booking'` — gleichzeitig korrigiert. Link auf `/admin/social/posts/[id]`.
+- **`reel_ready`** (pink, Film-Icon) — aus `lib/reels/orchestrator.ts` direkt nach dem critical-update wenn `newStatus === 'pending_review'`. Im `'rendered'`-Modus (preview_required=false) keine Push, weil dann Auto-Publish greift. Link auf `/admin/social/reels/[id]`.
+- **Permission-Mapping** in `lib/admin-notifications.ts` → `TYPE_TO_PERMISSION`: alle drei auf `'content'` gemappt. Mitarbeiter mit Content-Permission kriegen die Push, Owner sowieso. Mitarbeiter ohne Content-Bereich (z.B. nur `tagesgeschaeft`) werden nicht gestoert.
 
 ### Buchungsflow
 5 Steps (Versand → Zubehör → Haftung → Zusammenfassung → Zahlung)

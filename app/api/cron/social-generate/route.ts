@@ -19,6 +19,7 @@ import { verifyCronAuth } from '@/lib/cron-auth';
 import Anthropic from '@anthropic-ai/sdk';
 import { generateCaption, generateSocialImage } from '@/lib/meta/ai-content';
 import { isTestMode } from '@/lib/env-mode';
+import { createAdminNotification } from '@/lib/admin-notifications';
 
 const STALE_LOCK_MINUTES = 10;
 
@@ -267,6 +268,18 @@ Max 500 Zeichen, klarer CTA am Ende.`;
         used_at: new Date().toISOString(),
         post_id: post.id,
       }).eq('id', entry.series_part_id);
+    }
+
+    // Push-Notification: nur im Semi-Modus (draft), wo Admin reviewen muss.
+    // Im Voll-Modus (scheduled) hat der Admin Auto-Publish gewaehlt.
+    if (postStatus === 'draft') {
+      const captionShort = finalCaption.length > 80 ? finalCaption.slice(0, 80) + '…' : finalCaption;
+      await createAdminNotification(supabase, {
+        type: 'social_ready',
+        title: 'Social-Post zum Reviewen',
+        message: captionShort,
+        link: `/admin/social/posts/${post.id}`,
+      });
     }
 
     await setGenerationStatus({ status: 'idle', last_success_at: new Date().toISOString(), last_entry_id: entry.id });

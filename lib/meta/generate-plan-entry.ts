@@ -9,6 +9,7 @@ import { createServiceClient } from '@/lib/supabase';
 import Anthropic from '@anthropic-ai/sdk';
 import { generateCaption, generateSocialImage } from '@/lib/meta/ai-content';
 import { isTopicOutOfSeason, getSeasonContext } from '@/lib/meta/season';
+import { createAdminNotification } from '@/lib/admin-notifications';
 
 export interface GenerateEntryResult {
   success: boolean;
@@ -193,6 +194,17 @@ Max 500 Zeichen, klarer CTA am Ende.`;
         used_at: new Date().toISOString(),
         post_id: post.id,
       }).eq('id', entry.series_part_id);
+    }
+
+    // Push-Notification: nur im Semi-Modus (draft).
+    if (postStatus === 'draft') {
+      const captionShort = finalCaption.length > 80 ? finalCaption.slice(0, 80) + '…' : finalCaption;
+      await createAdminNotification(supabase, {
+        type: 'social_ready',
+        title: 'Social-Post zum Reviewen',
+        message: captionShort,
+        link: `/admin/social/posts/${post.id}`,
+      });
     }
 
     return { success: true, post_id: post.id };

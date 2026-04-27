@@ -22,6 +22,9 @@ const TYPE_TO_PERMISSION: Record<string, PermissionKey> = {
   new_ugc: 'kunden',
   payment_failed: 'finanzen',
   coupon_race: 'finanzen',
+  blog_ready: 'content',
+  social_ready: 'content',
+  reel_ready: 'content',
 };
 
 /**

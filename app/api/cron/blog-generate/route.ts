@@ -6,6 +6,7 @@ import OpenAI from 'openai';
 import { isTestMode } from '@/lib/env-mode';
 import { buildBlogSystemPrompt, HUMANIZER_PASS } from '@/lib/blog/system-prompt';
 import { sanitizePromptInput, sanitizePromptInputList } from '@/lib/prompt-sanitize';
+import { createAdminNotification } from '@/lib/admin-notifications';
 
 const LENGTH_MAP: Record<string, string> = {
   kurz: 'ca. 500 Wörter',
@@ -444,6 +445,19 @@ Antworte NUR mit dem korrigierten Artikel-Text in Markdown. Keine Erklärungen, 
         .from('blog_auto_topics')
         .update({ used: true, used_at: now })
         .eq('id', topicData.id);
+    }
+
+    // Push-Notification: Admin soll wissen, dass ein neuer Artikel zum
+    // Reviewen bereitsteht. Bei 'published' (voll-Modus, bereits live) keine
+    // Push — sonst kommt sie sowohl bei draft als auch bei scheduled.
+    if (postStatus !== 'published' && post) {
+      const titleShort = parsed.title.length > 80 ? parsed.title.slice(0, 80) + '…' : parsed.title;
+      await createAdminNotification(supabase, {
+        type: 'blog_ready',
+        title: postStatus === 'scheduled' ? 'Geplanter Blog-Artikel generiert' : 'Neuer Blog-Artikel zum Reviewen',
+        message: titleShort,
+        link: `/admin/blog/artikel/${post.id}`,
+      });
     }
 
     await setGenerationStatus('idle', topicData.topic);

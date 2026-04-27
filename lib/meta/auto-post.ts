@@ -132,11 +132,13 @@ export async function autoPost(
 
     if (error) throw error;
 
-    // Admin-Benachrichtigung
-    if (newPost) {
+    // Push-Notification: nur im Draft-Modus (Admin muss reviewen).
+    // Bei 'scheduled' hat der Admin Auto-Posting bewusst gewaehlt — keine
+    // Push, sonst wird's zu noisy bei jedem Trigger.
+    if (newPost && status === 'draft') {
       await createAdminNotification(supabase, {
-        type: 'new_booking', // TODO: neuen Typ "social_post_ready" ergänzen
-        title: mode === 'scheduled' ? 'Social-Post geplant' : 'Social-Post Entwurf bereit',
+        type: 'social_ready',
+        title: 'Social-Post zum Reviewen',
         message: generated.caption.slice(0, 120),
         link: '/admin/social/posts/' + newPost.id,
       });

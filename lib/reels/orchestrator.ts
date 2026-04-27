@@ -15,6 +15,7 @@
 
 import { createServiceClient } from '@/lib/supabase';
 import { isTestMode } from '@/lib/env-mode';
+import { createAdminNotification } from '@/lib/admin-notifications';
 import { generateReelScript, type ReelScript } from './script-ai';
 // Phase 1.5: Multi-Source-Stock-Footage (Pexels + Pixabay) statt direktem Pexels-Aufruf.
 import { findClipForQuery, type StockClip } from './stock-sources';
@@ -441,6 +442,18 @@ export async function generateReel(opts: GenerateReelOptions): Promise<GenerateR
       throw new Error(`Final UPDATE failed: ${updateError.message ?? 'unknown'}`);
     }
     await phaseLog(reelId, 'render_complete', `status=${newStatus}`);
+
+    // Push-Notification: nur bei pending_review (Admin muss reviewen).
+    // Im 'rendered'-Modus (Auto-Publish) waere die Notification redundant.
+    if (newStatus === 'pending_review') {
+      const topicShort = opts.topic.length > 60 ? opts.topic.slice(0, 60) + '…' : opts.topic;
+      await createAdminNotification(supabase, {
+        type: 'reel_ready',
+        title: 'Reel fertig zum Reviewen',
+        message: topicShort,
+        link: `/admin/social/reels/${reelId}`,
+      });
+    }
 
     // Optional: Quality-Metrics in eigener Spalte. Wenn die Migration noch
     // nicht ausgefuehrt ist (Spalte fehlt), wird der Fehler nur geloggt — der
