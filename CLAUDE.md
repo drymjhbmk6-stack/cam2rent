@@ -1309,22 +1309,31 @@ Datei: `app/admin/social/reels/[id]/page.tsx` (aktuell 756 Zeilen Wand). State +
 - Tab-Badge mit Counter sinnvoll für „Szenen (N)" und ⚠ in „Render" wenn `error_message` gesetzt
 - Modals (Delete + Query) bleiben unverändert am Ende
 
-**Schritt 3 — Neues-Reel-Wizard (TODO)**
-Datei: `app/admin/social/reels/neu/page.tsx` (aktuell 280 Z., 1-Screen-Form). Umbau zu 4-Schritt-Wizard mit Stepper oben, „Zurück/Weiter"-Buttons, Validation pro Schritt:
-- **Schritt 1 — Idee:** Vorlage (Dropdown) + Topic (Pflicht) + Kamera (optional). Prompt-Vorschau aus Template-`script_prompt` mit ausgefüllten Platzhaltern.
-- **Schritt 2 — Visuelles:** Stock-Keywords (komma-getrennt) **mit Live-Preview-Grid** aus Pexels/Pixabay (es gibt schon `GET /api/admin/reels/preview-stock?query=…&source=pexels|pixabay` — nutzen!), Musik-Track-Auswahl (aus `/api/admin/reels/music`), Plattformen-Checkboxen.
-- **Schritt 3 — Verteilung:** FB-Page-Dropdown (nur wenn Facebook angehakt) + IG-Account-Dropdown, Toggle „Sofort generieren" vs. „In Plan einreihen" (datetime).
-- **Schritt 4 — Bestätigen:** Zusammenfassung aller Felder + Kosten-Hinweis (Claude ~0,02 € + DALL-E/TTS optional) + „Reel generieren"-Button → POST `/api/admin/reels` (existiert).
-- Wenn „In Plan einreihen": POST `/api/admin/reels/plan` (Endpoint existiert noch NICHT, kommt in Schritt 5).
-- State zentral: `useState<{step: 1|2|3|4, formData: {...}}>` oder useReducer.
+**Schritt 3 — Neues-Reel-Wizard ✓**
+Datei `app/admin/social/reels/neu/page.tsx` (vorher 280 Z. 1-Screen-Form, jetzt 4-Schritt-Wizard mit Stepper).
+- **State zentral:** `step: 1|2|3|4` + Formfelder einzeln (kein useReducer, da Felder ohnehin separat).
+- **Stepper oben:** 4 Kacheln (Idee / Visuelles / Verteilung / Bestätigen), aktiv = orange, fertig = emerald-Haken.
+- **Schritt 1 — Idee:** Vorlage-Dropdown + Topic (Pflicht) + Kamera (optional). Skript-Prompt-Vorschau füllt `{topic}`/`{product_name}`/`{keywords}` direkt aus dem Template-`script_prompt` ein.
+- **Schritt 2 — Visuelles:** Keywords-Input + Live-Preview-Grid aus Pexels/Pixabay (nutzt `GET /api/admin/reels/preview-stock?query=…&source=…`, zeigt 6 Treffer als 9:16-Video-Tiles mit Quelle/Auflösung/Dauer-Overlay). Musik-Dropdown (`/api/admin/reels/music`). Plattformen-Checkboxen mit Pflichtfeld-Validierung.
+- **Schritt 3 — Verteilung:** FB-Page-Dropdown (conditional auf Facebook) + IG-Account-Dropdown (conditional auf Instagram). Radio-Toggle „Sofort generieren" vs. „In Redaktionsplan einreihen". Plan-Option ist disabled+greyed mit Hinweis „kommt mit Schritt 5".
+- **Schritt 4 — Bestätigen:** `<dl>` mit allen gewählten Feldern (Vorlage, Topic, Kamera, Keywords, Plattformen, Musik, FB-Seite, IG-Account, Timing) + amber Kosten-Box (~0,02 € Claude + ~0,003 € TTS). „Reel generieren" ruft POST `/api/admin/reels` und springt auf Detail-Seite.
+- **Navigation:** Zurück-Button (disabled in Schritt 1), Weiter-Button (validiert via `canGoNext()` — Topic+Template in S1, mind. 1 Plattform in S2, gültiger Schedule in S3), in Schritt 4 wird Weiter zu „Reel generieren".
+- **Preview-API-Vertrag:** liefert `{ externalId, downloadUrl, width, height, durationSec, attribution }` — kein `thumb`-Feld. Frontend zeigt das Video direkt mit `preload="metadata"` als Tile (Browser zieht nur die ersten Bytes).
 
-**Schritt 4 — Übersichtsliste mit Bulk + Filtern (TODO)**
-Datei: `app/admin/social/reels/page.tsx` (aktuell 188 Z.). Verbesserungen:
-- **Status-Filter als Pill-Bar oben** mit Counter pro Status (Heute / Wartet auf Review / Geplant / Veröffentlicht / Fehler). Bestehender Filter-Buttons gibt's schon, nur cleaner mit Counts.
-- **„Nächster Schritt"-Hint pro Karte** (z.B. „Wartet auf Freigabe", „Geplant für Mi 18:00", „Render fehlgeschlagen — neu starten?"). Berechnet aus `status` + `scheduled_at` + `error_message`.
-- **Hover-Preview** des Videos (Mini-`<video muted autoplay loop>` bei `:hover`)
-- **Bulk-Auswahl** mit Checkboxen + Bulk-Aktionen: Freigeben (mehrere `pending_review` → `approved`), Löschen (mit Bestätigung), Veröffentlichen (mehrere `approved` → publish — sollte sequentiell laufen wegen Meta-Rate-Limits). Neuer Bulk-Endpoint nötig: `POST /api/admin/reels/bulk` mit `{ action: 'approve'|'delete', ids: string[] }`.
-- **Sortierung:** Default umstellen von `created_at DESC` auf hybride Sortierung — `scheduled` zuerst nach `scheduled_at ASC`, dann Rest nach `created_at DESC`.
+**Schritt 4 — Übersichtsliste mit Bulk + Filtern ✓**
+Datei `app/admin/social/reels/page.tsx` (vorher 188 Z.). Lädt jetzt unbedingt alle (limit=200) und filtert/zählt client-seitig — dadurch sind die Counter pro Status-Pill immer richtig, egal welcher Filter aktiv ist.
+- **Status-Pills mit Counter** (`{ '': allReels.length }` + pro Status). Aktive Pill ist dunkel, Counter sitzt als kleines Badge daneben.
+- **Hybrid-Sort `hybridSort()`:** `scheduled` zuerst nach `scheduled_at` ASC, alles andere nach `created_at` DESC. Dadurch landet die nächste planmäßige Veröffentlichung immer ganz oben.
+- **`nextStepHint(reel)`-Helper** liefert pro Reel einen kontextabhängigen Status-Hint mit Farbklasse: „Wartet auf Freigabe", „Geplant für TT.MM. HH:MM", „Render fehlgeschlagen — neu starten?", „Bereit — manuell veröffentlichen", „Nur teilweise gepostet — erneut versuchen?" usw. Wird auf der Karte unter Caption angezeigt.
+- **Hover-Preview:** `onMouseEnter`/`onMouseLeave` setzen `hoveredId`. Wenn die Karte gehovert + `video_url` vorhanden, ersetzt ein `<video muted autoPlay loop>` das Thumbnail. Mobile sieht weiterhin das Standbild.
+- **Bulk-Auswahl:** Checkbox in jeder Karte (Top-Left, mit Stop-Propagation über separates `<label>` außerhalb des Detail-Links). Sticky Bulk-Bar oben (`sticky top-0 z-10`) mit „Freigeben"/„Löschen"/„Auswahl aufheben" + Counter. „Alle X sichtbaren auswählen"-Link wird angezeigt wenn Liste vorhanden + Auswahl leer.
+- **Bulk-Veröffentlichen NICHT** in der Bulk-Bar — Hinweistext: „Veröffentlichen läuft pro-Reel über die Detail-Seite (Meta-Rate-Limits)". Verhindert Massen-Posting-Fehler.
+- **Auto-Refresh** bei `rendering`/`publishing`-Reels alle 5 Sek (wie vorher).
+
+**Bulk-API:** `POST /api/admin/reels/bulk` mit `{ action: 'approve'|'delete', ids: string[] }` (max 100).
+- `approve`: lädt zuerst alle Reels per `in('id', ids)`, filtert auf `status IN ('pending_review','rendered','draft') AND video_url NOT NULL`, setzt nur diese auf `approved`. Antwort: `{ approved: N, skipped: M }`.
+- `delete`: räumt zuerst `social-reels/{id}/{video.mp4,thumb.jpg}` aus dem Storage (best-effort), dann `delete().in('id', ids)`. Kein Remote-Delete (zu viele API-Calls bei Bulk). Antwort: `{ deleted: N }`.
+- Audit-Log: `reel.bulk_approve` bzw. `reel.bulk_delete` mit allen IDs als comma-separated entityId + Count in changes.
 
 **Schritt 5 — Redaktionsplan + Bulk-Generator (TODO, größter Aufwand)**
 Tabelle `social_reel_plan` ist seit `supabase-reels.sql` da, wird aber **nirgendwo im Code genutzt**. Spalten: `id, scheduled_date, scheduled_time, topic, template_id, status, generated_reel_id, error_message, …` (analog `social_editorial_plan` für Posts).
