@@ -126,7 +126,15 @@ export const pixabaySource: StockSource = {
     url.searchParams.set('safesearch', 'true');
     // Pixabay ignoriert min_width/min_height bei Videos teilweise — wir filtern selbst.
 
-    const res = await fetch(url.toString());
+    // Hotfix: 10s-Timeout pro Request — analog Pexels.
+    const res = await fetch(url.toString(), {
+      signal: AbortSignal.timeout(10_000),
+    }).catch((err) => {
+      if (err?.name === 'TimeoutError' || err?.name === 'AbortError') {
+        throw new Error(`Pixabay-API Timeout (10s): ${url.toString().replace(apiKey, '***')}`);
+      }
+      throw err;
+    });
     if (!res.ok) {
       const body = await res.text().catch(() => '');
       throw new Error(`Pixabay-API Fehler ${res.status}: ${body.slice(0, 200)}`);

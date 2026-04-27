@@ -221,6 +221,26 @@ export default function ReelDetailPage({ params }: { params: Promise<{ id: strin
     }
   }
 
+  // Hotfix: Haengenden Render abbrechen — setzt status='failed'.
+  async function handleResetRender() {
+    if (!reel) return;
+    if (!confirm('Hängenden Render wirklich abbrechen? Reel wird auf "failed" gesetzt — du kannst dann "Neu rendern" klicken.')) return;
+    setSaving(true);
+    setFeedback(null);
+    try {
+      const res = await fetch(`/api/admin/reels/${id}/reset`, { method: 'POST' });
+      const body = await res.json();
+      if (!res.ok) {
+        setFeedback(`Reset-Fehler: ${body.error ?? 'unbekannt'}`);
+        return;
+      }
+      setFeedback('Render abgebrochen — Reel ist jetzt auf "failed" und kann neu gestartet werden.');
+      await load();
+    } finally {
+      setSaving(false);
+    }
+  }
+
   // Phase 3.2: Body-Segment austauschen
   async function handleRegenerateSegment(segment: ReelSegment, newQuery?: string) {
     if (!segment) return;
@@ -305,6 +325,16 @@ export default function ReelDetailPage({ params }: { params: Promise<{ id: strin
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
+          {(reel.status === 'rendering' || reel.status === 'publishing') && (
+            <button
+              onClick={handleResetRender}
+              disabled={saving}
+              className="rounded-lg border border-amber-400 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/30 px-3 py-2 text-sm font-medium text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/50 disabled:opacity-50"
+              title="Bricht den Hintergrund-Render ab und setzt den Reel auf 'failed'."
+            >
+              🛑 Render abbrechen
+            </button>
+          )}
           <button
             onClick={handleRerender}
             disabled={saving}

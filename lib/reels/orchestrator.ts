@@ -109,6 +109,31 @@ async function uploadToBucket(path: string, buffer: Buffer, contentType: string)
   return data?.publicUrl ?? null;
 }
 
+/**
+ * Schreibt einen Phasen-Marker live in `render_log`, damit der Admin im UI
+ * sehen kann wo ein haengender Render gerade klemmt (statt erst am Ende einen
+ * grossen Block zu kriegen). Append-Pattern — bei concurrent Updates koennten
+ * Zeilen verloren gehen, aber waehrend eines Renders gibt's nur einen Writer.
+ * Best-effort: Fehler werden geschluckt, damit Logging nie den Render abbricht.
+ */
+async function phaseLog(reelId: string, phase: string, extra?: string): Promise<void> {
+  try {
+    const supabase = createServiceClient();
+    const { data } = await supabase
+      .from('social_reels')
+      .select('render_log')
+      .eq('id', reelId)
+      .maybeSingle();
+    const oldLog = (data?.render_log as string | null) ?? '';
+    const ts = new Date().toISOString().slice(11, 19); // HH:MM:SS
+    const line = `[phase ${ts}] ${phase}${extra ? ` · ${extra}` : ''}`;
+    const newLog = (oldLog ? `${oldLog}\n${line}` : line).slice(-4000);
+    await supabase.from('social_reels').update({ render_log: newLog }).eq('id', reelId);
+  } catch {
+    /* swallow — Logging darf den Render nie killen */
+  }
+}
+
 export async function generateReel(opts: GenerateReelOptions): Promise<GenerateReelResult> {
   const supabase = createServiceClient();
   const settings = await loadSettings();
@@ -173,7 +198,11 @@ export async function generateReel(opts: GenerateReelOptions): Promise<GenerateR
   const reelId = inserted.id as string;
 
   try {
+    // Phasen-Marker live in render_log — bei einem Hang sieht der Admin sofort wo's klemmt.
+    await phaseLog(reelId, 'started', `topic="${opts.topic.slice(0, 60)}"`);
+
     // ── 3. Skript generieren ────────────────────────────────────────────────
+    await phaseLog(reelId, 'script_generation_start');
     const keywordsStr = (opts.keywords ?? []).join(', ');
     const script = await generateReelScript(
       tmpl.script_prompt,
@@ -184,6 +213,7 @@ export async function generateReel(opts: GenerateReelOptions): Promise<GenerateR
       },
       { postDate: opts.postDate, voiceStyle: settings.voice_style ?? 'normal' }
     );
+    await phaseLog(reelId, 'script_generated', `${script.scenes.length} szenen, ${script.duration}s gesamt`);
 
     // Dauer-Cap (Reels dürfen max 90s auf IG, wir limitieren konservativ)
     const maxDur = settings.max_duration ?? 30;
@@ -202,10 +232,12 @@ export async function generateReel(opts: GenerateReelOptions): Promise<GenerateR
     let clips: StockClip[] | undefined;
     const sourceCounts: Record<string, number> = {};
     if (templateType === 'stock_footage') {
+      await phaseLog(reelId, 'stock_search_start', `${script.scenes.length} szenen`);
       clips = [];
       const seen = new Set<string>();
       for (let sceneIdx = 0; sceneIdx < script.scenes.length; sceneIdx++) {
         const scene = script.scenes[sceneIdx];
+        await phaseLog(reelId, `stock_search:${sceneIdx + 1}/${script.scenes.length}`, `query="${scene.search_query.slice(0, 50)}"`);
         const clip = await findClipForQuery(scene.search_query, {
           seed: `${reelId}:${sceneIdx}`,
           excludeIds: seen,
@@ -218,11 +250,13 @@ export async function generateReel(opts: GenerateReelOptions): Promise<GenerateR
         seen.add(clip.externalId);
         sourceCounts[clip.source] = (sourceCounts[clip.source] ?? 0) + 1;
       }
+      await phaseLog(reelId, 'stock_search_done', Object.entries(sourceCounts).map(([k, v]) => `${k}=${v}`).join(' '));
     }
 
     // ── 5a. Voice-Over generieren (wenn aktiviert) ──────────────────────────
     let voiceSegments: Buffer[] | undefined;
     if (settings.voice_enabled) {
+      await phaseLog(reelId, 'voice_generation_start');
       try {
         const voice = settings.voice_name ?? 'nova';
         const model = settings.voice_model ?? 'tts-1';
@@ -244,7 +278,9 @@ export async function generateReel(opts: GenerateReelOptions): Promise<GenerateR
         if (generated.some((b) => b.length > 0)) {
           voiceSegments = generated;
         }
+        await phaseLog(reelId, 'voice_generation_done', `${generated.filter((b) => b.length > 0).length}/${generated.length} segs`);
       } catch (err) {
+        await phaseLog(reelId, 'voice_generation_failed', err instanceof Error ? err.message.slice(0, 80) : 'unknown');
         console.warn('[reels/orchestrator] TTS-Fehler, Video wird ohne Voice gerendert:', err);
       }
     }
@@ -253,6 +289,7 @@ export async function generateReel(opts: GenerateReelOptions): Promise<GenerateR
     // Phase 2.2: motionStyle aus Template (oder Default 'kenburns'), reelId als
     // Seed fuer deterministische Ken-Burns-Variante pro Szene.
     const motionStyleResolved: 'static' | 'kenburns' | 'mixed' = tmpl.motion_style ?? 'kenburns';
+    await phaseLog(reelId, 'ffmpeg_start', `motion=${motionStyleResolved} type=${templateType}`);
     const { videoBuffer, thumbnailBuffer, durationSeconds, log, qualityMetrics, segments: persistedSegments } = await renderReel({
       script,
       templateType,
@@ -277,11 +314,14 @@ export async function generateReel(opts: GenerateReelOptions): Promise<GenerateR
     if (sizeMb > 45) {
       console.warn(`[reels/orchestrator] Video ist ${sizeMb.toFixed(1)} MB — Bucket-Limit 50 MB`);
     }
+    await phaseLog(reelId, 'ffmpeg_done', `${sizeMb.toFixed(1)} MB · ${durationSeconds.toFixed(1)}s`);
 
     const videoPath = `${reelId}/video.mp4`;
     const thumbPath = `${reelId}/thumb.jpg`;
+    await phaseLog(reelId, 'video_upload_start');
     const videoUrl = await uploadToBucket(videoPath, videoBuffer, 'video/mp4');
     const thumbnailUrl = await uploadToBucket(thumbPath, thumbnailBuffer, 'image/jpeg');
+    await phaseLog(reelId, 'video_upload_done');
 
     if (!videoUrl) {
       const hint = sizeMb > 45
@@ -290,6 +330,7 @@ export async function generateReel(opts: GenerateReelOptions): Promise<GenerateR
       throw new Error(`Video-Upload fehlgeschlagen.${hint}`);
     }
 
+    await phaseLog(reelId, 'segments_persist_start', `${persistedSegments.length} segs`);
     // ── 6b. Phase 3.1: Pro-Szene-Persistierung ──────────────────────────────
     // Body-Tausch in Phase 3 braucht die Original-Segment-Files. Jedes Segment
     // landet unter {reelId}/segments/seg-{index}-{kind}.mp4. Voice-Buffer pro
@@ -351,7 +392,9 @@ export async function generateReel(opts: GenerateReelOptions): Promise<GenerateR
       }
     } catch (err) {
       console.warn('[reels/orchestrator] Segment-Persistierung fehlgeschlagen:', err);
+      await phaseLog(reelId, 'segments_persist_failed', err instanceof Error ? err.message.slice(0, 80) : 'unknown');
     }
+    await phaseLog(reelId, 'segments_persisted', `${segmentsPersisted}/${persistedSegments.length}`);
 
     // ── 7. DB aktualisieren ─────────────────────────────────────────────────
     const needsReview = opts.previewRequired ?? settings.preview_required ?? true;

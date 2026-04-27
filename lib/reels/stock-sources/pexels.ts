@@ -81,8 +81,17 @@ export async function searchPexelsVideos(
   url.searchParams.set('orientation', options.orientation ?? 'portrait');
   if (options.size) url.searchParams.set('size', options.size);
 
+  // Hotfix: 10s-Timeout pro Request, sonst kann ein hängender Pexels-Call den
+  // gesamten Render-Job blockieren (war bisher unbegrenzt → bei API-Slowdown
+  // blieb der Reel auf status='rendering' haengen).
   const res = await fetch(url.toString(), {
     headers: { Authorization: apiKey },
+    signal: AbortSignal.timeout(10_000),
+  }).catch((err) => {
+    if (err?.name === 'TimeoutError' || err?.name === 'AbortError') {
+      throw new Error(`Pexels-API Timeout (10s): ${url.toString()}`);
+    }
+    throw err;
   });
   if (!res.ok) {
     const body = await res.text().catch(() => '');

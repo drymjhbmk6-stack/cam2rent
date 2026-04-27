@@ -280,7 +280,17 @@ export async function runFfmpeg(args: string[]): Promise<{ stderr: string }> {
 }
 
 export async function downloadToFile(url: string, destPath: string): Promise<void> {
-  const res = await fetch(url);
+  // Hotfix: 60s-Timeout — Stock-Videos sind 5-30 MB, bei langsamer Hetzner-zu-
+  // Pexels-Verbindung okay, aber ohne Timeout konnte der Render bei einem haengenden
+  // Download ewig hocken bleiben (Reel auf status='rendering' fixiert).
+  const res = await fetch(url, {
+    signal: AbortSignal.timeout(60_000),
+  }).catch((err) => {
+    if (err?.name === 'TimeoutError' || err?.name === 'AbortError') {
+      throw new Error(`Download Timeout (60s): ${url.slice(0, 120)}`);
+    }
+    throw err;
+  });
   if (!res.ok) throw new Error(`Download fehlgeschlagen (${res.status}): ${url}`);
   const buf = Buffer.from(await res.arrayBuffer());
   await writeFile(destPath, buf);
