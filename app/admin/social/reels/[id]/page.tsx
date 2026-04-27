@@ -32,6 +32,23 @@ interface ReelQualityMetrics {
   motion_style?: 'static' | 'kenburns' | 'mixed';
 }
 
+// Phase 3.2: Persistierte Segmente eines Reels
+interface ReelSegment {
+  id: string;
+  reel_id: string;
+  index: number;
+  kind: 'intro' | 'body' | 'cta' | 'outro';
+  storage_path: string;
+  storage_url: string | null;
+  duration_seconds: number;
+  scene_data: Record<string, unknown> | null;
+  source_clip_data: Record<string, unknown> | null;
+  has_voice: boolean;
+  voice_storage_path: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 interface Reel {
   id: string;
   caption: string;
@@ -87,6 +104,12 @@ export default function ReelDetailPage({ params }: { params: Promise<{ id: strin
   const [showScript, setShowScript] = useState(false);
   const [showLog, setShowLog] = useState(false);
   const [showMetrics, setShowMetrics] = useState(false);
+  // Phase 3.2: Szenen-Editor
+  const [segments, setSegments] = useState<ReelSegment[]>([]);
+  const [segmentsMissing, setSegmentsMissing] = useState(false); // Migration nicht durch
+  const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
+  const [queryModalSegment, setQueryModalSegment] = useState<ReelSegment | null>(null);
+  const [queryModalText, setQueryModalText] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
 
@@ -101,8 +124,30 @@ export default function ReelDetailPage({ params }: { params: Promise<{ id: strin
     setLoading(false);
   }
 
+  // Phase 3.2: Segmente parallel laden
+  async function loadSegments() {
+    try {
+      const res = await fetch(`/api/admin/reels/${id}/segments`);
+      if (!res.ok) {
+        setSegments([]);
+        return;
+      }
+      const body = await res.json();
+      if (body.migrationMissing) {
+        setSegmentsMissing(true);
+        setSegments([]);
+        return;
+      }
+      setSegments(body.segments ?? []);
+      setSegmentsMissing(false);
+    } catch {
+      setSegments([]);
+    }
+  }
+
   useEffect(() => {
     load();
+    loadSegments();
   }, [id]);
 
   // Auto-Refresh während Render oder Publishing läuft
@@ -174,6 +219,47 @@ export default function ReelDetailPage({ params }: { params: Promise<{ id: strin
     } finally {
       setPublishing(false);
     }
+  }
+
+  // Phase 3.2: Body-Segment austauschen
+  async function handleRegenerateSegment(segment: ReelSegment, newQuery?: string) {
+    if (!segment) return;
+    const isScheduled = reel?.status === 'scheduled';
+    if (isScheduled && !confirm('Reel ist bereits eingeplant. Wirklich Szene tauschen? Das aktualisiert die Datei am geplanten Veröffentlichungstermin.')) {
+      return;
+    }
+    setRegeneratingId(segment.id);
+    setFeedback(null);
+    try {
+      const body: Record<string, unknown> = {};
+      if (newQuery !== undefined) body.newSearchQuery = newQuery;
+      if (isScheduled) body.confirm = true;
+      const res = await fetch(`/api/admin/reels/${id}/segments/${segment.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const result = await res.json();
+      if (!res.ok) {
+        setFeedback(`Fehler: ${result.error ?? 'unbekannt'}`);
+        return;
+      }
+      setFeedback(`Szene ${segment.index} getauscht — neuer Clip von ${result.newClip?.source}.`);
+      await load();
+      await loadSegments();
+    } catch (err) {
+      setFeedback(`Fehler: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setRegeneratingId(null);
+      setQueryModalSegment(null);
+      setQueryModalText('');
+    }
+  }
+
+  function openQueryModal(segment: ReelSegment) {
+    setQueryModalSegment(segment);
+    const sceneData = (segment.scene_data ?? {}) as Record<string, unknown>;
+    setQueryModalText((sceneData.search_query as string) ?? '');
   }
 
   async function handleRerender() {
@@ -395,6 +481,134 @@ export default function ReelDetailPage({ params }: { params: Promise<{ id: strin
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Phase 3.2: Szenen-Editor — Liste persistierter Segmente mit
+          Body-Tausch-Buttons. Nur sichtbar wenn Migration `social_reel_segments`
+          durch ist und der Reel mit Phase-3-Pipeline gerendert wurde. */}
+      {segments.length > 0 && (
+        <div className="mt-8 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-medium text-brand-dark dark:text-white">Szenen ({segments.length})</h2>
+            <span className="text-xs text-brand-steel dark:text-gray-500">Body-Szenen einzeln austauschbar</span>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+            {segments.map((seg) => {
+              const sceneData = (seg.scene_data ?? {}) as Record<string, unknown>;
+              const sourceClip = (seg.source_clip_data ?? {}) as Record<string, unknown>;
+              const isBody = seg.kind === 'body';
+              const isRegenerating = regeneratingId === seg.id;
+              const kindBadge = {
+                intro: { label: 'Intro', cls: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200' },
+                body: { label: 'Body', cls: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-200' },
+                cta: { label: 'CTA', cls: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200' },
+                outro: { label: 'Outro', cls: 'bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-200' },
+              }[seg.kind];
+              return (
+                <div key={seg.id} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden bg-gray-50 dark:bg-gray-900/50">
+                  <div className="aspect-[9/16] bg-black relative">
+                    {seg.storage_url ? (
+                      <video
+                        src={seg.storage_url}
+                        muted
+                        playsInline
+                        preload="metadata"
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="absolute inset-0 flex items-center justify-center text-xs text-gray-400">kein Video</div>
+                    )}
+                    {isRegenerating && (
+                      <div className="absolute inset-0 bg-black/70 flex items-center justify-center">
+                        <span className="text-xs text-white animate-pulse">Tausche…</span>
+                      </div>
+                    )}
+                    <span className={`absolute top-1 left-1 inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium ${kindBadge?.cls ?? ''}`}>
+                      {kindBadge?.label} #{seg.index}
+                    </span>
+                  </div>
+                  <div className="p-2 space-y-1">
+                    <p className="text-[11px] text-brand-dark dark:text-white truncate">
+                      {(sceneData.text_overlay as string) || (sceneData.headline as string) || <em className="text-brand-steel">(kein Text)</em>}
+                    </p>
+                    <p className="text-[10px] text-brand-steel dark:text-gray-500">
+                      {seg.duration_seconds.toFixed(1)}s
+                      {sourceClip.source ? ` · ${sourceClip.source} ${sourceClip.width}×${sourceClip.height}` : ''}
+                      {seg.has_voice ? ' · 🔊' : ''}
+                    </p>
+                    {isBody && (
+                      <div className="flex flex-col gap-1 pt-1">
+                        <button
+                          onClick={() => handleRegenerateSegment(seg)}
+                          disabled={regeneratingId !== null || reel.status === 'published' || reel.status === 'rendering'}
+                          className="text-[10px] rounded border border-cyan-400 dark:border-cyan-700 bg-white dark:bg-gray-800 text-cyan-700 dark:text-cyan-200 hover:bg-cyan-50 dark:hover:bg-cyan-900/30 disabled:opacity-40 disabled:cursor-not-allowed px-2 py-1"
+                          title="Anderen Stock-Clip mit der gleichen Such-Query holen"
+                        >
+                          🔄 Neuer Clip
+                        </button>
+                        <button
+                          onClick={() => openQueryModal(seg)}
+                          disabled={regeneratingId !== null || reel.status === 'published' || reel.status === 'rendering'}
+                          className="text-[10px] rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-brand-dark dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed px-2 py-1"
+                          title="Suchbegriff für Stock-Footage anpassen"
+                        >
+                          ✏️ Query
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {reel.status === 'published' && (
+            <p className="text-xs text-brand-steel dark:text-gray-500 mt-3 italic">
+              Reel ist veröffentlicht — Tausch ist gesperrt.
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Hinweis falls Reel noch ohne persistierte Segmente */}
+      {segments.length === 0 && !segmentsMissing && reel.status !== 'rendering' && reel.status !== 'failed' && (
+        <div className="mt-4 text-xs text-brand-steel dark:text-gray-500 italic">
+          Dieses Reel wurde vor Phase 3 gerendert — Szenen-Editor steht erst nach einem Neu-Render zur Verfügung.
+        </div>
+      )}
+
+      {/* Query-Modal */}
+      {queryModalSegment && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl max-w-md w-full p-6">
+            <h2 className="text-lg font-bold text-brand-dark dark:text-white mb-2">Such-Query ändern</h2>
+            <p className="text-sm text-brand-steel dark:text-gray-400 mb-4">
+              Gib einen anderen Stock-Footage-Suchbegriff ein. System holt den ersten passenden Clip aus Pexels/Pixabay.
+            </p>
+            <input
+              type="text"
+              value={queryModalText}
+              onChange={(e) => setQueryModalText(e.target.value)}
+              placeholder="z.B. surfer in waves"
+              className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-brand-dark dark:text-white mb-4"
+              autoFocus
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => { setQueryModalSegment(null); setQueryModalText(''); }}
+                className="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-brand-dark dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 px-4 py-2 text-sm"
+              >
+                Abbrechen
+              </button>
+              <button
+                onClick={() => queryModalSegment && handleRegenerateSegment(queryModalSegment, queryModalText.trim())}
+                disabled={!queryModalText.trim() || regeneratingId !== null}
+                className="rounded bg-brand-orange hover:bg-brand-orange/90 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 text-sm font-medium"
+              >
+                Tauschen
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

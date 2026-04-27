@@ -253,7 +253,7 @@ export async function generateReel(opts: GenerateReelOptions): Promise<GenerateR
     // Phase 2.2: motionStyle aus Template (oder Default 'kenburns'), reelId als
     // Seed fuer deterministische Ken-Burns-Variante pro Szene.
     const motionStyleResolved: 'static' | 'kenburns' | 'mixed' = tmpl.motion_style ?? 'kenburns';
-    const { videoBuffer, thumbnailBuffer, durationSeconds, log, qualityMetrics } = await renderReel({
+    const { videoBuffer, thumbnailBuffer, durationSeconds, log, qualityMetrics, segments: persistedSegments } = await renderReel({
       script,
       templateType,
       clips,
@@ -290,6 +290,69 @@ export async function generateReel(opts: GenerateReelOptions): Promise<GenerateR
       throw new Error(`Video-Upload fehlgeschlagen.${hint}`);
     }
 
+    // ── 6b. Phase 3.1: Pro-Szene-Persistierung ──────────────────────────────
+    // Body-Tausch in Phase 3 braucht die Original-Segment-Files. Jedes Segment
+    // landet unter {reelId}/segments/seg-{index}-{kind}.mp4. Voice-Buffer pro
+    // Szene unter {reelId}/audio/voice-{index}.mp3.
+    // Defensiv: Wenn die Migration `social_reel_segments` noch nicht durch ist,
+    // ueberspringen wir den DB-Insert mit Warning. Der Initial-Render bleibt
+    // dann funktional, aber Segment-Tausch geht erst nach Migration.
+    let segmentsPersisted = 0;
+    try {
+      const segmentRows: Array<Record<string, unknown>> = [];
+      for (const seg of persistedSegments) {
+        const segStoragePath = `${reelId}/segments/seg-${seg.index}-${seg.kind}.mp4`;
+        await uploadToBucket(segStoragePath, seg.buffer, 'video/mp4');
+
+        // Voice-Buffer fuer dieses Segment (nur bei Body/CTA und wenn voiceSegments existieren)
+        // Voice-Index-Mapping: voiceSegments hat Reihenfolge [scene_0, ..., scene_N-1, cta]
+        // also Index in voiceSegments = (seg.index - introOffset) wenn body/cta
+        let voiceStoragePath: string | null = null;
+        let hasVoice = false;
+        if (voiceSegments && (seg.kind === 'body' || seg.kind === 'cta')) {
+          const introOffset = (settings.intro_enabled !== false) ? 1 : 0;
+          const voiceIdx = seg.index - introOffset;
+          const voiceBuf = voiceSegments[voiceIdx];
+          if (voiceBuf && voiceBuf.length > 0) {
+            voiceStoragePath = `${reelId}/audio/voice-${seg.index}.mp3`;
+            await uploadToBucket(voiceStoragePath, voiceBuf, 'audio/mpeg');
+            hasVoice = true;
+          }
+        }
+
+        segmentRows.push({
+          reel_id: reelId,
+          index: seg.index,
+          kind: seg.kind,
+          storage_path: segStoragePath,
+          duration_seconds: seg.duration,
+          scene_data: seg.sceneData ?? null,
+          source_clip_data: seg.sourceClipData ?? null,
+          has_voice: hasVoice,
+          voice_storage_path: voiceStoragePath,
+        });
+      }
+      // Erst alte Rows fuer dieses Reel loeschen (idempotent bei Re-Render),
+      // dann neu inserten. ON DELETE CASCADE auf reel_id sorgt fuer Auto-Cleanup
+      // wenn das Reel komplett geloescht wird.
+      const { error: delErr } = await supabase.from('social_reel_segments').delete().eq('reel_id', reelId);
+      if (delErr && !delErr.message?.includes('does not exist') && !delErr.message?.includes('relation')) {
+        throw delErr;
+      }
+      const { error: insErr } = await supabase.from('social_reel_segments').insert(segmentRows);
+      if (insErr) {
+        if (insErr.message?.includes('does not exist') || insErr.message?.includes('relation')) {
+          console.warn('[reels/orchestrator] social_reel_segments-Tabelle fehlt — Phase-3-Migration noch nicht durch?');
+        } else {
+          throw insErr;
+        }
+      } else {
+        segmentsPersisted = segmentRows.length;
+      }
+    } catch (err) {
+      console.warn('[reels/orchestrator] Segment-Persistierung fehlgeschlagen:', err);
+    }
+
     // ── 7. DB aktualisieren ─────────────────────────────────────────────────
     const needsReview = opts.previewRequired ?? settings.preview_required ?? true;
     const newStatus = needsReview ? 'pending_review' : 'rendered';
@@ -308,6 +371,8 @@ export async function generateReel(opts: GenerateReelOptions): Promise<GenerateR
     const sourceSummary = Object.entries(sourceCounts).length > 0
       ? `[stock-sources] ${Object.entries(sourceCounts).map(([k, v]) => `${k}=${v}`).join(' · ')}`
       : '[stock-sources] none (motion_graphics)';
+    // Phase 3.1: Persistierungs-Status im Log dokumentieren.
+    const segmentsSummary = `[segments] persisted=${segmentsPersisted}/${persistedSegments.length}`;
 
     // Phase 2.5: Strukturierte Metriken in eigene Spalte. Defensiv: wenn
     // die Migration `quality_metrics` noch nicht ausgefuehrt ist, fangen
@@ -319,7 +384,7 @@ export async function generateReel(opts: GenerateReelOptions): Promise<GenerateR
       thumbnail_url: thumbnailUrl,
       duration_seconds: durationSeconds,
       script_json: script as unknown as Record<string, unknown>,
-      render_log: `${audioHeader}\n${sourceSummary}\n${log}`.slice(-4000),
+      render_log: `${audioHeader}\n${sourceSummary}\n${segmentsSummary}\n${log}`.slice(-4000),
       status: newStatus,
       error_message: null,
       quality_metrics: qualityMetrics as unknown as Record<string, unknown>,

@@ -78,6 +78,22 @@ export interface ReelQualityMetrics {
   motion_style: MotionStyle;
 }
 
+/**
+ * Phase 3.1: Persisted-Segment-Info pro gerendertem Pro-Szene-File.
+ * Caller (Orchestrator) lädt die Buffer in den Storage-Bucket hoch und
+ * schreibt eine Row in `social_reel_segments`.
+ */
+export interface PersistedSegment {
+  index: number;                                       // Position im Final-Reel (0 = intro)
+  kind: 'intro' | 'body' | 'cta' | 'outro';
+  buffer: Buffer;                                      // MP4-Bytes
+  duration: number;                                    // Sekunden
+  /** Body-Segmente: { text_overlay, search_query, voice_text } aus dem Skript */
+  sceneData?: Record<string, unknown>;
+  /** Body-Segmente mit Stock-Footage: { source, externalId, downloadUrl, width, height, attribution } */
+  sourceClipData?: Record<string, unknown>;
+}
+
 export interface RenderResult {
   videoBuffer: Buffer;
   thumbnailBuffer: Buffer;
@@ -85,11 +101,14 @@ export interface RenderResult {
   log: string; // FFmpeg-Stderr für Debugging
   /** Phase 2.5: strukturierte Render-Metriken fuer DB-Spalte `quality_metrics`. */
   qualityMetrics: ReelQualityMetrics;
+  /** Phase 3.1: Buffer aller Pro-Szene-Files fuer Storage-Persistierung. */
+  segments: PersistedSegment[];
 }
 
-const TARGET_W = 1080;
-const TARGET_H = 1920;
-const TARGET_FPS = 30;
+// Phase 3: exportiert, damit segment-regenerator.ts dieselben Dimensionen + FPS nutzt.
+export const TARGET_W = 1080;
+export const TARGET_H = 1920;
+export const TARGET_FPS = 30;
 
 // Phase 1 (1.6): Inter Tight ist die primaere Marken-Schrift im Reel.
 // Liegt im Repo unter assets/fonts/InterTight.ttf (Variable Font, OFL) und wird
@@ -118,7 +137,7 @@ const CTA_URL_PILL_PATH = path.join(process.cwd(), 'assets', 'reels', 'cta-url-p
 // Bewegungs-Szenen, ~2x langsamer pro Segment, durch Wegfall des Concat-Re-Encodes
 // netto aber nicht langsamer als der vorige Status.
 // Datei-Groesse 30s-Reels: typisch 8-15 MB (gesund unter 50 MB Bucket-Limit).
-const STD_VIDEO_ENCODE_ARGS: string[] = [
+export const STD_VIDEO_ENCODE_ARGS: string[] = [
   '-c:v', 'libx264',
   '-profile:v', 'high',
   '-level', '4.0',
@@ -246,7 +265,8 @@ function buildStackedDrawtext(
     .join(',');
 }
 
-async function runFfmpeg(args: string[]): Promise<{ stderr: string }> {
+// Phase 3: exportierter Helper, damit `lib/reels/segment-regenerator.ts` denselben Spawn-Pfad nutzt.
+export async function runFfmpeg(args: string[]): Promise<{ stderr: string }> {
   return new Promise((resolve, reject) => {
     const proc = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
     let stderr = '';
@@ -259,7 +279,7 @@ async function runFfmpeg(args: string[]): Promise<{ stderr: string }> {
   });
 }
 
-async function downloadToFile(url: string, destPath: string): Promise<void> {
+export async function downloadToFile(url: string, destPath: string): Promise<void> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Download fehlgeschlagen (${res.status}): ${url}`);
   const buf = Buffer.from(await res.arrayBuffer());
@@ -291,7 +311,7 @@ function detectFontPath(): string {
  */
 type KenBurnsVariant = 'static' | 'zoom-in' | 'zoom-out' | 'pan-left' | 'pan-right';
 
-function pickKenBurnsVariant(
+export function pickKenBurnsVariant(
   motionStyle: MotionStyle,
   seed: string,
   sceneIdx: number
@@ -363,7 +383,7 @@ function buildKenBurnsFilter(variant: KenBurnsVariant, durationSec: number): str
  * - Phase 2.2: optional Ken-Burns (Zoom oder Pan) auf der gecroppten Quelle
  * - Text-Overlay unten mit schwarzem Hintergrund (55% Opazität)
  */
-function buildClipFilter(
+export function buildClipFilter(
   sceneText: string,
   duration: number,
   kenBurns: KenBurnsVariant = 'static'
@@ -648,7 +668,7 @@ async function buildBrandingFrame(
  * nutzt STD_VIDEO_ENCODE_ARGS, damit sie bitstream-kompatibel zu Intro+Outro
  * ist und der Final-Concat mit `-c copy` laeuft.
  */
-async function buildBodyCtaWithCrossfade(
+export async function buildBodyCtaWithCrossfade(
   segments: { path: string; duration: number }[],
   outPath: string,
   xfadeDuration: number,
@@ -711,13 +731,25 @@ export async function renderReel(input: RenderInput): Promise<RenderResult> {
   await mkdir(workDir, { recursive: true });
 
   try {
-    // Phase 2.1: Trennung in zwei Listen.
+    // Phase 2.1 + 3.1: Drei Tracking-Strukturen.
     //   - segmentFiles: das was am Ende per Concat-Demuxer (-c copy) zusammenkommt.
-    //                   Nach Phase 2.1 enthaelt das nur noch [intro?, body-cta, outro?].
-    //   - bodyAndCtaSegments: Body-Szenen + CTA mit Dauer-Info, werden vor dem
-    //                   Final-Concat per xfade-Crossfade zu einem File gemerged.
+    //                   Enthaelt nur noch [intro?, body-cta, outro?].
+    //   - bodyAndCtaSegments: Body-Szenen + CTA mit Dauer + scene/clip-Metadaten,
+    //                   werden vor dem Final-Concat per xfade-Crossfade gemerged
+    //                   und in Phase 3.1 zusaetzlich pro Stueck im Storage persistiert.
+    //   - introPath / outroPath: separate Tracker fuer Storage-Persistierung
+    //                   (in Phase 3 koennen einzelne Szenen getauscht werden, dann
+    //                    werden Intro+Outro zur Re-Concat-Zeit aus Storage geladen).
     const segmentFiles: string[] = [];
-    const bodyAndCtaSegments: { path: string; duration: number }[] = [];
+    const bodyAndCtaSegments: Array<{
+      path: string;
+      duration: number;
+      kind: 'body' | 'cta';
+      sceneData?: Record<string, unknown>;
+      sourceClipData?: Record<string, unknown>;
+    }> = [];
+    let introPath: string | null = null;
+    let outroPath: string | null = null;
     let fullLog = '';
 
     // ── Intro-Frame (cam2rent-Logo) ─────────────────────────────────────────
@@ -728,7 +760,7 @@ export async function renderReel(input: RenderInput): Promise<RenderResult> {
     const logoPath = await findLogoPath();
 
     if (introEnabled) {
-      const introPath = path.join(workDir, 'intro.mp4');
+      introPath = path.join(workDir, 'intro.mp4');
       const { log } = await buildBrandingFrame(workDir, 'intro', introDuration, introPath, logoPath);
       fullLog += `\n[intro] ${log}`;
       segmentFiles.push(introPath);
@@ -777,7 +809,27 @@ export async function renderReel(input: RenderInput): Promise<RenderResult> {
         fullLog += `\n[seg-${i}] ${stderr}`;
         // Phase 2.1: Body-Segmente landen NICHT in segmentFiles, sondern in bodyAndCtaSegments
         // (xfade-Merge am Ende, Concat dann mit -c copy).
-        bodyAndCtaSegments.push({ path: outPath, duration: scene.duration });
+        // Phase 3.1: Scene + Clip-Metadaten dazu, fuer spaeteren Re-Render.
+        bodyAndCtaSegments.push({
+          path: outPath,
+          duration: scene.duration,
+          kind: 'body',
+          sceneData: {
+            text_overlay: scene.text_overlay ?? '',
+            search_query: scene.search_query ?? '',
+            voice_text: scene.voice_text ?? '',
+            kind: scene.kind,
+          },
+          sourceClipData: {
+            source: clip.source,
+            externalId: clip.externalId,
+            downloadUrl: clip.downloadUrl,
+            width: clip.width,
+            height: clip.height,
+            attribution: clip.attribution,
+            pageUrl: clip.pageUrl,
+          },
+        });
       }
 
       // CTA-Frame (Phase 2.3: voll gebrandet mit Gradient + Logo + URL-Pill,
@@ -802,7 +854,16 @@ export async function renderReel(input: RenderInput): Promise<RenderResult> {
         ctaPath,
       ]);
       fullLog += `\n[cta] ${ctaLog}`;
-      bodyAndCtaSegments.push({ path: ctaPath, duration: input.script.cta_frame.duration });
+      bodyAndCtaSegments.push({
+        path: ctaPath,
+        duration: input.script.cta_frame.duration,
+        kind: 'cta',
+        sceneData: {
+          headline: input.script.cta_frame.headline ?? '',
+          subline: input.script.cta_frame.subline ?? '',
+          voice_text: input.script.cta_frame.voice_text ?? '',
+        },
+      });
     } else {
       // ── Motion-Graphics — jede Szene ist ein Color-Frame mit drawtext ─────
       for (let i = 0; i < input.script.scenes.length; i++) {
@@ -836,7 +897,16 @@ export async function renderReel(input: RenderInput): Promise<RenderResult> {
           outPath,
         ]);
         fullLog += `\n[mg-${i}] ${stderr}`;
-        bodyAndCtaSegments.push({ path: outPath, duration: scene.duration });
+        bodyAndCtaSegments.push({
+          path: outPath,
+          duration: scene.duration,
+          kind: 'body',
+          sceneData: {
+            text_overlay: scene.text_overlay ?? '',
+            voice_text: scene.voice_text ?? '',
+            kind: scene.kind,
+          },
+        });
       }
 
       // CTA am Ende (Phase 2.3: gleicher gebrandeter Look wie im Stock-Pfad)
@@ -860,7 +930,16 @@ export async function renderReel(input: RenderInput): Promise<RenderResult> {
         ctaPath,
       ]);
       fullLog += `\n[cta] ${ctaLog}`;
-      bodyAndCtaSegments.push({ path: ctaPath, duration: input.script.cta_frame.duration });
+      bodyAndCtaSegments.push({
+        path: ctaPath,
+        duration: input.script.cta_frame.duration,
+        kind: 'cta',
+        sceneData: {
+          headline: input.script.cta_frame.headline ?? '',
+          subline: input.script.cta_frame.subline ?? '',
+          voice_text: input.script.cta_frame.voice_text ?? '',
+        },
+      });
     }
 
     // ── Body+CTA mit Crossfade zu einem File mergen (Phase 2.1) ─────────────
@@ -881,7 +960,7 @@ export async function renderReel(input: RenderInput): Promise<RenderResult> {
 
     // ── Outro-Frame (cam2rent-Logo + Tagline) ───────────────────────────────
     if (outroEnabled) {
-      const outroPath = path.join(workDir, 'outro.mp4');
+      outroPath = path.join(workDir, 'outro.mp4');
       const { log } = await buildBrandingFrame(workDir, 'outro', outroDuration, outroPath, logoPath);
       fullLog += `\n[outro] ${log}`;
       segmentFiles.push(outroPath);
@@ -1214,7 +1293,45 @@ export async function renderReel(input: RenderInput): Promise<RenderResult> {
       motion_style: motionStyle,
     };
 
-    return { videoBuffer, thumbnailBuffer, durationSeconds: total, log: fullLog, qualityMetrics };
+    // Phase 3.1: Persisted-Segment-Buffer fuer Storage-Upload sammeln.
+    // Reihenfolge: [intro?, ...bodies+cta, outro?]. Index ist fortlaufend.
+    const persistedSegments: PersistedSegment[] = [];
+    let persistedIdx = 0;
+    if (introPath) {
+      persistedSegments.push({
+        index: persistedIdx++,
+        kind: 'intro',
+        buffer: await readFile(introPath),
+        duration: introDuration,
+      });
+    }
+    for (const seg of bodyAndCtaSegments) {
+      persistedSegments.push({
+        index: persistedIdx++,
+        kind: seg.kind,
+        buffer: await readFile(seg.path),
+        duration: seg.duration,
+        sceneData: seg.sceneData,
+        sourceClipData: seg.sourceClipData,
+      });
+    }
+    if (outroPath) {
+      persistedSegments.push({
+        index: persistedIdx++,
+        kind: 'outro',
+        buffer: await readFile(outroPath),
+        duration: outroDuration,
+      });
+    }
+
+    return {
+      videoBuffer,
+      thumbnailBuffer,
+      durationSeconds: total,
+      log: fullLog,
+      qualityMetrics,
+      segments: persistedSegments,
+    };
   } finally {
     // Temp-Verzeichnis aufräumen (best-effort)
     await rm(workDir, { recursive: true, force: true }).catch(() => {});
