@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 
 interface Template {
@@ -17,21 +18,6 @@ interface Template {
   is_active: boolean;
   // Phase 2.2: Ken-Burns-Modus pro Template
   motion_style?: 'static' | 'kenburns' | 'mixed';
-}
-
-interface ReelsSettings {
-  pexels_api_key?: string;
-  // Phase 1.5: zweite Stock-Footage-Quelle. Solange leer → Pexels-only.
-  pixabay_api_key?: string;
-  voice_enabled?: boolean;
-  voice_name?: 'alloy' | 'echo' | 'fable' | 'nova' | 'onyx' | 'shimmer';
-  voice_model?: 'tts-1' | 'tts-1-hd';
-  voice_style?: 'calm' | 'normal' | 'energetic';
-  max_duration?: number;
-  intro_enabled?: boolean;
-  outro_enabled?: boolean;
-  intro_duration?: number;
-  outro_duration?: number;
 }
 
 interface MusicTrack {
@@ -51,10 +37,6 @@ export default function TemplatesPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
-  const [settings, setSettings] = useState<ReelsSettings>({});
-  const [savingSettings, setSavingSettings] = useState(false);
-  const [settingsFeedback, setSettingsFeedback] = useState('');
-
   const [music, setMusic] = useState<MusicTrack[]>([]);
   const [musicUploading, setMusicUploading] = useState(false);
   const [musicError, setMusicError] = useState('');
@@ -68,18 +50,6 @@ export default function TemplatesPage() {
     const body = await res.json();
     setTemplates(body.templates ?? []);
     setLoading(false);
-  }
-
-  async function loadSettings() {
-    try {
-      const res = await fetch('/api/admin/settings?key=reels_settings');
-      if (!res.ok) return;
-      const body = await res.json();
-      if (body.value) {
-        const parsed = typeof body.value === 'string' ? JSON.parse(body.value) : body.value;
-        setSettings(parsed ?? {});
-      }
-    } catch { /* ignore */ }
   }
 
   async function loadMusic() {
@@ -162,26 +132,8 @@ export default function TemplatesPage() {
     await loadMusic();
   }
 
-  async function saveSettings() {
-    setSavingSettings(true);
-    setSettingsFeedback('');
-    try {
-      const res = await fetch('/api/admin/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key: 'reels_settings', value: JSON.stringify(settings) }),
-      });
-      setSettingsFeedback(res.ok ? 'Gespeichert.' : 'Fehler beim Speichern.');
-    } catch {
-      setSettingsFeedback('Netzwerk-Fehler.');
-    } finally {
-      setSavingSettings(false);
-    }
-  }
-
   useEffect(() => {
     load();
-    loadSettings();
     loadMusic();
   }, []);
 
@@ -214,171 +166,21 @@ export default function TemplatesPage() {
     <div className="p-4 md:p-8 max-w-5xl mx-auto">
       <AdminBackLink href="/admin/social/reels" />
 
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 gap-3 flex-wrap">
         <h1 className="text-2xl md:text-3xl font-heading font-bold text-brand-dark dark:text-white">Reel-Vorlagen</h1>
-        <button
-          onClick={() => setCreating(true)}
-          className="rounded-lg bg-brand-orange hover:bg-brand-orange/90 px-4 py-2 text-sm font-medium text-white"
-        >
-          + Neue Vorlage
-        </button>
-      </div>
-
-      {/* Einstellungen */}
-      <div className="mb-8 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
-        <h2 className="text-lg font-heading font-bold text-brand-dark dark:text-white mb-3">Einstellungen</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <label className="block">
-            <span className="block text-xs font-medium text-brand-steel dark:text-gray-400 mb-1">Pexels API-Key (für Stock-Footage)</span>
-            <input
-              type="password"
-              placeholder="z.B. 5634abcd..."
-              value={settings.pexels_api_key ?? ''}
-              onChange={(e) => setSettings({ ...settings, pexels_api_key: e.target.value })}
-              className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-brand-dark dark:text-white"
-            />
-          </label>
-          <label className="block">
-            <span className="block text-xs font-medium text-brand-steel dark:text-gray-400 mb-1">
-              Pixabay API-Key <span className="text-brand-steel/70">(optional, zweite Quelle)</span>
-            </span>
-            <input
-              type="password"
-              placeholder="z.B. 12345678-abcdef..."
-              value={settings.pixabay_api_key ?? ''}
-              onChange={(e) => setSettings({ ...settings, pixabay_api_key: e.target.value })}
-              className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-brand-dark dark:text-white"
-            />
-          </label>
-          <label className="block">
-            <span className="block text-xs font-medium text-brand-steel dark:text-gray-400 mb-1">Max. Reel-Dauer (Sekunden)</span>
-            <input
-              type="number"
-              min={5}
-              max={90}
-              value={settings.max_duration ?? 30}
-              onChange={(e) => setSettings({ ...settings, max_duration: Number(e.target.value) })}
-              className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-brand-dark dark:text-white"
-            />
-          </label>
-        </div>
-        <p className="text-xs text-brand-steel dark:text-gray-500 mt-2">
-          Hintergrund-Musik wird jetzt pro Reel aus der Musik-Bibliothek (siehe unten) ausgewählt. Der als &bdquo;Standard&ldquo; markierte Track wird automatisch vorgewählt.
-          Pixabay als zweite Stock-Footage-Quelle ist optional — solange leer, wird ausschließlich Pexels abgefragt. Mit Key
-          wird pro Reel deterministisch zwischen beiden gewechselt (verhindert Wiederholung der Clips).
-        </p>
-
-        <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-          <h3 className="text-sm font-semibold text-brand-dark dark:text-white mb-2">Branding</h3>
-          <div className="space-y-2">
-            <label className="flex items-center gap-2 text-sm text-brand-dark dark:text-white cursor-pointer">
-              <input
-                type="checkbox"
-                checked={settings.intro_enabled !== false}
-                onChange={(e) => setSettings({ ...settings, intro_enabled: e.target.checked })}
-              />
-              <span>Intro mit cam2rent-Logo (Anfang)</span>
-            </label>
-            <label className="flex items-center gap-2 text-sm text-brand-dark dark:text-white cursor-pointer">
-              <input
-                type="checkbox"
-                checked={settings.outro_enabled !== false}
-                onChange={(e) => setSettings({ ...settings, outro_enabled: e.target.checked })}
-              />
-              <span>Outro mit cam2rent-Logo + &bdquo;Action-Cam mieten auf cam2rent.de&ldquo; (Ende)</span>
-            </label>
-            <div className="grid grid-cols-2 gap-3 pl-6">
-              <label className="block">
-                <span className="block text-xs text-brand-steel dark:text-gray-400 mb-1">Intro-Dauer (Sek.)</span>
-                <input
-                  type="number"
-                  step="0.5"
-                  min={0.5}
-                  max={5}
-                  value={settings.intro_duration ?? 1.5}
-                  onChange={(e) => setSettings({ ...settings, intro_duration: Number(e.target.value) })}
-                  className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-2 py-1 text-sm text-brand-dark dark:text-white"
-                />
-              </label>
-              <label className="block">
-                <span className="block text-xs text-brand-steel dark:text-gray-400 mb-1">Outro-Dauer (Sek.)</span>
-                <input
-                  type="number"
-                  step="0.5"
-                  min={0.5}
-                  max={5}
-                  value={settings.outro_duration ?? 1.5}
-                  onChange={(e) => setSettings({ ...settings, outro_duration: Number(e.target.value) })}
-                  className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-2 py-1 text-sm text-brand-dark dark:text-white"
-                />
-              </label>
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-          <label className="flex items-center gap-2 text-sm font-medium text-brand-dark dark:text-white cursor-pointer">
-            <input
-              type="checkbox"
-              checked={settings.voice_enabled ?? false}
-              onChange={(e) => setSettings({ ...settings, voice_enabled: e.target.checked })}
-            />
-            <span>Voice-Over aktivieren (OpenAI TTS, ~0,005 € pro Reel)</span>
-          </label>
-
-          {settings.voice_enabled && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
-              <label className="block">
-                <span className="block text-xs font-medium text-brand-steel dark:text-gray-400 mb-1">Stimme</span>
-                <select
-                  value={settings.voice_name ?? 'nova'}
-                  onChange={(e) => setSettings({ ...settings, voice_name: e.target.value as ReelsSettings['voice_name'] })}
-                  className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-brand-dark dark:text-white"
-                >
-                  <option value="nova">Nova (weiblich, jung, natürlich)</option>
-                  <option value="shimmer">Shimmer (weiblich, warm)</option>
-                  <option value="alloy">Alloy (neutral, sachlich)</option>
-                  <option value="echo">Echo (männlich, ruhig)</option>
-                  <option value="onyx">Onyx (männlich, tief)</option>
-                  <option value="fable">Fable (britisch, erzählend)</option>
-                </select>
-              </label>
-              <label className="block">
-                <span className="block text-xs font-medium text-brand-steel dark:text-gray-400 mb-1">Stil</span>
-                <select
-                  value={settings.voice_style ?? 'normal'}
-                  onChange={(e) => setSettings({ ...settings, voice_style: e.target.value as ReelsSettings['voice_style'] })}
-                  className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-brand-dark dark:text-white"
-                >
-                  <option value="calm">Ruhig (langsamer, fast meditativ)</option>
-                  <option value="normal">Normal (sympathisch-aktiv)</option>
-                  <option value="energetic">Energetisch (schnell, enthusiastisch)</option>
-                </select>
-              </label>
-              <label className="block">
-                <span className="block text-xs font-medium text-brand-steel dark:text-gray-400 mb-1">Modell</span>
-                <select
-                  value={settings.voice_model ?? 'tts-1-hd'}
-                  onChange={(e) => setSettings({ ...settings, voice_model: e.target.value as ReelsSettings['voice_model'] })}
-                  className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-brand-dark dark:text-white"
-                >
-                  <option value="tts-1-hd">tts-1-hd (HD, empfohlen, 0,006 €/Reel)</option>
-                  <option value="tts-1">tts-1 (Standard, 0,003 €/Reel)</option>
-                </select>
-              </label>
-            </div>
-          )}
-        </div>
-
-        <div className="mt-4 flex items-center gap-3">
-          <button
-            onClick={saveSettings}
-            disabled={savingSettings}
-            className="rounded-lg bg-cyan-600 hover:bg-cyan-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+        <div className="flex items-center gap-2">
+          <Link
+            href="/admin/social/reels/einstellungen"
+            className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 px-4 py-2 text-sm font-medium text-brand-dark dark:text-white"
           >
-            {savingSettings ? 'Speichere…' : 'Einstellungen speichern'}
+            Einstellungen
+          </Link>
+          <button
+            onClick={() => setCreating(true)}
+            className="rounded-lg bg-brand-orange hover:bg-brand-orange/90 px-4 py-2 text-sm font-medium text-white"
+          >
+            + Neue Vorlage
           </button>
-          {settingsFeedback && <span className="text-xs text-brand-steel dark:text-gray-400">{settingsFeedback}</span>}
         </div>
       </div>
 

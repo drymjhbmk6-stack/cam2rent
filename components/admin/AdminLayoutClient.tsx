@@ -128,6 +128,9 @@ const iconGallery = (
 const iconSocial = (
   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg>
 );
+const iconFilm = (
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 4h16a1 1 0 011 1v14a1 1 0 01-1 1H4a1 1 0 01-1-1V5a1 1 0 011-1z" /></svg>
+);
 
 // ============================================================
 // Navigation groups
@@ -179,15 +182,28 @@ const BLOG_ITEMS: NavItem[] = [
   { href: '/admin/blog/mediathek', label: 'Mediathek', icon: iconBlog, perm: 'content' },
 ];
 
-const SOCIAL_ITEMS: NavItem[] = [
+// SOCIAL_ITEMS gilt nur für Posts-bezogene Bereiche.
+// Reels haben ihre eigene Sub-Navigation (REELS_ITEMS) und werden in
+// SocialCollapse als eingeschachtelte ReelsCollapse-Gruppe gerendert.
+const SOCIAL_POSTS_ITEMS_BEFORE: NavItem[] = [
   { href: '/admin/social', label: 'Übersicht', exact: true, icon: iconDashboard, perm: 'content' },
   { href: '/admin/social/posts', label: 'Posts', icon: iconBuchungen, perm: 'content' },
   { href: '/admin/social/neu', label: 'Neuer Post', icon: iconPlus, perm: 'content' },
-  { href: '/admin/social/reels', label: 'Reels', icon: iconCamera, perm: 'content' },
+];
+
+const SOCIAL_POSTS_ITEMS_AFTER: NavItem[] = [
   { href: '/admin/social/themen', label: 'Themen & Serien', icon: iconStar, perm: 'content' },
   { href: '/admin/social/zeitplan', label: 'Redaktionsplan', icon: iconCalendar, perm: 'content' },
   { href: '/admin/social/plan', label: 'KI-Plan (Bulk)', icon: iconBlog, perm: 'content' },
   { href: '/admin/social/vorlagen', label: 'Vorlagen', icon: iconClipboard, perm: 'content' },
+];
+
+const REELS_ITEMS: NavItem[] = [
+  { href: '/admin/social/reels', label: 'Übersicht', exact: true, icon: iconDashboard, perm: 'content' },
+  { href: '/admin/social/reels/neu', label: 'Neues Reel', icon: iconPlus, perm: 'content' },
+  { href: '/admin/social/reels/zeitplan', label: 'Redaktionsplan', icon: iconCalendar, perm: 'content' },
+  { href: '/admin/social/reels/vorlagen', label: 'Vorlagen', icon: iconClipboard, perm: 'content' },
+  { href: '/admin/social/reels/einstellungen', label: 'Einstellungen', icon: iconCog, perm: 'content' },
 ];
 
 const FINANZEN_ITEMS: NavItem[] = [
@@ -325,9 +341,77 @@ function NavGroupCollapse({
   );
 }
 
+function ReelsCollapse({ pathname, onNavClick, me }: { pathname: string; onNavClick?: () => void; me: MeInfo | null }) {
+  const visibleItems = REELS_ITEMS.filter((i) => canSee(me, i));
+  const isReelsPath = pathname.startsWith('/admin/social/reels');
+  const [open, setOpen] = useState<boolean>(isReelsPath);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (isReelsPath) {
+      setOpen(true);
+      return;
+    }
+    try {
+      const raw = window.localStorage.getItem('admin_reels_collapsed');
+      if (raw !== null) setOpen(raw === 'false');
+    } catch { /* empty */ }
+  }, [isReelsPath]);
+
+  useEffect(() => {
+    if (isReelsPath && !open) setOpen(true);
+  }, [isReelsPath, open]);
+
+  function toggle() {
+    const next = !open;
+    setOpen(next);
+    try {
+      window.localStorage.setItem('admin_reels_collapsed', next ? 'false' : 'true');
+    } catch { /* empty */ }
+  }
+
+  if (visibleItems.length === 0) return null;
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={toggle}
+        className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-heading font-semibold transition-all mx-1 text-left"
+        style={{ color: isReelsPath ? '#06b6d4' : '#94a3b8', background: isReelsPath ? 'rgba(6,182,212,0.15)' : 'transparent' }}
+        onMouseEnter={(e) => { if (!isReelsPath) (e.currentTarget as HTMLElement).style.color = '#e2e8f0'; }}
+        onMouseLeave={(e) => { if (!isReelsPath) (e.currentTarget as HTMLElement).style.color = '#94a3b8'; }}
+      >
+        <span style={{ color: isReelsPath ? '#06b6d4' : '#475569' }}>{iconFilm}</span>
+        <span className="flex-1">Reels</span>
+        <span
+          style={{
+            color: isReelsPath ? '#06b6d4' : '#475569',
+            transform: open ? 'rotate(90deg)' : 'none',
+            transition: 'transform 0.15s ease',
+          }}
+        >
+          {iconChevron}
+        </span>
+      </button>
+      {open && (
+        <div className="ml-4 pl-2 mt-0.5 space-y-0" style={{ borderLeft: '1px solid #1e293b' }}>
+          {visibleItems.map((item) => (
+            <NavLinkItem key={item.href} item={item} pathname={pathname} onNavClick={onNavClick} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SocialCollapse({ pathname, onNavClick, me }: { pathname: string; onNavClick?: () => void; me: MeInfo | null }) {
-  const visibleItems = SOCIAL_ITEMS.filter((i) => canSee(me, i));
+  const itemsBefore = SOCIAL_POSTS_ITEMS_BEFORE.filter((i) => canSee(me, i));
+  const itemsAfter = SOCIAL_POSTS_ITEMS_AFTER.filter((i) => canSee(me, i));
   const isSocialPath = pathname.startsWith('/admin/social');
+  // Highlighten nur wenn nicht in einer Reels-Subseite (Reels hat eigene Active-Anzeige)
+  const isReelsPath = pathname.startsWith('/admin/social/reels');
+  const isSocialActive = isSocialPath && !isReelsPath;
   const [open, setOpen] = useState<boolean>(isSocialPath);
 
   useEffect(() => {
@@ -360,15 +444,15 @@ function SocialCollapse({ pathname, onNavClick, me }: { pathname: string; onNavC
         type="button"
         onClick={toggle}
         className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-heading font-semibold transition-all mx-1 text-left"
-        style={{ color: isSocialPath ? '#06b6d4' : '#94a3b8', background: isSocialPath ? 'rgba(6,182,212,0.15)' : 'transparent' }}
-        onMouseEnter={(e) => { if (!isSocialPath) (e.currentTarget as HTMLElement).style.color = '#e2e8f0'; }}
-        onMouseLeave={(e) => { if (!isSocialPath) (e.currentTarget as HTMLElement).style.color = '#94a3b8'; }}
+        style={{ color: isSocialActive ? '#06b6d4' : '#94a3b8', background: isSocialActive ? 'rgba(6,182,212,0.15)' : 'transparent' }}
+        onMouseEnter={(e) => { if (!isSocialActive) (e.currentTarget as HTMLElement).style.color = '#e2e8f0'; }}
+        onMouseLeave={(e) => { if (!isSocialActive) (e.currentTarget as HTMLElement).style.color = '#94a3b8'; }}
       >
-        <span style={{ color: isSocialPath ? '#06b6d4' : '#475569' }}>{iconSocial}</span>
+        <span style={{ color: isSocialActive ? '#06b6d4' : '#475569' }}>{iconSocial}</span>
         <span className="flex-1">Social Media</span>
         <span
           style={{
-            color: isSocialPath ? '#06b6d4' : '#475569',
+            color: isSocialActive ? '#06b6d4' : '#475569',
             transform: open ? 'rotate(90deg)' : 'none',
             transition: 'transform 0.15s ease',
           }}
@@ -378,7 +462,11 @@ function SocialCollapse({ pathname, onNavClick, me }: { pathname: string; onNavC
       </button>
       {open && (
         <div className="ml-4 pl-2 mt-0.5 space-y-0" style={{ borderLeft: '1px solid #1e293b' }}>
-          {visibleItems.map((item) => (
+          {itemsBefore.map((item) => (
+            <NavLinkItem key={item.href} item={item} pathname={pathname} onNavClick={onNavClick} />
+          ))}
+          <ReelsCollapse pathname={pathname} onNavClick={onNavClick} me={me} />
+          {itemsAfter.map((item) => (
             <NavLinkItem key={item.href} item={item} pathname={pathname} onNavClick={onNavClick} />
           ))}
         </div>
@@ -463,7 +551,10 @@ function SidebarContent({ pathname, isDashboard, onNavClick, handleLogout, me }:
   me: MeInfo | null;
 }) {
   const blogVisible = BLOG_ITEMS.some((i) => canSee(me, i));
-  const socialVisible = SOCIAL_ITEMS.some((i) => canSee(me, i));
+  const socialVisible =
+    SOCIAL_POSTS_ITEMS_BEFORE.some((i) => canSee(me, i)) ||
+    SOCIAL_POSTS_ITEMS_AFTER.some((i) => canSee(me, i)) ||
+    REELS_ITEMS.some((i) => canSee(me, i));
 
   // Accordion: genau eine Gruppe darf offen sein. Bei Pfadwechsel wird die
   // zugehoerige Gruppe automatisch ausgeklappt; Klick auf eine andere
