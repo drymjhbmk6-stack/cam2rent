@@ -1245,6 +1245,88 @@ Systematischer Sweep ueber Admin- und Kundenkonto-UI nach Darstellungsfehlern. G
 
 ## Offene Punkte
 
+### Reel-Workflow-Refactor (in Arbeit, Stand 2026-04-27)
+Aktuelle Reel-UX ist zu unübersichtlich (Detailseite ~756 Zeilen Wand, Erstellung 1-Screen, kein Redaktionsplan, Vorlagen-Seite vermischt Settings + Music + Templates). Plan: 5 Schritte. **Schritt 1 ist gemerged (Commit `f7ddf89`)**, der Rest steht noch.
+
+**Sidebar-Wireframe (final, in Schritt 1 umgesetzt):**
+```
+Social Media (Collapse)
+├─ Übersicht
+├─ Posts
+├─ Neuer Post
+├─ Reels (Sub-Collapse, neu)
+│  ├─ Übersicht
+│  ├─ Neues Reel
+│  ├─ Redaktionsplan          ← Seite existiert noch nicht (Schritt 5)
+│  ├─ Vorlagen
+│  └─ Einstellungen           ← Schritt 1 ✓ (eigene Seite)
+├─ Themen & Serien
+├─ Redaktionsplan (Posts)
+├─ KI-Plan (Bulk, Posts)
+└─ Vorlagen (Posts)
+```
+Implementierung: `components/admin/AdminLayoutClient.tsx` — neue Komponente `ReelsCollapse` (analog `BlogCollapse`), `SOCIAL_ITEMS` aufgeteilt in `SOCIAL_POSTS_ITEMS_BEFORE` + `SOCIAL_POSTS_ITEMS_AFTER`, dazwischen `<ReelsCollapse>`. Highlight-Logik: `SocialCollapse` highlightet **nicht**, wenn man auf einem Reels-Pfad ist (sondern nur die Reels-Collapse).
+
+**Schritt 1 — Sidebar-Sub-Nav + Einstellungen abspalten ✓ (Commit `f7ddf89`)**
+- Neue Komponente `ReelsCollapse` in `AdminLayoutClient.tsx`, eingehängt in `SocialCollapse` zwischen "Neuer Post" und "Themen & Serien"
+- Neue Seite `app/admin/social/reels/einstellungen/page.tsx` — Card-Layout mit API-Keys, Standard-Dauer, Branding, Voice-Over (extrahiert aus `vorlagen/page.tsx`)
+- `vorlagen/page.tsx` zeigt nur noch Templates + Musikbibliothek + Link "Einstellungen" oben rechts
+- Sidebar-Link `/admin/social/reels/zeitplan` ist drin, **Seite existiert aber noch nicht** → Schritt 5 muss diese Seite anlegen
+
+**Schritt 2 — Detailseite mit Tabs (TODO)**
+Datei: `app/admin/social/reels/[id]/page.tsx` (aktuell 756 Zeilen Wand). State + Handler 1:1 erhalten, JSX neu strukturieren:
+- **Header (immer sichtbar):** Back-Link, Titel, Status-Badge, TEST-Badge, „erstellt am", rechts: „Neu rendern" + „Löschen"
+- **Toast** für `feedback`-Message, **`<ReelRenderStatus>`-Banner** (existiert) während Render
+- **4 Tabs** (`useState<'preview'|'content'|'scenes'|'render'>('preview')`):
+  - **Vorschau** — Video links (9:16), rechts „Nächster Schritt"-Block mit kontextabhängigem Primary-Button basierend auf `reel.status`:
+    - `rendering` → „Render abbrechen" (`handleResetRender`)
+    - `failed` → „Neu rendern" + Error-Message-Box
+    - `rendered`/`pending_review`/`draft` → „Freigeben" + „Einplanen" (datetime-local + Button), nutzt bestehende `handleApprove(false|true)`
+    - `approved`/`scheduled` → „Jetzt veröffentlichen" (`handlePublishNow`)
+    - `published` → FB+IG-Permalink-Links
+  - **Inhalt** — Caption-Textarea + Hashtags-Input + Schedule-Input + „Speichern"-Button (`handleSave`). Plattformen + Account-Namen read-only.
+  - **Szenen** — bestehender Segment-Grid (Z. 524–605) + Migration-Banner + Query-Modal
+  - **Render & Skript** — KI-Skript-JSON-Viewer (immer aufgeklappt), Render-Metriken (immer aufgeklappt), Render-Log (immer aufgeklappt), Audio-Warning-Banner falls stumm (Z. 363–368)
+- Tab-Badge mit Counter sinnvoll für „Szenen (N)" und ⚠ in „Render" wenn `error_message` gesetzt
+- Modals (Delete + Query) bleiben unverändert am Ende
+
+**Schritt 3 — Neues-Reel-Wizard (TODO)**
+Datei: `app/admin/social/reels/neu/page.tsx` (aktuell 280 Z., 1-Screen-Form). Umbau zu 4-Schritt-Wizard mit Stepper oben, „Zurück/Weiter"-Buttons, Validation pro Schritt:
+- **Schritt 1 — Idee:** Vorlage (Dropdown) + Topic (Pflicht) + Kamera (optional). Prompt-Vorschau aus Template-`script_prompt` mit ausgefüllten Platzhaltern.
+- **Schritt 2 — Visuelles:** Stock-Keywords (komma-getrennt) **mit Live-Preview-Grid** aus Pexels/Pixabay (es gibt schon `GET /api/admin/reels/preview-stock?query=…&source=pexels|pixabay` — nutzen!), Musik-Track-Auswahl (aus `/api/admin/reels/music`), Plattformen-Checkboxen.
+- **Schritt 3 — Verteilung:** FB-Page-Dropdown (nur wenn Facebook angehakt) + IG-Account-Dropdown, Toggle „Sofort generieren" vs. „In Plan einreihen" (datetime).
+- **Schritt 4 — Bestätigen:** Zusammenfassung aller Felder + Kosten-Hinweis (Claude ~0,02 € + DALL-E/TTS optional) + „Reel generieren"-Button → POST `/api/admin/reels` (existiert).
+- Wenn „In Plan einreihen": POST `/api/admin/reels/plan` (Endpoint existiert noch NICHT, kommt in Schritt 5).
+- State zentral: `useState<{step: 1|2|3|4, formData: {...}}>` oder useReducer.
+
+**Schritt 4 — Übersichtsliste mit Bulk + Filtern (TODO)**
+Datei: `app/admin/social/reels/page.tsx` (aktuell 188 Z.). Verbesserungen:
+- **Status-Filter als Pill-Bar oben** mit Counter pro Status (Heute / Wartet auf Review / Geplant / Veröffentlicht / Fehler). Bestehender Filter-Buttons gibt's schon, nur cleaner mit Counts.
+- **„Nächster Schritt"-Hint pro Karte** (z.B. „Wartet auf Freigabe", „Geplant für Mi 18:00", „Render fehlgeschlagen — neu starten?"). Berechnet aus `status` + `scheduled_at` + `error_message`.
+- **Hover-Preview** des Videos (Mini-`<video muted autoplay loop>` bei `:hover`)
+- **Bulk-Auswahl** mit Checkboxen + Bulk-Aktionen: Freigeben (mehrere `pending_review` → `approved`), Löschen (mit Bestätigung), Veröffentlichen (mehrere `approved` → publish — sollte sequentiell laufen wegen Meta-Rate-Limits). Neuer Bulk-Endpoint nötig: `POST /api/admin/reels/bulk` mit `{ action: 'approve'|'delete', ids: string[] }`.
+- **Sortierung:** Default umstellen von `created_at DESC` auf hybride Sortierung — `scheduled` zuerst nach `scheduled_at ASC`, dann Rest nach `created_at DESC`.
+
+**Schritt 5 — Redaktionsplan + Bulk-Generator (TODO, größter Aufwand)**
+Tabelle `social_reel_plan` ist seit `supabase-reels.sql` da, wird aber **nirgendwo im Code genutzt**. Spalten: `id, scheduled_date, scheduled_time, topic, template_id, status, generated_reel_id, error_message, …` (analog `social_editorial_plan` für Posts).
+
+Vorbild: `/admin/social/zeitplan` (Posts) + `/admin/social/plan` (Bulk-Generator). Blueprint:
+- **Neue Seite `app/admin/social/reels/zeitplan/page.tsx`** — 3-Spalten-Layout: Plan-Liste (Datum-Kacheln, klickbar für Inline-Edit) | rechts Plan-Eintrag-Detail mit Buttons „⚡ Jetzt generieren" / „🚀 Sofort posten" / „Bearbeiten" / „Löschen" / „Überspringen". Status-Workflow `planned → generating → generated → reviewed → published`.
+- **Optional Schritt 5b: Bulk-Plan-Generator `app/admin/social/reels/plan/page.tsx`** (analog `/admin/social/plan`) — Eingabe: N Reels über M Wochen, Wochentag-Pills, Uhrzeit, Plattformen, Background-Job mit Progress-Bar.
+- **Neue API-Routen unter `/api/admin/reels/plan/`:**
+  - `GET/POST /api/admin/reels/plan` — Liste / Anlegen
+  - `GET/PATCH/DELETE /api/admin/reels/plan/[id]`
+  - `POST /api/admin/reels/plan/[id]/generate` — sofort generieren (extrahierte Logik aus dem bestehenden `POST /api/admin/reels` als reusable Helper in `lib/reels/`)
+  - Optional `POST /api/admin/reels/plan/bulk` für Bulk-Generator
+- **Neuer Cron `/api/cron/reels-generate`** (stündlich `0 * * * *`) analog `social-generate`: scannt fällige Plan-Einträge mit `scheduled_date <= today + reels_settings.schedule_days_before`, ruft Generate-Helper auf, setzt Status `generating → generated`. Im Voll-Modus direkt `scheduled` setzen, im Semi-Modus auf `pending_review` lassen. Nach Cron-Eintrag: `0 * * * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/reels-generate`.
+- **Settings-Block in `/admin/social/reels/einstellungen`** für „Automatische Generierung" (Toggle, Modus Semi/Voll, Vorlaufzeit, Wochentage, Zeitfenster) — analog `social_settings.auto_generate_*`. Speicherung in `admin_settings.reels_settings.auto_generate_config`.
+
+**Test/Live-Hinweis:** Im Test-Modus springt der Cron früh raus (kein OpenAI/Pexels-Spend), analog `social-generate`.
+
+**Reihenfolge der Implementierung war:** 1 → 2 → 3 → 4 → 5. Jeder Schritt für sich committable. Schritt 5 ist deutlich größer als die anderen — kann auf 5a (UI + APIs für Plan-CRUD) und 5b (Bulk + Cron) gesplittet werden.
+
+**Vor jedem Push:** `npx tsc --noEmit` + `npx next lint` (siehe Regel oben). `npx next build` läuft in der Sandbox NICHT (kein Google-Fonts-Zugang).
+
 ### Check-Tool
 - **`supabase-migrationen-status-check.sql`** — Read-only SQL-Script im Repo-Root. Listet je Migration "ERLEDIGT" oder "OFFEN". Nach jedem Deploy neuer Migrationen einfach nochmal laufen lassen und erledigte manuell nach `erledigte supabase/` verschieben.
 
