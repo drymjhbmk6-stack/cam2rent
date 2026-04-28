@@ -280,6 +280,18 @@ Alle Dropdowns laden aus `admin_settings` und können neue Einträge hinzufügen
   - `GET /api/admin/booking/[id]` → `booking.serial_number` (aus product_units nachgeladen)
   - `GET /api/admin/versand-buchungen` → `booking.serial_number` (angereichert)
 
+### Einzelexemplar-Tracking für Zubehör (Phase 1 SQL gepusht, noch nicht ausgeführt — Stand 2026-04-28)
+Analog zu `product_units` für Kameras werden Akkus, Stative, Karten etc. künftig pro physischem Stück getrackt — Grundlage für rechtssichere Schadensabwicklung (§ 249 BGB, kein Pauschalbetrag, sondern dokumentierter Wiederbeschaffungswert pro Exemplar). **Aktueller Stand:** SQL-Migrations sind im Repo, UI/Booking-Logik folgt in Phase 2-4 nach Review der Migrations-Statistik.
+
+- **Tabelle `accessory_units`** (Migration `supabase/supabase-accessory-units.sql`): id UUID, accessory_id TEXT FK, exemplar_code TEXT (UNIQUE pro accessory_id), status (`available|rented|maintenance|damaged|lost|retired`), purchased_at, retired_at, retirement_reason, notes, created/updated_at. RLS: Service-Role-only (analog `product_units`).
+- **`bookings.accessory_unit_ids UUID[]`** (parallel zu `bookings.accessory_items` JSONB) hält die zugewiesenen Exemplare pro Buchung. Zuordnung welche Unit zu welchem accessory_id gehört ergibt sich aus `accessory_units.accessory_id` — kein zusätzliches Mapping nötig. GIN-Index für Überlappungs-Queries.
+- **View `accessories_with_stats`** liefert pro Zubehör Counts pro Status + Kaufdaten-Range — ersetzt mittelfristig die direkte Nutzung von `available_qty`.
+- **RPC `assign_free_accessory_units(accessory_id, qty, rental_from, rental_to, booking_id)`** (`supabase-accessory-unit-assignment-lock.sql`) mit `pg_advisory_xact_lock` — race-sicher, vergibt **mehrere** Exemplare gleichzeitig (Mengen-Buchung typisch bei Zubehör), FIFO nach `purchased_at`. Bei nicht ausreichend freien Units → leeres Array, Aufrufer reagiert.
+- **Wertverfolgung läuft NICHT in `accessory_units`**, sondern in der bestehenden `assets`-Tabelle mit `kind='rental_accessory'` + `unit_id` FK auf `accessory_units(id)`. Der monatliche AfA-Cron schreibt `current_value` fort, der Vertrags-Floor `Math.max(asset.current_value, deposit)` greift automatisch — kein neues Bracket-System, keine Doppel-Logik.
+- **Daten-Migration** (`supabase-accessory-units-data-migration.sql`): Erzeugt pro `accessories`-Row mit `available_qty > 0` entsprechend viele Exemplare (`exemplar_code = <accessory_id>-001` aufwärts) mit konservativem Default-Kaufdatum (`CURRENT_DATE - 18 months`). Setzt `accessories.migrated_to_units = TRUE`. Idempotent. Statistik-SELECT am Ende der Datei für visuelle Prüfung im SQL-Editor.
+- **Rollback** (`supabase-accessory-units-rollback.sql`): Drop in der richtigen Reihenfolge (RPC → View → Spalte → Tabelle → Marker). ACHTUNG: Schadensabwicklungs-Historie geht verloren.
+- **Phase 2 (UI/API/Booking-Logik) folgt** sobald die drei SQL-Migrations auf Supabase ausgeführt sind und die Migrations-Statistik geprüft wurde.
+
 ### Verfügbarkeit + Gantt-Kalender
 - **Gantt-Kalender** (`/admin/verfuegbarkeit`): Alle 3 Tabs (Kameras, Zubehör, Sets) mit Gantt-Ansicht
   - **Durchgehend scrollbar:** 3 Monate zurück + 6 Monate voraus (kein Monatswechsel nötig)
@@ -1429,6 +1441,11 @@ Admin-Seite `/admin/newsletter` (in Sidebar-Gruppe „Rabatte & Aktionen", Permi
 **Audit-Log-Aktionen:** `newsletter.send_campaign`, `newsletter.update_subscriber`, `newsletter.delete_subscriber`, `customer_push.send`.
 
 ### Noch offen
+- **Zubehör-Exemplar-Tracking Phase 1 (Migrations bereit, noch auszuführen):**
+  1. `supabase/supabase-accessory-units.sql` (Tabelle + Index + RLS + View `accessories_with_stats` + `bookings.accessory_unit_ids`)
+  2. `supabase/supabase-accessory-unit-assignment-lock.sql` (RPC `assign_free_accessory_units`, race-sicher mit pg_advisory_xact_lock)
+  3. `supabase/supabase-accessory-units-data-migration.sql` (legt für jede `available_qty > 0`-Row entsprechend viele Exemplare an, Default-Kaufdatum heute - 18 Mon., gibt am Ende eine Statistik-SELECT aus)
+  - Reihenfolge zwingend: erst Schema, dann RPC, dann Daten-Migration. Alle drei idempotent, mehrfach laufenlassen unkritisch. Statistik-Output prüfen (legacy_qty == units_created), bevor Phase 2 (UI/API/Booking-Logik) startet. Rollback bei Bedarf via `supabase-accessory-units-rollback.sql`.
 - Nach der Push-Migration: alle Mitarbeiter müssen einmal Push neu aktivieren unter `/admin/einstellungen` → "Push aktivieren", damit ihre Subscription mit dem Mitarbeiter-Account verknüpft wird (sonst kriegen sie weiterhin alle Notifications wie ein Owner).
 - **Cron-Eintrag AfA monatlich in Hetzner-Crontab:**
   `0 3 1 * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/depreciation`
