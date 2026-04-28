@@ -249,6 +249,7 @@ Alle Dropdowns laden aus `admin_settings` und können neue Einträge hinzufügen
 - **Zubehör-Dropdown:** Gruppiert nach Kategorie (`<optgroup>`), zeigt intern-Flag, Upgrade-Gruppe, Stückzahl, Kompatibilität
 - **Kamera-Toggles:** Nutzen `CameraToggle` mit dynamischen Brand-Farben
 - **Dark-Mode:** Alle Elemente mit `dark:` Klassen versehen
+- **Vorschaubild im eingeklappten Header:** Quadratisches 80×80-Thumbnail (`set.image_url`, `next/image`, `object-cover`) links neben Name + Preis. Sets ohne Bild zeigen einen gestrichelten „Kein Bild"-Platzhalter gleicher Maße — kein Layout-Shift.
 
 ### Technische Daten (Specs)
 - Spec-Typen werden in `/admin/einstellungen` → "Technische Daten" verwaltet (Name, Icon, Einheit)

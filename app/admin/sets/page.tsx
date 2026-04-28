@@ -452,7 +452,25 @@ export default function AdminSetsPage() {
               return (
                 <div key={set.id} className="bg-white dark:bg-slate-800/60 rounded-xl border border-brand-border dark:border-slate-700 overflow-hidden">
                   {/* Row */}
-                  <div className="px-5 py-4 space-y-3">
+                  <div className="px-5 py-4">
+                    <div className="flex items-center gap-4">
+                      {/* Vorschaubild links */}
+                      {set.image_url ? (
+                        <Image
+                          src={set.image_url}
+                          alt={set.name}
+                          width={80}
+                          height={80}
+                          className="w-20 h-20 object-cover rounded-lg border border-brand-border dark:border-slate-700 shrink-0"
+                          unoptimized={set.image_url.startsWith('data:')}
+                        />
+                      ) : (
+                        <div className="w-20 h-20 rounded-lg border-2 border-dashed border-brand-border dark:border-slate-600 flex items-center justify-center text-brand-muted text-[10px] shrink-0">
+                          Kein Bild
+                        </div>
+                      )}
+                      {/* Name/Badges + Preis/Aktionen rechts daneben */}
+                      <div className="flex-1 min-w-0 space-y-3">
                     {/* Zeile 1: Name + Badges */}
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-heading font-semibold text-sm text-brand-black dark:text-slate-200">{set.name}</span>
@@ -499,6 +517,8 @@ export default function AdminSetsPage() {
                       >
                         {isExpanded ? '▲ Schließen' : '▼ Bearbeiten'}
                       </button>
+                    </div>
+                      </div>
                     </div>
                   </div>
 
