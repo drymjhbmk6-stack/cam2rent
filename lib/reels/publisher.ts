@@ -13,6 +13,7 @@ import {
   MetaApiError,
 } from '@/lib/meta/graph-api';
 import { isTestMode } from '@/lib/env-mode';
+import { shouldPublishInTestMode } from '@/lib/test-mode-publish';
 
 export interface ReelPublishResult {
   success: boolean;
@@ -45,22 +46,6 @@ function buildCaption(reel: SocialReel): string {
     parts.push(reel.hashtags.map((h) => (h.startsWith('#') ? h : `#${h}`)).join(' '));
   }
   return parts.join('\n').trim();
-}
-
-/**
- * Liest reels_settings.publish_in_test_mode — wenn true, wird auch im Test-Modus
- * tatsaechlich auf Meta hochgeladen. Default false (= alter Schutz bleibt aktiv).
- */
-async function shouldPublishInTestMode(): Promise<boolean> {
-  try {
-    const supabase = createServiceClient();
-    const { data } = await supabase.from('admin_settings').select('value').eq('key', 'reels_settings').maybeSingle();
-    if (!data?.value) return false;
-    const parsed = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
-    return Boolean(parsed?.publish_in_test_mode);
-  } catch {
-    return false;
-  }
 }
 
 export async function publishReel(reelId: string): Promise<ReelPublishResult> {

@@ -20,6 +20,7 @@ import { verifyCronAuth } from '@/lib/cron-auth';
 import { publishPost } from '@/lib/meta/publisher';
 import { generateFromTemplate } from '@/lib/meta/ai-content';
 import { isTestMode } from '@/lib/env-mode';
+import { shouldPublishInTestMode } from '@/lib/test-mode-publish';
 import { acquireCronLock, releaseCronLock } from '@/lib/cron-lock';
 
 const MAX_RETRIES = 2;
@@ -176,8 +177,12 @@ export async function POST(req: NextRequest) {
   }
 
   // Im Test-Modus nicht auf Meta publishen — Live-Reichweite ungewollt.
+  // Ausnahme: Admin hat unter /admin/social/reels/einstellungen den Schalter
+  // "Im Test-Modus echt veroeffentlichen" aktiviert.
   if (await isTestMode()) {
-    return NextResponse.json({ skipped: 'test_mode' });
+    if (!(await shouldPublishInTestMode())) {
+      return NextResponse.json({ skipped: 'test_mode' });
+    }
   }
 
   // Re-Entry-Schutz: doppelte Cron-Trigger duerfen nicht zweimal denselben

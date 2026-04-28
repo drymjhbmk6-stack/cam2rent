@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase';
 import { verifyCronAuth } from '@/lib/cron-auth';
 import { autoPost } from '@/lib/meta/auto-post';
 import { isTestMode } from '@/lib/env-mode';
+import { shouldPublishInTestMode } from '@/lib/test-mode-publish';
 
 /** POST /api/cron/blog-publish - Geplante Posts veröffentlichen */
 export async function POST(req: NextRequest) {
@@ -11,9 +12,13 @@ export async function POST(req: NextRequest) {
   }
 
   // Im Test-Modus keine Blog-Artikel veroeffentlichen — Shop-Indexierung
-  // waere sonst mit Test-Content belastet.
+  // waere sonst mit Test-Content belastet. Ausnahme: Admin hat den Schalter
+  // "Im Test-Modus echt veroeffentlichen" unter /admin/social/reels/einstellungen
+  // aktiviert.
   if (await isTestMode()) {
-    return NextResponse.json({ skipped: 'test_mode' });
+    if (!(await shouldPublishInTestMode())) {
+      return NextResponse.json({ skipped: 'test_mode' });
+    }
   }
 
   const supabase = createServiceClient();

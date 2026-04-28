@@ -11,6 +11,7 @@ import { createServiceClient } from '@/lib/supabase';
 import { generateFromTemplate } from '@/lib/meta/ai-content';
 import { createAdminNotification } from '@/lib/admin-notifications';
 import { isTestMode } from '@/lib/env-mode';
+import { shouldPublishInTestMode } from '@/lib/test-mode-publish';
 
 type TriggerType = 'blog_publish' | 'product_added' | 'set_added' | 'voucher_created';
 
@@ -67,9 +68,13 @@ export async function autoPost(
 ): Promise<void> {
   try {
     // Im Test-Modus nichts auf Meta posten — waere sonst echte Reichweite.
+    // Ausnahme: Admin hat den Schalter "Im Test-Modus echt veroeffentlichen"
+    // unter /admin/social/reels/einstellungen aktiviert.
     if (await isTestMode()) {
-      console.info(`[auto-post] Test-Modus aktiv — Trigger "${trigger}" uebersprungen.`);
-      return;
+      if (!(await shouldPublishInTestMode())) {
+        console.info(`[auto-post] Test-Modus aktiv — Trigger "${trigger}" uebersprungen.`);
+        return;
+      }
     }
 
     const settings = await getSocialSettings();

@@ -26,7 +26,6 @@ interface ReelsSettings {
   outro_enabled?: boolean;
   intro_duration?: number;
   outro_duration?: number;
-  publish_in_test_mode?: boolean;
 }
 
 interface ElevenLabsVoice {
@@ -51,6 +50,9 @@ const DEFAULT_SAMPLE_TEXT = 'Hey, schau mal — die GoPro Hero 13 für dein näc
 
 export default function ReelsEinstellungenPage() {
   const [settings, setSettings] = useState<ReelsSettings>({});
+  // Cross-Channel-Schalter: liegt unter admin_settings.publish_in_test_mode
+  // (Top-Level), gilt fuer Reels + Social-Posts + Blog.
+  const [publishInTestMode, setPublishInTestMode] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState('');
@@ -71,13 +73,33 @@ export default function ReelsEinstellungenPage() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch('/api/admin/settings?key=reels_settings');
-        if (!res.ok) return;
-        const body = await res.json();
+        const [reelsRes, publishRes] = await Promise.all([
+          fetch('/api/admin/settings?key=reels_settings'),
+          fetch('/api/admin/settings?key=publish_in_test_mode'),
+        ]);
         if (cancelled) return;
-        if (body.value) {
-          const parsed = typeof body.value === 'string' ? JSON.parse(body.value) : body.value;
-          setSettings(parsed ?? {});
+        if (reelsRes.ok) {
+          const body = await reelsRes.json();
+          if (body.value) {
+            const parsed = typeof body.value === 'string' ? JSON.parse(body.value) : body.value;
+            const reels = parsed ?? {};
+            setSettings(reels);
+            // Backward-Compat: alter Key war reels_settings.publish_in_test_mode
+            if (reels.publish_in_test_mode === true) {
+              setPublishInTestMode(true);
+            }
+          }
+        }
+        if (publishRes.ok) {
+          const body = await publishRes.json();
+          if (body.value !== null && body.value !== undefined) {
+            const parsed = typeof body.value === 'string' ? JSON.parse(body.value) : body.value;
+            const enabled =
+              typeof parsed === 'boolean'
+                ? parsed
+                : Boolean((parsed as { enabled?: boolean })?.enabled);
+            setPublishInTestMode(enabled);
+          }
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -90,12 +112,28 @@ export default function ReelsEinstellungenPage() {
     setSaving(true);
     setFeedback('');
     try {
-      const res = await fetch('/api/admin/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key: 'reels_settings', value: JSON.stringify(settings) }),
-      });
-      setFeedback(res.ok ? 'Gespeichert.' : 'Fehler beim Speichern.');
+      // Cleanup: alten reels_settings.publish_in_test_mode-Eintrag rauswerfen,
+      // damit der Wert nur noch zentral gepflegt wird.
+      const cleanedReels: Record<string, unknown> = { ...settings };
+      delete cleanedReels.publish_in_test_mode;
+
+      const [reelsRes, publishRes] = await Promise.all([
+        fetch('/api/admin/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key: 'reels_settings', value: JSON.stringify(cleanedReels) }),
+        }),
+        fetch('/api/admin/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            key: 'publish_in_test_mode',
+            value: JSON.stringify({ enabled: publishInTestMode }),
+          }),
+        }),
+      ]);
+      const ok = reelsRes.ok && publishRes.ok;
+      setFeedback(ok ? 'Gespeichert.' : 'Fehler beim Speichern.');
     } catch {
       setFeedback('Netzwerk-Fehler.');
     } finally {
@@ -267,31 +305,37 @@ export default function ReelsEinstellungenPage() {
             </Field>
           </Card>
 
-          {/* Veröffentlichungs-Verhalten */}
+          {/* Veröffentlichungs-Verhalten — gilt fuer alle Content-Kanaele */}
           <Card
-            title="Veröffentlichung im Test-Modus"
-            description="Standardmäßig werden Reels im Test-Modus nicht wirklich auf Facebook/Instagram hochgeladen — nur DB-Status wird auf 'published' gesetzt. Mit dieser Option umgehst du den Schutz und veröffentlichst echt."
+            title="Content-Veröffentlichung im Test-Modus"
+            description="Standardmäßig werden im Test-Modus keine Reels, Social-Posts und Blog-Artikel echt auf Facebook/Instagram bzw. den öffentlichen Shop publiziert (Schutz gegen ungewollte Reichweite). Mit dieser Option umgehst du den Schutz für alle drei Kanäle gemeinsam."
           >
             <label className="flex items-start gap-3 text-sm text-brand-dark dark:text-white cursor-pointer">
               <input
                 type="checkbox"
                 className="mt-1"
-                checked={settings.publish_in_test_mode ?? false}
-                onChange={(e) => setSettings({ ...settings, publish_in_test_mode: e.target.checked })}
+                checked={publishInTestMode}
+                onChange={(e) => setPublishInTestMode(e.target.checked)}
               />
               <span>
-                <span className="font-medium">Auch im Test-Modus echt auf Meta veröffentlichen</span>
+                <span className="font-medium">
+                  Reels, Social-Posts und Blog auch im Test-Modus echt veröffentlichen
+                </span>
                 <span className="block text-xs text-brand-steel dark:text-gray-400 mt-1">
-                  Greift sowohl beim manuellen „Jetzt veröffentlichen“-Button als auch beim geplanten Cron
-                  (<code className="text-[10px]">/api/cron/reels-publish</code>). Andere Test-Modus-Schutzmechanismen
-                  (Stripe-Test-Keys, Mail-Redirect, Versand-Skip) bleiben unberührt.
+                  Greift in allen drei Kanälen — manuelle „Jetzt veröffentlichen“-Buttons und alle Crons
+                  (<code className="text-[10px]">reels-publish</code>, <code className="text-[10px]">social-publish</code>,
+                  {' '}<code className="text-[10px]">social-generate</code>, <code className="text-[10px]">blog-publish</code>,
+                  {' '}<code className="text-[10px]">blog-generate</code>). Andere Test-Modus-Schutzmechanismen
+                  (Stripe-Test-Keys, Mail-Redirect, Versand-Skip, MUSTER-Wasserzeichen, TEST-Buchungsnummern)
+                  bleiben unberührt.
                 </span>
               </span>
             </label>
-            {settings.publish_in_test_mode && (
+            {publishInTestMode && (
               <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/40 px-3 py-2">
                 <p className="text-xs text-amber-800 dark:text-amber-300">
-                  <strong>Aktiv:</strong> Generierte Reels gehen wirklich live auf deine FB-Page und IG-Business-Accounts —
+                  <strong>Aktiv:</strong> Reels gehen live auf FB+IG, Social-Posts werden veröffentlicht,
+                  Blog-Artikel gehen auf <code className="text-[10px]">cam2rent.de/blog</code> live —
                   auch wenn die Umgebung sonst auf Test steht.
                 </p>
               </div>

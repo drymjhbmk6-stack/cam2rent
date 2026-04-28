@@ -19,6 +19,7 @@ import { verifyCronAuth } from '@/lib/cron-auth';
 import Anthropic from '@anthropic-ai/sdk';
 import { generateCaption, generateSocialImage } from '@/lib/meta/ai-content';
 import { isTestMode } from '@/lib/env-mode';
+import { shouldPublishInTestMode } from '@/lib/test-mode-publish';
 import { createAdminNotification } from '@/lib/admin-notifications';
 
 const STALE_LOCK_MINUTES = 10;
@@ -102,8 +103,12 @@ export async function POST(req: NextRequest) {
 
   // Im Test-Modus keine KI-Generierung — spart Kosten und vermeidet dass
   // Test-Content spaeter versehentlich live veroeffentlicht wird.
+  // Ausnahme: Admin hat den Schalter "Im Test-Modus echt veroeffentlichen"
+  // unter /admin/social/reels/einstellungen aktiviert.
   if (await isTestMode()) {
-    return NextResponse.json({ skipped: 'test_mode' });
+    if (!(await shouldPublishInTestMode())) {
+      return NextResponse.json({ skipped: 'test_mode' });
+    }
   }
 
   const supabase = createServiceClient();

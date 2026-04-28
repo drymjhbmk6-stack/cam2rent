@@ -4,6 +4,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { verifyCronAuth } from '@/lib/cron-auth';
 import OpenAI from 'openai';
 import { isTestMode } from '@/lib/env-mode';
+import { shouldPublishInTestMode } from '@/lib/test-mode-publish';
 import { buildBlogSystemPrompt, HUMANIZER_PASS } from '@/lib/blog/system-prompt';
 import { sanitizePromptInput, sanitizePromptInputList } from '@/lib/prompt-sanitize';
 import { createAdminNotification } from '@/lib/admin-notifications';
@@ -27,8 +28,12 @@ export async function POST(req: NextRequest) {
   }
 
   // Im Test-Modus keine Artikel generieren — spart Claude/DALL-E-Kosten.
+  // Ausnahme: Admin hat den Schalter "Im Test-Modus echt veroeffentlichen"
+  // unter /admin/social/reels/einstellungen aktiviert.
   if (await isTestMode()) {
-    return NextResponse.json({ skipped: 'test_mode' });
+    if (!(await shouldPublishInTestMode())) {
+      return NextResponse.json({ skipped: 'test_mode' });
+    }
   }
 
   // force=true überspringt den Scheduler (für manuelle Tests)
