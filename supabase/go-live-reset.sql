@@ -23,77 +23,127 @@
 --   3. auth.users separat (siehe Phase 2 im Plan)
 --   4. Storage-Buckets manuell (Phase 3 im Plan)
 --
--- Komplett transaktional — bei Fehler ROLLBACK auf null Aenderungen.
+-- Das Skript ist robust gegen fehlende Tabellen — falls eine Tabelle
+-- in dieser DB nicht existiert, wird sie stillschweigend uebersprungen.
+-- Komplett transaktional: bei Fehler ROLLBACK auf null Aenderungen.
 -- ════════════════════════════════════════════════════════════════════
 
 BEGIN;
 
 -- ─────────────────────────────────────────────────────────────────
+-- Helper: leert eine Tabelle nur wenn sie existiert.
+-- TEMP-Funktion lebt nur fuer diese Session, wird automatisch
+-- mit COMMIT/ROLLBACK weggeraeumt.
+-- ─────────────────────────────────────────────────────────────────
+CREATE OR REPLACE FUNCTION pg_temp.del_if(tbl text) RETURNS void AS $$
+DECLARE
+  rows_affected bigint;
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_tables
+     WHERE schemaname = 'public' AND tablename = tbl
+  ) THEN
+    EXECUTE format('DELETE FROM public.%I', tbl);
+    GET DIAGNOSTICS rows_affected = ROW_COUNT;
+    RAISE NOTICE '%: % rows deleted', tbl, rows_affected;
+  ELSE
+    RAISE NOTICE '%: table does not exist (skipped)', tbl;
+  END IF;
+END $$ LANGUAGE plpgsql;
+
+-- ─────────────────────────────────────────────────────────────────
 -- 1) Social-Modul (Children → Parents)
 -- ─────────────────────────────────────────────────────────────────
-DELETE FROM social_reel_segments;
-DELETE FROM social_reel_plan;
-DELETE FROM social_reel_templates;
-DELETE FROM social_reels;
-DELETE FROM social_editorial_plan;
-DELETE FROM social_schedule;
-DELETE FROM social_insights;
-DELETE FROM social_series_parts;
-DELETE FROM social_series;
-DELETE FROM social_topics;
-DELETE FROM social_posts;
-DELETE FROM social_templates;
+SELECT pg_temp.del_if('social_reel_segments');
+SELECT pg_temp.del_if('social_reel_plan');
+SELECT pg_temp.del_if('social_reel_templates');
+SELECT pg_temp.del_if('social_reels');
+SELECT pg_temp.del_if('social_editorial_plan');
+SELECT pg_temp.del_if('social_schedule');
+SELECT pg_temp.del_if('social_insights');
+SELECT pg_temp.del_if('social_series_parts');
+SELECT pg_temp.del_if('social_series');
+SELECT pg_temp.del_if('social_topics');
+SELECT pg_temp.del_if('social_posts');
+SELECT pg_temp.del_if('social_templates');
 -- social_accounts BLEIBT (OAuth-Verbindung FB-Page + IG-Account)
 
 -- ─────────────────────────────────────────────────────────────────
 -- 2) Buchungs-Children (Tabellen mit FK auf bookings oder Kunden)
 -- ─────────────────────────────────────────────────────────────────
-DELETE FROM messages;
-DELETE FROM conversations;
-DELETE FROM rental_agreements;
-DELETE FROM damage_reports;
-DELETE FROM return_checklists;
-DELETE FROM dunning_notices;
-DELETE FROM credit_notes;
-DELETE FROM invoices;
-DELETE FROM stripe_transactions;
-DELETE FROM email_log;
+SELECT pg_temp.del_if('messages');
+SELECT pg_temp.del_if('conversations');
+SELECT pg_temp.del_if('rental_agreements');
+SELECT pg_temp.del_if('damage_reports');
+SELECT pg_temp.del_if('return_checklists');
+SELECT pg_temp.del_if('dunning_notices');
+SELECT pg_temp.del_if('credit_notes');
+SELECT pg_temp.del_if('invoices');
+SELECT pg_temp.del_if('stripe_transactions');
+SELECT pg_temp.del_if('email_log');
 
 -- admin_audit_log hat einen GoBD-Schutz-Trigger, temporaer disablen
-ALTER TABLE admin_audit_log DISABLE TRIGGER trg_prevent_audit_log_delete;
-DELETE FROM admin_audit_log;
-ALTER TABLE admin_audit_log ENABLE TRIGGER trg_prevent_audit_log_delete;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_tables
+     WHERE schemaname = 'public' AND tablename = 'admin_audit_log'
+  ) THEN
+    ALTER TABLE admin_audit_log DISABLE TRIGGER trg_prevent_audit_log_delete;
+    DELETE FROM admin_audit_log;
+    ALTER TABLE admin_audit_log ENABLE TRIGGER trg_prevent_audit_log_delete;
+    RAISE NOTICE 'admin_audit_log: cleared (trigger toggled)';
+  END IF;
+END $$;
 
-DELETE FROM abandoned_carts;
-DELETE FROM reviews;
-DELETE FROM favorites;
-DELETE FROM customer_ugc_submissions;
-DELETE FROM waitlist_subscriptions;
-DELETE FROM newsletter_subscribers;
-DELETE FROM customer_push_subscriptions;
-DELETE FROM push_subscriptions;
-DELETE FROM admin_notifications;
-DELETE FROM beta_feedback;
-DELETE FROM customer_notes;
+SELECT pg_temp.del_if('abandoned_carts');
+SELECT pg_temp.del_if('reviews');
+SELECT pg_temp.del_if('favorites');
+SELECT pg_temp.del_if('customer_ugc_submissions');
+SELECT pg_temp.del_if('waitlist_subscriptions');
+SELECT pg_temp.del_if('newsletter_subscribers');
+SELECT pg_temp.del_if('customer_push_subscriptions');
+SELECT pg_temp.del_if('push_subscriptions');
+SELECT pg_temp.del_if('admin_notifications');
+SELECT pg_temp.del_if('beta_feedback');
+SELECT pg_temp.del_if('admin_customer_notes');
+SELECT pg_temp.del_if('customer_notes');
 
 -- ─────────────────────────────────────────────────────────────────
 -- 3) Bookings selbst
 -- ─────────────────────────────────────────────────────────────────
-DELETE FROM bookings;
+SELECT pg_temp.del_if('bookings');
 
 -- ─────────────────────────────────────────────────────────────────
 -- 4) Anlagenverzeichnis — nur Test-Daten weg
 -- ─────────────────────────────────────────────────────────────────
-DELETE FROM expenses WHERE is_test = TRUE;
-DELETE FROM purchase_items
- WHERE purchase_id IN (SELECT id FROM purchases WHERE is_test = TRUE);
-DELETE FROM purchases WHERE is_test = TRUE;
-DELETE FROM assets WHERE is_test = TRUE;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename='expenses') THEN
+    DELETE FROM expenses WHERE is_test = TRUE;
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename='purchase_items')
+     AND EXISTS (SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename='purchases') THEN
+    DELETE FROM purchase_items
+     WHERE purchase_id IN (SELECT id FROM purchases WHERE is_test = TRUE);
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename='purchases') THEN
+    DELETE FROM purchases WHERE is_test = TRUE;
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename='assets') THEN
+    DELETE FROM assets WHERE is_test = TRUE;
+  END IF;
+END $$;
 
 -- ─────────────────────────────────────────────────────────────────
 -- 5) Counter zuruecksetzen
 -- ─────────────────────────────────────────────────────────────────
-UPDATE invoice_counter SET counter = 0;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename='invoice_counter') THEN
+    UPDATE invoice_counter SET counter = 0;
+  END IF;
+END $$;
 
 -- ─────────────────────────────────────────────────────────────────
 -- 6) Transiente admin_settings-Keys (Cron-Locks + Job-State)
