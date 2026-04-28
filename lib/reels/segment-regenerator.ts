@@ -468,7 +468,7 @@ async function rebuildVoiceTrack(
 
 /**
  * Audio-Mix mit gleichem Verhalten wie in renderReel:
- *   - Voice + Musik: Musik bei volume=0.25, mit Voice gemischt
+ *   - Voice + Musik: Musik bei volume=0.12 (-18dB), mit Voice gemischt
  *   - Nur Voice: pur
  *   - Nur Musik: pur
  *   - Stille: anullsrc
@@ -492,7 +492,7 @@ async function mixFinalAudio(
         '-i', noAudioPath,
         '-i', voiceTrackPath as string,
         '-i', musicPath,
-        '-filter_complex', '[2:a]volume=0.25[m];[1:a][m]amix=inputs=2:duration=first:dropout_transition=0[a]',
+        '-filter_complex', '[2:a]volume=0.12[m];[1:a][m]amix=inputs=2:duration=first:dropout_transition=0[a]',
         '-map', '0:v', '-map', '[a]',
         '-c:v', 'copy', '-c:a', 'aac', '-b:a', '128k',
         '-shortest',

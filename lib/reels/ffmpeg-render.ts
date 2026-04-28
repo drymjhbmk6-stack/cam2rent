@@ -1135,7 +1135,7 @@ export async function renderReel(input: RenderInput): Promise<RenderResult> {
     const hasVoice = Boolean(voiceTrackPath);
 
     if (hasMusic && hasVoice) {
-      // Musik (-10dB) + Voice (0dB) mischen
+      // Musik (-18dB ≈ volume=0.12) + Voice (0dB) mischen — Broadcast-Standard fuer Musik unter Sprache
       const musicPath = path.join(workDir, 'music.mp3');
       try {
         await downloadToFile(input.musicUrl!, musicPath);
@@ -1146,7 +1146,7 @@ export async function renderReel(input: RenderInput): Promise<RenderResult> {
           '-i', noAudioPath,
           '-i', voiceTrackPath!,
           '-i', musicPath,
-          '-filter_complex', '[2:a]volume=0.25[m];[1:a][m]amix=inputs=2:duration=first:dropout_transition=0[a]',
+          '-filter_complex', '[2:a]volume=0.12[m];[1:a][m]amix=inputs=2:duration=first:dropout_transition=0[a]',
           '-map', '0:v',
           '-map', '[a]',
           '-c:v', 'copy',
