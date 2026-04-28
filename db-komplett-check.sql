@@ -9,6 +9,8 @@
 --   2. Spalten-Checks für nachträglich hinzugefügte Spalten (is_test etc.)
 --   3. Storage-Buckets
 --   4. Zusammenfassung — wie viele Tabellen vorhanden vs. erwartet
+--
+-- Stand: 2026-04-28 — Tabellennamen mit der echten DB abgeglichen.
 -- ────────────────────────────────────────────────────────────────────────────
 
 
@@ -20,6 +22,7 @@ WITH expected(modul, tabelle) AS (
     -- Kern
     ('Kern',           'profiles'),
     ('Kern',           'admin_settings'),
+    ('Kern',           'admin_config'),
     ('Kern',           'admin_users'),
     ('Kern',           'admin_sessions'),
     ('Kern',           'admin_audit_log'),
@@ -30,19 +33,19 @@ WITH expected(modul, tabelle) AS (
     ('Buchungen',      'rental_agreements'),
     ('Buchungen',      'product_units'),
     ('Buchungen',      'damage_reports'),
+    ('Buchungen',      'return_checklists'),
 
     -- Katalog
-    ('Katalog',        'admin_config'),
     ('Katalog',        'accessories'),
     ('Katalog',        'sets'),
     ('Katalog',        'suppliers'),
 
     -- Kunden
-    ('Kunden',         'customer_notes'),
+    ('Kunden',         'admin_customer_notes'),
     ('Kunden',         'waitlist_subscriptions'),
     ('Kunden',         'customer_ugc_submissions'),
-    ('Kunden',         'newsletter_subscribers'),         -- ⚠ aktuell offen
-    ('Kunden',         'customer_push_subscriptions'),    -- ⚠ aktuell offen
+    ('Kunden',         'newsletter_subscribers'),
+    ('Kunden',         'customer_push_subscriptions'),
 
     -- Buchhaltung
     ('Buchhaltung',    'invoices'),
@@ -64,17 +67,12 @@ WITH expected(modul, tabelle) AS (
     ('Kommunikation',  'conversations'),
     ('Kommunikation',  'push_subscriptions'),
 
-    -- Coupons & Rabatte
+    -- Aktionen
     ('Aktionen',       'coupons'),
-    ('Aktionen',       'discounts'),
 
     -- Bewertungen / Beta
     ('Feedback',       'reviews'),
     ('Feedback',       'beta_feedback'),
-
-    -- Versand / Retouren
-    ('Versand',        'returns'),
-    ('Versand',        'shipping_labels'),
 
     -- Blog
     ('Blog',           'blog_posts'),
@@ -107,12 +105,7 @@ WITH expected(modul, tabelle) AS (
     ('Legal',          'legal_document_versions'),
 
     -- Analytics
-    ('Analytics',      'analytics_pageviews'),
-    ('Analytics',      'analytics_events'),
-
-    -- Sonstiges
-    ('Sonstiges',      'home_content'),
-    ('Sonstiges',      'shop_sections')
+    ('Analytics',      'page_views')
 )
 SELECT
   e.modul                                              AS "Modul",
@@ -133,21 +126,21 @@ ORDER BY
 -- ════════════════════════════════════════════════════════════════════════════
 WITH col_checks(beschreibung, t, c) AS (
   VALUES
-    ('Push-Subscriptions: admin_user_id (Permission-Filter)', 'push_subscriptions', 'admin_user_id'),
-    ('Reels: motion_style',                                   'social_reel_templates', 'motion_style'),
-    ('Reels: quality_metrics',                                'social_reels',       'quality_metrics'),
-    ('Reels-Settings Pixabay-Key (in admin_settings JSON)',   'admin_settings',     'value'),
-    ('Bookings: is_test',                                     'bookings',           'is_test'),
-    ('Bookings: verification_required',                       'bookings',           'verification_required'),
-    ('Bookings: early_service_consent_at',                    'bookings',           'early_service_consent_at'),
-    ('Bookings: stripe_payment_link_id',                      'bookings',           'stripe_payment_link_id'),
-    ('Bookings: pack_status (4-Augen Versand-Pack)',          'bookings',           'pack_status'),
-    ('Bookings: unit_id',                                     'bookings',           'unit_id'),
-    ('Invoices: is_test',                                     'invoices',           'is_test'),
-    ('Email-Log: is_test',                                    'email_log',          'is_test'),
-    ('Social-Posts: fb_image_position',                       'social_posts',       'fb_image_position'),
-    ('Social-Posts: fb_permalink',                            'social_posts',       'fb_permalink'),
-    ('Purchase-Items: classification (KI-Rechnungs-OCR)',     'purchase_items',     'classification')
+    ('Push-Subscriptions: admin_user_id (Permission-Filter)', 'push_subscriptions',    'admin_user_id'),
+    ('Reel-Templates: motion_style (Phase 2)',                'social_reel_templates', 'motion_style'),
+    ('Reels: quality_metrics (Phase 2)',                      'social_reels',          'quality_metrics'),
+    ('Bookings: is_test (Test/Live-Toggle)',                  'bookings',              'is_test'),
+    ('Bookings: verification_required',                       'bookings',              'verification_required'),
+    ('Bookings: early_service_consent_at (§ 356 BGB)',        'bookings',              'early_service_consent_at'),
+    ('Bookings: stripe_payment_link_id',                      'bookings',              'stripe_payment_link_id'),
+    ('Bookings: pack_status (4-Augen Versand-Pack)',          'bookings',              'pack_status'),
+    ('Bookings: unit_id (Seriennummer-Tracking)',             'bookings',              'unit_id'),
+    ('Invoices: is_test',                                     'invoices',              'is_test'),
+    ('Email-Log: is_test',                                    'email_log',             'is_test'),
+    ('Social-Posts: fb_image_position',                       'social_posts',          'fb_image_position'),
+    ('Social-Posts: fb_permalink',                            'social_posts',          'fb_permalink'),
+    ('Purchase-Items: classification (KI-OCR)',               'purchase_items',        'classification'),
+    ('Bookings: sendcloud_parcel_id',                         'bookings',              'sendcloud_parcel_id')
 )
 SELECT
   cc.beschreibung                                        AS "Check",
@@ -202,23 +195,41 @@ ORDER BY
 -- ════════════════════════════════════════════════════════════════════════════
 WITH expected(tabelle) AS (
   VALUES
-    ('profiles'),('admin_settings'),('admin_users'),('admin_sessions'),
-    ('admin_audit_log'),('admin_notifications'),('bookings'),('rental_agreements'),
-    ('product_units'),('damage_reports'),('admin_config'),('accessories'),
-    ('sets'),('suppliers'),('customer_notes'),('waitlist_subscriptions'),
-    ('customer_ugc_submissions'),('newsletter_subscribers'),('customer_push_subscriptions'),
+    -- Kern
+    ('profiles'),('admin_settings'),('admin_config'),('admin_users'),
+    ('admin_sessions'),('admin_audit_log'),('admin_notifications'),
+    -- Buchungen
+    ('bookings'),('rental_agreements'),('product_units'),('damage_reports'),
+    ('return_checklists'),
+    -- Katalog
+    ('accessories'),('sets'),('suppliers'),
+    -- Kunden
+    ('admin_customer_notes'),('waitlist_subscriptions'),('customer_ugc_submissions'),
+    ('newsletter_subscribers'),('customer_push_subscriptions'),
+    -- Buchhaltung
     ('invoices'),('invoice_counter'),('credit_notes'),('dunning_notices'),
-    ('stripe_transactions'),('expenses'),('export_log'),('assets'),('purchases'),
-    ('purchase_items'),('email_log'),('messages'),('conversations'),
-    ('push_subscriptions'),('coupons'),('discounts'),('reviews'),('beta_feedback'),
-    ('returns'),('shipping_labels'),('blog_posts'),('blog_categories'),
-    ('blog_comments'),('blog_schedule'),('blog_auto_topics'),('blog_series'),
-    ('blog_series_parts'),('social_accounts'),('social_posts'),('social_templates'),
-    ('social_schedule'),('social_insights'),('social_topics'),('social_series'),
-    ('social_series_parts'),('social_editorial_plan'),('social_reels'),
-    ('social_reel_templates'),('social_reel_plan'),('social_reel_segments'),
-    ('legal_documents'),('legal_document_versions'),('analytics_pageviews'),
-    ('analytics_events'),('home_content'),('shop_sections')
+    ('stripe_transactions'),('expenses'),('export_log'),
+    -- Anlagen
+    ('assets'),('purchases'),('purchase_items'),
+    -- Kommunikation
+    ('email_log'),('messages'),('conversations'),('push_subscriptions'),
+    -- Aktionen
+    ('coupons'),
+    -- Feedback
+    ('reviews'),('beta_feedback'),
+    -- Blog
+    ('blog_posts'),('blog_categories'),('blog_comments'),('blog_schedule'),
+    ('blog_auto_topics'),('blog_series'),('blog_series_parts'),
+    -- Social
+    ('social_accounts'),('social_posts'),('social_templates'),('social_schedule'),
+    ('social_insights'),('social_topics'),('social_series'),('social_series_parts'),
+    ('social_editorial_plan'),
+    -- Reels
+    ('social_reels'),('social_reel_templates'),('social_reel_plan'),('social_reel_segments'),
+    -- Legal
+    ('legal_documents'),('legal_document_versions'),
+    -- Analytics
+    ('page_views')
 )
 SELECT
   COUNT(*)                                                              AS "Erwartet",
