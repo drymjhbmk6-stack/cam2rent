@@ -173,6 +173,7 @@ const API_PATH_PERMISSIONS: PermRule[] = [
   { prefix: '/api/admin/reviews', perm: 'kunden' },
   // Katalog
   { prefix: '/api/admin/accessories', perm: 'katalog' },
+  { prefix: '/api/admin/accessory-units', perm: 'katalog' },
   { prefix: '/api/admin/product-units', perm: 'katalog' },
   { prefix: '/api/admin/suppliers', perm: 'katalog' },
   { prefix: '/api/admin/purchase-items', perm: 'katalog' },

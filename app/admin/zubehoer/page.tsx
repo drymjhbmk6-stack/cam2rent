@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import DynamicSelect from '@/components/admin/DynamicSelect';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import AccessoryUnitsManager from '@/components/admin/AccessoryUnitsManager';
 import { type AdminProduct } from '@/lib/price-config';
 import { getBrandStyle } from '@/lib/brand-colors';
 import { useBrandColors } from '@/hooks/useBrandColors';
@@ -40,7 +41,7 @@ function emptyForm() {
     description: '',
     pricing_mode: 'perDay' as 'perDay' | 'flat',
     price: 0,
-    available_qty: 1,
+    available_qty: 0,
     available: true,
     image_url: '',
     compatible_product_ids: [] as string[],
@@ -270,9 +271,9 @@ export default function AdminZubehoerPage() {
               </div>
               <div>
                 <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Verfügbare Menge</label>
-                <input type="number" min="0" value={newForm.available_qty}
-                  onChange={(e) => setNewForm((f) => ({ ...f, available_qty: parseInt(e.target.value) || 0 }))}
-                  className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
+                <div className="w-full px-3 py-2.5 border border-dashed border-brand-border rounded-[10px] text-xs font-body text-brand-muted bg-gray-50">
+                  0 Exemplare — nach dem Speichern unten Exemplare anlegen.
+                </div>
               </div>
               <div>
                 <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">
@@ -593,9 +594,10 @@ function AccessoryCard({ acc, editId, editForm, setEditForm, savedId, savingId, 
                       </div>
                       <div>
                         <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Verfügbare Menge</label>
-                        <input type="number" min="0" value={editForm.available_qty ?? 1}
-                          onChange={(e) => setEditForm((f) => ({ ...f, available_qty: parseInt(e.target.value) || 0 }))}
-                          className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body bg-white focus:outline-none focus:ring-2 focus:ring-accent-blue" />
+                        <div className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body bg-gray-50 text-brand-muted flex items-center justify-between">
+                          <span>{editForm.available_qty ?? 0} Exemplare</span>
+                          <span className="text-[10px]">automatisch berechnet</span>
+                        </div>
                       </div>
                       <div>
                         <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">
@@ -702,6 +704,15 @@ function AccessoryCard({ acc, editId, editForm, setEditForm, savedId, savingId, 
                         </div>
                         <p className="text-xs text-brand-muted">Leer = passt zu allen Kameras.</p>
                       </div>
+                    </div>
+                    {/* Exemplar-Verwaltung — nur sichtbar im Edit-Modus, weil acc.id existiert */}
+                    <div className="mt-5">
+                      <AccessoryUnitsManager
+                        accessoryId={acc.id}
+                        onCountChanged={({ available }) =>
+                          setEditForm((f) => ({ ...f, available_qty: available }))
+                        }
+                      />
                     </div>
                     <div className="flex justify-end mt-4 gap-2">
                       <button onClick={() => onSetEditId(null)}
