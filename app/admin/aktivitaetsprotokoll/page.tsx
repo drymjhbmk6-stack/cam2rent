@@ -67,6 +67,8 @@ const ACTION_LABELS: Record<string, string> = {
   // Einstellungen
   'settings.update': 'Einstellungen geändert',
   'env_mode.change': 'Test-/Live-Modus gewechselt',
+  'email_template.update': 'E-Mail-Vorlage angepasst',
+  'email_template.reset': 'E-Mail-Vorlage zurückgesetzt',
   // Legacy (Unterstrich-Namen, falls noch im Bestand)
   booking_cancelled: 'Buchung storniert',
   booking_confirmed: 'Buchung bestätigt',
@@ -120,6 +122,7 @@ const ENTITY_LABELS: Record<string, string> = {
   stripe: 'Stripe',
   reel: 'Reel',
   customer_ugc: 'Kundenmaterial',
+  email_template: 'E-Mail-Vorlage',
 };
 
 function humanizeAction(action: string): string {

@@ -8,6 +8,7 @@ import { BUSINESS } from '@/lib/business-config';
 import { createServiceClient } from '@/lib/supabase';
 import { fmtDate, fmtEuro } from '@/lib/format-utils';
 import { getResendFromEmail, getTestModeEmailRedirect, isTestMode, getSiteUrl } from '@/lib/env-mode';
+import { getEmailTemplateOverride, applyEmailOverride } from '@/lib/email-template-overrides';
 
 // Resend wirft im Konstruktor wenn der Key fehlt (ab v6). Zur Build-Zeit
 // liegt RESEND_API_KEY in Coolify nicht als ARG an → Platzhalter, damit
@@ -107,11 +108,19 @@ export async function sendAndLog(opts: {
   emailType: string;
   attachments?: { filename: string; content: Buffer }[];
 }) {
+  // Admin-Overrides (Subject + Einleitungs-HTML) werden vor allem anderen
+  // angewendet — damit auch der Preview-Capture-Pfad und das DB-Log die
+  // tatsaechlich versendete Variante sehen.
+  const override = await getEmailTemplateOverride(opts.emailType).catch(() => null);
+  const applied = applyEmailOverride({ subject: opts.subject, html: opts.html }, override);
+  const overriddenSubject = applied.subject;
+  const overriddenHtml = applied.html;
+
   // Preview-Modus: capture statt Versand
   const capture = previewContext.getStore();
   if (capture) {
-    capture.subject = opts.subject;
-    capture.html = opts.html;
+    capture.subject = overriddenSubject;
+    capture.html = overriddenHtml;
     capture.to = opts.to;
     capture.emailType = opts.emailType;
     return;
@@ -121,14 +130,14 @@ export async function sendAndLog(opts: {
     const redirect = await getTestModeEmailRedirect();
     const finalTo = redirect ?? opts.to;
     const finalSubject = redirect
-      ? `[TEST → urspruenglich: ${opts.to}] ${opts.subject}`
-      : opts.subject;
+      ? `[TEST → urspruenglich: ${opts.to}] ${overriddenSubject}`
+      : overriddenSubject;
     const result = await resend.emails.send({
       from: `${BUSINESS.name} <${fromEmail}>`,
       replyTo: ADMIN_EMAIL,
       to: finalTo,
       subject: finalSubject,
-      html: opts.html,
+      html: overriddenHtml,
       text: opts.text,
       attachments: opts.attachments,
     });
@@ -142,7 +151,7 @@ export async function sendAndLog(opts: {
       bookingId: opts.bookingId,
       customerEmail: opts.to,
       emailType: opts.emailType,
-      subject: opts.subject,
+      subject: overriddenSubject,
       status: 'sent',
       resendMessageId: result.data?.id,
     });
@@ -151,7 +160,7 @@ export async function sendAndLog(opts: {
       bookingId: opts.bookingId,
       customerEmail: opts.to,
       emailType: opts.emailType,
-      subject: opts.subject,
+      subject: overriddenSubject,
       status: 'failed',
       errorMessage: err instanceof Error ? err.message : 'Unbekannt',
     });

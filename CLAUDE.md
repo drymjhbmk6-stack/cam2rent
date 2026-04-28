@@ -1108,13 +1108,17 @@ Zentraler Switch im Admin (`/admin/einstellungen` → "Test-/Live-Modus") kippt 
 ### Test-Email Endpoint
 - `GET /api/admin/test-email?to=email@example.de` — sendet Test-Email und gibt bei Fehler konkrete Hinweise (Sandbox? Domain? API-Key?)
 
-### E-Mail-Vorlagen-Übersicht (`/admin/emails/vorlagen`)
-Read-only Katalog aller automatisch versendeten E-Mails mit Inline-Vorschau.
-- **Katalog:** `lib/email-previews.ts` — `EMAIL_TEMPLATE_CATALOG` listet ~14 Templates mit id, Name, Trigger-Beschreibung, Empfänger (Kunde/Admin) und Render-Funktion
+### E-Mail-Vorlagen-Übersicht + Bearbeitung (`/admin/emails/vorlagen`, Stand 2026-04-28)
+Katalog aller automatisch versendeten E-Mails mit Inline-Vorschau und optionaler Anpassung von Betreff + Einleitungstext pro Vorlage.
+- **Katalog:** `lib/email-previews.ts` — `EMAIL_TEMPLATE_CATALOG` listet ~17 Templates mit id, Name, Trigger-Beschreibung, Empfänger (Kunde/Admin) und Render-Funktion
 - **Preview-Mechanismus:** `renderEmailPreview(sendFn, data)` in `lib/email.ts` nutzt `AsyncLocalStorage`, um `sendAndLog` im Capture-Modus auszuführen — kein tatsächlicher Versand, kein Log-Eintrag. Minimal-invasiv: keine Refaktorierung der 17 send-Funktionen nötig.
-- **APIs:** `GET /api/admin/email-templates` (Liste), `GET /api/admin/email-templates/preview?id=X&format=html|json` (gerenderte E-Mail mit Dummy-Daten)
-- **UI:** Karten-Liste mit Inline-Vorschau im Modal (iframe) + Button "Neuer Tab" für Fullscreen-Preview
-- **Keine Bearbeitung** in dieser Stufe — geplant ist Stufe 2 (Betreff/Textblock-Overrides in `admin_settings`) bei Bedarf
+- **Overrides (Stufe 2):** Pro Template (keyed by emailType) lassen sich `subject` und `introHtml` in `admin_settings.email_template_overrides` hinterlegen. Greift überall — echte Sends, manueller Versand aus Buchungsdetails, Vorschau im Admin.
+  - **Lib:** `lib/email-template-overrides.ts` — `getEmailTemplateOverride(id)`, `applyEmailOverride(rendered, override)`, `setEmailTemplateOverride(id, override|null)`, 30 s In-Memory-Cache mit `invalidateEmailTemplateOverridesCache()`. Eigener Allowlist-Sanitizer (`<b>`, `<i>`, `<em>`, `<strong>`, `<p>`, `<br>`, `<a>`, `<ul>`, `<ol>`, `<li>`, `<h2>`, `<h3>`, `<span>`, `<div>`, `<u>`, `<s>`, `<small>`, `<code>`); entfernt `<script>`, `<iframe>`, `<style>`, Event-Handler-Attribute, `style`-Attribute und `javascript:`-Links. Subject-Cap auf 250 Zeichen.
+  - **Wiring:** `sendAndLog()` in `lib/email.ts` ruft den Override-Lookup vor Capture/Versand auf — Capture-Pfad (`renderEmailPreview`) bekommt damit automatisch die Override-Variante, das DB-`email_log` protokolliert den tatsächlich versendeten Subject. Die 5 Build-Pfad-Templates (booking_confirmation, booking_admin, cancellation_customer, cancellation_admin, shipping_confirmation) wenden Overrides explizit über `withOverride()` in `email-previews.ts` an, damit auch deren Vorschau die Anpassungen zeigt.
+  - **HTML-Injection:** Einleitungs-Block wird nach der ersten `</h1>` eingefügt; falls keine vorhanden, am Anfang des weißen Body-Containers. Block hat ein `data-cam2rent-intro="1"`-Attribut zur Erkennung.
+- **APIs:** `GET /api/admin/email-templates` (Liste), `GET /api/admin/email-templates/preview?id=X&format=html|json` (Render mit Dummy-Daten), `GET /api/admin/email-templates/overrides` (Map aller aktiven Overrides), `PUT /api/admin/email-templates/overrides` (Body `{ id, subject?, introHtml? }`), `DELETE /api/admin/email-templates/overrides?id=...` (Standard wiederherstellen).
+- **UI:** Karten-Liste mit Inline-Vorschau im Modal (iframe) + Button „Neuer Tab" für Fullscreen-Preview. Bearbeiten-Button öffnet Edit-Modal mit Betreff-Input + Einleitungstext-Textarea + Live-Vorschau (iframe gegen Preview-API, manuell aktualisierbar) + „Auf Standard zurücksetzen"-Button. Karten mit aktiver Anpassung bekommen amber-Border + „✏ angepasst"-Badge, im Header zeigt sich die Gesamtzahl angepasster Vorlagen.
+- **Audit-Log:** `email_template.update` + `email_template.reset` in `ACTION_LABELS`, Entity `email_template` in `ENTITY_LABELS`.
 
 ### Wochenbericht (Stand 2026-04-20)
 Automatische E-Mail mit **PDF-Anhang** jeden Sonntag 18:30 Uhr Server-Zeit. Sammelt Kennzahlen der letzten 7 Tage + Vergleich zur Vorwoche.

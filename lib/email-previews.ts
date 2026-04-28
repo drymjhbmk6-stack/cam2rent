@@ -46,6 +46,10 @@ import {
   sendUgcFeaturedEmail,
   sendUgcRejectedEmail,
 } from '@/lib/customer-ugc';
+import {
+  applyEmailOverride,
+  getEmailTemplateOverride,
+} from '@/lib/email-template-overrides';
 
 export type EmailRecipient = 'customer' | 'admin';
 
@@ -55,6 +59,20 @@ export interface EmailTemplateMeta {
   description: string;
   recipient: EmailRecipient;
   render: () => Promise<{ subject: string; html: string }>;
+}
+
+/**
+ * Wrappt eine Render-Funktion und wendet Admin-Overrides nach dem Rendern an.
+ * Wichtig fuer den Build-Pfad (buildCustomerEmail etc.) — der renderEmailPreview-
+ * Pfad bekommt Overrides bereits ueber sendAndLog().
+ */
+async function withOverride(
+  id: string,
+  render: () => Promise<{ subject: string; html: string }>,
+): Promise<{ subject: string; html: string }> {
+  const rendered = await render();
+  const override = await getEmailTemplateOverride(id).catch(() => null);
+  return applyEmailOverride(rendered, override);
 }
 
 // ─── Dummy-Daten ──────────────────────────────────────────────────────────────
@@ -166,14 +184,14 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateMeta[] = [
     name: 'Buchungsbestätigung',
     description: 'Nach erfolgreicher Zahlung über den Checkout — inkl. Rechnung, Vertrag und Rechtstexten als PDF-Anhang.',
     recipient: 'customer',
-    render: async () => buildCustomerEmail(dummyBooking),
+    render: () => withOverride('booking_confirmation', async () => buildCustomerEmail(dummyBooking)),
   },
   {
     id: 'booking_admin',
     name: 'Neue Buchung — Admin-Benachrichtigung',
     description: 'Parallel zur Buchungsbestätigung: Admin erhält Info über die neue Buchung.',
     recipient: 'admin',
-    render: async () => buildAdminEmail(dummyBooking),
+    render: () => withOverride('booking_admin', async () => buildAdminEmail(dummyBooking)),
   },
   // Stornierung
   {
@@ -181,14 +199,14 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateMeta[] = [
     name: 'Stornierungsbestätigung',
     description: 'Wenn Kunde oder Admin eine Buchung storniert — enthält Rückerstattungsbetrag und evtl. Stornogebühr.',
     recipient: 'customer',
-    render: async () => buildCancellationCustomerEmail(dummyCancellation),
+    render: () => withOverride('cancellation_customer', async () => buildCancellationCustomerEmail(dummyCancellation)),
   },
   {
     id: 'cancellation_admin',
     name: 'Stornierung — Admin-Benachrichtigung',
     description: 'Parallel zur Stornierungsbestätigung: Admin erhält Info über die stornierte Buchung.',
     recipient: 'admin',
-    render: async () => buildCancellationAdminEmail(dummyCancellation),
+    render: () => withOverride('cancellation_admin', async () => buildCancellationAdminEmail(dummyCancellation)),
   },
   // Versand
   {
@@ -196,7 +214,7 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateMeta[] = [
     name: 'Versandbestätigung',
     description: 'Wenn das Paket durch den Admin im Versand-Workflow als "versandt" markiert wird — inkl. Tracking-Link.',
     recipient: 'customer',
-    render: async () => buildShippingEmail(dummyShipping),
+    render: () => withOverride('shipping_confirmation', async () => buildShippingEmail(dummyShipping)),
   },
   // Schaden
   {
