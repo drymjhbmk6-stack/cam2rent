@@ -13,6 +13,7 @@ import { isTestMode } from '@/lib/env-mode';
 import { createAdminNotification } from '@/lib/admin-notifications';
 import { parseMetadataAccessoryItems, itemsToLegacyIds } from '@/lib/booking-accessories';
 import { assignUnitToBooking } from '@/lib/unit-assignment';
+import { assignAccessoryUnitsToBooking } from '@/lib/accessory-unit-assignment';
 
 /**
  * Vergleicht die Summe einzelner Preiskomponenten gegen den von Stripe
@@ -308,6 +309,15 @@ async function handleSingleBooking(
     }
   }
 
+  // Zubehoer-Exemplare zuweisen (non-blocking)
+  if (accessoryItems.length > 0 && meta.rental_from && meta.rental_to) {
+    try {
+      await assignAccessoryUnitsToBooking(bookingId, accessoryItems, meta.rental_from, meta.rental_to);
+    } catch (e) {
+      console.error('[Webhook] accessory-unit-assign single failed', bookingId, e);
+    }
+  }
+
   console.log(`[Webhook] Einzelbuchung ${bookingId} nachgeholt.`);
 
   // Email senden
@@ -488,6 +498,15 @@ async function handleCartBooking(
       await assignUnitToBooking(bookingId, firstItem.productId, firstItem.rentalFrom, firstItem.rentalTo);
     } catch (e) {
       console.error('[Webhook] unit-assign cart failed', bookingId, e);
+    }
+  }
+
+  // Zubehoer-Exemplare zuweisen (non-blocking)
+  if (cartAccessoryItems.length > 0 && firstItem.rentalFrom && firstItem.rentalTo) {
+    try {
+      await assignAccessoryUnitsToBooking(bookingId, cartAccessoryItems, firstItem.rentalFrom, firstItem.rentalTo);
+    } catch (e) {
+      console.error('[Webhook] accessory-unit-assign cart failed', bookingId, e);
     }
   }
 

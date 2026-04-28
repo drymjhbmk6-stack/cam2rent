@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { generateBookingId } from '@/lib/booking-id';
 import { assignUnitToBooking } from '@/lib/unit-assignment';
+import { assignAccessoryUnitsToBooking } from '@/lib/accessory-unit-assignment';
 import { createAdminNotification } from '@/lib/admin-notifications';
 import { generateContractPDF } from '@/lib/contracts/generate-contract';
 import { storeContract } from '@/lib/contracts/store-contract';
@@ -124,6 +125,18 @@ export async function POST(req: NextRequest) {
     if (!body.unit_id) {
       assignUnitToBooking(bookingId, product_id, rental_from, rental_to)
         .catch((err) => console.error(`Unit assignment error for ${bookingId}:`, err));
+    }
+
+    // Zubehoer-Exemplare automatisch zuordnen (non-blocking)
+    const finalAccessoryItems: { accessory_id: string; qty: number }[] =
+      Array.isArray(body.accessory_items) && body.accessory_items.length > 0
+        ? body.accessory_items
+        : Array.isArray(accessories) && accessories.length > 0
+          ? (accessories as string[]).map((id) => ({ accessory_id: id, qty: 1 }))
+          : [];
+    if (finalAccessoryItems.length > 0) {
+      assignAccessoryUnitsToBooking(bookingId, finalAccessoryItems, rental_from, rental_to)
+        .catch((err) => console.error(`Accessory-unit assignment error for ${bookingId}:`, err));
     }
 
     // Transaktionsgebühren als Ausgabe verbuchen

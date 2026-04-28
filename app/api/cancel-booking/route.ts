@@ -9,6 +9,7 @@ import {
 } from '@/lib/email';
 import { createAdminNotification } from '@/lib/admin-notifications';
 import { getStripe } from '@/lib/stripe';
+import { releaseAccessoryUnitsFromBooking } from '@/lib/accessory-unit-assignment';
 
 export async function POST(req: NextRequest) {
   const cookieStore = await cookies();
@@ -113,6 +114,10 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
+
+  // Zubehoer-Exemplare freigeben (non-blocking)
+  releaseAccessoryUnitsFromBooking(bookingId)
+    .catch((err) => console.error('[cancel-booking] accessory-unit release failed:', err));
 
   // Send emails (fire and forget)
   const emailData = {

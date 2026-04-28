@@ -8,6 +8,7 @@ import { calcShipping } from '@/data/shipping';
 import type { ShippingMethod } from '@/data/shipping';
 import { DEFAULT_SHIPPING, type ShippingPriceConfig, calcPriceFromTable, type AdminProduct } from '@/lib/price-config';
 import { assignUnitToBooking } from '@/lib/unit-assignment';
+import { assignAccessoryUnitsToBooking } from '@/lib/accessory-unit-assignment';
 import { createAdminNotification } from '@/lib/admin-notifications';
 import { generateContractPDF } from '@/lib/contracts/generate-contract';
 import { storeContract } from '@/lib/contracts/store-contract';
@@ -160,6 +161,33 @@ export async function POST(req: NextRequest) {
                   if (unitId) fb.unit_id = unitId;
                 } catch (e) {
                   console.error('[confirm-cart] unit-assign idem failed', fb.id, e);
+                }
+              }),
+            );
+          }
+
+          // Idempotente Zubehoer-Exemplar-Zuweisung: nur wenn accessory_unit_ids
+          // leer und accessory_items vorhanden — sonst hatte schon ein anderer
+          // Pfad zugewiesen.
+          const needsAccUnits = (fullBookings ?? []).filter(
+            (fb) =>
+              fb.status !== 'cancelled' &&
+              Array.isArray(fb.accessory_items) &&
+              fb.accessory_items.length > 0 &&
+              (!Array.isArray(fb.accessory_unit_ids) || fb.accessory_unit_ids.length === 0)
+          );
+          if (needsAccUnits.length > 0) {
+            await Promise.all(
+              needsAccUnits.map(async (fb) => {
+                try {
+                  await assignAccessoryUnitsToBooking(
+                    fb.id,
+                    fb.accessory_items as { accessory_id: string; qty: number }[],
+                    fb.rental_from,
+                    fb.rental_to,
+                  );
+                } catch (e) {
+                  console.error('[confirm-cart] accessory-unit-assign idem failed', fb.id, e);
                 }
               }),
             );
@@ -497,6 +525,16 @@ export async function POST(req: NextRequest) {
       // Unit automatisch zuordnen (non-blocking)
       assignUnitToBooking(bookingId, firstItem.productId, firstItem.rentalFrom, firstItem.rentalTo)
         .catch((err) => console.error(`Unit assignment error for ${bookingId}:`, err));
+
+      // Zubehoer-Exemplare automatisch zuordnen (non-blocking)
+      if (groupAccessoryItems.length > 0) {
+        assignAccessoryUnitsToBooking(
+          bookingId,
+          groupAccessoryItems,
+          firstItem.rentalFrom,
+          firstItem.rentalTo,
+        ).catch((err) => console.error(`Accessory-unit assignment error for ${bookingId}:`, err));
+      }
     }
 
     // 5. Coupon used_count atomar erhöhen.

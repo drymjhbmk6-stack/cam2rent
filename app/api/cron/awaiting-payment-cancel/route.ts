@@ -5,6 +5,7 @@ import { isTestMode } from '@/lib/env-mode';
 import { getStripe } from '@/lib/stripe';
 import { getBerlinOffsetString } from '@/lib/timezone';
 import { acquireCronLock, releaseCronLock } from '@/lib/cron-lock';
+import { releaseAccessoryUnitsFromBooking } from '@/lib/accessory-unit-assignment';
 
 export const runtime = 'nodejs';
 export const maxDuration = 180;
@@ -161,6 +162,10 @@ async function handle(req: NextRequest) {
       results.push({ id: b.id, action: 'kept', error: cancelUpdate.error.message });
       continue;
     }
+
+    // Zubehoer-Exemplare freigeben (non-blocking)
+    releaseAccessoryUnitsFromBooking(b.id)
+      .catch((err) => console.error('[awaiting-payment-cancel] accessory-unit release failed', b.id, err));
 
     if (b.customer_email) {
       try {

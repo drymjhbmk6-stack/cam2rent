@@ -6,6 +6,7 @@ import { createAdminNotification } from '@/lib/admin-notifications';
 import { getStripe } from '@/lib/stripe';
 import { BUSINESS } from '@/lib/business-config';
 import { acquireCronLock, releaseCronLock } from '@/lib/cron-lock';
+import { releaseAccessoryUnitsFromBooking } from '@/lib/accessory-unit-assignment';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -115,6 +116,10 @@ async function handle(req: NextRequest) {
       errors.push(`${b.id}: ${updateErr.message}`);
       continue;
     }
+
+    // Zubehoer-Exemplare freigeben (non-blocking)
+    releaseAccessoryUnitsFromBooking(b.id)
+      .catch((err) => console.error('[verification-auto-cancel] accessory-unit release failed', b.id, err));
 
     // Stripe-Refund versuchen (best effort — Stornierung ist auch ohne Refund gueltig)
     if (b.payment_intent_id && !b.payment_intent_id.startsWith('MANUAL')) {

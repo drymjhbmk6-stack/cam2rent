@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { releaseAccessoryUnitsFromBooking } from '@/lib/accessory-unit-assignment';
 
 /**
  * POST /api/admin/return-booking
@@ -58,6 +59,15 @@ export async function POST(req: NextRequest) {
       .eq('id', bookingId);
 
     if (updateErr) throw updateErr;
+
+    // 1a.1 Zubehoer-Exemplare nur bei "completed" zurueck auf 'available' setzen.
+    // Bei 'damaged' bleibt der Status auf 'rented' -- der Admin muss einzeln im
+    // Schadensmodul (Phase 3) entscheiden, welches Exemplar als 'damaged' bzw.
+    // 'lost' markiert wird.
+    if (newStatus === 'completed') {
+      releaseAccessoryUnitsFromBooking(bookingId)
+        .catch((err) => console.error('[return-booking] accessory-unit release failed:', err));
+    }
 
     // 1b. Bei Beschädigung: automatisch Schadensmeldung erstellen
     if (condition === 'beschaedigt' && createDamageReport) {

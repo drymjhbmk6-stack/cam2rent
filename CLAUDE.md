@@ -280,8 +280,8 @@ Alle Dropdowns laden aus `admin_settings` und können neue Einträge hinzufügen
   - `GET /api/admin/booking/[id]` → `booking.serial_number` (aus product_units nachgeladen)
   - `GET /api/admin/versand-buchungen` → `booking.serial_number` (angereichert)
 
-### Einzelexemplar-Tracking für Zubehör (Phase 1 + 2A live — Stand 2026-04-28)
-Analog zu `product_units` für Kameras werden Akkus, Stative, Karten etc. pro physischem Stück getrackt — Grundlage für rechtssichere Schadensabwicklung (§ 249 BGB, kein Pauschalbetrag, sondern dokumentierter Wiederbeschaffungswert pro Exemplar). **Aktueller Stand:** Phase 1 (DB) + Phase 2A (Admin-CRUD) sind live. Phase 2B (Auto-Zuweisung bei Buchung) und 2C (Verfügbarkeits-API umstellen) folgen.
+### Einzelexemplar-Tracking für Zubehör (Phase 1 + 2A + 2B live — Stand 2026-04-28)
+Analog zu `product_units` für Kameras werden Akkus, Stative, Karten etc. pro physischem Stück getrackt — Grundlage für rechtssichere Schadensabwicklung (§ 249 BGB, kein Pauschalbetrag, sondern dokumentierter Wiederbeschaffungswert pro Exemplar). **Aktueller Stand:** Phase 1 (DB) + Phase 2A (Admin-CRUD) + Phase 2B (Auto-Zuweisung bei Buchung) sind live. Phase 2C (Verfügbarkeits-API umstellen) folgt.
 
 - **Tabelle `accessory_units`** (Migration `supabase/supabase-accessory-units.sql`): id UUID, accessory_id TEXT FK, exemplar_code TEXT (UNIQUE pro accessory_id), status (`available|rented|maintenance|damaged|lost|retired`), purchased_at, retired_at, retirement_reason, notes, created/updated_at. RLS: Service-Role-only (analog `product_units`).
 - **`bookings.accessory_unit_ids UUID[]`** (parallel zu `bookings.accessory_items` JSONB) hält die zugewiesenen Exemplare pro Buchung. Zuordnung welche Unit zu welchem accessory_id gehört ergibt sich aus `accessory_units.accessory_id` — kein zusätzliches Mapping nötig. GIN-Index für Überlappungs-Queries.
@@ -291,7 +291,11 @@ Analog zu `product_units` für Kameras werden Akkus, Stative, Karten etc. pro ph
 - **Daten-Migration** (`supabase-accessory-units-data-migration.sql`): Erzeugt pro `accessories`-Row mit `available_qty > 0` entsprechend viele Exemplare (`exemplar_code = <accessory_id>-001` aufwärts) mit konservativem Default-Kaufdatum (`CURRENT_DATE - 18 months`). Setzt `accessories.migrated_to_units = TRUE`. Idempotent. Statistik-SELECT am Ende der Datei für visuelle Prüfung im SQL-Editor.
 - **Rollback** (`supabase-accessory-units-rollback.sql`): Drop in der richtigen Reihenfolge (RPC → View → Spalte → Tabelle → Marker). ACHTUNG: Schadensabwicklungs-Historie geht verloren.
 - **Phase 2A (Admin-CRUD, live):** Neue API `app/api/admin/accessory-units/route.ts` (GET/POST/PUT/DELETE, Permission `katalog`), Helper `lib/sync-accessory-qty.ts` (hält `accessories.available_qty = COUNT(units WHERE status IN ('available','rented'))` nach jedem Mutate), UI-Komponente `components/admin/AccessoryUnitsManager.tsx` (Tabelle + Inline-Edit + Anlegen/Löschen) — eingebaut im Edit-Panel von `/admin/zubehoer`. Das `Verfügbare Menge`-Feld ist read-only und zeigt automatisch die berechnete Anzahl. Beim Anlegen eines neuen Zubehörs ist `available_qty` initial 0; Exemplare werden nach dem Speichern in der Edit-Ansicht hinzugefügt (analog Kamera-Neu-Seite).
-- **Phase 2B (TODO):** `lib/accessory-unit-assignment.ts` mit RPC-Aufruf `assign_free_accessory_units(...)`, Hooks in `confirm-cart`, `confirm-booking`, `manual-booking`. Bei Storno/Rückgabe Status der Units zurück auf `available`.
+- **Phase 2B (Auto-Zuweisung + Release, live):** Neue Lib `lib/accessory-unit-assignment.ts` mit zwei Funktionen:
+  - `assignAccessoryUnitsToBooking(bookingId, accessoryItems, rentalFrom, rentalTo)` ruft die RPC `assign_free_accessory_units` pro accessory_id+qty auf, gibt `{ assigned: Record<accessory_id, uuid[]>, missing: accessory_id[] }` zurück. Bei nicht ausreichend freien Units → der accessory_id landet in `missing`, Buchung läuft trotzdem durch (Fallback-Verhalten wie heute).
+  - `releaseAccessoryUnitsFromBooking(bookingId, unitIds?)` setzt Units zurück auf `available` — aber nur jene, die nicht in einer **anderen** aktiven Buchung stecken (durch Folgebuchungen können Exemplare bereits weiterreserviert sein). `bookings.accessory_unit_ids` bleibt für Audit/Schadensabwicklung erhalten — nur `accessory_units.status` wird zurückgesetzt. Status `damaged`/`lost`/`maintenance` bleiben unangetastet (nur `rented` → `available`).
+  - **6 Assignment-Hooks** (alle non-blocking): `confirm-cart` (2 Stellen — direkt nach Insert + idempotenter Re-Sync nach Webhook-Race), `confirm-booking`, `manual-booking`, `stripe-webhook` (2 Stellen — Single + Cart). Aufruf nach `assignUnitToBooking`.
+  - **5 Release-Hooks** (alle non-blocking): `cancel-booking`, `cron/auto-cancel`, `cron/awaiting-payment-cancel`, `cron/verification-auto-cancel`, `admin/return-booking` (**nur** bei `condition !== 'beschaedigt'`, also `newStatus === 'completed'`). Bei `damaged` bleiben Units auf `rented` — der Admin muss im Phase-3-Schadensmodul einzeln entscheiden.
 - **Phase 2C (TODO):** `/api/accessory-availability` umstellen, sodass `bookings.accessory_unit_ids` korrekt berücksichtigt wird (statt nur `bookings.accessories.length`-Legacy).
 
 ### Verfügbarkeit + Gantt-Kalender
@@ -1443,9 +1447,8 @@ Admin-Seite `/admin/newsletter` (in Sidebar-Gruppe „Rabatte & Aktionen", Permi
 **Audit-Log-Aktionen:** `newsletter.send_campaign`, `newsletter.update_subscriber`, `newsletter.delete_subscriber`, `customer_push.send`.
 
 ### Noch offen
-- **Zubehör-Exemplar-Tracking Phase 2B + 2C (TODO):**
-  - **2B:** `lib/accessory-unit-assignment.ts` schreiben (Wrapper um RPC `assign_free_accessory_units`), Hooks in `confirm-cart`, `confirm-booking`, `manual-booking`. Bei Storno/Rückgabe Units zurück auf `available`.
-  - **2C:** `/api/accessory-availability` umstellen — heute liest die API `bookings.accessories` (TEXT[]) und ignoriert `accessory_items[].qty`. Stattdessen `bookings.accessory_unit_ids` + View `accessories_with_stats` nutzen, damit Mehrfach-Buchungen (qty > 1) korrekt blockiert werden.
+- **Zubehör-Exemplar-Tracking Phase 2C (TODO):**
+  - `/api/accessory-availability` umstellen — heute liest die API `bookings.accessories` (TEXT[]) und ignoriert `accessory_items[].qty`. Stattdessen `bookings.accessory_unit_ids` + View `accessories_with_stats` nutzen, damit Mehrfach-Buchungen (qty > 1) korrekt blockiert werden. Nach Phase 2B sind `accessory_unit_ids` bei jeder neuen Buchung gesetzt — die Daten sind also da, nur die API liest sie noch nicht.
 - Nach der Push-Migration: alle Mitarbeiter müssen einmal Push neu aktivieren unter `/admin/einstellungen` → "Push aktivieren", damit ihre Subscription mit dem Mitarbeiter-Account verknüpft wird (sonst kriegen sie weiterhin alle Notifications wie ein Owner).
 - **Cron-Eintrag AfA monatlich in Hetzner-Crontab:**
   `0 3 1 * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/depreciation`

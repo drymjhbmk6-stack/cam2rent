@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase';
 import { sendAndLog } from '@/lib/email';
 import { verifyCronAuth } from '@/lib/cron-auth';
 import { createAdminNotification } from '@/lib/admin-notifications';
+import { releaseAccessoryUnitsFromBooking } from '@/lib/accessory-unit-assignment';
 
 /**
  * GET /api/cron/auto-cancel
@@ -49,6 +50,13 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: bulkUpdateErr.message }, { status: 500 });
   }
   const cancelledIds: string[] = [...allIds];
+
+  // Zubehoer-Exemplare aller stornierten Buchungen freigeben (non-blocking,
+  // einzeln pro Buchung damit nicht eine Buchung die andere mit-killt)
+  for (const id of cancelledIds) {
+    releaseAccessoryUnitsFromBooking(id)
+      .catch((err) => console.error('[auto-cancel] accessory-unit release failed', id, err));
+  }
 
   for (const booking of bookings) {
     // Admin-Benachrichtigung (fire-and-forget)

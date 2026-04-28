@@ -5,6 +5,7 @@ import { detectSuspicious } from '@/lib/suspicious';
 import { ensureBusinessConfig } from '@/lib/load-business-config';
 import { generateBookingId } from '@/lib/booking-id';
 import { assignUnitToBooking } from '@/lib/unit-assignment';
+import { assignAccessoryUnitsToBooking } from '@/lib/accessory-unit-assignment';
 import { createAdminNotification } from '@/lib/admin-notifications';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { calcPriceFromTable, type AdminProduct } from '@/lib/price-config';
@@ -259,6 +260,12 @@ export async function POST(req: NextRequest) {
     // 6a. Unit automatisch zuordnen (non-blocking)
     assignUnitToBooking(bookingId, meta.product_id, meta.rental_from, meta.rental_to)
       .catch((err) => console.error(`Unit assignment error for ${bookingId}:`, err));
+
+    // 6a.2. Zubehoer-Exemplare automatisch zuordnen (non-blocking)
+    if (accessoryItems.length > 0) {
+      assignAccessoryUnitsToBooking(bookingId, accessoryItems, meta.rental_from, meta.rental_to)
+        .catch((err) => console.error(`Accessory-unit assignment error for ${bookingId}:`, err));
+    }
 
     // 6b. Abandoned Cart als recovered markieren (non-blocking)
     if (meta.user_id) {
