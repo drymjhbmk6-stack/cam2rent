@@ -1395,6 +1395,8 @@ Vorbild: `/admin/social/zeitplan` (Posts) + `/admin/social/plan` (Bulk-Generator
 - ~~`supabase-env-toggle.sql`~~ (`is_test`-Flag auf 7 Tabellen — Test/Live-Wechsel sauber)
 - ~~`supabase-awaiting-payment-deadline.sql`~~ (`stripe_payment_link_id` + Deadline-Regeln)
 - ~~`supabase-check-email-rpc.sql`~~ (Anti-Enumeration RPC, ersetzt `listUsers` in 2 Auth-Routen)
+- ~~`supabase-newsletter.sql`~~ + ~~`supabase-customer-push.sql`~~ + ~~`supabase-push-per-user.sql`~~ (Newsletter-Double-Opt-In, Endkunden-Push, Permission-gefilterte Admin-Pushes — am 2026-04-28 ausgeführt)
+- ~~Restbestand `supabase/`-Ordner~~ (Buchhaltung-Vollausbau, Reels-Erweiterungen, Packing-Workflow, Legal-Seeds, Buchhaltung-Teil2, Anlagen-Flag-Live, Reels-Music/Pixabay/Motion-Style/Quality-Metrics/Segments, Newsletter, Customer-Push usw. — alle 60 erwarteten Tabellen nachweislich vorhanden, Stand 2026-04-28)
 
 ### Startseiten-Module (Stand 2026-04-26)
 Fünf neue Frontend-Module, die die Startseite lebendig halten — alle nutzen vorhandene Daten/Infrastruktur, kein Pflegeaufwand notwendig.
@@ -1426,10 +1428,7 @@ Admin-Seite `/admin/newsletter` (in Sidebar-Gruppe „Rabatte & Aktionen", Permi
 **Audit-Log-Aktionen:** `newsletter.send_campaign`, `newsletter.update_subscriber`, `newsletter.delete_subscriber`, `customer_push.send`.
 
 ### Noch offen
-- **SQL-Migration `supabase/supabase-newsletter.sql` ausführen** (Newsletter mit Double-Opt-In). Idempotent.
-- **SQL-Migration `supabase/supabase-customer-push.sql` ausführen** (Endkunden-Push). Idempotent.
-- **SQL-Migration `supabase/supabase-push-per-user.sql` ausführen** (eine Spalte `admin_user_id` auf `push_subscriptions` für Permission-gefilterte Pushes). Idempotent, sicher auch ohne Mitarbeiter-Accounts.
-- Nach der Migration: alle Mitarbeiter müssen einmal Push neu aktivieren unter `/admin/einstellungen` → "Push aktivieren", damit ihre Subscription mit dem Mitarbeiter-Account verknüpft wird (sonst kriegen sie weiterhin alle Notifications wie ein Owner).
+- Nach der Push-Migration: alle Mitarbeiter müssen einmal Push neu aktivieren unter `/admin/einstellungen` → "Push aktivieren", damit ihre Subscription mit dem Mitarbeiter-Account verknüpft wird (sonst kriegen sie weiterhin alle Notifications wie ein Owner).
 - **Cron-Eintrag AfA monatlich in Hetzner-Crontab:**
   `0 3 1 * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/depreciation`
 - **Cron-Härtung optional:** `CRON_DISABLE_URL_SECRET=true` in Coolify-Env setzen + Hetzner-Crontab auf Header-Auth umstellen (`-H "x-cron-secret: $CRON_SECRET"`), damit Secrets nicht mehr in Access-Logs landen.
