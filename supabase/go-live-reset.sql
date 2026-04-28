@@ -9,7 +9,7 @@
 --   - Social-Modul komplett (Posts, Reels, Themen, Serien, Plan)
 --   - Anlagenverzeichnis: nur is_test=TRUE Eintraege weg
 --   - admin_settings: nur Cron-Locks und Job-State weg
---   - invoice_counter zurueck auf 0
+--   - invoice_counter zurueck auf null
 --
 -- BLEIBT:
 --   - admin_users (Mitarbeiter), admin_settings (Konfig),
@@ -31,59 +31,84 @@
 BEGIN;
 
 -- ─────────────────────────────────────────────────────────────────
--- Helper: leert eine Tabelle nur wenn sie existiert.
--- TEMP-Funktion lebt nur fuer diese Session, wird automatisch
--- mit COMMIT/ROLLBACK weggeraeumt.
+-- 1) Social-Modul + 2) Buchungs-Children + 3) Bookings + 5) Counter
+--
+-- Eine Schleife ueber eine geordnete Liste, FK-sicher von Children
+-- zu Parents. Fehlende Tabellen werden uebersprungen (Notice).
 -- ─────────────────────────────────────────────────────────────────
-CREATE OR REPLACE FUNCTION pg_temp.del_if(tbl text) RETURNS void AS $$
-DECLARE
-  rows_affected bigint;
-BEGIN
-  IF EXISTS (
-    SELECT 1 FROM pg_tables
-     WHERE schemaname = 'public' AND tablename = tbl
-  ) THEN
-    EXECUTE format('DELETE FROM public.%I', tbl);
-    GET DIAGNOSTICS rows_affected = ROW_COUNT;
-    RAISE NOTICE '%: % rows deleted', tbl, rows_affected;
-  ELSE
-    RAISE NOTICE '%: table does not exist (skipped)', tbl;
-  END IF;
-END $$ LANGUAGE plpgsql;
-
--- ─────────────────────────────────────────────────────────────────
--- 1) Social-Modul (Children → Parents)
--- ─────────────────────────────────────────────────────────────────
-SELECT pg_temp.del_if('social_reel_segments');
-SELECT pg_temp.del_if('social_reel_plan');
-SELECT pg_temp.del_if('social_reel_templates');
-SELECT pg_temp.del_if('social_reels');
-SELECT pg_temp.del_if('social_editorial_plan');
-SELECT pg_temp.del_if('social_schedule');
-SELECT pg_temp.del_if('social_insights');
-SELECT pg_temp.del_if('social_series_parts');
-SELECT pg_temp.del_if('social_series');
-SELECT pg_temp.del_if('social_topics');
-SELECT pg_temp.del_if('social_posts');
-SELECT pg_temp.del_if('social_templates');
--- social_accounts BLEIBT (OAuth-Verbindung FB-Page + IG-Account)
-
--- ─────────────────────────────────────────────────────────────────
--- 2) Buchungs-Children (Tabellen mit FK auf bookings oder Kunden)
--- ─────────────────────────────────────────────────────────────────
-SELECT pg_temp.del_if('messages');
-SELECT pg_temp.del_if('conversations');
-SELECT pg_temp.del_if('rental_agreements');
-SELECT pg_temp.del_if('damage_reports');
-SELECT pg_temp.del_if('return_checklists');
-SELECT pg_temp.del_if('dunning_notices');
-SELECT pg_temp.del_if('credit_notes');
-SELECT pg_temp.del_if('invoices');
-SELECT pg_temp.del_if('stripe_transactions');
-SELECT pg_temp.del_if('email_log');
-
--- admin_audit_log hat einen GoBD-Schutz-Trigger, temporaer disablen
 DO $$
+DECLARE
+  tables_to_clear text[] := ARRAY[
+    -- Social-Modul (Children → Parents); social_accounts BLEIBT
+    'social_reel_segments',
+    'social_reel_plan',
+    'social_reel_templates',
+    'social_reels',
+    'social_editorial_plan',
+    'social_schedule',
+    'social_insights',
+    'social_series_parts',
+    'social_series',
+    'social_topics',
+    'social_posts',
+    'social_templates',
+
+    -- Buchungs-Children
+    'messages',
+    'conversations',
+    'rental_agreements',
+    'damage_reports',
+    'return_checklists',
+    'dunning_notices',
+    'credit_notes',
+    'invoices',
+    'stripe_transactions',
+    'email_log',
+    -- admin_audit_log siehe separater DO-Block (Trigger-Schutz)
+    'abandoned_carts',
+    'reviews',
+    'favorites',
+    'customer_ugc_submissions',
+    'waitlist_subscriptions',
+    'newsletter_subscribers',
+    'customer_push_subscriptions',
+    'push_subscriptions',
+    'admin_notifications',
+    'beta_feedback',
+    'admin_customer_notes',
+    'customer_notes',
+
+    -- Bookings selbst (kommt nach allen Children)
+    'bookings',
+
+    -- Counter (komplett leeren — naechster next_invoice_number()
+    -- Aufruf legt Jahres-Zeile mit last_number=1 wieder an)
+    'invoice_counter'
+  ];
+  t        text;
+  affected bigint;
+BEGIN
+  FOREACH t IN ARRAY tables_to_clear LOOP
+    IF EXISTS (
+      SELECT 1 FROM pg_tables
+       WHERE schemaname = 'public' AND tablename = t
+    ) THEN
+      EXECUTE format('DELETE FROM public.%I', t);
+      GET DIAGNOSTICS affected = ROW_COUNT;
+      RAISE NOTICE '%: % rows deleted', t, affected;
+    ELSE
+      RAISE NOTICE '%: skipped (table does not exist)', t;
+    END IF;
+  END LOOP;
+END $$;
+
+-- ─────────────────────────────────────────────────────────────────
+-- admin_audit_log hat einen GoBD-Schutz-Trigger gegen DELETE.
+-- Trigger temporaer abschalten, leeren, wieder einschalten.
+-- ─────────────────────────────────────────────────────────────────
+DO $$
+DECLARE
+  affected bigint;
 BEGIN
   IF EXISTS (
     SELECT 1 FROM pg_tables
@@ -91,57 +116,47 @@ BEGIN
   ) THEN
     ALTER TABLE admin_audit_log DISABLE TRIGGER trg_prevent_audit_log_delete;
     DELETE FROM admin_audit_log;
+    GET DIAGNOSTICS affected = ROW_COUNT;
     ALTER TABLE admin_audit_log ENABLE TRIGGER trg_prevent_audit_log_delete;
-    RAISE NOTICE 'admin_audit_log: cleared (trigger toggled)';
+    RAISE NOTICE 'admin_audit_log: % rows deleted (trigger toggled)', affected;
+  ELSE
+    RAISE NOTICE 'admin_audit_log: skipped (table does not exist)';
   END IF;
 END $$;
 
-SELECT pg_temp.del_if('abandoned_carts');
-SELECT pg_temp.del_if('reviews');
-SELECT pg_temp.del_if('favorites');
-SELECT pg_temp.del_if('customer_ugc_submissions');
-SELECT pg_temp.del_if('waitlist_subscriptions');
-SELECT pg_temp.del_if('newsletter_subscribers');
-SELECT pg_temp.del_if('customer_push_subscriptions');
-SELECT pg_temp.del_if('push_subscriptions');
-SELECT pg_temp.del_if('admin_notifications');
-SELECT pg_temp.del_if('beta_feedback');
-SELECT pg_temp.del_if('admin_customer_notes');
-SELECT pg_temp.del_if('customer_notes');
-
 -- ─────────────────────────────────────────────────────────────────
--- 3) Bookings selbst
--- ─────────────────────────────────────────────────────────────────
-SELECT pg_temp.del_if('bookings');
-
--- ─────────────────────────────────────────────────────────────────
--- 4) Anlagenverzeichnis — nur Test-Daten weg
+-- 4) Anlagenverzeichnis — nur Test-Daten weg (is_test=TRUE)
 -- ─────────────────────────────────────────────────────────────────
 DO $$
+DECLARE
+  affected bigint;
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename='expenses') THEN
     DELETE FROM expenses WHERE is_test = TRUE;
+    GET DIAGNOSTICS affected = ROW_COUNT;
+    RAISE NOTICE 'expenses (is_test=true): % rows deleted', affected;
   END IF;
+
   IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename='purchase_items')
      AND EXISTS (SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename='purchases') THEN
     DELETE FROM purchase_items
      WHERE purchase_id IN (SELECT id FROM purchases WHERE is_test = TRUE);
+    GET DIAGNOSTICS affected = ROW_COUNT;
+    RAISE NOTICE 'purchase_items (linked to test purchases): % rows deleted', affected;
   END IF;
+
   IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename='purchases') THEN
     DELETE FROM purchases WHERE is_test = TRUE;
+    GET DIAGNOSTICS affected = ROW_COUNT;
+    RAISE NOTICE 'purchases (is_test=true): % rows deleted', affected;
   END IF;
+
   IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename='assets') THEN
     DELETE FROM assets WHERE is_test = TRUE;
+    GET DIAGNOSTICS affected = ROW_COUNT;
+    RAISE NOTICE 'assets (is_test=true): % rows deleted', affected;
   END IF;
 END $$;
-
--- ─────────────────────────────────────────────────────────────────
--- 5) Counter zuruecksetzen
--- invoice_counter ist pro Jahr partitioniert (year, last_number).
--- Komplett leeren — beim naechsten next_invoice_number()-Aufruf
--- wird die Zeile fuer das Jahr automatisch wieder mit 1 angelegt.
--- ─────────────────────────────────────────────────────────────────
-SELECT pg_temp.del_if('invoice_counter');
 
 -- ─────────────────────────────────────────────────────────────────
 -- 6) Transiente admin_settings-Keys (Cron-Locks + Job-State)
