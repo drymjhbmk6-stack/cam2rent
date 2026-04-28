@@ -16,6 +16,7 @@ export async function GET(req: NextRequest) {
   const status = searchParams.get('status');
   const purchaseId = searchParams.get('purchase_id');
   const unitId = searchParams.get('unit_id');
+  const accessoryUnitId = searchParams.get('accessory_unit_id');
   const includeTest = searchParams.get('include_test') === '1';
 
   const supabase = createServiceClient();
@@ -28,6 +29,7 @@ export async function GET(req: NextRequest) {
   if (status) q = q.eq('status', status);
   if (purchaseId) q = q.eq('purchase_id', purchaseId);
   if (unitId) q = q.eq('unit_id', unitId);
+  if (accessoryUnitId) q = q.eq('accessory_unit_id', accessoryUnitId);
   if (!includeTest) q = q.eq('is_test', false);
 
   const { data, error } = await q;
@@ -71,6 +73,7 @@ export async function POST(req: NextRequest) {
       current_value: Number(body.current_value) > 0 ? Number(body.current_value) : purchasePrice,
       product_id: body.product_id ?? null,
       unit_id: body.unit_id ?? null,
+      accessory_unit_id: body.accessory_unit_id ?? null,
       status: body.status ?? 'active',
       notes: body.notes ?? null,
       is_test: testMode,
