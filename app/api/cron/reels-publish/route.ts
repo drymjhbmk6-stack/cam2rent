@@ -17,16 +17,34 @@ export const maxDuration = 300;
  * Empfohlener Crontab-Eintrag (alle 5 Min):
  *   5-59/5 * * * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/reels-publish
  */
+/**
+ * reels_settings.publish_in_test_mode — wenn true, laeuft der Cron auch im
+ * Test-Modus durch (echte Publishes). Default false (= alter Schutz aktiv).
+ */
+async function shouldPublishInTestMode(supabase: ReturnType<typeof createServiceClient>): Promise<boolean> {
+  try {
+    const { data } = await supabase.from('admin_settings').select('value').eq('key', 'reels_settings').maybeSingle();
+    if (!data?.value) return false;
+    const parsed = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
+    return Boolean(parsed?.publish_in_test_mode);
+  } catch {
+    return false;
+  }
+}
+
 async function handle(req: NextRequest) {
   if (!verifyCronAuth(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  if (await isTestMode()) {
-    return NextResponse.json({ skipped: 'test_mode' });
-  }
-
   const supabase = createServiceClient();
+
+  if (await isTestMode()) {
+    if (!(await shouldPublishInTestMode(supabase))) {
+      return NextResponse.json({ skipped: 'test_mode' });
+    }
+    // sonst durchlaufen lassen
+  }
   const now = new Date().toISOString();
 
   const { data: due, error } = await supabase

@@ -26,6 +26,7 @@ interface ReelsSettings {
   outro_enabled?: boolean;
   intro_duration?: number;
   outro_duration?: number;
+  publish_in_test_mode?: boolean;
 }
 
 interface ElevenLabsVoice {
@@ -264,6 +265,37 @@ export default function ReelsEinstellungenPage() {
                 className={inputClass}
               />
             </Field>
+          </Card>
+
+          {/* Veröffentlichungs-Verhalten */}
+          <Card
+            title="Veröffentlichung im Test-Modus"
+            description="Standardmäßig werden Reels im Test-Modus nicht wirklich auf Facebook/Instagram hochgeladen — nur DB-Status wird auf 'published' gesetzt. Mit dieser Option umgehst du den Schutz und veröffentlichst echt."
+          >
+            <label className="flex items-start gap-3 text-sm text-brand-dark dark:text-white cursor-pointer">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={settings.publish_in_test_mode ?? false}
+                onChange={(e) => setSettings({ ...settings, publish_in_test_mode: e.target.checked })}
+              />
+              <span>
+                <span className="font-medium">Auch im Test-Modus echt auf Meta veröffentlichen</span>
+                <span className="block text-xs text-brand-steel dark:text-gray-400 mt-1">
+                  Greift sowohl beim manuellen „Jetzt veröffentlichen“-Button als auch beim geplanten Cron
+                  (<code className="text-[10px]">/api/cron/reels-publish</code>). Andere Test-Modus-Schutzmechanismen
+                  (Stripe-Test-Keys, Mail-Redirect, Versand-Skip) bleiben unberührt.
+                </span>
+              </span>
+            </label>
+            {settings.publish_in_test_mode && (
+              <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/40 px-3 py-2">
+                <p className="text-xs text-amber-800 dark:text-amber-300">
+                  <strong>Aktiv:</strong> Generierte Reels gehen wirklich live auf deine FB-Page und IG-Business-Accounts —
+                  auch wenn die Umgebung sonst auf Test steht.
+                </p>
+              </div>
+            )}
           </Card>
 
           {/* Branding */}

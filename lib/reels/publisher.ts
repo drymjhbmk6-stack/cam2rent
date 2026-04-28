@@ -47,6 +47,22 @@ function buildCaption(reel: SocialReel): string {
   return parts.join('\n').trim();
 }
 
+/**
+ * Liest reels_settings.publish_in_test_mode — wenn true, wird auch im Test-Modus
+ * tatsaechlich auf Meta hochgeladen. Default false (= alter Schutz bleibt aktiv).
+ */
+async function shouldPublishInTestMode(): Promise<boolean> {
+  try {
+    const supabase = createServiceClient();
+    const { data } = await supabase.from('admin_settings').select('value').eq('key', 'reels_settings').maybeSingle();
+    if (!data?.value) return false;
+    const parsed = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
+    return Boolean(parsed?.publish_in_test_mode);
+  } catch {
+    return false;
+  }
+}
+
 export async function publishReel(reelId: string): Promise<ReelPublishResult> {
   const supabase = createServiceClient();
   const errors: Array<{ platform: string; message: string }> = [];
@@ -57,17 +73,22 @@ export async function publishReel(reelId: string): Promise<ReelPublishResult> {
   let fbPageToken: string | undefined;
   let igPageToken: string | undefined;
 
-  // Im Test-Modus: kein echter Meta-Call, aber DB-Status updaten zur Transparenz
+  // Im Test-Modus: nur ueberspringen, wenn der Admin nicht explizit zugestimmt hat,
+  // dass auch Test-Reels echt auf Meta gehen sollen (reels_settings.publish_in_test_mode).
   if (await isTestMode()) {
-    await supabase
-      .from('social_reels')
-      .update({
-        status: 'published',
-        published_at: new Date().toISOString(),
-        error_message: 'TEST-Modus: Kein echter Upload zu Meta',
-      })
-      .eq('id', reelId);
-    return { success: true, errors: [{ platform: 'system', message: 'Test-Modus — simulierter Publish' }] };
+    const allow = await shouldPublishInTestMode();
+    if (!allow) {
+      await supabase
+        .from('social_reels')
+        .update({
+          status: 'published',
+          published_at: new Date().toISOString(),
+          error_message: 'TEST-Modus: Kein echter Upload zu Meta',
+        })
+        .eq('id', reelId);
+      return { success: true, errors: [{ platform: 'system', message: 'Test-Modus — simulierter Publish' }] };
+    }
+    // Sonst durchlaufen lassen — echter Publish auch im Test-Modus
   }
 
   const { data: reel, error: reelError } = await supabase.from('social_reels').select('*').eq('id', reelId).single();
