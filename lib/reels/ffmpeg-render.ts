@@ -338,50 +338,49 @@ export function pickKenBurnsVariant(
 }
 
 /**
- * Phase 2.2: Baut den zoompan-Filter-String fuer eine bestimmte Ken-Burns-Variante.
+ * Phase 2.2 (überarbeitet 2026-04-28): Ken-Burns-Filter ohne `zoompan`.
  *
- * Wir machen vorab `scale=2160x3840`, damit der zoompan Inner-Frame-Crop sauber
- * bleibt (sonst entstehen Pixel-Artefakte am Rand bei Sub-Pixel-Verschiebungen).
- * Output ist immer 1080x1920 @ 30 fps.
+ * `zoompan` behandelt jeden Input-Frame als Standbild und produziert daraus
+ * `d` Output-Frames mit Zoom-Animation — bei Video-Input friert es die echte
+ * Bewegung des Stock-Clips ein und macht aus dem Reel eine Slideshow.
  *
- * Bei zoom-in startet zoom bei 1.0 und steigt linear bis 1.08 ueber durationFrames.
- * Bei zoom-out: zoom startet bei 1.08, faellt auf 1.0 (mit `1.08-...`-Ausdruck).
- * Pan-left/right: zoom konstant bei 1.04, x bewegt sich von einem Rand zum anderen.
+ * Stattdessen: pre-scale 1.10× → zeit-basierter `crop` mit `t`-Expressions →
+ * post-scale auf TARGET_W×TARGET_H. Drei Per-Frame-Filter, die den
+ * Video-Stream durchlassen (kein Frame-Freeze).
  *
- * `iw` und `ih` referenzieren beim zoompan die hochskalierte Quelle (2160×3840).
- * Das Output-Pixel-Format `s=1080x1920` enthaelt den finalen Frame nach Zoom.
+ * `t` startet bei 0 weil im Aufrufer (`buildClipFilter`) vor dem Ken-Burns
+ * `setpts=PTS-STARTPTS` läuft. Floor `0.001` schützt gegen Division-by-Zero
+ * bei degenerierten Szenen.
+ *
+ * Zoom-Range: 1.02× → 1.10× (effektiv 8 % Zoom-Bewegung). Pan-Modi nutzen
+ * konstant das 1.10×-Pre-Scale-Headroom.
  */
 function buildKenBurnsFilter(variant: KenBurnsVariant, durationSec: number): string | null {
   if (variant === 'static') return null;
-  const frames = Math.max(1, Math.round(durationSec * TARGET_FPS));
-  // Vorab-Upscale damit zoompan keine Pixel-Stretching-Artefakte erzeugt
-  const preScale = `scale=${TARGET_W * 2}:${TARGET_H * 2}:flags=bicubic`;
-  const sOut = `${TARGET_W}x${TARGET_H}`;
+  const dur = Math.max(0.001, durationSec).toFixed(3);
+  const preW = Math.round(TARGET_W * 1.1);
+  const preH = Math.round(TARGET_H * 1.1);
+  const preScale = `scale=${preW}:${preH}:flags=bicubic`;
+  const postScale = `scale=${TARGET_W}:${TARGET_H}:flags=bicubic`;
 
   switch (variant) {
     case 'zoom-in': {
-      // 1.0 → 1.08 linear, zentriert
-      const z = `'1.0+0.08*on/${frames}'`;
-      return `${preScale},zoompan=z=${z}:d=${frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${sOut}:fps=${TARGET_FPS}`;
+      // Crop-Größe schrumpft von 1.10× auf 1.02× → effektiv reinzoomen.
+      const factor = `(1.10-0.08*t/${dur})`;
+      return `${preScale},crop='${TARGET_W}*${factor}':'${TARGET_H}*${factor}':x='(iw-ow)/2':y='(ih-oh)/2',${postScale}`;
     }
     case 'zoom-out': {
-      // 1.08 → 1.0 linear, zentriert
-      const z = `'1.08-0.08*on/${frames}'`;
-      return `${preScale},zoompan=z=${z}:d=${frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${sOut}:fps=${TARGET_FPS}`;
+      // Crop-Größe wächst von 1.02× auf 1.10× → effektiv rauszoomen.
+      const factor = `(1.02+0.08*t/${dur})`;
+      return `${preScale},crop='${TARGET_W}*${factor}':'${TARGET_H}*${factor}':x='(iw-ow)/2':y='(ih-oh)/2',${postScale}`;
     }
     case 'pan-right': {
-      // zoom 1.04 fest, x von links (0) nach rechts (iw - iw/zoom)
-      const z = `'1.04'`;
-      const x = `'(iw-iw/zoom)*on/${frames}'`;
-      const y = `'ih/2-(ih/zoom/2)'`;
-      return `${preScale},zoompan=z=${z}:d=${frames}:x=${x}:y=${y}:s=${sOut}:fps=${TARGET_FPS}`;
+      // Konstantes 1.10×-Pre-Scale, x bewegt sich von 0 (links) bis iw-W (rechts).
+      return `${preScale},crop=${TARGET_W}:${TARGET_H}:x='(iw-${TARGET_W})*t/${dur}':y='(ih-${TARGET_H})/2'`;
     }
     case 'pan-left': {
-      // zoom 1.04 fest, x von rechts nach links
-      const z = `'1.04'`;
-      const x = `'(iw-iw/zoom)*(1-on/${frames})'`;
-      const y = `'ih/2-(ih/zoom/2)'`;
-      return `${preScale},zoompan=z=${z}:d=${frames}:x=${x}:y=${y}:s=${sOut}:fps=${TARGET_FPS}`;
+      // Spiegelverkehrt: x von iw-W nach 0.
+      return `${preScale},crop=${TARGET_W}:${TARGET_H}:x='(iw-${TARGET_W})*(1-t/${dur})':y='(ih-${TARGET_H})/2'`;
     }
   }
 }
@@ -406,9 +405,8 @@ export function buildClipFilter(
     `setpts=PTS-STARTPTS`,
   ];
 
-  // Phase 2.2: Ken-Burns kommt NACH dem Crop, damit zoompan auf einem 1080x1920-
-  // Frame-Stack arbeitet (statt auf der Original-Quelle, die andere Aspect-Ratio
-  // haben kann).
+  // Phase 2.2: Ken-Burns nach dem Cover-Crop. Der KB-Filter macht ein eigenes
+  // Pre-Scale + zeit-basiertes Crop + Post-Scale und liefert wieder W×H zurück.
   const kbFilter = buildKenBurnsFilter(kenBurns, duration);
   if (kbFilter) baseFilters.push(kbFilter);
 
