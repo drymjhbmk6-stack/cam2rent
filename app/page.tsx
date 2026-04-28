@@ -12,7 +12,6 @@ import HomeUgc from '@/components/home/HomeUgc';
 import NewsletterSignup from '@/components/home/NewsletterSignup';
 import AppInstallBanner from '@/components/home/AppInstallBanner';
 import UnderConstructionBanner from '@/components/home/UnderConstructionBanner';
-import BetaFeedbackButton from '@/components/home/BetaFeedbackButton';
 import CustomerPushPrompt from '@/components/home/CustomerPushPrompt';
 import { getHomePageData } from '@/lib/get-homepage-data';
 
@@ -40,7 +39,6 @@ export default async function Home() {
       <NewsletterSignup />
       <AppInstallBanner />
       <CtaBanner />
-      <BetaFeedbackButton />
       <CustomerPushPrompt />
     </>
   );

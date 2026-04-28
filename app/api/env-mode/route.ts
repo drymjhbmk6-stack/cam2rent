@@ -3,8 +3,8 @@ import { getEnvMode, getStripePublishableKey, getSiteUrl } from '@/lib/env-mode'
 
 /**
  * Oeffentlicher Endpoint: Liefert Modus + Client-seitige Konfiguration.
- * Wird von TestBanner + Checkout-Seiten genutzt, damit Stripe-Publishable-Key
- * und Modus-Anzeige zur DB-Einstellung passen.
+ * Wird von Checkout-Seiten genutzt, damit der Stripe-Publishable-Key
+ * zur DB-Einstellung passt.
  *
  * Enthaelt NUR oeffentliche Keys (Publishable). Geheime Keys bleiben serverseitig.
  */

@@ -11,7 +11,6 @@ import { AccessoriesProvider } from '@/components/AccessoriesProvider';
 import PageTracker from '@/components/PageTracker';
 import ShopShell from '@/components/ShopShell';
 import CookieBanner from '@/components/CookieBanner';
-import TestBanner from '@/components/TestBanner';
 import ServiceWorkerRegistration from '@/components/ServiceWorkerRegistration';
 import InstallPrompt from '@/components/InstallPrompt';
 import ThemeProvider from '@/components/ThemeProvider';
@@ -99,7 +98,6 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body className="font-body antialiased bg-white dark:bg-gray-900 text-brand-text dark:text-gray-300 transition-colors duration-200">
-        <TestBanner />
         <ThemeProvider>
           <AuthProvider>
             <FavoritesProvider>

@@ -1112,7 +1112,6 @@ Zentraler Switch im Admin (`/admin/einstellungen` → "Test-/Live-Modus") kippt 
 - **Admin-API:** `GET /api/admin/env-mode` + `POST /api/admin/env-mode` (Passwort-Pflicht, Audit-Log). Oeffentlich: `GET /api/env-mode` fuer Client (Banner, Stripe-Publishable).
 - **Env-Var-Konvention:** `<NAME>_LIVE` / `<NAME>_TEST` (z.B. `STRIPE_SECRET_KEY_LIVE`); Fallback auf das bisherige `<NAME>` ohne Suffix (Backwards-Compat).
 - **UI:** `components/admin/EnvModeSection.tsx` (Switch mit Passwort-Modal), `components/admin/EnvModeBadge.tsx` (Badge oben in Admin-Sidebar + Mobile-Header, amber = TEST, rosa = LIVE, Polling 60s).
-- **TestBanner:** Zeigt sich jetzt wenn DB-Modus = `test` (bisher nur auf test.* Subdomain oder `NEXT_PUBLIC_IS_BETA`).
 
 #### Daten-Kontamination verhindert (GoBD-konform)
 - **Migration `supabase-env-toggle.sql`:** Spalte `is_test BOOLEAN NOT NULL DEFAULT FALSE` auf `bookings`, `invoices`, `credit_notes`, `expenses`, `email_log`, `admin_audit_log`, `stripe_transactions` + Partial-Indizes.
@@ -1173,12 +1172,6 @@ Automatische E-Mail mit **PDF-Anhang** jeden Sonntag 18:30 Uhr Server-Zeit. Samm
 - **Test:** `POST /api/admin/weekly-report/test` → Sofort-Versand an konfigurierten Empfänger oder Body-Email.
 - **Admin-UI:** `components/admin/WeeklyReportSection.tsx` in `/admin/einstellungen`. Toggle (an/aus), Empfänger-Mail, „Test-Bericht jetzt senden"-Button.
 - **Setting-Key:** `admin_settings.weekly_report_config = { enabled: boolean, email: string }`. Default: aktiv, Empfänger = `BUSINESS.emailKontakt`.
-
-### TestBanner — Beta-Hinweis für Test-Modus (Stand 2026-04-21)
-Sticky Banner ganz oben (z-50) mit Hinweis „TESTUMGEBUNG — Keine echten Buchungen, keine Zahlungen" + Link auf `/beta-feedback`.
-- **Komponente:** `components/TestBanner.tsx` — Inline-SVG-Icons (kein lucide-react Dep). Dismissable, persistiert in `localStorage.cam2rent_beta_banner_dismissed`.
-- **Gate:** Fetcht `/api/env-mode` und zeigt Banner wenn `mode === 'test'`. Fallback bei API-Fehler: Hostname startsWith `test.` ODER `NEXT_PUBLIC_IS_BETA === 'true'`. **An den Admin-Modus-Switch gekoppelt** — bei Umschaltung auf Live verschwindet der Banner, auch wenn die Domain noch `test.*` ist.
-- **Mount:** `app/layout.tsx` als erstes Element im `<body>` vor `ThemeProvider` — sichtbar auf Shop UND Admin.
 
 ### Security-/Stabilitäts-Fixes (2026-04-17)
 - **Shop-Updater Eingabe-Bug:** `loadSections` normalisiert jetzt alle 4 Sections (hero, news_banner, usps, reviews_config) beim Laden. Vorher: `updateSectionLocal` nutzte `prev.map`, wenn die DB-Row fehlte oder `content` leer war, verpufften Tastatureingaben. Jetzt garantiert die Load-Normalisierung die Existenz im State + Merge mit Feld-Defaults.
