@@ -158,6 +158,7 @@ const API_PATH_PERMISSIONS: PermRule[] = [
   { prefix: '/api/admin/versand', perm: 'tagesgeschaeft' },
   { prefix: '/api/admin/versand-buchungen', perm: 'tagesgeschaeft' },
   { prefix: '/api/admin/damage', perm: 'tagesgeschaeft' },
+  { prefix: '/api/admin/accessory-damage', perm: 'tagesgeschaeft' },
   { prefix: '/api/admin/sendcloud', perm: 'tagesgeschaeft' },
   { prefix: '/api/admin/label', perm: 'tagesgeschaeft' },
   // Kunden & Kommunikation

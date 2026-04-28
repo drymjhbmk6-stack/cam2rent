@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import AccessoryDamageModal from '@/components/admin/AccessoryDamageModal';
 import { BUSINESS } from '@/lib/business-config';
 import { fmtEuro as fmtEuroCanonical } from '@/lib/format-utils';
 
@@ -155,6 +156,8 @@ export default function BuchungDetailPage() {
   const [newStatus, setNewStatus] = useState('');
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
+  const [showAccessoryDamage, setShowAccessoryDamage] = useState(false);
+  const [accessoryDamageMsg, setAccessoryDamageMsg] = useState<string | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
   const [deleteError, setDeleteError] = useState('');
@@ -1056,11 +1059,36 @@ export default function BuchungDetailPage() {
                     </button>
                   </>
                 )}
+                {booking.accessory_items && booking.accessory_items.length > 0 && (
+                  <button
+                    onClick={() => { setAccessoryDamageMsg(null); setShowAccessoryDamage(true); }}
+                    className="block w-full text-center px-4 py-2 text-sm font-heading font-semibold bg-rose-600 text-white rounded-btn hover:bg-rose-700 transition-colors"
+                  >
+                    Zubehör-Schaden melden
+                  </button>
+                )}
+                {accessoryDamageMsg && (
+                  <p className="text-xs font-body text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 rounded-lg p-2">
+                    {accessoryDamageMsg}
+                  </p>
+                )}
                 <Link href="/admin/schaeden" className="block w-full text-center px-4 py-2 text-sm font-heading font-semibold bg-orange-500 text-white rounded-btn hover:bg-orange-600 transition-colors">Schadensbericht erstellen</Link>
               </div>
             </Section>
           </div>
         </div>
+
+        {/* ═══ Zubehör-Schaden-Modal ═══ */}
+        <AccessoryDamageModal
+          bookingId={booking.id}
+          open={showAccessoryDamage}
+          onClose={() => setShowAccessoryDamage(false)}
+          onSuccess={(msg) => {
+            setAccessoryDamageMsg(msg);
+            // Buchung neu laden, damit Status/Kaution sich aktualisieren
+            fetchBooking();
+          }}
+        />
 
         {/* ═══ Stornieren-Modal ═══ */}
         {showCancelModal && (
