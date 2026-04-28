@@ -137,13 +137,11 @@ END $$;
 
 -- ─────────────────────────────────────────────────────────────────
 -- 5) Counter zuruecksetzen
+-- invoice_counter ist pro Jahr partitioniert (year, last_number).
+-- Komplett leeren — beim naechsten next_invoice_number()-Aufruf
+-- wird die Zeile fuer das Jahr automatisch wieder mit 1 angelegt.
 -- ─────────────────────────────────────────────────────────────────
-DO $$
-BEGIN
-  IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename='invoice_counter') THEN
-    UPDATE invoice_counter SET counter = 0;
-  END IF;
-END $$;
+SELECT pg_temp.del_if('invoice_counter');
 
 -- ─────────────────────────────────────────────────────────────────
 -- 6) Transiente admin_settings-Keys (Cron-Locks + Job-State)
