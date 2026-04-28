@@ -49,8 +49,27 @@ export async function getEnvMode(): Promise<EnvMode> {
       .eq('key', MODE_KEY)
       .maybeSingle();
 
+    // admin_settings.value ist je nach Migration entweder TEXT (JSON-String)
+    // oder JSONB (Object). Plus Edge-Case: value ist ein roher String 'live'/'test'.
+    // Defensiv beide Faelle behandeln.
     const value = data?.value;
-    const raw = typeof value === 'string' ? value : (value as { mode?: string } | null)?.mode;
+    let raw: string | undefined;
+    if (typeof value === 'string') {
+      // TEXT-Spalte: kann roher String 'live'/'test' sein ODER serialisierter JSON
+      const trimmed = value.trim();
+      if (trimmed.startsWith('{')) {
+        try {
+          const parsed = JSON.parse(trimmed) as { mode?: string };
+          raw = parsed?.mode;
+        } catch {
+          raw = trimmed;
+        }
+      } else {
+        raw = trimmed;
+      }
+    } else if (value && typeof value === 'object') {
+      raw = (value as { mode?: string }).mode;
+    }
     const mode: EnvMode = raw === 'live' ? 'live' : 'test';
     cachedMode = mode;
     cachedAt = now;
