@@ -136,10 +136,14 @@ export default function AvailabilityCalendar({
     fetchMonth(year, month).then((result) => {
       if (!cancelled) { setData(result); setLoading(false); }
     });
-    // Prefetch next month
+    // Prefetch next month (fuer Trail-Tage am Ende des aktuellen Monats)
     const nextM = month === 11 ? 0 : month + 1;
     const nextY = month === 11 ? year + 1 : year;
     fetchMonth(nextY, nextM);
+    // Prefetch previous month (fuer Lead-Tage am Anfang des aktuellen Monats)
+    const prevM = month === 0 ? 11 : month - 1;
+    const prevY = month === 0 ? year - 1 : year;
+    fetchMonth(prevY, prevM);
     return () => { cancelled = true; };
   }, [year, month, fetchMonth]);
 
@@ -164,6 +168,16 @@ export default function AvailabilityCalendar({
   const firstDayOfWeek = new Date(year, month, 1).getDay();
   const startOffset = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1;
   const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  // Lead-/Trail-Tage aus Vor-/Folgemonat fuer ein vollstaendig gefuelltes Grid
+  // (6 Wochen × 7 Tage = 42 Zellen). Daten kommen aus dem Prefetch-Cache.
+  const prevMonthIdx = month === 0 ? 11 : month - 1;
+  const prevMonthYear = month === 0 ? year - 1 : year;
+  const nextMonthIdx = month === 11 ? 0 : month + 1;
+  const nextMonthYear = month === 11 ? year + 1 : year;
+  const daysInPrevMonth = new Date(year, month, 0).getDate();
+  const prevMonthCache = cache.current[`${formatMonth(prevMonthYear, prevMonthIdx)}_${deliveryMode}`];
+  const nextMonthCache = cache.current[`${formatMonth(nextMonthYear, nextMonthIdx)}_${deliveryMode}`];
 
   // Cart-Holds clientseitig in die Verfuegbarkeit einrechnen — inkl. der
   // Admin-Puffertage, damit dieselbe Logik wie auf dem Server (siehe
@@ -205,6 +219,16 @@ export default function AvailabilityCalendar({
 
   const dayMap = new Map<string, DayInfo>();
   for (const d of effectiveDays) dayMap.set(d.date, d);
+  // Vor-/Folgemonatstage in dayMap aufnehmen (ohne Cart-Holds anzurechnen —
+  // die Holds gehoeren zur aktuellen Auswahl und wirken nur auf den naechsten
+  // Klick, nicht auf vergangene Lead-Tage). Damit Tage des Folgemonats korrekt
+  // als "Verfuegbar"/"Ausgebucht" eingefaerbt werden, statt grau zu bleiben.
+  for (const d of (prevMonthCache?.days ?? [])) {
+    if (!dayMap.has(d.date)) dayMap.set(d.date, d);
+  }
+  for (const d of (nextMonthCache?.days ?? [])) {
+    if (!dayMap.has(d.date)) dayMap.set(d.date, d);
+  }
 
   // Check if a day is selectable
   const isChoosingEnd = !!rangeFrom && !rangeTo;
@@ -370,98 +394,135 @@ export default function AvailabilityCalendar({
 
       {/* Calendar grid */}
       <div className="grid grid-cols-7 gap-0.5">
-        {Array.from({ length: startOffset }).map((_, i) => (
-          <div key={`empty-${i}`} className="aspect-square" />
-        ))}
-        {Array.from({ length: daysInMonth }).map((_, i) => {
-          const dayNum = i + 1;
-          const dateStr = fmtDate(year, month, dayNum);
-          const info = dayMap.get(dateStr);
-
-          if (loading || !info) {
-            return (
-              <div key={dayNum} className="aspect-square rounded-md bg-gray-50 dark:bg-gray-800 flex items-center justify-center">
-                <span className="text-[11px] text-gray-300 dark:text-gray-600">{dayNum}</span>
-              </div>
-            );
+        {(() => {
+          // 42 Zellen (6 Wochen × 7 Tage). Lead-Tage aus Vor-Monat,
+          // dann aktueller Monat, dann Trail-Tage aus Folge-Monat.
+          type Cell = { dateStr: string; displayDay: number; isOutside: boolean };
+          const cells: Cell[] = [];
+          for (let i = startOffset; i > 0; i--) {
+            const dayNum = daysInPrevMonth - i + 1;
+            cells.push({
+              dateStr: fmtDate(prevMonthYear, prevMonthIdx, dayNum),
+              displayDay: dayNum,
+              isOutside: true,
+            });
+          }
+          for (let dayNum = 1; dayNum <= daysInMonth; dayNum++) {
+            cells.push({ dateStr: fmtDate(year, month, dayNum), displayDay: dayNum, isOutside: false });
+          }
+          // Trail bis Grid voll, max 42 Zellen.
+          let trailDay = 1;
+          while (cells.length < 42) {
+            cells.push({
+              dateStr: fmtDate(nextMonthYear, nextMonthIdx, trailDay),
+              displayDay: trailDay,
+              isOutside: true,
+            });
+            trailDay++;
           }
 
-          let displayStatus = getDisplayStatus(info);
-          const selectable = isDaySelectable(dateStr, info);
-          const inRange = isInRange(dateStr);
-          const isStart = isRangeStart(dateStr);
-          const isEnd = isRangeEnd(dateStr);
+          return cells.map((cell, idx) => {
+            const { dateStr, displayDay, isOutside } = cell;
+            const info = dayMap.get(dateStr);
 
-          // Vorlauf-Sperre (heute + leadTimeDays) — nur visuell, damit freie
-          // Tage im Vorlauf-Fenster nicht faelschlich als "Verfuegbar" angezeigt
-          // werden. Status selbst aus der API bleibt unveraendert.
-          const preLeadBlock = displayStatus === 'available' && isBeforeLeadTime(dateStr);
-          if (preLeadBlock) displayStatus = 'blocked';
-          const cfg = STATUS_CONFIG[displayStatus];
-
-          const dayDate = parseDate(dateStr);
-          let blockReason: string | null = null;
-          if (deliveryMode === 'versand' && isChoosingEnd && !selectable) {
-            blockReason = getShippingBlockReason(dayDate, true);
-          }
-          if (!blockReason && preLeadBlock) {
-            blockReason = deliveryMode === 'abholung'
-              ? `Abholung erst ab ${minDaysAhead === 1 ? 'morgen' : `${minDaysAhead} Tagen`} moeglich`
-              : `Versand-Vorlauf: ${minDaysAhead} Tage — frueheste Miete am ${minDate.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })}`;
-          }
-
-          let bgClass = cfg.bg;
-          let textClass = cfg.text;
-          let cursor = 'cursor-default';
-          let ringClass = '';
-
-          if (selectable) {
-            cursor = 'cursor-pointer';
-            if (inRange) {
-              bgClass = 'bg-accent-blue/20 dark:bg-accent-blue/30';
-              textClass = 'text-accent-blue dark:text-blue-300';
+            // Loading- und No-Info-Fallback (z.B. Outside-Tage ohne Cache)
+            if (loading || !info) {
+              return (
+                <div key={`${dateStr}-${idx}`} className={`aspect-square rounded-md bg-gray-50 dark:bg-gray-800 flex items-center justify-center ${isOutside ? 'opacity-40' : ''}`}>
+                  <span className="text-[11px] text-gray-300 dark:text-gray-600">{displayDay}</span>
+                </div>
+              );
             }
-            if (isStart || isEnd) {
+
+            let displayStatus = getDisplayStatus(info);
+            const selectable = isDaySelectable(dateStr, info);
+            const inRange = isInRange(dateStr);
+            const isStart = isRangeStart(dateStr);
+            const isEnd = isRangeEnd(dateStr);
+
+            const preLeadBlock = displayStatus === 'available' && isBeforeLeadTime(dateStr);
+            if (preLeadBlock) displayStatus = 'blocked';
+            const cfg = STATUS_CONFIG[displayStatus];
+
+            const dayDate = parseDate(dateStr);
+            let blockReason: string | null = null;
+            if (deliveryMode === 'versand' && isChoosingEnd && !selectable) {
+              blockReason = getShippingBlockReason(dayDate, true);
+            }
+            if (!blockReason && preLeadBlock) {
+              blockReason = deliveryMode === 'abholung'
+                ? `Abholung erst ab ${minDaysAhead === 1 ? 'morgen' : `${minDaysAhead} Tagen`} moeglich`
+                : `Versand-Vorlauf: ${minDaysAhead} Tage — frueheste Miete am ${minDate.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })}`;
+            }
+
+            let bgClass = cfg.bg;
+            let textClass = cfg.text;
+            let cursor = 'cursor-default';
+            let ringClass = '';
+
+            if (selectable) {
+              cursor = 'cursor-pointer';
+              if (inRange) {
+                bgClass = 'bg-accent-blue/20 dark:bg-accent-blue/30';
+                textClass = 'text-accent-blue dark:text-blue-300';
+              }
+              if (isStart || isEnd) {
+                bgClass = 'bg-accent-blue';
+                textClass = 'text-white';
+                ringClass = 'ring-2 ring-accent-blue ring-offset-1 dark:ring-offset-gray-800';
+              }
+            } else if (isStart) {
               bgClass = 'bg-accent-blue';
               textClass = 'text-white';
               ringClass = 'ring-2 ring-accent-blue ring-offset-1 dark:ring-offset-gray-800';
+            } else if (blockReason) {
+              bgClass = 'bg-gray-100 dark:bg-gray-700';
+              textClass = 'text-gray-400 dark:text-gray-500';
             }
-          } else if (isStart) {
-            bgClass = 'bg-accent-blue';
-            textClass = 'text-white';
-            ringClass = 'ring-2 ring-accent-blue ring-offset-1 dark:ring-offset-gray-800';
-          } else if (blockReason) {
-            bgClass = 'bg-gray-100 dark:bg-gray-700';
-            textClass = 'text-gray-400 dark:text-gray-500';
-          }
 
-          const tooltip = blockReason
-            ?? (displayStatus === 'available' ? 'Verfügbar' : cfg.label);
+            const tooltip = blockReason
+              ?? (displayStatus === 'available' ? 'Verfügbar' : cfg.label);
 
-          return (
-            <div key={dayNum} className="relative group">
-              <button
-                type="button"
-                disabled={!selectable}
-                onClick={() => selectable && handleDayClick(dateStr)}
-                onMouseEnter={() => {
-                  if (selectable && rangeFrom && !rangeTo) setHoverDate(dateStr);
-                }}
-                onMouseLeave={() => setHoverDate(null)}
-                className={`w-full aspect-square rounded-md ${bgClass} ${textClass} ${cursor} ${ringClass} flex items-center justify-center transition-all disabled:cursor-default`}
-                title={tooltip}
-              >
-                <span className="text-[11px] font-heading font-semibold">{dayNum}</span>
-              </button>
-              {blockReason && (
-                <div className="hidden group-hover:block absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 rounded-md text-[10px] font-body whitespace-nowrap z-50 pointer-events-none"
-                  style={{ background: '#0f172a', color: '#f1f5f9', border: '1px solid #334155' }}>
-                  {blockReason}
-                </div>
-              )}
-            </div>
-          );
-        })}
+            // Beim Klick auf einen Outside-Tag wechseln wir zusaetzlich den
+            // Monat, damit die Auswahl auch sichtbar wird.
+            const onClick = () => {
+              if (!selectable) return;
+              handleDayClick(dateStr);
+              if (isOutside) {
+                const targetY = parseInt(dateStr.slice(0, 4), 10);
+                const targetM = parseInt(dateStr.slice(5, 7), 10) - 1;
+                if (targetY !== year || targetM !== month) {
+                  setYear(targetY);
+                  setMonth(targetM);
+                }
+              }
+            };
+
+            return (
+              <div key={`${dateStr}-${idx}`} className={`relative group ${isOutside ? 'opacity-50' : ''}`}>
+                <button
+                  type="button"
+                  disabled={!selectable}
+                  onClick={onClick}
+                  onMouseEnter={() => {
+                    if (selectable && rangeFrom && !rangeTo) setHoverDate(dateStr);
+                  }}
+                  onMouseLeave={() => setHoverDate(null)}
+                  className={`w-full aspect-square rounded-md ${bgClass} ${textClass} ${cursor} ${ringClass} flex items-center justify-center transition-all disabled:cursor-default`}
+                  title={tooltip}
+                >
+                  <span className="text-[11px] font-heading font-semibold">{displayDay}</span>
+                </button>
+                {blockReason && (
+                  <div className="hidden group-hover:block absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 rounded-md text-[10px] font-body whitespace-nowrap z-50 pointer-events-none"
+                    style={{ background: '#0f172a', color: '#f1f5f9', border: '1px solid #334155' }}>
+                    {blockReason}
+                  </div>
+                )}
+              </div>
+            );
+          });
+        })()}
       </div>
 
       {/* Legend */}
