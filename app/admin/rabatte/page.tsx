@@ -5,6 +5,7 @@ import type { DurationDiscount, LoyaltyDiscount, ProductDiscount } from '@/lib/p
 import AdminBackLink from '@/components/admin/AdminBackLink';
 
 interface ProductOption { id: string; name: string; }
+interface AccessoryOption { id: string; name: string; category?: string; }
 
 const S = {
   input: { background: '#0a0f1e', border: '1px solid #1e293b', borderRadius: 10, padding: '10px 12px', color: '#e2e8f0', fontSize: 14 } as React.CSSProperties,
@@ -20,6 +21,40 @@ function toLocal(iso: string | null): string {
   const d = new Date(iso);
   const p = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+function PillButton({
+  active,
+  onClick,
+  label,
+  tone = 'cyan',
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  tone?: 'cyan' | 'violet';
+}) {
+  const accent = tone === 'violet' ? '#a855f7' : '#06b6d4';
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        fontSize: 12,
+        fontWeight: 600,
+        color: active ? 'white' : '#94a3b8',
+        background: active ? accent : 'transparent',
+        border: `1px solid ${active ? accent : '#334155'}`,
+        borderRadius: 999,
+        padding: '6px 12px',
+        cursor: 'pointer',
+        whiteSpace: 'nowrap',
+        transition: 'all 0.15s',
+      }}
+    >
+      {active ? '✓ ' : ''}{label}
+    </button>
+  );
 }
 
 export default function AdminRabattePage() {
@@ -48,6 +83,7 @@ export default function AdminRabattePage() {
 
   // ─── Produkt-Dropdown Daten ────────────────────────────────────────────────
   const [products, setProducts] = useState<ProductOption[]>([]);
+  const [accessories, setAccessories] = useState<AccessoryOption[]>([]);
 
   useEffect(() => {
     fetch('/api/admin/config?key=duration_discounts').then((r) => r.json())
@@ -75,7 +111,60 @@ export default function AdminRabattePage() {
         }
       })
       .catch(() => {});
+
+    // Zubehoer laden — fuer Mehrfach-Auswahl in Aktionen
+    fetch('/api/accessories').then((r) => r.json())
+      .then((d) => {
+        if (Array.isArray(d.accessories)) {
+          setAccessories(d.accessories.map((a: { id: string; name: string; category?: string }) => ({
+            id: a.id,
+            name: a.name,
+            category: a.category,
+          })));
+        }
+      })
+      .catch(() => {});
   }, []);
+
+  /** Migriert Legacy product_id auf product_ids[] beim ersten Render. */
+  function getProductIds(d: ProductDiscount): string[] {
+    if (Array.isArray(d.product_ids) && d.product_ids.length > 0) return d.product_ids;
+    if (d.product_id && d.product_id !== 'all') return [d.product_id];
+    return [];
+  }
+  function getAccessoryIds(d: ProductDiscount): string[] {
+    return Array.isArray(d.accessory_ids) ? d.accessory_ids : [];
+  }
+  function isAllSelected(d: ProductDiscount): boolean {
+    if (d.product_id === 'all') return true;
+    return getProductIds(d).length === 0 && getAccessoryIds(d).length === 0 && !d.product_id;
+  }
+  function toggleProductId(i: number, productId: string) {
+    setProductDiscounts((prev) => {
+      const a = [...prev];
+      const cur = getProductIds(a[i]);
+      const next = cur.includes(productId) ? cur.filter((x) => x !== productId) : [...cur, productId];
+      // Legacy product_id raeumen, sobald Multi-Select aktiv ist
+      a[i] = { ...a[i], product_ids: next, product_id: undefined };
+      return a;
+    });
+  }
+  function toggleAccessoryId(i: number, accessoryId: string) {
+    setProductDiscounts((prev) => {
+      const a = [...prev];
+      const cur = getAccessoryIds(a[i]);
+      const next = cur.includes(accessoryId) ? cur.filter((x) => x !== accessoryId) : [...cur, accessoryId];
+      a[i] = { ...a[i], accessory_ids: next, product_id: undefined };
+      return a;
+    });
+  }
+  function selectAllCameras(i: number) {
+    setProductDiscounts((prev) => {
+      const a = [...prev];
+      a[i] = { ...a[i], product_ids: [], accessory_ids: [], product_id: 'all' };
+      return a;
+    });
+  }
 
   async function saveConfig(key: string, value: unknown, setSaving: (v: boolean) => void, setSuccess: (v: string) => void) {
     setSaving(true); setSuccess('');
@@ -266,18 +355,6 @@ export default function AdminRabattePage() {
                         <span style={{ fontSize: 12, color: '#64748b' }}>%</span>
                       </div>
                     </div>
-                    {/* Product */}
-                    <div>
-                      <label style={S.label}>Gilt für</label>
-                      <select value={d.product_id}
-                        onChange={(e) => { const a = [...productDiscounts]; a[i] = { ...a[i], product_id: e.target.value }; setProductDiscounts(a); }}
-                        style={{ ...S.select, width: '100%' }}>
-                        <option value="all">Alle Kameras</option>
-                        {products.map((p) => (
-                          <option key={p.id} value={p.id}>{p.name}</option>
-                        ))}
-                      </select>
-                    </div>
                     {/* Active */}
                     <div style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: 4 }}>
                       <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
@@ -304,6 +381,48 @@ export default function AdminRabattePage() {
                         style={{ ...S.input, width: '100%' }} />
                     </div>
                   </div>
+
+                  {/* Gilt-fuer Multi-Select */}
+                  <div style={{ marginBottom: 12 }}>
+                    <label style={S.label}>Gilt für</label>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      <PillButton
+                        active={isAllSelected(d)}
+                        onClick={() => selectAllCameras(i)}
+                        label="Alle Kameras"
+                      />
+                      {products.map((p) => {
+                        const isOn = !isAllSelected(d) && getProductIds(d).includes(p.id);
+                        return (
+                          <PillButton key={p.id} active={isOn}
+                            onClick={() => toggleProductId(i, p.id)}
+                            label={p.name} />
+                        );
+                      })}
+                    </div>
+                    {accessories.length > 0 && (
+                      <>
+                        <p style={{ fontSize: 11, fontWeight: 700, color: '#64748b', marginTop: 12, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                          Zubehör (Mehrfach möglich)
+                        </p>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                          {accessories.map((a) => {
+                            const isOn = getAccessoryIds(d).includes(a.id);
+                            return (
+                              <PillButton key={a.id} active={isOn}
+                                onClick={() => toggleAccessoryId(i, a.id)}
+                                label={a.name}
+                                tone="violet" />
+                            );
+                          })}
+                        </div>
+                      </>
+                    )}
+                    <p style={{ fontSize: 11, color: '#64748b', marginTop: 8 }}>
+                      Aktion greift, wenn die Buchung eine ausgewählte Kamera enthält oder eines der ausgewählten Zubehörteile.
+                    </p>
+                  </div>
+
                   <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                     <button onClick={() => setProductDiscounts((p) => p.filter((_, j) => j !== i))}
                       style={{ fontSize: 12, fontWeight: 600, color: '#ef4444', background: 'transparent', border: '1px solid #ef444433', borderRadius: 8, padding: '6px 14px', cursor: 'pointer' }}>
@@ -317,6 +436,8 @@ export default function AdminRabattePage() {
                 id: `pd-${Date.now().toString(36)}`,
                 name: '',
                 discount_percent: 10,
+                product_ids: [],
+                accessory_ids: [],
                 product_id: 'all',
                 valid_from: null,
                 valid_until: null,

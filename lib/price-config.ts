@@ -266,8 +266,12 @@ export interface ProductDiscount {
   id: string;
   name: string;
   discount_percent: number;
-  /** 'all' oder eine bestimmte Produkt-ID */
-  product_id: string;
+  /** Legacy: 'all' oder eine bestimmte Produkt-ID. Bleibt fuer Backward-Compat. */
+  product_id?: string;
+  /** Neu: Liste von Kamera-IDs (Mehrfach-Auswahl). Leer + accessory_ids leer = alle */
+  product_ids?: string[];
+  /** Neu: Liste von Zubehoer-IDs. Discount triggert wenn diese im Cart-Item enthalten sind. */
+  accessory_ids?: string[];
   valid_from: string | null;
   valid_until: string | null;
   active: boolean;
@@ -275,20 +279,45 @@ export interface ProductDiscount {
 
 export const DEFAULT_PRODUCT_DISCOUNTS: ProductDiscount[] = [];
 
-/** Gibt den besten aktiven Produktrabatt für ein Produkt zurück (oder null) */
+/**
+ * Gibt den besten aktiven Produktrabatt fuer ein Cart-Item zurueck.
+ *
+ * Match-Bedingungen (eines davon reicht):
+ * - Legacy product_id === 'all' → alle Kameras
+ * - Legacy product_id === productId → diese Kamera
+ * - product_ids leer UND accessory_ids leer (UND kein Legacy-product_id) → alle Kameras
+ * - product_ids enthaelt productId
+ * - accessory_ids enthaelt mind. eines aus cartAccessoryIds
+ *
+ * Bei mehreren matches: hoechster Rabatt.
+ */
 export function getActiveProductDiscount(
   productId: string,
-  discounts: ProductDiscount[]
+  discounts: ProductDiscount[],
+  cartAccessoryIds: string[] = []
 ): ProductDiscount | null {
   const now = new Date();
   const active = discounts.filter((d) => {
     if (!d.active) return false;
     if (d.valid_from && new Date(d.valid_from) > now) return false;
     if (d.valid_until && new Date(d.valid_until) < now) return false;
-    return d.product_id === 'all' || d.product_id === productId;
+
+    // Legacy Behandlung
+    if (d.product_id === 'all') return true;
+    if (d.product_id && d.product_id !== 'all' && d.product_id === productId) return true;
+
+    const productIds = d.product_ids ?? [];
+    const accessoryIds = d.accessory_ids ?? [];
+
+    // Wenn nichts spezifiziert (auch kein Legacy-product_id) → alle Kameras
+    if (!d.product_id && productIds.length === 0 && accessoryIds.length === 0) return true;
+
+    if (productIds.includes(productId)) return true;
+    if (accessoryIds.some((aid) => cartAccessoryIds.includes(aid))) return true;
+
+    return false;
   });
   if (active.length === 0) return null;
-  // Höchsten Rabatt zurückgeben
   return active.sort((a, b) => b.discount_percent - a.discount_percent)[0];
 }
 

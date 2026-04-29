@@ -375,9 +375,10 @@ export default function CheckoutPage() {
 
   // ── Auto-discount calculations ──────────────────────────────────────────────
 
-  // Product discount: per-item discount on rental price (e.g. Black Friday 25% off)
+  // Product discount: per-item discount on rental price (e.g. Black Friday 25% off).
+  // Match auch wenn ein Zubehoer im Cart-Item zur Aktion gehoert (accessory_ids).
   const productDiscountAmount = items.reduce((sum, item) => {
-    const match = getActiveProductDiscount(item.productId, productDiscounts);
+    const match = getActiveProductDiscount(item.productId, productDiscounts, item.accessories ?? []);
     if (!match) return sum;
     return sum + Math.round(item.priceRental * match.discount_percent) / 100;
   }, 0);
