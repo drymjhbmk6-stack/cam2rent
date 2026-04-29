@@ -262,16 +262,25 @@ export function calcLoyaltyDiscount(
 
 // ─── Produktrabatte (z.B. Black Friday) ──────────────────────────────────────
 
+export type DiscountType = 'percent' | 'fixed' | 'free';
+
 export interface ProductDiscount {
   id: string;
   name: string;
+  /** Rabatt-Typ: prozentual, fester EUR-Betrag, oder gratis. Default 'percent' (Legacy). */
+  discount_type?: DiscountType;
+  /** Prozentwert (nur bei discount_type='percent') */
   discount_percent: number;
+  /** Fester EUR-Betrag pro Cart-Item (nur bei discount_type='fixed') */
+  discount_amount?: number;
   /** Legacy: 'all' oder eine bestimmte Produkt-ID. Bleibt fuer Backward-Compat. */
   product_id?: string;
-  /** Neu: Liste von Kamera-IDs (Mehrfach-Auswahl). Leer + accessory_ids leer = alle */
+  /** Liste von Kamera-IDs (Mehrfach). Leer = alle */
   product_ids?: string[];
-  /** Neu: Liste von Zubehoer-IDs. Discount triggert wenn diese im Cart-Item enthalten sind. */
+  /** Liste von Zubehoer-IDs. Triggert wenn im Cart-Item enthalten. */
   accessory_ids?: string[];
+  /** Liste von Set-IDs. Triggert wenn das Set in der Buchung enthalten ist. */
+  set_ids?: string[];
   valid_from: string | null;
   valid_until: string | null;
   active: boolean;
@@ -279,46 +288,127 @@ export interface ProductDiscount {
 
 export const DEFAULT_PRODUCT_DISCOUNTS: ProductDiscount[] = [];
 
+export type DiscountTarget = 'rental' | 'accessories';
+
+export interface DiscountMatch {
+  discount: ProductDiscount;
+  /** rental = Mietpreis (Kamera). accessories = Zubehoer-/Set-Preis. */
+  target: DiscountTarget;
+  /** Berechneter Rabattbetrag in EUR fuer dieses Item. */
+  amount: number;
+}
+
+function isWithinValidity(d: ProductDiscount, now: Date): boolean {
+  if (!d.active) return false;
+  if (d.valid_from && new Date(d.valid_from) > now) return false;
+  if (d.valid_until && new Date(d.valid_until) < now) return false;
+  return true;
+}
+
+function hasProductTargets(d: ProductDiscount): boolean {
+  if (d.product_id && d.product_id !== 'all') return true;
+  return (d.product_ids?.length ?? 0) > 0;
+}
+function hasAccessoryTargets(d: ProductDiscount): boolean {
+  return (d.accessory_ids?.length ?? 0) > 0 || (d.set_ids?.length ?? 0) > 0;
+}
+
+function calcDiscountValue(d: ProductDiscount, base: number): number {
+  if (base <= 0) return 0;
+  const type = d.discount_type ?? 'percent';
+  if (type === 'free') return base;
+  if (type === 'fixed') return Math.min(base, Math.max(0, d.discount_amount ?? 0));
+  // percent (Default — Legacy)
+  return Math.round(base * (d.discount_percent ?? 0)) / 100;
+}
+
 /**
- * Gibt den besten aktiven Produktrabatt fuer ein Cart-Item zurueck.
- *
- * Match-Bedingungen (eines davon reicht):
- * - Legacy product_id === 'all' → alle Kameras
- * - Legacy product_id === productId → diese Kamera
- * - product_ids leer UND accessory_ids leer (UND kein Legacy-product_id) → alle Kameras
- * - product_ids enthaelt productId
- * - accessory_ids enthaelt mind. eines aus cartAccessoryIds
- *
- * Bei mehreren matches: hoechster Rabatt.
+ * Liefert alle aktiven Rabatte, die fuer ein Cart-Item greifen, jeweils mit
+ * berechnetem Betrag und Target. Ein Discount kann auf 'rental' (Mietpreis)
+ * oder 'accessories' (Zubehoer/Sets) wirken — Auto-Detection:
+ * - Match via product_ids → 'rental'
+ * - Match via accessory_ids/set_ids → 'accessories'
+ * - Match via Legacy product_id → 'rental'
+ * - Kein Target gesetzt → 'rental' (wirkt auf alle Kameras)
+ */
+export function getDiscountMatchesForItem(
+  productId: string,
+  priceRental: number,
+  priceAccessories: number,
+  cartAccessoryIds: string[],
+  discounts: ProductDiscount[]
+): DiscountMatch[] {
+  const now = new Date();
+  const matches: DiscountMatch[] = [];
+
+  for (const d of discounts) {
+    if (!isWithinValidity(d, now)) continue;
+
+    const productIds = d.product_ids ?? [];
+    const accIds = d.accessory_ids ?? [];
+    const setIds = d.set_ids ?? [];
+
+    const matchesAllLegacy = d.product_id === 'all';
+    const matchesSpecificLegacy = d.product_id && d.product_id !== 'all' && d.product_id === productId;
+    const matchesNewProductList = productIds.includes(productId);
+    const matchesAccOrSet = accIds.some((id) => cartAccessoryIds.includes(id))
+                         || setIds.some((id) => cartAccessoryIds.includes(id));
+
+    // Wenn weder Produkt- noch Zubehoer-Targets gesetzt sind und kein
+    // Legacy-product_id → matched alle Kameras (Default).
+    const noTargets = !d.product_id && !hasProductTargets(d) && !hasAccessoryTargets(d);
+
+    let target: DiscountTarget;
+    if (matchesAllLegacy || matchesSpecificLegacy || matchesNewProductList || noTargets) {
+      target = 'rental';
+    } else if (matchesAccOrSet) {
+      target = 'accessories';
+    } else {
+      continue; // kein Match
+    }
+
+    const base = target === 'rental' ? priceRental : priceAccessories;
+    const amount = calcDiscountValue(d, base);
+    if (amount > 0) matches.push({ discount: d, target, amount });
+  }
+
+  return matches;
+}
+
+/**
+ * Berechnet den Gesamtrabatt fuer ein Item bei mehreren matchenden Aktionen.
+ * Pro Target gewinnt der hoechste Rabatt (verhindert Doppel-Rabatt auf
+ * dieselbe Basis); Targets stacken untereinander. Cap auf Item-Gesamtpreis.
+ */
+export function calcItemDiscountTotal(
+  matches: DiscountMatch[],
+  priceRental: number,
+  priceAccessories: number
+): number {
+  let rentalDiscount = 0;
+  let accessoriesDiscount = 0;
+  for (const m of matches) {
+    if (m.target === 'rental') rentalDiscount = Math.max(rentalDiscount, m.amount);
+    else accessoriesDiscount = Math.max(accessoriesDiscount, m.amount);
+  }
+  rentalDiscount = Math.min(rentalDiscount, priceRental);
+  accessoriesDiscount = Math.min(accessoriesDiscount, priceAccessories);
+  return Math.min(rentalDiscount + accessoriesDiscount, priceRental + priceAccessories);
+}
+
+/**
+ * Backward-Compat: Liefert den hoechsten Match (oder null). Aufrufer, die
+ * nicht stacken muessen, koennen weiter dieses einfache API nutzen.
  */
 export function getActiveProductDiscount(
   productId: string,
   discounts: ProductDiscount[],
   cartAccessoryIds: string[] = []
 ): ProductDiscount | null {
-  const now = new Date();
-  const active = discounts.filter((d) => {
-    if (!d.active) return false;
-    if (d.valid_from && new Date(d.valid_from) > now) return false;
-    if (d.valid_until && new Date(d.valid_until) < now) return false;
-
-    // Legacy Behandlung
-    if (d.product_id === 'all') return true;
-    if (d.product_id && d.product_id !== 'all' && d.product_id === productId) return true;
-
-    const productIds = d.product_ids ?? [];
-    const accessoryIds = d.accessory_ids ?? [];
-
-    // Wenn nichts spezifiziert (auch kein Legacy-product_id) → alle Kameras
-    if (!d.product_id && productIds.length === 0 && accessoryIds.length === 0) return true;
-
-    if (productIds.includes(productId)) return true;
-    if (accessoryIds.some((aid) => cartAccessoryIds.includes(aid))) return true;
-
-    return false;
-  });
-  if (active.length === 0) return null;
-  return active.sort((a, b) => b.discount_percent - a.discount_percent)[0];
+  // Vereinfacht: nimmt nur Rental-Targets, da das Legacy-Verhalten
+  const matches = getDiscountMatchesForItem(productId, 1, 0, cartAccessoryIds, discounts);
+  if (matches.length === 0) return null;
+  return matches.sort((a, b) => b.amount - a.amount)[0].discount;
 }
 
 // ─── PriceConfig (used by /api/prices) ───────────────────────────────────────

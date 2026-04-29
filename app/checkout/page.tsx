@@ -17,7 +17,7 @@ import { calcDiscount, type Coupon } from '@/data/coupons';
 import { calcShipping, shippingConfig } from '@/data/shipping';
 import type { ShippingMethod } from '@/data/shipping';
 import type { ShippingPriceConfig, DurationDiscount, LoyaltyDiscount, ProductDiscount } from '@/lib/price-config';
-import { calcDurationDiscount, calcLoyaltyDiscount, getActiveProductDiscount } from '@/lib/price-config';
+import { calcDurationDiscount, calcLoyaltyDiscount, getDiscountMatchesForItem, calcItemDiscountTotal } from '@/lib/price-config';
 import { useAccessories } from '@/components/AccessoriesProvider';
 import { getAccessoryPrice } from '@/data/accessories';
 import { BUSINESS } from '@/lib/business-config';
@@ -375,12 +375,18 @@ export default function CheckoutPage() {
 
   // ── Auto-discount calculations ──────────────────────────────────────────────
 
-  // Product discount: per-item discount on rental price (e.g. Black Friday 25% off).
-  // Match auch wenn ein Zubehoer im Cart-Item zur Aktion gehoert (accessory_ids).
+  // Product discount: per-item, mit Stacking. Mehrere Aktionen koennen
+  // gleichzeitig greifen — pro Pot (Mietpreis vs. Zubehoer) gewinnt die
+  // hoechste, Pots stacken. Cap auf Item-Gesamtpreis.
   const productDiscountAmount = items.reduce((sum, item) => {
-    const match = getActiveProductDiscount(item.productId, productDiscounts, item.accessories ?? []);
-    if (!match) return sum;
-    return sum + Math.round(item.priceRental * match.discount_percent) / 100;
+    const matches = getDiscountMatchesForItem(
+      item.productId,
+      item.priceRental,
+      item.priceAccessories,
+      item.accessories ?? [],
+      productDiscounts,
+    );
+    return sum + calcItemDiscountTotal(matches, item.priceRental, item.priceAccessories);
   }, 0);
   // productDiscountLabel für zukünftige Nutzung
   void productDiscountAmount;

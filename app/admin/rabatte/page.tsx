@@ -6,6 +6,7 @@ import AdminBackLink from '@/components/admin/AdminBackLink';
 
 interface ProductOption { id: string; name: string; }
 interface AccessoryOption { id: string; name: string; category?: string; }
+interface SetOption { id: string; name: string; }
 
 const S = {
   input: { background: '#0a0f1e', border: '1px solid #1e293b', borderRadius: 10, padding: '10px 12px', color: '#e2e8f0', fontSize: 14 } as React.CSSProperties,
@@ -32,9 +33,9 @@ function PillButton({
   active: boolean;
   onClick: () => void;
   label: string;
-  tone?: 'cyan' | 'violet';
+  tone?: 'cyan' | 'violet' | 'amber';
 }) {
-  const accent = tone === 'violet' ? '#a855f7' : '#06b6d4';
+  const accent = tone === 'violet' ? '#a855f7' : tone === 'amber' ? '#f59e0b' : '#06b6d4';
   return (
     <button
       type="button"
@@ -84,6 +85,7 @@ export default function AdminRabattePage() {
   // ─── Produkt-Dropdown Daten ────────────────────────────────────────────────
   const [products, setProducts] = useState<ProductOption[]>([]);
   const [accessories, setAccessories] = useState<AccessoryOption[]>([]);
+  const [sets, setSets] = useState<SetOption[]>([]);
 
   useEffect(() => {
     fetch('/api/admin/config?key=duration_discounts').then((r) => r.json())
@@ -124,6 +126,16 @@ export default function AdminRabattePage() {
         }
       })
       .catch(() => {});
+
+    // Sets laden — Sets gehen als pseudo-Zubehoer in cart.accessories rein,
+    // matchen aber ueber set_ids[] in der Aktion.
+    fetch('/api/sets').then((r) => r.json())
+      .then((d) => {
+        if (Array.isArray(d.sets)) {
+          setSets(d.sets.map((s: { id: string; name: string }) => ({ id: s.id, name: s.name })));
+        }
+      })
+      .catch(() => {});
   }, []);
 
   /** Migriert Legacy product_id auf product_ids[] beim ersten Render. */
@@ -135,9 +147,31 @@ export default function AdminRabattePage() {
   function getAccessoryIds(d: ProductDiscount): string[] {
     return Array.isArray(d.accessory_ids) ? d.accessory_ids : [];
   }
+  function getSetIds(d: ProductDiscount): string[] {
+    return Array.isArray(d.set_ids) ? d.set_ids : [];
+  }
+  function toggleSetId(i: number, setId: string) {
+    setProductDiscounts((prev) => {
+      const a = [...prev];
+      const cur = getSetIds(a[i]);
+      const next = cur.includes(setId) ? cur.filter((x) => x !== setId) : [...cur, setId];
+      a[i] = { ...a[i], set_ids: next, product_id: undefined };
+      return a;
+    });
+  }
+  function setDiscountType(i: number, type: 'percent' | 'fixed' | 'free') {
+    setProductDiscounts((prev) => {
+      const a = [...prev];
+      a[i] = { ...a[i], discount_type: type };
+      return a;
+    });
+  }
   function isAllSelected(d: ProductDiscount): boolean {
     if (d.product_id === 'all') return true;
-    return getProductIds(d).length === 0 && getAccessoryIds(d).length === 0 && !d.product_id;
+    return getProductIds(d).length === 0
+      && getAccessoryIds(d).length === 0
+      && (Array.isArray(d.set_ids) ? d.set_ids.length === 0 : true)
+      && !d.product_id;
   }
   function toggleProductId(i: number, productId: string) {
     setProductDiscounts((prev) => {
@@ -161,7 +195,7 @@ export default function AdminRabattePage() {
   function selectAllCameras(i: number) {
     setProductDiscounts((prev) => {
       const a = [...prev];
-      a[i] = { ...a[i], product_ids: [], accessory_ids: [], product_id: 'all' };
+      a[i] = { ...a[i], product_ids: [], accessory_ids: [], set_ids: [], product_id: 'all' };
       return a;
     });
   }
@@ -345,15 +379,46 @@ export default function AdminRabattePage() {
                         placeholder="z.B. Black Friday"
                         style={{ ...S.input, width: '100%' }} />
                     </div>
-                    {/* Discount */}
+                    {/* Discount-Typ + Wert */}
                     <div>
-                      <label style={S.label}>Rabatt auf Mietpreis</label>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <input type="number" min="0" max="100" value={d.discount_percent}
-                          onChange={(e) => { const a = [...productDiscounts]; a[i] = { ...a[i], discount_percent: parseInt(e.target.value) || 0 }; setProductDiscounts(a); }}
-                          style={{ ...S.input, width: 80, textAlign: 'center' }} />
-                        <span style={{ fontSize: 12, color: '#64748b' }}>%</span>
+                      <label style={S.label}>Rabatt</label>
+                      <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+                        {(['percent', 'fixed', 'free'] as const).map((t) => {
+                          const cur = d.discount_type ?? 'percent';
+                          const labels = { percent: '%', fixed: '€', free: 'Gratis' };
+                          return (
+                            <button key={t} type="button" onClick={() => setDiscountType(i, t)}
+                              style={{
+                                fontSize: 12, fontWeight: 600, padding: '6px 10px', borderRadius: 8, cursor: 'pointer',
+                                background: cur === t ? S.cyan : 'transparent',
+                                color: cur === t ? 'white' : '#94a3b8',
+                                border: `1px solid ${cur === t ? S.cyan : '#334155'}`,
+                              }}>
+                              {labels[t]}
+                            </button>
+                          );
+                        })}
                       </div>
+                      {(d.discount_type ?? 'percent') === 'percent' && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <input type="number" min="0" max="100" value={d.discount_percent}
+                            onChange={(e) => { const a = [...productDiscounts]; a[i] = { ...a[i], discount_percent: parseInt(e.target.value) || 0 }; setProductDiscounts(a); }}
+                            style={{ ...S.input, width: 80, textAlign: 'center' }} />
+                          <span style={{ fontSize: 12, color: '#64748b' }}>%</span>
+                        </div>
+                      )}
+                      {d.discount_type === 'fixed' && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <input type="number" min="0" step="0.01" value={d.discount_amount ?? ''}
+                            onChange={(e) => { const a = [...productDiscounts]; a[i] = { ...a[i], discount_amount: parseFloat(e.target.value) || 0 }; setProductDiscounts(a); }}
+                            style={{ ...S.input, width: 100, textAlign: 'center' }}
+                            placeholder="0,00" />
+                          <span style={{ fontSize: 12, color: '#64748b' }}>€</span>
+                        </div>
+                      )}
+                      {d.discount_type === 'free' && (
+                        <p style={{ fontSize: 11, color: '#10b981', margin: 0 }}>Position wird kostenfrei.</p>
+                      )}
                     </div>
                     {/* Active */}
                     <div style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: 4 }}>
@@ -418,8 +483,27 @@ export default function AdminRabattePage() {
                         </div>
                       </>
                     )}
+                    {sets.length > 0 && (
+                      <>
+                        <p style={{ fontSize: 11, fontWeight: 700, color: '#64748b', marginTop: 12, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                          Sets (Mehrfach möglich)
+                        </p>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                          {sets.map((s) => {
+                            const isOn = getSetIds(d).includes(s.id);
+                            return (
+                              <PillButton key={s.id} active={isOn}
+                                onClick={() => toggleSetId(i, s.id)}
+                                label={s.name}
+                                tone="amber" />
+                            );
+                          })}
+                        </div>
+                      </>
+                    )}
                     <p style={{ fontSize: 11, color: '#64748b', marginTop: 8 }}>
-                      Aktion greift, wenn die Buchung eine ausgewählte Kamera enthält oder eines der ausgewählten Zubehörteile.
+                      Aktion greift, wenn die Buchung eine ausgewählte Kamera enthält oder eines der ausgewählten Zubehörteile/Sets.
+                      Mehrere Aktionen können gleichzeitig aktiv sein und stacken (höchste pro Kategorie gewinnt).
                     </p>
                   </div>
 
@@ -435,9 +519,12 @@ export default function AdminRabattePage() {
               <button onClick={() => setProductDiscounts((p) => [...p, {
                 id: `pd-${Date.now().toString(36)}`,
                 name: '',
+                discount_type: 'percent',
                 discount_percent: 10,
+                discount_amount: 0,
                 product_ids: [],
                 accessory_ids: [],
+                set_ids: [],
                 product_id: 'all',
                 valid_from: null,
                 valid_until: null,
