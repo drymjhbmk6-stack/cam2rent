@@ -811,7 +811,14 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
     return () => { cancelled = true; };
   }, [pathname]);
 
-  const isLoginOrBlog = pathname === '/admin/login' || pathname.startsWith('/admin/blog');
+  // Druck-/QR-/Scan-Seiten haben ein eigenes Layout (weisser Hintergrund,
+  // kein Sidebar/Header) — das Admin-Shell wuerde sie sonst zerquetschen.
+  const isStandalone =
+    pathname === '/admin/login'
+    || pathname.startsWith('/admin/blog')
+    || pathname.endsWith('/qr-codes')
+    || pathname.startsWith('/admin/scan/');
+  const isLoginOrBlog = isStandalone;
 
   // Auto-Logout nach Inaktivität (nicht auf Login-Seite)
   useAutoLogout({

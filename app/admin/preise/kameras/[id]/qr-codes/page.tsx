@@ -87,22 +87,22 @@ export default async function KameraQrCodesPage({
             an.
           </div>
         ) : (
-          <div className="grid grid-cols-3 gap-3 print:gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 print:gap-2">
             {qrItems.map((u) => (
               <div
                 key={u.id}
-                className="border border-gray-300 rounded-lg p-3 flex flex-col items-center break-inside-avoid"
+                className="border border-gray-300 rounded-lg p-3 flex flex-col items-center break-inside-avoid bg-white"
                 style={{ pageBreakInside: 'avoid' }}
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={u.qr} alt={u.serial_number} className="w-full max-w-[180px] aspect-square" />
-                <div className="text-center mt-1">
+                <img src={u.qr} alt={u.serial_number} className="w-full max-w-[160px] aspect-square" />
+                <div className="text-center mt-2 w-full px-1 overflow-hidden">
                   {brandLabel && (
-                    <p className="text-[10px] uppercase tracking-wider text-gray-500">{brandLabel}</p>
+                    <p className="text-[10px] uppercase tracking-wider text-gray-500 truncate">{brandLabel}</p>
                   )}
-                  <p className="text-sm font-bold leading-tight">{productLabel}</p>
-                  <p className="text-base font-mono font-bold mt-1">{u.serial_number}</p>
-                  {u.label && <p className="text-[10px] text-gray-500 mt-0.5">{u.label}</p>}
+                  <p className="text-xs font-bold text-black leading-tight truncate">{productLabel}</p>
+                  <p className="text-sm font-mono font-bold text-black mt-1 break-all">{u.serial_number}</p>
+                  {u.label && <p className="text-[10px] text-gray-500 mt-0.5 truncate">{u.label}</p>}
                 </div>
               </div>
             ))}
