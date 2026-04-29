@@ -254,10 +254,23 @@ export default function AccessoryUnitsManager({ accessoryId, onCountChanged }: P
         <h3 className="font-heading font-bold text-sm text-brand-black dark:text-slate-200">
           Exemplare ({units.length})
         </h3>
-        <span className="text-xs font-body text-brand-muted">
-          {activeCount} aktiv
-          {units.length - activeCount > 0 && `, ${units.length - activeCount} ausgemustert/verloren`}
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="text-xs font-body text-brand-muted">
+            {activeCount} aktiv
+            {units.length - activeCount > 0 && `, ${units.length - activeCount} ausgemustert/verloren`}
+          </span>
+          {activeCount > 0 && (
+            <a
+              href={`/admin/zubehoer/${accessoryId}/qr-codes`}
+              target="_blank"
+              rel="noopener"
+              className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-heading font-semibold bg-cyan-600 text-white rounded hover:bg-cyan-700 transition-colors"
+              title="QR-Code-Etiketten zum Aufkleben drucken"
+            >
+              QR-Codes drucken
+            </a>
+          )}
+        </div>
       </div>
       <p className="text-xs font-body text-brand-muted mb-3">
         Jedes physische Exemplar einzeln erfassen. Die verfügbare Menge wird automatisch berechnet.

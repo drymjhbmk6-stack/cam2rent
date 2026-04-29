@@ -628,9 +628,22 @@ export default function AdminKameraEditorPage() {
             <div className="bg-white rounded-2xl border border-brand-border p-6">
               <div className="flex items-center justify-between mb-1">
                 <h2 className="font-heading font-bold text-sm text-brand-black">Kameras / Seriennummern</h2>
-                <span className="text-xs font-body text-brand-muted">
-                  {activeUnitCount} aktiv{units.filter((u) => u.status === 'retired').length > 0 && `, ${units.filter((u) => u.status === 'retired').length} ausgemustert`}
-                </span>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-body text-brand-muted">
+                    {activeUnitCount} aktiv{units.filter((u) => u.status === 'retired').length > 0 && `, ${units.filter((u) => u.status === 'retired').length} ausgemustert`}
+                  </span>
+                  {activeUnitCount > 0 && (
+                    <a
+                      href={`/admin/preise/kameras/${id}/qr-codes`}
+                      target="_blank"
+                      rel="noopener"
+                      className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-heading font-semibold bg-cyan-600 text-white rounded hover:bg-cyan-700 transition-colors"
+                      title="QR-Code-Etiketten zum Aufkleben drucken"
+                    >
+                      QR-Codes drucken
+                    </a>
+                  )}
+                </div>
               </div>
               <p className="text-xs font-body text-brand-muted mb-4">Jede physische Kamera einzeln erfassen. Der Lagerbestand wird automatisch berechnet.</p>
 
