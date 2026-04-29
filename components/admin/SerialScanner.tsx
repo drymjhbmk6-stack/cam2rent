@@ -42,6 +42,28 @@ interface SerialScannerProps {
   title?: string;
 }
 
+/**
+ * Extrahiert den eigentlichen Code aus dem Scan-Wert. Akzeptiert sowohl
+ * Plaintext-Codes ("GP12-001") als auch URLs vom QR-Code-Druck
+ * ("https://cam2rent.de/admin/scan/GP12-001"). Bei URLs wird der letzte
+ * Pfad-Segment genommen und URL-dekodiert.
+ */
+function extractScanValue(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return '';
+  if (/^https?:\/\//i.test(trimmed)) {
+    try {
+      const url = new URL(trimmed);
+      const segments = url.pathname.split('/').filter(Boolean);
+      const last = segments[segments.length - 1];
+      return last ? decodeURIComponent(last) : trimmed;
+    } catch {
+      return trimmed;
+    }
+  }
+  return trimmed;
+}
+
 export default function SerialScanner({ open, onResult, onClose, title = 'Seriennummer scannen' }: SerialScannerProps) {
   const [status, setStatus] = useState<Status>('init');
   const [errorMsg, setErrorMsg] = useState('');
@@ -110,7 +132,7 @@ export default function SerialScanner({ open, onResult, onClose, title = 'Serien
         try {
           const codes = await detector.detect(videoRef.current);
           if (codes.length > 0) {
-            const value = codes[0].rawValue.trim();
+            const value = extractScanValue(codes[0].rawValue);
             if (value) {
               stopScanning();
               onResult(value);
@@ -129,7 +151,7 @@ export default function SerialScanner({ open, onResult, onClose, title = 'Serien
 
   function handleManualSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const v = manualValue.trim();
+    const v = extractScanValue(manualValue);
     if (!v) return;
     stopScanning();
     onResult(v);

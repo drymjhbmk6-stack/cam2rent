@@ -2,6 +2,7 @@ import { createServiceClient } from '@/lib/supabase';
 import QRCode from 'qrcode';
 import Link from 'next/link';
 import PrintButton from '../../../preise/kameras/[id]/qr-codes/PrintButton';
+import { getSiteUrl } from '@/lib/env-mode';
 
 interface Unit {
   id: string;
@@ -34,10 +35,11 @@ export default async function ZubehoerQrCodesPage({
     .order('exemplar_code', { ascending: true });
   const units = (unitsRaw ?? []) as Unit[];
 
+  const siteUrl = (await getSiteUrl()).replace(/\/+$/, '');
   const qrItems = await Promise.all(
     units.map(async (u) => ({
       ...u,
-      qr: await QRCode.toDataURL(u.exemplar_code, {
+      qr: await QRCode.toDataURL(`${siteUrl}/admin/scan/${encodeURIComponent(u.exemplar_code)}`, {
         margin: 1,
         width: 360,
         errorCorrectionLevel: 'M',

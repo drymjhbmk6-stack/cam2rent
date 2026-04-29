@@ -2,6 +2,7 @@ import { createServiceClient } from '@/lib/supabase';
 import QRCode from 'qrcode';
 import Link from 'next/link';
 import PrintButton from './PrintButton';
+import { getSiteUrl } from '@/lib/env-mode';
 
 interface Unit {
   id: string;
@@ -37,13 +38,16 @@ export default async function KameraQrCodesPage({
     .order('serial_number', { ascending: true });
   const units = (unitsRaw ?? []) as Unit[];
 
-  // QR-Codes generieren — Inhalt ist die nackte Seriennummer (kompatibel mit
-  // dem bestehenden SerialScanner). Optional kann ein Admin später auf URLs
-  // umstellen, indem er hier z.B. `https://cam2rent.de/u/<serial>` einbettet.
+  // QR-Inhalt = vollstaendige Scan-URL. Beim Scannen mit der Smartphone-Kamera
+  // oeffnet der Browser automatisch /admin/scan/<seriennr> und zeigt die Detail-
+  // ansicht (Modell, Status, aktive Buchung). Der bestehende SerialScanner unter
+  // /admin/buchungen/neu erkennt URLs auch — er extrahiert den letzten Pfad-
+  // Segment, sodass nur die Seriennummer ins Eingabefeld faellt.
+  const siteUrl = (await getSiteUrl()).replace(/\/+$/, '');
   const qrItems = await Promise.all(
     units.map(async (u) => ({
       ...u,
-      qr: await QRCode.toDataURL(u.serial_number, {
+      qr: await QRCode.toDataURL(`${siteUrl}/admin/scan/${encodeURIComponent(u.serial_number)}`, {
         margin: 1,
         width: 360,
         errorCorrectionLevel: 'M',
