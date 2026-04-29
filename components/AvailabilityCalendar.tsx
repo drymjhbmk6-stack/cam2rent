@@ -230,8 +230,10 @@ export default function AvailabilityCalendar({
     if (!dayMap.has(d.date)) dayMap.set(d.date, d);
   }
 
-  // Check if a day is selectable
-  const isChoosingEnd = !!rangeFrom && !rangeTo;
+  // Check if a day is selectable. Wir sind im "Enddatum erweitern"-Modus,
+  // wenn aktuell eine 1-Tag-Auswahl getroffen wurde (rangeFrom === rangeTo).
+  // Der weitere Klick erweitert dann den Range vorwaerts oder rueckwaerts.
+  const isChoosingEnd = !!rangeFrom && !!rangeTo && rangeFrom === rangeTo;
 
   // Wenn Startdatum gewählt: finde den nächsten gebuchten/gesperrten Tag
   // Alle Tage danach sind nicht wählbar (verhindert Überbuchungen)
@@ -273,30 +275,47 @@ export default function AvailabilityCalendar({
     return true;
   }
 
-  // Handle day click
+  // Handle day click — neuer Flow:
+  // 1. Klick (oder nach abgeschlossenem Range): Start = Ende = Tag → 1 Tag
+  // 2. Klick im 1-Tag-Modus auf gleichen Tag: Auswahl aufheben
+  // 2. Klick im 1-Tag-Modus auf späteren Tag: Range erweitern
+  // 2. Klick im 1-Tag-Modus auf früheren Tag: Range rueckwaerts erweitern (Variante A)
   function handleDayClick(dateStr: string) {
-    if (!rangeFrom || rangeTo) {
-      // Neues Startdatum wählen
+    // Erster Klick (oder nach abgeschlossenem Range) → 1-Tag-Auswahl direkt
+    if (!rangeFrom || (rangeTo && rangeFrom !== rangeTo)) {
       setRangeFrom(dateStr);
+      setRangeTo(dateStr);
+      return;
+    }
+
+    // Aktuell im 1-Tag-Modus (rangeFrom === rangeTo)
+    if (dateStr === rangeFrom) {
+      // Toggle off
+      setRangeFrom(null);
       setRangeTo(null);
-    } else {
-      if (dateStr < rangeFrom) {
-        // Klick vor dem Startdatum → neues Startdatum
+      return;
+    }
+
+    if (dateStr < rangeFrom) {
+      // Rückwärts erweitern (Variante A)
+      if (hasBookedDaysBetween(dateStr, rangeFrom)) {
+        // Gebuchter Tag dazwischen → neue 1-Tag-Auswahl auf den geklickten Tag
         setRangeFrom(dateStr);
-        setRangeTo(null);
-      } else if (dateStr === rangeFrom) {
-        // Gleicher Tag nochmal → 1-Tag-Buchung (Start = Ende)
         setRangeTo(dateStr);
       } else {
-        // Enddatum: prüfen ob dazwischen gebuchte Tage liegen
-        if (hasBookedDaysBetween(rangeFrom, dateStr)) {
-          // Ungültiger Bereich → Startdatum zurücksetzen
-          setRangeFrom(dateStr);
-          setRangeTo(null);
-        } else {
-          setRangeTo(dateStr);
-        }
+        const oldStart = rangeFrom;
+        setRangeFrom(dateStr);
+        setRangeTo(oldStart);
       }
+      return;
+    }
+
+    // dateStr > rangeFrom → nach vorne erweitern
+    if (hasBookedDaysBetween(rangeFrom, dateStr)) {
+      setRangeFrom(dateStr);
+      setRangeTo(dateStr);
+    } else {
+      setRangeTo(dateStr);
     }
   }
 
@@ -310,21 +329,34 @@ export default function AvailabilityCalendar({
     });
   }
 
-  // Check if day is in range
+  // Effektiver Range fuer das Rendering. Nimmt Hover-Vorschau im 1-Tag-Modus
+  // mit, bidirektional (Hover vor rangeFrom -> rueckwaerts-Range).
+  function getEffectiveRange(): { start: string | null; end: string | null } {
+    if (!rangeFrom || !rangeTo) {
+      return { start: rangeFrom, end: rangeTo };
+    }
+    // Im 1-Tag-Modus mit Hover -> vorlaeufiger Range
+    if (rangeFrom === rangeTo && hoverDate && hoverDate !== rangeFrom) {
+      if (hoverDate < rangeFrom) {
+        return { start: hoverDate, end: rangeFrom };
+      }
+      return { start: rangeFrom, end: hoverDate };
+    }
+    return { start: rangeFrom, end: rangeTo };
+  }
+
   function isInRange(dateStr: string): boolean {
-    if (!rangeFrom) return false;
-    const end = rangeTo || hoverDate;
-    if (!end) return dateStr === rangeFrom;
-    if (end < rangeFrom) return false;
-    return dateStr >= rangeFrom && dateStr <= end;
+    const { start, end } = getEffectiveRange();
+    if (!start || !end) return false;
+    return dateStr >= start && dateStr <= end;
   }
 
   function isRangeStart(dateStr: string): boolean {
-    return dateStr === rangeFrom;
+    return dateStr === getEffectiveRange().start;
   }
 
   function isRangeEnd(dateStr: string): boolean {
-    return dateStr === (rangeTo || (hoverDate && !rangeTo && rangeFrom && hoverDate >= rangeFrom ? hoverDate : null));
+    return dateStr === getEffectiveRange().end;
   }
 
   // Reset range when delivery mode changes
@@ -505,7 +537,9 @@ export default function AvailabilityCalendar({
                   disabled={!selectable}
                   onClick={onClick}
                   onMouseEnter={() => {
-                    if (selectable && rangeFrom && !rangeTo) setHoverDate(dateStr);
+                    // Hover-Preview im 1-Tag-Modus (rangeFrom === rangeTo) — zeigt
+                    // visuell, wie der Range mit dem naechsten Klick aussehen wird.
+                    if (selectable && rangeFrom && rangeTo && rangeFrom === rangeTo) setHoverDate(dateStr);
                   }}
                   onMouseLeave={() => setHoverDate(null)}
                   className={`w-full aspect-square rounded-md ${bgClass} ${textClass} ${cursor} ${ringClass} flex items-center justify-center transition-all disabled:cursor-default`}
@@ -535,17 +569,11 @@ export default function AvailabilityCalendar({
         ))}
       </div>
 
-      {/* Startdatum gewählt, Enddatum noch offen */}
-      {rangeFrom && !rangeTo && (
+      {/* Hinweis im 1-Tag-Modus: Tippe auf einen weiteren Tag fuer einen Range */}
+      {rangeFrom && rangeTo && rangeFrom === rangeTo && (
         <div className="mt-3 bg-accent-blue-soft/50 dark:bg-accent-blue/5 border border-accent-blue/10 rounded-[10px] p-3">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-xs font-body text-accent-blue/70 dark:text-blue-300/70">Startdatum</span>
-            <span className="text-xs font-heading font-bold text-accent-blue dark:text-blue-300">
-              {parseDate(rangeFrom).toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })}
-            </span>
-          </div>
-          <p className="text-[10px] font-body text-accent-blue/50 dark:text-blue-300/50">
-            Wähle das Enddatum oder klicke erneut für 1 Tag
+          <p className="text-[10px] font-body text-accent-blue/60 dark:text-blue-300/60 text-center">
+            Tippe einen weiteren Tag für einen Mietzeitraum oder erneut auf den ausgewählten Tag, um die Auswahl aufzuheben.
           </p>
         </div>
       )}
