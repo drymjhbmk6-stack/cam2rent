@@ -119,6 +119,27 @@ export async function GET(
     .maybeSingle();
   if (agreementData) agreement = agreementData;
 
+  // Self-Heal: Wenn ein rental_agreements-Eintrag existiert (Vertrag wurde
+  // erfolgreich erzeugt + gespeichert), das bookings.contract_signed-Flag aber
+  // noch auf false steht, beide Datenpunkte synchronisieren. Das deckt zwei
+  // Faelle ab:
+  //  1) storeContract() crashte zwischen Step 3 (agreements-Insert) und Step
+  //     4 (bookings-UPDATE) — selten, aber moeglich
+  //  2) `after()`-Block ist mit dem agreements-Insert durch, aber das
+  //     bookings-UPDATE noch on-the-fly. Ohne Self-Heal sieht der Admin den
+  //     hartnaeckigen "Ausstehend"-Status, obwohl der Vertrag laengst da ist.
+  if (agreement && !booking.contract_signed) {
+    await supabase
+      .from('bookings')
+      .update({
+        contract_signed: true,
+        contract_signed_at: agreement.signed_at,
+      })
+      .eq('id', id);
+    booking.contract_signed = true;
+    booking.contract_signed_at = agreement.signed_at;
+  }
+
   // E-Mail-Verlauf laden (email_log)
   const { data: emails } = await supabase
     .from('email_log')
