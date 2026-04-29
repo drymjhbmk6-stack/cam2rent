@@ -45,6 +45,8 @@ interface BookingDetail {
   extended_at: string | null;
   contract_signed: boolean | null;
   contract_signed_at: string | null;
+  contract_signer_name: string | null;
+  contract_signature_url: string | null;
   suspicious: boolean;
   suspicious_reasons: string[];
   notes: string | null;
@@ -165,6 +167,7 @@ export default function BuchungDetailPage() {
   const [emailDraft, setEmailDraft] = useState('');
   const [emailSaving, setEmailSaving] = useState(false);
   const [showEmailModal, setShowEmailModal] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
   const [emailSending, setEmailSending] = useState(false);
   const [emailToast, setEmailToast] = useState<{ msg: string; type: 'ok' | 'err' } | null>(null);
   const [emailRecipient, setEmailRecipient] = useState('');
@@ -269,6 +272,28 @@ export default function BuchungDetailPage() {
     } finally {
       setEmailSending(false);
       setTimeout(() => setEmailToast(null), 4000);
+    }
+  }
+
+  async function handleRegenerateContract() {
+    if (!booking) return;
+    if (!confirm('Vertrag aus der gespeicherten Signatur regenerieren?')) return;
+    setRegenerating(true);
+    try {
+      const res = await fetch(`/api/admin/booking/${bookingId}/regenerate-contract`, {
+        method: 'POST',
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        await fetchBooking();
+        alert('Vertrag erfolgreich regeneriert.');
+      } else {
+        alert(data.error || 'Vertrag konnte nicht regeneriert werden.');
+      }
+    } catch {
+      alert('Netzwerkfehler beim Regenerieren.');
+    } finally {
+      setRegenerating(false);
     }
   }
 
@@ -795,16 +820,33 @@ export default function BuchungDetailPage() {
                   </a>
                 </div>
               ) : (
-                <div className="flex items-center gap-3 flex-wrap">
-                  <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-heading font-semibold bg-red-100 text-red-600">Ausstehend</span>
-                  <span className="text-sm font-body text-brand-muted">Noch nicht unterschrieben</span>
-                  <a
-                    href={`/admin/buchungen/${booking.id}/vertrag-unterschreiben`}
-                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-heading font-semibold bg-amber-500 text-white rounded-btn hover:bg-amber-600 transition-colors"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
-                    Jetzt unterschreiben
-                  </a>
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-heading font-semibold bg-red-100 text-red-600">Ausstehend</span>
+                    <span className="text-sm font-body text-brand-muted">Noch nicht unterschrieben</span>
+                    <a
+                      href={`/admin/buchungen/${booking.id}/vertrag-unterschreiben`}
+                      className="inline-flex items-center gap-2 px-4 py-2 text-sm font-heading font-semibold bg-amber-500 text-white rounded-btn hover:bg-amber-600 transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                      Jetzt unterschreiben
+                    </a>
+                  </div>
+                  {booking.contract_signer_name && (
+                    <div className="p-3 rounded-lg bg-amber-50 border border-amber-200">
+                      <p className="text-xs font-body text-amber-900 mb-2">
+                        Kunde hat bei der Buchung digital unterschrieben (<strong>{booking.contract_signer_name}</strong>),
+                        aber das Vertrags-PDF wurde nicht erzeugt. Du kannst es jetzt aus der gespeicherten Signatur regenerieren.
+                      </p>
+                      <button
+                        onClick={handleRegenerateContract}
+                        disabled={regenerating}
+                        className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-heading font-semibold bg-amber-600 text-white rounded-btn hover:bg-amber-700 transition-colors disabled:opacity-40"
+                      >
+                        {regenerating ? 'Regeneriere…' : 'Vertrag aus Signatur regenerieren'}
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </Section>

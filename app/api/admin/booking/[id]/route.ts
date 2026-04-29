@@ -119,15 +119,9 @@ export async function GET(
     .maybeSingle();
   if (agreementData) agreement = agreementData;
 
-  // Self-Heal: Wenn ein rental_agreements-Eintrag existiert (Vertrag wurde
-  // erfolgreich erzeugt + gespeichert), das bookings.contract_signed-Flag aber
-  // noch auf false steht, beide Datenpunkte synchronisieren. Das deckt zwei
-  // Faelle ab:
-  //  1) storeContract() crashte zwischen Step 3 (agreements-Insert) und Step
-  //     4 (bookings-UPDATE) — selten, aber moeglich
-  //  2) `after()`-Block ist mit dem agreements-Insert durch, aber das
-  //     bookings-UPDATE noch on-the-fly. Ohne Self-Heal sieht der Admin den
-  //     hartnaeckigen "Ausstehend"-Status, obwohl der Vertrag laengst da ist.
+  // Self-Heal Stufe 1: rental_agreements existiert, aber bookings.contract_signed
+  // ist false (storeContract zwischen Step 3 und Step 4 abgebrochen, oder
+  // after()-Race) → beide Datenpunkte synchronisieren.
   if (agreement && !booking.contract_signed) {
     await supabase
       .from('bookings')
@@ -138,6 +132,52 @@ export async function GET(
       .eq('id', id);
     booking.contract_signed = true;
     booking.contract_signed_at = agreement.signed_at;
+  }
+
+  // Self-Heal Stufe 2: Kein agreements-Eintrag, aber das PDF liegt schon im
+  // Storage. Passiert wenn der after()-Block storeContract gestartet hat und
+  // der Storage-Upload durchging, der DB-Insert in rental_agreements aber nicht
+  // mehr (Container-Restart, RLS-Hiccup). Wir tragen den Eintrag nach und
+  // synchronisieren contract_signed.
+  if (!agreement && !booking.contract_signed) {
+    // Berlin-Jahr berechnen — storeContract nutzt es ebenfalls. Plus Vorjahr
+    // als Fallback für Buchungen rund um Silvester.
+    const berlinYear = parseInt(
+      new Date().toLocaleDateString('en-CA', { year: 'numeric', timeZone: 'Europe/Berlin' }),
+      10,
+    );
+    for (const year of [berlinYear, berlinYear - 1]) {
+      const path = `${year}/${id}.pdf`;
+      const { data: file } = await supabase.storage.from('contracts').download(path);
+      if (!file) continue;
+      // PDF gefunden → agreements-Row + contract_signed nachtragen.
+      const signedAt = booking.created_at || new Date().toISOString();
+      const signerName = booking.contract_signer_name || booking.customer_name || 'Unbekannt';
+      const { data: inserted } = await supabase
+        .from('rental_agreements')
+        .insert({
+          booking_id: id,
+          pdf_url: `contracts/${path}`,
+          contract_hash: 'restored-from-storage',
+          signed_by_name: signerName,
+          signed_at: signedAt,
+          ip_address: 'unknown',
+          signature_method: 'canvas',
+        })
+        .select('id, pdf_url, contract_hash, signed_by_name, signed_at, ip_address, signature_method, created_at')
+        .single();
+      if (inserted) {
+        agreement = inserted;
+        await supabase
+          .from('bookings')
+          .update({ contract_signed: true, contract_signed_at: signedAt })
+          .eq('id', id);
+        booking.contract_signed = true;
+        booking.contract_signed_at = signedAt;
+        console.log('[booking-detail] Storage-Scan-Self-Heal erfolgreich für', id, path);
+      }
+      break;
+    }
   }
 
   // E-Mail-Verlauf laden (email_log)

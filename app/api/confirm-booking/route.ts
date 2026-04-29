@@ -244,6 +244,12 @@ export async function POST(req: NextRequest) {
       customer_email: meta.customer_email || null,
       customer_name: meta.customer_name || null,
       shipping_address: shippingAddress,
+      // Signatur direkt persistieren — ohne das geht sie bei Container-Restart
+      // verloren und der after()-Block kann den Vertrag nicht mehr erzeugen.
+      // Mit Persistenz kann der Admin den Vertrag jederzeit ueber den Recovery-
+      // Endpoint nachgenerieren, wenn after() scheitert.
+      ...(contractSignature?.signerName ? { contract_signer_name: contractSignature.signerName } : {}),
+      ...(contractSignature?.signatureDataUrl ? { contract_signature_url: contractSignature.signatureDataUrl } : {}),
       // Nur setzen wenn true — so bleibt Insert ohne Migration ruckwaerts-kompatibel
       ...(verificationRequired ? { verification_required: true } : {}),
     });

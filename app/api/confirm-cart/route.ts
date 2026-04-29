@@ -497,6 +497,10 @@ export async function POST(req: NextRequest) {
         loyalty_discount: groupLoyaltyDiscount,
         early_service_consent_at: r_earlyServiceConsentAt,
         early_service_consent_ip: r_earlyServiceConsentIp,
+        // Signatur direkt persistieren (s. confirm-booking) — Recovery-Pfad
+        // funktioniert nur, wenn Signatur in der DB liegt, nicht im JS-Closure.
+        ...(contractSignature?.signerName ? { contract_signer_name: contractSignature.signerName } : {}),
+        ...(contractSignature?.signatureDataUrl ? { contract_signature_url: contractSignature.signatureDataUrl } : {}),
         // Nur wenn explizit gesetzt — so bleibt das Insert auch ohne
         // Migration `supabase-verification-deferred.sql` unveraendert.
         ...(r_verificationRequired ? { verification_required: true } : {}),
