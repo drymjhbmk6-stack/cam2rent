@@ -33,6 +33,7 @@ function SingleBookingConfirmed({
   paymentIntentId: string;
 }) {
   const [bookingId, setBookingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const contractSignature = readContractSignature();
@@ -50,12 +51,14 @@ function SingleBookingConfirmed({
         if (data.booking_id) {
           setBookingId(data.booking_id);
           clearContractSignature();
+        } else if (data.error) {
+          setError(typeof data.error === 'string' ? data.error : 'Unbekannter Fehler');
         }
       })
-      .catch(() => {});
+      .catch(() => setError('Verbindungsfehler. Deine Buchung läuft trotzdem im Hintergrund.'));
   }, [paymentIntentId]);
 
-  return <SuccessCard bookingIds={bookingId ? [bookingId] : null} />;
+  return <SuccessCard bookingIds={bookingId ? [bookingId] : null} error={error} />;
 }
 
 // ─── Cart flow (from /checkout) ───────────────────────────────────────────────
@@ -69,6 +72,7 @@ function CartBookingConfirmed({
   const { user, loading: authLoading } = useAuth();
   const [bookingIds, setBookingIds] = useState<string[] | null>(null);
   const [confirmed, setConfirmed] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleConfirm = useCallback(async () => {
     // Read checkout context saved before payment
@@ -132,6 +136,8 @@ function CartBookingConfirmed({
       clearCart();
       sessionStorage.removeItem('cam2rent_checkout_context');
       clearContractSignature();
+    } else if (data.error) {
+      setError(typeof data.error === 'string' ? data.error : 'Unbekannter Fehler');
     }
   }, [paymentIntentId, items, clearCart, user]);
 
@@ -139,15 +145,34 @@ function CartBookingConfirmed({
     if (confirmed) return;
     if (authLoading) return;
     setConfirmed(true);
-    handleConfirm().catch(() => {});
+    handleConfirm().catch(() =>
+      setError('Verbindungsfehler. Deine Buchung läuft trotzdem im Hintergrund.'),
+    );
   }, [confirmed, authLoading, handleConfirm]);
 
-  return <SuccessCard bookingIds={bookingIds} />;
+  return <SuccessCard bookingIds={bookingIds} error={error} />;
 }
 
 // ─── Shared success card ──────────────────────────────────────────────────────
 
-function SuccessCard({ bookingIds }: { bookingIds: string[] | null }) {
+function SuccessCard({
+  bookingIds,
+  error,
+}: {
+  bookingIds: string[] | null;
+  error: string | null;
+}) {
+  // Nach 12 s ohne booking-IDs zeigen wir einen Fallback-Hinweis statt
+  // endlosem Spinner — die Buchung selbst läuft im Hintergrund weiter.
+  const [longWait, setLongWait] = useState(false);
+  useEffect(() => {
+    if (bookingIds || error) return;
+    const t = setTimeout(() => setLongWait(true), 12_000);
+    return () => clearTimeout(t);
+  }, [bookingIds, error]);
+
+  const showFallback = !bookingIds && (longWait || error);
+
   return (
     <div className="min-h-screen bg-brand-bg dark:bg-brand-black flex items-center justify-center px-4">
       <div className="bg-white dark:bg-brand-dark rounded-card shadow-card p-8 sm:p-12 max-w-lg w-full text-center">
@@ -189,6 +214,10 @@ function SuccessCard({ bookingIds }: { bookingIds: string[] | null }) {
                 </p>
               ))}
             </div>
+          ) : showFallback ? (
+            <p className="font-body text-sm text-brand-steel dark:text-gray-400">
+              Du findest sie gleich unter <Link href="/konto/buchungen" className="text-accent-blue underline">Meine Buchungen</Link>.
+            </p>
           ) : (
             <div className="flex items-center gap-2 justify-center">
               <div className="w-4 h-4 border-2 border-accent-blue border-t-transparent rounded-full animate-spin" />
@@ -198,6 +227,15 @@ function SuccessCard({ bookingIds }: { bookingIds: string[] | null }) {
             </div>
           )}
         </div>
+
+        {error && (
+          <div className="mb-8 p-4 bg-status-warning/10 border border-status-warning/30 rounded-xl text-left">
+            <p className="text-xs font-body text-status-warning">
+              Hinweis: {error} Falls deine Zahlung erfolgreich war, ist die Buchung trotzdem
+              gespeichert — du siehst sie unter &bdquo;Meine Buchungen&ldquo;.
+            </p>
+          </div>
+        )}
 
         {/* Deine Kamera ist bald unterwegs */}
         <div className="text-left bg-accent-blue-soft/30 dark:bg-accent-blue/10 rounded-xl p-5 mb-8">
