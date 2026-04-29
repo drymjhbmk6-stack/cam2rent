@@ -126,12 +126,10 @@ export async function POST(req: NextRequest) {
       .like('payment_intent_id', `${payment_intent_id}%`);
 
     if (existingRows && existingRows.length > 0) {
-      // Buchungen existieren bereits — aber Vertrag noch signieren falls nötig.
-      // WICHTIG: Wir warten synchron auf PDF + Storage + contract_signed=true,
-      // BEVOR wir die Response rausgeben. So sieht der Kunde zwar 2-4 Sek
-      // Spinner, aber der Vertrag ist danach GARANTIERT gespeichert.
-      // `after()` + fire-and-forget fielen in der Serverless-Umgebung still
-      // aus und lieferten E-Mails ohne Vertrag + "contract_signed=false".
+      // Buchungen existieren bereits — Vertrag und Follow-up-Mail laufen jetzt in
+      // after(). Auf Hetzner Coolify (Docker, langlaufender Prozess) garantiert
+      // next/after die Ausführung nach der Response. Damit antwortet die Route
+      // sofort statt 2-4 s synchron auf PDF + Storage zu warten.
       console.log('[confirm-cart] Idempotent: existingRows=', existingRows.length, 'contractSignature=', contractSignature ? 'vorhanden' : 'FEHLT');
       if (contractSignature?.agreedToTerms && contractSignature?.signerName) {
         const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
@@ -139,112 +137,107 @@ export async function POST(req: NextRequest) {
         const ids = existingRows.map((r) => r.id);
         const sig = contractSignature;
 
-        try {
-          const [{ data: fullBookings }, { data: txS }] = await Promise.all([
-            supabase.from('bookings').select('*').in('id', ids),
-            supabase.from('admin_settings').select('key, value').in('key', ['tax_mode', 'tax_rate']),
-          ]);
+        after(async () => {
+          try {
+            const [{ data: fullBookings }, { data: txS }] = await Promise.all([
+              supabase.from('bookings').select('*').in('id', ids),
+              supabase.from('admin_settings').select('key, value').in('key', ['tax_mode', 'tax_rate']),
+            ]);
 
-          // Falls der Webhook die Buchung zuerst angelegt hat, fehlt moeglicherweise
-          // die unit_id — dann wird der Zeitwert aus dem Asset nicht gefunden und
-          // landet im Vertrag als 0 €. Hier nachholen, bevor wir den Vertrag erzeugen.
-          const needsUnit = (fullBookings ?? []).filter(
-            (fb) => !fb.unit_id && fb.product_id && fb.rental_from && fb.rental_to && fb.status !== 'cancelled',
-          );
-          if (needsUnit.length > 0) {
-            await Promise.all(
-              needsUnit.map(async (fb) => {
-                try {
-                  const unitId = await assignUnitToBooking(
-                    fb.id, fb.product_id, fb.rental_from, fb.rental_to,
-                  );
-                  if (unitId) fb.unit_id = unitId;
-                } catch (e) {
-                  console.error('[confirm-cart] unit-assign idem failed', fb.id, e);
-                }
-              }),
+            // Falls der Webhook die Buchung zuerst angelegt hat, fehlt moeglicherweise
+            // die unit_id — dann wird der Zeitwert aus dem Asset nicht gefunden und
+            // landet im Vertrag als 0 €. Hier nachholen, bevor wir den Vertrag erzeugen.
+            const needsUnit = (fullBookings ?? []).filter(
+              (fb) => !fb.unit_id && fb.product_id && fb.rental_from && fb.rental_to && fb.status !== 'cancelled',
             );
-          }
+            if (needsUnit.length > 0) {
+              await Promise.all(
+                needsUnit.map(async (fb) => {
+                  try {
+                    const unitId = await assignUnitToBooking(
+                      fb.id, fb.product_id, fb.rental_from, fb.rental_to,
+                    );
+                    if (unitId) fb.unit_id = unitId;
+                  } catch (e) {
+                    console.error('[confirm-cart] unit-assign idem failed', fb.id, e);
+                  }
+                }),
+              );
+            }
 
-          // Idempotente Zubehoer-Exemplar-Zuweisung: nur wenn accessory_unit_ids
-          // leer und accessory_items vorhanden — sonst hatte schon ein anderer
-          // Pfad zugewiesen.
-          const needsAccUnits = (fullBookings ?? []).filter(
-            (fb) =>
-              fb.status !== 'cancelled' &&
-              Array.isArray(fb.accessory_items) &&
-              fb.accessory_items.length > 0 &&
-              (!Array.isArray(fb.accessory_unit_ids) || fb.accessory_unit_ids.length === 0)
-          );
-          if (needsAccUnits.length > 0) {
-            await Promise.all(
-              needsAccUnits.map(async (fb) => {
-                try {
-                  await assignAccessoryUnitsToBooking(
-                    fb.id,
-                    fb.accessory_items as { accessory_id: string; qty: number }[],
-                    fb.rental_from,
-                    fb.rental_to,
-                  );
-                } catch (e) {
-                  console.error('[confirm-cart] accessory-unit-assign idem failed', fb.id, e);
-                }
-              }),
+            // Idempotente Zubehoer-Exemplar-Zuweisung
+            const needsAccUnits = (fullBookings ?? []).filter(
+              (fb) =>
+                fb.status !== 'cancelled' &&
+                Array.isArray(fb.accessory_items) &&
+                fb.accessory_items.length > 0 &&
+                (!Array.isArray(fb.accessory_unit_ids) || fb.accessory_unit_ids.length === 0)
             );
-          }
+            if (needsAccUnits.length > 0) {
+              await Promise.all(
+                needsAccUnits.map(async (fb) => {
+                  try {
+                    await assignAccessoryUnitsToBooking(
+                      fb.id,
+                      fb.accessory_items as { accessory_id: string; qty: number }[],
+                      fb.rental_from,
+                      fb.rental_to,
+                    );
+                  } catch (e) {
+                    console.error('[confirm-cart] accessory-unit-assign idem failed', fb.id, e);
+                  }
+                }),
+              );
+            }
 
-          const txM: Record<string, string> = {};
-          for (const s of txS ?? []) txM[s.key] = s.value;
-          const taxModeIdem = (txM['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer';
-          const taxRateIdem = parseFloat(txM['tax_rate'] || '19');
-          const fmtD = (iso: string) => { const [y, m, d] = (iso || '').split('T')[0].split('-'); return `${d}.${m}.${y}`; };
+            const txM: Record<string, string> = {};
+            for (const s of txS ?? []) txM[s.key] = s.value;
+            const taxModeIdem = (txM['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer';
+            const taxRateIdem = parseFloat(txM['tax_rate'] || '19');
+            const fmtD = (iso: string) => { const [y, m, d] = (iso || '').split('T')[0].split('-'); return `${d}.${m}.${y}`; };
 
-          // Alle Vertraege parallel generieren + speichern
-          await Promise.all(
-            (fullBookings ?? [])
-              .filter((fb) => !fb.contract_signed)
-              .map(async (fullBooking) => {
-                try {
-                  const result = await generateContractPDF({
-                    bookingId: fullBooking.id, bookingNumber: fullBooking.id,
-                    customerName: sig.signerName, customerEmail: fullBooking.customer_email || '',
-                    productName: fullBooking.product_name || '',
-                    accessories: Array.isArray(fullBooking.accessories) ? fullBooking.accessories : [],
-                    accessoryItems: Array.isArray(fullBooking.accessory_items) && fullBooking.accessory_items.length > 0
-                      ? fullBooking.accessory_items as { accessory_id: string; qty: number }[]
-                      : undefined,
-                    rentalFrom: fmtD(fullBooking.rental_from), rentalTo: fmtD(fullBooking.rental_to),
-                    rentalDays: fullBooking.days || 1,
-                    priceRental: fullBooking.price_rental || 0, priceAccessories: fullBooking.price_accessories || 0,
-                    priceHaftung: fullBooking.price_haftung || 0, priceShipping: fullBooking.shipping_price || 0,
-                    priceTotal: fullBooking.price_total || 0, deposit: fullBooking.deposit || 0,
-                    taxMode: taxModeIdem,
-                    taxRate: taxRateIdem,
-                    signatureDataUrl: sig.signatureDataUrl,
-                    signatureMethod: sig.signatureMethod,
-                    signerName: sig.signerName, ipAddress: ip,
-                    unitId: fullBooking.unit_id ?? null,
-                  });
-                  await storeContract(fullBooking.id, result.pdfBuffer, {
-                    contractHash: result.contractHash, customerName: sig.signerName,
-                    ipAddress: ip, signedAt: new Date().toISOString(), signatureMethod: sig.signatureMethod,
-                  });
-                  console.log('[confirm-cart] Vertrag gespeichert für', fullBooking.id);
-                } catch (err) { console.error('[confirm-cart] Contract generation (idempotent) error:', err); }
-              }),
-          );
+            // Alle Vertraege parallel generieren + speichern
+            await Promise.all(
+              (fullBookings ?? [])
+                .filter((fb) => !fb.contract_signed)
+                .map(async (fullBooking) => {
+                  try {
+                    const result = await generateContractPDF({
+                      bookingId: fullBooking.id, bookingNumber: fullBooking.id,
+                      customerName: sig.signerName, customerEmail: fullBooking.customer_email || '',
+                      productName: fullBooking.product_name || '',
+                      accessories: Array.isArray(fullBooking.accessories) ? fullBooking.accessories : [],
+                      accessoryItems: Array.isArray(fullBooking.accessory_items) && fullBooking.accessory_items.length > 0
+                        ? fullBooking.accessory_items as { accessory_id: string; qty: number }[]
+                        : undefined,
+                      rentalFrom: fmtD(fullBooking.rental_from), rentalTo: fmtD(fullBooking.rental_to),
+                      rentalDays: fullBooking.days || 1,
+                      priceRental: fullBooking.price_rental || 0, priceAccessories: fullBooking.price_accessories || 0,
+                      priceHaftung: fullBooking.price_haftung || 0, priceShipping: fullBooking.shipping_price || 0,
+                      priceTotal: fullBooking.price_total || 0, deposit: fullBooking.deposit || 0,
+                      taxMode: taxModeIdem,
+                      taxRate: taxRateIdem,
+                      signatureDataUrl: sig.signatureDataUrl,
+                      signatureMethod: sig.signatureMethod,
+                      signerName: sig.signerName, ipAddress: ip,
+                      unitId: fullBooking.unit_id ?? null,
+                    });
+                    await storeContract(fullBooking.id, result.pdfBuffer, {
+                      contractHash: result.contractHash, customerName: sig.signerName,
+                      ipAddress: ip, signedAt: new Date().toISOString(), signatureMethod: sig.signatureMethod,
+                    });
+                    console.log('[confirm-cart] Vertrag gespeichert für', fullBooking.id);
+                  } catch (err) { console.error('[confirm-cart] Contract generation (idempotent) error:', err); }
+                }),
+            );
 
-          // Wenn der Webhook schon eine E-Mail OHNE Vertrag geschickt hat
-          // (Cart-Flow wo Webhook zuerst war), senden wir jetzt eine zweite
-          // E-Mail MIT Vertrag im Anhang. Die Nachfolge-Mail kennzeichnen wir
-          // in email_log via emailType='contract_signed' (separate Kategorie).
-          after(async () => {
+            // Follow-up-Mail mit Vertrag-Anhang an Kunden, deren Mail vom Webhook
+            // bereits ohne Vertrag rausging.
             try {
               const { sendAndLog } = await import('@/lib/email');
               for (const fb of fullBookings ?? []) {
-                if (fb.contract_signed) continue; // war schon vorher signiert → keine Nachfolge-Mail
+                if (fb.contract_signed) continue;
                 if (!fb.customer_email) continue;
-                // Storage-Pfad des Vertrags
                 const year = new Date().getUTCFullYear();
                 const storagePath = `${year}/${fb.id}.pdf`;
                 const { data: file } = await supabase.storage.from('contracts').download(storagePath);
@@ -263,10 +256,10 @@ export async function POST(req: NextRequest) {
             } catch (err) {
               console.error('[confirm-cart] contract follow-up mail error:', err);
             }
-          });
-        } catch (err) {
-          console.error('[confirm-cart] Idempotent synchron error:', err);
-        }
+          } catch (err) {
+            console.error('[confirm-cart] Idempotent (after) error:', err);
+          }
+        });
       }
       return NextResponse.json({
         success: true,
@@ -332,15 +325,22 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ── Second-Line-Defense: intent.amount (echter Stripe-Betrag) vs Server-Preis ──
-    // checkout-intent prüft schon präventiv, aber wenn der Payment Intent
-    // irgendwie doch mit zu wenig durchkommt, wird die Buchung hier geblockt.
+    // ── Vier voneinander unabhaengige Lookups parallel: Produkt-Plausibility,
+    // Profil-Adresse, Versand-Config, Steuer-Settings. Spart 3 sequentielle
+    // Roundtrips zu Supabase (~200-400 ms).
+    const needsProfileAddress = Boolean(r_userId && r_deliveryMode === 'versand');
+    const [prodResult, profileResultCart, shippingResult, taxResultCart] = await Promise.all([
+      supabase.from('admin_config').select('value').eq('key', 'products').maybeSingle(),
+      needsProfileAddress
+        ? supabase.from('profiles').select('address_street, address_zip, address_city').eq('id', r_userId!).maybeSingle()
+        : Promise.resolve({ data: null as null | { address_street?: string; address_zip?: string; address_city?: string } }),
+      supabase.from('admin_config').select('value').eq('key', 'shipping').maybeSingle(),
+      supabase.from('admin_settings').select('key, value').in('key', ['tax_mode', 'tax_rate', 'ust_id']),
+    ]);
+
+    // Second-Line-Defense: intent.amount (echter Stripe-Betrag) vs Server-Preis
     try {
-      const { data: prodRow } = await supabase
-        .from('admin_config')
-        .select('value')
-        .eq('key', 'products')
-        .maybeSingle();
+      const prodRow = prodResult?.data;
       if (prodRow?.value && typeof prodRow.value === 'object') {
         const productMap = prodRow.value as Record<string, AdminProduct>;
         let expectedMinCents = 0;
@@ -369,7 +369,6 @@ export async function POST(req: NextRequest) {
       }
     } catch (plausErr) {
       console.error('Preis-Plausibilitätsprüfung fehlgeschlagen:', plausErr);
-      // Check ist Defense-in-Depth, keine harte Auth — nicht blocken
     }
 
     // Deposit-Vorautorisierung bestätigen
@@ -390,31 +389,20 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Lieferadresse aus Kundenprofil
+    // Lieferadresse aus parallel geladenem Profil
     let profileAddress: string | null = null;
-    if (r_userId && r_deliveryMode === 'versand') {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('address_street, address_zip, address_city')
-        .eq('id', r_userId)
-        .maybeSingle();
-      if (profile?.address_street) {
-        profileAddress = [
-          profile.address_street,
-          [profile.address_zip, profile.address_city].filter(Boolean).join(' '),
-        ].filter(Boolean).join(', ');
-      }
+    const profileCart = profileResultCart?.data;
+    if (profileCart?.address_street) {
+      profileAddress = [
+        profileCart.address_street,
+        [profileCart.address_zip, profileCart.address_city].filter(Boolean).join(' '),
+      ].filter(Boolean).join(', ');
     }
 
-    // 3. Versand-Config aus DB laden
+    // Versand-Config aus parallel geladenem Result
     let shippingCfg: ShippingPriceConfig = DEFAULT_SHIPPING;
-    const { data: shippingRow } = await supabase
-      .from('admin_config')
-      .select('value')
-      .eq('key', 'shipping')
-      .maybeSingle();
-    if (shippingRow?.value) {
-      shippingCfg = shippingRow.value as ShippingPriceConfig;
+    if (shippingResult?.data?.value) {
+      shippingCfg = shippingResult.data.value as ShippingPriceConfig;
     }
 
     // 4. Items nach Mietzeitraum gruppieren → separate Buchungen
@@ -691,13 +679,9 @@ export async function POST(req: NextRequest) {
       }
     }).catch((err) => console.error('Suspicious detection error:', err));
 
-    // 10. Steuer-Config laden (schnell)
-    const { data: taxSettings } = await supabase
-      .from('admin_settings')
-      .select('key, value')
-      .in('key', ['tax_mode', 'tax_rate', 'ust_id']);
+    // 10. Steuer-Config aus parallel geladenem Result
     const txMap: Record<string, string> = {};
-    for (const s of taxSettings ?? []) txMap[s.key] = s.value;
+    for (const s of taxResultCart?.data ?? []) txMap[s.key] = s.value;
 
     const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
       || req.headers.get('x-real-ip')

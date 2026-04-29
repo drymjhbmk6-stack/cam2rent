@@ -73,48 +73,54 @@ export async function POST(req: NextRequest) {
       .maybeSingle();
 
     if (existing) {
-      // Buchung existiert bereits (Webhook oder Reload) — Vertrag noch signieren falls nötig
+      // Buchung existiert bereits (Webhook oder Reload) — Vertrag noch signieren falls nötig.
+      // Auf Hetzner Coolify (Docker, langlaufender Prozess) garantiert next/after die
+      // Ausführung nach der Response. Damit antwortet die Route sofort (~50 ms) statt
+      // 2-4 s synchron auf PDF + Storage zu warten.
       console.log('[confirm-booking] Idempotent: existing=', existing.id, 'contractSignature=', contractSignature ? 'vorhanden' : 'FEHLT');
       if (contractSignature?.agreedToTerms && contractSignature?.signerName) {
-        const { data: bk } = await supabase.from('bookings').select('contract_signed').eq('id', existing.id).single();
-        if (bk && !bk.contract_signed) {
-          const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
-            || req.headers.get('x-real-ip') || 'unknown';
+        const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+          || req.headers.get('x-real-ip') || 'unknown';
+        const sig = contractSignature;
+        after(async () => {
           try {
+            const { data: bk } = await supabase.from('bookings').select('contract_signed').eq('id', existing.id).single();
+            if (!bk || bk.contract_signed) return;
             const { data: fullBooking } = await supabase.from('bookings').select('*').eq('id', existing.id).single();
-            if (fullBooking) {
-              const fmtD = (iso: string) => { const [y, m, d] = (iso || '').split('T')[0].split('-'); return `${d}.${m}.${y}`; };
-              const { data: txS } = await supabase.from('admin_settings').select('key, value').in('key', ['tax_mode', 'tax_rate']);
-              const txM: Record<string, string> = {}; for (const s of txS ?? []) txM[s.key] = s.value;
-              const result = await generateContractPDF({
-                bookingId: existing.id, bookingNumber: existing.id,
-                customerName: contractSignature.signerName,
-                customerEmail: fullBooking.customer_email || '',
-                productName: fullBooking.product_name || '',
-                accessories: Array.isArray(fullBooking.accessories) ? fullBooking.accessories : [],
-                accessoryItems: Array.isArray(fullBooking.accessory_items) && fullBooking.accessory_items.length > 0
-                  ? fullBooking.accessory_items as { accessory_id: string; qty: number }[]
-                  : undefined,
-                rentalFrom: fmtD(fullBooking.rental_from), rentalTo: fmtD(fullBooking.rental_to),
-                rentalDays: fullBooking.days || 1,
-                priceRental: fullBooking.price_rental || 0, priceAccessories: fullBooking.price_accessories || 0,
-                priceHaftung: fullBooking.price_haftung || 0, priceShipping: fullBooking.shipping_price || 0,
-                priceTotal: fullBooking.price_total || 0, deposit: fullBooking.deposit || 0,
-                taxMode: (txM['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer',
-                taxRate: parseFloat(txM['tax_rate'] || '19'),
-                signatureDataUrl: contractSignature.signatureDataUrl,
-                signatureMethod: contractSignature.signatureMethod,
-                signerName: contractSignature.signerName, ipAddress: ip,
-                unitId: fullBooking.unit_id ?? null,
-              });
-              await storeContract(existing.id, result.pdfBuffer, {
-                contractHash: result.contractHash, customerName: contractSignature.signerName,
-                ipAddress: ip, signedAt: new Date().toISOString(), signatureMethod: contractSignature.signatureMethod,
-              });
-              console.log('[confirm-booking] Vertrag gespeichert für', existing.id);
-            }
-          } catch (err) { console.error('[confirm-booking] Contract generation error:', err); }
-        }
+            if (!fullBooking) return;
+            const fmtD = (iso: string) => { const [y, m, d] = (iso || '').split('T')[0].split('-'); return `${d}.${m}.${y}`; };
+            const { data: txS } = await supabase.from('admin_settings').select('key, value').in('key', ['tax_mode', 'tax_rate']);
+            const txM: Record<string, string> = {}; for (const s of txS ?? []) txM[s.key] = s.value;
+            const result = await generateContractPDF({
+              bookingId: existing.id, bookingNumber: existing.id,
+              customerName: sig.signerName,
+              customerEmail: fullBooking.customer_email || '',
+              productName: fullBooking.product_name || '',
+              accessories: Array.isArray(fullBooking.accessories) ? fullBooking.accessories : [],
+              accessoryItems: Array.isArray(fullBooking.accessory_items) && fullBooking.accessory_items.length > 0
+                ? fullBooking.accessory_items as { accessory_id: string; qty: number }[]
+                : undefined,
+              rentalFrom: fmtD(fullBooking.rental_from), rentalTo: fmtD(fullBooking.rental_to),
+              rentalDays: fullBooking.days || 1,
+              priceRental: fullBooking.price_rental || 0, priceAccessories: fullBooking.price_accessories || 0,
+              priceHaftung: fullBooking.price_haftung || 0, priceShipping: fullBooking.shipping_price || 0,
+              priceTotal: fullBooking.price_total || 0, deposit: fullBooking.deposit || 0,
+              taxMode: (txM['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer',
+              taxRate: parseFloat(txM['tax_rate'] || '19'),
+              signatureDataUrl: sig.signatureDataUrl,
+              signatureMethod: sig.signatureMethod,
+              signerName: sig.signerName, ipAddress: ip,
+              unitId: fullBooking.unit_id ?? null,
+            });
+            await storeContract(existing.id, result.pdfBuffer, {
+              contractHash: result.contractHash, customerName: sig.signerName,
+              ipAddress: ip, signedAt: new Date().toISOString(), signatureMethod: sig.signatureMethod,
+            });
+            console.log('[confirm-booking] Vertrag gespeichert für', existing.id);
+          } catch (err) {
+            console.error('[confirm-booking] Contract generation error (after):', err);
+          }
+        });
       }
       return NextResponse.json({ success: true, booking_id: existing.id });
     }
@@ -135,63 +141,56 @@ export async function POST(req: NextRequest) {
       ? itemsToLegacyIds(accessoryItems)
       : (meta.accessories ? meta.accessories.split(',').filter(Boolean) : []);
 
-    // 4a. Preis-Plausibilitätsprüfung (Defense-in-Depth):
-    // intent.amount ist der echte bei Stripe gezahlte Betrag (nicht manipulierbar).
-    // Wir prüfen nur, ob er plausibel zu dem gebuchten Produkt + Dauer passt.
-    // 70% Rabatt-Puffer, damit Gutscheine und Admin-Sonderpreise nicht fälschlich
-    // blockiert werden. Nur bei massiven Abweichungen wird abgebrochen.
+    // 4a + 4b + 7: Plausibility-Produktdaten, Lieferadresse und Steuer-Settings
+    // parallel laden — sie sind voneinander unabhängig. Spart 2-3 sequentielle
+    // Roundtrips zu Supabase (~150-300 ms).
+    const needsAddress = Boolean(meta.user_id && meta.delivery_mode === 'versand');
+    const [prodResult, profileResult, taxResult] = await Promise.all([
+      supabase.from('admin_config').select('value').eq('key', 'products').maybeSingle(),
+      needsAddress
+        ? supabase.from('profiles').select('address_street, address_zip, address_city').eq('id', meta.user_id!).maybeSingle()
+        : Promise.resolve({ data: null as null | { address_street?: string; address_zip?: string; address_city?: string } }),
+      supabase.from('admin_settings').select('key, value').in('key', ['tax_mode', 'tax_rate', 'ust_id']),
+    ]);
+
+    // 4a. Preis-Plausibilitätsprüfung (Defense-in-Depth)
     try {
       if (meta.product_id && meta.days) {
         const days = parseInt(meta.days, 10);
-        if (days > 0) {
-          const { data: prodRow } = await supabase
-            .from('admin_config')
-            .select('value')
-            .eq('key', 'products')
-            .maybeSingle();
-          if (prodRow?.value && typeof prodRow.value === 'object') {
-            const productMap = prodRow.value as Record<string, AdminProduct>;
-            const product = productMap[meta.product_id];
-            if (product && Array.isArray(product.priceTable)) {
-              const expectedCents = Math.round(calcPriceFromTable(product, days) * 100);
-              const floorCents = Math.floor(expectedCents * 0.3); // 70 % Rabatt-Puffer
-              if (intent.amount < floorCents) {
-                console.error('[confirm-booking] Preis-Plausibilität verletzt:', {
-                  paymentIntent: payment_intent_id,
-                  paidAmount: intent.amount,
-                  expectedCents,
-                  floorCents,
-                });
-                return NextResponse.json(
-                  { error: 'Preis-Plausibilitätsprüfung fehlgeschlagen. Buchung wurde nicht bestätigt.' },
-                  { status: 400 },
-                );
-              }
+        const prodRow = prodResult?.data;
+        if (days > 0 && prodRow?.value && typeof prodRow.value === 'object') {
+          const productMap = prodRow.value as Record<string, AdminProduct>;
+          const product = productMap[meta.product_id];
+          if (product && Array.isArray(product.priceTable)) {
+            const expectedCents = Math.round(calcPriceFromTable(product, days) * 100);
+            const floorCents = Math.floor(expectedCents * 0.3); // 70 % Rabatt-Puffer
+            if (intent.amount < floorCents) {
+              console.error('[confirm-booking] Preis-Plausibilität verletzt:', {
+                paymentIntent: payment_intent_id,
+                paidAmount: intent.amount,
+                expectedCents,
+                floorCents,
+              });
+              return NextResponse.json(
+                { error: 'Preis-Plausibilitätsprüfung fehlgeschlagen. Buchung wurde nicht bestätigt.' },
+                { status: 400 },
+              );
             }
           }
         }
       }
     } catch (plausErr) {
-      // Plausibilitätsprüfung darf Buchungsbestätigung nicht blockieren, wenn
-      // die Berechnung selbst crasht (z.B. DB-Hiccup). Dann greift nur der
-      // Basis-Stripe-Verify oben.
       console.error('[confirm-booking] Plausibilitätsprüfung fehlgeschlagen:', plausErr);
     }
 
     // 4b. Lieferadresse aus Profil holen
     let shippingAddress: string | null = null;
-    if (meta.user_id && meta.delivery_mode === 'versand') {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('address_street, address_zip, address_city')
-        .eq('id', meta.user_id)
-        .maybeSingle();
-      if (profile?.address_street) {
-        shippingAddress = [
-          profile.address_street,
-          [profile.address_zip, profile.address_city].filter(Boolean).join(' '),
-        ].filter(Boolean).join(', ');
-      }
+    const profile = profileResult?.data;
+    if (profile?.address_street) {
+      shippingAddress = [
+        profile.address_street,
+        [profile.address_zip, profile.address_city].filter(Boolean).join(' '),
+      ].filter(Boolean).join(', ');
     }
 
     // 5. Deposit-Vorautorisierung bestätigen (falls vorhanden)
@@ -306,13 +305,9 @@ export async function POST(req: NextRequest) {
       if (profile?.full_name) customerName = profile.full_name;
     }
 
-    // 7. Fetch tax config for emails/PDFs
-    const { data: taxSettings } = await supabase
-      .from('admin_settings')
-      .select('key, value')
-      .in('key', ['tax_mode', 'tax_rate', 'ust_id']);
+    // 7. Tax config aus parallel geladenem Result
     const txMap: Record<string, string> = {};
-    for (const s of taxSettings ?? []) txMap[s.key] = s.value;
+    for (const s of taxResult?.data ?? []) txMap[s.key] = s.value;
 
     // 8. + 9. Vertrag-PDF + Storage + Bestaetigungs-Mails — alles ASYNC nach
     // Response. Wir laufen auf Hetzner Coolify (Docker), nicht Vercel-
