@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 export interface AccessoryUnit {
   id: string;
@@ -73,14 +73,21 @@ export default function AccessoryUnitsManager({ accessoryId, onCountChanged }: P
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const reportCounts = useCallback(
-    (rows: AccessoryUnit[]) => {
-      if (!onCountChanged) return;
-      const available = rows.filter((u) => u.status === 'available' || u.status === 'rented').length;
-      onCountChanged({ available, total: rows.length });
-    },
-    [onCountChanged]
-  );
+  // Callback per Ref — der Parent uebergibt typisch eine Inline-Funktion,
+  // deren Identitaet sich bei jedem Re-Render aendert. Ohne Ref propagiert
+  // diese Identitaetsaenderung durch reportCounts -> load -> useEffect und
+  // loest eine Render-Loop aus ("Lade Exemplare..." flackert ewig).
+  const onCountChangedRef = useRef(onCountChanged);
+  useEffect(() => {
+    onCountChangedRef.current = onCountChanged;
+  }, [onCountChanged]);
+
+  const reportCounts = useCallback((rows: AccessoryUnit[]) => {
+    const cb = onCountChangedRef.current;
+    if (!cb) return;
+    const available = rows.filter((u) => u.status === 'available' || u.status === 'rented').length;
+    cb({ available, total: rows.length });
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);

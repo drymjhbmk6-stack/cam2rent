@@ -313,7 +313,7 @@ export default function AdminZubehoerPage() {
                     onChange={(e) => setNewForm((f) => ({ ...f, allow_multi_qty: e.target.checked }))}
                     className="w-4 h-4 rounded border-brand-border accent-accent-blue" />
                   <span className="text-sm font-body text-brand-black">Mehrfach-Auswahl</span>
-                  <span className="text-[10px] text-brand-muted">(Kunde kann Stueckzahl waehlen)</span>
+                  <span className="text-[10px] text-brand-muted">(Kunde kann Stückzahl wählen)</span>
                 </label>
                 {newForm.allow_multi_qty && (
                   <label className="flex items-center gap-2">
@@ -637,7 +637,7 @@ function AccessoryCard({ acc, editId, editForm, setEditForm, savedId, savingId, 
                             onChange={(e) => setEditForm((f) => ({ ...f, allow_multi_qty: e.target.checked }))}
                             className="w-4 h-4 rounded border-brand-border accent-accent-blue" />
                           <span className="text-sm font-body text-brand-black">Mehrfach-Auswahl</span>
-                          <span className="text-[10px] text-brand-muted">(Kunde kann Stueckzahl waehlen)</span>
+                          <span className="text-[10px] text-brand-muted">(Kunde kann Stückzahl wählen)</span>
                         </label>
                         {(editForm as Record<string, unknown>).allow_multi_qty ? (
                           <label className="flex items-center gap-2">
