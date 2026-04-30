@@ -17,7 +17,7 @@ import { calcDiscount, type Coupon } from '@/data/coupons';
 import { calcShipping, shippingConfig } from '@/data/shipping';
 import type { ShippingMethod } from '@/data/shipping';
 import type { ShippingPriceConfig, DurationDiscount, LoyaltyDiscount, ProductDiscount } from '@/lib/price-config';
-import { calcDurationDiscount, calcLoyaltyDiscount, getDiscountMatchesForItem, calcItemDiscountTotal } from '@/lib/price-config';
+import { calcDurationDiscount, calcLoyaltyDiscount, getDiscountMatchesForItem, calcItemDiscountTotal, calcCartLevelDiscount } from '@/lib/price-config';
 import { useAccessories } from '@/components/AccessoriesProvider';
 import { getAccessoryPrice } from '@/data/accessories';
 import { BUSINESS } from '@/lib/business-config';
@@ -378,7 +378,7 @@ export default function CheckoutPage() {
   // Product discount: per-item, mit Stacking. Mehrere Aktionen koennen
   // gleichzeitig greifen — pro Pot (Mietpreis vs. Zubehoer) gewinnt die
   // hoechste, Pots stacken. Cap auf Item-Gesamtpreis.
-  const productDiscountAmount = items.reduce((sum, item) => {
+  const itemDiscountAmount = items.reduce((sum, item) => {
     const matches = getDiscountMatchesForItem(
       item.productId,
       item.priceRental,
@@ -388,6 +388,12 @@ export default function CheckoutPage() {
     );
     return sum + calcItemDiscountTotal(matches, item.priceRental, item.priceAccessories);
   }, 0);
+  // Cart-Level-Rabatt (Aktionen mit applies_to_cart=true) — gilt auf den
+  // Gesamtbetrag aller Items minus Item-Rabatte. Hoechster gewinnt (kein
+  // Stacking, weil sonst >100 % moeglich waere).
+  const cartTotalNetItems = items.reduce((s, it) => s + it.priceRental + it.priceAccessories, 0) - itemDiscountAmount;
+  const cartLevelDiscountAmount = calcCartLevelDiscount(cartTotalNetItems, productDiscounts);
+  const productDiscountAmount = itemDiscountAmount + cartLevelDiscountAmount;
   // productDiscountLabel für zukünftige Nutzung
   void productDiscountAmount;
 

@@ -281,9 +281,32 @@ export interface ProductDiscount {
   accessory_ids?: string[];
   /** Liste von Set-IDs. Triggert wenn das Set in der Buchung enthalten ist. */
   set_ids?: string[];
+  /** Wenn true, gilt der Rabatt auf den Warenkorb-Gesamtbetrag statt pro Item. */
+  applies_to_cart?: boolean;
   valid_from: string | null;
   valid_until: string | null;
   active: boolean;
+}
+
+/**
+ * Berechnet den Warenkorb-Level-Rabatt fuer applies_to_cart-Aktionen.
+ * Mehrere Cart-Level-Aktionen stacken (hoechste gewinnt, nicht summiert,
+ * weil 50%+50% sonst >100% ergaeben). Cap auf cartTotal.
+ */
+export function calcCartLevelDiscount(
+  cartTotal: number,
+  discounts: ProductDiscount[],
+): number {
+  if (cartTotal <= 0) return 0;
+  const now = new Date();
+  let best = 0;
+  for (const d of discounts) {
+    if (!d.applies_to_cart) continue;
+    if (!isWithinValidity(d, now)) continue;
+    const amount = calcDiscountValue(d, cartTotal);
+    if (amount > best) best = amount;
+  }
+  return Math.min(best, cartTotal);
 }
 
 export const DEFAULT_PRODUCT_DISCOUNTS: ProductDiscount[] = [];
@@ -343,6 +366,8 @@ export function getDiscountMatchesForItem(
 
   for (const d of discounts) {
     if (!isWithinValidity(d, now)) continue;
+    // Cart-Level-Discounts werden separat in calcCartLevelDiscount berechnet.
+    if (d.applies_to_cart) continue;
 
     const productIds = d.product_ids ?? [];
     const accIds = d.accessory_ids ?? [];

@@ -6,7 +6,7 @@ import AdminBackLink from '@/components/admin/AdminBackLink';
 
 interface ProductOption { id: string; name: string; }
 interface AccessoryOption { id: string; name: string; category?: string; }
-interface SetOption { id: string; name: string; }
+interface SetOption { id: string; name: string; productIds: string[]; }
 
 const S = {
   input: { background: '#0a0f1e', border: '1px solid #1e293b', borderRadius: 10, padding: '10px 12px', color: '#e2e8f0', fontSize: 14 } as React.CSSProperties,
@@ -128,11 +128,16 @@ export default function AdminRabattePage() {
       .catch(() => {});
 
     // Sets laden — Sets gehen als pseudo-Zubehoer in cart.accessories rein,
-    // matchen aber ueber set_ids[] in der Aktion.
+    // matchen aber ueber set_ids[] in der Aktion. Plus product_ids fuer
+    // eindeutige Pill-Labels (mehrere Sets haben oft gleichen Namen).
     fetch('/api/sets').then((r) => r.json())
       .then((d) => {
         if (Array.isArray(d.sets)) {
-          setSets(d.sets.map((s: { id: string; name: string }) => ({ id: s.id, name: s.name })));
+          setSets(d.sets.map((s: { id: string; name: string; product_ids?: string[] }) => ({
+            id: s.id,
+            name: s.name,
+            productIds: Array.isArray(s.product_ids) ? s.product_ids : [],
+          })));
         }
       })
       .catch(() => {});
@@ -370,29 +375,47 @@ export default function AdminRabattePage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {productDiscounts.map((d, i) => (
                 <div key={d.id} style={{ background: '#0a0f1e', borderRadius: 10, border: '1px solid #1e293b', padding: 16 }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-                    {/* Name */}
-                    <div>
-                      <label style={S.label}>Aktionsname</label>
-                      <input type="text" value={d.name}
-                        onChange={(e) => { const a = [...productDiscounts]; a[i] = { ...a[i], name: e.target.value }; setProductDiscounts(a); }}
-                        placeholder="z.B. Black Friday"
-                        style={{ ...S.input, width: '100%' }} />
-                    </div>
-                    {/* Discount-Typ + Wert */}
-                    <div>
-                      <label style={S.label}>Rabatt</label>
-                      <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+                  {/* Header-Zeile: Aktiv-Toggle + Entfernen */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, paddingBottom: 10, borderBottom: '1px solid #1e293b' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                      <input type="checkbox" checked={d.active}
+                        onChange={(e) => { const a = [...productDiscounts]; a[i] = { ...a[i], active: e.target.checked }; setProductDiscounts(a); }}
+                        style={{ width: 16, height: 16, accentColor: S.cyan }} />
+                      <span style={{ fontSize: 13, fontWeight: 600, color: d.active ? '#10b981' : '#64748b' }}>
+                        {d.active ? 'Aktiv' : 'Inaktiv'}
+                      </span>
+                    </label>
+                    <button onClick={() => setProductDiscounts((p) => p.filter((_, j) => j !== i))}
+                      style={{ fontSize: 12, fontWeight: 600, color: '#ef4444', background: 'transparent', border: '1px solid #ef444433', borderRadius: 8, padding: '6px 12px', cursor: 'pointer' }}>
+                      Entfernen
+                    </button>
+                  </div>
+
+                  {/* Name (full-width) */}
+                  <div style={{ marginBottom: 12 }}>
+                    <label style={S.label}>Aktionsname</label>
+                    <input type="text" value={d.name}
+                      onChange={(e) => { const a = [...productDiscounts]; a[i] = { ...a[i], name: e.target.value }; setProductDiscounts(a); }}
+                      placeholder="z.B. Black Friday"
+                      style={{ ...S.input, width: '100%' }} />
+                  </div>
+
+                  {/* Rabatt-Typ + Wert (full-width) */}
+                  <div style={{ marginBottom: 12 }}>
+                    <label style={S.label}>Rabatt</label>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                      <div style={{ display: 'flex', gap: 4 }}>
                         {(['percent', 'fixed', 'free'] as const).map((t) => {
                           const cur = d.discount_type ?? 'percent';
                           const labels = { percent: '%', fixed: '€', free: 'Gratis' };
                           return (
                             <button key={t} type="button" onClick={() => setDiscountType(i, t)}
                               style={{
-                                fontSize: 12, fontWeight: 600, padding: '6px 10px', borderRadius: 8, cursor: 'pointer',
+                                fontSize: 13, fontWeight: 600, padding: '8px 14px', borderRadius: 8, cursor: 'pointer',
                                 background: cur === t ? S.cyan : 'transparent',
                                 color: cur === t ? 'white' : '#94a3b8',
                                 border: `1px solid ${cur === t ? S.cyan : '#334155'}`,
+                                minWidth: 48,
                               }}>
                               {labels[t]}
                             </button>
@@ -400,45 +423,38 @@ export default function AdminRabattePage() {
                         })}
                       </div>
                       {(d.discount_type ?? 'percent') === 'percent' && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                           <input type="number" min="0" max="100" value={d.discount_percent}
+                            inputMode="decimal"
                             onChange={(e) => { const a = [...productDiscounts]; a[i] = { ...a[i], discount_percent: parseInt(e.target.value) || 0 }; setProductDiscounts(a); }}
-                            style={{ ...S.input, width: 80, textAlign: 'center' }} />
-                          <span style={{ fontSize: 12, color: '#64748b' }}>%</span>
+                            style={{ ...S.input, width: 90, textAlign: 'center' }} />
+                          <span style={{ fontSize: 13, color: '#94a3b8' }}>%</span>
                         </div>
                       )}
                       {d.discount_type === 'fixed' && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                           <input type="number" min="0" step="0.01" value={d.discount_amount ?? ''}
+                            inputMode="decimal"
                             onChange={(e) => { const a = [...productDiscounts]; a[i] = { ...a[i], discount_amount: parseFloat(e.target.value) || 0 }; setProductDiscounts(a); }}
-                            style={{ ...S.input, width: 100, textAlign: 'center' }}
+                            style={{ ...S.input, width: 110, textAlign: 'center' }}
                             placeholder="0,00" />
-                          <span style={{ fontSize: 12, color: '#64748b' }}>€</span>
+                          <span style={{ fontSize: 13, color: '#94a3b8' }}>€</span>
                         </div>
                       )}
                       {d.discount_type === 'free' && (
-                        <p style={{ fontSize: 11, color: '#10b981', margin: 0 }}>Position wird kostenfrei.</p>
+                        <span style={{ fontSize: 12, color: '#10b981', fontWeight: 600 }}>Position wird kostenfrei.</span>
                       )}
                     </div>
-                    {/* Active */}
-                    <div style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: 4 }}>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-                        <input type="checkbox" checked={d.active}
-                          onChange={(e) => { const a = [...productDiscounts]; a[i] = { ...a[i], active: e.target.checked }; setProductDiscounts(a); }}
-                          style={{ width: 16, height: 16, accentColor: S.cyan }} />
-                        <span style={{ fontSize: 13, fontWeight: 600, color: d.active ? '#10b981' : '#64748b' }}>
-                          {d.active ? 'Aktiv' : 'Inaktiv'}
-                        </span>
-                      </label>
-                    </div>
-                    {/* Valid from */}
+                  </div>
+
+                  {/* Datums-Range — Mobile gestapelt, Desktop nebeneinander */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10, marginBottom: 14 }}>
                     <div>
                       <label style={S.label}>Gültig ab</label>
                       <input type="datetime-local" value={toLocal(d.valid_from)}
                         onChange={(e) => { const a = [...productDiscounts]; a[i] = { ...a[i], valid_from: e.target.value ? new Date(e.target.value).toISOString() : null }; setProductDiscounts(a); }}
                         style={{ ...S.input, width: '100%' }} />
                     </div>
-                    {/* Valid until */}
                     <div>
                       <label style={S.label}>Gültig bis</label>
                       <input type="datetime-local" value={toLocal(d.valid_until)}
@@ -491,27 +507,44 @@ export default function AdminRabattePage() {
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                           {sets.map((s) => {
                             const isOn = getSetIds(d).includes(s.id);
+                            // Mehrere Sets haben oft den gleichen Namen (z.B. "Basic Set"
+                            // pro Kamera). Disambiguieren ueber das erste kompatible
+                            // Kamera-Modell — sonst sind die Pillen ununterscheidbar.
+                            const compat = s.productIds.map((pid) => products.find((p) => p.id === pid)?.name).filter(Boolean) as string[];
+                            const suffix = compat.length === 0 ? '' : compat.length === 1 ? ` · ${compat[0]}` : ` · ${compat[0]} +${compat.length - 1}`;
                             return (
                               <PillButton key={s.id} active={isOn}
                                 onClick={() => toggleSetId(i, s.id)}
-                                label={s.name}
+                                label={`${s.name}${suffix}`}
                                 tone="amber" />
                             );
                           })}
                         </div>
                       </>
                     )}
-                    <p style={{ fontSize: 11, color: '#64748b', marginTop: 8 }}>
+                    <p style={{ fontSize: 11, color: '#64748b', marginTop: 10 }}>
                       Aktion greift, wenn die Buchung eine ausgewählte Kamera enthält oder eines der ausgewählten Zubehörteile/Sets.
                       Mehrere Aktionen können gleichzeitig aktiv sein und stacken (höchste pro Kategorie gewinnt).
                     </p>
                   </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                    <button onClick={() => setProductDiscounts((p) => p.filter((_, j) => j !== i))}
-                      style={{ fontSize: 12, fontWeight: 600, color: '#ef4444', background: 'transparent', border: '1px solid #ef444433', borderRadius: 8, padding: '6px 14px', cursor: 'pointer' }}>
-                      Entfernen
-                    </button>
+                  {/* Cart-Level Toggle */}
+                  <div style={{ marginTop: 4, padding: 10, borderRadius: 8, background: '#0f172a', border: '1px solid #1e293b' }}>
+                    <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
+                      <input type="checkbox" checked={!!d.applies_to_cart}
+                        onChange={(e) => {
+                          const a = [...productDiscounts];
+                          a[i] = { ...a[i], applies_to_cart: e.target.checked };
+                          setProductDiscounts(a);
+                        }}
+                        style={{ width: 16, height: 16, accentColor: S.cyan, marginTop: 2 }} />
+                      <div>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: '#e2e8f0' }}>Auf Warenkorb-Gesamt anwenden</span>
+                        <p style={{ fontSize: 11, color: '#64748b', margin: '2px 0 0 0' }}>
+                          Wenn aktiviert, gilt der Rabatt auf den Gesamtbetrag (Mietpreis + Zubehör) der Buchung — unabhängig von den Targets oben.
+                        </p>
+                      </div>
+                    </label>
                   </div>
                 </div>
               ))}
