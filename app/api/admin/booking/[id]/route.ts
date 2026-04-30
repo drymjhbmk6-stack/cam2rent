@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { logAudit } from '@/lib/audit';
+import { sendCancellationConfirmation, sendAdminCancellationNotification } from '@/lib/email';
+import { releaseAccessoryUnitsFromBooking } from '@/lib/accessory-unit-assignment';
+import { getStripe } from '@/lib/stripe';
 
 /**
  * GET /api/admin/booking/[id]
@@ -259,6 +262,67 @@ export async function PATCH(
   if (error) {
     console.error('Booking update error:', error);
     return NextResponse.json({ error: 'Aktualisierung fehlgeschlagen.' }, { status: 500 });
+  }
+
+  // Bei Stornierung: Stripe-Link deaktivieren, Zubehoer freigeben, Mails raus.
+  // Alles non-blocking — Response geht sofort, der Rest haengt im Hintergrund.
+  if (status === 'cancelled') {
+    const { data: booking } = await supabase
+      .from('bookings')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (booking) {
+      // Stripe Payment Link deaktivieren (falls vorhanden), damit der Kunde
+      // nicht noch nach Stornierung zahlt.
+      if (booking.stripe_payment_link_id) {
+        try {
+          const stripe = await getStripe();
+          await stripe.paymentLinks.update(booking.stripe_payment_link_id, { active: false });
+        } catch (err) {
+          console.error('[booking-cancel] Stripe Payment Link deaktivieren fehlgeschlagen:', err);
+        }
+      }
+
+      // Zubehoer-Exemplare freigeben (non-blocking)
+      releaseAccessoryUnitsFromBooking(id).catch((err) =>
+        console.error('[booking-cancel] accessory-unit release failed:', err),
+      );
+
+      // Stornierungs-Mails (non-blocking). Refund auf 0 — manueller Storno
+      // durch den Admin, etwaige Rueckerstattung macht der Admin in Stripe
+      // direkt. Wenn Bedarf besteht, kann das spaeter ueber ein
+      // optionales body.refund_amount erweitert werden.
+      if (booking.customer_email) {
+        const emailData = {
+          bookingId: booking.id,
+          customerName: booking.customer_name ?? '',
+          customerEmail: booking.customer_email,
+          productName: booking.product_name,
+          productId: booking.product_id,
+          rentalFrom: booking.rental_from,
+          rentalTo: booking.rental_to,
+          days: booking.days,
+          priceTotal: booking.price_total ?? 0,
+          refundAmount: 0,
+          refundPercentage: 0,
+        };
+        Promise.allSettled([
+          sendCancellationConfirmation(emailData),
+          sendAdminCancellationNotification(emailData),
+        ]).then((results) => {
+          results.forEach((r, i) => {
+            if (r.status === 'rejected') {
+              const which = i === 0 ? 'customer' : 'admin';
+              console.error(`[booking-cancel] ${which} cancellation mail failed:`, r.reason);
+            }
+          });
+        });
+      } else {
+        console.warn(`[booking-cancel] Buchung ${id} storniert, aber keine Kunden-E-Mail hinterlegt — keine Mail versendet.`);
+      }
+    }
   }
 
   // Audit-Log mit passendem Action-Namen
