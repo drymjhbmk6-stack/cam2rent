@@ -3,9 +3,16 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 /**
- * Landing-Page nach QR-Scan. Sucht den Code in product_units (Seriennummer)
- * und accessory_units (exemplar_code), zeigt Stammdaten + aktuellen Status +
- * aktive Buchung. Erreichbar unter /admin/scan/<code>.
+ * Detail-Karte nach QR-Scan. Sucht den Code in product_units (Seriennummer)
+ * und accessory_units (exemplar_code), zeigt:
+ * - Bild
+ * - Stammdaten (Marke, Name, Modell, Kategorie)
+ * - Status
+ * - Asset-Daten (Kaufdatum, Kaufpreis, Wiederbeschaffungswert)
+ * - Kaution / Mietpreis-Info
+ * - Aktive Buchung
+ * - Notizen
+ * - Quick-Actions (Editor, Belegungs-Kalender)
  */
 
 interface PageProps {
@@ -29,6 +36,20 @@ function fmtDate(iso: string | null) {
   });
 }
 
+function fmtEuro(n: number | null | undefined) {
+  if (n == null || isNaN(n)) return '—';
+  return n.toFixed(2).replace('.', ',') + ' €';
+}
+
+interface AssetRow {
+  id: string;
+  current_value: number | null;
+  purchase_price: number | null;
+  purchase_date: string | null;
+  useful_life_months: number | null;
+  status: string | null;
+}
+
 export default async function ScanLandingPage({ params }: PageProps) {
   const { code } = await params;
   const decodedCode = decodeURIComponent(code).trim();
@@ -44,43 +65,63 @@ export default async function ScanLandingPage({ params }: PageProps) {
     .maybeSingle();
 
   if (productUnit) {
-    // Produkt-Stammdaten
-    const { data: configRow } = await supabase
-      .from('admin_config')
-      .select('value')
-      .eq('key', 'products')
-      .maybeSingle();
-    const productMap = (configRow?.value ?? {}) as Record<string, { name?: string; brand?: string }>;
-    const product = productMap[productUnit.product_id];
-
-    // Aktive / kommende Buchung dieser Unit
+    // Produkt-Stammdaten + Asset + aktive Buchungen parallel laden
     const today = new Date().toISOString().slice(0, 10);
-    const { data: activeBookings } = await supabase
-      .from('bookings')
-      .select('id, customer_name, rental_from, rental_to, status, delivery_mode')
-      .eq('unit_id', productUnit.id)
-      .in('status', ['confirmed', 'shipped', 'picked_up'])
-      .gte('rental_to', today)
-      .order('rental_from', { ascending: true })
-      .limit(5);
+    const [configRes, assetRes, bookingsRes] = await Promise.all([
+      supabase.from('admin_config').select('value').eq('key', 'products').maybeSingle(),
+      supabase.from('assets')
+        .select('id, current_value, purchase_price, purchase_date, useful_life_months, status')
+        .eq('unit_id', productUnit.id)
+        .maybeSingle(),
+      supabase.from('bookings')
+        .select('id, customer_name, rental_from, rental_to, status, delivery_mode')
+        .eq('unit_id', productUnit.id)
+        .in('status', ['confirmed', 'shipped', 'picked_up'])
+        .gte('rental_to', today)
+        .order('rental_from', { ascending: true })
+        .limit(5),
+    ]);
+
+    const productMap = (configRes?.data?.value ?? {}) as Record<string, {
+      name?: string; brand?: string; model?: string; category?: string;
+      images?: string[]; imageUrl?: string; deposit?: number;
+    }>;
+    const product = productMap[productUnit.product_id];
+    const asset = (assetRes?.data ?? null) as AssetRow | null;
+    const activeBookings = bookingsRes?.data ?? [];
+    const heroImage = product?.images?.[0] ?? product?.imageUrl ?? null;
 
     return (
       <ScanLayout title="Kamera">
+        {heroImage && (
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img src={heroImage} alt={product?.name ?? ''} className="w-full aspect-[4/3] object-contain bg-gray-50 rounded-xl mb-4" />
+        )}
+
         <div className="space-y-4">
           <div>
-            <p className="text-xs uppercase tracking-wider text-gray-500">{product?.brand ?? 'Marke'}</p>
-            <h1 className="text-2xl font-bold">{product?.name ?? productUnit.product_id}</h1>
-            <p className="text-base font-mono mt-1">{productUnit.serial_number}</p>
+            <p className="text-xs uppercase tracking-wider text-gray-500">{product?.brand ?? 'Marke'}{product?.category ? ` · ${product.category}` : ''}</p>
+            <h1 className="text-2xl font-bold leading-tight">{product?.name ?? productUnit.product_id}</h1>
+            {product?.model && <p className="text-sm text-gray-600 mt-1">{product.model}</p>}
+            <p className="text-base font-mono mt-2 break-all">{productUnit.serial_number}</p>
             {productUnit.label && <p className="text-sm text-gray-600 mt-1">{productUnit.label}</p>}
           </div>
 
           <StatusBadge status={productUnit.status} />
 
-          {productUnit.notes && (
-            <Note text={productUnit.notes} />
-          )}
+          {/* Stammdaten-Grid: Kauf, Wert, Kaution */}
+          <DataGrid items={[
+            { label: 'Kaufdatum', value: fmtDate(productUnit.purchased_at ?? asset?.purchase_date ?? null) },
+            { label: 'Kaufpreis', value: fmtEuro(asset?.purchase_price) },
+            { label: 'Wiederbeschaffungswert', value: fmtEuro(asset?.current_value), highlight: true },
+            { label: 'Kaution', value: fmtEuro(product?.deposit) },
+            { label: 'Nutzungsdauer', value: asset?.useful_life_months ? `${asset.useful_life_months} Monate` : '—' },
+            { label: 'Anlagen-Status', value: asset?.status ?? '—' },
+          ]} />
 
-          <BookingsBlock bookings={activeBookings ?? []} />
+          {productUnit.notes && <Note text={productUnit.notes} />}
+
+          <BookingsBlock bookings={activeBookings} />
 
           <div className="flex flex-wrap gap-2 pt-3 border-t">
             <Link
@@ -89,6 +130,14 @@ export default async function ScanLandingPage({ params }: PageProps) {
             >
               Kamera-Editor
             </Link>
+            {asset && (
+              <Link
+                href={`/admin/anlagen/${asset.id}`}
+                className="px-3 py-2 text-sm font-semibold bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
+              >
+                Anlage öffnen
+              </Link>
+            )}
             <Link
               href={`/admin/verfuegbarkeit?product=${productUnit.product_id}`}
               className="px-3 py-2 text-sm font-semibold bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
@@ -109,45 +158,69 @@ export default async function ScanLandingPage({ params }: PageProps) {
     .maybeSingle();
 
   if (accUnit) {
-    const { data: accessory } = await supabase
-      .from('accessories')
-      .select('id, name, category')
-      .eq('id', accUnit.accessory_id)
-      .maybeSingle();
-
-    // Aktive Buchungen die dieses Exemplar enthalten (über accessory_unit_ids[])
     const today = new Date().toISOString().slice(0, 10);
-    const { data: activeBookings } = await supabase
-      .from('bookings')
-      .select('id, customer_name, rental_from, rental_to, status, delivery_mode')
-      .contains('accessory_unit_ids', [accUnit.id])
-      .in('status', ['confirmed', 'shipped', 'picked_up'])
-      .gte('rental_to', today)
-      .order('rental_from', { ascending: true })
-      .limit(5);
+    const [accessoryRes, assetRes, bookingsRes] = await Promise.all([
+      supabase.from('accessories').select('*').eq('id', accUnit.accessory_id).maybeSingle(),
+      supabase.from('assets')
+        .select('id, current_value, purchase_price, purchase_date, useful_life_months, status')
+        .eq('accessory_unit_id', accUnit.id)
+        .maybeSingle(),
+      supabase.from('bookings')
+        .select('id, customer_name, rental_from, rental_to, status, delivery_mode')
+        .contains('accessory_unit_ids', [accUnit.id])
+        .in('status', ['confirmed', 'shipped', 'picked_up'])
+        .gte('rental_to', today)
+        .order('rental_from', { ascending: true })
+        .limit(5),
+    ]);
+
+    const accessory = (accessoryRes?.data ?? null) as null | {
+      id: string; name?: string; category?: string; description?: string;
+      image_url?: string; price?: number; price_type?: string;
+    };
+    const asset = (assetRes?.data ?? null) as AssetRow | null;
+    const activeBookings = bookingsRes?.data ?? [];
+    const heroImage = accessory?.image_url ?? null;
 
     return (
       <ScanLayout title="Zubehör">
+        {heroImage && (
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img src={heroImage} alt={accessory?.name ?? ''} className="w-full aspect-[4/3] object-contain bg-gray-50 rounded-xl mb-4" />
+        )}
+
         <div className="space-y-4">
           <div>
             <p className="text-xs uppercase tracking-wider text-gray-500">{accessory?.category ?? 'Zubehör'}</p>
-            <h1 className="text-2xl font-bold">{accessory?.name ?? accUnit.accessory_id}</h1>
-            <p className="text-base font-mono mt-1">{accUnit.exemplar_code}</p>
+            <h1 className="text-2xl font-bold leading-tight">{accessory?.name ?? accUnit.accessory_id}</h1>
+            <p className="text-base font-mono mt-2 break-all">{accUnit.exemplar_code}</p>
+            {accessory?.description && <p className="text-sm text-gray-600 mt-2">{accessory.description}</p>}
           </div>
 
           <StatusBadge status={accUnit.status} />
 
+          <DataGrid items={[
+            { label: 'Kaufdatum', value: fmtDate(accUnit.purchased_at ?? asset?.purchase_date ?? null) },
+            { label: 'Kaufpreis', value: fmtEuro(asset?.purchase_price) },
+            { label: 'Wiederbeschaffungswert', value: fmtEuro(asset?.current_value), highlight: true },
+            { label: 'Mietpreis', value: accessory?.price != null ? `${fmtEuro(accessory.price)}${accessory.price_type === 'perDay' ? '/Tag' : ' (einm.)'}` : '—' },
+            { label: 'Nutzungsdauer', value: asset?.useful_life_months ? `${asset.useful_life_months} Monate` : '—' },
+            { label: 'Anlagen-Status', value: asset?.status ?? '—' },
+          ]} />
+
           {accUnit.notes && <Note text={accUnit.notes} />}
 
-          <BookingsBlock bookings={activeBookings ?? []} />
+          <BookingsBlock bookings={activeBookings} />
 
           <div className="flex flex-wrap gap-2 pt-3 border-t">
-            <Link
-              href="/admin/zubehoer"
-              className="px-3 py-2 text-sm font-semibold bg-cyan-600 text-white rounded hover:bg-cyan-700"
-            >
+            <Link href="/admin/zubehoer" className="px-3 py-2 text-sm font-semibold bg-cyan-600 text-white rounded hover:bg-cyan-700">
               Zubehör-Editor
             </Link>
+            {asset && (
+              <Link href={`/admin/anlagen/${asset.id}`} className="px-3 py-2 text-sm font-semibold bg-gray-100 text-gray-700 rounded hover:bg-gray-200">
+                Anlage öffnen
+              </Link>
+            )}
           </div>
         </div>
       </ScanLayout>
@@ -192,6 +265,19 @@ function Note({ text }: { text: string }) {
   return (
     <div className="p-3 bg-amber-50 border border-amber-200 rounded text-sm text-amber-900 whitespace-pre-wrap">
       {text}
+    </div>
+  );
+}
+
+function DataGrid({ items }: { items: { label: string; value: string; highlight?: boolean }[] }) {
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      {items.map((item, i) => (
+        <div key={i} className={`p-3 rounded-lg ${item.highlight ? 'bg-cyan-50 border border-cyan-200' : 'bg-gray-50 border border-gray-200'}`}>
+          <p className="text-[10px] uppercase tracking-wider text-gray-500">{item.label}</p>
+          <p className={`text-sm font-semibold mt-0.5 ${item.highlight ? 'text-cyan-900' : 'text-black'}`}>{item.value}</p>
+        </div>
+      ))}
     </div>
   );
 }

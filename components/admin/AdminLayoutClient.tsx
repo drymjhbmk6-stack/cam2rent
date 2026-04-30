@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import NotificationDropdown from '@/components/admin/NotificationDropdown';
 import EnvModeBadge from '@/components/admin/EnvModeBadge';
+import AdminScanFab from '@/components/admin/AdminScanFab';
 import { useAutoLogout } from '@/hooks/useAutoLogout';
 
 // 30 Minuten Inaktivität für Admin
@@ -921,6 +922,10 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
       >
         {children}
       </main>
+
+      {/* Floating Scanner-FAB — auf allen Admin-Seiten ausser Standalone (Login,
+          Blog, QR-Druck, Scan-Detail-Seite selbst). */}
+      <AdminScanFab />
     </div>
   );
 }
