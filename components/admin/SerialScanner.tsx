@@ -5,17 +5,17 @@ import { useEffect, useRef, useState } from 'react';
 /**
  * Seriennummern-/Barcode-Scanner für die Admin-PWA.
  *
- * Nutzt die native BarcodeDetector-API (Chrome/Edge/Safari ≥ 17).
- * Fallback: Manuelle Texteingabe wenn API/Kamera nicht verfügbar.
+ * Nutzt zwei Backends:
+ * 1. Native BarcodeDetector-API (Chrome/Edge auf Android, Desktop) — schnell,
+ *    erkennt viele Formate (QR, EAN, Code128, DataMatrix, ...)
+ * 2. jsQR Fallback (iOS Safari, alte Browser) — pure JS, nur QR-Codes,
+ *    laeuft im Canvas-Frame-Loop
  *
  * Modal-Komponente — wird mit `open=true` geöffnet, ruft `onResult(text)`
  * beim ersten erkannten Code auf und schließt sich automatisch.
- *
- * Erkannt werden alle gängigen Codes (QR, EAN-13, Code128, Code39,
- * DataMatrix, etc.) sowie reine Text-Eingabe als Fallback.
  */
 
-type Status = 'init' | 'requesting' | 'scanning' | 'no-camera' | 'no-detector' | 'error';
+type Status = 'init' | 'requesting' | 'scanning' | 'no-camera' | 'error';
 
 interface BarcodeDetectorResult {
   rawValue: string;
@@ -68,9 +68,12 @@ export default function SerialScanner({ open, onResult, onClose, title = 'Serien
   const [status, setStatus] = useState<Status>('init');
   const [errorMsg, setErrorMsg] = useState('');
   const [manualValue, setManualValue] = useState('');
+  const [usingFallback, setUsingFallback] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const detectIntervalRef = useRef<number | null>(null);
+  const rafRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!open) {
@@ -87,6 +90,10 @@ export default function SerialScanner({ open, onResult, onClose, title = 'Serien
       window.clearInterval(detectIntervalRef.current);
       detectIntervalRef.current = null;
     }
+    if (rafRef.current !== null) {
+      window.cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
@@ -100,11 +107,7 @@ export default function SerialScanner({ open, onResult, onClose, title = 'Serien
     setStatus('requesting');
     setErrorMsg('');
     setManualValue('');
-
-    if (typeof window === 'undefined' || !window.BarcodeDetector) {
-      setStatus('no-detector');
-      return;
-    }
+    setUsingFallback(false);
 
     if (!navigator.mediaDevices?.getUserMedia) {
       setStatus('no-camera');
@@ -120,31 +123,92 @@ export default function SerialScanner({ open, onResult, onClose, title = 'Serien
 
       if (!videoRef.current) return;
       videoRef.current.srcObject = stream;
+      // iOS Safari verlangt playsInline + muted; sonst Vollbild oder kein autoplay.
+      videoRef.current.setAttribute('playsinline', 'true');
       await videoRef.current.play();
       setStatus('scanning');
 
-      const detector = new window.BarcodeDetector({
-        formats: ['qr_code', 'ean_13', 'ean_8', 'code_128', 'code_39', 'code_93', 'codabar', 'data_matrix', 'itf', 'upc_a', 'upc_e'],
-      });
+      // Pfad 1: Native BarcodeDetector — wenn verfuegbar (Chrome/Edge Android, Desktop)
+      if (typeof window !== 'undefined' && window.BarcodeDetector) {
+        const detector = new window.BarcodeDetector({
+          formats: ['qr_code', 'ean_13', 'ean_8', 'code_128', 'code_39', 'code_93', 'codabar', 'data_matrix', 'itf', 'upc_a', 'upc_e'],
+        });
 
-      detectIntervalRef.current = window.setInterval(async () => {
-        if (!videoRef.current || videoRef.current.readyState < 2) return;
+        detectIntervalRef.current = window.setInterval(async () => {
+          if (!videoRef.current || videoRef.current.readyState < 2) return;
+          try {
+            const codes = await detector.detect(videoRef.current);
+            if (codes.length > 0) {
+              const value = extractScanValue(codes[0].rawValue);
+              if (value) {
+                stopScanning();
+                onResult(value);
+                onClose();
+              }
+            }
+          } catch {
+            // Detect-Fehler einzelner Frames ignorieren — naechster Frame versucht erneut.
+          }
+        }, 250);
+        return;
+      }
+
+      // Pfad 2: jsQR Fallback (iOS Safari, alte Browser) — pure JS, nur QR-Codes
+      setUsingFallback(true);
+      const jsQRMod = await import('jsqr');
+      const jsQR = jsQRMod.default;
+
+      if (!canvasRef.current) {
+        canvasRef.current = document.createElement('canvas');
+      }
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      if (!ctx) {
+        setErrorMsg('Canvas nicht verfuegbar.');
+        setStatus('error');
+        return;
+      }
+
+      const tick = () => {
+        if (!videoRef.current || videoRef.current.readyState < 2) {
+          rafRef.current = window.requestAnimationFrame(tick);
+          return;
+        }
+        const w = videoRef.current.videoWidth;
+        const h = videoRef.current.videoHeight;
+        if (w === 0 || h === 0) {
+          rafRef.current = window.requestAnimationFrame(tick);
+          return;
+        }
+        // Auf max 480px lange Seite verkleinern — schneller, sonst frisst jsQR
+        // pro Frame ~100-300ms auf iPhone. Reicht fuer 25mm-Etiketten.
+        const scale = Math.min(1, 480 / Math.max(w, h));
+        canvas.width = Math.round(w * scale);
+        canvas.height = Math.round(h * scale);
+        ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
         try {
-          const codes = await detector.detect(videoRef.current);
-          if (codes.length > 0) {
-            const value = extractScanValue(codes[0].rawValue);
+          const code = jsQR(imageData.data, imageData.width, imageData.height, {
+            inversionAttempts: 'dontInvert',
+          });
+          if (code?.data) {
+            const value = extractScanValue(code.data);
             if (value) {
               stopScanning();
               onResult(value);
               onClose();
+              return;
             }
           }
         } catch {
-          // Detect-Fehler einzelner Frames ignorieren — nächster Frame versucht erneut.
+          // jsQR-Crash auf einzelnem Frame ignorieren
         }
-      }, 250);
+        rafRef.current = window.requestAnimationFrame(tick);
+      };
+      rafRef.current = window.requestAnimationFrame(tick);
     } catch (e) {
-      setErrorMsg((e as Error).message || 'Kamera-Zugriff verweigert');
+      const msg = (e as Error).message || 'Kamera-Zugriff verweigert';
+      setErrorMsg(msg);
       setStatus('error');
     }
   }
@@ -202,12 +266,10 @@ export default function SerialScanner({ open, onResult, onClose, title = 'Serien
             </div>
           )}
 
-          {status === 'no-detector' && (
-            <div className="rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-4 py-3">
-              <p className="text-sm font-body text-amber-800 dark:text-amber-200">
-                Dein Browser unterstützt keinen nativen Barcode-Scanner. Bitte gib die Seriennummer manuell ein.
-              </p>
-            </div>
+          {status === 'scanning' && usingFallback && (
+            <p className="text-xs font-body text-brand-muted dark:text-gray-400 text-center">
+              JS-Modus aktiv (iOS): Nur QR-Codes, halte den Code etwas naeher und gerade vor die Kamera.
+            </p>
           )}
           {status === 'no-camera' && (
             <div className="rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-4 py-3">

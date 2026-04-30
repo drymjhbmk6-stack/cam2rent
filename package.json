@@ -19,6 +19,7 @@
     "@types/react-signature-canvas": "^1.0.7",
     "@types/web-push": "^3.6.4",
     "date-fns": "^4.1.0",
+    "jsqr": "^1.4.0",
     "marked": "^18.0.0",
     "next": "^15.5.15",
     "openai": "^6.33.0",
