@@ -88,27 +88,30 @@ export default function AdminRabattePage() {
   const [sets, setSets] = useState<SetOption[]>([]);
 
   useEffect(() => {
+    // /api/admin/config?key=... liefert den Wert direkt zurueck (nicht
+    // {value: ...} eingewickelt). Bisheriger Code hat d.value gelesen → war
+    // immer undefined → Aktionen wurden nie aus der DB geladen.
     fetch('/api/admin/config?key=duration_discounts').then((r) => r.json())
-      .then((d) => { if (d.value) setDurationDiscounts(d.value); setDurationLoading(false); })
+      .then((d) => { if (Array.isArray(d)) setDurationDiscounts(d); setDurationLoading(false); })
       .catch(() => setDurationLoading(false));
 
     fetch('/api/admin/config?key=loyalty_discounts').then((r) => r.json())
-      .then((d) => { if (d.value) setLoyaltyDiscounts(d.value); setLoyaltyLoading(false); })
+      .then((d) => { if (Array.isArray(d)) setLoyaltyDiscounts(d); setLoyaltyLoading(false); })
       .catch(() => setLoyaltyLoading(false));
 
     fetch('/api/admin/config?key=product_discounts').then((r) => r.json())
-      .then((d) => { if (d.value) setProductDiscounts(d.value); setProductLoading(false); })
+      .then((d) => { if (Array.isArray(d)) setProductDiscounts(d); setProductLoading(false); })
       .catch(() => setProductLoading(false));
 
     fetch('/api/admin/config?key=referral_reward_value').then((r) => r.json())
-      .then((d) => { if (d.value) setRewardValue(d.value); setRewardLoading(false); })
+      .then((d) => { if (typeof d === 'number') setRewardValue(d); setRewardLoading(false); })
       .catch(() => setRewardLoading(false));
 
     // Produkte laden für Dropdown
     fetch('/api/admin/config?key=products').then((r) => r.json())
       .then((d) => {
-        if (d.value) {
-          const prods = Object.values(d.value) as { id: string; name: string }[];
+        if (d && typeof d === 'object') {
+          const prods = Object.values(d) as { id: string; name: string }[];
           setProducts(prods.map((p) => ({ id: p.id, name: p.name })));
         }
       })
