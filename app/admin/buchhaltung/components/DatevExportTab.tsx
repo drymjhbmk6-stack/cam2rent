@@ -306,6 +306,7 @@ export default function DatevExportTab() {
       {exportLog.length > 0 && (
         <div style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 12, padding: 24 }}>
           <h3 style={{ color: '#e2e8f0', fontSize: 15, fontWeight: 700, marginTop: 0, marginBottom: 16 }}>Export-Historie</h3>
+          <div style={{ overflowX: 'auto', margin: '0 -24px', padding: '0 24px' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ borderBottom: '1px solid #1e293b' }}>
@@ -326,6 +327,7 @@ export default function DatevExportTab() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </div>

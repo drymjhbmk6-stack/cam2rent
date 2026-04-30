@@ -326,7 +326,7 @@ export default function OffenePostenTab() {
           <h3 style={{ color: '#e2e8f0', fontSize: 18, fontWeight: 700, marginTop: 0, marginBottom: 16 }}>
             Mahnung erstellen — Stufe {Math.min(dunningModal.dunning_level + 1, 3)}
           </h3>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16, fontSize: 14, color: '#94a3b8' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8, marginBottom: 16, fontSize: 14, color: '#94a3b8' }}>
             <div>Rechnung: <span style={{ color: '#06b6d4', fontWeight: 600 }}>{dunningModal.invoice_number}</span></div>
             <div>Betrag: <span style={{ color: '#e2e8f0', fontWeight: 600 }}>{formatCurrency(dunningModal.gross_amount)}</span></div>
             <div>Kunde: <span style={{ color: '#e2e8f0' }}>{dunningModal.customer_name}</span></div>

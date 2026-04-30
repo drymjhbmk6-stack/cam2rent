@@ -422,7 +422,7 @@ export default function KundenDetailPage() {
                   Bilder werden geladen...
                 </div>
               ) : (idFrontSignedUrl || idBackSignedUrl) ? (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 20 }}>
                   {/* Vorderseite */}
                   <div>
                     <div style={{

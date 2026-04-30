@@ -230,7 +230,7 @@ export default function GutschriftenTab() {
               <StatusBadge status={detail.status} />
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20, fontSize: 14 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12, marginBottom: 20, fontSize: 14 }}>
               <div><span style={{ color: '#64748b' }}>Bezugsrechnung:</span> <span style={{ color: '#06b6d4' }}>{detail.invoice_number}</span></div>
               <div><span style={{ color: '#64748b' }}>Buchung:</span> <span style={{ color: '#94a3b8' }}>{detail.booking_id}</span></div>
               <div><span style={{ color: '#64748b' }}>Kunde:</span> <span style={{ color: '#e2e8f0' }}>{detail.customer_name}</span></div>

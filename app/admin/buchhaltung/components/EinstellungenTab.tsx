@@ -223,7 +223,7 @@ export default function EinstellungenTab() {
           ))}
         </div>
         {settings.tax_mode === 'regelbesteuerung' && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
             <div>
               <label style={labelStyle}>Steuersatz (%)</label>
               <input type="number" value={settings.tax_rate} onChange={(e) => updateSetting('tax_rate', e.target.value)} style={inputStyle} />
@@ -243,7 +243,7 @@ export default function EinstellungenTab() {
 
       {/* DATEV-Konten */}
       <Section title="DATEV-Konten">
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
           <div>
             <label style={labelStyle}>Erlöskonto</label>
             <input value={settings.datev_erloeskonto} onChange={(e) => updateSetting('datev_erloeskonto', e.target.value)} style={inputStyle} />
@@ -281,7 +281,7 @@ export default function EinstellungenTab() {
 
       {/* Mahnwesen */}
       <Section title="Mahnwesen">
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
           {[1, 2, 3].map(level => (
             <div key={level} style={{ background: '#0f172a', borderRadius: 8, padding: 16, border: '1px solid #1e293b' }}>
               <h4 style={{ color: level === 1 ? '#f59e0b' : level === 2 ? '#f97316' : '#ef4444', fontSize: 14, fontWeight: 700, marginTop: 0, marginBottom: 12 }}>
@@ -313,7 +313,7 @@ export default function EinstellungenTab() {
 
       {/* Rechnungs-Defaults */}
       <Section title="Rechnungs-Defaults">
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12, marginBottom: 12 }}>
           <div>
             <label style={labelStyle}>Zahlungsfrist (Tage)</label>
             <input type="number" value={settings.payment_terms_days} onChange={(e) => updateSetting('payment_terms_days', e.target.value)} style={inputStyle} />

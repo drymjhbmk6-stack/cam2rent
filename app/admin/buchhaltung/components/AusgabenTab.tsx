@@ -223,7 +223,7 @@ export default function AusgabenTab() {
           <h4 style={{ color: '#e2e8f0', fontSize: 15, fontWeight: 700, marginTop: 0, marginBottom: 16 }}>
             {editingId ? 'Ausgabe bearbeiten' : 'Neue Ausgabe'}
           </h4>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
             <div>
               <label style={labelStyle}>Datum</label>
               <input type="date" value={form.expense_date} onChange={(e) => setForm(f => ({ ...f, expense_date: e.target.value }))} style={inputStyle} />

@@ -295,7 +295,7 @@ export default function AdminSchaedenPage() {
             </div>
 
             {/* Info */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 24 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 24 }}>
               <div>
                 <p style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>Kamera</p>
                 <p style={{ fontSize: 14, color: '#e2e8f0', fontWeight: 600 }}>{selectedReport.booking?.product_name || '–'}</p>
@@ -349,7 +349,7 @@ export default function AdminSchaedenPage() {
               <>
                 <div style={{ height: 1, background: '#1e293b', margin: '24px 0' }} />
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 16 }}>
                   <div>
                     <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 6 }}>Schadenshöhe (€)</label>
                     <input

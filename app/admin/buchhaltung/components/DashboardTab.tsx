@@ -144,7 +144,7 @@ export default function DashboardTab({ onNavigate }: DashboardTabProps) {
       </div>
 
       {/* Charts */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 32 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 24, marginBottom: 32 }}>
         {/* Umsatzverlauf */}
         <div style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 12, padding: 20 }}>
           <h3 style={{ fontSize: 15, fontWeight: 700, color: '#e2e8f0', marginBottom: 16, marginTop: 0 }}>Umsatzverlauf (12 Monate)</h3>
@@ -195,7 +195,7 @@ export default function DashboardTab({ onNavigate }: DashboardTabProps) {
       </div>
 
       {/* Mini-Tabellen */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 24 }}>
         {/* Letzte Rechnungen */}
         <div style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 12, padding: 20 }}>
           <h3 style={{ fontSize: 15, fontWeight: 700, color: '#e2e8f0', marginBottom: 16, marginTop: 0 }}>Letzte 10 Rechnungen</h3>
@@ -285,7 +285,7 @@ function DashboardSkeleton() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 32 }}>
         {[1, 2, 3, 4].map(i => <div key={i} style={{ height: 100, ...shimmer }} />)}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 24 }}>
         <div style={{ height: 300, ...shimmer }} />
         <div style={{ height: 300, ...shimmer }} />
       </div>

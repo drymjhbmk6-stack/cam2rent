@@ -340,7 +340,7 @@ export default function EinkaufPage() {
           {showNewSupplier && (
             <div style={{ ...S.card, padding: 24, marginBottom: 16 }}>
               <h3 style={{ color: 'white', fontSize: 15, fontWeight: 700, marginBottom: 16 }}>Neuer Lieferant</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
                 <div>
                   <label style={S.label}>Name *</label>
                   <input style={S.input} value={supplierForm.name} onChange={e => setSupplierForm({ ...supplierForm, name: e.target.value })} />
@@ -483,7 +483,7 @@ export default function EinkaufPage() {
           {showNewPurchase && (
             <div style={{ ...S.card, padding: 24, marginBottom: 16 }}>
               <h3 style={{ color: 'white', fontSize: 15, fontWeight: 700, marginBottom: 16 }}>Neuer Einkauf</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
                 <div>
                   <label style={S.label}>Lieferant *</label>
                   <select
@@ -665,7 +665,7 @@ function SupplierRow({
       {isEditing && (
         <tr>
           <td colSpan={5} style={{ background: '#0a0f1e', borderBottom: '1px solid #1e293b', padding: 20 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
               <div>
                 <label style={S.label}>Name *</label>
                 <input style={S.input} value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
@@ -745,7 +745,7 @@ function PurchaseRow({
       {expanded && (
         <tr>
           <td colSpan={6} style={{ background: '#0a0f1e', borderBottom: '1px solid #1e293b', padding: 20 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginBottom: 16 }}>
               <div>
                 <div style={S.label}>Rechnungsnr.</div>
                 <div style={{ color: '#e2e8f0', fontSize: 13 }}>{purchase.invoice_number || '\u2014'}</div>
