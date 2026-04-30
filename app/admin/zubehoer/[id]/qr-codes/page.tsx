@@ -49,7 +49,6 @@ export default async function ZubehoerQrCodesPage({
   );
 
   const accessoryName = accessory?.name ?? id;
-  const categoryLabel = accessory?.category ?? '';
 
   return (
     <div className="min-h-screen bg-white text-black p-6 print:p-0">
@@ -112,11 +111,8 @@ export default async function ZubehoerQrCodesPage({
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={u.qr} alt={u.exemplar_code} className="w-full max-w-[160px] aspect-square" />
                 <div className="text-center mt-2 w-full px-1 overflow-hidden">
-                  {categoryLabel && (
-                    <p className="text-[10px] uppercase tracking-wider text-gray-500 truncate">{categoryLabel}</p>
-                  )}
-                  <p className="text-xs font-bold text-black leading-tight truncate">{accessoryName}</p>
-                  <p className="text-sm font-mono font-bold text-black mt-1 break-all">{u.exemplar_code}</p>
+                  <p className="text-base font-mono font-bold text-black break-all leading-tight">{u.exemplar_code}</p>
+                  <p className="text-xs text-gray-700 mt-1 truncate">{accessoryName}</p>
                 </div>
                 <div className="w-full mt-2 print:hidden">
                   <QrDownloadButton dataUrl={u.qr} filename={u.exemplar_code} />

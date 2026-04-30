@@ -57,7 +57,6 @@ export default async function KameraQrCodesPage({
   );
 
   const productLabel = product?.name ?? id;
-  const brandLabel = product?.brand ?? '';
 
   return (
     <div className="min-h-screen bg-white text-black p-6 print:p-0">
@@ -125,12 +124,8 @@ export default async function KameraQrCodesPage({
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={u.qr} alt={u.serial_number} className="w-full max-w-[160px] aspect-square" />
                 <div className="text-center mt-2 w-full px-1 overflow-hidden">
-                  {brandLabel && (
-                    <p className="text-[10px] uppercase tracking-wider text-gray-500 truncate">{brandLabel}</p>
-                  )}
-                  <p className="text-xs font-bold text-black leading-tight truncate">{productLabel}</p>
-                  <p className="text-sm font-mono font-bold text-black mt-1 break-all">{u.serial_number}</p>
-                  {u.label && <p className="text-[10px] text-gray-500 mt-0.5 truncate">{u.label}</p>}
+                  <p className="text-base font-mono font-bold text-black break-all leading-tight">{u.serial_number}</p>
+                  <p className="text-xs text-gray-700 mt-1 truncate">{productLabel}</p>
                 </div>
                 <div className="w-full mt-2 print:hidden">
                   <QrDownloadButton dataUrl={u.qr} filename={u.serial_number} />
