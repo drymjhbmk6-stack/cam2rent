@@ -24,6 +24,19 @@ function toLocal(iso: string | null): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
+function getDiscountStatus(d: ProductDiscount): { label: string; color: string; bg: string } {
+  const now = new Date();
+  if (!d.active) return { label: 'Deaktiviert', color: '#94a3b8', bg: '#33415544' };
+  if (d.valid_from && new Date(d.valid_from) > now) {
+    const days = Math.ceil((new Date(d.valid_from).getTime() - now.getTime()) / 86400000);
+    return { label: days > 0 ? `Startet in ${days} Tag${days === 1 ? '' : 'en'}` : 'Wartet auf Start', color: '#fbbf24', bg: '#f59e0b22' };
+  }
+  if (d.valid_until && new Date(d.valid_until) < now) {
+    return { label: 'Abgelaufen', color: '#ef4444', bg: '#ef444422' };
+  }
+  return { label: 'Aktiv jetzt', color: '#10b981', bg: '#10b98122' };
+}
+
 function PillButton({
   active,
   onClick,
@@ -86,6 +99,7 @@ export default function AdminRabattePage() {
   const [products, setProducts] = useState<ProductOption[]>([]);
   const [accessories, setAccessories] = useState<AccessoryOption[]>([]);
   const [sets, setSets] = useState<SetOption[]>([]);
+  const [openDiscountIdx, setOpenDiscountIdx] = useState<number | null>(null);
 
   useEffect(() => {
     // /api/admin/config?key=... liefert den Wert direkt zurueck (nicht
@@ -376,18 +390,36 @@ export default function AdminRabattePage() {
         <div style={S.section}>
           {productLoading ? <div style={{ color: '#64748b', fontSize: 14 }}>Laden...</div> : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {productDiscounts.map((d, i) => (
+              {productDiscounts.map((d, i) => {
+                const isOpen = openDiscountIdx === i;
+                const status = getDiscountStatus(d);
+                return (
                 <div key={d.id} style={{ background: '#0a0f1e', borderRadius: 10, border: '1px solid #1e293b', padding: 16 }}>
-                  {/* Header-Zeile: Aktiv-Toggle + Entfernen */}
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, paddingBottom: 10, borderBottom: '1px solid #1e293b' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                  {/* Header-Zeile: Aktiv-Toggle + Status + Toggle + Entfernen */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: isOpen ? 14 : 0, paddingBottom: isOpen ? 10 : 0, borderBottom: isOpen ? '1px solid #1e293b' : 'none' }}>
+                    <button type="button"
+                      onClick={() => setOpenDiscountIdx(isOpen ? null : i)}
+                      style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, padding: 0, textAlign: 'left' }}>
+                      <span style={{ fontSize: 13, color: '#94a3b8', flexShrink: 0 }}>{isOpen ? '▾' : '▸'}</span>
+                      <span style={{ fontSize: 14, fontWeight: 600, color: '#e2e8f0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {d.name || 'Unbenannte Aktion'}
+                      </span>
+                      <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 999, background: status.bg, color: status.color, flexShrink: 0 }}>
+                        {status.label}
+                      </span>
+                    </button>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', flexShrink: 0 }}>
                       <input type="checkbox" checked={d.active}
                         onChange={(e) => { const a = [...productDiscounts]; a[i] = { ...a[i], active: e.target.checked }; setProductDiscounts(a); }}
                         style={{ width: 16, height: 16, accentColor: S.cyan }} />
-                      <span style={{ fontSize: 13, fontWeight: 600, color: d.active ? '#10b981' : '#64748b' }}>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: d.active ? '#10b981' : '#64748b' }}>
                         {d.active ? 'Aktiv' : 'Inaktiv'}
                       </span>
                     </label>
+                  </div>
+
+                  {isOpen && (<>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
                     <button onClick={() => setProductDiscounts((p) => p.filter((_, j) => j !== i))}
                       style={{ fontSize: 12, fontWeight: 600, color: '#ef4444', background: 'transparent', border: '1px solid #ef444433', borderRadius: 8, padding: '6px 12px', cursor: 'pointer' }}>
                       Entfernen
@@ -549,23 +581,32 @@ export default function AdminRabattePage() {
                       </div>
                     </label>
                   </div>
+                  </>)}
                 </div>
-              ))}
+              );
+              })}
 
-              <button onClick={() => setProductDiscounts((p) => [...p, {
-                id: `pd-${Date.now().toString(36)}`,
-                name: '',
-                discount_type: 'percent',
-                discount_percent: 10,
-                discount_amount: 0,
-                product_ids: [],
-                accessory_ids: [],
-                set_ids: [],
-                product_id: 'all',
-                valid_from: null,
-                valid_until: null,
-                active: true,
-              }])}
+              <button onClick={() => {
+                setProductDiscounts((p) => {
+                  const next = [...p, {
+                    id: `pd-${Date.now().toString(36)}`,
+                    name: '',
+                    discount_type: 'percent' as const,
+                    discount_percent: 10,
+                    discount_amount: 0,
+                    product_ids: [],
+                    accessory_ids: [],
+                    set_ids: [],
+                    product_id: 'all',
+                    valid_from: null,
+                    valid_until: null,
+                    active: true,
+                  }];
+                  // Neu angelegte Aktion direkt aufklappen, alte zuklappen
+                  setOpenDiscountIdx(next.length - 1);
+                  return next;
+                });
+              }}
                 style={{ fontSize: 12, fontWeight: 600, color: '#f59e0b', background: 'none', border: '1px dashed #f59e0b44', borderRadius: 8, padding: '10px 14px', cursor: 'pointer', alignSelf: 'flex-start' }}>
                 + Neue Aktion anlegen
               </button>
