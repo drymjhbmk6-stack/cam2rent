@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
+import { logAudit } from '@/lib/audit';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -84,6 +85,15 @@ export async function POST(req: NextRequest) {
       await supabase.storage.from('social-reels').remove([storagePath]).catch(() => {});
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
+
+    await logAudit({
+      action: 'reel_music.upload',
+      entityType: 'reel_music',
+      entityId: data?.id,
+      entityLabel: name,
+      request: req,
+    });
+
     return NextResponse.json({ track: data }, { status: 201 });
   }
 
@@ -118,5 +128,14 @@ export async function POST(req: NextRequest) {
     .select('*')
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await logAudit({
+    action: 'reel_music.create',
+    entityType: 'reel_music',
+    entityId: data?.id,
+    entityLabel: name,
+    request: req,
+  });
+
   return NextResponse.json({ track: data }, { status: 201 });
 }

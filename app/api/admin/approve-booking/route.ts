@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { checkAdminAuth } from '@/lib/admin-auth';
 import { approvePendingBooking } from '@/lib/booking-approve';
+import { logAudit } from '@/lib/audit';
 
 /**
  * POST /api/admin/approve-booking
@@ -31,6 +32,14 @@ export async function POST(req: NextRequest) {
     if (!result.success) {
       return NextResponse.json({ error: result.error }, { status: result.status ?? 500 });
     }
+
+    await logAudit({
+      action: 'booking.approve',
+      entityType: 'booking',
+      entityId: bookingId,
+      changes: { paymentLinkId: result.paymentLinkId, emailSent: result.emailSent },
+      request: req,
+    });
 
     return NextResponse.json({
       success: true,

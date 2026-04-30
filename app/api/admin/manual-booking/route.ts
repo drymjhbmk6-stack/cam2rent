@@ -8,6 +8,7 @@ import { generateContractPDF } from '@/lib/contracts/generate-contract';
 import { storeContract } from '@/lib/contracts/store-contract';
 import { sendBookingConfirmation, sendAdminNotification, type BookingEmailData } from '@/lib/email';
 import { isTestMode } from '@/lib/env-mode';
+import { logAudit } from '@/lib/audit';
 
 /**
  * POST /api/admin/manual-booking
@@ -270,6 +271,22 @@ export async function POST(req: NextRequest) {
       title: `Manuelle Buchung: ${bookingId}`,
       message: `${customer_name} — ${product_name} (${days} Tage)`,
       link: `/admin/buchungen/${bookingId}`,
+    });
+
+    await logAudit({
+      action: 'booking.create_manual',
+      entityType: 'booking',
+      entityId: bookingId,
+      entityLabel: `${customer_name} — ${product_name}`,
+      changes: {
+        product_id,
+        days: parseInt(days, 10),
+        rental_from,
+        rental_to,
+        payment_status: payment_status || 'paid',
+        price_total: parseFloat(price_total || '0'),
+      },
+      request: req,
     });
 
     return NextResponse.json({ success: true, bookingId });

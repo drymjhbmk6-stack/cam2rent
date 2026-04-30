@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
+import { logAudit } from '@/lib/audit';
 
 export const runtime = 'nodejs';
 
@@ -55,5 +56,14 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await logAudit({
+    action: 'reel_template.create',
+    entityType: 'reel_template',
+    entityId: data?.id,
+    entityLabel: name,
+    request: req,
+  });
+
   return NextResponse.json({ template: data }, { status: 201 });
 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { getCurrentAdminUser } from '@/lib/admin-auth';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
+import { logAudit } from '@/lib/audit';
 
 /**
  * POST /api/admin/versand/[id]/pack
@@ -77,6 +78,14 @@ export async function POST(
     console.error('[versand/pack] error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  await logAudit({
+    action: 'versand.pack',
+    entityType: 'pack',
+    entityId: id,
+    entityLabel: packedBy,
+    request: req,
+  });
 
   return NextResponse.json({ success: true, status: 'packed' });
 }

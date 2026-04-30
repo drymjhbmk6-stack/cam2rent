@@ -16,6 +16,7 @@ import {
   getInstagramAccountForPage,
 } from '@/lib/meta/graph-api';
 import { randomBytes } from 'crypto';
+import { logAudit } from '@/lib/audit';
 
 function getBaseUrl(req: NextRequest): string {
   const host = req.headers.get('x-forwarded-host') ?? req.headers.get('host') ?? 'cam2rent.de';
@@ -122,6 +123,13 @@ export async function GET(req: NextRequest) {
         }
       }
 
+      await logAudit({
+        action: 'social_oauth.connect',
+        entityType: 'social_oauth',
+        changes: { pages_connected: pages.length },
+        request: req,
+      });
+
       return externalRedirect(req, '/admin/social/einstellungen?connected=1');
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -144,5 +152,13 @@ export async function DELETE(req: NextRequest) {
   const supabase = createServiceClient();
   const { error } = await supabase.from('social_accounts').delete().eq('id', id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await logAudit({
+    action: 'social_oauth.disconnect',
+    entityType: 'social_oauth',
+    entityId: id,
+    request: req,
+  });
+
   return NextResponse.json({ success: true });
 }

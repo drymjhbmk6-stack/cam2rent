@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
+import { logAudit } from '@/lib/audit';
 
 /** GET /api/admin/social/posts?status=&limit=&offset= */
 export async function GET(req: NextRequest) {
@@ -82,5 +83,14 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await logAudit({
+    action: 'social_post.create',
+    entityType: 'social_post',
+    entityId: data?.id,
+    changes: { status, platforms, scheduled_at, ai_generated },
+    request: req,
+  });
+
   return NextResponse.json({ post: data });
 }

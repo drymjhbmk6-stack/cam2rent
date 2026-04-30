@@ -5,6 +5,7 @@ import {
   pendingDepreciationMonths,
   type DepreciableAsset,
 } from '@/lib/depreciation';
+import { logAudit } from '@/lib/audit';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -16,7 +17,7 @@ type Ctx = { params: Promise<{ id: string }> };
  * current_value dem tatsaechlichen Zeitwert entspricht.
  */
 
-export async function POST(_req: NextRequest, ctx: Ctx) {
+export async function POST(req: NextRequest, ctx: Ctx) {
   const { id } = await ctx.params;
   const supabase = createServiceClient();
 
@@ -87,6 +88,15 @@ export async function POST(_req: NextRequest, ctx: Ctx) {
       .update({ current_value: currentValue, last_depreciation_at: lastDayOfMonthIso(lastMonth) })
       .eq('id', asset.id);
   }
+
+  await logAudit({
+    action: 'asset.depreciation_catchup',
+    entityType: 'asset',
+    entityId: asset.id,
+    entityLabel: asset.name,
+    changes: { months_processed: processed, total_depreciated: totalDepreciated },
+    request: req,
+  });
 
   return NextResponse.json({
     ok: true,

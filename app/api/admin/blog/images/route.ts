@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { logAudit } from '@/lib/audit';
 
 async function getUnsplashKey(): Promise<string | null> {
   const supabase = createServiceClient();
@@ -106,6 +107,13 @@ export async function POST(req: NextRequest) {
   const { data: urlData } = supabase.storage
     .from('blog-images')
     .getPublicUrl(filename);
+
+  await logAudit({
+    action: 'blog_post.unsplash_import',
+    entityType: 'blog_post',
+    entityLabel: filename,
+    request: req,
+  });
 
   return NextResponse.json({
     url: urlData.publicUrl,

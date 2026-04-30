@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { logAudit } from '@/lib/audit';
 
 /** GET /api/admin/blog/comments */
 export async function GET(req: NextRequest) {
@@ -43,6 +44,15 @@ export async function PUT(req: NextRequest) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await logAudit({
+    action: 'blog_comment.update_status',
+    entityType: 'blog_comment',
+    entityId: id,
+    changes: { status },
+    request: req,
+  });
+
   return NextResponse.json({ comment: data });
 }
 
@@ -58,5 +68,13 @@ export async function DELETE(req: NextRequest) {
   const supabase = createServiceClient();
   const { error } = await supabase.from('blog_comments').delete().eq('id', id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await logAudit({
+    action: 'blog_comment.delete',
+    entityType: 'blog_comment',
+    entityId: id,
+    request: req,
+  });
+
   return NextResponse.json({ success: true });
 }

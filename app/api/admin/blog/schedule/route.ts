@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import Anthropic from '@anthropic-ai/sdk';
+import { logAudit } from '@/lib/audit';
 
 /**
  * GET /api/admin/blog/schedule — Redaktionsplan laden
@@ -280,6 +281,13 @@ WICHTIG für das "prompt"-Feld:
       }
     })();
 
+    await logAudit({
+      action: 'blog_schedule.generate_plan',
+      entityType: 'blog_schedule',
+      changes: { weeks, postsPerWeek, total: weeks * postsPerWeek },
+      request: req,
+    });
+
     // Sofort antworten
     return NextResponse.json({ background: true, message: 'Planung läuft im Hintergrund...' });
   }
@@ -300,6 +308,15 @@ WICHTIG für das "prompt"-Feld:
     .select().single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await logAudit({
+    action: 'blog_schedule.create',
+    entityType: 'blog_schedule',
+    entityId: data?.id,
+    entityLabel: topic,
+    request: req,
+  });
+
   return NextResponse.json({ entry: data });
 }
 
@@ -335,6 +352,14 @@ export async function PUT(req: NextRequest) {
     }).eq('id', data.post_id);
   }
 
+  await logAudit({
+    action: 'blog_schedule.update',
+    entityType: 'blog_schedule',
+    entityId: id,
+    changes: updates,
+    request: req,
+  });
+
   return NextResponse.json({ entry: data });
 }
 
@@ -345,5 +370,13 @@ export async function DELETE(req: NextRequest) {
   const supabase = createServiceClient();
   const { error } = await supabase.from('blog_schedule').delete().eq('id', id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await logAudit({
+    action: 'blog_schedule.delete',
+    entityType: 'blog_schedule',
+    entityId: id,
+    request: req,
+  });
+
   return NextResponse.json({ success: true });
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { syncAccessoryQty } from '@/lib/sync-accessory-qty';
+import { logAudit } from '@/lib/audit';
 
 /**
  * GET    /api/admin/accessory-units?accessory_id=xxx → Exemplare fuer ein Zubehoer
@@ -102,6 +103,15 @@ export async function POST(req: NextRequest) {
 
   await syncAccessoryQty(supabase, accessory_id);
 
+  await logAudit({
+    action: 'accessory_unit.create',
+    entityType: 'accessory_unit',
+    entityId: data?.id,
+    entityLabel: finalCode,
+    changes: { accessory_id, status: status || 'available' },
+    request: req,
+  });
+
   return NextResponse.json({ unit: data }, { status: 201 });
 }
 
@@ -160,6 +170,15 @@ export async function PUT(req: NextRequest) {
     await syncAccessoryQty(supabase, data.accessory_id);
   }
 
+  await logAudit({
+    action: 'accessory_unit.update',
+    entityType: 'accessory_unit',
+    entityId: id,
+    entityLabel: data?.exemplar_code,
+    changes: updates,
+    request: req,
+  });
+
   return NextResponse.json({ unit: data });
 }
 
@@ -210,6 +229,14 @@ export async function DELETE(req: NextRequest) {
   if (unit?.accessory_id) {
     await syncAccessoryQty(supabase, unit.accessory_id);
   }
+
+  await logAudit({
+    action: 'accessory_unit.delete',
+    entityType: 'accessory_unit',
+    entityId: id,
+    changes: { accessory_id: unit?.accessory_id },
+    request: req,
+  });
 
   return NextResponse.json({ success: true });
 }

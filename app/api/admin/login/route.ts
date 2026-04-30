@@ -8,6 +8,7 @@ import {
   getAdminUserByLoginId,
   verifyPassword,
 } from '@/lib/admin-users';
+import { logAudit } from '@/lib/audit';
 
 /** Timing-safer String-Vergleich — sonst verrät Response-Zeit Teil-Treffer. */
 function safeEqualStrings(a: string, b: string): boolean {
@@ -80,6 +81,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Falscher Login oder Passwort.' }, { status: 401 });
     }
     const { token, expiresAt } = await createSession(user.id, { userAgent, ipAddress: ip });
+
+    await logAudit({
+      action: 'auth.login',
+      entityType: 'auth',
+      entityId: user.id,
+      entityLabel: user.name,
+      adminUserId: user.id,
+      adminUserName: user.name,
+      changes: { mode: 'multi_user', role: user.role },
+      request: req,
+    });
+
     const response = NextResponse.json({
       success: true,
       user: { id: user.id, email: user.email, username: user.username, name: user.name, role: user.role },
@@ -124,6 +137,15 @@ export async function POST(req: NextRequest) {
   }
 
   const token = await computeLegacyAdminToken(adminPassword);
+
+  await logAudit({
+    action: 'auth.login',
+    entityType: 'auth',
+    adminUserName: 'Admin (ENV)',
+    changes: { mode: 'legacy_env' },
+    request: req,
+  });
+
   const response = NextResponse.json({ success: true, user: { role: 'owner', name: 'Admin (ENV)' } });
   response.cookies.set('admin_token', token, {
     httpOnly: true,

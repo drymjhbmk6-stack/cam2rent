@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { computeCurrentValue } from '@/lib/depreciation';
+import { logAudit } from '@/lib/audit';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -104,10 +105,21 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  const isStatusChange = newStatus && ['disposed', 'sold', 'lost'].includes(newStatus);
+  await logAudit({
+    action: isStatusChange ? `asset.${newStatus}` : 'asset.update',
+    entityType: 'asset',
+    entityId: id,
+    entityLabel: data?.name,
+    changes: updates,
+    request: req,
+  });
+
   return NextResponse.json({ asset: data });
 }
 
-export async function DELETE(_req: NextRequest, ctx: Ctx) {
+export async function DELETE(req: NextRequest, ctx: Ctx) {
   const { id } = await ctx.params;
   const supabase = createServiceClient();
 
@@ -127,5 +139,13 @@ export async function DELETE(_req: NextRequest, ctx: Ctx) {
 
   const { error } = await supabase.from('assets').delete().eq('id', id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await logAudit({
+    action: 'asset.delete',
+    entityType: 'asset',
+    entityId: id,
+    request: req,
+  });
+
   return NextResponse.json({ ok: true });
 }

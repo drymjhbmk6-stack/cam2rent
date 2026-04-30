@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { getStripe } from '@/lib/stripe';
+import { logAudit } from '@/lib/audit';
 
 /**
  * POST /api/admin/deposit/release
@@ -44,6 +45,13 @@ export async function POST(req: NextRequest) {
       .from('bookings')
       .update({ deposit_status: 'released' })
       .eq('id', bookingId);
+
+    await logAudit({
+      action: 'deposit.release',
+      entityType: 'deposit',
+      entityId: bookingId,
+      request: req,
+    });
 
     return NextResponse.json({ success: true });
   } catch (err) {

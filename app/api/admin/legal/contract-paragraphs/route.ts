@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
 import { getParagraphen } from '@/lib/contracts/contract-template';
+import { logAudit } from '@/lib/audit';
 
 /**
  * GET — Vertragsparagraphen laden (DB oder Fallback auf hardcoded)
@@ -63,10 +64,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  await logAudit({
+    action: 'legal.update_contract_paragraphs',
+    entityType: 'contract_paragraphs',
+    changes: { count: paragraphs.length },
+    request: req,
+  });
+
   return NextResponse.json({ ok: true });
 }
 
-export async function DELETE() {
+export async function DELETE(req: NextRequest) {
   if (!(await checkAdminAuth())) {
     return NextResponse.json({ error: 'Nicht autorisiert.' }, { status: 401 });
   }
@@ -77,6 +85,12 @@ export async function DELETE() {
     .from('admin_settings')
     .delete()
     .eq('key', 'contract_paragraphs');
+
+  await logAudit({
+    action: 'legal.reset_contract_paragraphs',
+    entityType: 'contract_paragraphs',
+    request: req,
+  });
 
   // Standard-Paragraphen zurückgeben
   return NextResponse.json({ paragraphs: getParagraphen(200), source: 'default' });

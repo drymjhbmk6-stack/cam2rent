@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
+import { logAudit } from '@/lib/audit';
 
 export async function GET(
   _req: NextRequest,
@@ -53,6 +54,14 @@ export async function POST(
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  await logAudit({
+    action: 'invoice.mark_paid',
+    entityType: 'buchhaltung_invoice',
+    entityId: id,
+    changes: { method: method || 'manual', date },
+    request: req,
+  });
 
   return NextResponse.json({ ok: true });
 }

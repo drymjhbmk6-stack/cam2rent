@@ -1,6 +1,7 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
+import { logAudit } from '@/lib/audit';
 
 /**
  * POST /api/admin/social/templates/seed
@@ -79,7 +80,7 @@ Struktur:
   },
 ];
 
-export async function POST() {
+export async function POST(req: NextRequest) {
   if (!(await checkAdminAuth())) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
@@ -96,6 +97,13 @@ export async function POST() {
 
   const { data, error } = await supabase.from('social_templates').insert(toInsert).select('id, name');
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await logAudit({
+    action: 'social_template.seed',
+    entityType: 'social_template',
+    changes: { imported: data?.length ?? 0 },
+    request: req,
+  });
 
   return NextResponse.json({
     imported: data?.length ?? 0,

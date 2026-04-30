@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { logAudit } from '@/lib/audit';
 
 /**
  * GET  /api/admin/config?key=shipping   → einzelnen Wert lesen
@@ -44,6 +45,13 @@ export async function PUT(req: NextRequest) {
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  await logAudit({
+    action: 'config.update',
+    entityType: 'config',
+    entityId: key,
+    request: req,
+  });
 
   return NextResponse.json({ success: true });
 }

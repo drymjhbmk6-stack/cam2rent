@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
 import { getResendFromEmail } from '@/lib/env-mode';
+import { logAudit } from '@/lib/audit';
 
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   if (!(await checkAdminAuth())) {
@@ -63,6 +64,15 @@ export async function POST(
       .from('invoices')
       .update({ sent_at: new Date().toISOString() })
       .eq('id', id);
+
+    await logAudit({
+      action: 'invoice.resend',
+      entityType: 'buchhaltung_invoice',
+      entityId: id,
+      entityLabel: invoice.invoice_number,
+      changes: { to: invoice.sent_to_email },
+      request: req,
+    });
 
     return NextResponse.json({ ok: true });
   } catch (err) {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { sendReviewRequest } from '@/lib/email';
+import { logAudit } from '@/lib/audit';
 
 /**
  * PATCH /api/admin/update-booking-status
@@ -36,6 +37,14 @@ export async function PATCH(req: NextRequest) {
     console.error('Status update error:', error);
     return NextResponse.json({ error: 'Status konnte nicht aktualisiert werden.' }, { status: 500 });
   }
+
+  await logAudit({
+    action: 'booking.update_status',
+    entityType: 'booking',
+    entityId: bookingId,
+    changes: { status },
+    request: req,
+  });
 
   // Nach Abschluss: Bewertungsanfrage per E-Mail (non-blocking)
   if (status === 'completed') {

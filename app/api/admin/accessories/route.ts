@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { logAudit } from '@/lib/audit';
 
 /**
  * GET  /api/admin/accessories     → alle Zubehörteile
@@ -57,5 +58,14 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await logAudit({
+    action: 'accessory.create',
+    entityType: 'accessory',
+    entityId: data?.id,
+    entityLabel: data?.name,
+    request: req,
+  });
+
   return NextResponse.json({ accessory: data });
 }

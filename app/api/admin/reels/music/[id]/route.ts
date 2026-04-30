@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
+import { logAudit } from '@/lib/audit';
 
 export const runtime = 'nodejs';
 
@@ -30,6 +31,15 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
 
   const { data, error } = await supabase.from('social_reel_music').update(update).eq('id', id).select('*').single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await logAudit({
+    action: 'reel_music.update',
+    entityType: 'reel_music',
+    entityId: id,
+    changes: update,
+    request: req,
+  });
+
   return NextResponse.json({ track: data });
 }
 
@@ -49,5 +59,13 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
 
   const { error } = await supabase.from('social_reel_music').delete().eq('id', id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await logAudit({
+    action: 'reel_music.delete',
+    entityType: 'reel_music',
+    entityId: id,
+    request: req,
+  });
+
   return NextResponse.json({ success: true });
 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { logAudit } from '@/lib/audit';
 
 /**
  * PUT    /api/admin/accessories/[id]  → Zubehörteil aktualisieren
@@ -43,16 +44,33 @@ export async function PUT(
     .eq('id', id);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await logAudit({
+    action: 'accessory.update',
+    entityType: 'accessory',
+    entityId: id,
+    entityLabel: body?.name,
+    request: req,
+  });
+
   return NextResponse.json({ success: true });
 }
 
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
   const supabase = createServiceClient();
   const { error } = await supabase.from('accessories').delete().eq('id', id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await logAudit({
+    action: 'accessory.delete',
+    entityType: 'accessory',
+    entityId: id,
+    request: req,
+  });
+
   return NextResponse.json({ success: true });
 }

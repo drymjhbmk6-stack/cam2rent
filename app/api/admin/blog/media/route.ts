@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { logAudit } from '@/lib/audit';
 
 const MAX_SIZE = 5 * 1024 * 1024;
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
@@ -49,6 +50,14 @@ export async function POST(req: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   const { data: urlData } = supabase.storage.from('blog-images').getPublicUrl(filename);
+
+  await logAudit({
+    action: 'blog_post.upload_media',
+    entityType: 'blog_post',
+    entityLabel: filename,
+    request: req,
+  });
+
   return NextResponse.json({ url: urlData.publicUrl, name: filename });
 }
 
@@ -60,5 +69,13 @@ export async function DELETE(req: NextRequest) {
   const supabase = createServiceClient();
   const { error } = await supabase.storage.from('blog-images').remove([name]);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await logAudit({
+    action: 'blog_post.delete_media',
+    entityType: 'blog_post',
+    entityLabel: name,
+    request: req,
+  });
+
   return NextResponse.json({ success: true });
 }

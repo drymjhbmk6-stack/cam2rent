@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { sendNewMessageNotificationToCustomer } from '@/lib/email';
+import { logAudit } from '@/lib/audit';
 
 /**
  * GET /api/admin/nachrichten/[conversationId]
@@ -123,6 +124,13 @@ export async function POST(
     }).catch(() => {});
   }
 
+  await logAudit({
+    action: 'nachricht.reply',
+    entityType: 'nachricht',
+    entityId: conversationId,
+    request: req,
+  });
+
   return NextResponse.json({ message_id: msg.id });
 }
 
@@ -147,6 +155,13 @@ export async function PATCH(
   if (error) {
     return NextResponse.json({ error: 'Fehler beim Aktualisieren.' }, { status: 500 });
   }
+
+  await logAudit({
+    action: closed ? 'nachricht.close' : 'nachricht.reopen',
+    entityType: 'nachricht',
+    entityId: conversationId,
+    request: req,
+  });
 
   return NextResponse.json({ success: true });
 }

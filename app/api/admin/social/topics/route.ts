@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
+import { logAudit } from '@/lib/audit';
 
 /** GET /api/admin/social/topics — Themenpool laden (used + offene) */
 export async function GET() {
@@ -29,5 +30,14 @@ export async function POST(req: NextRequest) {
     with_image: body.with_image ?? true,
   }).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await logAudit({
+    action: 'social_topic.create',
+    entityType: 'social_topic',
+    entityId: data?.id,
+    entityLabel: body.topic,
+    request: req,
+  });
+
   return NextResponse.json({ topic: data });
 }

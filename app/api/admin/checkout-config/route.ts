@@ -6,7 +6,7 @@ import {
   DEFAULT_CHECKOUT_CONFIG,
   type CheckoutConfig,
 } from '@/lib/checkout-config';
-import { createServiceClient } from '@/lib/supabase';
+import { logAudit } from '@/lib/audit';
 
 export async function GET() {
   const ok = await checkAdminAuth();
@@ -38,17 +38,13 @@ export async function POST(req: NextRequest) {
   const previous = await getCheckoutConfig();
   const next = await setCheckoutConfig(patch);
 
-  try {
-    const supabase = createServiceClient();
-    await supabase.from('admin_audit_log').insert({
-      action: 'checkout_config_change',
-      entity_type: 'settings',
-      entity_id: 'checkout_config',
-      changes: { from: previous, to: next },
-    });
-  } catch {
-    // Audit-Log darf Save nicht blocken
-  }
+  await logAudit({
+    action: 'checkout_config.update',
+    entityType: 'checkout_config',
+    entityId: 'checkout_config',
+    changes: { from: previous, to: next },
+    request: req,
+  });
 
   return NextResponse.json({ config: next });
 }

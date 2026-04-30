@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import type { SeasonalImagesData } from '@/lib/seasonal-themes';
+import { logAudit } from '@/lib/audit';
 
 /**
  * GET /api/admin/seasonal-images
@@ -87,6 +88,14 @@ export async function POST(req: NextRequest) {
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  await logAudit({
+    action: remove ? 'seasonal_image.remove' : 'seasonal_image.update',
+    entityType: 'seasonal_image',
+    entityId: `${zone}/${yearMonth}`,
+    changes: { zone, yearMonth, removed: !!remove },
+    request: req,
+  });
 
   return NextResponse.json({ success: true, images });
 }

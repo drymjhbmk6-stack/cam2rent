@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { releaseAccessoryUnitsFromBooking } from '@/lib/accessory-unit-assignment';
+import { logAudit } from '@/lib/audit';
 
 /**
  * POST /api/admin/return-booking
@@ -120,6 +121,18 @@ export async function POST(req: NextRequest) {
         }
       }
     }
+
+    await logAudit({
+      action: 'booking.return',
+      entityType: 'booking',
+      entityId: bookingId,
+      changes: {
+        condition,
+        new_status: newStatus,
+        damage_report_created: !!(condition === 'beschaedigt' && createDamageReport),
+      },
+      request: req,
+    });
 
     return NextResponse.json({ success: true });
   } catch (err) {

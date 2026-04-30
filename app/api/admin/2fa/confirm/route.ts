@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { verifyToken } from '@/lib/totp';
+import { logAudit } from '@/lib/audit';
 
 /**
  * POST /api/admin/2fa/confirm
@@ -33,6 +34,12 @@ export async function POST(req: NextRequest) {
       console.error('Save TOTP secret error:', error);
       return NextResponse.json({ error: 'Fehler beim Speichern.' }, { status: 500 });
     }
+
+    await logAudit({
+      action: 'auth.2fa_setup',
+      entityType: 'auth',
+      request: req,
+    });
 
     return NextResponse.json({ success: true });
   } catch (err) {

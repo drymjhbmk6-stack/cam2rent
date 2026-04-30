@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { logAudit } from '@/lib/audit';
 
 /**
  * POST /api/admin/kunden/verify
@@ -65,6 +66,13 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Fehler beim Ablehnen.' }, { status: 500 });
       }
     }
+
+    await logAudit({
+      action: action === 'verify' ? 'customer.verify' : 'customer.reject_verification',
+      entityType: 'customer',
+      entityId: userId,
+      request: req,
+    });
 
     return NextResponse.json({ success: true });
   } catch (err) {

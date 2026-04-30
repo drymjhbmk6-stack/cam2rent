@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sendWeeklyReport } from '@/lib/email';
 import { createServiceClient } from '@/lib/supabase';
+import { logAudit } from '@/lib/audit';
 
 /**
  * POST /api/admin/weekly-report/test
@@ -34,6 +35,14 @@ export async function POST(req: NextRequest) {
 
   try {
     await sendWeeklyReport(recipient);
+
+    await logAudit({
+      action: 'weekly_report.test_send',
+      entityType: 'weekly_report',
+      entityLabel: recipient,
+      request: req,
+    });
+
     return NextResponse.json({ ok: true });
   } catch (err) {
     return NextResponse.json(

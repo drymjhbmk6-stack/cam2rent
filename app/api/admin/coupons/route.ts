@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { logAudit } from '@/lib/audit';
 
 /**
  * GET  /api/admin/coupons  → alle Gutscheine
@@ -67,5 +68,15 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await logAudit({
+    action: 'coupon.create',
+    entityType: 'coupon',
+    entityId: data?.id,
+    entityLabel: data?.code,
+    changes: { type, value: parseFloat(value) || 0, target_type: target_type ?? 'all' },
+    request: req,
+  });
+
   return NextResponse.json({ coupon: data });
 }

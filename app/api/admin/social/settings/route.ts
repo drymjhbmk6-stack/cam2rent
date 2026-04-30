@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
+import { logAudit } from '@/lib/audit';
 
 /**
  * Social-Settings (admin_settings.social_settings):
@@ -32,5 +33,13 @@ export async function POST(req: NextRequest) {
     updated_at: new Date().toISOString(),
   });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await logAudit({
+    action: 'social_settings.update',
+    entityType: 'settings',
+    entityId: 'social_settings',
+    request: req,
+  });
+
   return NextResponse.json({ success: true });
 }

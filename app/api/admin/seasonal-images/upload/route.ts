@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { logAudit } from '@/lib/audit';
 
 // Gleicher Bucket wie Blog-Bilder — kein extra Bucket nötig
 const BUCKET = 'blog-images';
@@ -71,6 +72,13 @@ export async function POST(req: NextRequest) {
   }
 
   const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(filename);
+
+  await logAudit({
+    action: 'seasonal_image.upload',
+    entityType: 'seasonal_image',
+    entityLabel: filename,
+    request: req,
+  });
 
   return NextResponse.json({
     url: urlData.publicUrl,

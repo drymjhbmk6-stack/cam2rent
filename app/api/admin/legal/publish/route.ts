@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
 import { LegalDocumentPDF, type LegalPDFData } from '@/lib/legal-pdf';
+import { logAudit } from '@/lib/audit';
 
 /**
  * POST /api/admin/legal/publish — Neue Version veröffentlichen
@@ -96,6 +97,19 @@ export async function POST(req: Request) {
       }
     }
   }
+
+  await logAudit({
+    action: 'legal.publish',
+    entityType: 'legal',
+    entityId: document_id,
+    entityLabel: doc?.title,
+    changes: {
+      slug: doc?.slug,
+      version_number: newVersion?.version_number,
+      change_note: change_note || null,
+    },
+    request: req,
+  });
 
   return NextResponse.json({ success: true, version_id: data });
 }

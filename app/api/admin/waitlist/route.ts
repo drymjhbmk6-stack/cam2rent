@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { logAudit } from '@/lib/audit';
 
 /**
  * GET    /api/admin/waitlist             → alle Warteliste-Einträge
@@ -60,5 +61,13 @@ export async function DELETE(req: NextRequest) {
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  await logAudit({
+    action: 'waitlist.delete',
+    entityType: 'waitlist',
+    entityId: id,
+    request: req,
+  });
+
   return NextResponse.json({ ok: true });
 }

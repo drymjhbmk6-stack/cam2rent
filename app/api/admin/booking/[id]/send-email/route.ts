@@ -9,6 +9,7 @@ import { ensureBusinessConfig } from '@/lib/load-business-config';
 import { BUSINESS } from '@/lib/business-config';
 import QRCode from 'qrcode';
 import { getResendFromEmail } from '@/lib/env-mode';
+import { logAudit } from '@/lib/audit';
 
 const LEGAL_SLUG_MAP: Record<string, string> = {
   agb: 'agb',
@@ -245,6 +246,20 @@ export async function POST(
       subject: `Deine Dokumente — Buchung ${id}`,
       customer_email: to,
       status: 'sent',
+    });
+
+    await logAudit({
+      action: 'booking.send_email',
+      entityType: 'booking',
+      entityId: id,
+      entityLabel: to,
+      changes: {
+        attachRechnung: !!attachRechnung,
+        attachVertrag: !!attachVertrag,
+        legalDocs: requestedLegalDocs,
+        attachmentCount: attachments.length,
+      },
+      request: req,
     });
 
     return NextResponse.json({ ok: true, sent: attachments.length });

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { logAudit } from '@/lib/audit';
 
 /**
  * GET  /api/admin/purchases         → alle Einkäufe (optional ?supplierId=)
@@ -64,6 +65,15 @@ export async function POST(req: NextRequest) {
 
   const { error: iErr } = await supabase.from('purchase_items').insert(rows);
   if (iErr) return NextResponse.json({ error: iErr.message }, { status: 500 });
+
+  await logAudit({
+    action: 'purchase.create',
+    entityType: 'purchase',
+    entityId: purchase?.id,
+    entityLabel: invoice_number || undefined,
+    changes: { supplier_id, order_date, item_count: rows.length },
+    request: req,
+  });
 
   return NextResponse.json({ purchase }, { status: 201 });
 }

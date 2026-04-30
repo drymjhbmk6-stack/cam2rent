@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { getStripe } from '@/lib/stripe';
+import { logAudit } from '@/lib/audit';
 
 /**
  * POST /api/admin/damage/retain-deposit
@@ -79,6 +80,14 @@ export async function POST(req: NextRequest) {
     if (updateErr) {
       console.error('Update damage_report deposit error:', updateErr);
     }
+
+    await logAudit({
+      action: 'damage.retain_deposit',
+      entityType: 'damage',
+      entityId: bookingId,
+      changes: { retained: amount, stripeCaptured },
+      request: req,
+    });
 
     return NextResponse.json({
       success: true,

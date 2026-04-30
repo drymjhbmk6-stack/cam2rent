@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { verifyToken } from '@/lib/totp';
+import { logAudit } from '@/lib/audit';
 
 /**
  * POST /api/admin/2fa/disable
@@ -38,6 +39,12 @@ export async function POST(req: NextRequest) {
       .from('admin_settings')
       .delete()
       .eq('key', 'totp_secret');
+
+    await logAudit({
+      action: 'auth.2fa_disable',
+      entityType: 'auth',
+      request: req,
+    });
 
     return NextResponse.json({ success: true });
   } catch (err) {

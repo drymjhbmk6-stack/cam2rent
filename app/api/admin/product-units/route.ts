@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { logAudit } from '@/lib/audit';
 
 /**
  * GET  /api/admin/product-units?product_id=xxx  → Units für ein Produkt
@@ -63,6 +64,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  await logAudit({
+    action: 'product_unit.create',
+    entityType: 'product_unit',
+    entityId: data?.id,
+    entityLabel: serial_number,
+    changes: { product_id, status: status || 'available' },
+    request: req,
+  });
+
   return NextResponse.json({ unit: data }, { status: 201 });
 }
 
@@ -100,6 +110,15 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  await logAudit({
+    action: 'product_unit.update',
+    entityType: 'product_unit',
+    entityId: id,
+    entityLabel: data?.serial_number,
+    changes: updates,
+    request: req,
+  });
+
   return NextResponse.json({ unit: data });
 }
 
@@ -132,5 +151,13 @@ export async function DELETE(req: NextRequest) {
     .eq('id', id);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await logAudit({
+    action: 'product_unit.delete',
+    entityType: 'product_unit',
+    entityId: id,
+    request: req,
+  });
+
   return NextResponse.json({ success: true });
 }

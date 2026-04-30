@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { logAudit } from '@/lib/audit';
 
 /**
  * PUT    /api/admin/coupons/[id]  → Gutschein aktualisieren
@@ -39,16 +40,37 @@ export async function PUT(
     .eq('id', id);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Spezifische Aktion erkennen: nur active geändert -> coupon.toggle_active
+  const updateKeys = Object.keys(updateData);
+  const isToggle = updateKeys.length === 1 && updateKeys[0] === 'active';
+  await logAudit({
+    action: isToggle ? 'coupon.toggle_active' : 'coupon.update',
+    entityType: 'coupon',
+    entityId: id,
+    entityLabel: typeof updateData.code === 'string' ? updateData.code : undefined,
+    changes: updateData,
+    request: req,
+  });
+
   return NextResponse.json({ success: true });
 }
 
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
   const supabase = createServiceClient();
   const { error } = await supabase.from('coupons').delete().eq('id', id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await logAudit({
+    action: 'coupon.delete',
+    entityType: 'coupon',
+    entityId: id,
+    request: req,
+  });
+
   return NextResponse.json({ success: true });
 }

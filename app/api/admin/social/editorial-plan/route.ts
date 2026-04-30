@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
+import { logAudit } from '@/lib/audit';
 
 /** GET — Redaktionsplan-Eintraege */
 export async function GET(req: NextRequest) {
@@ -58,6 +59,14 @@ export async function POST(req: NextRequest) {
       used_at: new Date().toISOString(),
     }).eq('id', body.from_topic_id);
   }
+
+  await logAudit({
+    action: 'social_editorial_plan.create',
+    entityType: 'social_editorial_plan',
+    entityId: data?.id,
+    entityLabel: body.topic,
+    request: req,
+  });
 
   return NextResponse.json({ entry: data });
 }

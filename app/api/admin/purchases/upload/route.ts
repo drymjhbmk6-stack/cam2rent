@@ -5,6 +5,7 @@ import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { detectFileType } from '@/lib/file-type-check';
 import { isTestMode } from '@/lib/env-mode';
 import { extractInvoice, type InvoiceMimeType } from '@/lib/ai/invoice-extract';
+import { logAudit } from '@/lib/audit';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -211,6 +212,19 @@ export async function POST(req: NextRequest) {
       console.error('[purchases/upload] items insert error', iErr);
       return NextResponse.json({ error: `Positionen konnten nicht angelegt werden: ${iErr.message}` }, { status: 500 });
     }
+
+    await logAudit({
+      action: 'purchase.upload_invoice',
+      entityType: 'purchase',
+      entityId: purchase.id,
+      entityLabel: invoice.invoice_number ?? undefined,
+      changes: {
+        supplier_id: supplierId,
+        items_count: items?.length ?? 0,
+        gross: invoice.totals.gross,
+      },
+      request: req,
+    });
 
     return NextResponse.json({
       purchase_id: purchase.id,

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
+import { logAudit } from '@/lib/audit';
 
 function computeNextRun(frequency: string, dayOfWeek: number | null, dayOfMonth: number | null, hour: number, minute: number): string {
   const now = new Date();
@@ -52,5 +53,14 @@ export async function POST(req: NextRequest) {
     .select()
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await logAudit({
+    action: 'social_schedule.create',
+    entityType: 'social_schedule',
+    entityId: data?.id,
+    entityLabel: data?.name,
+    request: req,
+  });
+
   return NextResponse.json({ entry: data });
 }

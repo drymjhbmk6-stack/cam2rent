@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { sanitizeSearchInput } from '@/lib/search-sanitize';
+import { logAudit } from '@/lib/audit';
 
 /**
  * GET  /api/admin/blog/posts  → Alle Posts (mit Filter)
@@ -90,5 +91,15 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await logAudit({
+    action: status === 'published' ? 'blog_post.publish' : 'blog_post.create',
+    entityType: 'blog_post',
+    entityId: data?.id,
+    entityLabel: data?.title,
+    changes: { status: data?.status, ai_generated: !!ai_generated },
+    request: req,
+  });
+
   return NextResponse.json({ post: data });
 }

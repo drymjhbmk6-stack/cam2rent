@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase';
 import { generateContractPDF } from '@/lib/contracts/generate-contract';
 import { storeContract } from '@/lib/contracts/store-contract';
 import { sendContractEmail } from '@/lib/contracts/send-contract-email';
+import { logAudit } from '@/lib/audit';
 
 /**
  * POST /api/admin/sign-contract
@@ -109,6 +110,15 @@ export async function POST(req: NextRequest) {
         pdfBuffer: result.pdfBuffer,
       }).catch((err) => console.error('[sign-contract] Email error:', err));
     }
+
+    await logAudit({
+      action: 'contract.sign',
+      entityType: 'booking',
+      entityId: bookingId,
+      entityLabel: signerName,
+      changes: { signatureMethod: signatureMethod || 'typed' },
+      request: req,
+    });
 
     return NextResponse.json({ success: true });
   } catch (err) {

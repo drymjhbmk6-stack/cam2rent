@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
+import { logAudit } from '@/lib/audit';
 
 /**
  * GET /api/admin/return-checklist?bookingId=BK-2026-00001
@@ -118,6 +119,14 @@ export async function PATCH(req: NextRequest) {
     console.error('Update checklist error:', error);
     return NextResponse.json({ error: 'Aktualisierung fehlgeschlagen.' }, { status: 500 });
   }
+
+  await logAudit({
+    action: 'return_checklist.update',
+    entityType: 'booking',
+    entityId: bookingId,
+    changes: { status: updateData.status },
+    request: req,
+  });
 
   return NextResponse.json({ success: true });
 }

@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase';
 import { getCurrentAdminUser } from '@/lib/admin-auth';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { detectImageType, isAllowedImage } from '@/lib/file-type-check';
+import { logAudit } from '@/lib/audit';
 
 /**
  * POST /api/admin/versand/[id]/check
@@ -169,6 +170,14 @@ export async function POST(
       { status: 409 },
     );
   }
+
+  await logAudit({
+    action: 'versand.check',
+    entityType: 'pack',
+    entityId: id,
+    entityLabel: checkedBy,
+    request: req,
+  });
 
   return NextResponse.json({ success: true, status: 'checked' });
 }

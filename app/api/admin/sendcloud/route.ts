@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { getSendcloudKeys } from '@/lib/env-mode';
+import { logAudit } from '@/lib/audit';
 
 const SC_BASE = 'https://panel.sendcloud.sc/api/v2';
 
@@ -164,6 +165,18 @@ export async function POST(req: NextRequest) {
       sendcloud_return_parcel_id: returnParcel?.id ?? null,
       return_label_url: returnParcel?.label?.label_printer ?? returnParcel?.label?.normal_printer?.[0] ?? null,
     }).eq('id', bookingId);
+
+    await logAudit({
+      action: 'sendcloud.create_label',
+      entityType: 'booking',
+      entityId: bookingId,
+      changes: {
+        parcelId: outParcel.id,
+        trackingNumber: outParcel.tracking_number,
+        returnParcelId: returnParcel?.id ?? null,
+      },
+      request: req,
+    });
 
     return NextResponse.json({
       success: true,

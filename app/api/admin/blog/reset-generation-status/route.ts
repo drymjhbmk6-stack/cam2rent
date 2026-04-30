@@ -1,6 +1,7 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
+import { logAudit } from '@/lib/audit';
 
 /**
  * POST /api/admin/blog/reset-generation-status
@@ -15,7 +16,7 @@ import { checkAdminAuth } from '@/lib/admin-auth';
  * der Eintrag noch auf 'generating' steht (sonst kommt das Thema nie
  * wieder in die Cron-Auswahl rein).
  */
-export async function POST() {
+export async function POST(req: NextRequest) {
   if (!(await checkAdminAuth())) {
     return NextResponse.json({ error: 'Nicht authentifiziert.' }, { status: 401 });
   }
@@ -41,6 +42,13 @@ export async function POST() {
     .update({ status: 'planned' })
     .eq('status', 'generating')
     .select('id');
+
+  await logAudit({
+    action: 'blog_post.reset_generation',
+    entityType: 'blog_post',
+    changes: { reset_schedules: stuckSchedules?.length ?? 0 },
+    request: req,
+  });
 
   return NextResponse.json({
     ok: true,

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { isTestMode } from '@/lib/env-mode';
+import { logAudit } from '@/lib/audit';
 
 /**
  * GET /api/admin/assets
@@ -85,5 +86,15 @@ export async function POST(req: NextRequest) {
     console.error('[assets POST]', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  await logAudit({
+    action: 'asset.create',
+    entityType: 'asset',
+    entityId: data?.id,
+    entityLabel: data?.name,
+    changes: { kind: body.kind, purchase_price: purchasePrice },
+    request: req,
+  });
+
   return NextResponse.json({ asset: data }, { status: 201 });
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { sendDamageResolution } from '@/lib/email';
+import { logAudit } from '@/lib/audit';
 
 /**
  * GET /api/admin/damage
@@ -137,6 +138,20 @@ export async function PATCH(req: NextRequest) {
         }).catch((e) => console.error('Damage resolution email error:', e));
       }
     }
+
+    const auditAction = status === 'resolved'
+      ? 'damage.resolve'
+      : status === 'confirmed'
+        ? 'damage.confirm'
+        : 'damage.update';
+
+    await logAudit({
+      action: auditAction,
+      entityType: 'damage',
+      entityId: reportId,
+      changes: updates,
+      request: req,
+    });
 
     return NextResponse.json({ success: true });
   } catch (err) {

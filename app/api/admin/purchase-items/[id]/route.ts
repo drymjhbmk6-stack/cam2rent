@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { isTestMode } from '@/lib/env-mode';
+import { logAudit } from '@/lib/audit';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -73,6 +74,14 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
       .select()
       .single();
     if (updErr) return NextResponse.json({ error: updErr.message }, { status: 500 });
+
+    await logAudit({
+      action: 'purchase_item.classify_ignored',
+      entityType: 'purchase_item',
+      entityId: itemId,
+      request: req,
+    });
+
     return NextResponse.json({ item: updated });
   }
 
@@ -176,6 +185,14 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
       .single();
     if (updErr) return NextResponse.json({ error: updErr.message }, { status: 500 });
 
+    await logAudit({
+      action: 'purchase_item.classify_asset',
+      entityType: 'purchase_item',
+      entityId: itemId,
+      changes: { asset_id: asset.id, kind, name },
+      request: req,
+    });
+
     return NextResponse.json({ item: updated, asset, unit_id: newUnitId });
   }
 
@@ -224,6 +241,14 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     .select()
     .single();
   if (updErr) return NextResponse.json({ error: updErr.message }, { status: 500 });
+
+  await logAudit({
+    action: 'purchase_item.classify_expense',
+    entityType: 'purchase_item',
+    entityId: itemId,
+    changes: { expense_id: expense.id, category, gross: grossTotal },
+    request: req,
+  });
 
   return NextResponse.json({ item: updated, expense });
 }

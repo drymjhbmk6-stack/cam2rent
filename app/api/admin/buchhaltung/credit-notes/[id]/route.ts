@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
 import { calculateTax, type TaxMode } from '@/lib/accounting/tax';
+import { logAudit } from '@/lib/audit';
 
 export async function PATCH(
   req: NextRequest,
@@ -56,6 +57,14 @@ export async function PATCH(
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  await logAudit({
+    action: 'credit_note.update',
+    entityType: 'buchhaltung_credit_note',
+    entityId: id,
+    changes: updates,
+    request: req,
+  });
 
   return NextResponse.json({ ok: true });
 }

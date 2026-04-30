@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { logAudit } from '@/lib/audit';
 
 const KEY = 'business_config';
 
@@ -42,6 +43,12 @@ export async function POST(req: NextRequest) {
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  await logAudit({
+    action: 'business_config.update',
+    entityType: 'business_config',
+    request: req,
+  });
 
   return NextResponse.json({ success: true });
 }

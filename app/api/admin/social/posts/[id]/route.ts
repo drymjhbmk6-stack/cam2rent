@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
 import { deleteFacebookPost, deleteInstagramPost } from '@/lib/meta/graph-api';
+import { logAudit } from '@/lib/audit';
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!(await checkAdminAuth())) {
@@ -35,6 +36,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const supabase = createServiceClient();
   const { data, error } = await supabase.from('social_posts').update(updates).eq('id', id).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await logAudit({
+    action: 'social_post.update',
+    entityType: 'social_post',
+    entityId: id,
+    changes: updates,
+    request: req,
+  });
+
   return NextResponse.json({ post: data });
 }
 
@@ -64,5 +74,14 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 
   const { error } = await supabase.from('social_posts').delete().eq('id', id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await logAudit({
+    action: 'social_post.delete',
+    entityType: 'social_post',
+    entityId: id,
+    changes: { remote_deleted: alsoDeleteRemote },
+    request: req,
+  });
+
   return NextResponse.json({ success: true });
 }

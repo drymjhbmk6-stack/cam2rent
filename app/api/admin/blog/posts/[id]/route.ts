@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { logAudit } from '@/lib/audit';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -57,14 +58,33 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  const isPublishAction = updates.published_at != null && body.status === 'published';
+  await logAudit({
+    action: isPublishAction ? 'blog_post.publish' : 'blog_post.update',
+    entityType: 'blog_post',
+    entityId: id,
+    entityLabel: data?.title,
+    changes: updates,
+    request: req,
+  });
+
   return NextResponse.json({ post: data });
 }
 
 /** DELETE /api/admin/blog/posts/[id] */
-export async function DELETE(_req: NextRequest, ctx: Ctx) {
+export async function DELETE(req: NextRequest, ctx: Ctx) {
   const { id } = await ctx.params;
   const supabase = createServiceClient();
   const { error } = await supabase.from('blog_posts').delete().eq('id', id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await logAudit({
+    action: 'blog_post.delete',
+    entityType: 'blog_post',
+    entityId: id,
+    request: req,
+  });
+
   return NextResponse.json({ success: true });
 }

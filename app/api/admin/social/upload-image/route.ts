@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
 import { detectImageType } from '@/lib/file-type-check';
+import { logAudit } from '@/lib/audit';
 
 /**
  * POST /api/admin/social/upload-image
@@ -58,5 +59,13 @@ export async function POST(req: NextRequest) {
   }
 
   const { data } = supabase.storage.from('blog-images').getPublicUrl(filename);
+
+  await logAudit({
+    action: 'social_post.upload_image',
+    entityType: 'social_post',
+    entityLabel: filename,
+    request: req,
+  });
+
   return NextResponse.json({ url: data.publicUrl, filename });
 }

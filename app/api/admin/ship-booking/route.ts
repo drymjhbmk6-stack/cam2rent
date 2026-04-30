@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { sendShippingConfirmation } from '@/lib/email';
+import { logAudit } from '@/lib/audit';
 
 // Träger-spezifische Tracking-URLs
 function buildTrackingUrl(carrier: string, trackingNumber: string): string {
@@ -102,6 +103,14 @@ export async function POST(req: NextRequest) {
         carrier,
       }).catch((err) => console.error('Shipping email error:', err));
     }
+
+    await logAudit({
+      action: 'booking.ship',
+      entityType: 'booking',
+      entityId: bookingId,
+      changes: { carrier, trackingNumber: trackingNumber.trim() },
+      request: req,
+    });
 
     return NextResponse.json({
       success: true,

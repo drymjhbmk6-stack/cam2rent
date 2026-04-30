@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { logAudit } from '@/lib/audit';
 
 /**
  * GET /api/admin/customer-notes?customerId=xxx
@@ -56,6 +57,14 @@ export async function POST(req: NextRequest) {
       console.error('Note insert error:', error);
       return NextResponse.json({ error: 'Fehler beim Speichern.' }, { status: 500 });
     }
+
+    await logAudit({
+      action: 'customer_note.create',
+      entityType: 'customer_note',
+      entityId: note?.id,
+      changes: { customerId },
+      request: req,
+    });
 
     return NextResponse.json({ note });
   } catch (err) {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { logAudit } from '@/lib/audit';
 
 /** GET /api/admin/blog/auto-topics */
 export async function GET() {
@@ -36,6 +37,15 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await logAudit({
+    action: 'blog_auto_topic.create',
+    entityType: 'blog_auto_topic',
+    entityId: data?.id,
+    entityLabel: topic,
+    request: req,
+  });
+
   return NextResponse.json({ topic: data });
 }
 
@@ -51,5 +61,13 @@ export async function DELETE(req: NextRequest) {
   const supabase = createServiceClient();
   const { error } = await supabase.from('blog_auto_topics').delete().eq('id', id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await logAudit({
+    action: 'blog_auto_topic.delete',
+    entityType: 'blog_auto_topic',
+    entityId: id,
+    request: req,
+  });
+
   return NextResponse.json({ success: true });
 }

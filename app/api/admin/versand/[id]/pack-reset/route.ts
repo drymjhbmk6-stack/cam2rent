@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { getCurrentAdminUser } from '@/lib/admin-auth';
+import { logAudit } from '@/lib/audit';
 
 /**
  * POST /api/admin/versand/[id]/pack-reset
@@ -10,7 +11,7 @@ import { getCurrentAdminUser } from '@/lib/admin-auth';
  * unbemerkt wieder zur Disposition stellen).
  */
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const user = await getCurrentAdminUser();
@@ -58,5 +59,13 @@ export async function POST(
     .eq('id', id);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await logAudit({
+    action: 'versand.pack_reset',
+    entityType: 'pack',
+    entityId: id,
+    request: req,
+  });
+
   return NextResponse.json({ success: true });
 }

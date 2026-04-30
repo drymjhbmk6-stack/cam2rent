@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { logAudit } from '@/lib/audit';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -29,15 +30,32 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await logAudit({
+    action: 'purchase.update',
+    entityType: 'purchase',
+    entityId: id,
+    changes: updates,
+    request: req,
+  });
+
   return NextResponse.json({ purchase: data });
 }
 
-export async function DELETE(_req: NextRequest, ctx: Ctx) {
+export async function DELETE(req: NextRequest, ctx: Ctx) {
   const { id } = await ctx.params;
   const supabase = createServiceClient();
 
   // purchase_items are deleted via ON DELETE CASCADE
   const { error } = await supabase.from('purchases').delete().eq('id', id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await logAudit({
+    action: 'purchase.delete',
+    entityType: 'purchase',
+    entityId: id,
+    request: req,
+  });
+
   return NextResponse.json({ ok: true });
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
+import { logAudit } from '@/lib/audit';
 
 /** GET — alle Serien mit Parts */
 export async function GET() {
@@ -41,6 +42,15 @@ export async function POST(req: NextRequest) {
     const { error: partsError } = await supabase.from('social_series_parts').insert(partsData);
     if (partsError) return NextResponse.json({ error: partsError.message }, { status: 500 });
   }
+
+  await logAudit({
+    action: 'social_series.create',
+    entityType: 'social_series',
+    entityId: series?.id,
+    entityLabel: series?.title,
+    changes: { parts: parts.length },
+    request: req,
+  });
 
   return NextResponse.json({ series });
 }
