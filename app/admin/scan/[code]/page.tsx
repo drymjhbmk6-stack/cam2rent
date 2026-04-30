@@ -248,16 +248,23 @@ function ScanLayout({ title, children }: { title: string; children: React.ReactN
   // weissem Karten-Hintergrund.
   return (
     <div
-      className="min-h-screen px-4 py-6"
-      style={{ background: '#f8fafc', color: '#0f172a', colorScheme: 'light' }}
+      className="min-h-screen px-4"
+      style={{
+        background: '#f8fafc',
+        color: '#0f172a',
+        colorScheme: 'light',
+        // iOS Safe-Area-Top beachten (Notch / Dynamic Island), unten ebenfalls
+        paddingTop: 'calc(1rem + env(safe-area-inset-top))',
+        paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom))',
+      }}
     >
       <div className="max-w-md mx-auto mb-3">
         <Link
           href="/admin"
-          className="inline-flex items-center gap-1 text-sm font-semibold"
+          className="inline-flex items-center gap-1 text-sm font-semibold py-2"
           style={{ color: '#0891b2' }}
         >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
           </svg>
           Zur&uuml;ck zum Dashboard
