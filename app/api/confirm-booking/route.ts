@@ -53,9 +53,16 @@ export async function POST(req: NextRequest) {
     }
     const { payment_intent_id, deposit_intent_id, contractSignature } = parsed.data;
 
-    // 1. Verify payment with Stripe
+    // 1. Verify payment with Stripe — 'processing' (PayPal/Klarna/SEPA async)
+    // mit 202 zurueckgeben, der Webhook traegt die Buchung gleich nach.
     const stripe = await getStripe();
     const intent = await stripe.paymentIntents.retrieve(payment_intent_id);
+    if (intent.status === 'processing') {
+      return NextResponse.json(
+        { processing: true, message: 'Zahlung wird von der Bank verarbeitet. Du erhaeltst gleich eine Bestaetigung per E-Mail.' },
+        { status: 202 }
+      );
+    }
     if (intent.status !== 'succeeded') {
       return NextResponse.json(
         { error: 'Zahlung nicht abgeschlossen.' },

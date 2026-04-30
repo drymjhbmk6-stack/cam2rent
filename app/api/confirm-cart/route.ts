@@ -107,9 +107,21 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 1. Verify payment with Stripe
+    // 1. Verify payment with Stripe.
+    // 'succeeded' = Sofort-Zahlung durch (Card, Apple Pay, etc.) → Buchung sofort
+    // 'processing' = Asynchron (PayPal, Klarna, SEPA) → Geld floss evtl. schon,
+    //                aber Stripe bestaetigt erst per Webhook. Wir geben dem
+    //                Frontend einen 202 + processing-Flag zurueck, damit es
+    //                den Hinweis "Zahlung wird verarbeitet" anzeigen kann.
+    // Alles andere (canceled, requires_*) = harter Fehler.
     const stripe = await getStripe();
     const intent = await stripe.paymentIntents.retrieve(payment_intent_id);
+    if (intent.status === 'processing') {
+      return NextResponse.json(
+        { processing: true, message: 'Zahlung wird von der Bank verarbeitet. Du erhaeltst gleich eine Bestaetigung per E-Mail.' },
+        { status: 202 }
+      );
+    }
     if (intent.status !== 'succeeded') {
       return NextResponse.json(
         { error: 'Zahlung nicht abgeschlossen.' },

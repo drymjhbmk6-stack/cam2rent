@@ -51,6 +51,9 @@ function SingleBookingConfirmed({
         if (data.booking_id) {
           setBookingId(data.booking_id);
           clearContractSignature();
+        } else if (data.processing) {
+          // Async-Zahlung (PayPal, Klarna, SEPA) — Webhook traegt Buchung nach
+          setError(data.message ?? 'Zahlung wird verarbeitet. Du bekommst gleich eine Bestaetigung.');
         } else if (data.error) {
           setError(typeof data.error === 'string' ? data.error : 'Unbekannter Fehler');
         }
@@ -136,6 +139,11 @@ function CartBookingConfirmed({
       clearCart();
       sessionStorage.removeItem('cam2rent_checkout_context');
       clearContractSignature();
+    } else if (data.processing) {
+      // Async-Zahlung (PayPal, Klarna, SEPA) — Webhook traegt Buchung nach.
+      // Cart leeren wir hier NICHT — falls Buchung doch nicht durchkommt,
+      // soll der Kunde sie nochmal abschicken koennen.
+      setError(data.message ?? 'Zahlung wird verarbeitet. Du bekommst gleich eine Bestaetigung.');
     } else if (data.error) {
       setError(typeof data.error === 'string' ? data.error : 'Unbekannter Fehler');
     }
@@ -305,22 +313,31 @@ function PaymentFailed() {
         <h1 className="font-heading font-bold text-2xl text-brand-black dark:text-white mb-2">
           Zahlung nicht abgeschlossen
         </h1>
-        <p className="font-body text-brand-steel dark:text-gray-400 mb-8">
+        <p className="font-body text-brand-steel dark:text-gray-400 mb-4">
           Die Zahlung wurde abgebrochen oder ist fehlgeschlagen. Es wurde nichts
           abgebucht.
         </p>
+        <div className="mb-8 p-4 rounded-xl bg-status-warning/10 border border-status-warning/30 text-left">
+          <p className="text-xs font-body text-status-warning leading-relaxed">
+            <strong>Wurde trotzdem abgebucht?</strong> Bei PayPal und anderen
+            Sofort&uuml;berweisungen kann es kurz dauern, bis die Buchung im
+            System sichtbar ist. Schau in <Link href="/konto/buchungen" className="underline font-semibold">Meine Buchungen</Link> nach &mdash;
+            falls dort nichts erscheint, melde dich bitte ueber die
+            Kontaktseite.
+          </p>
+        </div>
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
           <Link
-            href="/warenkorb"
+            href="/konto/buchungen"
             className="px-6 py-3 border border-brand-border dark:border-white/10 text-brand-black dark:text-white font-heading font-semibold text-sm rounded-[10px] hover:bg-brand-bg dark:hover:bg-brand-black transition-colors"
           >
-            Zur&uuml;ck zum Warenkorb
+            Meine Buchungen
           </Link>
           <Link
-            href="/kameras"
+            href="/warenkorb"
             className="px-6 py-3 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold text-sm rounded-[10px] hover:bg-brand-dark transition-colors"
           >
-            Kameras ansehen
+            Zur&uuml;ck zum Warenkorb
           </Link>
         </div>
       </div>
@@ -336,7 +353,14 @@ function BookingConfirmedContent() {
   const paymentIntentId = searchParams.get('payment_intent');
   const fromCart = searchParams.get('from') === 'cart';
 
-  if (status !== 'succeeded' || !paymentIntentId) {
+  // PayPal/Klarna/SEPA koennen 'pending' zurueckgeben (asynchrone Zahlung).
+  // In dem Fall ist das Geld evtl. schon geflossen, aber Stripe-Webhook traegt
+  // die Buchung erst kurz danach ein. Wir lassen den Confirm-Pfad trotzdem
+  // laufen — confirm-cart/confirm-booking pruefen intent.status server-seitig
+  // und greifen bei Race auf den idempotenten Pfad zurueck.
+  // Nur bei explizit 'failed' oder fehlendem paymentIntent zeigen wir die
+  // Failed-Seite (mit Recovery-Hinweis fuer den Fall dass doch abgebucht wurde).
+  if (!paymentIntentId || status === 'failed') {
     return <PaymentFailed />;
   }
 
