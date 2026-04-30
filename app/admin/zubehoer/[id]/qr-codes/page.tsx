@@ -2,6 +2,7 @@ import { createServiceClient } from '@/lib/supabase';
 import QRCode from 'qrcode';
 import Link from 'next/link';
 import PrintButton from '../../../preise/kameras/[id]/qr-codes/PrintButton';
+import QrDownloadButton from '../../../preise/kameras/[id]/qr-codes/QrDownloadButton';
 import { getSiteUrl } from '@/lib/env-mode';
 
 interface Unit {
@@ -66,6 +67,32 @@ export default async function ZubehoerQrCodesPage({
           <PrintButton />
         </div>
 
+        {qrItems.length > 0 && (
+          <details className="mb-6 print:hidden bg-blue-50 border border-blue-200 rounded-lg">
+            <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-blue-900">
+              🖨️ Mit Brother P-touch oder anderem Etikettendrucker drucken?
+            </summary>
+            <div className="px-4 pb-4 text-sm text-blue-900 space-y-2">
+              <p><strong>Variante 1 — Direkt aus Brother iPrint&amp;Label:</strong></p>
+              <ol className="list-decimal pl-5 space-y-1">
+                <li>Auf jedem QR-Etikett unten den Button <strong>📥 Als PNG speichern</strong> klicken</li>
+                <li>Auf iOS: Bild öffnet sich → lange tippen → <strong>&bdquo;Zu Fotos hinzufügen&ldquo;</strong></li>
+                <li>Brother-App öffnen → <strong>Neues Etikett → Bild einfügen</strong> → das gespeicherte QR-Bild auswählen</li>
+                <li>Drucken</li>
+              </ol>
+              <p className="pt-2"><strong>Variante 2 — AirPrint (falls dein Drucker AirPrint kann):</strong></p>
+              <ol className="list-decimal pl-5 space-y-1">
+                <li>Oben rechts auf <strong>Drucken</strong> klicken</li>
+                <li>Im iOS-Druckdialog deinen Brother auswählen</li>
+                <li>Format/Skalierung anpassen, drucken</li>
+              </ol>
+              <p className="pt-2 text-xs text-blue-700">
+                <strong>Tipp:</strong> Für Brother P-touch CUBE / D200 / D460BT etc. funktioniert nur Variante 1 — die brauchen die Brother-App.
+              </p>
+            </div>
+          </details>
+        )}
+
         {qrItems.length === 0 ? (
           <div className="border border-dashed border-gray-300 rounded p-8 text-center text-gray-500 print:hidden">
             Keine Exemplare hinterlegt. Lege erst Einzelstücke unter{' '}
@@ -90,6 +117,9 @@ export default async function ZubehoerQrCodesPage({
                   )}
                   <p className="text-xs font-bold text-black leading-tight truncate">{accessoryName}</p>
                   <p className="text-sm font-mono font-bold text-black mt-1 break-all">{u.exemplar_code}</p>
+                </div>
+                <div className="w-full mt-2 print:hidden">
+                  <QrDownloadButton dataUrl={u.qr} filename={u.exemplar_code} />
                 </div>
               </div>
             ))}
