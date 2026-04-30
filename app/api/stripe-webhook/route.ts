@@ -122,10 +122,30 @@ export async function POST(req: NextRequest) {
     // Andere PaymentIntents (z.B. ohne booking metadata) ignorieren
   }
 
-  // Zahlungslink-Flow: Kunde bezahlt über genehmigten Link
-  if (event.type === 'checkout.session.completed') {
+  // Zahlungslink-Flow: Kunde bezahlt über genehmigten Link.
+  // - 'checkout.session.completed': Sofort-Zahlungen (Karte, Apple Pay) sind
+  //   sofort bezahlt; bei async (PayPal, Klarna, SEPA) hat session
+  //   `payment_status: 'unpaid'` ODER 'no_payment_required'.
+  // - 'checkout.session.async_payment_succeeded': WICHTIG fuer PayPal & Co —
+  //   Stripe schickt diesen Event SPAETER, sobald das Geld tatsaechlich da
+  //   ist. Ohne diesen Branch wuerde die Buchung ewig auf 'awaiting_payment'
+  //   stehen, obwohl PayPal abgebucht hat.
+  // Beide Events haben dieselbe Session-Form und Metadata.
+  if (
+    event.type === 'checkout.session.completed' ||
+    event.type === 'checkout.session.async_payment_succeeded'
+  ) {
     const session = event.data.object as Stripe.Checkout.Session;
     const meta = session.metadata ?? {};
+
+    // Bei 'completed' nur weiter, wenn payment_status === 'paid'. Sonst
+    // schickt Stripe noch den async_payment_succeeded-Event hinterher und
+    // wir verarbeiten erst dann. Verhindert verfruehte Bestaetigung.
+    const isPaid = session.payment_status === 'paid' || session.payment_status === 'no_payment_required';
+    if (event.type === 'checkout.session.completed' && !isPaid) {
+      console.log(`[Webhook] checkout.session.completed mit payment_status='${session.payment_status}' — warte auf async_payment_succeeded.`);
+      return NextResponse.json({ received: true, async_pending: true });
+    }
 
     if (meta.booking_type === 'pending_approval' && meta.booking_id) {
       const supabase = createServiceClient();
