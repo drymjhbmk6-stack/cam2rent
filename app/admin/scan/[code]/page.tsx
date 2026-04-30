@@ -251,6 +251,18 @@ function ScanLayout({ title, children }: { title: string; children: React.ReactN
       className="min-h-screen px-4 py-6"
       style={{ background: '#f8fafc', color: '#0f172a', colorScheme: 'light' }}
     >
+      <div className="max-w-md mx-auto mb-3">
+        <Link
+          href="/admin"
+          className="inline-flex items-center gap-1 text-sm font-semibold"
+          style={{ color: '#0891b2' }}
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+          </svg>
+          Zur&uuml;ck zum Dashboard
+        </Link>
+      </div>
       <div
         className="max-w-md mx-auto rounded-2xl border p-5"
         style={{ background: '#ffffff', borderColor: '#e5e7eb', color: '#0f172a' }}
