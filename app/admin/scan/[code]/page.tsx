@@ -242,10 +242,20 @@ export default async function ScanLandingPage({ params }: PageProps) {
 }
 
 function ScanLayout({ title, children }: { title: string; children: React.ReactNode }) {
+  // Inline-Style + colorScheme: 'light' verhindert dass iOS-System-Dark-Mode
+  // den Browser-Default-Text einfaerbt — sonst bekommen Elemente ohne
+  // explizite text-Klasse einen weissen Default und sind unlesbar auf
+  // weissem Karten-Hintergrund.
   return (
-    <div className="min-h-screen bg-gray-50 px-4 py-6">
-      <div className="max-w-md mx-auto bg-white rounded-2xl border border-gray-200 p-5">
-        <p className="text-xs text-gray-500 mb-3">QR-Scan · {title}</p>
+    <div
+      className="min-h-screen px-4 py-6"
+      style={{ background: '#f8fafc', color: '#0f172a', colorScheme: 'light' }}
+    >
+      <div
+        className="max-w-md mx-auto rounded-2xl border p-5"
+        style={{ background: '#ffffff', borderColor: '#e5e7eb', color: '#0f172a' }}
+      >
+        <p className="text-xs mb-3" style={{ color: '#6b7280' }}>QR-Scan · {title}</p>
         {children}
       </div>
     </div>
