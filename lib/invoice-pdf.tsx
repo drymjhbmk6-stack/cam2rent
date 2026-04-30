@@ -40,6 +40,11 @@ export interface InvoiceData {
   priceAccessories: number;
   priceHaftung: number;
   shippingPrice: number;
+  /** Gesamt-Rabatt (Produkt-/Aktions-Rabatt + Gutschein + Mietdauer- + Loyalitaets-Rabatt).
+   *  Wird als eigene Zeile vor dem Gesamtbetrag angezeigt. priceTotal ist bereits nach Abzug. */
+  discountAmount?: number;
+  /** Optional: Gutschein-Code zur Beschriftung der Rabatt-Zeile */
+  couponCode?: string;
   priceTotal: number;
   deposit: number;
   taxMode?: 'kleinunternehmer' | 'regelbesteuerung';
@@ -362,6 +367,9 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
   const taxRate = data.taxRate ?? 19;
   const netAmount = isRegel ? data.priceTotal / (1 + taxRate / 100) : data.priceTotal;
   const taxAmount = isRegel ? data.priceTotal - netAmount : 0;
+  const discountAmount = data.discountAmount ?? 0;
+  // Zwischensumme vor Rabatt = Gesamt + Rabatt (ergibt sich aus Mietpreis + Zubehoer + Haftung + Versand)
+  const subtotalBeforeDiscount = data.priceTotal + discountAmount;
 
   const isUnpaid = data.paymentStatus === 'unpaid' || data.paymentMethod === 'Ausstehend';
   const verwendungszweck = `${invoiceNumber} ${data.customerName}`;
@@ -457,6 +465,22 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
             </Text>
           </View>
         ))}
+
+        {/* ── Rabatt-Zeile (vor Steuern + Gesamt) ── */}
+        {discountAmount > 0 && (
+          <View style={{ marginTop: 6 }}>
+            <View style={s.sumRow}>
+              <Text style={s.sumLabel}>Zwischensumme:</Text>
+              <Text style={s.sumValue}>{fmtEuro(subtotalBeforeDiscount)}</Text>
+            </View>
+            <View style={s.sumRow}>
+              <Text style={s.sumLabel}>
+                Rabatt{data.couponCode ? ` (${data.couponCode})` : ''}:
+              </Text>
+              <Text style={s.sumValue}>-{fmtEuro(discountAmount)}</Text>
+            </View>
+          </View>
+        )}
 
         {/* ── Summen ── */}
         {isRegel ? (

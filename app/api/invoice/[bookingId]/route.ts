@@ -122,6 +122,11 @@ export async function GET(
     priceAccessories: booking.price_accessories ?? 0,
     priceHaftung: booking.price_haftung ?? 0,
     shippingPrice: booking.shipping_price ?? 0,
+    discountAmount:
+      (booking.discount_amount ?? 0)
+      + (booking.duration_discount ?? 0)
+      + (booking.loyalty_discount ?? 0),
+    couponCode: booking.coupon_code ?? undefined,
     priceTotal: booking.price_total ?? 0,
     deposit: booking.deposit ?? 0,
     taxMode: (taxMap['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer',

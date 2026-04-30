@@ -186,10 +186,14 @@ export interface BookingEmailData {
    *  fuer die Buchungsbestaetigungs-Mail qty-aware aufgeloest. */
   accessoryItems?: { accessory_id: string; qty: number }[];
   /** Optional: Map accessory_id -> Name (vom Aufrufer resolvt). */
-  accessoryNames?: Record<string, string>;
-  priceRental: number;
+  accessoryNames?: Record<string, string>;  priceRental: number;
   priceAccessories: number;
   priceHaftung: number;
+  /** Gesamt-Rabatt (Aktion + Gutschein + Mietdauer + Loyalitaet) — wird in der
+   *  Rechnung als eigene Zeile vor dem Gesamt angezeigt. */
+  discountAmount?: number;
+  /** Optional: Gutschein-Code zur Beschriftung */
+  couponCode?: string;
   priceTotal: number;
   deposit: number;
   shippingPrice: number;
@@ -226,6 +230,8 @@ export async function sendBookingConfirmation(data: BookingEmailData, contractPd
     priceAccessories: data.priceAccessories,
     priceHaftung: data.priceHaftung,
     shippingPrice: data.shippingPrice,
+    discountAmount: data.discountAmount,
+    couponCode: data.couponCode,
     priceTotal: data.priceTotal,
     deposit: data.deposit,
     taxMode: data.taxMode,

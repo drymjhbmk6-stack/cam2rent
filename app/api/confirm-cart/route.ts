@@ -824,6 +824,11 @@ export async function POST(req: NextRequest) {
               priceTotal: Math.max(0, groupTotal),
               deposit: groupItems.reduce((s, it) => s + it.deposit, 0),
               shippingPrice: emailShipping,
+              discountAmount:
+                Math.round((r_discountAmount ?? 0) * ratio * 100) / 100
+                + Math.round((r_durationDiscount ?? 0) * ratio * 100) / 100
+                + Math.round((r_loyaltyDiscount ?? 0) * ratio * 100) / 100,
+              couponCode: r_couponCode || undefined,
               taxMode: (txMap['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer',
               taxRate: parseFloat(txMap['tax_rate'] || '19'),
               ustId: txMap['ust_id'] || '',
