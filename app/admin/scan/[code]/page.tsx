@@ -100,11 +100,11 @@ export default async function ScanLandingPage({ params }: PageProps) {
 
         <div className="space-y-4">
           <div>
-            <p className="text-xs uppercase tracking-wider text-gray-500">{product?.brand ?? 'Marke'}{product?.category ? ` · ${product.category}` : ''}</p>
-            <h1 className="text-2xl font-bold leading-tight">{product?.name ?? productUnit.product_id}</h1>
-            {product?.model && <p className="text-sm text-gray-600 mt-1">{product.model}</p>}
-            <p className="text-base font-mono mt-2 break-all">{productUnit.serial_number}</p>
-            {productUnit.label && <p className="text-sm text-gray-600 mt-1">{productUnit.label}</p>}
+            <p className="text-xs uppercase tracking-wider" style={{ color: '#6b7280' }}>{product?.brand ?? 'Marke'}{product?.category ? ` · ${product.category}` : ''}</p>
+            <h1 className="text-2xl font-bold leading-tight" style={{ color: '#0f172a' }}>{product?.name ?? productUnit.product_id}</h1>
+            {product?.model && <p className="text-sm mt-1" style={{ color: '#4b5563' }}>{product.model}</p>}
+            <p className="text-base font-mono mt-2 break-all" style={{ color: '#0f172a' }}>{productUnit.serial_number}</p>
+            {productUnit.label && <p className="text-sm mt-1" style={{ color: '#4b5563' }}>{productUnit.label}</p>}
           </div>
 
           <StatusBadge status={productUnit.status} />
@@ -191,10 +191,10 @@ export default async function ScanLandingPage({ params }: PageProps) {
 
         <div className="space-y-4">
           <div>
-            <p className="text-xs uppercase tracking-wider text-gray-500">{accessory?.category ?? 'Zubehör'}</p>
-            <h1 className="text-2xl font-bold leading-tight">{accessory?.name ?? accUnit.accessory_id}</h1>
-            <p className="text-base font-mono mt-2 break-all">{accUnit.exemplar_code}</p>
-            {accessory?.description && <p className="text-sm text-gray-600 mt-2">{accessory.description}</p>}
+            <p className="text-xs uppercase tracking-wider" style={{ color: '#6b7280' }}>{accessory?.category ?? 'Zubehör'}</p>
+            <h1 className="text-2xl font-bold leading-tight" style={{ color: '#0f172a' }}>{accessory?.name ?? accUnit.accessory_id}</h1>
+            <p className="text-base font-mono mt-2 break-all" style={{ color: '#0f172a' }}>{accUnit.exemplar_code}</p>
+            {accessory?.description && <p className="text-sm mt-2" style={{ color: '#4b5563' }}>{accessory.description}</p>}
           </div>
 
           <StatusBadge status={accUnit.status} />
@@ -275,17 +275,33 @@ function ScanLayout({ title, children }: { title: string; children: React.ReactN
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const cfg = STATUS_LABELS[status] ?? { label: status, color: 'bg-gray-100 text-gray-700' };
+  // Inline-Farben statt Tailwind-Klassen, damit iOS-Dark-Mode nichts ueberschreibt.
+  const colorMap: Record<string, { bg: string; fg: string }> = {
+    available: { bg: '#dcfce7', fg: '#15803d' },
+    rented: { bg: '#dbeafe', fg: '#1d4ed8' },
+    maintenance: { bg: '#fef3c7', fg: '#b45309' },
+    damaged: { bg: '#fee2e2', fg: '#b91c1c' },
+    lost: { bg: '#fee2e2', fg: '#b91c1c' },
+    retired: { bg: '#f3f4f6', fg: '#374151' },
+  };
+  const cfg = colorMap[status] ?? { bg: '#f3f4f6', fg: '#374151' };
+  const label = STATUS_LABELS[status]?.label ?? status;
   return (
-    <span className={`inline-flex px-3 py-1 rounded-full text-sm font-semibold ${cfg.color}`}>
-      {cfg.label}
+    <span
+      className="inline-flex px-3 py-1 rounded-full text-sm font-semibold"
+      style={{ background: cfg.bg, color: cfg.fg }}
+    >
+      {label}
     </span>
   );
 }
 
 function Note({ text }: { text: string }) {
   return (
-    <div className="p-3 bg-amber-50 border border-amber-200 rounded text-sm text-amber-900 whitespace-pre-wrap">
+    <div
+      className="p-3 rounded text-sm whitespace-pre-wrap"
+      style={{ background: '#fef3c7', border: '1px solid #fde68a', color: '#78350f' }}
+    >
       {text}
     </div>
   );
@@ -295,9 +311,20 @@ function DataGrid({ items }: { items: { label: string; value: string; highlight?
   return (
     <div className="grid grid-cols-2 gap-2">
       {items.map((item, i) => (
-        <div key={i} className={`p-3 rounded-lg ${item.highlight ? 'bg-cyan-50 border border-cyan-200' : 'bg-gray-50 border border-gray-200'}`}>
-          <p className="text-[10px] uppercase tracking-wider text-gray-500">{item.label}</p>
-          <p className={`text-sm font-semibold mt-0.5 ${item.highlight ? 'text-cyan-900' : 'text-black'}`}>{item.value}</p>
+        <div
+          key={i}
+          className="p-3 rounded-lg"
+          style={item.highlight
+            ? { background: '#ecfeff', border: '1px solid #a5f3fc' }
+            : { background: '#f9fafb', border: '1px solid #e5e7eb' }}
+        >
+          <p className="text-[10px] uppercase tracking-wider" style={{ color: '#6b7280' }}>{item.label}</p>
+          <p
+            className="text-sm font-semibold mt-0.5"
+            style={{ color: item.highlight ? '#155e75' : '#0f172a' }}
+          >
+            {item.value}
+          </p>
         </div>
       ))}
     </div>
@@ -316,30 +343,34 @@ interface BookingRow {
 function BookingsBlock({ bookings }: { bookings: BookingRow[] }) {
   if (bookings.length === 0) {
     return (
-      <div className="p-3 bg-green-50 border border-green-200 rounded text-sm text-green-900">
+      <div
+        className="p-3 rounded text-sm"
+        style={{ background: '#dcfce7', border: '1px solid #bbf7d0', color: '#14532d' }}
+      >
         Keine aktive Buchung.
       </div>
     );
   }
   return (
     <div className="space-y-2">
-      <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+      <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#6b7280' }}>
         {bookings.length === 1 ? 'Aktive Buchung' : 'Aktive Buchungen'}
       </p>
       {bookings.map((b) => (
         <Link
           key={b.id}
           href={`/admin/buchungen/${b.id}`}
-          className="block p-3 border border-gray-200 rounded-lg hover:border-cyan-500 hover:bg-cyan-50 transition-colors"
+          className="block p-3 rounded-lg transition-colors"
+          style={{ background: '#ffffff', border: '1px solid #e5e7eb', color: '#0f172a' }}
         >
           <div className="flex items-center justify-between gap-2">
-            <p className="text-sm font-bold">{b.customer_name ?? 'Gast'}</p>
-            <span className="text-xs px-2 py-0.5 bg-gray-100 rounded">{b.status}</span>
+            <p className="text-sm font-bold" style={{ color: '#0f172a' }}>{b.customer_name ?? 'Gast'}</p>
+            <span className="text-xs px-2 py-0.5 rounded" style={{ background: '#f3f4f6', color: '#374151' }}>{b.status}</span>
           </div>
-          <p className="text-xs text-gray-600 mt-1">
+          <p className="text-xs mt-1" style={{ color: '#4b5563' }}>
             {fmtDate(b.rental_from)} – {fmtDate(b.rental_to)} · {b.delivery_mode === 'abholung' ? 'Abholung' : 'Versand'}
           </p>
-          <p className="text-xs font-mono text-gray-500 mt-0.5">{b.id}</p>
+          <p className="text-xs font-mono mt-0.5" style={{ color: '#6b7280' }}>{b.id}</p>
         </Link>
       ))}
     </div>
