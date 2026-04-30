@@ -243,7 +243,7 @@ export default function CheckoutPage() {
   const [, setTaxRate] = useState(19);
 
   useEffect(() => {
-    fetch('/api/prices')
+    fetch('/api/prices', { cache: 'no-store' })
       .then((r) => r.json())
       .then((d) => {
         if (d.shipping) setDynShipping(d.shipping);

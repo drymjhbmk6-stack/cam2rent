@@ -54,7 +54,12 @@ export async function GET() {
     };
 
     return NextResponse.json(config, {
-      headers: { 'Cache-Control': 'public, max-age=30, s-maxage=300, stale-while-revalidate=600' },
+      headers: {
+        // Kein Cache, damit frisch angelegte Aktionen sofort im Checkout
+        // greifen. Die Route ist sehr leichtgewichtig (eine Supabase-Query),
+        // 30 s Cache hat hier zu Bug-Reports gefuehrt ("Rabatt wirkt nicht").
+        'Cache-Control': 'no-store',
+      },
     });
   } catch {
     return NextResponse.json(defaultConfig());
