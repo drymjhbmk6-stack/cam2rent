@@ -260,9 +260,9 @@ export default function AdminGutscheinePage() {
     const effectiveTarget = form.target_type === 'user' ? 'all' : (form.target_type ?? 'all');
 
     return (
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        {/* Code */}
-        <div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
+        {/* Code (full-width) */}
+        <div style={{ gridColumn: '1 / -1' }}>
           <label style={S.label}>Code *</label>
           <input type="text" value={form.code ?? ''}
             onChange={(e) => setForm((f) => ({ ...f, code: e.target.value.toUpperCase() }))}
@@ -270,24 +270,25 @@ export default function AdminGutscheinePage() {
             style={{ ...S.input, width: '100%', fontFamily: 'monospace' }} />
         </div>
 
-        {/* Type + Value */}
-        <div>
+        {/* Type + Value (full-width, Typ-Dropdown vorne, Wert flex-1) */}
+        <div style={{ gridColumn: '1 / -1' }}>
           <label style={S.label}>Rabatt *</label>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <div style={{ position: 'relative', flex: 1 }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <select value={form.type ?? 'percent'}
+              onChange={(e) => setForm((f) => ({ ...f, type: e.target.value as 'percent' | 'fixed' }))}
+              style={{ ...S.select, minWidth: 130, flex: '0 0 auto' }}>
+              <option value="percent">Prozent</option>
+              <option value="fixed">Festbetrag</option>
+            </select>
+            <div style={{ position: 'relative', flex: '1 1 140px', minWidth: 140 }}>
               <input type="number" min="0" step="0.5" value={form.value ?? 0}
+                inputMode="decimal"
                 onChange={(e) => setForm((f) => ({ ...f, value: parseFloat(e.target.value) || 0 }))}
                 style={{ ...S.input, width: '100%', paddingRight: 32 }} />
               <span style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 12, color: '#64748b' }}>
                 {form.type === 'percent' ? '%' : '\u20AC'}
               </span>
             </div>
-            <select value={form.type ?? 'percent'}
-              onChange={(e) => setForm((f) => ({ ...f, type: e.target.value as 'percent' | 'fixed' }))}
-              style={{ ...S.select, width: 140 }}>
-              <option value="percent">Prozent</option>
-              <option value="fixed">Festbetrag</option>
-            </select>
           </div>
         </div>
 
@@ -300,8 +301,8 @@ export default function AdminGutscheinePage() {
             style={{ ...S.input, width: '100%' }} />
         </div>
 
-        {/* Target Type — always visible, independent of personalization */}
-        <div>
+        {/* Target Type — full-width auf Mobile, Dropdown bricht keinen Text mehr ab */}
+        <div style={{ gridColumn: '1 / -1' }}>
           <label style={S.label}>Gilt für</label>
           <select value={effectiveTarget}
             onChange={(e) => {
@@ -317,7 +318,7 @@ export default function AdminGutscheinePage() {
 
         {/* Conditional: accessory dropdown */}
         {effectiveTarget === 'accessory' && (
-          <div>
+          <div style={{ gridColumn: '1 / -1' }}>
             <label style={S.label}>Zubehör</label>
             <select value={form.target_id ?? ''}
               onChange={(e) => {
@@ -336,7 +337,7 @@ export default function AdminGutscheinePage() {
 
         {/* Conditional: set dropdown */}
         {effectiveTarget === 'group' && (
-          <div>
+          <div style={{ gridColumn: '1 / -1' }}>
             <label style={S.label}>Set</label>
             <select value={form.target_group_id ?? ''}
               onChange={(e) => {
@@ -353,9 +354,9 @@ export default function AdminGutscheinePage() {
           </div>
         )}
 
-        {/* Personalisiert checkbox + customer picker — independent of target_type */}
-        <div style={{ gridColumn: '1 / -1', background: '#0d1322', borderRadius: 10, padding: 16, border: '1px solid #1e293b' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+        {/* Personalisiert checkbox + customer picker */}
+        <div style={{ gridColumn: '1 / -1', background: '#0d1322', borderRadius: 10, padding: 14, border: '1px solid #1e293b' }}>
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
             <input type="checkbox"
               checked={isPersonalized}
               onChange={(e) => {
@@ -370,10 +371,12 @@ export default function AdminGutscheinePage() {
                   setPickerOpen(true);
                 }
               }}
-              style={{ width: 16, height: 16, accentColor: S.cyan }}
+              style={{ width: 16, height: 16, accentColor: S.cyan, marginTop: 2, flexShrink: 0 }}
             />
-            <span style={{ fontSize: 13, fontWeight: 600, color: '#e2e8f0' }}>Personalisiert</span>
-            <span style={{ fontSize: 11, color: '#64748b' }}>(nur für einen bestimmten Kunden einlösbar)</span>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: '#e2e8f0' }}>Personalisiert</div>
+              <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>Nur für einen bestimmten Kunden einlösbar.</div>
+            </div>
           </label>
           {isPersonalized && (
             <div
@@ -383,28 +386,26 @@ export default function AdminGutscheinePage() {
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
                 <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#10b98120', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                   <svg width="14" height="14" fill="none" stroke="#10b981" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                   </svg>
                 </div>
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: '#e2e8f0' }}>
+                <div style={{ minWidth: 0, overflow: 'hidden' }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: '#e2e8f0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {customers.find((c) => c.email === form.target_user_email)?.full_name || form.target_user_email}
                   </div>
                   {customers.find((c) => c.email === form.target_user_email)?.full_name && (
-                    <div style={{ fontSize: 11, color: '#94a3b8' }}>{form.target_user_email}</div>
+                    <div style={{ fontSize: 11, color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{form.target_user_email}</div>
                   )}
                 </div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <button
-                  onClick={(e) => { e.stopPropagation(); setForm((f) => ({ ...f, target_user_email: null })); }}
-                  style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, padding: '0 4px' }}
-                  title="Personalisierung entfernen"
-                >{'\u2715'}</button>
-              </div>
+              <button
+                onClick={(e) => { e.stopPropagation(); setForm((f) => ({ ...f, target_user_email: null })); }}
+                style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, padding: '0 4px', flexShrink: 0 }}
+                title="Personalisierung entfernen"
+              >{'\u2715'}</button>
             </div>
           )}
         </div>
@@ -442,24 +443,24 @@ export default function AdminGutscheinePage() {
           </div>
         </div>
 
-        {/* Restrictions */}
-        <div style={{ gridColumn: '1 / -1', display: 'flex', flexWrap: 'wrap', gap: 20 }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+        {/* Restrictions — vertikal gestapelt fuer Mobile-Lesbarkeit */}
+        <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 4 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
             <input type="checkbox" checked={form.once_per_customer ?? false}
               onChange={(e) => setForm((f) => ({ ...f, once_per_customer: e.target.checked }))}
-              style={{ width: 16, height: 16, accentColor: S.cyan }} />
+              style={{ width: 16, height: 16, accentColor: S.cyan, flexShrink: 0 }} />
             <span style={{ fontSize: 13, fontWeight: 600, color: '#e2e8f0' }}>Einmal pro Kunde</span>
           </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
             <input type="checkbox" checked={form.not_combinable ?? false}
               onChange={(e) => setForm((f) => ({ ...f, not_combinable: e.target.checked }))}
-              style={{ width: 16, height: 16, accentColor: S.cyan }} />
+              style={{ width: 16, height: 16, accentColor: S.cyan, flexShrink: 0 }} />
             <span style={{ fontSize: 13, fontWeight: 600, color: '#e2e8f0' }}>Nicht mit anderen Rabatten kombinierbar</span>
           </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
             <input type="checkbox" checked={form.active ?? true}
               onChange={(e) => setForm((f) => ({ ...f, active: e.target.checked }))}
-              style={{ width: 16, height: 16, accentColor: S.cyan }} />
+              style={{ width: 16, height: 16, accentColor: S.cyan, flexShrink: 0 }} />
             <span style={{ fontSize: 13, fontWeight: 600, color: '#e2e8f0' }}>Aktiv</span>
           </label>
         </div>
