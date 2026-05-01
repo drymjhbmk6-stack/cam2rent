@@ -40,13 +40,18 @@ export default async function InventarPage() {
     supabase.from('product_units').select('id, product_id, serial_number, label, status').order('serial_number'),
     supabase.from('accessory_units').select('id, accessory_id, exemplar_code, status').order('exemplar_code'),
     supabase.from('admin_config').select('value').eq('key', 'products').maybeSingle(),
-    supabase.from('accessories').select('id, name, category'),
+    supabase.from('accessories').select('id, name, category, is_bulk, available_qty, available'),
   ]);
 
   const productMap = (configRes?.data?.value ?? {}) as Record<string, { name?: string; brand?: string }>;
+  const accessoryRows = (accessoriesRes.data ?? []) as Array<{
+    id: string; name?: string; category?: string;
+    is_bulk?: boolean; available_qty?: number; available?: boolean;
+  }>;
   const accessoryMap = new Map(
-    (accessoriesRes.data ?? []).map((a) => [a.id, { name: a.name as string | undefined, category: a.category as string | undefined }]),
+    accessoryRows.map((a) => [a.id, { name: a.name, category: a.category, is_bulk: a.is_bulk }]),
   );
+  const bulkAccessories = accessoryRows.filter((a) => a.is_bulk === true);
 
   const items: ListItem[] = [];
 
@@ -71,6 +76,9 @@ export default async function InventarPage() {
 
   for (const u of accUnitsRes.data ?? []) {
     const acc = accessoryMap.get(u.accessory_id);
+    // Sammel-Zubehoer hat keine echten Einzel-Exemplare, sondern wird unten
+    // einmal pro accessory angezeigt. Defensiv hier auch raus filtern.
+    if (acc?.is_bulk) continue;
     items.push({
       type: 'accessory',
       code: u.exemplar_code,
@@ -78,6 +86,18 @@ export default async function InventarPage() {
       status: u.status,
       href: `/admin/scan/${encodeURIComponent(u.exemplar_code)}`,
       context: acc?.category ?? undefined,
+    });
+  }
+
+  // Sammel-Zubehoer: ein Eintrag pro accessory (nicht pro physisches Stueck)
+  for (const a of bulkAccessories) {
+    items.push({
+      type: 'accessory',
+      code: a.id,
+      name: `${a.name ?? a.id} (Sammel · ${a.available_qty ?? 0} Stk.)`,
+      status: a.available === false ? 'retired' : 'available',
+      href: `/admin/scan/${encodeURIComponent(a.id)}`,
+      context: a.category ?? undefined,
     });
   }
 

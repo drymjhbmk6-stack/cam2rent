@@ -23,30 +23,50 @@ export default async function ZubehoerQrCodesPage({
   // Zubehör laden
   const { data: accessory } = await supabase
     .from('accessories')
-    .select('id, name, category')
+    .select('id, name, category, is_bulk')
     .eq('id', id)
     .maybeSingle();
 
-  // Units laden (kein 'retired')
-  const { data: unitsRaw } = await supabase
-    .from('accessory_units')
-    .select('id, exemplar_code, status, notes')
-    .eq('accessory_id', id)
-    .neq('status', 'retired')
-    .order('exemplar_code', { ascending: true });
-  const units = (unitsRaw ?? []) as Unit[];
+  const isBulk = (accessory as { is_bulk?: boolean } | null)?.is_bulk === true;
 
   const siteUrl = (await getSiteUrl()).replace(/\/+$/, '');
-  const qrItems = await Promise.all(
-    units.map(async (u) => ({
-      ...u,
-      qr: await QRCode.toDataURL(`${siteUrl}/admin/scan/${encodeURIComponent(u.exemplar_code)}`, {
+
+  // Bei Sammel-Zubehoer: ein einzelner QR auf accessory_id (statt N pro Exemplar).
+  // Bei normalem Zubehoer: ein QR pro Exemplar.
+  let qrItems: Array<{ id: string; exemplar_code: string; status: string; notes: string | null; qr: string }> = [];
+
+  if (isBulk) {
+    qrItems = [{
+      id: id,
+      exemplar_code: id,
+      status: 'available',
+      notes: null,
+      qr: await QRCode.toDataURL(`${siteUrl}/admin/scan/${encodeURIComponent(id)}`, {
         margin: 1,
         width: 360,
         errorCorrectionLevel: 'M',
       }),
-    })),
-  );
+    }];
+  } else {
+    const { data: unitsRaw } = await supabase
+      .from('accessory_units')
+      .select('id, exemplar_code, status, notes')
+      .eq('accessory_id', id)
+      .neq('status', 'retired')
+      .order('exemplar_code', { ascending: true });
+    const units = (unitsRaw ?? []) as Unit[];
+
+    qrItems = await Promise.all(
+      units.map(async (u) => ({
+        ...u,
+        qr: await QRCode.toDataURL(`${siteUrl}/admin/scan/${encodeURIComponent(u.exemplar_code)}`, {
+          margin: 1,
+          width: 360,
+          errorCorrectionLevel: 'M',
+        }),
+      })),
+    );
+  }
 
   const accessoryName = accessory?.name ?? id;
 
@@ -58,9 +78,11 @@ export default async function ZubehoerQrCodesPage({
             <Link href="/admin/zubehoer" className="text-sm text-cyan-600 hover:underline">
               ← Zurück zum Zubehör
             </Link>
-            <h1 className="text-2xl font-bold mt-2">QR-Codes – {accessoryName}</h1>
+            <h1 className="text-2xl font-bold mt-2">QR-{isBulk ? 'Code' : 'Codes'} – {accessoryName}</h1>
             <p className="text-sm text-gray-600">
-              {qrItems.length} Exemplar{qrItems.length === 1 ? '' : 'e'} · zum Aufkleben auf jedes Stück
+              {isBulk
+                ? 'Sammel-QR · ein QR-Code für das gesamte Zubehör (auf den Aufbewahrungs-Behälter aufkleben)'
+                : `${qrItems.length} Exemplar${qrItems.length === 1 ? '' : 'e'} · zum Aufkleben auf jedes Stück`}
             </p>
           </div>
           <PrintButton />

@@ -40,6 +40,7 @@ export async function PUT(
       allow_multi_qty: body.allow_multi_qty ?? false,
       max_qty_per_booking: maxQty,
       replacement_value: replacementValue,
+      is_bulk: body.is_bulk ?? false,
     })
     .eq('id', id);
 

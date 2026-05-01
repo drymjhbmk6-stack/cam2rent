@@ -80,6 +80,8 @@ interface ActionLink {
 interface UnitCardData {
   layoutTitle: string; // "Kamera" / "Zubehör"
   kind: 'camera' | 'accessory';
+  /** Wenn true: Sammel-Zubehoer (kein Exemplar-Tracking, kein Edit/Delete-Modal). */
+  bulk?: boolean;
   unitId: string;
   headerLabel: string; // z.B. "INSTA360 · 360-CAM" oder "AKKU"
   name: string;
@@ -231,7 +233,41 @@ export default async function ScanLandingPage({ params }: PageProps) {
     return <UnitCard data={data} />;
   }
 
-  // 3) Nichts gefunden
+  // 3) Versuche Sammel-Zubehoer (Bulk-Accessory direkt ueber accessory.id)
+  const { data: bulkAcc } = await supabase
+    .from('accessories')
+    .select('id, name, category, description, image_url, price, pricing_mode, available, available_qty, is_bulk')
+    .eq('id', decodedCode)
+    .eq('is_bulk', true)
+    .maybeSingle();
+
+  if (bulkAcc) {
+    const data: UnitCardData = {
+      layoutTitle: 'Sammel-Zubehör',
+      kind: 'accessory',
+      bulk: true,
+      unitId: bulkAcc.id,
+      headerLabel: bulkAcc.category ?? 'Zubehör',
+      name: bulkAcc.name ?? bulkAcc.id,
+      subtitle: bulkAcc.description ?? null,
+      code: bulkAcc.id,
+      statusKey: bulkAcc.available ? 'available' : 'retired',
+      heroImage: bulkAcc.image_url ?? null,
+      dataGrid: [
+        { label: 'Verfügbare Menge', value: `${bulkAcc.available_qty ?? 0} Stück`, highlight: true },
+        { label: 'Mietpreis', value: bulkAcc.price != null ? `${fmtEuro(bulkAcc.price)}${bulkAcc.pricing_mode === 'perDay' ? '/Tag' : ' (einmalig)'}` : '—' },
+        { label: 'Typ', value: 'Sammel-Zubehör (Verbrauchsmaterial)' },
+      ],
+      note: null,
+      bookings: [],
+      actions: [
+        { href: '/admin/zubehoer', label: 'Zubehör-Editor', primary: true },
+      ],
+    };
+    return <UnitCard data={data} />;
+  }
+
+  // 4) Nichts gefunden
   return (
     <ScanLayout title="Code unbekannt">
       <div className="space-y-3">
@@ -280,7 +316,7 @@ function UnitCard({ data }: { data: UnitCardData }) {
 
         <BookingsBlock bookings={data.bookings} />
 
-        {(data.actions.length > 0 || data.kind === 'camera' || data.kind === 'accessory') && (
+        {(data.actions.length > 0 || ((data.kind === 'camera' || data.kind === 'accessory') && !data.bulk)) && (
           <div className="flex flex-wrap gap-2 pt-3 border-t">
             {data.actions.map((a) => (
               <Link
@@ -295,7 +331,7 @@ function UnitCard({ data }: { data: UnitCardData }) {
                 {a.label}
               </Link>
             ))}
-            {data.kind === 'camera' && (
+            {data.kind === 'camera' && !data.bulk && (
               <EditCameraEntry
                 unitId={data.unitId}
                 initialStatus={(data.statusKey as 'available' | 'rented' | 'maintenance' | 'retired') ?? 'available'}
@@ -303,7 +339,7 @@ function UnitCard({ data }: { data: UnitCardData }) {
                 initialLabel={data.code ?? ''}
               />
             )}
-            {data.kind === 'accessory' && (
+            {data.kind === 'accessory' && !data.bulk && (
               <EditAccessoryEntry
                 unitId={data.unitId}
                 initialStatus={(data.statusKey as 'available' | 'rented' | 'maintenance' | 'damaged' | 'lost' | 'retired') ?? 'available'}
@@ -311,7 +347,7 @@ function UnitCard({ data }: { data: UnitCardData }) {
                 initialCode={data.code ?? ''}
               />
             )}
-            {(data.kind === 'camera' || data.kind === 'accessory') && (
+            {(data.kind === 'camera' || data.kind === 'accessory') && !data.bulk && (
               <DeleteUnitButton kind={data.kind} unitId={data.unitId} code={data.code ?? ''} />
             )}
           </div>

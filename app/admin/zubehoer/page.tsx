@@ -29,6 +29,8 @@ interface Accessory {
   // String-Variante wird im Formular verwendet (input type="number" liefert string),
   // number kommt aus der DB. API nimmt beides entgegen und konvertiert.
   replacement_value?: number | string | null;
+  // Sammel-Zubehoer: kein Exemplar-Tracking, ein Sammel-QR, manuelle Mengen-Pflege
+  is_bulk?: boolean | null;
 }
 
 const CATEGORIES = ['Akku', 'Speicher', 'Halterung', 'Schutz', 'Audio', 'Stativ', 'Sonstiges'];
@@ -51,6 +53,7 @@ function emptyForm() {
     allow_multi_qty: false,
     max_qty_per_booking: null as number | null,
     replacement_value: '',
+    is_bulk: false,
   };
 }
 
@@ -136,6 +139,7 @@ export default function AdminZubehoerPage() {
       allow_multi_qty: acc.allow_multi_qty ?? false,
       max_qty_per_booking: acc.max_qty_per_booking ?? null,
       replacement_value: acc.replacement_value != null ? String(acc.replacement_value) : '',
+      is_bulk: acc.is_bulk ?? false,
     });
   }
 
@@ -296,9 +300,23 @@ export default function AdminZubehoerPage() {
               </div>
               <div className="sm:col-span-2">
                 <p className="text-xs font-body text-brand-muted bg-brand-bg dark:bg-slate-800/40 border border-brand-border rounded-[10px] px-3 py-2.5">
-                  Bild und Exemplare können nach dem ersten Speichern unten in der Bearbeiten-Ansicht erfasst werden. Wiederbeschaffungswert ergibt sich automatisch aus den Anlagen der einzelnen Exemplare.
+                  {newForm.is_bulk
+                    ? 'Sammel-Zubehör: kein Exemplar-Tracking, ein Sammel-QR pro Eintrag. Verfügbare Menge pflegst du manuell, sie wird automatisch bei Buchungen reduziert und bei Rückgabe wieder erhöht.'
+                    : 'Bild und Exemplare können nach dem ersten Speichern unten in der Bearbeiten-Ansicht erfasst werden. Wiederbeschaffungswert ergibt sich automatisch aus den Anlagen der einzelnen Exemplare.'}
                 </p>
               </div>
+              {newForm.is_bulk && (
+                <div>
+                  <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Verfügbare Menge</label>
+                  <input
+                    type="number" min="0" step="1"
+                    value={newForm.available_qty}
+                    onChange={(e) => setNewForm((f) => ({ ...f, available_qty: Math.max(0, parseInt(e.target.value, 10) || 0) }))}
+                    placeholder="z.B. 200"
+                    className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue"
+                  />
+                </div>
+              )}
               <div className="flex items-center gap-6 flex-wrap">
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input type="checkbox" checked={newForm.available}
@@ -312,6 +330,13 @@ export default function AdminZubehoerPage() {
                     className="w-4 h-4 rounded border-brand-border accent-amber-500" />
                   <span className="text-sm font-body text-brand-black">Nur intern</span>
                   <span className="text-[10px] text-brand-muted">(Kunde sieht es nicht)</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={newForm.is_bulk}
+                    onChange={(e) => setNewForm((f) => ({ ...f, is_bulk: e.target.checked }))}
+                    className="w-4 h-4 rounded border-brand-border accent-purple-500" />
+                  <span className="text-sm font-body text-brand-black">Sammel-Zubehör</span>
+                  <span className="text-[10px] text-brand-muted">(Verbrauchsmaterial, kein Exemplar-Tracking)</span>
                 </label>
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input type="checkbox" checked={newForm.allow_multi_qty}
@@ -646,6 +671,19 @@ function AccessoryCard({ acc, editId, editForm, setEditForm, savedId, savingId, 
                         </div>
                         <p className="text-[11px] text-brand-muted mt-2">Wird automatisch auf 1200×900 skaliert mit Name als dezentem Wasserzeichen.</p>
                       </div>
+                      {Boolean((editForm as Record<string, unknown>).is_bulk) ? (
+                        <div className="sm:col-span-2">
+                          <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Verfügbare Menge</label>
+                          <input
+                            type="number" min="0" step="1"
+                            value={(editForm as Record<string, unknown>).available_qty as number ?? 0}
+                            onChange={(e) => setEditForm((f) => ({ ...f, available_qty: Math.max(0, parseInt(e.target.value, 10) || 0) }))}
+                            placeholder="z.B. 200"
+                            className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body bg-white focus:outline-none focus:ring-2 focus:ring-accent-blue"
+                          />
+                          <p className="text-[10px] text-brand-muted mt-1">Sammel-Zubehör — wird bei Buchung automatisch reduziert und bei Rückgabe wieder erhöht.</p>
+                        </div>
+                      ) : null}
                       <div className="flex items-center gap-6 flex-wrap">
                         <label className="flex items-center gap-2 cursor-pointer">
                           <input type="checkbox" checked={editForm.available ?? true}
@@ -659,6 +697,13 @@ function AccessoryCard({ acc, editId, editForm, setEditForm, savedId, savingId, 
                             className="w-4 h-4 rounded border-brand-border accent-amber-500" />
                           <span className="text-sm font-body text-brand-black">Nur intern</span>
                           <span className="text-[10px] text-brand-muted">(Kunde sieht es nicht)</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="checkbox" checked={(editForm as Record<string, unknown>).is_bulk as boolean ?? false}
+                            onChange={(e) => setEditForm((f) => ({ ...f, is_bulk: e.target.checked }))}
+                            className="w-4 h-4 rounded border-brand-border accent-purple-500" />
+                          <span className="text-sm font-body text-brand-black">Sammel-Zubehör</span>
+                          <span className="text-[10px] text-brand-muted">(Verbrauchsmaterial, kein Exemplar-Tracking)</span>
                         </label>
                         <label className="flex items-center gap-2 cursor-pointer">
                           <input type="checkbox" checked={(editForm as Record<string, unknown>).allow_multi_qty as boolean ?? false}
@@ -707,15 +752,35 @@ function AccessoryCard({ acc, editId, editForm, setEditForm, savedId, savingId, 
                         </div>
                       </div>
                     </div>
-                    {/* Exemplar-Verwaltung — nur sichtbar im Edit-Modus, weil acc.id existiert */}
-                    <div className="mt-5">
-                      <AccessoryUnitsManager
-                        accessoryId={acc.id}
-                        onCountChanged={({ available }) =>
-                          setEditForm((f) => ({ ...f, available_qty: available }))
-                        }
-                      />
-                    </div>
+                    {/* Exemplar-Verwaltung — nur sichtbar wenn KEIN Sammel-Zubehoer.
+                        Bei is_bulk wird die Menge manuell im Feld oben gepflegt
+                        und ein einzelner Sammel-QR auf der QR-Codes-Seite ausgegeben. */}
+                    {!Boolean((editForm as Record<string, unknown>).is_bulk) && (
+                      <div className="mt-5">
+                        <AccessoryUnitsManager
+                          accessoryId={acc.id}
+                          onCountChanged={({ available }) =>
+                            setEditForm((f) => ({ ...f, available_qty: available }))
+                          }
+                        />
+                      </div>
+                    )}
+                    {Boolean((editForm as Record<string, unknown>).is_bulk) && (
+                      <div className="mt-5 bg-brand-bg dark:bg-slate-800/40 rounded-xl border border-brand-border dark:border-slate-700 p-4 flex items-center justify-between gap-3 flex-wrap">
+                        <div>
+                          <h3 className="font-heading font-bold text-sm text-brand-black dark:text-slate-200 mb-0.5">Sammel-QR</h3>
+                          <p className="text-xs font-body text-brand-muted">Ein einzelner QR-Code für das gesamte Zubehör. Drauf kleben oder ausdrucken — keine Exemplar-Verwaltung nötig.</p>
+                        </div>
+                        <a
+                          href={`/admin/zubehoer/${acc.id}/qr-codes`}
+                          target="_blank"
+                          rel="noopener"
+                          className="inline-flex items-center gap-1 px-3 py-1.5 text-[11px] font-heading font-semibold bg-cyan-600 text-white rounded hover:bg-cyan-700 transition-colors"
+                        >
+                          QR-Code drucken
+                        </a>
+                      </div>
+                    )}
                     <div className="flex justify-end mt-4 gap-2">
                       <button onClick={() => onSetEditId(null)}
                         className="px-4 py-2 text-sm font-heading font-semibold text-brand-muted border border-brand-border rounded-btn hover:bg-white transition-colors">
