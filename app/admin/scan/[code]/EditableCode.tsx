@@ -3,13 +3,30 @@
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
+type Kind = 'camera' | 'accessory';
+
 interface Props {
+  kind: Kind;
   unitId: string;
   initialCode: string;
 }
 
-export default function EditableExemplarCode({ unitId, initialCode }: Props) {
+const ENDPOINTS: Record<Kind, { url: string; field: string; label: string }> = {
+  camera: {
+    url: '/api/admin/product-units',
+    field: 'serial_number',
+    label: 'Seriennummer bearbeiten',
+  },
+  accessory: {
+    url: '/api/admin/accessory-units',
+    field: 'exemplar_code',
+    label: 'Code bearbeiten',
+  },
+};
+
+export default function EditableCode({ kind, unitId, initialCode }: Props) {
   const router = useRouter();
+  const cfg = ENDPOINTS[kind];
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(initialCode);
   const [saving, setSaving] = useState(false);
@@ -48,10 +65,10 @@ export default function EditableExemplarCode({ unitId, initialCode }: Props) {
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch('/api/admin/accessory-units', {
+      const res = await fetch(cfg.url, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: unitId, exemplar_code: trimmed }),
+        body: JSON.stringify({ id: unitId, [cfg.field]: trimmed }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -120,8 +137,8 @@ export default function EditableExemplarCode({ unitId, initialCode }: Props) {
       onClick={startEdit}
       className="mt-2 inline-flex items-center gap-2 text-base font-mono break-all text-left rounded px-1 -mx-1 transition-colors hover:bg-gray-100 active:bg-gray-200"
       style={{ color: '#0f172a' }}
-      title="Code bearbeiten"
-      aria-label="Code bearbeiten"
+      title={cfg.label}
+      aria-label={cfg.label}
     >
       <span className="break-all">{initialCode}</span>
       <svg

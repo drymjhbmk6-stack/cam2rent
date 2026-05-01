@@ -2,32 +2,27 @@ import { createServiceClient } from '@/lib/supabase';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import ScanBackLink from './ScanBackLink';
-import EditableExemplarCode from './EditableExemplarCode';
+import EditableCode from './EditableCode';
 
 /**
  * Detail-Karte nach QR-Scan. Sucht den Code in product_units (Seriennummer)
- * und accessory_units (exemplar_code), zeigt:
- * - Bild
- * - Stammdaten (Marke, Name, Modell, Kategorie)
- * - Status
- * - Asset-Daten (Kaufdatum, Kaufpreis, Wiederbeschaffungswert)
- * - Kaution / Mietpreis-Info
- * - Aktive Buchung
- * - Notizen
- * - Quick-Actions (Editor, Belegungs-Kalender)
+ * und accessory_units (exemplar_code). Beide Pfade normalisieren ihre Daten
+ * in eine gemeinsame UnitCardData-Form, sodass das Rendering ueber einen
+ * einzigen <UnitCard>-Pfad laeuft. Damit gibt es keine Drift mehr zwischen
+ * den beiden Karten (z.B. Inline-Edit auf beiden gleich).
  */
 
 interface PageProps {
   params: Promise<{ code: string }>;
 }
 
-const STATUS_LABELS: Record<string, { label: string; color: string }> = {
-  available: { label: 'Verfügbar', color: 'bg-green-100 text-green-700' },
-  rented: { label: 'Vermietet', color: 'bg-blue-100 text-blue-700' },
-  maintenance: { label: 'In Wartung', color: 'bg-amber-100 text-amber-700' },
-  damaged: { label: 'Beschädigt', color: 'bg-red-100 text-red-700' },
-  lost: { label: 'Verloren', color: 'bg-red-100 text-red-700' },
-  retired: { label: 'Ausgemustert', color: 'bg-gray-100 text-gray-700' },
+const STATUS_LABELS: Record<string, string> = {
+  available: 'Verfügbar',
+  rented: 'Vermietet',
+  maintenance: 'In Wartung',
+  damaged: 'Beschädigt',
+  lost: 'Verloren',
+  retired: 'Ausgemustert',
 };
 
 function fmtDate(iso: string | null) {
@@ -52,12 +47,50 @@ interface AssetRow {
   status: string | null;
 }
 
+interface BookingRow {
+  id: string;
+  customer_name: string | null;
+  rental_from: string;
+  rental_to: string;
+  status: string;
+  delivery_mode: string;
+}
+
+interface DataGridItem {
+  label: string;
+  value: string;
+  highlight?: boolean;
+}
+
+interface ActionLink {
+  href: string;
+  label: string;
+  primary?: boolean;
+}
+
+interface UnitCardData {
+  layoutTitle: string; // "Kamera" / "Zubehör"
+  kind: 'camera' | 'accessory';
+  unitId: string;
+  headerLabel: string; // z.B. "INSTA360 · 360-CAM" oder "AKKU"
+  name: string;
+  subtitle?: string | null; // Modell, Label oder Description
+  code: string; // Seriennummer / Exemplar-Code
+  statusKey: string;
+  heroImage: string | null;
+  dataGrid: DataGridItem[];
+  note?: string | null;
+  bookings: BookingRow[];
+  actions: ActionLink[];
+}
+
 export default async function ScanLandingPage({ params }: PageProps) {
   const { code } = await params;
   const decodedCode = decodeURIComponent(code).trim();
   if (!decodedCode) notFound();
 
   const supabase = createServiceClient();
+  const today = new Date().toISOString().slice(0, 10);
 
   // 1) Versuche product_units (Kameras)
   const { data: productUnit } = await supabase
@@ -67,8 +100,6 @@ export default async function ScanLandingPage({ params }: PageProps) {
     .maybeSingle();
 
   if (productUnit) {
-    // Produkt-Stammdaten + Asset + aktive Buchungen parallel laden
-    const today = new Date().toISOString().slice(0, 10);
     const [configRes, assetRes, bookingsRes] = await Promise.all([
       supabase.from('admin_config').select('value').eq('key', 'products').maybeSingle(),
       supabase.from('assets')
@@ -90,77 +121,35 @@ export default async function ScanLandingPage({ params }: PageProps) {
     }>;
     const product = productMap[productUnit.product_id];
     const asset = (assetRes?.data ?? null) as AssetRow | null;
-    const activeBookings = bookingsRes?.data ?? [];
-    const heroImage = product?.images?.[0] ?? product?.imageUrl ?? null;
 
-    return (
-      <ScanLayout title="Kamera">
-        <div className="space-y-4">
-          <div className="flex gap-4 items-stretch">
-            <div className="flex-1 min-w-0 flex flex-col">
-              <p className="text-xs uppercase tracking-wider" style={{ color: '#6b7280' }}>{product?.brand ?? 'Marke'}{product?.category ? ` · ${product.category}` : ''}</p>
-              <h1 className="text-2xl font-bold leading-tight" style={{ color: '#0f172a' }}>{product?.name ?? productUnit.product_id}</h1>
-              {product?.model && <p className="text-sm mt-1" style={{ color: '#4b5563' }}>{product.model}</p>}
-              <p className="text-base font-mono mt-2 break-all" style={{ color: '#0f172a' }}>{productUnit.serial_number}</p>
-              {productUnit.label && <p className="text-sm mt-1" style={{ color: '#4b5563' }}>{productUnit.label}</p>}
-              <div className="mt-auto pt-3">
-                <StatusBadge status={productUnit.status} />
-              </div>
-            </div>
-            {heroImage && (
-              <a
-                href={heroImage}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-32 flex-shrink-0 block transition-transform active:scale-95"
-                aria-label="Bild vergrößern"
-                title="Bild vergrößern"
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={heroImage} alt={product?.name ?? ''} className="w-full h-full object-contain bg-gray-50 rounded-xl" />
-              </a>
-            )}
-          </div>
+    const data: UnitCardData = {
+      layoutTitle: 'Kamera',
+      kind: 'camera',
+      unitId: productUnit.id,
+      headerLabel: `${product?.brand ?? 'Marke'}${product?.category ? ` · ${product.category}` : ''}`,
+      name: product?.name ?? productUnit.product_id,
+      subtitle: [product?.model, productUnit.label].filter(Boolean).join(' · ') || null,
+      code: productUnit.serial_number,
+      statusKey: productUnit.status,
+      heroImage: product?.images?.[0] ?? product?.imageUrl ?? null,
+      dataGrid: [
+        { label: 'Kaufdatum', value: fmtDate(productUnit.purchased_at ?? asset?.purchase_date ?? null) },
+        { label: 'Kaufpreis', value: fmtEuro(asset?.purchase_price) },
+        { label: 'Wiederbeschaffungswert', value: fmtEuro(asset?.current_value), highlight: true },
+        { label: 'Kaution', value: fmtEuro(product?.deposit) },
+        { label: 'Nutzungsdauer', value: asset?.useful_life_months ? `${asset.useful_life_months} Monate` : '—' },
+        { label: 'Anlagen-Status', value: asset?.status ?? '—' },
+      ],
+      note: productUnit.notes,
+      bookings: bookingsRes?.data ?? [],
+      actions: [
+        { href: `/admin/preise/kameras/${productUnit.product_id}`, label: 'Kamera-Editor', primary: true },
+        ...(asset ? [{ href: `/admin/anlagen/${asset.id}`, label: 'Anlage öffnen' }] : []),
+        { href: `/admin/verfuegbarkeit?product=${productUnit.product_id}`, label: 'Belegungs-Kalender' },
+      ],
+    };
 
-          {/* Stammdaten-Grid: Kauf, Wert, Kaution */}
-          <DataGrid items={[
-            { label: 'Kaufdatum', value: fmtDate(productUnit.purchased_at ?? asset?.purchase_date ?? null) },
-            { label: 'Kaufpreis', value: fmtEuro(asset?.purchase_price) },
-            { label: 'Wiederbeschaffungswert', value: fmtEuro(asset?.current_value), highlight: true },
-            { label: 'Kaution', value: fmtEuro(product?.deposit) },
-            { label: 'Nutzungsdauer', value: asset?.useful_life_months ? `${asset.useful_life_months} Monate` : '—' },
-            { label: 'Anlagen-Status', value: asset?.status ?? '—' },
-          ]} />
-
-          {productUnit.notes && <Note text={productUnit.notes} />}
-
-          <BookingsBlock bookings={activeBookings} />
-
-          <div className="flex flex-wrap gap-2 pt-3 border-t">
-            <Link
-              href={`/admin/preise/kameras/${productUnit.product_id}`}
-              className="px-3 py-2 text-sm font-semibold bg-cyan-600 text-white rounded hover:bg-cyan-700"
-            >
-              Kamera-Editor
-            </Link>
-            {asset && (
-              <Link
-                href={`/admin/anlagen/${asset.id}`}
-                className="px-3 py-2 text-sm font-semibold bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
-              >
-                Anlage öffnen
-              </Link>
-            )}
-            <Link
-              href={`/admin/verfuegbarkeit?product=${productUnit.product_id}`}
-              className="px-3 py-2 text-sm font-semibold bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
-            >
-              Belegungs-Kalender
-            </Link>
-          </div>
-        </div>
-      </ScanLayout>
-    );
+    return <UnitCard data={data} />;
   }
 
   // 2) Versuche accessory_units (Zubehör)
@@ -171,7 +160,6 @@ export default async function ScanLandingPage({ params }: PageProps) {
     .maybeSingle();
 
   if (accUnit) {
-    const today = new Date().toISOString().slice(0, 10);
     const [accessoryRes, assetRes, bookingsRes] = await Promise.all([
       supabase.from('accessories').select('*').eq('id', accUnit.accessory_id).maybeSingle(),
       supabase.from('assets')
@@ -192,63 +180,34 @@ export default async function ScanLandingPage({ params }: PageProps) {
       image_url?: string; price?: number; price_type?: string;
     };
     const asset = (assetRes?.data ?? null) as AssetRow | null;
-    const activeBookings = bookingsRes?.data ?? [];
-    const heroImage = accessory?.image_url ?? null;
 
-    return (
-      <ScanLayout title="Zubehör">
-        <div className="space-y-4">
-          <div className="flex gap-4 items-stretch">
-            <div className="flex-1 min-w-0 flex flex-col">
-              <p className="text-xs uppercase tracking-wider" style={{ color: '#6b7280' }}>{accessory?.category ?? 'Zubehör'}</p>
-              <h1 className="text-2xl font-bold leading-tight" style={{ color: '#0f172a' }}>{accessory?.name ?? accUnit.accessory_id}</h1>
-              <EditableExemplarCode unitId={accUnit.id} initialCode={accUnit.exemplar_code} />
-              {accessory?.description && <p className="text-sm mt-2" style={{ color: '#4b5563' }}>{accessory.description}</p>}
-              <div className="mt-auto pt-3">
-                <StatusBadge status={accUnit.status} />
-              </div>
-            </div>
-            {heroImage && (
-              <a
-                href={heroImage}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-32 flex-shrink-0 block transition-transform active:scale-95"
-                aria-label="Bild vergrößern"
-                title="Bild vergrößern"
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={heroImage} alt={accessory?.name ?? ''} className="w-full h-full object-contain bg-gray-50 rounded-xl" />
-              </a>
-            )}
-          </div>
+    const data: UnitCardData = {
+      layoutTitle: 'Zubehör',
+      kind: 'accessory',
+      unitId: accUnit.id,
+      headerLabel: accessory?.category ?? 'Zubehör',
+      name: accessory?.name ?? accUnit.accessory_id,
+      subtitle: accessory?.description ?? null,
+      code: accUnit.exemplar_code,
+      statusKey: accUnit.status,
+      heroImage: accessory?.image_url ?? null,
+      dataGrid: [
+        { label: 'Kaufdatum', value: fmtDate(accUnit.purchased_at ?? asset?.purchase_date ?? null) },
+        { label: 'Kaufpreis', value: fmtEuro(asset?.purchase_price) },
+        { label: 'Wiederbeschaffungswert', value: fmtEuro(asset?.current_value), highlight: true },
+        { label: 'Mietpreis', value: accessory?.price != null ? `${fmtEuro(accessory.price)}${accessory.price_type === 'perDay' ? '/Tag' : ' (einmalig)'}` : '—' },
+        { label: 'Nutzungsdauer', value: asset?.useful_life_months ? `${asset.useful_life_months} Monate` : '—' },
+        { label: 'Anlagen-Status', value: asset?.status ?? '—' },
+      ],
+      note: accUnit.notes,
+      bookings: bookingsRes?.data ?? [],
+      actions: [
+        { href: '/admin/zubehoer', label: 'Zubehör-Editor', primary: true },
+        ...(asset ? [{ href: `/admin/anlagen/${asset.id}`, label: 'Anlage öffnen' }] : []),
+      ],
+    };
 
-          <DataGrid items={[
-            { label: 'Kaufdatum', value: fmtDate(accUnit.purchased_at ?? asset?.purchase_date ?? null) },
-            { label: 'Kaufpreis', value: fmtEuro(asset?.purchase_price) },
-            { label: 'Wiederbeschaffungswert', value: fmtEuro(asset?.current_value), highlight: true },
-            { label: 'Mietpreis', value: accessory?.price != null ? `${fmtEuro(accessory.price)}${accessory.price_type === 'perDay' ? '/Tag' : ' (einm.)'}` : '—' },
-            { label: 'Nutzungsdauer', value: asset?.useful_life_months ? `${asset.useful_life_months} Monate` : '—' },
-            { label: 'Anlagen-Status', value: asset?.status ?? '—' },
-          ]} />
-
-          {accUnit.notes && <Note text={accUnit.notes} />}
-
-          <BookingsBlock bookings={activeBookings} />
-
-          <div className="flex flex-wrap gap-2 pt-3 border-t">
-            <Link href="/admin/zubehoer" className="px-3 py-2 text-sm font-semibold bg-cyan-600 text-white rounded hover:bg-cyan-700">
-              Zubehör-Editor
-            </Link>
-            {asset && (
-              <Link href={`/admin/anlagen/${asset.id}`} className="px-3 py-2 text-sm font-semibold bg-gray-100 text-gray-700 rounded hover:bg-gray-200">
-                Anlage öffnen
-              </Link>
-            )}
-          </div>
-        </div>
-      </ScanLayout>
-    );
+    return <UnitCard data={data} />;
   }
 
   // 3) Nichts gefunden
@@ -260,6 +219,63 @@ export default async function ScanLandingPage({ params }: PageProps) {
         <Link href="/admin" className="inline-block px-3 py-2 text-sm font-semibold bg-gray-100 text-gray-700 rounded hover:bg-gray-200">
           Zurück zum Dashboard
         </Link>
+      </div>
+    </ScanLayout>
+  );
+}
+
+function UnitCard({ data }: { data: UnitCardData }) {
+  return (
+    <ScanLayout title={data.layoutTitle}>
+      <div className="space-y-4">
+        <div className="flex gap-4 items-stretch">
+          <div className="flex-1 min-w-0 flex flex-col">
+            <p className="text-xs uppercase tracking-wider" style={{ color: '#6b7280' }}>{data.headerLabel}</p>
+            <h1 className="text-2xl font-bold leading-tight" style={{ color: '#0f172a' }}>{data.name}</h1>
+            {data.subtitle && <p className="text-sm mt-1" style={{ color: '#4b5563' }}>{data.subtitle}</p>}
+            <EditableCode kind={data.kind} unitId={data.unitId} initialCode={data.code} />
+            <div className="mt-auto pt-3">
+              <StatusBadge status={data.statusKey} />
+            </div>
+          </div>
+          {data.heroImage && (
+            <a
+              href={data.heroImage}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-32 flex-shrink-0 block transition-transform active:scale-95"
+              aria-label="Bild vergrößern"
+              title="Bild vergrößern"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={data.heroImage} alt={data.name} className="w-full h-full object-contain bg-gray-50 rounded-xl" />
+            </a>
+          )}
+        </div>
+
+        <DataGrid items={data.dataGrid} />
+
+        {data.note && <Note text={data.note} />}
+
+        <BookingsBlock bookings={data.bookings} />
+
+        {data.actions.length > 0 && (
+          <div className="flex flex-wrap gap-2 pt-3 border-t">
+            {data.actions.map((a) => (
+              <Link
+                key={a.href}
+                href={a.href}
+                className={`px-3 py-2 text-sm font-semibold rounded ${
+                  a.primary
+                    ? 'bg-cyan-600 text-white hover:bg-cyan-700'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                {a.label}
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
     </ScanLayout>
   );
@@ -307,7 +323,7 @@ function StatusBadge({ status }: { status: string }) {
     retired: { bg: '#f3f4f6', fg: '#374151' },
   };
   const cfg = colorMap[status] ?? { bg: '#f3f4f6', fg: '#374151' };
-  const label = STATUS_LABELS[status]?.label ?? status;
+  const label = STATUS_LABELS[status] ?? status;
   return (
     <span
       className="inline-flex px-3 py-1 rounded-full text-sm font-semibold"
@@ -329,7 +345,7 @@ function Note({ text }: { text: string }) {
   );
 }
 
-function DataGrid({ items }: { items: { label: string; value: string; highlight?: boolean }[] }) {
+function DataGrid({ items }: { items: DataGridItem[] }) {
   return (
     <div className="grid grid-cols-2 gap-2">
       {items.map((item, i) => (
@@ -351,15 +367,6 @@ function DataGrid({ items }: { items: { label: string; value: string; highlight?
       ))}
     </div>
   );
-}
-
-interface BookingRow {
-  id: string;
-  customer_name: string | null;
-  rental_from: string;
-  rental_to: string;
-  status: string;
-  delivery_mode: string;
 }
 
 function BookingsBlock({ bookings }: { bookings: BookingRow[] }) {
