@@ -4,6 +4,12 @@ import { notFound } from 'next/navigation';
 import ScanBackLink from './ScanBackLink';
 import EditCameraEntry from './EditCameraEntry';
 import EditAccessoryEntry from './EditAccessoryEntry';
+import DeleteUnitButton from './DeleteUnitButton';
+
+// Niemals cachen — sonst zeigt die Page beim Aufruf einer alten URL noch
+// das Pre-Rename-Ergebnis ("Code unbekannt"), obwohl der Code zwischen-
+// zeitlich (z.B. nach erneutem Anlegen mit gleichem Wert) wieder existiert.
+export const dynamic = 'force-dynamic';
 
 /**
  * Detail-Karte nach QR-Scan. Sucht den Code in product_units (Seriennummer)
@@ -304,6 +310,9 @@ function UnitCard({ data }: { data: UnitCardData }) {
                 initialNotes={data.note ?? ''}
                 initialCode={data.code ?? ''}
               />
+            )}
+            {(data.kind === 'camera' || data.kind === 'accessory') && (
+              <DeleteUnitButton kind={data.kind} unitId={data.unitId} code={data.code ?? ''} />
             )}
           </div>
         )}
