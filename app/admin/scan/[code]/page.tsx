@@ -1,6 +1,7 @@
 import { createServiceClient } from '@/lib/supabase';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import ScanBackLink from './ScanBackLink';
 
 /**
  * Detail-Karte nach QR-Scan. Sucht den Code in product_units (Seriennummer)
@@ -259,16 +260,7 @@ function ScanLayout({ title, children }: { title: string; children: React.ReactN
       }}
     >
       <div className="max-w-md mx-auto mb-3">
-        <Link
-          href="/admin"
-          className="inline-flex items-center gap-1 text-sm font-semibold py-2"
-          style={{ color: '#0891b2' }}
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-          </svg>
-          Zur&uuml;ck zum Dashboard
-        </Link>
+        <ScanBackLink />
       </div>
       <div
         className="max-w-md mx-auto rounded-2xl border p-5"
