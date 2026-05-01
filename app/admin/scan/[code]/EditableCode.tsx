@@ -11,18 +11,25 @@ interface Props {
   initialCode: string;
 }
 
-const ENDPOINTS: Record<Kind, { url: string; field: string; label: string; placeholder: string }> = {
+const ENDPOINTS: Record<Kind, { url: string; field: string; label: string; placeholder: string; codeIsUrl: boolean }> = {
   camera: {
     url: '/api/admin/product-units',
     field: 'label',
     label: 'Bezeichnung bearbeiten',
     placeholder: '+ Bezeichnung hinzufügen',
+    // Bei Kameras steht die Seriennummer in der URL — Label-Aenderung
+    // veraendert die URL nicht, deshalb reicht ein Refresh.
+    codeIsUrl: false,
   },
   accessory: {
     url: '/api/admin/accessory-units',
     field: 'exemplar_code',
     label: 'Code bearbeiten',
     placeholder: '+ Code hinzufügen',
+    // Bei Zubehoer ist der exemplar_code Teil der URL (/admin/scan/<code>).
+    // Nach dem Umbenennen muss zur neuen URL navigiert werden, sonst lauft
+    // der Refresh auf die alte URL und zeigt "Code unbekannt".
+    codeIsUrl: true,
   },
 };
 
@@ -83,7 +90,13 @@ export default function EditableCode({ kind, unitId, initialCode }: Props) {
       }
       setEditing(false);
       setSaving(false);
-      router.refresh();
+      // Wenn der gespeicherte Code Teil der URL ist (Zubehoer), zur neuen
+      // URL navigieren — sonst zeigt der Refresh "Code unbekannt".
+      if (cfg.codeIsUrl) {
+        router.replace(`/admin/scan/${encodeURIComponent(trimmed)}`);
+      } else {
+        router.refresh();
+      }
     } catch {
       setError('Netzwerkfehler.');
       setSaving(false);
