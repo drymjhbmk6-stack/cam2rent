@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import ScanBackLink from './ScanBackLink';
 import EditableCode from './EditableCode';
+import EditCameraEntry from './EditCameraEntry';
 
 /**
  * Detail-Karte nach QR-Scan. Sucht den Code in product_units (Seriennummer)
@@ -277,7 +278,7 @@ function UnitCard({ data }: { data: UnitCardData }) {
 
         <BookingsBlock bookings={data.bookings} />
 
-        {data.actions.length > 0 && (
+        {(data.actions.length > 0 || data.kind === 'camera') && (
           <div className="flex flex-wrap gap-2 pt-3 border-t">
             {data.actions.map((a) => (
               <Link
@@ -292,6 +293,13 @@ function UnitCard({ data }: { data: UnitCardData }) {
                 {a.label}
               </Link>
             ))}
+            {data.kind === 'camera' && (
+              <EditCameraEntry
+                unitId={data.unitId}
+                initialStatus={(data.statusKey as 'available' | 'rented' | 'maintenance' | 'retired') ?? 'available'}
+                initialNotes={data.note ?? ''}
+              />
+            )}
           </div>
         )}
       </div>
