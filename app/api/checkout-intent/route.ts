@@ -4,6 +4,7 @@ import { createServiceClient } from '@/lib/supabase';
 import { calcPriceFromTable, type AdminProduct } from '@/lib/price-config';
 import { getStripe, buildPaymentDescription } from '@/lib/stripe';
 import { getCheckoutConfig } from '@/lib/checkout-config';
+import { generateBookingId } from '@/lib/booking-id';
 
 const checkoutLimiter = rateLimit({ maxAttempts: 10, windowMs: 60 * 1000 }); // 10 pro Min
 
@@ -185,7 +186,24 @@ export async function POST(req: NextRequest) {
       rentalTo?: string;
     }> | undefined) ?? [];
     const firstItem = cartItems[0];
+
+    // Buchungsnummer vorab generieren — damit der Kunde sie schon in PayPal
+    // sieht ("Buchung BK-XXX-001 · ..."). confirm-cart nimmt sie aus metadata
+    // statt eine neue zu erzeugen. Theoretische Race (zwei Checkouts in
+    // derselben Woche zur selben Zeit) wird in confirm-cart per Fallback auf
+    // generateBookingId() abgefangen, falls der Insert mit 23505 scheitert.
+    let preBookingId: string | null = null;
+    try {
+      preBookingId = await generateBookingId();
+    } catch (idErr) {
+      console.warn('[checkout-intent] generateBookingId failed, fallback to no-id description:', idErr);
+    }
+    if (preBookingId) {
+      metadata.pre_booking_id = preBookingId;
+    }
+
     const description = buildPaymentDescription({
+      bookingId: preBookingId,
       productName: firstItem?.productName,
       rentalFrom: firstItem?.rentalFrom,
       rentalTo: firstItem?.rentalTo,
@@ -236,6 +254,10 @@ export async function POST(req: NextRequest) {
         // Flag wird in confirm-cart in die Buchung geschrieben
         if (verificationRequired) {
           ctxToStore.verificationRequired = true;
+        }
+        // Vorab-Buchungsnummer durchreichen, damit confirm-cart sie nutzt
+        if (preBookingId) {
+          ctxToStore.preBookingId = preBookingId;
         }
         await supabase
           .from('admin_settings')

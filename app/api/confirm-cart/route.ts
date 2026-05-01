@@ -299,6 +299,9 @@ export async function POST(req: NextRequest) {
     let r_earlyServiceConsentAt: string | null = null;
     let r_earlyServiceConsentIp: string | null = null;
     let r_verificationRequired = false;
+    // Vorab-generierte Buchungsnummer aus checkout-intent
+    let r_preBookingId: string | null =
+      (typeof intent.metadata?.pre_booking_id === 'string' && intent.metadata.pre_booking_id) || null;
 
     if (!r_items?.length) {
       const { data: ctxRow } = await supabase
@@ -328,6 +331,9 @@ export async function POST(req: NextRequest) {
           if (ctx.earlyServiceConsentAt) r_earlyServiceConsentAt = ctx.earlyServiceConsentAt;
           if (ctx.earlyServiceConsentIp) r_earlyServiceConsentIp = ctx.earlyServiceConsentIp;
           if (ctx.verificationRequired === true) r_verificationRequired = true;
+          if (typeof ctx.preBookingId === 'string' && ctx.preBookingId && !r_preBookingId) {
+            r_preBookingId = ctx.preBookingId;
+          }
         } catch {
           // ignore
         }
@@ -452,7 +458,15 @@ export async function POST(req: NextRequest) {
       const groupShipping = groupShippingResult.price;
       const groupTotal = groupSubtotal - groupDiscount - groupDurationDiscount - groupLoyaltyDiscount + groupShipping;
 
-      const bookingId = await generateBookingId();
+      // Erste Gruppe nutzt die in checkout-intent vorab generierte Nummer
+      // (steht so schon in der PayPal-Quittung). Weitere Gruppen + Fallback
+      // bei Conflict generieren neu.
+      let bookingId: string;
+      if (gi === 0 && r_preBookingId) {
+        bookingId = r_preBookingId;
+      } else {
+        bookingId = await generateBookingId();
+      }
       bookingIds.push(bookingId);
 
       const productName = groupItems.length === 1
@@ -486,8 +500,8 @@ export async function POST(req: NextRequest) {
       const piId = gi === 0 ? payment_intent_id : `${payment_intent_id}_g${gi + 1}`;
 
       const testMode = await isTestMode();
-      const { error } = await supabase.from('bookings').insert({
-        id: bookingId,
+      const buildInsertPayload = (id: string) => ({
+        id,
         payment_intent_id: piId,
         is_test: testMode,
         product_id: firstItem.productId,
@@ -527,6 +541,18 @@ export async function POST(req: NextRequest) {
         // Migration `supabase-verification-deferred.sql` unveraendert.
         ...(r_verificationRequired ? { verification_required: true } : {}),
       });
+
+      let { error } = await supabase.from('bookings').insert(buildInsertPayload(bookingId));
+      // Race-Fallback: vorab-generierte ID kollidiert mit anderer Buchung
+      // derselben Woche → neue ID erzeugen und nochmal versuchen.
+      if (error?.code === '23505' && gi === 0 && r_preBookingId === bookingId) {
+        console.warn(`[confirm-cart] Pre-booking-id ${bookingId} kollidiert, generiere neu.`);
+        const fresh = await generateBookingId();
+        bookingId = fresh;
+        bookingIds[gi] = fresh;
+        const retry = await supabase.from('bookings').insert(buildInsertPayload(fresh));
+        error = retry.error;
+      }
 
       if (error) {
         console.error(`Error saving booking ${bookingId}:`, error);
