@@ -94,21 +94,32 @@ export default async function ScanLandingPage({ params }: PageProps) {
 
     return (
       <ScanLayout title="Kamera">
-        {heroImage && (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img src={heroImage} alt={product?.name ?? ''} className="w-full aspect-[4/3] object-contain bg-gray-50 rounded-xl mb-4" />
-        )}
-
         <div className="space-y-4">
-          <div>
-            <p className="text-xs uppercase tracking-wider" style={{ color: '#6b7280' }}>{product?.brand ?? 'Marke'}{product?.category ? ` · ${product.category}` : ''}</p>
-            <h1 className="text-2xl font-bold leading-tight" style={{ color: '#0f172a' }}>{product?.name ?? productUnit.product_id}</h1>
-            {product?.model && <p className="text-sm mt-1" style={{ color: '#4b5563' }}>{product.model}</p>}
-            <p className="text-base font-mono mt-2 break-all" style={{ color: '#0f172a' }}>{productUnit.serial_number}</p>
-            {productUnit.label && <p className="text-sm mt-1" style={{ color: '#4b5563' }}>{productUnit.label}</p>}
+          <div className="flex gap-4 items-stretch">
+            <div className="flex-1 min-w-0 flex flex-col">
+              <p className="text-xs uppercase tracking-wider" style={{ color: '#6b7280' }}>{product?.brand ?? 'Marke'}{product?.category ? ` · ${product.category}` : ''}</p>
+              <h1 className="text-2xl font-bold leading-tight" style={{ color: '#0f172a' }}>{product?.name ?? productUnit.product_id}</h1>
+              {product?.model && <p className="text-sm mt-1" style={{ color: '#4b5563' }}>{product.model}</p>}
+              <p className="text-base font-mono mt-2 break-all" style={{ color: '#0f172a' }}>{productUnit.serial_number}</p>
+              {productUnit.label && <p className="text-sm mt-1" style={{ color: '#4b5563' }}>{productUnit.label}</p>}
+              <div className="mt-auto pt-3">
+                <StatusBadge status={productUnit.status} />
+              </div>
+            </div>
+            {heroImage && (
+              <a
+                href={heroImage}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-32 flex-shrink-0 block transition-transform active:scale-95"
+                aria-label="Bild vergrößern"
+                title="Bild vergrößern"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={heroImage} alt={product?.name ?? ''} className="w-full h-full object-contain bg-gray-50 rounded-xl" />
+              </a>
+            )}
           </div>
-
-          <StatusBadge status={productUnit.status} />
 
           {/* Stammdaten-Grid: Kauf, Wert, Kaution */}
           <DataGrid items={[
@@ -185,20 +196,31 @@ export default async function ScanLandingPage({ params }: PageProps) {
 
     return (
       <ScanLayout title="Zubehör">
-        {heroImage && (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img src={heroImage} alt={accessory?.name ?? ''} className="w-full aspect-[4/3] object-contain bg-gray-50 rounded-xl mb-4" />
-        )}
-
         <div className="space-y-4">
-          <div>
-            <p className="text-xs uppercase tracking-wider" style={{ color: '#6b7280' }}>{accessory?.category ?? 'Zubehör'}</p>
-            <h1 className="text-2xl font-bold leading-tight" style={{ color: '#0f172a' }}>{accessory?.name ?? accUnit.accessory_id}</h1>
-            <p className="text-base font-mono mt-2 break-all" style={{ color: '#0f172a' }}>{accUnit.exemplar_code}</p>
-            {accessory?.description && <p className="text-sm mt-2" style={{ color: '#4b5563' }}>{accessory.description}</p>}
+          <div className="flex gap-4 items-stretch">
+            <div className="flex-1 min-w-0 flex flex-col">
+              <p className="text-xs uppercase tracking-wider" style={{ color: '#6b7280' }}>{accessory?.category ?? 'Zubehör'}</p>
+              <h1 className="text-2xl font-bold leading-tight" style={{ color: '#0f172a' }}>{accessory?.name ?? accUnit.accessory_id}</h1>
+              <p className="text-base font-mono mt-2 break-all" style={{ color: '#0f172a' }}>{accUnit.exemplar_code}</p>
+              {accessory?.description && <p className="text-sm mt-2" style={{ color: '#4b5563' }}>{accessory.description}</p>}
+              <div className="mt-auto pt-3">
+                <StatusBadge status={accUnit.status} />
+              </div>
+            </div>
+            {heroImage && (
+              <a
+                href={heroImage}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-32 flex-shrink-0 block transition-transform active:scale-95"
+                aria-label="Bild vergrößern"
+                title="Bild vergrößern"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={heroImage} alt={accessory?.name ?? ''} className="w-full h-full object-contain bg-gray-50 rounded-xl" />
+              </a>
+            )}
           </div>
-
-          <StatusBadge status={accUnit.status} />
 
           <DataGrid items={[
             { label: 'Kaufdatum', value: fmtDate(accUnit.purchased_at ?? asset?.purchase_date ?? null) },
