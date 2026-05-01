@@ -21,6 +21,7 @@ interface ListItem {
   status: string;
   href: string;
   context?: string; // z.B. Marke (GoPro) oder Kategorie (Akku)
+  extraSearch?: string; // zusaetzliche Suchbegriffe (z.B. Seriennummer wenn Code = Bezeichnung)
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -51,13 +52,20 @@ export default async function InventarPage() {
 
   for (const u of productUnitsRes.data ?? []) {
     const product = productMap[u.product_id];
+    // Bezeichnung (label) hat Vorrang — Fallback auf Seriennummer wenn noch keine
+    // gepflegt ist, damit die Liste keine leeren Codes enthaelt.
+    const displayCode = (u.label && u.label.trim()) || u.serial_number;
+    const hasLabel = displayCode !== u.serial_number;
     items.push({
       type: 'camera',
-      code: u.serial_number,
+      code: displayCode,
       name: product?.name ?? u.product_id,
       status: u.status,
+      // QR-Code zeigt immer auf die Seriennummer (das ist der gescannte Wert)
       href: `/admin/scan/${encodeURIComponent(u.serial_number)}`,
       context: product?.brand ?? undefined,
+      // Damit Suche nach Seriennummer auch trifft, selbst wenn eine Bezeichnung sichtbar ist
+      extraSearch: hasLabel ? u.serial_number : undefined,
     });
   }
 

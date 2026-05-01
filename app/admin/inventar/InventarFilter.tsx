@@ -10,6 +10,7 @@ interface ListItem {
   status: string;
   href: string;
   context?: string;
+  extraSearch?: string;
 }
 
 interface Props {
@@ -41,6 +42,7 @@ export default function InventarFilter({ items, statusLabels }: Props) {
         i.code.toLowerCase().includes(q)
         || i.name.toLowerCase().includes(q)
         || (i.context?.toLowerCase().includes(q) ?? false)
+        || (i.extraSearch?.toLowerCase().includes(q) ?? false)
       );
     });
   }, [items, query, typeFilter, statusFilter]);
