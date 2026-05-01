@@ -39,21 +39,23 @@ export default async function KameraQrCodesPage({
     .order('serial_number', { ascending: true });
   const units = (unitsRaw ?? []) as Unit[];
 
-  // QR-Inhalt = vollstaendige Scan-URL. Beim Scannen mit der Smartphone-Kamera
-  // oeffnet der Browser automatisch /admin/scan/<seriennr> und zeigt die Detail-
-  // ansicht (Modell, Status, aktive Buchung). Der bestehende SerialScanner unter
-  // /admin/buchungen/neu erkennt URLs auch — er extrahiert den letzten Pfad-
-  // Segment, sodass nur die Seriennummer ins Eingabefeld faellt.
+  // QR-Inhalt = vollstaendige Scan-URL ueber die Bezeichnung (label).
+  // Beim Scannen oeffnet der Browser /admin/scan/<bezeichnung> und zeigt die
+  // Detail-Ansicht. Wenn label nicht gesetzt (Altbestand), faellt's auf die
+  // Seriennummer zurueck — die scan-Page akzeptiert beide.
   const siteUrl = (await getSiteUrl()).replace(/\/+$/, '');
   const qrItems = await Promise.all(
-    units.map(async (u) => ({
-      ...u,
-      qr: await QRCode.toDataURL(`${siteUrl}/admin/scan/${encodeURIComponent(u.serial_number)}`, {
-        margin: 1,
-        width: 360,
-        errorCorrectionLevel: 'M',
-      }),
-    })),
+    units.map(async (u) => {
+      const code = (u.label && u.label.trim()) ? u.label.trim() : u.serial_number;
+      return {
+        ...u,
+        qr: await QRCode.toDataURL(`${siteUrl}/admin/scan/${encodeURIComponent(code)}`, {
+          margin: 1,
+          width: 360,
+          errorCorrectionLevel: 'M',
+        }),
+      };
+    }),
   );
 
   const productLabel = product?.name ?? id;

@@ -49,10 +49,25 @@ export default function AdminKameraEditorPage() {
   // Seriennummern-Verwaltung
   const [units, setUnits] = useState<ProductUnit[]>([]);
   const [unitsLoading, setUnitsLoading] = useState(true);
-  const [newUnit, setNewUnit] = useState({ serial_number: '', label: '', notes: '', purchased_at: '' });
-  const [addingUnit, setAddingUnit] = useState(false);
-  const [editingUnit, setEditingUnit] = useState<string | null>(null);
-  const [editUnitData, setEditUnitData] = useState<Partial<ProductUnit>>({});
+
+  // Anlegen-Modal (Pflicht: Bezeichnung, Seriennummer, Kaufdatum, Kaufpreis)
+  const [addOpen, setAddOpen] = useState(false);
+  const [addForm, setAddForm] = useState({
+    label: '',
+    serial_number: '',
+    purchased_at: '',
+    purchase_price: '',
+    notes: '',
+  });
+  const [addBusy, setAddBusy] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
+
+  // Bearbeiten-Modal (nur Status + Notizen aenderbar)
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editStatus, setEditStatus] = useState<ProductUnit['status']>('available');
+  const [editNotes, setEditNotes] = useState('');
+  const [editBusy, setEditBusy] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
 
   useEffect(() => {
     // Load kaution tiers
@@ -123,46 +138,101 @@ export default function AdminKameraEditorPage() {
     }
   }, [activeUnitCount, product]);
 
+  async function reloadAssetsMap() {
+    try {
+      const r = await fetch('/api/admin/assets?include_test=1');
+      if (!r.ok) return;
+      const data = await r.json();
+      const map: Record<string, { id: string; purchase_price: number; current_value: number; purchase_date: string }> = {};
+      for (const a of data.assets ?? []) {
+        if (a.unit_id) {
+          map[a.unit_id] = {
+            id: a.id,
+            purchase_price: Number(a.purchase_price),
+            current_value: Number(a.current_value),
+            purchase_date: a.purchase_date,
+          };
+        }
+      }
+      setUnitAssets(map);
+    } catch {
+      // assets-Tabelle evtl. noch nicht migriert — egal
+    }
+  }
+
   async function handleAddUnit() {
-    if (!newUnit.serial_number.trim()) return;
-    setAddingUnit(true);
+    setAddError(null);
+    const label = addForm.label.trim();
+    const serial = addForm.serial_number.trim();
+    const purchaseDate = addForm.purchased_at;
+    const priceNum = Number(String(addForm.purchase_price).replace(',', '.'));
+
+    if (!label) { setAddError('Bezeichnung ist Pflicht.'); return; }
+    if (!serial) { setAddError('Seriennummer ist Pflicht.'); return; }
+    if (!purchaseDate) { setAddError('Kaufdatum ist Pflicht.'); return; }
+    if (!Number.isFinite(priceNum) || priceNum <= 0) {
+      setAddError('Kaufpreis muss eine positive Zahl sein.');
+      return;
+    }
+
+    setAddBusy(true);
     try {
       const res = await fetch('/api/admin/product-units', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ product_id: id, ...newUnit }),
+        body: JSON.stringify({
+          product_id: id,
+          label,
+          serial_number: serial,
+          purchased_at: purchaseDate,
+          purchase_price: priceNum,
+          notes: addForm.notes.trim() || undefined,
+        }),
       });
       if (!res.ok) {
-        const err = await res.json();
-        alert(err.error || 'Fehler beim Hinzufügen.');
+        const err = await res.json().catch(() => ({}));
+        setAddError(err.error || 'Fehler beim Anlegen.');
         return;
       }
-      setNewUnit({ serial_number: '', label: '', notes: '', purchased_at: '' });
+      setAddForm({ label: '', serial_number: '', purchased_at: '', purchase_price: '', notes: '' });
+      setAddOpen(false);
       await loadUnits();
+      await reloadAssetsMap();
     } catch {
-      alert('Fehler beim Hinzufügen.');
+      setAddError('Netzwerk-Fehler. Bitte erneut versuchen.');
     } finally {
-      setAddingUnit(false);
+      setAddBusy(false);
     }
   }
 
-  async function handleUpdateUnit(unitId: string) {
+  function openEditModal(unit: ProductUnit) {
+    setEditId(unit.id);
+    setEditStatus(unit.status);
+    setEditNotes(unit.notes ?? '');
+    setEditError(null);
+  }
+
+  async function handleSaveEdit() {
+    if (!editId) return;
+    setEditError(null);
+    setEditBusy(true);
     try {
       const res = await fetch('/api/admin/product-units', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: unitId, ...editUnitData }),
+        body: JSON.stringify({ id: editId, status: editStatus, notes: editNotes }),
       });
       if (!res.ok) {
-        const err = await res.json();
-        alert(err.error || 'Fehler beim Speichern.');
+        const err = await res.json().catch(() => ({}));
+        setEditError(err.error || 'Fehler beim Speichern.');
         return;
       }
-      setEditingUnit(null);
-      setEditUnitData({});
+      setEditId(null);
       await loadUnits();
     } catch {
-      alert('Fehler beim Speichern.');
+      setEditError('Netzwerk-Fehler.');
+    } finally {
+      setEditBusy(false);
     }
   }
 
@@ -581,10 +651,16 @@ export default function AdminKameraEditorPage() {
               </div>
             </details>
 
-            {/* Preise (Tag 1-30 + 31+ Tage) */}
-            <div className="bg-white rounded-2xl border border-brand-border p-6">
-              <h2 className="font-heading font-bold text-sm text-brand-black mb-1">Preise</h2>
-              <p className="text-xs font-body text-brand-muted mb-5">Tag 1–30 einzeln festlegen, ab Tag 31 wird der Zusatztag-Preis verwendet (Gesamtpreis in €).</p>
+            {/* Preise (aufklappbar) */}
+            <details open className="bg-white rounded-2xl border border-brand-border group/preise">
+              <summary className="cursor-pointer select-none px-6 pt-6 pb-4 list-none flex items-center justify-between">
+                <div>
+                  <h2 className="font-heading font-bold text-sm text-brand-black">Preise</h2>
+                  <p className="text-xs font-body text-brand-muted mt-0.5">Tag 1–30 einzeln festlegen, ab Tag 31 wird der Zusatztag-Preis verwendet (Gesamtpreis in €).</p>
+                </div>
+                <span className="text-brand-muted text-lg leading-none transition-transform group-open/preise:rotate-180">▾</span>
+              </summary>
+              <div className="px-6 pb-6">
 
               <div className="grid grid-cols-5 sm:grid-cols-6 gap-2">
                 {Array.from({ length: 30 }, (_, i) => {
@@ -630,22 +706,30 @@ export default function AdminKameraEditorPage() {
                   </div>
                 </div>
               </div>
-            </div>
+              </div>
+            </details>
 
             {/* Seriennummern / Kameras */}
             <div className="bg-white rounded-2xl border border-brand-border p-6">
-              <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
                 <h2 className="font-heading font-bold text-sm text-brand-black">Kameras / Seriennummern</h2>
                 <div className="flex items-center gap-3">
                   <span className="text-xs font-body text-brand-muted">
                     {activeUnitCount} aktiv{units.filter((u) => u.status === 'retired').length > 0 && `, ${units.filter((u) => u.status === 'retired').length} ausgemustert`}
                   </span>
+                  <button
+                    type="button"
+                    onClick={() => { setAddOpen(true); setAddError(null); }}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 text-[11px] font-heading font-semibold bg-accent-blue text-white rounded hover:bg-blue-600 transition-colors"
+                  >
+                    + Neue Kamera anlegen
+                  </button>
                   {activeUnitCount > 0 && (
                     <a
                       href={`/admin/preise/kameras/${id}/qr-codes`}
                       target="_blank"
                       rel="noopener"
-                      className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-heading font-semibold bg-cyan-600 text-white rounded hover:bg-cyan-700 transition-colors"
+                      className="inline-flex items-center gap-1 px-3 py-1.5 text-[11px] font-heading font-semibold bg-cyan-600 text-white rounded hover:bg-cyan-700 transition-colors"
                       title="QR-Code-Etiketten zum Aufkleben drucken"
                     >
                       QR-Codes drucken
@@ -657,141 +741,56 @@ export default function AdminKameraEditorPage() {
 
               {unitsLoading ? (
                 <p className="text-sm text-brand-muted py-4 text-center">Lade Seriennummern…</p>
+              ) : units.length === 0 ? (
+                <p className="text-sm text-brand-muted py-6 text-center italic">Noch keine Kamera angelegt. Klick auf <span className="font-semibold">&bdquo;+ Neue Kamera anlegen&ldquo;</span> oben rechts.</p>
               ) : (
-                <>
-                  {/* Bestehende Units */}
-                  {units.length > 0 && (
-                    <div className="overflow-x-auto mb-4">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b border-brand-border">
-                            <th className="text-left text-xs font-heading font-semibold text-brand-muted py-2 px-2">Seriennummer</th>
-                            <th className="text-left text-xs font-heading font-semibold text-brand-muted py-2 px-2">Label</th>
-                            <th className="text-left text-xs font-heading font-semibold text-brand-muted py-2 px-2">Status</th>
-                            <th className="text-left text-xs font-heading font-semibold text-brand-muted py-2 px-2">Kaufdatum</th>
-                            <th className="text-left text-xs font-heading font-semibold text-brand-muted py-2 px-2">Anlage (Zeitwert)</th>
-                            <th className="text-left text-xs font-heading font-semibold text-brand-muted py-2 px-2">Notizen</th>
-                            <th className="text-right text-xs font-heading font-semibold text-brand-muted py-2 px-2">Aktionen</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {units.map((unit) => (
-                            <tr key={unit.id} className="border-b border-brand-border/50 hover:bg-brand-bg transition-colors">
-                              {editingUnit === unit.id ? (
-                                <>
-                                  <td className="py-2 px-2">
-                                    <input type="text" value={editUnitData.serial_number ?? unit.serial_number}
-                                      onChange={(e) => setEditUnitData((d) => ({ ...d, serial_number: e.target.value }))}
-                                      className="w-full px-2 py-1 border border-brand-border rounded-lg text-xs font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
-                                  </td>
-                                  <td className="py-2 px-2">
-                                    <input type="text" value={editUnitData.label ?? unit.label ?? ''}
-                                      onChange={(e) => setEditUnitData((d) => ({ ...d, label: e.target.value }))}
-                                      className="w-full px-2 py-1 border border-brand-border rounded-lg text-xs font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
-                                  </td>
-                                  <td className="py-2 px-2">
-                                    <select value={editUnitData.status ?? unit.status}
-                                      onChange={(e) => setEditUnitData((d) => ({ ...d, status: e.target.value as ProductUnit['status'] }))}
-                                      className="px-2 py-1 border border-brand-border rounded-lg text-xs font-body focus:outline-none focus:ring-2 focus:ring-accent-blue">
-                                      <option value="available">Verfügbar</option>
-                                      <option value="rented">Vermietet</option>
-                                      <option value="maintenance">Wartung</option>
-                                      <option value="retired">Ausgemustert</option>
-                                    </select>
-                                  </td>
-                                  <td className="py-2 px-2">
-                                    <input type="date" value={editUnitData.purchased_at ?? unit.purchased_at ?? ''}
-                                      onChange={(e) => setEditUnitData((d) => ({ ...d, purchased_at: e.target.value }))}
-                                      className="px-2 py-1 border border-brand-border rounded-lg text-xs font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
-                                  </td>
-                                  <td className="py-2 px-2 text-xs text-brand-muted italic">–</td>
-                                  <td className="py-2 px-2">
-                                    <input type="text" value={editUnitData.notes ?? unit.notes ?? ''}
-                                      onChange={(e) => setEditUnitData((d) => ({ ...d, notes: e.target.value }))}
-                                      className="w-full px-2 py-1 border border-brand-border rounded-lg text-xs font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
-                                  </td>
-                                  <td className="py-2 px-2 text-right whitespace-nowrap">
-                                    <button onClick={() => handleUpdateUnit(unit.id)}
-                                      className="text-xs text-green-600 hover:text-green-700 font-semibold mr-2">Speichern</button>
-                                    <button onClick={() => { setEditingUnit(null); setEditUnitData({}); }}
-                                      className="text-xs text-brand-muted hover:text-brand-black">Abbrechen</button>
-                                  </td>
-                                </>
-                              ) : (
-                                <>
-                                  <td className="py-2 px-2 font-mono text-xs font-semibold text-brand-black">{unit.serial_number}</td>
-                                  <td className="py-2 px-2 text-xs text-brand-muted">{unit.label || '–'}</td>
-                                  <td className="py-2 px-2">
-                                    <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold ${UNIT_STATUS_CONFIG[unit.status]?.color ?? ''}`}>
-                                      {UNIT_STATUS_CONFIG[unit.status]?.label ?? unit.status}
-                                    </span>
-                                  </td>
-                                  <td className="py-2 px-2 text-xs text-brand-muted">
-                                    {unit.purchased_at ? new Date(unit.purchased_at).toLocaleDateString('de-DE') : '–'}
-                                  </td>
-                                  <td className="py-2 px-2 text-xs">
-                                    {unitAssets[unit.id] ? (
-                                      <a href={`/admin/anlagen/${unitAssets[unit.id].id}`} className="text-accent-blue hover:underline font-semibold">
-                                        {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(unitAssets[unit.id].current_value)}
-                                      </a>
-                                    ) : (
-                                      <a href="/admin/einkauf/upload" className="text-brand-muted hover:text-accent-blue underline-offset-2 hover:underline italic">noch nicht erfasst</a>
-                                    )}
-                                  </td>
-                                  <td className="py-2 px-2 text-xs text-brand-muted max-w-[150px] truncate">{unit.notes || '–'}</td>
-                                  <td className="py-2 px-2 text-right whitespace-nowrap">
-                                    <button onClick={() => { setEditingUnit(unit.id); setEditUnitData({}); }}
-                                      className="text-xs text-accent-blue hover:text-blue-700 font-semibold mr-2">Bearbeiten</button>
-                                    <button onClick={() => handleDeleteUnit(unit)}
-                                      className="text-xs text-red-500 hover:text-red-700 font-semibold">Löschen</button>
-                                  </td>
-                                </>
-                              )}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-
-                  {/* Neue Unit hinzufügen */}
-                  <div className="bg-brand-bg rounded-xl border border-brand-border/50 p-4">
-                    <p className="text-xs font-heading font-semibold text-brand-black mb-3">+ Neue Kamera hinzufügen</p>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
-                      <div>
-                        <label className="block text-[10px] font-heading font-semibold text-brand-muted mb-1">Seriennummer *</label>
-                        <input type="text" value={newUnit.serial_number}
-                          onChange={(e) => setNewUnit((u) => ({ ...u, serial_number: e.target.value }))}
-                          placeholder="z.B. HERO13-ABC123"
-                          className="w-full px-2 py-1.5 border border-brand-border rounded-lg text-xs font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-heading font-semibold text-brand-muted mb-1">Label (optional)</label>
-                        <input type="text" value={newUnit.label}
-                          onChange={(e) => setNewUnit((u) => ({ ...u, label: e.target.value }))}
-                          placeholder="z.B. GoPro #1"
-                          className="w-full px-2 py-1.5 border border-brand-border rounded-lg text-xs font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-heading font-semibold text-brand-muted mb-1">Kaufdatum</label>
-                        <input type="date" value={newUnit.purchased_at}
-                          onChange={(e) => setNewUnit((u) => ({ ...u, purchased_at: e.target.value }))}
-                          className="w-full px-2 py-1.5 border border-brand-border rounded-lg text-xs font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-heading font-semibold text-brand-muted mb-1">Notizen</label>
-                        <input type="text" value={newUnit.notes}
-                          onChange={(e) => setNewUnit((u) => ({ ...u, notes: e.target.value }))}
-                          placeholder="Zustand, Bemerkungen…"
-                          className="w-full px-2 py-1.5 border border-brand-border rounded-lg text-xs font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
-                      </div>
-                    </div>
-                    <button onClick={handleAddUnit} disabled={addingUnit || !newUnit.serial_number.trim()}
-                      className="px-4 py-2 text-xs font-heading font-semibold text-white bg-accent-blue rounded-btn hover:bg-blue-600 transition-colors disabled:opacity-40">
-                      {addingUnit ? 'Wird hinzugefügt…' : '+ Hinzufügen'}
-                    </button>
-                  </div>
-                </>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-brand-border">
+                        <th className="text-left text-xs font-heading font-semibold text-brand-muted py-2 px-2">Seriennummer</th>
+                        <th className="text-left text-xs font-heading font-semibold text-brand-muted py-2 px-2">Bezeichnung</th>
+                        <th className="text-left text-xs font-heading font-semibold text-brand-muted py-2 px-2">Status</th>
+                        <th className="text-left text-xs font-heading font-semibold text-brand-muted py-2 px-2">Kaufdatum</th>
+                        <th className="text-left text-xs font-heading font-semibold text-brand-muted py-2 px-2">Anlage (Zeitwert)</th>
+                        <th className="text-left text-xs font-heading font-semibold text-brand-muted py-2 px-2">Notizen</th>
+                        <th className="text-right text-xs font-heading font-semibold text-brand-muted py-2 px-2">Aktionen</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {units.map((unit) => (
+                        <tr key={unit.id} className="border-b border-brand-border/50 hover:bg-brand-bg transition-colors">
+                          <td className="py-2 px-2 font-mono text-xs font-semibold text-brand-black">{unit.serial_number}</td>
+                          <td className="py-2 px-2 text-xs text-brand-black">{unit.label || '–'}</td>
+                          <td className="py-2 px-2">
+                            <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold ${UNIT_STATUS_CONFIG[unit.status]?.color ?? ''}`}>
+                              {UNIT_STATUS_CONFIG[unit.status]?.label ?? unit.status}
+                            </span>
+                          </td>
+                          <td className="py-2 px-2 text-xs text-brand-muted">
+                            {unit.purchased_at ? new Date(unit.purchased_at).toLocaleDateString('de-DE') : '–'}
+                          </td>
+                          <td className="py-2 px-2 text-xs">
+                            {unitAssets[unit.id] ? (
+                              <a href={`/admin/anlagen/${unitAssets[unit.id].id}`} className="text-accent-blue hover:underline font-semibold">
+                                {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(unitAssets[unit.id].current_value)}
+                              </a>
+                            ) : (
+                              <span className="text-brand-muted italic">–</span>
+                            )}
+                          </td>
+                          <td className="py-2 px-2 text-xs text-brand-muted max-w-[150px] truncate" title={unit.notes ?? ''}>{unit.notes || '–'}</td>
+                          <td className="py-2 px-2 text-right whitespace-nowrap">
+                            <button onClick={() => openEditModal(unit)}
+                              className="text-xs text-accent-blue hover:text-blue-700 font-semibold mr-3">Bearbeiten</button>
+                            <button onClick={() => handleDeleteUnit(unit)}
+                              className="text-xs text-red-500 hover:text-red-700 font-semibold">Löschen</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
 
@@ -829,6 +828,132 @@ export default function AdminKameraEditorPage() {
 
         </div>
       </div>
+
+      {/* Modal: Neue Kamera anlegen */}
+      {addOpen && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm overflow-y-auto p-4 pt-16">
+          <div className="bg-white rounded-2xl shadow-xl border border-brand-border w-full max-w-md">
+            <div className="px-6 pt-5 pb-3 border-b border-brand-border flex items-center justify-between">
+              <h3 className="font-heading font-bold text-base text-brand-black">Neue Kamera anlegen</h3>
+              <button onClick={() => setAddOpen(false)} disabled={addBusy}
+                className="text-brand-muted hover:text-brand-black text-2xl leading-none disabled:opacity-40">×</button>
+            </div>
+            <div className="px-6 py-4 space-y-4">
+              <div>
+                <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Bezeichnung <span className="text-red-500">*</span></label>
+                <input type="text" value={addForm.label}
+                  onChange={(e) => setAddForm((f) => ({ ...f, label: e.target.value }))}
+                  placeholder="z.B. CAM-DJI-OA5-01"
+                  className="w-full px-3 py-2 border border-brand-border rounded-lg text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
+                <p className="text-[10px] text-brand-muted mt-1">Eindeutige Kennung. Wird im QR-Code-Link verwendet und kann später nicht mehr geändert werden.</p>
+              </div>
+              <div>
+                <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Seriennummer <span className="text-red-500">*</span></label>
+                <input type="text" value={addForm.serial_number}
+                  onChange={(e) => setAddForm((f) => ({ ...f, serial_number: e.target.value }))}
+                  placeholder="z.B. 82JXN3800BRXRA"
+                  className="w-full px-3 py-2 border border-brand-border rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-accent-blue" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Kaufdatum <span className="text-red-500">*</span></label>
+                  <input type="date" value={addForm.purchased_at}
+                    onChange={(e) => setAddForm((f) => ({ ...f, purchased_at: e.target.value }))}
+                    className="w-full px-3 py-2 border border-brand-border rounded-lg text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
+                </div>
+                <div>
+                  <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Kaufpreis <span className="text-red-500">*</span></label>
+                  <div className="relative">
+                    <input type="text" inputMode="decimal" value={addForm.purchase_price}
+                      onChange={(e) => setAddForm((f) => ({ ...f, purchase_price: e.target.value }))}
+                      placeholder="z.B. 449"
+                      className="w-full pr-8 pl-3 py-2 border border-brand-border rounded-lg text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-brand-muted pointer-events-none">€</span>
+                  </div>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Notizen (optional)</label>
+                <textarea value={addForm.notes} rows={2}
+                  onChange={(e) => setAddForm((f) => ({ ...f, notes: e.target.value }))}
+                  placeholder="Zustand, Bemerkungen…"
+                  className="w-full px-3 py-2 border border-brand-border rounded-lg text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue resize-y" />
+              </div>
+
+              {/* Auto-Werte (read-only Hinweis) */}
+              <div className="rounded-lg bg-brand-bg border border-brand-border/60 p-3 text-[11px] font-body text-brand-muted">
+                <p className="font-semibold text-brand-black mb-1">Automatisch erfasst:</p>
+                <ul className="space-y-0.5">
+                  <li>• <span className="text-brand-black">Wiederbeschaffungswert</span> = aktueller AfA-Zeitwert (Start = Kaufpreis, monatliche Abschreibung)</li>
+                  <li>• <span className="text-brand-black">Nutzungsdauer</span> = 36 Monate (Standard, linear)</li>
+                  <li>• <span className="text-brand-black">Anlagen-Status</span> = aktiv</li>
+                </ul>
+              </div>
+
+              {addError && (
+                <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs font-body text-red-700">
+                  {addError}
+                </div>
+              )}
+            </div>
+            <div className="px-6 py-3 border-t border-brand-border flex justify-end gap-2">
+              <button onClick={() => setAddOpen(false)} disabled={addBusy}
+                className="px-4 py-2 text-xs font-heading font-semibold text-brand-muted hover:text-brand-black transition-colors disabled:opacity-40">Abbrechen</button>
+              <button onClick={handleAddUnit} disabled={addBusy}
+                className="px-4 py-2 text-xs font-heading font-semibold bg-accent-blue text-white rounded-btn hover:bg-blue-600 transition-colors disabled:opacity-40">
+                {addBusy ? 'Wird angelegt…' : 'Kamera anlegen'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Eintrag bearbeiten (Status + Notizen) */}
+      {editId && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm overflow-y-auto p-4 pt-16">
+          <div className="bg-white rounded-2xl shadow-xl border border-brand-border w-full max-w-md">
+            <div className="px-6 pt-5 pb-3 border-b border-brand-border flex items-center justify-between">
+              <h3 className="font-heading font-bold text-base text-brand-black">Eintrag bearbeiten</h3>
+              <button onClick={() => setEditId(null)} disabled={editBusy}
+                className="text-brand-muted hover:text-brand-black text-2xl leading-none disabled:opacity-40">×</button>
+            </div>
+            <div className="px-6 py-4 space-y-4">
+              <p className="text-xs text-brand-muted">Bezeichnung, Seriennummer, Kaufdatum und Kaufpreis sind nach Anlage nicht mehr änderbar. Du kannst nur Status und Notizen ändern.</p>
+              <div>
+                <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Status</label>
+                <select value={editStatus}
+                  onChange={(e) => setEditStatus(e.target.value as ProductUnit['status'])}
+                  className="w-full px-3 py-2 border border-brand-border rounded-lg text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue">
+                  <option value="available">Verfügbar</option>
+                  <option value="rented">Vermietet</option>
+                  <option value="maintenance">Wartung</option>
+                  <option value="retired">Ausgemustert</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Notizen</label>
+                <textarea value={editNotes} rows={4}
+                  onChange={(e) => setEditNotes(e.target.value)}
+                  placeholder="Zustand, Bemerkungen…"
+                  className="w-full px-3 py-2 border border-brand-border rounded-lg text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue resize-y" />
+              </div>
+              {editError && (
+                <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs font-body text-red-700">
+                  {editError}
+                </div>
+              )}
+            </div>
+            <div className="px-6 py-3 border-t border-brand-border flex justify-end gap-2">
+              <button onClick={() => setEditId(null)} disabled={editBusy}
+                className="px-4 py-2 text-xs font-heading font-semibold text-brand-muted hover:text-brand-black transition-colors disabled:opacity-40">Abbrechen</button>
+              <button onClick={handleSaveEdit} disabled={editBusy}
+                className="px-4 py-2 text-xs font-heading font-semibold bg-accent-blue text-white rounded-btn hover:bg-blue-600 transition-colors disabled:opacity-40">
+                {editBusy ? 'Wird gespeichert…' : 'Speichern'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

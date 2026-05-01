@@ -339,10 +339,16 @@ export default function AdminNeueKameraPage() {
               </div>
             </details>
 
-            {/* Preise (Tag 1-30 + 31+ Tage) */}
-            <div className="bg-white rounded-2xl border border-brand-border p-6">
-              <h2 className="font-heading font-bold text-sm text-brand-black mb-1">Preise</h2>
-              <p className="text-xs font-body text-brand-muted mb-5">Tag 1–30 einzeln festlegen, ab Tag 31 wird der Zusatztag-Preis verwendet (Gesamtpreis in €).</p>
+            {/* Preise (aufklappbar) */}
+            <details open className="bg-white rounded-2xl border border-brand-border group/preise">
+              <summary className="cursor-pointer select-none px-6 pt-6 pb-4 list-none flex items-center justify-between">
+                <div>
+                  <h2 className="font-heading font-bold text-sm text-brand-black">Preise</h2>
+                  <p className="text-xs font-body text-brand-muted mt-0.5">Tag 1–30 einzeln festlegen, ab Tag 31 wird der Zusatztag-Preis verwendet (Gesamtpreis in €).</p>
+                </div>
+                <span className="text-brand-muted text-lg leading-none transition-transform group-open/preise:rotate-180">▾</span>
+              </summary>
+              <div className="px-6 pb-6">
 
               <div className="grid grid-cols-5 sm:grid-cols-6 gap-2">
                 {Array.from({ length: 30 }, (_, i) => {
@@ -388,7 +394,8 @@ export default function AdminNeueKameraPage() {
                   </div>
                 </div>
               </div>
-            </div>
+              </div>
+            </details>
 
             {/* Erstellen */}
             <div className="flex justify-end">

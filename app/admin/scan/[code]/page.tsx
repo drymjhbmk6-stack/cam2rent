@@ -94,12 +94,23 @@ export default async function ScanLandingPage({ params }: PageProps) {
   const supabase = createServiceClient();
   const today = new Date().toISOString().slice(0, 10);
 
-  // 1) Versuche product_units (Kameras)
-  const { data: productUnit } = await supabase
+  // 1) Versuche product_units (Kameras) — primaer ueber Bezeichnung (label),
+  //    Fallback ueber Seriennummer fuer alte QR-Aufkleber, die noch die
+  //    Seriennummer in der URL hatten.
+  let { data: productUnit } = await supabase
     .from('product_units')
     .select('id, product_id, serial_number, label, status, notes, purchased_at')
-    .eq('serial_number', decodedCode)
+    .eq('label', decodedCode)
     .maybeSingle();
+
+  if (!productUnit) {
+    const fallback = await supabase
+      .from('product_units')
+      .select('id, product_id, serial_number, label, status, notes, purchased_at')
+      .eq('serial_number', decodedCode)
+      .maybeSingle();
+    productUnit = fallback.data;
+  }
 
   if (productUnit) {
     const [configRes, assetRes, bookingsRes] = await Promise.all([
@@ -236,7 +247,11 @@ function UnitCard({ data }: { data: UnitCardData }) {
             <p className="text-xs uppercase tracking-wider" style={{ color: '#6b7280' }}>{data.headerLabel}</p>
             <h1 className="text-2xl font-bold leading-tight" style={{ color: '#0f172a' }}>{data.name}</h1>
             {data.subtitle && <p className="text-sm mt-1" style={{ color: '#4b5563' }}>{data.subtitle}</p>}
-            <EditableCode kind={data.kind} unitId={data.unitId} initialCode={data.code} />
+            {data.kind === 'accessory' ? (
+              <EditableCode kind={data.kind} unitId={data.unitId} initialCode={data.code} />
+            ) : (
+              <p className="text-sm font-mono mt-1" style={{ color: '#0f172a' }}>{data.code}</p>
+            )}
             <div className="mt-auto pt-3">
               <StatusBadge status={data.statusKey} />
             </div>
