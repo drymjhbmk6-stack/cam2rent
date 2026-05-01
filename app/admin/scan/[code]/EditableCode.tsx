@@ -93,37 +93,38 @@ export default function EditableCode({ kind, unitId, initialCode }: Props) {
   if (editing) {
     return (
       <div className="mt-2">
-        <div className="flex items-center gap-2">
-          <input
-            ref={inputRef}
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') save();
-              else if (e.key === 'Escape') cancel();
-            }}
-            disabled={saving}
-            className="flex-1 min-w-0 px-2 py-1 text-base font-mono rounded border"
-            style={{
-              borderColor: '#06b6d4',
-              background: '#ffffff',
-              color: '#0f172a',
-            }}
-          />
+        <input
+          ref={inputRef}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') save();
+            else if (e.key === 'Escape') cancel();
+          }}
+          disabled={saving}
+          placeholder={cfg.placeholder.replace('+ ', '')}
+          className="w-full px-3 py-2 text-base font-mono rounded border"
+          style={{
+            borderColor: '#06b6d4',
+            background: '#ffffff',
+            color: '#0f172a',
+          }}
+        />
+        <div className="flex items-center gap-2 mt-2">
           <button
             type="button"
             onClick={save}
             disabled={saving}
-            className="px-2 py-1 text-xs font-semibold rounded text-white"
+            className="px-4 py-2 text-sm font-semibold rounded text-white"
             style={{ background: '#06b6d4', opacity: saving ? 0.6 : 1 }}
           >
-            {saving ? '…' : 'OK'}
+            {saving ? 'Speichert…' : 'OK'}
           </button>
           <button
             type="button"
             onClick={cancel}
             disabled={saving}
-            className="px-2 py-1 text-xs font-semibold rounded"
+            className="px-4 py-2 text-sm font-semibold rounded"
             style={{ background: '#f3f4f6', color: '#374151' }}
           >
             Abbrechen
