@@ -417,9 +417,13 @@ export default function AdminKameraEditorPage() {
               </label>
             </div>
 
-            {/* Stammdaten */}
-            <div className="bg-white rounded-2xl border border-brand-border p-6">
-              <h2 className="font-heading font-bold text-sm text-brand-black mb-4">Stammdaten</h2>
+            {/* Stammdaten (aufklappbar) */}
+            <details open className="bg-white rounded-2xl border border-brand-border group/main">
+              <summary className="cursor-pointer select-none px-6 pt-6 pb-4 list-none flex items-center justify-between">
+                <h2 className="font-heading font-bold text-sm text-brand-black">Stammdaten</h2>
+                <span className="text-brand-muted text-lg leading-none transition-transform group-open/main:rotate-180">▾</span>
+              </summary>
+              <div className="px-6 pb-6">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Name</label>
@@ -511,13 +515,13 @@ export default function AdminKameraEditorPage() {
               </div>
 
               {/* Technische Daten (aufklappbar) */}
-              <details className="mt-6 group">
+              <details className="mt-6 group/td">
                 <summary className="flex items-center justify-between cursor-pointer select-none py-2 border-t border-brand-border pt-4 list-none">
                   <div>
                     <h3 className="font-heading font-bold text-sm text-brand-black">Technische Daten</h3>
                     <p className="text-xs font-body text-brand-muted mt-0.5">{(product.specs ?? []).length} Spec{(product.specs ?? []).length === 1 ? '' : 's'} · klicken zum Aufklappen</p>
                   </div>
-                  <span className="text-brand-muted text-lg leading-none transition-transform group-open:rotate-45">+</span>
+                  <span className="text-brand-muted text-lg leading-none transition-transform group-open/td:rotate-45">+</span>
                 </summary>
 
                 <div className="mt-4 space-y-2">
@@ -574,6 +578,58 @@ export default function AdminKameraEditorPage() {
                   + Spec hinzufügen
                 </button>
               </details>
+              </div>
+            </details>
+
+            {/* Preise (Tag 1-30 + 31+ Tage) */}
+            <div className="bg-white rounded-2xl border border-brand-border p-6">
+              <h2 className="font-heading font-bold text-sm text-brand-black mb-1">Preise</h2>
+              <p className="text-xs font-body text-brand-muted mb-5">Tag 1–30 einzeln festlegen, ab Tag 31 wird der Zusatztag-Preis verwendet (Gesamtpreis in €).</p>
+
+              <div className="grid grid-cols-5 sm:grid-cols-6 gap-2">
+                {Array.from({ length: 30 }, (_, i) => {
+                  const day = i + 1;
+                  const price = product.priceTable[i] ?? 0;
+                  return (
+                    <div key={day}>
+                      <label className="block text-xs font-heading font-semibold text-brand-muted mb-1 text-center">
+                        {day}T
+                      </label>
+                      <PriceInput
+                        value={price}
+                        onChange={(v) => setTableDay(day, v)}
+                        min={0}
+                        className="w-full px-1.5 py-2 border border-brand-border rounded-[8px] text-sm font-body text-center focus:outline-none focus:ring-2 focus:ring-accent-blue"
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="mt-6 pt-5 border-t border-brand-border">
+                <h3 className="font-heading font-semibold text-sm text-brand-black mb-1">31+ Tage</h3>
+                <p className="text-xs font-body text-brand-muted mb-3">
+                  Preis = Tag-30-Preis + (Tage − 30) × Preis pro Zusatztag
+                </p>
+                <div className="flex items-end gap-4">
+                  <div className="w-40">
+                    <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Preis pro Zusatztag</label>
+                    <div className="relative">
+                      <PriceInput value={product.perDayAfter30}
+                        onChange={(v) => setProduct((p) => p && ({ ...p, perDayAfter30: v }))}
+                        placeholder="z.B. 4,50"
+                        className="w-full pr-8 pl-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-brand-muted pointer-events-none">€</span>
+                    </div>
+                  </div>
+                  <div className="pb-2.5">
+                    <p className="text-xs font-body text-brand-muted">Beispiel:</p>
+                    <p className="text-sm font-heading font-semibold text-brand-black">
+                      31 Tage = {day30Price} € + {product.perDayAfter30} € = {day31Preview} €
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Seriennummern / Kameras */}
@@ -737,57 +793,6 @@ export default function AdminKameraEditorPage() {
                   </div>
                 </>
               )}
-            </div>
-
-            {/* Preise (Tag 1-30 + 31+ Tage) */}
-            <div className="bg-white rounded-2xl border border-brand-border p-6">
-              <h2 className="font-heading font-bold text-sm text-brand-black mb-1">Preise</h2>
-              <p className="text-xs font-body text-brand-muted mb-5">Tag 1–30 einzeln festlegen, ab Tag 31 wird der Zusatztag-Preis verwendet (Gesamtpreis in €).</p>
-
-              <div className="grid grid-cols-5 sm:grid-cols-6 gap-2">
-                {Array.from({ length: 30 }, (_, i) => {
-                  const day = i + 1;
-                  const price = product.priceTable[i] ?? 0;
-                  return (
-                    <div key={day}>
-                      <label className="block text-xs font-heading font-semibold text-brand-muted mb-1 text-center">
-                        {day}T
-                      </label>
-                      <PriceInput
-                        value={price}
-                        onChange={(v) => setTableDay(day, v)}
-                        min={0}
-                        className="w-full px-1.5 py-2 border border-brand-border rounded-[8px] text-sm font-body text-center focus:outline-none focus:ring-2 focus:ring-accent-blue"
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div className="mt-6 pt-5 border-t border-brand-border">
-                <h3 className="font-heading font-semibold text-sm text-brand-black mb-1">31+ Tage</h3>
-                <p className="text-xs font-body text-brand-muted mb-3">
-                  Preis = Tag-30-Preis + (Tage − 30) × Preis pro Zusatztag
-                </p>
-                <div className="flex items-end gap-4">
-                  <div className="w-40">
-                    <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Preis pro Zusatztag</label>
-                    <div className="relative">
-                      <PriceInput value={product.perDayAfter30}
-                        onChange={(v) => setProduct((p) => p && ({ ...p, perDayAfter30: v }))}
-                        placeholder="z.B. 4,50"
-                        className="w-full pr-8 pl-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-brand-muted pointer-events-none">€</span>
-                    </div>
-                  </div>
-                  <div className="pb-2.5">
-                    <p className="text-xs font-body text-brand-muted">Beispiel:</p>
-                    <p className="text-sm font-heading font-semibold text-brand-black">
-                      31 Tage = {day30Price} € + {product.perDayAfter30} € = {day31Preview} €
-                    </p>
-                  </div>
-                </div>
-              </div>
             </div>
 
             {/* Speichern */}

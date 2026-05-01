@@ -171,9 +171,13 @@ export default function AdminNeueKameraPage() {
           {/* Left: Editor form */}
           <div className="flex-1 min-w-0 space-y-6">
 
-            {/* Stammdaten */}
-            <div className="bg-white rounded-2xl border border-brand-border p-6">
-              <h2 className="font-heading font-bold text-sm text-brand-black mb-4">Stammdaten</h2>
+            {/* Stammdaten (aufklappbar) */}
+            <details open className="bg-white rounded-2xl border border-brand-border group/main">
+              <summary className="cursor-pointer select-none px-6 pt-6 pb-4 list-none flex items-center justify-between">
+                <h2 className="font-heading font-bold text-sm text-brand-black">Stammdaten</h2>
+                <span className="text-brand-muted text-lg leading-none transition-transform group-open/main:rotate-180">▾</span>
+              </summary>
+              <div className="px-6 pb-6">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Name</label>
@@ -269,13 +273,13 @@ export default function AdminNeueKameraPage() {
               </div>
 
               {/* Technische Daten (aufklappbar) */}
-              <details className="mt-6 group">
+              <details className="mt-6 group/td">
                 <summary className="flex items-center justify-between cursor-pointer select-none py-2 border-t border-brand-border pt-4 list-none">
                   <div>
                     <h3 className="font-heading font-bold text-sm text-brand-black">Technische Daten</h3>
                     <p className="text-xs font-body text-brand-muted mt-0.5">{(product.specs ?? []).length} Spec{(product.specs ?? []).length === 1 ? '' : 's'} · klicken zum Aufklappen</p>
                   </div>
-                  <span className="text-brand-muted text-lg leading-none transition-transform group-open:rotate-45">+</span>
+                  <span className="text-brand-muted text-lg leading-none transition-transform group-open/td:rotate-45">+</span>
                 </summary>
 
                 <div className="mt-4 space-y-2">
@@ -332,7 +336,8 @@ export default function AdminNeueKameraPage() {
                   + Spec hinzufügen
                 </button>
               </details>
-            </div>
+              </div>
+            </details>
 
             {/* Preise (Tag 1-30 + 31+ Tage) */}
             <div className="bg-white rounded-2xl border border-brand-border p-6">
