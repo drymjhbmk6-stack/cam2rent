@@ -66,6 +66,7 @@ export async function POST(req: NextRequest) {
       shippingMethod,
       discountAmount,
       couponCode,
+      productDiscount,
       durationDiscount,
       loyaltyDiscount,
       referralCode,
@@ -81,6 +82,7 @@ export async function POST(req: NextRequest) {
       shippingMethod: string;
       discountAmount: number;
       couponCode?: string;
+      productDiscount?: number;
       durationDiscount?: number;
       loyaltyDiscount?: number;
       referralCode?: string;
@@ -289,6 +291,7 @@ export async function POST(req: NextRequest) {
     let r_shippingMethod = shippingMethod;
     let r_discountAmount = discountAmount;
     let r_couponCode = couponCode;
+    let r_productDiscount = productDiscount;
     let r_durationDiscount = durationDiscount;
     let r_loyaltyDiscount = loyaltyDiscount;
     let r_referralCode = referralCode;
@@ -315,6 +318,7 @@ export async function POST(req: NextRequest) {
           r_shippingMethod = ctx.shippingMethod ?? r_shippingMethod;
           r_discountAmount = ctx.discountAmount ?? r_discountAmount;
           r_couponCode = ctx.couponCode ?? r_couponCode;
+          r_productDiscount = ctx.productDiscount ?? r_productDiscount;
           r_durationDiscount = ctx.durationDiscount ?? r_durationDiscount;
           r_loyaltyDiscount = ctx.loyaltyDiscount ?? r_loyaltyDiscount;
           r_referralCode = ctx.referralCode ?? r_referralCode;
@@ -427,9 +431,15 @@ export async function POST(req: NextRequest) {
       const firstItem = groupItems[0];
       const groupSubtotal = groupItems.reduce((s, it) => s + it.subtotal, 0);
 
-      // Rabatte proportional aufteilen
+      // Rabatte proportional aufteilen.
+      // Hinweis: productDiscount (Aktionen wie -50% auf Hero13) wurde bisher
+      // nicht durchgereicht — Stripe lud zwar korrekt ab, aber price_total in
+      // der DB war zu hoch und damit auch die Rechnung. Wir summieren ihn jetzt
+      // mit in groupDiscount, sodass discount_amount = Coupon + Produktrabatt.
       const ratio = totalCartSubtotal > 0 ? groupSubtotal / totalCartSubtotal : 1 / periodGroups.length;
-      const groupDiscount = Math.round((r_discountAmount ?? 0) * ratio * 100) / 100;
+      const groupCouponDiscount = Math.round((r_discountAmount ?? 0) * ratio * 100) / 100;
+      const groupProductDiscount = Math.round((r_productDiscount ?? 0) * ratio * 100) / 100;
+      const groupDiscount = groupCouponDiscount + groupProductDiscount;
       const groupDurationDiscount = Math.round((r_durationDiscount ?? 0) * ratio * 100) / 100;
       const groupLoyaltyDiscount = Math.round((r_loyaltyDiscount ?? 0) * ratio * 100) / 100;
       // Versand pro Gruppe neu berechnen (jede Gruppe prüft Gratis-Schwelle)
@@ -748,6 +758,7 @@ export async function POST(req: NextRequest) {
             ).price;
             const groupTotal = groupSubtotal
               - Math.round((r_discountAmount ?? 0) * ratio * 100) / 100
+              - Math.round((r_productDiscount ?? 0) * ratio * 100) / 100
               - Math.round((r_durationDiscount ?? 0) * ratio * 100) / 100
               - Math.round((r_loyaltyDiscount ?? 0) * ratio * 100) / 100
               + emailShipping;
@@ -826,6 +837,7 @@ export async function POST(req: NextRequest) {
               shippingPrice: emailShipping,
               discountAmount:
                 Math.round((r_discountAmount ?? 0) * ratio * 100) / 100
+                + Math.round((r_productDiscount ?? 0) * ratio * 100) / 100
                 + Math.round((r_durationDiscount ?? 0) * ratio * 100) / 100
                 + Math.round((r_loyaltyDiscount ?? 0) * ratio * 100) / 100,
               couponCode: r_couponCode || undefined,

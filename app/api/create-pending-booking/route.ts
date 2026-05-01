@@ -44,6 +44,7 @@ export async function POST(req: NextRequest) {
       shippingMethod,
       discountAmount,
       couponCode,
+      productDiscount,
       durationDiscount,
       loyaltyDiscount,
       earlyServiceConsentAt,
@@ -57,6 +58,7 @@ export async function POST(req: NextRequest) {
       shippingMethod: string;
       discountAmount: number;
       couponCode?: string;
+      productDiscount?: number;
       durationDiscount?: number;
       loyaltyDiscount?: number;
       earlyServiceConsentAt?: string | null;
@@ -166,9 +168,16 @@ export async function POST(req: NextRequest) {
       const firstItem = groupItems[0];
       const groupSubtotal = groupItems.reduce((s, it) => s + it.subtotal, 0);
 
-      // Rabatte proportional aufteilen
+      // Rabatte proportional aufteilen.
+      // Hinweis: productDiscount (Aktionen wie -50% auf Hero13) wurde bisher
+      // nicht durchgereicht — dadurch kassierte der Payment-Link den vollen
+      // Preis. Wir summieren ihn jetzt mit in groupTotalDiscount und schreiben
+      // ihn zusammen mit dem Coupon-Anteil in discount_amount, damit
+      // price_total korrekt ist und die Rechnungs-Generation den Rabatt zeigt.
       const ratio = totalCartSubtotal > 0 ? groupSubtotal / totalCartSubtotal : 1 / periodGroups.length;
-      const groupDiscountAmount = Math.round((discountAmount ?? 0) * ratio * 100) / 100;
+      const groupCouponDiscount = Math.round((discountAmount ?? 0) * ratio * 100) / 100;
+      const groupProductDiscount = Math.round((productDiscount ?? 0) * ratio * 100) / 100;
+      const groupDiscountAmount = groupCouponDiscount + groupProductDiscount;
       const groupDurationDiscount = Math.round((durationDiscount ?? 0) * ratio * 100) / 100;
       const groupLoyaltyDiscount = Math.round((loyaltyDiscount ?? 0) * ratio * 100) / 100;
       // Versand pro Gruppe neu berechnen (jede Gruppe prüft Gratis-Schwelle)

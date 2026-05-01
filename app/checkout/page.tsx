@@ -614,6 +614,7 @@ export default function CheckoutPage() {
           shippingPrice: finalShipping,
           discountAmount: couponDiscountAmount,
           couponCode: appliedCoupon?.code ?? '',
+          productDiscount: effectiveProductDiscount,
           durationDiscount: effectiveDurationDiscount,
           loyaltyDiscount: effectiveLoyaltyDiscount,
           earlyServiceConsentAt: (requiresEarlyServiceConsent && acceptsEarlyService) ? new Date().toISOString() : null,
