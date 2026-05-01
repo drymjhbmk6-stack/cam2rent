@@ -1,5 +1,5 @@
 import { createServiceClient } from '@/lib/supabase';
-import { getStripe } from '@/lib/stripe';
+import { getStripe, buildPaymentDescription } from '@/lib/stripe';
 import { getSiteUrl } from '@/lib/env-mode';
 
 /**
@@ -88,9 +88,22 @@ export async function approvePendingBooking(
       unit_amount: amountCents,
       currency: 'eur',
     });
+    // Description landet in der Stripe-Quittung UND wird an PayPal als
+     // Verwendungszweck weitergegeben — sonst sieht der Kunde dort nur
+     // "cam2rent" ohne Bezug zur Buchung.
+     const description = buildPaymentDescription({
+       bookingId,
+       productName,
+       rentalFrom: String(booking.rental_from ?? ''),
+       rentalTo: String(booking.rental_to ?? ''),
+     });
     const pl = await stripe.paymentLinks.create({
       line_items: [{ price: stripePrice.id, quantity: 1 }],
       metadata: { booking_id: bookingId, booking_type: 'pending_approval' },
+      payment_intent_data: {
+        description,
+        metadata: { booking_id: bookingId, booking_type: 'pending_approval' },
+      },
       after_completion: {
         type: 'redirect',
         redirect: { url: `${siteUrl}/buchung-bestaetigt?from=approval&booking_id=${bookingId}` },

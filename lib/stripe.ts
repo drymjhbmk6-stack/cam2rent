@@ -36,3 +36,55 @@ export async function getStripeWebhookSecretOrThrow(): Promise<string> {
   }
   return secret;
 }
+
+/**
+ * Baut eine sprechende Description fuer einen PaymentIntent. Stripe gibt das
+ * Feld an PayPal als „Verwendungszweck" weiter und zeigt es zusaetzlich auf
+ * der Stripe-eigenen Quittung. Dadurch sieht der Kunde nicht mehr nur
+ * "cam2rent" in seiner PayPal-Historie, sondern z.B. "GoPro Hero13 Black ·
+ * 19.05.2026 · cam2rent.de".
+ *
+ * Die Booking-ID kennen wir zum Zeitpunkt des PaymentIntent-Create i.d.R.
+ * noch nicht (wird erst in confirm-cart/confirm-booking generiert). Deshalb
+ * baut der Helper aus Produktname + Zeitraum eine eindeutige Referenz.
+ */
+export function buildPaymentDescription(opts: {
+  productName?: string | null;
+  rentalFrom?: string | null;
+  rentalTo?: string | null;
+  bookingId?: string | null;
+  extraItemCount?: number;
+}): string {
+  const parts: string[] = [];
+
+  if (opts.bookingId) {
+    parts.push(`Buchung ${opts.bookingId}`);
+  }
+
+  let product = (opts.productName ?? '').trim();
+  if (product) {
+    if (opts.extraItemCount && opts.extraItemCount > 0) {
+      product = `${product} + ${opts.extraItemCount} weitere`;
+    }
+    parts.push(product);
+  }
+
+  const fmt = (iso: string | null | undefined): string | null => {
+    if (!iso) return null;
+    const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!m) return null;
+    return `${m[3]}.${m[2]}.${m[1]}`;
+  };
+  const from = fmt(opts.rentalFrom);
+  const to = fmt(opts.rentalTo);
+  if (from && to && from !== to) {
+    parts.push(`${from} – ${to}`);
+  } else if (from) {
+    parts.push(from);
+  }
+
+  parts.push('cam2rent.de');
+  // Stripe-Limit: 350 Zeichen fuer description, PayPal kuerzt zusaetzlich.
+  return parts.join(' · ').slice(0, 200);
+}
+

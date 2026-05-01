@@ -331,6 +331,24 @@ export async function POST(req: NextRequest) {
       || req.headers.get('x-real-ip')
       || 'unknown';
 
+    // Stripe-PaymentIntent mit der finalen Buchungsnummer bestempeln, damit
+    // sie in der Stripe-Quittung + Stripe-Dashboard erscheint. Non-blocking,
+    // Fehler werden geschluckt.
+    after(async () => {
+      try {
+        const { buildPaymentDescription } = await import('@/lib/stripe');
+        const desc = buildPaymentDescription({
+          bookingId,
+          productName: meta.product_name ?? null,
+          rentalFrom: meta.rental_from ?? null,
+          rentalTo: meta.rental_to ?? null,
+        });
+        await stripe.paymentIntents.update(intent.id, { description: desc });
+      } catch (err) {
+        console.warn('[confirm-booking] PaymentIntent description update failed:', err);
+      }
+    });
+
     after(async () => {
       const fmtDate = (iso: string) => {
         if (!iso) return '';

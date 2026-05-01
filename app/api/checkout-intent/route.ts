@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { createServiceClient } from '@/lib/supabase';
 import { calcPriceFromTable, type AdminProduct } from '@/lib/price-config';
-import { getStripe } from '@/lib/stripe';
+import { getStripe, buildPaymentDescription } from '@/lib/stripe';
 import { getCheckoutConfig } from '@/lib/checkout-config';
 
 const checkoutLimiter = rateLimit({ maxAttempts: 10, windowMs: 60 * 1000 }); // 10 pro Min
@@ -178,10 +178,25 @@ export async function POST(req: NextRequest) {
       metadata.verification_required = '1';
     }
 
+    // Sprechende Description fuer PayPal-Verwendungszweck + Stripe-Quittung
+    const cartItems = (checkoutContext?.items as Array<{
+      productName?: string;
+      rentalFrom?: string;
+      rentalTo?: string;
+    }> | undefined) ?? [];
+    const firstItem = cartItems[0];
+    const description = buildPaymentDescription({
+      productName: firstItem?.productName,
+      rentalFrom: firstItem?.rentalFrom,
+      rentalTo: firstItem?.rentalTo,
+      extraItemCount: cartItems.length > 1 ? cartItems.length - 1 : 0,
+    });
+
     const stripe = await getStripe();
     const paymentIntent = await stripe.paymentIntents.create({
       amount: amountCents,
       currency: 'eur',
+      description,
       automatic_payment_methods: { enabled: true },
       metadata,
       ...(depositCents && depositCents > 0 ? { setup_future_usage: 'off_session' } : {}),
@@ -203,6 +218,7 @@ export async function POST(req: NextRequest) {
           currency: 'eur',
           capture_method: 'manual',
           payment_method_types: ['card'],
+          description: `Kaution · ${description}`.slice(0, 200),
           metadata: { ...metadata, type: 'deposit_hold' },
         });
         depositIntentId = depositIntent.id;

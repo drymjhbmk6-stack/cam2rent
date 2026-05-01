@@ -738,6 +738,31 @@ export async function POST(req: NextRequest) {
     // Falls eines davon scheitert, sieht es der Admin im E-Mail-Protokoll
     // bzw. an der Buchung (contract_signed=false). Idempotenz-Block oben
     // faengt Re-Versuche bei Re-Aufruf des /confirm-cart Endpoints.
+    // Stripe-PaymentIntent mit der finalen Buchungsnummer bestempeln, damit
+     // sie in der Stripe-Quittung + Stripe-Dashboard erscheint. PayPal hat zu
+     // dem Zeitpunkt schon abgebucht, das Update verschoenert nur Stripe-side
+     // Tracking. Non-blocking, Fehler werden geschluckt.
+     if (bookingIds.length > 0) {
+       after(async () => {
+         try {
+           const { buildPaymentDescription } = await import('@/lib/stripe');
+           const firstItem = periodGroups[0]?.[0];
+           const productName = periodGroups[0]?.length === 1
+             ? firstItem?.productName
+             : (firstItem?.productName ?? '') + (periodGroups[0]?.length > 1 ? ` + ${periodGroups[0].length - 1} weitere` : '');
+           const desc = buildPaymentDescription({
+             bookingId: bookingIds[0],
+             productName,
+             rentalFrom: firstItem?.rentalFrom,
+             rentalTo: firstItem?.rentalTo,
+           });
+           await stripe.paymentIntents.update(payment_intent_id, { description: desc });
+         } catch (err) {
+           console.warn('[confirm-cart] PaymentIntent description update failed:', err);
+         }
+       });
+     }
+
     if (r_email) {
       after(async () => {
         try {

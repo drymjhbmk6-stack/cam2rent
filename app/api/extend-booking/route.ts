@@ -6,7 +6,7 @@ import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { getPriceForDays } from '@/data/products';
 import { getProducts } from '@/lib/get-products';
 import { calcHaftungTieredPrice, DEFAULT_HAFTUNG } from '@/lib/price-config';
-import { getStripe } from '@/lib/stripe';
+import { getStripe, buildPaymentDescription } from '@/lib/stripe';
 
 const limiter = rateLimit({ maxAttempts: 5, windowMs: 60_000 });
 
@@ -137,9 +137,15 @@ export async function POST(req: NextRequest) {
 
   // Create Stripe PaymentIntent
   const stripe = await getStripe();
+  const extensionDescription = `Verlaengerung · ${buildPaymentDescription({
+    bookingId,
+    productName: booking.product_name ?? null,
+    rentalTo: newRentalTo,
+  })}`.slice(0, 200);
   const paymentIntent = await stripe.paymentIntents.create({
     amount: amountCents,
     currency: 'eur',
+    description: extensionDescription,
     automatic_payment_methods: { enabled: true },
     metadata: {
       type: 'extension',
