@@ -11,16 +11,18 @@ interface Props {
   initialCode: string;
 }
 
-const ENDPOINTS: Record<Kind, { url: string; field: string; label: string }> = {
+const ENDPOINTS: Record<Kind, { url: string; field: string; label: string; placeholder: string }> = {
   camera: {
     url: '/api/admin/product-units',
-    field: 'serial_number',
-    label: 'Seriennummer bearbeiten',
+    field: 'label',
+    label: 'Bezeichnung bearbeiten',
+    placeholder: '+ Bezeichnung hinzufügen',
   },
   accessory: {
     url: '/api/admin/accessory-units',
     field: 'exemplar_code',
     label: 'Code bearbeiten',
+    placeholder: '+ Code hinzufügen',
   },
 };
 
@@ -54,10 +56,6 @@ export default function EditableCode({ kind, unitId, initialCode }: Props) {
 
   async function save() {
     const trimmed = value.trim();
-    if (!trimmed) {
-      setError('Code darf nicht leer sein.');
-      return;
-    }
     if (trimmed === initialCode) {
       setEditing(false);
       return;
@@ -65,6 +63,13 @@ export default function EditableCode({ kind, unitId, initialCode }: Props) {
     setSaving(true);
     setError(null);
     try {
+      // Bei Kameras ist das Feld "label" optional → leer = null setzen erlaubt.
+      // Bei Zubehoer ist exemplar_code Pflicht → leer abfangen.
+      if (kind === 'accessory' && !trimmed) {
+        setError('Code darf nicht leer sein.');
+        setSaving(false);
+        return;
+      }
       const res = await fetch(cfg.url, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -131,32 +136,36 @@ export default function EditableCode({ kind, unitId, initialCode }: Props) {
     );
   }
 
+  const isEmpty = !initialCode;
+
   return (
     <button
       type="button"
       onClick={startEdit}
-      className="mt-2 inline-flex items-center gap-2 text-base font-mono break-all text-left rounded px-1 -mx-1 transition-colors hover:bg-gray-100 active:bg-gray-200"
-      style={{ color: '#0f172a' }}
+      className={`mt-2 inline-flex items-center gap-2 text-base ${isEmpty ? 'italic' : 'font-mono'} break-all text-left rounded px-1 -mx-1 transition-colors hover:bg-gray-100 active:bg-gray-200`}
+      style={{ color: isEmpty ? '#06b6d4' : '#0f172a' }}
       title={cfg.label}
       aria-label={cfg.label}
     >
-      <span className="break-all">{initialCode}</span>
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        width="14"
-        height="14"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        style={{ color: '#6b7280', flexShrink: 0 }}
-        aria-hidden="true"
-      >
-        <path d="M12 20h9" />
-        <path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-      </svg>
+      <span className="break-all">{isEmpty ? cfg.placeholder : initialCode}</span>
+      {!isEmpty && (
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          style={{ color: '#6b7280', flexShrink: 0 }}
+          aria-hidden="true"
+        >
+          <path d="M12 20h9" />
+          <path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+        </svg>
+      )}
     </button>
   );
 }

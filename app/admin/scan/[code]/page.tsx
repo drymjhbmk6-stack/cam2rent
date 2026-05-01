@@ -60,6 +60,8 @@ interface DataGridItem {
   label: string;
   value: string;
   highlight?: boolean;
+  fullWidth?: boolean;
+  mono?: boolean;
 }
 
 interface ActionLink {
@@ -128,11 +130,12 @@ export default async function ScanLandingPage({ params }: PageProps) {
       unitId: productUnit.id,
       headerLabel: `${product?.brand ?? 'Marke'}${product?.category ? ` · ${product.category}` : ''}`,
       name: product?.name ?? productUnit.product_id,
-      subtitle: [product?.model, productUnit.label].filter(Boolean).join(' · ') || null,
-      code: productUnit.serial_number,
+      subtitle: product?.model ?? null,
+      code: productUnit.label ?? '',
       statusKey: productUnit.status,
       heroImage: product?.images?.[0] ?? product?.imageUrl ?? null,
       dataGrid: [
+        { label: 'Seriennummer', value: productUnit.serial_number, fullWidth: true, mono: true },
         { label: 'Kaufdatum', value: fmtDate(productUnit.purchased_at ?? asset?.purchase_date ?? null) },
         { label: 'Kaufpreis', value: fmtEuro(asset?.purchase_price) },
         { label: 'Wiederbeschaffungswert', value: fmtEuro(asset?.current_value), highlight: true },
@@ -351,14 +354,14 @@ function DataGrid({ items }: { items: DataGridItem[] }) {
       {items.map((item, i) => (
         <div
           key={i}
-          className="p-3 rounded-lg"
+          className={`p-3 rounded-lg ${item.fullWidth ? 'col-span-2' : ''}`}
           style={item.highlight
             ? { background: '#ecfeff', border: '1px solid #a5f3fc' }
             : { background: '#f9fafb', border: '1px solid #e5e7eb' }}
         >
           <p className="text-[10px] uppercase tracking-wider" style={{ color: '#6b7280' }}>{item.label}</p>
           <p
-            className="text-sm font-semibold mt-0.5"
+            className={`text-sm font-semibold mt-0.5 break-all ${item.mono ? 'font-mono' : ''}`}
             style={{ color: item.highlight ? '#155e75' : '#0f172a' }}
           >
             {item.value}
