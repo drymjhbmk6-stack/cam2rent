@@ -6,6 +6,7 @@ export interface AccessoryUnit {
   id: string;
   accessory_id: string;
   exemplar_code: string;
+  serial_number: string | null;
   status: 'available' | 'rented' | 'maintenance' | 'damaged' | 'lost' | 'retired';
   notes: string | null;
   purchased_at: string | null; // ISO date YYYY-MM-DD
@@ -55,23 +56,25 @@ export default function AccessoryUnitsManager({ accessoryId, onCountChanged }: P
   const [units, setUnits] = useState<AccessoryUnit[]>([]);
   const [unitAssets, setUnitAssets] = useState<Record<string, AssetRow>>({});
   const [loading, setLoading] = useState(true);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editDraft, setEditDraft] = useState<Partial<AccessoryUnit>>({});
-  const [adding, setAdding] = useState(false);
-  const [newDraft, setNewDraft] = useState<Partial<AccessoryUnit>>({
+
+  // Anlegen-Modal
+  const [addOpen, setAddOpen] = useState(false);
+  const [addForm, setAddForm] = useState({
     exemplar_code: '',
+    serial_number: '',
     purchased_at: '',
-    status: 'available',
+    purchase_price: '',
     notes: '',
   });
-  const [enrollingUnit, setEnrollingUnit] = useState<AccessoryUnit | null>(null);
-  const [enrollDraft, setEnrollDraft] = useState<{
-    purchase_price: string;
-    purchase_date: string;
-    useful_life_months: string;
-  }>({ purchase_price: '', purchase_date: '', useful_life_months: '36' });
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [addBusy, setAddBusy] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
+
+  // Bearbeiten-Modal (nur Status + Notizen aenderbar)
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editStatus, setEditStatus] = useState<AccessoryUnit['status']>('available');
+  const [editNotes, setEditNotes] = useState('');
+  const [editBusy, setEditBusy] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
 
   // Callback per Ref — der Parent uebergibt typisch eine Inline-Funktion,
   // deren Identitaet sich bei jedem Re-Render aendert. Ohne Ref propagiert
@@ -92,8 +95,6 @@ export default function AccessoryUnitsManager({ accessoryId, onCountChanged }: P
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      // Units + Assets parallel laden — Assets ueber kind=rental_accessory,
-      // dann clientseitig nach accessory_unit_id filtern.
       const [unitsRes, assetsRes] = await Promise.all([
         fetch(`/api/admin/accessory-units?accessory_id=${encodeURIComponent(accessoryId)}`),
         fetch('/api/admin/assets?kind=rental_accessory&include_test=1'),
@@ -105,7 +106,6 @@ export default function AccessoryUnitsManager({ accessoryId, onCountChanged }: P
       setUnits(rows);
       reportCounts(rows);
 
-      // Assets-Mapping aufbauen — defensiv, falls Migration noch nicht durch
       if (assetsRes.ok) {
         const assetsJson = await assetsRes.json();
         const map: Record<string, AssetRow> = {};
@@ -123,133 +123,108 @@ export default function AccessoryUnitsManager({ accessoryId, onCountChanged }: P
         setUnitAssets(map);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Fehler beim Laden');
+      console.error('[AccessoryUnitsManager] load error:', err);
     } finally {
       setLoading(false);
     }
   }, [accessoryId, reportCounts]);
 
-  function startEnroll(unit: AccessoryUnit) {
-    setEnrollingUnit(unit);
-    setEnrollDraft({
-      purchase_price: '',
-      purchase_date: unit.purchased_at ?? new Date().toISOString().slice(0, 10),
-      useful_life_months: '36',
-    });
-    setError(null);
-  }
-
-  async function handleEnrollSave() {
-    if (!enrollingUnit) return;
-    const price = parseFloat(enrollDraft.purchase_price.replace(',', '.'));
-    if (!isFinite(price) || price <= 0) {
-      setError('Bitte einen gültigen Kaufpreis angeben.');
-      return;
-    }
-    if (!enrollDraft.purchase_date) {
-      setError('Kaufdatum ist Pflicht.');
-      return;
-    }
-
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await fetch('/api/admin/assets', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          kind: 'rental_accessory',
-          name: enrollingUnit.exemplar_code,
-          accessory_unit_id: enrollingUnit.id,
-          purchase_price: price,
-          purchase_date: enrollDraft.purchase_date,
-          useful_life_months: parseInt(enrollDraft.useful_life_months, 10) || 36,
-        }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Fehler beim Anlegen der Anlage');
-      setEnrollingUnit(null);
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Fehler beim Anlegen der Anlage');
-    } finally {
-      setBusy(false);
-    }
-  }
-
   useEffect(() => {
     load();
   }, [load]);
 
+  function openAddModal() {
+    setAddForm({ exemplar_code: '', serial_number: '', purchased_at: '', purchase_price: '', notes: '' });
+    setAddError(null);
+    setAddOpen(true);
+  }
+
   async function handleAdd() {
-    setBusy(true);
-    setError(null);
+    setAddError(null);
+    const code = addForm.exemplar_code.trim();
+    const purchaseDate = addForm.purchased_at;
+    const priceNum = Number(String(addForm.purchase_price).replace(',', '.'));
+
+    if (!code) { setAddError('Bezeichnung ist Pflicht.'); return; }
+    if (!purchaseDate) { setAddError('Kaufdatum ist Pflicht.'); return; }
+    if (!Number.isFinite(priceNum) || priceNum <= 0) {
+      setAddError('Kaufpreis muss eine positive Zahl sein.');
+      return;
+    }
+
+    setAddBusy(true);
     try {
       const res = await fetch('/api/admin/accessory-units', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           accessory_id: accessoryId,
-          exemplar_code: newDraft.exemplar_code?.trim() || undefined,
-          purchased_at: newDraft.purchased_at || undefined,
-          status: newDraft.status || 'available',
-          notes: newDraft.notes || undefined,
+          exemplar_code: code,
+          serial_number: addForm.serial_number.trim() || undefined,
+          purchased_at: purchaseDate,
+          purchase_price: priceNum,
+          notes: addForm.notes.trim() || undefined,
         }),
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Fehler beim Anlegen');
-      setNewDraft({ exemplar_code: '', purchased_at: '', status: 'available', notes: '' });
-      setAdding(false);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        setAddError(err.error || 'Fehler beim Anlegen.');
+        return;
+      }
+      setAddOpen(false);
       await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Fehler beim Anlegen');
+    } catch {
+      setAddError('Netzwerk-Fehler. Bitte erneut versuchen.');
     } finally {
-      setBusy(false);
+      setAddBusy(false);
     }
   }
 
-  async function handleSaveEdit(id: string) {
-    setBusy(true);
-    setError(null);
+  function openEditModal(unit: AccessoryUnit) {
+    setEditId(unit.id);
+    setEditStatus(unit.status);
+    setEditNotes(unit.notes ?? '');
+    setEditError(null);
+  }
+
+  async function handleSaveEdit() {
+    if (!editId) return;
+    setEditError(null);
+    setEditBusy(true);
     try {
       const res = await fetch('/api/admin/accessory-units', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id,
-          exemplar_code: editDraft.exemplar_code,
-          purchased_at: editDraft.purchased_at ?? null,
-          status: editDraft.status,
-          notes: editDraft.notes ?? null,
-        }),
+        body: JSON.stringify({ id: editId, status: editStatus, notes: editNotes }),
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Fehler beim Speichern');
-      setEditingId(null);
-      setEditDraft({});
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        setEditError(err.error || 'Fehler beim Speichern.');
+        return;
+      }
+      setEditId(null);
       await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Fehler beim Speichern');
+    } catch {
+      setEditError('Netzwerk-Fehler.');
     } finally {
-      setBusy(false);
+      setEditBusy(false);
     }
   }
 
   async function handleDelete(unit: AccessoryUnit) {
     if (!confirm(`Exemplar "${unit.exemplar_code}" endgültig löschen?`)) return;
-    setBusy(true);
-    setError(null);
     try {
       const res = await fetch(`/api/admin/accessory-units?id=${encodeURIComponent(unit.id)}`, {
         method: 'DELETE',
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Fehler beim Löschen');
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(err.error || 'Fehler beim Löschen.');
+        return;
+      }
       await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Fehler beim Löschen');
-    } finally {
-      setBusy(false);
+    } catch {
+      alert('Fehler beim Löschen.');
     }
   }
 
@@ -257,21 +232,28 @@ export default function AccessoryUnitsManager({ accessoryId, onCountChanged }: P
 
   return (
     <div className="bg-brand-bg dark:bg-slate-900/40 rounded-xl border border-brand-border dark:border-slate-700 p-4">
-      <div className="flex items-center justify-between mb-1">
+      <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
         <h3 className="font-heading font-bold text-sm text-brand-black dark:text-slate-200">
           Exemplare ({units.length})
         </h3>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <span className="text-xs font-body text-brand-muted">
             {activeCount} aktiv
             {units.length - activeCount > 0 && `, ${units.length - activeCount} ausgemustert/verloren`}
           </span>
+          <button
+            type="button"
+            onClick={openAddModal}
+            className="inline-flex items-center gap-1 px-3 py-1.5 text-[11px] font-heading font-semibold bg-accent-blue text-white rounded hover:bg-blue-600 transition-colors"
+          >
+            + Exemplar anlegen
+          </button>
           {activeCount > 0 && (
             <a
               href={`/admin/zubehoer/${accessoryId}/qr-codes`}
               target="_blank"
               rel="noopener"
-              className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-heading font-semibold bg-cyan-600 text-white rounded hover:bg-cyan-700 transition-colors"
+              className="inline-flex items-center gap-1 px-3 py-1.5 text-[11px] font-heading font-semibold bg-cyan-600 text-white rounded hover:bg-cyan-700 transition-colors"
               title="QR-Code-Etiketten zum Aufkleben drucken"
             >
               QR-Codes drucken
@@ -283,299 +265,199 @@ export default function AccessoryUnitsManager({ accessoryId, onCountChanged }: P
         Jedes physische Exemplar einzeln erfassen. Die verfügbare Menge wird automatisch berechnet.
       </p>
 
-      {error && (
-        <div className="mb-3 p-2 rounded-lg bg-red-50 border border-red-200 text-xs font-body text-red-700">
-          {error}
+      {loading ? (
+        <p className="text-sm text-brand-muted py-4 text-center">Lade Exemplare…</p>
+      ) : units.length === 0 ? (
+        <p className="text-sm text-brand-muted py-4 text-center italic">
+          Noch kein Exemplar angelegt. Klick auf <span className="font-semibold">&bdquo;+ Exemplar anlegen&ldquo;</span> oben rechts.
+        </p>
+      ) : (
+        <div className="overflow-x-auto bg-white dark:bg-slate-800/60 rounded-lg border border-brand-border dark:border-slate-700">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-brand-border dark:border-slate-700">
+                <th className="text-left text-[10px] font-heading font-semibold text-brand-muted py-2 px-2">Bezeichnung</th>
+                <th className="text-left text-[10px] font-heading font-semibold text-brand-muted py-2 px-2">Seriennummer</th>
+                <th className="text-left text-[10px] font-heading font-semibold text-brand-muted py-2 px-2">Status</th>
+                <th className="text-left text-[10px] font-heading font-semibold text-brand-muted py-2 px-2">Kaufdatum</th>
+                <th className="text-left text-[10px] font-heading font-semibold text-brand-muted py-2 px-2">Anlage (Zeitwert)</th>
+                <th className="text-left text-[10px] font-heading font-semibold text-brand-muted py-2 px-2">Notizen</th>
+                <th className="text-right text-[10px] font-heading font-semibold text-brand-muted py-2 px-2">Aktionen</th>
+              </tr>
+            </thead>
+            <tbody>
+              {units.map((unit) => {
+                const asset = unitAssets[unit.id];
+                return (
+                  <tr key={unit.id} className="border-b border-brand-border/50 dark:border-slate-700/50 hover:bg-brand-bg/50 dark:hover:bg-slate-800/40 transition-colors">
+                    <td className="py-2 px-2 font-mono text-xs font-semibold text-brand-black dark:text-slate-200">{unit.exemplar_code}</td>
+                    <td className="py-2 px-2 text-xs text-brand-muted">{unit.serial_number || '–'}</td>
+                    <td className="py-2 px-2">
+                      <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold ${STATUS_CONFIG[unit.status]?.pill ?? ''}`}>
+                        {STATUS_CONFIG[unit.status]?.label ?? unit.status}
+                      </span>
+                    </td>
+                    <td className="py-2 px-2 text-xs text-brand-muted">
+                      {unit.purchased_at ? new Date(unit.purchased_at).toLocaleDateString('de-DE') : '–'}
+                    </td>
+                    <td className="py-2 px-2 text-xs">
+                      {asset ? (
+                        <a href={`/admin/anlagen/${asset.id}`} className="text-accent-blue hover:underline font-semibold">
+                          {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(asset.current_value)}
+                        </a>
+                      ) : (
+                        <span className="text-brand-muted italic">–</span>
+                      )}
+                    </td>
+                    <td className="py-2 px-2 text-xs text-brand-muted max-w-[150px] truncate" title={unit.notes ?? ''}>{unit.notes || '–'}</td>
+                    <td className="py-2 px-2 text-right whitespace-nowrap">
+                      <button onClick={() => openEditModal(unit)}
+                        className="text-xs text-accent-blue hover:text-blue-700 font-semibold mr-3">Bearbeiten</button>
+                      <button onClick={() => handleDelete(unit)}
+                        className="text-xs text-red-500 hover:text-red-700 font-semibold">Löschen</button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
 
-      {loading ? (
-        <p className="text-sm text-brand-muted py-4 text-center">Lade Exemplare…</p>
-      ) : (
-        <>
-          {units.length > 0 && (
-            <div className="overflow-x-auto mb-3 bg-white dark:bg-slate-800/60 rounded-lg border border-brand-border dark:border-slate-700">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-brand-border dark:border-slate-700">
-                    <th className="text-left text-[10px] font-heading font-semibold text-brand-muted py-2 px-2">Exemplar-Code</th>
-                    <th className="text-left text-[10px] font-heading font-semibold text-brand-muted py-2 px-2">Status</th>
-                    <th className="text-left text-[10px] font-heading font-semibold text-brand-muted py-2 px-2">Kaufdatum</th>
-                    <th className="text-left text-[10px] font-heading font-semibold text-brand-muted py-2 px-2">Anlage (Zeitwert)</th>
-                    <th className="text-left text-[10px] font-heading font-semibold text-brand-muted py-2 px-2">Notizen</th>
-                    <th className="text-right text-[10px] font-heading font-semibold text-brand-muted py-2 px-2">Aktionen</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {units.map((unit) => {
-                    const isEditing = editingId === unit.id;
-                    return (
-                      <tr key={unit.id} className="border-b border-brand-border/40 dark:border-slate-700/60 last:border-b-0">
-                        {isEditing ? (
-                          <>
-                            <td className="py-2 px-2">
-                              <input
-                                type="text"
-                                value={editDraft.exemplar_code ?? unit.exemplar_code}
-                                onChange={(e) => setEditDraft((d) => ({ ...d, exemplar_code: e.target.value }))}
-                                className="w-full px-2 py-1 border border-brand-border rounded-lg text-xs font-mono bg-white focus:outline-none focus:ring-2 focus:ring-accent-blue"
-                              />
-                            </td>
-                            <td className="py-2 px-2">
-                              <select
-                                value={editDraft.status ?? unit.status}
-                                onChange={(e) =>
-                                  setEditDraft((d) => ({ ...d, status: e.target.value as AccessoryUnit['status'] }))
-                                }
-                                className="px-2 py-1 border border-brand-border rounded-lg text-xs font-body bg-white focus:outline-none focus:ring-2 focus:ring-accent-blue"
-                              >
-                                {STATUS_OPTIONS.map((s) => (
-                                  <option key={s} value={s}>
-                                    {STATUS_CONFIG[s].label}
-                                  </option>
-                                ))}
-                              </select>
-                            </td>
-                            <td className="py-2 px-2">
-                              <input
-                                type="date"
-                                value={editDraft.purchased_at ?? unit.purchased_at ?? ''}
-                                onChange={(e) => setEditDraft((d) => ({ ...d, purchased_at: e.target.value }))}
-                                className="px-2 py-1 border border-brand-border rounded-lg text-xs font-body bg-white focus:outline-none focus:ring-2 focus:ring-accent-blue"
-                              />
-                            </td>
-                            <td className="py-2 px-2 text-xs text-brand-muted italic">
-                              {unitAssets[unit.id]
-                                ? new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(unitAssets[unit.id].current_value)
-                                : '–'}
-                            </td>
-                            <td className="py-2 px-2">
-                              <input
-                                type="text"
-                                value={editDraft.notes ?? unit.notes ?? ''}
-                                onChange={(e) => setEditDraft((d) => ({ ...d, notes: e.target.value }))}
-                                className="w-full px-2 py-1 border border-brand-border rounded-lg text-xs font-body bg-white focus:outline-none focus:ring-2 focus:ring-accent-blue"
-                              />
-                            </td>
-                            <td className="py-2 px-2 text-right whitespace-nowrap">
-                              <button
-                                onClick={() => handleSaveEdit(unit.id)}
-                                disabled={busy}
-                                className="text-xs text-emerald-600 hover:text-emerald-700 font-semibold mr-2 disabled:opacity-40"
-                              >
-                                Speichern
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setEditingId(null);
-                                  setEditDraft({});
-                                }}
-                                className="text-xs text-brand-muted hover:text-brand-black"
-                              >
-                                Abbrechen
-                              </button>
-                            </td>
-                          </>
-                        ) : (
-                          <>
-                            <td className="py-2 px-2 font-mono text-xs font-semibold text-brand-black dark:text-slate-200">
-                              {unit.exemplar_code}
-                            </td>
-                            <td className="py-2 px-2">
-                              <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold ${STATUS_CONFIG[unit.status].pill}`}>
-                                {STATUS_CONFIG[unit.status].label}
-                              </span>
-                            </td>
-                            <td className="py-2 px-2 text-xs text-brand-muted">
-                              {unit.purchased_at ? new Date(unit.purchased_at).toLocaleDateString('de-DE') : '–'}
-                            </td>
-                            <td className="py-2 px-2 text-xs">
-                              {unitAssets[unit.id] ? (
-                                <a
-                                  href={`/admin/anlagen/${unitAssets[unit.id].id}`}
-                                  className="text-accent-blue hover:underline font-semibold"
-                                >
-                                  {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(unitAssets[unit.id].current_value)}
-                                </a>
-                              ) : (
-                                <button
-                                  onClick={() => startEnroll(unit)}
-                                  className="text-brand-muted hover:text-accent-blue underline-offset-2 hover:underline italic"
-                                >
-                                  + erfassen
-                                </button>
-                              )}
-                            </td>
-                            <td className="py-2 px-2 text-xs text-brand-muted max-w-[180px] truncate" title={unit.notes ?? ''}>
-                              {unit.notes || '–'}
-                            </td>
-                            <td className="py-2 px-2 text-right whitespace-nowrap">
-                              <button
-                                onClick={() => {
-                                  setEditingId(unit.id);
-                                  setEditDraft({});
-                                }}
-                                className="text-xs text-accent-blue hover:text-blue-700 font-semibold mr-2"
-                              >
-                                Bearbeiten
-                              </button>
-                              <button
-                                onClick={() => handleDelete(unit)}
-                                disabled={busy}
-                                className="text-xs text-red-500 hover:text-red-700 font-semibold disabled:opacity-40"
-                              >
-                                Löschen
-                              </button>
-                            </td>
-                          </>
-                        )}
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+      {/* Modal: Neues Exemplar anlegen */}
+      {addOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm overflow-y-auto p-4 pt-16"
+          onClick={() => { if (!addBusy) setAddOpen(false); }}
+        >
+          <div
+            className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-brand-border dark:border-slate-700 w-full max-w-md"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-6 pt-5 pb-3 border-b border-brand-border dark:border-slate-700 flex items-center justify-between">
+              <h4 className="font-heading font-bold text-base text-brand-black dark:text-slate-200">Neues Exemplar anlegen</h4>
+              <button onClick={() => setAddOpen(false)} disabled={addBusy}
+                className="text-brand-muted hover:text-brand-black text-2xl leading-none disabled:opacity-40">×</button>
             </div>
-          )}
+            <div className="px-6 py-4 space-y-4">
+              <div>
+                <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Bezeichnung <span className="text-red-500">*</span></label>
+                <input type="text" value={addForm.exemplar_code}
+                  onChange={(e) => setAddForm((f) => ({ ...f, exemplar_code: e.target.value }))}
+                  placeholder="z.B. AKKU-DJI-OA5-01"
+                  className="w-full px-3 py-2 border border-brand-border rounded-lg text-sm font-body bg-white dark:bg-slate-800 text-brand-black dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-blue" />
+                <p className="text-[10px] text-brand-muted mt-1">Eindeutige Kennung. Wird im QR-Code-Link verwendet und kann später nicht mehr geändert werden.</p>
+              </div>
+              <div>
+                <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Seriennummer (optional)</label>
+                <input type="text" value={addForm.serial_number}
+                  onChange={(e) => setAddForm((f) => ({ ...f, serial_number: e.target.value }))}
+                  placeholder="Hersteller-S/N — z.B. bei Akkus, Speicherkarten"
+                  className="w-full px-3 py-2 border border-brand-border rounded-lg text-sm font-mono bg-white dark:bg-slate-800 text-brand-black dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-blue" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Kaufdatum <span className="text-red-500">*</span></label>
+                  <input type="date" value={addForm.purchased_at}
+                    onChange={(e) => setAddForm((f) => ({ ...f, purchased_at: e.target.value }))}
+                    className="w-full px-3 py-2 border border-brand-border rounded-lg text-sm font-body bg-white dark:bg-slate-800 text-brand-black dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-blue" />
+                </div>
+                <div>
+                  <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Kaufpreis <span className="text-red-500">*</span></label>
+                  <div className="relative">
+                    <input type="text" inputMode="decimal" value={addForm.purchase_price}
+                      onChange={(e) => setAddForm((f) => ({ ...f, purchase_price: e.target.value }))}
+                      placeholder="z.B. 49,90"
+                      className="w-full pr-8 pl-3 py-2 border border-brand-border rounded-lg text-sm font-body bg-white dark:bg-slate-800 text-brand-black dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-blue" />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-brand-muted pointer-events-none">€</span>
+                  </div>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Notizen (optional)</label>
+                <textarea value={addForm.notes} rows={2}
+                  onChange={(e) => setAddForm((f) => ({ ...f, notes: e.target.value }))}
+                  placeholder="Zustand, Bemerkungen…"
+                  className="w-full px-3 py-2 border border-brand-border rounded-lg text-sm font-body bg-white dark:bg-slate-800 text-brand-black dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-blue resize-y" />
+              </div>
 
-          {/* + Hinzufuegen */}
-          {!adding ? (
-            <button
-              onClick={() => setAdding(true)}
-              className="w-full px-3 py-2 text-xs font-heading font-semibold text-accent-blue border border-dashed border-brand-border dark:border-slate-700 rounded-lg hover:bg-white dark:hover:bg-slate-800/40 transition-colors"
-            >
-              + Exemplar hinzufügen
-            </button>
-          ) : (
-            <div className="bg-white dark:bg-slate-800/60 rounded-lg border border-brand-border dark:border-slate-700 p-3">
-              <p className="text-xs font-heading font-semibold text-brand-black dark:text-slate-200 mb-3">+ Neues Exemplar</p>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
-                <div>
-                  <label className="block text-[10px] font-heading font-semibold text-brand-muted mb-1">Code</label>
-                  <input
-                    type="text"
-                    value={newDraft.exemplar_code ?? ''}
-                    onChange={(e) => setNewDraft((u) => ({ ...u, exemplar_code: e.target.value }))}
-                    placeholder={`auto: ${accessoryId}-XXX`}
-                    className="w-full px-2 py-1.5 border border-brand-border rounded-lg text-xs font-mono bg-white focus:outline-none focus:ring-2 focus:ring-accent-blue"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-heading font-semibold text-brand-muted mb-1">Kaufdatum</label>
-                  <input
-                    type="date"
-                    value={newDraft.purchased_at ?? ''}
-                    onChange={(e) => setNewDraft((u) => ({ ...u, purchased_at: e.target.value }))}
-                    className="w-full px-2 py-1.5 border border-brand-border rounded-lg text-xs font-body bg-white focus:outline-none focus:ring-2 focus:ring-accent-blue"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-heading font-semibold text-brand-muted mb-1">Status</label>
-                  <select
-                    value={newDraft.status ?? 'available'}
-                    onChange={(e) => setNewDraft((u) => ({ ...u, status: e.target.value as AccessoryUnit['status'] }))}
-                    className="w-full px-2 py-1.5 border border-brand-border rounded-lg text-xs font-body bg-white focus:outline-none focus:ring-2 focus:ring-accent-blue"
-                  >
-                    {STATUS_OPTIONS.map((s) => (
-                      <option key={s} value={s}>
-                        {STATUS_CONFIG[s].label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-heading font-semibold text-brand-muted mb-1">Notizen</label>
-                  <input
-                    type="text"
-                    value={newDraft.notes ?? ''}
-                    onChange={(e) => setNewDraft((u) => ({ ...u, notes: e.target.value }))}
-                    placeholder="optional"
-                    className="w-full px-2 py-1.5 border border-brand-border rounded-lg text-xs font-body bg-white focus:outline-none focus:ring-2 focus:ring-accent-blue"
-                  />
-                </div>
+              <div className="rounded-lg bg-brand-bg dark:bg-slate-800 border border-brand-border/60 dark:border-slate-700/60 p-3 text-[11px] font-body text-brand-muted">
+                <p className="font-semibold text-brand-black dark:text-slate-200 mb-1">Automatisch erfasst:</p>
+                <ul className="space-y-0.5">
+                  <li>• <span className="text-brand-black dark:text-slate-300">Wiederbeschaffungswert</span> = aktueller AfA-Zeitwert (Start = Kaufpreis)</li>
+                  <li>• <span className="text-brand-black dark:text-slate-300">Nutzungsdauer</span> = 36 Monate (Standard, linear)</li>
+                  <li>• <span className="text-brand-black dark:text-slate-300">Anlagen-Status</span> = aktiv</li>
+                </ul>
               </div>
-              <div className="flex justify-end gap-2">
-                <button
-                  onClick={() => {
-                    setAdding(false);
-                    setNewDraft({ exemplar_code: '', purchased_at: '', status: 'available', notes: '' });
-                  }}
-                  className="px-3 py-1.5 text-xs font-heading font-semibold text-brand-muted hover:text-brand-black"
-                >
-                  Abbrechen
-                </button>
-                <button
-                  onClick={handleAdd}
-                  disabled={busy}
-                  className="px-4 py-1.5 text-xs font-heading font-semibold rounded-btn bg-brand-black text-white hover:bg-brand-dark transition-colors disabled:opacity-40"
-                >
-                  {busy ? 'Anlegen…' : 'Anlegen'}
-                </button>
-              </div>
-            </div>
-          )}
 
-          {/* Anlage erfassen — Inline-Form, oeffnet sich wenn ein Exemplar
-              "+ erfassen" geklickt hat. Legt eine assets-Row mit
-              kind=rental_accessory + accessory_unit_id an. */}
-          {enrollingUnit && (
-            <div className="mt-3 bg-emerald-50 dark:bg-emerald-950/30 rounded-lg border border-emerald-200 dark:border-emerald-900 p-3">
-              <p className="text-xs font-heading font-semibold text-emerald-900 dark:text-emerald-200 mb-1">
-                Anlage erfassen — <span className="font-mono">{enrollingUnit.exemplar_code}</span>
-              </p>
-              <p className="text-[10px] font-body text-emerald-800/80 dark:text-emerald-300/80 mb-3">
-                Wird im Anlagenverzeichnis als Asset (rental_accessory) angelegt. Der monatliche AfA-Cron schreibt den Zeitwert fort —
-                er erscheint automatisch im Mietvertrag und im Schadensfall als Wiederbeschaffungswert.
-              </p>
-              <div className="grid grid-cols-3 gap-2 mb-3">
-                <div>
-                  <label className="block text-[10px] font-heading font-semibold text-brand-muted mb-1">Kaufpreis (€)</label>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={enrollDraft.purchase_price}
-                    onChange={(e) => setEnrollDraft((d) => ({ ...d, purchase_price: e.target.value }))}
-                    placeholder="z.B. 39,99"
-                    className="w-full px-2 py-1.5 border border-brand-border rounded-lg text-xs font-body bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  />
+              {addError && (
+                <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs font-body text-red-700">
+                  {addError}
                 </div>
-                <div>
-                  <label className="block text-[10px] font-heading font-semibold text-brand-muted mb-1">Kaufdatum</label>
-                  <input
-                    type="date"
-                    value={enrollDraft.purchase_date}
-                    onChange={(e) => setEnrollDraft((d) => ({ ...d, purchase_date: e.target.value }))}
-                    className="w-full px-2 py-1.5 border border-brand-border rounded-lg text-xs font-body bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-heading font-semibold text-brand-muted mb-1">Nutzungsdauer (Mon.)</label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={enrollDraft.useful_life_months}
-                    onChange={(e) => setEnrollDraft((d) => ({ ...d, useful_life_months: e.target.value }))}
-                    className="w-full px-2 py-1.5 border border-brand-border rounded-lg text-xs font-body bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  />
-                </div>
-              </div>
-              <div className="flex justify-end gap-2">
-                <button
-                  onClick={() => setEnrollingUnit(null)}
-                  className="px-3 py-1.5 text-xs font-heading font-semibold text-brand-muted hover:text-brand-black"
-                >
-                  Abbrechen
-                </button>
-                <button
-                  onClick={handleEnrollSave}
-                  disabled={busy}
-                  className="px-4 py-1.5 text-xs font-heading font-semibold rounded-btn bg-emerald-600 text-white hover:bg-emerald-700 transition-colors disabled:opacity-40"
-                >
-                  {busy ? 'Anlegen…' : 'Anlage anlegen'}
-                </button>
-              </div>
+              )}
             </div>
-          )}
-        </>
+            <div className="px-6 py-3 border-t border-brand-border dark:border-slate-700 flex justify-end gap-2">
+              <button onClick={() => setAddOpen(false)} disabled={addBusy}
+                className="px-4 py-2 text-xs font-heading font-semibold text-brand-muted hover:text-brand-black transition-colors disabled:opacity-40">Abbrechen</button>
+              <button onClick={handleAdd} disabled={addBusy}
+                className="px-4 py-2 text-xs font-heading font-semibold bg-accent-blue text-white rounded-btn hover:bg-blue-600 transition-colors disabled:opacity-40">
+                {addBusy ? 'Wird angelegt…' : 'Exemplar anlegen'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Eintrag bearbeiten (Status + Notizen) */}
+      {editId && (
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm overflow-y-auto p-4 pt-16"
+          onClick={() => { if (!editBusy) setEditId(null); }}
+        >
+          <div
+            className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-brand-border dark:border-slate-700 w-full max-w-md"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-6 pt-5 pb-3 border-b border-brand-border dark:border-slate-700 flex items-center justify-between">
+              <h4 className="font-heading font-bold text-base text-brand-black dark:text-slate-200">Eintrag bearbeiten</h4>
+              <button onClick={() => setEditId(null)} disabled={editBusy}
+                className="text-brand-muted hover:text-brand-black text-2xl leading-none disabled:opacity-40">×</button>
+            </div>
+            <div className="px-6 py-4 space-y-4">
+              <p className="text-xs text-brand-muted">Bezeichnung, Seriennummer, Kaufdatum und Kaufpreis sind nach Anlage nicht mehr änderbar. Du kannst nur Status und Notizen ändern.</p>
+              <div>
+                <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Status</label>
+                <select value={editStatus}
+                  onChange={(e) => setEditStatus(e.target.value as AccessoryUnit['status'])}
+                  className="w-full px-3 py-2 border border-brand-border rounded-lg text-sm font-body bg-white dark:bg-slate-800 text-brand-black dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-blue">
+                  {STATUS_OPTIONS.map((s) => (
+                    <option key={s} value={s}>{STATUS_CONFIG[s].label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Notizen</label>
+                <textarea value={editNotes} rows={4}
+                  onChange={(e) => setEditNotes(e.target.value)}
+                  placeholder="Zustand, Bemerkungen…"
+                  className="w-full px-3 py-2 border border-brand-border rounded-lg text-sm font-body bg-white dark:bg-slate-800 text-brand-black dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-blue resize-y" />
+              </div>
+              {editError && (
+                <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs font-body text-red-700">
+                  {editError}
+                </div>
+              )}
+            </div>
+            <div className="px-6 py-3 border-t border-brand-border dark:border-slate-700 flex justify-end gap-2">
+              <button onClick={() => setEditId(null)} disabled={editBusy}
+                className="px-4 py-2 text-xs font-heading font-semibold text-brand-muted hover:text-brand-black transition-colors disabled:opacity-40">Abbrechen</button>
+              <button onClick={handleSaveEdit} disabled={editBusy}
+                className="px-4 py-2 text-xs font-heading font-semibold bg-accent-blue text-white rounded-btn hover:bg-blue-600 transition-colors disabled:opacity-40">
+                {editBusy ? 'Wird gespeichert…' : 'Speichern'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

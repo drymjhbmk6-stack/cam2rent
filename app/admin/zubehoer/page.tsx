@@ -252,6 +252,31 @@ export default function AdminZubehoerPage() {
                   placeholder="Kurze Beschreibung (optional)"
                   className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
               </div>
+              {/* Kompatible Kameras — direkt unter Beschreibung, vor Preis */}
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Kompatible Kameras</label>
+                <div className="flex flex-wrap gap-2 mb-2">
+                  <label className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-body cursor-pointer ${newForm.compatible_product_ids.length === 0 ? 'border-blue-500 bg-blue-500/20 text-blue-700 dark:text-blue-300 font-semibold' : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300'}`}>
+                    <input type="radio" name="new-compat" checked={newForm.compatible_product_ids.length === 0}
+                      onChange={() => setNewForm((f) => ({ ...f, compatible_product_ids: [] }))} className="sr-only" />
+                    Alle Kameras
+                  </label>
+                  {productList.map((p) => {
+                    const checked = newForm.compatible_product_ids.includes(p.id);
+                    return (
+                      <label key={p.id} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-body cursor-pointer ${checked ? 'border-blue-500 bg-blue-500/20 text-blue-700 dark:text-blue-300 font-semibold' : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300'}`}>
+                        <input type="checkbox" checked={checked} className="sr-only"
+                          onChange={() => setNewForm((f) => {
+                            const ids = checked ? f.compatible_product_ids.filter((id) => id !== p.id) : [...f.compatible_product_ids, p.id];
+                            return { ...f, compatible_product_ids: ids };
+                          })} />
+                        {p.name}
+                      </label>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-brand-muted">Leer = passt zu allen Kameras. Auswahl = nur für diese Modelle.</p>
+              </div>
               <div>
                 <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Preis</label>
                 <div className="flex gap-2">
@@ -269,30 +294,10 @@ export default function AdminZubehoerPage() {
                   </select>
                 </div>
               </div>
-              <div>
-                <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Verfügbare Menge</label>
-                <div className="w-full px-3 py-2.5 border border-dashed border-brand-border rounded-[10px] text-xs font-body text-brand-muted bg-gray-50">
-                  0 Exemplare — nach dem Speichern unten Exemplare anlegen.
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">
-                  Wiederbeschaffungswert (€)
-                  <span className="ml-1 text-brand-muted font-normal normal-case">— Zeitwert im Mietvertrag</span>
-                </label>
-                <input
-                  type="number" min="0" step="0.01" value={newForm.replacement_value}
-                  onChange={(e) => setNewForm((f) => ({ ...f, replacement_value: e.target.value }))}
-                  placeholder="z.B. 40.00"
-                  className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue"
-                />
-              </div>
               <div className="sm:col-span-2">
-                <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Bild-URL (optional)</label>
-                <input type="text" value={newForm.image_url}
-                  onChange={(e) => setNewForm((f) => ({ ...f, image_url: e.target.value }))}
-                  placeholder="https://…"
-                  className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
+                <p className="text-xs font-body text-brand-muted bg-brand-bg dark:bg-slate-800/40 border border-brand-border rounded-[10px] px-3 py-2.5">
+                  Bild und Exemplare können nach dem ersten Speichern unten in der Bearbeiten-Ansicht erfasst werden. Wiederbeschaffungswert ergibt sich automatisch aus den Anlagen der einzelnen Exemplare.
+                </p>
               </div>
               <div className="flex items-center gap-6 flex-wrap">
                 <label className="flex items-center gap-2 cursor-pointer">
@@ -354,31 +359,6 @@ export default function AdminZubehoerPage() {
                   )}
                 </div>
                 <p className="text-xs text-brand-muted mt-1">Upgrade-Gruppen werden als Radio-Buttons im Buchungsflow angezeigt.</p>
-              </div>
-              {/* Produkt-Zuordnung */}
-              <div className="sm:col-span-2">
-                <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Kompatible Kameras</label>
-                <div className="flex flex-wrap gap-2 mb-2">
-                  <label className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-body cursor-pointer ${newForm.compatible_product_ids.length === 0 ? 'border-blue-500 bg-blue-500/20 text-blue-700 dark:text-blue-300 font-semibold' : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300'}`}>
-                    <input type="radio" name="new-compat" checked={newForm.compatible_product_ids.length === 0}
-                      onChange={() => setNewForm((f) => ({ ...f, compatible_product_ids: [] }))} className="sr-only" />
-                    Alle Kameras
-                  </label>
-                  {productList.map((p) => {
-                    const checked = newForm.compatible_product_ids.includes(p.id);
-                    return (
-                      <label key={p.id} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-body cursor-pointer ${checked ? 'border-blue-500 bg-blue-500/20 text-blue-700 dark:text-blue-300 font-semibold' : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300'}`}>
-                        <input type="checkbox" checked={checked} className="sr-only"
-                          onChange={() => setNewForm((f) => {
-                            const ids = checked ? f.compatible_product_ids.filter((id) => id !== p.id) : [...f.compatible_product_ids, p.id];
-                            return { ...f, compatible_product_ids: ids };
-                          })} />
-                        {p.name}
-                      </label>
-                    );
-                  })}
-                </div>
-                <p className="text-xs text-brand-muted">Leer = passt zu allen Kameras. Auswahl = nur für diese Modelle.</p>
               </div>
             </div>
             <div className="flex justify-end mt-5 gap-2">
@@ -575,6 +555,32 @@ function AccessoryCard({ acc, editId, editForm, setEditForm, savedId, savingId, 
                           onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
                           className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body bg-white focus:outline-none focus:ring-2 focus:ring-accent-blue" />
                       </div>
+                      {/* Kompatible Kameras — direkt unter Beschreibung, vor Preis */}
+                      <div className="sm:col-span-2">
+                        <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Kompatible Kameras</label>
+                        <div className="flex flex-wrap gap-2 mb-2">
+                          <label className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-body cursor-pointer ${(editForm.compatible_product_ids ?? []).length === 0 ? 'border-blue-500 bg-blue-500/20 text-blue-700 dark:text-blue-300 font-semibold' : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300'}`}>
+                            <input type="radio" name="edit-compat" checked={(editForm.compatible_product_ids ?? []).length === 0}
+                              onChange={() => setEditForm((f) => ({ ...f, compatible_product_ids: [] }))} className="sr-only" />
+                            Alle Kameras
+                          </label>
+                          {productList.map((p) => {
+                            const checked = (editForm.compatible_product_ids ?? []).includes(p.id);
+                            return (
+                              <label key={p.id} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-body cursor-pointer ${checked ? 'border-blue-500 bg-blue-500/20 text-blue-700 dark:text-blue-300 font-semibold' : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300'}`}>
+                                <input type="checkbox" checked={checked} className="sr-only"
+                                  onChange={() => setEditForm((f) => {
+                                    const cur = f.compatible_product_ids ?? [];
+                                    const ids = checked ? cur.filter((id: string) => id !== p.id) : [...cur, p.id];
+                                    return { ...f, compatible_product_ids: ids };
+                                  })} />
+                                {p.name}
+                              </label>
+                            );
+                          })}
+                        </div>
+                        <p className="text-xs text-brand-muted">Leer = passt zu allen Kameras.</p>
+                      </div>
                       <div>
                         <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Preis</label>
                         <div className="flex gap-2">
@@ -592,31 +598,53 @@ function AccessoryCard({ acc, editId, editForm, setEditForm, savedId, savingId, 
                           </select>
                         </div>
                       </div>
-                      <div>
-                        <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Verfügbare Menge</label>
-                        <div className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body bg-gray-50 text-brand-muted flex items-center justify-between">
-                          <span>{editForm.available_qty ?? 0} Exemplare</span>
-                          <span className="text-[10px]">automatisch berechnet</span>
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">
-                          Wiederbeschaffungswert (€)
-                          <span className="ml-1 text-brand-muted font-normal normal-case">— Zeitwert im Mietvertrag</span>
-                        </label>
-                        <input
-                          type="number" min="0" step="0.01"
-                          value={(editForm.replacement_value as string | number | null | undefined) ?? ''}
-                          onChange={(e) => setEditForm((f) => ({ ...f, replacement_value: e.target.value }))}
-                          placeholder="z.B. 40.00"
-                          className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body bg-white focus:outline-none focus:ring-2 focus:ring-accent-blue"
-                        />
-                      </div>
                       <div className="sm:col-span-2">
-                        <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Bild-URL (optional)</label>
-                        <input type="text" value={editForm.image_url ?? ''}
-                          onChange={(e) => setEditForm((f) => ({ ...f, image_url: e.target.value }))}
-                          className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body bg-white focus:outline-none focus:ring-2 focus:ring-accent-blue" />
+                        <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Bild</label>
+                        <div className="flex items-center gap-4">
+                          {editForm.image_url ? (
+                            <div className="relative group">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={editForm.image_url as string} alt={(editForm.name as string | undefined) ?? acc.name} className="w-40 h-30 object-contain rounded-lg border border-brand-border bg-white" />
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  if (!confirm('Bild löschen?')) return;
+                                  const url = editForm.image_url as string;
+                                  const pathMatch = url.match(/product-images\/(.+)$/);
+                                  const path = pathMatch?.[1] ?? '';
+                                  try {
+                                    await fetch('/api/accessory-images', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path, accessoryId: acc.id }) });
+                                    setEditForm((f) => ({ ...f, image_url: '' }));
+                                  } catch { alert('Fehler beim Löschen.'); }
+                                }}
+                                className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full text-xs font-bold flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                              >✕</button>
+                            </div>
+                          ) : (
+                            <div className="w-40 h-30 rounded-lg border-2 border-dashed border-brand-border dark:border-slate-600 flex items-center justify-center text-brand-muted text-xs">
+                              Kein Bild
+                            </div>
+                          )}
+                          <label className="cursor-pointer px-4 py-2.5 bg-accent-blue text-white text-sm font-heading font-semibold rounded-[10px] hover:bg-blue-700 transition-colors">
+                            {editForm.image_url ? 'Bild ändern' : 'Bild hochladen'}
+                            <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={async (ev) => {
+                              const file = ev.target.files?.[0];
+                              if (!file) return;
+                              const fd = new FormData();
+                              fd.append('accessoryId', acc.id);
+                              fd.append('accessoryName', (editForm.name as string | undefined) ?? acc.name);
+                              fd.append('file', file);
+                              try {
+                                const res = await fetch('/api/accessory-images', { method: 'POST', body: fd });
+                                if (!res.ok) { const d = await res.json().catch(() => ({})); alert(d.error ?? 'Upload fehlgeschlagen.'); return; }
+                                const data = await res.json();
+                                setEditForm((f) => ({ ...f, image_url: data.url }));
+                              } catch { alert('Upload fehlgeschlagen.'); }
+                              ev.target.value = '';
+                            }} />
+                          </label>
+                        </div>
+                        <p className="text-[11px] text-brand-muted mt-2">Wird automatisch auf 1200×900 skaliert mit Name als dezentem Wasserzeichen.</p>
                       </div>
                       <div className="flex items-center gap-6 flex-wrap">
                         <label className="flex items-center gap-2 cursor-pointer">
@@ -677,32 +705,6 @@ function AccessoryCard({ acc, editId, editForm, setEditForm, savedId, savingId, 
                             </label>
                           )}
                         </div>
-                      </div>
-                      {/* Produkt-Zuordnung */}
-                      <div className="sm:col-span-2">
-                        <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Kompatible Kameras</label>
-                        <div className="flex flex-wrap gap-2 mb-2">
-                          <label className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-body cursor-pointer ${(editForm.compatible_product_ids ?? []).length === 0 ? 'border-blue-500 bg-blue-500/20 text-blue-700 dark:text-blue-300 font-semibold' : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300'}`}>
-                            <input type="radio" name="edit-compat" checked={(editForm.compatible_product_ids ?? []).length === 0}
-                              onChange={() => setEditForm((f) => ({ ...f, compatible_product_ids: [] }))} className="sr-only" />
-                            Alle Kameras
-                          </label>
-                          {productList.map((p) => {
-                            const checked = (editForm.compatible_product_ids ?? []).includes(p.id);
-                            return (
-                              <label key={p.id} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-body cursor-pointer ${checked ? 'border-blue-500 bg-blue-500/20 text-blue-700 dark:text-blue-300 font-semibold' : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300'}`}>
-                                <input type="checkbox" checked={checked} className="sr-only"
-                                  onChange={() => setEditForm((f) => {
-                                    const cur = f.compatible_product_ids ?? [];
-                                    const ids = checked ? cur.filter((id: string) => id !== p.id) : [...cur, p.id];
-                                    return { ...f, compatible_product_ids: ids };
-                                  })} />
-                                {p.name}
-                              </label>
-                            );
-                          })}
-                        </div>
-                        <p className="text-xs text-brand-muted">Leer = passt zu allen Kameras.</p>
                       </div>
                     </div>
                     {/* Exemplar-Verwaltung — nur sichtbar im Edit-Modus, weil acc.id existiert */}

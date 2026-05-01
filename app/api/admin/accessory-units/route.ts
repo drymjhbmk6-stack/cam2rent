@@ -2,24 +2,29 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { syncAccessoryQty } from '@/lib/sync-accessory-qty';
 import { logAudit } from '@/lib/audit';
+import { isTestMode } from '@/lib/env-mode';
 
 /**
  * GET    /api/admin/accessory-units?accessory_id=xxx → Exemplare fuer ein Zubehoer
  * GET    /api/admin/accessory-units                  → Alle Exemplare
- * POST   /api/admin/accessory-units                  → Neues Exemplar anlegen
- * PUT    /api/admin/accessory-units                  → Exemplar aktualisieren
+ * POST   /api/admin/accessory-units                  → Neues Exemplar + automatisch Asset
+ * PUT    /api/admin/accessory-units                  → Nur status + notes aenderbar
  * DELETE /api/admin/accessory-units?id=xxx           → Exemplar loeschen
  *
  * Permission: 'katalog' (siehe middleware.ts).
  *
- * Nach jedem POST/PUT (mit Status-Change)/DELETE wird accessories.available_qty
- * automatisch auf COUNT(units WHERE status IN ('available','rented')) gesetzt --
- * damit bestehende Verfuegbarkeitslogik konsistent bleibt, bis Phase 2C den
- * Check direkt auf accessory_units umstellt.
+ * Pflichtfelder bei POST: accessory_id, exemplar_code (Bezeichnung), purchased_at, purchase_price
+ * Optionale Felder: serial_number (Hersteller-S/N), notes
+ *
+ * Nach Anlage sind exemplar_code/serial_number/purchased_at/purchase_price unveraenderlich.
+ * Nur status + notes sind via PUT aenderbar (analog product_units).
  */
 
 const VALID_STATUSES = ['available', 'rented', 'maintenance', 'damaged', 'lost', 'retired'] as const;
 type AccessoryUnitStatus = (typeof VALID_STATUSES)[number];
+
+const DEFAULT_USEFUL_LIFE_MONTHS = 36;
+const DEFAULT_RESIDUAL_PERCENT = 0.3;
 
 function isValidStatus(s: unknown): s is AccessoryUnitStatus {
   return typeof s === 'string' && (VALID_STATUSES as readonly string[]).includes(s);
@@ -46,91 +51,128 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { accessory_id, exemplar_code, status, notes, purchased_at } = body;
+  const {
+    accessory_id,
+    exemplar_code,
+    serial_number,
+    status,
+    notes,
+    purchased_at,
+    purchase_price,
+  } = body as {
+    accessory_id?: string;
+    exemplar_code?: string;
+    serial_number?: string;
+    status?: string;
+    notes?: string;
+    purchased_at?: string;
+    purchase_price?: number | string;
+  };
 
+  // Pflichtfeld-Validierung
   if (!accessory_id || typeof accessory_id !== 'string') {
     return NextResponse.json({ error: 'accessory_id ist erforderlich.' }, { status: 400 });
   }
-
+  if (!exemplar_code || !exemplar_code.trim()) {
+    return NextResponse.json({ error: 'Bezeichnung ist erforderlich.' }, { status: 400 });
+  }
+  if (!purchased_at) {
+    return NextResponse.json({ error: 'Kaufdatum ist erforderlich.' }, { status: 400 });
+  }
+  const priceNum = Number(purchase_price);
+  if (!Number.isFinite(priceNum) || priceNum <= 0) {
+    return NextResponse.json(
+      { error: 'Kaufpreis muss eine positive Zahl sein.' },
+      { status: 400 }
+    );
+  }
   if (status !== undefined && !isValidStatus(status)) {
     return NextResponse.json({ error: 'Ungültiger Status.' }, { status: 400 });
   }
 
+  const finalCode = exemplar_code.trim();
+  const finalSerial = typeof serial_number === 'string' && serial_number.trim()
+    ? serial_number.trim()
+    : null;
+
   const supabase = createServiceClient();
 
-  // Wenn kein Code übergeben: <accessory_id>-<NextNumber> mit höchster bestehender Nummer + 1
-  let finalCode = typeof exemplar_code === 'string' ? exemplar_code.trim() : '';
-  if (!finalCode) {
-    const { data: existing } = await supabase
-      .from('accessory_units')
-      .select('exemplar_code')
-      .eq('accessory_id', accessory_id);
-
-    let next = 1;
-    if (existing && existing.length > 0) {
-      const numbers = existing
-        .map((u) => {
-          const match = (u.exemplar_code as string).match(/(\d+)$/);
-          return match ? parseInt(match[1], 10) : 0;
-        })
-        .filter((n) => !isNaN(n));
-      next = Math.max(0, ...numbers) + 1;
-    }
-    finalCode = `${accessory_id}-${String(next).padStart(3, '0')}`;
-  }
-
-  const { data, error } = await supabase
+  // 1. Unit anlegen
+  const { data: unit, error: unitError } = await supabase
     .from('accessory_units')
     .insert({
       accessory_id,
       exemplar_code: finalCode,
+      serial_number: finalSerial,
       status: status || 'available',
       notes: typeof notes === 'string' ? notes.trim() || null : null,
-      purchased_at: purchased_at || null,
+      purchased_at,
     })
     .select()
     .single();
 
-  if (error) {
-    if (error.code === '23505') {
+  if (unitError) {
+    if (unitError.code === '23505') {
       return NextResponse.json(
-        { error: `Exemplar-Code "${finalCode}" existiert bereits für dieses Zubehör.` },
+        { error: `Bezeichnung "${finalCode}" existiert bereits. Waehle eine andere.` },
         { status: 409 }
       );
     }
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: unitError.message }, { status: 500 });
   }
 
   await syncAccessoryQty(supabase, accessory_id);
 
+  // 2. Asset automatisch anlegen
+  const residualValue = Math.round(priceNum * DEFAULT_RESIDUAL_PERCENT * 100) / 100;
+  const isTest = await isTestMode();
+
+  const { error: assetError } = await supabase.from('assets').insert({
+    kind: 'rental_accessory',
+    name: finalCode,
+    serial_number: finalSerial,
+    purchase_price: priceNum,
+    purchase_date: purchased_at,
+    useful_life_months: DEFAULT_USEFUL_LIFE_MONTHS,
+    depreciation_method: 'linear',
+    residual_value: residualValue,
+    current_value: priceNum,
+    accessory_unit_id: unit.id,
+    status: 'active',
+    is_test: isTest,
+  });
+
+  if (assetError) {
+    // Non-fatal: Unit bleibt erhalten, Asset kann manuell nachgetragen werden.
+    console.error('[accessory-units POST] Asset-Anlage fehlgeschlagen:', assetError);
+  }
+
   await logAudit({
     action: 'accessory_unit.create',
     entityType: 'accessory_unit',
-    entityId: data?.id,
+    entityId: unit?.id,
     entityLabel: finalCode,
-    changes: { accessory_id, status: status || 'available' },
+    changes: { accessory_id, exemplar_code: finalCode, purchase_price: priceNum },
     request: req,
   });
 
-  return NextResponse.json({ unit: data }, { status: 201 });
+  return NextResponse.json({ unit, assetCreated: !assetError }, { status: 201 });
 }
 
 export async function PUT(req: NextRequest) {
   const body = await req.json();
-  const {
-    id,
-    exemplar_code,
-    status,
-    notes,
-    purchased_at,
-    retired_at,
-    retirement_reason,
-  } = body;
+  const { id, status, notes } = body as {
+    id?: string;
+    status?: string;
+    notes?: string;
+    // exemplar_code, serial_number, purchased_at, purchase_price werden bewusst
+    // NICHT mehr akzeptiert (immutable nach Anlage). Alte Aufrufer mit diesen
+    // Feldern bekommen sie ignoriert (defensiv).
+  };
 
   if (!id || typeof id !== 'string') {
     return NextResponse.json({ error: 'id ist erforderlich.' }, { status: 400 });
   }
-
   if (status !== undefined && !isValidStatus(status)) {
     return NextResponse.json({ error: 'Ungültiger Status.' }, { status: 400 });
   }
@@ -138,14 +180,16 @@ export async function PUT(req: NextRequest) {
   const supabase = createServiceClient();
 
   const updates: Record<string, unknown> = {};
-  if (typeof exemplar_code === 'string') updates.exemplar_code = exemplar_code.trim();
   if (status !== undefined) updates.status = status;
-  if (notes !== undefined) updates.notes = typeof notes === 'string' ? notes.trim() || null : null;
-  if (purchased_at !== undefined) updates.purchased_at = purchased_at || null;
-  if (retired_at !== undefined) updates.retired_at = retired_at || null;
-  if (retirement_reason !== undefined) {
-    updates.retirement_reason =
-      typeof retirement_reason === 'string' ? retirement_reason.trim() || null : null;
+  if (notes !== undefined) {
+    updates.notes = typeof notes === 'string' ? notes.trim() || null : null;
+  }
+
+  if (Object.keys(updates).length === 0) {
+    return NextResponse.json(
+      { error: 'Keine erlaubten Aenderungen. Aenderbar sind nur status und notes.' },
+      { status: 400 }
+    );
   }
 
   const { data, error } = await supabase
@@ -156,16 +200,10 @@ export async function PUT(req: NextRequest) {
     .single();
 
   if (error) {
-    if (error.code === '23505') {
-      return NextResponse.json(
-        { error: 'Exemplar-Code existiert bereits für dieses Zubehör.' },
-        { status: 409 }
-      );
-    }
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // Bei Status-Aenderung: qty resyncen
+  // Bei Status-Aenderung qty resyncen
   if (status !== undefined && data?.accessory_id) {
     await syncAccessoryQty(supabase, data.accessory_id);
   }
@@ -190,7 +228,7 @@ export async function DELETE(req: NextRequest) {
 
   const supabase = createServiceClient();
 
-  // Vorher accessory_id holen (für sync nach Delete)
+  // Vorher accessory_id holen (fuer sync nach Delete)
   const { data: unit } = await supabase
     .from('accessory_units')
     .select('accessory_id')
@@ -216,11 +254,14 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json(
       {
         error:
-          'Dieses Exemplar ist einer aktiven Buchung zugeordnet und kann nicht gelöscht werden. Setze stattdessen den Status auf "ausgemustert".',
+          'Dieses Exemplar ist einer aktiven Buchung zugeordnet und kann nicht geloescht werden. Setze stattdessen den Status auf "ausgemustert".',
       },
       { status: 409 }
     );
   }
+
+  // Verknuepftes Asset ebenfalls loeschen
+  await supabase.from('assets').delete().eq('accessory_unit_id', id);
 
   const { error } = await supabase.from('accessory_units').delete().eq('id', id);
 

@@ -2,8 +2,8 @@ import { createServiceClient } from '@/lib/supabase';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import ScanBackLink from './ScanBackLink';
-import EditableCode from './EditableCode';
 import EditCameraEntry from './EditCameraEntry';
+import EditAccessoryEntry from './EditAccessoryEntry';
 
 /**
  * Detail-Karte nach QR-Scan. Sucht den Code in product_units (Seriennummer)
@@ -248,11 +248,7 @@ function UnitCard({ data }: { data: UnitCardData }) {
             <p className="text-xs uppercase tracking-wider" style={{ color: '#6b7280' }}>{data.headerLabel}</p>
             <h1 className="text-2xl font-bold leading-tight" style={{ color: '#0f172a' }}>{data.name}</h1>
             {data.subtitle && <p className="text-sm mt-1" style={{ color: '#4b5563' }}>{data.subtitle}</p>}
-            {data.kind === 'accessory' ? (
-              <EditableCode kind={data.kind} unitId={data.unitId} initialCode={data.code} />
-            ) : (
-              <p className="text-sm font-mono mt-1" style={{ color: '#0f172a' }}>{data.code}</p>
-            )}
+            <p className="text-sm font-mono mt-1" style={{ color: '#0f172a' }}>{data.code}</p>
             <div className="mt-auto pt-3">
               <StatusBadge status={data.statusKey} />
             </div>
@@ -278,7 +274,7 @@ function UnitCard({ data }: { data: UnitCardData }) {
 
         <BookingsBlock bookings={data.bookings} />
 
-        {(data.actions.length > 0 || data.kind === 'camera') && (
+        {(data.actions.length > 0 || data.kind === 'camera' || data.kind === 'accessory') && (
           <div className="flex flex-wrap gap-2 pt-3 border-t">
             {data.actions.map((a) => (
               <Link
@@ -297,6 +293,13 @@ function UnitCard({ data }: { data: UnitCardData }) {
               <EditCameraEntry
                 unitId={data.unitId}
                 initialStatus={(data.statusKey as 'available' | 'rented' | 'maintenance' | 'retired') ?? 'available'}
+                initialNotes={data.note ?? ''}
+              />
+            )}
+            {data.kind === 'accessory' && (
+              <EditAccessoryEntry
+                unitId={data.unitId}
+                initialStatus={(data.statusKey as 'available' | 'rented' | 'maintenance' | 'damaged' | 'lost' | 'retired') ?? 'available'}
                 initialNotes={data.note ?? ''}
               />
             )}
