@@ -2,6 +2,7 @@ import { createServiceClient } from '@/lib/supabase';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import ScanBackLink from './ScanBackLink';
+import EditableExemplarCode from './EditableExemplarCode';
 
 /**
  * Detail-Karte nach QR-Scan. Sucht den Code in product_units (Seriennummer)
@@ -201,7 +202,7 @@ export default async function ScanLandingPage({ params }: PageProps) {
             <div className="flex-1 min-w-0 flex flex-col">
               <p className="text-xs uppercase tracking-wider" style={{ color: '#6b7280' }}>{accessory?.category ?? 'Zubehör'}</p>
               <h1 className="text-2xl font-bold leading-tight" style={{ color: '#0f172a' }}>{accessory?.name ?? accUnit.accessory_id}</h1>
-              <p className="text-base font-mono mt-2 break-all" style={{ color: '#0f172a' }}>{accUnit.exemplar_code}</p>
+              <EditableExemplarCode unitId={accUnit.id} initialCode={accUnit.exemplar_code} />
               {accessory?.description && <p className="text-sm mt-2" style={{ color: '#4b5563' }}>{accessory.description}</p>}
               <div className="mt-auto pt-3">
                 <StatusBadge status={accUnit.status} />
