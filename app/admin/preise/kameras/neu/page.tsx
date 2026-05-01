@@ -9,7 +9,6 @@ import {
   type AdminProduct,
   type AdminProductSpec,
   type KautionTiers,
-  calcPriceFromTable,
 } from '@/lib/price-config';
 import ProductPreview from '@/components/ProductPreview';
 import MarkdownEditor from '@/components/MarkdownEditor';
@@ -46,7 +45,6 @@ export default function AdminNeueKameraPage() {
   const [allProducts, setAllProducts] = useState<Record<string, AdminProduct>>({});
   const [saving, setSaving] = useState(false);
   const [autoSlug, setAutoSlug] = useState(true);
-  const [depositMode, setDepositMode] = useState<'kaution' | 'haftung'>('haftung');
 
   const { specs: specDefs } = useSpecDefinitions();
 
@@ -54,11 +52,6 @@ export default function AdminNeueKameraPage() {
     fetch('/api/prices').then((r) => r.json()).then((d) => {
       if (d.kautionTiers) setKautionTiers(d.kautionTiers);
     }).catch(() => {});
-
-    fetch('/api/admin/settings?key=deposit_mode')
-      .then((r) => r.json())
-      .then((d) => { if (d.value) setDepositMode(d.value); })
-      .catch(() => {});
 
     fetch('/api/admin/config?key=products')
       .then((r) => r.json())
@@ -274,119 +267,77 @@ export default function AdminNeueKameraPage() {
                   </div>
                 </div>
               </div>
-            </div>
 
-            {/* Haftung / Kaution — abhängig von globaler Einstellung */}
-            <div className="bg-white rounded-2xl border border-brand-border p-6">
-              <h2 className="font-heading font-bold text-sm text-brand-black mb-1">Haftung & Kaution</h2>
-              <p className="text-xs font-body text-brand-muted mb-4">
-                {depositMode === 'kaution' && 'Globaler Modus: Nur Kaution. Kaution-Stufe für dieses Produkt wählen.'}
-                {depositMode === 'haftung' && 'Globaler Modus: Nur Haftungsschutz. Kunden können Standard/Premium wählen.'}
-{/* both-Modus entfernt */}
-              </p>
+              {/* Technische Daten (aufklappbar) */}
+              <details className="mt-6 group">
+                <summary className="flex items-center justify-between cursor-pointer select-none py-2 border-t border-brand-border pt-4 list-none">
+                  <div>
+                    <h3 className="font-heading font-bold text-sm text-brand-black">Technische Daten</h3>
+                    <p className="text-xs font-body text-brand-muted mt-0.5">{(product.specs ?? []).length} Spec{(product.specs ?? []).length === 1 ? '' : 's'} · klicken zum Aufklappen</p>
+                  </div>
+                  <span className="text-brand-muted text-lg leading-none transition-transform group-open:rotate-45">+</span>
+                </summary>
 
-              <div className="space-y-3">
-                {(depositMode === 'haftung') && (
-                  <label className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-colors ${product.hasHaftungsoption ? 'border-accent-blue bg-accent-blue-soft/20' : 'border-brand-border hover:border-brand-muted'}`}>
-                    <input type="radio" name="liability" checked={product.hasHaftungsoption}
-                      onChange={() => setProduct((p) => ({ ...p, hasHaftungsoption: true, kautionTier: null }))}
-                      className="sr-only" />
-                    <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${product.hasHaftungsoption ? 'border-accent-blue' : 'border-brand-border'}`}>
-                      {product.hasHaftungsoption && <div className="w-2 h-2 rounded-full bg-accent-blue" />}
-                    </div>
-                    <div>
-                      <p className="text-sm font-heading font-semibold text-brand-black">Haftungsoption (Standard / Premium)</p>
-                      <p className="text-xs font-body text-brand-muted">Kunden können Standard- oder Premium-Haftungsschutz wählen</p>
-                    </div>
-                  </label>
-                )}
+                <div className="mt-4 space-y-2">
+                  {(product.specs ?? []).map((spec, index) => {
+                    const def = specDefs.find((d) => d.id === spec.id);
+                    const unit = def?.unit ?? '';
+                    return (
+                      <div key={`${spec.id}-${index}`} className="flex items-center gap-2 p-2.5 rounded-xl border border-brand-border bg-brand-bg">
+                        <div className="flex flex-col gap-0.5">
+                          <button type="button" onClick={() => moveSpec(index, 'up')} disabled={index === 0}
+                            className="px-1 py-0.5 text-[10px] text-brand-muted hover:text-brand-black disabled:opacity-30 transition-colors" title="Nach oben">&#9650;</button>
+                          <button type="button" onClick={() => moveSpec(index, 'down')} disabled={index === (product.specs?.length ?? 0) - 1}
+                            className="px-1 py-0.5 text-[10px] text-brand-muted hover:text-brand-black disabled:opacity-30 transition-colors" title="Nach unten">&#9660;</button>
+                        </div>
 
-                {(depositMode === 'kaution') && ([1, 2, 3] as const).map((tier) => (
-                  <label key={tier} className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-colors ${!product.hasHaftungsoption && product.kautionTier === tier ? 'border-accent-blue bg-accent-blue-soft/20' : 'border-brand-border hover:border-brand-muted'}`}>
-                    <input type="radio" name="liability"
-                      checked={!product.hasHaftungsoption && product.kautionTier === tier}
-                      onChange={() => setProduct((p) => ({ ...p, hasHaftungsoption: false, kautionTier: tier }))}
-                      className="sr-only" />
-                    <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${!product.hasHaftungsoption && product.kautionTier === tier ? 'border-accent-blue' : 'border-brand-border'}`}>
-                      {!product.hasHaftungsoption && product.kautionTier === tier && <div className="w-2 h-2 rounded-full bg-accent-blue" />}
-                    </div>
-                    <div>
-                      <p className="text-sm font-heading font-semibold text-brand-black">
-                        {kautionTiers[tier].name} — {kautionTiers[tier].amount} €
-                      </p>
-                      <p className="text-xs font-body text-brand-muted">Kaution-Stufe {tier}</p>
-                    </div>
-                  </label>
-                ))}
-              </div>
-            </div>
+                        <select
+                          value={spec.id}
+                          onChange={(e) => {
+                            const d = specDefs.find((s) => s.id === e.target.value);
+                            if (d) updateSpec(index, { id: d.id, name: d.name, icon: d.icon });
+                          }}
+                          className="w-32 px-2 py-1.5 border border-brand-border rounded-[8px] text-xs font-body bg-white focus:outline-none focus:ring-2 focus:ring-accent-blue"
+                        >
+                          {specDefs.map((d) => (
+                            <option key={d.id} value={d.id}>{d.name}</option>
+                          ))}
+                        </select>
 
-            {/* Technische Daten (Specs Editor) */}
-            <div className="bg-white rounded-2xl border border-brand-border p-6">
-              <h2 className="font-heading font-bold text-sm text-brand-black mb-1">Technische Daten</h2>
-              <p className="text-xs font-body text-brand-muted mb-4">Specs die auf der Produktseite angezeigt werden. Reihenfolge per Pfeiltasten ändern.</p>
+                        <div className="flex-1 min-w-0 relative">
+                          <input
+                            type="text"
+                            value={spec.value}
+                            onChange={(e) => updateSpec(index, { value: e.target.value })}
+                            placeholder={unit ? `Wert (${unit})` : 'Wert'}
+                            className="w-full px-2 py-1.5 border border-brand-border rounded-[8px] text-xs font-body focus:outline-none focus:ring-2 focus:ring-accent-blue pr-12"
+                          />
+                          {unit && (
+                            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-brand-muted pointer-events-none">{unit}</span>
+                          )}
+                        </div>
 
-              <div className="space-y-2">
-                {(product.specs ?? []).map((spec, index) => {
-                  const def = specDefs.find((d) => d.id === spec.id);
-                  const unit = def?.unit ?? '';
-                  return (
-                    <div key={`${spec.id}-${index}`} className="flex items-center gap-2 p-2.5 rounded-xl border border-brand-border bg-brand-bg">
-                      <div className="flex flex-col gap-0.5">
-                        <button type="button" onClick={() => moveSpec(index, 'up')} disabled={index === 0}
-                          className="px-1 py-0.5 text-[10px] text-brand-muted hover:text-brand-black disabled:opacity-30 transition-colors" title="Nach oben">&#9650;</button>
-                        <button type="button" onClick={() => moveSpec(index, 'down')} disabled={index === (product.specs?.length ?? 0) - 1}
-                          className="px-1 py-0.5 text-[10px] text-brand-muted hover:text-brand-black disabled:opacity-30 transition-colors" title="Nach unten">&#9660;</button>
+                        <button type="button" onClick={() => removeSpec(index)}
+                          className="px-2 py-1.5 text-xs text-red-500 hover:text-red-700 hover:bg-red-50 rounded-[8px] transition-colors" title="Spec entfernen">&#10005;</button>
                       </div>
+                    );
+                  })}
+                </div>
 
-                      {/* Spec-Definition Dropdown */}
-                      <select
-                        value={spec.id}
-                        onChange={(e) => {
-                          const d = specDefs.find((s) => s.id === e.target.value);
-                          if (d) updateSpec(index, { id: d.id, name: d.name, icon: d.icon });
-                        }}
-                        className="w-32 px-2 py-1.5 border border-brand-border rounded-[8px] text-xs font-body bg-white focus:outline-none focus:ring-2 focus:ring-accent-blue"
-                      >
-                        {specDefs.map((d) => (
-                          <option key={d.id} value={d.id}>{d.name}</option>
-                        ))}
-                      </select>
-
-                      {/* Wert + Einheit */}
-                      <div className="flex-1 min-w-0 relative">
-                        <input
-                          type="text"
-                          value={spec.value}
-                          onChange={(e) => updateSpec(index, { value: e.target.value })}
-                          placeholder={unit ? `Wert (${unit})` : 'Wert'}
-                          className="w-full px-2 py-1.5 border border-brand-border rounded-[8px] text-xs font-body focus:outline-none focus:ring-2 focus:ring-accent-blue pr-12"
-                        />
-                        {unit && (
-                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-brand-muted pointer-events-none">{unit}</span>
-                        )}
-                      </div>
-
-                      <button type="button" onClick={() => removeSpec(index)}
-                        className="px-2 py-1.5 text-xs text-red-500 hover:text-red-700 hover:bg-red-50 rounded-[8px] transition-colors" title="Spec entfernen">&#10005;</button>
-                    </div>
-                  );
-                })}
-              </div>
-
-              <button
-                type="button"
-                onClick={addSpec}
-                className="mt-3 px-4 py-2 text-xs font-heading font-semibold text-accent-blue border border-accent-blue/30 rounded-btn hover:bg-accent-blue-soft/20 transition-colors"
-              >
-                + Spec hinzufügen
-              </button>
+                <button
+                  type="button"
+                  onClick={addSpec}
+                  className="mt-3 px-4 py-2 text-xs font-heading font-semibold text-accent-blue border border-accent-blue/30 rounded-btn hover:bg-accent-blue-soft/20 transition-colors"
+                >
+                  + Spec hinzufügen
+                </button>
+              </details>
             </div>
 
-            {/* Preistabelle Tag 1–30 */}
+            {/* Preise (Tag 1-30 + 31+ Tage) */}
             <div className="bg-white rounded-2xl border border-brand-border p-6">
-              <h2 className="font-heading font-bold text-sm text-brand-black mb-1">Preistabelle: Tag 1–30</h2>
-              <p className="text-xs font-body text-brand-muted mb-5">Jeden Tag einzeln festlegen (Gesamtpreis in €)</p>
+              <h2 className="font-heading font-bold text-sm text-brand-black mb-1">Preise</h2>
+              <p className="text-xs font-body text-brand-muted mb-5">Tag 1–30 einzeln festlegen, ab Tag 31 wird der Zusatztag-Preis verwendet (Gesamtpreis in €).</p>
 
               <div className="grid grid-cols-5 sm:grid-cols-6 gap-2">
                 {Array.from({ length: 30 }, (_, i) => {
@@ -407,44 +358,30 @@ export default function AdminNeueKameraPage() {
                   );
                 })}
               </div>
-            </div>
 
-            {/* 31+ Tage Formel */}
-            <div className="bg-white rounded-2xl border border-brand-border p-6">
-              <h2 className="font-heading font-bold text-sm text-brand-black mb-1">31+ Tage</h2>
-              <p className="text-xs font-body text-brand-muted mb-4">
-                Preis = Tag-30-Preis + (Tage − 30) × Preis pro Zusatztag
-              </p>
-              <div className="flex items-end gap-4">
-                <div className="w-40">
-                  <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Preis pro Zusatztag</label>
-                  <div className="relative">
-                    <PriceInput value={product.perDayAfter30}
-                      onChange={(v) => setProduct((p) => ({ ...p, perDayAfter30: v }))}
-                      placeholder="z.B. 4,50"
-                      className="w-full pr-8 pl-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-brand-muted pointer-events-none">€</span>
+              <div className="mt-6 pt-5 border-t border-brand-border">
+                <h3 className="font-heading font-semibold text-sm text-brand-black mb-1">31+ Tage</h3>
+                <p className="text-xs font-body text-brand-muted mb-3">
+                  Preis = Tag-30-Preis + (Tage − 30) × Preis pro Zusatztag
+                </p>
+                <div className="flex items-end gap-4">
+                  <div className="w-40">
+                    <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Preis pro Zusatztag</label>
+                    <div className="relative">
+                      <PriceInput value={product.perDayAfter30}
+                        onChange={(v) => setProduct((p) => ({ ...p, perDayAfter30: v }))}
+                        placeholder="z.B. 4,50"
+                        className="w-full pr-8 pl-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-brand-muted pointer-events-none">€</span>
+                    </div>
+                  </div>
+                  <div className="pb-2.5">
+                    <p className="text-xs font-body text-brand-muted">Beispiel:</p>
+                    <p className="text-sm font-heading font-semibold text-brand-black">
+                      31 Tage = {day30Price} € + {product.perDayAfter30} € = {day31Preview} €
+                    </p>
                   </div>
                 </div>
-                <div className="pb-2.5">
-                  <p className="text-xs font-body text-brand-muted">Beispiel:</p>
-                  <p className="text-sm font-heading font-semibold text-brand-black">
-                    31 Tage = {day30Price} € + {product.perDayAfter30} € = {day31Preview} €
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Vorschau */}
-            <div className="bg-brand-bg rounded-2xl border border-brand-border p-5">
-              <p className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider mb-3">Vorschau ausgewählter Tage</p>
-              <div className="flex flex-wrap gap-x-5 gap-y-2">
-                {[1, 2, 3, 7, 14, 30, 31, 45].map((d) => (
-                  <span key={d} className="text-sm font-body">
-                    <span className="text-brand-muted">{d}T: </span>
-                    <span className="font-semibold text-brand-black">{calcPriceFromTable(product, d)} €</span>
-                  </span>
-                ))}
               </div>
             </div>
 
