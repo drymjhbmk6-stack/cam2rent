@@ -9,6 +9,7 @@ interface Props {
   unitId: string;
   initialStatus: Status;
   initialNotes: string;
+  initialCode: string;
 }
 
 const STATUS_OPTIONS: { value: Status; label: string }[] = [
@@ -20,13 +21,16 @@ const STATUS_OPTIONS: { value: Status; label: string }[] = [
   { value: 'retired', label: 'Ausgemustert' },
 ];
 
-export default function EditAccessoryEntry({ unitId, initialStatus, initialNotes }: Props) {
+export default function EditAccessoryEntry({ unitId, initialStatus, initialNotes, initialCode }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState<Status>(initialStatus);
   const [notes, setNotes] = useState(initialNotes);
+  const [code, setCode] = useState(initialCode);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const codeChanged = code.trim() !== initialCode.trim();
 
   function close() {
     if (busy) return;
@@ -34,16 +38,29 @@ export default function EditAccessoryEntry({ unitId, initialStatus, initialNotes
     setError(null);
     setStatus(initialStatus);
     setNotes(initialNotes);
+    setCode(initialCode);
   }
 
   async function save() {
     setError(null);
+    if (codeChanged && !code.trim()) {
+      setError('Bezeichnung darf nicht leer sein.');
+      return;
+    }
+    if (codeChanged) {
+      const ok = confirm(
+        'Achtung: Wenn du die Bezeichnung änderst, sind bereits gedruckte QR-Aufkleber für dieses Exemplar ungültig und müssen neu gedruckt werden. Trotzdem ändern?'
+      );
+      if (!ok) return;
+    }
     setBusy(true);
     try {
+      const body: Record<string, unknown> = { id: unitId, status, notes };
+      if (codeChanged) body.exemplar_code = code.trim();
       const res = await fetch('/api/admin/accessory-units', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: unitId, status, notes }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -51,7 +68,12 @@ export default function EditAccessoryEntry({ unitId, initialStatus, initialNotes
         return;
       }
       setOpen(false);
-      router.refresh();
+      // Bei Code-Aenderung aendert sich auch die URL — auf neue navigieren.
+      if (codeChanged) {
+        router.push(`/admin/scan/${encodeURIComponent(code.trim())}`);
+      } else {
+        router.refresh();
+      }
     } catch {
       setError('Netzwerk-Fehler. Bitte erneut versuchen.');
     } finally {
@@ -91,8 +113,24 @@ export default function EditAccessoryEntry({ unitId, initialStatus, initialNotes
             </div>
             <div className="px-6 py-4 space-y-4">
               <p className="text-xs text-gray-500">
-                Bezeichnung, Seriennummer, Kaufdatum und Kaufpreis sind nach Anlage nicht mehr änderbar. Du kannst nur Status und Notizen ändern.
+                Seriennummer, Kaufdatum und Kaufpreis sind nach Anlage nicht mehr änderbar. Bezeichnung, Status und Notizen kannst du jederzeit ändern.
               </p>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1.5">Bezeichnung</label>
+                <input
+                  type="text"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  disabled={busy}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm font-mono bg-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  style={{ color: '#0f172a' }}
+                />
+                {codeChanged && code.trim() && (
+                  <div className="mt-1.5 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-[11px] text-amber-800">
+                    ⚠ Achtung: Bestehende QR-Aufkleber werden ungültig, weil die QR-URL die Bezeichnung enthält. Du musst die QR-Codes für dieses Exemplar neu drucken.
+                  </div>
+                )}
+              </div>
               <div>
                 <label className="block text-xs font-semibold text-gray-500 mb-1.5">Status</label>
                 <select

@@ -294,6 +294,7 @@ function UnitCard({ data }: { data: UnitCardData }) {
                 unitId={data.unitId}
                 initialStatus={(data.statusKey as 'available' | 'rented' | 'maintenance' | 'retired') ?? 'available'}
                 initialNotes={data.note ?? ''}
+                initialLabel={data.code ?? ''}
               />
             )}
             {data.kind === 'accessory' && (
@@ -301,6 +302,7 @@ function UnitCard({ data }: { data: UnitCardData }) {
                 unitId={data.unitId}
                 initialStatus={(data.statusKey as 'available' | 'rented' | 'maintenance' | 'damaged' | 'lost' | 'retired') ?? 'available'}
                 initialNotes={data.note ?? ''}
+                initialCode={data.code ?? ''}
               />
             )}
           </div>

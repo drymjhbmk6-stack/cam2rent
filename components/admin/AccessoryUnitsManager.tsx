@@ -69,10 +69,13 @@ export default function AccessoryUnitsManager({ accessoryId, onCountChanged }: P
   const [addBusy, setAddBusy] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
 
-  // Bearbeiten-Modal (nur Status + Notizen aenderbar)
+  // Bearbeiten-Modal (Status + Notizen + Bezeichnung aenderbar — letzteres mit
+  // Warnung, weil sich dadurch die QR-URL aendert)
   const [editId, setEditId] = useState<string | null>(null);
   const [editStatus, setEditStatus] = useState<AccessoryUnit['status']>('available');
   const [editNotes, setEditNotes] = useState('');
+  const [editCode, setEditCode] = useState('');
+  const [editCodeOriginal, setEditCodeOriginal] = useState('');
   const [editBusy, setEditBusy] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
 
@@ -184,18 +187,35 @@ export default function AccessoryUnitsManager({ accessoryId, onCountChanged }: P
     setEditId(unit.id);
     setEditStatus(unit.status);
     setEditNotes(unit.notes ?? '');
+    setEditCode(unit.exemplar_code);
+    setEditCodeOriginal(unit.exemplar_code);
     setEditError(null);
   }
 
   async function handleSaveEdit() {
     if (!editId) return;
     setEditError(null);
+
+    const codeChanged = editCode.trim() !== editCodeOriginal.trim();
+    if (codeChanged && !editCode.trim()) {
+      setEditError('Bezeichnung darf nicht leer sein.');
+      return;
+    }
+    if (codeChanged) {
+      const ok = confirm(
+        'Achtung: Wenn du die Bezeichnung änderst, sind bereits gedruckte QR-Aufkleber für dieses Exemplar ungültig und müssen neu gedruckt werden. Trotzdem ändern?'
+      );
+      if (!ok) return;
+    }
+
     setEditBusy(true);
     try {
+      const body: Record<string, unknown> = { id: editId, status: editStatus, notes: editNotes };
+      if (codeChanged) body.exemplar_code = editCode.trim();
       const res = await fetch('/api/admin/accessory-units', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: editId, status: editStatus, notes: editNotes }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -424,7 +444,18 @@ export default function AccessoryUnitsManager({ accessoryId, onCountChanged }: P
                 className="text-brand-muted hover:text-brand-black text-2xl leading-none disabled:opacity-40">×</button>
             </div>
             <div className="px-6 py-4 space-y-4">
-              <p className="text-xs text-brand-muted">Bezeichnung, Seriennummer, Kaufdatum und Kaufpreis sind nach Anlage nicht mehr änderbar. Du kannst nur Status und Notizen ändern.</p>
+              <p className="text-xs text-brand-muted">Seriennummer, Kaufdatum und Kaufpreis sind nach Anlage nicht mehr änderbar. Bezeichnung, Status und Notizen kannst du jederzeit ändern.</p>
+              <div>
+                <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Bezeichnung</label>
+                <input type="text" value={editCode}
+                  onChange={(e) => setEditCode(e.target.value)}
+                  className="w-full px-3 py-2 border border-brand-border rounded-lg text-sm font-mono bg-white dark:bg-slate-800 text-brand-black dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-blue" />
+                {editCode.trim() !== editCodeOriginal.trim() && editCode.trim() && (
+                  <div className="mt-1.5 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-[11px] font-body text-amber-800">
+                    ⚠ Achtung: Bestehende QR-Aufkleber werden ungültig, weil die QR-URL die Bezeichnung enthält. Du musst die QR-Codes für dieses Exemplar neu drucken.
+                  </div>
+                )}
+              </div>
               <div>
                 <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Status</label>
                 <select value={editStatus}

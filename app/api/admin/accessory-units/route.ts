@@ -161,13 +161,15 @@ export async function POST(req: NextRequest) {
 
 export async function PUT(req: NextRequest) {
   const body = await req.json();
-  const { id, status, notes } = body as {
+  const { id, status, notes, exemplar_code } = body as {
     id?: string;
     status?: string;
     notes?: string;
-    // exemplar_code, serial_number, purchased_at, purchase_price werden bewusst
-    // NICHT mehr akzeptiert (immutable nach Anlage). Alte Aufrufer mit diesen
-    // Feldern bekommen sie ignoriert (defensiv).
+    exemplar_code?: string;
+    // serial_number, purchased_at, purchase_price werden bewusst NICHT mehr
+    // akzeptiert (immutable nach Anlage). exemplar_code darf nachtraeglich
+    // geaendert werden (Tippfehler / Migration aus Auto-Codes), aendert aber
+    // die QR-URL — der Aufrufer muss die User-Warnung selbst zeigen.
   };
 
   if (!id || typeof id !== 'string') {
@@ -184,10 +186,17 @@ export async function PUT(req: NextRequest) {
   if (notes !== undefined) {
     updates.notes = typeof notes === 'string' ? notes.trim() || null : null;
   }
+  if (exemplar_code !== undefined) {
+    const trimmed = typeof exemplar_code === 'string' ? exemplar_code.trim() : '';
+    if (!trimmed) {
+      return NextResponse.json({ error: 'Bezeichnung darf nicht leer sein.' }, { status: 400 });
+    }
+    updates.exemplar_code = trimmed;
+  }
 
   if (Object.keys(updates).length === 0) {
     return NextResponse.json(
-      { error: 'Keine erlaubten Aenderungen. Aenderbar sind nur status und notes.' },
+      { error: 'Keine erlaubten Aenderungen. Aenderbar sind nur status, notes und exemplar_code.' },
       { status: 400 }
     );
   }
@@ -200,12 +209,23 @@ export async function PUT(req: NextRequest) {
     .single();
 
   if (error) {
+    if (error.code === '23505') {
+      return NextResponse.json(
+        { error: 'Diese Bezeichnung ist bereits vergeben. Waehle eine andere.' },
+        { status: 409 }
+      );
+    }
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
   // Bei Status-Aenderung qty resyncen
   if (status !== undefined && data?.accessory_id) {
     await syncAccessoryQty(supabase, data.accessory_id);
+  }
+
+  // Asset-Name mit neuer Bezeichnung mitziehen (kosmetisch)
+  if (exemplar_code !== undefined && data?.id) {
+    await supabase.from('assets').update({ name: data.exemplar_code }).eq('accessory_unit_id', data.id);
   }
 
   await logAudit({

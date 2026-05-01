@@ -62,10 +62,13 @@ export default function AdminKameraEditorPage() {
   const [addBusy, setAddBusy] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
 
-  // Bearbeiten-Modal (nur Status + Notizen aenderbar)
+  // Bearbeiten-Modal (Status + Notizen + Bezeichnung aenderbar — letzteres mit
+  // Warnung, weil sich dadurch die QR-URL aendert)
   const [editId, setEditId] = useState<string | null>(null);
   const [editStatus, setEditStatus] = useState<ProductUnit['status']>('available');
   const [editNotes, setEditNotes] = useState('');
+  const [editLabel, setEditLabel] = useState('');
+  const [editLabelOriginal, setEditLabelOriginal] = useState('');
   const [editBusy, setEditBusy] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
 
@@ -209,18 +212,35 @@ export default function AdminKameraEditorPage() {
     setEditId(unit.id);
     setEditStatus(unit.status);
     setEditNotes(unit.notes ?? '');
+    setEditLabel(unit.label ?? '');
+    setEditLabelOriginal(unit.label ?? '');
     setEditError(null);
   }
 
   async function handleSaveEdit() {
     if (!editId) return;
     setEditError(null);
+
+    const labelChanged = editLabel.trim() !== editLabelOriginal.trim();
+    if (labelChanged && !editLabel.trim()) {
+      setEditError('Bezeichnung darf nicht leer sein.');
+      return;
+    }
+    if (labelChanged) {
+      const ok = confirm(
+        'Achtung: Wenn du die Bezeichnung änderst, sind bereits gedruckte QR-Aufkleber für diese Kamera ungültig und müssen neu gedruckt werden. Trotzdem ändern?'
+      );
+      if (!ok) return;
+    }
+
     setEditBusy(true);
     try {
+      const body: Record<string, unknown> = { id: editId, status: editStatus, notes: editNotes };
+      if (labelChanged) body.label = editLabel.trim();
       const res = await fetch('/api/admin/product-units', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: editId, status: editStatus, notes: editNotes }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -918,7 +938,18 @@ export default function AdminKameraEditorPage() {
                 className="text-brand-muted hover:text-brand-black text-2xl leading-none disabled:opacity-40">×</button>
             </div>
             <div className="px-6 py-4 space-y-4">
-              <p className="text-xs text-brand-muted">Bezeichnung, Seriennummer, Kaufdatum und Kaufpreis sind nach Anlage nicht mehr änderbar. Du kannst nur Status und Notizen ändern.</p>
+              <p className="text-xs text-brand-muted">Seriennummer, Kaufdatum und Kaufpreis sind nach Anlage nicht mehr änderbar. Bezeichnung, Status und Notizen kannst du jederzeit ändern.</p>
+              <div>
+                <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Bezeichnung</label>
+                <input type="text" value={editLabel}
+                  onChange={(e) => setEditLabel(e.target.value)}
+                  className="w-full px-3 py-2 border border-brand-border rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-accent-blue" />
+                {editLabel.trim() !== editLabelOriginal.trim() && editLabel.trim() && (
+                  <div className="mt-1.5 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-[11px] font-body text-amber-800">
+                    ⚠ Achtung: Bestehende QR-Aufkleber werden ungültig, weil die QR-URL die Bezeichnung enthält. Du musst die QR-Codes für diese Kamera neu drucken.
+                  </div>
+                )}
+              </div>
               <div>
                 <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Status</label>
                 <select value={editStatus}

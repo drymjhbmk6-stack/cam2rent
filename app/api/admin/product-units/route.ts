@@ -153,13 +153,15 @@ export async function POST(req: NextRequest) {
 
 export async function PUT(req: NextRequest) {
   const body = await req.json();
-  const { id, status, notes } = body as {
+  const { id, status, notes, label } = body as {
     id?: string;
     status?: string;
     notes?: string;
-    // Hinweis: serial_number, label, purchased_at und purchase_price werden
-    // bewusst NICHT mehr akzeptiert. Alte Frontend-Aufrufe mit diesen Feldern
-    // bekommen ihren Wert ignoriert (kein Fehler — defensiv).
+    label?: string;
+    // Hinweis: serial_number, purchased_at und purchase_price werden bewusst
+    // NICHT mehr akzeptiert (immutable nach Anlage). label darf nachtraeglich
+    // geaendert werden (Tippfehler / Migration aus Auto-Codes), aendert aber
+    // die QR-URL — der Aufrufer muss die User-Warnung selbst zeigen.
   };
 
   if (!id) {
@@ -171,10 +173,17 @@ export async function PUT(req: NextRequest) {
   const updates: Record<string, unknown> = {};
   if (status !== undefined) updates.status = status;
   if (notes !== undefined) updates.notes = notes?.trim() || null;
+  if (label !== undefined) {
+    const trimmed = label.trim();
+    if (!trimmed) {
+      return NextResponse.json({ error: 'Bezeichnung darf nicht leer sein.' }, { status: 400 });
+    }
+    updates.label = trimmed;
+  }
 
   if (Object.keys(updates).length === 0) {
     return NextResponse.json(
-      { error: 'Keine erlaubten Aenderungen. Aenderbar sind nur status und notes.' },
+      { error: 'Keine erlaubten Aenderungen. Aenderbar sind nur status, notes und label.' },
       { status: 400 }
     );
   }
@@ -187,7 +196,19 @@ export async function PUT(req: NextRequest) {
     .single();
 
   if (error) {
+    if (error.code === '23505') {
+      return NextResponse.json(
+        { error: 'Diese Bezeichnung ist bereits vergeben. Waehle eine andere.' },
+        { status: 409 }
+      );
+    }
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  // Asset-Name mit der neuen Bezeichnung mitziehen (kosmetisch — der Anlagen-
+  // Eintrag zeigt sonst noch den alten Namen).
+  if (label !== undefined && data?.id) {
+    await supabase.from('assets').update({ name: data.label }).eq('unit_id', data.id);
   }
 
   await logAudit({
