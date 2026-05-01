@@ -4,7 +4,7 @@
 Action-Cam Verleih-Shop. Next.js 15 App Router, TypeScript, Tailwind CSS.
 Lokaler Pfad: `C:\Cam2Rent\cam2rent`
 GitHub: drymjhbmk6-stack/cam2rent (master)
-Server: Hetzner CX23 (178.104.117.135) + Coolify → test.cam2rent.de
+Server: Hetzner CPX32 (178.104.117.135) + Coolify → cam2rent.de (live seit 2026-05-01)
 
 ## Sprache
 Alle UI-Texte, Kommentare und Kommunikation auf **Deutsch**.
@@ -996,9 +996,9 @@ Ausführliche Dokumentation: `BLOG_SYSTEM_DOCS.md`
 
 ### Cron-Jobs (Hetzner Server)
 ```
-0 * * * *    curl -s -X POST "https://test.cam2rent.de/api/cron/blog-generate?secret=<CRON_SECRET>"
-*/10 * * * * curl -s -X POST "https://test.cam2rent.de/api/cron/blog-publish?secret=<CRON_SECRET>"
-30 18 * * 0  curl -s -X POST -H "x-cron-secret: <CRON_SECRET>" "https://test.cam2rent.de/api/cron/weekly-report"
+0 * * * *    curl -s -X POST "https://cam2rent.de/api/cron/blog-generate?secret=<CRON_SECRET>"
+*/10 * * * * curl -s -X POST "https://cam2rent.de/api/cron/blog-publish?secret=<CRON_SECRET>"
+30 18 * * 0  curl -s -X POST -H "x-cron-secret: <CRON_SECRET>" "https://cam2rent.de/api/cron/weekly-report"
 ```
 - **Generate:** Jede Stunde. Bei Intervall "daily" kein Wochentag-Check. Max 5 Artikel/Tag.
 - **Publish:** Alle 10 Min. Voll-Modus: automatisch. Semi-Modus: nur wenn "Gesehen"-Haken gesetzt.
@@ -1479,10 +1479,10 @@ Admin-Seite `/admin/newsletter` (in Sidebar-Gruppe „Rabatte & Aktionen", Permi
     ```
   Storniert `awaiting_payment`-Buchungen deren Deadline (siehe Regeln oben) erreicht ist. Deaktiviert den Stripe Payment Link via `stripe.paymentLinks.update(id, {active:false})`, setzt Status `cancelled`, schickt Storno-Mail. Grace-Period: 1h nach Buchungs-Erstellung.
 - **Auto-Reels Restschritte:** (1) Pexels API-Key (kostenlos) registrieren + in `admin_settings.reels_settings.pexels_api_key` hinterlegen oder als `PEXELS_API_KEY`-Env. (2) Docker-Image neu bauen (Dockerfile installiert jetzt `ffmpeg + ttf-dejavu + fontconfig` und kopiert `assets/fonts/InterTight.ttf` ins Image). (3) Crontab-Eintrag: `*/5 * * * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/reels-publish`. (4) **Phase 1 Quick-Wins:** SQL-Migration `supabase/supabase-reels-pixabay-key.sql` ausführen + optional `PIXABAY_API_KEY` als zweite Stock-Footage-Quelle in `admin_settings.reels_settings.pixabay_api_key` oder als Env hinterlegen (Free-Tier 5000 req/h, kostenlos: pixabay.com/api/docs/). (5) **Phase 2 Stilistische Aufwertung:** SQL-Migrationen `supabase/supabase-reels-motion-style.sql` + `supabase/supabase-reels-quality-metrics.sql` ausführen (beide idempotent, additiv). (6) **Phase 3 Pro-Szene-Re-Render:** SQL-Migration `supabase/supabase-reel-segments.sql` ausführen + Crontab-Eintrag `0 4 * * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/reels-segment-cleanup` (täglich 04:00, löscht Segmente nach 30 Tagen).
-- **Go-Live 01.05.2026:** Test/Live-Switch auf Live umschalten (`/admin/einstellungen` → Test-/Live-Modus → "Live-Modus"). Ersetzt: TEST_MODE-Konstante, Stripe-Key-Wechsel, Vertrags-Wasserzeichen, Resend-Absender, Sendcloud-Keys.
-- **Go-Live 01.05.2026:** Domain test.cam2rent.de → cam2rent.de
-- **Go-Live 01.05.2026:** Resend Domain verifizieren (DKIM + SPF)
-- **Go-Live 01.05.2026:** `STRIPE_SECRET_KEY_LIVE`, `STRIPE_WEBHOOK_SECRET_LIVE`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY_LIVE`, `SENDCLOUD_PUBLIC_KEY_LIVE`, `SENDCLOUD_SECRET_KEY_LIVE`, `FROM_EMAIL_LIVE`, `NEXT_PUBLIC_SITE_URL_LIVE` in Coolify hinterlegen — die vorhandenen Envs koennen als Test-Fallback bleiben (siehe `lib/env-mode.ts`).
+- ~~**Go-Live 01.05.2026:** Test/Live-Switch auf Live umschalten~~ ✓ (live seit 2026-05-01)
+- ~~**Go-Live 01.05.2026:** Domain test.cam2rent.de → cam2rent.de~~ ✓ (live seit 2026-05-01)
+- **Go-Live 01.05.2026:** Resend Domain verifizieren (DKIM + SPF) — pruefen ob durch
+- ~~**Go-Live 01.05.2026:** `STRIPE_SECRET_KEY_LIVE` etc. in Coolify hinterlegen~~ ✓ (sonst wuerde Live-Modus nicht laufen)
 - **Social-Modul Setup:**
   - ~~SQL-Migration `supabase-social.sql` ausführen~~ ✓
   - ~~`META_APP_ID` + `META_APP_SECRET` in Coolify hinterlegen~~ ✓
