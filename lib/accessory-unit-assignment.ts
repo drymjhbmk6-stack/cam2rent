@@ -46,8 +46,34 @@ export async function assignAccessoryUnitsToBooking(
 
   const supabase = createServiceClient();
 
+  // Bulk-Status aller betroffenen accessory_ids vorab laden — Sammel-Zubehoer
+  // hat keine Exemplare und wird bei der Verfuegbarkeit dynamisch ueber
+  // accessory_items berechnet (siehe /api/accessory-availability). Daher
+  // KEIN RPC-Aufruf, KEINE Unit-Zuweisung, KEIN sync.
+  const accIds = Array.from(new Set(accessoryItems.map((i) => i.accessory_id).filter(Boolean)));
+  let bulkSet = new Set<string>();
+  if (accIds.length > 0) {
+    const { data: accs } = await supabase
+      .from('accessories')
+      .select('id, is_bulk')
+      .in('id', accIds);
+    bulkSet = new Set(
+      ((accs as Array<{ id: string; is_bulk?: boolean }> | null) ?? [])
+        .filter((a) => a.is_bulk === true)
+        .map((a) => a.id),
+    );
+  }
+
   for (const item of accessoryItems) {
     if (!item.accessory_id || !item.qty || item.qty <= 0) continue;
+
+    // Sammel-Zubehoer ueberspringen — keine Units zum Assignen.
+    if (bulkSet.has(item.accessory_id)) {
+      // Symbolisch in 'assigned' eintragen (leeres Array signalisiert: bulk),
+      // damit die Aufrufer-Statistik konsistent bleibt.
+      result.assigned[item.accessory_id] = [];
+      continue;
+    }
 
     const { data, error } = await supabase.rpc('assign_free_accessory_units', {
       p_accessory_id: item.accessory_id,

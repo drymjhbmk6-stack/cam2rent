@@ -14,6 +14,24 @@ export async function syncAccessoryQty(
   supabase: SupabaseClient,
   accessoryId: string
 ): Promise<void> {
+  // Sammel-Zubehoer (is_bulk=true) hat keine accessory_units. available_qty
+  // ist dort der manuell gepflegte Lagerbestand und darf NICHT auf 0 gesetzt
+  // werden — sonst wuerde der Wert beim ersten Sync-Trigger verloren gehen.
+  const { data: acc, error: accError } = await supabase
+    .from('accessories')
+    .select('is_bulk')
+    .eq('id', accessoryId)
+    .maybeSingle();
+
+  if (accError) {
+    console.error('[syncAccessoryQty] accessory lookup failed:', accError.message);
+    return;
+  }
+
+  if ((acc as { is_bulk?: boolean } | null)?.is_bulk === true) {
+    return; // Bulk: Lagerbestand wird manuell gepflegt
+  }
+
   const { count, error: countError } = await supabase
     .from('accessory_units')
     .select('id', { count: 'exact', head: true })

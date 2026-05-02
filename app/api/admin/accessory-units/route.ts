@@ -97,6 +97,21 @@ export async function POST(req: NextRequest) {
 
   const supabase = createServiceClient();
 
+  // Sammel-Zubehoer blockieren — dort gibt es keine Exemplare, der Lager-
+  // bestand wird in accessories.available_qty manuell gepflegt.
+  const { data: parent } = await supabase
+    .from('accessories')
+    .select('is_bulk')
+    .eq('id', accessory_id)
+    .maybeSingle();
+
+  if ((parent as { is_bulk?: boolean } | null)?.is_bulk === true) {
+    return NextResponse.json(
+      { error: 'Dieses Zubehoer ist als Sammel-Zubehoer markiert — Exemplare koennen nicht angelegt werden. Pflege die Menge im Zubehoer-Editor manuell.' },
+      { status: 400 }
+    );
+  }
+
   // 1. Unit anlegen
   const { data: unit, error: unitError } = await supabase
     .from('accessory_units')
