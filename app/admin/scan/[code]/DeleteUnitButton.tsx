@@ -4,14 +4,15 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 interface Props {
-  kind: 'camera' | 'accessory';
+  kind: 'camera' | 'accessory' | 'bulk_accessory';
   unitId: string;
   code: string; // Bezeichnung — wird im Confirm-Dialog gezeigt
 }
 
-const ENDPOINTS: Record<Props['kind'], string> = {
-  camera: '/api/admin/product-units',
-  accessory: '/api/admin/accessory-units',
+const ENDPOINTS: Record<Props['kind'], (id: string) => string> = {
+  camera: (id) => `/api/admin/product-units?id=${encodeURIComponent(id)}`,
+  accessory: (id) => `/api/admin/accessory-units?id=${encodeURIComponent(id)}`,
+  bulk_accessory: (id) => `/api/admin/accessories/${encodeURIComponent(id)}`,
 };
 
 export default function DeleteUnitButton({ kind, unitId, code }: Props) {
@@ -20,16 +21,16 @@ export default function DeleteUnitButton({ kind, unitId, code }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   async function handleDelete() {
-    const ok = confirm(
-      `Eintrag "${code}" wirklich endgültig löschen?\n\n` +
-      'Die zugehörige Anlage wird ebenfalls entfernt. Wenn der Eintrag in einer aktiven Buchung steckt, wird das Löschen abgebrochen — setze den Status dann lieber auf "Ausgemustert".'
-    );
+    const message = kind === 'bulk_accessory'
+      ? `Sammel-Zubehör "${code}" wirklich endgültig löschen?\n\nDas entfernt das gesamte Zubehörteil aus dem Katalog (nicht nur ein Exemplar). Buchungen, die es bereits referenzieren, behalten ihren Datenstand — neue Buchungen können es aber nicht mehr verwenden. Alternativ: einfach den Verfügbar-Toggle abschalten.`
+      : `Eintrag "${code}" wirklich endgültig löschen?\n\nDie zugehörige Anlage wird ebenfalls entfernt. Wenn der Eintrag in einer aktiven Buchung steckt, wird das Löschen abgebrochen — setze den Status dann lieber auf "Ausgemustert".`;
+    const ok = confirm(message);
     if (!ok) return;
 
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch(`${ENDPOINTS[kind]}?id=${encodeURIComponent(unitId)}`, {
+      const res = await fetch(ENDPOINTS[kind](unitId), {
         method: 'DELETE',
       });
       if (!res.ok) {

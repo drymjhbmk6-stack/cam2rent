@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import ScanBackLink from './ScanBackLink';
 import EditCameraEntry from './EditCameraEntry';
 import EditAccessoryEntry from './EditAccessoryEntry';
+import EditBulkAccessoryEntry, { type BulkAccessoryFullData } from './EditBulkAccessoryEntry';
 import DeleteUnitButton from './DeleteUnitButton';
 
 // Niemals cachen — sonst zeigt die Page beim Aufruf einer alten URL noch
@@ -80,7 +81,7 @@ interface ActionLink {
 interface UnitCardData {
   layoutTitle: string; // "Kamera" / "Zubehör"
   kind: 'camera' | 'accessory';
-  /** Wenn true: Sammel-Zubehoer (kein Exemplar-Tracking, kein Edit/Delete-Modal). */
+  /** Wenn true: Sammel-Zubehoer (kein Exemplar-Tracking). */
   bulk?: boolean;
   unitId: string;
   headerLabel: string; // z.B. "INSTA360 · 360-CAM" oder "AKKU"
@@ -93,6 +94,8 @@ interface UnitCardData {
   note?: string | null;
   bookings: BookingRow[];
   actions: ActionLink[];
+  /** Komplette Bulk-Daten fuer das Edit-Modal (nur bei bulk=true). */
+  bulkInitial?: BulkAccessoryFullData;
 }
 
 export default async function ScanLandingPage({ params }: PageProps) {
@@ -236,12 +239,30 @@ export default async function ScanLandingPage({ params }: PageProps) {
   // 3) Versuche Sammel-Zubehoer (Bulk-Accessory direkt ueber accessory.id)
   const { data: bulkAcc } = await supabase
     .from('accessories')
-    .select('id, name, category, description, image_url, price, pricing_mode, available, available_qty, is_bulk')
+    .select('id, name, category, description, image_url, price, pricing_mode, available, available_qty, is_bulk, compatible_product_ids, internal, upgrade_group, is_upgrade_base, allow_multi_qty, max_qty_per_booking, replacement_value')
     .eq('id', decodedCode)
     .eq('is_bulk', true)
     .maybeSingle();
 
   if (bulkAcc) {
+    const bulkInitial: BulkAccessoryFullData = {
+      id: bulkAcc.id,
+      name: bulkAcc.name ?? bulkAcc.id,
+      category: bulkAcc.category ?? '',
+      description: bulkAcc.description ?? null,
+      pricing_mode: bulkAcc.pricing_mode ?? 'oneTime',
+      price: typeof bulkAcc.price === 'number' ? bulkAcc.price : 0,
+      available_qty: typeof bulkAcc.available_qty === 'number' ? bulkAcc.available_qty : 0,
+      available: bulkAcc.available !== false,
+      image_url: bulkAcc.image_url ?? null,
+      compatible_product_ids: Array.isArray(bulkAcc.compatible_product_ids) ? bulkAcc.compatible_product_ids : [],
+      internal: bulkAcc.internal === true,
+      upgrade_group: bulkAcc.upgrade_group ?? null,
+      is_upgrade_base: bulkAcc.is_upgrade_base === true,
+      allow_multi_qty: bulkAcc.allow_multi_qty === true,
+      max_qty_per_booking: typeof bulkAcc.max_qty_per_booking === 'number' ? bulkAcc.max_qty_per_booking : null,
+      replacement_value: typeof bulkAcc.replacement_value === 'number' ? bulkAcc.replacement_value : 0,
+    };
     const data: UnitCardData = {
       layoutTitle: 'Sammel-Zubehör',
       kind: 'accessory',
@@ -263,6 +284,7 @@ export default async function ScanLandingPage({ params }: PageProps) {
       actions: [
         { href: '/admin/zubehoer', label: 'Zubehör-Editor', primary: true },
       ],
+      bulkInitial,
     };
     return <UnitCard data={data} />;
   }
@@ -316,7 +338,7 @@ function UnitCard({ data }: { data: UnitCardData }) {
 
         <BookingsBlock bookings={data.bookings} />
 
-        {(data.actions.length > 0 || ((data.kind === 'camera' || data.kind === 'accessory') && !data.bulk)) && (
+        {(data.actions.length > 0 || data.kind === 'camera' || data.kind === 'accessory') && (
           <div className="flex flex-wrap gap-2 pt-3 border-t">
             {data.actions.map((a) => (
               <Link
@@ -347,8 +369,14 @@ function UnitCard({ data }: { data: UnitCardData }) {
                 initialCode={data.code ?? ''}
               />
             )}
+            {data.kind === 'accessory' && data.bulk && data.bulkInitial && (
+              <EditBulkAccessoryEntry initial={data.bulkInitial} />
+            )}
             {(data.kind === 'camera' || data.kind === 'accessory') && !data.bulk && (
               <DeleteUnitButton kind={data.kind} unitId={data.unitId} code={data.code ?? ''} />
+            )}
+            {data.kind === 'accessory' && data.bulk && (
+              <DeleteUnitButton kind="bulk_accessory" unitId={data.unitId} code={data.name} />
             )}
           </div>
         )}
