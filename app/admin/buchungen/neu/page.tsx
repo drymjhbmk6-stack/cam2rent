@@ -432,15 +432,19 @@ export default function ManualBookingPage() {
   })();
   const shippingPrice = shippingPriceCalc;
   const grossTotal = subtotal + shippingPrice;
+  // Rabatt-Basis: nur Miete + Zubehör + Sets. Haftungsschutz und Versand
+  // bleiben aussen vor (Haftung deckt eigene Risiken ab, Versand ist
+  // Durchlaufposten).
+  const discountBase = rentalPrice + accessoryPrice + setPrice;
   const discountAmount = (() => {
     if (discountMode === 'none') return 0;
     const v = parseFloat(discountValue);
     if (isNaN(v) || v <= 0) return 0;
     if (discountMode === 'percent') {
       const pct = Math.min(100, v);
-      return Math.round(grossTotal * pct) / 100;
+      return Math.round(discountBase * pct) / 100;
     }
-    return Math.min(grossTotal, Math.round(v * 100) / 100);
+    return Math.min(discountBase, Math.round(v * 100) / 100);
   })();
   const total = Math.max(0, grossTotal - discountAmount);
   const deposit = totalDeposit;
@@ -1186,7 +1190,10 @@ export default function ManualBookingPage() {
 
         {/* ─── Rabatt ─── */}
         <div style={sectionStyle}>
-          <h2 className="font-heading font-semibold text-sm mb-4" style={headingStyle}>Rabatt</h2>
+          <h2 className="font-heading font-semibold text-sm mb-1" style={headingStyle}>Rabatt</h2>
+          <p className="text-xs mb-4" style={{ color: '#64748b' }}>
+            Wird nur auf Miete, Zubehör und Sets angewendet — nicht auf Haftungsschutz oder Versand.
+          </p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <label style={labelStyle}>Art</label>
