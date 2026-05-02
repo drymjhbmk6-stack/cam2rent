@@ -35,6 +35,18 @@ declare global {
   }
 }
 
+interface ExtendedMediaTrackConstraintSet extends MediaTrackConstraintSet {
+  torch?: boolean;
+  zoom?: number;
+  focusMode?: string;
+  pointsOfInterest?: Array<{ x: number; y: number }>;
+}
+interface ExtendedMediaTrackCapabilities extends MediaTrackCapabilities {
+  torch?: boolean;
+  zoom?: { min: number; max: number; step?: number };
+  focusMode?: string[];
+}
+
 interface SerialScannerProps {
   open: boolean;
   onResult: (text: string) => void;
@@ -69,6 +81,8 @@ export default function SerialScanner({ open, onResult, onClose, title = 'Serien
   const [errorMsg, setErrorMsg] = useState('');
   const [manualValue, setManualValue] = useState('');
   const [usingFallback, setUsingFallback] = useState(false);
+  const [torchOn, setTorchOn] = useState(false);
+  const [torchSupported, setTorchSupported] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -101,6 +115,45 @@ export default function SerialScanner({ open, onResult, onClose, title = 'Serien
     if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
+    setTorchOn(false);
+    setTorchSupported(false);
+  }
+
+  /**
+   * Aktiviert/deaktiviert die Taschenlampe der Ruek-Kamera. Funktioniert nur
+   * auf Chromium-Browsern (Android/Desktop). iOS Safari unterstuetzt das nicht.
+   */
+  async function toggleTorch() {
+    const track = streamRef.current?.getVideoTracks()?.[0];
+    if (!track) return;
+    const next = !torchOn;
+    try {
+      await track.applyConstraints({ advanced: [{ torch: next } as ExtendedMediaTrackConstraintSet] });
+      setTorchOn(next);
+    } catch {
+      // Wenn das Geraet keine Torch hat, einfach den Button verstecken
+      setTorchSupported(false);
+    }
+  }
+
+  /**
+   * Tap-to-Focus: bei Klick auf das Video versucht die Kamera, an dieser
+   * Stelle scharfzustellen. Greift nur, wenn der Browser pointsOfInterest
+   * im Track unterstuetzt (iOS Safari + neuere Chromium).
+   */
+  async function handleVideoTap(e: React.MouseEvent<HTMLVideoElement>) {
+    const track = streamRef.current?.getVideoTracks()?.[0];
+    if (!track) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+    try {
+      await track.applyConstraints({
+        advanced: [{ pointsOfInterest: [{ x, y }], focusMode: 'single-shot' } as ExtendedMediaTrackConstraintSet],
+      });
+    } catch {
+      // Ignorieren — Browser unterstuetzt das nicht.
+    }
   }
 
   async function startScanning() {
@@ -115,11 +168,29 @@ export default function SerialScanner({ open, onResult, onClose, title = 'Serien
     }
 
     try {
+      // Hohe Aufloesung + Continuous-Autofocus → mehr Pixel pro QR-Modul,
+      // damit der Scan auch bei groesserem Abstand und leichten Winkeln klappt.
+      // `ideal` statt `exact`, damit aeltere Kameras nicht hart abbrechen.
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' } },
+        video: {
+          facingMode: { ideal: 'environment' },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+          // Continuous-Autofocus haelt das Bild scharf, auch wenn der Nutzer
+          // die Kamera bewegt.
+          focusMode: { ideal: 'continuous' },
+          advanced: [{ focusMode: 'continuous' } as ExtendedMediaTrackConstraintSet],
+        } as MediaTrackConstraints,
         audio: false,
       });
       streamRef.current = stream;
+
+      // Torch-Capability einmalig pruefen + UI-Toggle freischalten
+      const track = stream.getVideoTracks()[0];
+      if (track && typeof track.getCapabilities === 'function') {
+        const caps = track.getCapabilities() as ExtendedMediaTrackCapabilities;
+        if (caps.torch === true) setTorchSupported(true);
+      }
 
       if (!videoRef.current) return;
       videoRef.current.srcObject = stream;
@@ -134,6 +205,8 @@ export default function SerialScanner({ open, onResult, onClose, title = 'Serien
           formats: ['qr_code', 'ean_13', 'ean_8', 'code_128', 'code_39', 'code_93', 'codabar', 'data_matrix', 'itf', 'upc_a', 'upc_e'],
         });
 
+        // 150 ms Intervall — bei 1080p kostet ein detect ~30-60 ms auf
+        // Mid-Range-Mobile, frequentes Polling fuehlt sich also "snappy" an.
         detectIntervalRef.current = window.setInterval(async () => {
           if (!videoRef.current || videoRef.current.readyState < 2) return;
           try {
@@ -149,7 +222,7 @@ export default function SerialScanner({ open, onResult, onClose, title = 'Serien
           } catch {
             // Detect-Fehler einzelner Frames ignorieren — naechster Frame versucht erneut.
           }
-        }, 250);
+        }, 150);
         return;
       }
 
@@ -180,16 +253,20 @@ export default function SerialScanner({ open, onResult, onClose, title = 'Serien
           rafRef.current = window.requestAnimationFrame(tick);
           return;
         }
-        // Auf max 480px lange Seite verkleinern — schneller, sonst frisst jsQR
-        // pro Frame ~100-300ms auf iPhone. Reicht fuer 25mm-Etiketten.
-        const scale = Math.min(1, 480 / Math.max(w, h));
+        // Auf max 720px lange Seite verkleinern — bringt deutlich mehr
+        // Reichweite als die alten 480px (fast doppelt so weit erkennbar),
+        // bleibt auf iPhone trotzdem unter 200ms pro Frame.
+        const scale = Math.min(1, 720 / Math.max(w, h));
         canvas.width = Math.round(w * scale);
         canvas.height = Math.round(h * scale);
         ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
         try {
+          // attemptBoth statt dontInvert — invertierte/kontrastarme Sticker
+          // werden jetzt auch erkannt. ~10ms Mehraufwand pro Frame, aber
+          // viel toleranter gegenueber Beleuchtung und Etiketten-Material.
           const code = jsQR(imageData.data, imageData.width, imageData.height, {
-            inversionAttempts: 'dontInvert',
+            inversionAttempts: 'attemptBoth',
           });
           if (code?.data) {
             const value = extractScanValue(code.data);
@@ -251,7 +328,8 @@ export default function SerialScanner({ open, onResult, onClose, title = 'Serien
                 ref={videoRef}
                 playsInline
                 muted
-                className="w-full h-full object-cover"
+                onClick={handleVideoTap}
+                className="w-full h-full object-cover cursor-crosshair"
               />
               {status === 'scanning' && (
                 <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
@@ -263,12 +341,28 @@ export default function SerialScanner({ open, onResult, onClose, title = 'Serien
                   Kamera wird gestartet…
                 </div>
               )}
+              {status === 'scanning' && torchSupported && (
+                <button
+                  type="button"
+                  onClick={toggleTorch}
+                  aria-label={torchOn ? 'Taschenlampe aus' : 'Taschenlampe an'}
+                  title={torchOn ? 'Taschenlampe aus' : 'Taschenlampe an'}
+                  className="absolute top-2 right-2 w-10 h-10 rounded-full flex items-center justify-center transition-colors"
+                  style={{ background: torchOn ? '#fbbf24' : 'rgba(0,0,0,0.5)', color: torchOn ? '#0f172a' : 'white' }}
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 2l.553 1.106A2 2 0 0011.342 4h1.316a2 2 0 001.789-.894L15 2M9 2v3a2 2 0 002 2h2a2 2 0 002-2V2M10 22h4M12 14v8M9 8h6l-1 6h-4l-1-6z" />
+                  </svg>
+                </button>
+              )}
             </div>
           )}
 
-          {status === 'scanning' && usingFallback && (
+          {status === 'scanning' && (
             <p className="text-xs font-body text-brand-muted dark:text-gray-400 text-center">
-              JS-Modus aktiv (iOS): Nur QR-Codes, halte den Code etwas naeher und gerade vor die Kamera.
+              {usingFallback
+                ? 'JS-Modus aktiv (iOS): Halte den Code möglichst gerade vor die Kamera. Tippe ins Bild zum Scharfstellen.'
+                : 'Tippe ins Bild zum Scharfstellen. Bei dunklen Stickern Taschenlampe aktivieren.'}
             </p>
           )}
           {status === 'no-camera' && (
