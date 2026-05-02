@@ -228,6 +228,9 @@ export default function ManualBookingPage() {
   const [paymentMethod, setPaymentMethod] = useState('bar');
   const [paymentFees, setPaymentFees] = useState('');
   const [customShippingPrice, setCustomShippingPrice] = useState('');
+  const [discountMode, setDiscountMode] = useState<'none' | 'percent' | 'fixed'>('none');
+  const [discountValue, setDiscountValue] = useState('');
+  const [discountReason, setDiscountReason] = useState('');
   const [remark, setRemark] = useState('');
   const [showSignature, setShowSignature] = useState(false);
   const [signatureData, setSignatureData] = useState<SignatureResult | null>(null);
@@ -428,7 +431,18 @@ export default function ManualBookingPage() {
     return 0; // Standard: kostenlos bei manuellen Buchungen
   })();
   const shippingPrice = shippingPriceCalc;
-  const total = subtotal + shippingPrice;
+  const grossTotal = subtotal + shippingPrice;
+  const discountAmount = (() => {
+    if (discountMode === 'none') return 0;
+    const v = parseFloat(discountValue);
+    if (isNaN(v) || v <= 0) return 0;
+    if (discountMode === 'percent') {
+      const pct = Math.min(100, v);
+      return Math.round(grossTotal * pct) / 100;
+    }
+    return Math.min(grossTotal, Math.round(v * 100) / 100);
+  })();
+  const total = Math.max(0, grossTotal - discountAmount);
   const deposit = totalDeposit;
 
   // ─── Rechnungs-Vorschau ───
@@ -552,6 +566,7 @@ export default function ManualBookingPage() {
     <thead><tr><th>Beschreibung</th><th>Betrag</th></tr></thead>
     <tbody>
       ${items.map(item => `<tr><td>${item.description}</td><td${item.amount === 0 ? ' class="zero-amount"' : ''}>${item.amount > 0 ? fmtEuro(item.amount) : '–'}</td></tr>`).join('\n      ')}
+      ${discountAmount > 0 ? `<tr><td style="color:#16a34a"><strong>Rabatt${discountMode === 'percent' && discountValue ? ` (${discountValue}%)` : ''}${discountReason ? ` – ${discountReason.replace(/[<>]/g, '')}` : ''}</strong></td><td style="color:#16a34a"><strong>−${fmtEuro(discountAmount)}</strong></td></tr>` : ''}
     </tbody>
   </table>
   <table style="margin-top:4px"><tbody><tr class="total-row"><td>Gesamtbetrag</td><td>${fmtEuro(total)}</td></tr></tbody></table>
@@ -584,7 +599,7 @@ export default function ManualBookingPage() {
       w.document.close();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedProducts, productList, days, rentalFrom, rentalTo, dynPrices, staticProducts, accessories, sets, shippingPrice, shippingMethod, deliveryMode, customerName, customerEmail, street, zip, city, paymentStatus, total, deposit, depositMode, remark]);
+  }, [selectedProducts, productList, days, rentalFrom, rentalTo, dynPrices, staticProducts, accessories, sets, shippingPrice, shippingMethod, deliveryMode, customerName, customerEmail, street, zip, city, paymentStatus, total, deposit, depositMode, remark, discountAmount, discountMode, discountValue, discountReason]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -683,12 +698,19 @@ export default function ManualBookingPage() {
           payment_status: paymentStatus,
           payment_method: paymentStatus === 'paid' ? paymentMethod : null,
           payment_fees: paymentStatus === 'paid' && paymentFees ? parseFloat(paymentFees) : 0,
+          discount_amount: discountAmount,
+          discount_type: discountMode === 'none' ? null : discountMode,
+          discount_value: discountMode === 'none' ? null : (parseFloat(discountValue) || 0),
+          discount_reason: discountReason.trim() || null,
           send_email: !!customerEmail.trim(),
           contractSignature: signatureData ?? undefined,
           notes: [
             source ? `Quelle: ${source}` : '',
             paymentStatus === 'paid' ? `Bezahlt (${paymentMethod === 'bar' ? 'Bar' : paymentMethod === 'paypal' ? 'PayPal' : paymentMethod === 'bank_transfer' ? 'Überweisung' : paymentMethod === 'stripe' ? 'Karte' : 'Sonstige'})` : '',
             paymentFees && parseFloat(paymentFees) > 0 ? `Transaktionsgebühren: ${parseFloat(paymentFees).toFixed(2)} €` : '',
+            discountAmount > 0
+              ? `Rabatt: −${discountAmount.toFixed(2).replace('.', ',')} €${discountMode === 'percent' && discountValue ? ` (${discountValue}%)` : ''}${discountReason.trim() ? ` – ${discountReason.trim()}` : ''}`
+              : '',
             ...allNotes,
             bankInfo,
             remark ? `Bemerkung: ${remark}` : '',
@@ -1162,6 +1184,72 @@ export default function ManualBookingPage() {
           </div>
         </div>
 
+        {/* ─── Rabatt ─── */}
+        <div style={sectionStyle}>
+          <h2 className="font-heading font-semibold text-sm mb-4" style={headingStyle}>Rabatt</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+              <label style={labelStyle}>Art</label>
+              <select
+                style={selectStyle}
+                value={discountMode}
+                onChange={(e) => {
+                  const next = e.target.value as 'none' | 'percent' | 'fixed';
+                  setDiscountMode(next);
+                  if (next === 'none') setDiscountValue('');
+                }}
+              >
+                <option value="none">Kein Rabatt</option>
+                <option value="percent">Prozent (%)</option>
+                <option value="fixed">Festbetrag (€)</option>
+              </select>
+            </div>
+            {discountMode !== 'none' && (
+              <>
+                <div>
+                  <label style={labelStyle}>Wert ({discountMode === 'percent' ? '%' : '€'})</label>
+                  <input
+                    style={inputStyle}
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max={discountMode === 'percent' ? 100 : undefined}
+                    value={discountValue}
+                    onChange={(e) => setDiscountValue(e.target.value)}
+                    placeholder={discountMode === 'percent' ? '10' : '5.00'}
+                    inputMode="decimal"
+                  />
+                </div>
+                <div>
+                  <label style={labelStyle}>Abzug</label>
+                  <div
+                    style={{
+                      ...inputStyle,
+                      display: 'flex',
+                      alignItems: 'center',
+                      color: discountAmount > 0 ? '#10b981' : '#64748b',
+                      fontWeight: 600,
+                    }}
+                  >
+                    {discountAmount > 0 ? `−${fmtEuro(discountAmount)}` : '—'}
+                  </div>
+                </div>
+                <div className="sm:col-span-3">
+                  <label style={labelStyle}>Grund / Anlass (optional, erscheint in den Notizen)</label>
+                  <input
+                    style={inputStyle}
+                    type="text"
+                    value={discountReason}
+                    onChange={(e) => setDiscountReason(e.target.value)}
+                    placeholder="z.B. Stammkunden-Rabatt, Verspätungsausgleich"
+                    maxLength={120}
+                  />
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
         {/* ─── Bezahlstatus ─── */}
         <div style={sectionStyle}>
           <h2 className="font-heading font-semibold text-sm mb-4" style={headingStyle}>Zahlung</h2>
@@ -1265,6 +1353,15 @@ export default function ManualBookingPage() {
               <div className="flex justify-between" style={{ color: '#e2e8f0' }}>
                 <span>Versand</span>
                 <span>{fmtEuro(shippingPrice)}</span>
+              </div>
+            )}
+            {discountAmount > 0 && (
+              <div className="flex justify-between" style={{ color: '#10b981' }}>
+                <span>
+                  Rabatt
+                  {discountMode === 'percent' && discountValue ? ` (${discountValue}%)` : ''}
+                </span>
+                <span>−{fmtEuro(discountAmount)}</span>
               </div>
             )}
             <div style={{ height: 1, background: '#1e293b', margin: '8px 0' }} />

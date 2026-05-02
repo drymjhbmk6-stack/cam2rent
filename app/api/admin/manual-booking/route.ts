@@ -99,6 +99,12 @@ export async function POST(req: NextRequest) {
     if (bookingNotes) insertData.notes = bookingNotes;
     if (payment_status) insertData.payment_status = payment_status;
 
+    // Manueller Rabatt (optional, Spalten existieren in bookings).
+    const manualDiscount = parseFloat(body.discount_amount || '0');
+    if (manualDiscount > 0) {
+      insertData.discount_amount = manualDiscount;
+    }
+
     // Vertrag als signiert markieren wenn Signatur vorhanden
     if (contractSignature?.agreedToTerms) {
       insertData.contract_signed = true;
@@ -111,6 +117,7 @@ export async function POST(req: NextRequest) {
       delete insertData.notes;
       delete insertData.payment_status;
       delete insertData.contract_signed;
+      delete insertData.discount_amount;
       result = await supabase.from('bookings').insert(insertData);
     }
 
@@ -285,6 +292,7 @@ export async function POST(req: NextRequest) {
         rental_to,
         payment_status: payment_status || 'paid',
         price_total: parseFloat(price_total || '0'),
+        ...(manualDiscount > 0 ? { discount_amount: manualDiscount } : {}),
       },
       request: req,
     });

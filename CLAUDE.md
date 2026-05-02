@@ -174,6 +174,7 @@ Wenn eine Buchung vor Ablauf der 14-tägigen Widerrufsfrist beginnt, muss der Ku
 - **Sets/Zubehör gefiltert** nach Kamera-Kompatibilität (product_ids / compatible_product_ids)
 - **Bezahlstatus:** "Bezahlt" / "Nicht bezahlt" — bei "Nicht bezahlt" wird `MANUAL-UNPAID-...` als `payment_intent_id` gespeichert
 - **Verwendungszweck:** Format `Name - Rechnungsnummer` (z.B. "Lars Kanitzky - RE-2616-001")
+- **Rabatt** (Stand 2026-05-03): Eigene Section unter „Herkunft & Notizen" — Modus `Prozent (%)` oder `Festbetrag (€)` + optionaler Grund. Abzug wird live in der Zusammenfassung + Rechnungsvorschau angezeigt, in `bookings.discount_amount` gespeichert (existierende Spalte, fließt automatisch in EÜR/DATEV). Notiz-String enthält den Rabatt zur Nachvollziehbarkeit.
 - Gast-Buchung ohne Kundenkonto (nur Name + E-Mail)
 - Digitale Vertragsunterschrift auf Admin-Tablet/Handy (SignatureStep)
 - Rechnung-PDF + Vertrag-PDF werden im Hintergrund generiert
