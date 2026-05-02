@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import type React from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/components/AuthProvider';
@@ -24,7 +24,8 @@ import ExpressSignup from '@/components/checkout/ExpressSignup';
 /** Inline type to replace react-day-picker's DateRange */
 type DateRange = { from: Date; to?: Date };
 
-const stripePromise = getStripePromise();
+// stripePromise wird je User initialisiert (Tester-Konto bekommt Test-Stripe-
+// Publishable-Key) — siehe useMemo im Component-Body weiter unten.
 
 // ─── Haftungsoptionen ─────────────────────────────────────────────────────────
 
@@ -374,6 +375,11 @@ export default function BuchenPage() {
   const { slug } = useParams<{ slug: string }>();
   const router = useRouter();
   const { user } = useAuth();
+  // Tester-Konten bekommen den Test-Publishable-Key (auch im Live-Modus).
+  const stripePromise = useMemo(
+    () => getStripePromise({ userId: user?.id }),
+    [user?.id],
+  );
   const { addItem, items: cartItems } = useCart();
   const { products } = useProducts();
   const product = products.find((p) => p.slug === slug);

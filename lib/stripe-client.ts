@@ -12,13 +12,25 @@
 
 import { loadStripe, type Stripe } from '@stripe/stripe-js';
 
-let cached: Promise<Stripe | null> | null = null;
+const cacheByKey = new Map<string, Promise<Stripe | null>>();
 
-export function getStripePromise(): Promise<Stripe | null> {
-  if (cached) return cached;
-  cached = (async () => {
+/**
+ * Wird von den Checkout-Seiten aufgerufen. Wenn `userId` mitgegeben ist und
+ * das Profil als Tester markiert ist, gibt der env-mode-Endpoint den Test-
+ * Publishable-Key zurueck — damit zahlt der Tester mit Test-Karten gegen
+ * Test-Stripe, auch wenn die Seite global im Live-Modus laeuft.
+ */
+export function getStripePromise(opts?: { userId?: string | null }): Promise<Stripe | null> {
+  const cacheKey = opts?.userId ?? '__public__';
+  const existing = cacheByKey.get(cacheKey);
+  if (existing) return existing;
+
+  const promise = (async () => {
     try {
-      const res = await fetch('/api/env-mode', { cache: 'no-store' });
+      const url = opts?.userId
+        ? `/api/env-mode?userId=${encodeURIComponent(opts.userId)}`
+        : '/api/env-mode';
+      const res = await fetch(url, { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json() as { stripePublishableKey?: string };
         if (data.stripePublishableKey) {
@@ -32,5 +44,6 @@ export function getStripePromise(): Promise<Stripe | null> {
     if (!fallback) return null;
     return await loadStripe(fallback);
   })();
-  return cached;
+  cacheByKey.set(cacheKey, promise);
+  return promise;
 }

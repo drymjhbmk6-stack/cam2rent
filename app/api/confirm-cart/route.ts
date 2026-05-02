@@ -21,6 +21,7 @@ import {
 } from '@/lib/email';
 import { getStripe } from '@/lib/stripe';
 import { isTestMode } from '@/lib/env-mode';
+import { isUserTester, getTesterStripe } from '@/lib/tester-mode';
 import { type BookingAccessoryItem, itemsToLegacyIds } from '@/lib/booking-accessories';
 
 const confirmCartLimiter = rateLimit({ maxAttempts: 5, windowMs: 60_000 });
@@ -116,8 +117,28 @@ export async function POST(req: NextRequest) {
     //                Frontend einen 202 + processing-Flag zurueck, damit es
     //                den Hinweis "Zahlung wird verarbeitet" anzeigen kann.
     // Alles andere (canceled, requires_*) = harter Fehler.
-    const stripe = await getStripe();
-    const intent = await stripe.paymentIntents.retrieve(payment_intent_id);
+    // Tester-Konto-Check vor Stripe-Auswahl: Tester nutzt Test-Stripe-Keys.
+    // Wir checken den userId aus dem Body — falls leer, fragen wir den
+    // checkout-Context aus admin_settings nach. Im worst case retrieve mit
+    // normalem Stripe und fallback auf Test-Stripe bei "No such payment_intent".
+    const requestedUserId = userId ?? null;
+    const tester = await isUserTester(requestedUserId);
+    let stripe = tester ? getTesterStripe() : await getStripe();
+    let intent;
+    try {
+      intent = await stripe.paymentIntents.retrieve(payment_intent_id);
+    } catch (retrieveErr) {
+      // Fallback: Wenn der Intent nicht im aktuellen Stripe-Account liegt,
+      // probieren wir den jeweils anderen. Das deckt z.B. den Fall ab,
+      // dass der userId zu spaet bekannt ist (Tester-Flag erst spaeter).
+      const msg = retrieveErr instanceof Error ? retrieveErr.message : String(retrieveErr);
+      if (/No such payment_intent/i.test(msg)) {
+        stripe = tester ? await getStripe() : getTesterStripe();
+        intent = await stripe.paymentIntents.retrieve(payment_intent_id);
+      } else {
+        throw retrieveErr;
+      }
+    }
     if (intent.status === 'processing') {
       return NextResponse.json(
         { processing: true, message: 'Zahlung wird von der Bank verarbeitet. Du erhaeltst gleich eine Bestaetigung per E-Mail.' },
@@ -499,7 +520,10 @@ export async function POST(req: NextRequest) {
       // payment_intent_id: erste Gruppe bekommt die originale ID, weitere bekommen Suffix
       const piId = gi === 0 ? payment_intent_id : `${payment_intent_id}_g${gi + 1}`;
 
-      const testMode = await isTestMode();
+      // is_test ist true wenn entweder global Test-Mode ODER der User ein
+      // Tester-Konto ist (Live-Modus, aber Buchung soll aus Reports raus).
+      const isTesterBooking = tester || intent.metadata?.tester === '1';
+      const testMode = isTesterBooking || (await isTestMode());
       const buildInsertPayload = (id: string) => ({
         id,
         payment_intent_id: piId,

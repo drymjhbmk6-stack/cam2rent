@@ -23,7 +23,8 @@ import { getAccessoryPrice } from '@/data/accessories';
 import { BUSINESS } from '@/lib/business-config';
 import ExpressSignup from '@/components/checkout/ExpressSignup';
 
-const stripePromise = getStripePromise();
+// stripePromise wird je User initialisiert (Tester-Konto bekommt Test-Stripe-
+// Publishable-Key) — siehe getStripePromise mit userId-Parameter weiter unten.
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -214,6 +215,13 @@ export default function CheckoutPage() {
   const router = useRouter();
   const { items, cartTotal, itemCount, clearCart, hydrated } = useCart();
   const { user } = useAuth();
+
+  // Stripe-Promise wird pro User erzeugt — Tester bekommt den Test-Publishable-
+  // Key zurueck, damit Test-Karten gegen Test-Stripe funktionieren.
+  const stripePromise = useMemo(
+    () => getStripePromise({ userId: user?.id }),
+    [user?.id],
+  );
 
   // Step: 'details' | 'payment'
   const [step, setStep] = useState<'details' | 'payment'>('details');

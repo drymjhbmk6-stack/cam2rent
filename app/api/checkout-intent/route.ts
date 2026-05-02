@@ -5,6 +5,7 @@ import { calcPriceFromTable, type AdminProduct } from '@/lib/price-config';
 import { getStripe, buildPaymentDescription } from '@/lib/stripe';
 import { getCheckoutConfig } from '@/lib/checkout-config';
 import { generateBookingId } from '@/lib/booking-id';
+import { isUserTester, getTesterStripe } from '@/lib/tester-mode';
 
 const checkoutLimiter = rateLimit({ maxAttempts: 10, windowMs: 60 * 1000 }); // 10 pro Min
 
@@ -111,13 +112,19 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Tester-Konto: ueberspringt Verifizierungs-Pflicht, nutzt Test-Stripe-Keys
+    // (echte Karten/PayPal werden nicht belastet — nur 4242-... funktioniert).
+    // Buchung wird unten als is_test=true markiert.
+    const tester = await isUserTester(userId);
+
     // Verifizierungspflicht VOR Zahlung:
     //   - Default-Verhalten (Flag aus): Kunde muss verifiziert sein, sonst 403.
     //   - Mit Flag `verificationDeferred`: unverifizierte Kunden duerfen zahlen.
     //     Die Buchung wird dann in confirm-cart mit `verification_required=true`
     //     markiert und erscheint in der Versand-Liste erst nach Freigabe.
+    //   - Tester: Verifizierung wird komplett uebersprungen.
     const checkoutCfg = await getCheckoutConfig();
-    const isVerified = profile?.verification_status === 'verified';
+    const isVerified = tester || profile?.verification_status === 'verified';
     const verificationRequired = !isVerified;
 
     if (!isVerified && !checkoutCfg.verificationDeferred) {
@@ -178,6 +185,10 @@ export async function POST(req: NextRequest) {
       // ausgelesen und in bookings.verification_required uebernommen.
       metadata.verification_required = '1';
     }
+    if (tester) {
+      // Wird in confirm-cart ausgelesen — bookings.is_test=true setzen
+      metadata.tester = '1';
+    }
 
     // Sprechende Description fuer PayPal-Verwendungszweck + Stripe-Quittung
     const cartItems = (checkoutContext?.items as Array<{
@@ -210,7 +221,10 @@ export async function POST(req: NextRequest) {
       extraItemCount: cartItems.length > 1 ? cartItems.length - 1 : 0,
     });
 
-    const stripe = await getStripe();
+    // Tester-Konto nutzt Test-Stripe-Keys (auch wenn die Seite live ist).
+    // Damit werden echte Karten/PayPal nicht belastet — der Tester-Flow
+    // funktioniert nur mit Test-Karten (z.B. 4242 4242 4242 4242).
+    const stripe = tester ? getTesterStripe() : await getStripe();
     const paymentIntent = await stripe.paymentIntents.create({
       amount: amountCents,
       currency: 'eur',

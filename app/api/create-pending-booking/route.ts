@@ -8,6 +8,7 @@ import { DEFAULT_SHIPPING, type ShippingPriceConfig } from '@/lib/price-config';
 import { sendAdminNotification, type BookingEmailData } from '@/lib/email';
 import { getClientIp } from '@/lib/rate-limit';
 import { isTestMode } from '@/lib/env-mode';
+import { isUserTester } from '@/lib/tester-mode';
 import { type BookingAccessoryItem, itemsToLegacyIds } from '@/lib/booking-accessories';
 import { generateContractPDF } from '@/lib/contracts/generate-contract';
 import { storeContract } from '@/lib/contracts/store-contract';
@@ -218,7 +219,10 @@ export async function POST(req: NextRequest) {
         .map(([accessory_id, qty]) => ({ accessory_id, qty }));
       const allAccessories = itemsToLegacyIds(groupAccessoryItems);
 
-      const testMode = await isTestMode();
+      // Tester-User → is_test=true (auch im Live-Modus). Im Pending-Flow
+      // landet ein Tester selten (weil verifiziert), aber defensiv markieren.
+      const tester = await isUserTester(userId);
+      const testMode = tester || (await isTestMode());
       const { error } = await supabase.from('bookings').insert({
         id: bookingId,
         payment_intent_id: gi === 0 ? `PENDING-${bookingId}` : `PENDING-${bookingId}_g${gi + 1}`,

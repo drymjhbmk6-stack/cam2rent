@@ -20,6 +20,7 @@ import { storeContract } from '@/lib/contracts/store-contract';
 import { confirmBookingBodySchema, firstZodError } from '@/lib/api-schemas';
 import { getStripe } from '@/lib/stripe';
 import { isTestMode } from '@/lib/env-mode';
+import { getTesterStripe } from '@/lib/tester-mode';
 
 // Confirm ist eine teure Operation (Stripe-Verify + DB + PDF + E-Mails).
 // 5/Minute pro IP — erlaubt Retry, blockt Spam.
@@ -55,8 +56,21 @@ export async function POST(req: NextRequest) {
 
     // 1. Verify payment with Stripe — 'processing' (PayPal/Klarna/SEPA async)
     // mit 202 zurueckgeben, der Webhook traegt die Buchung gleich nach.
-    const stripe = await getStripe();
-    const intent = await stripe.paymentIntents.retrieve(payment_intent_id);
+    // Tester-Intents liegen in einem anderen Stripe-Account → bei 404 nochmal
+    // mit dem jeweils anderen Stripe-Client probieren.
+    let stripe = await getStripe();
+    let intent;
+    try {
+      intent = await stripe.paymentIntents.retrieve(payment_intent_id);
+    } catch (retrieveErr) {
+      const msg = retrieveErr instanceof Error ? retrieveErr.message : String(retrieveErr);
+      if (/No such payment_intent/i.test(msg)) {
+        stripe = getTesterStripe();
+        intent = await stripe.paymentIntents.retrieve(payment_intent_id);
+      } else {
+        throw retrieveErr;
+      }
+    }
     if (intent.status === 'processing') {
       return NextResponse.json(
         { processing: true, message: 'Zahlung wird von der Bank verarbeitet. Du erhaeltst gleich eine Bestaetigung per E-Mail.' },
@@ -221,7 +235,10 @@ export async function POST(req: NextRequest) {
     }
 
     // 6. Save booking
-    const testMode = await isTestMode();
+    // is_test = global Test-Mode ODER Tester-User-Buchung (metadata.tester='1'
+    // wird in create-payment-intent gesetzt).
+    const isTesterBooking = meta.tester === '1';
+    const testMode = isTesterBooking || (await isTestMode());
     // Verifizierungsflag aus Stripe-Metadata (von checkout-intent gesetzt).
     const verificationRequired = meta.verification_required === '1';
     const { error } = await supabase.from('bookings').insert({

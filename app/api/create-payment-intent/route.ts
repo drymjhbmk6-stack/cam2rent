@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { createServiceClient } from '@/lib/supabase';
 import { getStripe, buildPaymentDescription } from '@/lib/stripe';
+import { isUserTester, getTesterStripe } from '@/lib/tester-mode';
 
 const paymentLimiter = rateLimit({ maxAttempts: 10, windowMs: 60 * 1000 }); // 10 pro Min
 
@@ -13,7 +14,6 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const stripe = await getStripe();
     const body = await req.json();
     const { amountCents, depositCents, metadata } = body as {
       amountCents: number;
@@ -50,12 +50,17 @@ export async function POST(req: NextRequest) {
         { status: 403 }
       );
     }
-    if (!profile || profile.verification_status !== 'verified') {
+
+    // Tester-Konto: ueberspringt Verification, nutzt Test-Stripe-Keys.
+    const tester = await isUserTester(metadata.user_id);
+    if (!tester && (!profile || profile.verification_status !== 'verified')) {
       return NextResponse.json(
         { error: 'Dein Konto muss zuerst verifiziert werden. Bitte lade deinen Ausweis unter "Mein Konto" hoch.', code: 'NOT_VERIFIED' },
         { status: 403 }
       );
     }
+    const stripe = tester ? getTesterStripe() : await getStripe();
+    if (tester) metadata.tester = '1';
 
     // Sprechende Description fuer PayPal-Verwendungszweck + Stripe-Quittung
     const description = buildPaymentDescription({

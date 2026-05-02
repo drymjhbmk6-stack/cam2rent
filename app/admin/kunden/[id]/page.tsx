@@ -21,6 +21,7 @@ interface CustomerProfile {
   blacklisted: boolean;
   blacklist_reason: string;
   blacklisted_at: string | null;
+  is_tester: boolean | null;
   created_at: string;
   anonymized: boolean;
   deleted_at: string | null;
@@ -248,6 +249,32 @@ export default function KundenDetailPage() {
     setBlockLoading(false);
     setBlacklistReason('');
     fetchData();
+  }
+
+  const [testerLoading, setTesterLoading] = useState(false);
+  async function handleTester(next: boolean) {
+    if (next) {
+      const ok = confirm(
+        'Tester-Konto aktivieren?\n\nKonsequenzen:\n· Buchungen dieses Kunden tauchen NICHT in Reports/EÜR/DATEV auf\n· Stripe nutzt Test-Keys → echte Karten/PayPal werden NICHT belastet, nur Test-Karten (z.B. 4242 4242 4242 4242)\n· Verifizierungs-Pflicht wird übersprungen\n\nFortfahren?'
+      );
+      if (!ok) return;
+    }
+    setTesterLoading(true);
+    try {
+      const res = await fetch('/api/admin/kunden/tester', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: customerId, isTester: next }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(err.error ?? 'Fehler beim Setzen des Tester-Flags.');
+        return;
+      }
+      fetchData();
+    } finally {
+      setTesterLoading(false);
+    }
   }
 
   async function handleAddNote() {
@@ -621,6 +648,53 @@ export default function KundenDetailPage() {
                   Kunde sperren
                 </button>
               </div>
+            )}
+          </div>
+
+          {/* Tester-Konto */}
+          <div style={{
+            background: '#111827', borderRadius: 12, border: '1px solid #1e293b',
+            padding: 24,
+          }}>
+            <h2 style={{ fontSize: 16, fontWeight: 700, color: '#e2e8f0', marginBottom: 8, marginTop: 0 }}>
+              Tester-Konto
+            </h2>
+            <p style={{ fontSize: 13, color: '#94a3b8', marginBottom: 16, marginTop: 0 }}>
+              Buchungen dieses Kunden landen mit <code style={{ color: '#06b6d4' }}>is_test=true</code> in der DB
+              (raus aus Reports/EÜR/DATEV) und gehen gegen Stripe-Test-Keys —
+              echte Karten/PayPal werden NICHT belastet, nur Test-Karten wie
+              <code style={{ color: '#06b6d4' }}> 4242 4242 4242 4242</code>.
+              Verifizierungs-Pflicht ist übersprungen. E-Mails laufen wie für echte Kunden.
+            </p>
+            {customer.is_tester ? (
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, color: '#06b6d4', fontSize: 14, fontWeight: 600 }}>
+                  ● Tester-Konto aktiv
+                </div>
+                <button
+                  onClick={() => handleTester(false)}
+                  disabled={testerLoading}
+                  style={{
+                    padding: '8px 20px', borderRadius: 8, fontSize: 14, fontWeight: 600,
+                    background: '#1e293b', color: '#94a3b8', border: '1px solid #334155', cursor: 'pointer',
+                    opacity: testerLoading ? 0.5 : 1,
+                  }}
+                >
+                  Tester-Status entfernen
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => handleTester(true)}
+                disabled={testerLoading}
+                style={{
+                  padding: '8px 20px', borderRadius: 8, fontSize: 14, fontWeight: 600,
+                  background: '#06b6d4', color: 'white', border: 'none', cursor: 'pointer',
+                  opacity: testerLoading ? 0.5 : 1,
+                }}
+              >
+                Als Tester-Konto markieren
+              </button>
             )}
           </div>
         </div>
