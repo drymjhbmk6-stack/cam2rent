@@ -22,6 +22,8 @@ interface ListItem {
   href: string;
   context?: string; // z.B. Marke (GoPro) oder Kategorie (Akku)
   extraSearch?: string; // zusaetzliche Suchbegriffe (z.B. Seriennummer wenn Code = Bezeichnung)
+  compatibleModels?: string[]; // Zubehoer-only: Modell-Namen mit denen es kompatibel ist
+  isUniversal?: boolean; // Zubehoer-only: passt zu allen Kameras (compatible_product_ids leer)
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -40,16 +42,32 @@ export default async function InventarPage() {
     supabase.from('product_units').select('id, product_id, serial_number, label, status').order('serial_number'),
     supabase.from('accessory_units').select('id, accessory_id, exemplar_code, status').order('exemplar_code'),
     supabase.from('admin_config').select('value').eq('key', 'products').maybeSingle(),
-    supabase.from('accessories').select('id, name, category, is_bulk, available_qty, available'),
+    supabase.from('accessories').select('id, name, category, is_bulk, available_qty, available, compatible_product_ids'),
   ]);
 
   const productMap = (configRes?.data?.value ?? {}) as Record<string, { name?: string; brand?: string }>;
+  // Modell-Namen-Lookup fuer Zubehoer-Kompatibilitaets-Auflösung
+  const modelNameById = new Map<string, string>();
+  for (const [pid, p] of Object.entries(productMap)) {
+    if (p?.name) modelNameById.set(pid, p.name);
+  }
+
   const accessoryRows = (accessoriesRes.data ?? []) as Array<{
     id: string; name?: string; category?: string;
     is_bulk?: boolean; available_qty?: number; available?: boolean;
+    compatible_product_ids?: string[] | null;
   }>;
   const accessoryMap = new Map(
-    accessoryRows.map((a) => [a.id, { name: a.name, category: a.category, is_bulk: a.is_bulk }]),
+    accessoryRows.map((a) => {
+      const compatIds = a.compatible_product_ids ?? [];
+      return [a.id, {
+        name: a.name,
+        category: a.category,
+        is_bulk: a.is_bulk,
+        compatibleModels: compatIds.map((pid) => modelNameById.get(pid)).filter(Boolean) as string[],
+        isUniversal: compatIds.length === 0,
+      }];
+    }),
   );
   const bulkAccessories = accessoryRows.filter((a) => a.is_bulk === true);
 
@@ -86,11 +104,14 @@ export default async function InventarPage() {
       status: u.status,
       href: `/admin/scan/${encodeURIComponent(u.exemplar_code)}`,
       context: acc?.category ?? undefined,
+      compatibleModels: acc?.compatibleModels ?? [],
+      isUniversal: acc?.isUniversal ?? true,
     });
   }
 
   // Sammel-Zubehoer: ein Eintrag pro accessory (nicht pro physisches Stueck)
   for (const a of bulkAccessories) {
+    const acc = accessoryMap.get(a.id);
     items.push({
       type: 'accessory',
       code: a.id,
@@ -98,6 +119,8 @@ export default async function InventarPage() {
       status: a.available === false ? 'retired' : 'available',
       href: `/admin/scan/${encodeURIComponent(a.id)}`,
       context: a.category ?? undefined,
+      compatibleModels: acc?.compatibleModels ?? [],
+      isUniversal: acc?.isUniversal ?? true,
     });
   }
 

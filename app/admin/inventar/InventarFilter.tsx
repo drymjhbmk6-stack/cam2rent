@@ -11,6 +11,8 @@ interface ListItem {
   href: string;
   context?: string;
   extraSearch?: string;
+  compatibleModels?: string[];
+  isUniversal?: boolean;
 }
 
 interface Props {
@@ -53,10 +55,17 @@ export default function InventarFilter({ items, statusLabels }: Props) {
         if (i.type !== 'accessory') return false;
         if ((i.context ?? '') !== categoryFilter) return false;
       }
-      // Modell filtert nur Kameras (name = Modell). Wenn aktiv, faellt Zubehoer raus.
+      // Modell-Filter:
+      //   - Bei Kameras: name === modelFilter (matcht die Kamera selbst)
+      //   - Bei Zubehoer: kompatibel mit dem Modell ODER universal (compatible_product_ids leer)
       if (modelFilter !== 'all') {
-        if (i.type !== 'camera') return false;
-        if (i.name !== modelFilter) return false;
+        if (i.type === 'camera') {
+          if (i.name !== modelFilter) return false;
+        } else {
+          const universal = i.isUniversal === true;
+          const matches = i.compatibleModels?.includes(modelFilter) === true;
+          if (!universal && !matches) return false;
+        }
       }
       if (!q) return true;
       return (
@@ -90,11 +99,11 @@ export default function InventarFilter({ items, statusLabels }: Props) {
     return [...seen].sort((a, b) => a.localeCompare(b));
   }, [items]);
 
-  // Wenn der Type-Filter auf Kameras springt, ist Kategorie sinnlos -> reset (und umgekehrt).
+  // Bei Type-Wechsel auf Kameras ist Kategorie sinnlos -> reset.
+  // Modell bleibt aktiv, weil es auch fuer Zubehoer-Kompatibilitaet relevant ist.
   function handleTypeChange(next: 'all' | 'camera' | 'accessory') {
     setTypeFilter(next);
     if (next === 'camera') setCategoryFilter('all');
-    if (next === 'accessory') setModelFilter('all');
   }
 
   const activeChips = (categoryFilter !== 'all' ? 1 : 0) + (modelFilter !== 'all' ? 1 : 0);
@@ -151,8 +160,9 @@ export default function InventarFilter({ items, statusLabels }: Props) {
                 ))}
               </select>
             )}
-            {/* Modell-Dropdown wird ausgeblendet, wenn Type auf Zubehör steht. */}
-            {modelOptions.length > 0 && typeFilter !== 'accessory' && (
+            {/* Modell-Dropdown bleibt sichtbar — auch bei "Zubehör" sinnvoll
+                (filtert dann nach Kompatibilität: passendes Zubehör + Universal-Stuecke). */}
+            {modelOptions.length > 0 && (
               <select
                 value={modelFilter}
                 onChange={(e) => setModelFilter(e.target.value)}
