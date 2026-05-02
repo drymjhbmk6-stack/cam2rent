@@ -248,6 +248,7 @@ Alle Dropdowns laden aus `admin_settings` und können neue Einträge hinzufügen
 - **Preissortierung:** Innerhalb jeder Gruppe nach Preis aufsteigend sortiert
 - **Kopieren-Button:** Dupliziert ein Set mit allen Einstellungen (Zubehör, Kameras, Preis), Kopie öffnet sich direkt zum Bearbeiten
 - **Zubehör-Dropdown:** Gruppiert nach Kategorie (`<optgroup>`), zeigt intern-Flag, Upgrade-Gruppe, Stückzahl, Kompatibilität
+- **Zubehör-Liste mit Drag-and-Drop** (Stand 2026-05-03): Komponente `<AccessoryItemList>` (gleiche im Edit + im „Neues Set"-Form). Native HTML5-D&D, Drag-Handle ⋮⋮ links, Ziel-Item bekommt Cyan-Outline. Items haben dunklen Hintergrund (#111827) + grünen/roten Border-Left je nach Verfügbarkeit. Reihenfolge wird beim Speichern direkt in `sets.accessory_items` (Array) persistiert — bestimmt damit die Anzeige-Reihenfolge in Vertrag/Packliste/Übergabeprotokoll.
 - **Kamera-Toggles:** Nutzen `CameraToggle` mit dynamischen Brand-Farben
 - **Dark-Mode:** Alle Elemente mit `dark:` Klassen versehen
 - **Vorschaubild im eingeklappten Header:** Quadratisches 80×80-Thumbnail (`set.image_url`, `next/image`, `object-cover`) links neben Name + Preis. Sets ohne Bild zeigen einen gestrichelten „Kein Bild"-Platzhalter gleicher Maße — kein Layout-Shift.

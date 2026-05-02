@@ -166,16 +166,6 @@ export default function AdminSetsPage() {
     setEdit(id, 'accessory_items', [...existing, { accessory_id: accessories[0].id, qty: 1 }]);
   }
 
-  function updateItem(id: string, idx: number, field: 'accessory_id' | 'qty', val: string | number) {
-    const items = [...(editState[id]?.accessory_items ?? [])];
-    items[idx] = { ...items[idx], [field]: val };
-    setEdit(id, 'accessory_items', items);
-  }
-
-  function removeItem(id: string, idx: number) {
-    setEdit(id, 'accessory_items', (editState[id]?.accessory_items ?? []).filter((_, i) => i !== idx));
-  }
-
   function toggleProduct(id: string, productId: string) {
     const current = editState[id]?.product_ids ?? [];
     setEdit(id, 'product_ids', current.includes(productId)
@@ -300,16 +290,6 @@ export default function AdminSetsPage() {
     if (accessories.length === 0) return;
     setNewSet((f) => ({ ...f, accessory_items: [...f.accessory_items, { accessory_id: accessories[0].id, qty: 1 }] }));
   }
-  function updateNewItem(idx: number, field: 'accessory_id' | 'qty', val: string | number) {
-    setNewSet((f) => {
-      const items = [...f.accessory_items];
-      items[idx] = { ...items[idx], [field]: val };
-      return { ...f, accessory_items: items };
-    });
-  }
-  function removeNewItem(idx: number) {
-    setNewSet((f) => ({ ...f, accessory_items: f.accessory_items.filter((_, i) => i !== idx) }));
-  }
   function toggleNewProduct(productId: string) {
     setNewSet((f) => ({
       ...f,
@@ -403,8 +383,7 @@ export default function AdminSetsPage() {
             <NewSetForm
               newSet={newSet} setNewSet={setNewSet}
               accessories={accessories} products={products} accMap={accMap}
-              addItem={addNewItem} updateItem={updateNewItem} removeItem={removeNewItem}
-              toggleProduct={toggleNewProduct}
+              addItem={addNewItem} toggleProduct={toggleNewProduct}
               badgeOptions={BADGE_OPTIONS} setBadgeOptions={setBadgeOptions}
             />
             <div className="flex justify-end mt-5 gap-2">
@@ -652,33 +631,13 @@ export default function AdminSetsPage() {
                             </label>
                           </div>
                         ) : (
-                          <div className="space-y-2">
-                            {e.accessory_items.map((item, idx) => {
-                              const acc = accMap.get(item.accessory_id);
-                              const accOk = acc && acc.available && acc.available_qty >= item.qty;
-                              return (
-                                <div key={idx} className={`rounded-lg border p-3 ${accOk ? 'bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800/40' : 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800/40'}`}>
-                                  <div className="flex items-center gap-2">
-                                    <AccessorySelect
-                                      value={item.accessory_id}
-                                      onChange={(val) => updateItem(set.id, idx, 'accessory_id', val)}
-                                      accessories={accessories}
-                                      products={products}
-                                    />
-                                    <div className="flex items-center gap-1 flex-shrink-0">
-                                      <span className="text-xs text-brand-muted">×</span>
-                                      <input type="number" min="1" value={item.qty}
-                                        onChange={(ev) => updateItem(set.id, idx, 'qty', parseInt(ev.target.value) || 1)}
-                                        className="w-14 px-2 py-2 border border-brand-border dark:border-slate-600 rounded-[10px] text-sm font-body text-center bg-white dark:bg-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-blue" />
-                                    </div>
-                                    <span className={`text-xs flex-shrink-0 ${accOk ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>{accOk ? '✓' : '✗'}</span>
-                                    <button onClick={() => removeItem(set.id, idx)}
-                                      className="text-red-400 hover:text-red-600 transition-colors text-lg leading-none flex-shrink-0">✕</button>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
+                          <AccessoryItemList
+                            items={e.accessory_items}
+                            onChange={(next) => setEdit(set.id, 'accessory_items', next)}
+                            accessories={accessories}
+                            products={products}
+                            accMap={accMap}
+                          />
                         )}
                       </div>
 
@@ -725,7 +684,7 @@ export default function AdminSetsPage() {
 
 function NewSetForm({
   newSet, setNewSet, accessories, products, accMap,
-  addItem, updateItem, removeItem, toggleProduct,
+  addItem, toggleProduct,
   badgeOptions, setBadgeOptions,
 }: {
   newSet: ReturnType<typeof emptyNew>;
@@ -734,8 +693,6 @@ function NewSetForm({
   products: Record<string, AdminProduct>;
   accMap: Map<string, Accessory>;
   addItem: () => void;
-  updateItem: (idx: number, field: 'accessory_id' | 'qty', val: string | number) => void;
-  removeItem: (idx: number) => void;
   toggleProduct: (id: string) => void;
   badgeOptions: typeof DEFAULT_BADGE_OPTIONS;
   setBadgeOptions: React.Dispatch<React.SetStateAction<typeof DEFAULT_BADGE_OPTIONS>>;
@@ -832,32 +789,13 @@ function NewSetForm({
           {newSet.accessory_items.length === 0 ? (
             <p className="text-xs font-body text-brand-muted">Noch kein Zubehör. Ohne Zubehör wird Verfügbarkeit manuell gesetzt.</p>
           ) : (
-            <div className="space-y-2">
-              {newSet.accessory_items.map((item, idx) => {
-                const acc = accMap.get(item.accessory_id);
-                const ok = acc && acc.available && acc.available_qty >= item.qty;
-                return (
-                  <div key={idx} className={`rounded-lg border p-3 ${ok ? 'bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800/40' : 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800/40'}`}>
-                    <div className="flex items-center gap-2">
-                      <AccessorySelect
-                        value={item.accessory_id}
-                        onChange={(val) => updateItem(idx, 'accessory_id', val)}
-                        accessories={accessories}
-                        products={products}
-                      />
-                      <div className="flex items-center gap-1 flex-shrink-0">
-                        <span className="text-xs text-brand-muted">×</span>
-                        <input type="number" min="1" value={item.qty}
-                          onChange={(e) => updateItem(idx, 'qty', parseInt(e.target.value) || 1)}
-                          className="w-14 px-2 py-2 border border-brand-border dark:border-slate-600 rounded-[10px] text-sm text-center bg-white dark:bg-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-blue" />
-                      </div>
-                      <span className={`text-xs flex-shrink-0 ${ok ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>{ok ? '✓' : '✗'}</span>
-                      <button onClick={() => removeItem(idx)} className="text-red-400 hover:text-red-600 text-lg leading-none flex-shrink-0">✕</button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            <AccessoryItemList
+              items={newSet.accessory_items}
+              onChange={(next) => setNewSet((f) => ({ ...f, accessory_items: next }))}
+              accessories={accessories}
+              products={products}
+              accMap={accMap}
+            />
           )}
         </div>
       )}
@@ -918,7 +856,8 @@ function AccessorySelect({
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="flex-1 min-w-0 px-3 py-2 border border-brand-border dark:border-slate-600 rounded-[10px] text-sm font-body bg-white dark:bg-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-blue"
+      className="flex-1 min-w-0 px-3 py-2 rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue"
+      style={{ background: '#0f172a', color: '#e2e8f0', border: '1px solid #334155' }}
     >
       {categories.map((cat) => {
         const group = accessories.filter((a) => a.category === cat);
@@ -942,5 +881,152 @@ function AccessorySelect({
         );
       })}
     </select>
+  );
+}
+
+// ── Drag-and-Drop Liste fuer Set-Zubehoer ────────────────────────────────────
+
+function AccessoryItemList({
+  items,
+  onChange,
+  accessories,
+  products,
+  accMap,
+}: {
+  items: AccessoryItem[];
+  onChange: (next: AccessoryItem[]) => void;
+  accessories: Accessory[];
+  products: Record<string, AdminProduct>;
+  accMap: Map<string, Accessory>;
+}) {
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [overIdx, setOverIdx] = useState<number | null>(null);
+
+  const handleDragStart = (idx: number) => (e: React.DragEvent) => {
+    setDragIdx(idx);
+    e.dataTransfer.effectAllowed = 'move';
+    // Etwas neutrales als Drag-Image, damit Browser den Container nicht mit Border-Farben anzeigt
+    try {
+      e.dataTransfer.setData('text/plain', String(idx));
+    } catch {
+      // ignore (Edge-Fall)
+    }
+  };
+
+  const handleDragEnter = (idx: number) => () => {
+    if (dragIdx !== null && dragIdx !== idx) setOverIdx(idx);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDragEnd = () => {
+    setDragIdx(null);
+    setOverIdx(null);
+  };
+
+  const handleDrop = (idx: number) => (e: React.DragEvent) => {
+    e.preventDefault();
+    if (dragIdx !== null && dragIdx !== idx) {
+      const next = [...items];
+      const [m] = next.splice(dragIdx, 1);
+      next.splice(idx, 0, m);
+      onChange(next);
+    }
+    setDragIdx(null);
+    setOverIdx(null);
+  };
+
+  const updateItem = (idx: number, field: 'accessory_id' | 'qty', val: string | number) => {
+    const next = [...items];
+    next[idx] = { ...next[idx], [field]: val };
+    onChange(next);
+  };
+
+  const removeItem = (idx: number) => {
+    onChange(items.filter((_, i) => i !== idx));
+  };
+
+  return (
+    <div className="space-y-2">
+      {items.map((item, idx) => {
+        const acc = accMap.get(item.accessory_id);
+        const ok = acc && acc.available && acc.available_qty >= item.qty;
+        const isDragging = dragIdx === idx;
+        const isOver = overIdx === idx && dragIdx !== idx;
+        return (
+          <div
+            key={idx}
+            draggable
+            onDragStart={handleDragStart(idx)}
+            onDragEnter={handleDragEnter(idx)}
+            onDragOver={handleDragOver}
+            onDragEnd={handleDragEnd}
+            onDrop={handleDrop(idx)}
+            className="rounded-lg p-3 transition-all"
+            style={{
+              background: '#111827',
+              border: `1px solid ${isOver ? '#06b6d4' : '#1e293b'}`,
+              borderLeft: `4px solid ${ok ? '#10b981' : '#ef4444'}`,
+              opacity: isDragging ? 0.4 : 1,
+              boxShadow: isOver ? '0 0 0 2px rgba(6,182,212,0.25)' : 'none',
+            }}
+          >
+            <div className="flex items-center gap-2">
+              <span
+                style={{
+                  cursor: 'grab',
+                  color: '#475569',
+                  fontSize: 14,
+                  userSelect: 'none',
+                  flexShrink: 0,
+                  letterSpacing: -1,
+                  lineHeight: 1,
+                  padding: '4px 2px',
+                }}
+                title="Ziehen zum Sortieren"
+                aria-label="Ziehen zum Sortieren"
+              >
+                ⋮⋮
+              </span>
+              <AccessorySelect
+                value={item.accessory_id}
+                onChange={(val) => updateItem(idx, 'accessory_id', val)}
+                accessories={accessories}
+                products={products}
+              />
+              <div className="flex items-center gap-1 flex-shrink-0">
+                <span className="text-xs" style={{ color: '#64748b' }}>×</span>
+                <input
+                  type="number"
+                  min="1"
+                  value={item.qty}
+                  onChange={(ev) => updateItem(idx, 'qty', parseInt(ev.target.value) || 1)}
+                  className="w-14 px-2 py-2 rounded-[10px] text-sm text-center focus:outline-none focus:ring-2 focus:ring-accent-blue"
+                  style={{ background: '#0f172a', color: '#e2e8f0', border: '1px solid #334155' }}
+                />
+              </div>
+              <span className="text-xs flex-shrink-0" style={{ color: ok ? '#10b981' : '#ef4444' }}>
+                {ok ? '✓' : '✗'}
+              </span>
+              <button
+                type="button"
+                onClick={() => removeItem(idx)}
+                className="text-lg leading-none flex-shrink-0 transition-colors"
+                style={{ color: '#94a3b8' }}
+                onMouseEnter={(e) => { e.currentTarget.style.color = '#ef4444'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = '#94a3b8'; }}
+                title="Entfernen"
+                aria-label="Entfernen"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
