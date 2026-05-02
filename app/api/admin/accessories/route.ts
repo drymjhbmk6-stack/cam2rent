@@ -25,14 +25,36 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'name und category erforderlich.' }, { status: 400 });
   }
 
-  // ID aus Name generieren (slug-artig)
-  const id = name.toLowerCase()
+  const supabase = createServiceClient();
+
+  // ID aus Name generieren (slug-artig). Erst ohne Timestamp probieren —
+  // schoenere URLs (`schraube` statt `schraube-mnz3t4va`). Bei Konflikt
+  // numerische Suffix `-2`, `-3`, ... bis frei.
+  const baseSlug = name.toLowerCase()
     .replace(/[äöüß]/g, (c: string) => ({ ä: 'ae', ö: 'oe', ü: 'ue', ß: 'ss' }[c] ?? c))
     .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    + '-' + Date.now().toString(36);
+    .replace(/^-+|-+$/g, '');
 
-  const supabase = createServiceClient();
+  let id = baseSlug || ('zubehoer-' + Date.now().toString(36));
+  // Bis zu 20 Konflikt-Versuche, sonst Fallback auf Timestamp
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const { data: existing } = await supabase
+      .from('accessories')
+      .select('id')
+      .eq('id', id)
+      .maybeSingle();
+    if (!existing) break;
+    id = `${baseSlug}-${attempt + 2}`;
+  }
+  // Wenn nach 20 Versuchen immer noch kollidiert, Timestamp anhaengen
+  {
+    const { data: stillCollides } = await supabase
+      .from('accessories')
+      .select('id')
+      .eq('id', id)
+      .maybeSingle();
+    if (stillCollides) id = `${baseSlug}-${Date.now().toString(36)}`;
+  }
 
   // Höchste sort_order ermitteln
   const { data: last } = await supabase

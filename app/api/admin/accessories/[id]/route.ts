@@ -22,6 +22,92 @@ export async function PUT(
     return Number.isFinite(n) && n >= 0 ? n : 0;
   })();
 
+  // ID-Rename: nur fuer Sammel-Zubehoer + nur wenn keine Buchungen/Sets
+  // diese accessory_id referenzieren. accessory_units werden ueber die FK
+  // ON UPDATE CASCADE automatisch mit-aktualisiert (siehe
+  // supabase/supabase-accessories-id-rename.sql). JSONB-Felder werden NICHT
+  // automatisch aktualisiert, deshalb hartes Verbot bei Verwendung.
+  const newIdRaw = typeof body.new_id === 'string' ? body.new_id.trim() : '';
+  const newId = newIdRaw && newIdRaw !== id ? newIdRaw : null;
+
+  if (newId) {
+    // 1. Format-Validierung (URL-safe)
+    if (!/^[A-Za-z0-9_-]+$/.test(newId)) {
+      return NextResponse.json(
+        { error: 'Bezeichnung darf nur Buchstaben, Zahlen, "-" und "_" enthalten.' },
+        { status: 400 }
+      );
+    }
+
+    // 2. nur fuer Sammel-Zubehoer erlauben
+    if (body.is_bulk !== true) {
+      return NextResponse.json(
+        { error: 'Bezeichnung kann nur bei Sammel-Zubehoer geaendert werden.' },
+        { status: 400 }
+      );
+    }
+
+    // 3. neue ID muss frei sein
+    const { data: existing } = await supabase
+      .from('accessories')
+      .select('id')
+      .eq('id', newId)
+      .maybeSingle();
+    if (existing) {
+      return NextResponse.json(
+        { error: 'Diese Bezeichnung ist bereits vergeben. Waehle eine andere.' },
+        { status: 409 }
+      );
+    }
+
+    // 4. Buchungen pruefen (alle Status, weil wir GoBD-Audit nicht kaputt machen)
+    const { data: bookingsArr } = await supabase
+      .from('bookings')
+      .select('id')
+      .contains('accessories', [id])
+      .limit(1);
+
+    const { data: bookingsItems } = await supabase
+      .from('bookings')
+      .select('id')
+      .contains('accessory_items', [{ accessory_id: id }])
+      .limit(1);
+
+    if ((bookingsArr && bookingsArr.length > 0) || (bookingsItems && bookingsItems.length > 0)) {
+      return NextResponse.json(
+        { error: 'Dieses Zubehoer wurde bereits in Buchungen verwendet. ID-Aenderung nicht moeglich (Audit-Trail). Lege ein neues Sammel-Zubehoer an und mustere dieses aus.' },
+        { status: 409 }
+      );
+    }
+
+    // 5. Sets pruefen
+    const { data: setsRows } = await supabase
+      .from('sets')
+      .select('id')
+      .contains('accessory_items', [{ accessory_id: id }])
+      .limit(1);
+
+    if (setsRows && setsRows.length > 0) {
+      return NextResponse.json(
+        { error: 'Dieses Zubehoer wird in einem Set verwendet. Bitte erst aus dem Set entfernen, dann ID aendern.' },
+        { status: 409 }
+      );
+    }
+
+    // 6. ID umbenennen — FK Cascade greift fuer accessory_units
+    const { error: renameErr } = await supabase
+      .from('accessories')
+      .update({ id: newId })
+      .eq('id', id);
+
+    if (renameErr) {
+      return NextResponse.json({ error: `ID-Aenderung fehlgeschlagen: ${renameErr.message}` }, { status: 500 });
+    }
+  }
+
+  // Ab hier wird mit der neuen ID weitergearbeitet (falls geaendert)
+  const effectiveId = newId ?? id;
+
   const { error } = await supabase
     .from('accessories')
     .update({
@@ -42,19 +128,20 @@ export async function PUT(
       replacement_value: replacementValue,
       is_bulk: body.is_bulk ?? false,
     })
-    .eq('id', id);
+    .eq('id', effectiveId);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   await logAudit({
-    action: 'accessory.update',
+    action: newId ? 'accessory.rename' : 'accessory.update',
     entityType: 'accessory',
-    entityId: id,
+    entityId: effectiveId,
     entityLabel: body?.name,
+    changes: newId ? { old_id: id, new_id: newId } : undefined,
     request: req,
   });
 
-  return NextResponse.json({ success: true });
+  return NextResponse.json({ success: true, id: effectiveId });
 }
 
 export async function DELETE(

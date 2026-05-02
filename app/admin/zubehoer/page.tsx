@@ -124,6 +124,10 @@ export default function AdminZubehoerPage() {
   function startEdit(acc: Accessory) {
     setEditId(acc.id);
     setEditForm({
+      // id wird ins editForm gespiegelt — bei is_bulk im Editor editierbar.
+      // Bei nicht-bulk wird das Feld nicht angezeigt; der Save schickt es
+      // dann nicht als new_id mit (weil unveraendert).
+      id: acc.id,
       name: acc.name,
       category: acc.category,
       description: acc.description ?? '',
@@ -146,6 +150,21 @@ export default function AdminZubehoerPage() {
   async function handleSave(id: string) {
     setSavingId(id);
     try {
+      // ID-Aenderung bei Sammel-Zubehoer: editForm.id != aktueller id
+      const newId = typeof editForm.id === 'string' && editForm.id.trim() && editForm.id !== id
+        ? editForm.id.trim()
+        : null;
+
+      if (newId) {
+        const ok = confirm(
+          'Achtung: Wenn du die Bezeichnung änderst, sind bestehende QR-Aufkleber ungültig und müssen neu gedruckt werden. Trotzdem ändern?'
+        );
+        if (!ok) {
+          setSavingId(null);
+          return;
+        }
+      }
+
       const res = await fetch(`/api/admin/accessories/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -153,14 +172,27 @@ export default function AdminZubehoerPage() {
           ...editForm,
           description: editForm.description || null,
           image_url: editForm.image_url || null,
+          new_id: newId,
         }),
       });
-      if (!res.ok) throw new Error();
-      setAccessories((prev) =>
-        prev.map((a) => a.id === id ? { ...a, ...editForm, description: editForm.description || null, image_url: editForm.image_url || null } as Accessory : a)
-      );
-      setEditId(null);
-      setSavedId(id);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(err.error || 'Fehler beim Speichern.');
+        return;
+      }
+      // Bei ID-Aenderung Liste neu laden — Position/Identitaet aendert sich,
+      // in-place mapping wuerde Geister-Eintrag erzeugen.
+      if (newId) {
+        loadAccessories();
+        setEditId(null);
+        setSavedId(newId);
+      } else {
+        setAccessories((prev) =>
+          prev.map((a) => a.id === id ? { ...a, ...editForm, description: editForm.description || null, image_url: editForm.image_url || null } as Accessory : a)
+        );
+        setEditId(null);
+        setSavedId(id);
+      }
       setTimeout(() => setSavedId(null), 3000);
     } catch {
       alert('Fehler beim Speichern.');
@@ -766,19 +798,37 @@ function AccessoryCard({ acc, editId, editForm, setEditForm, savedId, savingId, 
                       </div>
                     )}
                     {Boolean((editForm as Record<string, unknown>).is_bulk) && (
-                      <div className="mt-5 bg-brand-bg dark:bg-slate-800/40 rounded-xl border border-brand-border dark:border-slate-700 p-4 flex items-center justify-between gap-3 flex-wrap">
-                        <div>
-                          <h3 className="font-heading font-bold text-sm text-brand-black dark:text-slate-200 mb-0.5">Sammel-QR</h3>
-                          <p className="text-xs font-body text-brand-muted">Ein einzelner QR-Code für das gesamte Zubehör. Drauf kleben oder ausdrucken — keine Exemplar-Verwaltung nötig.</p>
+                      <div className="mt-5 bg-brand-bg dark:bg-slate-800/40 rounded-xl border border-brand-border dark:border-slate-700 p-4">
+                        <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
+                          <div>
+                            <h3 className="font-heading font-bold text-sm text-brand-black dark:text-slate-200 mb-0.5">Sammel-QR</h3>
+                            <p className="text-xs font-body text-brand-muted">Ein einzelner QR-Code für das gesamte Zubehör. Drauf kleben oder ausdrucken — keine Exemplar-Verwaltung nötig.</p>
+                          </div>
+                          <a
+                            href={`/admin/zubehoer/${acc.id}/qr-codes`}
+                            target="_blank"
+                            rel="noopener"
+                            className="inline-flex items-center gap-1 px-3 py-1.5 text-[11px] font-heading font-semibold bg-cyan-600 text-white rounded hover:bg-cyan-700 transition-colors"
+                          >
+                            QR-Code drucken
+                          </a>
                         </div>
-                        <a
-                          href={`/admin/zubehoer/${acc.id}/qr-codes`}
-                          target="_blank"
-                          rel="noopener"
-                          className="inline-flex items-center gap-1 px-3 py-1.5 text-[11px] font-heading font-semibold bg-cyan-600 text-white rounded hover:bg-cyan-700 transition-colors"
-                        >
-                          QR-Code drucken
-                        </a>
+                        {/* Bezeichnung (= URL-Code, accessories.id) editierbar bei Bulk */}
+                        <div>
+                          <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Bezeichnung (URL-Code)</label>
+                          <input
+                            type="text"
+                            value={(editForm.id as string | undefined) ?? acc.id}
+                            onChange={(e) => setEditForm((f) => ({ ...f, id: e.target.value.trim() }))}
+                            placeholder="z.B. BEF-SCHR-01"
+                            className="w-full px-3 py-2 border border-brand-border rounded-lg text-sm font-mono bg-white focus:outline-none focus:ring-2 focus:ring-accent-blue"
+                          />
+                          {(editForm.id as string | undefined) && editForm.id !== acc.id && (
+                            <div className="mt-1.5 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-[11px] font-body text-amber-800">
+                              ⚠ Achtung: Die Bezeichnung wird als URL im QR-Code verwendet. Wenn du sie änderst, sind bestehende QR-Aufkleber ungültig und müssen neu gedruckt werden. Erlaubt sind Buchstaben, Zahlen, &quot;-&quot; und &quot;_&quot;.
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )}
                     <div className="flex justify-end mt-4 gap-2">
