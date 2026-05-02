@@ -113,7 +113,7 @@ export default function EditAccessoryEntry({ unitId, initialStatus, initialNotes
             </div>
             <div className="px-6 py-4 space-y-4">
               <p className="text-xs text-gray-500">
-                Seriennummer, Kaufdatum und Kaufpreis sind nach Anlage nicht mehr änderbar. Bezeichnung, Status und Notizen kannst du jederzeit ändern.
+                Seriennummer, Kaufdatum und Kaufpreis sind nach Anlage nicht mehr änderbar. Bezeichnung, Status und Notizen kannst du jederzeit ändern. Spezifikationen (Gewicht, mAh, ND-Werte, Länge…) gelten pro Zubehörteil und werden im <a href="/admin/zubehoer" className="underline text-cyan-700 hover:text-cyan-800">Zubehör-Editor</a> gepflegt.
               </p>
               <div>
                 <label className="block text-xs font-semibold text-gray-500 mb-1.5">Bezeichnung</label>

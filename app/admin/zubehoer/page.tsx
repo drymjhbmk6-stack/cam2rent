@@ -8,6 +8,12 @@ import { type AdminProduct } from '@/lib/price-config';
 import { getBrandStyle } from '@/lib/brand-colors';
 import { useBrandColors } from '@/hooks/useBrandColors';
 import { fmtEuro } from '@/lib/format-utils';
+import {
+  getSpecFieldsForCategory,
+  SPEC_FIELD_DEFINITIONS,
+  type AccessorySpecs,
+  type SpecFieldKind,
+} from '@/lib/accessory-specs';
 
 interface Accessory {
   id: string;
@@ -31,6 +37,8 @@ interface Accessory {
   replacement_value?: number | string | null;
   // Sammel-Zubehoer: kein Exemplar-Tracking, ein Sammel-QR, manuelle Mengen-Pflege
   is_bulk?: boolean | null;
+  // Kategorie-spezifische Specs (Gewicht, mAh, ND-Werte, Länge etc.)
+  specs?: AccessorySpecs | null;
 }
 
 const CATEGORIES = ['Akku', 'Speicher', 'Halterung', 'Schutz', 'Audio', 'Stativ', 'Sonstiges'];
@@ -54,7 +62,40 @@ function emptyForm() {
     max_qty_per_booking: null as number | null,
     replacement_value: '',
     is_bulk: false,
+    specs: {} as Record<string, string>, // Form-State: Strings, beim Submit zu AccessorySpecs konvertiert
   };
+}
+
+function specsToFormState(specs: AccessorySpecs | null | undefined): Record<string, string> {
+  if (!specs) return {};
+  const out: Record<string, string> = {};
+  if (typeof specs.weight_g === 'number') out.weight_g = String(specs.weight_g);
+  if (typeof specs.mah === 'number') out.mah = String(specs.mah);
+  if (typeof specs.storage_gb === 'number') out.storage_gb = String(specs.storage_gb);
+  if (typeof specs.length_min_cm === 'number') out.length_min_cm = String(specs.length_min_cm);
+  if (typeof specs.length_max_cm === 'number') out.length_max_cm = String(specs.length_max_cm);
+  if (Array.isArray(specs.nd_values)) out.nd_values = specs.nd_values.join(', ');
+  return out;
+}
+
+function formStateToSpecs(form: Record<string, string> | undefined | null): AccessorySpecs {
+  if (!form) return {};
+  const out: AccessorySpecs = {};
+  const numKeys: SpecFieldKind[] = ['weight_g', 'mah', 'storage_gb', 'length_min_cm', 'length_max_cm'];
+  for (const k of numKeys) {
+    const raw = form[k]?.trim?.();
+    if (!raw) continue;
+    const n = parseFloat(raw.replace(',', '.'));
+    if (Number.isFinite(n) && n >= 0) {
+      (out as Record<string, unknown>)[k] = n;
+    }
+  }
+  const ndRaw = form.nd_values?.trim?.();
+  if (ndRaw) {
+    const arr = ndRaw.split(/[,;\n]/).map((v) => v.trim()).filter(Boolean);
+    if (arr.length > 0) out.nd_values = arr;
+  }
+  return out;
 }
 
 export default function AdminZubehoerPage() {
@@ -104,6 +145,7 @@ export default function AdminZubehoerPage() {
           ...newForm,
           description: newForm.description || null,
           image_url: newForm.image_url || null,
+          specs: formStateToSpecs(newForm.specs),
         }),
       });
       if (!res.ok) {
@@ -144,6 +186,7 @@ export default function AdminZubehoerPage() {
       max_qty_per_booking: acc.max_qty_per_booking ?? null,
       replacement_value: acc.replacement_value != null ? String(acc.replacement_value) : '',
       is_bulk: acc.is_bulk ?? false,
+      specs: specsToFormState(acc.specs ?? null) as unknown as AccessorySpecs,
     });
   }
 
@@ -173,6 +216,7 @@ export default function AdminZubehoerPage() {
           description: editForm.description || null,
           image_url: editForm.image_url || null,
           new_id: newId,
+          specs: formStateToSpecs(editForm.specs as unknown as Record<string, string>),
         }),
       });
       if (!res.ok) {
@@ -288,6 +332,12 @@ export default function AdminZubehoerPage() {
                   placeholder="Kurze Beschreibung (optional)"
                   className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
               </div>
+              {/* Kategorie-spezifische Spezifikationen */}
+              <SpecFields
+                category={newForm.category}
+                values={newForm.specs}
+                onChange={(specs) => setNewForm((f) => ({ ...f, specs }))}
+              />
               {/* Kompatible Kameras — direkt unter Beschreibung, vor Preis */}
               <div className="sm:col-span-2">
                 <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Kompatible Kameras</label>
@@ -612,6 +662,12 @@ function AccessoryCard({ acc, editId, editForm, setEditForm, savedId, savingId, 
                           onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
                           className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body bg-white focus:outline-none focus:ring-2 focus:ring-accent-blue" />
                       </div>
+                      {/* Kategorie-spezifische Spezifikationen */}
+                      <SpecFields
+                        category={editForm.category ?? 'Sonstiges'}
+                        values={(editForm.specs as unknown as Record<string, string>) ?? {}}
+                        onChange={(specs) => setEditForm((f) => ({ ...f, specs: specs as unknown as AccessorySpecs }))}
+                      />
                       {/* Kompatible Kameras — direkt unter Beschreibung, vor Preis */}
                       <div className="sm:col-span-2">
                         <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Kompatible Kameras</label>
@@ -843,6 +899,56 @@ function AccessoryCard({ acc, editId, editForm, setEditForm, savedId, savingId, 
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/* ── SpecFields: kategorie-abhaengige Spezifikationen ──────────────────── */
+
+function SpecFields({
+  category,
+  values,
+  onChange,
+}: {
+  category: string;
+  values: Record<string, string>;
+  onChange: (next: Record<string, string>) => void;
+}) {
+  const fields = getSpecFieldsForCategory(category);
+  if (fields.length === 0) return null;
+  return (
+    <div className="sm:col-span-2 bg-brand-bg dark:bg-slate-800/40 border border-brand-border dark:border-slate-700 rounded-[10px] p-3 space-y-3">
+      <p className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider">
+        Spezifikationen
+        <span className="ml-2 text-[10px] font-normal normal-case tracking-normal">
+          (kategorie-spezifisch)
+        </span>
+      </p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {fields.map((kind) => {
+          const def = SPEC_FIELD_DEFINITIONS[kind];
+          return (
+            <div key={kind} className={kind === 'nd_values' ? 'sm:col-span-2' : ''}>
+              <label className="block text-[11px] font-heading font-semibold text-brand-muted mb-1">
+                {def.label}{def.unit ? ` (${def.unit})` : ''}
+              </label>
+              <input
+                type={def.type === 'number' ? 'number' : 'text'}
+                inputMode={def.type === 'number' ? 'decimal' : undefined}
+                step={def.step}
+                min={def.type === 'number' ? 0 : undefined}
+                value={values[kind] ?? ''}
+                onChange={(e) => onChange({ ...values, [kind]: e.target.value })}
+                placeholder={def.placeholder}
+                className="w-full px-3 py-2 border border-brand-border rounded-[10px] text-sm font-body bg-white focus:outline-none focus:ring-2 focus:ring-accent-blue"
+              />
+              {def.helpText && (
+                <p className="text-[10px] text-brand-muted mt-1">{def.helpText}</p>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

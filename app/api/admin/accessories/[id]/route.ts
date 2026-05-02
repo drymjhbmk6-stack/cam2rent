@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { logAudit } from '@/lib/audit';
+import { sanitizeSpecs } from '@/lib/accessory-specs';
 
 /**
  * PUT    /api/admin/accessories/[id]  → Zubehörteil aktualisieren
@@ -108,27 +109,37 @@ export async function PUT(
   // Ab hier wird mit der neuen ID weitergearbeitet (falls geaendert)
   const effectiveId = newId ?? id;
 
-  const { error } = await supabase
+  const updatePayload: Record<string, unknown> = {
+    name: body.name,
+    category: body.category,
+    description: body.description ?? null,
+    pricing_mode: body.pricing_mode,
+    price: parseFloat(body.price) || 0,
+    available_qty: parseInt(body.available_qty) || 1,
+    available: body.available,
+    image_url: body.image_url ?? null,
+    compatible_product_ids: body.compatible_product_ids ?? [],
+    internal: body.internal ?? false,
+    upgrade_group: body.upgrade_group || null,
+    is_upgrade_base: body.is_upgrade_base ?? false,
+    allow_multi_qty: body.allow_multi_qty ?? false,
+    max_qty_per_booking: maxQty,
+    replacement_value: replacementValue,
+    is_bulk: body.is_bulk ?? false,
+  };
+  if (body.specs !== undefined) updatePayload.specs = sanitizeSpecs(body.specs);
+
+  let { error } = await supabase
     .from('accessories')
-    .update({
-      name: body.name,
-      category: body.category,
-      description: body.description ?? null,
-      pricing_mode: body.pricing_mode,
-      price: parseFloat(body.price) || 0,
-      available_qty: parseInt(body.available_qty) || 1,
-      available: body.available,
-      image_url: body.image_url ?? null,
-      compatible_product_ids: body.compatible_product_ids ?? [],
-      internal: body.internal ?? false,
-      upgrade_group: body.upgrade_group || null,
-      is_upgrade_base: body.is_upgrade_base ?? false,
-      allow_multi_qty: body.allow_multi_qty ?? false,
-      max_qty_per_booking: maxQty,
-      replacement_value: replacementValue,
-      is_bulk: body.is_bulk ?? false,
-    })
+    .update(updatePayload)
     .eq('id', effectiveId);
+
+  // Defensiv: Migration noch nicht durch — specs-Spalte fehlt. Retry ohne.
+  if (error && /column .*specs/i.test(error.message) && 'specs' in updatePayload) {
+    delete updatePayload.specs;
+    const retry = await supabase.from('accessories').update(updatePayload).eq('id', effectiveId);
+    error = retry.error;
+  }
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 

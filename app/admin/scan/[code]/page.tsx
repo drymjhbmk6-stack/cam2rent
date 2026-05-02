@@ -6,6 +6,7 @@ import EditCameraEntry from './EditCameraEntry';
 import EditAccessoryEntry from './EditAccessoryEntry';
 import EditBulkAccessoryEntry, { type BulkAccessoryFullData } from './EditBulkAccessoryEntry';
 import DeleteUnitButton from './DeleteUnitButton';
+import { buildSpecDataGridItems, type AccessorySpecs } from '@/lib/accessory-specs';
 
 // Niemals cachen — sonst zeigt die Page beim Aufruf einer alten URL noch
 // das Pre-Rename-Ergebnis ("Code unbekannt"), obwohl der Code zwischen-
@@ -39,6 +40,33 @@ function fmtDate(iso: string | null) {
     day: '2-digit', month: '2-digit', year: 'numeric',
     timeZone: 'Europe/Berlin',
   });
+}
+
+/**
+ * Loest compatible_product_ids zu Kamera-Stammdaten auf (Name + Marke).
+ * Liefert null wenn der Aufkleber zu allen Kameras passt (= leere Liste).
+ */
+async function resolveCompatibleCameras(
+  supabase: ReturnType<typeof createServiceClient>,
+  productIds: string[],
+): Promise<CompatibleCamera[] | null> {
+  if (!productIds || productIds.length === 0) return null;
+  const { data: configRow } = await supabase
+    .from('admin_config')
+    .select('value')
+    .eq('key', 'products')
+    .maybeSingle();
+  const productMap = (configRow?.value ?? {}) as Record<string, { name?: string; brand?: string }>;
+  const out: CompatibleCamera[] = [];
+  for (const pid of productIds) {
+    const p = productMap[pid];
+    out.push({
+      id: pid,
+      name: p?.name ?? pid,
+      brand: p?.brand ?? '',
+    });
+  }
+  return out;
 }
 
 function fmtEuro(n: number | null | undefined) {
@@ -78,6 +106,12 @@ interface ActionLink {
   primary?: boolean;
 }
 
+interface CompatibleCamera {
+  id: string;
+  name: string;
+  brand: string;
+}
+
 interface UnitCardData {
   layoutTitle: string; // "Kamera" / "Zubehör"
   kind: 'camera' | 'accessory';
@@ -96,6 +130,8 @@ interface UnitCardData {
   actions: ActionLink[];
   /** Komplette Bulk-Daten fuer das Edit-Modal (nur bei bulk=true). */
   bulkInitial?: BulkAccessoryFullData;
+  /** Kompatible Kameras (nur bei Zubehör). Leer = "Alle Kameras". */
+  compatibleCameras?: CompatibleCamera[] | null;
 }
 
 export default async function ScanLandingPage({ params }: PageProps) {
@@ -204,8 +240,13 @@ export default async function ScanLandingPage({ params }: PageProps) {
     const accessory = (accessoryRes?.data ?? null) as null | {
       id: string; name?: string; category?: string; description?: string;
       image_url?: string; price?: number; price_type?: string;
+      pricing_mode?: string;
+      compatible_product_ids?: string[];
+      specs?: AccessorySpecs;
     };
     const asset = (assetRes?.data ?? null) as AssetRow | null;
+    const compatibleCameras = await resolveCompatibleCameras(supabase, accessory?.compatible_product_ids ?? []);
+    const specItems = buildSpecDataGridItems(accessory?.category, accessory?.specs ?? null);
 
     const data: UnitCardData = {
       layoutTitle: 'Zubehör',
@@ -221,10 +262,12 @@ export default async function ScanLandingPage({ params }: PageProps) {
         { label: 'Kaufdatum', value: fmtDate(accUnit.purchased_at ?? asset?.purchase_date ?? null) },
         { label: 'Kaufpreis', value: fmtEuro(asset?.purchase_price) },
         { label: 'Wiederbeschaffungswert', value: fmtEuro(asset?.current_value), highlight: true },
-        { label: 'Mietpreis', value: accessory?.price != null ? `${fmtEuro(accessory.price)}${accessory.price_type === 'perDay' ? '/Tag' : ' (einmalig)'}` : '—' },
+        { label: 'Mietpreis', value: accessory?.price != null ? `${fmtEuro(accessory.price)}${(accessory.pricing_mode ?? accessory.price_type) === 'perDay' ? '/Tag' : ' (einmalig)'}` : '—' },
         { label: 'Nutzungsdauer', value: asset?.useful_life_months ? `${asset.useful_life_months} Monate` : '—' },
         { label: 'Anlagen-Status', value: asset?.status ?? '—' },
+        ...specItems,
       ],
+      compatibleCameras,
       note: accUnit.notes,
       bookings: bookingsRes?.data ?? [],
       actions: [
@@ -239,12 +282,13 @@ export default async function ScanLandingPage({ params }: PageProps) {
   // 3) Versuche Sammel-Zubehoer (Bulk-Accessory direkt ueber accessory.id)
   const { data: bulkAcc } = await supabase
     .from('accessories')
-    .select('id, name, category, description, image_url, price, pricing_mode, available, available_qty, is_bulk, compatible_product_ids, internal, upgrade_group, is_upgrade_base, allow_multi_qty, max_qty_per_booking, replacement_value')
+    .select('id, name, category, description, image_url, price, pricing_mode, available, available_qty, is_bulk, compatible_product_ids, internal, upgrade_group, is_upgrade_base, allow_multi_qty, max_qty_per_booking, replacement_value, specs')
     .eq('id', decodedCode)
     .eq('is_bulk', true)
     .maybeSingle();
 
   if (bulkAcc) {
+    const specs = (bulkAcc.specs ?? null) as AccessorySpecs | null;
     const bulkInitial: BulkAccessoryFullData = {
       id: bulkAcc.id,
       name: bulkAcc.name ?? bulkAcc.id,
@@ -262,7 +306,10 @@ export default async function ScanLandingPage({ params }: PageProps) {
       allow_multi_qty: bulkAcc.allow_multi_qty === true,
       max_qty_per_booking: typeof bulkAcc.max_qty_per_booking === 'number' ? bulkAcc.max_qty_per_booking : null,
       replacement_value: typeof bulkAcc.replacement_value === 'number' ? bulkAcc.replacement_value : 0,
+      specs: specs ?? {},
     };
+    const compatibleCameras = await resolveCompatibleCameras(supabase, bulkInitial.compatible_product_ids);
+    const specItems = buildSpecDataGridItems(bulkAcc.category, specs);
     const data: UnitCardData = {
       layoutTitle: 'Sammel-Zubehör',
       kind: 'accessory',
@@ -278,7 +325,9 @@ export default async function ScanLandingPage({ params }: PageProps) {
         { label: 'Verfügbare Menge', value: `${bulkAcc.available_qty ?? 0} Stück`, highlight: true },
         { label: 'Mietpreis', value: bulkAcc.price != null ? `${fmtEuro(bulkAcc.price)}${bulkAcc.pricing_mode === 'perDay' ? '/Tag' : ' (einmalig)'}` : '—' },
         { label: 'Typ', value: 'Sammel-Zubehör (Verbrauchsmaterial)' },
+        ...specItems,
       ],
+      compatibleCameras,
       note: null,
       bookings: [],
       actions: [
@@ -333,6 +382,10 @@ function UnitCard({ data }: { data: UnitCardData }) {
         </div>
 
         <DataGrid items={data.dataGrid} />
+
+        {data.kind === 'accessory' && (
+          <CompatibilityBlock cameras={data.compatibleCameras ?? null} />
+        )}
 
         {data.note && <Note text={data.note} />}
 
@@ -469,6 +522,40 @@ function DataGrid({ items }: { items: DataGridItem[] }) {
           </p>
         </div>
       ))}
+    </div>
+  );
+}
+
+function CompatibilityBlock({ cameras }: { cameras: CompatibleCamera[] | null }) {
+  // null = passt zu allen Kameras (kompakt anzeigen, keine eigene Card)
+  if (cameras === null) {
+    return (
+      <div
+        className="px-3 py-2 rounded text-xs"
+        style={{ background: '#f0fdfa', border: '1px solid #99f6e4', color: '#115e59' }}
+      >
+        Passt zu allen Kameras
+      </div>
+    );
+  }
+  if (cameras.length === 0) return null;
+  return (
+    <div className="space-y-2">
+      <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#6b7280' }}>
+        Kompatibel mit
+      </p>
+      <div className="flex flex-wrap gap-1.5">
+        {cameras.map((c) => (
+          <span
+            key={c.id}
+            className="inline-flex px-2 py-1 rounded text-xs font-medium"
+            style={{ background: '#f1f5f9', color: '#0f172a', border: '1px solid #e2e8f0' }}
+          >
+            {c.brand ? <span className="opacity-60 mr-1">{c.brand}</span> : null}
+            {c.name}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }

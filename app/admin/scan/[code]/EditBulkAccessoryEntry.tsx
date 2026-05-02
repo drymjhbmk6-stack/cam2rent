@@ -2,6 +2,12 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import {
+  getSpecFieldsForCategory,
+  SPEC_FIELD_DEFINITIONS,
+  type AccessorySpecs,
+  type SpecFieldKind,
+} from '@/lib/accessory-specs';
 
 /**
  * Quick-Edit-Modal fuer Sammel-Zubehoer (accessories.is_bulk=true) —
@@ -32,6 +38,7 @@ export interface BulkAccessoryFullData {
   allow_multi_qty: boolean;
   max_qty_per_booking: number | null;
   replacement_value: number;
+  specs: AccessorySpecs;
 }
 
 interface Props {
@@ -46,9 +53,11 @@ export default function EditBulkAccessoryEntry({ initial }: Props) {
   const [availableQty, setAvailableQty] = useState(String(initial.available_qty));
   const [available, setAvailable] = useState(initial.available);
   const [description, setDescription] = useState(initial.description ?? '');
+  const [specs, setSpecs] = useState<Record<string, string>>(() => specsToFormState(initial.specs));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const specFields = getSpecFieldsForCategory(initial.category);
   const idChanged = newId.trim() !== initial.id;
 
   function close() {
@@ -60,6 +69,7 @@ export default function EditBulkAccessoryEntry({ initial }: Props) {
     setAvailableQty(String(initial.available_qty));
     setAvailable(initial.available);
     setDescription(initial.description ?? '');
+    setSpecs(specsToFormState(initial.specs));
   }
 
   async function save() {
@@ -97,6 +107,7 @@ export default function EditBulkAccessoryEntry({ initial }: Props) {
         available_qty: qty,
         available,
         new_id: idChanged ? newId.trim() : undefined,
+        specs: formStateToSpecs(specs),
         // Nicht editierbare Felder — werden 1:1 zurueckgeschickt
         category: initial.category,
         pricing_mode: initial.pricing_mode,
@@ -234,6 +245,36 @@ export default function EditBulkAccessoryEntry({ initial }: Props) {
                   style={{ color: '#0f172a' }}
                 />
               </div>
+              {specFields.length > 0 && (
+                <div className="space-y-3 pt-1 border-t border-gray-100">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider pt-3">Spezifikationen</p>
+                  {specFields.map((kind) => {
+                    const def = SPEC_FIELD_DEFINITIONS[kind];
+                    return (
+                      <div key={kind}>
+                        <label className="block text-xs font-semibold text-gray-500 mb-1.5">
+                          {def.label}{def.unit ? ` (${def.unit})` : ''}
+                        </label>
+                        <input
+                          type={def.type === 'number' ? 'number' : 'text'}
+                          inputMode={def.type === 'number' ? 'decimal' : undefined}
+                          step={def.step}
+                          min={def.type === 'number' ? 0 : undefined}
+                          value={specs[kind] ?? ''}
+                          onChange={(e) => setSpecs((s) => ({ ...s, [kind]: e.target.value }))}
+                          disabled={busy}
+                          placeholder={def.placeholder}
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-base bg-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                          style={{ color: '#0f172a' }}
+                        />
+                        {def.helpText && (
+                          <p className="text-[10px] text-gray-500 mt-1">{def.helpText}</p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
               {error && (
                 <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">
                   {error}
@@ -261,4 +302,38 @@ export default function EditBulkAccessoryEntry({ initial }: Props) {
       )}
     </>
   );
+}
+
+function specsToFormState(specs: AccessorySpecs | null | undefined): Record<string, string> {
+  if (!specs) return {};
+  const out: Record<string, string> = {};
+  if (typeof specs.weight_g === 'number') out.weight_g = String(specs.weight_g);
+  if (typeof specs.mah === 'number') out.mah = String(specs.mah);
+  if (typeof specs.storage_gb === 'number') out.storage_gb = String(specs.storage_gb);
+  if (typeof specs.length_min_cm === 'number') out.length_min_cm = String(specs.length_min_cm);
+  if (typeof specs.length_max_cm === 'number') out.length_max_cm = String(specs.length_max_cm);
+  if (Array.isArray(specs.nd_values)) out.nd_values = specs.nd_values.join(', ');
+  return out;
+}
+
+function formStateToSpecs(form: Record<string, string>): AccessorySpecs {
+  const out: AccessorySpecs = {};
+  const numKeys: SpecFieldKind[] = ['weight_g', 'mah', 'storage_gb', 'length_min_cm', 'length_max_cm'];
+  for (const k of numKeys) {
+    const raw = form[k]?.trim();
+    if (!raw) continue;
+    const n = parseFloat(raw.replace(',', '.'));
+    if (Number.isFinite(n) && n >= 0) {
+      (out as Record<string, unknown>)[k] = n;
+    }
+  }
+  const ndRaw = form.nd_values?.trim();
+  if (ndRaw) {
+    out.nd_values = ndRaw
+      .split(/[,;\n]/)
+      .map((v) => v.trim())
+      .filter(Boolean);
+    if (out.nd_values.length === 0) delete out.nd_values;
+  }
+  return out;
 }
