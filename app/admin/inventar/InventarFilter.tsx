@@ -27,16 +27,37 @@ const STATUS_COLORS: Record<string, { bg: string; fg: string }> = {
   retired: { bg: '#64748b20', fg: '#94a3b8' },
 };
 
+const dropdownStyle: React.CSSProperties = {
+  background: '#0a0f1e',
+  border: '1px solid #1e293b',
+  borderRadius: 10,
+  padding: '8px 12px',
+  color: '#e2e8f0',
+  fontSize: 13,
+};
+
 export default function InventarFilter({ items, statusLabels }: Props) {
   const [query, setQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<'all' | 'camera' | 'accessory'>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all'); // Zubehoer-Kategorie
+  const [modelFilter, setModelFilter] = useState<string>('all'); // Kamera-Modell (= name)
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return items.filter((i) => {
       if (typeFilter !== 'all' && i.type !== typeFilter) return false;
       if (statusFilter !== 'all' && i.status !== statusFilter) return false;
+      // Kategorie filtert nur Zubehoer (context = Kategorie). Wenn aktiv, fallen Kameras automatisch raus.
+      if (categoryFilter !== 'all') {
+        if (i.type !== 'accessory') return false;
+        if ((i.context ?? '') !== categoryFilter) return false;
+      }
+      // Modell filtert nur Kameras (name = Modell). Wenn aktiv, faellt Zubehoer raus.
+      if (modelFilter !== 'all') {
+        if (i.type !== 'camera') return false;
+        if (i.name !== modelFilter) return false;
+      }
       if (!q) return true;
       return (
         i.code.toLowerCase().includes(q)
@@ -45,13 +66,38 @@ export default function InventarFilter({ items, statusLabels }: Props) {
         || (i.extraSearch?.toLowerCase().includes(q) ?? false)
       );
     });
-  }, [items, query, typeFilter, statusFilter]);
+  }, [items, query, typeFilter, statusFilter, categoryFilter, modelFilter]);
 
   const statusOptions = useMemo(() => {
     const seen = new Set<string>();
     for (const i of items) seen.add(i.status);
     return [...seen];
   }, [items]);
+
+  const categoryOptions = useMemo(() => {
+    const seen = new Set<string>();
+    for (const i of items) {
+      if (i.type === 'accessory' && i.context) seen.add(i.context);
+    }
+    return [...seen].sort((a, b) => a.localeCompare(b));
+  }, [items]);
+
+  const modelOptions = useMemo(() => {
+    const seen = new Set<string>();
+    for (const i of items) {
+      if (i.type === 'camera' && i.name) seen.add(i.name);
+    }
+    return [...seen].sort((a, b) => a.localeCompare(b));
+  }, [items]);
+
+  // Wenn der Type-Filter auf Kameras springt, ist Kategorie sinnlos -> reset (und umgekehrt).
+  function handleTypeChange(next: 'all' | 'camera' | 'accessory') {
+    setTypeFilter(next);
+    if (next === 'camera') setCategoryFilter('all');
+    if (next === 'accessory') setModelFilter('all');
+  }
+
+  const activeChips = (categoryFilter !== 'all' ? 1 : 0) + (modelFilter !== 'all' ? 1 : 0);
 
   return (
     <>
@@ -72,22 +118,16 @@ export default function InventarFilter({ items, statusLabels }: Props) {
             width: '100%',
           }}
         />
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          <FilterPill active={typeFilter === 'all'} onClick={() => setTypeFilter('all')}>Alle</FilterPill>
-          <FilterPill active={typeFilter === 'camera'} onClick={() => setTypeFilter('camera')}>Kameras</FilterPill>
-          <FilterPill active={typeFilter === 'accessory'} onClick={() => setTypeFilter('accessory')}>Zubehör</FilterPill>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+          <FilterPill active={typeFilter === 'all'} onClick={() => handleTypeChange('all')}>Alle</FilterPill>
+          <FilterPill active={typeFilter === 'camera'} onClick={() => handleTypeChange('camera')}>Kameras</FilterPill>
+          <FilterPill active={typeFilter === 'accessory'} onClick={() => handleTypeChange('accessory')}>Zubehör</FilterPill>
           <span style={{ flex: 1 }} />
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            style={{
-              background: '#0a0f1e',
-              border: '1px solid #1e293b',
-              borderRadius: 10,
-              padding: '8px 12px',
-              color: '#e2e8f0',
-              fontSize: 13,
-            }}
+            style={dropdownStyle}
+            aria-label="Status filtern"
           >
             <option value="all">Alle Status</option>
             {statusOptions.map((s) => (
@@ -95,6 +135,55 @@ export default function InventarFilter({ items, statusLabels }: Props) {
             ))}
           </select>
         </div>
+        {(categoryOptions.length > 0 || modelOptions.length > 0) && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+            {/* Kategorie-Dropdown wird ausgeblendet, wenn Type auf Kameras steht (sinnlos). */}
+            {categoryOptions.length > 0 && typeFilter !== 'camera' && (
+              <select
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                style={dropdownStyle}
+                aria-label="Kategorie filtern"
+              >
+                <option value="all">Alle Kategorien</option>
+                {categoryOptions.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            )}
+            {/* Modell-Dropdown wird ausgeblendet, wenn Type auf Zubehör steht. */}
+            {modelOptions.length > 0 && typeFilter !== 'accessory' && (
+              <select
+                value={modelFilter}
+                onChange={(e) => setModelFilter(e.target.value)}
+                style={dropdownStyle}
+                aria-label="Modell filtern"
+              >
+                <option value="all">Alle Modelle</option>
+                {modelOptions.map((m) => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+            )}
+            {activeChips > 0 && (
+              <button
+                type="button"
+                onClick={() => { setCategoryFilter('all'); setModelFilter('all'); }}
+                style={{
+                  fontSize: 12,
+                  color: '#94a3b8',
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: '6px 4px',
+                  textDecoration: 'underline',
+                }}
+              >
+                Filter zurücksetzen
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Treffer-Anzahl */}
