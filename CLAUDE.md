@@ -175,6 +175,7 @@ Wenn eine Buchung vor Ablauf der 14-tägigen Widerrufsfrist beginnt, muss der Ku
 - **Bezahlstatus:** "Bezahlt" / "Nicht bezahlt" — bei "Nicht bezahlt" wird `MANUAL-UNPAID-...` als `payment_intent_id` gespeichert
 - **Verwendungszweck:** Format `Name - Rechnungsnummer` (z.B. "Lars Kanitzky - RE-2616-001")
 - **Rabatt** (Stand 2026-05-03): Eigene Section unter „Herkunft & Notizen" — Modus `Prozent (%)` oder `Festbetrag (€)` + optionaler Grund. Basis = Miete + Zubehör + Sets (Haftungsschutz und Versand bleiben aussen vor — Haftung deckt eigene Risiken, Versand ist Durchlaufposten). Festbetrag ist auf die Rabatt-Basis gecapt. Abzug wird live in der Zusammenfassung + Rechnungsvorschau angezeigt, in `bookings.discount_amount` gespeichert (existierende Spalte, fließt automatisch in EÜR/DATEV). Notiz-String enthält den Rabatt zur Nachvollziehbarkeit.
+- **Tester-User** (Stand 2026-05-03): Wenn der ausgewählte Kunde `profiles.is_tester=true` hat, wird die manuelle Buchung mit `is_test=true` gespeichert (auch im Live-Modus → raus aus Reports/EÜR/DATEV). Vertrag bekommt zusätzlich das „MUSTER / TESTVERTRAG"-Wasserzeichen via `forceTestMode: true`. Stripe spielt bei manuellen Buchungen keine Rolle (nur `MANUAL-...`-Marker als payment_intent_id).
 - Gast-Buchung ohne Kundenkonto (nur Name + E-Mail)
 - Digitale Vertragsunterschrift auf Admin-Tablet/Handy (SignatureStep)
 - Rechnung-PDF + Vertrag-PDF werden im Hintergrund generiert

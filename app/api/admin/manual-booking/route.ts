@@ -8,6 +8,7 @@ import { generateContractPDF } from '@/lib/contracts/generate-contract';
 import { storeContract } from '@/lib/contracts/store-contract';
 import { sendBookingConfirmation, sendAdminNotification, type BookingEmailData } from '@/lib/email';
 import { isTestMode } from '@/lib/env-mode';
+import { isUserTester } from '@/lib/tester-mode';
 import { logAudit } from '@/lib/audit';
 
 /**
@@ -59,7 +60,13 @@ export async function POST(req: NextRequest) {
       : `MANUAL-${bookingId}-${Date.now()}`;
     const bookingNotes = body.notes || null;
 
-    const testMode = await isTestMode();
+    // is_test = globaler Test-Modus ODER ausgewaehlter Kunde ist Tester-Konto.
+    // Bei manueller Buchung gibt es kein Stripe — nur das DB-Flag ist relevant,
+    // damit die Buchung in Reports/EUeR/DATEV ausgefiltert wird.
+    const globalTestMode = await isTestMode();
+    const userIsTester = body.user_id ? await isUserTester(body.user_id) : false;
+    const testMode = globalTestMode || userIsTester;
+
     const insertData: Record<string, unknown> = {
       id: bookingId,
       payment_intent_id: paymentIntentId,
@@ -221,6 +228,9 @@ export async function POST(req: NextRequest) {
               signerName: contractSignature.signerName,
               ipAddress: ip,
               unitId: body.unit_id ?? null,
+              // Tester-User → Wasserzeichen "MUSTER / TESTVERTRAG" auch im
+              // Live-Modus, damit klar ist dass das ein Test war.
+              ...(userIsTester ? { forceTestMode: true } : {}),
             });
             contractPdfBuffer = contractResult.pdfBuffer;
 
