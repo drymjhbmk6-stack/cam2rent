@@ -133,6 +133,8 @@ export interface AdminProduct {
   tags?: string[];
   /** Kaution in Euro (direkt, unabhängig von kautionTier) */
   deposit?: number;
+  /** Gewicht in Gramm — fuer Versand-/Paketgewicht-Schaetzung. */
+  weight_g?: number;
 }
 
 export type AdminProducts = Record<string, AdminProduct>;

@@ -179,6 +179,7 @@ export default async function ScanLandingPage({ params }: PageProps) {
     const productMap = (configRes?.data?.value ?? {}) as Record<string, {
       name?: string; brand?: string; model?: string; category?: string;
       images?: string[]; imageUrl?: string; deposit?: number;
+      weight_g?: number;
     }>;
     const product = productMap[productUnit.product_id];
     const asset = (assetRes?.data ?? null) as AssetRow | null;
@@ -201,6 +202,9 @@ export default async function ScanLandingPage({ params }: PageProps) {
         { label: 'Kaution', value: fmtEuro(product?.deposit) },
         { label: 'Nutzungsdauer', value: asset?.useful_life_months ? `${asset.useful_life_months} Monate` : '—' },
         { label: 'Anlagen-Status', value: asset?.status ?? '—' },
+        ...(typeof product?.weight_g === 'number' && product.weight_g > 0
+          ? [{ label: 'Gewicht', value: `${product.weight_g} g` }]
+          : []),
       ],
       note: productUnit.notes,
       bookings: bookingsRes?.data ?? [],

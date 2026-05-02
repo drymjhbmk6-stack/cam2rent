@@ -580,6 +580,24 @@ export default function AdminKameraEditorPage() {
                     placeholder="z.B. 150"
                     className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
                 </div>
+                <div>
+                  <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Gewicht (g)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    inputMode="numeric"
+                    value={product.weight_g ?? ''}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      const n = v === '' ? undefined : Math.max(0, parseInt(v, 10) || 0);
+                      setProduct((p) => p && ({ ...p, weight_g: n }));
+                    }}
+                    placeholder="z.B. 154"
+                    className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue"
+                  />
+                  <p className="text-[10px] text-brand-muted mt-1">Wird für Paket-/Versandgewicht aufaddiert.</p>
+                </div>
                 <div className="sm:col-span-2">
                   <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Ausführliche Beschreibung (Markdown)</label>
                   <MarkdownEditor
