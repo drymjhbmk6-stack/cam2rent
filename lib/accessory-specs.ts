@@ -39,22 +39,28 @@ export type SpecFieldKind =
  */
 export function getSpecFieldsForCategory(category: string | null | undefined): SpecFieldKind[] {
   const cat = (category ?? '').trim().toLowerCase();
-  if (!cat) return ['weight_g'];
+  const specific: SpecFieldKind[] = [];
 
-  // Akku
-  if (/^akku|battery|akkus?$/.test(cat)) return ['mah', 'weight_g'];
+  if (cat) {
+    // Akku
+    if (/^akku|battery|akkus?$/.test(cat)) {
+      specific.push('mah');
+    } else if (/speicher|sd-?karte|sd ?card|micro ?sd|memory/.test(cat)) {
+      // Speicher / Speicherkarte
+      specific.push('storage_gb');
+    } else if (/^nd-?filter|filter$|filters?$/.test(cat)) {
+      // ND-Filter / Filter
+      specific.push('nd_values');
+    } else if (/stativ|tripod|selfi|selfie|stick|gimbal/.test(cat)) {
+      // Stativ + Selfie-Stick
+      specific.push('length_min_cm', 'length_max_cm');
+    }
+    // Sonstige (Halterung, Schutz, Audio, Mikrofon, …) → keine Spezialfelder.
+  }
 
-  // Speicher / Speicherkarte
-  if (/speicher|sd-?karte|sd ?card|micro ?sd|memory/.test(cat)) return ['storage_gb', 'weight_g'];
-
-  // ND-Filter / Filter
-  if (/^nd-?filter|filter$|filters?$/.test(cat)) return ['nd_values', 'weight_g'];
-
-  // Stativ + Selfie-Stick
-  if (/stativ|tripod|selfi|selfie|stick|gimbal/.test(cat)) return ['length_min_cm', 'length_max_cm', 'weight_g'];
-
-  // Default: nur Gewicht
-  return ['weight_g'];
+  // Gewicht ist IMMER dabei — fuer alle Kategorien, weil wir es fuer die
+  // Paket-/Versand-Berechnung aufaddieren.
+  return [...specific, 'weight_g'];
 }
 
 interface SpecFieldDefinition {
