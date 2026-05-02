@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
     // Alle Profile laden — nur Listen-relevante Spalten (Ausweisbilder etc. nicht nötig)
     let query = supabase
       .from('profiles')
-      .select('id, full_name, phone, address_city, verification_status, verified_at, blacklisted, blacklist_reason, blacklisted_at, created_at')
+      .select('id, full_name, phone, address_city, verification_status, verified_at, blacklisted, blacklist_reason, blacklisted_at, is_tester, created_at')
       .order('created_at', { ascending: false });
 
     if (statusFilter === 'blacklisted') {
@@ -73,6 +73,7 @@ export async function GET(req: NextRequest) {
       blacklisted: p.blacklisted || false,
       blacklist_reason: p.blacklist_reason || '',
       blacklisted_at: p.blacklisted_at,
+      is_tester: p.is_tester || false,
       booking_count: countMap.get(p.id) || 0,
       created_at: p.created_at,
     }));

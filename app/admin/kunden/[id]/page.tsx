@@ -350,6 +350,15 @@ export default function KundenDetailPage() {
                 Verifiziert
               </span>
             )}
+            {customer.is_tester && (
+              <span style={{
+                display: 'inline-block', padding: '4px 12px', borderRadius: 6,
+                fontSize: 12, fontWeight: 700, color: '#ec4899', background: '#ec489914',
+                border: '1px solid #ec489933',
+              }}>
+                Tester
+              </span>
+            )}
           </div>
         </div>
       </div>

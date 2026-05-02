@@ -16,6 +16,7 @@ interface Customer {
   blacklisted: boolean;
   blacklist_reason: string;
   blacklisted_at: string | null;
+  is_tester: boolean;
   booking_count: number;
   created_at: string;
 }
@@ -210,35 +211,53 @@ export default function KundenPage() {
                         </span>
                       </td>
                       <td style={{ padding: '12px 14px' }}>
-                        {c.blacklisted ? (
-                          <span
-                            style={{
-                              display: 'inline-block',
-                              padding: '3px 10px',
-                              borderRadius: 6,
-                              fontSize: 12,
-                              fontWeight: 600,
-                              color: '#ef4444',
-                              background: '#ef444414',
-                            }}
-                          >
-                            Gesperrt
-                          </span>
-                        ) : (
-                          <span
-                            style={{
-                              display: 'inline-block',
-                              padding: '3px 10px',
-                              borderRadius: 6,
-                              fontSize: 12,
-                              fontWeight: 600,
-                              color: '#10b981',
-                              background: '#10b98114',
-                            }}
-                          >
-                            Aktiv
-                          </span>
-                        )}
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          {c.blacklisted ? (
+                            <span
+                              style={{
+                                display: 'inline-block',
+                                padding: '3px 10px',
+                                borderRadius: 6,
+                                fontSize: 12,
+                                fontWeight: 600,
+                                color: '#ef4444',
+                                background: '#ef444414',
+                              }}
+                            >
+                              Gesperrt
+                            </span>
+                          ) : (
+                            <span
+                              style={{
+                                display: 'inline-block',
+                                padding: '3px 10px',
+                                borderRadius: 6,
+                                fontSize: 12,
+                                fontWeight: 600,
+                                color: '#10b981',
+                                background: '#10b98114',
+                              }}
+                            >
+                              Aktiv
+                            </span>
+                          )}
+                          {c.is_tester && (
+                            <span
+                              style={{
+                                display: 'inline-block',
+                                padding: '3px 10px',
+                                borderRadius: 6,
+                                fontSize: 12,
+                                fontWeight: 600,
+                                color: '#ec4899',
+                                background: '#ec489914',
+                                border: '1px solid #ec489933',
+                              }}
+                            >
+                              Tester
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td style={{ padding: '12px 14px', fontSize: 13, color: '#64748b' }}>
                         {fmtDate(c.created_at)}

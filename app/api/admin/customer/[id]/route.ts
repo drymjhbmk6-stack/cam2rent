@@ -123,6 +123,7 @@ export async function GET(
         blacklisted: profile.blacklisted || false,
         blacklist_reason: profile.blacklist_reason || '',
         blacklisted_at: profile.blacklisted_at,
+        is_tester: profile.is_tester || false,
         created_at: profile.created_at,
         anonymized: profile.anonymized || false,
         deleted_at: profile.deleted_at,
