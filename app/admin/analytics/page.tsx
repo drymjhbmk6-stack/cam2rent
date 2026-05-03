@@ -51,7 +51,7 @@ interface ProductsData { products: { slug: string; views: number; bookings: numb
 
 type Tab = 'live' | 'bookings' | 'traffic' | 'customers' | 'blog';
 
-type TimeRange = 'heute' | '7tage' | '30tage' | 'monat' | 'jahr' | 'custom';
+type TimeRange = 'heute' | '24h' | '7tage' | '30tage' | 'monat' | 'jahr' | 'custom';
 type StatusFilter = 'alle' | 'aktiv' | 'abgeschlossen' | 'storniert';
 
 interface FilterState {
@@ -259,6 +259,7 @@ function utilizationColor(pct: number): string {
 function getTimeRangeLabel(tr: TimeRange): string {
   const labels: Record<TimeRange, string> = {
     heute: 'Heute',
+    '24h': 'Letzte 24 Std',
     '7tage': '7 Tage',
     '30tage': '30 Tage',
     monat: 'Dieser Monat',
@@ -271,6 +272,7 @@ function getTimeRangeLabel(tr: TimeRange): string {
 function getViewsChartTitle(tr: TimeRange): string {
   switch (tr) {
     case 'heute': return 'Aufrufe heute nach Stunde';
+    case '24h': return 'Aufrufe der letzten 24 Stunden';
     case '7tage': return 'Aufrufe der letzten 7 Tage';
     case '30tage': return 'Aufrufe der letzten 30 Tage';
     case 'monat': return 'Aufrufe diesen Monat';
@@ -564,6 +566,7 @@ export default function AnalyticsPage() {
   // Mappt UI-TimeRange auf API-range-Parameter
   const apiRange = (() => {
     if (filters.timeRange === 'heute') return 'today';
+    if (filters.timeRange === '24h') return '24h';
     if (filters.timeRange === '7tage') return '7d';
     if (filters.timeRange === '30tage') return '30d';
     if (filters.timeRange === 'monat') return 'month';
@@ -585,6 +588,7 @@ export default function AnalyticsPage() {
   const historyDays = (() => {
     const now = new Date();
     if (filters.timeRange === 'heute') return 0;
+    if (filters.timeRange === '24h') return 0;
     if (filters.timeRange === '7tage') return 7;
     if (filters.timeRange === '30tage') return 30;
     if (filters.timeRange === 'monat') return now.getDate();
@@ -717,7 +721,7 @@ export default function AnalyticsPage() {
       ),
     },
     {
-      id: 'traffic', label: 'Traffic & Marketing', icon: (
+      id: 'traffic', label: 'Besucher & Marketing', icon: (
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064" />
         </svg>
@@ -906,12 +910,12 @@ export default function AnalyticsPage() {
           </div>
         )}
 
-        {/* Filter row */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          {/* Time range pills */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        {/* Filter-Reihe — Zeitraum-Pills oben, sekundäre Filter darunter */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {/* Zeitraum-Pills (umbrechen einzeln auf Mobile) */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 11, color: C.textDim, marginRight: 4 }}>Zeitraum:</span>
-            {(['heute', '7tage', '30tage', 'monat', 'jahr', 'custom'] as TimeRange[]).map(tr => (
+            {(['heute', '24h', '7tage', '30tage', 'monat', 'jahr', 'custom'] as TimeRange[]).map(tr => (
               <button
                 key={tr}
                 onClick={() => setFilters(f => ({ ...f, timeRange: tr }))}
@@ -922,9 +926,9 @@ export default function AnalyticsPage() {
             ))}
           </div>
 
-          {/* Custom date inputs */}
+          {/* Eingabefelder für eigenen Zeitraum */}
           {filters.timeRange === 'custom' && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
               <input
                 type="date"
                 value={filters.customFrom}
@@ -941,48 +945,37 @@ export default function AnalyticsPage() {
             </div>
           )}
 
-          {/* Product filter */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontSize: 11, color: C.textDim }}>Produkt:</span>
-            <select
-              value={filters.product}
-              onChange={e => setFilters(f => ({ ...f, product: e.target.value }))}
-              style={selectStyle}
-            >
-              <option value="alle">Alle Produkte</option>
-              {productSlugs.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-          </div>
+          {/* Sekundäre Filter-Reihe: Produkt nur wo es ausgewertet wird,
+              "Filter speichern" rechtsbündig. Auf Mobile umbrechen. */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            {activeTab === 'bookings' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 11, color: C.textDim }}>Produkt:</span>
+                <select
+                  value={filters.product}
+                  onChange={e => setFilters(f => ({ ...f, product: e.target.value }))}
+                  style={selectStyle}
+                >
+                  <option value="alle">Alle Produkte</option>
+                  {productSlugs.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+            )}
 
-          {/* Status filter */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontSize: 11, color: C.textDim }}>Status:</span>
-            <select
-              value={filters.status}
-              onChange={e => setFilters(f => ({ ...f, status: e.target.value as StatusFilter }))}
-              style={selectStyle}
+            <button
+              onClick={() => setShowPresetModal(true)}
+              style={{
+                padding: '6px 12px', borderRadius: 8, border: `1px solid ${C.border}`,
+                background: 'transparent', color: C.textMuted, fontSize: 11, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 4, marginLeft: 'auto',
+              }}
             >
-              <option value="alle">Alle</option>
-              <option value="aktiv">Aktiv</option>
-              <option value="abgeschlossen">Abgeschlossen</option>
-              <option value="storniert">Storniert</option>
-            </select>
+              <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+              </svg>
+              Filter speichern
+            </button>
           </div>
-
-          {/* Save preset */}
-          <button
-            onClick={() => setShowPresetModal(true)}
-            style={{
-              padding: '6px 12px', borderRadius: 8, border: `1px solid ${C.border}`,
-              background: 'transparent', color: C.textMuted, fontSize: 11, cursor: 'pointer',
-              display: 'flex', alignItems: 'center', gap: 4,
-            }}
-          >
-            <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
-            </svg>
-            Filter speichern
-          </button>
         </div>
 
         {/* Active filter chips */}
@@ -1160,7 +1153,7 @@ export default function AnalyticsPage() {
           {/* Aufrufe-Chart: dynamisch nach Zeitraum-Filter */}
           <Card>
             <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16 }}>{getViewsChartTitle(filters.timeRange)}</div>
-            {filters.timeRange === 'heute' ? (
+            {filters.timeRange === 'heute' || filters.timeRange === '24h' ? (
               todayData ? (
                 <HourlyChart data={todayData.hourly ?? Array(24).fill(0)} />
               ) : (
@@ -1553,6 +1546,9 @@ function filterByTimeRange<T extends { date: string }>(data: T[], filters: Filte
   switch (filters.timeRange) {
     case 'heute':
       fromDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      break;
+    case '24h':
+      fromDate = new Date(Date.now() - 24 * 60 * 60 * 1000);
       break;
     case '7tage':
       fromDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);

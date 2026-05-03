@@ -65,10 +65,12 @@ export async function GET(req: NextRequest) {
 
     const visitors = Array.from(sessionMap.values());
 
-    // Range-abhaengige Stats (respektiert ?range=today|7d|30d|month aus URL)
+    // Range-abhaengige Stats (respektiert ?range=today|24h|7d|30d|month aus URL)
     const range = req.nextUrl.searchParams.get('range') ?? 'today';
     let startDateISO: string;
-    if (range === '7d') {
+    if (range === '24h') {
+      startDateISO = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    } else if (range === '7d') {
       startDateISO = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
     } else if (range === '30d') {
       startDateISO = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
