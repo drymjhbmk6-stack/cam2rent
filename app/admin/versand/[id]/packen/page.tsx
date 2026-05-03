@@ -5,22 +5,21 @@ import Link from 'next/link';
 import SignatureCanvas from 'react-signature-canvas';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import SerialScanner from '@/components/admin/SerialScanner';
+import {
+  expandItems,
+  groupItems,
+  buildScanLookup,
+  applyScan,
+  ItemList,
+  ScannerBar,
+  ScannerLiveList,
+  type ResolvedItem,
+  type UnitCode,
+  type PackItem,
+  type GroupedItem,
+} from '@/components/admin/scan-workflow';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
-
-interface ResolvedItem {
-  id: string;
-  name: string;
-  qty: number;
-  isFromSet?: boolean;
-  setName?: string;
-}
-
-interface UnitCode {
-  id: string;
-  accessory_id: string;
-  exemplar_code: string;
-}
 
 interface BookingDetail {
   id: string;
@@ -53,102 +52,14 @@ interface CurrentAdminUser {
   isEmployeeAccount: boolean; // true wenn echter Mitarbeiter-Account (nicht legacy-env Master-Passwort)
 }
 
-interface PackItem {
-  key: string;
-  label: string;
-  subLabel: string;
-  // Fuer Scanner-Lookup: welche Codes haken dieses Item ab?
-  // 'camera' nutzt Kamera-Seriennummer, 'accessory' nutzt accessory_id (loest
-  // ueber unit_codes auf), 'return-label' ist nicht scanbar.
-  type: 'camera' | 'accessory' | 'return-label';
-  accessoryId?: string;
-}
-
-// Stueckzahl aus resolved_items expandieren — eine Zeile pro physisches Stueck
-// damit jeder Akku/Karte/etc. einzeln abgehakt werden kann.
-//
-// Set-Container-Zeilen (z.B. "Basic Set" als Header zwischen den Sub-Items)
-// werden hier rausgefiltert — die Pack-UI listet nur die tatsaechlich zu
-// packenden physischen Stuecke. Erkennung: ein nicht-isFromSet-Item dessen
-// name als setName eines anderen Items vorkommt.
-function expandItems(b: BookingDetail): PackItem[] {
-  const items = b.resolved_items ?? [];
-  const usedSetNames = new Set<string>();
-  for (const it of items) {
-    if (it.isFromSet && it.setName) usedSetNames.add(it.setName);
-  }
-
-  const out: PackItem[] = [];
-  out.push({
-    key: 'camera',
-    type: 'camera',
-    label: b.product_name,
-    subLabel: b.serial_number ? `Seriennummer: ${b.serial_number}` : 'Kamera',
-  });
-  for (const it of items) {
-    // Set-Container ueberspringen
-    if (!it.isFromSet && usedSetNames.has(it.name)) continue;
-    for (let i = 0; i < it.qty; i++) {
-      out.push({
-        key: `${it.id}::${i}`,
-        type: 'accessory',
-        accessoryId: it.id,
-        label: it.name,
-        subLabel: it.isFromSet && it.setName ? `Im Set: ${it.setName}` : 'Zubehör',
-      });
-    }
-  }
-  out.push({
-    key: 'return-label',
-    type: 'return-label',
-    label: 'Rücksendeetikett beilegen',
-    subLabel: 'DHL / DPD / etc.',
-  });
-  return out;
-}
-
-// ─── Aggregierte Anzeige: pro Kategorie eine Zeile mit Mengen-Counter ────
-// Statt 3 separater "Extra Akku"-Zeilen rendert die UI eine Zeile "Extra Akku
-// 0/3". Die internen Slot-Keys bleiben in slotKeys[] erhalten, damit der
-// Pack-Submit weiterhin packedItems: string[] schickt.
-
-interface GroupedItem {
-  groupKey: string;
-  type: 'camera' | 'accessory' | 'return-label';
-  label: string;
-  subLabel: string;
-  slotKeys: string[];
-}
-
-function groupItems(items: PackItem[]): GroupedItem[] {
-  const out: GroupedItem[] = [];
-  const map = new Map<string, GroupedItem>();
-  for (const it of items) {
-    const key = it.type === 'camera' ? 'camera'
-              : it.type === 'return-label' ? 'return-label'
-              : (it.accessoryId ?? it.key);
-    const existing = map.get(key);
-    if (existing) {
-      existing.slotKeys.push(it.key);
-    } else {
-      const g: GroupedItem = {
-        groupKey: key,
-        type: it.type,
-        label: it.label,
-        subLabel: it.subLabel,
-        slotKeys: [it.key],
-      };
-      map.set(key, g);
-      out.push(g);
-    }
-  }
-  return out;
-}
-
-function groupCheckedCount(g: GroupedItem, checked: Record<string, boolean>): number {
-  let n = 0;
-  for (const k of g.slotKeys) if (checked[k]) n++;
-  return n;
+function bookingToScanInput(b: BookingDetail) {
+  return {
+    productName: b.product_name,
+    serialNumber: b.serial_number ?? null,
+    resolvedItems: b.resolved_items,
+    unitCodes: b.unit_codes,
+    unitId: b.unit_id ?? null,
+  };
 }
 
 export default function PackenPage({ params }: { params: Promise<{ id: string }> }) {
@@ -192,7 +103,7 @@ export default function PackenPage({ params }: { params: Promise<{ id: string }>
   if (loading) return <div className="p-8 text-center text-gray-500">Lädt…</div>;
   if (error || !booking) return <div className="p-8 text-center text-red-600">{error}</div>;
 
-  const items = expandItems(booking);
+  const items = expandItems(bookingToScanInput(booking));
   const status = booking.pack_status ?? 'pending';
 
   return (
@@ -319,7 +230,7 @@ function PackStep({
   // Klartext-Codes der Substitute fuer den Banner ueber der Liste.
   const [substituteBadges, setSubstituteBadges] = useState<string[]>([]);
 
-  const scanLookup = useMemo(() => buildScanLookup(booking), [booking]);
+  const scanLookup = useMemo(() => buildScanLookup(bookingToScanInput(booking)), [booking]);
   const groups = useMemo(() => groupItems(items), [items]);
 
   // Gesamt + abgehakt zaehlen — return-label bleibt bewusst draussen, das
@@ -535,7 +446,7 @@ function CheckStep({
   const [scannerOpen, setScannerOpen] = useState(false);
   const [scanFeedback, setScanFeedback] = useState<{ type: 'ok' | 'warn' | 'err'; msg: string } | null>(null);
 
-  const scanLookup = useMemo(() => buildScanLookup(booking), [booking]);
+  const scanLookup = useMemo(() => buildScanLookup(bookingToScanInput(booking)), [booking]);
   const groups = useMemo(() => groupItems(items), [items]);
   const totalPackable = useMemo(
     () => items.filter((it) => it.type !== 'return-label').length,
@@ -865,127 +776,6 @@ function DoneStep({ booking, me, onReset }: { booking: BookingDetail; me: Curren
   );
 }
 
-// ─── Item-Liste mit Checkboxen ───────────────────────────────────────────────
-
-function ItemList({
-  groups, checked, onIncrement, onDecrement, compact,
-}: {
-  groups: GroupedItem[];
-  checked: Record<string, boolean>;
-  onIncrement: (g: GroupedItem) => void;
-  onDecrement: (g: GroupedItem) => void;
-  compact?: boolean; // kompaktere Darstellung im Scanner-Modal
-}) {
-  return (
-    <div className="border border-slate-800 rounded-lg overflow-hidden divide-y divide-slate-800">
-      {groups.map((g) => {
-        const checkedCount = groupCheckedCount(g, checked);
-        const total = g.slotKeys.length;
-        const fullyChecked = checkedCount === total;
-        const partiallyChecked = checkedCount > 0 && !fullyChecked;
-        const showCounter = total > 1;
-
-        return (
-          <div
-            key={g.groupKey}
-            className={`flex items-start gap-3 ${compact ? 'px-3 py-2' : 'px-4 py-3'} ${
-              fullyChecked ? 'bg-emerald-500/5' : partiallyChecked ? 'bg-amber-500/5' : ''
-            }`}
-          >
-            <button
-              type="button"
-              onClick={() => onIncrement(g)}
-              aria-label="Abhaken"
-              className={`mt-0.5 w-6 h-6 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
-                fullyChecked ? 'border-emerald-500 bg-emerald-500 text-slate-950'
-                  : partiallyChecked ? 'border-amber-500 bg-amber-500/20 text-amber-300'
-                  : 'border-slate-600 hover:border-slate-400'
-              }`}
-            >
-              {fullyChecked ? <span className="font-bold">✓</span>
-                : partiallyChecked ? <span className="text-xs font-bold">{checkedCount}</span>
-                : null}
-            </button>
-            <button
-              type="button"
-              onClick={() => onIncrement(g)}
-              className="flex-1 min-w-0 text-left"
-            >
-              <div className={`font-semibold ${compact ? 'text-sm' : ''} ${
-                fullyChecked ? 'text-emerald-300' : 'text-slate-100'
-              }`}>
-                {g.label}
-              </div>
-              {!compact && (
-                <div className="text-xs text-slate-500 mt-0.5">{g.subLabel}</div>
-              )}
-            </button>
-            {showCounter && (
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <span className={`text-xs font-mono tabular-nums ${
-                  fullyChecked ? 'text-emerald-400' : partiallyChecked ? 'text-amber-300' : 'text-slate-500'
-                }`}>
-                  {checkedCount}/{total}
-                </span>
-                {checkedCount > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => onDecrement(g)}
-                    aria-label="Eins zurueck"
-                    className="w-7 h-7 rounded border border-slate-700 text-slate-400 hover:text-slate-100 hover:border-slate-500 flex items-center justify-center text-base leading-none"
-                  >
-                    −
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-/**
- * Kompakte Live-Liste, die unter dem Kamera-Stream im Scanner-Modal
- * angezeigt wird. Zeigt was noch fehlt (rote Items), gerade gescannt wurde
- * (gruene Items) plus letztes Scan-Feedback.
- */
-function ScannerLiveList({
-  groups, checked, feedback, onIncrement, onDecrement,
-}: {
-  groups: GroupedItem[];
-  checked: Record<string, boolean>;
-  feedback: { type: 'ok' | 'warn' | 'err'; msg: string } | null;
-  onIncrement: (g: GroupedItem) => void;
-  onDecrement: (g: GroupedItem) => void;
-}) {
-  // Rücksendeetikett ist nicht scanbar — im Scanner-Modal blenden wir es aus,
-  // damit der Packer sich auf die scanbaren Items konzentrieren kann.
-  const visible = groups.filter((g) => g.type !== 'return-label');
-  const fbColor = feedback?.type === 'ok'
-    ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
-    : feedback?.type === 'warn'
-      ? 'bg-amber-500/15 border-amber-500/40 text-amber-300'
-      : 'bg-red-500/15 border-red-500/40 text-red-300';
-  return (
-    <div className="space-y-2">
-      {feedback && (
-        <div className={`px-3 py-2 rounded-lg border text-xs ${fbColor}`}>
-          {feedback.msg}
-        </div>
-      )}
-      <ItemList
-        groups={visible}
-        checked={checked}
-        onIncrement={onIncrement}
-        onDecrement={onDecrement}
-        compact
-      />
-    </div>
-  );
-}
-
 function SubstituteBanner({ codes }: { codes: string[] }) {
   if (codes.length === 0) return null;
   return (
@@ -1065,248 +855,3 @@ function SignatureBlock({
   );
 }
 
-// ─── Scanner-Helpers ─────────────────────────────────────────────────────────
-
-interface ScanLookup {
-  cameraSerial: string | null;
-  cameraUnitId: string | null;
-  // exemplar_code → accessory_id
-  codeToAccessory: Map<string, string>;
-  // exemplar_code → accessory_unit_id (UUID)
-  codeToUnit: Map<string, string>;
-  scannableCount: number;
-}
-
-function buildScanLookup(b: BookingDetail): ScanLookup {
-  const codeToAccessory = new Map<string, string>();
-  const codeToUnit = new Map<string, string>();
-  for (const u of b.unit_codes ?? []) {
-    if (u.exemplar_code) {
-      const norm = normalizeCode(u.exemplar_code);
-      codeToAccessory.set(norm, u.accessory_id);
-      codeToUnit.set(norm, u.id);
-    }
-  }
-  return {
-    cameraSerial: b.serial_number ? normalizeCode(b.serial_number) : null,
-    cameraUnitId: b.unit_id ?? null,
-    codeToAccessory,
-    codeToUnit,
-    scannableCount: (b.serial_number ? 1 : 0) + codeToAccessory.size,
-  };
-}
-
-function normalizeCode(s: string): string {
-  return s.trim().toUpperCase().replace(/\s+/g, '');
-}
-
-interface ScanResult {
-  ok: boolean;
-  alreadyChecked?: boolean;
-  key?: string;
-  message: string;
-  // Welche Unit-ID wurde durch den Scan tatsaechlich identifiziert? Wird im
-  // PackStep gesammelt und beim Submit ans Backend geschickt — der berechnet
-  // daraus reihenfolge-egal die finale Buchungs-Zuordnung (Substitute werden
-  // erst dort gegen ungescannte reservierte Slots gleicher Kategorie
-  // gematcht).
-  scannedUnitId?: string;
-  scannedKind?: 'camera' | 'accessory';
-  // True wenn der gescannte Code NICHT in der Buchung reserviert war
-  // (gleiche Kategorie, anderes Exemplar) — fuer den globalen Substitut-Banner.
-  isSubstitute?: boolean;
-  // Klartext-Code des Substituts (zum Anzeigen im Banner).
-  substituteCode?: string;
-}
-
-interface ServerScanLookup {
-  kind: 'camera' | 'accessory' | 'unknown';
-  productId?: string;
-  productName?: string;
-  accessoryId?: string;
-  accessoryName?: string;
-  unitId?: string;
-  serialNumber?: string;
-  exemplarCode?: string;
-  matchesBooking?: boolean;
-  conflict?: { bookingId: string; customerName: string | null } | null;
-}
-
-/**
- * Scan-Auswertung:
- *  1) Erst lokal gegen die zur Buchung reservierten Codes pruefen (schneller
- *     Pfad, kein API-Call) — Standardfall.
- *  2) Wenn der Code lokal nicht matcht, fragt die UI die scan-lookup-API:
- *     - Gehoert er zu einer Kamera/Zubehoer derselben Kategorie wie ein
- *       Buchungs-Slot? → Substitution erlaubt, Buchung wird beim Submit
- *       umgeschrieben.
- *     - Gehoert er zu einer anderen Kategorie? → Klartext-Fehler mit Namen.
- *     - Lockt er gerade in einer anderen aktiven Buchung? → hart blockiert.
- *     - Komplett unbekannt? → "Code unbekannt".
- */
-async function applyScan(
-  rawCode: string,
-  bookingId: string,
-  items: PackItem[],
-  checked: Record<string, boolean>,
-  lookup: ScanLookup,
-  scannedUnitIds: Set<string>,
-  allowSubstitution: boolean = true,
-): Promise<ScanResult> {
-  const code = normalizeCode(rawCode);
-  if (!code) return { ok: false, message: 'Leerer Code.' };
-
-  // ── Schritt 1: lokaler Match auf den reservierten Codes ──────────────────
-  if (lookup.cameraSerial && lookup.cameraSerial === code) {
-    if (checked['camera']) {
-      return { ok: false, alreadyChecked: true, message: `Kamera (${rawCode}) schon abgehakt.` };
-    }
-    return {
-      ok: true,
-      key: 'camera',
-      message: `✓ Kamera (${rawCode})`,
-      scannedKind: 'camera',
-      scannedUnitId: lookup.cameraUnitId ?? undefined,
-    };
-  }
-
-  const accId = lookup.codeToAccessory.get(code);
-  if (accId) {
-    const localUnitId = lookup.codeToUnit.get(code);
-    if (localUnitId && scannedUnitIds.has(localUnitId)) {
-      return { ok: false, alreadyChecked: true, message: `Code ${rawCode} schon gescannt.` };
-    }
-    const slots = items.filter((it) => it.type === 'accessory' && it.accessoryId === accId);
-    const free = slots.find((it) => !checked[it.key]);
-    if (!free) {
-      return { ok: false, alreadyChecked: true, message: `Alle ${slots[0]?.label ?? 'Slots'} schon abgehakt.` };
-    }
-    return {
-      ok: true,
-      key: free.key,
-      message: `✓ ${free.label}`,
-      scannedKind: 'accessory',
-      scannedUnitId: localUnitId,
-    };
-  }
-
-  // ── Schritt 2: Server-Lookup fuer Substitution / Klartext-Fehler ─────────
-  let info: ServerScanLookup;
-  try {
-    const res = await fetch('/api/admin/scan-lookup', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code, bookingId }),
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    info = await res.json();
-  } catch {
-    return { ok: false, message: `Code ${rawCode} unbekannt.` };
-  }
-
-  if (info.kind === 'unknown') {
-    return { ok: false, message: `Code ${rawCode} ist im System nicht hinterlegt.` };
-  }
-
-  // Doppelt-Scan: Unit ist bereits in der Liste der gescannten IDs
-  if (info.unitId && scannedUnitIds.has(info.unitId)) {
-    return { ok: false, alreadyChecked: true, message: `Code ${rawCode} schon abgehakt.` };
-  }
-
-  // Konflikt: gerade in einer anderen aktiven Buchung
-  if (info.conflict) {
-    const cust = info.conflict.customerName ? ` (${info.conflict.customerName})` : '';
-    const itemLabel = info.kind === 'camera' ? info.productName ?? 'Kamera' : info.accessoryName ?? 'Zubehör';
-    return {
-      ok: false,
-      message: `${itemLabel} (${rawCode}) ist bereits Buchung ${info.conflict.bookingId}${cust} zugeordnet.`,
-    };
-  }
-
-  if (info.kind === 'camera') {
-    if (!info.matchesBooking) {
-      return { ok: false, message: `Kamera „${info.productName ?? rawCode}" wird nicht benötigt.` };
-    }
-    if (!allowSubstitution) {
-      return { ok: false, message: `Diese Kamera wurde nicht ins Paket gelegt — bitte gegen die gepackte Seriennummer pruefen.` };
-    }
-    if (checked['camera']) {
-      return { ok: false, alreadyChecked: true, message: `Kamera schon abgehakt.` };
-    }
-    return {
-      ok: true,
-      key: 'camera',
-      message: `✓ Kamera ersetzt: ${info.serialNumber ?? rawCode}`,
-      scannedKind: 'camera',
-      scannedUnitId: info.unitId,
-      isSubstitute: true,
-      substituteCode: info.serialNumber ?? rawCode,
-    };
-  }
-
-  // info.kind === 'accessory'
-  if (!info.matchesBooking) {
-    return { ok: false, message: `Zubehör „${info.accessoryName ?? rawCode}" wird nicht benötigt.` };
-  }
-  if (!allowSubstitution) {
-    return { ok: false, message: `Dieses „${info.accessoryName}" wurde nicht ins Paket gelegt — bitte gegen den gepackten Code pruefen.` };
-  }
-  const slots = items.filter((it) => it.type === 'accessory' && it.accessoryId === info.accessoryId);
-  const free = slots.find((it) => !checked[it.key]);
-  if (!free) {
-    return { ok: false, alreadyChecked: true, message: `Alle „${info.accessoryName}" schon abgehakt.` };
-  }
-  return {
-    ok: true,
-    key: free.key,
-    message: `✓ ${free.label} ersetzt: ${info.exemplarCode ?? rawCode}`,
-    scannedKind: 'accessory',
-    scannedUnitId: info.unitId,
-    isSubstitute: true,
-    substituteCode: info.exemplarCode ?? rawCode,
-  };
-}
-
-function ScannerBar({
-  onOpen, feedback, totalCount, checkedCount,
-}: {
-  onOpen: () => void;
-  feedback: { type: 'ok' | 'warn' | 'err'; msg: string } | null;
-  totalCount: number;
-  checkedCount: number;
-}) {
-  if (totalCount === 0) return null;
-  const fbColor = feedback?.type === 'ok'
-    ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
-    : feedback?.type === 'warn'
-      ? 'bg-amber-500/15 border-amber-500/40 text-amber-300'
-      : 'bg-red-500/15 border-red-500/40 text-red-300';
-  const allDone = checkedCount >= totalCount;
-  return (
-    <div className="mb-4">
-      <button
-        type="button"
-        onClick={onOpen}
-        className="w-full flex items-center justify-between gap-3 px-4 py-3 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 rounded-lg transition-colors"
-      >
-        <div className="flex items-center gap-3 text-cyan-300">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><line x1="7" y1="12" x2="17" y2="12"/>
-          </svg>
-          <div className="text-left">
-            <div className="font-semibold text-sm">Scanner öffnen</div>
-            <div className="text-xs text-cyan-400/80">Item-Code scannen → wird automatisch abgehakt</div>
-          </div>
-        </div>
-        <div className={`text-sm font-semibold tabular-nums ${allDone ? 'text-emerald-400' : 'text-cyan-300/90'}`}>
-          {checkedCount}/{totalCount}
-        </div>
-      </button>
-      {feedback && (
-        <div className={`mt-2 px-3 py-2 rounded-lg border text-sm ${fbColor}`}>
-          {feedback.msg}
-        </div>
-      )}
-    </div>
-  );
-}

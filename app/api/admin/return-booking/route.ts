@@ -23,11 +23,15 @@ export async function POST(req: NextRequest) {
         speicherkarteZurueckgesetzt: boolean;
         akkuGeladen: boolean;
       };
+      // Liste der konkret abgehakten Item-Slot-Keys (Kamera + Zubehoer-
+      // Stuecke). Wird zusammen mit der Checkliste in den Notizen archiviert,
+      // damit der Stand der Vollstaendigkeitspruefung nachvollziehbar bleibt.
+      checkedItems?: string[];
       createDamageReport?: boolean;
       damageDescription?: string;
     };
 
-    const { bookingId, condition, notes, checklist, createDamageReport, damageDescription } = body;
+    const { bookingId, condition, notes, checklist, checkedItems, createDamageReport, damageDescription } = body;
     if (!bookingId) return NextResponse.json({ error: 'bookingId fehlt.' }, { status: 400 });
 
     const supabase = createServiceClient();
@@ -48,14 +52,25 @@ export async function POST(req: NextRequest) {
 
     // 1. Buchung abschließen
     const newStatus = condition === 'beschaedigt' ? 'damaged' : 'completed';
-    const checklistStr = checklist ? JSON.stringify(checklist) : null;
+    // Notizen + Checkliste + abgehakte Items in einem strukturierten Block
+    // archivieren — der Admin sieht in der Buchungsdetail-Seite spaeter
+    // welche physischen Stuecke abgehakt wurden und welche Pauschalpunkte
+    // erfuellt waren.
+    const auditPayload: Record<string, unknown> = {};
+    if (checklist) auditPayload.checklist = checklist;
+    if (Array.isArray(checkedItems) && checkedItems.length > 0) auditPayload.checkedItems = checkedItems;
+    const auditStr = Object.keys(auditPayload).length > 0 ? JSON.stringify(auditPayload) : null;
+    const finalNotes = notes
+      ? (auditStr ? `${notes}\n\nRückgabe-Prüfung: ${auditStr}` : notes)
+      : (auditStr ? `Rückgabe-Prüfung: ${auditStr}` : null);
+
     const { error: updateErr } = await supabase
       .from('bookings')
       .update({
         status: newStatus,
         returned_at: new Date().toISOString(),
         return_condition: condition,
-        return_notes: notes ? (checklistStr ? `${notes}\n\nCheckliste: ${checklistStr}` : notes) : (checklistStr ? `Checkliste: ${checklistStr}` : null),
+        return_notes: finalNotes,
       })
       .eq('id', bookingId);
 
