@@ -6,6 +6,7 @@ import { getTaxModeLabel } from '@/lib/accounting/tax';
 import KpiCard from './shared/KpiCard';
 import StatusBadge from './shared/StatusBadge';
 import DateRangePicker, { type DateRange } from './shared/DateRangePicker';
+import CockpitInbox from './CockpitInbox';
 import {
   ResponsiveContainer,
   LineChart,
@@ -105,6 +106,9 @@ export default function DashboardTab({ onNavigate }: DashboardTabProps) {
 
   return (
     <div>
+      {/* Cockpit-Inbox: was muss ich heute tun? */}
+      <CockpitInbox onNavigateTab={onNavigate} />
+
       {/* Header mit Zeitraum + Steuermodus */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16, marginBottom: 24 }}>
         <DateRangePicker onChange={handleRangeChange} />
