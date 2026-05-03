@@ -66,6 +66,27 @@ export async function GET(req: NextRequest) {
 
   // ── Schritt 3: Callback mit Code ──────────────────────────────────────
   if (code) {
+    // CSRF-Schutz: state aus URL muss mit Cookie uebereinstimmen.
+    // Ohne diesen Vergleich konnte ein Angreifer einen Owner via Phishing-
+    // Link auf eine Meta-Authorize-URL locken; Meta hat den Code dann an
+    // unseren Callback geschickt, der ihn — auf der gueltigen Owner-Session —
+    // verarbeitet hat: Angreifers FB-Page wuerde danach fuer cam2rent posten.
+    const stateParam = url.searchParams.get('state') ?? '';
+    const stateCookie = req.cookies.get('meta_oauth_state')?.value ?? '';
+    const stateOk = stateParam.length > 0
+      && stateCookie.length > 0
+      && stateParam.length === stateCookie.length
+      && (() => {
+        let r = 0;
+        for (let i = 0; i < stateParam.length; i++) r |= stateParam.charCodeAt(i) ^ stateCookie.charCodeAt(i);
+        return r === 0;
+      })();
+    if (!stateOk) {
+      const res = externalRedirect(req, '/admin/social?error=invalid_state');
+      res.cookies.delete('meta_oauth_state');
+      return res;
+    }
+
     try {
       // Token-Exchange
       const { access_token: shortToken } = await exchangeCodeForToken(code, redirectUri);
@@ -130,10 +151,14 @@ export async function GET(req: NextRequest) {
         request: req,
       });
 
-      return externalRedirect(req, '/admin/social/einstellungen?connected=1');
+      const res = externalRedirect(req, '/admin/social/einstellungen?connected=1');
+      res.cookies.delete('meta_oauth_state');
+      return res;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      return externalRedirect(req, `/admin/social/einstellungen?error=${encodeURIComponent(msg)}`);
+      const res = externalRedirect(req, `/admin/social/einstellungen?error=${encodeURIComponent(msg)}`);
+      res.cookies.delete('meta_oauth_state');
+      return res;
     }
   }
 

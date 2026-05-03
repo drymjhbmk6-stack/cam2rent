@@ -31,17 +31,28 @@ export async function POST(
     return NextResponse.json({ error: 'Nur Entwürfe können freigegeben werden.' }, { status: 400 });
   }
 
-  // Status auf approved setzen
-  const { error: updateError } = await supabase
+  // ATOMIC GUARD: UPDATE nur wenn Status noch pending_review. Verhindert
+  // Doppel-Klick → Doppel-Refund. Wenn 0 Rows betroffen, hat eine andere
+  // Anfrage die Gutschrift bereits freigegeben → 409.
+  const { data: claimed, error: claimError } = await supabase
     .from('credit_notes')
     .update({
       status: 'approved',
       approved_at: new Date().toISOString(),
     })
-    .eq('id', id);
+    .eq('id', id)
+    .eq('status', 'pending_review')
+    .select('id')
+    .maybeSingle();
 
-  if (updateError) {
-    return NextResponse.json({ error: updateError.message }, { status: 500 });
+  if (claimError) {
+    return NextResponse.json({ error: claimError.message }, { status: 500 });
+  }
+  if (!claimed) {
+    return NextResponse.json(
+      { error: 'Gutschrift wurde bereits bearbeitet.' },
+      { status: 409 }
+    );
   }
 
   // Stripe-Refund auslösen falls Buchung per Stripe bezahlt
@@ -56,14 +67,20 @@ export async function POST(
       .maybeSingle();
 
     const stripeKey = await getStripeSecretKey();
-    if (booking?.payment_intent_id && stripeKey) {
+    // Manuelle Buchungen haben payment_intent_id wie "MANUAL-..." — Stripe
+    // wuerde mit 404 antworten. Refund nur fuer echte PaymentIntents.
+    const isStripePI = !!booking?.payment_intent_id?.startsWith('pi_');
+    if (isStripePI && stripeKey) {
       try {
         const stripe = await getStripe();
-        const refund = await stripe.refunds.create({
-          payment_intent: booking.payment_intent_id,
-          amount: Math.round(creditNote.gross_amount * 100), // Cent
-          reason: 'requested_by_customer',
-        });
+        const refund = await stripe.refunds.create(
+          {
+            payment_intent: booking!.payment_intent_id,
+            amount: Math.round(creditNote.gross_amount * 100), // Cent
+            reason: 'requested_by_customer',
+          },
+          { idempotencyKey: `cn-refund:${id}` }
+        );
         stripeRefundId = refund.id;
         refundStatus = refund.status === 'succeeded' ? 'succeeded' : 'pending';
       } catch (err) {

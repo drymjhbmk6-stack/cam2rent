@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
+import { buildCsvRow } from '@/lib/csv';
 
 export async function GET(req: NextRequest) {
   if (!(await checkAdminAuth())) {
@@ -24,7 +25,7 @@ export async function GET(req: NextRequest) {
 
   const lines = ['Datum;Stripe-PI;Buchungs-Nr.;Brutto;Gebühr;Netto;Status;Match-Status'];
   for (const tx of data || []) {
-    lines.push([
+    lines.push(buildCsvRow([
       tx.stripe_created_at ? new Date(tx.stripe_created_at).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' }) : '',
       tx.stripe_payment_intent_id || '',
       tx.booking_id || '',
@@ -33,7 +34,7 @@ export async function GET(req: NextRequest) {
       (tx.net || 0).toFixed(2).replace('.', ','),
       tx.status || '',
       tx.match_status || '',
-    ].join(';'));
+    ]));
   }
 
   const csv = '\uFEFF' + lines.join('\r\n');

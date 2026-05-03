@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createServerClient } from '@supabase/ssr';
+import { cookies } from 'next/headers';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { createServiceClient } from '@/lib/supabase';
 import { getStripe, buildPaymentDescription } from '@/lib/stripe';
@@ -28,13 +30,36 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Konto ist Pflicht — kein Gast-Checkout
-    if (!metadata.user_id) {
+    // Auth-Pinning: metadata.user_id MUSS aus der Session kommen, nicht aus dem
+    // Body. Verhindert: Schwarze-Liste-Bypass via fremder userId, Buchungs-
+    // Attribution an Opfer, Tester-Flag-Injection.
+    const cookieStore = await cookies();
+    const supabaseAuth = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() { return cookieStore.getAll(); },
+          setAll(cookiesToSet) {
+            cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options));
+          },
+        },
+      }
+    );
+    const { data: { user } } = await supabaseAuth.auth.getUser();
+    if (!user) {
       return NextResponse.json(
         { error: 'Bitte erstelle ein Konto, um eine Buchung durchzuführen.', code: 'LOGIN_REQUIRED' },
         { status: 403 }
       );
     }
+    if (metadata.user_id && metadata.user_id !== user.id) {
+      return NextResponse.json(
+        { error: 'User-ID stimmt nicht mit Session überein.' },
+        { status: 403 }
+      );
+    }
+    metadata.user_id = user.id;
 
     // Verifizierungs- und Blacklist-Check
     const supabase = createServiceClient();
@@ -52,7 +77,8 @@ export async function POST(req: NextRequest) {
     }
 
     // Tester-Konto: ueberspringt Verification, nutzt Test-Stripe-Keys.
-    const tester = await isUserTester(metadata.user_id);
+    // user.id ist die session-gepinnte Quelle der Wahrheit (siehe oben).
+    const tester = await isUserTester(user.id);
     if (!tester && (!profile || profile.verification_status !== 'verified')) {
       return NextResponse.json(
         { error: 'Dein Konto muss zuerst verifiziert werden. Bitte lade deinen Ausweis unter "Mein Konto" hoch.', code: 'NOT_VERIFIED' },

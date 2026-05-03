@@ -109,6 +109,13 @@ export async function sendReturnReminder(data: ReminderEmailData): Promise<strin
     html,
   });
 
+  // Resend wirft NICHT bei Rate-Limit/ungueltiger Adresse — sondern liefert
+  // {data:null, error}. Ohne diesen Throw wuerde der Cron die Mail als
+  // "sent" loggen, der idempotency-Set blockiert kuenftige Retries.
+  if (result.error) {
+    throw new Error(result.error.message ?? 'resend send failed');
+  }
+
   return result.data?.id ?? null;
 }
 
@@ -141,6 +148,13 @@ export async function sendReturnDueToday(data: ReminderEmailData): Promise<strin
     subject,
     html,
   });
+
+  // Resend wirft NICHT bei Rate-Limit/ungueltiger Adresse — sondern liefert
+  // {data:null, error}. Ohne diesen Throw wuerde der Cron die Mail als
+  // "sent" loggen, der idempotency-Set blockiert kuenftige Retries.
+  if (result.error) {
+    throw new Error(result.error.message ?? 'resend send failed');
+  }
 
   return result.data?.id ?? null;
 }
@@ -177,6 +191,13 @@ export async function sendOverdueNotice(data: ReminderEmailData): Promise<string
     html,
   });
 
+  // Resend wirft NICHT bei Rate-Limit/ungueltiger Adresse — sondern liefert
+  // {data:null, error}. Ohne diesen Throw wuerde der Cron die Mail als
+  // "sent" loggen, der idempotency-Set blockiert kuenftige Retries.
+  if (result.error) {
+    throw new Error(result.error.message ?? 'resend send failed');
+  }
+
   return result.data?.id ?? null;
 }
 
@@ -212,6 +233,13 @@ export async function sendSecondOverdueNotice(data: ReminderEmailData): Promise<
     html,
   });
 
+  // Resend wirft NICHT bei Rate-Limit/ungueltiger Adresse — sondern liefert
+  // {data:null, error}. Ohne diesen Throw wuerde der Cron die Mail als
+  // "sent" loggen, der idempotency-Set blockiert kuenftige Retries.
+  if (result.error) {
+    throw new Error(result.error.message ?? 'resend send failed');
+  }
+
   return result.data?.id ?? null;
 }
 
@@ -246,6 +274,13 @@ export async function sendReviewRequest(data: ReminderEmailData): Promise<string
     subject,
     html,
   });
+
+  // Resend wirft NICHT bei Rate-Limit/ungueltiger Adresse — sondern liefert
+  // {data:null, error}. Ohne diesen Throw wuerde der Cron die Mail als
+  // "sent" loggen, der idempotency-Set blockiert kuenftige Retries.
+  if (result.error) {
+    throw new Error(result.error.message ?? 'resend send failed');
+  }
 
   return result.data?.id ?? null;
 }

@@ -90,8 +90,11 @@ export async function POST(req: NextRequest) {
       .gte('rental_to', booking.rental_to);
 
     if ((count ?? 0) >= product.stock) {
-      // Refund the payment
-      await stripe.refunds.create({ payment_intent: paymentIntentId });
+      // Refund the payment — idempotencyKey verhindert Doppel-Refund bei Retry.
+      await stripe.refunds.create(
+        { payment_intent: paymentIntentId },
+        { idempotencyKey: `extension-refund:${paymentIntentId}` }
+      );
       return NextResponse.json({ error: 'Leider nicht mehr verfügbar. Zahlung wurde erstattet.' }, { status: 409 });
     }
   }

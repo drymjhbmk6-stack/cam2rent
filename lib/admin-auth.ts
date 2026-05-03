@@ -1,4 +1,4 @@
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { createHash, timingSafeEqual } from 'crypto';
 import {
   type AdminUser,
@@ -33,7 +33,11 @@ export async function getCurrentAdminUser(): Promise<AdminUser | null> {
   if (!token) return null;
 
   if (isSessionToken(token)) {
-    return await getUserBySession(token);
+    // UA-Binding: Bei Cookie-Diebstahl + Wiederverwendung von anderem
+    // Browser/Geraet wird die Session invalidiert.
+    const hdrs = await headers();
+    const ua = hdrs.get('user-agent') ?? null;
+    return await getUserBySession(token, ua);
   }
 
   // Legacy: SHA-256-Vergleich gegen ENV-Passwort (timing-safe)

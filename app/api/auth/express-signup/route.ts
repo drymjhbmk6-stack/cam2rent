@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { getCheckoutConfig } from '@/lib/checkout-config';
+import { sendAndLog, escapeHtml } from '@/lib/email';
+import { BUSINESS } from '@/lib/business-config';
 
 /**
  * Express-Signup — Konto-Erstellung direkt im Checkout.
@@ -165,6 +167,27 @@ export async function POST(req: NextRequest) {
       console.error('[express-signup] Profil-Upsert fehlgeschlagen (nicht kritisch):', err);
     }
   }
+
+  // Sicherheits-Hinweis an die E-Mail-Adresse: jemand hat ein Konto mit dieser
+  // Adresse angelegt. Falls das nicht der Eigentuemer der Adresse war, wird er
+  // hier alarmiert. Fire-and-forget, damit der Signup nicht blockiert.
+  sendAndLog({
+    to: email,
+    subject: 'Neues Konto bei cam2rent angelegt',
+    html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#0f172a;">
+      <h2>Konto erstellt</h2>
+      <p>Hallo${fullName ? ` ${escapeHtml(fullName)}` : ''},</p>
+      <p>fuer diese E-Mail-Adresse wurde gerade ein Konto bei <strong>${escapeHtml(BUSINESS.name)}</strong> angelegt
+      (IP: ${escapeHtml(ip)}).</p>
+      <p><strong>Warst das du?</strong> Dann kannst du dich ab sofort einloggen — keine weitere Aktion noetig.</p>
+      <p><strong>Warst das NICHT du?</strong> Bitte schreibe sofort an
+      <a href="mailto:${BUSINESS.emailKontakt}">${BUSINESS.emailKontakt}</a>, damit wir das Konto sperren.
+      Bis zur Klaerung kannst du keine Buchungen unter dieser Adresse durchfuehren.</p>
+      <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0;">
+      <p style="font-size:12px;color:#6b7280;">${escapeHtml(BUSINESS.name)} · automatische Sicherheits-Benachrichtigung</p>
+    </div>`,
+    emailType: 'account_created_alert',
+  }).catch((err) => console.error('[express-signup] alert mail failed:', err));
 
   return NextResponse.json({
     success: true,

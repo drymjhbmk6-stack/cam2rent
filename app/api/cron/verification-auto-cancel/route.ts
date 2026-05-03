@@ -125,11 +125,14 @@ async function handle(req: NextRequest) {
     if (b.payment_intent_id && !b.payment_intent_id.startsWith('MANUAL')) {
       try {
         const stripe = await getStripe();
-        await stripe.refunds.create({
-          payment_intent: b.payment_intent_id,
-          reason: 'requested_by_customer',
-          metadata: { auto_cancel: 'verification_missing', booking_id: b.id },
-        });
+        await stripe.refunds.create(
+          {
+            payment_intent: b.payment_intent_id,
+            reason: 'requested_by_customer',
+            metadata: { auto_cancel: 'verification_missing', booking_id: b.id },
+          },
+          { idempotencyKey: `verif-auto-cancel:${b.id}` }
+        );
       } catch (refundErr) {
         console.error(`[verification-auto-cancel] Refund fehlgeschlagen fuer ${b.id}:`, refundErr);
       }

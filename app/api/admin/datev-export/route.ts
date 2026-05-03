@@ -62,11 +62,10 @@ function formatAmount(amount: number): string {
   return Math.abs(amount).toFixed(2).replace('.', ',');
 }
 
+// Wrapper auf zentralen Helper aus lib/csv.ts (CSV-Formula-Injection-Schutz).
+import { escapeCsvField } from '@/lib/csv';
 function escapeField(val: string): string {
-  if (val.includes(';') || val.includes('"') || val.includes('\n')) {
-    return `"${val.replace(/"/g, '""')}"`;
-  }
-  return val;
+  return escapeCsvField(val, ';');
 }
 
 export async function GET(req: NextRequest) {

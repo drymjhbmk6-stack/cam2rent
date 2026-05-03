@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
 import { sanitizeSearchInput } from '@/lib/search-sanitize';
+import { buildCsvRow } from '@/lib/csv';
 
 export async function GET(req: NextRequest) {
   if (!(await checkAdminAuth())) {
@@ -32,7 +33,7 @@ export async function GET(req: NextRequest) {
   if (format === 'csv') {
     const lines = ['Rechnungsnr.;Datum;Buchungs-Nr.;E-Mail;Netto;Steuer;Brutto;Status'];
     for (const inv of data || []) {
-      lines.push([
+      lines.push(buildCsvRow([
         inv.invoice_number || '',
         inv.invoice_date || '',
         inv.booking_id || '',
@@ -41,7 +42,7 @@ export async function GET(req: NextRequest) {
         (inv.tax_amount || 0).toFixed(2).replace('.', ','),
         (inv.gross_amount || 0).toFixed(2).replace('.', ','),
         inv.status || 'paid',
-      ].join(';'));
+      ]));
     }
 
     const csv = '\uFEFF' + lines.join('\r\n');

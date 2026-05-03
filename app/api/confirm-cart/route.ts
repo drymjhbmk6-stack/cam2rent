@@ -397,7 +397,15 @@ export async function POST(req: NextRequest) {
       supabase.from('admin_settings').select('key, value').in('key', ['tax_mode', 'tax_rate', 'ust_id']),
     ]);
 
-    // Second-Line-Defense: intent.amount (echter Stripe-Betrag) vs Server-Preis
+    // Second-Line-Defense: intent.amount (echter Stripe-Betrag) vs Server-Preis.
+    //
+    // Frueher: 70% Floor (= Kunde durfte 30% des Listenpreises zahlen, ohne
+    // Coupon-Verifikation). Das war ein eingebauter Pauschalrabatt, mit dem
+    // Angreifer beliebig Discounts erfinden konnten (Audit Sweep 6, Vuln 9+10).
+    //
+    // Neu: Server berechnet den tatsaechlichen Mindestbetrag aus
+    // (Listenpreis + Versand) − validierter Coupon-Wert − duration/loyalty
+    // (gecappt). 5% Toleranz fuer Rundungsfehler.
     try {
       const prodRow = prodResult?.data;
       if (prodRow?.value && typeof prodRow.value === 'object') {
@@ -411,12 +419,53 @@ export async function POST(req: NextRequest) {
           checked = true;
         }
         if (checked) {
-          const floorCents = Math.floor(expectedMinCents * 0.3); // 70 % Rabatt-Puffer
+          // Coupon-Wert server-seitig nachschlagen, NICHT aus Body trauen.
+          let validatedDiscountCents = 0;
+          if (r_couponCode) {
+            const { data: coupon } = await supabase
+              .from('coupons')
+              .select('value, type')
+              .ilike('code', r_couponCode)
+              .maybeSingle();
+            if (coupon) {
+              if (coupon.type === 'percent') {
+                validatedDiscountCents = Math.round(expectedMinCents * (Number(coupon.value) || 0) / 100);
+              } else {
+                // 'fixed' = Festbetrag in EUR
+                validatedDiscountCents = Math.round((Number(coupon.value) || 0) * 100);
+              }
+              // Hard-Cap: ein Coupon darf nie mehr als 100% des Listenpreises ergeben
+              validatedDiscountCents = Math.max(0, Math.min(validatedDiscountCents, expectedMinCents));
+            }
+          }
+
+          // Vuln 10/13-Fix: r_discountAmount mit dem server-validierten Wert
+          // ueberschreiben, damit weder Rechnung noch DB-price_total durch
+          // Body-Manipulation einen Fake-Rabatt zeigen.
+          const validatedDiscountEur = validatedDiscountCents / 100;
+          if (Math.abs((r_discountAmount ?? 0) - validatedDiscountEur) > 0.5) {
+            console.warn('[confirm-cart] Body-discountAmount weicht vom Coupon-Wert ab:', {
+              body: r_discountAmount,
+              server: validatedDiscountEur,
+              code: r_couponCode,
+            });
+            r_discountAmount = validatedDiscountEur;
+          }
+          // duration/loyalty maximal 30% on top — uebliche Promo-Range.
+          // Beide werden client-seitig berechnet und sind fuer cam2rent
+          // keine bekannte Server-Quelle, daher konservativer Cap.
+          const otherDiscountCap = Math.floor(expectedMinCents * 0.30);
+          const totalAllowedDiscountCents = Math.min(
+            validatedDiscountCents + otherDiscountCap,
+            Math.floor(expectedMinCents * 0.95),
+          );
+          const floorCents = Math.max(50, expectedMinCents - totalAllowedDiscountCents - 50); // 50 ct Rundungs-Toleranz
           if (intent.amount < floorCents) {
             console.error('[confirm-cart] Preis-Plausibilität verletzt:', {
               paymentIntent: payment_intent_id,
               paidAmount: intent.amount,
               expectedMinCents,
+              validatedDiscountCents,
               floorCents,
             });
             return NextResponse.json(
@@ -595,6 +644,30 @@ export async function POST(req: NextRequest) {
       }
 
       if (error) {
+        // Vuln 17 (Audit Sweep 6): Bei 23505 (Unique-Verletzung auf
+        // payment_intent_id) hat in aller Regel der Stripe-Webhook die
+        // Buchung schon angelegt. Frueher: Wir haben hier 500 zurueckgegeben,
+        // der Customer-Browser fragte nicht mehr nach, der After-Hook fuer
+        // den Mietvertrag lief nie → Buchung in DB ohne signierten Vertrag.
+        // Jetzt: idempotent durchziehen — Booking-IDs aus DB ziehen, normaler
+        // Erfolgs-Pfad geht weiter (After-Hook erzeugt fehlende Vertraege).
+        if (error.code === '23505') {
+          console.warn(`[confirm-cart] Webhook-Race: ${bookingId} bereits in DB. Setze idempotent fort.`);
+          // Existing-Row(s) holen + Loop verlassen, damit der Erfolgs-Pfad
+          // (Vertrag-After-Hook + Confirmation-Mail) trotzdem laeuft.
+          const { data: existingBookings } = await supabase
+            .from('bookings')
+            .select('id')
+            .like('payment_intent_id', `${payment_intent_id}%`);
+          const existingIds = (existingBookings ?? []).map((r) => r.id);
+          if (existingIds.length > 0) {
+            // Bekannte IDs uebernehmen + Loop fruehzeitig beenden, da der
+            // Webhook bereits alle Buchungen angelegt hat.
+            bookingIds.length = 0;
+            bookingIds.push(...existingIds);
+            break;
+          }
+        }
         console.error(`Error saving booking ${bookingId}:`, error);
         return NextResponse.json(
           { error: 'Buchung konnte nicht gespeichert werden.' },

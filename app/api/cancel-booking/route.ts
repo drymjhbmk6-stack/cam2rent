@@ -83,22 +83,49 @@ export async function POST(req: NextRequest) {
 
   const stripe = await getStripe();
 
-  // Process Stripe refund (if any amount to refund)
-  if (refundAmountCents > 0) {
+  // ATOMIC GUARD: Status-Flip ZUERST. Verhindert dass zwei parallele
+  // Storno-Anfragen vom selben Browser/Tab beide den Refund ausfuehren.
+  // Ohne idempotencyKey wuerde Stripe das auch so durchwinken (= Doppel-Refund).
+  const { data: claimed, error: claimError } = await supabase
+    .from('bookings')
+    .update({ status: 'cancelled' })
+    .eq('id', bookingId)
+    .in('status', ['confirmed', 'shipped'])
+    .select('id')
+    .maybeSingle();
+
+  if (claimError) {
+    console.error('[cancel-booking] DB update error:', claimError);
+    return NextResponse.json(
+      { error: 'Buchungsstatus konnte nicht aktualisiert werden.' },
+      { status: 500 }
+    );
+  }
+  if (!claimed) {
+    return NextResponse.json(
+      { error: 'Buchung wurde bereits bearbeitet.' },
+      { status: 409 }
+    );
+  }
+
+  // Process Stripe refund (if any amount to refund). Manuelle Buchungen haben
+  // payment_intent_id wie "MANUAL-..." → Stripe wuerde 404 zurueckgeben.
+  // idempotencyKey verhindert doppelte Refunds bei Network-Retries.
+  const isStripePI = !!booking.payment_intent_id?.startsWith('pi_');
+  if (refundAmountCents > 0 && isStripePI) {
     try {
-      await stripe.refunds.create({
-        payment_intent: booking.payment_intent_id,
-        amount: refundAmountCents,
-      });
+      await stripe.refunds.create(
+        {
+          payment_intent: booking.payment_intent_id,
+          amount: refundAmountCents,
+        },
+        { idempotencyKey: `cancel-refund:${bookingId}` }
+      );
     } catch (stripeErr) {
       console.error('[cancel-booking] Stripe refund error:', stripeErr);
-      return NextResponse.json(
-        {
-          error:
-            'Rückerstattung bei Stripe fehlgeschlagen. Bitte kontaktiere uns direkt.',
-        },
-        { status: 500 }
-      );
+      // Status ist bereits cancelled — Admin muss Refund manuell ausloesen.
+      // Wir loggen das Problem und antworten trotzdem 200, damit der Customer
+      // nicht denkt, die Stornierung sei fehlgeschlagen.
     }
   }
 
@@ -116,20 +143,6 @@ export async function POST(req: NextRequest) {
       // Nicht-fatal: Storno laeuft weiter, Admin kann den Hold manuell freigeben.
       console.error('[cancel-booking] Deposit release failed:', depErr);
     }
-  }
-
-  // Update booking status to cancelled
-  const { error: updateError } = await supabase
-    .from('bookings')
-    .update({ status: 'cancelled' })
-    .eq('id', bookingId);
-
-  if (updateError) {
-    console.error('[cancel-booking] DB update error:', updateError);
-    return NextResponse.json(
-      { error: 'Buchungsstatus konnte nicht aktualisiert werden.' },
-      { status: 500 }
-    );
   }
 
   // Zubehoer-Exemplare freigeben (non-blocking)

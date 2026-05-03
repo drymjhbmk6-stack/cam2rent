@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createServerClient } from '@supabase/ssr';
+import { cookies } from 'next/headers';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { createServiceClient } from '@/lib/supabase';
 import { calcPriceFromTable, type AdminProduct } from '@/lib/price-config';
@@ -24,7 +26,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { amountCents, depositCents, customerName, customerEmail, userId, checkoutContext } = body as {
+    const { amountCents, depositCents, customerName, customerEmail, userId: bodyUserId, checkoutContext } = body as {
       amountCents: number;
       depositCents?: number;
       customerName: string;
@@ -39,6 +41,38 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
+
+    // Auth-Pinning: userId MUSS aus der Supabase-Session stammen, nicht aus dem
+    // Body. Sonst koennte ein Angreifer (a) eigene Sperre via fremder userId
+    // umgehen, (b) Buchungen im Namen anderer Kunden anlegen oder (c) eine
+    // bekannte Tester-userId einschleusen, um auf Test-Stripe-Keys umzuschalten.
+    const cookieStore = await cookies();
+    const supabaseAuth = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() { return cookieStore.getAll(); },
+          setAll(cookiesToSet) {
+            cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options));
+          },
+        },
+      }
+    );
+    const { data: { user } } = await supabaseAuth.auth.getUser();
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Bitte erstelle ein Konto, um eine Buchung durchzuführen.', code: 'LOGIN_REQUIRED' },
+        { status: 403 }
+      );
+    }
+    if (bodyUserId && bodyUserId !== user.id) {
+      return NextResponse.json(
+        { error: 'User-ID stimmt nicht mit Session überein.' },
+        { status: 403 }
+      );
+    }
+    const userId = user.id;
 
     const supabase = createServiceClient();
 
@@ -68,7 +102,13 @@ export async function POST(req: NextRequest) {
           }
 
           if (hasData) {
-            const floorCents = Math.floor(expectedMinCents * 0.3); // 70 % Rabatt-Puffer
+            // Tighter floor — der frueher 30% generelle Pauschalrabatt-Puffer
+            // wurde durch einen Coupon-Lookup + 30%-Cap fuer duration/loyalty
+            // ersetzt. Die finale, harte Pruefung passiert in confirm-cart
+            // (siehe dort) — hier reicht 50% als grobes Pre-Check, damit
+            // erkennbar abwegige Werte schon vor PaymentIntent-Erzeugung
+            // abgelehnt werden.
+            const floorCents = Math.floor(expectedMinCents * 0.5);
             if (amountCents < floorCents) {
               console.error('[checkout-intent] Preis-Plausibilität verletzt:', {
                 userId,
@@ -90,13 +130,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Konto ist Pflicht — kein Gast-Checkout
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'Bitte erstelle ein Konto, um eine Buchung durchzuführen.', code: 'LOGIN_REQUIRED' },
-        { status: 403 }
-      );
-    }
+    // (Auth-Pinning oben bereits geprueft.)
 
     // Verifizierungs- und Blacklist-Check
     const { data: profile } = await supabase
@@ -132,6 +166,29 @@ export async function POST(req: NextRequest) {
         { error: 'Dein Konto muss zuerst verifiziert werden. Bitte lade deinen Ausweis unter "Mein Konto" hoch.', code: 'NOT_VERIFIED' },
         { status: 403 }
       );
+    }
+
+    // Refund-Loop-Schutz (Audit Sweep 6, Vuln 16): wenn der Kunde im
+    // verification-deferred-Modus bereits 2x wegen fehlendem Ausweis-Upload
+    // automatisch storniert wurde, neue Buchungen ablehnen — sonst kann er
+    // unendlich oft buchen + erstattet bekommen, was Stripe-Gebuehren
+    // verursacht und Inventar fuer 48h blockt.
+    if (verificationRequired && checkoutCfg.verificationDeferred) {
+      const { count: priorAutoCancels } = await supabase
+        .from('bookings')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .eq('status', 'cancelled')
+        .ilike('notes', '%Ausweis-Upload wurde nicht fristgerecht%');
+      if ((priorAutoCancels ?? 0) >= 2) {
+        return NextResponse.json(
+          {
+            error: 'Bitte lade zuerst deinen Ausweis unter "Mein Konto" hoch — frueher gestartete Buchungen wurden mehrfach automatisch storniert.',
+            code: 'TOO_MANY_AUTO_CANCELS',
+          },
+          { status: 403 }
+        );
+      }
     }
 
     // Zusatz-Schranke: Express-Signup-Regeln (Max-Betrag, Vorlaufzeit) schuetzen

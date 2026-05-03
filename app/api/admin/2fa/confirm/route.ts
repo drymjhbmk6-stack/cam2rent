@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { verifyToken } from '@/lib/totp';
 import { logAudit } from '@/lib/audit';
+import { checkAdminAuth } from '@/lib/admin-auth';
 
 /**
  * POST /api/admin/2fa/confirm
@@ -10,6 +11,10 @@ import { logAudit } from '@/lib/audit';
  */
 export async function POST(req: NextRequest) {
   try {
+    if (!(await checkAdminAuth())) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const { secret, token } = (await req.json()) as { secret: string; token: string };
 
     if (!secret || !token) {

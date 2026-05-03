@@ -423,17 +423,32 @@ export async function deleteAllSessionsForUser(userId: string): Promise<void> {
 /**
  * Liefert den User zu einem Session-Token oder null wenn abgelaufen/unbekannt.
  * Stempelt `last_used_at` weich (fire-and-forget).
+ *
+ * Wenn `currentUserAgent` uebergeben wird, vergleicht die Funktion ihn mit dem
+ * bei Login gespeicherten User-Agent. Bei Abweichung wird die Session
+ * invalidiert (Session-Hijack-Schutz, Audit Sweep 6 Vuln 15). Bei NULL-
+ * Werten in DB oder Aufruf wird der Check uebersprungen — sonst wuerden alte
+ * Sessions vor Migration sofort tot sein.
  */
-export async function getUserBySession(token: string): Promise<AdminUser | null> {
+export async function getUserBySession(
+  token: string,
+  currentUserAgent?: string | null,
+): Promise<AdminUser | null> {
   if (!isSessionToken(token)) return null;
   const supabase = createServiceClient();
   const { data } = await supabase
     .from('admin_sessions')
-    .select('token, user_id, expires_at, admin_users!inner(id, email, username, name, role, permissions, is_active, created_at, updated_at, last_login_at, created_by, password_hash)')
+    .select('token, user_id, expires_at, user_agent, admin_users!inner(id, email, username, name, role, permissions, is_active, created_at, updated_at, last_login_at, created_by, password_hash)')
     .eq('token', token)
     .maybeSingle();
   if (!data) return null;
   if (new Date(data.expires_at).getTime() < Date.now()) {
+    await deleteSession(token).catch(() => {});
+    return null;
+  }
+  // UA-Binding: bei Mismatch Session toeten + null zurueckgeben.
+  // Beide Seiten muessen non-null sein, sonst skip (Backward-Compat).
+  if (currentUserAgent && data.user_agent && currentUserAgent !== data.user_agent) {
     await deleteSession(token).catch(() => {});
     return null;
   }

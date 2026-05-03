@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { checkAdminAuth } from '@/lib/admin-auth';
 
 /**
  * GET /api/admin/2fa/status
@@ -7,6 +8,10 @@ import { createServiceClient } from '@/lib/supabase';
  */
 export async function GET() {
   try {
+    if (!(await checkAdminAuth())) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const supabase = createServiceClient();
 
     const { data } = await supabase

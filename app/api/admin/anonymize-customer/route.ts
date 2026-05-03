@@ -1,24 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
-import { checkAdminAuth } from '@/lib/admin-auth';
+import { getCurrentAdminUser } from '@/lib/admin-auth';
 import { logAudit } from '@/lib/audit';
 
 /**
  * POST /api/admin/anonymize-customer
- * Body: { customerId: string }
+ * Body: { customerId: string, password?: string }
  *
  * Anonymisiert Kundenstammdaten (Name, Adresse, Telefon).
  * Buchungs- und Rechnungsdaten bleiben 10 Jahre erhalten.
+ *
+ * NUR Owner — Mitarbeiter mit `kunden`-Permission koennten sonst Spuren in
+ * `email_log` (recipient_email -> 'anonymisiert@anonymisiert.local') verwischen
+ * oder Massen-Anonymisierungen ausloesen (Audit Sweep 6, Vuln 19).
  */
 export async function POST(req: NextRequest) {
-  // Admin-Auth prüfen
-  if (!(await checkAdminAuth())) {
-    return NextResponse.json({ error: 'Nicht autorisiert.' }, { status: 401 });
+  const me = await getCurrentAdminUser();
+  if (!me || me.role !== 'owner') {
+    return NextResponse.json({ error: 'Nur Owner duerfen Kunden anonymisieren.' }, { status: 403 });
   }
 
   const { customerId } = await req.json();
   if (!customerId) {
     return NextResponse.json({ error: 'Kunden-ID fehlt.' }, { status: 400 });
+  }
+
+  // Selbst-Anonymisierung verbieten (Audit-Trail-Schutz)
+  if (me.id !== 'legacy-env' && me.id === customerId) {
+    return NextResponse.json({ error: 'Selbst-Anonymisierung nicht erlaubt.' }, { status: 400 });
   }
 
   const supabase = createServiceClient();
