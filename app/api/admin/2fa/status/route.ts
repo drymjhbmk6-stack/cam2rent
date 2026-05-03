@@ -1,15 +1,19 @@
 import { NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
-import { checkAdminAuth } from '@/lib/admin-auth';
+import { getCurrentAdminUser } from '@/lib/admin-auth';
 
 /**
  * GET /api/admin/2fa/status
  * Gibt zurück ob 2FA aktiviert ist.
+ *
+ * Owner-only (Sweep 7 Vuln 2): TOTP-Status ist eine Owner-Information,
+ * Mitarbeiter haben damit nichts zu tun.
  */
 export async function GET() {
   try {
-    if (!(await checkAdminAuth())) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const me = await getCurrentAdminUser();
+    if (!me || me.role !== 'owner') {
+      return NextResponse.json({ error: 'Nur Owner dürfen 2FA verwalten.' }, { status: 403 });
     }
 
     const supabase = createServiceClient();

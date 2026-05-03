@@ -1,5 +1,5 @@
 import { createServiceClient } from '@/lib/supabase';
-import { sendAndLog } from '@/lib/email';
+import { sendAndLog, escapeHtml as h } from '@/lib/email';
 import { BUSINESS } from '@/lib/business-config';
 import { getSiteUrl } from '@/lib/env-mode';
 
@@ -25,12 +25,12 @@ export function buildNewsletterEmailHtml(opts: {
         </td></tr>
         <tr><td style="background:#f9fafb;padding:20px 32px;border-top:1px solid #e5e7eb;">
           <p style="margin:0 0 8px;font-size:11px;color:#9ca3af;text-align:center;">
-            ${BUSINESS.name} · ${BUSINESS.addressLine}
+            ${h(BUSINESS.name)} · ${h(BUSINESS.addressLine)}
           </p>
           <p style="margin:0;font-size:11px;color:#9ca3af;text-align:center;">
-            <a href="${opts.unsubscribeUrl}" style="color:#9ca3af;">Vom Newsletter abmelden</a>
+            <a href="${h(opts.unsubscribeUrl)}" style="color:#9ca3af;">Vom Newsletter abmelden</a>
             ·
-            <a href="${opts.baseUrl}/datenschutz" style="color:#9ca3af;">Datenschutz</a>
+            <a href="${h(opts.baseUrl)}/datenschutz" style="color:#9ca3af;">Datenschutz</a>
           </p>
         </td></tr>
       </table>

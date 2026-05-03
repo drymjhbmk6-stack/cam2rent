@@ -1,6 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { logAudit } from '@/lib/audit';
+import { detectImageType, isAllowedImage } from '@/lib/file-type-check';
+
+/**
+ * Host-Allowlist fuer Unsplash-URLs (Sweep 7 Vuln 6).
+ * Schliesst SSRF auf interne Adressen aus + verhindert Key-Leak ueber
+ * vom Angreifer kontrollierte downloadLocation.
+ */
+function isUnsplashUrl(raw: string): boolean {
+  try {
+    const u = new URL(raw);
+    if (u.protocol !== 'https:') return false;
+    return [
+      'images.unsplash.com',
+      'plus.unsplash.com',
+      'api.unsplash.com',
+      'unsplash.com',
+    ].includes(u.hostname);
+  } catch {
+    return false;
+  }
+}
 
 async function getUnsplashKey(): Promise<string | null> {
   const supabase = createServiceClient();
@@ -79,11 +100,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Bild-URL ist erforderlich.' }, { status: 400 });
   }
 
+  // Sweep 7 Vuln 6 — Host-Allowlist:
+  // Vorher hingen unauthentifizierte URLs aus dem Body direkt an `fetch()`,
+  // damit war SSRF auf interne Adressen (AWS-Metadata, localhost) moeglich
+  // und der Unsplash-Schluessel konnte ueber eine vom Angreifer kontrollierte
+  // downloadLocation als Query-String exfiltriert werden.
+  if (!isUnsplashUrl(imageUrl)) {
+    return NextResponse.json({ error: 'Nur Unsplash-URLs erlaubt.' }, { status: 400 });
+  }
+
   const accessKey = await getUnsplashKey();
 
-  // Unsplash Download-Event tracken (Pflicht laut API-Richtlinien)
-  if (accessKey && downloadLocation) {
-    fetch(`${downloadLocation}?client_id=${accessKey}`).catch(() => {});
+  // Unsplash Download-Event tracken (Pflicht laut API-Richtlinien).
+  // Schluessel als Authorization-Header — nicht mehr in der URL.
+  if (accessKey && downloadLocation && isUnsplashUrl(downloadLocation)) {
+    fetch(downloadLocation, { headers: { Authorization: `Client-ID ${accessKey}` } }).catch(() => {});
   }
 
   // Bild herunterladen
@@ -93,12 +124,24 @@ export async function POST(req: NextRequest) {
   }
 
   const buffer = Buffer.from(await imageRes.arrayBuffer());
-  const filename = `blog-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
+
+  // Magic-Byte-Pruefung: stellt sicher, dass es wirklich ein Bild ist und
+  // nicht z.B. eine HTML-/JS-Antwort einer (irgendwie eingeschmuggelten)
+  // Nicht-Unsplash-URL.
+  if (!isAllowedImage(buffer)) {
+    return NextResponse.json({ error: 'Ungueltiger Bildinhalt.' }, { status: 400 });
+  }
+  const detected = detectImageType(buffer);
+  const detectedMime = detected === 'png' ? 'image/png'
+    : detected === 'webp' ? 'image/webp'
+    : 'image/jpeg';
+  const ext = detected === 'png' ? 'png' : detected === 'webp' ? 'webp' : 'jpg';
+  const filename = `blog-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
 
   const supabase = createServiceClient();
   const { error: uploadError } = await supabase.storage
     .from('blog-images')
-    .upload(filename, buffer, { contentType: 'image/jpeg', upsert: false });
+    .upload(filename, buffer, { contentType: detectedMime, upsert: false });
 
   if (uploadError) {
     return NextResponse.json({ error: uploadError.message }, { status: 500 });

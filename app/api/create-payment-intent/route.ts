@@ -5,6 +5,7 @@ import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { createServiceClient } from '@/lib/supabase';
 import { getStripe, buildPaymentDescription } from '@/lib/stripe';
 import { isUserTester, getTesterStripe } from '@/lib/tester-mode';
+import { calcPriceFromTable, type AdminProduct } from '@/lib/price-config';
 
 const paymentLimiter = rateLimit({ maxAttempts: 10, windowMs: 60 * 1000 }); // 10 pro Min
 
@@ -85,6 +86,55 @@ export async function POST(req: NextRequest) {
         { status: 403 }
       );
     }
+
+    // ── Sweep 7 Vuln 10 — Preis-Plausibilitaetspruefung ──
+    // checkout-intent (Cart-Flow) hat diesen Check bereits. Single-Buchungen
+    // gingen aber bisher ohne Plausibilitaetspruefung durch. Damit konnte ein
+    // Angreifer durch DOM-Manipulation 1 EUR statt 500 EUR fuer eine Buchung
+    // zahlen — der Stripe-Webhook schreibt dann die Buchung mit
+    // intent.amount/100 als Total.
+    if (!tester && metadata.product_id && metadata.days) {
+      try {
+        const days = Number(metadata.days);
+        if (Number.isFinite(days) && days > 0) {
+          const { data: prodRow } = await supabase
+            .from('admin_config')
+            .select('value')
+            .eq('key', 'products')
+            .maybeSingle();
+          if (prodRow?.value && typeof prodRow.value === 'object') {
+            const productMap = prodRow.value as Record<string, AdminProduct>;
+            const product = productMap[metadata.product_id];
+            if (product && Array.isArray(product.priceTable)) {
+              const expectedMinCents = Math.round(calcPriceFromTable(product, days) * 100);
+              if (expectedMinCents > 0) {
+                // 50% Floor — locker genug fuer Coupons + Loyalty + Rabatte,
+                // strikt genug fuer "1 EUR statt 500 EUR"-Manipulationen.
+                const floorCents = Math.floor(expectedMinCents * 0.5);
+                if (amountCents < floorCents) {
+                  console.error('[create-payment-intent] Preis-Plausibilitaet verletzt:', {
+                    userId: user.id,
+                    productId: metadata.product_id,
+                    days,
+                    amountCents,
+                    expectedMinCents,
+                    floorCents,
+                  });
+                  return NextResponse.json(
+                    { error: 'Ungueltige Preisangabe.' },
+                    { status: 400 },
+                  );
+                }
+              }
+            }
+          }
+        }
+      } catch (plausErr) {
+        console.error('[create-payment-intent] Plausibilitaetspruefung fehlgeschlagen:', plausErr);
+        // Nicht hart blocken — Defense-in-Depth, nicht primaerer Auth-Pfad.
+      }
+    }
+
     const stripe = tester ? getTesterStripe() : await getStripe();
     if (tester) metadata.tester = '1';
 

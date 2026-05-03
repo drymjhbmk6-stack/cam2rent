@@ -504,7 +504,22 @@ function generateCSV(
     rows.push(['Keine Daten verfügbar']);
   }
 
-  return rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(';')).join('\n');
+  return rows.map(row => row.map(cell => csvEscape(cell)).join(';')).join('\n');
+}
+
+/**
+ * CSV-Formula-Injection-Schutz (Sweep 7 Vuln 26):
+ * Felder, die mit =/+/-/@/TAB/CR beginnen, werden mit einem Apostroph
+ * praefixiert, damit Excel sie nicht als Formel interpretiert. Verhindert
+ * RCE-Vektoren wie `=cmd|...!A1` oder Datenexfil mit `=HYPERLINK(...)`.
+ * Spiegelt das Verhalten von lib/csv.ts (server-seitig).
+ */
+function csvEscape(cell: unknown): string {
+  let s = cell === null || cell === undefined ? '' : String(cell);
+  if (/^[=+\-@\t\r]/.test(s)) {
+    s = "'" + s;
+  }
+  return `"${s.replace(/"/g, '""')}"`;
 }
 
 function downloadCSV(csv: string) {

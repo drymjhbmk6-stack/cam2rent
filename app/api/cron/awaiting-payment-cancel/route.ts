@@ -138,7 +138,43 @@ async function handle(req: NextRequest) {
       continue;
     }
 
-    // Payment Link deaktivieren
+    // Sweep 7 Vuln 11 — Atomarer Status-Flip ZUERST (vor Payment-Link-Deaktivierung).
+    // Vorher: SELECT lieferte 'awaiting_payment', dann update ohne Status-Guard.
+    // Wenn der Stripe-Webhook zwischen SELECT und UPDATE die Zahlung verbucht und
+    // den Status auf 'confirmed' setzt, hat der Cron das 'confirmed' wieder
+    // ueberschrieben — Kunde hat gezahlt, Buchung gilt als storniert.
+    const reasonText = `Auto-Storno: unbezahlt, Deadline ${deadline.toISOString()} erreicht (${rule.days_before_rental}T vor Mietbeginn, ${rule.cutoff_hour_berlin}:00 Berlin).`;
+    let cancelUpdate = await supabase
+      .from('bookings')
+      .update({ status: 'cancelled', notes: reasonText })
+      .eq('id', b.id)
+      .eq('status', 'awaiting_payment')
+      .select('id')
+      .maybeSingle();
+    if (cancelUpdate.error && /notes/i.test(cancelUpdate.error.message)) {
+      cancelUpdate = await supabase
+        .from('bookings')
+        .update({ status: 'cancelled' })
+        .eq('id', b.id)
+        .eq('status', 'awaiting_payment')
+        .select('id')
+        .maybeSingle();
+    }
+    if (cancelUpdate.error) {
+      results.push({ id: b.id, action: 'kept', error: cancelUpdate.error.message });
+      continue;
+    }
+    if (!cancelUpdate.data) {
+      // Race gewonnen: Status hat sich zwischen SELECT und UPDATE geaendert
+      // (typisch: gerade rechtzeitig bezahlt). Kein Storno, kein Payment-Link
+      // deaktivieren, kein Mail.
+      results.push({ id: b.id, action: 'kept', reason: 'race: Status nicht mehr awaiting_payment' });
+      continue;
+    }
+
+    // Payment Link erst NACH erfolgreichem Status-Flip deaktivieren —
+    // sonst koennten wir einen aktiven Link toeten obwohl Zahlung gerade
+    // eingegangen ist.
     let stripeErr: string | undefined;
     if (b.stripe_payment_link_id) {
       try {
@@ -147,20 +183,6 @@ async function handle(req: NextRequest) {
         stripeErr = err instanceof Error ? err.message : String(err);
         console.warn(`[awaiting-payment-cancel] Stripe deactivate fehlgeschlagen fuer ${b.id}:`, stripeErr);
       }
-    }
-
-    const reasonText = `Auto-Storno: unbezahlt, Deadline ${deadline.toISOString()} erreicht (${rule.days_before_rental}T vor Mietbeginn, ${rule.cutoff_hour_berlin}:00 Berlin).`;
-    // notes ist optional — Fallback ohne falls Spalte fehlt
-    let cancelUpdate = await supabase
-      .from('bookings')
-      .update({ status: 'cancelled', notes: reasonText })
-      .eq('id', b.id);
-    if (cancelUpdate.error && /notes/i.test(cancelUpdate.error.message)) {
-      cancelUpdate = await supabase.from('bookings').update({ status: 'cancelled' }).eq('id', b.id);
-    }
-    if (cancelUpdate.error) {
-      results.push({ id: b.id, action: 'kept', error: cancelUpdate.error.message });
-      continue;
     }
 
     // Zubehoer-Exemplare freigeben (non-blocking)

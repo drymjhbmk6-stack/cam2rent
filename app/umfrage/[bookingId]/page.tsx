@@ -1,10 +1,17 @@
 'use client';
 
-import { useState, use } from 'react';
+import { useState, use, useEffect } from 'react';
 import Link from 'next/link';
 
 export default function UmfragePage({ params }: { params: Promise<{ bookingId: string }> }) {
   const { bookingId } = use(params);
+  // Sweep 7 Vuln 25 — Token aus URL-Param `?t=...` lesen und mit absenden.
+  const [token, setToken] = useState<string>('');
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const t = new URLSearchParams(window.location.search).get('t');
+    if (t) setToken(t);
+  }, []);
   const [rating, setRating] = useState(0);
   const [hoverRating, setHoverRating] = useState(0);
   const [feedback, setFeedback] = useState('');
@@ -26,6 +33,7 @@ export default function UmfragePage({ params }: { params: Promise<{ bookingId: s
           bookingId,
           rating,
           feedback,
+          token,
           ...(withEmail && email ? { email: email.trim() } : {}),
         }),
       });

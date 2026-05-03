@@ -420,22 +420,42 @@ export async function POST(req: NextRequest) {
         }
         if (checked) {
           // Coupon-Wert server-seitig nachschlagen, NICHT aus Body trauen.
+          // Sweep 7 Vuln 12: Aktivitaet/Gueltigkeit/MinOrder pruefen — sonst
+          // konnte ein abgelaufener oder inaktiver Coupon den Plausibilitaets-
+          // Floor absenken. Die spaetere RPC haette ihn zwar abgelehnt, aber
+          // die Buchung waere mit reduziertem Stripe-Betrag durchgegangen.
           let validatedDiscountCents = 0;
           if (r_couponCode) {
             const { data: coupon } = await supabase
               .from('coupons')
-              .select('value, type')
+              .select('value, type, active, valid_from, valid_until, min_order_value')
               .ilike('code', r_couponCode)
               .maybeSingle();
             if (coupon) {
-              if (coupon.type === 'percent') {
-                validatedDiscountCents = Math.round(expectedMinCents * (Number(coupon.value) || 0) / 100);
+              const nowIso = new Date().toISOString();
+              const isActive = coupon.active !== false;
+              const startsValid = !coupon.valid_from || coupon.valid_from <= nowIso;
+              const stillValid = !coupon.valid_until || coupon.valid_until >= nowIso;
+              const minOrderEur = Number(coupon.min_order_value) || 0;
+              const meetsMin = minOrderEur <= 0 || (expectedMinCents / 100) >= minOrderEur;
+              if (isActive && startsValid && stillValid && meetsMin) {
+                if (coupon.type === 'percent') {
+                  validatedDiscountCents = Math.round(expectedMinCents * (Number(coupon.value) || 0) / 100);
+                } else {
+                  // 'fixed' = Festbetrag in EUR
+                  validatedDiscountCents = Math.round((Number(coupon.value) || 0) * 100);
+                }
+                // Hard-Cap: ein Coupon darf nie mehr als 100% des Listenpreises ergeben
+                validatedDiscountCents = Math.max(0, Math.min(validatedDiscountCents, expectedMinCents));
               } else {
-                // 'fixed' = Festbetrag in EUR
-                validatedDiscountCents = Math.round((Number(coupon.value) || 0) * 100);
+                console.warn('[confirm-cart] Coupon ungueltig im Floor-Check:', {
+                  code: r_couponCode,
+                  isActive,
+                  startsValid,
+                  stillValid,
+                  meetsMin,
+                });
               }
-              // Hard-Cap: ein Coupon darf nie mehr als 100% des Listenpreises ergeben
-              validatedDiscountCents = Math.max(0, Math.min(validatedDiscountCents, expectedMinCents));
             }
           }
 

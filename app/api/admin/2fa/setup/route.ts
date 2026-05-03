@@ -1,19 +1,22 @@
 import { NextResponse } from 'next/server';
 import { generateSecret, generateQRDataURL } from '@/lib/totp';
-import { checkAdminAuth } from '@/lib/admin-auth';
+import { getCurrentAdminUser } from '@/lib/admin-auth';
 
 /**
  * POST /api/admin/2fa/setup
  * Generiert ein neues TOTP-Secret und QR-Code.
  * Secret wird NOCH NICHT gespeichert — erst nach Bestätigung.
  *
- * NUR fuer eingeloggte Admins — sonst koennte ein Anonymer das Setup
- * starten und in confirm/disable das gespeicherte Secret ueberschreiben.
+ * Owner-only (Sweep 7 Vuln 2): Das TOTP-Secret schuetzt ausschliesslich den
+ * Legacy-ENV-Notfall-Login. Mitarbeiter haben hier nichts zu suchen — sie
+ * koennten sonst eigene Secrets persistieren oder das bestehende Secret
+ * ueberschreiben/loeschen und damit den Owner aussperren.
  */
 export async function POST() {
   try {
-    if (!(await checkAdminAuth())) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const me = await getCurrentAdminUser();
+    if (!me || me.role !== 'owner') {
+      return NextResponse.json({ error: 'Nur Owner dürfen 2FA verwalten.' }, { status: 403 });
     }
 
     const { secret, otpauthUrl } = generateSecret();

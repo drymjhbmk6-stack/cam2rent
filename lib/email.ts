@@ -41,6 +41,19 @@ export function escapeHtml(val: unknown): string {
 }
 const h = escapeHtml;
 
+/**
+ * Subject-Sanitizer (Sweep 7 Vuln 16):
+ * Entfernt CR/LF/U+2028/U+2029 (verhindert Header-Injection / Subject-Spoofing)
+ * und cappt auf 200 Zeichen.
+ */
+export function stripSubject(val: unknown): string {
+  if (val === null || val === undefined) return '';
+  return String(val)
+    .replace(/[\r\n  ]+/g, ' ')
+    .slice(0, 200)
+    .trim();
+}
+
 // ─── Email Log Helper ────────────────────────────────────────────────────────
 
 async function logEmail(params: {
@@ -850,7 +863,8 @@ export async function sendDamageReportConfirmation(data: DamageEmailData) {
 // ─── Damage report notification (to admin) ───────────────────────────────────
 
 export async function sendAdminDamageNotification(data: DamageEmailData) {
-  const subject = `Neue Schadensmeldung: ${data.bookingId} – ${data.productName}`;
+  // Sweep 7 Vuln 16 — Subject-Spoofing/CRLF-Strip + Cap.
+  const subject = stripSubject(`Neue Schadensmeldung: ${data.bookingId} – ${data.productName}`);
   const html = `
 <!DOCTYPE html>
 <html lang="de">
@@ -926,13 +940,13 @@ export async function sendDamageResolution(data: DamageResolutionEmailData) {
         <tr><td style="background:#ffffff;padding:32px;">
           <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#0a0a0a;">Schadensmeldung bearbeitet</h1>
           <p style="margin:0 0 24px;font-size:15px;color:#4b5563;">
-            Hallo ${data.customerName || 'Kunde'},<br>
+            Hallo ${h(data.customerName) || 'Kunde'},<br>
             wir haben deine Schadensmeldung zur Buchung <strong>${data.bookingId}</strong> geprüft.
           </p>
           <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:10px;margin-bottom:24px;">
             <tr><td style="padding:16px 20px;border-bottom:1px solid #e5e7eb;">
               <p style="margin:0 0 2px;font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:0.8px;">Kamera</p>
-              <p style="margin:0;font-size:15px;font-weight:600;color:#0a0a0a;">${data.productName}</p>
+              <p style="margin:0;font-size:15px;font-weight:600;color:#0a0a0a;">${h(data.productName)}</p>
             </td></tr>
             <tr><td style="padding:16px 20px;border-bottom:1px solid #e5e7eb;">
               <p style="margin:0 0 2px;font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:0.8px;">Festgestellte Schadenshöhe</p>
@@ -1080,8 +1094,8 @@ export async function sendReferralReward(data: ReferralRewardEmailData) {
         </td></tr>
         <tr><td style="background:#ffffff;padding:32px;">
           <p style="margin:0 0 20px;font-size:15px;color:#374151;">
-            Hallo ${data.referrerName || 'dort'},<br><br>
-            deine Empfehlung hat funktioniert! <strong>${data.referredName}</strong> hat gerade eine Buchung abgeschlossen.
+            Hallo ${h(data.referrerName) || 'dort'},<br><br>
+            deine Empfehlung hat funktioniert! <strong>${h(data.referredName)}</strong> hat gerade eine Buchung abgeschlossen.
             Als Dankeschön erhältst du einen <strong>${data.rewardValue} EUR Gutschein</strong>.
           </p>
           <table width="100%" cellpadding="0" cellspacing="0" style="background:#f0f9ff;border:2px solid #bae6fd;border-radius:10px;margin-bottom:24px;">
@@ -1252,14 +1266,14 @@ export async function sendExtensionConfirmation(data: ExtensionEmailData) {
         </td></tr>
         <tr><td style="background:#ffffff;padding:32px;">
           <p style="margin:0 0 20px;font-size:15px;color:#374151;">
-            Hallo ${data.customerName},<br><br>
+            Hallo ${h(data.customerName)},<br><br>
             deine Buchung wurde erfolgreich verlängert. Hier die Details:
           </p>
           <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:24px;">
             <tr><td style="padding:20px 24px;">
               <table width="100%" cellpadding="0" cellspacing="0">
-                <tr><td style="padding:6px 0;font-size:14px;color:#6b7280;">Buchungs-Nr.</td><td style="padding:6px 0;font-size:14px;color:#0a0a0a;font-weight:600;text-align:right;">${data.bookingId}</td></tr>
-                <tr><td style="padding:6px 0;font-size:14px;color:#6b7280;">Kamera</td><td style="padding:6px 0;font-size:14px;color:#0a0a0a;font-weight:600;text-align:right;">${data.productName}</td></tr>
+                <tr><td style="padding:6px 0;font-size:14px;color:#6b7280;">Buchungs-Nr.</td><td style="padding:6px 0;font-size:14px;color:#0a0a0a;font-weight:600;text-align:right;">${h(data.bookingId)}</td></tr>
+                <tr><td style="padding:6px 0;font-size:14px;color:#6b7280;">Kamera</td><td style="padding:6px 0;font-size:14px;color:#0a0a0a;font-weight:600;text-align:right;">${h(data.productName)}</td></tr>
                 <tr><td style="padding:6px 0;font-size:14px;color:#6b7280;">Neues Rückgabedatum</td><td style="padding:6px 0;font-size:14px;color:#15803d;font-weight:600;text-align:right;">${fmtDate(data.newRentalTo)}</td></tr>
                 <tr><td style="padding:6px 0;font-size:14px;color:#6b7280;">Zusätzliche Tage</td><td style="padding:6px 0;font-size:14px;color:#0a0a0a;font-weight:600;text-align:right;">+${data.additionalDays} Tag${data.additionalDays !== 1 ? 'e' : ''}</td></tr>
                 <tr><td colspan="2" style="border-top:1px solid #e2e8f0;padding:8px 0 0;"></td></tr>
@@ -1293,7 +1307,7 @@ export async function sendReviewRequest(data: {
   const BASE_URL = await getSiteUrl();
   const reviewUrl = `${BASE_URL}/konto/bewertung/${data.bookingId}`;
 
-  const subject = `Wie war deine Erfahrung mit der ${data.productName}?`;
+  const subject = stripSubject(`Wie war deine Erfahrung mit der ${data.productName}?`);
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8"></head>
 <body style="margin:0;padding:0;background:#f0f0f0;font-family:Arial,Helvetica,sans-serif;">
   <table width="100%" cellpadding="0" cellspacing="0" style="padding:24px 0;">
@@ -1305,8 +1319,8 @@ export async function sendReviewRequest(data: {
         <tr><td style="padding:32px;">
           <h1 style="margin:0 0 8px;font-size:20px;font-weight:700;color:#0a0a0a;">Deine Meinung zählt!</h1>
           <p style="margin:0 0 24px;font-size:14px;color:#6b7280;line-height:1.6;">
-            Hallo ${data.customerName},<br><br>
-            du hattest kürzlich die <strong style="color:#0a0a0a;">${data.productName}</strong> bei uns gemietet.
+            Hallo ${h(data.customerName)},<br><br>
+            du hattest kürzlich die <strong style="color:#0a0a0a;">${h(data.productName)}</strong> bei uns gemietet.
             Wir würden uns riesig über dein Feedback freuen! Deine Bewertung hilft anderen Kunden bei der Entscheidung.
           </p>
           <a href="${reviewUrl}" style="display:inline-block;padding:14px 28px;background:#f59e0b;color:#ffffff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">
@@ -1343,7 +1357,7 @@ export async function sendAbandonedCartReminder(data: {
 
   const itemRows = data.items.map((item) =>
     `<tr>
-      <td style="padding:8px 0;font-size:14px;color:#0a0a0a;font-weight:500;">${item.productName}</td>
+      <td style="padding:8px 0;font-size:14px;color:#0a0a0a;font-weight:500;">${h(item.productName)}</td>
       <td style="padding:8px 0;font-size:14px;color:#6b7280;text-align:center;">${item.days} Tag${item.days !== 1 ? 'e' : ''}</td>
       <td style="padding:8px 0;font-size:14px;color:#0a0a0a;font-weight:600;text-align:right;">${fmtEuro(item.subtotal)}</td>
     </tr>`
@@ -1369,7 +1383,7 @@ export async function sendAbandonedCartReminder(data: {
         <tr><td style="padding:32px;">
           <h1 style="margin:0 0 8px;font-size:20px;font-weight:700;color:#0a0a0a;">Dein Warenkorb wartet!</h1>
           <p style="margin:0 0 24px;font-size:14px;color:#6b7280;line-height:1.6;">
-            Hallo ${data.customerName},<br><br>
+            Hallo ${h(data.customerName)},<br><br>
             du hast noch Artikel in deinem Warenkorb. Schließe deine Buchung ab, bevor die Kameras vergriffen sind!
           </p>
           <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px;">
@@ -1415,7 +1429,7 @@ export async function sendVerificationRejected(data: {
 
   const reasonBlock = data.reason
     ? `<p style="margin:0 0 16px;padding:12px 16px;background:#fef2f2;border-left:3px solid #ef4444;border-radius:4px;font-size:13px;color:#991b1b;line-height:1.6;">
-        <strong>Hinweis vom cam2rent-Team:</strong><br>${data.reason.replace(/\n/g, '<br>')}
+        <strong>Hinweis vom cam2rent-Team:</strong><br>${h(data.reason).replace(/\n/g, '<br>')}
       </p>`
     : '';
 
@@ -1430,7 +1444,7 @@ export async function sendVerificationRejected(data: {
         <tr><td style="padding:32px;">
           <h1 style="margin:0 0 8px;font-size:20px;font-weight:700;color:#0a0a0a;">Ausweis-Upload erneut nötig</h1>
           <p style="margin:0 0 16px;font-size:14px;color:#6b7280;line-height:1.6;">
-            Hallo ${data.customerName},<br><br>
+            Hallo ${h(data.customerName)},<br><br>
             wir konnten deinen hochgeladenen Ausweis leider nicht verifizieren. Damit deine Buchungen reibungslos versendet werden können, brauchen wir dich kurz nochmal:
           </p>
           ${reasonBlock}

@@ -157,3 +157,53 @@ export function isAllowedVideo(
   const detected = detectVideoType(buffer);
   return detected !== null && allowed.includes(detected);
 }
+
+export type DetectedAudioType = 'mp3' | 'wav' | 'ogg' | 'flac' | 'm4a' | null;
+
+/**
+ * Audio-Magic-Byte-Erkennung. Reichlich tolerant fuer MP3 (Frame-Sync FF E0..FF FF
+ * im ersten Block) + ID3v2-Tag-Header. Auch WAV, OGG, FLAC und M4A werden erkannt.
+ */
+export function detectAudioType(buffer: Buffer | Uint8Array): DetectedAudioType {
+  if (buffer.length < 12) return null;
+
+  // ID3v2 ("ID3"): MP3 mit Tags
+  if (buffer[0] === 0x49 && buffer[1] === 0x44 && buffer[2] === 0x33) return 'mp3';
+
+  // MP3 Frame-Sync: FF Ex / Fx (11 Bits = 1)
+  if (buffer[0] === 0xff && (buffer[1] & 0xe0) === 0xe0) {
+    // Layer-Bits != 00, Version-Bits != 01 (reserviert) — grobes Sanity-Check
+    const layer = (buffer[1] >> 1) & 0x03;
+    const version = (buffer[1] >> 3) & 0x03;
+    if (layer !== 0 && version !== 1) return 'mp3';
+  }
+
+  // RIFF + WAVE
+  if (
+    buffer[0] === 0x52 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x46 &&
+    buffer[8] === 0x57 && buffer[9] === 0x41 && buffer[10] === 0x56 && buffer[11] === 0x45
+  ) return 'wav';
+
+  // OggS
+  if (buffer[0] === 0x4f && buffer[1] === 0x67 && buffer[2] === 0x67 && buffer[3] === 0x53) return 'ogg';
+
+  // fLaC
+  if (buffer[0] === 0x66 && buffer[1] === 0x4c && buffer[2] === 0x61 && buffer[3] === 0x43) return 'flac';
+
+  // M4A: ftyp + Brand 'M4A '
+  if (
+    buffer[4] === 0x66 && buffer[5] === 0x74 && buffer[6] === 0x79 && buffer[7] === 0x70 &&
+    buffer[8] === 0x4d && buffer[9] === 0x34 && buffer[10] === 0x41 && buffer[11] === 0x20
+  ) return 'm4a';
+
+  return null;
+}
+
+/** Prueft, ob der Buffer ein echtes Audio (einer der erlaubten Typen) ist. */
+export function isAllowedAudio(
+  buffer: Buffer | Uint8Array,
+  allowed: DetectedAudioType[] = ['mp3', 'wav', 'ogg', 'flac', 'm4a'],
+): boolean {
+  const detected = detectAudioType(buffer);
+  return detected !== null && allowed.includes(detected);
+}

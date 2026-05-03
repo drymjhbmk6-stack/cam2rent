@@ -126,11 +126,20 @@ export async function POST(req: NextRequest) {
   // User anlegen. email_confirm: true heisst, dass kein Bestaetigungsklick noetig ist,
   // bevor der User sich einloggen kann. Damit kann der Kunde direkt im Checkout weiter.
   // Trotzdem wird ueber sendWelcomeEmail (asynchron) eine Willkommens-Mail geschickt.
+  //
+  // Sweep 7 Vuln 23 — Display-Name NICHT in user_metadata speichern:
+  // Da die E-Mail-Adresse bei email_confirm:true noch nicht verifiziert ist,
+  // koennte ein Angreifer ein Konto auf eine fremde E-Mail mit einem
+  // beleidigenden/diskreditierenden Namen anlegen. Spaetere Buchungen unter
+  // der E-Mail wuerden den Angreifer-Namen auf Rechnung/Vertrag/Versand-Label
+  // tragen. Der echte Eigentuemer der Adresse muesste manuell korrigieren.
+  // Loesung: full_name erst beim ersten echten Login (oder Buchung) setzen,
+  // wenn der Kunde das Profil selbst ausfuellt.
   const createResult = await supabase.auth.admin.createUser({
     email,
     password,
     email_confirm: true,
-    user_metadata: fullName ? { full_name: fullName } : {},
+    user_metadata: {},
   });
 
   if (createResult.error) {
@@ -149,16 +158,19 @@ export async function POST(req: NextRequest) {
 
   // Profil-Zeile anlegen wenn der handle_new_user-Trigger nicht greift.
   // Idempotent durch UPSERT auf id.
+  // Sweep 7 Vuln 23: full_name + Adresse werden NICHT im Profil persistiert,
+  // bis die E-Mail durch einen echten Login bestaetigt ist. Phone bleibt drin,
+  // weil der Kunde sie aktiv eingegeben hat und sie kein Display-Name ist.
   if (userId) {
     try {
       await supabase.from('profiles').upsert(
         {
           id: userId,
-          full_name: fullName || null,
+          full_name: null,
           phone: phone,
-          address_street: street || null,
-          address_zip: zip || null,
-          address_city: city || null,
+          address_street: null,
+          address_zip: null,
+          address_city: null,
           verification_status: 'unverified',
         },
         { onConflict: 'id', ignoreDuplicates: false },

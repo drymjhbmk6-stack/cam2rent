@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
-import { sendAndLog } from '@/lib/email';
+import { sendAndLog, escapeHtml as h } from '@/lib/email';
 import { BUSINESS } from '@/lib/business-config';
 import { getSiteUrl } from '@/lib/env-mode';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
+import { verifySurveyToken } from '@/lib/survey-token';
 
 const surveyLimiter = rateLimit({ maxAttempts: 20, windowMs: 60 * 60 * 1000 }); // 20/h
 
@@ -36,15 +37,28 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { bookingId, rating, feedback, email } = await req.json() as {
+    const { bookingId, rating, feedback, email, token } = await req.json() as {
       bookingId: string;
       rating: number;
       feedback?: string;
       email?: string;
+      token?: string;
     };
 
     if (!bookingId || !rating || rating < 1 || rating > 5) {
       return NextResponse.json({ error: 'Ungültige Daten.' }, { status: 400 });
+    }
+
+    // Sweep 7 Vuln 25 — HMAC-Token-Pflicht:
+    // Vorher konnte jeder anonyme User mit erratener Booking-ID Spam-Reviews
+    // unter dem Namen echter Kunden einreichen + DANKE-Coupon-Mails an die
+    // echten Kunden ausloesen. Der Token wird beim Versand der
+    // Bewertungs-Aufforderung in den Link eingebaut.
+    if (!token || !verifySurveyToken(bookingId, token)) {
+      return NextResponse.json(
+        { error: 'Ungueltiger oder fehlender Token. Bitte den Link aus der E-Mail verwenden.' },
+        { status: 403 },
+      );
     }
 
     const supabase = createServiceClient();

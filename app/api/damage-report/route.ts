@@ -90,9 +90,13 @@ export async function POST(req: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: 'Bitte melde dich an.' }, { status: 401 });
     }
-    const matchesUser = booking.user_id === user.id;
-    const matchesEmail = !booking.user_id && booking.customer_email === user.email;
-    if (!matchesUser && !matchesEmail) {
+    // Sweep 7 Vuln 14 — E-Mail-Fallback entfernt:
+    // Vorher konnte ein Angreifer per Express-Signup ein Konto auf die E-Mail
+    // einer Gastbuchung anlegen und dann fuer diese Buchung eine erfundene
+    // Schadensmeldung mit gefaelschten Fotos einreichen. Sweep 6 hat den
+    // gleichen Fallback in /api/meine-buchungen entfernt — hier wurde er
+    // uebersehen.
+    if (booking.user_id !== user.id) {
       return NextResponse.json({ error: 'Nicht autorisiert.' }, { status: 403 });
     }
 

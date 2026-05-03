@@ -54,11 +54,13 @@ export async function GET(
     return NextResponse.json({ error: 'Buchung nicht gefunden.' }, { status: 404 });
   }
 
-  // Owner-Check: Buchung muss zum eingeloggten Kunden gehoeren
-  const isOwner =
-    booking.user_id === user.id ||
-    (!booking.user_id && booking.customer_email === user.email);
-  if (!isOwner) {
+  // Sweep 7 Vuln 15 — E-Mail-Fallback entfernt:
+  // Vorher konnte ein Angreifer per Express-Signup ein Konto auf die E-Mail
+  // einer Gastbuchung anlegen und dann den Stripe-Payment-Link einer fremden
+  // Gastbuchung anfordern (Geldwaesche-Vehikel: gestohlene Karte → Zahlung →
+  // Ware geht an die echte Lieferadresse des Opfers). Sweep 6 hat den gleichen
+  // Fallback in /api/meine-buchungen entfernt — hier wurde er uebersehen.
+  if (booking.user_id !== user.id) {
     return NextResponse.json({ error: 'Nicht autorisiert.' }, { status: 403 });
   }
 

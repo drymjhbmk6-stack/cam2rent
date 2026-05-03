@@ -90,23 +90,42 @@ export async function POST(
     }
   }
 
-  // Refund-Status aktualisieren
+  // Sweep 7 Vuln 18 — bei Stripe-Refund-Fehler NICHT auf 'sent' flippen
+  // und auch die Originalrechnung NICHT auf 'cancelled' setzen. Vorher: bei
+  // Refund-Fail wurde der CN trotzdem sent + Invoice cancelled → USt-Voran-
+  // meldung enthielt eine Gutschrift, ohne dass je Geld zurueckgegangen waere.
+  const refundFailed = refundStatus === 'failed';
   await supabase
     .from('credit_notes')
     .update({
       stripe_refund_id: stripeRefundId,
       refund_status: refundStatus,
-      status: 'sent',
-      sent_at: new Date().toISOString(),
+      status: refundFailed ? 'approved' : 'sent',
+      sent_at: refundFailed ? null : new Date().toISOString(),
     })
     .eq('id', id);
 
-  // Originalrechnung als storniert markieren
-  if (creditNote.invoice_id) {
+  // Originalrechnung nur bei erfolgreichem Refund stornieren
+  if (creditNote.invoice_id && !refundFailed) {
     await supabase
       .from('invoices')
       .update({ status: 'cancelled' })
       .eq('id', creditNote.invoice_id);
+  }
+
+  // Bei Refund-Fehler Admin-Notification fuer Manual-Refund-Workflow
+  if (refundFailed) {
+    try {
+      const { createAdminNotification } = await import('@/lib/admin-notifications');
+      await createAdminNotification(supabase, {
+        type: 'payment_failed',
+        title: `Gutschrift ${id}: Stripe-Refund fehlgeschlagen`,
+        message: `Manueller Refund noetig. Originalrechnung NICHT storniert, bis Refund erfolgt.`,
+        link: `/admin/buchhaltung?tab=einnahmen&sub=gutschriften`,
+      });
+    } catch (notifErr) {
+      console.error('CN-Refund-Fail Notification:', notifErr);
+    }
   }
 
   await logAudit({

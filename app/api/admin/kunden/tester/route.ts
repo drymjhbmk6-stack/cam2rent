@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { logAudit } from '@/lib/audit';
 import { invalidateTesterCache } from '@/lib/tester-mode';
+import { getCurrentAdminUser } from '@/lib/admin-auth';
 
 /**
  * POST /api/admin/kunden/tester
@@ -13,12 +14,23 @@ import { invalidateTesterCache } from '@/lib/tester-mode';
  *    belastet — nur Test-Karten 4242... funktionieren)
  *  - Verifizierungs-Pflicht uebersprungen
  *
- * Permission: 'kunden' (siehe middleware.ts API_PATH_PERMISSIONS).
+ * Owner-only (Sweep 7 Vuln 4): Das Tester-Flag schaltet Stripe auf Test-Keys
+ * — ein Mitarbeiter mit kunden-Permission koennte sich oder Komplizen auf
+ * Tester setzen und damit gratis Equipment buchen (echte Karte wird nicht
+ * belastet, Kamera wird trotzdem versendet).
  *
  * Body: { userId: string, isTester: boolean }
  */
 export async function POST(req: NextRequest) {
   try {
+    const me = await getCurrentAdminUser();
+    if (!me || me.role !== 'owner') {
+      return NextResponse.json(
+        { error: 'Nur Owner dürfen das Tester-Flag setzen.' },
+        { status: 403 },
+      );
+    }
+
     const { userId, isTester } = (await req.json()) as {
       userId: string;
       isTester: boolean;

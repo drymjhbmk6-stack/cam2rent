@@ -32,6 +32,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Sweep 7 Vuln 20 — Path-Traversal-Schutz:
+    // accessoryId wird in den Storage-Pfad interpoliert. Whitelist-Regex
+    // verhindert "../products/..."-Angriffe, mit denen ein Mitarbeiter mit
+    // katalog-Permission fremde Produktbilder ueberschreiben koennte.
+    if (!/^[a-z0-9_-]{1,64}$/i.test(accessoryId)) {
+      return NextResponse.json({ error: 'Ungueltige accessoryId.' }, { status: 400 });
+    }
+
     if (!ALLOWED_TYPES.includes(file.type)) {
       return NextResponse.json({ error: 'Nur JPG, PNG und WebP erlaubt.' }, { status: 400 });
     }
@@ -103,6 +111,21 @@ export async function DELETE(req: NextRequest) {
     const { path, accessoryId } = (await req.json()) as { path: string; accessoryId: string };
     if (!path || !accessoryId) {
       return NextResponse.json({ error: 'path und accessoryId erforderlich.' }, { status: 400 });
+    }
+
+    // Sweep 7 Vuln 20 — Path-Traversal-Schutz:
+    // Vorher konnte ein Mitarbeiter mit katalog-Permission jedes Bild im
+    // product-images-Bucket loeschen, indem er einen beliebigen `path`
+    // mitschickte (z.B. "products/gopro-hero-12-1234.jpg").
+    if (!/^[a-z0-9_-]{1,64}$/i.test(accessoryId)) {
+      return NextResponse.json({ error: 'Ungueltige accessoryId.' }, { status: 400 });
+    }
+    const expectedPrefix = `accessories/${accessoryId}/`;
+    if (!path.startsWith(expectedPrefix) || path.includes('..')) {
+      return NextResponse.json(
+        { error: 'Pfad gehoert nicht zu diesem Zubehoer.' },
+        { status: 400 },
+      );
     }
 
     const supabase = createServiceClient();

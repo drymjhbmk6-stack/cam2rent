@@ -83,6 +83,42 @@ export async function POST(req: NextRequest) {
 
   const supabase = createServiceClient();
 
+  // Sweep 7 Vuln 18 — Cap gegen Originalrechnung.
+  // Vorher konnte ein Mitarbeiter mit finanzen-Berechtigung (oder Tippfehler)
+  // eine 5000-EUR-Gutschrift auf eine 100-EUR-Rechnung anlegen. Stripe lehnt
+  // den Refund zwar ab, aber die Originalrechnung wird trotzdem auf 'cancelled'
+  // gesetzt → die 5000 EUR landen in der USt-Voranmeldung als Vorsteuerkuerzung.
+  const requestedGross = Number(gross_amount) || 0;
+  if (requestedGross > 0) {
+    const { data: invoiceRow } = await supabase
+      .from('invoices')
+      .select('gross_amount')
+      .eq('id', invoice_id)
+      .maybeSingle();
+    if (!invoiceRow) {
+      return NextResponse.json({ error: 'Rechnung nicht gefunden.' }, { status: 404 });
+    }
+    const invoiceGross = Number(invoiceRow.gross_amount) || 0;
+    // Bereits aktive/gesendete Gutschriften aufaddieren — eine Rechnung darf
+    // nicht durch mehrere CNs gemeinsam ueber den Originalbetrag rutschen.
+    const { data: existingCns } = await supabase
+      .from('credit_notes')
+      .select('gross_amount, status')
+      .eq('invoice_id', invoice_id)
+      .in('status', ['pending_review', 'approved', 'sent']);
+    const existingSum = (existingCns ?? [])
+      .reduce((sum, cn) => sum + (Number(cn.gross_amount) || 0), 0);
+    const remaining = Math.max(0, invoiceGross - existingSum);
+    if (requestedGross > remaining + 0.01) {
+      return NextResponse.json(
+        {
+          error: `Gutschriftbetrag uebersteigt verbleibenden Rechnungsbetrag (${remaining.toFixed(2)} EUR).`,
+        },
+        { status: 400 }
+      );
+    }
+  }
+
   // Steuermodus laden
   const { data: taxRow } = await supabase
     .from('admin_settings')

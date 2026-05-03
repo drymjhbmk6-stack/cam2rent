@@ -2,6 +2,7 @@ import { Resend } from 'resend';
 import { BUSINESS } from '@/lib/business-config';
 import { escapeHtml as h } from '@/lib/email';
 import { getResendFromEmail, getSiteUrl } from '@/lib/env-mode';
+import { generateSurveyToken } from '@/lib/survey-token';
 
 // Platzhalter-Key, damit Modul-Import beim Build ohne RESEND_API_KEY nicht kippt.
 const resend = new Resend(process.env.RESEND_API_KEY || 're_build_placeholder');
@@ -248,7 +249,10 @@ export async function sendSecondOverdueNotice(data: ReminderEmailData): Promise<
 export async function sendReviewRequest(data: ReminderEmailData): Promise<string | null> {
   const baseUrl = await getSiteUrl();
   const fromEmail = await getResendFromEmail();
-  const reviewUrl = `${baseUrl}/umfrage/${h(data.bookingId)}`;
+  // Sweep 7 Vuln 25 — HMAC-Token im Link, damit der Survey-Endpoint
+  // nicht durch erratene Booking-IDs ueber Spam-Reviews missbraucht wird.
+  const surveyToken = generateSurveyToken(data.bookingId);
+  const reviewUrl = `${baseUrl}/umfrage/${h(data.bookingId)}?t=${h(surveyToken)}`;
   const subject = `Wie war dein Erlebnis mit ${h(data.productName)}?`;
 
   const html = wrapLayout(`

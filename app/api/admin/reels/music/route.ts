@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
 import { logAudit } from '@/lib/audit';
+import { isAllowedStockUrl } from '@/lib/url-allowlist';
+import { isAllowedAudio } from '@/lib/file-type-check';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -53,12 +55,20 @@ export async function POST(req: NextRequest) {
     if (file.size > 25 * 1024 * 1024) {
       return NextResponse.json({ error: 'Datei ueber 25 MB — bitte kleinere MP3 verwenden' }, { status: 400 });
     }
-    const contentMime = file.type || 'audio/mpeg';
-    if (!contentMime.startsWith('audio/') && !contentMime.includes('mp3') && !contentMime.includes('mpeg')) {
-      return NextResponse.json({ error: `Ungueltiger MIME-Typ: ${contentMime}` }, { status: 400 });
-    }
 
     const buffer = Buffer.from(await file.arrayBuffer());
+
+    // Sweep 7 Vuln 19 — Magic-Byte-Check:
+    // Vorher reichte file.type (Client-MIME). Damit konnte ein content-Mitarbeiter
+    // beliebige Inhalte (HTML, JS, SVG) als "audio/mpeg" in den oeffentlichen
+    // social-reels-Bucket legen → Phishing-Hosting unter cam2rent-Storage-URL.
+    if (!isAllowedAudio(buffer)) {
+      return NextResponse.json(
+        { error: 'Datei ist keine gueltige Audio-Datei (MP3, WAV, OGG, FLAC, M4A).' },
+        { status: 400 },
+      );
+    }
+
     const safeName = name.replace(/[^a-z0-9-_]+/gi, '-').toLowerCase();
     const storagePath = `music/${Date.now()}-${safeName}.mp3`;
 
@@ -110,10 +120,20 @@ export async function POST(req: NextRequest) {
   if (!name || !url) {
     return NextResponse.json({ error: 'name + url sind Pflicht' }, { status: 400 });
   }
-  try {
-    new URL(url);
-  } catch {
-    return NextResponse.json({ error: 'url ist keine gueltige URL' }, { status: 400 });
+
+  // Sweep 7 Vuln 7 — SSRF-Schutz:
+  // Die URL wird beim Reel-Render server-seitig per fetch() geladen. Ohne
+  // Host-Allowlist konnte ein content-Mitarbeiter z.B. http://169.254.169.254/...
+  // (AWS-Cloud-Metadata) als Musik-URL eintragen — beim naechsten Render
+  // wird die interne Antwort heruntergeladen und steht im render_log.
+  if (!isAllowedStockUrl(url)) {
+    return NextResponse.json(
+      {
+        error:
+          'URL nicht erlaubt. Nur https-URLs auf Pexels, Pixabay, Supabase-Storage oder cam2rent.de.',
+      },
+      { status: 400 },
+    );
   }
 
   const { data, error } = await supabase

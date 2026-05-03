@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
 import { logAudit } from '@/lib/audit';
 import { getResendFromEmail } from '@/lib/env-mode';
+import { escapeHtml as h, stripSubject } from '@/lib/email';
 
 export async function POST(req: NextRequest) {
   if (!(await checkAdminAuth())) {
@@ -90,15 +91,19 @@ export async function POST(req: NextRequest) {
       const { Resend } = await import('resend');
       const resend = new Resend(process.env.RESEND_API_KEY);
       const fromEmail = await getResendFromEmail();
+      // Sweep 7 Vuln 27 — vollstaendiges escapeHtml + Subject-Stripping.
+      // Vorher: nur < und > escaped, kein & / " / ' → Entity-Injection moeglich.
+      // custom_text ist admin-controlled (finanzen-Permission), aber inkonsistent
+      // zur restlichen Mail-Surface — wir nutzen den zentralen Helper.
       await resend.emails.send({
         from: fromEmail,
         to: invoice.sent_to_email,
-        subject: `Mahnung Stufe ${level} — Rechnung ${invoice.invoice_number}`,
+        subject: stripSubject(`Mahnung Stufe ${level} — Rechnung ${invoice.invoice_number}`),
         html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;">
           <h2 style="color:#0f172a;">Mahnung — Stufe ${level}</h2>
-          <p style="white-space:pre-wrap;">${(custom_text || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>
+          <p style="white-space:pre-wrap;">${h(custom_text || '')}</p>
           <hr style="border:1px solid #e2e8f0;"/>
-          <p style="color:#64748b;font-size:13px;">Rechnung: ${invoice.invoice_number}<br/>
+          <p style="color:#64748b;font-size:13px;">Rechnung: ${h(invoice.invoice_number)}<br/>
           Betrag: ${(invoice.gross_amount || 0).toFixed(2).replace('.', ',')} €${feeAmount > 0 ? `<br/>Mahngebühr: ${feeAmount.toFixed(2).replace('.', ',')} €` : ''}</p>
         </div>`,
       });

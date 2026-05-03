@@ -242,23 +242,42 @@ export async function POST(req: NextRequest) {
   }
 
   // Schritt 2: Stripe-Capture (1× mit Summe)
+  // Sweep 7 Vuln 17 — atomarer Status-Flip + idempotencyKey vor dem Capture.
   let stripeCaptured = false;
   let stripeError: string | null = null;
 
   if (booking.deposit_intent_id && booking.deposit_status === 'held' && totalRetained > 0) {
-    try {
-      const stripe = await getStripe();
-      await stripe.paymentIntents.capture(booking.deposit_intent_id, {
-        amount_to_capture: Math.round(totalRetained * 100),
-      });
-      stripeCaptured = true;
-      await supabase
-        .from('bookings')
-        .update({ deposit_status: 'captured' })
-        .eq('id', bookingId);
-    } catch (err) {
-      stripeError = err instanceof Error ? err.message : 'Stripe-Capture fehlgeschlagen';
-      console.error('[accessory-damage] Stripe capture failed:', err);
+    const captureCents = Math.round(totalRetained * 100);
+    // Atomarer Flip: 'held' -> 'captured' nur wenn noch 'held'.
+    const flip = await supabase
+      .from('bookings')
+      .update({ deposit_status: 'captured' })
+      .eq('id', bookingId)
+      .eq('deposit_status', 'held')
+      .select('id')
+      .maybeSingle();
+    if (flip.data) {
+      try {
+        const stripe = await getStripe();
+        await stripe.paymentIntents.capture(
+          booking.deposit_intent_id,
+          { amount_to_capture: captureCents },
+          { idempotencyKey: `acc-deposit-capture:${booking.deposit_intent_id}:${captureCents}` },
+        );
+        stripeCaptured = true;
+      } catch (err) {
+        stripeError = err instanceof Error ? err.message : 'Stripe-Capture fehlgeschlagen';
+        console.error('[accessory-damage] Stripe capture failed:', err);
+        // Flip rueckgaengig — Admin kann ueber /admin/schaeden manuell capturen
+        await supabase
+          .from('bookings')
+          .update({ deposit_status: 'held' })
+          .eq('id', bookingId)
+          .eq('deposit_status', 'captured');
+      }
+    } else {
+      // Race: bereits captured (z.B. anderer Modal-Submit zur selben Zeit)
+      stripeError = 'Kaution wurde gerade bereits einbehalten — bitte Stripe-Dashboard pruefen.';
     }
   }
 

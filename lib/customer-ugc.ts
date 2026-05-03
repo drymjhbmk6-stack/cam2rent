@@ -1,5 +1,5 @@
 import { SupabaseClient } from '@supabase/supabase-js';
-import { sendAndLog } from '@/lib/email';
+import { sendAndLog, escapeHtml as h } from '@/lib/email';
 import { BUSINESS } from '@/lib/business-config';
 import { getSiteUrl } from '@/lib/env-mode';
 
@@ -100,6 +100,10 @@ export async function createUgcCoupon(
 }
 
 function emailShell(bodyHtml: string, baseUrl: string): string {
+  // Sweep 7 Vuln 28 — BUSINESS-Felder escapen.
+  // Werte stammen aus admin_settings.business_config (system-Permission). Wenn
+  // jemand mit System-Permission versehentlich oder boeswillig Phishing-Links
+  // einbaut, landen die sonst in jeder UGC- und Newsletter-Mail.
   return `<!DOCTYPE html><html><head><meta charset="utf-8"></head>
 <body style="margin:0;padding:0;background:#f0f0f0;font-family:Arial,Helvetica,sans-serif;">
   <table width="100%" cellpadding="0" cellspacing="0" style="padding:24px 0;">
@@ -111,8 +115,8 @@ function emailShell(bodyHtml: string, baseUrl: string): string {
         <tr><td style="padding:32px;">${bodyHtml}</td></tr>
         <tr><td style="background:#f9fafb;padding:20px 32px;border-top:1px solid #e5e7eb;">
           <p style="margin:0;font-size:11px;color:#9ca3af;text-align:center;">
-            ${BUSINESS.name} · ${BUSINESS.addressLine}<br>
-            <a href="${baseUrl}" style="color:#9ca3af;">${BUSINESS.domain}</a>
+            ${h(BUSINESS.name)} · ${h(BUSINESS.addressLine)}<br>
+            <a href="${h(baseUrl)}" style="color:#9ca3af;">${h(BUSINESS.domain)}</a>
           </p>
         </td></tr>
       </table>
@@ -133,14 +137,14 @@ export async function sendUgcApprovedEmail(params: {
   const body = `
     <h1 style="margin:0 0 12px;font-size:22px;font-weight:700;color:#0a0a0a;">Danke für dein Material!</h1>
     <p style="margin:0 0 24px;font-size:15px;color:#6b7280;line-height:1.6;">
-      Hallo ${params.name},<br><br>
+      Hallo ${h(params.name)},<br><br>
       wir haben deine Fotos/Videos erhalten und freigegeben — vielen Dank! Als Dankeschön bekommst du einen
       <strong>${params.discountPercent}% Gutschein</strong> für deine nächste Miete.
     </p>
     <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;background:#fef3c7;border:2px dashed #f59e0b;border-radius:10px;">
       <tr><td style="padding:24px;text-align:center;">
         <p style="margin:0 0 6px;font-size:13px;font-weight:600;color:#92400e;text-transform:uppercase;letter-spacing:0.8px;">Dein Gutschein-Code</p>
-        <p style="margin:0 0 8px;font-family:monospace;font-size:24px;font-weight:700;color:#78350f;letter-spacing:1px;">${params.code}</p>
+        <p style="margin:0 0 8px;font-family:monospace;font-size:24px;font-weight:700;color:#78350f;letter-spacing:1px;">${h(params.code)}</p>
         <p style="margin:0;font-size:12px;color:#a16207;">${params.discountPercent}% Rabatt · gültig ${params.validityDays} Tage · ab ${params.minOrderValue} €</p>
       </td></tr>
     </table>
@@ -183,14 +187,14 @@ export async function sendUgcFeaturedEmail(params: {
   const body = `
     <h1 style="margin:0 0 12px;font-size:22px;font-weight:700;color:#0a0a0a;">Dein Material ist live!</h1>
     <p style="margin:0 0 24px;font-size:15px;color:#6b7280;line-height:1.6;">
-      Hallo ${params.name},<br><br>
+      Hallo ${h(params.name)},<br><br>
       wir haben dein Foto/Video gerade auf ${channelLabel} geteilt. Tausend Dank — richtig starker Content!
       Als kleines Extra gibt es einen weiteren <strong>${params.discountPercent}% Gutschein</strong>.
     </p>
     <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;background:#f3e8ff;border:2px dashed #9333ea;border-radius:10px;">
       <tr><td style="padding:24px;text-align:center;">
         <p style="margin:0 0 6px;font-size:13px;font-weight:600;color:#6b21a8;text-transform:uppercase;letter-spacing:0.8px;">Dein Feature-Bonus</p>
-        <p style="margin:0 0 8px;font-family:monospace;font-size:24px;font-weight:700;color:#581c87;letter-spacing:1px;">${params.code}</p>
+        <p style="margin:0 0 8px;font-family:monospace;font-size:24px;font-weight:700;color:#581c87;letter-spacing:1px;">${h(params.code)}</p>
         <p style="margin:0;font-size:12px;color:#7c3aed;">${params.discountPercent}% Rabatt · gültig ${params.validityDays} Tage · ab ${params.minOrderValue} €</p>
       </td></tr>
     </table>
@@ -218,12 +222,12 @@ export async function sendUgcRejectedEmail(params: {
   const body = `
     <h1 style="margin:0 0 12px;font-size:22px;font-weight:700;color:#0a0a0a;">Zu deinem Material-Upload</h1>
     <p style="margin:0 0 16px;font-size:15px;color:#6b7280;line-height:1.6;">
-      Hallo ${params.name},<br><br>
+      Hallo ${h(params.name)},<br><br>
       vielen Dank für deine Einreichung. Leider können wir dein Material in dieser Form nicht verwenden.
     </p>
     <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;">
       <tr><td style="padding:16px;">
-        <p style="margin:0;font-size:14px;color:#991b1b;line-height:1.5;"><strong>Begründung:</strong><br>${params.reason}</p>
+        <p style="margin:0;font-size:14px;color:#991b1b;line-height:1.5;"><strong>Begründung:</strong><br>${h(params.reason).replace(/\n/g, '<br>')}</p>
       </td></tr>
     </table>
     <p style="margin:0 0 16px;font-size:14px;color:#6b7280;line-height:1.5;">

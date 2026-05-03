@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sendNewsletterToAllConfirmed, sendNewsletterTest } from '@/lib/newsletter';
 import { logAudit } from '@/lib/audit';
+import { getCurrentAdminUser } from '@/lib/admin-auth';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300; // bis zu 5 Min, falls viele Empfaenger
@@ -11,14 +12,29 @@ export const maxDuration = 300; // bis zu 5 Min, falls viele Empfaenger
  *   { subject, bodyHtml, mode: 'test', testEmail }  → Test an einzelne Adresse
  *   { subject, bodyHtml, mode: 'live' }             → Live an alle bestaetigten
  *
+ * Live-Sendung Owner-only (Sweep 7 Vuln 5): Massenversand an alle bestaetigten
+ * Newsletter-Abonnenten mit cam2rent-Branding ist eine Phishing-Waffe, wenn an
+ * Mitarbeiter delegiert. Test-Versand bleibt fuer preise-Permission moeglich.
  * Live-Sendung loggt eine Audit-Zeile pro Run.
  */
 export async function POST(req: NextRequest) {
   try {
+    const me = await getCurrentAdminUser();
+    if (!me) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const body = await req.json();
     const subject = String(body?.subject ?? '').trim();
     const bodyHtml = String(body?.bodyHtml ?? '').trim();
     const mode = body?.mode === 'test' ? 'test' : 'live';
+
+    if (mode === 'live' && me.role !== 'owner') {
+      return NextResponse.json(
+        { error: 'Nur Owner dürfen den Live-Versand auslösen.' },
+        { status: 403 },
+      );
+    }
 
     if (!subject || subject.length < 3) {
       return NextResponse.json({ error: 'Betreff zu kurz.' }, { status: 400 });

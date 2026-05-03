@@ -47,6 +47,7 @@ interface SessionCacheEntry {
   isActive: boolean;
   expiresAt: number; // DB-Session-Ablauf
   cacheUntil: number;
+  userAgent: string | null;
 }
 const sessionCache = new Map<string, SessionCacheEntry>();
 // Kurzes TTL: bei Rechte-Entzug, Mitarbeiter-Deaktivierung oder Logout greift
@@ -55,10 +56,30 @@ const sessionCache = new Map<string, SessionCacheEntry>();
 // erzeugte. Trade-off: bei jeder Anfrage ein Supabase-Roundtrip (idR. <50 ms).
 const SESSION_CACHE_TTL_MS = 5 * 1000;
 
-async function lookupSession(token: string): Promise<SessionCacheEntry | null> {
+/**
+ * Sweep 7 Vuln 13 — UA-Binding auch in der Middleware:
+ * Sweep 6 Vuln 15 hat UA-Binding in `getUserBySession` (lib/admin-users.ts)
+ * eingebaut. Die Middleware nutzte aber `lookupSession` ohne UA-Vergleich,
+ * sodass ein gestohlenes Cookie auf 90 % der Admin-Routen weiter funktionierte
+ * (alle Routen, die nur durch die Middleware geschuetzt sind, nicht zusaetzlich
+ * durch checkAdminAuth).
+ *
+ * Logik:
+ *  - Beide UA-Werte (Request + DB) = vorhanden → mit Equality vergleichen.
+ *  - Mismatch → Session toeten (DB-DELETE, Cache invalidieren) + null.
+ *  - DB-UA = NULL (Legacy-Sessions vor Migration) → Skip-Check (Backward-Compat).
+ *  - Request-UA = NULL → Skip-Check (Bots, manche Curl-Aufrufe).
+ */
+async function lookupSession(token: string, currentUserAgent: string | null): Promise<SessionCacheEntry | null> {
   const now = Date.now();
   const cached = sessionCache.get(token);
   if (cached && cached.cacheUntil > now && cached.expiresAt > now && cached.isActive) {
+    if (currentUserAgent && cached.userAgent && currentUserAgent !== cached.userAgent) {
+      sessionCache.delete(token);
+      // DB-Eintrag killen — gestohlenes Cookie ist nicht mehr nutzbar
+      void killSession(token);
+      return null;
+    }
     return cached;
   }
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -68,7 +89,7 @@ async function lookupSession(token: string): Promise<SessionCacheEntry | null> {
     const sb = createClient(url, key, { auth: { persistSession: false } });
     const { data } = await sb
       .from('admin_sessions')
-      .select('expires_at, admin_users!inner(is_active, role, permissions)')
+      .select('expires_at, user_agent, admin_users!inner(is_active, role, permissions)')
       .eq('token', token)
       .maybeSingle();
     if (!data) {
@@ -82,12 +103,19 @@ async function lookupSession(token: string): Promise<SessionCacheEntry | null> {
     }
     const u = Array.isArray(data.admin_users) ? data.admin_users[0] : data.admin_users;
     if (!u || !u.is_active) return null;
+    const dbUa: string | null = data.user_agent ?? null;
+    if (currentUserAgent && dbUa && currentUserAgent !== dbUa) {
+      sessionCache.delete(token);
+      await sb.from('admin_sessions').delete().eq('token', token);
+      return null;
+    }
     const entry: SessionCacheEntry = {
       permissions: Array.isArray(u.permissions) ? (u.permissions as string[]) : [],
       role: u.role,
       isActive: u.is_active,
       expiresAt,
       cacheUntil: now + SESSION_CACHE_TTL_MS,
+      userAgent: dbUa,
     };
     sessionCache.set(token, entry);
     // LRU-Schutz: Cache nicht unbegrenzt wachsen lassen
@@ -98,6 +126,18 @@ async function lookupSession(token: string): Promise<SessionCacheEntry | null> {
     return entry;
   } catch {
     return null;
+  }
+}
+
+async function killSession(token: string): Promise<void> {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return;
+  try {
+    const sb = createClient(url, key, { auth: { persistSession: false } });
+    await sb.from('admin_sessions').delete().eq('token', token);
+  } catch {
+    // best-effort
   }
 }
 
@@ -271,7 +311,7 @@ export async function middleware(request: NextRequest) {
 
       // Session-Token (Multi-User)
       if (adminToken.startsWith('sess_')) {
-        const session = await lookupSession(adminToken);
+        const session = await lookupSession(adminToken, request.headers.get('user-agent'));
         if (!session) {
           return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
@@ -314,7 +354,7 @@ export async function middleware(request: NextRequest) {
 
     // Session-Token (Multi-User)
     if (adminToken.startsWith('sess_')) {
-      const session = await lookupSession(adminToken);
+      const session = await lookupSession(adminToken, request.headers.get('user-agent'));
       if (!session) {
         const url = request.nextUrl.clone();
         url.pathname = '/admin/login';

@@ -486,6 +486,12 @@ function ComposeTab() {
               <strong>Betreff:</strong> {subject || '—'}
             </div>
             <iframe
+              /* Sweep 7 Vuln 29 — sandbox="" verhindert, dass eingefuegte
+                 <script>-Tags im Newsletter-Body im Admin-Origin laufen
+                 koennten und z.B. document.cookie auslesen. Leere Sandbox
+                 = alle Restrictions aktiv (kein Script, kein same-origin,
+                 keine Forms, kein Top-Level-Navigation). */
+              sandbox=""
               srcDoc={`<html><head><style>body{margin:0;font-family:Arial;}</style></head><body style="padding:16px;background:#fff;color:#1a1a1a;">${bodyHtml}<hr style="margin:24px 0;border:none;border-top:1px solid #e5e7eb;"/><p style="font-size:11px;color:#9ca3af;text-align:center;">Cam2Rent · Vom Newsletter abmelden · Datenschutz</p></body></html>`}
               className="w-full h-[400px] bg-white border border-brand-border dark:border-white/10 rounded"
               title="Vorschau"

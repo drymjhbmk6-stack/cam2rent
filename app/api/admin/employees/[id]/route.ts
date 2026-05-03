@@ -31,6 +31,16 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   const target = await getAdminUserById(id);
   if (!target) return NextResponse.json({ error: 'Mitarbeiter nicht gefunden.' }, { status: 404 });
 
+  // Privesc-Schutz (Sweep 7 Vuln 1): Nicht-Owner duerfen Owner-Accounts nicht
+  // veraendern — sonst koennte ein Mitarbeiter mit `mitarbeiter_verwalten` das
+  // Owner-Passwort zuruecksetzen und sich dann selbst einloggen.
+  if (target.role === 'owner' && me?.role !== 'owner') {
+    return NextResponse.json(
+      { error: 'Nur Owner dürfen Owner-Accounts bearbeiten.' },
+      { status: 403 }
+    );
+  }
+
   const body = (await req.json().catch(() => null)) as {
     name?: string;
     email?: string;
@@ -41,6 +51,31 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     password?: string;
   } | null;
   if (!body) return NextResponse.json({ error: 'Ungültige Anfrage.' }, { status: 400 });
+
+  // Privesc-Schutz (Sweep 7 Vuln 1): Nicht-Owner duerfen sich nicht selbst die
+  // Permissions erweitern oder die Rolle aendern — sonst waere mit
+  // `mitarbeiter_verwalten` allein bereits Self-Privesc auf alle 9 Permissions
+  // moeglich (de facto Owner-Aequivalent).
+  if (me?.id === id && me?.role !== 'owner') {
+    if (body.permissions !== undefined) {
+      return NextResponse.json(
+        { error: 'Du kannst deine eigenen Berechtigungen nicht ändern.' },
+        { status: 403 }
+      );
+    }
+    if (body.role !== undefined && body.role !== me.role) {
+      return NextResponse.json(
+        { error: 'Du kannst deine eigene Rolle nicht ändern.' },
+        { status: 403 }
+      );
+    }
+    if (body.is_active === false) {
+      return NextResponse.json(
+        { error: 'Du kannst dich nicht selbst deaktivieren.' },
+        { status: 403 }
+      );
+    }
+  }
 
   const patch: {
     name?: string; email?: string; username?: string | null; role?: 'owner' | 'employee';

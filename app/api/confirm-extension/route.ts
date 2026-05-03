@@ -41,8 +41,25 @@ export async function POST(req: NextRequest) {
   // Verify PaymentIntent
   const stripe = await getStripe();
   const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
-  if (paymentIntent.status !== 'succeeded' && paymentIntent.status !== 'processing') {
-    return NextResponse.json({ error: `Zahlung nicht abgeschlossen (Status: ${paymentIntent.status}).` }, { status: 400 });
+
+  // Sweep 7 Vuln 9 — nur 'succeeded' akzeptieren:
+  // Vorher wurde 'processing' (PayPal/SEPA-pending) als gleichwertig zu
+  // 'succeeded' behandelt. Es gibt aber keinen Webhook-Handler fuer
+  // metadata.type === 'extension' — bei spaeterem Zahlungs-Fehlschlag
+  // bleibt die Verlaengerung dauerhaft eingebucht ohne Geldfluss.
+  // Karten gehen immer direkt auf 'succeeded'; PayPal/SEPA fuer
+  // Verlaengerungen sind heute nicht unterstuetzt (waere eigener Webhook-
+  // Handler-Aufwand).
+  if (paymentIntent.status !== 'succeeded') {
+    return NextResponse.json(
+      {
+        error:
+          paymentIntent.status === 'processing'
+            ? 'Zahlung noch nicht abgeschlossen. Bitte mit Karte bezahlen oder Stripe-Bestaetigung abwarten.'
+            : `Zahlung nicht abgeschlossen (Status: ${paymentIntent.status}).`,
+      },
+      { status: 400 },
+    );
   }
 
   // Sicherheit: PaymentIntent muss zur konkreten Buchung + Zieldatum passen.

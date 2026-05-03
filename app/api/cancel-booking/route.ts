@@ -123,9 +123,32 @@ export async function POST(req: NextRequest) {
       );
     } catch (stripeErr) {
       console.error('[cancel-booking] Stripe refund error:', stripeErr);
-      // Status ist bereits cancelled — Admin muss Refund manuell ausloesen.
-      // Wir loggen das Problem und antworten trotzdem 200, damit der Customer
-      // nicht denkt, die Stornierung sei fehlgeschlagen.
+      // Sweep 7 Vuln 24 — Refund-Fehler tracken + Admin-Notification.
+      // Vorher wurde der Fehler nur geloggt; Kunde sah "Storno bestaetigt",
+      // glaubt das Geld kommt zurueck, merkt aber erst beim Kontoauszug,
+      // dass nichts angekommen ist.
+      try {
+        await supabase
+          .from('bookings')
+          .update({ refund_status: 'failed_pending_admin' })
+          .eq('id', bookingId);
+      } catch (rsErr) {
+        // Spalte existiert evtl. noch nicht in alten DBs — defensive
+        console.warn('[cancel-booking] refund_status-Update fehlgeschlagen:', rsErr);
+      }
+      try {
+        const { createAdminNotification } = await import('@/lib/admin-notifications');
+        await createAdminNotification(supabase, {
+          type: 'payment_failed',
+          title: `Refund fehlgeschlagen: ${bookingId}`,
+          message: `Stornierung wurde durchgefuehrt, aber Stripe-Refund von ${(refundAmountCents / 100).toFixed(2)} EUR ist fehlgeschlagen. Bitte manuell pruefen.`,
+          link: `/admin/buchungen/${bookingId}`,
+        });
+      } catch (notifErr) {
+        console.error('[cancel-booking] Admin-Notification fehlgeschlagen:', notifErr);
+      }
+      // Status ist bereits cancelled — Customer-Response 200, aber Admin
+      // ist jetzt informiert.
     }
   }
 

@@ -2,17 +2,20 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { verifyToken } from '@/lib/totp';
 import { logAudit } from '@/lib/audit';
-import { checkAdminAuth } from '@/lib/admin-auth';
+import { getCurrentAdminUser } from '@/lib/admin-auth';
 
 /**
  * POST /api/admin/2fa/disable
  * Deaktiviert 2FA nach Code-Bestätigung.
  * Body: { token: string }
+ *
+ * Owner-only (Sweep 7 Vuln 2). Siehe setup/route.ts.
  */
 export async function POST(req: NextRequest) {
   try {
-    if (!(await checkAdminAuth())) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const me = await getCurrentAdminUser();
+    if (!me || me.role !== 'owner') {
+      return NextResponse.json({ error: 'Nur Owner dürfen 2FA verwalten.' }, { status: 403 });
     }
 
     const { token } = (await req.json()) as { token: string };

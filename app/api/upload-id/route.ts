@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
-import { isAllowedImage } from '@/lib/file-type-check';
+import { isAllowedImage, detectImageType } from '@/lib/file-type-check';
 
 const uploadLimiter = rateLimit({ maxAttempts: 5, windowMs: 60 * 60 * 1000 }); // 5 pro Stunde
 
@@ -92,9 +92,6 @@ export async function POST(req: NextRequest) {
     for (const { side, file } of uploads) {
       // Extension AUS dem MIME-Type ableiten (nicht aus file.name — sonst
       // Path-Traversal möglich, z.B. file.name = "../../etc/passwd").
-      const ext = MIME_TO_EXT[file.type] ?? 'jpg';
-      const filePath = `${userId}/${side}.${ext}`;
-
       const buffer = Buffer.from(await file.arrayBuffer());
 
       // Magic-Byte-Check: vom Client gemeldeter MIME reicht nicht.
@@ -107,10 +104,34 @@ export async function POST(req: NextRequest) {
         );
       }
 
+      // Sweep 7 Vuln 21 — Content-Type aus Magic-Byte ableiten:
+      // Vorher kam contentType aus file.type (Client-MIME). Polyglot-JPEG mit
+      // text/html-MIME wuerde beim Aufruf der Signed URL als HTML gerendert.
+      // Jetzt: detectImageType liefert das echte Format, daraus harten MIME +
+      // Extension ableiten.
+      const detected = detectImageType(buffer);
+      const detectedMime: Record<string, string> = {
+        jpeg: 'image/jpeg',
+        png: 'image/png',
+        webp: 'image/webp',
+        heic: 'image/heic',
+        heif: 'image/heif',
+      };
+      const detectedExt: Record<string, string> = {
+        jpeg: 'jpg',
+        png: 'png',
+        webp: 'webp',
+        heic: 'heic',
+        heif: 'heif',
+      };
+      const safeContentType = detected ? detectedMime[detected] : 'image/jpeg';
+      const ext = detected ? detectedExt[detected] : 'jpg';
+      const filePath = `${userId}/${side}.${ext}`;
+
       const { error: uploadErr } = await supabase.storage
         .from('id-documents')
         .upload(filePath, buffer, {
-          contentType: file.type || 'image/jpeg',
+          contentType: safeContentType,
           upsert: true, // Überschreiben bei erneutem Upload
         });
 

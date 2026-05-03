@@ -73,7 +73,19 @@ export async function POST(req: NextRequest) {
   // ── Variante A: Multi-User-Login (E-Mail/Benutzername + Passwort) ──────────
   if (loginIdentifier) {
     const user = await getAdminUserByLoginId(loginIdentifier);
+
+    // Sweep 7 Vuln 22 — Timing-Channel-Schutz:
+    // Vorher: bei nicht-existentem User wurde scrypt nicht aufgerufen → ~50–100 ms
+    // Antwortzeit-Unterschied zwischen "User existiert nicht" und "User existiert,
+    // falsches Passwort". Damit liessen sich Mitarbeiter-Konten enumerieren.
+    // Jetzt: bei nicht-existentem User wird gegen einen festen Dummy-Hash
+    // verifiziert, damit die Antwortzeit konstant bleibt.
+    const DUMMY_HASH = 'scrypt$1$00000000000000000000000000000000$' +
+      '00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000';
+
     if (!user || !user.is_active) {
+      // Trotzdem scrypt aufrufen, damit die Latenz konstant bleibt
+      await verifyPassword(password, DUMMY_HASH).catch(() => false);
       return NextResponse.json({ error: 'Falscher Login oder Passwort.' }, { status: 401 });
     }
     const ok = await verifyPassword(password, user.password_hash);
