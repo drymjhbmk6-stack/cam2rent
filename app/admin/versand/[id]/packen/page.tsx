@@ -32,6 +32,7 @@ interface BookingDetail {
   rental_from: string;
   rental_to: string;
   serial_number?: string | null;
+  unit_id?: string | null;
   resolved_items?: ResolvedItem[];
   unit_codes?: UnitCode[];
   pack_status?: string | null;
@@ -264,27 +265,35 @@ function PackStep({
   const [err, setErr] = useState('');
   const [scannerOpen, setScannerOpen] = useState(false);
   const [scanFeedback, setScanFeedback] = useState<{ type: 'ok' | 'warn' | 'err'; msg: string } | null>(null);
-  // itemKey → Substitution. Wenn der Packer ein anderes Exemplar gleicher
-  // Kategorie scannt (Akku B statt Akku A), persistieren wir den Tausch beim
-  // Pack-Submit in bookings.unit_id / accessory_unit_ids.
-  const [substitutions, setSubstitutions] = useState<Record<string, {
-    kind: 'camera' | 'accessory';
-    newUnitId: string;
-    newCode: string;
-  }>>({});
+  // Welche Unit-IDs wurden tatsaechlich gescannt — egal ob reservierter Code
+  // oder Substitut. Reihenfolge der Scans ist egal: das Backend rechnet beim
+  // Pack-Submit die finale Buchungs-Zuordnung aus, indem es ungescannte
+  // reservierte Units mit gescannten Substituten gleicher accessory_id
+  // matched.
+  const [scannedCameraUnitId, setScannedCameraUnitId] = useState<string | null>(null);
+  const [scannedAccessoryUnitIds, setScannedAccessoryUnitIds] = useState<string[]>([]);
+  // Klartext-Codes der Substitute fuer den Banner ueber der Liste.
+  const [substituteBadges, setSubstituteBadges] = useState<string[]>([]);
 
   const scanLookup = useMemo(() => buildScanLookup(booking), [booking]);
 
   async function handleScan(code: string) {
-    const result = await applyScan(code, booking.id, items, checked, scanLookup, substitutions);
+    const scannedSet = new Set([
+      ...(scannedCameraUnitId ? [scannedCameraUnitId] : []),
+      ...scannedAccessoryUnitIds,
+    ]);
+    const result = await applyScan(code, booking.id, items, checked, scanLookup, scannedSet);
     if (result.ok && result.key) {
       setChecked((p) => ({ ...p, [result.key!]: true }));
-      if (result.substitution) {
-        const sub = result.substitution;
-        setSubstitutions((p) => ({
-          ...p,
-          [sub.itemKey]: { kind: sub.kind, newUnitId: sub.newUnitId, newCode: sub.newCode },
-        }));
+      if (result.scannedUnitId) {
+        if (result.scannedKind === 'camera') {
+          setScannedCameraUnitId(result.scannedUnitId);
+        } else if (result.scannedKind === 'accessory') {
+          setScannedAccessoryUnitIds((p) => p.includes(result.scannedUnitId!) ? p : [...p, result.scannedUnitId!]);
+        }
+      }
+      if (result.isSubstitute && result.substituteCode) {
+        setSubstituteBadges((p) => p.includes(result.substituteCode!) ? p : [...p, result.substituteCode!]);
       }
       setScanFeedback({ type: 'ok', msg: result.message });
     } else if (result.alreadyChecked) {
@@ -314,11 +323,6 @@ function PackStep({
     setErr('');
     try {
       const sig = sigRef.current?.toDataURL('image/png') ?? null;
-      const subPayload = Object.entries(substitutions).map(([itemKey, s]) => ({
-        itemKey,
-        kind: s.kind,
-        newUnitId: s.newUnitId,
-      }));
       const res = await fetch(`/api/admin/versand/${booking.id}/pack`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -327,7 +331,10 @@ function PackStep({
           packedItems: items.filter((it) => checked[it.key]).map((it) => it.key),
           condition: { tested, noVisibleDamage: noVisible, note: note.trim() || undefined },
           signatureDataUrl: sig,
-          substitutions: subPayload,
+          scannedUnits: {
+            cameraUnitId: scannedCameraUnitId,
+            accessoryUnitIds: scannedAccessoryUnitIds,
+          },
         }),
       });
       if (!res.ok) {
@@ -356,11 +363,12 @@ function PackStep({
         checkedScannable={Object.keys(checked).filter((k) => checked[k] && items.find((i) => i.key === k)?.type !== 'return-label').length}
       />
 
+      <SubstituteBanner codes={substituteBadges} />
+
       <ItemList
         items={items}
         checked={checked}
         onToggle={(k) => setChecked((p) => ({ ...p, [k]: !p[k] }))}
-        substitutions={substitutions}
       />
 
       <SerialScanner
@@ -438,7 +446,7 @@ function CheckStep({
 
   async function handleScan(code: string) {
     // CheckStep: keine Substitution mehr — Codes sind durch Step 1 gesetzt.
-    const result = await applyScan(code, booking.id, items, checked, scanLookup, {}, false);
+    const result = await applyScan(code, booking.id, items, checked, scanLookup, new Set(), false);
     if (result.ok && result.key) {
       setChecked((p) => ({ ...p, [result.key!]: true }));
       setScanFeedback({ type: 'ok', msg: result.message });
@@ -722,45 +730,47 @@ function DoneStep({ booking, me, onReset }: { booking: BookingDetail; me: Curren
 // ─── Item-Liste mit Checkboxen ───────────────────────────────────────────────
 
 function ItemList({
-  items, checked, onToggle, substitutions,
+  items, checked, onToggle,
 }: {
   items: PackItem[];
   checked: Record<string, boolean>;
   onToggle: (key: string) => void;
-  substitutions?: Record<string, { newCode: string }>;
 }) {
   return (
     <div className="border border-slate-800 rounded-lg overflow-hidden divide-y divide-slate-800">
-      {items.map((it) => {
-        const sub = substitutions?.[it.key];
-        return (
-          <button
-            key={it.key}
-            type="button"
-            onClick={() => onToggle(it.key)}
-            className={`w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-slate-800/50 transition-colors ${
-              checked[it.key] ? 'bg-emerald-500/5' : ''
-            }`}
-          >
-            <div className={`mt-0.5 w-6 h-6 rounded border-2 flex items-center justify-center flex-shrink-0 ${
-              checked[it.key] ? 'border-emerald-500 bg-emerald-500 text-slate-950' : 'border-slate-600'
-            }`}>
-              {checked[it.key] && <span className="font-bold">✓</span>}
+      {items.map((it) => (
+        <button
+          key={it.key}
+          type="button"
+          onClick={() => onToggle(it.key)}
+          className={`w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-slate-800/50 transition-colors ${
+            checked[it.key] ? 'bg-emerald-500/5' : ''
+          }`}
+        >
+          <div className={`mt-0.5 w-6 h-6 rounded border-2 flex items-center justify-center flex-shrink-0 ${
+            checked[it.key] ? 'border-emerald-500 bg-emerald-500 text-slate-950' : 'border-slate-600'
+          }`}>
+            {checked[it.key] && <span className="font-bold">✓</span>}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className={`font-semibold ${checked[it.key] ? 'text-emerald-300' : 'text-slate-100'}`}>
+              {it.label}
             </div>
-            <div className="flex-1 min-w-0">
-              <div className={`font-semibold ${checked[it.key] ? 'text-emerald-300' : 'text-slate-100'}`}>
-                {it.label}
-              </div>
-              <div className="text-xs text-slate-500 mt-0.5">{it.subLabel}</div>
-              {sub && (
-                <div className="mt-1 inline-flex items-center gap-1 text-xs text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded px-2 py-0.5">
-                  ↻ Anderes Exemplar gepackt: <span className="font-mono">{sub.newCode}</span>
-                </div>
-              )}
-            </div>
-          </button>
-        );
-      })}
+            <div className="text-xs text-slate-500 mt-0.5">{it.subLabel}</div>
+          </div>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function SubstituteBanner({ codes }: { codes: string[] }) {
+  if (codes.length === 0) return null;
+  return (
+    <div className="mb-3 px-3 py-2 rounded-lg border border-amber-500/40 bg-amber-500/10 text-amber-200 text-xs">
+      <div className="font-semibold mb-1">↻ {codes.length === 1 ? '1 Substitut gepackt' : `${codes.length} Substitute gepackt`}</div>
+      <div className="font-mono text-amber-300">{codes.join(', ')}</div>
+      <div className="text-[10px] text-amber-200/70 mt-1">Buchungs-Zuordnung wird beim Speichern automatisch ausgetauscht.</div>
     </div>
   );
 }
@@ -837,20 +847,30 @@ function SignatureBlock({
 
 interface ScanLookup {
   cameraSerial: string | null;
+  cameraUnitId: string | null;
   // exemplar_code → accessory_id
   codeToAccessory: Map<string, string>;
+  // exemplar_code → accessory_unit_id (UUID)
+  codeToUnit: Map<string, string>;
   scannableCount: number;
 }
 
 function buildScanLookup(b: BookingDetail): ScanLookup {
-  const codeMap = new Map<string, string>();
+  const codeToAccessory = new Map<string, string>();
+  const codeToUnit = new Map<string, string>();
   for (const u of b.unit_codes ?? []) {
-    if (u.exemplar_code) codeMap.set(normalizeCode(u.exemplar_code), u.accessory_id);
+    if (u.exemplar_code) {
+      const norm = normalizeCode(u.exemplar_code);
+      codeToAccessory.set(norm, u.accessory_id);
+      codeToUnit.set(norm, u.id);
+    }
   }
   return {
     cameraSerial: b.serial_number ? normalizeCode(b.serial_number) : null,
-    codeToAccessory: codeMap,
-    scannableCount: (b.serial_number ? 1 : 0) + codeMap.size,
+    cameraUnitId: b.unit_id ?? null,
+    codeToAccessory,
+    codeToUnit,
+    scannableCount: (b.serial_number ? 1 : 0) + codeToAccessory.size,
   };
 }
 
@@ -863,15 +883,18 @@ interface ScanResult {
   alreadyChecked?: boolean;
   key?: string;
   message: string;
-  // Substitution: anderer Code derselben Kategorie wurde akzeptiert.
-  // Beim Pack-Submit wird die Buchungs-Zuordnung in der DB ausgetauscht.
-  substitution?: {
-    itemKey: string;
-    kind: 'camera' | 'accessory';
-    newUnitId: string;
-    newCode: string;
-    oldUnitId: string | null;
-  };
+  // Welche Unit-ID wurde durch den Scan tatsaechlich identifiziert? Wird im
+  // PackStep gesammelt und beim Submit ans Backend geschickt — der berechnet
+  // daraus reihenfolge-egal die finale Buchungs-Zuordnung (Substitute werden
+  // erst dort gegen ungescannte reservierte Slots gleicher Kategorie
+  // gematcht).
+  scannedUnitId?: string;
+  scannedKind?: 'camera' | 'accessory';
+  // True wenn der gescannte Code NICHT in der Buchung reserviert war
+  // (gleiche Kategorie, anderes Exemplar) — fuer den globalen Substitut-Banner.
+  isSubstitute?: boolean;
+  // Klartext-Code des Substituts (zum Anzeigen im Banner).
+  substituteCode?: string;
 }
 
 interface ServerScanLookup {
@@ -905,7 +928,7 @@ async function applyScan(
   items: PackItem[],
   checked: Record<string, boolean>,
   lookup: ScanLookup,
-  substitutions: Record<string, { newUnitId: string }>,
+  scannedUnitIds: Set<string>,
   allowSubstitution: boolean = true,
 ): Promise<ScanResult> {
   const code = normalizeCode(rawCode);
@@ -916,17 +939,33 @@ async function applyScan(
     if (checked['camera']) {
       return { ok: false, alreadyChecked: true, message: `Kamera (${rawCode}) schon abgehakt.` };
     }
-    return { ok: true, key: 'camera', message: `✓ Kamera (${rawCode})` };
+    return {
+      ok: true,
+      key: 'camera',
+      message: `✓ Kamera (${rawCode})`,
+      scannedKind: 'camera',
+      scannedUnitId: lookup.cameraUnitId ?? undefined,
+    };
   }
 
   const accId = lookup.codeToAccessory.get(code);
   if (accId) {
+    const localUnitId = lookup.codeToUnit.get(code);
+    if (localUnitId && scannedUnitIds.has(localUnitId)) {
+      return { ok: false, alreadyChecked: true, message: `Code ${rawCode} schon gescannt.` };
+    }
     const slots = items.filter((it) => it.type === 'accessory' && it.accessoryId === accId);
     const free = slots.find((it) => !checked[it.key]);
     if (!free) {
       return { ok: false, alreadyChecked: true, message: `Alle ${slots[0]?.label ?? 'Slots'} schon abgehakt.` };
     }
-    return { ok: true, key: free.key, message: `✓ ${free.label}` };
+    return {
+      ok: true,
+      key: free.key,
+      message: `✓ ${free.label}`,
+      scannedKind: 'accessory',
+      scannedUnitId: localUnitId,
+    };
   }
 
   // ── Schritt 2: Server-Lookup fuer Substitution / Klartext-Fehler ─────────
@@ -947,9 +986,9 @@ async function applyScan(
     return { ok: false, message: `Code ${rawCode} ist im System nicht hinterlegt.` };
   }
 
-  // Eine Substitution wurde gerade auf dieses Exemplar gemacht? Doppelt-Scan.
-  if (info.unitId && Object.values(substitutions).some((s) => s.newUnitId === info.unitId)) {
-    return { ok: false, alreadyChecked: true, message: `Code ${rawCode} schon abgehakt (Substitution).` };
+  // Doppelt-Scan: Unit ist bereits in der Liste der gescannten IDs
+  if (info.unitId && scannedUnitIds.has(info.unitId)) {
+    return { ok: false, alreadyChecked: true, message: `Code ${rawCode} schon abgehakt.` };
   }
 
   // Konflikt: gerade in einer anderen aktiven Buchung
@@ -972,18 +1011,14 @@ async function applyScan(
     if (checked['camera']) {
       return { ok: false, alreadyChecked: true, message: `Kamera schon abgehakt.` };
     }
-    // Substitution akzeptieren
     return {
       ok: true,
       key: 'camera',
       message: `✓ Kamera ersetzt: ${info.serialNumber ?? rawCode}`,
-      substitution: {
-        itemKey: 'camera',
-        kind: 'camera',
-        newUnitId: info.unitId!,
-        newCode: info.serialNumber ?? rawCode,
-        oldUnitId: null, // wird im Pack-API-Update ueber bookings.unit_id ausgelesen
-      },
+      scannedKind: 'camera',
+      scannedUnitId: info.unitId,
+      isSubstitute: true,
+      substituteCode: info.serialNumber ?? rawCode,
     };
   }
 
@@ -999,21 +1034,14 @@ async function applyScan(
   if (!free) {
     return { ok: false, alreadyChecked: true, message: `Alle „${info.accessoryName}" schon abgehakt.` };
   }
-  // Alte unit-id fuer den Tausch: erste reservierte unit dieser accessory_id,
-  // die noch nicht durch eine Substitution ueberschrieben wurde — wird vom
-  // Server-Pack-Endpoint ueber das Substitutions-Mapping korrekt
-  // herausgerechnet.
   return {
     ok: true,
     key: free.key,
     message: `✓ ${free.label} ersetzt: ${info.exemplarCode ?? rawCode}`,
-    substitution: {
-      itemKey: free.key,
-      kind: 'accessory',
-      newUnitId: info.unitId!,
-      newCode: info.exemplarCode ?? rawCode,
-      oldUnitId: null,
-    },
+    scannedKind: 'accessory',
+    scannedUnitId: info.unitId,
+    isSubstitute: true,
+    substituteCode: info.exemplarCode ?? rawCode,
   };
 }
 
