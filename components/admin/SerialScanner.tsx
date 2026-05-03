@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 /**
  * Seriennummern-/Barcode-Scanner für die Admin-PWA.
@@ -11,8 +11,12 @@ import { useEffect, useRef, useState } from 'react';
  * 2. jsQR Fallback (iOS Safari, alte Browser) — pure JS, nur QR-Codes,
  *    laeuft im Canvas-Frame-Loop
  *
- * Modal-Komponente — wird mit `open=true` geöffnet, ruft `onResult(text)`
- * beim ersten erkannten Code auf und schließt sich automatisch.
+ * Modal-Komponente. Default-Verhalten: schließt sich nach erstem erkannten
+ * Code. Mit `continuous=true` bleibt der Scanner offen und erkennt mehrere
+ * Codes hintereinander (Cooldown gegen Mehrfach-Erkennung desselben Codes
+ * im Detect-Loop). Optional kann via `children` eine Live-Liste unter dem
+ * Video-Stream eingeblendet werden — z.B. der Pack-Status mit den noch
+ * fehlenden Items.
  */
 
 type Status = 'init' | 'requesting' | 'scanning' | 'no-camera' | 'error';
@@ -52,7 +56,25 @@ interface SerialScannerProps {
   onResult: (text: string) => void;
   onClose: () => void;
   title?: string;
+  /**
+   * Continuous-Modus: Scanner bleibt nach erkanntem Code offen, akzeptiert
+   * weitere Codes. Cooldown gegen Mehrfach-Detection desselben Codes ist
+   * eingebaut. Default false.
+   */
+  continuous?: boolean;
+  /** Optionaler Inhalt unter dem Video-Stream (z.B. Live-Item-Liste). */
+  children?: ReactNode;
 }
+
+// Cooldown gegen Mehrfacherkennung im continuous-Modus:
+// - Gleicher Code wird fuer 1.5s ignoriert (Detect-Loop laeuft alle 150ms,
+//   sonst feuert ein QR-Code 10x hintereinander)
+// - Anderer Code wird fuer 600ms ignoriert (Mensch braucht Zeit, das naechste
+//   Item vor die Kamera zu halten — ohne diesen Cooldown wuerde ein
+//   Vorbeischwingen schon einen unerwuenschten Scan ausloesen)
+const COOLDOWN_SAME_MS = 1500;
+const COOLDOWN_OTHER_MS = 600;
+const FLASH_DURATION_MS = 700;
 
 /**
  * Extrahiert den eigentlichen Code aus dem Scan-Wert. Akzeptiert sowohl
@@ -76,18 +98,53 @@ function extractScanValue(raw: string): string {
   return trimmed;
 }
 
-export default function SerialScanner({ open, onResult, onClose, title = 'Seriennummer scannen' }: SerialScannerProps) {
+export default function SerialScanner({
+  open, onResult, onClose, title = 'Seriennummer scannen',
+  continuous = false, children,
+}: SerialScannerProps) {
   const [status, setStatus] = useState<Status>('init');
   const [errorMsg, setErrorMsg] = useState('');
   const [manualValue, setManualValue] = useState('');
   const [usingFallback, setUsingFallback] = useState(false);
   const [torchOn, setTorchOn] = useState(false);
   const [torchSupported, setTorchSupported] = useState(false);
+  const [flashCode, setFlashCode] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const detectIntervalRef = useRef<number | null>(null);
   const rafRef = useRef<number | null>(null);
+  // Cooldown-State: letzten erkannten Code + Zeitpunkt merken.
+  const lastDetectionRef = useRef<{ code: string; at: number } | null>(null);
+  const flashTimerRef = useRef<number | null>(null);
+
+  /**
+   * Wird aus dem Detect-Loop bei jedem erkannten Code aufgerufen. Behandelt
+   * Cooldown (gegen Mehrfacherkennung), Continuous-Mode (offen lassen) und
+   * Flash-Visualisierung.
+   */
+  function handleDetected(value: string) {
+    const now = Date.now();
+    const last = lastDetectionRef.current;
+    if (last) {
+      const sinceLast = now - last.at;
+      if (last.code === value && sinceLast < COOLDOWN_SAME_MS) return;
+      if (last.code !== value && sinceLast < COOLDOWN_OTHER_MS) return;
+    }
+    lastDetectionRef.current = { code: value, at: now };
+
+    if (continuous) {
+      // Visuelles Feedback im Scanner-Modal — kurz aufblitzen mit Code.
+      setFlashCode(value);
+      if (flashTimerRef.current) window.clearTimeout(flashTimerRef.current);
+      flashTimerRef.current = window.setTimeout(() => setFlashCode(null), FLASH_DURATION_MS);
+      onResult(value);
+    } else {
+      stopScanning();
+      onResult(value);
+      onClose();
+    }
+  }
 
   useEffect(() => {
     if (!open) {
@@ -108,6 +165,10 @@ export default function SerialScanner({ open, onResult, onClose, title = 'Serien
       window.cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
     }
+    if (flashTimerRef.current !== null) {
+      window.clearTimeout(flashTimerRef.current);
+      flashTimerRef.current = null;
+    }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
@@ -117,6 +178,8 @@ export default function SerialScanner({ open, onResult, onClose, title = 'Serien
     }
     setTorchOn(false);
     setTorchSupported(false);
+    setFlashCode(null);
+    lastDetectionRef.current = null;
   }
 
   /**
@@ -213,11 +276,7 @@ export default function SerialScanner({ open, onResult, onClose, title = 'Serien
             const codes = await detector.detect(videoRef.current);
             if (codes.length > 0) {
               const value = extractScanValue(codes[0].rawValue);
-              if (value) {
-                stopScanning();
-                onResult(value);
-                onClose();
-              }
+              if (value) handleDetected(value);
             }
           } catch {
             // Detect-Fehler einzelner Frames ignorieren — naechster Frame versucht erneut.
@@ -271,10 +330,8 @@ export default function SerialScanner({ open, onResult, onClose, title = 'Serien
           if (code?.data) {
             const value = extractScanValue(code.data);
             if (value) {
-              stopScanning();
-              onResult(value);
-              onClose();
-              return;
+              handleDetected(value);
+              if (!continuous) return;
             }
           }
         } catch {
@@ -294,34 +351,40 @@ export default function SerialScanner({ open, onResult, onClose, title = 'Serien
     e.preventDefault();
     const v = extractScanValue(manualValue);
     if (!v) return;
-    stopScanning();
-    onResult(v);
-    onClose();
+    setManualValue('');
+    if (continuous) {
+      onResult(v);
+    } else {
+      stopScanning();
+      onResult(v);
+      onClose();
+    }
   }
 
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[60] flex items-start sm:items-center justify-center bg-black/80 p-2 sm:p-4 overflow-y-auto" onClick={() => { stopScanning(); onClose(); }}>
       <div
-        className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-md overflow-hidden"
+        className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-md overflow-hidden my-2 sm:my-0 max-h-[calc(100dvh-1rem)] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-brand-border dark:border-slate-700">
-          <h3 className="font-heading font-bold text-base text-brand-black dark:text-white">{title}</h3>
+        <div className="flex items-center justify-between px-4 py-3 border-b border-brand-border dark:border-slate-700 flex-shrink-0">
           <button
             type="button"
             onClick={() => { stopScanning(); onClose(); }}
-            aria-label="Schließen"
-            className="p-1.5 text-brand-muted hover:text-brand-black dark:hover:text-white transition-colors"
+            className="flex items-center gap-1.5 text-sm font-heading font-semibold text-accent-cyan hover:text-cyan-300 transition-colors -ml-1.5 px-2 py-1 rounded"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
+            Zurück
           </button>
+          <h3 className="font-heading font-bold text-sm text-brand-black dark:text-white">{title}</h3>
+          <div className="w-16" aria-hidden="true" />
         </div>
 
-        <div className="p-5 space-y-4">
+        <div className="p-4 sm:p-5 space-y-4 overflow-y-auto">
           {(status === 'requesting' || status === 'scanning') && (
             <div className="relative bg-black rounded-xl overflow-hidden aspect-[4/3]">
               <video
@@ -341,6 +404,14 @@ export default function SerialScanner({ open, onResult, onClose, title = 'Serien
                   Kamera wird gestartet…
                 </div>
               )}
+              {/* Flash-Overlay nach jedem erkannten Code im continuous-Modus */}
+              {flashCode && (
+                <div className="absolute inset-0 pointer-events-none flex items-center justify-center bg-emerald-500/30 backdrop-blur-[1px] animate-pulse">
+                  <div className="bg-emerald-500 text-slate-950 px-4 py-2 rounded-lg font-mono text-sm font-bold shadow-lg">
+                    ✓ {flashCode}
+                  </div>
+                </div>
+              )}
               {status === 'scanning' && torchSupported && (
                 <button
                   type="button"
@@ -355,6 +426,12 @@ export default function SerialScanner({ open, onResult, onClose, title = 'Serien
                   </svg>
                 </button>
               )}
+            </div>
+          )}
+
+          {children && (
+            <div className="border-t border-brand-border dark:border-slate-700 -mx-4 sm:-mx-5 px-4 sm:px-5 pt-4">
+              {children}
             </div>
           )}
 

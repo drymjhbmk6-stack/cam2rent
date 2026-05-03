@@ -107,6 +107,50 @@ function expandItems(b: BookingDetail): PackItem[] {
   return out;
 }
 
+// ─── Aggregierte Anzeige: pro Kategorie eine Zeile mit Mengen-Counter ────
+// Statt 3 separater "Extra Akku"-Zeilen rendert die UI eine Zeile "Extra Akku
+// 0/3". Die internen Slot-Keys bleiben in slotKeys[] erhalten, damit der
+// Pack-Submit weiterhin packedItems: string[] schickt.
+
+interface GroupedItem {
+  groupKey: string;
+  type: 'camera' | 'accessory' | 'return-label';
+  label: string;
+  subLabel: string;
+  slotKeys: string[];
+}
+
+function groupItems(items: PackItem[]): GroupedItem[] {
+  const out: GroupedItem[] = [];
+  const map = new Map<string, GroupedItem>();
+  for (const it of items) {
+    const key = it.type === 'camera' ? 'camera'
+              : it.type === 'return-label' ? 'return-label'
+              : (it.accessoryId ?? it.key);
+    const existing = map.get(key);
+    if (existing) {
+      existing.slotKeys.push(it.key);
+    } else {
+      const g: GroupedItem = {
+        groupKey: key,
+        type: it.type,
+        label: it.label,
+        subLabel: it.subLabel,
+        slotKeys: [it.key],
+      };
+      map.set(key, g);
+      out.push(g);
+    }
+  }
+  return out;
+}
+
+function groupCheckedCount(g: GroupedItem, checked: Record<string, boolean>): number {
+  let n = 0;
+  for (const k of g.slotKeys) if (checked[k]) n++;
+  return n;
+}
+
 export default function PackenPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const [booking, setBooking] = useState<BookingDetail | null>(null);
@@ -276,6 +320,32 @@ function PackStep({
   const [substituteBadges, setSubstituteBadges] = useState<string[]>([]);
 
   const scanLookup = useMemo(() => buildScanLookup(booking), [booking]);
+  const groups = useMemo(() => groupItems(items), [items]);
+
+  // Gesamt + abgehakt zaehlen — return-label bleibt bewusst draussen, das
+  // Etikett ist nicht scanbar und zaehlt nicht in den Scanner-Fortschritt.
+  const totalPackable = useMemo(
+    () => items.filter((it) => it.type !== 'return-label').length,
+    [items],
+  );
+  const checkedPackable = useMemo(
+    () => items.filter((it) => it.type !== 'return-label' && checked[it.key]).length,
+    [items, checked],
+  );
+
+  function incGroup(g: GroupedItem) {
+    const next = g.slotKeys.find((k) => !checked[k]);
+    if (next) setChecked((p) => ({ ...p, [next]: true }));
+  }
+  function decGroup(g: GroupedItem) {
+    for (let i = g.slotKeys.length - 1; i >= 0; i--) {
+      if (checked[g.slotKeys[i]]) {
+        const k = g.slotKeys[i];
+        setChecked((p) => ({ ...p, [k]: false }));
+        return;
+      }
+    }
+  }
 
   async function handleScan(code: string) {
     const scannedSet = new Set([
@@ -301,9 +371,22 @@ function PackStep({
     } else {
       setScanFeedback({ type: 'err', msg: result.message });
     }
-    setScannerOpen(false);
+    // Scanner laeuft im continuous-Modus offen — Auto-Close greift via Effekt
+    // unten, sobald alle scanbaren Items abgehakt sind.
     window.setTimeout(() => setScanFeedback(null), 3500);
   }
+
+  // Auto-Close wenn alle scanbaren Items abgehakt sind. Verhindert zugleich
+  // dass der Scanner Schritt 1 abschliesst — den Submit macht der User
+  // weiterhin manuell ueber den Fertig-Button (mit Signatur, Konditions-
+  // Checks usw.).
+  useEffect(() => {
+    if (!scannerOpen) return;
+    if (totalPackable > 0 && checkedPackable >= totalPackable) {
+      const t = window.setTimeout(() => setScannerOpen(false), 800);
+      return () => window.clearTimeout(t);
+    }
+  }, [scannerOpen, checkedPackable, totalPackable]);
 
   // Name aus Mitarbeiter-Konto vorausfuellen — bleibt editierbar fuer den Fall,
   // dass jemand anderes (z.B. Aushilfe ohne eigenen Account) am Geraet packt.
@@ -359,24 +442,34 @@ function PackStep({
       <ScannerBar
         onOpen={() => setScannerOpen(true)}
         feedback={scanFeedback}
-        scannableCount={scanLookup.scannableCount}
-        checkedScannable={Object.keys(checked).filter((k) => checked[k] && items.find((i) => i.key === k)?.type !== 'return-label').length}
+        totalCount={totalPackable}
+        checkedCount={checkedPackable}
       />
 
       <SubstituteBanner codes={substituteBadges} />
 
       <ItemList
-        items={items}
+        groups={groups}
         checked={checked}
-        onToggle={(k) => setChecked((p) => ({ ...p, [k]: !p[k] }))}
+        onIncrement={incGroup}
+        onDecrement={decGroup}
       />
 
       <SerialScanner
         open={scannerOpen}
         onResult={handleScan}
         onClose={() => setScannerOpen(false)}
-        title="Item scannen"
-      />
+        title={`Pack-Liste · ${checkedPackable}/${totalPackable}`}
+        continuous
+      >
+        <ScannerLiveList
+          groups={groups}
+          checked={checked}
+          feedback={scanFeedback}
+          onIncrement={incGroup}
+          onDecrement={decGroup}
+        />
+      </SerialScanner>
 
       <div className="mt-6 space-y-3 border-t border-slate-800 pt-4">
         <h3 className="text-sm font-semibold text-slate-300 mb-2">Zustand bei Verpackung</h3>
@@ -443,6 +536,29 @@ function CheckStep({
   const [scanFeedback, setScanFeedback] = useState<{ type: 'ok' | 'warn' | 'err'; msg: string } | null>(null);
 
   const scanLookup = useMemo(() => buildScanLookup(booking), [booking]);
+  const groups = useMemo(() => groupItems(items), [items]);
+  const totalPackable = useMemo(
+    () => items.filter((it) => it.type !== 'return-label').length,
+    [items],
+  );
+  const checkedPackable = useMemo(
+    () => items.filter((it) => it.type !== 'return-label' && checked[it.key]).length,
+    [items, checked],
+  );
+
+  function incGroup(g: GroupedItem) {
+    const next = g.slotKeys.find((k) => !checked[k]);
+    if (next) setChecked((p) => ({ ...p, [next]: true }));
+  }
+  function decGroup(g: GroupedItem) {
+    for (let i = g.slotKeys.length - 1; i >= 0; i--) {
+      if (checked[g.slotKeys[i]]) {
+        const k = g.slotKeys[i];
+        setChecked((p) => ({ ...p, [k]: false }));
+        return;
+      }
+    }
+  }
 
   async function handleScan(code: string) {
     // CheckStep: keine Substitution mehr — Codes sind durch Step 1 gesetzt.
@@ -455,9 +571,17 @@ function CheckStep({
     } else {
       setScanFeedback({ type: 'err', msg: result.message });
     }
-    setScannerOpen(false);
     window.setTimeout(() => setScanFeedback(null), 3500);
   }
+
+  // Auto-Close wenn alle scanbaren Items abgehakt sind.
+  useEffect(() => {
+    if (!scannerOpen) return;
+    if (totalPackable > 0 && checkedPackable >= totalPackable) {
+      const t = window.setTimeout(() => setScannerOpen(false), 800);
+      return () => window.clearTimeout(t);
+    }
+  }, [scannerOpen, checkedPackable, totalPackable]);
 
   // Name aus Mitarbeiter-Konto vorausfuellen.
   useEffect(() => {
@@ -533,18 +657,32 @@ function CheckStep({
       <ScannerBar
         onOpen={() => setScannerOpen(true)}
         feedback={scanFeedback}
-        scannableCount={scanLookup.scannableCount}
-        checkedScannable={Object.keys(checked).filter((k) => checked[k] && items.find((i) => i.key === k)?.type !== 'return-label').length}
+        totalCount={totalPackable}
+        checkedCount={checkedPackable}
       />
 
-      <ItemList items={items} checked={checked} onToggle={(k) => setChecked((p) => ({ ...p, [k]: !p[k] }))} />
+      <ItemList
+        groups={groups}
+        checked={checked}
+        onIncrement={incGroup}
+        onDecrement={decGroup}
+      />
 
       <SerialScanner
         open={scannerOpen}
         onResult={handleScan}
         onClose={() => setScannerOpen(false)}
-        title="Item scannen"
-      />
+        title={`Kontroll-Liste · ${checkedPackable}/${totalPackable}`}
+        continuous
+      >
+        <ScannerLiveList
+          groups={groups}
+          checked={checked}
+          feedback={scanFeedback}
+          onIncrement={incGroup}
+          onDecrement={decGroup}
+        />
+      </SerialScanner>
 
       <div className="mt-6 border-t border-slate-800 pt-4">
         <label className="block text-xs text-slate-500 uppercase tracking-wider mb-1">Notizen (optional)</label>
@@ -730,36 +868,120 @@ function DoneStep({ booking, me, onReset }: { booking: BookingDetail; me: Curren
 // ─── Item-Liste mit Checkboxen ───────────────────────────────────────────────
 
 function ItemList({
-  items, checked, onToggle,
+  groups, checked, onIncrement, onDecrement, compact,
 }: {
-  items: PackItem[];
+  groups: GroupedItem[];
   checked: Record<string, boolean>;
-  onToggle: (key: string) => void;
+  onIncrement: (g: GroupedItem) => void;
+  onDecrement: (g: GroupedItem) => void;
+  compact?: boolean; // kompaktere Darstellung im Scanner-Modal
 }) {
   return (
     <div className="border border-slate-800 rounded-lg overflow-hidden divide-y divide-slate-800">
-      {items.map((it) => (
-        <button
-          key={it.key}
-          type="button"
-          onClick={() => onToggle(it.key)}
-          className={`w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-slate-800/50 transition-colors ${
-            checked[it.key] ? 'bg-emerald-500/5' : ''
-          }`}
-        >
-          <div className={`mt-0.5 w-6 h-6 rounded border-2 flex items-center justify-center flex-shrink-0 ${
-            checked[it.key] ? 'border-emerald-500 bg-emerald-500 text-slate-950' : 'border-slate-600'
-          }`}>
-            {checked[it.key] && <span className="font-bold">✓</span>}
+      {groups.map((g) => {
+        const checkedCount = groupCheckedCount(g, checked);
+        const total = g.slotKeys.length;
+        const fullyChecked = checkedCount === total;
+        const partiallyChecked = checkedCount > 0 && !fullyChecked;
+        const showCounter = total > 1;
+
+        return (
+          <div
+            key={g.groupKey}
+            className={`flex items-start gap-3 ${compact ? 'px-3 py-2' : 'px-4 py-3'} ${
+              fullyChecked ? 'bg-emerald-500/5' : partiallyChecked ? 'bg-amber-500/5' : ''
+            }`}
+          >
+            <button
+              type="button"
+              onClick={() => onIncrement(g)}
+              aria-label="Abhaken"
+              className={`mt-0.5 w-6 h-6 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
+                fullyChecked ? 'border-emerald-500 bg-emerald-500 text-slate-950'
+                  : partiallyChecked ? 'border-amber-500 bg-amber-500/20 text-amber-300'
+                  : 'border-slate-600 hover:border-slate-400'
+              }`}
+            >
+              {fullyChecked ? <span className="font-bold">✓</span>
+                : partiallyChecked ? <span className="text-xs font-bold">{checkedCount}</span>
+                : null}
+            </button>
+            <button
+              type="button"
+              onClick={() => onIncrement(g)}
+              className="flex-1 min-w-0 text-left"
+            >
+              <div className={`font-semibold ${compact ? 'text-sm' : ''} ${
+                fullyChecked ? 'text-emerald-300' : 'text-slate-100'
+              }`}>
+                {g.label}
+              </div>
+              {!compact && (
+                <div className="text-xs text-slate-500 mt-0.5">{g.subLabel}</div>
+              )}
+            </button>
+            {showCounter && (
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <span className={`text-xs font-mono tabular-nums ${
+                  fullyChecked ? 'text-emerald-400' : partiallyChecked ? 'text-amber-300' : 'text-slate-500'
+                }`}>
+                  {checkedCount}/{total}
+                </span>
+                {checkedCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => onDecrement(g)}
+                    aria-label="Eins zurueck"
+                    className="w-7 h-7 rounded border border-slate-700 text-slate-400 hover:text-slate-100 hover:border-slate-500 flex items-center justify-center text-base leading-none"
+                  >
+                    −
+                  </button>
+                )}
+              </div>
+            )}
           </div>
-          <div className="flex-1 min-w-0">
-            <div className={`font-semibold ${checked[it.key] ? 'text-emerald-300' : 'text-slate-100'}`}>
-              {it.label}
-            </div>
-            <div className="text-xs text-slate-500 mt-0.5">{it.subLabel}</div>
-          </div>
-        </button>
-      ))}
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * Kompakte Live-Liste, die unter dem Kamera-Stream im Scanner-Modal
+ * angezeigt wird. Zeigt was noch fehlt (rote Items), gerade gescannt wurde
+ * (gruene Items) plus letztes Scan-Feedback.
+ */
+function ScannerLiveList({
+  groups, checked, feedback, onIncrement, onDecrement,
+}: {
+  groups: GroupedItem[];
+  checked: Record<string, boolean>;
+  feedback: { type: 'ok' | 'warn' | 'err'; msg: string } | null;
+  onIncrement: (g: GroupedItem) => void;
+  onDecrement: (g: GroupedItem) => void;
+}) {
+  // Rücksendeetikett ist nicht scanbar — im Scanner-Modal blenden wir es aus,
+  // damit der Packer sich auf die scanbaren Items konzentrieren kann.
+  const visible = groups.filter((g) => g.type !== 'return-label');
+  const fbColor = feedback?.type === 'ok'
+    ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
+    : feedback?.type === 'warn'
+      ? 'bg-amber-500/15 border-amber-500/40 text-amber-300'
+      : 'bg-red-500/15 border-red-500/40 text-red-300';
+  return (
+    <div className="space-y-2">
+      {feedback && (
+        <div className={`px-3 py-2 rounded-lg border text-xs ${fbColor}`}>
+          {feedback.msg}
+        </div>
+      )}
+      <ItemList
+        groups={visible}
+        checked={checked}
+        onIncrement={onIncrement}
+        onDecrement={onDecrement}
+        compact
+      />
     </div>
   );
 }
@@ -1046,19 +1268,20 @@ async function applyScan(
 }
 
 function ScannerBar({
-  onOpen, feedback, scannableCount, checkedScannable,
+  onOpen, feedback, totalCount, checkedCount,
 }: {
   onOpen: () => void;
   feedback: { type: 'ok' | 'warn' | 'err'; msg: string } | null;
-  scannableCount: number;
-  checkedScannable: number;
+  totalCount: number;
+  checkedCount: number;
 }) {
-  if (scannableCount === 0) return null;
+  if (totalCount === 0) return null;
   const fbColor = feedback?.type === 'ok'
     ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
     : feedback?.type === 'warn'
       ? 'bg-amber-500/15 border-amber-500/40 text-amber-300'
       : 'bg-red-500/15 border-red-500/40 text-red-300';
+  const allDone = checkedCount >= totalCount;
   return (
     <div className="mb-4">
       <button
@@ -1075,8 +1298,8 @@ function ScannerBar({
             <div className="text-xs text-cyan-400/80">Item-Code scannen → wird automatisch abgehakt</div>
           </div>
         </div>
-        <div className="text-xs text-cyan-300/80 tabular-nums">
-          {checkedScannable}/{scannableCount}
+        <div className={`text-sm font-semibold tabular-nums ${allDone ? 'text-emerald-400' : 'text-cyan-300/90'}`}>
+          {checkedCount}/{totalCount}
         </div>
       </button>
       {feedback && (
