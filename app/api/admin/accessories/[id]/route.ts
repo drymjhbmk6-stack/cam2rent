@@ -3,6 +3,20 @@ import { createServiceClient } from '@/lib/supabase';
 import { logAudit } from '@/lib/audit';
 import { sanitizeSpecs } from '@/lib/accessory-specs';
 
+// Bestandteile-Liste auf saubere String-Eintraege normalisieren — gleiche
+// Regeln wie im POST-Pfad (siehe ../route.ts).
+function sanitizeIncludedParts(input: unknown): string[] {
+  if (!Array.isArray(input)) return [];
+  const cleaned: string[] = [];
+  for (const raw of input) {
+    if (typeof raw !== 'string') continue;
+    const trimmed = raw.trim().slice(0, 120);
+    if (trimmed) cleaned.push(trimmed);
+    if (cleaned.length >= 30) break;
+  }
+  return cleaned;
+}
+
 /**
  * PUT    /api/admin/accessories/[id]  → Zubehörteil aktualisieren
  * DELETE /api/admin/accessories/[id]  → Zubehörteil löschen
@@ -128,6 +142,7 @@ export async function PUT(
     is_bulk: body.is_bulk ?? false,
   };
   if (body.specs !== undefined) updatePayload.specs = sanitizeSpecs(body.specs);
+  if (body.included_parts !== undefined) updatePayload.included_parts = sanitizeIncludedParts(body.included_parts);
 
   let { error } = await supabase
     .from('accessories')
@@ -137,6 +152,14 @@ export async function PUT(
   // Defensiv: Migration noch nicht durch — specs-Spalte fehlt. Retry ohne.
   if (error && /column .*specs/i.test(error.message) && 'specs' in updatePayload) {
     delete updatePayload.specs;
+    const retry = await supabase.from('accessories').update(updatePayload).eq('id', effectiveId);
+    error = retry.error;
+  }
+
+  // Gleiches Defensiv-Muster fuer included_parts (Migration
+  // `supabase-accessories-included-parts.sql`).
+  if (error && /column .*included_parts/i.test(error.message) && 'included_parts' in updatePayload) {
+    delete updatePayload.included_parts;
     const retry = await supabase.from('accessories').update(updatePayload).eq('id', effectiveId);
     error = retry.error;
   }

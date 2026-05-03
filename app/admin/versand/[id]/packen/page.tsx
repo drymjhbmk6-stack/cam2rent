@@ -219,7 +219,7 @@ function PackStep({
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState('');
   const [scannerOpen, setScannerOpen] = useState(false);
-  const [scanFeedback, setScanFeedback] = useState<{ type: 'ok' | 'warn' | 'err'; msg: string } | null>(null);
+  const [scanFeedback, setScanFeedback] = useState<{ type: 'ok' | 'warn' | 'err'; msg: string; parts?: string[] } | null>(null);
   // Welche Unit-IDs wurden tatsaechlich gescannt — egal ob reservierter Code
   // oder Substitut. Reihenfolge der Scans ist egal: das Backend rechnet beim
   // Pack-Submit die finale Buchungs-Zuordnung aus, indem es ungescannte
@@ -276,15 +276,17 @@ function PackStep({
       if (result.isSubstitute && result.substituteCode) {
         setSubstituteBadges((p) => p.includes(result.substituteCode!) ? p : [...p, result.substituteCode!]);
       }
-      setScanFeedback({ type: 'ok', msg: result.message });
+      setScanFeedback({ type: 'ok', msg: result.message, parts: result.includedParts });
     } else if (result.alreadyChecked) {
       setScanFeedback({ type: 'warn', msg: result.message });
     } else {
       setScanFeedback({ type: 'err', msg: result.message });
     }
     // Scanner laeuft im continuous-Modus offen — Auto-Close greift via Effekt
-    // unten, sobald alle scanbaren Items abgehakt sind.
-    window.setTimeout(() => setScanFeedback(null), 3500);
+    // unten, sobald alle scanbaren Items abgehakt sind. Bei Bestandteile-
+    // Hinweis bleibt der Toast laenger sichtbar.
+    const dur = result.includedParts && result.includedParts.length > 0 ? 6000 : 3500;
+    window.setTimeout(() => setScanFeedback(null), dur);
   }
 
   // Auto-Close wenn alle scanbaren Items abgehakt sind. Verhindert zugleich
@@ -444,7 +446,7 @@ function CheckStep({
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState('');
   const [scannerOpen, setScannerOpen] = useState(false);
-  const [scanFeedback, setScanFeedback] = useState<{ type: 'ok' | 'warn' | 'err'; msg: string } | null>(null);
+  const [scanFeedback, setScanFeedback] = useState<{ type: 'ok' | 'warn' | 'err'; msg: string; parts?: string[] } | null>(null);
 
   const scanLookup = useMemo(() => buildScanLookup(bookingToScanInput(booking)), [booking]);
   const groups = useMemo(() => groupItems(items), [items]);
@@ -476,13 +478,14 @@ function CheckStep({
     const result = await applyScan(code, booking.id, items, checked, scanLookup, new Set(), false);
     if (result.ok && result.key) {
       setChecked((p) => ({ ...p, [result.key!]: true }));
-      setScanFeedback({ type: 'ok', msg: result.message });
+      setScanFeedback({ type: 'ok', msg: result.message, parts: result.includedParts });
     } else if (result.alreadyChecked) {
       setScanFeedback({ type: 'warn', msg: result.message });
     } else {
       setScanFeedback({ type: 'err', msg: result.message });
     }
-    window.setTimeout(() => setScanFeedback(null), 3500);
+    const dur = result.includedParts && result.includedParts.length > 0 ? 6000 : 3500;
+    window.setTimeout(() => setScanFeedback(null), dur);
   }
 
   // Auto-Close wenn alle scanbaren Items abgehakt sind.

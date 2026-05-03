@@ -39,6 +39,9 @@ interface Accessory {
   is_bulk?: boolean | null;
   // Kategorie-spezifische Specs (Gewicht, mAh, ND-Werte, Länge etc.)
   specs?: AccessorySpecs | null;
+  // Bestandteile dieses Zubehoers (z.B. "2x Sender", "1x Windschutz") —
+  // reine Anzeige fuer Pack-Workflow + Packliste, kein eigenes Inventar.
+  included_parts?: string[] | null;
 }
 
 const CATEGORIES = ['Akku', 'Speicher', 'Halterung', 'Schutz', 'Audio', 'Stativ', 'Sonstiges'];
@@ -63,6 +66,7 @@ function emptyForm() {
     replacement_value: '',
     is_bulk: false,
     specs: {} as Record<string, string>, // Form-State: Strings, beim Submit zu AccessorySpecs konvertiert
+    included_parts: [] as string[],
   };
 }
 
@@ -146,6 +150,9 @@ export default function AdminZubehoerPage() {
           description: newForm.description || null,
           image_url: newForm.image_url || null,
           specs: formStateToSpecs(newForm.specs),
+          included_parts: Array.isArray(newForm.included_parts)
+            ? newForm.included_parts.filter((p) => typeof p === 'string' && p.trim().length > 0)
+            : [],
         }),
       });
       if (!res.ok) {
@@ -187,6 +194,7 @@ export default function AdminZubehoerPage() {
       replacement_value: acc.replacement_value != null ? String(acc.replacement_value) : '',
       is_bulk: acc.is_bulk ?? false,
       specs: specsToFormState(acc.specs ?? null) as unknown as AccessorySpecs,
+      included_parts: Array.isArray(acc.included_parts) ? [...acc.included_parts] : [],
     });
   }
 
@@ -217,6 +225,9 @@ export default function AdminZubehoerPage() {
           image_url: editForm.image_url || null,
           new_id: newId,
           specs: formStateToSpecs(editForm.specs as unknown as Record<string, string>),
+          included_parts: Array.isArray(editForm.included_parts)
+            ? (editForm.included_parts as string[]).filter((p) => typeof p === 'string' && p.trim().length > 0)
+            : [],
         }),
       });
       if (!res.ok) {
@@ -332,6 +343,11 @@ export default function AdminZubehoerPage() {
                   placeholder="Kurze Beschreibung (optional)"
                   className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
               </div>
+              {/* Bestandteile (z.B. Funkmikrofon-Set) */}
+              <IncludedPartsEditor
+                value={newForm.included_parts}
+                onChange={(parts) => setNewForm((f) => ({ ...f, included_parts: parts }))}
+              />
               {/* Kategorie-spezifische Spezifikationen */}
               <SpecFields
                 category={newForm.category}
@@ -662,6 +678,11 @@ function AccessoryCard({ acc, editId, editForm, setEditForm, savedId, savingId, 
                           onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
                           className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body bg-white focus:outline-none focus:ring-2 focus:ring-accent-blue" />
                       </div>
+                      {/* Bestandteile (z.B. Funkmikrofon-Set) */}
+                      <IncludedPartsEditor
+                        value={Array.isArray(editForm.included_parts) ? editForm.included_parts : []}
+                        onChange={(parts) => setEditForm((f) => ({ ...f, included_parts: parts }))}
+                      />
                       {/* Kategorie-spezifische Spezifikationen */}
                       <SpecFields
                         category={editForm.category ?? 'Sonstiges'}
@@ -899,6 +920,97 @@ function AccessoryCard({ acc, editId, editForm, setEditForm, savedId, savingId, 
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/* ── IncludedPartsEditor: Bestandteile-Liste ───────────────────────────── */
+
+function IncludedPartsEditor({
+  value,
+  onChange,
+}: {
+  value: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const items = Array.isArray(value) ? value : [];
+
+  function update(idx: number, next: string) {
+    const arr = [...items];
+    arr[idx] = next;
+    onChange(arr);
+  }
+  function removeAt(idx: number) {
+    onChange(items.filter((_, i) => i !== idx));
+  }
+  function add() {
+    if (items.length >= 30) return;
+    onChange([...items, '']);
+  }
+  function moveUp(idx: number) {
+    if (idx === 0) return;
+    const arr = [...items];
+    [arr[idx - 1], arr[idx]] = [arr[idx], arr[idx - 1]];
+    onChange(arr);
+  }
+
+  return (
+    <div className="sm:col-span-2 bg-brand-bg dark:bg-slate-800/40 border border-brand-border dark:border-slate-700 rounded-[10px] p-3 space-y-2">
+      <div>
+        <p className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider">
+          Bestandteile
+          <span className="ml-2 text-[10px] font-normal normal-case tracking-normal">
+            (z.B. &bdquo;2× Sender&ldquo;, &bdquo;1× Windschutz&ldquo; — nur Anzeige beim Packen, kein eigenes Inventar)
+          </span>
+        </p>
+      </div>
+      {items.length === 0 && (
+        <p className="text-[11px] font-body text-brand-muted italic">
+          Keine Bestandteile hinterlegt.
+        </p>
+      )}
+      <div className="space-y-1.5">
+        {items.map((line, idx) => (
+          <div key={idx} className="flex items-center gap-2">
+            <span className="text-[11px] font-mono text-brand-muted w-5 text-right shrink-0">{idx + 1}.</span>
+            <input
+              type="text"
+              value={line}
+              onChange={(e) => update(idx, e.target.value)}
+              placeholder="z.B. 2x Sender"
+              maxLength={120}
+              className="flex-1 px-3 py-1.5 border border-brand-border rounded-[8px] text-sm font-body bg-white focus:outline-none focus:ring-2 focus:ring-accent-blue"
+            />
+            {items.length > 1 && (
+              <button
+                type="button"
+                onClick={() => moveUp(idx)}
+                disabled={idx === 0}
+                aria-label="Nach oben"
+                className="px-2 py-1 text-xs font-heading text-brand-muted border border-brand-border rounded-[6px] hover:bg-white disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                ↑
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => removeAt(idx)}
+              aria-label="Entfernen"
+              className="px-2 py-1 text-xs font-heading text-red-600 border border-red-200 rounded-[6px] hover:bg-red-50"
+            >
+              ✕
+            </button>
+          </div>
+        ))}
+      </div>
+      <button
+        type="button"
+        onClick={add}
+        disabled={items.length >= 30}
+        className="text-xs font-heading font-semibold text-accent-blue hover:underline disabled:opacity-40 disabled:cursor-not-allowed"
+      >
+        + Bestandteil hinzufügen
+      </button>
     </div>
   );
 }

@@ -25,6 +25,9 @@ export interface ResolvedItem {
   qty: number;
   isFromSet?: boolean;
   setName?: string;
+  /** Bestandteile dieses Zubehoers (z.B. "2x Sender", "1x Windschutz").
+   *  Werden im Pack-Workflow als Hinweis angezeigt — kein eigener Slot. */
+  included_parts?: string[];
 }
 
 export interface UnitCode {
@@ -39,6 +42,8 @@ export interface PackItem {
   subLabel: string;
   type: 'camera' | 'accessory' | 'return-label';
   accessoryId?: string;
+  /** Bestandteile dieses Zubehoers (Anzeige-Hinweis, kein Slot). */
+  includedParts?: string[];
 }
 
 export interface GroupedItem {
@@ -47,6 +52,8 @@ export interface GroupedItem {
   label: string;
   subLabel: string;
   slotKeys: string[];
+  /** Bestandteile (aggregiert vom ersten Item der Gruppe). */
+  includedParts?: string[];
 }
 
 export interface ScanLookup {
@@ -79,6 +86,10 @@ export interface ScanResult {
   scannedKind?: 'camera' | 'accessory';
   isSubstitute?: boolean;
   substituteCode?: string;
+  /** Bestandteile des gescannten Items (z.B. "2x Sender", "Windschutz").
+   *  Werden im Scanner-Toast als zusaetzlicher Hinweis ausgegeben, damit der
+   *  Packer daran denkt, alle Teile mit einzupacken. */
+  includedParts?: string[];
 }
 
 interface ServerScanLookup {
@@ -115,6 +126,9 @@ export function expandItems(b: ScanWorkflowInput): PackItem[] {
   });
   for (const it of items) {
     if (!it.isFromSet && usedSetNames.has(it.name)) continue;
+    const parts = Array.isArray(it.included_parts) && it.included_parts.length > 0
+      ? it.included_parts
+      : undefined;
     for (let i = 0; i < it.qty; i++) {
       out.push({
         key: `${it.id}::${i}`,
@@ -122,6 +136,7 @@ export function expandItems(b: ScanWorkflowInput): PackItem[] {
         accessoryId: it.id,
         label: it.name,
         subLabel: it.isFromSet && it.setName ? `Im Set: ${it.setName}` : 'Zubehör',
+        includedParts: parts,
       });
     }
   }
@@ -153,6 +168,7 @@ export function groupItems(items: PackItem[]): GroupedItem[] {
         label: it.label,
         subLabel: it.subLabel,
         slotKeys: [it.key],
+        includedParts: it.includedParts,
       };
       map.set(key, g);
       out.push(g);
@@ -237,6 +253,7 @@ export async function applyScan(
       message: `✓ ${free.label}`,
       scannedKind: 'accessory',
       scannedUnitId: localUnitId,
+      includedParts: free.includedParts,
     };
   }
 
@@ -308,6 +325,7 @@ export async function applyScan(
     scannedUnitId: info.unitId,
     isSubstitute: true,
     substituteCode: info.exemplarCode ?? rawCode,
+    includedParts: free.includedParts,
   };
 }
 
@@ -403,6 +421,16 @@ export function ItemList({
               {!compact && (
                 <div className="text-xs text-slate-500 mt-0.5">{g.subLabel}</div>
               )}
+              {g.includedParts && g.includedParts.length > 0 && (
+                <div className={`mt-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 ${compact ? 'px-2 py-1' : 'px-2.5 py-1.5'}`}>
+                  <div className={`font-semibold text-amber-300 ${compact ? 'text-[10px]' : 'text-[11px]'} uppercase tracking-wider mb-0.5`}>
+                    Enthält {g.includedParts.length} {g.includedParts.length === 1 ? 'Teil' : 'Teile'}
+                  </div>
+                  <div className={`text-amber-200/90 leading-snug ${compact ? 'text-[10px]' : 'text-xs'}`}>
+                    {g.includedParts.join(' · ')}
+                  </div>
+                </div>
+              )}
             </button>
             {showCounter && (
               <div className="flex items-center gap-2 flex-shrink-0">
@@ -430,7 +458,7 @@ export function ItemList({
   );
 }
 
-export type ScanFeedback = { type: 'ok' | 'warn' | 'err'; msg: string } | null;
+export type ScanFeedback = { type: 'ok' | 'warn' | 'err'; msg: string; parts?: string[] } | null;
 
 export function ScannerBar({
   onOpen, feedback, totalCount, checkedCount,
@@ -469,7 +497,13 @@ export function ScannerBar({
       </button>
       {feedback && (
         <div className={`mt-2 px-3 py-2 rounded-lg border text-sm ${fbColor}`}>
-          {feedback.msg}
+          <div>{feedback.msg}</div>
+          {feedback.parts && feedback.parts.length > 0 && (
+            <div className="mt-1.5 pt-1.5 border-t border-current/20 text-xs">
+              <span className="font-semibold">⚠ Enthält weitere Teile — bitte mitpacken:</span>
+              <span className="ml-1 opacity-90">{feedback.parts.join(' · ')}</span>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -496,7 +530,13 @@ export function ScannerLiveList({
     <div className="space-y-2">
       {feedback && (
         <div className={`px-3 py-2 rounded-lg border text-xs ${fbColor}`}>
-          {feedback.msg}
+          <div>{feedback.msg}</div>
+          {feedback.parts && feedback.parts.length > 0 && (
+            <div className="mt-1 pt-1 border-t border-current/20">
+              <span className="font-semibold">⚠ Enthält weitere Teile:</span>
+              <span className="ml-1 opacity-90">{feedback.parts.join(' · ')}</span>
+            </div>
+          )}
         </div>
       )}
       <ItemList

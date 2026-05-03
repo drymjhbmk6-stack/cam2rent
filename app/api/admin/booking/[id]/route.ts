@@ -44,7 +44,9 @@ export async function GET(
   // Fuer jedes Element wird der Name aus accessories ODER sets aufgeloest.
   // Bei Sets werden zusaetzlich die enthaltenen accessory_items expandiert,
   // damit die Packliste das vollstaendige Inventar zeigt.
-  type ResolvedItem = { id: string; name: string; qty: number; isFromSet?: boolean; setName?: string };
+  // included_parts (Bestandteile) werden mitgeladen — Pack-Workflow zeigt sie
+  // als Hinweis an, sie sind kein eigenes Inventar.
+  type ResolvedItem = { id: string; name: string; qty: number; isFromSet?: boolean; setName?: string; included_parts?: string[] };
   const rawItems: { accessory_id: string; qty: number }[] = Array.isArray(booking.accessory_items) && booking.accessory_items.length > 0
     ? (booking.accessory_items as { accessory_id: string; qty: number }[])
     : (Array.isArray(booking.accessories) ? booking.accessories as string[] : []).map((aid) => ({ accessory_id: aid, qty: 1 }));
@@ -52,11 +54,27 @@ export async function GET(
   const resolved: ResolvedItem[] = [];
   if (rawItems.length > 0) {
     const allIds = [...new Set(rawItems.map((r) => r.accessory_id))];
-    const [{ data: accs }, { data: sets }] = await Promise.all([
-      supabase.from('accessories').select('id, name').in('id', allIds),
-      supabase.from('sets').select('id, name, accessory_items').in('id', allIds),
-    ]);
-    const accNameMap = Object.fromEntries((accs ?? []).map((a) => [a.id, a.name as string]));
+    type AccLookup = { name: string; included_parts: string[] };
+    const accLookup: Record<string, AccLookup> = {};
+    let accs: Array<{ id: string; name: string; included_parts?: string[] | null }> | null = null;
+
+    // Zwei Versuche: erst inkl. included_parts (neue Migration), bei
+    // fehlender Spalte ohne — kein 500 wenn Migration noch aussteht.
+    const accFull = await supabase.from('accessories').select('id, name, included_parts').in('id', allIds);
+    if (accFull.error && /column .*included_parts/i.test(accFull.error.message)) {
+      const accFallback = await supabase.from('accessories').select('id, name').in('id', allIds);
+      accs = accFallback.data ?? [];
+    } else {
+      accs = accFull.data ?? [];
+    }
+    const { data: sets } = await supabase.from('sets').select('id, name, accessory_items').in('id', allIds);
+
+    for (const a of accs ?? []) {
+      accLookup[a.id] = {
+        name: a.name as string,
+        included_parts: Array.isArray(a.included_parts) ? a.included_parts as string[] : [],
+      };
+    }
     const setMap: Record<string, { name: string; items: { accessory_id: string; qty: number }[] }> = {};
     for (const s of sets ?? []) {
       setMap[s.id] = {
@@ -65,16 +83,29 @@ export async function GET(
       };
     }
 
-    // Set-Sub-Item-Namen separat nachladen (wenn nicht schon im accNameMap)
+    // Set-Sub-Item-Namen separat nachladen (wenn nicht schon im accLookup)
     const setSubIds = new Set<string>();
     for (const setInfo of Object.values(setMap)) {
       for (const it of setInfo.items) {
-        if (!accNameMap[it.accessory_id]) setSubIds.add(it.accessory_id);
+        if (!accLookup[it.accessory_id]) setSubIds.add(it.accessory_id);
       }
     }
     if (setSubIds.size > 0) {
-      const { data: subAccs } = await supabase.from('accessories').select('id, name').in('id', [...setSubIds]);
-      for (const a of subAccs ?? []) accNameMap[a.id] = a.name as string;
+      const subFull = await supabase
+        .from('accessories')
+        .select('id, name, included_parts')
+        .in('id', [...setSubIds]);
+      let subRows: Array<{ id: string; name: string; included_parts?: string[] | null }> = subFull.data ?? [];
+      if (subFull.error && /column .*included_parts/i.test(subFull.error.message)) {
+        const subFallback = await supabase.from('accessories').select('id, name').in('id', [...setSubIds]);
+        subRows = subFallback.data ?? [];
+      }
+      for (const a of subRows) {
+        accLookup[a.id] = {
+          name: a.name as string,
+          included_parts: Array.isArray(a.included_parts) ? a.included_parts as string[] : [],
+        };
+      }
     }
 
     for (const item of rawItems) {
@@ -83,19 +114,23 @@ export async function GET(
         // Set-Container-Zeile zur Orientierung, dann Sub-Items expandiert
         resolved.push({ id: item.accessory_id, name: setInfo.name, qty: item.qty });
         for (const sub of setInfo.items) {
+          const subAcc = accLookup[sub.accessory_id];
           resolved.push({
             id: sub.accessory_id,
-            name: accNameMap[sub.accessory_id] ?? sub.accessory_id,
+            name: subAcc?.name ?? sub.accessory_id,
             qty: (sub.qty || 1) * item.qty,
             isFromSet: true,
             setName: setInfo.name,
+            included_parts: subAcc?.included_parts && subAcc.included_parts.length > 0 ? subAcc.included_parts : undefined,
           });
         }
       } else {
+        const acc = accLookup[item.accessory_id];
         resolved.push({
           id: item.accessory_id,
-          name: accNameMap[item.accessory_id] ?? item.accessory_id,
+          name: acc?.name ?? item.accessory_id,
           qty: item.qty,
+          included_parts: acc?.included_parts && acc.included_parts.length > 0 ? acc.included_parts : undefined,
         });
       }
     }

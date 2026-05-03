@@ -320,6 +320,18 @@ Analog zu `product_units` für Kameras werden Akkus, Stative, Karten etc. pro ph
   - Response-Schema unverändert (`{ id, name, total_qty, booked_qty, available_qty_remaining, is_available, compatible }`) — alle 3 Konsumenten (`/admin/buchungen/neu`, `/kameras/[slug]/buchen`, `ProductAccessorySets`) funktionieren weiter.
   - **Total-Quelle bleibt `accessories.available_qty`** — wird durch `syncAccessoryQty` automatisch als `COUNT(units WHERE status IN ('available','rented'))` gehalten, schließt also `damaged|lost|maintenance|retired` schon aus.
 
+### Zubehör-Bestandteile (Stand 2026-05-03)
+Manche Zubehöre bestehen physisch aus mehreren Teilen (z.B. Funkmikrofon-Set: 2× Sender, 1× Empfänger, 2× Lavalier-Mikro, 1× USB-C-Kabel, Windschutz). Diese Teile werden nicht als eigene Inventar-Einträge geführt und tauchen beim Pack-Scan auch nicht als eigene Slots auf — sie hängen am Sammel-/Exemplar-QR des Hauptzubehörs. Beim Scannen erinnert das System aber sichtbar daran, dass weitere Teile mit ins Paket gehören.
+
+- **DB-Spalte `accessories.included_parts TEXT[]`** (Migration `supabase-accessories-included-parts.sql`, idempotent, default `'{}'`). Speicherform: Klartext-Liste wie `['2x Sender', '1x Windschutz']`.
+- **API:** `POST/PUT /api/admin/accessories[/[id]]` akzeptiert `included_parts` als String-Array. `sanitizeIncludedParts()` trimmt, droppt Leereinträge, cap auf 30 Zeilen × 120 Zeichen. Defensiver Fallback bei fehlender Migration (Insert-Retry ohne Spalte).
+- **Admin-UI** (`/admin/zubehoer`): Komponente `IncludedPartsEditor` direkt unter Beschreibung in beiden Forms (Anlegen + Edit). Pro Zeile: Input + ↑-Reorder + ✕-Remove. Button „+ Bestandteil hinzufügen". Limits werden serverseitig erzwungen, Client zeigt 30er-Cap.
+- **Booking-Detail-API** (`GET /api/admin/booking/[id]` + `GET /api/packlist/[bookingId]`): laden `included_parts` zusätzlich zur Name-Auflösung und reichen sie als optionales Feld auf jedem `resolved_items[]`-Eintrag durch — auch für Set-Sub-Items. Beide haben den Defensiv-Fallback (alte DB-Schemas ohne Migration werden unterstützt).
+- **Pack-Workflow** (`/admin/versand/[id]/packen`): `<ItemList>` zeigt unter dem Item-Namen einen amber Hinweis-Block „Enthält N Teile" mit der Klartext-Liste. Greift in beiden Schritten (Packen + Kontrollieren) sowie in der continuous-Live-Liste unter dem Scanner. Set-Container werden weiterhin gefiltert (siehe oben), die Bestandteile hängen an den expandierten Sub-Items.
+- **Scanner-Toast:** `applyScan()` liest `includedParts` vom getroffenen Slot und gibt sie über `ScanResult.includedParts` an den Aufrufer zurück. Sowohl `ScannerBar` als auch `ScannerLiveList` rendern einen Sub-Block „⚠ Enthält weitere Teile — bitte mitpacken: …". Toast-Lebensdauer wird bei vorhandenen Bestandteilen auf 6 s erhöht (sonst 3,5 s).
+- **Packliste-PDF** (`lib/packlist-pdf.tsx`): `resolvedItems[].included_parts` wird unter dem Item-Namen als 8pt-grauer Text „Enthält: 2× Sender · 1× Windschutz" gerendert (`wrap={false}` damit Zeile zusammen bleibt).
+- **Was nicht passiert:** Keine eigenen `accessory_units`, keine Verfügbarkeitsprüfung, keine eigenen Scan-Codes, keine Auswirkung auf den Lagerbestand. Bestandteile sind reine Zusatzanzeige.
+
 ### Verfügbarkeit + Gantt-Kalender
 - **Gantt-Kalender** (`/admin/verfuegbarkeit`): Alle 3 Tabs (Kameras, Zubehör, Sets) mit Gantt-Ansicht
   - **Durchgehend scrollbar:** 3 Monate zurück + 6 Monate voraus (kein Monatswechsel nötig)
@@ -1564,6 +1576,7 @@ Admin-Seite `/admin/newsletter` (in Sidebar-Gruppe „Rabatte & Aktionen", Permi
 **Audit-Log-Aktionen:** `newsletter.send_campaign`, `newsletter.update_subscriber`, `newsletter.delete_subscriber`, `customer_push.send`.
 
 ### Noch offen
+- **Zubehör-Bestandteile Migration auszuführen:** `supabase/supabase-accessories-included-parts.sql` (idempotent). Fügt nullable Spalte `included_parts TEXT[] DEFAULT '{}'` zu `accessories`. Ohne Migration ignorieren die APIs den Wert (defensiver Retry-Pfad), die Admin-UI speichert dann leer, Pack-Workflow + PDF zeigen keine Bestandteile.
 - **Buchhaltungs-Refactor Migration auszuführen:** `supabase/supabase-buchhaltung-foundation.sql` (idempotent). Fügt nullable Spalten `account_code` + `internal_beleg_no` zu invoices/expenses/credit_notes/purchases/purchase_items/assets hinzu, initialisiert `period_locks` + `kontenrahmen_mapping` Settings. Heute keine Wirkung — bereit fuer Belegjournal/Regelbesteuerung-Wechsel.
 - **Zubehör-Exemplar-Tracking Phase 3A + 3B (Migrationen auszuführen, beide idempotent):**
   1. `supabase/supabase-assets-accessory-unit-id.sql` (3A) — Spalte `assets.accessory_unit_id` mit FK auf `accessory_units(id)` + Index. Ohne Migration schlägt der „+ erfassen"-Button im AccessoryUnitsManager mit 500 fehl.

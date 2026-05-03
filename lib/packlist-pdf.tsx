@@ -31,8 +31,10 @@ export interface PacklistData {
   accessoryItems?: { accessory_id: string; qty: number }[];
   /** Optional: Bereits aufgeloeste Item-Namen mit Stueckzahl. Wenn vorhanden,
    *  hat das Vorrang vor accessoryItems/accessories — wird typischerweise von
-   *  der Booking-API geliefert (loest Sets in einzelne Zubehoere auf). */
-  resolvedItems?: { name: string; qty: number }[];
+   *  der Booking-API geliefert (loest Sets in einzelne Zubehoere auf).
+   *  included_parts werden, wenn vorhanden, als kleine Hinweis-Zeile unter
+   *  dem Hauptitem im PDF gerendert. */
+  resolvedItems?: { name: string; qty: number; included_parts?: string[] }[];
   /** Seriennummer der gebuchten Kamera. Wenn vorhanden, wird sie statt der
    *  leeren Eintrage-Linie ausgegeben. */
   serialNumber?: string | null;
@@ -264,14 +266,18 @@ export function PacklistPDF({ data }: { data: PacklistData }) {
   // Zubehör-Namen auflösen.
   // Vorrang: resolvedItems (vom Server bereits expandiert, inkl. Set-Items),
   // dann accessoryItems (qty-aware), zuletzt accessories[] (Legacy, qty=1).
-  const accItems = data.resolvedItems && data.resolvedItems.length > 0
-    ? data.resolvedItems.map((i) => (i.qty > 1 ? `${i.qty}x ${i.name}` : i.name))
+  type AccRow = { label: string; included_parts?: string[] };
+  const accItems: AccRow[] = data.resolvedItems && data.resolvedItems.length > 0
+    ? data.resolvedItems.map((i) => ({
+        label: i.qty > 1 ? `${i.qty}x ${i.name}` : i.name,
+        included_parts: Array.isArray(i.included_parts) && i.included_parts.length > 0 ? i.included_parts : undefined,
+      }))
     : data.accessoryItems && data.accessoryItems.length > 0
       ? data.accessoryItems.map((i) => {
           const name = accName(i.accessory_id);
-          return i.qty > 1 ? `${i.qty}x ${name}` : name;
+          return { label: i.qty > 1 ? `${i.qty}x ${name}` : name };
         })
-      : data.accessories.map((id) => accName(id));
+      : data.accessories.map((id) => ({ label: accName(id) }));
 
   // Haftung Label
   const haftungLabel = data.haftung === 'standard' ? 'Standard-Haftungsschutz'
@@ -390,10 +396,17 @@ export function PacklistPDF({ data }: { data: PacklistData }) {
             </View>
 
             {accItems.length > 0 ? (
-              accItems.map((name, i) => (
-                <View key={i} style={[s.tableRow, i % 2 === 1 ? s.tableRowAlt : {}]}>
+              accItems.map((row, i) => (
+                <View key={i} style={[s.tableRow, i % 2 === 1 ? s.tableRowAlt : {}]} wrap={false}>
                   <Text style={s.colNr}>{i + 1}</Text>
-                  <Text style={s.colBez}>{name}</Text>
+                  <View style={s.colBez}>
+                    <Text>{row.label}</Text>
+                    {row.included_parts && row.included_parts.length > 0 && (
+                      <Text style={{ fontSize: 8, color: C.grayText, marginTop: 1 }}>
+                        Enthält: {row.included_parts.join(' · ')}
+                      </Text>
+                    )}
+                  </View>
                   <View style={[s.colOk, { alignItems: 'center' }]}>
                     <Checkbox checked={itemsAcknowledged} />
                   </View>

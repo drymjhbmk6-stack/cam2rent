@@ -3,6 +3,23 @@ import { createServiceClient } from '@/lib/supabase';
 import { logAudit } from '@/lib/audit';
 import { sanitizeSpecs } from '@/lib/accessory-specs';
 
+// Bestandteile-Liste auf saubere String-Eintraege normalisieren.
+// Whitespace trimmen, Leereintraege raus, max 30 Zeilen, max 120 Zeichen pro
+// Eintrag — verhindert Pasten von ganzen Datenblaettern. Falls die Migration
+// `supabase-accessories-included-parts.sql` noch nicht durch ist, schluckt der
+// Insert-Retry-Pfad das Feld (siehe unten).
+function sanitizeIncludedParts(input: unknown): string[] {
+  if (!Array.isArray(input)) return [];
+  const cleaned: string[] = [];
+  for (const raw of input) {
+    if (typeof raw !== 'string') continue;
+    const trimmed = raw.trim().slice(0, 120);
+    if (trimmed) cleaned.push(trimmed);
+    if (cleaned.length >= 30) break;
+  }
+  return cleaned;
+}
+
 /**
  * GET  /api/admin/accessories     → alle Zubehörteile
  * POST /api/admin/accessories     → neues Zubehörteil anlegen
@@ -20,7 +37,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { name, category, description, pricing_mode, price, available_qty, available, image_url, compatible_product_ids, internal, upgrade_group, is_upgrade_base, allow_multi_qty, max_qty_per_booking, replacement_value, is_bulk, specs } = body;
+  const { name, category, description, pricing_mode, price, available_qty, available, image_url, compatible_product_ids, internal, upgrade_group, is_upgrade_base, allow_multi_qty, max_qty_per_booking, replacement_value, is_bulk, specs, included_parts } = body;
 
   if (!name || !category) {
     return NextResponse.json({ error: 'name und category erforderlich.' }, { status: 400 });
@@ -76,6 +93,7 @@ export async function POST(req: NextRequest) {
 
   const insertPayload: Record<string, unknown> = { id, name, category, description: description ?? null, pricing_mode: pricing_mode ?? 'perDay', price: parseFloat(price) || 0, available_qty: parseInt(available_qty) || 1, available: available ?? true, image_url: image_url ?? null, sort_order, compatible_product_ids: compatible_product_ids ?? [], internal: internal ?? false, upgrade_group: upgrade_group || null, is_upgrade_base: is_upgrade_base ?? false, allow_multi_qty: allow_multi_qty ?? false, max_qty_per_booking: maxQty, replacement_value: replacementValue, is_bulk: is_bulk ?? false };
   if (specs !== undefined) insertPayload.specs = sanitizeSpecs(specs);
+  if (included_parts !== undefined) insertPayload.included_parts = sanitizeIncludedParts(included_parts);
 
   let { data, error } = await supabase
     .from('accessories')
@@ -88,6 +106,15 @@ export async function POST(req: NextRequest) {
   // ohne specs versuchen, damit das Anlegen weiter klappt.
   if (error && /column .*specs/i.test(error.message) && 'specs' in insertPayload) {
     delete insertPayload.specs;
+    const retry = await supabase.from('accessories').insert(insertPayload).select().single();
+    data = retry.data;
+    error = retry.error;
+  }
+
+  // Gleiches Defensiv-Muster fuer included_parts (Migration
+  // `supabase-accessories-included-parts.sql`).
+  if (error && /column .*included_parts/i.test(error.message) && 'included_parts' in insertPayload) {
+    delete insertPayload.included_parts;
     const retry = await supabase.from('accessories').insert(insertPayload).select().single();
     data = retry.data;
     error = retry.error;
