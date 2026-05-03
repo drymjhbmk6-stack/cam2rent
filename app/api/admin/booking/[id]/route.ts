@@ -102,6 +102,28 @@ export async function GET(
   }
   booking.resolved_items = resolved;
 
+  // Zubehoer-Exemplar-Codes laden — fuer den Scanner-Workflow auf der Pack-
+  // Seite, damit ein gescannter Code direkt einem accessory_id zugeordnet
+  // werden kann. Defensiv bei fehlender Spalte / leeren UUIDs.
+  type UnitCode = { id: string; accessory_id: string; exemplar_code: string };
+  let unitCodes: UnitCode[] = [];
+  const accUnitIds: string[] = Array.isArray(booking.accessory_unit_ids)
+    ? (booking.accessory_unit_ids as string[]).filter(Boolean)
+    : [];
+  if (accUnitIds.length > 0) {
+    try {
+      const { data: units } = await supabase
+        .from('accessory_units')
+        .select('id, accessory_id, exemplar_code')
+        .in('id', accUnitIds);
+      unitCodes = (units ?? []) as UnitCode[];
+    } catch {
+      // Tabelle fehlt (Migration nicht durch) — Scanner-Match laeuft dann
+      // nur fuer Kamera-Seriennummer, nicht fuer Zubehoer.
+    }
+  }
+  booking.unit_codes = unitCodes;
+
   // Kundenprofil laden
   let customer = null;
   if (booking.user_id) {

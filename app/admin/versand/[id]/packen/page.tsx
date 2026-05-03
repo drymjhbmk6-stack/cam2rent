@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useRef, useState, use } from 'react';
+import { useEffect, useRef, useState, use, useMemo } from 'react';
 import Link from 'next/link';
 import SignatureCanvas from 'react-signature-canvas';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import SerialScanner from '@/components/admin/SerialScanner';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -13,6 +14,12 @@ interface ResolvedItem {
   qty: number;
   isFromSet?: boolean;
   setName?: string;
+}
+
+interface UnitCode {
+  id: string;
+  accessory_id: string;
+  exemplar_code: string;
 }
 
 interface BookingDetail {
@@ -26,6 +33,7 @@ interface BookingDetail {
   rental_to: string;
   serial_number?: string | null;
   resolved_items?: ResolvedItem[];
+  unit_codes?: UnitCode[];
   pack_status?: string | null;
   pack_packed_by?: string | null;
   pack_packed_by_user_id?: string | null;
@@ -44,22 +52,57 @@ interface CurrentAdminUser {
   isEmployeeAccount: boolean; // true wenn echter Mitarbeiter-Account (nicht legacy-env Master-Passwort)
 }
 
+interface PackItem {
+  key: string;
+  label: string;
+  subLabel: string;
+  // Fuer Scanner-Lookup: welche Codes haken dieses Item ab?
+  // 'camera' nutzt Kamera-Seriennummer, 'accessory' nutzt accessory_id (loest
+  // ueber unit_codes auf), 'return-label' ist nicht scanbar.
+  type: 'camera' | 'accessory' | 'return-label';
+  accessoryId?: string;
+}
+
 // Stueckzahl aus resolved_items expandieren — eine Zeile pro physisches Stueck
 // damit jeder Akku/Karte/etc. einzeln abgehakt werden kann.
-function expandItems(b: BookingDetail): { key: string; label: string; subLabel: string }[] {
-  const out: { key: string; label: string; subLabel: string }[] = [];
-  out.push({ key: 'camera', label: b.product_name, subLabel: b.serial_number ? `Seriennummer: ${b.serial_number}` : 'Kamera' });
+//
+// Set-Container-Zeilen (z.B. "Basic Set" als Header zwischen den Sub-Items)
+// werden hier rausgefiltert — die Pack-UI listet nur die tatsaechlich zu
+// packenden physischen Stuecke. Erkennung: ein nicht-isFromSet-Item dessen
+// name als setName eines anderen Items vorkommt.
+function expandItems(b: BookingDetail): PackItem[] {
   const items = b.resolved_items ?? [];
+  const usedSetNames = new Set<string>();
   for (const it of items) {
+    if (it.isFromSet && it.setName) usedSetNames.add(it.setName);
+  }
+
+  const out: PackItem[] = [];
+  out.push({
+    key: 'camera',
+    type: 'camera',
+    label: b.product_name,
+    subLabel: b.serial_number ? `Seriennummer: ${b.serial_number}` : 'Kamera',
+  });
+  for (const it of items) {
+    // Set-Container ueberspringen
+    if (!it.isFromSet && usedSetNames.has(it.name)) continue;
     for (let i = 0; i < it.qty; i++) {
       out.push({
         key: `${it.id}::${i}`,
+        type: 'accessory',
+        accessoryId: it.id,
         label: it.name,
         subLabel: it.isFromSet && it.setName ? `Im Set: ${it.setName}` : 'Zubehör',
       });
     }
   }
-  out.push({ key: 'return-label', label: 'Rücksendeetikett beilegen', subLabel: 'DHL / DPD / etc.' });
+  out.push({
+    key: 'return-label',
+    type: 'return-label',
+    label: 'Rücksendeetikett beilegen',
+    subLabel: 'DHL / DPD / etc.',
+  });
   return out;
 }
 
@@ -205,7 +248,7 @@ function PackStep({
   booking, items, me, onDone,
 }: {
   booking: BookingDetail;
-  items: { key: string; label: string; subLabel: string }[];
+  items: PackItem[];
   me: CurrentAdminUser | null;
   onDone: () => void;
 }) {
@@ -219,6 +262,25 @@ function PackStep({
   const [hasDrawn, setHasDrawn] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState('');
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [scanFeedback, setScanFeedback] = useState<{ type: 'ok' | 'warn' | 'err'; msg: string } | null>(null);
+
+  const scanLookup = useMemo(() => buildScanLookup(booking), [booking]);
+
+  function handleScan(code: string) {
+    const result = applyScan(code, items, checked, scanLookup);
+    if (result.ok && result.key) {
+      setChecked((p) => ({ ...p, [result.key!]: true }));
+      setScanFeedback({ type: 'ok', msg: result.message });
+    } else if (result.alreadyChecked) {
+      setScanFeedback({ type: 'warn', msg: result.message });
+    } else {
+      setScanFeedback({ type: 'err', msg: result.message });
+    }
+    setScannerOpen(false);
+    // Feedback nach 2s ausblenden
+    window.setTimeout(() => setScanFeedback(null), 2500);
+  }
 
   // Name aus Mitarbeiter-Konto vorausfuellen — bleibt editierbar fuer den Fall,
   // dass jemand anderes (z.B. Aushilfe ohne eigenen Account) am Geraet packt.
@@ -263,11 +325,25 @@ function PackStep({
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 sm:p-6 mb-6">
       <h2 className="text-lg font-bold mb-1 text-slate-100">Schritt 1: Paket packen</h2>
-      <p className="text-sm text-slate-400 mb-5">
+      <p className="text-sm text-slate-400 mb-4">
         Pack jedes Item einzeln ein und hake es ab. Am Ende unterschreiben — danach übergibst du das Paket einer zweiten Person zur Kontrolle.
       </p>
 
+      <ScannerBar
+        onOpen={() => setScannerOpen(true)}
+        feedback={scanFeedback}
+        scannableCount={scanLookup.scannableCount}
+        checkedScannable={Object.keys(checked).filter((k) => checked[k] && items.find((i) => i.key === k)?.type !== 'return-label').length}
+      />
+
       <ItemList items={items} checked={checked} onToggle={(k) => setChecked((p) => ({ ...p, [k]: !p[k] }))} />
+
+      <SerialScanner
+        open={scannerOpen}
+        onResult={handleScan}
+        onClose={() => setScannerOpen(false)}
+        title="Item scannen"
+      />
 
       <div className="mt-6 space-y-3 border-t border-slate-800 pt-4">
         <h3 className="text-sm font-semibold text-slate-300 mb-2">Zustand bei Verpackung</h3>
@@ -316,7 +392,7 @@ function CheckStep({
   booking, items, me, onDone,
 }: {
   booking: BookingDetail;
-  items: { key: string; label: string; subLabel: string }[];
+  items: PackItem[];
   me: CurrentAdminUser | null;
   onDone: () => void;
 }) {
@@ -330,6 +406,24 @@ function CheckStep({
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState('');
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [scanFeedback, setScanFeedback] = useState<{ type: 'ok' | 'warn' | 'err'; msg: string } | null>(null);
+
+  const scanLookup = useMemo(() => buildScanLookup(booking), [booking]);
+
+  function handleScan(code: string) {
+    const result = applyScan(code, items, checked, scanLookup);
+    if (result.ok && result.key) {
+      setChecked((p) => ({ ...p, [result.key!]: true }));
+      setScanFeedback({ type: 'ok', msg: result.message });
+    } else if (result.alreadyChecked) {
+      setScanFeedback({ type: 'warn', msg: result.message });
+    } else {
+      setScanFeedback({ type: 'err', msg: result.message });
+    }
+    setScannerOpen(false);
+    window.setTimeout(() => setScanFeedback(null), 2500);
+  }
 
   // Name aus Mitarbeiter-Konto vorausfuellen.
   useEffect(() => {
@@ -402,7 +496,21 @@ function CheckStep({
         </p>
       )}
 
+      <ScannerBar
+        onOpen={() => setScannerOpen(true)}
+        feedback={scanFeedback}
+        scannableCount={scanLookup.scannableCount}
+        checkedScannable={Object.keys(checked).filter((k) => checked[k] && items.find((i) => i.key === k)?.type !== 'return-label').length}
+      />
+
       <ItemList items={items} checked={checked} onToggle={(k) => setChecked((p) => ({ ...p, [k]: !p[k] }))} />
+
+      <SerialScanner
+        open={scannerOpen}
+        onResult={handleScan}
+        onClose={() => setScannerOpen(false)}
+        title="Item scannen"
+      />
 
       <div className="mt-6 border-t border-slate-800 pt-4">
         <label className="block text-xs text-slate-500 uppercase tracking-wider mb-1">Notizen (optional)</label>
@@ -590,7 +698,7 @@ function DoneStep({ booking, me, onReset }: { booking: BookingDetail; me: Curren
 function ItemList({
   items, checked, onToggle,
 }: {
-  items: { key: string; label: string; subLabel: string }[];
+  items: PackItem[];
   checked: Record<string, boolean>;
   onToggle: (key: string) => void;
 }) {
@@ -686,6 +794,116 @@ function SignatureBlock({
           <p className="text-xs text-amber-400">Bitte unterschreiben.</p>
         )}
       </div>
+    </div>
+  );
+}
+
+// ─── Scanner-Helpers ─────────────────────────────────────────────────────────
+
+interface ScanLookup {
+  cameraSerial: string | null;
+  // exemplar_code → accessory_id
+  codeToAccessory: Map<string, string>;
+  scannableCount: number;
+}
+
+function buildScanLookup(b: BookingDetail): ScanLookup {
+  const codeMap = new Map<string, string>();
+  for (const u of b.unit_codes ?? []) {
+    if (u.exemplar_code) codeMap.set(normalizeCode(u.exemplar_code), u.accessory_id);
+  }
+  return {
+    cameraSerial: b.serial_number ? normalizeCode(b.serial_number) : null,
+    codeToAccessory: codeMap,
+    scannableCount: (b.serial_number ? 1 : 0) + codeMap.size,
+  };
+}
+
+function normalizeCode(s: string): string {
+  return s.trim().toUpperCase().replace(/\s+/g, '');
+}
+
+interface ScanResult {
+  ok: boolean;
+  alreadyChecked?: boolean;
+  key?: string;
+  message: string;
+}
+
+function applyScan(
+  rawCode: string,
+  items: PackItem[],
+  checked: Record<string, boolean>,
+  lookup: ScanLookup,
+): ScanResult {
+  const code = normalizeCode(rawCode);
+  if (!code) return { ok: false, message: 'Leerer Code.' };
+
+  // Kamera?
+  if (lookup.cameraSerial && lookup.cameraSerial === code) {
+    if (checked['camera']) {
+      return { ok: false, alreadyChecked: true, message: `Kamera (${rawCode}) schon abgehakt.` };
+    }
+    return { ok: true, key: 'camera', message: `✓ Kamera (${rawCode})` };
+  }
+
+  // Zubehoer?
+  const accId = lookup.codeToAccessory.get(code);
+  if (accId) {
+    // Ersten ungehakten Slot dieses accessoryId finden
+    const slots = items.filter((it) => it.type === 'accessory' && it.accessoryId === accId);
+    if (slots.length === 0) {
+      return { ok: false, message: `Code ${rawCode} gehört nicht zu dieser Buchung.` };
+    }
+    const free = slots.find((it) => !checked[it.key]);
+    if (!free) {
+      return { ok: false, alreadyChecked: true, message: `Alle ${slots[0].label} schon abgehakt.` };
+    }
+    return { ok: true, key: free.key, message: `✓ ${free.label}` };
+  }
+
+  return { ok: false, message: `Code ${rawCode} unbekannt.` };
+}
+
+function ScannerBar({
+  onOpen, feedback, scannableCount, checkedScannable,
+}: {
+  onOpen: () => void;
+  feedback: { type: 'ok' | 'warn' | 'err'; msg: string } | null;
+  scannableCount: number;
+  checkedScannable: number;
+}) {
+  if (scannableCount === 0) return null;
+  const fbColor = feedback?.type === 'ok'
+    ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
+    : feedback?.type === 'warn'
+      ? 'bg-amber-500/15 border-amber-500/40 text-amber-300'
+      : 'bg-red-500/15 border-red-500/40 text-red-300';
+  return (
+    <div className="mb-4">
+      <button
+        type="button"
+        onClick={onOpen}
+        className="w-full flex items-center justify-between gap-3 px-4 py-3 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 rounded-lg transition-colors"
+      >
+        <div className="flex items-center gap-3 text-cyan-300">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><line x1="7" y1="12" x2="17" y2="12"/>
+          </svg>
+          <div className="text-left">
+            <div className="font-semibold text-sm">Scanner öffnen</div>
+            <div className="text-xs text-cyan-400/80">Item-Code scannen → wird automatisch abgehakt</div>
+          </div>
+        </div>
+        <div className="text-xs text-cyan-300/80 tabular-nums">
+          {checkedScannable}/{scannableCount}
+        </div>
+      </button>
+      {feedback && (
+        <div className={`mt-2 px-3 py-2 rounded-lg border text-sm ${fbColor}`}>
+          {feedback.msg}
+        </div>
+      )}
     </div>
   );
 }
