@@ -167,57 +167,59 @@ export default function AnlagenPage() {
               Keine Anlagegueter gefunden. <Link href="/admin/einkauf/upload" style={{ color: cyan }}>Rechnung hochladen</Link> oder <Link href="/admin/anlagen/nachtragen" style={{ color: cyan }}>Bestand nachtragen</Link>.
             </div>
           ) : (
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-              <thead>
-                <tr style={{ background: '#0a0f1e' }}>
-                  <th style={th}>Name</th>
-                  <th style={th}>Art</th>
-                  <th style={th}>Kaufdatum</th>
-                  <th style={{ ...th, textAlign: 'right' }}>Anschaffung</th>
-                  <th style={{ ...th, textAlign: 'right' }}>Zeitwert</th>
-                  <th style={th}>Status</th>
-                  <th style={th}>Lieferant</th>
-                  <th style={th}>Rechnung</th>
-                  <th style={th}></th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((a) => (
-                  <tr key={a.id} style={{ borderTop: '1px solid #1e293b' }}>
-                    <td style={td}>
-                      <div style={{ color: '#e2e8f0', fontWeight: 600 }}>{a.name}</div>
-                      {a.serial_number && <div style={{ color: '#64748b', fontSize: 11, marginTop: 2 }}>SN: {a.serial_number}</div>}
-                    </td>
-                    <td style={td}>
-                      <span style={{
-                        display: 'inline-block', padding: '3px 10px', borderRadius: 999,
-                        fontSize: 11, fontWeight: 700,
-                        background: KIND_LABELS[a.kind].bg, color: KIND_LABELS[a.kind].color,
-                      }}>
-                        {KIND_LABELS[a.kind].label}
-                      </span>
-                    </td>
-                    <td style={td}>{fmtDate(a.purchase_date)}</td>
-                    <td style={{ ...td, textAlign: 'right', color: '#e2e8f0' }}>{formatCurrency(a.purchase_price)}</td>
-                    <td style={{ ...td, textAlign: 'right', color: cyan, fontWeight: 600 }}>{formatCurrency(a.current_value)}</td>
-                    <td style={td}>
-                      <span style={{ color: STATUS_LABELS[a.status].color, fontWeight: 600, fontSize: 12 }}>{STATUS_LABELS[a.status].label}</span>
-                    </td>
-                    <td style={{ ...td, color: '#94a3b8' }}>{a.supplier?.name ?? '—'}</td>
-                    <td style={td}>
-                      {a.purchase?.invoice_storage_path ? (
-                        <a href={`/api/admin/invoices/purchase-pdf?path=${encodeURIComponent(a.purchase.invoice_storage_path)}`} target="_blank" rel="noopener noreferrer" style={{ color: cyan, fontSize: 12 }}>
-                          📄 PDF
-                        </a>
-                      ) : '—'}
-                    </td>
-                    <td style={{ ...td, textAlign: 'right' }}>
-                      <a href={`/admin/anlagen/${a.id}`} style={{ color: cyan, fontSize: 12, fontWeight: 600 }}>Details →</a>
-                    </td>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', minWidth: 1000, borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr style={{ background: '#0a0f1e' }}>
+                    <th style={th}>Name</th>
+                    <th style={th}>Art</th>
+                    <th style={th}>Kaufdatum</th>
+                    <th style={{ ...th, textAlign: 'right' }}>Anschaffung</th>
+                    <th style={{ ...th, textAlign: 'right' }}>Zeitwert</th>
+                    <th style={th}>Status</th>
+                    <th style={th}>Lieferant</th>
+                    <th style={th}>Rechnung</th>
+                    <th style={th}></th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {filtered.map((a) => (
+                    <tr key={a.id} style={{ borderTop: '1px solid #1e293b' }}>
+                      <td style={td}>
+                        <div style={{ color: '#e2e8f0', fontWeight: 600 }}>{a.name}</div>
+                        {a.serial_number && <div style={{ color: '#64748b', fontSize: 11, marginTop: 2 }}>SN: {a.serial_number}</div>}
+                      </td>
+                      <td style={td}>
+                        <span style={{
+                          display: 'inline-block', padding: '3px 10px', borderRadius: 999,
+                          fontSize: 11, fontWeight: 700,
+                          background: KIND_LABELS[a.kind].bg, color: KIND_LABELS[a.kind].color,
+                        }}>
+                          {KIND_LABELS[a.kind].label}
+                        </span>
+                      </td>
+                      <td style={td}>{fmtDate(a.purchase_date)}</td>
+                      <td style={{ ...td, textAlign: 'right', color: '#e2e8f0' }}>{formatCurrency(a.purchase_price)}</td>
+                      <td style={{ ...td, textAlign: 'right', color: cyan, fontWeight: 600 }}>{formatCurrency(a.current_value)}</td>
+                      <td style={td}>
+                        <span style={{ color: STATUS_LABELS[a.status].color, fontWeight: 600, fontSize: 12 }}>{STATUS_LABELS[a.status].label}</span>
+                      </td>
+                      <td style={{ ...td, color: '#94a3b8' }}>{a.supplier?.name ?? '—'}</td>
+                      <td style={td}>
+                        {a.purchase?.invoice_storage_path ? (
+                          <a href={`/api/admin/invoices/purchase-pdf?path=${encodeURIComponent(a.purchase.invoice_storage_path)}`} target="_blank" rel="noopener noreferrer" style={{ color: cyan, fontSize: 12 }}>
+                            📄 PDF
+                          </a>
+                        ) : '—'}
+                      </td>
+                      <td style={{ ...td, textAlign: 'right' }}>
+                        <a href={`/admin/anlagen/${a.id}`} style={{ color: cyan, fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' }}>Details →</a>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       </div>

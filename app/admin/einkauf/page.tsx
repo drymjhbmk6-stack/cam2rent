@@ -379,30 +379,32 @@ export default function EinkaufPage() {
 
           {/* Supplier Table */}
           <div style={{ ...S.card, overflow: 'hidden' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ borderBottom: '1px solid #1e293b' }}>
-                  {['Name', 'Kontaktperson', 'E-Mail', 'Telefon', ''].map(h => (
-                    <th key={h} style={{ ...S.dim, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', padding: '12px 16px', textAlign: 'left' }}>{h}</th>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', minWidth: 720, borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid #1e293b' }}>
+                    {['Name', 'Kontaktperson', 'E-Mail', 'Telefon', ''].map(h => (
+                      <th key={h} style={{ ...S.dim, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', padding: '12px 16px', textAlign: 'left' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredSuppliers.length === 0 ? (
+                    <tr><td colSpan={5} style={{ padding: 40, textAlign: 'center', ...S.dim }}>Keine Lieferanten gefunden</td></tr>
+                  ) : filteredSuppliers.map(sup => (
+                    <SupplierRow
+                      key={sup.id}
+                      supplier={sup}
+                      isEditing={editingSupplier === sup.id}
+                      onEdit={() => setEditingSupplier(editingSupplier === sup.id ? null : sup.id)}
+                      onSave={(data) => updateSupplier(sup.id, data)}
+                      onDelete={() => deleteSupplier(sup.id)}
+                      saving={saving}
+                    />
                   ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filteredSuppliers.length === 0 ? (
-                  <tr><td colSpan={5} style={{ padding: 40, textAlign: 'center', ...S.dim }}>Keine Lieferanten gefunden</td></tr>
-                ) : filteredSuppliers.map(sup => (
-                  <SupplierRow
-                    key={sup.id}
-                    supplier={sup}
-                    isEditing={editingSupplier === sup.id}
-                    onEdit={() => setEditingSupplier(editingSupplier === sup.id ? null : sup.id)}
-                    onSave={(data) => updateSupplier(sup.id, data)}
-                    onDelete={() => deleteSupplier(sup.id)}
-                    saving={saving}
-                  />
-                ))}
-              </tbody>
-            </table>
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       ) : (
@@ -580,29 +582,31 @@ export default function EinkaufPage() {
 
           {/* Purchase Table */}
           <div style={{ ...S.card, overflow: 'hidden' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ borderBottom: '1px solid #1e293b' }}>
-                  {['Datum', 'Lieferant', 'Produkte', 'Betrag', 'Status', ''].map(h => (
-                    <th key={h} style={{ ...S.dim, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', padding: '12px 16px', textAlign: 'left' }}>{h}</th>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', minWidth: 820, borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid #1e293b' }}>
+                    {['Datum', 'Lieferant', 'Produkte', 'Betrag', 'Status', ''].map(h => (
+                      <th key={h} style={{ ...S.dim, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', padding: '12px 16px', textAlign: 'left' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredPurchases.length === 0 ? (
+                    <tr><td colSpan={6} style={{ padding: 40, textAlign: 'center', ...S.dim }}>Keine Einkäufe gefunden</td></tr>
+                  ) : filteredPurchases.map(p => (
+                    <PurchaseRow
+                      key={p.id}
+                      purchase={p}
+                      expanded={expandedPurchase === p.id}
+                      onToggle={() => setExpandedPurchase(expandedPurchase === p.id ? null : p.id)}
+                      onStatusChange={(status) => updatePurchaseStatus(p.id, status)}
+                      onDelete={() => deletePurchase(p.id)}
+                    />
                   ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filteredPurchases.length === 0 ? (
-                  <tr><td colSpan={6} style={{ padding: 40, textAlign: 'center', ...S.dim }}>Keine Einkäufe gefunden</td></tr>
-                ) : filteredPurchases.map(p => (
-                  <PurchaseRow
-                    key={p.id}
-                    purchase={p}
-                    expanded={expandedPurchase === p.id}
-                    onToggle={() => setExpandedPurchase(expandedPurchase === p.id ? null : p.id)}
-                    onStatusChange={(status) => updatePurchaseStatus(p.id, status)}
-                    onDelete={() => deletePurchase(p.id)}
-                  />
-                ))}
-              </tbody>
-            </table>
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
