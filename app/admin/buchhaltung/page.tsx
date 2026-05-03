@@ -5,39 +5,87 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import BuchhaltungTabs, { type TabId } from './components/BuchhaltungTabs';
 import DashboardTab from './components/DashboardTab';
-import RechnungenTab from './components/RechnungenTab';
-import OffenePostenTab from './components/OffenePostenTab';
-import GutschriftenTab from './components/GutschriftenTab';
+import EinnahmenTab from './components/EinnahmenTab';
+import AusgabenIntegratedTab from './components/AusgabenIntegratedTab';
 import StripeAbgleichTab from './components/StripeAbgleichTab';
-import ReportsTab from './components/ReportsTab';
-import AusgabenTab from './components/AusgabenTab';
-import DatevExportTab from './components/DatevExportTab';
+import ReportsCombinedTab from './components/ReportsCombinedTab';
 import EinstellungenTab from './components/EinstellungenTab';
 
-const VALID_TABS: TabId[] = ['dashboard', 'rechnungen', 'offene-posten', 'gutschriften', 'stripe', 'reports', 'ausgaben', 'datev', 'einstellungen'];
+const VALID_TABS: TabId[] = ['dashboard', 'einnahmen', 'ausgaben', 'stripe', 'reports', 'einstellungen'];
+
+/**
+ * Backwards-Compat: alte URL-Parameter (vor Etappe 2) auf neue Tabs mappen.
+ * Bookmarks und gespeicherte Notification-Links bleiben damit funktional.
+ */
+function legacyTabRedirect(legacyTab: string): { tab: TabId; sub?: string } | null {
+  switch (legacyTab) {
+    case 'rechnungen':
+      return { tab: 'einnahmen', sub: 'rechnungen' };
+    case 'offene-posten':
+      return { tab: 'einnahmen', sub: 'offen' };
+    case 'gutschriften':
+      return { tab: 'einnahmen', sub: 'gutschriften' };
+    case 'datev':
+      return { tab: 'reports', sub: 'datev' };
+    default:
+      return null;
+  }
+}
 
 function BuchhaltungContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const tabParam = searchParams.get('tab') as TabId | null;
-  const [activeTab, setActiveTab] = useState<TabId>(
-    tabParam && VALID_TABS.includes(tabParam) ? tabParam : 'dashboard'
-  );
+  const tabParam = searchParams.get('tab');
+
+  // Initialer Tab: berücksichtigt Legacy-URLs
+  const initialTab: TabId = (() => {
+    if (!tabParam) return 'dashboard';
+    if (VALID_TABS.includes(tabParam as TabId)) return tabParam as TabId;
+    const legacy = legacyTabRedirect(tabParam);
+    return legacy ? legacy.tab : 'dashboard';
+  })();
+
+  const [activeTab, setActiveTab] = useState<TabId>(initialTab);
+
+  // Wenn die URL einen Legacy-Tab enthaelt, einmalig auf neue URL umleiten
+  useEffect(() => {
+    if (tabParam && !VALID_TABS.includes(tabParam as TabId)) {
+      const legacy = legacyTabRedirect(tabParam);
+      if (legacy) {
+        const params = new URLSearchParams(searchParams.toString());
+        params.set('tab', legacy.tab);
+        if (legacy.sub) params.set('sub', legacy.sub);
+        router.replace(`/admin/buchhaltung?${params.toString()}`, { scroll: false });
+        setActiveTab(legacy.tab);
+      }
+    }
+  }, [tabParam]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (tabParam && VALID_TABS.includes(tabParam) && tabParam !== activeTab) {
-      setActiveTab(tabParam);
+    if (tabParam && VALID_TABS.includes(tabParam as TabId) && tabParam !== activeTab) {
+      setActiveTab(tabParam as TabId);
     }
   }, [tabParam]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleTabChange(tab: TabId) {
     setActiveTab(tab);
+    // Beim Tab-Wechsel die `sub`-Param entfernen (gehoert zum alten Tab)
     router.push(`/admin/buchhaltung?tab=${tab}`, { scroll: false });
   }
 
   function handleNavigate(tab: string) {
     if (VALID_TABS.includes(tab as TabId)) {
       handleTabChange(tab as TabId);
+      return;
+    }
+    // Cockpit-Inbox-Aktionen verwenden noch alte Tab-Namen → mappen
+    const legacy = legacyTabRedirect(tab);
+    if (legacy) {
+      setActiveTab(legacy.tab);
+      const params = new URLSearchParams();
+      params.set('tab', legacy.tab);
+      if (legacy.sub) params.set('sub', legacy.sub);
+      router.push(`/admin/buchhaltung?${params.toString()}`, { scroll: false });
     }
   }
 
@@ -51,7 +99,7 @@ function BuchhaltungContent() {
           Buchhaltung
         </h1>
         <p style={{ color: '#94a3b8', fontSize: 14, marginTop: 6, marginBottom: 0 }}>
-          Rechnungen, Mahnwesen, Stripe-Abgleich, EÜR und DATEV-Export
+          Cockpit, Einnahmen, Ausgaben, Stripe-Abgleich, Berichte und Einstellungen
         </p>
       </div>
 
@@ -61,13 +109,10 @@ function BuchhaltungContent() {
       {/* Tab-Inhalt */}
       <div>
         {activeTab === 'dashboard' && <DashboardTab onNavigate={handleNavigate} />}
-        {activeTab === 'rechnungen' && <RechnungenTab />}
-        {activeTab === 'offene-posten' && <OffenePostenTab />}
-        {activeTab === 'gutschriften' && <GutschriftenTab />}
+        {activeTab === 'einnahmen' && <EinnahmenTab />}
+        {activeTab === 'ausgaben' && <AusgabenIntegratedTab />}
         {activeTab === 'stripe' && <StripeAbgleichTab />}
-        {activeTab === 'reports' && <ReportsTab />}
-        {activeTab === 'ausgaben' && <AusgabenTab />}
-        {activeTab === 'datev' && <DatevExportTab />}
+        {activeTab === 'reports' && <ReportsCombinedTab />}
         {activeTab === 'einstellungen' && <EinstellungenTab />}
       </div>
     </div>

@@ -53,7 +53,7 @@ export async function GET() {
         subtitle: `Gesamt offen: ${totalOverdue.toFixed(2).replace('.', ',')} €`,
         count: overdue.length,
         amount: totalOverdue,
-        action: { label: 'Mahn-Entwürfe prüfen', tab: 'offene-posten' },
+        action: { label: 'Mahn-Entwürfe prüfen', tab: 'offene-posten' /* legacy → mapped to einnahmen?sub=offen */ },
       });
     }
   } catch {
@@ -200,7 +200,7 @@ export async function GET() {
         title: `${draftsList.length} ${draftsList.length === 1 ? 'Mahn-Entwurf wartet' : 'Mahn-Entwürfe warten'} auf Freigabe`,
         subtitle: 'Vom täglichen Cron erstellt',
         count: draftsList.length,
-        action: { label: 'Mahnungen prüfen', tab: 'offene-posten' },
+        action: { label: 'Mahnungen prüfen', tab: 'offene-posten' /* legacy */ },
       });
     }
   } catch {
@@ -226,7 +226,7 @@ export async function GET() {
         subtitle: `Summe: ${sum.toFixed(2).replace('.', ',')} €`,
         count: pendingList.length,
         amount: sum,
-        action: { label: 'Gutschriften prüfen', tab: 'gutschriften' },
+        action: { label: 'Gutschriften prüfen', tab: 'gutschriften' /* legacy */ },
       });
     }
   } catch {
