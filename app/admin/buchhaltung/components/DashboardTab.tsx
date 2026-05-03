@@ -7,6 +7,7 @@ import KpiCard from './shared/KpiCard';
 import StatusBadge from './shared/StatusBadge';
 import DateRangePicker, { type DateRange } from './shared/DateRangePicker';
 import CockpitInbox from './CockpitInbox';
+import MonthCloseWizard from './MonthCloseWizard';
 import {
   ResponsiveContainer,
   LineChart,
@@ -57,6 +58,7 @@ export default function DashboardTab({ onNavigate }: DashboardTabProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [range, setRange] = useState<DateRange>({ from: '', to: '' });
+  const [wizardOpen, setWizardOpen] = useState(false);
 
   const fetchData = useCallback(async (r: DateRange) => {
     if (!r.from || !r.to) return;
@@ -106,6 +108,42 @@ export default function DashboardTab({ onNavigate }: DashboardTabProps) {
 
   return (
     <div>
+      {/* Monatsabschluss-Wizard (Modal) */}
+      {wizardOpen && (
+        <MonthCloseWizard
+          onClose={() => setWizardOpen(false)}
+          onNavigate={(tab, sub) => {
+            const params = new URLSearchParams();
+            params.set('tab', tab);
+            if (sub) params.set('sub', sub);
+            window.location.href = `/admin/buchhaltung?${params.toString()}`;
+          }}
+        />
+      )}
+
+      {/* Quick-Action: Monatsabschluss-Wizard (oben rechts) */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+        <button
+          onClick={() => setWizardOpen(true)}
+          style={{
+            background: 'linear-gradient(135deg, rgba(6,182,212,0.15), rgba(16,185,129,0.10))',
+            border: '1px solid rgba(6,182,212,0.4)',
+            color: '#67e8f9',
+            borderRadius: 10,
+            padding: '8px 16px',
+            fontSize: 13,
+            fontWeight: 700,
+            cursor: 'pointer',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 8,
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          Monatsabschluss starten
+        </button>
+      </div>
+
       {/* Cockpit-Inbox: was muss ich heute tun? */}
       <CockpitInbox onNavigateTab={onNavigate} />
 
