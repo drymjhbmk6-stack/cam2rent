@@ -38,6 +38,22 @@ export async function POST(
   const signatureDataUrl = typeof body.signatureDataUrl === 'string' && body.signatureDataUrl.startsWith('data:image/')
     ? body.signatureDataUrl : null;
 
+  // Substitutionen aus dem Scanner-Workflow: der Packer hat ein anderes
+  // Exemplar gleicher Kategorie gescannt als urspruenglich reserviert. Wir
+  // schreiben unit_id / accessory_unit_ids entsprechend um, damit Schadens-
+  // Tracking und Vertrag spaeter auf das tatsaechlich versandte Stueck zeigen.
+  type SubstitutionInput = { itemKey: string; kind: 'camera' | 'accessory'; newUnitId: string };
+  const substitutions: SubstitutionInput[] = Array.isArray(body.substitutions)
+    ? (body.substitutions as unknown[])
+        .filter((s): s is SubstitutionInput =>
+          !!s && typeof s === 'object'
+          && typeof (s as SubstitutionInput).itemKey === 'string'
+          && ((s as SubstitutionInput).kind === 'camera' || (s as SubstitutionInput).kind === 'accessory')
+          && typeof (s as SubstitutionInput).newUnitId === 'string'
+          && (s as SubstitutionInput).newUnitId.length > 0,
+        )
+    : [];
+
   if (!packedBy || packedBy.length < 2) {
     return NextResponse.json({ error: 'Bitte deinen vollen Namen eintragen.' }, { status: 400 });
   }
@@ -51,6 +67,108 @@ export async function POST(
   const packedByUserId = user.id !== 'legacy-env' ? user.id : null;
 
   const supabase = createServiceClient();
+
+  // ── Substitutionen anwenden (vor dem Pack-Status-Update) ─────────────────
+  // Wir brauchen die aktuelle Buchung um:
+  //   - bei Kamera den alten unit_id zu kennen (fuer Status-Reset auf available)
+  //   - bei Zubehoer den ersten passenden alten unit_id im accessory_unit_ids
+  //     auszutauschen (gleiche accessory_id wie das gescannte neue Exemplar)
+  if (substitutions.length > 0) {
+    const { data: bookingBefore } = await supabase
+      .from('bookings')
+      .select('unit_id, accessory_unit_ids')
+      .eq('id', id)
+      .maybeSingle();
+    if (!bookingBefore) {
+      return NextResponse.json({ error: 'Buchung nicht gefunden.' }, { status: 404 });
+    }
+
+    // 1) Kamera-Substitution
+    const cameraSub = substitutions.find((s) => s.kind === 'camera');
+    if (cameraSub) {
+      const oldCameraUnitId = bookingBefore.unit_id as string | null;
+      const newCameraUnitId = cameraSub.newUnitId;
+      if (oldCameraUnitId !== newCameraUnitId) {
+        await supabase.from('bookings').update({ unit_id: newCameraUnitId }).eq('id', id);
+        // Status-Tausch best-effort — Tabelle hat ggf. keinen 'rented'-Workflow.
+        if (oldCameraUnitId) {
+          await supabase.from('product_units')
+            .update({ status: 'available' })
+            .eq('id', oldCameraUnitId)
+            .eq('status', 'rented');
+        }
+        await supabase.from('product_units')
+          .update({ status: 'rented' })
+          .eq('id', newCameraUnitId)
+          .in('status', ['available', 'rented']);
+      }
+    }
+
+    // 2) Zubehoer-Substitutionen: pro Eintrag genau eine alte UUID derselben
+    //    accessory_id im Array durch die neue ersetzen.
+    const accessorySubs = substitutions.filter((s) => s.kind === 'accessory');
+    if (accessorySubs.length > 0) {
+      const currentAccUnitIds = ((bookingBefore.accessory_unit_ids as string[] | null) ?? []).slice();
+      // accessory_id pro neuer Unit nachladen — wir brauchen das, um die alte
+      // unit_id im Array zu finden (gleiche Kategorie).
+      const newUnitIds = accessorySubs.map((s) => s.newUnitId);
+      const { data: newUnits } = await supabase
+        .from('accessory_units')
+        .select('id, accessory_id')
+        .in('id', newUnitIds);
+      const newUnitIdToAccId = new Map<string, string>();
+      for (const u of newUnits ?? []) newUnitIdToAccId.set(u.id as string, u.accessory_id as string);
+
+      // accessory_id der bestehenden alten Units laden (um den Tausch nach
+      // Kategorie zu treffen).
+      const { data: oldUnits } = await supabase
+        .from('accessory_units')
+        .select('id, accessory_id')
+        .in('id', currentAccUnitIds.length > 0 ? currentAccUnitIds : ['00000000-0000-0000-0000-000000000000']);
+      const oldUnitIdToAccId = new Map<string, string>();
+      for (const u of oldUnits ?? []) oldUnitIdToAccId.set(u.id as string, u.accessory_id as string);
+
+      const releasedOldIds: string[] = [];
+      const claimedNewIds: string[] = [];
+
+      for (const sub of accessorySubs) {
+        const accId = newUnitIdToAccId.get(sub.newUnitId);
+        if (!accId) continue; // unbekannte Unit — wir lassen die Buchung in Ruhe
+        // Wenn die neue Unit-ID schon im Array steht, nichts zu tun.
+        if (currentAccUnitIds.includes(sub.newUnitId)) continue;
+        // Eine alte Unit gleicher Kategorie suchen, die noch nicht ersetzt wurde.
+        const idx = currentAccUnitIds.findIndex((uid) =>
+          oldUnitIdToAccId.get(uid) === accId && !releasedOldIds.includes(uid),
+        );
+        if (idx >= 0) {
+          releasedOldIds.push(currentAccUnitIds[idx]);
+          currentAccUnitIds[idx] = sub.newUnitId;
+        } else {
+          // Keine passende alte Unit → einfach hinten anhaengen
+          currentAccUnitIds.push(sub.newUnitId);
+        }
+        claimedNewIds.push(sub.newUnitId);
+      }
+
+      await supabase.from('bookings')
+        .update({ accessory_unit_ids: currentAccUnitIds })
+        .eq('id', id);
+
+      if (releasedOldIds.length > 0) {
+        await supabase.from('accessory_units')
+          .update({ status: 'available' })
+          .in('id', releasedOldIds)
+          .eq('status', 'rented');
+      }
+      if (claimedNewIds.length > 0) {
+        await supabase.from('accessory_units')
+          .update({ status: 'rented' })
+          .in('id', claimedNewIds)
+          .in('status', ['available', 'rented']);
+      }
+    }
+  }
+
   const { error } = await supabase
     .from('bookings')
     .update({
