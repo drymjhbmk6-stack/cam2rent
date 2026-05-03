@@ -809,17 +809,17 @@ export async function sendDamageReportConfirmation(data: DamageEmailData) {
         <tr><td style="background:#ffffff;padding:32px;">
           <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#0a0a0a;">Schadensmeldung eingegangen</h1>
           <p style="margin:0 0 24px;font-size:15px;color:#4b5563;">
-            Hallo ${data.customerName || 'Kunde'},<br>
-            wir haben deine Schadensmeldung zur Buchung <strong>${data.bookingId}</strong> erhalten.
+            Hallo ${h(data.customerName || 'Kunde')},<br>
+            wir haben deine Schadensmeldung zur Buchung <strong>${h(data.bookingId)}</strong> erhalten.
           </p>
           <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:10px;margin-bottom:24px;">
             <tr><td style="padding:16px 20px;border-bottom:1px solid #e5e7eb;">
               <p style="margin:0 0 2px;font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:0.8px;">Kamera</p>
-              <p style="margin:0;font-size:15px;font-weight:600;color:#0a0a0a;">${data.productName}</p>
+              <p style="margin:0;font-size:15px;font-weight:600;color:#0a0a0a;">${h(data.productName)}</p>
             </td></tr>
             <tr><td style="padding:16px 20px;border-bottom:1px solid #e5e7eb;">
               <p style="margin:0 0 2px;font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:0.8px;">Beschreibung</p>
-              <p style="margin:0;font-size:14px;color:#374151;">${data.description}</p>
+              <p style="margin:0;font-size:14px;color:#374151;">${h(data.description)}</p>
             </td></tr>
             <tr><td style="padding:16px 20px;">
               <p style="margin:0 0 2px;font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:0.8px;">Fotos</p>
@@ -865,12 +865,12 @@ export async function sendAdminDamageNotification(data: DamageEmailData) {
         </td></tr>
         <tr><td style="background:#ffffff;padding:32px;">
           <table width="100%" cellpadding="0" cellspacing="0">
-            <tr><td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#6b7280;width:40%;">Buchung</td><td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;font-weight:600;color:#0a0a0a;">${data.bookingId}</td></tr>
-            <tr><td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#6b7280;">Kunde</td><td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#0a0a0a;">${data.customerName || '–'}</td></tr>
-            <tr><td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#6b7280;">E-Mail</td><td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#0a0a0a;"><a href="mailto:${data.customerEmail}" style="color:#3b82f6;">${data.customerEmail}</a></td></tr>
-            <tr><td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#6b7280;">Kamera</td><td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#0a0a0a;">${data.productName}</td></tr>
+            <tr><td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#6b7280;width:40%;">Buchung</td><td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;font-weight:600;color:#0a0a0a;">${h(data.bookingId)}</td></tr>
+            <tr><td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#6b7280;">Kunde</td><td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#0a0a0a;">${h(data.customerName || '–')}</td></tr>
+            <tr><td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#6b7280;">E-Mail</td><td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#0a0a0a;"><a href="mailto:${h(data.customerEmail)}" style="color:#3b82f6;">${h(data.customerEmail)}</a></td></tr>
+            <tr><td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#6b7280;">Kamera</td><td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#0a0a0a;">${h(data.productName)}</td></tr>
             <tr><td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#6b7280;">Fotos</td><td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#0a0a0a;">${data.photoCount} hochgeladen</td></tr>
-            <tr><td style="padding:8px 0;font-size:14px;color:#6b7280;">Beschreibung</td><td style="padding:8px 0;font-size:14px;color:#0a0a0a;">${data.description}</td></tr>
+            <tr><td style="padding:8px 0;font-size:14px;color:#6b7280;">Beschreibung</td><td style="padding:8px 0;font-size:14px;color:#0a0a0a;">${h(data.description)}</td></tr>
           </table>
           <div style="margin-top:24px;">
             <a href="${BUSINESS.url}/admin/schaeden" style="display:inline-block;padding:10px 24px;background:#0a0a0a;color:#ffffff;font-size:14px;font-weight:600;text-decoration:none;border-radius:8px;">Im Dashboard ansehen</a>
@@ -903,7 +903,7 @@ export async function sendDamageResolution(data: DamageResolutionEmailData) {
   const notesRow = data.adminNotes
     ? `<tr><td style="padding:16px 20px;">
         <p style="margin:0 0 2px;font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:0.8px;">Anmerkung</p>
-        <p style="margin:0;font-size:14px;color:#374151;">${data.adminNotes}</p>
+        <p style="margin:0;font-size:14px;color:#374151;">${h(data.adminNotes)}</p>
       </td></tr>`
     : '';
   const html = `
@@ -1117,7 +1117,11 @@ export interface MessageNotificationData {
 }
 
 export async function sendNewMessageNotificationToAdmin(data: MessageNotificationData) {
-  const subject = `Neue Nachricht von ${data.customerName}: ${data.subject}`;
+  // CRLF-Strip + Cap fuer Subject (verhindert Header-Injection / Subject-Spoofing
+  // mit Unicode-Linebreaks).
+  const safeSubject = (data.subject ?? '').replace(/[\r\n\u2028\u2029]/g, ' ').slice(0, 200);
+  const safeName = (data.customerName ?? '').replace(/[\r\n\u2028\u2029]/g, ' ').slice(0, 100);
+  const subject = `Neue Nachricht von ${safeName}: ${safeSubject}`;
 
   const html = `<!DOCTYPE html>
 <html lang="de">
@@ -1140,12 +1144,12 @@ export async function sendNewMessageNotificationToAdmin(data: MessageNotificatio
         </td></tr>
         <tr><td style="background:#ffffff;padding:32px;">
           <p style="margin:0 0 16px;font-size:15px;color:#374151;">
-            <strong>${data.customerName}</strong> (${data.customerEmail}) hat eine Nachricht geschrieben:
+            <strong>${h(data.customerName)}</strong> (${h(data.customerEmail)}) hat eine Nachricht geschrieben:
           </p>
           <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:24px;">
             <tr><td style="padding:16px 20px;">
-              <p style="margin:0 0 4px;font-size:13px;font-weight:600;color:#374151;">Betreff: ${data.subject}</p>
-              <p style="margin:0;font-size:14px;color:#6b7280;">${data.messagePreview}</p>
+              <p style="margin:0 0 4px;font-size:13px;font-weight:600;color:#374151;">Betreff: ${h(data.subject)}</p>
+              <p style="margin:0;font-size:14px;color:#6b7280;">${h(data.messagePreview)}</p>
             </td></tr>
           </table>
           <a href="${BUSINESS.url}/admin/nachrichten" style="display:inline-block;padding:12px 24px;background:#0a0a0a;color:#ffffff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">Im Admin antworten</a>
@@ -1163,7 +1167,8 @@ export async function sendNewMessageNotificationToAdmin(data: MessageNotificatio
 }
 
 export async function sendNewMessageNotificationToCustomer(data: MessageNotificationData) {
-  const subject = `Antwort auf deine Nachricht: ${data.subject}`;
+  const safeSubject = (data.subject ?? '').replace(/[\r\n\u2028\u2029]/g, ' ').slice(0, 200);
+  const subject = `Antwort auf deine Nachricht: ${safeSubject}`;
 
   const html = `<!DOCTYPE html>
 <html lang="de">
@@ -1186,13 +1191,13 @@ export async function sendNewMessageNotificationToCustomer(data: MessageNotifica
         </td></tr>
         <tr><td style="background:#ffffff;padding:32px;">
           <p style="margin:0 0 16px;font-size:15px;color:#374151;">
-            Hallo ${data.customerName},<br><br>
+            Hallo ${h(data.customerName)},<br><br>
             das cam2rent Team hat auf deine Nachricht geantwortet:
           </p>
           <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:24px;">
             <tr><td style="padding:16px 20px;">
-              <p style="margin:0 0 4px;font-size:13px;font-weight:600;color:#374151;">Betreff: ${data.subject}</p>
-              <p style="margin:0;font-size:14px;color:#6b7280;">${data.messagePreview}</p>
+              <p style="margin:0 0 4px;font-size:13px;font-weight:600;color:#374151;">Betreff: ${h(data.subject)}</p>
+              <p style="margin:0;font-size:14px;color:#6b7280;">${h(data.messagePreview)}</p>
             </td></tr>
           </table>
           <a href="${BUSINESS.url}/konto/nachrichten" style="display:inline-block;padding:12px 24px;background:#0a0a0a;color:#ffffff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">Zur Nachricht</a>

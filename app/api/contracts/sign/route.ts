@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createServerClient } from '@supabase/ssr';
+import { cookies } from 'next/headers';
 import { createServiceClient } from '@/lib/supabase';
+import { checkAdminAuth } from '@/lib/admin-auth';
 import { generateContractPDF } from '@/lib/contracts/generate-contract';
 import { storeContract } from '@/lib/contracts/store-contract';
 import { sendContractEmail } from '@/lib/contracts/send-contract-email';
@@ -30,14 +33,38 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Auth: Kunde (Supabase-Session) ODER Admin (Tablet-Übergabe vor Ort).
+    const isAdmin = await checkAdminAuth();
+    let userId: string | null = null;
+    if (!isAdmin) {
+      const cookieStore = await cookies();
+      const supabaseAuth = createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        {
+          cookies: {
+            getAll() { return cookieStore.getAll(); },
+            setAll(cookiesToSet) {
+              cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options));
+            },
+          },
+        }
+      );
+      const { data: { user } } = await supabaseAuth.auth.getUser();
+      if (!user) {
+        return NextResponse.json({ error: 'Nicht angemeldet.' }, { status: 401 });
+      }
+      userId = user.id;
+    }
+
     const supabase = createServiceClient();
 
-    // 2. Buchung laden
-    const { data: booking, error: bookingError } = await supabase
-      .from('bookings')
-      .select('*')
-      .eq('id', bookingId)
-      .single();
+    // 2. Buchung laden — Nicht-Admins muessen Eigentuemer der Buchung sein.
+    let bookingQuery = supabase.from('bookings').select('*').eq('id', bookingId);
+    if (!isAdmin && userId) {
+      bookingQuery = bookingQuery.eq('user_id', userId);
+    }
+    const { data: booking, error: bookingError } = await bookingQuery.single();
 
     if (bookingError || !booking) {
       return NextResponse.json({ error: 'Buchung nicht gefunden.' }, { status: 404 });

@@ -152,6 +152,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Wenn der PaymentIntent eine user_id im Metadata hat (gesetzt von
+    // checkout-intent), muss der Body diesen Wert mitbringen. Verhindert
+    // Buchung-zu-fremder-User-ID via manipuliertem Body.
+    const intentUserId = (intent.metadata?.user_id || '').trim() || null;
+    if (intentUserId && requestedUserId && requestedUserId !== intentUserId) {
+      return NextResponse.json(
+        { error: 'User-ID stimmt nicht mit Zahlung überein.' },
+        { status: 403 }
+      );
+    }
+
     const supabase = createServiceClient();
 
     // 2. Idempotency: check if bookings already exist for this payment intent
@@ -303,11 +314,13 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 2b. Fallback: Checkout-Kontext aus DB laden falls items leer
+    // 2b. Fallback: Checkout-Kontext aus DB laden falls items leer.
+    // r_userId wird nach Stripe-Metadata-Pruefung mit der user_id aus dem
+    // Stripe-Intent vorbelegt — sonst koennte der Body die User-ID frei waehlen.
     let r_items = items;
     let r_name = customerName;
     let r_email = customerEmail;
-    let r_userId = userId;
+    let r_userId = intentUserId ?? userId;
     let r_deliveryMode = deliveryMode;
     let r_shippingMethod = shippingMethod;
     let r_discountAmount = discountAmount;
@@ -337,7 +350,10 @@ export async function POST(req: NextRequest) {
           r_items = ctx.items ?? [];
           r_name = ctx.customerName ?? r_name;
           r_email = ctx.customerEmail ?? r_email;
-          r_userId = ctx.userId ?? r_userId;
+          // Stripe-Metadata-user_id hat Vorrang vor checkout-context, damit
+          // Manipulation am Context (DB-Insert kommt aus checkout-intent, aber
+          // im Zweifel gilt die Stripe-Quittung) nicht durchschlagen kann.
+          r_userId = intentUserId ?? ctx.userId ?? r_userId;
           r_deliveryMode = ctx.deliveryMode ?? r_deliveryMode;
           r_shippingMethod = ctx.shippingMethod ?? r_shippingMethod;
           r_discountAmount = ctx.discountAmount ?? r_discountAmount;
@@ -607,7 +623,58 @@ export async function POST(req: NextRequest) {
     // Fallback auf das alte Muster falls die Migration
     // `supabase-coupon-atomic-increment.sql` noch nicht ausgeführt wurde.
     if (r_couponCode) {
+      // Pre-Check: Personalisierte Constraints (target_user_email + once_per_customer)
+      // erzwingen — die RPC pruegt nur aktive/Gueltig-bis/max_uses. Ohne diesen
+      // Block koennte ein Angreifer einen DANKE-XXX-Coupon eines anderen Kunden
+      // einloesen, oder once_per_customer-Codes mit wechselnden Mail-Adressen
+      // mehrfach nutzen.
+      let allowRedeem = true;
       try {
+        const { data: couponMeta } = await supabase
+          .from('coupons')
+          .select('id, target_user_email, once_per_customer')
+          .ilike('code', r_couponCode)
+          .maybeSingle();
+        if (couponMeta) {
+          const targetEmail = (couponMeta.target_user_email ?? '').trim().toLowerCase();
+          const buyerEmail = (r_email ?? '').trim().toLowerCase();
+          if (targetEmail && targetEmail !== buyerEmail) {
+            allowRedeem = false;
+            console.warn('[confirm-cart] Coupon ist auf andere E-Mail registriert:', r_couponCode);
+          }
+          if (allowRedeem && couponMeta.once_per_customer && (buyerEmail || r_userId)) {
+            // Schon einmal von diesem Kunden genutzt?
+            let usedQuery = supabase
+              .from('bookings')
+              .select('id', { count: 'exact', head: true })
+              .ilike('coupon_code', r_couponCode);
+            if (r_userId) {
+              usedQuery = usedQuery.eq('user_id', r_userId);
+            } else if (buyerEmail) {
+              usedQuery = usedQuery.ilike('customer_email', buyerEmail);
+            }
+            const { count: priorUses } = await usedQuery;
+            if ((priorUses ?? 0) > 0) {
+              allowRedeem = false;
+              console.warn('[confirm-cart] once_per_customer-Coupon bereits genutzt:', r_couponCode);
+            }
+          }
+        }
+      } catch (preErr) {
+        // Defensiv: Pre-Check-Fehler nicht hart blocken (RPC entscheidet final).
+        console.error('[confirm-cart] Coupon-Pre-Check fehlgeschlagen:', preErr);
+      }
+      if (!allowRedeem) {
+        createAdminNotification(supabase, {
+          type: 'coupon_race',
+          title: 'Coupon-Beschraenkung verletzt',
+          message: `Coupon "${r_couponCode}" wurde versucht einzuloesen, aber target_user_email/once_per_customer wurde verletzt (Booking ${payment_intent_id}). Manuell pruefen.`,
+        });
+        // Buchung trotzdem durchziehen (Geld ist eingegangen) — aber Counter
+        // NICHT erhoehen, damit der Code weiter "ungenutzt" wirkt.
+      }
+      try {
+        if (!allowRedeem) throw new Error('skip-rpc');
         const { data: rpcData, error: rpcErr } = await supabase.rpc(
           'increment_coupon_if_available',
           { p_code: r_couponCode },
@@ -626,18 +693,25 @@ export async function POST(req: NextRequest) {
           });
         }
       } catch (rpcErr) {
-        // Fallback: alte Logik (unsafer, aber rückwärtskompatibel)
-        console.error('[confirm-cart] RPC fehlgeschlagen, nutze Fallback-Increment:', rpcErr);
-        const { data: couponRow } = await supabase
-          .from('coupons')
-          .select('id, used_count')
-          .ilike('code', r_couponCode)
-          .maybeSingle();
-        if (couponRow) {
-          await supabase
-            .from('coupons')
-            .update({ used_count: (couponRow.used_count ?? 0) + 1 })
-            .eq('id', couponRow.id);
+        // skip-rpc kommt aus dem Pre-Check (siehe oben) — nicht als Fehler werten.
+        if (rpcErr instanceof Error && rpcErr.message === 'skip-rpc') {
+          // Bewusst nichts tun.
+        } else {
+          // Fallback: alte Logik (unsafer, aber rückwärtskompatibel)
+          console.error('[confirm-cart] RPC fehlgeschlagen, nutze Fallback-Increment:', rpcErr);
+          if (allowRedeem) {
+            const { data: couponRow } = await supabase
+              .from('coupons')
+              .select('id, used_count')
+              .ilike('code', r_couponCode)
+              .maybeSingle();
+            if (couponRow) {
+              await supabase
+                .from('coupons')
+                .update({ used_count: (couponRow.used_count ?? 0) + 1 })
+                .eq('id', couponRow.id);
+            }
+          }
         }
       }
     }

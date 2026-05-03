@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { checkAdminAuth } from '@/lib/admin-auth';
 import { processSetImage } from '@/lib/image-processing';
 import { isAllowedImage } from '@/lib/file-type-check';
 
@@ -15,6 +16,10 @@ const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
  */
 export async function POST(req: NextRequest) {
   try {
+    if (!(await checkAdminAuth())) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const formData = await req.formData();
     const accessoryId = formData.get('accessoryId') as string;
     const accessoryName = formData.get('accessoryName') as string;
@@ -91,6 +96,10 @@ export async function POST(req: NextRequest) {
  */
 export async function DELETE(req: NextRequest) {
   try {
+    if (!(await checkAdminAuth())) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const { path, accessoryId } = (await req.json()) as { path: string; accessoryId: string };
     if (!path || !accessoryId) {
       return NextResponse.json({ error: 'path und accessoryId erforderlich.' }, { status: 400 });

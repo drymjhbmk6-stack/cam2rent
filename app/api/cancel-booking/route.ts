@@ -81,10 +81,11 @@ export async function POST(req: NextRequest) {
     (booking.price_total ?? 0) * refundPercentage * 100
   );
 
+  const stripe = await getStripe();
+
   // Process Stripe refund (if any amount to refund)
   if (refundAmountCents > 0) {
     try {
-      const stripe = await getStripe();
       await stripe.refunds.create({
         payment_intent: booking.payment_intent_id,
         amount: refundAmountCents,
@@ -98,6 +99,22 @@ export async function POST(req: NextRequest) {
         },
         { status: 500 }
       );
+    }
+  }
+
+  // Kautions-Pre-Auth aufheben (sonst bleibt der Hold ~7 Tage auf der Karte
+  // und liesse sich theoretisch noch nachtraeglich capturen, obwohl die
+  // Buchung storniert ist). Verifications-Auto-Cancel macht es genauso.
+  if (booking.deposit_intent_id && booking.deposit_status === 'held') {
+    try {
+      await stripe.paymentIntents.cancel(booking.deposit_intent_id);
+      await supabase
+        .from('bookings')
+        .update({ deposit_status: 'released' })
+        .eq('id', bookingId);
+    } catch (depErr) {
+      // Nicht-fatal: Storno laeuft weiter, Admin kann den Hold manuell freigeben.
+      console.error('[cancel-booking] Deposit release failed:', depErr);
     }
   }
 

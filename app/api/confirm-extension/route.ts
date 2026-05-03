@@ -45,6 +45,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `Zahlung nicht abgeschlossen (Status: ${paymentIntent.status}).` }, { status: 400 });
   }
 
+  // Sicherheit: PaymentIntent muss zur konkreten Buchung + Zieldatum passen.
+  // Sonst koennte ein Angreifer einen billigen "+1 Tag"-Intent fuer eine
+  // 30-Tage-Verlaengerung wiederverwenden.
+  const meta = paymentIntent.metadata ?? {};
+  if (meta.type !== 'extension'
+      || meta.booking_id !== bookingId
+      || meta.new_rental_to !== newRentalTo) {
+    return NextResponse.json(
+      { error: 'PaymentIntent passt nicht zur Buchung. Bitte Verlängerung neu starten.' },
+      { status: 400 }
+    );
+  }
+
   const supabase = createServiceClient();
 
   // Fetch booking
@@ -99,7 +112,21 @@ export async function POST(req: NextRequest) {
     newHaftungPrice = calcHaftungTieredPrice(DEFAULT_HAFTUNG.premium, DEFAULT_HAFTUNG.premiumIncrement, newDays);
   }
 
-  const priceDifference = (paymentIntent.amount ?? 0) / 100;
+  // Plausibilitaets-Check: Stripe-Betrag muss zur Server-Neuberechnung passen.
+  // 50-Cent-Toleranz fuer Rundungsdifferenzen zwischen extend-booking und confirm-extension.
+  const expectedDiffCents = Math.round(
+    (Math.max(0, (productData ? newRentalPrice : 0) - (booking.price_rental || 0))
+     + Math.max(0, newHaftungPrice - (booking.price_haftung || 0))) * 100
+  );
+  const paidCents = paymentIntent.amount ?? 0;
+  if (expectedDiffCents > 0 && Math.abs(paidCents - expectedDiffCents) > 50) {
+    return NextResponse.json(
+      { error: 'Bezahlter Betrag stimmt nicht mit Verlaengerung ueberein. Bitte erneut buchen.' },
+      { status: 400 }
+    );
+  }
+
+  const priceDifference = paidCents / 100;
   const newTotal = (booking.price_total || 0) + priceDifference;
 
   // Update booking

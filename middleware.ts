@@ -49,7 +49,11 @@ interface SessionCacheEntry {
   cacheUntil: number;
 }
 const sessionCache = new Map<string, SessionCacheEntry>();
-const SESSION_CACHE_TTL_MS = 60 * 1000;
+// Kurzes TTL: bei Rechte-Entzug, Mitarbeiter-Deaktivierung oder Logout greift
+// die Aenderung nach max. 5 s. Frueher waren es 60 s — in der Lueckenphase
+// liefen Requests mit den alten Permissions weiter, was Privesc-Window
+// erzeugte. Trade-off: bei jeder Anfrage ein Supabase-Roundtrip (idR. <50 ms).
+const SESSION_CACHE_TTL_MS = 5 * 1000;
 
 async function lookupSession(token: string): Promise<SessionCacheEntry | null> {
   const now = Date.now();
@@ -161,6 +165,8 @@ const API_PATH_PERMISSIONS: PermRule[] = [
   { prefix: '/api/admin/accessory-damage', perm: 'tagesgeschaeft' },
   { prefix: '/api/admin/sendcloud', perm: 'tagesgeschaeft' },
   { prefix: '/api/admin/label', perm: 'tagesgeschaeft' },
+  { prefix: '/api/admin/handover', perm: 'tagesgeschaeft' },
+  { prefix: '/api/admin/scan-lookup', perm: 'tagesgeschaeft' },
   // Kunden & Kommunikation
   { prefix: '/api/admin/kunden', perm: 'kunden' },
   { prefix: '/api/admin/customer', perm: 'kunden' },

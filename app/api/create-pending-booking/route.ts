@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createServerClient } from '@supabase/ssr';
+import { cookies } from 'next/headers';
 import { createServiceClient } from '@/lib/supabase';
 import { generateBookingId } from '@/lib/booking-id';
 import type { CartItem } from '@/components/CartProvider';
@@ -35,6 +37,27 @@ function groupByPeriod(items: CartItem[]) {
  */
 export async function POST(req: NextRequest) {
   try {
+    // Auth: Buchung darf nur fuer den eingeloggten Kunden erstellt werden,
+    // sonst koennte ein Angreifer Buchungen + signierte Vertraege im Namen
+    // fremder user_ids hinterlegen.
+    const cookieStore = await cookies();
+    const supabaseAuth = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() { return cookieStore.getAll(); },
+          setAll(cookiesToSet) {
+            cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options));
+          },
+        },
+      }
+    );
+    const { data: { user } } = await supabaseAuth.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: 'Nicht angemeldet.' }, { status: 401 });
+    }
+
     const body = await req.json();
     const {
       items,
@@ -73,12 +96,11 @@ export async function POST(req: NextRequest) {
     const ip = getClientIp(req);
     const earlyServiceConsentIp = earlyServiceConsentAt ? ip : null;
 
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'Bitte erstelle ein Konto.' },
-        { status: 403 }
-      );
+    // userId aus dem Body MUSS dem eingeloggten User entsprechen.
+    if (userId && userId !== user.id) {
+      return NextResponse.json({ error: 'User-ID stimmt nicht mit Session überein.' }, { status: 403 });
     }
+    const verifiedUserId = user.id;
 
     if (!items?.length) {
       return NextResponse.json(
@@ -93,7 +115,7 @@ export async function POST(req: NextRequest) {
     const { data: existingPending } = await supabase
       .from('bookings')
       .select('id')
-      .eq('user_id', userId)
+      .eq('user_id', verifiedUserId)
       .eq('status', 'pending_verification')
       .limit(1)
       .maybeSingle();
@@ -114,7 +136,7 @@ export async function POST(req: NextRequest) {
       const { data: profile } = await supabase
         .from('profiles')
         .select('address_street, address_zip, address_city')
-        .eq('id', userId)
+        .eq('id', verifiedUserId)
         .maybeSingle();
       if (profile?.address_street) {
         custStreet = profile.address_street;
@@ -221,7 +243,7 @@ export async function POST(req: NextRequest) {
 
       // Tester-User → is_test=true (auch im Live-Modus). Im Pending-Flow
       // landet ein Tester selten (weil verifiziert), aber defensiv markieren.
-      const tester = await isUserTester(userId);
+      const tester = await isUserTester(verifiedUserId);
       const testMode = tester || (await isTestMode());
       const { error } = await supabase.from('bookings').insert({
         id: bookingId,
@@ -244,7 +266,7 @@ export async function POST(req: NextRequest) {
         price_total: Math.max(0, priceTotal),
         deposit: groupItems.reduce((s, it) => s + it.deposit, 0),
         status: 'pending_verification',
-        user_id: userId,
+        user_id: verifiedUserId,
         customer_email: customerEmail,
         customer_name: customerName,
         shipping_address: shippingAddress,

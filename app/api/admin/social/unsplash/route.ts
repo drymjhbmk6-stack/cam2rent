@@ -2,6 +2,26 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 
 /**
+ * Erlaubt nur Unsplash-eigene Hosts. Verhindert SSRF und Schluessel-Exfiltration
+ * ueber attacker-controlled `imageUrl` / `downloadLocation`.
+ */
+function isUnsplashUrl(raw: string): boolean {
+  try {
+    const u = new URL(raw);
+    if (u.protocol !== 'https:') return false;
+    const allowed = [
+      'images.unsplash.com',
+      'plus.unsplash.com',
+      'api.unsplash.com',
+      'unsplash.com',
+    ];
+    return allowed.includes(u.hostname);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Unsplash-Suche + Download für Social-Posts.
  * Nutzt den gleichen Access-Key der auch für Blog-Bilder hinterlegt ist
  * (admin_settings.blog_settings.unsplash_access_key).
@@ -95,11 +115,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Bild-URL ist erforderlich.' }, { status: 400 });
   }
 
+  // Host-Allowlist: nur Unsplash-CDN als Bild-Quelle erlaubt — verhindert
+  // SSRF auf interne Adressen + Exfiltration ueber das Storage-Upload.
+  if (!isUnsplashUrl(imageUrl)) {
+    return NextResponse.json({ error: 'Nur Unsplash-URLs erlaubt.' }, { status: 400 });
+  }
+
   const accessKey = await getUnsplashKey();
 
-  // Unsplash Download-Event tracken (Pflicht laut API-Richtlinien)
-  if (accessKey && downloadLocation) {
-    fetch(`${downloadLocation}?client_id=${accessKey}`).catch(() => {});
+  // Unsplash Download-Event tracken (Pflicht laut API-Richtlinien). Schluessel
+  // geht in den Authorization-Header, nicht in die URL — sonst landet er in
+  // jedem Server-Access-Log + (frueher) im Webserver-Log des Angreifers, falls
+  // er die downloadLocation kontrolliert. Zusaetzlich Allowlist auf den Host.
+  if (accessKey && downloadLocation && isUnsplashUrl(downloadLocation)) {
+    fetch(downloadLocation, { headers: { Authorization: `Client-ID ${accessKey}` } }).catch(() => {});
   }
 
   // Bild herunterladen

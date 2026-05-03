@@ -279,7 +279,7 @@ export default function ReelRenderStatus({ status, renderLog, createdAt }: ReelR
       {isStuck && (
         <div className="mt-3 text-xs text-red-800 dark:text-red-200">
           Schwellwert für diese Phase überschritten — der Worker antwortet nicht mehr. Wenn die Anzeige in den
-          nächsten Minuten nicht weiterläuft: <strong>„🛑 Render abbrechen"</strong> klicken und neu starten.
+          nächsten Minuten nicht weiterläuft: <strong>&bdquo;🛑 Render abbrechen&ldquo;</strong> klicken und neu starten.
         </div>
       )}
 

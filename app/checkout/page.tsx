@@ -1140,12 +1140,12 @@ export default function CheckoutPage() {
                         >
                           Zu meinen Buchungen
                         </a>
-                        <a
+                        <Link
                           href="/"
                           className="flex-1 px-4 py-3 border border-brand-border dark:border-white/10 text-brand-black dark:text-white font-heading font-semibold text-sm rounded-btn text-center hover:bg-brand-bg dark:hover:bg-white/5 transition-colors"
                         >
                           Zur Startseite
-                        </a>
+                        </Link>
                       </div>
                     </div>
                   </div>

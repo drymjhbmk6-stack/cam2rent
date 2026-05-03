@@ -56,6 +56,39 @@ function parseFocalPoint(value: string | null | undefined): { x: number; y: numb
  * zurueck. Wenn sharp nicht verfuegbar ist oder Position=center, gibt die
  * Original-URL zurueck (kein Crop noetig).
  */
+/**
+ * Erlaubt nur Bild-Hosts, denen wir vertrauen — verhindert SSRF auf interne
+ * Adressen (http://10.x, http://localhost, file://) sowie Daten-Exfiltration
+ * an attacker-controlled Hosts. Falls die URL einer der Allowlist-Suffixe
+ * ist (Supabase, Unsplash, OpenAI-CDN, eigene cam2rent-Domain), wird sie
+ * akzeptiert.
+ */
+function isAllowedSourceUrl(raw: string): boolean {
+  try {
+    const u = new URL(raw);
+    if (u.protocol !== 'https:') return false;
+    const host = u.hostname;
+    // Loopback / private Ranges hart blocken
+    if (host === 'localhost' || host === '0.0.0.0' || host === '127.0.0.1') return false;
+    if (/^10\./.test(host) || /^192\.168\./.test(host)) return false;
+    if (/^172\.(1[6-9]|2\d|3[01])\./.test(host)) return false;
+    const allowed = [
+      '.supabase.co',
+      '.supabase.in',
+      'images.unsplash.com',
+      'plus.unsplash.com',
+      'oaidalleapiprodscus.blob.core.windows.net',
+      'cam2rent.de',
+      'test.cam2rent.de',
+    ];
+    return allowed.some((suffix) =>
+      suffix.startsWith('.') ? host.endsWith(suffix) : host === suffix
+    );
+  } catch {
+    return false;
+  }
+}
+
 async function cropImageForPlatform(
   sourceUrl: string,
   targetAspect: number, // width / height
@@ -63,6 +96,15 @@ async function cropImageForPlatform(
 ): Promise<string> {
   // Center + default Aspect → kein Crop noetig
   if (!position || position === 'center center' || position === '50% 50%') {
+    return sourceUrl;
+  }
+
+  // Host-Check vor jedem fetch(): ohne diese Schranke koennte ein
+  // content-Mitarbeiter `media_urls: ["http://10.x.x.x/..."]` setzen, beim
+  // Publish wird die interne Antwort geladen und in einen public Bucket
+  // gespiegelt → SSRF + Daten-Exfiltration.
+  if (!isAllowedSourceUrl(sourceUrl)) {
+    console.warn('[publisher] cropImageForPlatform: Quelle nicht in Allowlist:', sourceUrl);
     return sourceUrl;
   }
 

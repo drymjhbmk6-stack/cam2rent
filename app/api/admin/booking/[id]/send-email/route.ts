@@ -7,6 +7,7 @@ import { InvoicePDF, type InvoiceData } from '@/lib/invoice-pdf';
 import { LegalDocumentPDF } from '@/lib/legal-pdf';
 import { ensureBusinessConfig } from '@/lib/load-business-config';
 import { BUSINESS } from '@/lib/business-config';
+import { escapeHtml } from '@/lib/email';
 import QRCode from 'qrcode';
 import { getResendFromEmail } from '@/lib/env-mode';
 import { logAudit } from '@/lib/audit';
@@ -230,12 +231,12 @@ export async function POST(
       subject: `Deine Dokumente — Buchung ${id}`,
       html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
         <h2 style="color:#0f172a;">Deine Dokumente von cam2rent</h2>
-        <p>Hallo ${booking.customer_name || 'Kunde'},</p>
-        <p>anbei findest du ${docNames} zu deiner Buchung:</p>
+        <p>Hallo ${escapeHtml(booking.customer_name || 'Kunde')},</p>
+        <p>anbei findest du ${escapeHtml(docNames)} zu deiner Buchung:</p>
         <table style="width:100%;border-collapse:collapse;margin:16px 0;">
-          <tr><td style="padding:6px 0;color:#64748b;">Buchungs-Nr.</td><td style="padding:6px 0;font-weight:600;">${id}</td></tr>
-          <tr><td style="padding:6px 0;color:#64748b;">Produkt</td><td style="padding:6px 0;">${booking.product_name || ''}</td></tr>
-          <tr><td style="padding:6px 0;color:#64748b;">Zeitraum</td><td style="padding:6px 0;">${von} — ${bis}</td></tr>
+          <tr><td style="padding:6px 0;color:#64748b;">Buchungs-Nr.</td><td style="padding:6px 0;font-weight:600;">${escapeHtml(id)}</td></tr>
+          <tr><td style="padding:6px 0;color:#64748b;">Produkt</td><td style="padding:6px 0;">${escapeHtml(booking.product_name || '')}</td></tr>
+          <tr><td style="padding:6px 0;color:#64748b;">Zeitraum</td><td style="padding:6px 0;">${escapeHtml(von)} — ${escapeHtml(bis)}</td></tr>
           <tr><td style="padding:6px 0;color:#64748b;">Gesamtbetrag</td><td style="padding:6px 0;font-weight:600;">${(booking.price_total || 0).toFixed(2).replace('.', ',')} €</td></tr>
         </table>
         <p>Bei Fragen erreichst du uns jederzeit unter <a href="mailto:${BUSINESS.emailKontakt}" style="color:#06b6d4;">${BUSINESS.emailKontakt}</a>.</p>

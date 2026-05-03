@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { checkAdminAuth } from '@/lib/admin-auth';
 import { processProductImage } from '@/lib/image-processing';
 import { isAllowedImage } from '@/lib/file-type-check';
 
@@ -17,6 +18,10 @@ const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
  */
 export async function POST(req: NextRequest) {
   try {
+    if (!(await checkAdminAuth())) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const formData = await req.formData();
     const productId = formData.get('productId') as string;
     const file = formData.get('file') as File | null;
@@ -74,6 +79,10 @@ export async function POST(req: NextRequest) {
  */
 export async function DELETE(req: NextRequest) {
   try {
+    if (!(await checkAdminAuth())) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const { path } = await req.json() as { path: string };
     if (!path) {
       return NextResponse.json({ error: 'path erforderlich.' }, { status: 400 });
