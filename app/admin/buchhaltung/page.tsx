@@ -90,7 +90,20 @@ function BuchhaltungContent() {
   }
 
   return (
-    <div style={{ padding: '24px 24px 48px', maxWidth: 1280, margin: '0 auto' }}>
+    <div className="cam2-buchhaltung-page" style={{ padding: '24px 24px 48px', maxWidth: 1280, margin: '0 auto' }}>
+      <style>{`
+        @media (max-width: 640px) {
+          .cam2-buchhaltung-page { padding: 16px 12px 32px !important; }
+          .cam2-buchhaltung-page h1 { font-size: 20px !important; }
+          .cam2-buchhaltung-page table { font-size: 12px !important; }
+          .cam2-buchhaltung-page table th,
+          .cam2-buchhaltung-page table td { padding: 8px 6px !important; }
+          /* iOS Auto-Zoom verhindern */
+          .cam2-buchhaltung-page input,
+          .cam2-buchhaltung-page select,
+          .cam2-buchhaltung-page textarea { font-size: 16px !important; }
+        }
+      `}</style>
       <AdminBackLink label="Zurück" />
 
       {/* Header */}

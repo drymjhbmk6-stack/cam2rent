@@ -435,18 +435,57 @@ Analog zu `product_units` für Kameras werden Akkus, Stative, Karten etc. pro ph
   2. Storage-Bucket `packing-photos` manuell anlegen (Public OFF, 10 MB, `image/jpeg + png + webp + heic + heif`)
   3. Mitarbeiter-Accounts unter `/admin/einstellungen/mitarbeiter` anlegen — sobald beide (Packer + Kontrolleur) eigenes Konto haben, greift die harte ID-Pruefung automatisch.
 
-### Buchhaltungs-Cockpit (`/admin/buchhaltung`)
-Tab-basiertes Cockpit mit 8 Tabs (Query-Parameter `?tab=...`):
+### Buchhaltungs-Cockpit (`/admin/buchhaltung`) — Stand 2026-05-03 nach Refactor
+Tab-basiertes Cockpit mit **6 Top-Level-Tabs** (frueher 9, zusammengelegt). Query-Parameter `?tab=...&sub=...`:
 
-#### Tab-Struktur
-- **Dashboard:** 4 KPI-Karten (Umsatz, Offene Posten, Bezahlte Rechnungen, Stornierungen), Umsatzverlauf (Recharts Line Chart, 12 Monate), Top 5 Produkte (Bar Chart), Mini-Tabellen (Letzte Rechnungen, Offene Mahnungen)
-- **Rechnungen:** Liste aus `invoices`-Tabelle, Suche/Filter/Pagination, CSV-Export, E-Mail-Resend, Bulk-Aktionen
-- **Offene Posten:** Mahnwesen mit 3 Stufen, Filter nach Mahnstufe, Suche, Mahn-Modal (editierbarer Text + Mahngebühr + Freigeben/Entwurf), Als-bezahlt-markieren mit Zahlungsweise
-- **Gutschriften:** Freigabe-Workflow (pending_review → approved → sent), Stripe-Refund-Integration, Detail-Modal mit Bearbeiten/Freigeben/Verwerfen
-- **Stripe-Abgleich:** Sync mit Stripe API, Reconciliation, manuelles Verknüpfen, Gebühren als Ausgaben importieren, CSV-Export
-- **Reports:** Sub-Tabs: EÜR (Einnahmen/Ausgaben/Gewinn), Umsatzliste (CSV-Export), USt-VA Vorbereitung (nur bei Regelbesteuerung), Ausgaben verwalten (CRUD + Soft-Delete + Kategorie-Filter)
-- **DATEV-Export:** Vorschau-Modal (erste 10 Buchungszeilen), Validierungs-Warnungen, Ausgaben optional mit-exportierbar, Export-Historie
-- **Einstellungen:** Steuermodus (Kleinunternehmer/Regelbesteuerung), DATEV-Konten, Mahnwesen-Fristen + Gebühren + Texte, Rechnungs-Defaults
+#### Top-Level-Tab-Struktur
+- **Cockpit** (`?tab=dashboard`): „Heute zu tun"-Inbox + KPIs + Charts. Inbox aggregiert defensiv ueberfaellige Rechnungen, unmatched Stripe, pending purchase_items, offene Mahn-Entwuerfe, pending Gutschriften, USt-VA-Erinnerung (nur Regelbesteuerung), Monatsabschluss-Status. API: `GET /api/admin/buchhaltung/cockpit`. Quick-Action-Button „Monatsabschluss starten" oben rechts oeffnet `MonthCloseWizard`-Modal.
+- **Einnahmen** (`?tab=einnahmen&sub=...`): Wrapper mit Pills `rechnungen | offen | gutschriften`. Komponenten unveraendert wiederverwendet (`RechnungenTab`, `OffenePostenTab`, `GutschriftenTab`).
+- **Ausgaben** (`?tab=ausgaben&sub=...`): Wrapper mit Pills `manuell | einkauf`. Manuell = bestehender `AusgabenTab`. Einkauf = neue Lieferanten-Rechnungen-Liste mit KPI-Karten + Klassifizierung-Counter, Edit weiter unter `/admin/einkauf`.
+- **Stripe-Abgleich**: unveraendert.
+- **Berichte** (`?tab=reports&sub=...`): Wrapper mit Pills `analyse | datev`. Analyse = bestehender `ReportsTab` (EÜR, USt-VA, Umsatzliste). DATEV = bestehender `DatevExportTab`.
+- **Einstellungen**: unveraendert.
+
+**Backwards-Compat-Routing:** `legacyTabRedirect()` in `page.tsx` mappt alte Bookmark-URLs (`?tab=rechnungen|offene-posten|gutschriften|datev`) automatisch auf neue Sub-Tabs via `router.replace`. Cockpit-Inbox-Aktionen routen ebenfalls ueber Legacy-Mapping.
+
+#### Cockpit-Inbox (Etappe 1)
+- **Komponente:** `app/admin/buchhaltung/components/CockpitInbox.tsx`. Rendert ToDo-Karten mit Severity-Sortierung (critical > warning > info > ok). Klick auf Action-Button ruft `onNavigateTab(tab)` oder routet ueber `href`.
+- **API:** `GET /api/admin/buchhaltung/cockpit` aggregiert defensiv (jede Sektion try/catch). Ohne ToDos: positive „Alles erledigt"-Karte.
+
+#### Bulk-Aktionen (Etappe 4)
+- **Komponente:** `app/admin/buchhaltung/components/shared/BulkBar.tsx` (sticky top, Backdrop-Blur, Counter-Badge). `BulkBtn`-Helper mit `primary|secondary|danger`-Varianten.
+- **APIs:**
+  - `POST /api/admin/buchhaltung/invoices/bulk` mit `action: 'mark_paid' | 'resend_email'` (max 200 IDs). `mark_paid` skippt bereits bezahlte/stornierte. `resend_email` sequenziell mit Cookie-Forward.
+  - `POST /api/admin/buchhaltung/dunning/bulk` (max 100). Erstellt naechste Mahnstufe als Entwurf pro Rechnung — wie der taegliche Cron, nur explizit.
+- Eingebaut in `RechnungenTab` (mark_paid + resend) und `OffenePostenTab` (Mahn-Entwuerfe + mark_paid).
+- **URL-Filter-Persistenz** in `RechnungenTab`: `q`, `status`, `p`, `limit` als Query-Params, ueber `useSearchParams` + `router.replace`. Reload-fest, teilbar als Link.
+
+#### Monatsabschluss-Wizard (Etappe 3)
+- **Komponente:** `app/admin/buchhaltung/components/MonthCloseWizard.tsx`. Modal mit 4 Schritten: Stripe-Abgleich → Lieferanten-Klassifizierung → EÜR-Vorschau → Abschluss. Springt automatisch zum ersten unfertigen Schritt. Pro Schritt eigener CTA-Button der zum passenden Tab routet.
+- **API:** `GET/POST/DELETE /api/admin/buchhaltung/period-close?period=YYYY-MM`. POST setzt Soft-Lock in `admin_settings.period_locks[period]` mit `{locked_at, locked_by}`. DELETE braucht `?reason=...` (min 10 Zeichen) und schreibt `unlocked_at, unlocked_by, unlock_reason` (Audit-Trail bleibt erhalten).
+- **Soft-Lock heute, Hard-Lock spaeter:** Aktuell warnt das System nur, blockiert nicht. Beim Wechsel auf Regelbesteuerung wird die API zur harten Sperre.
+- Audit-Log: `period.close`, `period.unlock`.
+
+#### Architektur-Fundamente fuer „spaeter mehr" (A1/A2/A5/A4)
+**Migration `supabase/supabase-buchhaltung-foundation.sql` (idempotent):**
+- A1 — Spalte `account_code TEXT` (nullable) auf `invoices`, `expenses`, `credit_notes`, `purchase_items`, `assets`. Vorbereitet fuer SKR03-Konto-Zuordnung pro Beleg.
+- A2 — Spalte `internal_beleg_no TEXT` (nullable) auf `invoices`, `expenses`, `credit_notes`, `purchases`. Vorbereitet fuer lueckenlose Belegnummer.
+- Indizes auf beide neuen Spalten (Partial Index `WHERE … IS NOT NULL`).
+- A5 — Setting `kontenrahmen_mapping` mit SKR03-Defaults (~25 Konten in 3 Gruppen) initialisiert.
+- Setting `period_locks` als leeres Objekt initialisiert.
+
+**Lib `lib/beleg-numbers.ts`:** `nextBelegNumber()` reserviert lueckenlose Nummer pro Geschaeftsjahr (Format `BELEG-2026-00001` / `TEST-BELEG-2026-00001`). Counter in `admin_settings.beleg_counter_<live|test>_<year>`. Optimistic-Concurrency mit Retry (3x). `parseBelegNumber()` als Reverse-Helper. Wird heute noch nirgends gerufen — bereit fuer Etappe „Belegjournal" oder Wechsel auf Regelbesteuerung.
+
+**Lib `lib/accounting/kontenrahmen.ts`:** `loadKontenrahmen()` (60s In-Memory-Cache), `accountForErloes()`, `accountForAufwand()`, `accountForBestand()`, `accountForExpenseCategory()`, `listAllAccounts()`. Klein-Modus-Sonderfall: `mietumsatz` → 8200 statt 8400. Fallback auf Default-Mapping bei DB-Fehler.
+
+**API:** `GET/PUT /api/admin/buchhaltung/kontenrahmen` mit Konto-Code-Validierung (3-5 Ziffern).
+
+**Lib `lib/delete-reason.ts` (A4):** `requireDeleteReason(req)` prueft `X-Delete-Reason`-Header, `?reason=...` oder Body. Min 10, max 500 Zeichen. Eingebaut in `DELETE /api/admin/buchhaltung/expenses/[id]`, `DELETE /api/admin/purchases/[id]`, `DELETE /api/admin/buchhaltung/period-close`. UI in `AusgabenTab` ruft `prompt()` mit Mindestlaengen-Pruefung. Audit-Log enthaelt `changes.reason`.
+
+#### Mobile-Tauglichkeit (Etappe 5)
+- BuchhaltungTabs nutzen `scrollSnapType: 'x mandatory'` + scroll-snap-align fuer iOS-freundliches horizontales Tab-Scrollen
+- Mobile-CSS-Patches in `page.tsx` `<style>`-Tag: `<= 640px` reduziertes Padding (`16px 12px`), Tabellen-Font 12px, Cell-Padding 8px/6px, Inputs/Selects auf 16px (verhindert iOS Auto-Zoom)
+- Scrollbar-Styling in Tab-Bar: 4px hoch, dunkel
 
 #### DB-Tabellen (Buchhaltung)
 - **`invoices`**: Rechnungen (booking_id, invoice_number, amounts, status, payment_status, paid_at, payment_method, tax_mode, tax_rate, due_date)
@@ -1464,6 +1503,7 @@ Admin-Seite `/admin/newsletter` (in Sidebar-Gruppe „Rabatte & Aktionen", Permi
 **Audit-Log-Aktionen:** `newsletter.send_campaign`, `newsletter.update_subscriber`, `newsletter.delete_subscriber`, `customer_push.send`.
 
 ### Noch offen
+- **Buchhaltungs-Refactor Migration auszuführen:** `supabase/supabase-buchhaltung-foundation.sql` (idempotent). Fügt nullable Spalten `account_code` + `internal_beleg_no` zu invoices/expenses/credit_notes/purchases/purchase_items/assets hinzu, initialisiert `period_locks` + `kontenrahmen_mapping` Settings. Heute keine Wirkung — bereit fuer Belegjournal/Regelbesteuerung-Wechsel.
 - **Zubehör-Exemplar-Tracking Phase 3A + 3B (Migrationen auszuführen, beide idempotent):**
   1. `supabase/supabase-assets-accessory-unit-id.sql` (3A) — Spalte `assets.accessory_unit_id` mit FK auf `accessory_units(id)` + Index. Ohne Migration schlägt der „+ erfassen"-Button im AccessoryUnitsManager mit 500 fehl.
   2. `supabase/supabase-damage-reports-accessory-unit.sql` (3B) — Spalte `damage_reports.accessory_unit_id` mit FK auf `accessory_units(id)` + Index. Ohne Migration schlägt der Submit im Zubehör-Schaden-Modal mit 500 fehl.

@@ -48,45 +48,59 @@ interface BuchhaltungTabsProps {
 
 export default function BuchhaltungTabs({ activeTab, onTabChange }: BuchhaltungTabsProps) {
   return (
-    <div style={{
-      display: 'flex',
-      gap: 2,
-      flexWrap: 'wrap',
-      overflowX: 'auto',
-      borderBottom: '1px solid #1e293b',
-      paddingBottom: 0,
-      marginBottom: 24,
-    }}>
-      {TABS.map((tab) => {
-        const isActive = tab.id === activeTab;
-        return (
-          <button
-            key={tab.id}
-            onClick={() => onTabChange(tab.id)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              padding: '10px 16px',
-              fontSize: 13,
-              fontWeight: isActive ? 700 : 500,
-              color: isActive ? '#06b6d4' : '#94a3b8',
-              background: 'transparent',
-              border: 'none',
-              borderBottom: isActive ? '2px solid #06b6d4' : '2px solid transparent',
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-              transition: 'color 0.15s, border-color 0.15s',
-              marginBottom: -1,
-            }}
-            onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.color = '#e2e8f0'; }}
-            onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.color = '#94a3b8'; }}
-          >
-            {tab.icon}
-            {tab.label}
-          </button>
-        );
-      })}
-    </div>
+    <>
+      {/* Desktop + Mobile horizontaler Scroll mit Snap */}
+      <div className="cam2-buchhaltung-tabs" style={{
+        display: 'flex',
+        gap: 2,
+        overflowX: 'auto',
+        scrollSnapType: 'x mandatory',
+        WebkitOverflowScrolling: 'touch',
+        borderBottom: '1px solid #1e293b',
+        paddingBottom: 0,
+        marginBottom: 24,
+      }}>
+        {TABS.map((tab) => {
+          const isActive = tab.id === activeTab;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => onTabChange(tab.id)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '10px 16px',
+                fontSize: 13,
+                fontWeight: isActive ? 700 : 500,
+                color: isActive ? '#06b6d4' : '#94a3b8',
+                background: 'transparent',
+                border: 'none',
+                borderBottom: isActive ? '2px solid #06b6d4' : '2px solid transparent',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                transition: 'color 0.15s, border-color 0.15s',
+                marginBottom: -1,
+                scrollSnapAlign: 'start',
+                flex: '0 0 auto',
+              }}
+              onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.color = '#e2e8f0'; }}
+              onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.color = '#94a3b8'; }}
+            >
+              {tab.icon}
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+      {/* Mobile: Hide scrollbar, kompakteres Padding */}
+      <style>{`
+        .cam2-buchhaltung-tabs::-webkit-scrollbar { height: 4px; }
+        .cam2-buchhaltung-tabs::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 2px; }
+        @media (max-width: 640px) {
+          .cam2-buchhaltung-tabs button { padding: 10px 12px !important; font-size: 12px !important; }
+        }
+      `}</style>
+    </>
   );
 }
