@@ -59,6 +59,7 @@ interface BookingDetail {
   unit_id: string | null;
   serial_number: string | null;
   stripe_payment_link_id: string | null;
+  is_test: boolean | null;
 }
 
 interface RentalAgreement {
@@ -585,9 +586,18 @@ export default function BuchungDetailPage() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
           <div>
             <AdminBackLink href="/admin/buchungen" label="Zurück zu Buchungen" />
-            <div className="flex items-center gap-3 mt-1">
+            <div className="flex items-center gap-3 mt-1 flex-wrap">
               <h1 className="font-heading font-bold text-2xl text-brand-black">{booking.id}</h1>
               <span className="inline-flex px-3 py-1 rounded-full text-xs font-heading font-semibold" style={{ color: sc.color, backgroundColor: sc.bg, border: `1px solid ${sc.color}30` }}>{sc.label}</span>
+              {booking.is_test && (
+                <span
+                  className="inline-flex px-3 py-1 rounded-full text-xs font-heading font-bold"
+                  style={{ color: '#ec4899', backgroundColor: '#ec489914', border: '1px solid #ec489933', letterSpacing: '0.5px' }}
+                  title="Test-Buchung — fällt aus Reports/EÜR/DATEV raus"
+                >
+                  TEST
+                </span>
+              )}
             </div>
             <p className="text-sm font-body text-brand-muted mt-1">Erstellt am {fmtDateTime(booking.created_at)}</p>
           </div>

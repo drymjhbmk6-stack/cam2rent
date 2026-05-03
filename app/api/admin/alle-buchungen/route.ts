@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
   let query = supabase
     .from('bookings')
     .select(
-      'id, product_name, rental_from, rental_to, days, price_total, deposit, status, delivery_mode, shipping_method, customer_email, customer_name, tracking_number, created_at, user_id, deposit_intent_id, deposit_status, suspicious, suspicious_reasons, original_rental_to, extended_at, contract_signed, contract_signed_at'
+      'id, product_name, rental_from, rental_to, days, price_total, deposit, status, delivery_mode, shipping_method, customer_email, customer_name, tracking_number, created_at, user_id, deposit_intent_id, deposit_status, suspicious, suspicious_reasons, original_rental_to, extended_at, contract_signed, contract_signed_at, is_test'
     )
     .order('created_at', { ascending: false })
     .limit(limit);

@@ -31,6 +31,7 @@ interface Booking {
   extended_at: string | null;
   contract_signed: boolean | null;
   contract_signed_at: string | null;
+  is_test: boolean | null;
 }
 
 type StatusFilter = 'all' | 'confirmed' | 'shipped' | 'completed' | 'cancelled' | 'damaged';
@@ -383,7 +384,27 @@ export default function AdminBuchungenPage() {
                         )}
                       </td>
                       <td className="px-3 sm:px-5 py-3 sm:py-4">
-                        <StatusBadge status={booking.status} />
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
+                          <StatusBadge status={booking.status} />
+                          {booking.is_test && (
+                            <span
+                              style={{
+                                display: 'inline-block',
+                                padding: '2px 8px',
+                                borderRadius: 999,
+                                fontSize: 10,
+                                fontWeight: 700,
+                                color: '#ec4899',
+                                background: '#ec489914',
+                                border: '1px solid #ec489933',
+                                letterSpacing: '0.5px',
+                              }}
+                              title="Test-Buchung — fällt aus Reports/EÜR/DATEV raus"
+                            >
+                              TEST
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-3 sm:px-5 py-3 sm:py-4">
                         <p className="font-heading font-semibold text-xs sm:text-sm text-brand-black whitespace-nowrap">
