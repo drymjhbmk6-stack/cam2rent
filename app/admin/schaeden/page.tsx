@@ -205,7 +205,7 @@ export default function AdminSchaedenPage() {
       ) : (
         <div style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 12, overflow: 'hidden' }}>
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <table style={{ width: '100%', minWidth: 920, borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid #1e293b' }}>
                   {['Buchung', 'Kamera', 'Kunde', 'Gemeldet', 'Status', 'Betrag', ''].map((h) => (

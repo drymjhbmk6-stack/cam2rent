@@ -174,7 +174,8 @@ function LieferantenRechnungenList() {
 
       {!loading && !error && purchases.length > 0 && (
         <div style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 12, overflow: 'hidden' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', minWidth: 820, borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ background: '#0f172a', borderBottom: '1px solid #1e293b' }}>
                 <th style={{ textAlign: 'left', padding: '10px 14px', color: '#64748b', fontWeight: 600 }}>Datum</th>
@@ -229,6 +230,7 @@ function LieferantenRechnungenList() {
               })}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 

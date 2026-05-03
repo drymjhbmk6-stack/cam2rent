@@ -783,7 +783,7 @@ export default function AdminKameraEditorPage() {
                 <p className="text-sm text-brand-muted py-6 text-center italic">Noch keine Kamera angelegt. Klick auf <span className="font-semibold">&bdquo;+ Neue Kamera anlegen&ldquo;</span> oben rechts.</p>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
+                  <table className="w-full text-sm" style={{ minWidth: 880 }}>
                     <thead>
                       <tr className="border-b border-brand-border">
                         <th className="text-left text-xs font-heading font-semibold text-brand-muted py-2 px-2">Seriennummer</th>

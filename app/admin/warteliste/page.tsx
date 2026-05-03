@@ -139,7 +139,8 @@ export default function Warteliste() {
                   {list.length} {list.length === 1 ? 'Interessent' : 'Interessenten'}
                 </span>
               </div>
-              <table className="w-full text-sm">
+              <div className="overflow-x-auto">
+              <table className="w-full text-sm" style={{ minWidth: 720 }}>
                 <thead className="bg-slate-900/70 text-slate-400 text-xs uppercase tracking-wider">
                   <tr>
                     <th className="px-4 py-2 text-left font-medium">E-Mail</th>
@@ -192,6 +193,7 @@ export default function Warteliste() {
                   ))}
                 </tbody>
               </table>
+              </div>
             </div>
           ))}
         </div>

@@ -718,7 +718,7 @@ export default function KundenDetailPage() {
             </div>
           ) : (
             <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <table style={{ width: '100%', minWidth: 720, borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid #1e293b' }}>
                     {['ID', 'Produkt', 'Zeitraum', 'Status', 'Betrag'].map((h) => (
