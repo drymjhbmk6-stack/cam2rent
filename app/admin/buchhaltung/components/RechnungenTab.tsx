@@ -1,9 +1,11 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { formatCurrency, fmtDateShort } from '@/lib/format-utils';
 import StatusBadge from './shared/StatusBadge';
 import ExportButton from './shared/ExportButton';
+import BulkBar, { BulkBtn } from './shared/BulkBar';
 
 interface Invoice {
   id: string;
@@ -30,15 +32,29 @@ interface InvoicesResponse {
 }
 
 export default function RechnungenTab() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [data, setData] = useState<InvoicesResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
-  const [page, setPage] = useState(1);
-  const [perPage, setPerPage] = useState(25);
+  const [search, setSearch] = useState(() => searchParams.get('q') || '');
+  const [statusFilter, setStatusFilter] = useState(() => searchParams.get('status') || '');
+  const [page, setPage] = useState(() => parseInt(searchParams.get('p') || '1', 10) || 1);
+  const [perPage, setPerPage] = useState(() => parseInt(searchParams.get('limit') || '25', 10) || 25);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [resending, setResending] = useState<string | null>(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: 'ok' | 'err' } | null>(null);
+
+  // URL-Filter-Persistenz: bei Aenderung von search/statusFilter/page/perPage URL aktualisieren
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (search) params.set('q', search); else params.delete('q');
+    if (statusFilter) params.set('status', statusFilter); else params.delete('status');
+    if (page > 1) params.set('p', String(page)); else params.delete('p');
+    if (perPage !== 25) params.set('limit', String(perPage)); else params.delete('limit');
+    const newUrl = `/admin/buchhaltung?${params.toString()}`;
+    router.replace(newUrl, { scroll: false });
+  }, [search, statusFilter, page, perPage]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchInvoices = useCallback(async () => {
     setLoading(true);
@@ -72,6 +88,57 @@ export default function RechnungenTab() {
       else showToast('Fehler beim Versand', 'err');
     } finally {
       setResending(null);
+    }
+  }
+
+  async function handleBulkMarkPaid() {
+    if (selected.size === 0) return;
+    if (!confirm(`${selected.size} ${selected.size === 1 ? 'Rechnung' : 'Rechnungen'} als bezahlt markieren?\n\nZahlungsweise: Überweisung\nDatum: heute`)) return;
+    setBulkBusy(true);
+    try {
+      const res = await fetch('/api/admin/buchhaltung/invoices/bulk', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'mark_paid', ids: Array.from(selected) }),
+      });
+      const json = await res.json();
+      if (res.ok) {
+        showToast(`${json.paid} bezahlt${json.skipped ? ` · ${json.skipped} übersprungen` : ''}`, 'ok');
+        setSelected(new Set());
+        fetchInvoices();
+      } else {
+        showToast(json.error || 'Fehler', 'err');
+      }
+    } catch {
+      showToast('Netzwerkfehler', 'err');
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  async function handleBulkResend() {
+    if (selected.size === 0) return;
+    if (selected.size > 20) {
+      if (!confirm(`${selected.size} E-Mails versenden? Das kann ein paar Sekunden dauern.`)) return;
+    }
+    setBulkBusy(true);
+    try {
+      const res = await fetch('/api/admin/buchhaltung/invoices/bulk', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'resend_email', ids: Array.from(selected) }),
+      });
+      const json = await res.json();
+      if (res.ok) {
+        showToast(`${json.sent} versendet${json.failed ? ` · ${json.failed} fehlgeschlagen` : ''}`, json.failed ? 'err' : 'ok');
+        setSelected(new Set());
+      } else {
+        showToast(json.error || 'Fehler', 'err');
+      }
+    } catch {
+      showToast('Netzwerkfehler', 'err');
+    } finally {
+      setBulkBusy(false);
     }
   }
 
@@ -134,6 +201,16 @@ export default function RechnungenTab() {
           {toast.msg}
         </div>
       )}
+
+      {/* Bulk-Aktionen */}
+      <BulkBar count={selected.size} onClear={() => setSelected(new Set())}>
+        <BulkBtn variant="primary" onClick={handleBulkMarkPaid} disabled={bulkBusy}>
+          {bulkBusy ? 'Verarbeite…' : 'Als bezahlt markieren'}
+        </BulkBtn>
+        <BulkBtn variant="secondary" onClick={handleBulkResend} disabled={bulkBusy}>
+          E-Mail erneut senden
+        </BulkBtn>
+      </BulkBar>
 
       {/* Filter-Bar */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap', alignItems: 'center' }}>

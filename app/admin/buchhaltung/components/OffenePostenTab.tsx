@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { formatCurrency, fmtDateShort } from '@/lib/format-utils';
+import BulkBar, { BulkBtn } from './shared/BulkBar';
 
 
 interface OpenItem {
@@ -45,6 +46,57 @@ export default function OffenePostenTab() {
   const [paidMethod, setPaidMethod] = useState('bank_transfer');
   const [paidNote, setPaidNote] = useState('');
   const [paidLoading, setPaidLoading] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
+
+  async function handleBulkDunning() {
+    if (selected.size === 0) return;
+    if (!confirm(`Für ${selected.size} ${selected.size === 1 ? 'Rechnung' : 'Rechnungen'} jeweils einen Mahn-Entwurf erstellen?\n\nNoch nicht versendet — du gibst die Entwürfe danach einzeln frei.`)) return;
+    setBulkBusy(true);
+    try {
+      const res = await fetch('/api/admin/buchhaltung/dunning/bulk', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ invoice_ids: Array.from(selected) }),
+      });
+      const json = await res.json();
+      if (res.ok) {
+        showToast(`${json.created} Mahn-Entwürfe erstellt${json.skipped ? ` · ${json.skipped} übersprungen` : ''}`, 'ok');
+        setSelected(new Set());
+        fetchData();
+      } else {
+        showToast(json.error || 'Fehler', 'err');
+      }
+    } catch {
+      showToast('Netzwerkfehler', 'err');
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  async function handleBulkMarkPaid() {
+    if (selected.size === 0) return;
+    if (!confirm(`${selected.size} ${selected.size === 1 ? 'Rechnung' : 'Rechnungen'} als bezahlt markieren?\n\nZahlungsweise: Überweisung\nDatum: heute`)) return;
+    setBulkBusy(true);
+    try {
+      const res = await fetch('/api/admin/buchhaltung/invoices/bulk', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'mark_paid', ids: Array.from(selected) }),
+      });
+      const json = await res.json();
+      if (res.ok) {
+        showToast(`${json.paid} bezahlt${json.skipped ? ` · ${json.skipped} übersprungen` : ''}`, 'ok');
+        setSelected(new Set());
+        fetchData();
+      } else {
+        showToast(json.error || 'Fehler', 'err');
+      }
+    } catch {
+      showToast('Netzwerkfehler', 'err');
+    } finally {
+      setBulkBusy(false);
+    }
+  }
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -205,6 +257,16 @@ export default function OffenePostenTab() {
           {toast.msg}
         </div>
       )}
+
+      {/* Bulk-Aktionen */}
+      <BulkBar count={selected.size} onClear={() => setSelected(new Set())}>
+        <BulkBtn variant="primary" onClick={handleBulkDunning} disabled={bulkBusy}>
+          {bulkBusy ? 'Verarbeite…' : 'Mahn-Entwürfe erstellen'}
+        </BulkBtn>
+        <BulkBtn variant="secondary" onClick={handleBulkMarkPaid} disabled={bulkBusy}>
+          Als bezahlt markieren
+        </BulkBtn>
+      </BulkBar>
 
       {/* Übersicht */}
       <div style={{ display: 'flex', gap: 16, marginBottom: 24, flexWrap: 'wrap' }}>
