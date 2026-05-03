@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { getProducts } from '@/lib/get-products';
 import { RESERVING_BOOKING_STATUSES } from '@/lib/booking-statuses';
+import { isTestMode } from '@/lib/env-mode';
 
 interface BufferDays {
   versand_before: number;
@@ -67,13 +68,21 @@ export async function GET(
   const extLast = new Date(year, mon - 1, daysInMonth + maxBuffer).toISOString().split('T')[0];
 
   // ── Buchungen abfragen (erweitert um Puffer) ──────────────────────────────
-  const { data: bookings, error: bookErr } = await supabase
+  // Test-Buchungen (Tester-User auf Live-Seite) blocken den Kunden-Kalender NICHT.
+  // Im globalen Test-Modus laufen alle Buchungen als is_test=true → dann zaehlen alle.
+  const globalTest = await isTestMode();
+  let bookingQuery = supabase
     .from('bookings')
     .select('rental_from, rental_to, delivery_mode')
     .eq('product_id', productId)
     .in('status', [...RESERVING_BOOKING_STATUSES])
     .lte('rental_from', extLast)
     .gte('rental_to', extFirst);
+  if (!globalTest) {
+    // matcht is_test=false UND is_test=NULL (defensive bei alter Buchung ohne Spalte)
+    bookingQuery = bookingQuery.not('is_test', 'is', true);
+  }
+  const { data: bookings, error: bookErr } = await bookingQuery;
 
   if (bookErr) {
     console.error('Availability bookings query error:', bookErr);

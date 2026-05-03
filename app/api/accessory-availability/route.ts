@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { RESERVING_BOOKING_STATUSES } from '@/lib/booking-statuses';
+import { isTestMode } from '@/lib/env-mode';
 
 interface BufferDays {
   versand_before: number;
@@ -95,12 +96,17 @@ export async function GET(req: NextRequest) {
   // 4. Überlappende Buchungen laden — mit allen drei Quellen für Zubehör-Belegung.
   //    Filter ".or" damit Buchungen ohne irgendwelche Zubehör-Spuren ausgeschlossen
   //    sind (Performance — bringt nichts, sie zu laden).
-  const { data: bookings } = await supabase
+  // Test-Buchungen blocken den Kunden-Kalender NICHT (siehe availability/[productId]).
+  const globalTest = await isTestMode();
+  let bookingsQuery = supabase
     .from('bookings')
     .select('accessories, accessory_items, accessory_unit_ids, rental_from, rental_to, delivery_mode')
     .in('status', [...RESERVING_BOOKING_STATUSES])
-    .or('accessories.neq.{},accessory_items.not.is.null,accessory_unit_ids.neq.{}')
-    .returns<ReservingBooking[]>();
+    .or('accessories.neq.{},accessory_items.not.is.null,accessory_unit_ids.neq.{}');
+  if (!globalTest) {
+    bookingsQuery = bookingsQuery.not('is_test', 'is', true);
+  }
+  const { data: bookings } = await bookingsQuery.returns<ReservingBooking[]>();
 
   // 5. Unit→Accessory-Mapping vorab laden (1 Bulk-Query statt N pro Buchung)
   const allUnitIds = new Set<string>();

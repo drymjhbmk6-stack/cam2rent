@@ -85,7 +85,7 @@ export async function GET(req: NextRequest) {
       .order('created_at', { ascending: true }),
     supabase
       .from('bookings')
-      .select('id, product_id, product_name, rental_from, rental_to, days, status, delivery_mode, customer_name, unit_id, accessories')
+      .select('id, product_id, product_name, rental_from, rental_to, days, status, delivery_mode, customer_name, unit_id, accessories, is_test')
       .in('status', ['confirmed', 'shipped', 'picked_up', 'completed'])
       .lte('rental_from', extLast)
       .gte('rental_to', extFirst),
@@ -149,6 +149,7 @@ export async function GET(req: NextRequest) {
           delivery_mode: b.delivery_mode,
           status: b.status,
           unit_id: b.unit_id,
+          is_test: b.is_test ?? false,
         })),
         blocked: productBlocked,
       };

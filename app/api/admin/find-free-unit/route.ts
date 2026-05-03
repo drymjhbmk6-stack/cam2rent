@@ -45,8 +45,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ available: false, unit: null, message: 'Keine Kameras für dieses Produkt angelegt.' });
   }
 
-  // Überlappende Buchungen finden
-  const { data: bookings } = await supabase
+  // Überlappende Buchungen finden. Test-Buchungen blocken die Verfuegbarkeits-
+  // Anzeige fuer Live-Buchungen NICHT (Test-/Live-Isolation, analog
+  // assign_free_unit RPC).
+  const forTest = req.nextUrl.searchParams.get('for_test') === '1';
+  let bookingQuery = supabase
     .from('bookings')
     .select('unit_id')
     .eq('product_id', productId)
@@ -54,6 +57,10 @@ export async function GET(req: NextRequest) {
     .not('unit_id', 'is', null)
     .lte('rental_from', bTo)
     .gte('rental_to', bFrom);
+  bookingQuery = forTest
+    ? bookingQuery.eq('is_test', true)
+    : bookingQuery.not('is_test', 'is', true);
+  const { data: bookings } = await bookingQuery;
 
   const occupied = new Set((bookings ?? []).map(b => b.unit_id).filter(Boolean));
   const freeUnit = units.find(u => !occupied.has(u.id));

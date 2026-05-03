@@ -21,6 +21,7 @@ interface GanttBooking {
   delivery_mode: string;
   status: string;
   unit_id: string | null;
+  is_test?: boolean;
 }
 
 interface GanttBlocked {
@@ -331,17 +332,29 @@ export default function AdminVerfuegbarkeitPage() {
 
   // Zellenfarbe — kräftige, gut unterscheidbare Farben auf dunklem Hintergrund
   function cellStyle(info: DayCellInfo): React.CSSProperties {
-    switch (info.type) {
-      case 'free': return { background: '#065f46', color: '#6ee7b7' };           // kräftiges Grün
-      case 'booked': return { background: '#1d4ed8', color: '#ffffff' };          // kräftiges Blau
-      case 'buffer-hin': return { background: '#a16207', color: '#fef3c7' };      // kräftiges Gelb/Gold
-      case 'buffer-rueck': return { background: '#c2410c', color: '#fed7aa' };    // kräftiges Orange
-      case 'maintenance': return { background: '#991b1b', color: '#fca5a5' };     // kräftiges Rot
-      case 'retired': return { background: '#374151', color: '#9ca3af' };         // Grau
-      case 'blocked': return { background: '#7f1d1d', color: '#fca5a5' };         // Dunkelrot
-      case 'past': return { background: '#1e293b', color: '#475569' };            // Dezent dunkel
-      default: return {};
+    const base: React.CSSProperties = (() => {
+      switch (info.type) {
+        case 'free': return { background: '#065f46', color: '#6ee7b7' };           // kräftiges Grün
+        case 'booked': return { background: '#1d4ed8', color: '#ffffff' };          // kräftiges Blau
+        case 'buffer-hin': return { background: '#a16207', color: '#fef3c7' };      // kräftiges Gelb/Gold
+        case 'buffer-rueck': return { background: '#c2410c', color: '#fed7aa' };    // kräftiges Orange
+        case 'maintenance': return { background: '#991b1b', color: '#fca5a5' };     // kräftiges Rot
+        case 'retired': return { background: '#374151', color: '#9ca3af' };         // Grau
+        case 'blocked': return { background: '#7f1d1d', color: '#fca5a5' };         // Dunkelrot
+        case 'past': return { background: '#1e293b', color: '#475569' };            // Dezent dunkel
+        default: return {};
+      }
+    })();
+    // Test-Buchungen visuell markieren: pinker outline + diagonales Streifen-Overlay.
+    if (info.booking?.is_test) {
+      return {
+        ...base,
+        outline: '2px dashed #ec4899',
+        outlineOffset: '-2px',
+        backgroundImage: `${base.background ? '' : ''}repeating-linear-gradient(45deg, transparent 0 6px, rgba(236,72,153,0.18) 6px 12px)`,
+      };
     }
+    return base;
   }
 
   function handleCellHover(e: React.MouseEvent, info: DayCellInfo, dateStr: string) {
@@ -358,7 +371,7 @@ export default function AdminVerfuegbarkeitPage() {
     };
 
     if (info.booking) {
-      content = `${info.booking.id}\n${info.booking.customer_name || 'Unbekannt'}\n${fmtDate(info.booking.rental_from)} – ${fmtDate(info.booking.rental_to)}\n${info.booking.delivery_mode === 'abholung' ? 'Abholung' : 'Versand'}`;
+      content = `${info.booking.id}${info.booking.is_test ? ' [TEST]' : ''}\n${info.booking.customer_name || 'Unbekannt'}\n${fmtDate(info.booking.rental_from)} – ${fmtDate(info.booking.rental_to)}\n${info.booking.delivery_mode === 'abholung' ? 'Abholung' : 'Versand'}`;
       if (info.bufferLabel) content = `${info.bufferLabel}\n${content}`;
     } else if (info.type === 'maintenance') {
       content = 'Wartung';

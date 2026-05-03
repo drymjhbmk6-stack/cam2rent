@@ -6,12 +6,16 @@ import { createServiceClient } from '@/lib/supabase';
  * Query: Finde eine product_unit deren id NICHT in einer aktiven Buchung ist,
  * die den Zeitraum überlappt.
  *
+ * @param isTest Optional: Wenn gesetzt, werden nur Buchungen mit gleichem
+ *   is_test-Wert als blockierend betrachtet (Test-/Live-Isolation).
+ *   Default: false (= Live-Buchungen sehen nur Live-Buchungen).
  * @returns Die unit_id oder null falls keine frei
  */
 export async function findFreeUnit(
   productId: string,
   rentalFrom: string,
   rentalTo: string,
+  isTest: boolean = false,
 ): Promise<string | null> {
   const supabase = createServiceClient();
 
@@ -24,8 +28,9 @@ export async function findFreeUnit(
 
   if (unitsErr || !units || units.length === 0) return null;
 
-  // 2. Alle Buchungen im Zeitraum laden (die eine Unit zugeordnet haben)
-  const { data: bookings } = await supabase
+  // 2. Alle Buchungen im Zeitraum laden (die eine Unit zugeordnet haben).
+  //    Test-/Live-Isolation: Nur Buchungen mit gleichem is_test-Wert blocken.
+  let bookingQuery = supabase
     .from('bookings')
     .select('unit_id')
     .eq('product_id', productId)
@@ -33,6 +38,10 @@ export async function findFreeUnit(
     .not('unit_id', 'is', null)
     .lte('rental_from', rentalTo)
     .gte('rental_to', rentalFrom);
+  bookingQuery = isTest
+    ? bookingQuery.eq('is_test', true)
+    : bookingQuery.not('is_test', 'is', true);
+  const { data: bookings } = await bookingQuery;
 
   const occupiedUnitIds = new Set(
     (bookings ?? []).map((b) => b.unit_id).filter(Boolean)
