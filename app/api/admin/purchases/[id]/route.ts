@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { logAudit } from '@/lib/audit';
+import { requireDeleteReason } from '@/lib/delete-reason';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -43,6 +44,11 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
 }
 
 export async function DELETE(req: NextRequest, ctx: Ctx) {
+  const reasonCheck = await requireDeleteReason(req);
+  if (!reasonCheck.ok) {
+    return NextResponse.json({ error: reasonCheck.error }, { status: 400 });
+  }
+
   const { id } = await ctx.params;
   const supabase = createServiceClient();
 
@@ -54,6 +60,7 @@ export async function DELETE(req: NextRequest, ctx: Ctx) {
     action: 'purchase.delete',
     entityType: 'purchase',
     entityId: id,
+    changes: { reason: reasonCheck.reason },
     request: req,
   });
 

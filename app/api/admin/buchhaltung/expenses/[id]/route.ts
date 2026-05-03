@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
 import { logAudit } from '@/lib/audit';
+import { requireDeleteReason } from '@/lib/delete-reason';
 
 export async function PATCH(
   req: NextRequest,
@@ -52,6 +53,11 @@ export async function DELETE(
     return NextResponse.json({ error: 'Nicht autorisiert.' }, { status: 401 });
   }
 
+  const reasonCheck = await requireDeleteReason(req);
+  if (!reasonCheck.ok) {
+    return NextResponse.json({ error: reasonCheck.error }, { status: 400 });
+  }
+
   const { id } = await params;
   const supabase = createServiceClient();
 
@@ -69,6 +75,7 @@ export async function DELETE(
     action: 'expense.delete',
     entityType: 'expense',
     entityId: id,
+    changes: { reason: reasonCheck.reason },
     request: req,
   });
 

@@ -89,12 +89,25 @@ export default function AusgabenTab() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm('Ausgabe wirklich löschen?')) return;
-    const res = await fetch(`/api/admin/buchhaltung/expenses/${id}`, { method: 'DELETE' });
+    const reason = prompt(
+      'Begründung für die Löschung (mindestens 10 Zeichen):\n\nWird im Audit-Log protokolliert.'
+    );
+    if (!reason || reason.trim().length < 10) {
+      if (reason !== null) alert('Begründung zu kurz — Löschung abgebrochen.');
+      return;
+    }
+    const res = await fetch(`/api/admin/buchhaltung/expenses/${id}`, {
+      method: 'DELETE',
+      headers: { 'x-delete-reason': reason.trim() },
+    });
     if (res.ok) {
       setToast({ msg: 'Ausgabe gelöscht', type: 'ok' });
       setTimeout(() => setToast(null), 3000);
       fetchExpenses();
+    } else {
+      const err = await res.json().catch(() => ({}));
+      setToast({ msg: err.error || 'Fehler beim Löschen', type: 'err' });
+      setTimeout(() => setToast(null), 4000);
     }
   }
 
@@ -124,14 +137,23 @@ export default function AusgabenTab() {
   async function handleBulkDelete() {
     const count = selectedIds.size;
     if (count === 0) return;
-    if (!confirm(`${count} Ausgabe${count === 1 ? '' : 'n'} wirklich löschen?`)) return;
+    const reason = prompt(
+      `Begründung für die Löschung von ${count} Ausgaben (mindestens 10 Zeichen):\n\nWird im Audit-Log pro Eintrag protokolliert.`
+    );
+    if (!reason || reason.trim().length < 10) {
+      if (reason !== null) alert('Begründung zu kurz — Löschung abgebrochen.');
+      return;
+    }
     setBulkDeleting(true);
     try {
       // Parallel loeschen; bei Fehlern nach erstem fail zumindest die bisherigen
       // Ergebnisse behalten.
       const results = await Promise.allSettled(
         [...selectedIds].map((id) =>
-          fetch(`/api/admin/buchhaltung/expenses/${id}`, { method: 'DELETE' }).then((r) => {
+          fetch(`/api/admin/buchhaltung/expenses/${id}`, {
+            method: 'DELETE',
+            headers: { 'x-delete-reason': reason.trim() },
+          }).then((r) => {
             if (!r.ok) throw new Error(`${id}: ${r.status}`);
             return id;
           }),
