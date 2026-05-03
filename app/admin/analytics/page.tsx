@@ -574,9 +574,17 @@ export default function AnalyticsPage() {
   })();
 
   const fetchLive = useCallback(async () => {
+    // today-Endpoint nimmt nur '24h' als optionalen Range an und liefert dann
+    // ein rollendes 24h-Fenster (statt ab Berlin-Mitternacht). Fuer alle
+    // anderen Zeitraeume bleibt today bei seinem Default — die Chart- und
+    // KPI-Daten kommen dort entweder weiterhin aus todayData (heute) oder aus
+    // historyData (>1 Tag), nicht aus today.
+    const todayUrl = apiRange === '24h'
+      ? '/api/admin/analytics?type=today&range=24h'
+      : '/api/admin/analytics?type=today';
     const [liveRes, todayRes] = await Promise.all([
       fetch(`/api/admin/analytics?type=live&range=${apiRange}`).then((r) => r.json()),
-      fetch('/api/admin/analytics?type=today').then((r) => r.json()),
+      fetch(todayUrl).then((r) => r.json()),
     ]);
     setLiveData(liveRes);
     setTodayData(todayRes);

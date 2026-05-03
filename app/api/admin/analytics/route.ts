@@ -103,10 +103,19 @@ export async function GET(req: NextRequest) {
 
   // ── TODAY ─────────────────────────────────────────────────────────────────
   if (type === 'today') {
+    // Optional ?range=24h → rollendes 24-Stunden-Fenster statt Berlin-Mitternacht.
+    // Hourly-Buckets bleiben nach Stunde-des-Tages (0-23) gruppiert; in den
+    // letzten 24h kommt jede Clock-Hour genau einmal vor, also kein
+    // Doppelzaehlen.
+    const range = req.nextUrl.searchParams.get('range');
+    const startISO = range === '24h'
+      ? new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+      : getBerlinDayStartISO();
+
     const { data } = await supabase
       .from('page_views')
       .select('session_id, visitor_id, path, device_type, created_at')
-      .gte('created_at', getBerlinDayStartISO());
+      .gte('created_at', startISO);
 
     const rows = data ?? [];
     const totalViews = rows.length;
