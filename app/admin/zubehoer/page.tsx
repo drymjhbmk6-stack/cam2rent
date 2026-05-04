@@ -202,6 +202,24 @@ export default function AdminZubehoerPage() {
     });
   }
 
+  /** Scrollt nach dem Zuklappen smooth zur Karte mit dieser ID. */
+  function scrollToCard(id: string) {
+    requestAnimationFrame(() => {
+      const el = document.getElementById(`acc-card-${id}`);
+      if (el) {
+        const rect = el.getBoundingClientRect();
+        const targetY = window.scrollY + rect.top - 80; // 80 px Sticky-Header-Puffer
+        window.scrollTo({ top: targetY, behavior: 'smooth' });
+      }
+    });
+  }
+
+  /** Edit-Modus schliessen (Abbrechen / Header-Toggle) — mit Auto-Scroll zur Karte. */
+  function closeEdit(id: string) {
+    setEditId(null);
+    scrollToCard(id);
+  }
+
   async function handleSave(id: string) {
     setSavingId(id);
     try {
@@ -265,16 +283,7 @@ export default function AdminZubehoerPage() {
         setSavedId(id);
       }
       setTimeout(() => setSavedId(null), 3000);
-      // Karte nach dem Zuklappen wieder in den Viewport scrollen (oben),
-      // sonst landet der User irgendwo unten in der Liste.
-      requestAnimationFrame(() => {
-        const el = document.getElementById(`acc-card-${targetId}`);
-        if (el) {
-          const rect = el.getBoundingClientRect();
-          const targetY = window.scrollY + rect.top - 80; // 80 px Sticky-Header-Puffer
-          window.scrollTo({ top: targetY, behavior: 'smooth' });
-        }
-      });
+      scrollToCard(targetId);
     } catch {
       alert('Fehler beim Speichern.');
     } finally {
@@ -547,7 +556,7 @@ export default function AdminZubehoerPage() {
                       {items.map((acc) => (
                         <AccessoryCard key={acc.id} acc={acc} editId={editId} editForm={editForm} setEditForm={setEditForm}
                           savedId={savedId} savingId={savingId} deletingId={deletingId} productList={productList}
-                          onStartEdit={startEdit} onSetEditId={setEditId} onSave={handleSave} onDelete={handleDelete} />
+                          onStartEdit={startEdit} onCloseEdit={closeEdit} onSave={handleSave} onDelete={handleDelete} />
                       ))}
                     </div>
                   </div>
@@ -573,7 +582,7 @@ export default function AdminZubehoerPage() {
                       {items.map((acc) => (
                         <AccessoryCard key={acc.id} acc={acc} editId={editId} editForm={editForm} setEditForm={setEditForm}
                           savedId={savedId} savingId={savingId} deletingId={deletingId} productList={productList}
-                          onStartEdit={startEdit} onSetEditId={setEditId} onSave={handleSave} onDelete={handleDelete} />
+                          onStartEdit={startEdit} onCloseEdit={closeEdit} onSave={handleSave} onDelete={handleDelete} />
                       ))}
                     </div>
                   </div>
@@ -604,7 +613,7 @@ function groupByCategory(accs: Accessory[]): { category: string; items: Accessor
 
 /* ── AccessoryCard Komponente ──────────────────────────────────────────────── */
 
-function AccessoryCard({ acc, editId, editForm, setEditForm, savedId, savingId, deletingId, productList, onStartEdit, onSetEditId, onSave, onDelete }: {
+function AccessoryCard({ acc, editId, editForm, setEditForm, savedId, savingId, deletingId, productList, onStartEdit, onCloseEdit, onSave, onDelete }: {
   acc: Accessory;
   editId: string | null;
   editForm: Partial<Accessory>;
@@ -614,7 +623,7 @@ function AccessoryCard({ acc, editId, editForm, setEditForm, savedId, savingId, 
   deletingId: string | null;
   productList: { id: string; name: string; brand: string }[];
   onStartEdit: (acc: Accessory) => void;
-  onSetEditId: (id: string | null) => void;
+  onCloseEdit: (id: string) => void;
   onSave: (id: string) => void;
   onDelete: (id: string, name: string) => void;
 }) {
@@ -649,7 +658,7 @@ function AccessoryCard({ acc, editId, editForm, setEditForm, savedId, savingId, 
               className="px-2 py-1 text-[10px] font-heading font-semibold text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-40">
               {deletingId === acc.id ? '…' : 'X'}
             </button>
-            <button onClick={() => editId === acc.id ? onSetEditId(null) : onStartEdit(acc)}
+            <button onClick={() => editId === acc.id ? onCloseEdit(acc.id) : onStartEdit(acc)}
               className="text-xs font-heading font-semibold text-brand-muted hover:text-brand-black transition-colors px-1">
               {editId === acc.id ? '▲' : '▼'}
             </button>
@@ -935,7 +944,7 @@ function AccessoryCard({ acc, editId, editForm, setEditForm, savedId, savingId, 
                       </div>
                     )}
                     <div className="flex justify-end mt-4 gap-2">
-                      <button onClick={() => onSetEditId(null)}
+                      <button onClick={() => onCloseEdit(acc.id)}
                         className="px-4 py-2 text-sm font-heading font-semibold text-brand-muted border border-brand-border rounded-btn hover:bg-white transition-colors">
                         Abbrechen
                       </button>
