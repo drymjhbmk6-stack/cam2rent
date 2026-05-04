@@ -83,6 +83,46 @@ export default function AssetDetailPage(props: { params: Promise<{ id: string }>
     }
   }
 
+  async function convertToGwg(confirmOldYear: boolean = false) {
+    const res = await fetch(`/api/admin/assets/${id}/convert-to-gwg`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ confirm_old_year: confirmOldYear }),
+    });
+    const data = await res.json();
+    if (res.status === 409 && data?.code === 'CONFIRM_OLD_YEAR_REQUIRED') {
+      const ok = confirm(
+        `⚠ Steuerlich kritisch!\n\n` +
+        `Anschaffungsjahr: ${data.purchase_year}\n` +
+        `Aktuelles Jahr: ${data.current_year}\n\n` +
+        `Eine GWG-Umstellung im Nachhinein ist nur zulässig, wenn die Steuererklärung für ${data.purchase_year} noch nicht beim Finanzamt eingereicht ist (oder der Bescheid noch nicht bestandskräftig ist).\n\n` +
+        `Bitte mit Steuerberater abklären, BEVOR du fortfährst.\n\n` +
+        `Wirklich umstellen?`,
+      );
+      if (!ok) return;
+      return convertToGwg(true);
+    }
+    if (!res.ok) {
+      setMsg(`Fehler: ${data?.error ?? 'unbekannt'}`);
+      return;
+    }
+    if (data?.warning) {
+      setMsg(`⚠ ${data.warning}`);
+    } else if (data?.booked_amount > 0) {
+      setMsg(`Auf GWG umgestellt — ${formatCurrency(data.booked_amount)} als Sofortabzug verbucht.`);
+    } else {
+      setMsg('Auf GWG umgestellt (Buchwert war bereits 0 — kein zusätzlicher Aufwand gebucht).');
+    }
+    // Reload
+    const r2 = await fetch(`/api/admin/assets/${id}`);
+    const d2 = await r2.json();
+    if (d2?.asset) {
+      setAsset(d2.asset);
+      setHistory(d2.depreciation_history ?? []);
+      setComputed(d2.computed_current_value ?? null);
+    }
+  }
+
   async function setReplacementValue(value: number | null) {
     const res = await fetch(`/api/admin/assets/${id}`, {
       method: 'PATCH',
@@ -192,6 +232,26 @@ export default function AssetDetailPage(props: { params: Promise<{ id: string }>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {asset.status === 'active' && (
               <>
+                {asset.depreciation_method !== 'immediate' && (
+                  <button
+                    onClick={() => {
+                      const ok = confirm(
+                        `Asset auf GWG-Sofortabschreibung umstellen?\n\n` +
+                        `• Buchwert (${formatCurrency(asset.current_value)}) wird auf 0 € gesetzt\n` +
+                        `• Restbuchwert wird als Aufwand „GWG-Sofortabzug" gebucht\n` +
+                        `• Wiederbeschaffungswert = Kaufpreis (${formatCurrency(asset.purchase_price)})\n` +
+                        `• Methode wird auf „Sofort" geaendert\n\n` +
+                        `Sinnvoll fuer Sachen unter 800 € netto. Steuerlich darf die Umstellung nur im Anschaffungsjahr erfolgen — bei aelteren Jahren wird zusaetzlich gewarnt.\n\n` +
+                        `Fortfahren?`,
+                      );
+                      if (ok) convertToGwg(false);
+                    }}
+                    style={{ padding: '8px 14px', borderRadius: 8, background: '#f59e0b', color: '#0f172a', border: 'none', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}
+                    title="Lineare AfA -> GWG-Sofortabschreibung umstellen"
+                  >
+                    ⚡ Auf GWG umstellen
+                  </button>
+                )}
                 <button onClick={catchup} style={btnPrimary}>AfA nachholen</button>
                 <button onClick={() => dispose('sold')} style={btnSecondary}>Verkauft</button>
                 <button onClick={() => dispose('disposed')} style={btnSecondary}>Ausmustern</button>
