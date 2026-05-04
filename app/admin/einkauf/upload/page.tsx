@@ -57,6 +57,8 @@ interface PurchaseItemRow {
     expense_date?: string;
     /** Wenn gesetzt: keine neue Anlage anlegen, sondern an existierende haengen */
     link_to_asset_id?: string;
+    /** Optional bei Ausgabe: Verknuepfung mit existierender Anlage (z.B. SD-Karte fuer Kamera X) */
+    expense_asset_id?: string;
   };
 }
 
@@ -274,6 +276,7 @@ export default function RechnungUploadPage() {
           body.category = draft.expense_category ?? 'hardware';
           body.expense_date = draft.expense_date;
           body.description = row.product_name;
+          if (draft.expense_asset_id) body.asset_id = draft.expense_asset_id;
         }
         const res = await fetch(`/api/admin/purchase-items/${row.id}`, {
           method: 'PATCH',
@@ -631,6 +634,27 @@ export default function RechnungUploadPage() {
                       <div>
                         <span style={label}>Buchungsdatum</span>
                         <input style={input} type="date" value={row.draft.expense_date ?? ''} onChange={(e) => updateDraft(row.id, { expense_date: e.target.value })} />
+                      </div>
+                      <div style={{ gridColumn: '1 / -1' }}>
+                        <span style={label}>Zugehörige Kamera / Zubehör (optional)</span>
+                        <select
+                          style={input}
+                          value={row.draft.expense_asset_id ?? ''}
+                          onChange={(e) => updateDraft(row.id, { expense_asset_id: e.target.value || undefined })}
+                        >
+                          <option value="">— Nicht zugeordnet —</option>
+                          {assets.map((a) => (
+                            <option key={a.id} value={a.id}>
+                              {a.name}
+                              {a.serial_number ? ` · SN ${a.serial_number}` : ''}
+                              {' · '}
+                              {a.kind === 'rental_camera' ? 'Kamera' : a.kind === 'rental_accessory' ? 'Zubehör' : a.kind}
+                            </option>
+                          ))}
+                        </select>
+                        <span style={{ fontSize: 10, color: '#64748b', display: 'block', marginTop: 4 }}>
+                          Verkn&uuml;pft die Ausgabe mit einer Anlage (z.B. SD-Karte f&uuml;r &bdquo;GoPro Hero13&ldquo;) &mdash; taucht sp&auml;ter unter der Anlage als Folgekosten auf. Buchhaltungs-relevant ist die Verkn&uuml;pfung nicht.
+                        </span>
                       </div>
                     </div>
                   )}

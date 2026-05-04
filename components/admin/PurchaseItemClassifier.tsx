@@ -107,6 +107,7 @@ export default function PurchaseItemClassifier({ item, products, assets, onSaved
     product_id: '' as string,
     expense_category: 'hardware',
     expense_date: new Date().toISOString().slice(0, 10),
+    expense_asset_id: '' as string,
   });
 
   function update<K extends keyof typeof draft>(key: K, value: (typeof draft)[K]) {
@@ -142,6 +143,7 @@ export default function PurchaseItemClassifier({ item, products, assets, onSaved
       } else if (draft.classification === 'expense') {
         body.category = draft.expense_category;
         body.expense_date = draft.expense_date;
+        if (draft.expense_asset_id) body.asset_id = draft.expense_asset_id;
       }
 
       const res = await fetch(`/api/admin/purchase-items/${item.id}`, {
@@ -383,6 +385,23 @@ export default function PurchaseItemClassifier({ item, products, assets, onSaved
               <div>
                 <span style={label}>Buchungsdatum</span>
                 <input style={input} type="date" value={draft.expense_date} onChange={(e) => update('expense_date', e.target.value)} />
+              </div>
+              <div style={{ gridColumn: '1 / -1' }}>
+                <span style={label}>Zugeh&ouml;rige Kamera / Zubeh&ouml;r (optional)</span>
+                <select style={input} value={draft.expense_asset_id} onChange={(e) => update('expense_asset_id', e.target.value)}>
+                  <option value="">&mdash; Nicht zugeordnet &mdash;</option>
+                  {assets.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                      {a.serial_number ? ` &middot; SN ${a.serial_number}` : ''}
+                      {' &middot; '}
+                      {a.kind === 'rental_camera' ? 'Kamera' : a.kind === 'rental_accessory' ? 'Zubehör' : a.kind}
+                    </option>
+                  ))}
+                </select>
+                <span style={{ fontSize: 10, color: '#64748b', display: 'block', marginTop: 4 }}>
+                  Verkn&uuml;pft die Ausgabe mit einer Anlage (z.B. SD-Karte f&uuml;r &bdquo;GoPro Hero13&ldquo;) &mdash; taucht sp&auml;ter unter der Anlage als Folgekosten auf.
+                </span>
               </div>
             </div>
           )}

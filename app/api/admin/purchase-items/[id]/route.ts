@@ -28,7 +28,8 @@ type Ctx = { params: Promise<{ id: string }> };
  * { "classification": "expense",
  *   "category": "hardware",
  *   "description": "Verbrauchsmaterial",
- *   "expense_date": "2026-04-21" }
+ *   "expense_date": "2026-04-21",
+ *   "asset_id": "<uuid>" }            // optional, fuer "SD-Karte gehoert zu Anlage X"
  *
  * { "classification": "ignored" }
  */
@@ -442,6 +443,23 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   const description = String(body.description || item.product_name).trim();
   const expenseDate = body.expense_date || purchase?.order_date || new Date().toISOString().slice(0, 10);
 
+  // Optional: Verknuepfung mit existierender Anlage (z.B. SD-Karte fuer Kamera X).
+  // Pflicht fuer GWG/Asset-Pfad ist die Spalte FK auf assets(id) ON DELETE SET NULL.
+  // Bei expense rein informativ — fuer "Welche Folgekosten haengen an Anlage X?".
+  let linkedAssetId: string | null = null;
+  if (typeof body.asset_id === 'string' && body.asset_id.trim()) {
+    const { data: existingAsset, error: assetErr } = await supabase
+      .from('assets')
+      .select('id')
+      .eq('id', body.asset_id.trim())
+      .maybeSingle();
+    if (assetErr) return NextResponse.json({ error: assetErr.message }, { status: 500 });
+    if (!existingAsset) {
+      return NextResponse.json({ error: 'Verknuepfte Anlage nicht gefunden.' }, { status: 404 });
+    }
+    linkedAssetId = existingAsset.id;
+  }
+
   const { data: expense, error: expErr } = await supabase
     .from('expenses')
     .insert({
@@ -457,6 +475,7 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
       notes: `Aus Einkauf ${purchase?.invoice_number ?? item.purchase_id}`,
       source_type: 'purchase_item',
       source_id: itemId,
+      asset_id: linkedAssetId,
       is_test: testMode,
     })
     .select()
