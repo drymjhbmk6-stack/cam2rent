@@ -245,18 +245,36 @@ export default function AdminZubehoerPage() {
       }
       // Bei ID-Aenderung Liste neu laden — Position/Identitaet aendert sich,
       // in-place mapping wuerde Geister-Eintrag erzeugen.
+      const targetId = newId ?? id;
       if (newId) {
         loadAccessories();
         setEditId(null);
         setSavedId(newId);
       } else {
+        // editForm.specs ist Form-State (Strings). Im persistierten Accessory
+        // muss das aber AccessorySpecs (Numbers) sein — sonst landet beim
+        // naechsten Aufklappen ein leeres Form-Object, weil specsToFormState
+        // nur typeof 'number' akzeptiert.
+        const persistedSpecs = formStateToSpecs(editForm.specs as unknown as Record<string, string>);
         setAccessories((prev) =>
-          prev.map((a) => a.id === id ? { ...a, ...editForm, description: editForm.description || null, image_url: editForm.image_url || null } as Accessory : a)
+          prev.map((a) => a.id === id
+            ? { ...a, ...editForm, description: editForm.description || null, image_url: editForm.image_url || null, specs: persistedSpecs } as Accessory
+            : a)
         );
         setEditId(null);
         setSavedId(id);
       }
       setTimeout(() => setSavedId(null), 3000);
+      // Karte nach dem Zuklappen wieder in den Viewport scrollen (oben),
+      // sonst landet der User irgendwo unten in der Liste.
+      requestAnimationFrame(() => {
+        const el = document.getElementById(`acc-card-${targetId}`);
+        if (el) {
+          const rect = el.getBoundingClientRect();
+          const targetY = window.scrollY + rect.top - 80; // 80 px Sticky-Header-Puffer
+          window.scrollTo({ top: targetY, behavior: 'smooth' });
+        }
+      });
     } catch {
       alert('Fehler beim Speichern.');
     } finally {
@@ -602,7 +620,7 @@ function AccessoryCard({ acc, editId, editForm, setEditForm, savedId, savingId, 
 }) {
   const brandColors = useBrandColors();
   return (
-    <div className={`bg-white rounded-xl border overflow-hidden ${acc.internal ? 'border-amber-300' : 'border-brand-border'}`}>
+    <div id={`acc-card-${acc.id}`} className={`bg-white rounded-xl border overflow-hidden scroll-mt-20 ${acc.internal ? 'border-amber-300' : 'border-brand-border'}`}>
       {/* Row */}
       <div className="px-4 py-3">
         <div className="flex items-center justify-between">
