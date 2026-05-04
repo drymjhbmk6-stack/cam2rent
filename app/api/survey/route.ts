@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
-import { sendAndLog, escapeHtml as h } from '@/lib/email';
+import { sendAndLog } from '@/lib/email';
 import { BUSINESS } from '@/lib/business-config';
 import { getSiteUrl } from '@/lib/env-mode';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';

@@ -13,6 +13,14 @@ const SUB_TABS: Array<{ id: SubTab; label: string; description: string }> = [
   { id: 'einkauf', label: 'Lieferanten-Rechnungen', description: 'Eingangsrechnungen + KI-OCR' },
 ];
 
+const PURCHASE_STATUS_LABEL: Record<string, { label: string; bg: string; color: string }> = {
+  ordered:   { label: 'Bestellt',   bg: 'rgba(234,179,8,0.18)',  color: '#fde68a' },
+  shipped:   { label: 'Versendet',  bg: 'rgba(59,130,246,0.18)', color: '#93c5fd' },
+  delivered: { label: 'Geliefert',  bg: 'rgba(16,185,129,0.18)', color: '#6ee7b7' },
+  received:  { label: 'Erhalten',   bg: 'rgba(16,185,129,0.18)', color: '#6ee7b7' },
+  cancelled: { label: 'Storniert',  bg: 'rgba(239,68,68,0.18)',  color: '#fca5a5' },
+};
+
 interface Purchase {
   id: string;
   invoice_number: string | null;
@@ -213,17 +221,23 @@ function LieferantenRechnungenList() {
                       {p.total_amount != null ? fmtEuro(p.total_amount) : '—'}
                     </td>
                     <td style={{ padding: '12px 14px', textAlign: 'center' }}>
-                      <span style={{
-                        display: 'inline-block',
-                        padding: '3px 8px',
-                        background: p.status === 'received' ? 'rgba(16,185,129,0.18)' : 'rgba(6,182,212,0.18)',
-                        color: p.status === 'received' ? '#6ee7b7' : '#67e8f9',
-                        fontSize: 11,
-                        fontWeight: 600,
-                        borderRadius: 6,
-                      }}>
-                        {p.status === 'received' ? 'Erhalten' : p.status === 'ordered' ? 'Bestellt' : p.status || '—'}
-                      </span>
+                      {(() => {
+                        const meta = (p.status && PURCHASE_STATUS_LABEL[p.status])
+                          || { label: p.status || '—', bg: 'rgba(100,116,139,0.18)', color: '#cbd5e1' };
+                        return (
+                          <span style={{
+                            display: 'inline-block',
+                            padding: '3px 8px',
+                            background: meta.bg,
+                            color: meta.color,
+                            fontSize: 11,
+                            fontWeight: 600,
+                            borderRadius: 6,
+                          }}>
+                            {meta.label}
+                          </span>
+                        );
+                      })()}
                     </td>
                   </tr>
                 );

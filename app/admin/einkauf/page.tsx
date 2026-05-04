@@ -161,6 +161,10 @@ export default function EinkaufPage() {
   });
   const [pendingFiles, setPendingFiles] = useState<{ file: File; kind: AttachmentKind }[]>([]);
 
+  // Bulk-Auswahl
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+
   const [saving, setSaving] = useState(false);
 
   // ─── Data fetching ──────────────────────────────────────────────────────
@@ -284,9 +288,89 @@ export default function EinkaufPage() {
   }
 
   async function deletePurchase(id: string) {
-    if (!confirm('Einkauf wirklich löschen?')) return;
-    const res = await fetch(`/api/admin/purchases/${id}`, { method: 'DELETE' });
-    if (res.ok) await fetchPurchases();
+    const reason = window.prompt('Einkauf endgültig löschen.\n\nBitte Begründung angeben (mindestens 10 Zeichen):');
+    if (reason === null) return; // Abbrechen
+    const trimmed = reason.trim();
+    if (trimmed.length < 10) {
+      alert('Begründung muss mindestens 10 Zeichen lang sein.');
+      return;
+    }
+    const res = await fetch(`/api/admin/purchases/${id}`, {
+      method: 'DELETE',
+      headers: { 'X-Delete-Reason': trimmed },
+    });
+    if (res.ok) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      await fetchPurchases();
+    } else {
+      const j = await res.json().catch(() => ({}));
+      alert(j.error || 'Fehler beim Löschen');
+    }
+  }
+
+  async function bulkDeletePurchases() {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    const reason = window.prompt(
+      `${ids.length} ${ids.length === 1 ? 'Einkauf' : 'Einkäufe'} endgültig löschen.\n\nBitte Begründung angeben (mindestens 10 Zeichen):`
+    );
+    if (reason === null) return;
+    const trimmed = reason.trim();
+    if (trimmed.length < 10) {
+      alert('Begründung muss mindestens 10 Zeichen lang sein.');
+      return;
+    }
+    if (!confirm(`Wirklich ${ids.length} ${ids.length === 1 ? 'Einkauf' : 'Einkäufe'} löschen? Diese Aktion ist nicht umkehrbar.`)) return;
+
+    setBulkDeleting(true);
+    try {
+      const results = await Promise.allSettled(
+        ids.map((id) =>
+          fetch(`/api/admin/purchases/${id}`, {
+            method: 'DELETE',
+            headers: { 'X-Delete-Reason': trimmed },
+          }).then(async (r) => {
+            if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `HTTP ${r.status}`);
+            return id;
+          })
+        )
+      );
+      const failed = results.filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
+      if (failed.length > 0) {
+        alert(`${ids.length - failed.length} gelöscht, ${failed.length} fehlgeschlagen:\n${failed.slice(0, 5).map((f) => f.reason?.message || f.reason).join('\n')}`);
+      }
+      setSelectedIds(new Set());
+      await fetchPurchases();
+    } finally {
+      setBulkDeleting(false);
+    }
+  }
+
+  function toggleSelectAllVisible() {
+    const visibleIds = filteredPurchases.map((p) => p.id);
+    const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allSelected) {
+        for (const id of visibleIds) next.delete(id);
+      } else {
+        for (const id of visibleIds) next.add(id);
+      }
+      return next;
+    });
+  }
+
+  function toggleSelectOne(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   }
 
   // ─── Computed stats ─────────────────────────────────────────────────────
@@ -476,6 +560,56 @@ export default function EinkaufPage() {
            EINKÄUFE TAB
            ═══════════════════════════════════════════════════════════ */
         <div>
+          {/* Bulk-Bar — sticky, sichtbar wenn Auswahl */}
+          {selectedIds.size > 0 && (
+            <div
+              style={{
+                position: 'sticky',
+                top: 0,
+                zIndex: 10,
+                background: 'rgba(15,23,42,0.95)',
+                backdropFilter: 'blur(8px)',
+                border: '1px solid #06b6d4',
+                borderRadius: 10,
+                padding: '10px 14px',
+                marginBottom: 12,
+                display: 'flex',
+                gap: 10,
+                alignItems: 'center',
+                flexWrap: 'wrap',
+              }}
+            >
+              <span style={{ color: '#06b6d4', fontWeight: 700, fontSize: 13 }}>
+                {selectedIds.size} {selectedIds.size === 1 ? 'Eintrag' : 'Einträge'} ausgewählt
+              </span>
+              <div style={{ flex: 1 }} />
+              <button
+                onClick={() => setSelectedIds(new Set())}
+                style={btnSecondary}
+                disabled={bulkDeleting}
+              >
+                Auswahl aufheben
+              </button>
+              <button
+                onClick={bulkDeletePurchases}
+                disabled={bulkDeleting}
+                style={{
+                  background: '#ef4444',
+                  color: 'white',
+                  fontWeight: 700,
+                  fontSize: 13,
+                  padding: '10px 20px',
+                  borderRadius: 10,
+                  border: 'none',
+                  cursor: bulkDeleting ? 'wait' : 'pointer',
+                  opacity: bulkDeleting ? 0.7 : 1,
+                }}
+              >
+                {bulkDeleting ? 'Löscht…' : `🗑 ${selectedIds.size} löschen`}
+              </button>
+            </div>
+          )}
+
           {/* Toolbar */}
           <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
             <select value={filterSupplier} onChange={e => setFilterSupplier(e.target.value)} style={{ ...S.select, maxWidth: 220 }}>
@@ -660,6 +794,25 @@ export default function EinkaufPage() {
               <table style={{ width: '100%', minWidth: 820, borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid #1e293b' }}>
+                    <th style={{ padding: '12px 8px 12px 16px', width: 36 }}>
+                      <input
+                        type="checkbox"
+                        checked={
+                          filteredPurchases.length > 0 &&
+                          filteredPurchases.every((p) => selectedIds.has(p.id))
+                        }
+                        ref={(el) => {
+                          if (el) {
+                            const visible = filteredPurchases.length;
+                            const sel = filteredPurchases.filter((p) => selectedIds.has(p.id)).length;
+                            el.indeterminate = sel > 0 && sel < visible;
+                          }
+                        }}
+                        onChange={toggleSelectAllVisible}
+                        title="Alle sichtbaren auswählen"
+                        style={{ cursor: 'pointer', width: 16, height: 16, accentColor: '#06b6d4' }}
+                      />
+                    </th>
                     {['Datum', 'Lieferant', 'Produkte', 'Betrag', 'Status', ''].map(h => (
                       <th key={h} style={{ ...S.dim, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', padding: '12px 16px', textAlign: 'left' }}>{h}</th>
                     ))}
@@ -667,12 +820,14 @@ export default function EinkaufPage() {
                 </thead>
                 <tbody>
                   {filteredPurchases.length === 0 ? (
-                    <tr><td colSpan={6} style={{ padding: 40, textAlign: 'center', ...S.dim }}>Keine Einkäufe gefunden</td></tr>
+                    <tr><td colSpan={7} style={{ padding: 40, textAlign: 'center', ...S.dim }}>Keine Einkäufe gefunden</td></tr>
                   ) : filteredPurchases.map(p => (
                     <PurchaseRow
                       key={p.id}
                       purchase={p}
                       expanded={expandedPurchase === p.id}
+                      selected={selectedIds.has(p.id)}
+                      onToggleSelect={() => toggleSelectOne(p.id)}
                       onToggle={() => setExpandedPurchase(expandedPurchase === p.id ? null : p.id)}
                       onStatusChange={(status) => updatePurchaseStatus(p.id, status)}
                       onDelete={() => deletePurchase(p.id)}
@@ -788,9 +943,11 @@ function SupplierRow({
 // ─── PurchaseRow Component ──────────────────────────────────────────────────
 
 function PurchaseRow({
-  purchase, expanded, onToggle, onStatusChange, onDelete, onAttachmentsChanged,
+  purchase, expanded, selected, onToggleSelect, onToggle, onStatusChange, onDelete, onAttachmentsChanged,
 }: {
   purchase: Purchase; expanded: boolean;
+  selected: boolean;
+  onToggleSelect: () => void;
   onToggle: () => void;
   onStatusChange: (status: string) => void;
   onDelete: () => void;
@@ -804,10 +961,23 @@ function PurchaseRow({
     <>
       <tr
         onClick={onToggle}
-        style={{ borderBottom: '1px solid #1e293b', cursor: 'pointer' }}
-        onMouseEnter={e => (e.currentTarget.style.background = 'rgba(6,182,212,0.05)')}
-        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+        style={{
+          borderBottom: '1px solid #1e293b',
+          cursor: 'pointer',
+          background: selected ? 'rgba(6,182,212,0.08)' : 'transparent',
+        }}
+        onMouseEnter={e => (e.currentTarget.style.background = selected ? 'rgba(6,182,212,0.12)' : 'rgba(6,182,212,0.05)')}
+        onMouseLeave={e => (e.currentTarget.style.background = selected ? 'rgba(6,182,212,0.08)' : 'transparent')}
       >
+        <td style={{ padding: '12px 8px 12px 16px', width: 36 }} onClick={(e) => e.stopPropagation()}>
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={onToggleSelect}
+            title="Auswählen"
+            style={{ cursor: 'pointer', width: 16, height: 16, accentColor: '#06b6d4' }}
+          />
+        </td>
         <td style={{ padding: '12px 16px', color: '#e2e8f0', fontSize: 13, fontWeight: 600 }}>{fmtDate(purchase.order_date)}</td>
         <td style={{ padding: '12px 16px', color: '#94a3b8', fontSize: 13 }}>{purchase.supplier?.name || '\u2014'}</td>
         <td style={{ padding: '12px 16px', color: '#94a3b8', fontSize: 13, maxWidth: 250, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{productSummary || '\u2014'}</td>
@@ -824,7 +994,7 @@ function PurchaseRow({
       </tr>
       {expanded && (
         <tr>
-          <td colSpan={6} style={{ background: '#0a0f1e', borderBottom: '1px solid #1e293b', padding: 20 }}>
+          <td colSpan={7} style={{ background: '#0a0f1e', borderBottom: '1px solid #1e293b', padding: 20 }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginBottom: 16 }}>
               <div>
                 <div style={S.label}>Rechnungsnr.</div>
