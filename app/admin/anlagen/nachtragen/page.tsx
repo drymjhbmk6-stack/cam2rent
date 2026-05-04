@@ -39,7 +39,29 @@ const input: React.CSSProperties = { background: '#0a0f1e', border: '1px solid #
 const label: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4, display: 'block' };
 const cyan = '#06b6d4';
 
-type Draft = { name: string; purchase_price: string; purchase_date: string; useful_life_months: string; kind: string; depreciation_method: 'linear' | 'immediate' };
+type Draft = {
+  name: string;
+  purchase_price: string;
+  purchase_date: string;
+  useful_life_months: string;
+  kind: string;
+  /** 'linear' = lineare AfA, 'immediate' = GWG-Sofortabzug, 'expense' = nur Ausgabe (kein Asset) */
+  depreciation_method: 'linear' | 'immediate' | 'expense';
+  /** Nur bei depreciation_method='expense' relevant */
+  expense_category: string;
+};
+
+const EXPENSE_CATEGORY_LABELS: Record<string, string> = {
+  hardware: 'Hardware',
+  office: 'Büro',
+  software: 'Software',
+  shipping: 'Versand',
+  marketing: 'Marketing',
+  travel: 'Reisen',
+  insurance: 'Versicherungen',
+  legal: 'Rechtsberatung',
+  other: 'Sonstiges',
+};
 
 function emptyDraft(opts?: Partial<Draft>): Draft {
   return {
@@ -49,6 +71,7 @@ function emptyDraft(opts?: Partial<Draft>): Draft {
     useful_life_months: opts?.useful_life_months ?? '36',
     kind: opts?.kind ?? 'rental_camera',
     depreciation_method: opts?.depreciation_method ?? 'linear',
+    expense_category: opts?.expense_category ?? 'hardware',
   };
 }
 
@@ -59,41 +82,54 @@ export default function NachtragenPage() {
   const [accessories, setAccessories] = useState<Accessory[]>([]);
   const [linkedUnitIds, setLinkedUnitIds] = useState<Set<string>>(new Set());
   const [linkedAccUnitIds, setLinkedAccUnitIds] = useState<Set<string>>(new Set());
+  // Units, die als Ausgabe verbucht wurden (kein Asset, aber bereits klassifiziert)
+  const [expenseUnitIds, setExpenseUnitIds] = useState<Set<string>>(new Set());
+  const [expenseAccUnitIds, setExpenseAccUnitIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [saving, setSaving] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function load() {
-      const [uRes, auRes, pRes, accRes, aRes] = await Promise.all([
-        fetch('/api/admin/product-units').then((r) => r.json()),
-        fetch('/api/admin/accessory-units').then((r) => r.json()),
-        fetch('/api/products').then((r) => r.json()),
-        fetch('/api/admin/accessories').then((r) => r.json()),
-        fetch('/api/admin/assets?include_test=1').then((r) => r.json()),
-      ]);
-      const unitList: Unit[] = uRes.units ?? uRes.data ?? [];
-      setUnits(unitList.filter((u) => u.status !== 'retired'));
-      const accUnitList: AccessoryUnit[] = auRes.units ?? [];
-      setAccUnits(accUnitList.filter((u) => u.status !== 'retired'));
-      setProducts((pRes.products ?? []).map((p: { id: string; name: string; brand: string }) => ({ id: p.id, name: p.name, brand: p.brand })));
-      setAccessories((accRes.accessories ?? []).map((a: { id: string; name: string; category: string }) => ({ id: a.id, name: a.name, category: a.category })));
-      const linkedU = new Set<string>();
-      const linkedA = new Set<string>();
-      for (const a of (aRes.assets ?? [])) {
-        if (a.unit_id) linkedU.add(a.unit_id);
-        if (a.accessory_unit_id) linkedA.add(a.accessory_unit_id);
-      }
-      setLinkedUnitIds(linkedU);
-      setLinkedAccUnitIds(linkedA);
-      setLoading(false);
+  async function reload() {
+    const [uRes, auRes, pRes, accRes, aRes, eRes] = await Promise.all([
+      fetch('/api/admin/product-units').then((r) => r.json()),
+      fetch('/api/admin/accessory-units').then((r) => r.json()),
+      fetch('/api/products').then((r) => r.json()),
+      fetch('/api/admin/accessories').then((r) => r.json()),
+      fetch('/api/admin/assets?include_test=1').then((r) => r.json()),
+      fetch('/api/admin/buchhaltung/expenses').then((r) => r.json()),
+    ]);
+    const unitList: Unit[] = uRes.units ?? uRes.data ?? [];
+    setUnits(unitList.filter((u) => u.status !== 'retired'));
+    const accUnitList: AccessoryUnit[] = auRes.units ?? [];
+    setAccUnits(accUnitList.filter((u) => u.status !== 'retired'));
+    setProducts((pRes.products ?? []).map((p: { id: string; name: string; brand: string }) => ({ id: p.id, name: p.name, brand: p.brand })));
+    setAccessories((accRes.accessories ?? []).map((a: { id: string; name: string; category: string }) => ({ id: a.id, name: a.name, category: a.category })));
+    const linkedU = new Set<string>();
+    const linkedA = new Set<string>();
+    for (const a of (aRes.assets ?? [])) {
+      if (a.unit_id) linkedU.add(a.unit_id);
+      if (a.accessory_unit_id) linkedA.add(a.accessory_unit_id);
     }
-    load();
+    setLinkedUnitIds(linkedU);
+    setLinkedAccUnitIds(linkedA);
+    // Units mit verknuepfter Ausgabe (source_type='product_unit_expense' / 'accessory_unit_expense')
+    const expU = new Set<string>();
+    const expA = new Set<string>();
+    for (const e of (eRes.expenses ?? [])) {
+      if (e.source_type === 'product_unit_expense' && e.source_id) expU.add(e.source_id);
+      if (e.source_type === 'accessory_unit_expense' && e.source_id) expA.add(e.source_id);
+    }
+    setExpenseUnitIds(expU);
+    setExpenseAccUnitIds(expA);
+  }
+
+  useEffect(() => {
+    reload().finally(() => setLoading(false));
   }, []);
 
-  const openUnits = units.filter((u) => !linkedUnitIds.has(u.id));
-  const openAccUnits = accUnits.filter((u) => !linkedAccUnitIds.has(u.id));
+  const openUnits = units.filter((u) => !linkedUnitIds.has(u.id) && !expenseUnitIds.has(u.id));
+  const openAccUnits = accUnits.filter((u) => !linkedAccUnitIds.has(u.id) && !expenseAccUnitIds.has(u.id));
 
   function getProductLabel(pid: string) {
     const p = products.find((x) => x.id === pid);
@@ -122,6 +158,34 @@ export default function NachtragenPage() {
     setSaving(draftKey);
     setMsg(null);
     try {
+      // 'expense'-Pfad: keine Anlage anlegen, nur Ausgabe verbuchen
+      if (d.depreciation_method === 'expense') {
+        const gross = Number(d.purchase_price);
+        const res = await fetch('/api/admin/buchhaltung/expenses', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            expense_date: d.purchase_date,
+            category: d.expense_category,
+            description: d.name,
+            gross_amount: gross,
+            net_amount: gross,
+            tax_amount: 0,
+            source_type: 'product_unit_expense',
+            source_id: unit.id,
+            notes: `Aus Bestand nachtragen — Kamera SN ${unit.serial_number}`,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setMsg(`Fehler: ${data?.error}`);
+          return;
+        }
+        setExpenseUnitIds((prev) => new Set(prev).add(unit.id));
+        setMsg(`Ausgabe "${d.name}" verbucht — Unit bleibt im Inventar (SN ${unit.serial_number}).`);
+        return;
+      }
+
       const isGwg = d.depreciation_method === 'immediate';
       const res = await fetch('/api/admin/assets', {
         method: 'POST',
@@ -165,6 +229,34 @@ export default function NachtragenPage() {
     setSaving(draftKey);
     setMsg(null);
     try {
+      // 'expense'-Pfad: keine Anlage anlegen, nur Ausgabe verbuchen
+      if (d.depreciation_method === 'expense') {
+        const gross = Number(d.purchase_price);
+        const res = await fetch('/api/admin/buchhaltung/expenses', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            expense_date: d.purchase_date,
+            category: d.expense_category,
+            description: d.name,
+            gross_amount: gross,
+            net_amount: gross,
+            tax_amount: 0,
+            source_type: 'accessory_unit_expense',
+            source_id: unit.id,
+            notes: `Aus Bestand nachtragen — Zubehör ${unit.exemplar_code}`,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setMsg(`Fehler: ${data?.error}`);
+          return;
+        }
+        setExpenseAccUnitIds((prev) => new Set(prev).add(unit.id));
+        setMsg(`Ausgabe "${d.name}" verbucht — Exemplar bleibt im Inventar (${unit.exemplar_code}).`);
+        return;
+      }
+
       const isGwg = d.depreciation_method === 'immediate';
       const res = await fetch('/api/admin/assets', {
         method: 'POST',
@@ -234,6 +326,7 @@ export default function NachtragenPage() {
             const draftKey = `cam-${unit.id}`;
             const d = drafts[draftKey] ?? emptyDraft({ name: getProductLabel(unit.product_id), purchase_date: unit.purchased_at ?? '', kind: 'rental_camera' });
             const isGwg = d.depreciation_method === 'immediate';
+            const isExpense = d.depreciation_method === 'expense';
             return (
               <div key={unit.id} style={{ ...card, marginBottom: 16 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
@@ -248,7 +341,7 @@ export default function NachtragenPage() {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
                   <div>
                     <span style={label}>Art</span>
-                    <select style={input} value={d.kind} onChange={(e) => setDraft(draftKey, 'kind', e.target.value, d)}>
+                    <select style={input} value={d.kind} disabled={isExpense} onChange={(e) => setDraft(draftKey, 'kind', e.target.value, d)}>
                       <option value="rental_camera">Vermietkamera</option>
                       <option value="rental_accessory">Zubehör</option>
                       <option value="office_equipment">Büro</option>
@@ -273,22 +366,37 @@ export default function NachtragenPage() {
                     <select style={input} value={d.depreciation_method} onChange={(e) => setDraft(draftKey, 'depreciation_method', e.target.value, d)}>
                       <option value="linear">Linear (über Nutzungsdauer)</option>
                       <option value="immediate">GWG (Sofortabzug)</option>
+                      <option value="expense">Ausgabe (kein Asset)</option>
                     </select>
                   </div>
-                  <div>
-                    <span style={label}>Nutzungsdauer (Monate)</span>
-                    <input style={input} type="number" min={1} disabled={isGwg} value={isGwg ? '' : d.useful_life_months} placeholder={isGwg ? 'Nicht relevant bei GWG' : ''} onChange={(e) => setDraft(draftKey, 'useful_life_months', e.target.value, d)} />
-                  </div>
+                  {isExpense ? (
+                    <div>
+                      <span style={label}>Kategorie</span>
+                      <select style={input} value={d.expense_category} onChange={(e) => setDraft(draftKey, 'expense_category', e.target.value, d)}>
+                        {Object.entries(EXPENSE_CATEGORY_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                      </select>
+                    </div>
+                  ) : (
+                    <div>
+                      <span style={label}>Nutzungsdauer (Monate)</span>
+                      <input style={input} type="number" min={1} disabled={isGwg} value={isGwg ? '' : d.useful_life_months} placeholder={isGwg ? 'Nicht relevant bei GWG' : ''} onChange={(e) => setDraft(draftKey, 'useful_life_months', e.target.value, d)} />
+                    </div>
+                  )}
                   <div style={{ display: 'flex', alignItems: 'flex-end' }}>
                     <button
                       onClick={() => saveCamera(unit)}
                       disabled={saving === draftKey}
-                      style={{ padding: '10px 20px', borderRadius: 8, background: cyan, color: '#0f172a', border: 'none', fontWeight: 700, fontSize: 13, cursor: 'pointer', width: '100%' }}
+                      style={{ padding: '10px 20px', borderRadius: 8, background: isExpense ? '#22c55e' : cyan, color: '#0f172a', border: 'none', fontWeight: 700, fontSize: 13, cursor: 'pointer', width: '100%' }}
                     >
-                      {saving === draftKey ? 'Speichere…' : 'Asset anlegen'}
+                      {saving === draftKey ? 'Speichere…' : isExpense ? 'Als Ausgabe verbuchen' : 'Asset anlegen'}
                     </button>
                   </div>
                 </div>
+                {isExpense && (
+                  <div style={{ marginTop: 8, fontSize: 11, color: '#86efac', lineHeight: 1.5 }}>
+                    ℹ Wird als Ausgabe in der EÜR gebucht. Die Unit bleibt im Inventar (Scanner / Verfügbarkeit / Buchungen funktionieren weiter).
+                  </div>
+                )}
               </div>
             );
           })
@@ -310,6 +418,7 @@ export default function NachtragenPage() {
             const draftKey = `acc-${unit.id}`;
             const d = drafts[draftKey] ?? emptyDraft({ name: unit.exemplar_code, purchase_date: unit.purchased_at ?? '', kind: 'rental_accessory' });
             const isGwg = d.depreciation_method === 'immediate';
+            const isExpense = d.depreciation_method === 'expense';
             return (
               <div key={unit.id} style={{ ...card, marginBottom: 16 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
@@ -326,7 +435,7 @@ export default function NachtragenPage() {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
                   <div>
                     <span style={label}>Art</span>
-                    <select style={input} value={d.kind} onChange={(e) => setDraft(draftKey, 'kind', e.target.value, d)}>
+                    <select style={input} value={d.kind} disabled={isExpense} onChange={(e) => setDraft(draftKey, 'kind', e.target.value, d)}>
                       <option value="rental_accessory">Vermietbares Zubehör</option>
                       <option value="rental_camera">Vermietkamera</option>
                       <option value="office_equipment">Büro</option>
@@ -351,22 +460,37 @@ export default function NachtragenPage() {
                     <select style={input} value={d.depreciation_method} onChange={(e) => setDraft(draftKey, 'depreciation_method', e.target.value, d)}>
                       <option value="linear">Linear (über Nutzungsdauer)</option>
                       <option value="immediate">GWG (Sofortabzug)</option>
+                      <option value="expense">Ausgabe (kein Asset)</option>
                     </select>
                   </div>
-                  <div>
-                    <span style={label}>Nutzungsdauer (Monate)</span>
-                    <input style={input} type="number" min={1} disabled={isGwg} value={isGwg ? '' : d.useful_life_months} placeholder={isGwg ? 'Nicht relevant bei GWG' : ''} onChange={(e) => setDraft(draftKey, 'useful_life_months', e.target.value, d)} />
-                  </div>
+                  {isExpense ? (
+                    <div>
+                      <span style={label}>Kategorie</span>
+                      <select style={input} value={d.expense_category} onChange={(e) => setDraft(draftKey, 'expense_category', e.target.value, d)}>
+                        {Object.entries(EXPENSE_CATEGORY_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                      </select>
+                    </div>
+                  ) : (
+                    <div>
+                      <span style={label}>Nutzungsdauer (Monate)</span>
+                      <input style={input} type="number" min={1} disabled={isGwg} value={isGwg ? '' : d.useful_life_months} placeholder={isGwg ? 'Nicht relevant bei GWG' : ''} onChange={(e) => setDraft(draftKey, 'useful_life_months', e.target.value, d)} />
+                    </div>
+                  )}
                   <div style={{ display: 'flex', alignItems: 'flex-end' }}>
                     <button
                       onClick={() => saveAccessory(unit)}
                       disabled={saving === draftKey}
-                      style={{ padding: '10px 20px', borderRadius: 8, background: cyan, color: '#0f172a', border: 'none', fontWeight: 700, fontSize: 13, cursor: 'pointer', width: '100%' }}
+                      style={{ padding: '10px 20px', borderRadius: 8, background: isExpense ? '#22c55e' : cyan, color: '#0f172a', border: 'none', fontWeight: 700, fontSize: 13, cursor: 'pointer', width: '100%' }}
                     >
-                      {saving === draftKey ? 'Speichere…' : 'Asset anlegen'}
+                      {saving === draftKey ? 'Speichere…' : isExpense ? 'Als Ausgabe verbuchen' : 'Asset anlegen'}
                     </button>
                   </div>
                 </div>
+                {isExpense && (
+                  <div style={{ marginTop: 8, fontSize: 11, color: '#86efac', lineHeight: 1.5 }}>
+                    ℹ Wird als Ausgabe in der EÜR gebucht. Das Exemplar bleibt im Inventar (Scanner / Verfügbarkeit / Buchungen funktionieren weiter).
+                  </div>
+                )}
               </div>
             );
           })
