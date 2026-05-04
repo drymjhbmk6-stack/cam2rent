@@ -105,10 +105,10 @@ export default function NachtragenPage() {
     return a ? `${a.name} (${a.category})` : accId;
   }
 
-  function setDraft(draftKey: string, key: keyof Draft, value: string) {
+  function setDraft(draftKey: string, key: keyof Draft, value: string, fallback?: Draft) {
     setDrafts((prev) => ({
       ...prev,
-      [draftKey]: { ...(prev[draftKey] ?? emptyDraft()), [key]: value as Draft[typeof key] },
+      [draftKey]: { ...(prev[draftKey] ?? fallback ?? emptyDraft()), [key]: value as Draft[typeof key] },
     }));
   }
 
@@ -248,7 +248,7 @@ export default function NachtragenPage() {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
                   <div>
                     <span style={label}>Art</span>
-                    <select style={input} value={d.kind} onChange={(e) => setDraft(draftKey, 'kind', e.target.value)}>
+                    <select style={input} value={d.kind} onChange={(e) => setDraft(draftKey, 'kind', e.target.value, d)}>
                       <option value="rental_camera">Vermietkamera</option>
                       <option value="rental_accessory">Zubehör</option>
                       <option value="office_equipment">Büro</option>
@@ -258,26 +258,26 @@ export default function NachtragenPage() {
                   </div>
                   <div>
                     <span style={label}>Name</span>
-                    <input style={input} value={d.name} onChange={(e) => setDraft(draftKey, 'name', e.target.value)} />
+                    <input style={input} value={d.name} onChange={(e) => setDraft(draftKey, 'name', e.target.value, d)} />
                   </div>
                   <div>
                     <span style={label}>Kaufpreis brutto (€)</span>
-                    <input style={input} type="number" step="0.01" value={d.purchase_price} onChange={(e) => setDraft(draftKey, 'purchase_price', e.target.value)} />
+                    <input style={input} type="number" step="0.01" value={d.purchase_price} onChange={(e) => setDraft(draftKey, 'purchase_price', e.target.value, d)} />
                   </div>
                   <div>
                     <span style={label}>Kaufdatum</span>
-                    <input style={input} type="date" value={d.purchase_date} onChange={(e) => setDraft(draftKey, 'purchase_date', e.target.value)} />
+                    <input style={input} type="date" value={d.purchase_date} onChange={(e) => setDraft(draftKey, 'purchase_date', e.target.value, d)} />
                   </div>
                   <div>
                     <span style={label}>AfA-Methode</span>
-                    <select style={input} value={d.depreciation_method} onChange={(e) => setDraft(draftKey, 'depreciation_method', e.target.value)}>
+                    <select style={input} value={d.depreciation_method} onChange={(e) => setDraft(draftKey, 'depreciation_method', e.target.value, d)}>
                       <option value="linear">Linear (über Nutzungsdauer)</option>
                       <option value="immediate">GWG (Sofortabzug)</option>
                     </select>
                   </div>
                   <div>
                     <span style={label}>Nutzungsdauer (Monate)</span>
-                    <input style={input} type="number" min={1} disabled={isGwg} value={isGwg ? '' : d.useful_life_months} placeholder={isGwg ? 'Nicht relevant bei GWG' : ''} onChange={(e) => setDraft(draftKey, 'useful_life_months', e.target.value)} />
+                    <input style={input} type="number" min={1} disabled={isGwg} value={isGwg ? '' : d.useful_life_months} placeholder={isGwg ? 'Nicht relevant bei GWG' : ''} onChange={(e) => setDraft(draftKey, 'useful_life_months', e.target.value, d)} />
                   </div>
                   <div style={{ display: 'flex', alignItems: 'flex-end' }}>
                     <button
@@ -326,7 +326,7 @@ export default function NachtragenPage() {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
                   <div>
                     <span style={label}>Art</span>
-                    <select style={input} value={d.kind} onChange={(e) => setDraft(draftKey, 'kind', e.target.value)}>
+                    <select style={input} value={d.kind} onChange={(e) => setDraft(draftKey, 'kind', e.target.value, d)}>
                       <option value="rental_accessory">Vermietbares Zubehör</option>
                       <option value="rental_camera">Vermietkamera</option>
                       <option value="office_equipment">Büro</option>
@@ -336,26 +336,26 @@ export default function NachtragenPage() {
                   </div>
                   <div>
                     <span style={label}>Name</span>
-                    <input style={input} value={d.name} onChange={(e) => setDraft(draftKey, 'name', e.target.value)} />
+                    <input style={input} value={d.name} onChange={(e) => setDraft(draftKey, 'name', e.target.value, d)} />
                   </div>
                   <div>
                     <span style={label}>Kaufpreis brutto (€)</span>
-                    <input style={input} type="number" step="0.01" value={d.purchase_price} onChange={(e) => setDraft(draftKey, 'purchase_price', e.target.value)} />
+                    <input style={input} type="number" step="0.01" value={d.purchase_price} onChange={(e) => setDraft(draftKey, 'purchase_price', e.target.value, d)} />
                   </div>
                   <div>
                     <span style={label}>Kaufdatum</span>
-                    <input style={input} type="date" value={d.purchase_date} onChange={(e) => setDraft(draftKey, 'purchase_date', e.target.value)} />
+                    <input style={input} type="date" value={d.purchase_date} onChange={(e) => setDraft(draftKey, 'purchase_date', e.target.value, d)} />
                   </div>
                   <div>
                     <span style={label}>AfA-Methode</span>
-                    <select style={input} value={d.depreciation_method} onChange={(e) => setDraft(draftKey, 'depreciation_method', e.target.value)}>
+                    <select style={input} value={d.depreciation_method} onChange={(e) => setDraft(draftKey, 'depreciation_method', e.target.value, d)}>
                       <option value="linear">Linear (über Nutzungsdauer)</option>
                       <option value="immediate">GWG (Sofortabzug)</option>
                     </select>
                   </div>
                   <div>
                     <span style={label}>Nutzungsdauer (Monate)</span>
-                    <input style={input} type="number" min={1} disabled={isGwg} value={isGwg ? '' : d.useful_life_months} placeholder={isGwg ? 'Nicht relevant bei GWG' : ''} onChange={(e) => setDraft(draftKey, 'useful_life_months', e.target.value)} />
+                    <input style={input} type="number" min={1} disabled={isGwg} value={isGwg ? '' : d.useful_life_months} placeholder={isGwg ? 'Nicht relevant bei GWG' : ''} onChange={(e) => setDraft(draftKey, 'useful_life_months', e.target.value, d)} />
                   </div>
                   <div style={{ display: 'flex', alignItems: 'flex-end' }}>
                     <button
