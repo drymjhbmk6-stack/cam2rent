@@ -160,6 +160,10 @@ export default function AdminZubehoerPage() {
         alert(`Fehler: ${d.error ?? 'Unbekannter Fehler (Status ' + res.status + ')'}`);
         return;
       }
+      const okBody = await res.json().catch(() => ({}));
+      if (Array.isArray(okBody.warnings) && okBody.warnings.length > 0) {
+        alert('Achtung — beim Speichern wurden Felder verworfen:\n\n' + okBody.warnings.join('\n\n'));
+      }
       setNewForm(emptyForm());
       setShowNew(false);
       loadAccessories();
@@ -234,6 +238,10 @@ export default function AdminZubehoerPage() {
         const err = await res.json().catch(() => ({}));
         alert(err.error || 'Fehler beim Speichern.');
         return;
+      }
+      const okBody = await res.json().catch(() => ({}));
+      if (Array.isArray(okBody.warnings) && okBody.warnings.length > 0) {
+        alert('Achtung — beim Speichern wurden Felder verworfen:\n\n' + okBody.warnings.join('\n\n'));
       }
       // Bei ID-Aenderung Liste neu laden — Position/Identitaet aendert sich,
       // in-place mapping wuerde Geister-Eintrag erzeugen.

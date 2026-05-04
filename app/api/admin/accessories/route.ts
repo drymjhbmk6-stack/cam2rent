@@ -101,20 +101,21 @@ export async function POST(req: NextRequest) {
     .select()
     .single();
 
-  // Defensiv: wenn die Migration `supabase-accessory-specs.sql` noch nicht
-  // ausgefuehrt wurde, kennt Postgres die specs-Spalte nicht. Dann nochmal
-  // ohne specs versuchen, damit das Anlegen weiter klappt.
+  // Defensiv: wenn die Migration noch nicht durch ist, retry ohne die fehlende
+  // Spalte — ABER mit Warnung im Response, sonst merkt der User nicht, dass
+  // Gewicht/mAh/etc. silent verloren gehen.
+  const warnings: string[] = [];
   if (error && /column .*specs/i.test(error.message) && 'specs' in insertPayload) {
     delete insertPayload.specs;
+    warnings.push('Spezifikationen (Gewicht, mAh, etc.) konnten nicht gespeichert werden — Migration `supabase-accessory-specs.sql` fehlt in der Datenbank.');
     const retry = await supabase.from('accessories').insert(insertPayload).select().single();
     data = retry.data;
     error = retry.error;
   }
 
-  // Gleiches Defensiv-Muster fuer included_parts (Migration
-  // `supabase-accessories-included-parts.sql`).
   if (error && /column .*included_parts/i.test(error.message) && 'included_parts' in insertPayload) {
     delete insertPayload.included_parts;
+    warnings.push('Bestandteile konnten nicht gespeichert werden — Migration `supabase-accessories-included-parts.sql` fehlt in der Datenbank.');
     const retry = await supabase.from('accessories').insert(insertPayload).select().single();
     data = retry.data;
     error = retry.error;
@@ -130,5 +131,5 @@ export async function POST(req: NextRequest) {
     request: req,
   });
 
-  return NextResponse.json({ accessory: data });
+  return NextResponse.json({ accessory: data, warnings: warnings.length > 0 ? warnings : undefined });
 }

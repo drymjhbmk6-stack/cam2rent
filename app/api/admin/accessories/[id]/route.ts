@@ -149,9 +149,14 @@ export async function PUT(
     .update(updatePayload)
     .eq('id', effectiveId);
 
-  // Defensiv: Migration noch nicht durch — specs-Spalte fehlt. Retry ohne.
+  // Defensiv: Migration noch nicht durch — specs-Spalte fehlt. Retry ohne,
+  // aber Warnung ans Frontend, damit der User merkt warum das Gewicht etc.
+  // verloren geht. Andernfalls schlucken wir den Fehler stumm und der User
+  // wundert sich, warum nichts gespeichert wird.
+  const warnings: string[] = [];
   if (error && /column .*specs/i.test(error.message) && 'specs' in updatePayload) {
     delete updatePayload.specs;
+    warnings.push('Spezifikationen (Gewicht, mAh, etc.) konnten nicht gespeichert werden — Migration `supabase-accessory-specs.sql` fehlt in der Datenbank.');
     const retry = await supabase.from('accessories').update(updatePayload).eq('id', effectiveId);
     error = retry.error;
   }
@@ -160,6 +165,7 @@ export async function PUT(
   // `supabase-accessories-included-parts.sql`).
   if (error && /column .*included_parts/i.test(error.message) && 'included_parts' in updatePayload) {
     delete updatePayload.included_parts;
+    warnings.push('Bestandteile konnten nicht gespeichert werden — Migration `supabase-accessories-included-parts.sql` fehlt in der Datenbank.');
     const retry = await supabase.from('accessories').update(updatePayload).eq('id', effectiveId);
     error = retry.error;
   }
@@ -175,7 +181,7 @@ export async function PUT(
     request: req,
   });
 
-  return NextResponse.json({ success: true, id: effectiveId });
+  return NextResponse.json({ success: true, id: effectiveId, warnings: warnings.length > 0 ? warnings : undefined });
 }
 
 export async function DELETE(
