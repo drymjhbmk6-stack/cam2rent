@@ -39,6 +39,14 @@ interface DepreciationEntry {
   notes: string | null;
 }
 
+interface ReplacementValueMeta {
+  computed: number;
+  source: 'manual' | 'computed' | 'floor' | 'fresh';
+  pct: number;
+  ageMonths: number;
+  config: { floor_percent: number; useful_life_months: number };
+}
+
 const card: React.CSSProperties = { background: '#111827', borderRadius: 12, border: '1px solid #1e293b', padding: 20 };
 const cyan = '#06b6d4';
 const label: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4, display: 'block' };
@@ -48,6 +56,7 @@ export default function AssetDetailPage(props: { params: Promise<{ id: string }>
   const [asset, setAsset] = useState<Asset | null>(null);
   const [history, setHistory] = useState<DepreciationEntry[]>([]);
   const [computed, setComputed] = useState<number | null>(null);
+  const [wbwMeta, setWbwMeta] = useState<ReplacementValueMeta | null>(null);
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -59,6 +68,15 @@ export default function AssetDetailPage(props: { params: Promise<{ id: string }>
           setAsset(d.asset);
           setHistory(d.depreciation_history ?? []);
           setComputed(d.computed_current_value ?? null);
+          if (d.replacement_value_computed != null && d.replacement_value_source) {
+            setWbwMeta({
+              computed: d.replacement_value_computed,
+              source: d.replacement_value_source,
+              pct: d.replacement_value_pct ?? 0,
+              ageMonths: d.replacement_value_age_months ?? 0,
+              config: d.replacement_value_config ?? { floor_percent: 40, useful_life_months: 36 },
+            });
+          }
         }
       })
       .finally(() => setLoading(false));
@@ -208,6 +226,7 @@ export default function AssetDetailPage(props: { params: Promise<{ id: string }>
           <div style={card}>
             <ReplacementValueCard
               asset={asset}
+              meta={wbwMeta}
               onSave={setReplacementValue}
             />
           </div>
@@ -328,9 +347,11 @@ function Field({ k, v }: { k: string; v: string | null | undefined }) {
 
 function ReplacementValueCard({
   asset,
+  meta,
   onSave,
 }: {
   asset: Asset;
+  meta: ReplacementValueMeta | null;
   onSave: (value: number | null) => Promise<void>;
 }) {
   const [editing, setEditing] = useState(false);
@@ -339,12 +360,14 @@ function ReplacementValueCard({
   );
   const [saving, setSaving] = useState(false);
 
-  // Effektiver Wert mit Fallback-Logik analog Vertrag/Schadensmodul:
-  // 1) replacement_value_estimate, 2) current_value
-  const effective = asset.replacement_value_estimate != null
-    ? Number(asset.replacement_value_estimate)
-    : Number(asset.current_value);
+  // Effektiver Wert kommt jetzt aus der Backend-Berechnung (mit Floor + manueller Override)
+  const effective = meta?.computed ?? Number(asset.current_value);
   const isEstimateSet = asset.replacement_value_estimate != null;
+  const sourceLabel = meta?.source === 'manual' ? 'Manuell gesetzt'
+    : meta?.source === 'fresh' ? `Frisch — 100% vom Kaufpreis`
+    : meta?.source === 'floor' ? `Floor erreicht — ${meta?.config?.floor_percent ?? 40}% vom Kaufpreis`
+    : meta?.source === 'computed' ? `Berechnet — ${meta?.pct?.toFixed(0) ?? '?'}% vom Kaufpreis (${meta?.ageMonths ?? 0} Monate alt)`
+    : 'Default';
 
   async function commit() {
     const cleaned = value.trim().replace(',', '.');
@@ -401,7 +424,7 @@ function ReplacementValueCard({
     <>
       <span style={label}>Wiederbeschaffungswert</span>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-        <div style={{ fontSize: 24, color: isEstimateSet ? '#10b981' : '#94a3b8', fontWeight: 800 }}>{formatCurrency(effective)}</div>
+        <div style={{ fontSize: 24, color: isEstimateSet ? '#10b981' : '#22d3ee', fontWeight: 800 }}>{formatCurrency(effective)}</div>
         <button
           onClick={() => setEditing(true)}
           style={{ padding: '4px 8px', borderRadius: 6, background: 'transparent', color: cyan, border: '1px solid #1e293b', fontSize: 11, cursor: 'pointer' }}
@@ -411,9 +434,12 @@ function ReplacementValueCard({
         </button>
       </div>
       <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
-        {isEstimateSet
-          ? 'Manuell gesetzt — fließt in Mietvertrag + Schadens-Vorschlag.'
-          : 'Default (Buchwert). Bei GWG = 0 — bitte manuell setzen!'}
+        {sourceLabel}
+        {meta?.source === 'computed' && meta?.config && (
+          <span style={{ display: 'block', fontSize: 10, marginTop: 2 }}>
+            Linear sinkend ueber {meta.config.useful_life_months} Monate auf {meta.config.floor_percent}% Floor
+          </span>
+        )}
       </div>
     </>
   );

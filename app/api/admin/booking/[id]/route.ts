@@ -5,6 +5,7 @@ import { sendCancellationConfirmation, sendAdminCancellationNotification } from 
 import { releaseAccessoryUnitsFromBooking } from '@/lib/accessory-unit-assignment';
 import { getStripe } from '@/lib/stripe';
 import { DEFAULT_HAFTUNG, getEigenbeteiligung, type HaftungConfig } from '@/lib/price-config';
+import { computeReplacementValue, loadReplacementValueConfig } from '@/lib/replacement-value';
 
 /**
  * GET /api/admin/booking/[id]
@@ -279,34 +280,34 @@ async function computeLiabilitySummary(
   const productDeposit = Number(booking.deposit ?? 0);
   const haftung = (booking.haftung as string | null) ?? null;
 
-  // 1. Kamera-WBW
+  // 1. Kamera-WBW — pauschal berechnet (linear -> Floor)
+  const wbwConfig = await loadReplacementValueConfig(supabase);
   let cameraValue = 0;
   let cameraSource: Line['source'] = 'unknown';
   if (booking.unit_id) {
     const primary = await supabase
       .from('assets')
-      .select('current_value, replacement_value_estimate')
+      .select('purchase_price, purchase_date, current_value, replacement_value_estimate')
       .eq('unit_id', booking.unit_id as string)
       .eq('status', 'active')
       .maybeSingle();
-    let row: { current_value?: number | null; replacement_value_estimate?: number | null } | null = primary.data;
+    let row: { purchase_price?: number | null; purchase_date?: string | null; current_value?: number | null; replacement_value_estimate?: number | null } | null = primary.data;
     if (primary.error && /replacement_value_estimate/i.test(primary.error.message)) {
       const fb = await supabase
         .from('assets')
-        .select('current_value')
+        .select('purchase_price, purchase_date, current_value')
         .eq('unit_id', booking.unit_id as string)
         .eq('status', 'active')
         .maybeSingle();
       row = fb.data;
     }
-    if (row) {
-      if (row.replacement_value_estimate != null) {
-        cameraValue = Number(row.replacement_value_estimate);
-        cameraSource = 'asset';
-      } else if (row.current_value != null) {
-        cameraValue = Number(row.current_value);
-        cameraSource = 'asset';
-      }
+    if (row && row.purchase_date && row.purchase_price != null) {
+      cameraValue = computeReplacementValue({
+        purchase_price: row.purchase_price,
+        purchase_date: row.purchase_date,
+        replacement_value_estimate: row.replacement_value_estimate ?? null,
+      }, wbwConfig);
+      cameraSource = 'asset';
     }
   }
   if (cameraValue === 0) {
@@ -348,30 +349,39 @@ async function computeLiabilitySummary(
 
     const primary = await supabase
       .from('assets')
-      .select('accessory_unit_id, current_value, replacement_value_estimate')
+      .select('accessory_unit_id, purchase_price, purchase_date, current_value, replacement_value_estimate')
       .in('accessory_unit_id', accUnitIds)
       .eq('status', 'active');
-    let assetRows: Array<{ accessory_unit_id: string; current_value: number | null; replacement_value_estimate: number | null }> = (primary.data ?? []).map((a) => ({
+    type AssetRow = { accessory_unit_id: string; purchase_price: number | null; purchase_date: string | null; current_value: number | null; replacement_value_estimate: number | null };
+    let assetRows: AssetRow[] = (primary.data ?? []).map((a) => ({
       accessory_unit_id: a.accessory_unit_id as string,
+      purchase_price: a.purchase_price as number | null,
+      purchase_date: a.purchase_date as string | null,
       replacement_value_estimate: (a as { replacement_value_estimate?: number | null }).replacement_value_estimate ?? null,
       current_value: a.current_value as number | null,
     }));
     if (primary.error && /replacement_value_estimate/i.test(primary.error.message)) {
       const fb = await supabase
         .from('assets')
-        .select('accessory_unit_id, current_value')
+        .select('accessory_unit_id, purchase_price, purchase_date, current_value')
         .in('accessory_unit_id', accUnitIds)
         .eq('status', 'active');
       assetRows = (fb.data ?? []).map((a) => ({
         accessory_unit_id: a.accessory_unit_id as string,
+        purchase_price: a.purchase_price as number | null,
+        purchase_date: a.purchase_date as string | null,
         replacement_value_estimate: null,
         current_value: a.current_value as number | null,
       }));
     }
     for (const ar of assetRows) {
       const accId = unitToAcc.get(ar.accessory_unit_id);
-      if (!accId) continue;
-      const v = Number(ar.replacement_value_estimate ?? ar.current_value ?? 0);
+      if (!accId || !ar.purchase_date || ar.purchase_price == null) continue;
+      const v = computeReplacementValue({
+        purchase_price: ar.purchase_price,
+        purchase_date: ar.purchase_date,
+        replacement_value_estimate: ar.replacement_value_estimate,
+      }, wbwConfig);
       const arr = assetValuesPerAccId.get(accId) ?? [];
       arr.push(v);
       assetValuesPerAccId.set(accId, arr);

@@ -16,6 +16,9 @@ interface Asset {
   purchase_date: string;
   current_value: number;
   replacement_value_estimate: number | null;
+  replacement_value_computed?: number;
+  replacement_value_source?: 'manual' | 'computed' | 'floor' | 'fresh';
+  replacement_value_pct?: number;
   useful_life_months: number;
   depreciation_method: 'linear' | 'none' | 'immediate';
   last_depreciation_at: string | null;
@@ -92,17 +95,19 @@ export default function AnlagenPage() {
   const totals = useMemo(() => {
     let purchase = 0;
     let current = 0;
+    let replacement = 0;
     let gwgCount = 0;
     let gwgPurchase = 0;
     for (const a of filtered) {
       purchase += Number(a.purchase_price);
       current += Number(a.current_value);
+      replacement += Number(a.replacement_value_computed ?? a.current_value);
       if (a.depreciation_method === 'immediate') {
         gwgCount += 1;
         gwgPurchase += Number(a.purchase_price);
       }
     }
-    return { purchase, current, depreciated: purchase - current, gwgCount, gwgPurchase };
+    return { purchase, current, replacement, depreciated: purchase - current, gwgCount, gwgPurchase };
   }, [filtered]);
 
   return (
@@ -243,8 +248,20 @@ export default function AnlagenPage() {
                       <td style={td}>{fmtDate(a.purchase_date)}</td>
                       <td style={{ ...td, textAlign: 'right', color: '#e2e8f0' }}>{formatCurrency(a.purchase_price)}</td>
                       <td style={{ ...td, textAlign: 'right', color: cyan, fontWeight: 600 }}>{formatCurrency(a.current_value)}</td>
-                      <td style={{ ...td, textAlign: 'right', color: a.replacement_value_estimate != null ? '#10b981' : '#64748b', fontWeight: 600 }}>
-                        {a.replacement_value_estimate != null ? formatCurrency(a.replacement_value_estimate) : <span style={{ fontStyle: 'italic' }}>—</span>}
+                      <td style={{ ...td, textAlign: 'right', color: a.replacement_value_source === 'manual' ? '#10b981' : '#22d3ee', fontWeight: 600 }}
+                        title={
+                          a.replacement_value_source === 'manual' ? 'Manuell gesetzt'
+                          : a.replacement_value_source === 'fresh' ? `Frisch gekauft — 100% vom Kaufpreis`
+                          : a.replacement_value_source === 'floor' ? `Floor erreicht — ${a.replacement_value_pct ?? 40}% vom Kaufpreis`
+                          : `Berechnet — aktuell ${a.replacement_value_pct?.toFixed(0) ?? '?'}% vom Kaufpreis`
+                        }
+                      >
+                        {formatCurrency(a.replacement_value_computed ?? 0)}
+                        {a.replacement_value_source && a.replacement_value_source !== 'manual' && (
+                          <span style={{ fontSize: 10, color: '#64748b', marginLeft: 6, fontWeight: 400 }}>
+                            {a.replacement_value_pct?.toFixed(0)}%
+                          </span>
+                        )}
                       </td>
                       <td style={td}>
                         <span style={{ color: STATUS_LABELS[a.status].color, fontWeight: 600, fontSize: 12 }}>{STATUS_LABELS[a.status].label}</span>

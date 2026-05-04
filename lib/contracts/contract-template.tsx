@@ -455,7 +455,7 @@ export function RentalContractPDF({ data }: { data: RentalContractData }) {
         </View>
 
         {/* Wiederbeschaffungswerte */}
-        <Text style={{ fontSize: 8, color: GRAY, marginBottom: 4 }}>Zur Transparenz: Die folgenden Zeitwerte dienen als Obergrenze der Ersatzpflicht bei Totalschaden oder Verlust (Option Ohne Schadenspauschale, siehe § 7).</Text>
+        <Text style={{ fontSize: 8, color: GRAY, marginBottom: 4 }}>Zur Transparenz: Die folgenden Zeitwerte dienen als Obergrenze der Ersatzpflicht bei Totalschaden oder Verlust (Option Ohne Schadenspauschale, siehe § 7). Berechnung pauschal nach Wertminderungsformel: linear sinkend vom Kaufpreis ueber 36 Monate auf 40 % Restwert (Floor); danach konstant. Der Mieter kann im Schadensfall einen geringeren Marktwert nachweisen — dann gilt der echte Wert.</Text>
         <View style={{ borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 4, overflow: 'hidden', marginBottom: 8 }}>
           <View style={{ flexDirection: 'row', backgroundColor: NAVY, paddingVertical: 3, paddingHorizontal: 6 }}>
             <Text style={{ width: '60%', fontSize: 7, fontFamily: 'Helvetica-Bold', color: '#fff' }}>Artikel</Text>

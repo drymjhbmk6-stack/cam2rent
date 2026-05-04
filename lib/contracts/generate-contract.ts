@@ -5,6 +5,7 @@ import { createServiceClient } from '@/lib/supabase';
 import { RentalContractPDF, buildContractText, type RentalContractData, type MietgegenstandItem } from './contract-template';
 import { DEFAULT_HAFTUNG, getEigenbeteiligung, type HaftungConfig } from '@/lib/price-config';
 import { isTestMode } from '@/lib/env-mode';
+import { computeReplacementValue, loadReplacementValueConfig } from '@/lib/replacement-value';
 
 /**
  * Lädt die aktuelle Haftungs-Konfiguration aus admin_settings.
@@ -122,31 +123,34 @@ async function resolveAccessoryInfo(ids: string[]): Promise<Record<string, Acces
 async function loadAssetCurrentValue(unitId: string): Promise<number | null> {
   try {
     const supabase = createServiceClient();
-    // replacement_value_estimate hat Vorrang: bei GWG ist der Buchwert 0,
-    // der echte Wiederbeschaffungswert ist aber der Kaufpreis (in
-    // replacement_value_estimate gespeichert). Bei regulaerem Asset (NULL)
-    // faellt der Code auf current_value zurueck.
+    // Wir laden Kaufpreis + Kaufdatum + manueller Override und berechnen
+    // den Wiederbeschaffungswert pauschal: linear sinkend von 100 % auf
+    // einen Floor (Default 40 %) ueber 36 Monate (configurable). Override
+    // (replacement_value_estimate) hat Vorrang vor der Berechnung.
     const primary = await supabase
       .from('assets')
-      .select('current_value, replacement_value_estimate')
+      .select('purchase_price, purchase_date, current_value, replacement_value_estimate')
       .eq('unit_id', unitId)
       .eq('status', 'active')
       .maybeSingle();
-    let row: { current_value: number | null; replacement_value_estimate?: number | null } | null = primary.data;
+    let row: { purchase_price: number | null; purchase_date: string | null; current_value: number | null; replacement_value_estimate?: number | null } | null = primary.data;
     // Defensiv: Migration noch nicht durch -> ohne replacement_value_estimate retryen
     if (primary.error && /replacement_value_estimate/i.test(primary.error.message)) {
       const fallback = await supabase
         .from('assets')
-        .select('current_value')
+        .select('purchase_price, purchase_date, current_value')
         .eq('unit_id', unitId)
         .eq('status', 'active')
         .maybeSingle();
       row = fallback.data;
     }
-    if (row) {
-      if (row.replacement_value_estimate != null) return Number(row.replacement_value_estimate);
-      if (row.current_value != null) return Number(row.current_value);
-    }
+    if (!row || !row.purchase_date || row.purchase_price == null) return null;
+    const config = await loadReplacementValueConfig(supabase);
+    return computeReplacementValue({
+      purchase_price: row.purchase_price,
+      purchase_date: row.purchase_date,
+      replacement_value_estimate: row.replacement_value_estimate ?? null,
+    }, config);
   } catch {
     // Fallback: deposit
   }

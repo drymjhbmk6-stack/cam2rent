@@ -430,8 +430,8 @@ export default function AccessoryUnitsManager({ accessoryId, onCountChanged }: P
                 <div className="rounded-lg bg-brand-bg dark:bg-slate-800 border border-brand-border/60 dark:border-slate-700/60 p-3 text-[11px] font-body text-brand-muted">
                   <p className="font-semibold text-brand-black dark:text-slate-200 mb-1">Automatisch erfasst:</p>
                   <ul className="space-y-0.5">
-                    <li>• <span className="text-brand-black dark:text-slate-300">Wiederbeschaffungswert</span> = aktueller AfA-Zeitwert (Start = Kaufpreis, sinkt monatlich)</li>
-                    <li>• <span className="text-brand-black dark:text-slate-300">Restwert</span> = 30 % vom Kaufpreis (Floor)</li>
+                    <li>• <span className="text-brand-black dark:text-slate-300">Buchwert</span> = sinkt monatlich linear (steuerliche AfA)</li>
+                    <li>• <span className="text-brand-black dark:text-slate-300">Wiederbeschaffungswert</span> = sinkt linear über 36 Monate auf 40 % Floor (für Vertrag/Schaden, manuell überschreibbar)</li>
                     <li>• <span className="text-brand-black dark:text-slate-300">Anlagen-Status</span> = aktiv</li>
                   </ul>
                 </div>
@@ -440,8 +440,8 @@ export default function AccessoryUnitsManager({ accessoryId, onCountChanged }: P
                   <p className="font-semibold text-amber-900 dark:text-amber-100 mb-1">GWG-Sofortabschreibung:</p>
                   <ul className="space-y-0.5">
                     <li>• <span className="font-semibold">Buchwert</span> = 0 € (sofort komplett abgeschrieben)</li>
-                    <li>• <span className="font-semibold">Wiederbeschaffungswert</span> = Kaufpreis (für Vertrag/Schaden)</li>
                     <li>• <span className="font-semibold">EÜR</span>: Kaufpreis wird automatisch als Aufwand &bdquo;GWG-Sofortabzug&ldquo; verbucht</li>
+                    <li>• <span className="font-semibold">Wiederbeschaffungswert</span> = sinkt linear über 36 Monate auf 40 % Floor (unabhängig von der Steuer-Abschreibung)</li>
                     <li>• Erscheint im Anlagenverzeichnis mit GWG-Badge</li>
                   </ul>
                 </div>

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { computeReplacementValue, loadReplacementValueConfig } from '@/lib/replacement-value';
 
 /**
  * GET /api/admin/booking/[id]/accessory-units-detail
@@ -106,13 +107,20 @@ export async function GET(
     }
   }
 
-  // 5. Result
+  // 5. Result — Asset-Wert mit pauschaler Wertminderung (linear -> Floor)
+  const config = await loadReplacementValueConfig(supabase);
   const result = units.map((u) => {
     const acc = accMap.get(u.accessory_id as string);
     const asset = assetMap.get(u.id as string);
-    // Asset-Wert: replacement_value_estimate (echter Marktwert, bei GWG = Kaufpreis)
-    // hat Vorrang vor dem Buchwert (current_value, bei GWG=0).
-    const assetWbw = asset?.replacement_value_estimate ?? asset?.current_value ?? 0;
+    // Asset-WBW: berechnet mit pauschaler Wertminderung (40 % Floor nach 36 Mon)
+    // oder Override aus replacement_value_estimate.
+    const assetWbw = asset && asset.purchase_date
+      ? computeReplacementValue({
+          purchase_price: asset.purchase_price,
+          purchase_date: asset.purchase_date,
+          replacement_value_estimate: asset.replacement_value_estimate,
+        }, config)
+      : 0;
     const replacementValue = acc?.replacement_value ?? 0;
     const suggested = Math.max(assetWbw, replacementValue, 0);
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { computeCurrentValue } from '@/lib/depreciation';
 import { logAudit } from '@/lib/audit';
+import { computeReplacementValue, explainReplacementValue, loadReplacementValueConfig } from '@/lib/replacement-value';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -43,10 +44,28 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
     last_depreciation_at: asset.last_depreciation_at,
   });
 
+  // Pauschaler Wiederbeschaffungswert (linear -> Floor) berechnen
+  const wbwConfig = await loadReplacementValueConfig(supabase);
+  const wbw = computeReplacementValue({
+    purchase_price: asset.purchase_price,
+    purchase_date: asset.purchase_date,
+    replacement_value_estimate: asset.replacement_value_estimate,
+  }, wbwConfig);
+  const wbwMeta = explainReplacementValue({
+    purchase_price: asset.purchase_price,
+    purchase_date: asset.purchase_date,
+    replacement_value_estimate: asset.replacement_value_estimate,
+  }, wbwConfig);
+
   return NextResponse.json({
     asset,
     depreciation_history: depreciationHistory ?? [],
     computed_current_value: computed,
+    replacement_value_computed: wbw,
+    replacement_value_source: wbwMeta.source,
+    replacement_value_pct: wbwMeta.pct,
+    replacement_value_age_months: wbwMeta.ageMonths,
+    replacement_value_config: wbwConfig,
   });
 }
 

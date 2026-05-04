@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { isTestMode } from '@/lib/env-mode';
 import { logAudit } from '@/lib/audit';
+import { computeReplacementValue, explainReplacementValue, loadReplacementValueConfig } from '@/lib/replacement-value';
 
 /**
  * GET /api/admin/assets
@@ -35,7 +36,28 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await q;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ assets: data ?? [] });
+
+  // Pauschalen Wiederbeschaffungswert pro Asset mitberechnen
+  const config = await loadReplacementValueConfig(supabase);
+  const enriched = (data ?? []).map((a) => {
+    const computed = computeReplacementValue({
+      purchase_price: (a as { purchase_price: number }).purchase_price,
+      purchase_date: (a as { purchase_date: string }).purchase_date,
+      replacement_value_estimate: (a as { replacement_value_estimate?: number | null }).replacement_value_estimate ?? null,
+    }, config);
+    const meta = explainReplacementValue({
+      purchase_price: (a as { purchase_price: number }).purchase_price,
+      purchase_date: (a as { purchase_date: string }).purchase_date,
+      replacement_value_estimate: (a as { replacement_value_estimate?: number | null }).replacement_value_estimate ?? null,
+    }, config);
+    return {
+      ...a,
+      replacement_value_computed: computed,
+      replacement_value_source: meta.source, // 'manual' | 'computed' | 'floor' | 'fresh'
+      replacement_value_pct: meta.pct,
+    };
+  });
+  return NextResponse.json({ assets: enriched, replacement_value_config: config });
 }
 
 export async function POST(req: NextRequest) {
