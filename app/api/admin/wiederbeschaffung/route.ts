@@ -1,5 +1,11 @@
 import { NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import {
+  computeReplacementValue,
+  explainReplacementValue,
+  loadReplacementValueConfig,
+  type ReplacementValueConfig,
+} from '@/lib/replacement-value';
 
 /**
  * GET /api/admin/wiederbeschaffung
@@ -8,18 +14,19 @@ import { createServiceClient } from '@/lib/supabase';
  * (Kamera-Exemplare + Zubehoer-Exemplare + Sammel-Zubehoer) mit dem
  * pro Item geltenden Wiederbeschaffungswert.
  *
- * Quelle pro Zeile (in Reihenfolge):
- *   1. assets.replacement_value_estimate (wenn Asset existiert)
- *   2. assets.current_value (Fallback wenn Asset existiert aber estimate NULL)
- *   3. accessories.replacement_value (Sammel-Default fuer Zubehoer ohne Asset)
- *   4. products (admin_config) keine eigene Wiederbeschaffung — Asset zwingend
+ * Berechnung pro Asset (gleicher Helper wie Anlagenverzeichnis und
+ * Mietvertrag — Konsistenz quer durch alle Ansichten):
+ *   - Manueller Override (assets.replacement_value_estimate) hat Vorrang.
+ *   - Sonst lineare Wertminderung von 100 % auf Floor (Default 40 %)
+ *     ueber Nutzungsdauer (Default 36 Monate). Konfig in
+ *     admin_settings.replacement_value_config.
  *
- * Editierbar:
- *   - editable_target = { type:'asset', id } -> PATCH /api/admin/assets/[id] { replacement_value_estimate }
- *   - editable_target = { type:'accessory', id } -> PUT /api/admin/accessories/[id] { ..., replacement_value }
+ * Fallback fuer Items OHNE Asset:
+ *   - Sammel-Zubehoer: accessories.replacement_value (Stamm-Wert)
+ *   - Kamera ohne Asset: products.deposit (Kaution als Floor)
  *
  * Response:
- *   { items: WiederbeschaffungItem[] }
+ *   { items: WiederbeschaffungItem[], replacement_value_config: ReplacementValueConfig }
  */
 
 export type WiederbeschaffungItem = {
@@ -27,8 +34,25 @@ export type WiederbeschaffungItem = {
   kind: 'camera_unit' | 'accessory_unit' | 'accessory_bulk';
   label: string;
   sublabel: string;
+  /** Aktueller Wert pro Stueck (Override oder berechnet) */
   replacement_value: number;
-  replacement_source: 'asset_estimate' | 'asset_current' | 'accessory_default' | 'product_deposit' | 'missing';
+  /**
+   * Quelle des Werts:
+   *  - 'manual' = assets.replacement_value_estimate gesetzt
+   *  - 'computed' = lineare Berechnung, noch ueber Floor
+   *  - 'floor' = Floor erreicht (Default 40 %)
+   *  - 'fresh' = vor < 1 Monat gekauft, noch 100 %
+   *  - 'accessory_default' = kein Asset, Sammel-Wert aus accessories.replacement_value
+   *  - 'product_deposit' = kein Asset, Fallback auf products.deposit
+   *  - 'missing' = nichts gesetzt
+   */
+  replacement_source: 'manual' | 'computed' | 'floor' | 'fresh' | 'accessory_default' | 'product_deposit' | 'missing';
+  /** Aktuelles Prozent vom Kaufpreis (nur bei Asset-basiert verfuegbar) */
+  replacement_pct: number | null;
+  /** Alter in Monaten (nur bei Asset-basiert) */
+  age_months: number | null;
+  /** Anschaffungspreis (fuer Anzeige im Tooltip) */
+  purchase_price: number | null;
   asset_id: string | null;
   editable_target: { type: 'asset' | 'accessory'; id: string } | null;
   qty: number;
@@ -42,6 +66,9 @@ interface AssetRow {
   accessory_unit_id: string | null;
   current_value: number | null;
   replacement_value_estimate: number | null;
+  purchase_price: number | string;
+  purchase_date: string;
+  status: string;
 }
 
 interface DbAccessoryRow {
@@ -53,8 +80,18 @@ interface DbAccessoryRow {
   available_qty: number | null;
 }
 
+function valueFromAsset(
+  asset: AssetRow,
+  config: ReplacementValueConfig,
+): { value: number; source: WiederbeschaffungItem['replacement_source']; pct: number; ageMonths: number } {
+  const value = computeReplacementValue(asset, config);
+  const explain = explainReplacementValue(asset, config);
+  return { value, source: explain.source, pct: explain.pct, ageMonths: explain.ageMonths };
+}
+
 export async function GET() {
   const supabase = createServiceClient();
+  const config = await loadReplacementValueConfig(supabase);
 
   // Produkte aus admin_config laden
   const { data: configRow } = await supabase
@@ -81,7 +118,7 @@ export async function GET() {
       .neq('status', 'retired'),
     supabase
       .from('assets')
-      .select('id, unit_id, accessory_unit_id, current_value, replacement_value_estimate, status')
+      .select('id, unit_id, accessory_unit_id, current_value, replacement_value_estimate, purchase_price, purchase_date, status')
       .eq('status', 'active'),
   ]);
 
@@ -98,16 +135,6 @@ export async function GET() {
     if (a.accessory_unit_id) assetByAccUnitId.set(a.accessory_unit_id, a);
   }
 
-  function valueFromAsset(a: AssetRow): { value: number; source: WiederbeschaffungItem['replacement_source'] } {
-    if (a.replacement_value_estimate != null && Number(a.replacement_value_estimate) > 0) {
-      return { value: Number(a.replacement_value_estimate), source: 'asset_estimate' };
-    }
-    if (a.current_value != null) {
-      return { value: Number(a.current_value), source: 'asset_current' };
-    }
-    return { value: 0, source: 'missing' };
-  }
-
   const items: WiederbeschaffungItem[] = [];
 
   // ── Kamera-Exemplare ────────────────────────────────────────────
@@ -120,17 +147,22 @@ export async function GET() {
     let source: WiederbeschaffungItem['replacement_source'] = 'missing';
     let assetId: string | null = null;
     let editable: WiederbeschaffungItem['editable_target'] = null;
+    let pct: number | null = null;
+    let ageMonths: number | null = null;
+    let purchasePrice: number | null = null;
 
     if (asset) {
       assetId = asset.id;
-      const v = valueFromAsset(asset);
+      const v = valueFromAsset(asset, config);
       replacementValue = v.value;
       source = v.source;
+      pct = v.pct;
+      ageMonths = v.ageMonths;
+      purchasePrice = Number(asset.purchase_price);
       editable = { type: 'asset', id: asset.id };
     } else if (product?.deposit) {
       replacementValue = Number(product.deposit);
       source = 'product_deposit';
-      // products.deposit ist Kaution — nicht ueber Wiederbeschaffungsliste editieren
     }
 
     items.push({
@@ -140,6 +172,9 @@ export async function GET() {
       sublabel: `SN: ${unit.serial_number ?? '—'}`,
       replacement_value: replacementValue,
       replacement_source: source,
+      replacement_pct: pct,
+      age_months: ageMonths,
+      purchase_price: purchasePrice,
       asset_id: assetId,
       editable_target: editable,
       qty: 1,
@@ -151,7 +186,7 @@ export async function GET() {
   // ── Zubehoer-Exemplare (mit Exemplar-Tracking) ─────────────────
   for (const unit of accessoryUnits) {
     const accessory = accessoryById.get(unit.accessory_id as string);
-    if (accessory?.is_bulk) continue; // Sammel-Zubehoer separat
+    if (accessory?.is_bulk) continue;
     const accLabel = accessory?.name ?? (unit.accessory_id as string);
     const asset = assetByAccUnitId.get(unit.id as string);
 
@@ -159,12 +194,18 @@ export async function GET() {
     let source: WiederbeschaffungItem['replacement_source'] = 'missing';
     let assetId: string | null = null;
     let editable: WiederbeschaffungItem['editable_target'] = null;
+    let pct: number | null = null;
+    let ageMonths: number | null = null;
+    let purchasePrice: number | null = null;
 
     if (asset) {
       assetId = asset.id;
-      const v = valueFromAsset(asset);
+      const v = valueFromAsset(asset, config);
       replacementValue = v.value;
       source = v.source;
+      pct = v.pct;
+      ageMonths = v.ageMonths;
+      purchasePrice = Number(asset.purchase_price);
       editable = { type: 'asset', id: asset.id };
     } else if (accessory?.replacement_value != null && Number(accessory.replacement_value) > 0) {
       replacementValue = Number(accessory.replacement_value);
@@ -179,6 +220,9 @@ export async function GET() {
       sublabel: `${accessory?.category ?? ''} · ${unit.exemplar_code}`,
       replacement_value: replacementValue,
       replacement_source: source,
+      replacement_pct: pct,
+      age_months: ageMonths,
+      purchase_price: purchasePrice,
       asset_id: assetId,
       editable_target: editable,
       qty: 1,
@@ -198,6 +242,9 @@ export async function GET() {
       sublabel: `${accessory.category} · Sammel-Bestand`,
       replacement_value: Number(replacementValue),
       replacement_source: replacementValue > 0 ? 'accessory_default' : 'missing',
+      replacement_pct: null,
+      age_months: null,
+      purchase_price: null,
       asset_id: null,
       editable_target: { type: 'accessory', id: accessory.id },
       qty: accessory.available_qty ?? 0,
@@ -213,5 +260,5 @@ export async function GET() {
     return a.label.localeCompare(b.label, 'de');
   });
 
-  return NextResponse.json({ items });
+  return NextResponse.json({ items, replacement_value_config: config });
 }

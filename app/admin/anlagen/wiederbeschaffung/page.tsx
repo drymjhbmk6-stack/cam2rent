@@ -9,7 +9,7 @@ import { fmtEuro } from '@/lib/format-utils';
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 type ItemKind = 'camera_unit' | 'accessory_unit' | 'accessory_bulk';
-type Source = 'asset_estimate' | 'asset_current' | 'accessory_default' | 'product_deposit' | 'missing';
+type Source = 'manual' | 'computed' | 'floor' | 'fresh' | 'accessory_default' | 'product_deposit' | 'missing';
 
 interface Item {
   row_key: string;
@@ -18,11 +18,19 @@ interface Item {
   sublabel: string;
   replacement_value: number;
   replacement_source: Source;
+  replacement_pct: number | null;
+  age_months: number | null;
+  purchase_price: number | null;
   asset_id: string | null;
   editable_target: { type: 'asset' | 'accessory'; id: string } | null;
   qty: number;
   status: string | null;
   searchable: string;
+}
+
+interface Config {
+  floor_percent: number;
+  useful_life_months: number;
 }
 
 // ─── Styles ─────────────────────────────────────────────────────────────────
@@ -39,8 +47,10 @@ const KIND_BADGE: Record<ItemKind, { label: string; bg: string; color: string }>
 };
 
 const SOURCE_HINT: Record<Source, { label: string; color: string }> = {
-  asset_estimate:    { label: 'Manuell gesetzt',                color: '#10b981' },
-  asset_current:     { label: 'Aus Buchwert',                   color: '#22d3ee' },
+  manual:            { label: 'Manuell gesetzt',                color: '#10b981' },
+  fresh:             { label: 'Frisch gekauft (100 %)',         color: '#10b981' },
+  computed:          { label: 'Berechnet (linearer Verfall)',   color: '#22d3ee' },
+  floor:             { label: 'Floor erreicht',                 color: '#f59e0b' },
   accessory_default: { label: 'Sammel-Wert (Zubehör-Stamm)',    color: '#a78bfa' },
   product_deposit:   { label: 'Aus Kaution (kein Asset)',       color: '#f59e0b' },
   missing:           { label: 'Nicht gesetzt',                  color: '#ef4444' },
@@ -50,6 +60,7 @@ const SOURCE_HINT: Record<Source, { label: string; color: string }> = {
 
 export default function WiederbeschaffungsListePage() {
   const [items, setItems] = useState<Item[]>([]);
+  const [config, setConfig] = useState<Config>({ floor_percent: 40, useful_life_months: 36 });
   const [loading, setLoading] = useState(true);
   const [filterKind, setFilterKind] = useState<string>('');
   const [filterMissing, setFilterMissing] = useState(false);
@@ -68,6 +79,7 @@ export default function WiederbeschaffungsListePage() {
       if (res.ok) {
         const j = await res.json();
         setItems(j.items ?? []);
+        if (j.replacement_value_config) setConfig(j.replacement_value_config);
       }
     } finally {
       setLoading(false);
@@ -152,10 +164,23 @@ export default function WiederbeschaffungsListePage() {
 
         <div style={{ marginBottom: 24 }}>
           <h1 style={{ color: '#f1f5f9', fontSize: 28, fontWeight: 800, marginBottom: 6 }}>Wiederbeschaffungsliste</h1>
-          <p style={{ color: '#94a3b8', fontSize: 14 }}>
+          <p style={{ color: '#94a3b8', fontSize: 14, marginBottom: 12 }}>
             Pro Inventar-Stück (Kamera / Zubehör-Exemplar / Sammel-Zubehör) der aktuelle Wiederbeschaffungswert.
             Greift im Mietvertrag und im Schadensmodul.
           </p>
+          <div style={{
+            background: 'rgba(6,182,212,0.08)',
+            border: '1px solid rgba(6,182,212,0.25)',
+            borderRadius: 8,
+            padding: '10px 14px',
+            fontSize: 12,
+            color: '#94d5e5',
+            lineHeight: 1.5,
+          }}>
+            <strong style={{ color: cyan }}>Formel:</strong> 100 % am Kauftag → linear runter →{' '}
+            <strong>{config.floor_percent} % Floor nach {config.useful_life_months} Monaten</strong>, danach konstant.
+            Manuell gesetzte Werte (über Bearbeiten) haben Vorrang. Die gleiche Berechnung läuft auch im Anlagenverzeichnis und im Mietvertrag.
+          </div>
         </div>
 
         {/* KPI-Karten */}
@@ -238,8 +263,19 @@ export default function WiederbeschaffungsListePage() {
                           </span>
                         </td>
                         <td style={{ ...td, textAlign: 'right', color: '#94a3b8' }}>{it.qty}</td>
-                        <td style={{ ...td, textAlign: 'right', color: it.replacement_source === 'missing' ? '#ef4444' : '#e2e8f0', fontWeight: 600 }}>
+                        <td style={{ ...td, textAlign: 'right', color: it.replacement_source === 'missing' ? '#ef4444' : '#e2e8f0', fontWeight: 600 }}
+                          title={
+                            it.purchase_price != null && it.replacement_pct != null
+                              ? `Kaufpreis ${fmtEuro(it.purchase_price)} · aktuell ${it.replacement_pct.toFixed(0)} % · Alter ${it.age_months ?? 0} Monate`
+                              : undefined
+                          }
+                        >
                           {it.replacement_value > 0 ? fmtEuro(it.replacement_value) : '—'}
+                          {it.replacement_pct != null && it.replacement_source !== 'manual' && (
+                            <span style={{ fontSize: 10, color: '#64748b', marginLeft: 6, fontWeight: 400 }}>
+                              {it.replacement_pct.toFixed(0)} %
+                            </span>
+                          )}
                         </td>
                         <td style={{ ...td, textAlign: 'right', color: cyan, fontWeight: 700 }}>
                           {total > 0 ? fmtEuro(total) : '—'}
