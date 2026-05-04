@@ -29,7 +29,7 @@ export default function NachtragenPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [linkedAssets, setLinkedAssets] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
-  const [drafts, setDrafts] = useState<Record<string, { name: string; purchase_price: string; purchase_date: string; useful_life_months: string; kind: string }>>({});
+  const [drafts, setDrafts] = useState<Record<string, { name: string; purchase_price: string; purchase_date: string; useful_life_months: string; kind: string; depreciation_method: 'linear' | 'immediate' }>>({});
   const [saving, setSaving] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -63,7 +63,7 @@ export default function NachtragenPage() {
   function setDraft(unitId: string, key: string, value: string) {
     setDrafts((prev) => ({
       ...prev,
-      [unitId]: { ...(prev[unitId] ?? { name: '', purchase_price: '', purchase_date: '', useful_life_months: '36', kind: 'rental_camera' }), [key]: value },
+      [unitId]: { ...(prev[unitId] ?? { name: '', purchase_price: '', purchase_date: '', useful_life_months: '36', kind: 'rental_camera', depreciation_method: 'linear' as const }), [key]: value },
     }));
   }
 
@@ -76,6 +76,7 @@ export default function NachtragenPage() {
     setSaving(unit.id);
     setMsg(null);
     try {
+      const isGwg = d.depreciation_method === 'immediate';
       const res = await fetch('/api/admin/assets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -85,7 +86,8 @@ export default function NachtragenPage() {
           serial_number: unit.serial_number,
           purchase_price: Number(d.purchase_price),
           purchase_date: d.purchase_date,
-          useful_life_months: Number(d.useful_life_months) || 36,
+          useful_life_months: isGwg ? 0 : (Number(d.useful_life_months) || 36),
+          depreciation_method: d.depreciation_method,
           product_id: unit.product_id,
           unit_id: unit.id,
         }),
@@ -95,10 +97,15 @@ export default function NachtragenPage() {
         setMsg(`Fehler: ${data?.error}`);
         return;
       }
-      // AfA nachholen
-      await fetch(`/api/admin/assets/${data.asset.id}/depreciation-catchup`, { method: 'POST' });
+      // AfA nachholen — bei GWG (immediate) macht der Catchup eh nichts,
+      // aber wir rufen es trotzdem auf um den Code-Pfad konsistent zu halten.
+      if (!isGwg) {
+        await fetch(`/api/admin/assets/${data.asset.id}/depreciation-catchup`, { method: 'POST' });
+      }
       setLinkedAssets((prev) => new Set(prev).add(unit.id));
-      setMsg(`Asset "${d.name}" angelegt und AfA nachgetragen.`);
+      setMsg(isGwg
+        ? `GWG "${d.name}" angelegt — als Sofortabzug in der EÜR verbucht.`
+        : `Asset "${d.name}" angelegt und AfA nachgetragen.`);
     } finally {
       setSaving(null);
     }
@@ -134,7 +141,8 @@ export default function NachtragenPage() {
           </div>
         ) : (
           openUnits.map((unit) => {
-            const d = drafts[unit.id] ?? { name: getProductLabel(unit.product_id), purchase_price: '', purchase_date: unit.purchased_at ?? '', useful_life_months: '36', kind: 'rental_camera' };
+            const d = drafts[unit.id] ?? { name: getProductLabel(unit.product_id), purchase_price: '', purchase_date: unit.purchased_at ?? '', useful_life_months: '36', kind: 'rental_camera', depreciation_method: 'linear' as const };
+            const isGwg = d.depreciation_method === 'immediate';
             return (
               <div key={unit.id} style={{ ...card, marginBottom: 16 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
@@ -170,8 +178,15 @@ export default function NachtragenPage() {
                     <input style={input} type="date" value={d.purchase_date} onChange={(e) => setDraft(unit.id, 'purchase_date', e.target.value)} />
                   </div>
                   <div>
+                    <span style={label}>AfA-Methode</span>
+                    <select style={input} value={d.depreciation_method} onChange={(e) => setDraft(unit.id, 'depreciation_method', e.target.value)}>
+                      <option value="linear">Linear (über Nutzungsdauer)</option>
+                      <option value="immediate">GWG (Sofortabzug)</option>
+                    </select>
+                  </div>
+                  <div>
                     <span style={label}>Nutzungsdauer (Monate)</span>
-                    <input style={input} type="number" min={1} value={d.useful_life_months} onChange={(e) => setDraft(unit.id, 'useful_life_months', e.target.value)} />
+                    <input style={input} type="number" min={1} disabled={isGwg} value={isGwg ? '' : d.useful_life_months} placeholder={isGwg ? 'Nicht relevant bei GWG' : ''} onChange={(e) => setDraft(unit.id, 'useful_life_months', e.target.value)} />
                   </div>
                   <div style={{ display: 'flex', alignItems: 'flex-end' }}>
                     <button
