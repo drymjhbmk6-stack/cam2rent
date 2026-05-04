@@ -57,8 +57,8 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   const allowed = [
     'name', 'description', 'serial_number', 'manufacturer', 'model',
     'useful_life_months', 'depreciation_method', 'residual_value',
-    'current_value', 'status', 'disposed_at', 'disposal_proceeds',
-    'product_id', 'unit_id', 'notes',
+    'current_value', 'replacement_value_estimate', 'status', 'disposed_at',
+    'disposal_proceeds', 'product_id', 'unit_id', 'notes',
   ];
   const updates: Record<string, unknown> = {};
   for (const k of allowed) {
@@ -97,12 +97,23 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     }
   }
 
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('assets')
     .update(updates)
     .eq('id', id)
     .select()
     .single();
+
+  // Defensiv: Migration replacement_value_estimate noch nicht durch — Retry ohne.
+  if (error && /replacement_value_estimate/i.test(error.message) && 'replacement_value_estimate' in updates) {
+    delete updates.replacement_value_estimate;
+    ({ data, error } = await supabase
+      .from('assets')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single());
+  }
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 

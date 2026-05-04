@@ -18,6 +18,7 @@ interface Asset {
   useful_life_months: number;
   depreciation_method: 'linear' | 'none' | 'immediate';
   residual_value: number | null;
+  replacement_value_estimate: number | null;
   last_depreciation_at: string | null;
   status: 'active' | 'disposed' | 'sold' | 'lost';
   disposed_at: string | null;
@@ -82,6 +83,23 @@ export default function AssetDetailPage(props: { params: Promise<{ id: string }>
     }
   }
 
+  async function setReplacementValue(value: number | null) {
+    const res = await fetch(`/api/admin/assets/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ replacement_value_estimate: value }),
+    });
+    if (!res.ok) {
+      const d = await res.json();
+      setMsg(`Fehler: ${d?.error ?? 'konnte nicht gespeichert werden'}`);
+      return;
+    }
+    const r2 = await fetch(`/api/admin/assets/${id}`);
+    const d2 = await r2.json();
+    if (d2?.asset) setAsset(d2.asset);
+    setMsg(value != null ? `Wiederbeschaffungswert auf ${formatCurrency(value)} gesetzt.` : 'Wiederbeschaffungswert geleert (Default greift).');
+  }
+
   async function dispose(kind: 'disposed' | 'sold' | 'lost') {
     const proceedsStr = kind === 'sold' ? prompt('Verkaufserloes in EUR?') : '';
     if (kind === 'sold' && !proceedsStr) return;
@@ -140,11 +158,18 @@ export default function AssetDetailPage(props: { params: Promise<{ id: string }>
           <div style={card}>
             <span style={label}>Aktueller Zeitwert (DB)</span>
             <div style={{ fontSize: 24, color: cyan, fontWeight: 800 }}>{formatCurrency(asset.current_value)}</div>
+            <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>Steuerlicher Buchwert — sinkt monatlich durch AfA.</div>
             {computed != null && Math.abs(Number(asset.current_value) - computed) > 0.5 && (
               <div style={{ fontSize: 12, color: '#f59e0b', marginTop: 4 }}>
                 Berechnet aktuell: {formatCurrency(computed)} — AfA-Lauf ausstehend
               </div>
             )}
+          </div>
+          <div style={card}>
+            <ReplacementValueCard
+              asset={asset}
+              onSave={setReplacementValue}
+            />
           </div>
           <div style={card}>
             <span style={label}>Abschreibung</span>
@@ -238,6 +263,99 @@ function Field({ k, v }: { k: string; v: string | null | undefined }) {
       <span style={label}>{k}</span>
       <div style={{ color: '#e2e8f0', fontSize: 13 }}>{v || '—'}</div>
     </div>
+  );
+}
+
+function ReplacementValueCard({
+  asset,
+  onSave,
+}: {
+  asset: Asset;
+  onSave: (value: number | null) => Promise<void>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState<string>(
+    asset.replacement_value_estimate != null ? String(asset.replacement_value_estimate).replace('.', ',') : '',
+  );
+  const [saving, setSaving] = useState(false);
+
+  // Effektiver Wert mit Fallback-Logik analog Vertrag/Schadensmodul:
+  // 1) replacement_value_estimate, 2) current_value
+  const effective = asset.replacement_value_estimate != null
+    ? Number(asset.replacement_value_estimate)
+    : Number(asset.current_value);
+  const isEstimateSet = asset.replacement_value_estimate != null;
+
+  async function commit() {
+    const cleaned = value.trim().replace(',', '.');
+    if (cleaned === '') {
+      setSaving(true);
+      await onSave(null);
+      setSaving(false);
+      setEditing(false);
+      return;
+    }
+    const n = parseFloat(cleaned);
+    if (!Number.isFinite(n) || n < 0) {
+      alert('Bitte eine gültige Zahl eingeben.');
+      return;
+    }
+    setSaving(true);
+    await onSave(Math.round(n * 100) / 100);
+    setSaving(false);
+    setEditing(false);
+  }
+
+  if (editing) {
+    return (
+      <>
+        <span style={label}>Wiederbeschaffungswert</span>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 4 }}>
+          <input
+            type="number"
+            inputMode="decimal"
+            step="0.01"
+            min={0}
+            value={value}
+            autoFocus
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setEditing(false); }}
+            placeholder="z.B. 600"
+            style={{ flex: 1, background: '#0a0f1e', border: '1px solid #1e293b', borderRadius: 8, padding: '8px 10px', color: '#e2e8f0', fontSize: 14 }}
+          />
+          <button onClick={commit} disabled={saving} style={{ padding: '8px 12px', borderRadius: 8, background: cyan, color: '#0f172a', border: 'none', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+            {saving ? '…' : 'OK'}
+          </button>
+          <button onClick={() => setEditing(false)} style={{ padding: '8px 10px', borderRadius: 8, background: 'transparent', color: '#94a3b8', border: '1px solid #334155', fontSize: 12, cursor: 'pointer' }}>
+            ✕
+          </button>
+        </div>
+        <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
+          Leer lassen = Default (Buchwert) wird genutzt.
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <span style={label}>Wiederbeschaffungswert</span>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+        <div style={{ fontSize: 24, color: isEstimateSet ? '#10b981' : '#94a3b8', fontWeight: 800 }}>{formatCurrency(effective)}</div>
+        <button
+          onClick={() => setEditing(true)}
+          style={{ padding: '4px 8px', borderRadius: 6, background: 'transparent', color: cyan, border: '1px solid #1e293b', fontSize: 11, cursor: 'pointer' }}
+          title="Wiederbeschaffungswert manuell setzen"
+        >
+          ✎ ändern
+        </button>
+      </div>
+      <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
+        {isEstimateSet
+          ? 'Manuell gesetzt — fließt in Mietvertrag + Schadens-Vorschlag.'
+          : 'Default (Buchwert). Bei GWG = 0 — bitte manuell setzen!'}
+      </div>
+    </>
   );
 }
 

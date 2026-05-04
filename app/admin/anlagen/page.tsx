@@ -15,6 +15,7 @@ interface Asset {
   purchase_price: number;
   purchase_date: string;
   current_value: number;
+  replacement_value_estimate: number | null;
   useful_life_months: number;
   depreciation_method: 'linear' | 'none' | 'immediate';
   last_depreciation_at: string | null;
@@ -204,6 +205,7 @@ export default function AnlagenPage() {
                     <th style={th}>Kaufdatum</th>
                     <th style={{ ...th, textAlign: 'right' }}>Anschaffung</th>
                     <th style={{ ...th, textAlign: 'right' }}>Zeitwert</th>
+                    <th style={{ ...th, textAlign: 'right' }}>Wiederb.-Wert</th>
                     <th style={th}>Status</th>
                     <th style={th}>Lieferant</th>
                     <th style={th}>Rechnung</th>
@@ -241,6 +243,9 @@ export default function AnlagenPage() {
                       <td style={td}>{fmtDate(a.purchase_date)}</td>
                       <td style={{ ...td, textAlign: 'right', color: '#e2e8f0' }}>{formatCurrency(a.purchase_price)}</td>
                       <td style={{ ...td, textAlign: 'right', color: cyan, fontWeight: 600 }}>{formatCurrency(a.current_value)}</td>
+                      <td style={{ ...td, textAlign: 'right', color: a.replacement_value_estimate != null ? '#10b981' : '#64748b', fontWeight: 600 }}>
+                        {a.replacement_value_estimate != null ? formatCurrency(a.replacement_value_estimate) : <span style={{ fontStyle: 'italic' }}>—</span>}
+                      </td>
                       <td style={td}>
                         <span style={{ color: STATUS_LABELS[a.status].color, fontWeight: 600, fontSize: 12 }}>{STATUS_LABELS[a.status].label}</span>
                       </td>
