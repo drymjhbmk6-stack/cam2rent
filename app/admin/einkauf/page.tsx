@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { fmtDate, formatCurrency } from '@/lib/format-utils';
 
@@ -25,6 +25,19 @@ interface PurchaseItem {
   unit_price: number;
 }
 
+type AttachmentKind = 'invoice' | 'receipt' | 'delivery_note' | 'other';
+
+interface PurchaseAttachment {
+  id: string;
+  purchase_id: string;
+  storage_path: string;
+  filename: string;
+  mime_type: string;
+  size_bytes: number | null;
+  kind: AttachmentKind;
+  created_at: string;
+}
+
 interface Purchase {
   id: string;
   supplier_id: string;
@@ -35,7 +48,29 @@ interface Purchase {
   total_amount: number | null;
   notes: string | null;
   purchase_items: PurchaseItem[];
+  attachments?: PurchaseAttachment[];
   created_at: string;
+}
+
+const KIND_LABEL: Record<AttachmentKind, string> = {
+  invoice: 'Rechnung',
+  receipt: 'Quittung',
+  delivery_note: 'Lieferschein',
+  other: 'Sonstiges',
+};
+
+const KIND_COLOR: Record<AttachmentKind, string> = {
+  invoice: '#06b6d4',
+  receipt: '#22c55e',
+  delivery_note: '#a855f7',
+  other: '#94a3b8',
+};
+
+function fmtBytes(bytes: number | null): string {
+  if (!bytes) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 type Tab = 'lieferanten' | 'einkauefe';
@@ -124,6 +159,7 @@ export default function EinkaufPage() {
     invoice_number: '', notes: '',
     items: [{ product_name: '', quantity: 1, unit_price: 0 }] as { product_name: string; quantity: number; unit_price: number }[],
   });
+  const [pendingFiles, setPendingFiles] = useState<{ file: File; kind: AttachmentKind }[]>([]);
 
   const [saving, setSaving] = useState(false);
 
@@ -194,21 +230,49 @@ export default function EinkaufPage() {
     if (!purchaseForm.supplier_id || !purchaseForm.order_date) return;
     if (purchaseForm.items.some(i => !i.product_name.trim())) return;
     setSaving(true);
-    const total = purchaseForm.items.reduce((s, i) => s + i.quantity * i.unit_price, 0);
-    const res = await fetch('/api/admin/purchases', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...purchaseForm, total_amount: total }),
-    });
-    if (res.ok) {
+    try {
+      const total = purchaseForm.items.reduce((s, i) => s + i.quantity * i.unit_price, 0);
+      const res = await fetch('/api/admin/purchases', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...purchaseForm, total_amount: total }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        alert(j.error || 'Fehler beim Speichern');
+        return;
+      }
+      const j = await res.json();
+      const newPurchaseId = j?.purchase?.id as string | undefined;
+
+      // Belege hochladen, wenn welche ausgewaehlt sind
+      if (newPurchaseId && pendingFiles.length > 0) {
+        const fd = new FormData();
+        fd.append('purchase_id', newPurchaseId);
+        for (const pf of pendingFiles) fd.append('files', pf.file);
+        fd.append('kinds', JSON.stringify(pendingFiles.map(p => p.kind)));
+        const up = await fetch('/api/admin/purchase-attachments', { method: 'POST', body: fd });
+        if (!up.ok) {
+          const ej = await up.json().catch(() => ({}));
+          alert(`Einkauf gespeichert, aber Belege fehlgeschlagen: ${ej.error || ej.errors?.join('; ') || up.status}`);
+        } else {
+          const ej = await up.json().catch(() => ({}));
+          if (ej.errors?.length) {
+            alert(`Einige Belege konnten nicht hochgeladen werden:\n${ej.errors.join('\n')}`);
+          }
+        }
+      }
+
       setShowNewPurchase(false);
       setPurchaseForm({
         supplier_id: '', order_date: new Date().toISOString().slice(0, 10),
         invoice_number: '', notes: '',
         items: [{ product_name: '', quantity: 1, unit_price: 0 }],
       });
+      setPendingFiles([]);
       await fetchPurchases();
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   }
 
   async function updatePurchaseStatus(id: string, status: string) {
@@ -573,9 +637,19 @@ export default function EinkaufPage() {
                 Gesamt: {fmtCurrency(purchaseForm.items.reduce((s, i) => s + i.quantity * i.unit_price, 0))}
               </div>
 
+              {/* Belege hochladen */}
+              <div style={{ marginTop: 18 }}>
+                <label style={S.label}>Belege (Rechnung, Quittung, Lieferschein …)</label>
+                <PendingFilesPicker
+                  files={pendingFiles}
+                  onChange={setPendingFiles}
+                  defaultKind="receipt"
+                />
+              </div>
+
               <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
                 <button onClick={savePurchase} disabled={saving} style={btnPrimary}>{saving ? 'Speichert...' : 'Speichern'}</button>
-                <button onClick={() => setShowNewPurchase(false)} style={btnSecondary}>Abbrechen</button>
+                <button onClick={() => { setShowNewPurchase(false); setPendingFiles([]); }} style={btnSecondary}>Abbrechen</button>
               </div>
             </div>
           )}
@@ -602,6 +676,7 @@ export default function EinkaufPage() {
                       onToggle={() => setExpandedPurchase(expandedPurchase === p.id ? null : p.id)}
                       onStatusChange={(status) => updatePurchaseStatus(p.id, status)}
                       onDelete={() => deletePurchase(p.id)}
+                      onAttachmentsChanged={fetchPurchases}
                     />
                   ))}
                 </tbody>
@@ -713,12 +788,13 @@ function SupplierRow({
 // ─── PurchaseRow Component ──────────────────────────────────────────────────
 
 function PurchaseRow({
-  purchase, expanded, onToggle, onStatusChange, onDelete,
+  purchase, expanded, onToggle, onStatusChange, onDelete, onAttachmentsChanged,
 }: {
   purchase: Purchase; expanded: boolean;
   onToggle: () => void;
   onStatusChange: (status: string) => void;
   onDelete: () => void;
+  onAttachmentsChanged: () => void | Promise<void>;
 }) {
   const productSummary = purchase.purchase_items
     .map(i => `${i.quantity}x ${i.product_name}`)
@@ -796,9 +872,204 @@ function PurchaseRow({
                 ))}
               </tbody>
             </table>
+
+            {/* Belege */}
+            <div style={{ marginTop: 20 }}>
+              <AttachmentsSection
+                purchaseId={purchase.id}
+                attachments={purchase.attachments ?? []}
+                onChanged={onAttachmentsChanged}
+              />
+            </div>
           </td>
         </tr>
       )}
     </>
+  );
+}
+
+// ─── PendingFilesPicker (vor dem Speichern) ─────────────────────────────────
+
+function PendingFilesPicker({
+  files, onChange, defaultKind = 'receipt',
+}: {
+  files: { file: File; kind: AttachmentKind }[];
+  onChange: (next: { file: File; kind: AttachmentKind }[]) => void;
+  defaultKind?: AttachmentKind;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  function addFiles(newFiles: FileList | File[] | null) {
+    if (!newFiles) return;
+    const added = Array.from(newFiles).map(f => ({ file: f, kind: defaultKind }));
+    onChange([...files, ...added].slice(0, 10));
+  }
+
+  return (
+    <div>
+      <div
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => { e.preventDefault(); addFiles(e.dataTransfer.files); }}
+        onClick={() => inputRef.current?.click()}
+        style={{
+          border: '1px dashed #334155', borderRadius: 10, padding: 16, textAlign: 'center',
+          cursor: 'pointer', background: '#0a0f1e', color: '#94a3b8', fontSize: 13,
+        }}
+      >
+        📎 Belege hierher ziehen oder klicken (PDF, JPG, PNG, WebP — max 20 MB pro Datei, bis zu 10)
+        <input
+          ref={inputRef}
+          type="file"
+          accept="application/pdf,image/jpeg,image/png,image/webp"
+          multiple
+          hidden
+          onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }}
+        />
+      </div>
+      {files.length > 0 && (
+        <ul style={{ listStyle: 'none', padding: 0, margin: '12px 0 0', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {files.map((pf, i) => (
+            <li key={i} style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              background: '#0a0f1e', border: '1px solid #1e293b', borderRadius: 8, padding: '8px 10px',
+            }}>
+              <span style={{ fontSize: 16 }}>📄</span>
+              <span style={{ flex: 1, color: '#e2e8f0', fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {pf.file.name} <span style={{ color: '#64748b', fontSize: 11 }}>({fmtBytes(pf.file.size)})</span>
+              </span>
+              <select
+                value={pf.kind}
+                onChange={(e) => {
+                  const next = [...files];
+                  next[i] = { ...pf, kind: e.target.value as AttachmentKind };
+                  onChange(next);
+                }}
+                style={{
+                  background: '#111827', color: '#e2e8f0', border: '1px solid #1e293b',
+                  borderRadius: 6, padding: '4px 8px', fontSize: 12,
+                }}
+              >
+                {(Object.keys(KIND_LABEL) as AttachmentKind[]).map(k => (
+                  <option key={k} value={k}>{KIND_LABEL[k]}</option>
+                ))}
+              </select>
+              <button
+                onClick={(e) => { e.stopPropagation(); onChange(files.filter((_, j) => j !== i)); }}
+                style={{
+                  background: 'transparent', border: '1px solid rgba(239,68,68,0.3)',
+                  color: '#ef4444', borderRadius: 6, padding: '4px 8px', fontSize: 12, cursor: 'pointer',
+                }}
+                title="Entfernen"
+              >
+                ✕
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+// ─── AttachmentsSection (existierender Einkauf) ─────────────────────────────
+
+function AttachmentsSection({
+  purchaseId, attachments, onChanged,
+}: {
+  purchaseId: string;
+  attachments: PurchaseAttachment[];
+  onChanged: () => void | Promise<void>;
+}) {
+  const [pending, setPending] = useState<{ file: File; kind: AttachmentKind }[]>([]);
+  const [uploading, setUploading] = useState(false);
+
+  async function uploadPending() {
+    if (pending.length === 0) return;
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append('purchase_id', purchaseId);
+      for (const pf of pending) fd.append('files', pf.file);
+      fd.append('kinds', JSON.stringify(pending.map(p => p.kind)));
+      const res = await fetch('/api/admin/purchase-attachments', { method: 'POST', body: fd });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert(j.error || 'Upload fehlgeschlagen');
+      } else if (j.errors?.length) {
+        alert(`Einige Belege fehlgeschlagen:\n${j.errors.join('\n')}`);
+      }
+      setPending([]);
+      await onChanged();
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function deleteAttachment(id: string, filename: string) {
+    if (!confirm(`Beleg "${filename}" wirklich löschen?`)) return;
+    const res = await fetch(`/api/admin/purchase-attachments/${id}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      alert(j.error || 'Fehler beim Löschen');
+      return;
+    }
+    await onChanged();
+  }
+
+  return (
+    <div>
+      <div style={S.label}>Belege ({attachments.length})</div>
+      {attachments.length === 0 ? (
+        <div style={{ color: '#64748b', fontSize: 12, marginBottom: 10 }}>Noch keine Belege hinterlegt.</div>
+      ) : (
+        <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {attachments.map(att => (
+            <li key={att.id} style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              background: '#111827', border: '1px solid #1e293b', borderRadius: 8, padding: '8px 10px',
+            }}>
+              <span style={{ fontSize: 16 }}>{att.mime_type === 'application/pdf' ? '📄' : '🖼️'}</span>
+              <a
+                href={`/api/admin/invoices/purchase-pdf?path=${encodeURIComponent(att.storage_path)}`}
+                target="_blank"
+                rel="noreferrer"
+                style={{ flex: 1, color: '#e2e8f0', fontSize: 13, textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                {att.filename}
+                {att.size_bytes ? <span style={{ color: '#64748b', fontSize: 11 }}> ({fmtBytes(att.size_bytes)})</span> : null}
+              </a>
+              <span style={{
+                fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 999,
+                background: `${KIND_COLOR[att.kind]}22`, color: KIND_COLOR[att.kind],
+              }}>{KIND_LABEL[att.kind]}</span>
+              <button
+                onClick={(e) => { e.stopPropagation(); deleteAttachment(att.id, att.filename); }}
+                style={{
+                  background: 'transparent', border: '1px solid rgba(239,68,68,0.3)',
+                  color: '#ef4444', borderRadius: 6, padding: '4px 8px', fontSize: 12, cursor: 'pointer',
+                }}
+                title="Löschen"
+              >
+                ✕
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <PendingFilesPicker files={pending} onChange={setPending} defaultKind="receipt" />
+      {pending.length > 0 && (
+        <div style={{ marginTop: 10 }}>
+          <button
+            onClick={(e) => { e.stopPropagation(); uploadPending(); }}
+            disabled={uploading}
+            style={btnPrimary}
+          >
+            {uploading ? 'Lädt hoch...' : `${pending.length} Beleg${pending.length === 1 ? '' : 'e'} hochladen`}
+          </button>
+        </div>
+      )}
+    </div>
   );
 }

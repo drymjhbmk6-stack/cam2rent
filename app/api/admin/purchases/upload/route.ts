@@ -213,6 +213,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `Positionen konnten nicht angelegt werden: ${iErr.message}` }, { status: 500 });
     }
 
+    // 5b. Haupt-Beleg auch in purchase_attachments eintragen, damit
+    //     Anhaenge-UI und Beleg-Liste an einer Stelle leben.
+    //     Defensiv: Migration koennte noch nicht durch sein -> still ignorieren.
+    const { error: attErr } = await supabase.from('purchase_attachments').insert({
+      purchase_id: purchase.id,
+      storage_path: storagePath,
+      filename: file.name.slice(0, 250),
+      mime_type: mimeType,
+      size_bytes: file.size,
+      kind: 'invoice',
+    });
+    if (attErr && !/relation .* does not exist/i.test(attErr.message)) {
+      console.warn('[purchases/upload] purchase_attachments insert failed:', attErr.message);
+    }
+
     await logAudit({
       action: 'purchase.upload_invoice',
       entityType: 'purchase',

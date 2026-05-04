@@ -240,6 +240,7 @@ const API_PATH_PERMISSIONS: PermRule[] = [
   { prefix: '/api/admin/datev-export', perm: 'finanzen' },
   { prefix: '/api/admin/invoices', perm: 'finanzen' },
   { prefix: '/api/admin/purchases', perm: 'finanzen' },
+  { prefix: '/api/admin/purchase-attachments', perm: 'finanzen' },
   { prefix: '/api/admin/deposit', perm: 'finanzen' },
   // Berichte
   { prefix: '/api/admin/analytics', perm: 'berichte' },

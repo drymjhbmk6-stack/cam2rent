@@ -7,6 +7,14 @@ import { formatCurrency } from '@/lib/format-utils';
 
 type Classification = 'asset' | 'expense' | 'ignored';
 type Kind = 'rental_camera' | 'rental_accessory' | 'office_equipment' | 'tool' | 'other';
+type AttachmentKind = 'invoice' | 'receipt' | 'delivery_note' | 'other';
+
+const ATTACHMENT_KIND_LABEL: Record<AttachmentKind, string> = {
+  invoice: 'Rechnung',
+  receipt: 'Quittung',
+  delivery_note: 'Lieferschein',
+  other: 'Sonstiges',
+};
 
 interface AISuggestion {
   suggested_classification?: 'asset' | 'expense';
@@ -90,6 +98,9 @@ export default function RechnungUploadPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [saving, setSaving] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  // Multi-File: erste Datei = Hauptrechnung (KI), weitere = Anhaenge ohne KI
+  const [pickedFiles, setPickedFiles] = useState<{ file: File; kind: AttachmentKind }[]>([]);
+  const [extraUploadStatus, setExtraUploadStatus] = useState<string>('');
 
   useEffect(() => {
     fetch('/api/products')
@@ -102,13 +113,27 @@ export default function RechnungUploadPage() {
       .catch(() => { /* silent */ });
   }, []);
 
-  async function handleFile(file: File) {
+  function addPickedFiles(newFiles: FileList | File[] | null) {
+    if (!newFiles) return;
+    const arr = Array.from(newFiles).map((f, idx) => ({
+      file: f,
+      // Erste Datei = Rechnung (geht in KI), Rest = Quittung (Default)
+      kind: (pickedFiles.length === 0 && idx === 0 ? 'invoice' : 'receipt') as AttachmentKind,
+    }));
+    setPickedFiles([...pickedFiles, ...arr].slice(0, 10));
+  }
+
+  async function processPickedFiles() {
+    if (pickedFiles.length === 0) return;
     setError(null);
     setStage('processing');
-    setProgress('Lade Datei hoch…');
+    setProgress('Lade Hauptrechnung hoch…');
+
+    const primary = pickedFiles[0];
+    const extras = pickedFiles.slice(1);
 
     const form = new FormData();
-    form.append('file', file);
+    form.append('file', primary.file);
 
     try {
       setProgress('Claude analysiert die Rechnung (5-15 Sekunden)…');
@@ -118,6 +143,26 @@ export default function RechnungUploadPage() {
         setError(data?.error || 'Upload fehlgeschlagen');
         setStage('upload');
         return;
+      }
+
+      const newPurchaseId = data.purchase_id as string | undefined;
+
+      // Zusatz-Belege an denselben Einkauf haengen
+      if (newPurchaseId && extras.length > 0) {
+        setProgress(`Lade ${extras.length} weitere${extras.length === 1 ? 'n' : ''} Beleg${extras.length === 1 ? '' : 'e'} hoch…`);
+        const fd = new FormData();
+        fd.append('purchase_id', newPurchaseId);
+        for (const ex of extras) fd.append('files', ex.file);
+        fd.append('kinds', JSON.stringify(extras.map(ex => ex.kind)));
+        const upRes = await fetch('/api/admin/purchase-attachments', { method: 'POST', body: fd });
+        const upJson = await upRes.json().catch(() => ({}));
+        if (!upRes.ok) {
+          setExtraUploadStatus(`⚠ Zusatzbelege fehlgeschlagen: ${upJson.error || upRes.status}`);
+        } else if (upJson.errors?.length) {
+          setExtraUploadStatus(`⚠ ${upJson.uploaded} von ${extras.length} Zusatzbelegen hochgeladen. Fehler: ${upJson.errors.join('; ')}`);
+        } else {
+          setExtraUploadStatus(`✓ ${upJson.uploaded} Zusatzbeleg${upJson.uploaded === 1 ? '' : 'e'} angehängt`);
+        }
       }
 
       setSupplierName(data.extracted?.supplier?.name ?? '');
@@ -219,7 +264,7 @@ export default function RechnungUploadPage() {
           <div style={card}>
             <div
               onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => { e.preventDefault(); if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); }}
+              onDrop={(e) => { e.preventDefault(); addPickedFiles(e.dataTransfer.files); }}
               onClick={() => fileRef.current?.click()}
               style={{
                 border: '2px dashed #334155', borderRadius: 12, padding: 48, textAlign: 'center',
@@ -228,22 +273,89 @@ export default function RechnungUploadPage() {
             >
               <div style={{ fontSize: 48, marginBottom: 12 }}>📄</div>
               <p style={{ color: '#e2e8f0', fontSize: 16, fontWeight: 600, marginBottom: 8 }}>
-                Rechnung hierher ziehen oder klicken
+                Rechnungen / Quittungen hierher ziehen oder klicken
               </p>
               <p style={{ color: '#64748b', fontSize: 13 }}>
-                PDF, JPG, PNG oder WebP — max. 20 MB
+                PDF, JPG, PNG oder WebP — max. 20 MB pro Datei, bis zu 10 Dateien
               </p>
               <input
                 ref={fileRef}
                 type="file"
                 accept="application/pdf,image/jpeg,image/png,image/webp"
+                multiple
                 hidden
-                onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
+                onChange={(e) => { addPickedFiles(e.target.files); e.target.value = ''; }}
               />
             </div>
+
+            {pickedFiles.length > 0 && (
+              <div style={{ marginTop: 18 }}>
+                <div style={{ ...label, marginBottom: 8 }}>{pickedFiles.length} Datei{pickedFiles.length === 1 ? '' : 'en'} ausgewählt</div>
+                <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {pickedFiles.map((pf, i) => (
+                    <li key={i} style={{
+                      display: 'flex', alignItems: 'center', gap: 10,
+                      background: '#0a0f1e', border: '1px solid #1e293b', borderRadius: 8, padding: '8px 10px',
+                    }}>
+                      <span style={{ fontSize: 16 }}>{i === 0 ? '🤖' : '📎'}</span>
+                      <span style={{ flex: 1, color: '#e2e8f0', fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {pf.file.name}
+                        {i === 0 && <span style={{ color: cyan, fontSize: 11, marginLeft: 8 }}>(KI-Analyse)</span>}
+                      </span>
+                      <select
+                        value={pf.kind}
+                        onChange={(e) => {
+                          const next = [...pickedFiles];
+                          next[i] = { ...pf, kind: e.target.value as AttachmentKind };
+                          setPickedFiles(next);
+                        }}
+                        disabled={i === 0}
+                        title={i === 0 ? 'Hauptrechnung wird immer als "Rechnung" gespeichert' : 'Belegtyp wählen'}
+                        style={{
+                          background: '#111827', color: '#e2e8f0', border: '1px solid #1e293b',
+                          borderRadius: 6, padding: '4px 8px', fontSize: 12, opacity: i === 0 ? 0.6 : 1,
+                        }}
+                      >
+                        {(Object.keys(ATTACHMENT_KIND_LABEL) as AttachmentKind[]).map(k => (
+                          <option key={k} value={k}>{ATTACHMENT_KIND_LABEL[k]}</option>
+                        ))}
+                      </select>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setPickedFiles(pickedFiles.filter((_, j) => j !== i)); }}
+                        style={{
+                          background: 'transparent', border: '1px solid rgba(239,68,68,0.3)',
+                          color: '#ef4444', borderRadius: 6, padding: '4px 8px', fontSize: 12, cursor: 'pointer',
+                        }}
+                        title="Entfernen"
+                      >
+                        ✕
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
+                  <button
+                    onClick={processPickedFiles}
+                    style={{
+                      padding: '12px 24px', borderRadius: 10, background: cyan, color: '#0f172a',
+                      border: 'none', fontWeight: 700, fontSize: 13, cursor: 'pointer',
+                    }}
+                  >
+                    {pickedFiles.length === 1 ? 'Rechnung analysieren' : `Rechnung analysieren + ${pickedFiles.length - 1} Beleg${pickedFiles.length === 2 ? '' : 'e'} anhängen`}
+                  </button>
+                  <button
+                    onClick={() => setPickedFiles([])}
+                    style={{ padding: '12px 24px', borderRadius: 10, border: '1px solid #1e293b', color: '#94a3b8', background: 'transparent', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
+                  >
+                    Liste leeren
+                  </button>
+                </div>
+              </div>
+            )}
+
             <p style={{ color: '#64748b', fontSize: 12, marginTop: 16, lineHeight: 1.5 }}>
-              Hinweis: Die Analyse nutzt Claude Sonnet 4.6 und kostet ~0,01-0,03 € pro Rechnung.
-              API-Key wird aus den Blog-Einstellungen gelesen.
+              Hinweis: Die KI analysiert nur die <strong>erste</strong> Datei (Hauptrechnung). Weitere Dateien werden ohne KI als Belege angehängt — perfekt für Quittungen, Lieferscheine oder Folgeseiten.
+              Kosten: ~0,01-0,03 € pro KI-Analyse.
             </p>
           </div>
         )}
@@ -259,6 +371,15 @@ export default function RechnungUploadPage() {
 
         {stage === 'classify' && (
           <>
+            {extraUploadStatus && (
+              <div style={{
+                ...card, marginBottom: 16,
+                background: extraUploadStatus.startsWith('✓') ? 'rgba(34,197,94,0.08)' : 'rgba(234,179,8,0.08)',
+                borderColor: extraUploadStatus.startsWith('✓') ? '#22c55e' : '#eab308',
+              }}>
+                <p style={{ color: extraUploadStatus.startsWith('✓') ? '#86efac' : '#fde68a', fontSize: 13, margin: 0 }}>{extraUploadStatus}</p>
+              </div>
+            )}
             <div style={{ ...card, marginBottom: 20 }}>
               <h2 style={{ color: '#f1f5f9', fontSize: 18, fontWeight: 700, marginBottom: 16 }}>
                 Rechnungs-Metadaten (von KI extrahiert)
@@ -419,6 +540,8 @@ export default function RechnungUploadPage() {
                     setStage('upload');
                     setItems([]);
                     setError(null);
+                    setPickedFiles([]);
+                    setExtraUploadStatus('');
                   }}
                   style={{ padding: '10px 20px', borderRadius: 8, border: '1px solid #334155', background: 'transparent', color: '#e2e8f0', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
                 >

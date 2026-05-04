@@ -22,7 +22,33 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ purchases: data ?? [] });
+
+  // Anhaenge in einem Bulk-Query laden und per Map auf Purchases mappen.
+  // Defensiv: Wenn Migration noch nicht durch ist, einfach leere Anhaenge.
+  const purchases = data ?? [];
+  const ids = purchases.map((p) => p.id);
+  const attachmentsByPurchase: Record<string, unknown[]> = {};
+  if (ids.length > 0) {
+    const { data: attachments, error: aErr } = await supabase
+      .from('purchase_attachments')
+      .select('id, purchase_id, storage_path, filename, mime_type, size_bytes, kind, created_at')
+      .in('purchase_id', ids)
+      .order('created_at', { ascending: true });
+    if (!aErr && attachments) {
+      for (const a of attachments) {
+        const key = a.purchase_id as string;
+        if (!attachmentsByPurchase[key]) attachmentsByPurchase[key] = [];
+        attachmentsByPurchase[key].push(a);
+      }
+    }
+  }
+
+  const enriched = purchases.map((p) => ({
+    ...p,
+    attachments: attachmentsByPurchase[p.id] ?? [],
+  }));
+
+  return NextResponse.json({ purchases: enriched });
 }
 
 export async function POST(req: NextRequest) {
