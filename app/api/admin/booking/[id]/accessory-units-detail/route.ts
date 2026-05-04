@@ -74,19 +74,32 @@ export async function GET(
     });
   }
 
-  // 4. assets (current_value pro accessory_unit_id)
-  const { data: assets } = await supabase
+  // 4. assets (current_value + replacement_value_estimate pro accessory_unit_id)
+  // Defensiv: replacement_value_estimate koennte ohne Migration noch nicht
+  // existieren — Retry ohne die Spalte.
+  const primary = await supabase
     .from('assets')
-    .select('id, accessory_unit_id, current_value, purchase_price, purchase_date')
+    .select('id, accessory_unit_id, current_value, replacement_value_estimate, purchase_price, purchase_date')
     .in('accessory_unit_id', unitIds)
     .eq('status', 'active');
+  let assetsRows: Array<Record<string, unknown>> | null = primary.data;
+  if (primary.error && /replacement_value_estimate/i.test(primary.error.message)) {
+    const fallback = await supabase
+      .from('assets')
+      .select('id, accessory_unit_id, current_value, purchase_price, purchase_date')
+      .in('accessory_unit_id', unitIds)
+      .eq('status', 'active');
+    assetsRows = fallback.data;
+  }
 
-  const assetMap = new Map<string, { id: string; current_value: number; purchase_price: number; purchase_date: string }>();
-  for (const a of assets ?? []) {
+  const assetMap = new Map<string, { id: string; current_value: number; replacement_value_estimate: number | null; purchase_price: number; purchase_date: string }>();
+  for (const a of assetsRows ?? []) {
     if (a.accessory_unit_id) {
+      const wbw = (a as { replacement_value_estimate?: number | null }).replacement_value_estimate;
       assetMap.set(a.accessory_unit_id as string, {
         id: a.id as string,
         current_value: Number(a.current_value) || 0,
+        replacement_value_estimate: wbw != null ? Number(wbw) : null,
         purchase_price: Number(a.purchase_price) || 0,
         purchase_date: a.purchase_date as string,
       });
@@ -97,9 +110,11 @@ export async function GET(
   const result = units.map((u) => {
     const acc = accMap.get(u.accessory_id as string);
     const asset = assetMap.get(u.id as string);
-    const currentValue = asset?.current_value ?? 0;
+    // Asset-Wert: replacement_value_estimate (echter Marktwert, bei GWG = Kaufpreis)
+    // hat Vorrang vor dem Buchwert (current_value, bei GWG=0).
+    const assetWbw = asset?.replacement_value_estimate ?? asset?.current_value ?? 0;
     const replacementValue = acc?.replacement_value ?? 0;
-    const suggested = Math.max(currentValue, replacementValue, 0);
+    const suggested = Math.max(assetWbw, replacementValue, 0);
 
     return {
       id: u.id as string,
@@ -107,7 +122,7 @@ export async function GET(
       accessory_name: acc?.name ?? u.accessory_id,
       exemplar_code: u.exemplar_code as string,
       status: u.status as string,
-      current_value: currentValue,
+      current_value: asset?.current_value ?? 0,
       replacement_value: replacementValue,
       suggested_wbw: suggested,
       asset_id: asset?.id ?? null,

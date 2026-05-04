@@ -27,12 +27,21 @@ export async function GET(req: NextRequest) {
 
     // Buchungs-Details dazuladen
     const bookingIds = [...new Set((reports || []).map((r) => r.booking_id))];
-    const bookingsMap: Record<string, { product_name: string; customer_name: string; customer_email: string; deposit: number; product_id: string }> = {};
+    const bookingsMap: Record<string, {
+      product_name: string;
+      customer_name: string;
+      customer_email: string;
+      deposit: number;
+      product_id: string;
+      deposit_intent_id: string | null;
+      deposit_status: string | null;
+      price_haftung: number | null;
+    }> = {};
 
     if (bookingIds.length > 0) {
       const { data: bookings } = await supabase
         .from('bookings')
-        .select('id, product_name, product_id, customer_name, customer_email, deposit')
+        .select('id, product_name, product_id, customer_name, customer_email, deposit, deposit_intent_id, deposit_status, price_haftung')
         .in('id', bookingIds);
 
       if (bookings) {
@@ -43,6 +52,9 @@ export async function GET(req: NextRequest) {
             customer_email: b.customer_email,
             deposit: b.deposit,
             product_id: b.product_id,
+            deposit_intent_id: b.deposit_intent_id ?? null,
+            deposit_status: b.deposit_status ?? null,
+            price_haftung: b.price_haftung ?? null,
           };
         }
       }

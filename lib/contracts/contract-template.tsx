@@ -81,6 +81,11 @@ export interface RentalContractData {
   // Test-Modus: MUSTER-Wasserzeichen anzeigen. Wird dynamisch aus
   // admin_settings.environment_mode geladen (siehe generate-contract.ts).
   testMode?: boolean;
+  // Globaler Schadens-Modus aus admin_settings.deposit_mode.
+  // 'kaution' = echte Pre-Auth via Stripe; 'haftung' = nur Schadenspauschale.
+  // Steuert Hinweistexte im Vertrag (kein "Kaution wird nicht erhoben"-Satz
+  // im Kaution-Modus, dafuer Pre-Auth-Hinweis).
+  depositMode?: 'kaution' | 'haftung';
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -479,12 +484,53 @@ export function RentalContractPDF({ data }: { data: RentalContractData }) {
           {data.paymentDate && <TableRow label="Zahlungsstatus" value={`Bezahlt am ${data.paymentDate}`} />}
         </View>
         <Text style={{ fontSize: 7, color: GRAY, fontStyle: 'italic', marginBottom: 2 }}>Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.</Text>
-        <Text style={{ fontSize: 7, color: GRAY, fontStyle: 'italic', marginBottom: 12 }}>Eine Kaution oder Kreditkartenvorautorisierung wird nicht erhoben. Etwaige Schadenersatzansprüche werden nach § 9 dieses Vertrags separat abgerechnet.</Text>
+        {data.depositMode === 'kaution' ? (
+          <Text style={{ fontSize: 7, color: GRAY, fontStyle: 'italic', marginBottom: 12 }}>
+            Zusaetzlich zum Mietpreis wird eine Kaution in Hoehe von {fmt(data.deposit ?? 0)} per Kreditkartenvorautorisierung reserviert (kein Geldfluss). Die Reservierung wird spaetestens 7 Tage nach Vertragsende aufgehoben, sofern keine Schaeden geltend gemacht werden.
+          </Text>
+        ) : (
+          <Text style={{ fontSize: 7, color: GRAY, fontStyle: 'italic', marginBottom: 12 }}>
+            Eine Kaution oder Kreditkartenvorautorisierung wird nicht erhoben. Etwaige Schadenersatzansprueche werden nach § 9 dieses Vertrags separat abgerechnet.
+          </Text>
+        )}
 
         {/* Gewählte Haftungsoption */}
-        <View style={{ backgroundColor: CYAN, borderRadius: 4, padding: 12, marginBottom: 16 }}>
+        <View style={{ backgroundColor: CYAN, borderRadius: 4, padding: 12, marginBottom: 8 }}>
           <Text style={{ fontSize: 11, fontFamily: 'Helvetica-Bold', color: '#ffffff', marginBottom: 3 }}>{data.haftungOption}</Text>
           <Text style={{ fontSize: 8, color: '#ffffff', lineHeight: 1.5 }}>{data.haftungDescription}</Text>
+        </View>
+
+        {/* Konkrete Haftungsgrenze fuer diese Buchung */}
+        <View style={{ borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 4, padding: 10, marginBottom: 16 }}>
+          <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold', color: NAVY, marginBottom: 6 }}>Konkrete Schadensregel fuer diese Buchung</Text>
+          {data.haftungOption === 'Premium-Schadenspauschale' ? (
+            <>
+              <Text style={{ fontSize: 8, color: DARK, lineHeight: 1.5, marginBottom: 3 }}>
+                <Text style={{ fontFamily: 'Helvetica-Bold' }}>Maximale Eigenbeteiligung des Mieters je Schadensereignis:</Text> 0,00 EUR
+              </Text>
+              <Text style={{ fontSize: 7, color: GRAY, lineHeight: 1.5 }}>
+                Bei Premium-Schadenspauschale traegt cam2rent jeden Schaden vollstaendig — ausgenommen Vorsatz, grobe Fahrlaessigkeit oder bestimmungswidrige Nutzung (siehe § 7 Abs. 4).
+              </Text>
+            </>
+          ) : data.haftungOption === 'Basis-Schadenspauschale' ? (
+            <>
+              <Text style={{ fontSize: 8, color: DARK, lineHeight: 1.5, marginBottom: 3 }}>
+                <Text style={{ fontFamily: 'Helvetica-Bold' }}>Maximale Eigenbeteiligung des Mieters je Schadensereignis:</Text> {fmt(data.eigenbeteiligung ?? 200)}
+              </Text>
+              <Text style={{ fontSize: 7, color: GRAY, lineHeight: 1.5 }}>
+                Bei reparablen Schaeden traegt der Mieter die Reparaturkosten bis zu diesem Betrag. Bei Totalschaden / Verlust ebenfalls bis zu diesem Betrag — der Restschaden wird durch das Reparaturdepot gedeckt. Ausnahmen siehe § 7 Abs. 4.
+              </Text>
+            </>
+          ) : (
+            <>
+              <Text style={{ fontSize: 8, color: DARK, lineHeight: 1.5, marginBottom: 3 }}>
+                <Text style={{ fontFamily: 'Helvetica-Bold' }}>Haftung des Mieters:</Text> bis zum Wiederbeschaffungswert pro Position (siehe Tabelle &bdquo;Wiederbeschaffungswerte&ldquo; oben).
+              </Text>
+              <Text style={{ fontSize: 7, color: GRAY, lineHeight: 1.5 }}>
+                Ohne Schadenspauschale haftet der Mieter im Schadens- oder Verlustfall in voller Hoehe. Reparable Schaeden = Reparaturkosten bis zum Wiederbeschaffungswert; Totalschaden / Verlust = voller Wiederbeschaffungswert pro Position.
+              </Text>
+            </>
+          )}
         </View>
 
         {/* Vertragsbedingungen Einleitung */}

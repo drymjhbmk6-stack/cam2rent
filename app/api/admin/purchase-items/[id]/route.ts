@@ -138,36 +138,49 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
       return NextResponse.json({ error: `GWG-Aufwand konnte nicht gebucht werden: ${expErr.message}` }, { status: 500 });
     }
 
-    // Asset fuer Verzeichnis-Pflicht (sofort abgeschrieben, Buchwert 0)
-    const { data: asset, error: assetErr } = await supabase
+    // Asset fuer Verzeichnis-Pflicht (sofort abgeschrieben, Buchwert 0).
+    // ABER: replacement_value_estimate haelt den echten Marktwert (Kaufpreis),
+    // damit Vertrag + Schadensmodul nicht 0 € als Wiederbeschaffung anbieten.
+    // Defensiv: Spalte koennte ohne Migration noch nicht existieren — Retry
+    // ohne sie, damit die GWG-Klassifizierung nicht haengt.
+    const assetBase = {
+      kind,
+      name,
+      description: body.description ?? null,
+      serial_number: body.serial_number ?? null,
+      manufacturer: body.manufacturer ?? null,
+      model: body.model ?? null,
+      purchase_price: purchasePrice,
+      purchase_date: purchaseDate,
+      supplier_id: purchase?.supplier_id ?? null,
+      purchase_id: item.purchase_id,
+      useful_life_months: 0,
+      depreciation_method: 'immediate',
+      residual_value: 0,
+      current_value: 0,
+      last_depreciation_at: purchaseDate,
+      product_id: body.product_id ?? null,
+      unit_id: body.unit_id ?? null,
+      is_test: testMode,
+    };
+    let { data: asset, error: assetErr } = await supabase
       .from('assets')
-      .insert({
-        kind,
-        name,
-        description: body.description ?? null,
-        serial_number: body.serial_number ?? null,
-        manufacturer: body.manufacturer ?? null,
-        model: body.model ?? null,
-        purchase_price: purchasePrice,
-        purchase_date: purchaseDate,
-        supplier_id: purchase?.supplier_id ?? null,
-        purchase_id: item.purchase_id,
-        useful_life_months: 0,
-        depreciation_method: 'immediate',
-        residual_value: 0,
-        current_value: 0,
-        last_depreciation_at: purchaseDate,
-        product_id: body.product_id ?? null,
-        unit_id: body.unit_id ?? null,
-        is_test: testMode,
-      })
+      .insert({ ...assetBase, replacement_value_estimate: purchasePrice })
       .select()
       .single();
-    if (assetErr) {
+    if (assetErr && /replacement_value_estimate/i.test(assetErr.message)) {
+      // Migration noch nicht durch -> ohne Spalte retryen
+      ({ data: asset, error: assetErr } = await supabase
+        .from('assets')
+        .insert(assetBase)
+        .select()
+        .single());
+    }
+    if (assetErr || !asset) {
       // Expense wieder weg, sonst doppelte Buchung
       await supabase.from('expenses').delete().eq('id', expense.id);
       console.error('[purchase-items] gwg asset insert error', assetErr);
-      return NextResponse.json({ error: `GWG-Anlage konnte nicht angelegt werden: ${assetErr.message}` }, { status: 500 });
+      return NextResponse.json({ error: `GWG-Anlage konnte nicht angelegt werden: ${assetErr?.message ?? 'unbekannt'}` }, { status: 500 });
     }
 
     // Asset <-> Expense gegenseitig verknuepfen

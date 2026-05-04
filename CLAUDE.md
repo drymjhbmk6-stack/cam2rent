@@ -961,6 +961,37 @@ Steuer-Modus umschaltbar im Admin (/admin/einstellungen):
 ## Anlagenbuchhaltung + KI-Rechnungs-OCR (Stand 2026-04-21)
 Volles Lager-/Anlagenmodul mit KI-gestuetzter Rechnungs-Analyse. Rechnung hochladen → Claude Vision extrahiert Lieferant, Positionen, Summen + schlaegt pro Position Anlagegut vs. Betriebsausgabe vor → Admin bestaetigt/korrigiert → System legt Assets bzw. Expenses an → Mietvertrag zieht aktuellen Zeitwert (asset.current_value) statt Kaution.
 
+### Wiederbeschaffungswert getrennt vom Buchwert (Stand 2026-05-04)
+Steuerlicher Buchwert (`assets.current_value`) und tatsaechlicher Wiederbeschaffungswert sind jetzt zwei getrennte Felder. Vorher: bei GWG fiel der Buchwert auf 0, der Mietvertrag zeigte dann fallback auf die Kaution — irrefuehrend, weil das ja nicht der echte Marktwert ist.
+
+- **Migration:** `supabase/supabase-assets-replacement-value-estimate.sql` (idempotent) — neue Spalte `assets.replacement_value_estimate NUMERIC NULL`. NULL = `current_value` als Default.
+- **GWG-Pfad** (`/api/admin/purchase-items/[id]`) setzt `replacement_value_estimate = purchase_price` automatisch beim Anlegen. Defensiver Retry ohne die Spalte falls Migration noch nicht durch ist.
+- **Manueller Asset-POST** (`/api/admin/assets`): bei `depreciation_method='immediate'` wird `current_value=0`, `residual_value=0`, `useful_life_months=0` und `replacement_value_estimate=purchase_price` automatisch gesetzt. Bei regulaerem Asset bleibt das Feld NULL.
+- **Vertrag-Floor** (`lib/contracts/generate-contract.ts`): `loadAssetCurrentValue` nimmt jetzt `replacement_value_estimate` mit Vorrang vor `current_value`. Bei GWG sieht der Mietvertrag damit den realen Marktwert (Kaufpreis), nicht 0 oder die Kaution.
+- **Zubehoer-Schaden-Modal** (`/api/admin/booking/[id]/accessory-units-detail`): `suggested_wbw = MAX(asset.replacement_value_estimate ?? asset.current_value, accessory.replacement_value, 0)`. Bei GWG-Akku wird der Kaufpreis vorgeschlagen, statt 0.
+
+### Schaden-Modus-Klarheit im Admin-Schadensmodul (Stand 2026-05-04)
+`booking.deposit` enthaelt **immer** den Wert aus `product.deposit`, unabhaengig vom Modus. Aber im **Haftung-Modus** (Default) ist das nur ein theoretischer Anker — es gibt keine Stripe-Pre-Auth, also auch kein Capture moeglich. Das Schaden-UI hat das nicht klar kommuniziert; der „Kaution einbehalten"-Button hat im Haftung-Modus immer fehlgeschlagen.
+
+- **`GET /api/admin/damage`** liefert jetzt zusaetzlich `deposit_intent_id`, `deposit_status`, `price_haftung` pro Booking.
+- **`/admin/schaeden`** zeigt jetzt:
+  - **Header-Label** wechselt zwischen „Kaution (Pre-Auth)" und „Kautions-Anker" je nach `deposit_intent_id`-Existenz
+  - **Hinweis-Banner** im Confirmed-Workflow: amber „Schadenspauschale-Modus — keine Pre-Auth, manuell einfordern" oder rot „Ohne Schadenspauschale — Forderung schriftlich" je nach `price_haftung`
+  - **„Kaution einbehalten"-Input** ist read-only mit „— keine Pre-Auth —" bei fehlender `deposit_intent_id`
+  - **„Kaution einbehalten"-Button** ist hidden bei fehlender `deposit_intent_id` (kein leerer Stripe-Capture-Aufruf mehr)
+
+### Vertrag: Schadensregel-Karte + dynamischer Kautions-Hinweis (Stand 2026-05-04)
+Der Vertrag zeigt unter der „Gewählte Haftungsoption"-Karte jetzt eine konkrete Schadensregel-Box mit den realen Zahlen fuer DIESE Buchung:
+- **Premium-Schadenspauschale**: „Maximale Eigenbeteiligung: 0,00 EUR"
+- **Basis-Schadenspauschale**: „Maximale Eigenbeteiligung: {eigenbeteiligung} EUR"
+- **Ohne Schadenspauschale**: „Haftung bis zum Wiederbeschaffungswert pro Position (siehe Tabelle oben)"
+
+Plus: der hardcoded Hinweis „Eine Kaution oder Kreditkartenvorautorisierung wird nicht erhoben" ist jetzt **dynamisch** je nach `admin_settings.deposit_mode`:
+- **Modus `kaution`**: „Kaution {betrag} per Kreditkartenvorautorisierung reserviert (kein Geldfluss). Aufhebung 7 Tage nach Vertragsende."
+- **Modus `haftung`**: bleibt wie vorher.
+
+`generate-contract.ts` laedt das Setting via `loadDepositMode()` und reicht es als `data.depositMode` ans PDF-Template.
+
 ### GWG-Pfad (Geringwertige Wirtschaftsgueter, Stand 2026-05-04)
 Vermietzubehör/Werkzeug/Bueroequipment zwischen 250 und 800 EUR netto kann jetzt korrekt nach § 6 Abs. 2 EStG sofort abgeschrieben werden — UND erscheint trotzdem im Anlagenverzeichnis (Verzeichnis-Pflicht). Vorher landete sowas entweder als regulaeres Asset mit linear-AfA ueber 36 Monate (verschenkte Sofort-Steuerersparnis) oder als reine Expense (kein GWG-Verzeichnis).
 
@@ -1653,6 +1684,7 @@ Admin-Seite `/admin/newsletter` (in Sidebar-Gruppe „Rabatte & Aktionen", Permi
 **Audit-Log-Aktionen:** `newsletter.send_campaign`, `newsletter.update_subscriber`, `newsletter.delete_subscriber`, `customer_push.send`.
 
 ### Noch offen
+- **Wiederbeschaffungswert-Migration auszuführen:** `supabase/supabase-assets-replacement-value-estimate.sql` (idempotent). Legt Spalte `assets.replacement_value_estimate` an. Ohne Migration laufen GWG-Anlage und Anlagen-POST per defensivem Retry weiter ohne die Spalte; Vertrag und Zubehör-Schaden-Modal fallen dann auf den Buchwert zurueck (bei GWG = 0 EUR — fuehrt zu falschen Vorschlaegen).
 - **GWG-Klassifikation Migration auszuführen:** `supabase/supabase-purchase-items-gwg.sql` (idempotent). Erweitert den CHECK-Constraint von `purchase_items.classification` um `'gwg'`. Ohne Migration laeuft der Asset-/Expense-Pfad weiter, aber die Speicherung von GWG-Klassifizierungen schlaegt mit constraint-violation fehl. Die UI zeigt den Button trotzdem an — er wirft dann beim Save einen Fehler.
 - **Einkauf-Belege-Migration auszuführen:** `supabase/supabase-purchase-attachments.sql` (idempotent). Legt Tabelle `purchase_attachments` an (id, purchase_id FK CASCADE, storage_path, filename, mime_type, size_bytes, kind `invoice|receipt|delivery_note|other`, created_at) + RLS service-role-only. Ohne Migration läuft alles weiter (defensive Fallbacks: `/api/admin/purchases` liefert leere `attachments[]`, `/api/admin/purchases/upload` Haupt-Beleg-Insert wird stumm geskippt). Anhang-Upload-Endpunkt liefert dann 500 — manueller Workflow + KI-Workflow beim ersten Beleg unverändert. Bucket `purchase-invoices` wird wiederverwendet.
 - **Zubehör-Bestandteile Migration auszuführen:** `supabase/supabase-accessories-included-parts.sql` (idempotent). Fügt nullable Spalte `included_parts TEXT[] DEFAULT '{}'` zu `accessories`. Ohne Migration ignorieren die APIs den Wert (defensiver Retry-Pfad), die Admin-UI speichert dann leer, Pack-Workflow + PDF zeigen keine Bestandteile.

@@ -122,19 +122,56 @@ async function resolveAccessoryInfo(ids: string[]): Promise<Record<string, Acces
 async function loadAssetCurrentValue(unitId: string): Promise<number | null> {
   try {
     const supabase = createServiceClient();
-    const { data } = await supabase
+    // replacement_value_estimate hat Vorrang: bei GWG ist der Buchwert 0,
+    // der echte Wiederbeschaffungswert ist aber der Kaufpreis (in
+    // replacement_value_estimate gespeichert). Bei regulaerem Asset (NULL)
+    // faellt der Code auf current_value zurueck.
+    const primary = await supabase
       .from('assets')
-      .select('current_value')
+      .select('current_value, replacement_value_estimate')
       .eq('unit_id', unitId)
       .eq('status', 'active')
       .maybeSingle();
-    if (data && data.current_value != null) {
-      return Number(data.current_value);
+    let row: { current_value: number | null; replacement_value_estimate?: number | null } | null = primary.data;
+    // Defensiv: Migration noch nicht durch -> ohne replacement_value_estimate retryen
+    if (primary.error && /replacement_value_estimate/i.test(primary.error.message)) {
+      const fallback = await supabase
+        .from('assets')
+        .select('current_value')
+        .eq('unit_id', unitId)
+        .eq('status', 'active')
+        .maybeSingle();
+      row = fallback.data;
+    }
+    if (row) {
+      if (row.replacement_value_estimate != null) return Number(row.replacement_value_estimate);
+      if (row.current_value != null) return Number(row.current_value);
     }
   } catch {
     // Fallback: deposit
   }
   return null;
+}
+
+/**
+ * Laedt den globalen Schadens-Modus aus admin_settings.deposit_mode.
+ * 'kaution' = echte Stripe-Pre-Auth, 'haftung' = nur Schadenspauschale.
+ * Default = 'haftung' (sicherer Fallback, wenn Setting fehlt).
+ */
+async function loadDepositMode(): Promise<'kaution' | 'haftung'> {
+  try {
+    const supabase = createServiceClient();
+    const { data } = await supabase
+      .from('admin_settings')
+      .select('value')
+      .eq('key', 'deposit_mode')
+      .maybeSingle();
+    const raw = data?.value;
+    if (raw === 'kaution' || raw === 'haftung') return raw;
+  } catch {
+    // Fallback
+  }
+  return 'haftung';
 }
 
 async function loadCustomParagraphs(): Promise<{ title: string; text: string }[] | null> {
@@ -313,6 +350,9 @@ export async function generateContractPDF(opts: {
   // Test-Modus: expliziter Override oder aus admin_settings.environment_mode
   const testMode = opts.forceTestMode !== undefined ? opts.forceTestMode : await isTestMode();
 
+  // Schadens-Modus: kaution = echte Stripe-Pre-Auth, haftung = nur Schadenspauschale
+  const depositMode = await loadDepositMode();
+
   const data: RentalContractData = {
     bookingId: opts.bookingId,
     bookingNumber: opts.bookingNumber,
@@ -352,6 +392,7 @@ export async function generateContractPDF(opts: {
     eigenbeteiligung: eb,
     customParagraphs: customParagraphs ?? undefined,
     testMode,
+    depositMode,
     // Backwards compat
     productName: opts.productName,
     accessories: opts.accessories,

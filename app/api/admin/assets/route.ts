@@ -55,32 +55,51 @@ export async function POST(req: NextRequest) {
     ? Number(body.residual_value)
     : Math.round(purchasePrice * 0.3 * 100) / 100;
 
-  const { data, error } = await supabase
+  const depreciationMethod = body.depreciation_method ?? 'linear';
+  const isImmediate = depreciationMethod === 'immediate';
+  // GWG: Buchwert sofort 0, aber replacement_value_estimate haelt den Marktwert
+  const currentValueDefault = isImmediate ? 0 : purchasePrice;
+  const replacementEstimate = body.replacement_value_estimate != null
+    ? Number(body.replacement_value_estimate)
+    : (isImmediate ? purchasePrice : null);
+
+  const insertBase = {
+    kind: body.kind,
+    name: String(body.name).trim(),
+    description: body.description ?? null,
+    serial_number: body.serial_number ?? null,
+    manufacturer: body.manufacturer ?? null,
+    model: body.model ?? null,
+    purchase_price: purchasePrice,
+    purchase_date: body.purchase_date,
+    supplier_id: body.supplier_id ?? null,
+    purchase_id: body.purchase_id ?? null,
+    useful_life_months: isImmediate ? 0 : (Number(body.useful_life_months) > 0 ? Number(body.useful_life_months) : 36),
+    depreciation_method: depreciationMethod,
+    residual_value: isImmediate ? 0 : residualValue,
+    current_value: Number(body.current_value) >= 0 ? Number(body.current_value) : currentValueDefault,
+    product_id: body.product_id ?? null,
+    unit_id: body.unit_id ?? null,
+    accessory_unit_id: body.accessory_unit_id ?? null,
+    status: body.status ?? 'active',
+    notes: body.notes ?? null,
+    is_test: testMode,
+  };
+
+  // Defensiv: replacement_value_estimate koennte ohne Migration noch nicht
+  // existieren. Bei Fehler ohne die Spalte retryen.
+  let { data, error } = await supabase
     .from('assets')
-    .insert({
-      kind: body.kind,
-      name: String(body.name).trim(),
-      description: body.description ?? null,
-      serial_number: body.serial_number ?? null,
-      manufacturer: body.manufacturer ?? null,
-      model: body.model ?? null,
-      purchase_price: purchasePrice,
-      purchase_date: body.purchase_date,
-      supplier_id: body.supplier_id ?? null,
-      purchase_id: body.purchase_id ?? null,
-      useful_life_months: Number(body.useful_life_months) > 0 ? Number(body.useful_life_months) : 36,
-      depreciation_method: body.depreciation_method ?? 'linear',
-      residual_value: residualValue,
-      current_value: Number(body.current_value) > 0 ? Number(body.current_value) : purchasePrice,
-      product_id: body.product_id ?? null,
-      unit_id: body.unit_id ?? null,
-      accessory_unit_id: body.accessory_unit_id ?? null,
-      status: body.status ?? 'active',
-      notes: body.notes ?? null,
-      is_test: testMode,
-    })
+    .insert(replacementEstimate != null ? { ...insertBase, replacement_value_estimate: replacementEstimate } : insertBase)
     .select()
     .single();
+  if (error && /replacement_value_estimate/i.test(error.message)) {
+    ({ data, error } = await supabase
+      .from('assets')
+      .insert(insertBase)
+      .select()
+      .single());
+  }
 
   if (error) {
     console.error('[assets POST]', error);

@@ -22,6 +22,9 @@ interface DamageReport {
     customer_name: string;
     customer_email: string;
     deposit: number;
+    deposit_intent_id: string | null;
+    deposit_status: string | null;
+    price_haftung: number | null;
   } | null;
 }
 
@@ -310,8 +313,15 @@ export default function AdminSchaedenPage() {
                 <p style={{ fontSize: 14, color: '#94a3b8' }}>{fmtDateTime(selectedReport.created_at)}</p>
               </div>
               <div>
-                <p style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>Kaution</p>
+                <p style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>
+                  {selectedReport.booking?.deposit_intent_id ? 'Kaution (Pre-Auth)' : 'Kautions-Anker'}
+                </p>
                 <p style={{ fontSize: 14, color: '#e2e8f0', fontWeight: 600 }}>{fmtEuro(selectedReport.booking?.deposit || 0)}</p>
+                {!selectedReport.booking?.deposit_intent_id && (selectedReport.booking?.price_haftung ?? 0) > 0 && (
+                  <p style={{ fontSize: 11, color: '#f59e0b', marginTop: 2 }}>
+                    Schadenspauschale-Modus · keine Pre-Auth
+                  </p>
+                )}
               </div>
             </div>
 
@@ -349,6 +359,24 @@ export default function AdminSchaedenPage() {
               <>
                 <div style={{ height: 1, background: '#1e293b', margin: '24px 0' }} />
 
+                {/* Schadens-Modus-Hinweis */}
+                {!selectedReport.booking?.deposit_intent_id && (selectedReport.booking?.price_haftung ?? 0) > 0 && (
+                  <div style={{
+                    background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.3)',
+                    borderRadius: 10, padding: '12px 14px', marginBottom: 16, fontSize: 13, color: '#fde68a', lineHeight: 1.55,
+                  }}>
+                    <strong>Schadenspauschale-Modus</strong> — Der Kunde hat eine Schadenspauschale gewählt, es ist <strong>keine Kaution per Stripe geblockt</strong>. Stripe-Capture aus der Pre-Auth ist nicht möglich. Wenn ein Schaden über die Eigenbeteiligung des Kunden hinaus geht, deckt das interne Reparaturdepot — andernfalls musst du den Mieter manuell zur Zahlung auffordern.
+                  </div>
+                )}
+                {!selectedReport.booking?.deposit_intent_id && (selectedReport.booking?.price_haftung ?? 0) === 0 && (
+                  <div style={{
+                    background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)',
+                    borderRadius: 10, padding: '12px 14px', marginBottom: 16, fontSize: 13, color: '#fca5a5', lineHeight: 1.55,
+                  }}>
+                    <strong>Ohne Schadenspauschale</strong> — Der Kunde haftet bis zum Wiederbeschaffungswert. Es ist aber keine Stripe-Pre-Auth vorhanden, daher kein automatischer Capture moeglich. Forderung muss schriftlich an den Mieter gehen.
+                  </div>
+                )}
+
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 16 }}>
                   <div>
                     <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 6 }}>Schadenshöhe (€)</label>
@@ -362,21 +390,35 @@ export default function AdminSchaedenPage() {
                       style={{ width: '100%', padding: '10px 14px', background: '#0a0f1e', border: '1px solid #1e293b', borderRadius: 10, color: '#e2e8f0', fontSize: 14, outline: 'none' }}
                     />
                   </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 6 }}>
-                      Kaution einbehalten (€) <span style={{ color: '#64748b' }}>max {fmtEuro(selectedReport.booking?.deposit || 0)}</span>
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      max={selectedReport.booking?.deposit || 0}
-                      value={editForm.deposit_retained}
-                      onChange={(e) => setEditForm((p) => ({ ...p, deposit_retained: e.target.value }))}
-                      placeholder="0.00"
-                      style={{ width: '100%', padding: '10px 14px', background: '#0a0f1e', border: '1px solid #1e293b', borderRadius: 10, color: '#e2e8f0', fontSize: 14, outline: 'none' }}
-                    />
-                  </div>
+                  {selectedReport.booking?.deposit_intent_id ? (
+                    <div>
+                      <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 6 }}>
+                        Kaution einbehalten (€) <span style={{ color: '#64748b' }}>max {fmtEuro(selectedReport.booking?.deposit || 0)}</span>
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        max={selectedReport.booking?.deposit || 0}
+                        value={editForm.deposit_retained}
+                        onChange={(e) => setEditForm((p) => ({ ...p, deposit_retained: e.target.value }))}
+                        placeholder="0.00"
+                        style={{ width: '100%', padding: '10px 14px', background: '#0a0f1e', border: '1px solid #1e293b', borderRadius: 10, color: '#e2e8f0', fontSize: 14, outline: 'none' }}
+                      />
+                    </div>
+                  ) : (
+                    <div>
+                      <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 6 }}>
+                        Kaution einbehalten <span style={{ color: '#64748b' }}>nicht verfügbar</span>
+                      </label>
+                      <input
+                        type="text"
+                        disabled
+                        value="— keine Pre-Auth —"
+                        style={{ width: '100%', padding: '10px 14px', background: '#0a0f1e', border: '1px solid #1e293b', borderRadius: 10, color: '#64748b', fontSize: 14, outline: 'none', cursor: 'not-allowed' }}
+                      />
+                    </div>
+                  )}
                 </div>
 
                 <div style={{ marginBottom: 16 }}>
@@ -421,7 +463,7 @@ export default function AdminSchaedenPage() {
                   )}
                   {selectedReport.status === 'confirmed' && (
                     <>
-                      {editForm.deposit_retained && parseFloat(editForm.deposit_retained) > 0 && (
+                      {selectedReport.booking?.deposit_intent_id && editForm.deposit_retained && parseFloat(editForm.deposit_retained) > 0 && (
                         <button
                           onClick={retainDeposit}
                           disabled={saving}
