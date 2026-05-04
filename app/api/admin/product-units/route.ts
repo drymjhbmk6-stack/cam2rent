@@ -47,6 +47,8 @@ export async function POST(req: NextRequest) {
     notes,
     purchased_at,
     purchase_price,
+    depreciation_method,
+    useful_life_months,
   } = body as {
     product_id?: string;
     serial_number?: string;
@@ -55,6 +57,8 @@ export async function POST(req: NextRequest) {
     notes?: string;
     purchased_at?: string;
     purchase_price?: number | string;
+    depreciation_method?: 'linear' | 'immediate' | 'none';
+    useful_life_months?: number | string;
   };
 
   // Pflichtfeld-Validierung
@@ -114,29 +118,75 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: unitError.message }, { status: 500 });
   }
 
-  // 2. Asset automatisch anlegen (Wiederbeschaffungswert + Nutzungsdauer)
-  // Restwert = 30 % vom Kaufpreis (Floor gegen 0-EUR-Wertverfall, siehe CLAUDE.md)
-  const residualValue = Math.round(purchasePriceNum * DEFAULT_RESIDUAL_PERCENT * 100) / 100;
+  // 2. Asset automatisch anlegen — Methode kann 'linear' (Default), 'immediate' (GWG) oder 'none' sein
   const isTest = await isTestMode();
+  const method: 'linear' | 'immediate' | 'none' = depreciation_method === 'immediate'
+    ? 'immediate'
+    : depreciation_method === 'none' ? 'none' : 'linear';
+  const usefulLife = method === 'linear'
+    ? (Number(useful_life_months) > 0 ? Number(useful_life_months) : DEFAULT_USEFUL_LIFE_MONTHS)
+    : 0;
+  const residualValue = method === 'linear'
+    ? Math.round(purchasePriceNum * DEFAULT_RESIDUAL_PERCENT * 100) / 100
+    : 0;
+  const currentValue = method === 'linear' ? purchasePriceNum : 0;
 
-  const { error: assetError } = await supabase.from('assets').insert({
+  // Bei GWG: replacement_value_estimate = Kaufpreis (sonst NULL = Default current_value)
+  const assetBase = {
     kind: 'rental_camera',
     name: label.trim(),
     serial_number: serial_number.trim(),
     purchase_price: purchasePriceNum,
     purchase_date: purchased_at,
-    useful_life_months: DEFAULT_USEFUL_LIFE_MONTHS,
-    depreciation_method: 'linear',
+    useful_life_months: usefulLife,
+    depreciation_method: method,
     residual_value: residualValue,
-    current_value: purchasePriceNum, // Startwert = Kaufpreis, AfA-Cron senkt monatlich
+    current_value: currentValue,
+    last_depreciation_at: method === 'immediate' ? purchased_at : null,
     unit_id: unit.id,
     status: 'active',
     is_test: isTest,
-  });
+  };
+
+  let { data: assetRow, error: assetError } = await supabase
+    .from('assets')
+    .insert(method === 'immediate' ? { ...assetBase, replacement_value_estimate: purchasePriceNum } : assetBase)
+    .select('id')
+    .single();
+  // Defensiv: Migration replacement_value_estimate noch nicht durch
+  if (assetError && /replacement_value_estimate/i.test(assetError.message)) {
+    ({ data: assetRow, error: assetError } = await supabase.from('assets').insert(assetBase).select('id').single());
+  }
 
   if (assetError) {
     // Non-fatal: Unit bleibt erhalten, Asset kann manuell nachgetragen werden.
     console.error('[product-units POST] Asset-Anlage fehlgeschlagen:', assetError);
+  }
+
+  // 3. Bei GWG: Expense fuer EÜR mit anlegen — analog purchase-items GWG-Pfad
+  let expenseCreated = false;
+  if (method === 'immediate' && assetRow?.id) {
+    const { error: expError } = await supabase.from('expenses').insert({
+      expense_date: purchased_at,
+      category: 'asset_purchase',
+      description: `GWG-Sofortabzug: ${label.trim()}`.slice(0, 500),
+      vendor: null,
+      net_amount: purchasePriceNum,
+      tax_amount: 0,
+      gross_amount: purchasePriceNum,
+      receipt_url: null,
+      payment_method: null,
+      notes: `Aus Kamera-Unit-Anlage. Asset-ID ${assetRow.id}, Seriennummer ${serial_number.trim()}.`,
+      source_type: 'product_unit_gwg',
+      source_id: unit.id,
+      asset_id: assetRow.id,
+      is_test: isTest,
+    });
+    if (expError) {
+      console.error('[product-units POST] GWG-Expense fehlgeschlagen:', expError);
+    } else {
+      expenseCreated = true;
+    }
   }
 
   await logAudit({
@@ -144,11 +194,11 @@ export async function POST(req: NextRequest) {
     entityType: 'product_unit',
     entityId: unit.id,
     entityLabel: label.trim(),
-    changes: { product_id, label: label.trim(), purchase_price: purchasePriceNum },
+    changes: { product_id, label: label.trim(), purchase_price: purchasePriceNum, depreciation_method: method },
     request: req,
   });
 
-  return NextResponse.json({ unit, assetCreated: !assetError }, { status: 201 });
+  return NextResponse.json({ unit, assetCreated: !assetError, expenseCreated }, { status: 201 });
 }
 
 export async function PUT(req: NextRequest) {

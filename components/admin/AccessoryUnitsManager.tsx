@@ -65,6 +65,8 @@ export default function AccessoryUnitsManager({ accessoryId, onCountChanged }: P
     purchased_at: '',
     purchase_price: '',
     notes: '',
+    depreciation_method: 'linear' as 'linear' | 'immediate',
+    useful_life_months: '36',
   });
   const [addBusy, setAddBusy] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
@@ -137,7 +139,7 @@ export default function AccessoryUnitsManager({ accessoryId, onCountChanged }: P
   }, [load]);
 
   function openAddModal() {
-    setAddForm({ exemplar_code: '', serial_number: '', purchased_at: '', purchase_price: '', notes: '' });
+    setAddForm({ exemplar_code: '', serial_number: '', purchased_at: '', purchase_price: '', notes: '', depreciation_method: 'linear', useful_life_months: '36' });
     setAddError(null);
     setAddOpen(true);
   }
@@ -167,6 +169,8 @@ export default function AccessoryUnitsManager({ accessoryId, onCountChanged }: P
           purchased_at: purchaseDate,
           purchase_price: priceNum,
           notes: addForm.notes.trim() || undefined,
+          depreciation_method: addForm.depreciation_method,
+          useful_life_months: addForm.depreciation_method === 'linear' ? Number(addForm.useful_life_months) : undefined,
         }),
       });
       if (!res.ok) {
@@ -401,14 +405,47 @@ export default function AccessoryUnitsManager({ accessoryId, onCountChanged }: P
                   className="w-full px-3 py-2 border border-brand-border rounded-lg text-sm font-body bg-white dark:bg-slate-800 text-brand-black dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-blue resize-y" />
               </div>
 
-              <div className="rounded-lg bg-brand-bg dark:bg-slate-800 border border-brand-border/60 dark:border-slate-700/60 p-3 text-[11px] font-body text-brand-muted">
-                <p className="font-semibold text-brand-black dark:text-slate-200 mb-1">Automatisch erfasst:</p>
-                <ul className="space-y-0.5">
-                  <li>• <span className="text-brand-black dark:text-slate-300">Wiederbeschaffungswert</span> = aktueller AfA-Zeitwert (Start = Kaufpreis)</li>
-                  <li>• <span className="text-brand-black dark:text-slate-300">Nutzungsdauer</span> = 36 Monate (Standard, linear)</li>
-                  <li>• <span className="text-brand-black dark:text-slate-300">Anlagen-Status</span> = aktiv</li>
-                </ul>
+              {/* AfA-Methode */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">AfA-Methode</label>
+                  <select value={addForm.depreciation_method}
+                    onChange={(e) => setAddForm((f) => ({ ...f, depreciation_method: e.target.value as 'linear' | 'immediate' }))}
+                    className="w-full px-3 py-2 border border-brand-border rounded-lg text-sm font-body bg-white dark:bg-slate-800 text-brand-black dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-blue">
+                    <option value="linear">Linear (über Nutzungsdauer)</option>
+                    <option value="immediate">GWG (Sofortabzug)</option>
+                  </select>
+                </div>
+                {addForm.depreciation_method === 'linear' && (
+                  <div>
+                    <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Nutzungsdauer (Monate)</label>
+                    <input type="number" min={1} value={addForm.useful_life_months}
+                      onChange={(e) => setAddForm((f) => ({ ...f, useful_life_months: e.target.value }))}
+                      className="w-full px-3 py-2 border border-brand-border rounded-lg text-sm font-body bg-white dark:bg-slate-800 text-brand-black dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-blue" />
+                  </div>
+                )}
               </div>
+
+              {addForm.depreciation_method === 'linear' ? (
+                <div className="rounded-lg bg-brand-bg dark:bg-slate-800 border border-brand-border/60 dark:border-slate-700/60 p-3 text-[11px] font-body text-brand-muted">
+                  <p className="font-semibold text-brand-black dark:text-slate-200 mb-1">Automatisch erfasst:</p>
+                  <ul className="space-y-0.5">
+                    <li>• <span className="text-brand-black dark:text-slate-300">Wiederbeschaffungswert</span> = aktueller AfA-Zeitwert (Start = Kaufpreis, sinkt monatlich)</li>
+                    <li>• <span className="text-brand-black dark:text-slate-300">Restwert</span> = 30 % vom Kaufpreis (Floor)</li>
+                    <li>• <span className="text-brand-black dark:text-slate-300">Anlagen-Status</span> = aktiv</li>
+                  </ul>
+                </div>
+              ) : (
+                <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 p-3 text-[11px] font-body text-amber-800 dark:text-amber-200">
+                  <p className="font-semibold text-amber-900 dark:text-amber-100 mb-1">GWG-Sofortabschreibung:</p>
+                  <ul className="space-y-0.5">
+                    <li>• <span className="font-semibold">Buchwert</span> = 0 € (sofort komplett abgeschrieben)</li>
+                    <li>• <span className="font-semibold">Wiederbeschaffungswert</span> = Kaufpreis (für Vertrag/Schaden)</li>
+                    <li>• <span className="font-semibold">EÜR</span>: Kaufpreis wird automatisch als Aufwand &bdquo;GWG-Sofortabzug&ldquo; verbucht</li>
+                    <li>• Erscheint im Anlagenverzeichnis mit GWG-Badge</li>
+                  </ul>
+                </div>
+              )}
 
               {addError && (
                 <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs font-body text-red-700">

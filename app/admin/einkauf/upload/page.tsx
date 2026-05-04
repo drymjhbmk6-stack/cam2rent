@@ -55,6 +55,8 @@ interface PurchaseItemRow {
     product_id?: string;
     expense_category?: string;
     expense_date?: string;
+    /** Wenn gesetzt: keine neue Anlage anlegen, sondern an existierende haengen */
+    link_to_asset_id?: string;
   };
 }
 
@@ -62,6 +64,15 @@ interface Product {
   id: string;
   name: string;
   brand: string;
+}
+
+interface AssetOption {
+  id: string;
+  name: string;
+  kind: string;
+  purchase_price: number;
+  serial_number: string | null;
+  depreciation_method: 'linear' | 'immediate' | 'none';
 }
 
 const KIND_LABELS: Record<Kind, string> = {
@@ -101,6 +112,7 @@ export default function RechnungUploadPage() {
   const [invoiceDate, setInvoiceDate] = useState<string>('');
   const [totals, setTotals] = useState<{ net: number; tax: number; gross: number }>({ net: 0, tax: 0, gross: 0 });
   const [products, setProducts] = useState<Product[]>([]);
+  const [assets, setAssets] = useState<AssetOption[]>([]);
   const [saving, setSaving] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   // Multi-File: erste Datei = Hauptrechnung (KI), weitere = Anhaenge ohne KI
@@ -113,6 +125,22 @@ export default function RechnungUploadPage() {
       .then((d) => {
         if (Array.isArray(d?.products)) {
           setProducts(d.products.map((p: { id: string; name: string; brand: string }) => ({ id: p.id, name: p.name, brand: p.brand })));
+        }
+      })
+      .catch(() => { /* silent */ });
+    // Existierende Anlagen fuer Verknuepfungs-Dropdown
+    fetch('/api/admin/assets?status=active')
+      .then((r) => r.json())
+      .then((d) => {
+        if (Array.isArray(d?.assets)) {
+          setAssets(d.assets.map((a: { id: string; name: string; kind: string; purchase_price: number; serial_number: string | null; depreciation_method: 'linear' | 'immediate' | 'none' }) => ({
+            id: a.id,
+            name: a.name,
+            kind: a.kind,
+            purchase_price: Number(a.purchase_price ?? 0),
+            serial_number: a.serial_number,
+            depreciation_method: a.depreciation_method,
+          })));
         }
       })
       .catch(() => { /* silent */ });
@@ -220,7 +248,10 @@ export default function RechnungUploadPage() {
         const draft = row.draft;
         if (!draft) continue;
         const body: Record<string, unknown> = { classification: draft.classification };
-        if (draft.classification === 'asset') {
+        if (draft.link_to_asset_id && (draft.classification === 'asset' || draft.classification === 'gwg')) {
+          // Verknuepfen statt neu anlegen
+          body.link_to_asset_id = draft.link_to_asset_id;
+        } else if (draft.classification === 'asset') {
           if (!draft.kind || !draft.name) throw new Error(`"${row.product_name}": Kind und Name sind Pflicht`);
           body.kind = draft.kind;
           body.name = draft.name;
@@ -479,7 +510,33 @@ export default function RechnungUploadPage() {
                     </div>
                   )}
 
-                  {row.draft?.classification === 'asset' && (
+                  {(row.draft?.classification === 'asset' || row.draft?.classification === 'gwg') && (
+                    <div style={{ marginTop: 8 }}>
+                      <span style={label}>An existierende Anlage hängen (optional)</span>
+                      <select
+                        style={{ ...input, marginBottom: 4 }}
+                        value={row.draft?.link_to_asset_id ?? ''}
+                        onChange={(e) => updateDraft(row.id, { link_to_asset_id: e.target.value || undefined })}
+                      >
+                        <option value="">— Neue Anlage anlegen —</option>
+                        {assets.map((a) => (
+                          <option key={a.id} value={a.id}>
+                            {a.name}
+                            {a.serial_number ? ` · SN ${a.serial_number}` : ''}
+                            {' · '}{a.purchase_price > 0 ? `${a.purchase_price.toFixed(2)} €` : 'kein Preis'}
+                            {a.depreciation_method === 'immediate' ? ' · GWG' : ''}
+                          </option>
+                        ))}
+                      </select>
+                      <span style={{ fontSize: 10, color: '#64748b', display: 'block' }}>
+                        {row.draft?.link_to_asset_id
+                          ? '✓ Diese Position wird der gewählten Anlage als Beleg zugeordnet. Wenn die Anlage noch keinen Kaufpreis hat, wird er aus dieser Position übernommen.'
+                          : 'Wenn leer: neue Anlage wird automatisch angelegt mit den Feldern unten.'}
+                      </span>
+                    </div>
+                  )}
+
+                  {row.draft?.classification === 'asset' && !row.draft?.link_to_asset_id && (
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginTop: 8 }}>
                       <div>
                         <span style={label}>Art</span>
@@ -516,7 +573,7 @@ export default function RechnungUploadPage() {
                     </div>
                   )}
 
-                  {row.draft?.classification === 'gwg' && (
+                  {row.draft?.classification === 'gwg' && !row.draft?.link_to_asset_id && (
                     <>
                       <div style={{
                         background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.3)',

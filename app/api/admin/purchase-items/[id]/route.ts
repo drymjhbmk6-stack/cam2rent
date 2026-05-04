@@ -93,6 +93,107 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   const grossTotal = Number(((item.ai_suggestion as { line_total_gross?: number } | null)?.line_total_gross)
     ?? netTotal * (1 + taxRate / 100));
 
+  // STUFE 2+3: Verknuepfung mit existierender Anlage statt neuem Asset.
+  // Wenn link_to_asset_id gesetzt ist UND classification 'asset' oder 'gwg':
+  //   - Kein neues Asset anlegen
+  //   - Existierendes Asset finden, purchase_items.asset_id verknuepfen
+  //   - Wenn Asset noch keinen purchase_price hat, aus der Position uebernehmen
+  //   - Bei classification='gwg': zusaetzlich Expense fuer EÜR anlegen
+  //   - Bei classification='asset': KEIN Expense (lineare AfA-Buchungen laeuft ueber den Cron)
+  const linkToAssetId = typeof body.link_to_asset_id === 'string' && body.link_to_asset_id.trim()
+    ? body.link_to_asset_id.trim()
+    : null;
+  if (linkToAssetId && (classification === 'asset' || classification === 'gwg')) {
+    const { data: existingAsset, error: assetFetchErr } = await supabase
+      .from('assets')
+      .select('id, name, kind, purchase_price, purchase_date, depreciation_method, status, supplier_id')
+      .eq('id', linkToAssetId)
+      .maybeSingle();
+    if (assetFetchErr) return NextResponse.json({ error: assetFetchErr.message }, { status: 500 });
+    if (!existingAsset) return NextResponse.json({ error: 'Verknuepfte Anlage nicht gefunden.' }, { status: 404 });
+    if (existingAsset.status !== 'active') {
+      return NextResponse.json({ error: 'Verknuepfte Anlage ist nicht aktiv (Status: ' + existingAsset.status + ').' }, { status: 409 });
+    }
+
+    // Preis aus Position uebernehmen, wenn Asset noch keinen Preis hat (=0 oder NULL)
+    const assetPrice = Number(existingAsset.purchase_price ?? 0);
+    if (assetPrice === 0 && netTotal > 0) {
+      const updates: Record<string, unknown> = {
+        purchase_price: netTotal,
+      };
+      // Bei lineare Methode: current_value mit-aktualisieren (sonst startet AfA bei 0)
+      if (existingAsset.depreciation_method === 'linear') {
+        updates.current_value = netTotal;
+        updates.residual_value = Math.round(netTotal * 0.3 * 100) / 100;
+      } else if (existingAsset.depreciation_method === 'immediate') {
+        // GWG: replacement_value_estimate = neuer Preis (defensiv)
+        const upd1 = await supabase
+          .from('assets')
+          .update({ ...updates, replacement_value_estimate: netTotal })
+          .eq('id', linkToAssetId);
+        if (upd1.error && /replacement_value_estimate/i.test(upd1.error.message)) {
+          await supabase.from('assets').update(updates).eq('id', linkToAssetId);
+        }
+      }
+      // Wenn nicht immediate, einfacher Update
+      if (existingAsset.depreciation_method !== 'immediate') {
+        await supabase.from('assets').update(updates).eq('id', linkToAssetId);
+      }
+    }
+
+    // Optional: Expense fuer GWG anlegen, damit der Beleg in der EÜR landet
+    let expenseId: string | null = null;
+    if (classification === 'gwg' && netTotal > 0) {
+      const expenseDate = body.expense_date || purchase?.order_date || new Date().toISOString().slice(0, 10);
+      const { data: exp, error: expErr } = await supabase
+        .from('expenses')
+        .insert({
+          expense_date: expenseDate,
+          category: 'asset_purchase',
+          description: `Beleg zu GWG: ${existingAsset.name}`.slice(0, 500),
+          vendor: null,
+          net_amount: netTotal,
+          tax_amount: Math.round((grossTotal - netTotal) * 100) / 100,
+          gross_amount: grossTotal,
+          receipt_url: null,
+          payment_method: body.payment_method ?? null,
+          notes: `Aus Einkauf ${purchase?.invoice_number ?? item.purchase_id}, an existierende Anlage gehaengt.`,
+          source_type: 'purchase_item',
+          source_id: itemId,
+          asset_id: linkToAssetId,
+          is_test: testMode,
+        })
+        .select('id')
+        .single();
+      if (!expErr && exp) expenseId = exp.id;
+    }
+
+    // purchase_items aktualisieren
+    const piUpdates: Record<string, unknown> = {
+      classification,
+      asset_id: linkToAssetId,
+    };
+    if (expenseId) piUpdates.expense_id = expenseId;
+
+    const { data: updated, error: updErr } = await supabase
+      .from('purchase_items')
+      .update(piUpdates)
+      .eq('id', itemId)
+      .select()
+      .single();
+    if (updErr) return NextResponse.json({ error: updErr.message }, { status: 500 });
+
+    await logAudit({
+      action: 'purchase_item.link_to_asset',
+      entityType: 'purchase_item',
+      entityId: itemId,
+      changes: { asset_id: linkToAssetId, expense_id: expenseId, classification, price_taken_over: assetPrice === 0 && netTotal > 0 },
+      request: req,
+    });
+
+    return NextResponse.json({ item: updated, asset_id: linkToAssetId, expense_id: expenseId, linked: true });
+  }
+
   if (classification === 'gwg') {
     // GWG nach § 6 Abs. 2 EStG: Sofortabschreibung als Aufwand (EÜR) UND
     // Eintrag im Anlagenverzeichnis (Verzeichnis-Pflicht ab 250 EUR netto).
