@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { expense_date, category, description, vendor, net_amount, tax_amount, gross_amount, notes, source_type, source_id, asset_id } = body;
+  const { expense_date, category, description, vendor, net_amount, tax_amount, gross_amount, notes, source_type, source_id, asset_id, purchase_id } = body;
 
   if (!expense_date || !category || !description || !gross_amount) {
     return NextResponse.json({ error: 'Pflichtfelder fehlen.' }, { status: 400 });
@@ -41,28 +41,42 @@ export async function POST(req: NextRequest) {
   const allowedSourceTypes = ['manual', 'purchase_item', 'product_unit_expense', 'accessory_unit_expense', 'stripe_fee'];
   const cleanSourceType = typeof source_type === 'string' && allowedSourceTypes.includes(source_type) ? source_type : null;
   const cleanSourceId = cleanSourceType && typeof source_id === 'string' && source_id.trim() ? source_id.trim() : null;
+  const cleanPurchaseId = typeof purchase_id === 'string' && purchase_id.trim() ? purchase_id.trim() : null;
 
   const supabase = createServiceClient();
 
   const testMode = await isTestMode();
-  const { data, error } = await supabase
+  const baseInsert = {
+    expense_date,
+    category,
+    description,
+    vendor: vendor || null,
+    net_amount: net_amount || gross_amount,
+    tax_amount: tax_amount || 0,
+    gross_amount,
+    notes: notes || null,
+    source_type: cleanSourceType,
+    source_id: cleanSourceId,
+    asset_id: typeof asset_id === 'string' && asset_id.trim() ? asset_id.trim() : null,
+    is_test: testMode,
+  };
+
+  // Defensiver Insert: Wenn Migration `expenses.purchase_id` noch nicht durch
+  // ist, retry ohne die Spalte — Beleg-Verknuepfung geht dann verloren, der
+  // Rest funktioniert.
+  let { data, error } = await supabase
     .from('expenses')
-    .insert({
-      expense_date,
-      category,
-      description,
-      vendor: vendor || null,
-      net_amount: net_amount || gross_amount,
-      tax_amount: tax_amount || 0,
-      gross_amount,
-      notes: notes || null,
-      source_type: cleanSourceType,
-      source_id: cleanSourceId,
-      asset_id: typeof asset_id === 'string' && asset_id.trim() ? asset_id.trim() : null,
-      is_test: testMode,
-    })
+    .insert({ ...baseInsert, purchase_id: cleanPurchaseId })
     .select()
     .single();
+
+  if (error && /purchase_id/i.test(error.message)) {
+    ({ data, error } = await supabase
+      .from('expenses')
+      .insert(baseInsert)
+      .select()
+      .single());
+  }
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

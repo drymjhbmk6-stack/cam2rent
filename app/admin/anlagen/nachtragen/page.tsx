@@ -34,6 +34,14 @@ interface Accessory {
   category: string;
 }
 
+interface PurchaseOption {
+  id: string;
+  invoice_number: string | null;
+  order_date: string;
+  supplier_name: string | null;
+  total_amount: number | null;
+}
+
 const card: React.CSSProperties = { background: '#111827', borderRadius: 12, border: '1px solid #1e293b', padding: 20 };
 const input: React.CSSProperties = { background: '#0a0f1e', border: '1px solid #1e293b', borderRadius: 8, padding: '8px 10px', color: '#e2e8f0', fontSize: 13, width: '100%' };
 const label: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4, display: 'block' };
@@ -49,6 +57,8 @@ type Draft = {
   depreciation_method: 'linear' | 'immediate' | 'expense';
   /** Nur bei depreciation_method='expense' relevant */
   expense_category: string;
+  /** Nur bei depreciation_method='expense' relevant: optionale Verknuepfung zur Lieferantenrechnung */
+  purchase_id: string;
 };
 
 const EXPENSE_CATEGORY_LABELS: Record<string, string> = {
@@ -72,6 +82,7 @@ function emptyDraft(opts?: Partial<Draft>): Draft {
     kind: opts?.kind ?? 'rental_camera',
     depreciation_method: opts?.depreciation_method ?? 'linear',
     expense_category: opts?.expense_category ?? 'hardware',
+    purchase_id: opts?.purchase_id ?? '',
   };
 }
 
@@ -80,6 +91,7 @@ export default function NachtragenPage() {
   const [accUnits, setAccUnits] = useState<AccessoryUnit[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [accessories, setAccessories] = useState<Accessory[]>([]);
+  const [purchases, setPurchases] = useState<PurchaseOption[]>([]);
   const [linkedUnitIds, setLinkedUnitIds] = useState<Set<string>>(new Set());
   const [linkedAccUnitIds, setLinkedAccUnitIds] = useState<Set<string>>(new Set());
   // Units, die als Ausgabe verbucht wurden (kein Asset, aber bereits klassifiziert)
@@ -91,13 +103,14 @@ export default function NachtragenPage() {
   const [msg, setMsg] = useState<string | null>(null);
 
   async function reload() {
-    const [uRes, auRes, pRes, accRes, aRes, eRes] = await Promise.all([
+    const [uRes, auRes, pRes, accRes, aRes, eRes, purchRes] = await Promise.all([
       fetch('/api/admin/product-units').then((r) => r.json()),
       fetch('/api/admin/accessory-units').then((r) => r.json()),
       fetch('/api/products').then((r) => r.json()),
       fetch('/api/admin/accessories').then((r) => r.json()),
       fetch('/api/admin/assets?include_test=1').then((r) => r.json()),
       fetch('/api/admin/buchhaltung/expenses').then((r) => r.json()),
+      fetch('/api/admin/purchases').then((r) => r.json()),
     ]);
     const unitList: Unit[] = uRes.units ?? uRes.data ?? [];
     setUnits(unitList.filter((u) => u.status !== 'retired'));
@@ -122,6 +135,14 @@ export default function NachtragenPage() {
     }
     setExpenseUnitIds(expU);
     setExpenseAccUnitIds(expA);
+    // Lieferanten-Rechnungen fuer das optionale Beleg-Dropdown
+    setPurchases((purchRes.purchases ?? []).map((p: { id: string; invoice_number: string | null; order_date: string; total_amount: number | null; supplier?: { name?: string } | null }) => ({
+      id: p.id,
+      invoice_number: p.invoice_number,
+      order_date: p.order_date,
+      supplier_name: p.supplier?.name ?? null,
+      total_amount: p.total_amount ?? null,
+    })));
   }
 
   useEffect(() => {
@@ -139,6 +160,14 @@ export default function NachtragenPage() {
   function getAccessoryLabel(accId: string) {
     const a = accessories.find((x) => x.id === accId);
     return a ? `${a.name} (${a.category})` : accId;
+  }
+
+  function getPurchaseLabel(p: PurchaseOption) {
+    const date = fmtDate(p.order_date);
+    const supp = p.supplier_name ?? 'Lieferant';
+    const inv = p.invoice_number ? ` · Rechnung ${p.invoice_number}` : '';
+    const total = p.total_amount != null ? ` · ${p.total_amount.toFixed(2).replace('.', ',')} €` : '';
+    return `${date} · ${supp}${inv}${total}`;
   }
 
   function setDraft(draftKey: string, key: keyof Draft, value: string, fallback?: Draft) {
@@ -173,6 +202,7 @@ export default function NachtragenPage() {
             tax_amount: 0,
             source_type: 'product_unit_expense',
             source_id: unit.id,
+            purchase_id: d.purchase_id || null,
             notes: `Aus Bestand nachtragen — Kamera SN ${unit.serial_number}`,
           }),
         });
@@ -244,6 +274,7 @@ export default function NachtragenPage() {
             tax_amount: 0,
             source_type: 'accessory_unit_expense',
             source_id: unit.id,
+            purchase_id: d.purchase_id || null,
             notes: `Aus Bestand nachtragen — Zubehör ${unit.exemplar_code}`,
           }),
         });
@@ -393,9 +424,20 @@ export default function NachtragenPage() {
                   </div>
                 </div>
                 {isExpense && (
-                  <div style={{ marginTop: 8, fontSize: 11, color: '#86efac', lineHeight: 1.5 }}>
-                    ℹ Wird als Ausgabe in der EÜR gebucht. Die Unit bleibt im Inventar (Scanner / Verfügbarkeit / Buchungen funktionieren weiter).
-                  </div>
+                  <>
+                    <div style={{ marginTop: 12 }}>
+                      <span style={label}>An Lieferantenrechnung hängen (optional)</span>
+                      <select style={input} value={d.purchase_id} onChange={(e) => setDraft(draftKey, 'purchase_id', e.target.value, d)}>
+                        <option value="">— Kein Beleg verknüpft —</option>
+                        {purchases.map((p) => (
+                          <option key={p.id} value={p.id}>{getPurchaseLabel(p)}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div style={{ marginTop: 8, fontSize: 11, color: '#86efac', lineHeight: 1.5 }}>
+                      ℹ Wird als Ausgabe in der EÜR gebucht. Die Unit bleibt im Inventar (Scanner / Verfügbarkeit / Buchungen funktionieren weiter).
+                    </div>
+                  </>
                 )}
               </div>
             );
@@ -487,9 +529,20 @@ export default function NachtragenPage() {
                   </div>
                 </div>
                 {isExpense && (
-                  <div style={{ marginTop: 8, fontSize: 11, color: '#86efac', lineHeight: 1.5 }}>
-                    ℹ Wird als Ausgabe in der EÜR gebucht. Das Exemplar bleibt im Inventar (Scanner / Verfügbarkeit / Buchungen funktionieren weiter).
-                  </div>
+                  <>
+                    <div style={{ marginTop: 12 }}>
+                      <span style={label}>An Lieferantenrechnung hängen (optional)</span>
+                      <select style={input} value={d.purchase_id} onChange={(e) => setDraft(draftKey, 'purchase_id', e.target.value, d)}>
+                        <option value="">— Kein Beleg verknüpft —</option>
+                        {purchases.map((p) => (
+                          <option key={p.id} value={p.id}>{getPurchaseLabel(p)}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div style={{ marginTop: 8, fontSize: 11, color: '#86efac', lineHeight: 1.5 }}>
+                      ℹ Wird als Ausgabe in der EÜR gebucht. Das Exemplar bleibt im Inventar (Scanner / Verfügbarkeit / Buchungen funktionieren weiter).
+                    </div>
+                  </>
                 )}
               </div>
             );

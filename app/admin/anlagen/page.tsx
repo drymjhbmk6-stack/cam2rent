@@ -3,6 +3,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import AnlagenTabs from '@/components/admin/AnlagenTabs';
 import { formatCurrency, fmtDate } from '@/lib/format-utils';
 
 interface Asset {
@@ -114,6 +115,7 @@ export default function AnlagenPage() {
     <div style={{ minHeight: '100dvh', background: '#0a0f1e', padding: '24px 20px' }}>
       <div style={{ maxWidth: 1400, margin: '0 auto' }}>
         <AdminBackLink />
+        <AnlagenTabs pathname="/admin/anlagen" />
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
           <div>
