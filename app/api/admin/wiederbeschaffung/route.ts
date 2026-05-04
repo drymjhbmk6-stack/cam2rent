@@ -207,10 +207,18 @@ export async function GET() {
       ageMonths = v.ageMonths;
       purchasePrice = Number(asset.purchase_price);
       editable = { type: 'asset', id: asset.id };
-    } else if (accessory?.replacement_value != null && Number(accessory.replacement_value) > 0) {
-      replacementValue = Number(accessory.replacement_value);
-      source = 'accessory_default';
-      editable = { type: 'accessory', id: unit.accessory_id as string };
+    } else {
+      // Kein Asset — fallback auf Sammel-Wert (accessories.replacement_value).
+      // Auch wenn der Sammel-Wert noch 0 ist, soll der Admin ihn von hier aus
+      // setzen koennen (sonst gibt's keine sinnvolle Action — Bestand nachtragen
+      // greift nicht mehr, wenn die Unit als Ausgabe klassifiziert wurde).
+      if (accessory?.replacement_value != null && Number(accessory.replacement_value) > 0) {
+        replacementValue = Number(accessory.replacement_value);
+        source = 'accessory_default';
+      }
+      if (accessory) {
+        editable = { type: 'accessory', id: unit.accessory_id as string };
+      }
     }
 
     items.push({
