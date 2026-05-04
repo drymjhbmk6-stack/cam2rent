@@ -123,10 +123,11 @@ export default function WiederbeschaffungsListePage() {
           body: JSON.stringify({ replacement_value_estimate: num }),
         });
       } else {
-        // Zubehoer: replacement_value via PUT (PUT erwartet vollstaendige Daten — wir
-        // schicken nur replacement_value mit, das Backend mergt mit Bestehendem)
+        // PATCH = partielles Update (PUT wuerde das ganze Objekt erwarten und
+        // fehlende Felder mit Defaults ueberschreiben — z.B. is_bulk auf false
+        // resetten und damit Sammel-Zubehoer kaputtmachen).
         res = await fetch(`/api/admin/accessories/${editing.editable_target.id}`, {
-          method: 'PUT',
+          method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ replacement_value: num }),
         });

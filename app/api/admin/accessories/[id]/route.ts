@@ -184,6 +184,90 @@ export async function PUT(
   return NextResponse.json({ success: true, id: effectiveId, warnings: warnings.length > 0 ? warnings : undefined });
 }
 
+/**
+ * PATCH /api/admin/accessories/[id]
+ *
+ * Partielles Update — nur Felder die im Body vorkommen werden ueberschrieben.
+ * Im Gegensatz zu PUT (das das volle Objekt erwartet) bleiben alle anderen
+ * Felder unangetastet. Ideal fuer schmale Aktionen wie
+ * "nur replacement_value setzen" aus der Wiederbeschaffungsliste.
+ */
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  const body = await req.json();
+  const supabase = createServiceClient();
+
+  const updates: Record<string, unknown> = {};
+
+  // Whitelist erlaubter Felder + Typ-Sanitizer
+  if ('name' in body) updates.name = String(body.name ?? '').trim() || null;
+  if ('category' in body) updates.category = String(body.category ?? '').trim() || null;
+  if ('description' in body) updates.description = body.description ?? null;
+  if ('pricing_mode' in body) updates.pricing_mode = body.pricing_mode;
+  if ('price' in body) {
+    const n = parseFloat(String(body.price));
+    updates.price = Number.isFinite(n) ? n : 0;
+  }
+  if ('available_qty' in body) {
+    const n = parseInt(String(body.available_qty), 10);
+    updates.available_qty = Number.isFinite(n) && n > 0 ? n : 1;
+  }
+  if ('available' in body) updates.available = !!body.available;
+  if ('image_url' in body) updates.image_url = body.image_url ?? null;
+  if ('compatible_product_ids' in body) updates.compatible_product_ids = Array.isArray(body.compatible_product_ids) ? body.compatible_product_ids : [];
+  if ('internal' in body) updates.internal = !!body.internal;
+  if ('upgrade_group' in body) updates.upgrade_group = body.upgrade_group || null;
+  if ('is_upgrade_base' in body) updates.is_upgrade_base = !!body.is_upgrade_base;
+  if ('allow_multi_qty' in body) updates.allow_multi_qty = !!body.allow_multi_qty;
+  if ('max_qty_per_booking' in body) {
+    const n = typeof body.max_qty_per_booking === 'number' && body.max_qty_per_booking > 0
+      ? Math.floor(body.max_qty_per_booking)
+      : null;
+    updates.max_qty_per_booking = n;
+  }
+  if ('replacement_value' in body) {
+    const n = parseFloat(String(body.replacement_value));
+    updates.replacement_value = Number.isFinite(n) && n >= 0 ? n : 0;
+  }
+  if ('is_bulk' in body) updates.is_bulk = !!body.is_bulk;
+  if ('specs' in body) updates.specs = sanitizeSpecs(body.specs);
+  if ('included_parts' in body) updates.included_parts = sanitizeIncludedParts(body.included_parts);
+
+  if (Object.keys(updates).length === 0) {
+    return NextResponse.json({ error: 'Keine aenderbaren Felder im Body.' }, { status: 400 });
+  }
+
+  // Defensive Retries: Wenn Migration fehlt, betroffene Spalte rausnehmen.
+  const warnings: string[] = [];
+  let { error } = await supabase.from('accessories').update(updates).eq('id', id);
+  if (error && /column .*specs/i.test(error.message) && 'specs' in updates) {
+    delete updates.specs;
+    warnings.push('Spezifikationen konnten nicht gespeichert werden — Migration `supabase-accessory-specs.sql` fehlt.');
+    ({ error } = await supabase.from('accessories').update(updates).eq('id', id));
+  }
+  if (error && /column .*included_parts/i.test(error.message) && 'included_parts' in updates) {
+    delete updates.included_parts;
+    warnings.push('Bestandteile konnten nicht gespeichert werden — Migration `supabase-accessories-included-parts.sql` fehlt.');
+    ({ error } = await supabase.from('accessories').update(updates).eq('id', id));
+  }
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  await logAudit({
+    action: 'accessory.update',
+    entityType: 'accessory',
+    entityId: id,
+    changes: { fields: Object.keys(updates) },
+    request: req,
+  });
+
+  return NextResponse.json({ success: true, id, warnings: warnings.length > 0 ? warnings : undefined });
+}
+
 export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
