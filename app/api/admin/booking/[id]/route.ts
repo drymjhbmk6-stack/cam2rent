@@ -4,6 +4,7 @@ import { logAudit } from '@/lib/audit';
 import { sendCancellationConfirmation, sendAdminCancellationNotification } from '@/lib/email';
 import { releaseAccessoryUnitsFromBooking } from '@/lib/accessory-unit-assignment';
 import { getStripe } from '@/lib/stripe';
+import { DEFAULT_HAFTUNG, getEigenbeteiligung, type HaftungConfig } from '@/lib/price-config';
 
 /**
  * GET /api/admin/booking/[id]
@@ -248,7 +249,232 @@ export async function GET(
     .order('created_at', { ascending: false })
     .limit(20);
 
+  // Wiederbeschaffungswert + Haftungsgrenze (intern fuer Admin)
+  booking.liability_summary = await computeLiabilitySummary(supabase, booking, resolved);
+
   return NextResponse.json({ booking, customer, agreement, emails: emails ?? [] });
+}
+
+/**
+ * Berechnet pro Buchung den realen Wiederbeschaffungswert (Kamera +
+ * jedes Zubehoer) und wieviel der Kunde maximal haftet (je nach
+ * gewaehlter Schadenspauschale).
+ *
+ * Quellen:
+ *   - Kamera-WBW: assets.replacement_value_estimate (mit Vorrang) ODER
+ *     assets.current_value via product_units.id, Fallback product.deposit
+ *   - Zubehoer-WBW pro Position:
+ *     a) wenn accessory_unit_ids gesetzt: assets pro accessory_unit_id
+ *     b) sonst: accessories.replacement_value pro accessory_id × qty
+ */
+async function computeLiabilitySummary(
+  supabase: ReturnType<typeof createServiceClient>,
+  booking: Record<string, unknown>,
+  resolvedItems: Array<{ id: string; name: string; qty: number; isFromSet?: boolean; setName?: string }>,
+) {
+  type Line = { name: string; qty: number; unit_value: number; total_value: number; source: 'asset' | 'accessory_replacement' | 'product_deposit' | 'unknown' };
+
+  const cameraId = booking.product_id as string;
+  const cameraName = booking.product_name as string;
+  const productDeposit = Number(booking.deposit ?? 0);
+  const haftung = (booking.haftung as string | null) ?? null;
+
+  // 1. Kamera-WBW
+  let cameraValue = 0;
+  let cameraSource: Line['source'] = 'unknown';
+  if (booking.unit_id) {
+    const primary = await supabase
+      .from('assets')
+      .select('current_value, replacement_value_estimate')
+      .eq('unit_id', booking.unit_id as string)
+      .eq('status', 'active')
+      .maybeSingle();
+    let row: { current_value?: number | null; replacement_value_estimate?: number | null } | null = primary.data;
+    if (primary.error && /replacement_value_estimate/i.test(primary.error.message)) {
+      const fb = await supabase
+        .from('assets')
+        .select('current_value')
+        .eq('unit_id', booking.unit_id as string)
+        .eq('status', 'active')
+        .maybeSingle();
+      row = fb.data;
+    }
+    if (row) {
+      if (row.replacement_value_estimate != null) {
+        cameraValue = Number(row.replacement_value_estimate);
+        cameraSource = 'asset';
+      } else if (row.current_value != null) {
+        cameraValue = Number(row.current_value);
+        cameraSource = 'asset';
+      }
+    }
+  }
+  if (cameraValue === 0) {
+    // Fallback: Kautionswert (im Haftung-Modus nur Anker, im Kaution-Modus echt)
+    cameraValue = productDeposit;
+    cameraSource = productDeposit > 0 ? 'product_deposit' : 'unknown';
+  }
+
+  const cameraLine: Line = {
+    name: cameraName,
+    qty: 1,
+    unit_value: cameraValue,
+    total_value: cameraValue,
+    source: cameraSource,
+  };
+
+  // 2. Zubehoer + Sets (auf Sub-Items expandiert) → Set-Container ueberspringen,
+  // weil wir die Sub-Items mitgezaehlt haben (vermeidet Doppelzaehlung).
+  const setContainerNames = new Set(
+    resolvedItems.filter((i) => i.isFromSet).map((i) => i.setName ?? ''),
+  );
+  const physicalAccItems = resolvedItems.filter((i) => !setContainerNames.has(i.name) || i.isFromSet);
+
+  const accIds = [...new Set(physicalAccItems.map((i) => i.id))];
+
+  // Asset-Lookup ueber accessory_unit_ids (genauer, wenn vorhanden).
+  // Ergebnis: Map accessory_id -> Liste aller Asset-Werte (= Anzahl Units mit Asset).
+  const accUnitIds: string[] = Array.isArray(booking.accessory_unit_ids)
+    ? (booking.accessory_unit_ids as string[]).filter(Boolean)
+    : [];
+  const assetValuesPerAccId = new Map<string, number[]>();
+  if (accUnitIds.length > 0) {
+    const { data: units } = await supabase
+      .from('accessory_units')
+      .select('id, accessory_id')
+      .in('id', accUnitIds);
+    const unitToAcc = new Map<string, string>();
+    for (const u of units ?? []) unitToAcc.set(u.id as string, u.accessory_id as string);
+
+    const primary = await supabase
+      .from('assets')
+      .select('accessory_unit_id, current_value, replacement_value_estimate')
+      .in('accessory_unit_id', accUnitIds)
+      .eq('status', 'active');
+    let assetRows: Array<{ accessory_unit_id: string; current_value: number | null; replacement_value_estimate: number | null }> = (primary.data ?? []).map((a) => ({
+      accessory_unit_id: a.accessory_unit_id as string,
+      replacement_value_estimate: (a as { replacement_value_estimate?: number | null }).replacement_value_estimate ?? null,
+      current_value: a.current_value as number | null,
+    }));
+    if (primary.error && /replacement_value_estimate/i.test(primary.error.message)) {
+      const fb = await supabase
+        .from('assets')
+        .select('accessory_unit_id, current_value')
+        .in('accessory_unit_id', accUnitIds)
+        .eq('status', 'active');
+      assetRows = (fb.data ?? []).map((a) => ({
+        accessory_unit_id: a.accessory_unit_id as string,
+        replacement_value_estimate: null,
+        current_value: a.current_value as number | null,
+      }));
+    }
+    for (const ar of assetRows) {
+      const accId = unitToAcc.get(ar.accessory_unit_id);
+      if (!accId) continue;
+      const v = Number(ar.replacement_value_estimate ?? ar.current_value ?? 0);
+      const arr = assetValuesPerAccId.get(accId) ?? [];
+      arr.push(v);
+      assetValuesPerAccId.set(accId, arr);
+    }
+  }
+
+  // accessories.replacement_value als Fallback pro accessory_id
+  const accRepMap = new Map<string, number>();
+  if (accIds.length > 0) {
+    const { data: accs } = await supabase
+      .from('accessories')
+      .select('id, replacement_value')
+      .in('id', accIds);
+    for (const a of accs ?? []) {
+      accRepMap.set(a.id as string, Number(a.replacement_value ?? 0));
+    }
+  }
+
+  // Pro physische Position eine Line bauen.
+  // Pro accessory_id wird der Pro-Stueck-Wert genommen aus:
+  //   1) Asset-Wert (Mittelwert wenn mehrere Units), wenn Asset fuer diesen
+  //      accessory_id existiert UND > 0
+  //   2) sonst accessories.replacement_value
+  const accessoryLines: Line[] = [];
+  for (const item of physicalAccItems) {
+    const assetValues = assetValuesPerAccId.get(item.id) ?? [];
+    const assetAvg = assetValues.length > 0
+      ? assetValues.reduce((s, v) => s + v, 0) / assetValues.length
+      : 0;
+    const repValue = accRepMap.get(item.id) ?? 0;
+
+    let unitValue: number;
+    let source: Line['source'];
+    if (assetAvg > 0) {
+      unitValue = assetAvg;
+      source = 'asset';
+    } else if (repValue > 0) {
+      unitValue = repValue;
+      source = 'accessory_replacement';
+    } else {
+      unitValue = 0;
+      source = 'unknown';
+    }
+
+    const totalValue = unitValue * item.qty;
+    accessoryLines.push({
+      name: item.isFromSet ? `${item.name} (aus Set: ${item.setName})` : item.name,
+      qty: item.qty,
+      unit_value: Math.round(unitValue * 100) / 100,
+      total_value: Math.round(totalValue * 100) / 100,
+      source,
+    });
+  }
+
+  const accessoriesTotal = accessoryLines.reduce((s, l) => s + l.total_value, 0);
+  const totalWbw = cameraValue + accessoriesTotal;
+
+  // 3. Kunden-Maximum je nach Haftungsoption
+  // booking.haftung Werte: 'standard' (Basis), 'premium', sonst (null/'none'/'')
+  let customerMax = 0;
+  let customerMaxLabel = '';
+  let customerMaxNote = '';
+  if (haftung === 'premium') {
+    customerMax = 0;
+    customerMaxLabel = 'Premium-Schadenspauschale';
+    customerMaxNote = 'Kunde haftet 0 € — alles ueber das Reparaturdepot.';
+  } else if (haftung === 'standard') {
+    // Eigenbeteiligung ueber haftung_config + product.category
+    const { data: setting } = await supabase
+      .from('admin_settings')
+      .select('value')
+      .eq('key', 'haftung_config')
+      .maybeSingle();
+    const haftungConfig: HaftungConfig = (setting?.value as HaftungConfig) ?? DEFAULT_HAFTUNG;
+    // Produkt-Kategorie nachladen
+    const { data: cfg } = await supabase
+      .from('admin_config')
+      .select('products')
+      .eq('id', 1)
+      .maybeSingle();
+    const products = Array.isArray(cfg?.products) ? cfg?.products as Array<{ id: string; category?: string }> : [];
+    const product = products.find((p) => p.id === cameraId);
+    const category: string | undefined = product?.category;
+    customerMax = getEigenbeteiligung(haftungConfig, category);
+    customerMaxLabel = 'Basis-Schadenspauschale';
+    customerMaxNote = `Eigenbeteiligung des Mieters je Schadensereignis. Restschaden ueber das Reparaturdepot.`;
+  } else {
+    customerMax = totalWbw;
+    customerMaxLabel = 'Ohne Schadenspauschale';
+    customerMaxNote = 'Kunde haftet bis zum vollen Wiederbeschaffungswert pro Position. Forderung manuell.';
+  }
+
+  return {
+    camera: cameraLine,
+    accessories: accessoryLines,
+    total_wbw: Math.round(totalWbw * 100) / 100,
+    accessories_total: Math.round(accessoriesTotal * 100) / 100,
+    customer_max_liability: Math.round(customerMax * 100) / 100,
+    customer_max_label: customerMaxLabel,
+    customer_max_note: customerMaxNote,
+    haftung_option: haftung,
+    deposit_anchor: productDeposit,
+  };
 }
 
 /**

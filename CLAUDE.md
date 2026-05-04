@@ -961,6 +961,19 @@ Steuer-Modus umschaltbar im Admin (/admin/einstellungen):
 ## Anlagenbuchhaltung + KI-Rechnungs-OCR (Stand 2026-04-21)
 Volles Lager-/Anlagenmodul mit KI-gestuetzter Rechnungs-Analyse. Rechnung hochladen → Claude Vision extrahiert Lieferant, Positionen, Summen + schlaegt pro Position Anlagegut vs. Betriebsausgabe vor → Admin bestaetigt/korrigiert → System legt Assets bzw. Expenses an → Mietvertrag zieht aktuellen Zeitwert (asset.current_value) statt Kaution.
 
+### Wiederbeschaffung & Haftung in Buchungsdetail (intern, Stand 2026-05-04)
+Pro Buchung sieht der Admin auf `/admin/buchungen/[id]` jetzt eine eigene Section „Wiederbeschaffung & Haftung (intern)" direkt unter „Buchungsdaten":
+- **Kompletter Wiederbeschaffungswert** als grosse Zahl oben (Summe aus Kamera + allen Zubehoer-Positionen).
+- **Breakdown** pro Position (Kamera + Zubehoer mit Mengen + Pro-Stueck-Wert + Quelle: Anlage / Wiederb.-Wert / Kautions-Anker).
+- **Was der Kunde maximal uebernimmt** als farbige Box (Premium gruen, Basis amber, Ohne rot) mit konkretem Eurobetrag + Erklaerung. Differenz zum vollen WBW wird ausgewiesen (geht ans Reparaturdepot bzw. muss bei „Ohne" manuell eingefordert werden).
+
+**Berechnung:**
+- Kamera-WBW: `assets.replacement_value_estimate` mit Vorrang vor `current_value`, Fallback `product.deposit`.
+- Zubehoer pro Position: bei vorhandenen `accessory_unit_ids` Asset-Mittelwert pro `accessory_id`, sonst `accessories.replacement_value`.
+- Kunden-Maximum: bei `haftung='premium'` = 0, bei `'standard'` = Eigenbeteiligung aus `haftung_config.eigenbeteiligungByCategory[product.category]`, sonst = voller WBW.
+
+API: `GET /api/admin/booking/[id]` liefert die Daten ueber neues Feld `liability_summary`. Defensive Fallbacks falls Migrationen noch nicht durch sind.
+
 ### Wiederbeschaffungswert getrennt vom Buchwert (Stand 2026-05-04)
 Steuerlicher Buchwert (`assets.current_value`) und tatsaechlicher Wiederbeschaffungswert sind jetzt zwei getrennte Felder. Vorher: bei GWG fiel der Buchwert auf 0, der Mietvertrag zeigte dann fallback auf die Kaution — irrefuehrend, weil das ja nicht der echte Marktwert ist.
 

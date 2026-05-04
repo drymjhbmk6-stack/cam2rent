@@ -60,6 +60,27 @@ interface BookingDetail {
   serial_number: string | null;
   stripe_payment_link_id: string | null;
   is_test: boolean | null;
+  liability_summary?: LiabilitySummary | null;
+}
+
+interface LiabilityLine {
+  name: string;
+  qty: number;
+  unit_value: number;
+  total_value: number;
+  source: 'asset' | 'accessory_replacement' | 'product_deposit' | 'unknown';
+}
+
+interface LiabilitySummary {
+  camera: LiabilityLine;
+  accessories: LiabilityLine[];
+  total_wbw: number;
+  accessories_total: number;
+  customer_max_liability: number;
+  customer_max_label: string;
+  customer_max_note: string;
+  haftung_option: string | null;
+  deposit_anchor: number;
 }
 
 interface RentalAgreement {
@@ -655,6 +676,11 @@ export default function BuchungDetailPage() {
                 </div>
               )}
             </Section>
+
+            {/* Wiederbeschaffung & Haftung (intern) */}
+            {booking.liability_summary && (
+              <LiabilitySection summary={booking.liability_summary} />
+            )}
 
             {/* Preisaufstellung */}
             <Section title="Preisaufstellung">
@@ -1406,6 +1432,97 @@ function PriceRow({ label, amount }: { label: string; amount: number }) {
     <div className="flex justify-between items-center">
       <span className="text-sm font-body text-brand-steel">{label}</span>
       <span className="text-sm font-body text-brand-black">{fmtEuro(amount)}</span>
+    </div>
+  );
+}
+
+function LiabilitySection({ summary }: { summary: LiabilitySummary }) {
+  const haftung = summary.haftung_option;
+  // Farbschema je nach Modus: Premium grün (Kunde sicher), Basis amber, Ohne rot.
+  const accentColor =
+    haftung === 'premium' ? '#10b981' :
+    haftung === 'standard' ? '#f59e0b' : '#ef4444';
+  const accentBg =
+    haftung === 'premium' ? 'rgba(16,185,129,0.08)' :
+    haftung === 'standard' ? 'rgba(245,158,11,0.08)' : 'rgba(239,68,68,0.08)';
+
+  return (
+    <Section title="Wiederbeschaffung & Haftung (intern)">
+      <div className="space-y-4">
+        {/* Wiederbeschaffungswert gesamt */}
+        <div>
+          <p className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider mb-2">
+            Kompletter Wiederbeschaffungswert
+          </p>
+          <p className="font-heading font-bold text-2xl text-brand-black">{fmtEuro(summary.total_wbw)}</p>
+          <p className="text-xs text-brand-muted mt-1">
+            Was du faktisch ausgeben muesstest, um alle Mietgegenstaende zu ersetzen.
+          </p>
+        </div>
+
+        {/* Breakdown */}
+        <div className="bg-brand-bg-soft rounded-lg p-3 space-y-1.5">
+          <LiabilityLineRow line={summary.camera} />
+          {summary.accessories.map((line, i) => (
+            <LiabilityLineRow key={i} line={line} />
+          ))}
+          {summary.accessories.length > 0 && (
+            <div className="pt-1.5 mt-1.5 border-t border-brand-border flex justify-between items-center">
+              <span className="text-xs font-heading font-semibold text-brand-muted">Zubehoer-Summe</span>
+              <span className="text-xs font-heading font-semibold text-brand-black">{fmtEuro(summary.accessories_total)}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Was der Kunde haftet */}
+        <div
+          className="rounded-lg border p-3"
+          style={{ borderColor: `${accentColor}55`, background: accentBg }}
+        >
+          <p className="text-xs font-heading font-semibold uppercase tracking-wider mb-1" style={{ color: accentColor }}>
+            Vom Kunden gewaehlt: {summary.customer_max_label}
+          </p>
+          <div className="flex items-baseline gap-2 mb-1">
+            <span className="text-xs font-body text-brand-steel">Maximaler Uebernahmebetrag durch Kunde:</span>
+            <span className="font-heading font-bold text-base" style={{ color: accentColor }}>
+              {fmtEuro(summary.customer_max_liability)}
+            </span>
+          </div>
+          <p className="text-xs text-brand-muted leading-relaxed">{summary.customer_max_note}</p>
+          {haftung !== 'premium' && summary.customer_max_liability < summary.total_wbw && (
+            <p className="text-xs text-brand-muted mt-1.5 pt-1.5 border-t border-brand-border">
+              Differenz <strong>{fmtEuro(summary.total_wbw - summary.customer_max_liability)}</strong> traegt das Reparaturdepot bzw. muss bei &bdquo;Ohne Schadenspauschale&ldquo; manuell eingefordert werden.
+            </p>
+          )}
+        </div>
+      </div>
+    </Section>
+  );
+}
+
+function LiabilityLineRow({ line }: { line: LiabilityLine }) {
+  const sourceLabel: Record<LiabilityLine['source'], string> = {
+    asset: 'Anlage',
+    accessory_replacement: 'Wiederb.-Wert',
+    product_deposit: 'Kautions-Anker',
+    unknown: 'unbekannt',
+  };
+  return (
+    <div className="flex justify-between items-baseline gap-3">
+      <div className="flex-1 min-w-0">
+        <span className="text-xs font-body text-brand-black truncate block">
+          {line.qty > 1 ? `${line.qty}× ` : ''}{line.name}
+        </span>
+        {line.qty > 1 && (
+          <span className="text-[10px] text-brand-muted">{fmtEuro(line.unit_value)} / Stueck · Quelle: {sourceLabel[line.source]}</span>
+        )}
+        {line.qty === 1 && line.source !== 'asset' && (
+          <span className="text-[10px] text-brand-muted">Quelle: {sourceLabel[line.source]}</span>
+        )}
+      </div>
+      <span className="text-xs font-heading font-semibold text-brand-black whitespace-nowrap">
+        {fmtEuro(line.total_value)}
+      </span>
     </div>
   );
 }
