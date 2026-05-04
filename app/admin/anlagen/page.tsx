@@ -49,6 +49,7 @@ export default function AnlagenPage() {
   const [loading, setLoading] = useState(true);
   const [filterKind, setFilterKind] = useState<string>('');
   const [filterStatus, setFilterStatus] = useState<string>('active');
+  const [filterMethod, setFilterMethod] = useState<string>('');
   const [search, setSearch] = useState('');
   const [isTestMode, setIsTestMode] = useState(false);
 
@@ -75,23 +76,32 @@ export default function AnlagenPage() {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return assets;
-    return assets.filter((a) =>
-      a.name.toLowerCase().includes(q) ||
-      (a.serial_number ?? '').toLowerCase().includes(q) ||
-      (a.manufacturer ?? '').toLowerCase().includes(q) ||
-      (a.supplier?.name ?? '').toLowerCase().includes(q),
-    );
-  }, [assets, search]);
+    return assets.filter((a) => {
+      if (filterMethod && a.depreciation_method !== filterMethod) return false;
+      if (!q) return true;
+      return (
+        a.name.toLowerCase().includes(q) ||
+        (a.serial_number ?? '').toLowerCase().includes(q) ||
+        (a.manufacturer ?? '').toLowerCase().includes(q) ||
+        (a.supplier?.name ?? '').toLowerCase().includes(q)
+      );
+    });
+  }, [assets, search, filterMethod]);
 
   const totals = useMemo(() => {
     let purchase = 0;
     let current = 0;
+    let gwgCount = 0;
+    let gwgPurchase = 0;
     for (const a of filtered) {
       purchase += Number(a.purchase_price);
       current += Number(a.current_value);
+      if (a.depreciation_method === 'immediate') {
+        gwgCount += 1;
+        gwgPurchase += Number(a.purchase_price);
+      }
     }
-    return { purchase, current, depreciated: purchase - current };
+    return { purchase, current, depreciated: purchase - current, gwgCount, gwgPurchase };
   }, [filtered]);
 
   return (
@@ -132,6 +142,18 @@ export default function AnlagenPage() {
             <div style={{ fontSize: 11, color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>Bereits abgeschrieben</div>
             <div style={{ fontSize: 28, color: '#f59e0b', fontWeight: 800, marginTop: 8 }}>{formatCurrency(totals.depreciated)}</div>
           </div>
+          <div
+            style={{ ...card, padding: 20, cursor: 'pointer' }}
+            title="Klicken: nur GWG zeigen"
+            onClick={() => setFilterMethod(filterMethod === 'immediate' ? '' : 'immediate')}
+          >
+            <div style={{ fontSize: 11, color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              Davon GWG (sofort){filterMethod === 'immediate' ? ' · aktiv' : ''}
+            </div>
+            <div style={{ fontSize: 28, color: '#f59e0b', fontWeight: 800, marginTop: 8 }}>
+              {totals.gwgCount} <span style={{ fontSize: 14, color: '#94a3b8', fontWeight: 600 }}>· {formatCurrency(totals.gwgPurchase)}</span>
+            </div>
+          </div>
         </div>
 
         {/* Filter */}
@@ -154,6 +176,12 @@ export default function AnlagenPage() {
               <option value="disposed">Ausgemustert</option>
               <option value="sold">Verkauft</option>
               <option value="lost">Verlust</option>
+            </select>
+            <select value={filterMethod} onChange={(e) => setFilterMethod(e.target.value)} style={{ background: '#0a0f1e', border: '1px solid #1e293b', borderRadius: 8, padding: '10px 12px', color: '#e2e8f0', fontSize: 14 }}>
+              <option value="">Alle AfA-Methoden</option>
+              <option value="linear">Linear (AfA)</option>
+              <option value="immediate">GWG (sofort)</option>
+              <option value="none">Keine AfA</option>
             </select>
           </div>
         </div>
@@ -197,6 +225,18 @@ export default function AnlagenPage() {
                         }}>
                           {KIND_LABELS[a.kind].label}
                         </span>
+                        {a.depreciation_method === 'immediate' && (
+                          <span
+                            title="Geringwertiges Wirtschaftsgut — sofort abgeschrieben (§ 6 Abs. 2 EStG)"
+                            style={{
+                              display: 'inline-block', padding: '3px 8px', borderRadius: 999,
+                              fontSize: 10, fontWeight: 700, marginLeft: 6,
+                              background: 'rgba(245,158,11,0.15)', color: '#f59e0b',
+                            }}
+                          >
+                            GWG
+                          </span>
+                        )}
                       </td>
                       <td style={td}>{fmtDate(a.purchase_date)}</td>
                       <td style={{ ...td, textAlign: 'right', color: '#e2e8f0' }}>{formatCurrency(a.purchase_price)}</td>

@@ -13,7 +13,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { createServiceClient } from '@/lib/supabase';
 
 export type InvoiceKind = 'rental_camera' | 'rental_accessory' | 'office_equipment' | 'tool' | 'other';
-export type InvoiceClassification = 'asset' | 'expense';
+export type InvoiceClassification = 'asset' | 'gwg' | 'expense';
 
 export interface ExtractedInvoiceItem {
   description: string;
@@ -59,20 +59,30 @@ export type InvoiceMimeType =
 const SYSTEM_PROMPT = `Du bist ein Buchhaltungs-Assistent fuer cam2rent, einen deutschen Action-Cam-Verleih (GoPro, DJI, Insta360 und Zubehoer).
 Deine Aufgabe: aus Eingangsrechnungen strukturierte Daten extrahieren und jede Position klassifizieren.
 
-Klassifikations-Regeln:
-- "asset" = Anlagegut, wird abgeschrieben. Kriterien:
-  - Kameras, Objektive, Drohnen, die vermietet werden (kind: rental_camera)
-  - Vermietbares Zubehoer > 100 EUR netto (kind: rental_accessory)
-  - Laptops, Drucker, Moebel fuer das Buero (kind: office_equipment)
-  - Werkzeug fuer Wartung/Reparatur ueber 100 EUR netto (kind: tool)
+Klassifikations-Regeln (deutsches Steuerrecht, § 6 EStG):
+- "asset" = Anlagegut > 800 EUR netto, lineare AfA ueber Nutzungsdauer (Pflicht):
+  - Teure Kameras, Objektive, Drohnen, die vermietet werden (kind: rental_camera)
+  - Vermietbares Zubehoer > 800 EUR netto (kind: rental_accessory)
+  - Teure Laptops, Drucker, Moebel ueber 800 EUR netto (kind: office_equipment)
+  - Werkzeug ueber 800 EUR netto (kind: tool)
   - Alle anderen Anlagegueter > 800 EUR netto (kind: other)
+- "gwg" = Geringwertiges Wirtschaftsgut 250-800 EUR netto, Sofortabschreibung + Verzeichnis-Pflicht:
+  - Vermietbares Zubehoer 250-800 EUR netto (kind: rental_accessory) — typisch: Akku-Pack, Stativ, hochwertige Mikrofone, mittelgrosse Drohnen-Gimbals
+  - Buero-Equipment 250-800 EUR netto (kind: office_equipment)
+  - Werkzeug 250-800 EUR netto (kind: tool)
+  - WICHTIG: Vermietkameras (kind: rental_camera) IMMER als "asset", auch wenn unter 800 EUR — wegen Inventur und Geraete-Lebenszyklus (Mietvertrags-Bezug)
 - "expense" = Betriebsausgabe, direkt abziehbar:
-  - Verbrauchsmaterial (Akkus unter 50 EUR, SD-Karten, Reinigungsmittel)
+  - Verbrauchsmaterial (Akkus unter 250 EUR, SD-Karten, Reinigungsmittel)
   - Software-Abos, Dienstleistungen
   - Versandkosten, Verpackung
-  - Kleinteile unter 100 EUR netto
+  - Kleinteile unter 250 EUR netto
 
-Gaengige Nutzungsdauern (useful_life_months):
+Faustregel:
+  netto < 250 EUR  → "expense"
+  netto 250-800 EUR → "gwg" (ausser Vermietkameras, die immer "asset")
+  netto > 800 EUR  → "asset"
+
+Gaengige Nutzungsdauern (useful_life_months) — nur fuer "asset" relevant, GWG ignoriert das:
 - Kamera/Drohne: 36 (3 Jahre)
 - Zubehoer: 36
 - Laptop: 36
@@ -95,7 +105,7 @@ Antworte AUSSCHLIESSLICH als JSON ohne Markdown-Codefences. Schema:
       "tax_rate": 19,
       "line_total_net": 0.00,
       "line_total_gross": 0.00,
-      "suggested_classification": "asset" | "expense",
+      "suggested_classification": "asset" | "gwg" | "expense",
       "suggested_category": "hardware",
       "suggested_kind": "rental_camera",
       "suggested_useful_life_months": 36,

@@ -36,9 +36,9 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   const { id: itemId } = await ctx.params;
   const body = await req.json().catch(() => ({}));
 
-  const classification = body.classification as 'asset' | 'expense' | 'ignored' | undefined;
-  if (!classification || !['asset', 'expense', 'ignored'].includes(classification)) {
-    return NextResponse.json({ error: 'classification muss asset|expense|ignored sein' }, { status: 400 });
+  const classification = body.classification as 'asset' | 'gwg' | 'expense' | 'ignored' | undefined;
+  if (!classification || !['asset', 'gwg', 'expense', 'ignored'].includes(classification)) {
+    return NextResponse.json({ error: 'classification muss asset|gwg|expense|ignored sein' }, { status: 400 });
   }
 
   const supabase = createServiceClient();
@@ -92,6 +92,125 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   const netTotal = Number(item.net_price ?? unitPriceNet * quantity);
   const grossTotal = Number(((item.ai_suggestion as { line_total_gross?: number } | null)?.line_total_gross)
     ?? netTotal * (1 + taxRate / 100));
+
+  if (classification === 'gwg') {
+    // GWG nach § 6 Abs. 2 EStG: Sofortabschreibung als Aufwand (EÜR) UND
+    // Eintrag im Anlagenverzeichnis (Verzeichnis-Pflicht ab 250 EUR netto).
+    // Daher legen wir BEIDES an: Expense (category=asset_purchase) + Asset
+    // (depreciation_method=immediate, current_value=0, residual_value=0).
+    const kind = body.kind as string | undefined;
+    const allowedKinds = ['rental_camera', 'rental_accessory', 'office_equipment', 'tool', 'other'];
+    if (!kind || !allowedKinds.includes(kind)) {
+      return NextResponse.json({ error: 'kind muss einer der erlaubten Werte sein' }, { status: 400 });
+    }
+    const name = String(body.name || item.product_name).trim();
+    if (!name) {
+      return NextResponse.json({ error: 'name ist Pflicht' }, { status: 400 });
+    }
+
+    const purchasePrice = Number(body.purchase_price) > 0
+      ? Number(body.purchase_price)
+      : Math.round(netTotal * 100) / 100;
+    const purchaseDate = body.purchase_date || purchase?.order_date || new Date().toISOString().slice(0, 10);
+
+    // Expense fuer EÜR
+    const { data: expense, error: expErr } = await supabase
+      .from('expenses')
+      .insert({
+        expense_date: purchaseDate,
+        category: 'asset_purchase',
+        description: name.slice(0, 500),
+        vendor: body.vendor ?? null,
+        net_amount: netTotal,
+        tax_amount: Math.round((grossTotal - netTotal) * 100) / 100,
+        gross_amount: grossTotal,
+        receipt_url: null,
+        payment_method: body.payment_method ?? null,
+        notes: `GWG-Sofortabzug aus Einkauf ${purchase?.invoice_number ?? item.purchase_id}`,
+        source_type: 'purchase_item',
+        source_id: itemId,
+        is_test: testMode,
+      })
+      .select()
+      .single();
+    if (expErr) {
+      console.error('[purchase-items] gwg expense insert error', expErr);
+      return NextResponse.json({ error: `GWG-Aufwand konnte nicht gebucht werden: ${expErr.message}` }, { status: 500 });
+    }
+
+    // Asset fuer Verzeichnis-Pflicht (sofort abgeschrieben, Buchwert 0)
+    const { data: asset, error: assetErr } = await supabase
+      .from('assets')
+      .insert({
+        kind,
+        name,
+        description: body.description ?? null,
+        serial_number: body.serial_number ?? null,
+        manufacturer: body.manufacturer ?? null,
+        model: body.model ?? null,
+        purchase_price: purchasePrice,
+        purchase_date: purchaseDate,
+        supplier_id: purchase?.supplier_id ?? null,
+        purchase_id: item.purchase_id,
+        useful_life_months: 0,
+        depreciation_method: 'immediate',
+        residual_value: 0,
+        current_value: 0,
+        last_depreciation_at: purchaseDate,
+        product_id: body.product_id ?? null,
+        unit_id: body.unit_id ?? null,
+        is_test: testMode,
+      })
+      .select()
+      .single();
+    if (assetErr) {
+      // Expense wieder weg, sonst doppelte Buchung
+      await supabase.from('expenses').delete().eq('id', expense.id);
+      console.error('[purchase-items] gwg asset insert error', assetErr);
+      return NextResponse.json({ error: `GWG-Anlage konnte nicht angelegt werden: ${assetErr.message}` }, { status: 500 });
+    }
+
+    // Asset <-> Expense gegenseitig verknuepfen
+    await supabase.from('expenses').update({ asset_id: asset.id }).eq('id', expense.id);
+
+    // Optional: neue product_units-Row anlegen (analog Asset-Pfad)
+    let newUnitId: string | null = body.unit_id ?? null;
+    if (!newUnitId && body.create_unit && body.product_id && body.serial_number) {
+      const { data: unit } = await supabase
+        .from('product_units')
+        .insert({
+          product_id: body.product_id,
+          serial_number: body.serial_number,
+          label: name,
+          status: 'available',
+          purchased_at: purchaseDate,
+        })
+        .select('id')
+        .single();
+      if (unit) {
+        newUnitId = unit.id;
+        await supabase.from('assets').update({ unit_id: unit.id }).eq('id', asset.id);
+      }
+    }
+
+    const { data: updated, error: updErr } = await supabase
+      .from('purchase_items')
+      .update({ classification: 'gwg', asset_id: asset.id, expense_id: expense.id })
+      .eq('id', itemId)
+      .select()
+      .single();
+    if (updErr) return NextResponse.json({ error: updErr.message }, { status: 500 });
+
+    await logAudit({
+      action: 'purchase_item.classify_gwg',
+      entityType: 'purchase_item',
+      entityId: itemId,
+      changes: { asset_id: asset.id, expense_id: expense.id, kind, name, purchase_price: purchasePrice },
+      request: req,
+    });
+
+    return NextResponse.json({ item: updated, asset, expense, unit_id: newUnitId });
+  }
 
   if (classification === 'asset') {
     const kind = body.kind as string | undefined;

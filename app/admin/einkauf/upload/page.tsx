@@ -5,9 +5,14 @@ import Link from 'next/link';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { formatCurrency } from '@/lib/format-utils';
 
-type Classification = 'asset' | 'expense' | 'ignored';
+type Classification = 'asset' | 'gwg' | 'expense' | 'ignored';
 type Kind = 'rental_camera' | 'rental_accessory' | 'office_equipment' | 'tool' | 'other';
 type AttachmentKind = 'invoice' | 'receipt' | 'delivery_note' | 'other';
+
+// 800 EUR netto = obere GWG-Grenze (§ 6 Abs. 2 EStG, Stand 2024).
+// 250 EUR netto = ab hier ist GWG ueberhaupt sinnvoll (darunter eh als Aufwand).
+const GWG_NETTO_MIN = 250;
+const GWG_NETTO_MAX = 800;
 
 const ATTACHMENT_KIND_LABEL: Record<AttachmentKind, string> = {
   invoice: 'Rechnung',
@@ -17,7 +22,7 @@ const ATTACHMENT_KIND_LABEL: Record<AttachmentKind, string> = {
 };
 
 interface AISuggestion {
-  suggested_classification?: 'asset' | 'expense';
+  suggested_classification?: 'asset' | 'gwg' | 'expense';
   suggested_category?: string;
   suggested_kind?: Kind;
   suggested_useful_life_months?: number;
@@ -172,10 +177,17 @@ export default function RechnungUploadPage() {
 
       const rows: PurchaseItemRow[] = (data.items ?? []).map((it: PurchaseItemRow) => {
         const netto = Number(it.net_price ?? 0);
+        // Default-Vorschlag: KI-Suggestion respektieren, aber Client-Side
+        // Plausibilitaets-Override: 250-800 EUR netto + Asset-Vorschlag → GWG.
+        // Damit greift GWG auch bei aelterer KI-Antwort ohne 'gwg'-Wissen.
+        let suggested = (it.ai_suggestion?.suggested_classification as Classification) ?? 'expense';
+        if (suggested === 'asset' && netto >= GWG_NETTO_MIN && netto <= GWG_NETTO_MAX) {
+          suggested = 'gwg';
+        }
         return {
           ...it,
           draft: {
-            classification: (it.ai_suggestion?.suggested_classification as Classification) ?? 'expense',
+            classification: suggested,
             kind: it.ai_suggestion?.suggested_kind,
             name: it.product_name,
             useful_life_months: it.ai_suggestion?.suggested_useful_life_months ?? 36,
@@ -217,6 +229,15 @@ export default function RechnungUploadPage() {
           body.serial_number = draft.serial_number;
           body.useful_life_months = draft.useful_life_months;
           body.residual_value = draft.residual_value;
+          body.product_id = draft.product_id;
+        } else if (draft.classification === 'gwg') {
+          if (!draft.kind || !draft.name) throw new Error(`"${row.product_name}": Kind und Name sind Pflicht`);
+          // GWG: Felder wie Asset, aber depreciation_method/residual_value setzt das Backend hart auf immediate/0.
+          body.kind = draft.kind;
+          body.name = draft.name;
+          body.manufacturer = draft.manufacturer;
+          body.model = draft.model;
+          body.serial_number = draft.serial_number;
           body.product_id = draft.product_id;
         } else if (draft.classification === 'expense') {
           body.category = draft.expense_category ?? 'hardware';
@@ -421,27 +442,39 @@ export default function RechnungUploadPage() {
                         {row.quantity}x · Netto {formatCurrency(row.net_price ?? 0)} · {row.tax_rate ?? 19}% USt
                       </div>
                     </div>
-                    <div style={{ display: 'flex', gap: 4 }}>
-                      {(['asset', 'expense', 'ignored'] as Classification[]).map((c) => (
-                        <button
-                          key={c}
-                          onClick={() => updateDraft(row.id, { classification: c })}
-                          style={{
-                            padding: '6px 12px', borderRadius: 6, border: '1px solid #334155',
-                            background: row.draft?.classification === c ? cyan : 'transparent',
-                            color: row.draft?.classification === c ? '#0f172a' : '#94a3b8',
-                            fontWeight: 600, fontSize: 12, cursor: 'pointer',
-                          }}
-                        >
-                          {c === 'asset' ? 'Anlagegut' : c === 'expense' ? 'Ausgabe' : 'Ignorieren'}
-                        </button>
-                      ))}
+                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                      {(['asset', 'gwg', 'expense', 'ignored'] as Classification[]).map((c) => {
+                        const active = row.draft?.classification === c;
+                        const activeColor = c === 'gwg' ? '#f59e0b' : cyan;
+                        const labelText =
+                          c === 'asset' ? 'Anlagegut' :
+                          c === 'gwg' ? 'GWG (sofort)' :
+                          c === 'expense' ? 'Ausgabe' : 'Ignorieren';
+                        return (
+                          <button
+                            key={c}
+                            onClick={() => updateDraft(row.id, { classification: c })}
+                            title={c === 'gwg' ? 'Geringwertiges Wirtschaftsgut: sofort als Aufwand verbucht (EÜR) UND ins Anlagenverzeichnis (GWG-Pflicht ab 250 €).' : undefined}
+                            style={{
+                              padding: '6px 12px', borderRadius: 6, border: '1px solid #334155',
+                              background: active ? activeColor : 'transparent',
+                              color: active ? '#0f172a' : '#94a3b8',
+                              fontWeight: 600, fontSize: 12, cursor: 'pointer',
+                            }}
+                          >
+                            {labelText}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
 
                   {row.ai_suggestion?.suggested_classification && (
                     <div style={{ fontSize: 11, color: '#64748b', marginBottom: 8 }}>
-                      KI-Vorschlag: <strong style={{ color: '#94a3b8' }}>{row.ai_suggestion.suggested_classification === 'asset' ? 'Anlagegut' : 'Ausgabe'}</strong>
+                      KI-Vorschlag: <strong style={{ color: '#94a3b8' }}>{
+                        row.ai_suggestion.suggested_classification === 'asset' ? 'Anlagegut' :
+                        row.ai_suggestion.suggested_classification === 'gwg' ? 'GWG (sofort)' : 'Ausgabe'
+                      }</strong>
                       {row.ai_suggestion.confidence != null && ` (${Math.round(row.ai_suggestion.confidence * 100)}% Sicherheit)`}
                     </div>
                   )}
@@ -481,6 +514,53 @@ export default function RechnungUploadPage() {
                         </div>
                       )}
                     </div>
+                  )}
+
+                  {row.draft?.classification === 'gwg' && (
+                    <>
+                      <div style={{
+                        background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.3)',
+                        borderRadius: 8, padding: '8px 12px', marginTop: 8, marginBottom: 8,
+                        fontSize: 12, color: '#fde68a', lineHeight: 1.5,
+                      }}>
+                        <strong>GWG-Sofortabzug</strong> nach § 6 Abs. 2 EStG: kompletter Nettobetrag landet sofort als Aufwand in der EÜR. Gleichzeitig wird ein Eintrag im Anlagenverzeichnis angelegt (Verzeichnis-Pflicht ab 250 € netto). Buchwert: 0 €.
+                        {(() => {
+                          const netto = Number(row.net_price ?? 0);
+                          if (netto > GWG_NETTO_MAX) {
+                            return <span style={{ display: 'block', marginTop: 4, color: '#fca5a5' }}>⚠ Nettobetrag {formatCurrency(netto)} liegt über 800 € — eigentlich Pflicht zu linearer AfA. GWG nur auswählen, wenn du die Konsequenzen kennst.</span>;
+                          }
+                          if (netto < GWG_NETTO_MIN && netto > 0) {
+                            return <span style={{ display: 'block', marginTop: 4, color: '#94a3b8' }}>Hinweis: Unter 250 € netto reicht eigentlich &bdquo;Ausgabe&ldquo; — kein Verzeichnis-Eintrag nötig.</span>;
+                          }
+                          return null;
+                        })()}
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginTop: 8 }}>
+                        <div>
+                          <span style={label}>Art</span>
+                          <select style={input} value={row.draft?.kind ?? 'rental_accessory'} onChange={(e) => updateDraft(row.id, { kind: e.target.value as Kind })}>
+                            {Object.entries(KIND_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <span style={label}>Name</span>
+                          <input style={input} value={row.draft.name ?? ''} onChange={(e) => updateDraft(row.id, { name: e.target.value })} />
+                        </div>
+                        <div>
+                          <span style={label}>Seriennummer</span>
+                          <input style={input} value={row.draft.serial_number ?? ''} onChange={(e) => updateDraft(row.id, { serial_number: e.target.value })} />
+                        </div>
+                        {row.draft.kind === 'rental_camera' && (
+                          <div>
+                            <span style={label}>Produkt verknuepfen</span>
+                            <select style={input} value={row.draft.product_id ?? ''} onChange={(e) => updateDraft(row.id, { product_id: e.target.value || undefined })}>
+                              <option value="">— ohne Verknuepfung —</option>
+                              {products.map((p) => <option key={p.id} value={p.id}>{p.brand} {p.name}</option>)}
+                            </select>
+                          </div>
+                        )}
+                      </div>
+                    </>
                   )}
 
                   {row.draft?.classification === 'expense' && (
