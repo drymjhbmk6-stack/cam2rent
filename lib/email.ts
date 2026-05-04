@@ -49,7 +49,7 @@ const h = escapeHtml;
 export function stripSubject(val: unknown): string {
   if (val === null || val === undefined) return '';
   return String(val)
-    .replace(/[\r\n  ]+/g, ' ')
+    .replace(/[\r\n\u2028\u2029]+/g, ' ')
     .slice(0, 200)
     .trim();
 }
