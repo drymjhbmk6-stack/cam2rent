@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { fmtDate, formatCurrency } from '@/lib/format-utils';
+import PurchaseItemClassifier, { type ClassifierItem, type ProductOption, type AssetOption } from '@/components/admin/PurchaseItemClassifier';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -23,6 +24,11 @@ interface PurchaseItem {
   product_name: string;
   quantity: number;
   unit_price: number;
+  net_price?: number | null;
+  tax_rate?: number | null;
+  classification?: 'asset' | 'gwg' | 'expense' | 'ignored' | 'pending' | null;
+  asset_id?: string | null;
+  expense_id?: string | null;
 }
 
 type AttachmentKind = 'invoice' | 'receipt' | 'delivery_note' | 'other';
@@ -165,6 +171,10 @@ export default function EinkaufPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
 
+  // Daten fuer Klassifizier-UI in der ausgeklappten PurchaseRow
+  const [products, setProducts] = useState<ProductOption[]>([]);
+  const [assets, setAssets] = useState<AssetOption[]>([]);
+
   const [saving, setSaving] = useState(false);
 
   // ─── Data fetching ──────────────────────────────────────────────────────
@@ -182,10 +192,41 @@ export default function EinkaufPage() {
     if (res.ok) { const j = await res.json(); setPurchases(j.purchases); }
   }, [filterSupplier]);
 
+  const fetchClassifierData = useCallback(async () => {
+    // Produkte + aktive Anlagen fuer das Verknuepfungs-Dropdown im Classifier
+    try {
+      const [pRes, aRes] = await Promise.all([
+        fetch('/api/products'),
+        fetch('/api/admin/assets?status=active'),
+      ]);
+      if (pRes.ok) {
+        const pJ = await pRes.json();
+        if (Array.isArray(pJ?.products)) {
+          setProducts(pJ.products.map((p: { id: string; name: string; brand: string }) => ({ id: p.id, name: p.name, brand: p.brand })));
+        }
+      }
+      if (aRes.ok) {
+        const aJ = await aRes.json();
+        if (Array.isArray(aJ?.assets)) {
+          setAssets(aJ.assets.map((a: { id: string; name: string; kind: string; purchase_price: number; serial_number: string | null; depreciation_method: 'linear' | 'immediate' | 'none' }) => ({
+            id: a.id,
+            name: a.name,
+            kind: a.kind,
+            purchase_price: Number(a.purchase_price ?? 0),
+            serial_number: a.serial_number,
+            depreciation_method: a.depreciation_method,
+          })));
+        }
+      }
+    } catch {
+      // silent — Classifier funktioniert auch ohne Vorab-Daten (Dropdowns einfach leer)
+    }
+  }, []);
+
   useEffect(() => {
     setLoading(true);
-    Promise.all([fetchSuppliers(), fetchPurchases()]).finally(() => setLoading(false));
-  }, [fetchSuppliers, fetchPurchases]);
+    Promise.all([fetchSuppliers(), fetchPurchases(), fetchClassifierData()]).finally(() => setLoading(false));
+  }, [fetchSuppliers, fetchPurchases, fetchClassifierData]);
 
   // ─── Supplier CRUD ──────────────────────────────────────────────────────
 
@@ -832,6 +873,9 @@ export default function EinkaufPage() {
                       onStatusChange={(status) => updatePurchaseStatus(p.id, status)}
                       onDelete={() => deletePurchase(p.id)}
                       onAttachmentsChanged={fetchPurchases}
+                      products={products}
+                      assets={assets}
+                      onItemClassified={async () => { await fetchPurchases(); await fetchClassifierData(); }}
                     />
                   ))}
                 </tbody>
@@ -944,6 +988,7 @@ function SupplierRow({
 
 function PurchaseRow({
   purchase, expanded, selected, onToggleSelect, onToggle, onStatusChange, onDelete, onAttachmentsChanged,
+  products, assets, onItemClassified,
 }: {
   purchase: Purchase; expanded: boolean;
   selected: boolean;
@@ -952,6 +997,9 @@ function PurchaseRow({
   onStatusChange: (status: string) => void;
   onDelete: () => void;
   onAttachmentsChanged: () => void | Promise<void>;
+  products: ProductOption[];
+  assets: AssetOption[];
+  onItemClassified: () => void | Promise<void>;
 }) {
   const productSummary = purchase.purchase_items
     .map(i => `${i.quantity}x ${i.product_name}`)
@@ -1042,6 +1090,23 @@ function PurchaseRow({
                 ))}
               </tbody>
             </table>
+
+            {/* Klassifizierung & Verknuepfung */}
+            <div style={{ marginTop: 20 }}>
+              <div style={S.label}>Klassifizierung & Verknüpfung</div>
+              <p style={{ color: '#64748b', fontSize: 12, margin: '0 0 8px' }}>
+                Pro Position als Anlagegut, GWG, Ausgabe oder Ignorieren festlegen — auch nachträglich. Anlagegüter können an eine bereits erfasste Anlage gehängt werden.
+              </p>
+              {purchase.purchase_items.map((item) => (
+                <PurchaseItemClassifier
+                  key={item.id}
+                  item={item as ClassifierItem}
+                  products={products}
+                  assets={assets}
+                  onSaved={onItemClassified}
+                />
+              ))}
+            </div>
 
             {/* Belege */}
             <div style={{ marginTop: 20 }}>
