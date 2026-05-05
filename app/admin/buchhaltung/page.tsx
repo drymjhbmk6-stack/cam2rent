@@ -123,6 +123,7 @@ function BuchhaltungContent() {
         <a href="/admin/buchhaltung/anlagen" style={{ fontSize: 13, color: '#06b6d4', textDecoration: 'none' }}>🏢 Anlagen (Steuersicht)</a>
         <a href="/admin/buchhaltung/ausgaben-neu" style={{ fontSize: 13, color: '#06b6d4', textDecoration: 'none' }}>💸 Ausgaben (vereinheitlicht)</a>
         <a href="/admin/inventar" style={{ fontSize: 13, color: '#06b6d4', textDecoration: 'none' }}>📦 Inventar</a>
+        <a href="/admin/buchhaltung/wbw-config" style={{ fontSize: 13, color: '#06b6d4', textDecoration: 'none' }}>⚙ WBW-Berechnung</a>
       </div>
 
       {/* Tab-Navigation */}

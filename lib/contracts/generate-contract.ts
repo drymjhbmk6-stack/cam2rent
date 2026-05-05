@@ -121,12 +121,48 @@ async function resolveAccessoryInfo(ids: string[]): Promise<Record<string, Acces
  * In dem Fall faellt der Vertrag auf opts.deposit als Wiederbeschaffungswert zurueck.
  */
 async function loadAssetCurrentValue(unitId: string): Promise<number | null> {
+  const supabase = createServiceClient();
+
+  // 1) NEUE Welt — inventar_units (nach Konsolidierungs-Migration).
+  //    bookings.unit_id ist eine product_units.id aus der alten Welt;
+  //    wir suchen ueber migration_audit die zugehoerige inventar_units.id.
   try {
-    const supabase = createServiceClient();
-    // Wir laden Kaufpreis + Kaufdatum + manueller Override und berechnen
-    // den Wiederbeschaffungswert pauschal: linear sinkend von 100 % auf
-    // einen Floor (Default 40 %) ueber 36 Monate (configurable). Override
-    // (replacement_value_estimate) hat Vorrang vor der Berechnung.
+    const { data: audit } = await supabase
+      .from('migration_audit')
+      .select('neue_id')
+      .eq('alte_tabelle', 'product_units')
+      .eq('alte_id', unitId)
+      .eq('neue_tabelle', 'inventar_units')
+      .maybeSingle();
+    if (audit?.neue_id) {
+      const { data: unit } = await supabase
+        .from('inventar_units')
+        .select('kaufpreis_netto, kaufdatum, wiederbeschaffungswert, wbw_manuell_gesetzt')
+        .eq('id', (audit as { neue_id: string }).neue_id)
+        .maybeSingle();
+      if (unit) {
+        const u = unit as { kaufpreis_netto: number | null; kaufdatum: string | null; wiederbeschaffungswert: number | null; wbw_manuell_gesetzt: boolean };
+        // 1a) Manueller Override hat Vorrang
+        if (u.wbw_manuell_gesetzt && u.wiederbeschaffungswert !== null) {
+          return Math.round(Number(u.wiederbeschaffungswert) * 100) / 100;
+        }
+        // 1b) Berechnen wenn Kaufpreis vorhanden
+        if (u.kaufpreis_netto !== null && u.kaufdatum) {
+          const config = await loadReplacementValueConfig(supabase);
+          return computeReplacementValue({
+            purchase_price: Number(u.kaufpreis_netto),
+            purchase_date: u.kaufdatum,
+            replacement_value_estimate: null,
+          }, config);
+        }
+      }
+    }
+  } catch {
+    // weiter zur alten Welt
+  }
+
+  // 2) ALTE Welt — assets-Tabelle mit unit_id (vor Konsolidierungs-Drop).
+  try {
     const primary = await supabase
       .from('assets')
       .select('purchase_price, purchase_date, current_value, replacement_value_estimate')
@@ -134,7 +170,6 @@ async function loadAssetCurrentValue(unitId: string): Promise<number | null> {
       .eq('status', 'active')
       .maybeSingle();
     let row: { purchase_price: number | null; purchase_date: string | null; current_value: number | null; replacement_value_estimate?: number | null } | null = primary.data;
-    // Defensiv: Migration noch nicht durch -> ohne replacement_value_estimate retryen
     if (primary.error && /replacement_value_estimate/i.test(primary.error.message)) {
       const fallback = await supabase
         .from('assets')

@@ -62,6 +62,56 @@ ESLint + TypeScript werden auf dem Server beim Build geskippt (RAM-Limit CX23).
 - Anthropic Claude API (Blog-KI-Generierung)
 - OpenAI DALL-E 3 (Blog-Bildgenerierung)
 
+## Buchhaltungs-/Inventar-Konsolidierung (Stand 2026-05-05)
+
+Vollstaendiger Refactor von Einkauf + Buchhaltung + Anlagen + Inventar in eine
+einheitliche, beleg-zentrierte Architektur.
+
+**Mentales Modell — 3 Welten:**
+1. **Belege-Welt** (`belege` + `beleg_positionen` + `beleg_anhaenge` + `lieferanten`): Jede Ausgabe entsteht ueber einen Beleg. Klassifizierung pro Position (afa/gwg/ausgabe/ignoriert), dann Festschreibung mit lueckenloser Belegnummer (`naechste_beleg_nummer()`).
+2. **Inventar-Welt** (`inventar_units` + `produkte` + `inventar_verknuepfung`): Alle physischen Stuecke in einer Tabelle. `tracking_mode='individual'` (mit Inventar-Code/Seriennummer) oder `'bulk'` (mit Bestand). WBW lebt hier — getrennt vom steuerlichen Buchwert.
+3. **Anlagen-Welt** (`assets` + `afa_buchungen`): Reine Steuersicht. Auto-erzeugt aus afa/gwg-Belegpositionen bei Festschreibung. AfA-Cron schreibt monatlich fort.
+
+**Neue Tabellen:** lieferanten, produkte, belege, beleg_positionen, beleg_anhaenge, inventar_units, inventar_verknuepfung, assets (umbenannt aus assets_neu nach Drop), afa_buchungen, migration_audit, beleg_nummer_counter.
+
+**Wichtige Routen:**
+- `/admin/buchhaltung/belege` — Liste, `/neu` Wizard (Quelle → Daten → Klassif.), `/[id]` Detail
+- `/admin/buchhaltung/anlagen` — Steuersicht (KEIN WBW), `/[id]` Detail mit AfA-Historie
+- `/admin/buchhaltung/ausgaben-neu` — vereinheitlichte Liste aus `beleg_positionen`
+- `/admin/buchhaltung/wbw-config` — Floor-% + Nutzungsdauer-Settings + Live-Vorschau
+- `/admin/inventar` — alle physischen Stuecke, `/neu` Manuell-Anlegen, `/[id]` Detail mit WBW-Override + Pfad-B-Verknuepfung
+
+**Key-Libs:**
+- `lib/buchhaltung/beleg-utils.ts` — nextBelegNr, recomputeSummen, sanitize
+- `lib/buchhaltung/asset-auto-generator.ts` — Festschreibung erzeugt Assets+afa_buchungen
+- `lib/buchhaltung/afa-cron.ts` — monatliche AfA-Logik mit Idempotenz
+- `lib/inventar/wiederbeschaffungswert.ts` — `computeWBW()` mit Entscheidungsbaum (Override → null bei kein Preis → lineare Formel mit Floor)
+- `lib/ai/klassifiziere-positionen.ts` — Claude Sonnet 4.6 fuer Auto-Klassifizierung
+- `lib/ai/invoice-extract.ts` — Claude Vision fuer OCR (existierte schon)
+
+**Wiederbeschaffungswert (WBW) — Entscheidungsbaum:**
+1. `wbw_manuell_gesetzt=true` → return `wiederbeschaffungswert` (Override hat Vorrang)
+2. `kaufpreis_netto IS NULL` → return `null` (UI zeigt "Nicht gesetzt")
+3. Sonst: lineare Wertminderung von `kaufpreis_netto` auf `floor_percent% × kaufpreis_netto` ueber `useful_life_months`, danach konstant.
+
+**Cron-Job:**
+```
+0 6 1 * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/afa-buchung
+```
+
+**Migrations-Reihenfolge (bei Go-Live):**
+1. `supabase/buchhaltung-konsolidierung.sql` (Schema, idempotent)
+2. `npx tsx scripts/migrate-buchhaltung.ts --dry-run` (Counts pruefen)
+3. `npx tsx scripts/migrate-buchhaltung.ts --confirm` (echte Migration)
+4. `npx tsx scripts/verify-migration.ts` (muss gruen sein)
+5. `supabase/buchhaltung-konsolidierung-drop.sql` (alte Tabellen weg, assets_neu→assets)
+6. `supabase/buchhaltung-konsolidierung-final-cleanup.sql` (Reste aufraeumen)
+
+Solange Schritt 5 nicht durchgelaufen ist, koexistieren alte und neue Welt:
+APIs/Libs nutzen `pickAssetsTable()` mit Fallback assets_neu→assets. Mietvertrag
+liest WBW zuerst aus `inventar_units` (via migration_audit-Lookup auf
+`product_units`) und faellt auf alte `assets`-Tabelle zurueck.
+
 ## Architektur-Übersicht (Stand 2026-04-16)
 
 ### Datenquellen — ALLES aus DB, keine statischen Fallbacks

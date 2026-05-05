@@ -210,8 +210,8 @@ const REELS_ITEMS: NavItem[] = [
 
 const FINANZEN_ITEMS: NavItem[] = [
   { href: '/admin/buchhaltung', label: 'Buchhaltung', icon: iconFinance, perm: 'finanzen' },
-  { href: '/admin/einkauf', label: 'Einkauf', icon: iconCart, perm: 'finanzen' },
-  { href: '/admin/anlagen', label: 'Anlagenverzeichnis', icon: iconCamera, perm: 'finanzen' },
+  { href: '/admin/buchhaltung/belege', label: 'Belege', icon: iconCart, perm: 'finanzen' },
+  { href: '/admin/buchhaltung/anlagen', label: 'Anlagen', icon: iconCamera, perm: 'finanzen' },
 ];
 
 const BERICHTE_ITEMS: NavItem[] = [
@@ -568,7 +568,7 @@ function SidebarContent({ pathname, isDashboard, onNavClick, handleLogout, me }:
     preise: ['/admin/gutscheine', '/admin/rabatte', '/admin/warenkorb-erinnerung', '/admin/newsletter'],
     content: ['/admin/blog', '/admin/social'],
     webseite: ['/admin/startseite', '/admin/legal'],
-    finanzen: ['/admin/buchhaltung', '/admin/einkauf', '/admin/anlagen'],
+    finanzen: ['/admin/buchhaltung'],
     berichte: ['/admin/analytics', '/admin/emails', '/admin/beta-feedback', '/admin/aktivitaetsprotokoll'],
   };
 
