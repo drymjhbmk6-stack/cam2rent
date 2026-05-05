@@ -73,9 +73,8 @@ const stats = {
   produkte_kameras: 0, produkte_zubehoer: 0,
   inventar_kameras: 0, inventar_zubehoer_individual: 0, inventar_bulk: 0,
   belege_aus_purchases: 0, belege_aus_expenses: 0, belege_aus_stripe: 0,
-  belege_aus_orphan_assets: 0,
   beleg_positionen_total: 0,
-  assets_neu_migriert: 0, assets_verwaist: 0, assets_via_eigenbeleg: 0,
+  assets_neu_migriert: 0, assets_verwaist: 0,
   inventar_verknuepfungen: 0,
   warnings: [] as string[],
 }
@@ -745,58 +744,9 @@ async function migrateAssets(itemMap: Map<string, string>): Promise<Map<string, 
       }
     }
     if (!belegPositionId) {
-      // Verwaistes Asset: kein purchase_item-Anker. Damit das Asset
-      // trotzdem ins Anlagenverzeichnis kommt, erzeugen wir einen
-      // Eigenbeleg + Position passend zu den Asset-Daten.
-      const purchaseDate = (a.purchase_date as string) || new Date().toISOString().slice(0, 10)
-      const jahr = new Date(purchaseDate).getFullYear()
-      const klassFromMethod: 'afa' | 'gwg' | 'ignoriert' =
-        a.depreciation_method === 'immediate' ? 'gwg' :
-        a.depreciation_method === 'linear' ? 'afa' : 'ignoriert'
-
-      if (DRY_RUN) {
-        belegPositionId = '00000000-0000-0000-0000-000000000000'
-        stats.assets_via_eigenbeleg++
-        stats.belege_aus_orphan_assets++
-        stats.beleg_positionen_total++
-      } else {
-        const eigenbelegNr = await nextBelegNr(jahr)
-        const { data: eigenbeleg, error: ebErr } = await supabase.from('belege').insert({
-          beleg_nr: eigenbelegNr,
-          interne_beleg_no: eigenbelegNr,
-          lieferant_id: null,
-          beleg_datum: purchaseDate,
-          summe_netto: Number(a.purchase_price ?? 0),
-          summe_brutto: Number(a.purchase_price ?? 0),  // Eigenbeleg: 0% MwSt
-          status: 'festgeschrieben',
-          quelle: 'migration',
-          ist_eigenbeleg: true,
-          eigenbeleg_grund: `Migration: Asset "${a.name}" hatte keine Belegquelle in der alten DB`,
-          notizen: 'Auto-erzeugt waehrend Konsolidierungs-Migration. Beleg kann unter /admin/buchhaltung/belege/[id] mit echter Rechnung als Anhang ergaenzt werden.',
-          is_test: !!a.is_test,
-          festgeschrieben_at: new Date().toISOString(),
-        }).select('id').single()
-        if (ebErr) { warn(`eigenbeleg fuer asset ${a.id}: ${ebErr.message}`); stats.assets_verwaist++; continue }
-        audit({ alte_tabelle: 'assets', alte_id: a.id, neue_tabelle: 'belege', neue_id: eigenbeleg.id, notizen: 'eigenbeleg fuer orphan asset' })
-        stats.belege_aus_orphan_assets++
-
-        const { data: pos, error: posErr } = await supabase.from('beleg_positionen').insert({
-          beleg_id: eigenbeleg.id,
-          reihenfolge: 0,
-          bezeichnung: a.name ?? 'Migration-Asset',
-          menge: 1,
-          einzelpreis_netto: Number(a.purchase_price ?? 0),
-          mwst_satz: 0,  // Eigenbeleg
-          klassifizierung: klassFromMethod,
-          locked: true,
-          notizen: a.serial_number ? `SN: ${a.serial_number}` : null,
-        }).select('id').single()
-        if (posErr) { warn(`eigenbeleg-position fuer asset ${a.id}: ${posErr.message}`); stats.assets_verwaist++; continue }
-        audit({ alte_tabelle: 'assets', alte_id: a.id, neue_tabelle: 'beleg_positionen', neue_id: pos.id, notizen: 'eigenbeleg-position fuer orphan asset' })
-        belegPositionId = pos.id
-        stats.assets_via_eigenbeleg++
-        stats.beleg_positionen_total++
-      }
+      warn(`Asset ${a.id} (${a.name}) hat keinen Beleg-Anker → uebersprungen`)
+      stats.assets_verwaist++
+      continue
     }
 
     const insertRow = {
@@ -823,7 +773,7 @@ async function migrateAssets(itemMap: Map<string, string>): Promise<Map<string, 
   }
 
   await flushAudit()
-  console.log(`  → ${stats.assets_neu_migriert} migriert (davon ${stats.assets_via_eigenbeleg} via Eigenbeleg), ${stats.assets_verwaist} echt verwaist`)
+  console.log(`  → ${stats.assets_neu_migriert} migriert, ${stats.assets_verwaist} verwaist`)
   return assetMap
 }
 
@@ -964,10 +914,9 @@ async function main() {
   console.log(`  Belege aus purchases:  ${stats.belege_aus_purchases}`)
   console.log(`  Belege aus expenses:   ${stats.belege_aus_expenses}`)
   console.log(`  Belege aus stripe:     ${stats.belege_aus_stripe}`)
-  console.log(`  Belege fuer Orphans:   ${stats.belege_aus_orphan_assets}`)
   console.log(`  Beleg-Positionen:      ${stats.beleg_positionen_total}`)
-  console.log(`  Assets migriert:       ${stats.assets_neu_migriert} (davon ${stats.assets_via_eigenbeleg} via Eigenbeleg)`)
-  console.log(`  Assets echt verwaist:  ${stats.assets_verwaist}`)
+  console.log(`  Assets migriert:       ${stats.assets_neu_migriert}`)
+  console.log(`  Assets verwaist:       ${stats.assets_verwaist}`)
   console.log(`  Verknuepfungen:        ${stats.inventar_verknuepfungen}`)
   console.log(`  Warnings:              ${stats.warnings.length}`)
   if (stats.warnings.length > 0) {
