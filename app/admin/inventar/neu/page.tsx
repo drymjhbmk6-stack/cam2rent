@@ -15,7 +15,7 @@ export default function NeuesInventarPage() {
   const [seriennummer, setSeriennummer] = useState('');
   const [inventarCode, setInventarCode] = useState('');
   const [bestand, setBestand] = useState(0);
-  const [setWbw, setSetWbw] = useState(false);
+  const [wbwEnabled, setWbwEnabled] = useState(false);
   const [wbw, setWbw] = useState<number>(0);
   const [notizen, setNotizen] = useState('');
 
@@ -32,7 +32,7 @@ export default function NeuesInventarPage() {
         bestand: trackingMode === 'bulk' ? bestand : null,
         notizen: notizen || null,
       };
-      if (setWbw && wbw > 0) body.wiederbeschaffungswert = wbw;
+      if (wbwEnabled && wbw > 0) body.wiederbeschaffungswert = wbw;
 
       const res = await fetch('/api/admin/inventar', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -103,10 +103,10 @@ export default function NeuesInventarPage() {
 
           <div className="pt-2 border-t border-slate-800">
             <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={setWbw} onChange={(e) => setSetWbw(e.target.checked)} />
+              <input type="checkbox" checked={wbwEnabled} onChange={(e) => setWbwEnabled(e.target.checked)} />
               Wiederbeschaffungswert manuell setzen (optional)
             </label>
-            {setWbw && (
+            {wbwEnabled && (
               <input type="number" step="0.01" min="0" value={wbw} onChange={(e) => setWbw(parseFloat(e.target.value || '0'))} className="w-full bg-[#111827] border border-slate-700 rounded px-3 py-2 text-base mt-2" placeholder="EUR" />
             )}
           </div>
