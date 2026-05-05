@@ -4,9 +4,45 @@ import { logAudit } from '@/lib/audit';
 import { sanitizePosition, recomputeBelegSummen } from '@/lib/buchhaltung/beleg-utils';
 
 /**
- * POST /api/admin/beleg-positionen
- * Body: { beleg_id, ...BelegPositionInput }
+ * POST /api/admin/beleg-positionen     → neue Position anlegen
+ * GET  /api/admin/beleg-positionen?q=…  → Fuzzy-Suche fuer Pfad B (Inventar
+ *      sucht passenden Beleg). Sucht in bezeichnung, beleg_nr, lieferant.name.
  */
+export async function GET(req: NextRequest) {
+  const sp = req.nextUrl.searchParams;
+  const q = sp.get('q')?.trim() ?? '';
+  const lieferantId = sp.get('lieferant_id');
+  const fromDate = sp.get('from');
+  const toDate = sp.get('to');
+
+  const supabase = createServiceClient();
+  let query = supabase
+    .from('beleg_positionen')
+    .select('id, bezeichnung, menge, einzelpreis_netto, gesamt_netto, klassifizierung, beleg:belege(id, beleg_nr, beleg_datum, lieferant_id, lieferant:lieferanten(id, name))')
+    .order('created_at', { ascending: false })
+    .limit(50);
+
+  if (q) query = query.ilike('bezeichnung', `%${q}%`);
+  // Hinweis: Filter auf nested beleg-Felder funktioniert in PostgREST nicht direkt,
+  // deshalb wird in den Kandidaten danach client-seitig nachgefiltert.
+
+  const { data, error } = await query;
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  let results = data ?? [];
+  if (lieferantId || fromDate || toDate) {
+    results = results.filter((r) => {
+      const beleg = (r as { beleg: { beleg_datum: string; lieferant_id: string | null } | null }).beleg;
+      if (!beleg) return false;
+      if (lieferantId && beleg.lieferant_id !== lieferantId) return false;
+      if (fromDate && beleg.beleg_datum < fromDate) return false;
+      if (toDate && beleg.beleg_datum > toDate) return false;
+      return true;
+    });
+  }
+  return NextResponse.json({ positionen: results });
+}
+
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null) as Record<string, unknown> | null;
   if (!body || !body.beleg_id) return NextResponse.json({ error: 'beleg_id Pflicht' }, { status: 400 });
