@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 
 interface Unit {
@@ -54,7 +54,6 @@ function fmtEuro(n: number | null): string {
 
 export default function InventarDetailPage() {
   const params = useParams();
-  const router = useRouter();
   const id = String(params?.id ?? '');
 
   const [unit, setUnit] = useState<Unit | null>(null);
