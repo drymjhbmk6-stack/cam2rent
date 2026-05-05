@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { logAudit } from '@/lib/audit';
+import { mirrorInventarToLegacy, deleteMirror } from '@/lib/inventar-mirror';
 
 export async function GET(
   _req: NextRequest,
@@ -53,6 +54,12 @@ export async function PATCH(
     .from('inventar_units').update(update).eq('id', id).select('*').single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+  // Mirror synchronisieren — bei produkt_id-Aenderung wird ggf. neu gespiegelt,
+  // bei Status-Aenderung wird der bestehende Mirror aktualisiert.
+  await mirrorInventarToLegacy(supabase, data).catch((e) => {
+    console.error('[inventar PATCH] mirror failed:', e);
+  });
+
   await logAudit({ action: 'inventar.update', entityType: 'inventar_unit', entityId: id, changes: update, request: req });
   return NextResponse.json({ unit: data });
 }
@@ -68,6 +75,10 @@ export async function DELETE(
   if (unit && (unit as { status: string }).status === 'vermietet') {
     return NextResponse.json({ error: 'Stueck ist vermietet — kann nicht geloescht werden' }, { status: 409 });
   }
+  // Mirror in alter Welt zuerst entfernen — sonst bleiben Waisen-Eintraege.
+  await deleteMirror(supabase, id).catch((e) => {
+    console.error('[inventar DELETE] mirror cleanup failed:', e);
+  });
   const { error } = await supabase.from('inventar_units').delete().eq('id', id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   await logAudit({ action: 'inventar.delete', entityType: 'inventar_unit', entityId: id, request: req });

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { logAudit } from '@/lib/audit';
 import { explainWBW, loadWbwConfig } from '@/lib/inventar/wiederbeschaffungswert';
+import { mirrorInventarToLegacy } from '@/lib/inventar-mirror';
 
 /**
  * GET /api/admin/inventar?typ=&status=&beleg_status=&q=
@@ -72,6 +73,12 @@ export async function POST(req: NextRequest) {
 
   const { data, error } = await supabase.from('inventar_units').insert(insert).select('*').single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Mirror in alte Welt: damit Buchungs-Auto-Zuweisung (RPC `assign_free_unit`)
+  // und Booking-FK weiter funktionieren. Best-effort, keine harte Abhaengigkeit.
+  await mirrorInventarToLegacy(supabase, data).catch((e) => {
+    console.error('[inventar POST] mirror failed:', e);
+  });
 
   await logAudit({
     action: 'inventar.create',

@@ -81,9 +81,12 @@ export default function InventarPage() {
       <div className="max-w-7xl mx-auto mt-4">
         <div className="flex flex-wrap justify-between gap-3 mb-6">
           <h1 className="text-2xl font-heading">Inventar</h1>
-          <Link href="/admin/inventar/neu" className="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-900 rounded font-semibold">
-            + Manuell anlegen
-          </Link>
+          <div className="flex gap-2">
+            <BackfillMirrorsButton />
+            <Link href="/admin/inventar/neu" className="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-900 rounded font-semibold">
+              + Manuell anlegen
+            </Link>
+          </div>
         </div>
 
         {produktId && (
@@ -186,6 +189,45 @@ function Stat({ label, value, color = 'slate' }: { label: string; value: number;
     <div className="bg-[#111827] border border-slate-800 rounded p-3">
       <div className="text-xs text-slate-400">{label}</div>
       <div className={`text-2xl font-mono ${colorClass}`}>{value}</div>
+    </div>
+  );
+}
+
+function BackfillMirrorsButton() {
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+
+  async function run() {
+    if (!confirm('Inventar-Einheiten in die alte product_units/accessory_units-Welt spiegeln? Idempotent — kann gefahrlos mehrfach laufen.')) return;
+    setBusy(true);
+    setResult(null);
+    try {
+      const res = await fetch('/api/admin/inventar/backfill-mirrors', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) {
+        setResult(`Fehler: ${data.error ?? 'unbekannt'}`);
+      } else {
+        setResult(`${data.mirrored} gespiegelt, ${data.skipped} übersprungen`);
+      }
+    } catch (err) {
+      setResult(`Netzwerk-Fehler: ${(err as Error).message}`);
+    } finally {
+      setBusy(false);
+      setTimeout(() => setResult(null), 6000);
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      {result && <span className="text-xs text-slate-400">{result}</span>}
+      <button
+        onClick={run}
+        disabled={busy}
+        title="Spiegelt alle Einzel-Inventar-Einheiten in product_units/accessory_units. Damit funktioniert die Buchungs-Auto-Zuweisung fuer manuell angelegte Stuecke."
+        className="px-3 py-2 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:text-slate-500 text-slate-200 rounded text-sm"
+      >
+        {busy ? 'Spiegele…' : 'Mirror-Backfill'}
+      </button>
     </div>
   );
 }
