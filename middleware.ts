@@ -242,6 +242,13 @@ const API_PATH_PERMISSIONS: PermRule[] = [
   { prefix: '/api/admin/purchases', perm: 'finanzen' },
   { prefix: '/api/admin/purchase-attachments', perm: 'finanzen' },
   { prefix: '/api/admin/deposit', perm: 'finanzen' },
+  // Buchhaltungs-Konsolidierung (neue Welt)
+  { prefix: '/api/admin/belege', perm: 'finanzen' },
+  { prefix: '/api/admin/beleg-positionen', perm: 'finanzen' },
+  { prefix: '/api/admin/lieferanten', perm: 'finanzen' },
+  { prefix: '/api/admin/inventar', perm: 'katalog' },
+  { prefix: '/api/admin/produkte', perm: 'katalog' },
+  { prefix: '/api/admin/afa-buchungen', perm: 'finanzen' },
   // Berichte
   { prefix: '/api/admin/analytics', perm: 'berichte' },
   { prefix: '/api/admin/email-log', perm: 'berichte' },
