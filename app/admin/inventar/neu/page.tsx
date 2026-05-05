@@ -1,16 +1,27 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+
+interface Produkt {
+  id: string;
+  name: string;
+  marke: string | null;
+  modell: string | null;
+  ist_vermietbar: boolean;
+}
 
 export default function NeuesInventarPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [bezeichnung, setBezeichnung] = useState('');
-  const [typ, setTyp] = useState<'kamera' | 'zubehoer' | 'verbrauch'>('zubehoer');
+  const [typ, setTyp] = useState<'kamera' | 'zubehoer' | 'verbrauch'>(
+    (searchParams.get('typ') as 'kamera' | 'zubehoer' | 'verbrauch') ?? 'zubehoer',
+  );
   const [trackingMode, setTrackingMode] = useState<'individual' | 'bulk'>('individual');
   const [seriennummer, setSeriennummer] = useState('');
   const [inventarCode, setInventarCode] = useState('');
@@ -18,6 +29,15 @@ export default function NeuesInventarPage() {
   const [wbwEnabled, setWbwEnabled] = useState(false);
   const [wbw, setWbw] = useState<number>(0);
   const [notizen, setNotizen] = useState('');
+  const [produkte, setProdukte] = useState<Produkt[]>([]);
+  const [produktId, setProduktId] = useState<string>(searchParams.get('produkt_id') ?? '');
+
+  useEffect(() => {
+    fetch('/api/admin/produkte')
+      .then((r) => (r.ok ? r.json() : { produkte: [] }))
+      .then((data) => setProdukte(data.produkte ?? []))
+      .catch(() => setProdukte([]));
+  }, []);
 
   async function handleSave() {
     setBusy(true);
@@ -27,6 +47,7 @@ export default function NeuesInventarPage() {
         bezeichnung,
         typ,
         tracking_mode: trackingMode,
+        produkt_id: produktId || null,
         seriennummer: trackingMode === 'individual' ? (seriennummer || null) : null,
         inventar_code: inventarCode,
         bestand: trackingMode === 'bulk' ? bestand : null,
@@ -63,7 +84,20 @@ export default function NeuesInventarPage() {
 
         <div className="space-y-3">
           <Label>Bezeichnung *</Label>
-          <input value={bezeichnung} onChange={(e) => setBezeichnung(e.target.value)} className="w-full bg-[#111827] border border-slate-700 rounded px-3 py-2 text-base" />
+          <input value={bezeichnung} onChange={(e) => setBezeichnung(e.target.value)} placeholder="z.B. CAM-GOP-13-01 oder Akku #1" className="w-full bg-[#111827] border border-slate-700 rounded px-3 py-2 text-base" />
+
+          <Label>Produkt zuordnen (Stammdaten)</Label>
+          <select value={produktId} onChange={(e) => setProduktId(e.target.value)} className="w-full bg-[#111827] border border-slate-700 rounded px-3 py-2 text-base">
+            <option value="">— Kein Produkt zugeordnet —</option>
+            {produkte.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.marke ? `${p.marke} ` : ''}{p.name}{p.modell && p.modell !== p.name ? ` (${p.modell})` : ''}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-slate-500">
+            Verknuepft das Inventar-Stueck mit den Produkt-Stammdaten — Voraussetzung fuer Verfuegbarkeit, Mietvertrag-Wiederbeschaffungswert und Auslastungs-Auswertung.
+          </p>
 
           <div className="grid grid-cols-2 gap-3">
             <div>

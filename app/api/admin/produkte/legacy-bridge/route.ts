@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { resolveProdukteId, type LegacySource } from '@/lib/legacy-bridge';
 
 /**
  * GET /api/admin/produkte/legacy-bridge?legacy_id=X&source=Y
@@ -12,18 +13,17 @@ import { createServiceClient } from '@/lib/supabase';
  *  - "admin_config.products" (Default) — fuer Kameras (legacy_id ist string wie "1")
  *  - "accessories"                     — fuer Zubehoer (legacy_id ist accessory.id)
  *
- * Wird auf der Kamera- und Zubehoer-Edit-Seite aufgerufen, um den Banner
- * mit aktiver Stueckzahl + Deep-Link ins Inventar zu rendern.
- *
- * Defensiv: Wenn migration_audit oder produkte/inventar_units nicht existieren,
- * wird produkte_id=null und total=0 zurueckgegeben — die UI zeigt dann den
- * Hinweis "Noch keine Einheiten" und keinen Deep-Link.
+ * Lazy-Backfill: Wenn die produkte-Row noch nicht existiert, wird sie hier
+ * automatisch aus den Stammdaten der Quelle erzeugt + ein migration_audit-
+ * Eintrag angelegt. So funktioniert das System auch fuer Kameras/Zubehoer,
+ * die nach der Konsolidierungs-Migration neu in admin_config.products bzw.
+ * accessories angelegt wurden.
  */
-const ALLOWED_SOURCES = new Set(['admin_config.products', 'accessories']);
+const ALLOWED_SOURCES = new Set<LegacySource>(['admin_config.products', 'accessories']);
 
 export async function GET(req: NextRequest) {
   const legacyId = req.nextUrl.searchParams.get('legacy_id');
-  const source = req.nextUrl.searchParams.get('source') ?? 'admin_config.products';
+  const source = (req.nextUrl.searchParams.get('source') ?? 'admin_config.products') as LegacySource;
   if (!legacyId) {
     return NextResponse.json({ error: 'legacy_id fehlt' }, { status: 400 });
   }
@@ -32,24 +32,7 @@ export async function GET(req: NextRequest) {
   }
 
   const supabase = createServiceClient();
-
-  // 1. Migration-Audit-Lookup. Bei Zubehoer existieren bis zu drei
-  // Audit-Zeilen pro accessory.id — Stammdaten in `produkte`, optional eine
-  // bulk-Zeile in `inventar_units` und mehrere individual-Zeilen ueber
-  // `accessory_units`. Wir wollen NUR die `produkte`-Zuordnung.
-  let produkteId: string | null = null;
-  try {
-    const { data } = await supabase
-      .from('migration_audit')
-      .select('neue_id')
-      .eq('alte_tabelle', source)
-      .eq('alte_id', legacyId)
-      .eq('neue_tabelle', 'produkte')
-      .maybeSingle();
-    produkteId = (data as { neue_id?: string } | null)?.neue_id ?? null;
-  } catch {
-    // migration_audit nicht vorhanden → noch alte Welt, einfach null zurueck
-  }
+  const produkteId = await resolveProdukteId(supabase, source, legacyId, { autoCreate: true });
 
   if (!produkteId) {
     return NextResponse.json({
@@ -61,7 +44,7 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  // 2. inventar_units zaehlen — fuer individual-Tracking pro Zeile, fuer bulk
+  // inventar_units zaehlen — fuer individual-Tracking pro Zeile, fuer bulk
   // ueber das `bestand`-Feld. `active` zaehlt alle Stuecke die noch im Umlauf
   // sein koennen (also nicht ausgemustert).
   let total = 0;

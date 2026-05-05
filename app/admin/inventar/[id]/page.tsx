@@ -10,6 +10,7 @@ interface Unit {
   bezeichnung: string;
   typ: 'kamera' | 'zubehoer' | 'verbrauch';
   tracking_mode: 'individual' | 'bulk';
+  produkt_id: string | null;
   produkt: { id: string; name: string; marke: string | null } | null;
   seriennummer: string | null;
   inventar_code: string | null;
@@ -21,6 +22,13 @@ interface Unit {
   status: string;
   beleg_status: 'verknuepft' | 'beleg_fehlt';
   notizen: string | null;
+}
+
+interface Produkt {
+  id: string;
+  name: string;
+  marke: string | null;
+  modell: string | null;
 }
 
 interface Link {
@@ -51,8 +59,13 @@ export default function InventarDetailPage() {
 
   const [unit, setUnit] = useState<Unit | null>(null);
   const [links, setLinks] = useState<Link[]>([]);
+  const [produkte, setProdukte] = useState<Produkt[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Produkt-Zuordnung
+  const [showProduktEdit, setShowProduktEdit] = useState(false);
+  const [produktInput, setProduktInput] = useState<string>('');
 
   // Verknuepfungs-Modal
   const [showLinkModal, setShowLinkModal] = useState(false);
@@ -72,6 +85,26 @@ export default function InventarDetailPage() {
   }
 
   useEffect(() => { reload(); }, [id]);
+
+  // Produkte-Liste fuer das Zuordnungs-Dropdown laden
+  useEffect(() => {
+    fetch('/api/admin/produkte')
+      .then((r) => (r.ok ? r.json() : { produkte: [] }))
+      .then((data) => setProdukte(data.produkte ?? []))
+      .catch(() => setProdukte([]));
+  }, []);
+
+  async function handleSetProdukt() {
+    setBusy(true);
+    const res = await fetch(`/api/admin/inventar/${id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ produkt_id: produktInput || null }),
+    });
+    if (!res.ok) setError((await res.json()).error);
+    await reload();
+    setShowProduktEdit(false);
+    setBusy(false);
+  }
 
   useEffect(() => {
     if (!showLinkModal) return;
@@ -165,7 +198,27 @@ export default function InventarDetailPage() {
               <option value="ausgemustert">Ausgemustert</option>
             </select>
           } />
-          {unit.produkt && <Row label="Produkt" value={`${unit.produkt.marke ?? ''} ${unit.produkt.name}`} />}
+          <Row label="Produkt" value={
+            showProduktEdit ? (
+              <div className="flex gap-2 items-center">
+                <select value={produktInput} onChange={(e) => setProduktInput(e.target.value)} className="bg-[#0a0f1e] border border-slate-700 rounded px-2 py-1 text-sm">
+                  <option value="">— Keins —</option>
+                  {produkte.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.marke ? `${p.marke} ` : ''}{p.name}
+                    </option>
+                  ))}
+                </select>
+                <button onClick={handleSetProdukt} disabled={busy} className="px-2 py-1 bg-cyan-500 hover:bg-cyan-400 text-slate-900 rounded text-xs font-semibold">Speichern</button>
+                <button onClick={() => setShowProduktEdit(false)} className="text-slate-400 text-xs hover:text-slate-300">Abbrechen</button>
+              </div>
+            ) : (
+              <span className="flex gap-2 items-center">
+                {unit.produkt ? `${unit.produkt.marke ?? ''} ${unit.produkt.name}`.trim() : <span className="text-amber-400 italic">Nicht zugeordnet</span>}
+                <button onClick={() => { setShowProduktEdit(true); setProduktInput(unit.produkt_id ?? ''); }} className="text-cyan-400 text-xs hover:text-cyan-300">Ändern</button>
+              </span>
+            )
+          } />
           <Row label="Kaufpreis netto" value={fmtEuro(unit.kaufpreis_netto)} />
           <Row label="Kaufdatum" value={unit.kaufdatum ? new Date(unit.kaufdatum).toLocaleDateString('de-DE') : '–'} />
         </section>
