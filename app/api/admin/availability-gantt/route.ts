@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { getProducts } from '@/lib/get-products';
+import { resolveProdukteIdMap, loadInventarUnitsForProdukteBulk } from '@/lib/legacy-bridge';
 
 /**
  * GET /api/admin/availability-gantt?from=2025-04-16&to=2027-04-15
@@ -77,12 +78,8 @@ export async function GET(req: NextRequest) {
   const extLast = extLastDate.toISOString().split('T')[0];
 
   // Parallele Abfragen
-  const [products, unitsResult, bookingsResult, blockedResult, accessoriesResult, setsResult] = await Promise.all([
+  const [products, bookingsResult, blockedResult, accessoriesResult, setsResult] = await Promise.all([
     getProducts(),
-    supabase
-      .from('product_units')
-      .select('id, product_id, serial_number, label, status')
-      .order('created_at', { ascending: true }),
     supabase
       .from('bookings')
       .select('id, product_id, product_name, rental_from, rental_to, days, status, delivery_mode, customer_name, unit_id, accessories, is_test')
@@ -105,15 +102,37 @@ export async function GET(req: NextRequest) {
       .order('sort_order', { ascending: true }),
   ]);
 
-  const units = unitsResult.data ?? [];
   const bookings = bookingsResult.data ?? [];
   const blocked = blockedResult.data ?? [];
 
-  // Gruppierung in O(n) statt O(n*m) pro Produkt (N+1-Fix)
-  const unitsByProduct: Record<string, typeof units> = {};
-  for (const u of units) {
-    (unitsByProduct[u.product_id] ||= []).push(u);
+  // Inventar-Einheiten via legacy-bridge laden (neue Welt). Mit
+  // legacy_unit_id-Mapping, damit existierende Buchungen (bookings.unit_id =
+  // alte product_units.id) korrekt zur Inventar-Einheit zugeordnet werden.
+  const visibleProducts = products.filter((p) => p.available !== false);
+  const legacyToProdukteId = await resolveProdukteIdMap(
+    supabase,
+    'admin_config.products',
+    visibleProducts.map((p) => p.id),
+    { autoCreate: true }, // Lazy-Backfill, falls neu angelegt
+  );
+  const produkteIds = Array.from(legacyToProdukteId.values());
+  const inventarByProdukt = await loadInventarUnitsForProdukteBulk(supabase, produkteIds, {
+    typ: 'kamera',
+    legacyMappingFrom: 'product_units',
+  });
+
+  // Fallback: alte product_units lesen — fuer Pre-Migration-Daten oder wenn
+  // die produkte/migration_audit-Tabellen noch nicht durch sind.
+  const { data: legacyUnitsData } = await supabase
+    .from('product_units')
+    .select('id, product_id, serial_number, label, status')
+    .order('created_at', { ascending: true });
+  const legacyUnits = legacyUnitsData ?? [];
+  const legacyUnitsByProduct: Record<string, typeof legacyUnits> = {};
+  for (const u of legacyUnits) {
+    (legacyUnitsByProduct[u.product_id] ||= []).push(u);
   }
+
   const bookingsByProduct: Record<string, typeof bookings> = {};
   for (const b of bookings) {
     if (b.product_id) (bookingsByProduct[b.product_id] ||= []).push(b);
@@ -123,37 +142,60 @@ export async function GET(req: NextRequest) {
     (blockedByProduct[bl.product_id] ||= []).push(bl);
   }
 
-  // Daten nach Produkt gruppieren
-  const productData = products
-    .filter((p) => p.available !== false)
-    .map((p) => {
-      const productUnits = unitsByProduct[p.id] ?? [];
-      const productBookings = bookingsByProduct[p.id] ?? [];
-      const productBlocked = blockedByProduct[p.id] ?? [];
+  // Daten nach Produkt gruppieren — Inventar-Einheiten haben Vorrang.
+  // Status-Mapping fuer alte UI: verfuegbar→available, vermietet→rented, ...
+  const productData = visibleProducts.map((p) => {
+    const produkteId = legacyToProdukteId.get(p.id);
+    const inventarUnits = produkteId ? (inventarByProdukt.get(produkteId) ?? []) : [];
+    const productBookings = bookingsByProduct[p.id] ?? [];
+    const productBlocked = blockedByProduct[p.id] ?? [];
 
-      return {
-        id: p.id,
-        name: p.name,
-        stock: p.stock,
-        units: productUnits.map((u) => ({
-          id: u.id,
-          serial_number: u.serial_number,
-          label: u.label,
-          status: u.status,
-        })),
-        bookings: productBookings.map((b) => ({
-          id: b.id,
-          rental_from: b.rental_from,
-          rental_to: b.rental_to,
-          customer_name: b.customer_name,
-          delivery_mode: b.delivery_mode,
-          status: b.status,
-          unit_id: b.unit_id,
-          is_test: b.is_test ?? false,
-        })),
-        blocked: productBlocked,
-      };
-    });
+    // Bekannte Inventar-Units mit Legacy-Mapping → diese alten product_units
+    // werden NICHT mehr separat gezeigt (wuerde sonst doppelte Zeilen ergeben).
+    const knownLegacyIds = new Set(
+      inventarUnits.map((u) => u.legacy_unit_id).filter((x): x is string => !!x),
+    );
+    const orphanLegacyUnits = (legacyUnitsByProduct[p.id] ?? [])
+      .filter((u) => !knownLegacyIds.has(u.id))
+      .map((u) => ({
+        id: u.id,
+        serial_number: u.serial_number,
+        label: u.label,
+        status: u.status,
+      }));
+
+    const unitsForUi = [
+      ...inventarUnits.map((u) => ({
+        // ID-Konvention: fuer Booking-Overlay verwenden wir die LEGACY-ID
+        // (falls vorhanden), denn bookings.unit_id hat die alte ID.
+        // Nur-Inventar-Stuecke (ohne Legacy-Twin) bekommen ihre Inventar-ID
+        // — bookings koennen eh noch nicht darauf zeigen.
+        id: u.legacy_unit_id ?? u.id,
+        serial_number: u.serial_number,
+        label: u.label,
+        status: u.status,
+      })),
+      ...orphanLegacyUnits,
+    ];
+
+    return {
+      id: p.id,
+      name: p.name,
+      stock: p.stock,
+      units: unitsForUi,
+      bookings: productBookings.map((b) => ({
+        id: b.id,
+        rental_from: b.rental_from,
+        rental_to: b.rental_to,
+        customer_name: b.customer_name,
+        delivery_mode: b.delivery_mode,
+        status: b.status,
+        unit_id: b.unit_id,
+        is_test: b.is_test ?? false,
+      })),
+      blocked: productBlocked,
+    };
+  });
 
   // ── Zubehör-Daten ──
   const allAccessories = accessoriesResult.data ?? [];

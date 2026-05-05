@@ -1,6 +1,6 @@
 import { createServiceClient } from '@/lib/supabase';
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import ScanBackLink from './ScanBackLink';
 import EditCameraEntry from './EditCameraEntry';
 import EditAccessoryEntry from './EditAccessoryEntry';
@@ -342,7 +342,22 @@ export default async function ScanLandingPage({ params }: PageProps) {
     return <UnitCard data={data} />;
   }
 
-  // 4) Nichts gefunden
+  // 4) Letzter Versuch: inventar_units (neue Welt). Wenn der Code als
+  // bezeichnung / inventar_code / seriennummer matched, redirect direkt auf
+  // die Inventar-Detail-Seite. Spart hier eine Vollintegration der UnitCard
+  // — dort liegt die volle Verwaltung sowieso.
+  const { data: invHit } = await supabase
+    .from('inventar_units')
+    .select('id')
+    .or(
+      `bezeichnung.eq.${decodedCode},inventar_code.eq.${decodedCode},seriennummer.eq.${decodedCode}`,
+    )
+    .maybeSingle();
+  if (invHit?.id) {
+    redirect(`/admin/inventar/${(invHit as { id: string }).id}`);
+  }
+
+  // 5) Nichts gefunden
   return (
     <ScanLayout title="Code unbekannt">
       <div className="space-y-3">

@@ -4,12 +4,12 @@ import Link from 'next/link';
 import PrintButton from './PrintButton';
 import QrDownloadButton from './QrDownloadButton';
 import { getSiteUrl } from '@/lib/env-mode';
+import { resolveProdukteId, loadInventarUnitsForProdukt } from '@/lib/legacy-bridge';
 
-interface Unit {
+interface DisplayUnit {
   id: string;
   serial_number: string;
-  label: string | null;
-  status: string;
+  label: string;
   notes: string | null;
 }
 
@@ -21,7 +21,7 @@ export default async function KameraQrCodesPage({
   const { id } = await params;
   const supabase = createServiceClient();
 
-  // Produkt laden
+  // Produkt-Stammdaten
   const { data: configRow } = await supabase
     .from('admin_config')
     .select('value')
@@ -30,23 +30,48 @@ export default async function KameraQrCodesPage({
   const productMap = (configRow?.value ?? {}) as Record<string, { name?: string; brand?: string }>;
   const product = productMap[id];
 
-  // Units laden — gefiltert auf nicht ausgemusterte
-  const { data: unitsRaw } = await supabase
-    .from('product_units')
-    .select('id, serial_number, label, status, notes')
-    .eq('product_id', id)
-    .neq('status', 'retired')
-    .order('serial_number', { ascending: true });
-  const units = (unitsRaw ?? []) as Unit[];
+  // Einheiten via legacy-bridge laden — bevorzugt aus inventar_units.
+  // Fallback: alte product_units lesen (Pre-Migration-Daten).
+  const produkteId = await resolveProdukteId(supabase, 'admin_config.products', id, { autoCreate: true });
+  let units: DisplayUnit[] = [];
+
+  if (produkteId) {
+    const inventarUnits = await loadInventarUnitsForProdukt(supabase, produkteId, {
+      excludeRetired: true,
+      trackingMode: 'individual',
+    });
+    units = inventarUnits.map((u) => ({
+      id: u.id,
+      serial_number: u.serial_number,
+      label: u.label || u.serial_number,
+      notes: u.notes,
+    }));
+  }
+
+  // Fallback auf alte product_units, falls die neue Welt leer ist.
+  if (units.length === 0) {
+    const { data: legacy } = await supabase
+      .from('product_units')
+      .select('id, serial_number, label, notes, status')
+      .eq('product_id', id)
+      .neq('status', 'retired')
+      .order('serial_number', { ascending: true });
+    units = ((legacy ?? []) as Array<{ id: string; serial_number: string; label: string | null; notes: string | null }>).map((u) => ({
+      id: u.id,
+      serial_number: u.serial_number,
+      label: u.label || u.serial_number,
+      notes: u.notes,
+    }));
+  }
 
   // QR-Inhalt = vollstaendige Scan-URL ueber die Bezeichnung (label).
   // Beim Scannen oeffnet der Browser /admin/scan/<bezeichnung> und zeigt die
-  // Detail-Ansicht. Wenn label nicht gesetzt (Altbestand), faellt's auf die
-  // Seriennummer zurueck — die scan-Page akzeptiert beide.
+  // Detail-Ansicht. Wenn label nicht gesetzt, faellt's auf die Seriennummer
+  // zurueck — die scan-Page akzeptiert beide.
   const siteUrl = (await getSiteUrl()).replace(/\/+$/, '');
   const qrItems = await Promise.all(
     units.map(async (u) => {
-      const code = (u.label && u.label.trim()) ? u.label.trim() : u.serial_number;
+      const code = u.label && u.label.trim() ? u.label.trim() : u.serial_number;
       return {
         ...u,
         qr: await QRCode.toDataURL(`${siteUrl}/admin/scan/${encodeURIComponent(code)}`, {
@@ -109,11 +134,11 @@ export default async function KameraQrCodesPage({
 
         {qrItems.length === 0 ? (
           <div className="border border-dashed border-gray-300 rounded p-8 text-center text-gray-500 print:hidden">
-            Keine Seriennummern hinterlegt. Lege erst Seriennummern unter{' '}
-            <Link href={`/admin/preise/kameras/${id}`} className="text-cyan-600 underline">
-              Kamera-Editor
+            Keine Seriennummern hinterlegt. Lege Einzelexemplare unter{' '}
+            <Link href="/admin/inventar/neu" className="text-cyan-600 underline">
+              Inventar
             </Link>{' '}
-            an.
+            an und ordne sie diesem Produkt zu.
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 print:gap-2">

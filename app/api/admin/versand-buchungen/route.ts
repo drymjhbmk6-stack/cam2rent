@@ -23,16 +23,49 @@ export async function GET() {
     return NextResponse.json({ bookings: [] });
   }
 
-  // Seriennummern für zugeordnete Units laden
-  const unitIds = (bookings ?? []).map((b) => b.unit_id).filter(Boolean);
-  let unitMap: Record<string, string> = {};
+  // Seriennummern für zugeordnete Units laden — bevorzugt aus inventar_units
+  // (neue Welt) ueber migration_audit. Fallback auf product_units.
+  const unitIds = (bookings ?? []).map((b) => b.unit_id).filter(Boolean) as string[];
+  const unitMap: Record<string, string> = {};
   if (unitIds.length > 0) {
-    const { data: units } = await supabase
-      .from('product_units')
-      .select('id, serial_number')
-      .in('id', unitIds);
-    if (units) {
-      unitMap = Object.fromEntries(units.map((u) => [u.id, u.serial_number]));
+    try {
+      const { data: auditRows } = await supabase
+        .from('migration_audit')
+        .select('alte_id, neue_id')
+        .eq('alte_tabelle', 'product_units')
+        .eq('neue_tabelle', 'inventar_units')
+        .in('alte_id', unitIds);
+      const auditMap = new Map<string, string>();
+      for (const row of (auditRows ?? []) as Array<{ alte_id: string; neue_id: string }>) {
+        auditMap.set(row.alte_id, row.neue_id);
+      }
+      if (auditMap.size > 0) {
+        const { data: invUnits } = await supabase
+          .from('inventar_units')
+          .select('id, seriennummer, inventar_code')
+          .in('id', Array.from(auditMap.values()));
+        const invById = new Map<string, { seriennummer: string | null; inventar_code: string | null }>();
+        for (const u of (invUnits ?? []) as Array<{ id: string; seriennummer: string | null; inventar_code: string | null }>) {
+          invById.set(u.id, { seriennummer: u.seriennummer, inventar_code: u.inventar_code });
+        }
+        for (const [legacyId, neueId] of auditMap.entries()) {
+          const inv = invById.get(neueId);
+          if (inv) unitMap[legacyId] = inv.seriennummer ?? inv.inventar_code ?? '';
+        }
+      }
+    } catch {
+      // migration_audit fehlt — Fallback unten greift fuer alle
+    }
+    // Fuer alle unit_ids ohne Inventar-Eintrag: alte product_units lesen.
+    const missing = unitIds.filter((u) => !unitMap[u]);
+    if (missing.length > 0) {
+      const { data: units } = await supabase
+        .from('product_units')
+        .select('id, serial_number')
+        .in('id', missing);
+      for (const u of (units ?? []) as Array<{ id: string; serial_number: string }>) {
+        unitMap[u.id] = u.serial_number;
+      }
     }
   }
 

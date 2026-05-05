@@ -91,11 +91,62 @@ export async function POST(req: NextRequest) {
   // Kamera-Seriennummern sind nicht garantiert komplett unique systemweit
   // (theoretisch koennte eine Hero11- und eine Hero13-Charge dieselbe Endung
   // teilen), deshalb maybeSingle + casefold gegen die Spalte mit ilike.
-  const { data: cameraUnit } = await supabase
-    .from('product_units')
-    .select('id, product_id, serial_number, status')
-    .ilike('serial_number', code)
-    .maybeSingle();
+  let cameraUnit: { id: string; product_id: string; serial_number: string; status: string } | null = null;
+  {
+    const { data } = await supabase
+      .from('product_units')
+      .select('id, product_id, serial_number, status')
+      .ilike('serial_number', code)
+      .maybeSingle();
+    cameraUnit = data as typeof cameraUnit;
+  }
+
+  // Fallback: inventar_units (neue Welt). Wenn dort gefunden, mappen wir
+  // ueber migration_audit zur Legacy-Welt zurueck — sonst zeigen wir die
+  // Inventar-IDs, die fuer Booking-Overlay nicht passen.
+  if (!cameraUnit) {
+    const { data: invUnit } = await supabase
+      .from('inventar_units')
+      .select('id, produkt_id, seriennummer, inventar_code, bezeichnung, status, typ')
+      .or(`seriennummer.ilike.${code},inventar_code.ilike.${code},bezeichnung.ilike.${code}`)
+      .eq('typ', 'kamera')
+      .maybeSingle();
+    if (invUnit) {
+      const inv = invUnit as { id: string; produkt_id: string | null; seriennummer: string | null; inventar_code: string | null; bezeichnung: string; status: string };
+      // legacy product_units.id ueber migration_audit suchen
+      let legacyUnitId: string | null = null;
+      try {
+        const { data: audit } = await supabase
+          .from('migration_audit')
+          .select('alte_id')
+          .eq('alte_tabelle', 'product_units')
+          .eq('neue_tabelle', 'inventar_units')
+          .eq('neue_id', inv.id)
+          .maybeSingle();
+        legacyUnitId = (audit as { alte_id?: string } | null)?.alte_id ?? null;
+      } catch { /* migration_audit fehlt */ }
+      // legacy product_id ueber migration_audit auf produkte suchen
+      let legacyProductId: string | null = null;
+      if (inv.produkt_id) {
+        try {
+          const { data: audit2 } = await supabase
+            .from('migration_audit')
+            .select('alte_id')
+            .eq('alte_tabelle', 'admin_config.products')
+            .eq('neue_tabelle', 'produkte')
+            .eq('neue_id', inv.produkt_id)
+            .maybeSingle();
+          legacyProductId = (audit2 as { alte_id?: string } | null)?.alte_id ?? null;
+        } catch { /* egal */ }
+      }
+      cameraUnit = {
+        id: legacyUnitId ?? inv.id,
+        product_id: legacyProductId ?? '',
+        serial_number: inv.seriennummer ?? inv.inventar_code ?? inv.bezeichnung,
+        status: inv.status,
+      };
+    }
+  }
 
   if (cameraUnit) {
     // Konflikt-Check: in einer anderen aktiven Buchung als unit_id?
@@ -138,11 +189,56 @@ export async function POST(req: NextRequest) {
   }
 
   // ── 2) Versuche es als Zubehoer-Exemplar-Code ─────────────────────────────
-  const { data: accessoryUnit } = await supabase
-    .from('accessory_units')
-    .select('id, accessory_id, exemplar_code, status')
-    .ilike('exemplar_code', code)
-    .maybeSingle();
+  let accessoryUnit: { id: string; accessory_id: string; exemplar_code: string; status: string } | null = null;
+  {
+    const { data } = await supabase
+      .from('accessory_units')
+      .select('id, accessory_id, exemplar_code, status')
+      .ilike('exemplar_code', code)
+      .maybeSingle();
+    accessoryUnit = data as typeof accessoryUnit;
+  }
+  if (!accessoryUnit) {
+    const { data: invUnit } = await supabase
+      .from('inventar_units')
+      .select('id, produkt_id, seriennummer, inventar_code, bezeichnung, status, typ')
+      .or(`inventar_code.ilike.${code},seriennummer.ilike.${code},bezeichnung.ilike.${code}`)
+      .in('typ', ['zubehoer', 'verbrauch'])
+      .maybeSingle();
+    if (invUnit) {
+      const inv = invUnit as { id: string; produkt_id: string | null; seriennummer: string | null; inventar_code: string | null; bezeichnung: string; status: string };
+      let legacyUnitId: string | null = null;
+      try {
+        const { data: audit } = await supabase
+          .from('migration_audit')
+          .select('alte_id')
+          .eq('alte_tabelle', 'accessory_units')
+          .eq('neue_tabelle', 'inventar_units')
+          .eq('neue_id', inv.id)
+          .maybeSingle();
+        legacyUnitId = (audit as { alte_id?: string } | null)?.alte_id ?? null;
+      } catch { /* egal */ }
+      let legacyAccessoryId: string | null = null;
+      if (inv.produkt_id) {
+        try {
+          const { data: audit2 } = await supabase
+            .from('migration_audit')
+            .select('alte_id')
+            .eq('alte_tabelle', 'accessories')
+            .eq('neue_tabelle', 'produkte')
+            .eq('neue_id', inv.produkt_id)
+            .maybeSingle();
+          legacyAccessoryId = (audit2 as { alte_id?: string } | null)?.alte_id ?? null;
+        } catch { /* egal */ }
+      }
+      accessoryUnit = {
+        id: legacyUnitId ?? inv.id,
+        accessory_id: legacyAccessoryId ?? '',
+        exemplar_code: inv.inventar_code ?? inv.seriennummer ?? inv.bezeichnung,
+        status: inv.status,
+      };
+    }
+  }
 
   if (accessoryUnit) {
     const { data: conflictBookings } = await supabase

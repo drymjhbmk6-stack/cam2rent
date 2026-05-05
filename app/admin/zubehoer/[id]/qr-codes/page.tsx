@@ -4,6 +4,7 @@ import Link from 'next/link';
 import PrintButton from '../../../preise/kameras/[id]/qr-codes/PrintButton';
 import QrDownloadButton from '../../../preise/kameras/[id]/qr-codes/QrDownloadButton';
 import { getSiteUrl } from '@/lib/env-mode';
+import { resolveProdukteId, loadInventarUnitsForProdukt } from '@/lib/legacy-bridge';
 
 interface Unit {
   id: string;
@@ -48,13 +49,31 @@ export default async function ZubehoerQrCodesPage({
       }),
     }];
   } else {
-    const { data: unitsRaw } = await supabase
-      .from('accessory_units')
-      .select('id, exemplar_code, status, notes')
-      .eq('accessory_id', id)
-      .neq('status', 'retired')
-      .order('exemplar_code', { ascending: true });
-    const units = (unitsRaw ?? []) as Unit[];
+    // Bevorzugt aus inventar_units (neue Welt) laden, Fallback auf
+    // accessory_units (Pre-Migration-Daten).
+    const produkteId = await resolveProdukteId(supabase, 'accessories', id, { autoCreate: true });
+    let units: Unit[] = [];
+    if (produkteId) {
+      const inventarUnits = await loadInventarUnitsForProdukt(supabase, produkteId, {
+        excludeRetired: true,
+        trackingMode: 'individual',
+      });
+      units = inventarUnits.map((u) => ({
+        id: u.id,
+        exemplar_code: u.inventar_code || u.label || u.serial_number,
+        status: u.status,
+        notes: u.notes,
+      }));
+    }
+    if (units.length === 0) {
+      const { data: unitsRaw } = await supabase
+        .from('accessory_units')
+        .select('id, exemplar_code, status, notes')
+        .eq('accessory_id', id)
+        .neq('status', 'retired')
+        .order('exemplar_code', { ascending: true });
+      units = (unitsRaw ?? []) as Unit[];
+    }
 
     qrItems = await Promise.all(
       units.map(async (u) => ({
@@ -116,11 +135,11 @@ export default async function ZubehoerQrCodesPage({
 
         {qrItems.length === 0 ? (
           <div className="border border-dashed border-gray-300 rounded p-8 text-center text-gray-500 print:hidden">
-            Keine Exemplare hinterlegt. Lege erst Einzelstücke unter{' '}
-            <Link href="/admin/zubehoer" className="text-cyan-600 underline">
-              Zubehör-Verwaltung
+            Keine Exemplare hinterlegt. Lege Einzelstücke unter{' '}
+            <Link href="/admin/inventar/neu" className="text-cyan-600 underline">
+              Inventar
             </Link>{' '}
-            an.
+            an und ordne sie diesem Zubehör zu.
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 print:gap-2">

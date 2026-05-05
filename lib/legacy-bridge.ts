@@ -289,6 +289,37 @@ export function inventarRowToUnitView(
 }
 
 /**
+ * Lookup: zu welchen `inventar_units.id` gehoeren welche alten
+ * `product_units.id` (oder `accessory_units.id`)? Wird gebraucht, damit
+ * Buchungen (`bookings.unit_id` = alte ID) mit Inventar-Einheiten verknuepft
+ * werden koennen.
+ *
+ * `direction='legacy_to_neu'`: Map alte_id → neue_id
+ * `direction='neu_to_legacy'`: Map neue_id → alte_id
+ */
+export async function loadUnitIdMapping(
+  supabase: SupabaseClient,
+  alteTabelle: 'product_units' | 'accessory_units',
+  direction: 'legacy_to_neu' | 'neu_to_legacy' = 'neu_to_legacy',
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  try {
+    const { data } = await supabase
+      .from('migration_audit')
+      .select('alte_id, neue_id')
+      .eq('alte_tabelle', alteTabelle)
+      .eq('neue_tabelle', 'inventar_units');
+    for (const row of (data ?? []) as Array<{ alte_id: string; neue_id: string }>) {
+      if (direction === 'legacy_to_neu') map.set(row.alte_id, row.neue_id);
+      else map.set(row.neue_id, row.alte_id);
+    }
+  } catch {
+    // migration_audit fehlt → leere Map
+  }
+  return map;
+}
+
+/**
  * Lade alle aktiven Inventar-Einheiten fuer ein Produkt. `excludeRetired=true`
  * schliesst ausgemusterte Stuecke aus (Default).
  */
@@ -311,4 +342,56 @@ export async function loadInventarUnitsForProdukt(
     return [];
   }
   return ((data ?? []) as InventarUnitRow[]).map((row) => inventarRowToUnitView(row));
+}
+
+/**
+ * Bulk-Variante von loadInventarUnitsForProdukt: laedt fuer mehrere
+ * produkt_ids gleichzeitig und liefert eine Map produkt_id → UnitView[].
+ *
+ * Optional wird `legacy_unit_id` pro UnitView gefuellt — das ist die alte
+ * `product_units.id` (oder `accessory_units.id`), unter der existierende
+ * Buchungen referenzieren. Wird gebraucht fuer Booking-Overlay.
+ */
+export async function loadInventarUnitsForProdukteBulk(
+  supabase: SupabaseClient,
+  produkteIds: string[],
+  options: {
+    excludeRetired?: boolean;
+    trackingMode?: 'individual' | 'bulk';
+    typ?: 'kamera' | 'zubehoer' | 'verbrauch';
+    /** Legacy-Tabelle aus der die unit_id-Mappings nachgeladen werden sollen. */
+    legacyMappingFrom?: 'product_units' | 'accessory_units';
+  } = {},
+): Promise<Map<string, UnitView[]>> {
+  const result = new Map<string, UnitView[]>();
+  if (produkteIds.length === 0) return result;
+
+  let q = supabase
+    .from('inventar_units')
+    .select('id, bezeichnung, inventar_code, seriennummer, status, notes, kaufdatum, tracking_mode, bestand, produkt_id')
+    .in('produkt_id', produkteIds);
+  if (options.excludeRetired ?? false) q = q.neq('status', 'ausgemustert');
+  if (options.trackingMode) q = q.eq('tracking_mode', options.trackingMode);
+  if (options.typ) q = q.eq('typ', options.typ);
+  q = q.order('bezeichnung');
+
+  const { data, error } = await q;
+  if (error) {
+    console.error('[legacy-bridge] loadInventarUnitsForProdukteBulk:', error.message);
+    return result;
+  }
+
+  // Optional: Legacy-Unit-ID-Mapping fuer Booking-Overlay
+  let legacyMap: Map<string, string> | null = null;
+  if (options.legacyMappingFrom) {
+    legacyMap = await loadUnitIdMapping(supabase, options.legacyMappingFrom, 'neu_to_legacy');
+  }
+
+  for (const row of (data ?? []) as InventarUnitRow[]) {
+    const view = inventarRowToUnitView(row, legacyMap?.get(row.id) ?? null);
+    if (!row.produkt_id) continue;
+    if (!result.has(row.produkt_id)) result.set(row.produkt_id, []);
+    result.get(row.produkt_id)!.push(view);
+  }
+  return result;
 }

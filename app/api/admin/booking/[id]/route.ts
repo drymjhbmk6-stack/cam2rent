@@ -29,15 +29,39 @@ export async function GET(
     return NextResponse.json({ error: 'Buchung nicht gefunden.' }, { status: 404 });
   }
 
-  // Seriennummer laden falls Unit zugeordnet
+  // Seriennummer laden falls Unit zugeordnet — bevorzugt aus inventar_units
+  // (neue Welt) via migration_audit-Mapping. Fallback auf product_units fuer
+  // Pre-Migration-Buchungen.
   let serialNumber: string | null = null;
   if (booking.unit_id) {
-    const { data: unit } = await supabase
-      .from('product_units')
-      .select('serial_number')
-      .eq('id', booking.unit_id)
-      .maybeSingle();
-    serialNumber = unit?.serial_number ?? null;
+    try {
+      const { data: audit } = await supabase
+        .from('migration_audit')
+        .select('neue_id')
+        .eq('alte_tabelle', 'product_units')
+        .eq('alte_id', booking.unit_id)
+        .eq('neue_tabelle', 'inventar_units')
+        .maybeSingle();
+      if ((audit as { neue_id?: string } | null)?.neue_id) {
+        const { data: invUnit } = await supabase
+          .from('inventar_units')
+          .select('seriennummer, inventar_code, bezeichnung')
+          .eq('id', (audit as { neue_id: string }).neue_id)
+          .maybeSingle();
+        const u = invUnit as { seriennummer: string | null; inventar_code: string | null; bezeichnung: string } | null;
+        serialNumber = u?.seriennummer ?? u?.inventar_code ?? u?.bezeichnung ?? null;
+      }
+    } catch {
+      // migration_audit fehlt → Fallback unten
+    }
+    if (!serialNumber) {
+      const { data: unit } = await supabase
+        .from('product_units')
+        .select('serial_number')
+        .eq('id', booking.unit_id)
+        .maybeSingle();
+      serialNumber = unit?.serial_number ?? null;
+    }
   }
   booking.serial_number = serialNumber;
 
