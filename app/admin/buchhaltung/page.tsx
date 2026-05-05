@@ -116,6 +116,15 @@ function BuchhaltungContent() {
         </p>
       </div>
 
+      {/* Quick-Links zur neuen Welt (Konsolidierungs-Refactor) */}
+      <div style={{ marginBottom: 16, padding: 12, background: '#0f1729', border: '1px solid #1e293b', borderRadius: 8, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        <span style={{ fontSize: 12, color: '#94a3b8', alignSelf: 'center' }}>Neue Welt:</span>
+        <a href="/admin/buchhaltung/belege" style={{ fontSize: 13, color: '#06b6d4', textDecoration: 'none' }}>📄 Belege</a>
+        <a href="/admin/buchhaltung/anlagen" style={{ fontSize: 13, color: '#06b6d4', textDecoration: 'none' }}>🏢 Anlagen (Steuersicht)</a>
+        <a href="/admin/buchhaltung/ausgaben-neu" style={{ fontSize: 13, color: '#06b6d4', textDecoration: 'none' }}>💸 Ausgaben (vereinheitlicht)</a>
+        <a href="/admin/inventar" style={{ fontSize: 13, color: '#06b6d4', textDecoration: 'none' }}>📦 Inventar</a>
+      </div>
+
       {/* Tab-Navigation */}
       <BuchhaltungTabs activeTab={activeTab} onTabChange={handleTabChange} />
 
