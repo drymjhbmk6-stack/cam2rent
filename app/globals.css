@@ -24,7 +24,8 @@
     color: #1a1a1a;
   }
 
-  .dark h1, .dark h2, .dark h3, .dark h4, .dark h5, .dark h6 {
+  .dark h1, .dark h2, .dark h3, .dark h4, .dark h5, .dark h6,
+  .admin-dark h1, .admin-dark h2, .admin-dark h3, .admin-dark h4, .admin-dark h5, .admin-dark h6 {
     color: #f3f4f6;
   }
 }
