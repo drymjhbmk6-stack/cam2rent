@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 
 /**
@@ -40,9 +41,11 @@ function fmtEuro(n: number | null): string {
 }
 
 export default function InventarPage() {
+  const searchParams = useSearchParams();
+  const produktId = searchParams.get('produkt_id') ?? '';
   const [units, setUnits] = useState<Unit[]>([]);
   const [loading, setLoading] = useState(true);
-  const [typ, setTyp] = useState('');
+  const [typ, setTyp] = useState(searchParams.get('typ') ?? '');
   const [status, setStatus] = useState('');
   const [belegStatus, setBelegStatus] = useState('');
   const [q, setQ] = useState('');
@@ -55,6 +58,7 @@ export default function InventarPage() {
       if (status) sp.set('status', status);
       if (belegStatus) sp.set('beleg_status', belegStatus);
       if (q) sp.set('q', q);
+      if (produktId) sp.set('produkt_id', produktId);
       const res = await fetch(`/api/admin/inventar?${sp.toString()}`);
       const data = await res.json();
       setUnits(data.units ?? []);
@@ -62,7 +66,7 @@ export default function InventarPage() {
     };
     const debounce = setTimeout(load, 300);
     return () => clearTimeout(debounce);
-  }, [typ, status, belegStatus, q]);
+  }, [typ, status, belegStatus, q, produktId]);
 
   const stats = {
     total: units.length,
@@ -81,6 +85,16 @@ export default function InventarPage() {
             + Manuell anlegen
           </Link>
         </div>
+
+        {produktId && (
+          <div className="mb-4 px-3 py-2 bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 rounded text-sm flex items-center justify-between gap-3">
+            <span>
+              Gefiltert auf Produkt
+              {units[0]?.produkt && <>: <strong>{units[0].produkt.marke ?? ''} {units[0].produkt.name}</strong></>}
+            </span>
+            <Link href="/admin/inventar" className="underline hover:text-cyan-200">Filter entfernen</Link>
+          </div>
+        )}
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
           <Stat label="Gesamt" value={stats.total} />

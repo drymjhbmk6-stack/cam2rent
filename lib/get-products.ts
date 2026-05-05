@@ -114,11 +114,45 @@ export async function getProducts(): Promise<Product[]> {
     return [];
   }
 
-  // product_units prüfen: welches Produkt hat mindestens eine aktive Unit?
-  // Ausgemusterte Units (status='retired') zählen nicht — sonst wäre die
-  // Waitlist nutzlos, sobald alte Kameras verkauft werden.
-  // Separater try/catch, damit Produkte trotzdem geladen werden wenn
-  // product_units nicht erreichbar ist (z.B. Tabelle fehlt).
+  // hasUnits ableiten: Welches Produkt hat mindestens ein aktives physisches
+  // Stueck? Wir bevorzugen die neue Welt (inventar_units), fallen bei Bedarf
+  // auf die alte product_units zurueck — so funktioniert die Logik vor wie
+  // nach der Buchhaltungs-Konsolidierung. Ausgemusterte Stuecke zaehlen nicht,
+  // sonst waere die Waitlist nutzlos, sobald alte Kameras verkauft werden.
+  //
+  // 1) Neue Welt: migration_audit liefert legacy-id → produkte.id, dann
+  //    inventar_units gegen aktive Stuecke abfragen.
+  try {
+    const { data: auditRows } = await supabase
+      .from('migration_audit')
+      .select('alte_id, neue_id')
+      .eq('alte_tabelle', 'admin_config.products')
+      .eq('neue_tabelle', 'produkte');
+
+    const produktIdToLegacy = new Map<string, string>();
+    for (const row of (auditRows ?? []) as Array<{ alte_id: string; neue_id: string }>) {
+      if (row.alte_id && row.neue_id) produktIdToLegacy.set(row.neue_id, row.alte_id);
+    }
+
+    if (produktIdToLegacy.size > 0) {
+      const { data: invRows } = await supabase
+        .from('inventar_units')
+        .select('produkt_id')
+        .eq('typ', 'kamera')
+        .neq('status', 'ausgemustert');
+
+      for (const row of (invRows ?? []) as Array<{ produkt_id: string | null }>) {
+        if (!row.produkt_id) continue;
+        const legacyId = produktIdToLegacy.get(row.produkt_id);
+        if (legacyId) productsWithUnits.add(legacyId);
+      }
+    }
+  } catch {
+    // migration_audit oder inventar_units fehlen — okay, Fallback unten greift.
+  }
+
+  // 2) Alte Welt als Fallback: product_units. Wichtig fuer Pre-Migration und
+  //    fuer Produkte, die noch keinen migration_audit-Eintrag haben.
   try {
     const { data: unitRows } = await supabase
       .from('product_units')
@@ -131,8 +165,7 @@ export async function getProducts(): Promise<Product[]> {
       }
     }
   } catch {
-    // best-effort — hasUnits wird dann für alle Produkte `false` sein,
-    // was den Waitlist-Modus aktiviert. Akzeptabler Fallback.
+    // best-effort — hasUnits bleibt fuer Produkte ohne Match `false`.
   }
 
   // AdminProducts → Product konvertieren

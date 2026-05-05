@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -16,23 +16,12 @@ import BrandSelect from '@/components/admin/BrandSelect';
 import { useSpecDefinitions } from '@/components/admin/SpecDefinitions';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 
-interface ProductUnit {
-  id: string;
-  product_id: string;
-  serial_number: string;
-  label: string | null;
-  status: 'available' | 'rented' | 'maintenance' | 'retired';
-  notes: string | null;
-  purchased_at: string | null;
-  created_at: string;
+interface InventarBridge {
+  produkte_id: string | null;
+  total: number;
+  active: number;
+  retired: number;
 }
-
-const UNIT_STATUS_CONFIG: Record<string, { label: string; color: string }> = {
-  available: { label: 'Verfügbar', color: 'bg-emerald-100 text-emerald-700' },
-  rented: { label: 'Vermietet', color: 'bg-blue-100 text-blue-700' },
-  maintenance: { label: 'Wartung', color: 'bg-amber-100 text-amber-700' },
-  retired: { label: 'Ausgemustert', color: 'bg-gray-200 text-gray-600' },
-};
 
 export default function AdminKameraEditorPage() {
   const { id } = useParams<{ id: string }>();
@@ -46,33 +35,9 @@ export default function AdminKameraEditorPage() {
   const [uploading, setUploading] = useState(false);
   const { specs: specDefs } = useSpecDefinitions();
 
-  // Seriennummern-Verwaltung
-  const [units, setUnits] = useState<ProductUnit[]>([]);
-  const [unitsLoading, setUnitsLoading] = useState(true);
-
-  // Anlegen-Modal (Pflicht: Bezeichnung, Seriennummer, Kaufdatum, Kaufpreis)
-  const [addOpen, setAddOpen] = useState(false);
-  const [addForm, setAddForm] = useState({
-    label: '',
-    serial_number: '',
-    purchased_at: '',
-    purchase_price: '',
-    notes: '',
-    depreciation_method: 'linear' as 'linear' | 'immediate',
-    useful_life_months: '36',
-  });
-  const [addBusy, setAddBusy] = useState(false);
-  const [addError, setAddError] = useState<string | null>(null);
-
-  // Bearbeiten-Modal (Status + Notizen + Bezeichnung aenderbar — letzteres mit
-  // Warnung, weil sich dadurch die QR-URL aendert)
-  const [editId, setEditId] = useState<string | null>(null);
-  const [editStatus, setEditStatus] = useState<ProductUnit['status']>('available');
-  const [editNotes, setEditNotes] = useState('');
-  const [editLabel, setEditLabel] = useState('');
-  const [editLabelOriginal, setEditLabelOriginal] = useState('');
-  const [editBusy, setEditBusy] = useState(false);
-  const [editError, setEditError] = useState<string | null>(null);
+  // Inventar-Bruecke (neue Welt: inventar_units via migration_audit-Mapping)
+  const [bridge, setBridge] = useState<InventarBridge | null>(null);
+  const [bridgeLoading, setBridgeLoading] = useState(true);
 
   useEffect(() => {
     // Load kaution tiers
@@ -97,183 +62,35 @@ export default function AdminKameraEditorPage() {
       });
   }, [id]);
 
-  // Units laden
-  const loadUnits = useCallback(async () => {
-    setUnitsLoading(true);
-    try {
-      const res = await fetch(`/api/admin/product-units?product_id=${id}`);
-      const data = await res.json();
-      setUnits(data.units ?? []);
-    } catch {
-      setUnits([]);
-    } finally {
-      setUnitsLoading(false);
-    }
-  }, [id]);
-
-  useEffect(() => { loadUnits(); }, [loadUnits]);
-
-  // Verknuepfte Assets pro Unit laden (optional, wenn assets-Tabelle existiert)
-  const [unitAssets, setUnitAssets] = useState<Record<string, { id: string; purchase_price: number; current_value: number; purchase_date: string }>>({});
+  // Inventar-Bestand laden (neue Welt: inventar_units via migration_audit)
   useEffect(() => {
-    fetch(`/api/admin/assets?include_test=1`)
-      .then((r) => r.ok ? r.json() : { assets: [] })
-      .then((data) => {
-        const map: Record<string, { id: string; purchase_price: number; current_value: number; purchase_date: string }> = {};
-        for (const a of data.assets ?? []) {
-          if (a.unit_id) {
-            map[a.unit_id] = {
-              id: a.id,
-              purchase_price: Number(a.purchase_price),
-              current_value: Number(a.current_value),
-              purchase_date: a.purchase_date,
-            };
-          }
-        }
-        setUnitAssets(map);
+    let cancelled = false;
+    setBridgeLoading(true);
+    fetch(`/api/admin/produkte/legacy-bridge?legacy_id=${encodeURIComponent(id)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: InventarBridge | null) => {
+        if (cancelled) return;
+        setBridge(data ?? { produkte_id: null, total: 0, active: 0, retired: 0 });
       })
-      .catch(() => { /* assets-Tabelle evtl. noch nicht migriert */ });
+      .catch(() => {
+        if (cancelled) return;
+        setBridge({ produkte_id: null, total: 0, active: 0, retired: 0 });
+      })
+      .finally(() => {
+        if (!cancelled) setBridgeLoading(false);
+      });
+    return () => { cancelled = true; };
   }, [id]);
 
-  // Stock automatisch aus aktiven Units berechnen
-  const activeUnitCount = units.filter((u) => u.status !== 'retired').length;
+  // Stock automatisch aus aktiven Inventar-Einheiten berechnen — sodass die
+  // Shop-Verfuegbarkeit der Realitaet folgt, sobald jemand im Inventar etwas
+  // anlegt/ausmustert.
+  const activeUnitCount = bridge?.active ?? 0;
   useEffect(() => {
     if (product && product.stock !== activeUnitCount) {
       setProduct((p) => p && ({ ...p, stock: activeUnitCount }));
     }
   }, [activeUnitCount, product]);
-
-  async function reloadAssetsMap() {
-    try {
-      const r = await fetch('/api/admin/assets?include_test=1');
-      if (!r.ok) return;
-      const data = await r.json();
-      const map: Record<string, { id: string; purchase_price: number; current_value: number; purchase_date: string }> = {};
-      for (const a of data.assets ?? []) {
-        if (a.unit_id) {
-          map[a.unit_id] = {
-            id: a.id,
-            purchase_price: Number(a.purchase_price),
-            current_value: Number(a.current_value),
-            purchase_date: a.purchase_date,
-          };
-        }
-      }
-      setUnitAssets(map);
-    } catch {
-      // assets-Tabelle evtl. noch nicht migriert — egal
-    }
-  }
-
-  async function handleAddUnit() {
-    setAddError(null);
-    const label = addForm.label.trim();
-    const serial = addForm.serial_number.trim();
-    const purchaseDate = addForm.purchased_at;
-    const priceNum = Number(String(addForm.purchase_price).replace(',', '.'));
-
-    if (!label) { setAddError('Bezeichnung ist Pflicht.'); return; }
-    if (!serial) { setAddError('Seriennummer ist Pflicht.'); return; }
-    if (!purchaseDate) { setAddError('Kaufdatum ist Pflicht.'); return; }
-    if (!Number.isFinite(priceNum) || priceNum <= 0) {
-      setAddError('Kaufpreis muss eine positive Zahl sein.');
-      return;
-    }
-
-    setAddBusy(true);
-    try {
-      const res = await fetch('/api/admin/product-units', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          product_id: id,
-          label,
-          serial_number: serial,
-          purchased_at: purchaseDate,
-          purchase_price: priceNum,
-          notes: addForm.notes.trim() || undefined,
-          depreciation_method: addForm.depreciation_method,
-          useful_life_months: addForm.depreciation_method === 'linear' ? Number(addForm.useful_life_months) : undefined,
-        }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        setAddError(err.error || 'Fehler beim Anlegen.');
-        return;
-      }
-      setAddForm({ label: '', serial_number: '', purchased_at: '', purchase_price: '', notes: '', depreciation_method: 'linear', useful_life_months: '36' });
-      setAddOpen(false);
-      await loadUnits();
-      await reloadAssetsMap();
-    } catch {
-      setAddError('Netzwerk-Fehler. Bitte erneut versuchen.');
-    } finally {
-      setAddBusy(false);
-    }
-  }
-
-  function openEditModal(unit: ProductUnit) {
-    setEditId(unit.id);
-    setEditStatus(unit.status);
-    setEditNotes(unit.notes ?? '');
-    setEditLabel(unit.label ?? '');
-    setEditLabelOriginal(unit.label ?? '');
-    setEditError(null);
-  }
-
-  async function handleSaveEdit() {
-    if (!editId) return;
-    setEditError(null);
-
-    const labelChanged = editLabel.trim() !== editLabelOriginal.trim();
-    if (labelChanged && !editLabel.trim()) {
-      setEditError('Bezeichnung darf nicht leer sein.');
-      return;
-    }
-    if (labelChanged) {
-      const ok = confirm(
-        'Achtung: Wenn du die Bezeichnung änderst, sind bereits gedruckte QR-Aufkleber für diese Kamera ungültig und müssen neu gedruckt werden. Trotzdem ändern?'
-      );
-      if (!ok) return;
-    }
-
-    setEditBusy(true);
-    try {
-      const body: Record<string, unknown> = { id: editId, status: editStatus, notes: editNotes };
-      if (labelChanged) body.label = editLabel.trim();
-      const res = await fetch('/api/admin/product-units', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        setEditError(err.error || 'Fehler beim Speichern.');
-        return;
-      }
-      setEditId(null);
-      await loadUnits();
-    } catch {
-      setEditError('Netzwerk-Fehler.');
-    } finally {
-      setEditBusy(false);
-    }
-  }
-
-  async function handleDeleteUnit(unit: ProductUnit) {
-    if (!confirm(`Kamera "${unit.serial_number}" wirklich löschen?`)) return;
-    try {
-      const res = await fetch(`/api/admin/product-units?id=${unit.id}`, { method: 'DELETE' });
-      if (!res.ok) {
-        const err = await res.json();
-        alert(err.error || 'Fehler beim Löschen.');
-        return;
-      }
-      await loadUnits();
-    } catch {
-      alert('Fehler beim Löschen.');
-    }
-  }
 
   function createEmpty(productId: string): AdminProduct {
     return {
@@ -621,7 +438,7 @@ export default function AdminKameraEditorPage() {
                 <div>
                   <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Bestand (automatisch)</label>
                   <div className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body bg-gray-50 text-brand-muted">
-                    {activeUnitCount} {activeUnitCount === 1 ? 'Kamera' : 'Kameras'} (aus Seriennummern)
+                    {activeUnitCount} {activeUnitCount === 1 ? 'Kamera' : 'Kameras'} (aus Inventar)
                   </div>
                 </div>
               </div>
@@ -751,21 +568,19 @@ export default function AdminKameraEditorPage() {
               </div>
             </details>
 
-            {/* Seriennummern / Kameras */}
+            {/* Einzelexemplare / Seriennummern — verwaltet im neuen Inventar */}
             <div className="bg-white rounded-2xl border border-brand-border p-6">
-              <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
-                <h2 className="font-heading font-bold text-sm text-brand-black">Kameras / Seriennummern</h2>
+              <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+                <h2 className="font-heading font-bold text-sm text-brand-black">Einzelexemplare</h2>
                 <div className="flex items-center gap-3">
-                  <span className="text-xs font-body text-brand-muted">
-                    {activeUnitCount} aktiv{units.filter((u) => u.status === 'retired').length > 0 && `, ${units.filter((u) => u.status === 'retired').length} ausgemustert`}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => { setAddOpen(true); setAddError(null); }}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 text-[11px] font-heading font-semibold bg-accent-blue text-white rounded hover:bg-blue-600 transition-colors"
-                  >
-                    + Neue Kamera anlegen
-                  </button>
+                  {bridgeLoading ? (
+                    <span className="text-xs font-body text-brand-muted">Lade Bestand…</span>
+                  ) : (
+                    <span className="text-xs font-body text-brand-muted">
+                      {activeUnitCount} aktiv
+                      {bridge && bridge.retired > 0 && `, ${bridge.retired} ausgemustert`}
+                    </span>
+                  )}
                   {activeUnitCount > 0 && (
                     <a
                       href={`/admin/preise/kameras/${id}/qr-codes`}
@@ -779,61 +594,41 @@ export default function AdminKameraEditorPage() {
                   )}
                 </div>
               </div>
-              <p className="text-xs font-body text-brand-muted mb-4">Jede physische Kamera einzeln erfassen. Der Lagerbestand wird automatisch berechnet.</p>
 
-              {unitsLoading ? (
-                <p className="text-sm text-brand-muted py-4 text-center">Lade Seriennummern…</p>
-              ) : units.length === 0 ? (
-                <p className="text-sm text-brand-muted py-6 text-center italic">Noch keine Kamera angelegt. Klick auf <span className="font-semibold">&bdquo;+ Neue Kamera anlegen&ldquo;</span> oben rechts.</p>
+              {bridgeLoading ? (
+                <p className="text-sm text-brand-muted py-2">Lade Bestand…</p>
+              ) : bridge && bridge.produkte_id ? (
+                <div className="rounded-lg bg-cyan-50 border border-cyan-200 px-4 py-3 text-sm font-body text-cyan-900 flex items-center justify-between gap-3 flex-wrap">
+                  <span>
+                    Einzelexemplare werden seit der Buchhaltungs-Konsolidierung zentral im{' '}
+                    <span className="font-semibold">Inventar</span> verwaltet.
+                  </span>
+                  <Link
+                    href={`/admin/inventar?produkt_id=${bridge.produkte_id}&typ=kamera`}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 text-[11px] font-heading font-semibold bg-cyan-600 text-white rounded hover:bg-cyan-700 transition-colors whitespace-nowrap"
+                  >
+                    Im Inventar öffnen →
+                  </Link>
+                </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm" style={{ minWidth: 880 }}>
-                    <thead>
-                      <tr className="border-b border-brand-border">
-                        <th className="text-left text-xs font-heading font-semibold text-brand-muted py-2 px-2">Seriennummer</th>
-                        <th className="text-left text-xs font-heading font-semibold text-brand-muted py-2 px-2">Bezeichnung</th>
-                        <th className="text-left text-xs font-heading font-semibold text-brand-muted py-2 px-2">Status</th>
-                        <th className="text-left text-xs font-heading font-semibold text-brand-muted py-2 px-2">Kaufdatum</th>
-                        <th className="text-left text-xs font-heading font-semibold text-brand-muted py-2 px-2">Anlage (Zeitwert)</th>
-                        <th className="text-left text-xs font-heading font-semibold text-brand-muted py-2 px-2">Notizen</th>
-                        <th className="text-right text-xs font-heading font-semibold text-brand-muted py-2 px-2">Aktionen</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {units.map((unit) => (
-                        <tr key={unit.id} className="border-b border-brand-border/50 hover:bg-brand-bg transition-colors">
-                          <td className="py-2 px-2 font-mono text-xs font-semibold text-brand-black">{unit.serial_number}</td>
-                          <td className="py-2 px-2 text-xs text-brand-black">{unit.label || '–'}</td>
-                          <td className="py-2 px-2">
-                            <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold ${UNIT_STATUS_CONFIG[unit.status]?.color ?? ''}`}>
-                              {UNIT_STATUS_CONFIG[unit.status]?.label ?? unit.status}
-                            </span>
-                          </td>
-                          <td className="py-2 px-2 text-xs text-brand-muted">
-                            {unit.purchased_at ? new Date(unit.purchased_at).toLocaleDateString('de-DE') : '–'}
-                          </td>
-                          <td className="py-2 px-2 text-xs">
-                            {unitAssets[unit.id] ? (
-                              <a href={`/admin/anlagen/${unitAssets[unit.id].id}`} className="text-accent-blue hover:underline font-semibold">
-                                {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(unitAssets[unit.id].current_value)}
-                              </a>
-                            ) : (
-                              <span className="text-brand-muted italic">–</span>
-                            )}
-                          </td>
-                          <td className="py-2 px-2 text-xs text-brand-muted max-w-[150px] truncate" title={unit.notes ?? ''}>{unit.notes || '–'}</td>
-                          <td className="py-2 px-2 text-right whitespace-nowrap">
-                            <button onClick={() => openEditModal(unit)}
-                              className="text-xs text-accent-blue hover:text-blue-700 font-semibold mr-3">Bearbeiten</button>
-                            <button onClick={() => handleDeleteUnit(unit)}
-                              className="text-xs text-red-500 hover:text-red-700 font-semibold">Löschen</button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm font-body text-amber-900 flex items-center justify-between gap-3 flex-wrap">
+                  <span>
+                    Noch keine Stammdaten in der neuen <span className="font-semibold">produkte</span>-Tabelle für diese Kamera.
+                    Lege das erste Einzelexemplar direkt im Inventar an — dort kannst du auch Beleg, Kaufpreis und Wiederbeschaffungswert pflegen.
+                  </span>
+                  <Link
+                    href="/admin/inventar/neu"
+                    className="inline-flex items-center gap-1 px-3 py-1.5 text-[11px] font-heading font-semibold bg-amber-600 text-white rounded hover:bg-amber-700 transition-colors whitespace-nowrap"
+                  >
+                    Inventar öffnen →
+                  </Link>
                 </div>
               )}
+
+              <p className="text-xs font-body text-brand-muted mt-3">
+                Der Lagerbestand für den Shop wird automatisch aus den aktiven Inventar-Einheiten berechnet.
+                Mietverträge und Schadensabwicklung greifen ebenfalls dort.
+              </p>
             </div>
 
             {/* Speichern */}
@@ -871,175 +666,6 @@ export default function AdminKameraEditorPage() {
         </div>
       </div>
 
-      {/* Modal: Neue Kamera anlegen */}
-      {addOpen && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm overflow-y-auto p-4 pt-16">
-          <div className="bg-white rounded-2xl shadow-xl border border-brand-border w-full max-w-md">
-            <div className="px-6 pt-5 pb-3 border-b border-brand-border flex items-center justify-between">
-              <h3 className="font-heading font-bold text-base text-brand-black">Neue Kamera anlegen</h3>
-              <button onClick={() => setAddOpen(false)} disabled={addBusy}
-                className="text-brand-muted hover:text-brand-black text-2xl leading-none disabled:opacity-40">×</button>
-            </div>
-            <div className="px-6 py-4 space-y-4">
-              <div>
-                <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Bezeichnung <span className="text-red-500">*</span></label>
-                <input type="text" value={addForm.label}
-                  onChange={(e) => setAddForm((f) => ({ ...f, label: e.target.value }))}
-                  placeholder="z.B. CAM-DJI-OA5-01"
-                  className="w-full px-3 py-2 border border-brand-border rounded-lg text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
-                <p className="text-[10px] text-brand-muted mt-1">Eindeutige Kennung. Wird im QR-Code-Link verwendet und kann später nicht mehr geändert werden.</p>
-              </div>
-              <div>
-                <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Seriennummer <span className="text-red-500">*</span></label>
-                <input type="text" value={addForm.serial_number}
-                  onChange={(e) => setAddForm((f) => ({ ...f, serial_number: e.target.value }))}
-                  placeholder="z.B. 82JXN3800BRXRA"
-                  className="w-full px-3 py-2 border border-brand-border rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-accent-blue" />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Kaufdatum <span className="text-red-500">*</span></label>
-                  <input type="date" value={addForm.purchased_at}
-                    onChange={(e) => setAddForm((f) => ({ ...f, purchased_at: e.target.value }))}
-                    className="w-full px-3 py-2 border border-brand-border rounded-lg text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
-                </div>
-                <div>
-                  <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Kaufpreis <span className="text-red-500">*</span></label>
-                  <div className="relative">
-                    <input type="text" inputMode="decimal" value={addForm.purchase_price}
-                      onChange={(e) => setAddForm((f) => ({ ...f, purchase_price: e.target.value }))}
-                      placeholder="z.B. 449"
-                      className="w-full pr-8 pl-3 py-2 border border-brand-border rounded-lg text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-brand-muted pointer-events-none">€</span>
-                  </div>
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Notizen (optional)</label>
-                <textarea value={addForm.notes} rows={2}
-                  onChange={(e) => setAddForm((f) => ({ ...f, notes: e.target.value }))}
-                  placeholder="Zustand, Bemerkungen…"
-                  className="w-full px-3 py-2 border border-brand-border rounded-lg text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue resize-y" />
-              </div>
-
-              {/* AfA-Methode */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">AfA-Methode</label>
-                  <select value={addForm.depreciation_method}
-                    onChange={(e) => setAddForm((f) => ({ ...f, depreciation_method: e.target.value as 'linear' | 'immediate' }))}
-                    className="w-full px-3 py-2 border border-brand-border rounded-lg text-sm font-body bg-white focus:outline-none focus:ring-2 focus:ring-accent-blue">
-                    <option value="linear">Linear (über Nutzungsdauer)</option>
-                    <option value="immediate">GWG (Sofortabzug)</option>
-                  </select>
-                </div>
-                {addForm.depreciation_method === 'linear' && (
-                  <div>
-                    <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Nutzungsdauer (Monate)</label>
-                    <input type="number" min={1} value={addForm.useful_life_months}
-                      onChange={(e) => setAddForm((f) => ({ ...f, useful_life_months: e.target.value }))}
-                      className="w-full px-3 py-2 border border-brand-border rounded-lg text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue" />
-                  </div>
-                )}
-              </div>
-
-              {/* Auto-Werte (read-only Hinweis) — dynamisch nach Methode */}
-              {addForm.depreciation_method === 'linear' ? (
-                <div className="rounded-lg bg-brand-bg border border-brand-border/60 p-3 text-[11px] font-body text-brand-muted">
-                  <p className="font-semibold text-brand-black mb-1">Automatisch erfasst:</p>
-                  <ul className="space-y-0.5">
-                    <li>• <span className="text-brand-black">Buchwert</span> = sinkt monatlich linear (steuerliche AfA)</li>
-                    <li>• <span className="text-brand-black">Wiederbeschaffungswert</span> = sinkt linear über 36 Monate auf 40 % Floor (für Vertrag/Schaden, kann manuell überschrieben werden)</li>
-                    <li>• <span className="text-brand-black">Anlagen-Status</span> = aktiv</li>
-                  </ul>
-                </div>
-              ) : (
-                <div className="rounded-lg bg-amber-50 border border-amber-300 p-3 text-[11px] font-body text-amber-800">
-                  <p className="font-semibold text-amber-900 mb-1">GWG-Sofortabschreibung:</p>
-                  <ul className="space-y-0.5">
-                    <li>• <span className="font-semibold">Buchwert</span> = 0 € (sofort komplett abgeschrieben)</li>
-                    <li>• <span className="font-semibold">EÜR</span>: Kaufpreis wird automatisch als Aufwand &bdquo;GWG-Sofortabzug&ldquo; verbucht</li>
-                    <li>• <span className="font-semibold">Wiederbeschaffungswert</span> = sinkt linear über 36 Monate auf 40 % Floor (unabhängig von der Steuer-Abschreibung)</li>
-                    <li>• Erscheint im Anlagenverzeichnis mit GWG-Badge</li>
-                  </ul>
-                </div>
-              )}
-
-              {addError && (
-                <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs font-body text-red-700">
-                  {addError}
-                </div>
-              )}
-            </div>
-            <div className="px-6 py-3 border-t border-brand-border flex justify-end gap-2">
-              <button onClick={() => setAddOpen(false)} disabled={addBusy}
-                className="px-4 py-2 text-xs font-heading font-semibold text-brand-muted hover:text-brand-black transition-colors disabled:opacity-40">Abbrechen</button>
-              <button onClick={handleAddUnit} disabled={addBusy}
-                className="px-4 py-2 text-xs font-heading font-semibold bg-accent-blue text-white rounded-btn hover:bg-blue-600 transition-colors disabled:opacity-40">
-                {addBusy ? 'Wird angelegt…' : 'Kamera anlegen'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal: Eintrag bearbeiten (Status + Notizen) */}
-      {editId && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm overflow-y-auto p-4 pt-16">
-          <div className="bg-white rounded-2xl shadow-xl border border-brand-border w-full max-w-md">
-            <div className="px-6 pt-5 pb-3 border-b border-brand-border flex items-center justify-between">
-              <h3 className="font-heading font-bold text-base text-brand-black">Eintrag bearbeiten</h3>
-              <button onClick={() => setEditId(null)} disabled={editBusy}
-                className="text-brand-muted hover:text-brand-black text-2xl leading-none disabled:opacity-40">×</button>
-            </div>
-            <div className="px-6 py-4 space-y-4">
-              <p className="text-xs text-brand-muted">Seriennummer, Kaufdatum und Kaufpreis sind nach Anlage nicht mehr änderbar. Bezeichnung, Status und Notizen kannst du jederzeit ändern.</p>
-              <div>
-                <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Bezeichnung</label>
-                <input type="text" value={editLabel}
-                  onChange={(e) => setEditLabel(e.target.value)}
-                  className="w-full px-3 py-2 border border-brand-border rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-accent-blue" />
-                {editLabel.trim() !== editLabelOriginal.trim() && editLabel.trim() && (
-                  <div className="mt-1.5 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-[11px] font-body text-amber-800">
-                    ⚠ Achtung: Bestehende QR-Aufkleber werden ungültig, weil die QR-URL die Bezeichnung enthält. Du musst die QR-Codes für diese Kamera neu drucken.
-                  </div>
-                )}
-              </div>
-              <div>
-                <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Status</label>
-                <select value={editStatus}
-                  onChange={(e) => setEditStatus(e.target.value as ProductUnit['status'])}
-                  className="w-full px-3 py-2 border border-brand-border rounded-lg text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue">
-                  <option value="available">Verfügbar</option>
-                  <option value="rented">Vermietet</option>
-                  <option value="maintenance">Wartung</option>
-                  <option value="retired">Ausgemustert</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Notizen</label>
-                <textarea value={editNotes} rows={4}
-                  onChange={(e) => setEditNotes(e.target.value)}
-                  placeholder="Zustand, Bemerkungen…"
-                  className="w-full px-3 py-2 border border-brand-border rounded-lg text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue resize-y" />
-              </div>
-              {editError && (
-                <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs font-body text-red-700">
-                  {editError}
-                </div>
-              )}
-            </div>
-            <div className="px-6 py-3 border-t border-brand-border flex justify-end gap-2">
-              <button onClick={() => setEditId(null)} disabled={editBusy}
-                className="px-4 py-2 text-xs font-heading font-semibold text-brand-muted hover:text-brand-black transition-colors disabled:opacity-40">Abbrechen</button>
-              <button onClick={handleSaveEdit} disabled={editBusy}
-                className="px-4 py-2 text-xs font-heading font-semibold bg-accent-blue text-white rounded-btn hover:bg-blue-600 transition-colors disabled:opacity-40">
-                {editBusy ? 'Wird gespeichert…' : 'Speichern'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -267,7 +267,7 @@ export default function AdminNeueKameraPage() {
                 <div>
                   <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Bestand (automatisch)</label>
                   <div className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body bg-gray-50 text-brand-muted">
-                    0 Kameras — Seriennummern nach dem Speichern hinzufügen
+                    0 Kameras — Einzelexemplare nach dem Speichern unter <span className="font-semibold">Inventar</span> anlegen
                   </div>
                 </div>
               </div>

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { logAudit } from '@/lib/audit';
-import { computeWBW, explainWBW, loadWbwConfig } from '@/lib/inventar/wiederbeschaffungswert';
+import { explainWBW, loadWbwConfig } from '@/lib/inventar/wiederbeschaffungswert';
 
 /**
  * GET /api/admin/inventar?typ=&status=&beleg_status=&q=
@@ -20,6 +20,7 @@ export async function GET(req: NextRequest) {
   if (sp.get('status')) q = q.eq('status', sp.get('status'));
   if (sp.get('beleg_status')) q = q.eq('beleg_status', sp.get('beleg_status'));
   if (sp.get('tracking_mode')) q = q.eq('tracking_mode', sp.get('tracking_mode'));
+  if (sp.get('produkt_id')) q = q.eq('produkt_id', sp.get('produkt_id'));
   const search = sp.get('q')?.trim();
   if (search) q = q.or(`bezeichnung.ilike.%${search}%,inventar_code.ilike.%${search}%,seriennummer.ilike.%${search}%`);
 
