@@ -229,6 +229,12 @@
   color: #e2e8f0 !important;
 }
 
+/* Primärer Button (bg-brand-black) auf Admin-Dark sichtbar machen — sonst
+   ist er fast schwarz auf fast-schwarzem Hintergrund. */
+.admin-dark .bg-brand-black { background-color: #06b6d4 !important; color: #0f172a !important; }
+.admin-dark .bg-brand-black:hover,
+.admin-dark .hover\:bg-brand-dark:hover { background-color: #22d3ee !important; }
+
 /* Status-Badges: Farben beibehalten, nur Hintergrund aufhellen */
 .admin-dark .bg-green-100  { background-color: rgba(16,185,129,0.15) !important; }
 .admin-dark .text-green-700 { color: #10b981 !important; }
