@@ -72,7 +72,26 @@ export async function POST(req: NextRequest) {
   }
 
   const { data, error } = await supabase.from('inventar_units').insert(insert).select('*').single();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    if (error.code === '23505') {
+      // Unique violation — entweder inventar_code oder seriennummer schon vergeben
+      const msg = (error.message || '').toLowerCase();
+      if (msg.includes('seriennummer')) {
+        return NextResponse.json(
+          { error: 'Diese Seriennummer ist bereits vergeben. Seriennummern muessen systemweit eindeutig sein.' },
+          { status: 409 },
+        );
+      }
+      if (msg.includes('inventar_code')) {
+        return NextResponse.json(
+          { error: 'Dieser Inventar-Code ist bereits vergeben. Inventar-Codes muessen systemweit eindeutig sein.' },
+          { status: 409 },
+        );
+      }
+      return NextResponse.json({ error: 'Ein eindeutiges Feld ist bereits vergeben.', detail: error.message }, { status: 409 });
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 
   // Mirror in alte Welt: damit Buchungs-Auto-Zuweisung (RPC `assign_free_unit`)
   // und Booking-FK weiter funktionieren. Best-effort, keine harte Abhaengigkeit.

@@ -52,7 +52,25 @@ export async function PATCH(
 
   const { data, error } = await supabase
     .from('inventar_units').update(update).eq('id', id).select('*').single();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    if (error.code === '23505') {
+      const msg = (error.message || '').toLowerCase();
+      if (msg.includes('seriennummer')) {
+        return NextResponse.json(
+          { error: 'Diese Seriennummer ist bereits vergeben. Seriennummern muessen systemweit eindeutig sein.' },
+          { status: 409 },
+        );
+      }
+      if (msg.includes('inventar_code')) {
+        return NextResponse.json(
+          { error: 'Dieser Inventar-Code ist bereits vergeben. Inventar-Codes muessen systemweit eindeutig sein.' },
+          { status: 409 },
+        );
+      }
+      return NextResponse.json({ error: 'Ein eindeutiges Feld ist bereits vergeben.', detail: error.message }, { status: 409 });
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 
   // Mirror synchronisieren — bei produkt_id-Aenderung wird ggf. neu gespiegelt,
   // bei Status-Aenderung wird der bestehende Mirror aktualisiert.
