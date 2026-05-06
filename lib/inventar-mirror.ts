@@ -41,7 +41,7 @@ interface InventarUnitRow {
   inventar_code: string | null;
   seriennummer: string | null;
   status: string;
-  notes: string | null;
+  notizen: string | null;
   kaufdatum: string | null;
 }
 
@@ -130,7 +130,7 @@ export async function mirrorCameraToLegacy(
     await supabase.from('product_units').update({
       label,
       status: newStatus,
-      notes: unit.notes,
+      notes: unit.notizen,
       purchased_at: unit.kaufdatum,
     }).eq('id', existing);
     return existing;
@@ -144,7 +144,7 @@ export async function mirrorCameraToLegacy(
       serial_number: serial,
       label,
       status: newStatus,
-      notes: unit.notes,
+      notes: unit.notizen,
       purchased_at: unit.kaufdatum,
     })
     .select('id')
@@ -169,8 +169,113 @@ export async function mirrorCameraToLegacy(
 }
 
 /**
+ * Sicherstellen, dass fuer eine produkte-Row (typ Zubehoer) ein Eintrag in
+ * der alten `accessories`-Tabelle existiert. Wird nur fuer Zubehoer/Verbrauch
+ * aufgerufen — fuer Kameras existiert kein vergleichbarer Listing-Eintrag.
+ *
+ * Effekt: zubehoer das vom User direkt im Inventar angelegt wird, erscheint
+ * automatisch unter `/admin/zubehoer` mit sinnvollen Defaults — der Admin
+ * kann dort spaeter Preis, Kategorie, Bild ergaenzen.
+ *
+ * Liefert die accessories.id (TEXT-Slug) oder null wenn nicht moeglich.
+ */
+async function ensureAccessoryListing(
+  supabase: SupabaseClient,
+  produkteId: string,
+  fallbackName: string,
+  isVerbrauch: boolean,
+): Promise<string | null> {
+  // 1. existiert schon?
+  const existing = await reverseLookupLegacyProductId(supabase, produkteId, 'accessories');
+  if (existing) return existing;
+
+  // 2. produkte-Stammdaten holen, um sinnvolle Defaults zu setzen
+  const { data: produkt } = await supabase
+    .from('produkte')
+    .select('name, modell, default_wbw, bild_url')
+    .eq('id', produkteId)
+    .maybeSingle();
+  const name = (produkt as { name?: string } | null)?.name ?? fallbackName;
+
+  // 3. Slug fuer accessories.id (TEXT PRIMARY KEY) generieren
+  const baseSlug = name
+    .toLowerCase()
+    .replace(/[äÄ]/g, 'ae').replace(/[öÖ]/g, 'oe').replace(/[üÜ]/g, 'ue').replace(/ß/g, 'ss')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40) || 'zubehoer';
+
+  // Eindeutigkeit sicherstellen
+  let slug = baseSlug;
+  let suffix = 1;
+  while (true) {
+    const { data: hit } = await supabase
+      .from('accessories')
+      .select('id')
+      .eq('id', slug)
+      .maybeSingle();
+    if (!hit) break;
+    suffix++;
+    slug = `${baseSlug}-${suffix}`;
+    if (suffix > 999) return null; // Sicherheitsgrenze
+  }
+
+  const insertRow: Record<string, unknown> = {
+    id: slug,
+    name,
+    category: isVerbrauch ? 'verbrauch' : (produkt as { modell?: string | null } | null)?.modell ?? 'sonstiges',
+    pricing_mode: 'perDay',
+    price: 0,
+    available_qty: 0, // wird durch syncAccessoryQty bzw. Mirror-Inserts hochgezaehlt
+    available: true,
+    image_url: (produkt as { bild_url?: string | null } | null)?.bild_url ?? null,
+    sort_order: 999,
+    replacement_value: (produkt as { default_wbw?: number | null } | null)?.default_wbw ?? null,
+  };
+
+  const { error } = await supabase.from('accessories').insert(insertRow);
+  if (error) {
+    // Defensiv: bei "column does not exist" einen schmaleren Insert probieren
+    if (/column .*does not exist/i.test(error.message)) {
+      const minimal = {
+        id: slug,
+        name,
+        category: isVerbrauch ? 'verbrauch' : 'sonstiges',
+        pricing_mode: 'perDay',
+        price: 0,
+        available_qty: 0,
+        available: true,
+      };
+      const retry = await supabase.from('accessories').insert(minimal);
+      if (retry.error) {
+        console.error('[inventar-mirror] accessories minimal insert fehlgeschlagen:', retry.error.message);
+        return null;
+      }
+    } else {
+      console.error('[inventar-mirror] accessories insert fehlgeschlagen:', error.message);
+      return null;
+    }
+  }
+
+  await supabase.from('migration_audit').insert({
+    alte_tabelle: 'accessories',
+    alte_id: slug,
+    neue_tabelle: 'produkte',
+    neue_id: produkteId,
+    notizen: 'auto-promote (inventar→accessories)',
+  }).then(({ error: auditErr }) => {
+    if (auditErr) console.error('[inventar-mirror] accessories audit insert fehlgeschlagen:', auditErr.message);
+  });
+
+  return slug;
+}
+
+/**
  * Spiegelt eine Inventar-Einheit (typ='zubehoer'/'verbrauch',
  * tracking_mode='individual') in die alte accessory_units-Tabelle.
+ *
+ * Erstellt automatisch auch einen `accessories`-Listing-Eintrag, falls noch
+ * keiner existiert — sodass das Zubehoer auch unter /admin/zubehoer auftaucht.
  */
 export async function mirrorAccessoryToLegacy(
   supabase: SupabaseClient,
@@ -181,7 +286,16 @@ export async function mirrorAccessoryToLegacy(
   if (!unit.produkt_id) return null;
 
   const existing = await findExistingMirror(supabase, unit.id, 'accessory_units');
-  const legacyAccessoryId = await reverseLookupLegacyProductId(supabase, unit.produkt_id, 'accessories');
+  let legacyAccessoryId = await reverseLookupLegacyProductId(supabase, unit.produkt_id, 'accessories');
+  if (!legacyAccessoryId) {
+    // Auto-Promote: erstmal eine accessories-Row anlegen
+    legacyAccessoryId = await ensureAccessoryListing(
+      supabase,
+      unit.produkt_id,
+      unit.bezeichnung,
+      unit.typ === 'verbrauch',
+    );
+  }
   if (!legacyAccessoryId) return null;
 
   const newStatus = STATUS_INVENTAR_TO_ACCESSORY_UNITS[unit.status] ?? 'available';
@@ -190,7 +304,7 @@ export async function mirrorAccessoryToLegacy(
   if (existing) {
     await supabase.from('accessory_units').update({
       status: newStatus,
-      notes: unit.notes,
+      notes: unit.notizen,
       purchased_at: unit.kaufdatum,
     }).eq('id', existing);
     return existing;
@@ -202,7 +316,7 @@ export async function mirrorAccessoryToLegacy(
       accessory_id: legacyAccessoryId,
       exemplar_code: exemplarCode,
       status: newStatus,
-      notes: unit.notes,
+      notes: unit.notizen,
       purchased_at: unit.kaufdatum,
     })
     .select('id')
@@ -228,13 +342,30 @@ export async function mirrorAccessoryToLegacy(
 
 /**
  * Wrapper, der die richtige Mirror-Funktion abhaengig vom typ aufruft.
+ *
+ * Fuer Zubehoer (auch bulk) wird zusaetzlich sichergestellt, dass eine
+ * accessories-Listing-Row existiert — damit das Stueck unter /admin/zubehoer
+ * sichtbar und auf der Public-Seite buchbar ist.
  */
 export async function mirrorInventarToLegacy(
   supabase: SupabaseClient,
   unit: InventarUnitRow,
 ): Promise<string | null> {
   if (unit.typ === 'kamera') return mirrorCameraToLegacy(supabase, unit);
-  return mirrorAccessoryToLegacy(supabase, unit);
+
+  // Zubehoer / Verbrauch: zuerst Listing sicherstellen, dann individual mirror
+  if (unit.produkt_id) {
+    await ensureAccessoryListing(
+      supabase,
+      unit.produkt_id,
+      unit.bezeichnung,
+      unit.typ === 'verbrauch',
+    );
+  }
+  if (unit.tracking_mode === 'individual') {
+    return mirrorAccessoryToLegacy(supabase, unit);
+  }
+  return null; // bulk: nur Listing, keine accessory_units
 }
 
 /**

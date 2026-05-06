@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
 
   const { data: units, error } = await supabase
     .from('inventar_units')
-    .select('id, produkt_id, typ, tracking_mode, bezeichnung, inventar_code, seriennummer, status, notes, kaufdatum')
+    .select('id, produkt_id, typ, tracking_mode, bezeichnung, inventar_code, seriennummer, status, notizen, kaufdatum')
     .eq('tracking_mode', 'individual');
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

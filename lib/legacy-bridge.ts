@@ -262,7 +262,7 @@ interface InventarUnitRow {
   inventar_code: string | null;
   seriennummer: string | null;
   status: string;
-  notes: string | null;
+  notizen: string | null;
   kaufdatum: string | null;
   tracking_mode: string;
   bestand: number | null;
@@ -279,7 +279,7 @@ export function inventarRowToUnitView(
     inventar_code: row.inventar_code ?? '',
     label: row.bezeichnung,
     status: STATUS_NEW_TO_OLD[row.status] ?? 'available',
-    notes: row.notes,
+    notes: row.notizen,
     purchased_at: row.kaufdatum,
     tracking_mode: (row.tracking_mode as 'individual' | 'bulk') ?? 'individual',
     bestand: row.bestand,
@@ -330,7 +330,7 @@ export async function loadInventarUnitsForProdukt(
 ): Promise<UnitView[]> {
   let q = supabase
     .from('inventar_units')
-    .select('id, bezeichnung, inventar_code, seriennummer, status, notes, kaufdatum, tracking_mode, bestand, produkt_id')
+    .select('id, bezeichnung, inventar_code, seriennummer, status, notizen, kaufdatum, tracking_mode, bestand, produkt_id')
     .eq('produkt_id', produkteId);
   if (options.excludeRetired ?? true) q = q.neq('status', 'ausgemustert');
   if (options.trackingMode) q = q.eq('tracking_mode', options.trackingMode);
@@ -368,7 +368,7 @@ export async function loadInventarUnitsForProdukteBulk(
 
   let q = supabase
     .from('inventar_units')
-    .select('id, bezeichnung, inventar_code, seriennummer, status, notes, kaufdatum, tracking_mode, bestand, produkt_id')
+    .select('id, bezeichnung, inventar_code, seriennummer, status, notizen, kaufdatum, tracking_mode, bestand, produkt_id')
     .in('produkt_id', produkteIds);
   if (options.excludeRetired ?? false) q = q.neq('status', 'ausgemustert');
   if (options.trackingMode) q = q.eq('tracking_mode', options.trackingMode);
