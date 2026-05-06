@@ -198,7 +198,7 @@ function BackfillMirrorsButton() {
   const [result, setResult] = useState<string | null>(null);
 
   async function run() {
-    if (!confirm('Inventar-Einheiten in die alte product_units/accessory_units-Welt spiegeln? Idempotent — kann gefahrlos mehrfach laufen.')) return;
+    if (!confirm('Bestand reparieren?\n\n1) Zubehoer-Listings aus migration_audit wiederherstellen (falls /admin/zubehoer leer)\n2) Inventar-Einheiten in product_units/accessory_units spiegeln (fuer Buchungs-RPCs)\n\nIdempotent — kann gefahrlos mehrfach laufen.')) return;
     setBusy(true);
     setResult(null);
     try {
@@ -207,7 +207,11 @@ function BackfillMirrorsButton() {
       if (!res.ok) {
         setResult(`Fehler: ${data.error ?? 'unbekannt'}`);
       } else {
-        setResult(`${data.mirrored} gespiegelt, ${data.skipped} übersprungen`);
+        const parts: string[] = [];
+        if (data.accessories_restored > 0) parts.push(`${data.accessories_restored} Zubehör wiederhergestellt`);
+        parts.push(`${data.mirrored} gespiegelt`);
+        if (data.skipped > 0) parts.push(`${data.skipped} übersprungen`);
+        setResult(parts.join(' · '));
       }
     } catch (err) {
       setResult(`Netzwerk-Fehler: ${(err as Error).message}`);

@@ -179,17 +179,30 @@ export async function mirrorCameraToLegacy(
  *
  * Liefert die accessories.id (TEXT-Slug) oder null wenn nicht moeglich.
  */
-async function ensureAccessoryListing(
+export async function ensureAccessoryListing(
   supabase: SupabaseClient,
   produkteId: string,
   fallbackName: string,
   isVerbrauch: boolean,
 ): Promise<string | null> {
-  // 1. existiert schon?
-  const existing = await reverseLookupLegacyProductId(supabase, produkteId, 'accessories');
-  if (existing) return existing;
+  // 1. Audit-Eintrag pruefen — entweder existiert ein Mapping (dann
+  //    moeglicherweise nur die accessories-Row wiederherstellen), oder wir
+  //    legen einen neuen Slug an.
+  const auditedLegacyId = await reverseLookupLegacyProductId(supabase, produkteId, 'accessories');
 
-  // 2. produkte-Stammdaten holen, um sinnvolle Defaults zu setzen
+  // 2. Pruefen, ob die accessories-Row tatsaechlich existiert. Wenn audit ja,
+  //    aber Tabelle leer/verloren — wir restoren aus produkte-Daten.
+  if (auditedLegacyId) {
+    const { data: existing } = await supabase
+      .from('accessories')
+      .select('id')
+      .eq('id', auditedLegacyId)
+      .maybeSingle();
+    if (existing) return auditedLegacyId; // alles gut
+    // sonst: Audit zeigt darauf, aber Row fehlt → restore mit der alten ID
+  }
+
+  // 3. produkte-Stammdaten holen, um sinnvolle Defaults zu setzen
   const { data: produkt } = await supabase
     .from('produkte')
     .select('name, modell, default_wbw, bild_url')
@@ -197,27 +210,31 @@ async function ensureAccessoryListing(
     .maybeSingle();
   const name = (produkt as { name?: string } | null)?.name ?? fallbackName;
 
-  // 3. Slug fuer accessories.id (TEXT PRIMARY KEY) generieren
-  const baseSlug = name
-    .toLowerCase()
-    .replace(/[äÄ]/g, 'ae').replace(/[öÖ]/g, 'oe').replace(/[üÜ]/g, 'ue').replace(/ß/g, 'ss')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 40) || 'zubehoer';
-
-  // Eindeutigkeit sicherstellen
-  let slug = baseSlug;
-  let suffix = 1;
-  while (true) {
-    const { data: hit } = await supabase
-      .from('accessories')
-      .select('id')
-      .eq('id', slug)
-      .maybeSingle();
-    if (!hit) break;
-    suffix++;
-    slug = `${baseSlug}-${suffix}`;
-    if (suffix > 999) return null; // Sicherheitsgrenze
+  // 4. Slug fuer accessories.id bestimmen — bei Audit-Restore die alte ID
+  //    behalten, sonst neu erzeugen mit Kollisions-Schutz.
+  let slug: string;
+  if (auditedLegacyId) {
+    slug = auditedLegacyId;
+  } else {
+    const baseSlug = name
+      .toLowerCase()
+      .replace(/[äÄ]/g, 'ae').replace(/[öÖ]/g, 'oe').replace(/[üÜ]/g, 'ue').replace(/ß/g, 'ss')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 40) || 'zubehoer';
+    slug = baseSlug;
+    let suffix = 1;
+    while (true) {
+      const { data: hit } = await supabase
+        .from('accessories')
+        .select('id')
+        .eq('id', slug)
+        .maybeSingle();
+      if (!hit) break;
+      suffix++;
+      slug = `${baseSlug}-${suffix}`;
+      if (suffix > 999) return null;
+    }
   }
 
   const insertRow: Record<string, unknown> = {
@@ -235,7 +252,6 @@ async function ensureAccessoryListing(
 
   const { error } = await supabase.from('accessories').insert(insertRow);
   if (error) {
-    // Defensiv: bei "column does not exist" einen schmaleren Insert probieren
     if (/column .*does not exist/i.test(error.message)) {
       const minimal = {
         id: slug,
@@ -257,15 +273,19 @@ async function ensureAccessoryListing(
     }
   }
 
-  await supabase.from('migration_audit').insert({
-    alte_tabelle: 'accessories',
-    alte_id: slug,
-    neue_tabelle: 'produkte',
-    neue_id: produkteId,
-    notizen: 'auto-promote (inventar→accessories)',
-  }).then(({ error: auditErr }) => {
-    if (auditErr) console.error('[inventar-mirror] accessories audit insert fehlgeschlagen:', auditErr.message);
-  });
+  // Audit-Eintrag nur dann anlegen, wenn noch keiner existiert (Restore-Fall:
+  // Audit war schon da, accessories-Row aber weg).
+  if (!auditedLegacyId) {
+    await supabase.from('migration_audit').insert({
+      alte_tabelle: 'accessories',
+      alte_id: slug,
+      neue_tabelle: 'produkte',
+      neue_id: produkteId,
+      notizen: 'auto-promote (inventar→accessories)',
+    }).then(({ error: auditErr }) => {
+      if (auditErr) console.error('[inventar-mirror] accessories audit insert fehlgeschlagen:', auditErr.message);
+    });
+  }
 
   return slug;
 }
