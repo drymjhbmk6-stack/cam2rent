@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import AdminBackLink from '@/components/admin/AdminBackLink';
@@ -11,6 +12,18 @@ interface Produkt {
   modell: string | null;
   ist_vermietbar: boolean;
   compatible_camera_names?: string[];
+}
+
+interface CodeSegment {
+  id: string;
+  typ: 'kategorie' | 'hersteller';
+  code: string;
+  label: string;
+}
+
+interface Seg3Suggestion {
+  name: string;
+  count: number;
 }
 
 function produktLabel(p: Produkt): string {
@@ -33,7 +46,6 @@ export default function NeuesInventarPage() {
   );
   const [trackingMode, setTrackingMode] = useState<'individual' | 'bulk'>('individual');
   const [seriennummer, setSeriennummer] = useState('');
-  const [inventarCode, setInventarCode] = useState('');
   const [bestand, setBestand] = useState(0);
   const [wbwEnabled, setWbwEnabled] = useState(false);
   const [wbw, setWbw] = useState<number>(0);
@@ -41,12 +53,79 @@ export default function NeuesInventarPage() {
   const [produkte, setProdukte] = useState<Produkt[]>([]);
   const [produktId, setProduktId] = useState<string>(searchParams.get('produkt_id') ?? '');
 
+  // Code-Builder: 4 Segmente
+  const [seg1, setSeg1] = useState(''); // Kategorie-Code (CAM, STO, ...)
+  const [seg2, setSeg2] = useState(''); // Hersteller-Code (GPR, SAN, ...)
+  const [seg3, setSeg3] = useState(''); // Name (frei oder aus Suggestion)
+  const [seg4, setSeg4] = useState('01'); // Auto-Nummer
+  const [seg4Loading, setSeg4Loading] = useState(false);
+  const [codeSegmente, setCodeSegmente] = useState<CodeSegment[]>([]);
+  const [seg3Suggestions, setSeg3Suggestions] = useState<Seg3Suggestion[]>([]);
+
+  // Berechneter Code
+  const inventarCode = seg1 && seg2 && seg3
+    ? `${seg1}-${seg2}-${seg3.toUpperCase().replace(/[^A-Z0-9]/g, '')}-${seg4}`
+    : '';
+
+  // Produkte laden
   useEffect(() => {
     fetch('/api/admin/produkte')
       .then((r) => (r.ok ? r.json() : { produkte: [] }))
       .then((data) => setProdukte(data.produkte ?? []))
       .catch(() => setProdukte([]));
   }, []);
+
+  // Code-Segmente (Kategorie + Hersteller) laden
+  useEffect(() => {
+    fetch('/api/admin/inventar/code-segmente')
+      .then((r) => (r.ok ? r.json() : { segmente: [] }))
+      .then((data) => setCodeSegmente(data.segmente ?? []))
+      .catch(() => setCodeSegmente([]));
+  }, []);
+
+  // Bei Seg1+Seg2-Wechsel: Seg3-Vorschlaege laden
+  useEffect(() => {
+    if (!seg1 || !seg2) {
+      setSeg3Suggestions([]);
+      return;
+    }
+    const sp = new URLSearchParams({ seg1, seg2 });
+    fetch(`/api/admin/inventar/seg3-suggestions?${sp.toString()}`)
+      .then((r) => (r.ok ? r.json() : { suggestions: [] }))
+      .then((data) => setSeg3Suggestions(data.suggestions ?? []))
+      .catch(() => setSeg3Suggestions([]));
+  }, [seg1, seg2]);
+
+  // Bei vollstaendiger Seg1-3 Kombi: naechste Nummer berechnen
+  useEffect(() => {
+    if (!seg1 || !seg2 || !seg3) {
+      setSeg4('01');
+      return;
+    }
+    const cleanedSeg3 = seg3.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (!cleanedSeg3) return;
+    setSeg4Loading(true);
+    const sp = new URLSearchParams({ seg1, seg2, seg3: cleanedSeg3 });
+    fetch(`/api/admin/inventar/next-code-number?${sp.toString()}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.seg4) setSeg4(data.seg4);
+      })
+      .catch(() => { /* default bleibt 01 */ })
+      .finally(() => setSeg4Loading(false));
+  }, [seg1, seg2, seg3]);
+
+  // Bezeichnung aus Produkt-Auswahl vorbelegen (nur wenn noch leer)
+  useEffect(() => {
+    if (!produktId || bezeichnung.trim()) return;
+    const p = produkte.find((x) => x.id === produktId);
+    if (p) {
+      setBezeichnung(`${p.marke ? p.marke + ' ' : ''}${p.name}`.trim());
+    }
+    // bewusst NUR auf produktId reagieren, damit User die bezeichnung danach
+    // frei bearbeiten kann ohne dass sie wieder ueberschrieben wird.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [produktId]);
 
   async function handleSave() {
     setBusy(true);
@@ -124,19 +203,25 @@ export default function NeuesInventarPage() {
             </div>
           </div>
 
+          <CodeBuilder
+            seg1={seg1} setSeg1={setSeg1}
+            seg2={seg2} setSeg2={setSeg2}
+            seg3={seg3} setSeg3={setSeg3}
+            seg4={seg4} seg4Loading={seg4Loading}
+            inventarCode={inventarCode}
+            codeSegmente={codeSegmente}
+            seg3Suggestions={seg3Suggestions}
+          />
+
           {trackingMode === 'individual' && (
             <>
-              <Label>Inventar-Code *</Label>
-              <input value={inventarCode} onChange={(e) => setInventarCode(e.target.value)} placeholder="z.B. CAM-GOP-13-01" className="w-full bg-[#111827] border border-slate-700 rounded px-3 py-2 text-base font-mono text-sm" />
-              <Label>Seriennummer</Label>
-              <input value={seriennummer} onChange={(e) => setSeriennummer(e.target.value)} className="w-full bg-[#111827] border border-slate-700 rounded px-3 py-2 text-base font-mono text-sm" />
+              <Label>Seriennummer (vom Hersteller)</Label>
+              <input value={seriennummer} onChange={(e) => setSeriennummer(e.target.value)} placeholder="optional" className="w-full bg-[#111827] border border-slate-700 rounded px-3 py-2 text-base font-mono text-sm" />
             </>
           )}
 
           {trackingMode === 'bulk' && (
             <>
-              <Label>Inventar-Code *</Label>
-              <input value={inventarCode} onChange={(e) => setInventarCode(e.target.value)} placeholder="z.B. STO-SAN-512" className="w-full bg-[#111827] border border-slate-700 rounded px-3 py-2 text-base font-mono text-sm" />
               <Label>Anfangsbestand</Label>
               <input type="number" min="0" value={bestand} onChange={(e) => setBestand(parseInt(e.target.value || '0', 10))} className="w-full bg-[#111827] border border-slate-700 rounded px-3 py-2 text-base" />
             </>
@@ -166,4 +251,101 @@ export default function NeuesInventarPage() {
 
 function Label({ children }: { children: React.ReactNode }) {
   return <label className="block text-sm text-slate-400">{children}</label>;
+}
+
+interface CodeBuilderProps {
+  seg1: string; setSeg1: (v: string) => void;
+  seg2: string; setSeg2: (v: string) => void;
+  seg3: string; setSeg3: (v: string) => void;
+  seg4: string; seg4Loading: boolean;
+  inventarCode: string;
+  codeSegmente: CodeSegment[];
+  seg3Suggestions: Seg3Suggestion[];
+}
+
+function CodeBuilder({ seg1, setSeg1, seg2, setSeg2, seg3, setSeg3, seg4, seg4Loading, inventarCode, codeSegmente, seg3Suggestions }: CodeBuilderProps) {
+  const kategorien = codeSegmente.filter((s) => s.typ === 'kategorie');
+  const hersteller = codeSegmente.filter((s) => s.typ === 'hersteller');
+  const noStammdaten = codeSegmente.length === 0;
+
+  return (
+    <div className="border border-slate-800 bg-slate-900/40 rounded p-3 space-y-3">
+      <div className="flex items-baseline justify-between">
+        <Label>Inventar-Code *</Label>
+        <Link href="/admin/inventar/code-segmente" className="text-xs text-cyan-400 hover:text-cyan-300">
+          Stammdaten pflegen ↗
+        </Link>
+      </div>
+
+      {noStammdaten && (
+        <div className="px-3 py-2 bg-amber-500/10 border border-amber-500/30 text-amber-300 rounded text-xs">
+          ⚠ Noch keine Code-Segmente angelegt. Bitte zuerst <Link href="/admin/inventar/code-segmente" className="underline">Stammdaten</Link> pflegen.
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+        {/* Seg 1 — Kategorie */}
+        <div>
+          <label className="block text-[11px] text-slate-500 mb-1">Kategorie</label>
+          <select value={seg1} onChange={(e) => setSeg1(e.target.value)} className="w-full bg-[#0a0f1e] border border-slate-700 rounded px-2 py-1.5 text-sm font-mono">
+            <option value="">—</option>
+            {kategorien.map((k) => (
+              <option key={k.id} value={k.code}>{k.code} · {k.label}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Seg 2 — Hersteller */}
+        <div>
+          <label className="block text-[11px] text-slate-500 mb-1">Hersteller</label>
+          <select value={seg2} onChange={(e) => setSeg2(e.target.value)} className="w-full bg-[#0a0f1e] border border-slate-700 rounded px-2 py-1.5 text-sm font-mono">
+            <option value="">—</option>
+            {hersteller.map((h) => (
+              <option key={h.id} value={h.code}>{h.code} · {h.label}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Seg 3 — Name (Combobox: Datalist) */}
+        <div>
+          <label className="block text-[11px] text-slate-500 mb-1">
+            Name {seg3Suggestions.length > 0 && <span className="text-slate-600">({seg3Suggestions.length} bekannt)</span>}
+          </label>
+          <input
+            list="seg3-list"
+            value={seg3}
+            onChange={(e) => setSeg3(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+            placeholder="z.B. 128"
+            disabled={!seg1 || !seg2}
+            className="w-full bg-[#0a0f1e] border border-slate-700 disabled:bg-slate-800 disabled:text-slate-500 rounded px-2 py-1.5 text-sm font-mono"
+          />
+          <datalist id="seg3-list">
+            {seg3Suggestions.map((s) => (
+              <option key={s.name} value={s.name}>{s.count}× vorhanden</option>
+            ))}
+          </datalist>
+        </div>
+
+        {/* Seg 4 — Laufende Nr (read-only) */}
+        <div>
+          <label className="block text-[11px] text-slate-500 mb-1">
+            Laufende Nr {seg4Loading && <span className="text-slate-600">(berechne…)</span>}
+          </label>
+          <input
+            value={seg4}
+            readOnly
+            className="w-full bg-slate-800 border border-slate-700 text-slate-300 rounded px-2 py-1.5 text-sm font-mono cursor-not-allowed"
+          />
+        </div>
+      </div>
+
+      {/* Live-Preview */}
+      <div className="pt-2 border-t border-slate-800">
+        <div className="text-[11px] text-slate-500 mb-1">Code wird:</div>
+        <div className="font-mono text-base text-cyan-300">
+          {inventarCode || <span className="text-slate-600 italic">— Bitte alle 4 Segmente fuellen —</span>}
+        </div>
+      </div>
+    </div>
+  );
 }
