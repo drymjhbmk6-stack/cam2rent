@@ -161,6 +161,31 @@ export default function InventarDetailPage() {
     setBusy(false);
   }
 
+  async function patchField(payload: Record<string, unknown>): Promise<boolean> {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/inventar/${id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        const msg = String(data.error ?? '');
+        if (msg.includes('duplicate key') || msg.includes('unique')) {
+          setError('Dieser Code/Seriennummer existiert bereits an einem anderen Stück.');
+        } else {
+          setError(msg || 'Speichern fehlgeschlagen');
+        }
+        return false;
+      }
+      await reload();
+      return true;
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (!unit) return <div className="p-6 text-slate-400">Lädt…</div>;
 
   return (
@@ -168,10 +193,10 @@ export default function InventarDetailPage() {
       <AdminBackLink href="/admin/inventar" />
       <div className="max-w-4xl mx-auto mt-4 space-y-6">
         <div>
-          <h1 className="text-2xl font-heading">{unit.bezeichnung}</h1>
-          <p className="text-sm text-slate-400 font-mono">
-            {unit.inventar_code} {unit.seriennummer && `· SN: ${unit.seriennummer}`}
-          </p>
+          <EditableHeading
+            value={unit.bezeichnung}
+            onSave={(v) => patchField({ bezeichnung: v.trim() })}
+          />
         </div>
 
         {error && <div className="p-3 bg-rose-500/10 border border-rose-500/30 text-rose-300 rounded text-sm">{error}</div>}
@@ -187,7 +212,7 @@ export default function InventarDetailPage() {
         <section className="bg-[#111827] border border-slate-800 rounded p-4 space-y-2">
           <h2 className="font-semibold mb-2">Stammdaten</h2>
           <Row label="Typ" value={unit.typ === 'kamera' ? 'Kamera' : unit.typ === 'zubehoer' ? 'Zubehör' : 'Verbrauchsmaterial'} />
-          <Row label="Tracking" value={unit.tracking_mode === 'bulk' ? `Bulk (Bestand: ${unit.bestand ?? 0})` : 'Einzeln'} />
+          <Row label="Tracking" value={unit.tracking_mode === 'bulk' ? 'Bulk (Sammelbestand)' : 'Einzeln (mit Code/SN)'} />
           <Row label="Status" value={
             <select value={unit.status} onChange={(e) => handleStatusChange(e.target.value)} className="bg-[#0a0f1e] border border-slate-700 rounded px-2 py-1 text-sm">
               <option value="verfuegbar">Verfügbar</option>
@@ -218,8 +243,67 @@ export default function InventarDetailPage() {
               </span>
             )
           } />
-          <Row label="Kaufpreis netto" value={fmtEuro(unit.kaufpreis_netto)} />
-          <Row label="Kaufdatum" value={unit.kaufdatum ? new Date(unit.kaufdatum).toLocaleDateString('de-DE') : '–'} />
+          <Row label="Code" value={
+            <EditableInline
+              value={unit.inventar_code ?? ''}
+              placeholder="z.B. CAM-DJI-OA5-01"
+              mono
+              onSave={(v) => patchField({ inventar_code: v.trim() || null })}
+            />
+          } />
+          {unit.tracking_mode === 'individual' && (
+            <Row label="Seriennummer" value={
+              <EditableInline
+                value={unit.seriennummer ?? ''}
+                placeholder="Hersteller-Seriennr."
+                mono
+                onSave={(v) => patchField({ seriennummer: v.trim() || null })}
+              />
+            } />
+          )}
+          {unit.tracking_mode === 'bulk' && (
+            <Row label="Bestand" value={
+              <EditableInline
+                value={String(unit.bestand ?? 0)}
+                type="number"
+                onSave={(v) => {
+                  const n = parseInt(v, 10);
+                  if (Number.isNaN(n) || n < 0) {
+                    setError('Bestand muss eine nicht-negative Zahl sein');
+                    return Promise.resolve(false);
+                  }
+                  return patchField({ bestand: n });
+                }}
+              />
+            } />
+          )}
+          <Row label="Kaufpreis netto" value={
+            <EditableInline
+              value={unit.kaufpreis_netto !== null && unit.kaufpreis_netto !== undefined ? String(unit.kaufpreis_netto) : ''}
+              placeholder="Nicht gesetzt"
+              type="number"
+              suffix="€"
+              displayValue={fmtEuro(unit.kaufpreis_netto)}
+              onSave={(v) => {
+                const trimmed = v.trim();
+                if (!trimmed) return patchField({ kaufpreis_netto: null });
+                const n = parseFloat(trimmed.replace(',', '.'));
+                if (Number.isNaN(n) || n < 0) {
+                  setError('Kaufpreis muss eine nicht-negative Zahl sein');
+                  return Promise.resolve(false);
+                }
+                return patchField({ kaufpreis_netto: n });
+              }}
+            />
+          } />
+          <Row label="Kaufdatum" value={
+            <EditableInline
+              value={unit.kaufdatum ?? ''}
+              type="date"
+              displayValue={unit.kaufdatum ? new Date(unit.kaufdatum).toLocaleDateString('de-DE') : '–'}
+              onSave={(v) => patchField({ kaufdatum: v || null })}
+            />
+          } />
         </section>
 
         {/* WBW */}
@@ -280,12 +364,10 @@ export default function InventarDetailPage() {
           )}
         </section>
 
-        {unit.notizen && (
-          <section className="bg-[#111827] border border-slate-800 rounded p-4">
-            <h2 className="font-semibold mb-2">Notizen</h2>
-            <p className="text-sm text-slate-400 whitespace-pre-wrap">{unit.notizen}</p>
-          </section>
-        )}
+        <NotizenSection
+          value={unit.notizen ?? ''}
+          onSave={(v) => patchField({ notizen: v.trim() || null })}
+        />
       </div>
 
       {/* Verknuepfungs-Modal */}
@@ -320,9 +402,188 @@ export default function InventarDetailPage() {
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="flex justify-between items-center text-sm">
-      <span className="text-slate-400">{label}</span>
-      <span>{value}</span>
+    <div className="flex justify-between items-center gap-3 text-sm py-1">
+      <span className="text-slate-400 shrink-0">{label}</span>
+      <span className="text-right min-w-0">{value}</span>
     </div>
+  );
+}
+
+function EditableHeading({
+  value,
+  onSave,
+}: {
+  value: string;
+  onSave: (v: string) => Promise<boolean>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const [busy, setBusy] = useState(false);
+
+  if (!editing) {
+    return (
+      <h1 className="text-2xl font-heading flex items-center gap-2">
+        <span>{value || <span className="text-slate-500 italic">Ohne Bezeichnung</span>}</span>
+        <button
+          onClick={() => { setDraft(value); setEditing(true); }}
+          className="text-cyan-400 hover:text-cyan-300 text-sm font-body"
+          aria-label="Bezeichnung bearbeiten"
+        >
+          ✎
+        </button>
+      </h1>
+    );
+  }
+
+  return (
+    <div className="flex gap-2 items-center">
+      <input
+        autoFocus
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') { e.preventDefault(); save(); }
+          if (e.key === 'Escape') setEditing(false);
+        }}
+        className="flex-1 bg-[#0a0f1e] border border-slate-700 rounded px-3 py-2 text-2xl font-heading"
+        disabled={busy}
+      />
+      <button onClick={save} disabled={busy} className="px-3 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-900 rounded text-sm font-semibold">Speichern</button>
+      <button onClick={() => setEditing(false)} disabled={busy} className="text-slate-400 hover:text-slate-300 text-sm">Abbrechen</button>
+    </div>
+  );
+
+  async function save() {
+    if (draft.trim() === value.trim()) { setEditing(false); return; }
+    setBusy(true);
+    const ok = await onSave(draft);
+    setBusy(false);
+    if (ok) setEditing(false);
+  }
+}
+
+function EditableInline({
+  value,
+  placeholder,
+  type = 'text',
+  mono = false,
+  suffix,
+  displayValue,
+  onSave,
+}: {
+  value: string;
+  placeholder?: string;
+  type?: 'text' | 'number' | 'date';
+  mono?: boolean;
+  suffix?: string;
+  displayValue?: string;
+  onSave: (v: string) => Promise<boolean>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const [busy, setBusy] = useState(false);
+
+  async function save() {
+    if (draft === value) { setEditing(false); return; }
+    setBusy(true);
+    const ok = await onSave(draft);
+    setBusy(false);
+    if (ok) setEditing(false);
+  }
+
+  if (!editing) {
+    const display = displayValue ?? (value
+      ? (suffix ? `${value} ${suffix}` : value)
+      : (placeholder ? <span className="text-slate-500 italic">{placeholder}</span> : '–'));
+    return (
+      <span className="flex items-center justify-end gap-2">
+        <span className={mono ? 'font-mono text-xs' : ''}>{display}</span>
+        <button
+          onClick={() => { setDraft(value); setEditing(true); }}
+          className="text-cyan-400 hover:text-cyan-300 text-xs"
+          aria-label="Bearbeiten"
+        >
+          ✎
+        </button>
+      </span>
+    );
+  }
+
+  return (
+    <span className="flex items-center justify-end gap-2">
+      <input
+        autoFocus
+        type={type}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') { e.preventDefault(); save(); }
+          if (e.key === 'Escape') setEditing(false);
+        }}
+        placeholder={placeholder}
+        className={`bg-[#0a0f1e] border border-slate-700 rounded px-2 py-1 text-sm ${mono ? 'font-mono text-xs' : ''}`}
+        style={{ width: type === 'date' ? 160 : type === 'number' ? 120 : 220 }}
+        disabled={busy}
+        step={type === 'number' ? '0.01' : undefined}
+      />
+      <button onClick={save} disabled={busy} className="px-2 py-1 bg-cyan-500 hover:bg-cyan-400 text-slate-900 rounded text-xs font-semibold">Speichern</button>
+      <button onClick={() => setEditing(false)} disabled={busy} className="text-slate-400 hover:text-slate-300 text-xs">Abbrechen</button>
+    </span>
+  );
+}
+
+function NotizenSection({
+  value,
+  onSave,
+}: {
+  value: string;
+  onSave: (v: string) => Promise<boolean>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const [busy, setBusy] = useState(false);
+
+  async function save() {
+    setBusy(true);
+    const ok = await onSave(draft);
+    setBusy(false);
+    if (ok) setEditing(false);
+  }
+
+  return (
+    <section className="bg-[#111827] border border-slate-800 rounded p-4">
+      <div className="flex justify-between items-center mb-3">
+        <h2 className="font-semibold">Notizen</h2>
+        {!editing && (
+          <button
+            onClick={() => { setDraft(value); setEditing(true); }}
+            className="text-cyan-400 hover:text-cyan-300 text-sm"
+          >
+            {value ? 'Bearbeiten' : '+ Notiz hinzufügen'}
+          </button>
+        )}
+      </div>
+      {editing ? (
+        <div className="space-y-2">
+          <textarea
+            autoFocus
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            rows={5}
+            placeholder="Interne Notizen zu diesem Stück (Zustand, Reparaturen, Besonderheiten…)"
+            className="w-full bg-[#0a0f1e] border border-slate-700 rounded px-3 py-2 text-sm"
+            disabled={busy}
+          />
+          <div className="flex gap-2">
+            <button onClick={save} disabled={busy} className="px-3 py-1 bg-cyan-500 hover:bg-cyan-400 text-slate-900 rounded text-sm font-semibold">Speichern</button>
+            <button onClick={() => setEditing(false)} disabled={busy} className="px-3 py-1 text-slate-400 hover:text-slate-300 text-sm">Abbrechen</button>
+          </div>
+        </div>
+      ) : value ? (
+        <p className="text-sm text-slate-300 whitespace-pre-wrap">{value}</p>
+      ) : (
+        <p className="text-sm text-slate-500 italic">Keine Notizen</p>
+      )}
+    </section>
   );
 }

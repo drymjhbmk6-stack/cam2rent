@@ -36,7 +36,7 @@ export async function PATCH(
   const update: Record<string, unknown> = {};
   for (const k of [
     'bezeichnung', 'produkt_id', 'seriennummer', 'inventar_code', 'bestand',
-    'status', 'notizen',
+    'status', 'notizen', 'kaufpreis_netto', 'kaufdatum',
   ]) {
     if (k in body) update[k] = body[k];
   }
