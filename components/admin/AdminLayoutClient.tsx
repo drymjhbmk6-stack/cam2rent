@@ -220,6 +220,7 @@ const BERICHTE_ITEMS: NavItem[] = [
   { href: '/admin/emails', label: 'E-Mail-Protokoll', exact: true, icon: iconMail, perm: 'berichte' },
   { href: '/admin/beta-feedback', label: 'Beta-Feedback', icon: iconFeedback, perm: 'berichte' },
   { href: '/admin/aktivitaetsprotokoll', label: 'Admin-Protokoll', icon: iconClipboard, perm: 'berichte' },
+  { href: '/admin/client-errors', label: 'Frontend-Fehler', icon: iconClipboard, perm: 'berichte' },
 ];
 
 const SYSTEM_ITEMS: NavItem[] = [
@@ -569,7 +570,7 @@ function SidebarContent({ pathname, isDashboard, onNavClick, handleLogout, me }:
     content: ['/admin/blog', '/admin/social'],
     webseite: ['/admin/startseite', '/admin/legal'],
     finanzen: ['/admin/buchhaltung'],
-    berichte: ['/admin/analytics', '/admin/emails', '/admin/beta-feedback', '/admin/aktivitaetsprotokoll'],
+    berichte: ['/admin/analytics', '/admin/emails', '/admin/beta-feedback', '/admin/aktivitaetsprotokoll', '/admin/client-errors'],
   };
 
   function groupForPath(p: string): string | null {

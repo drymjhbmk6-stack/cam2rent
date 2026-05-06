@@ -173,6 +173,7 @@ const PATH_PERMISSIONS: PermRule[] = [
   { prefix: '/admin/emails', perm: 'berichte' },
   { prefix: '/admin/beta-feedback', perm: 'berichte' },
   { prefix: '/admin/aktivitaetsprotokoll', perm: 'berichte' },
+  { prefix: '/admin/client-errors', perm: 'berichte' },
   { prefix: '/admin/legal', perm: 'system' },
   { prefix: '/admin/einstellungen', perm: 'system' },
 ];
@@ -254,6 +255,7 @@ const API_PATH_PERMISSIONS: PermRule[] = [
   { prefix: '/api/admin/email-log', perm: 'berichte' },
   { prefix: '/api/admin/email-templates', perm: 'berichte' },
   { prefix: '/api/admin/audit-log', perm: 'berichte' },
+  { prefix: '/api/admin/client-errors', perm: 'berichte' },
   { prefix: '/api/admin/utilization', perm: 'berichte' },
   { prefix: '/api/admin/weekly-report', perm: 'berichte' },
   // System
