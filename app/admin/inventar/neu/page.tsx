@@ -10,6 +10,15 @@ interface Produkt {
   marke: string | null;
   modell: string | null;
   ist_vermietbar: boolean;
+  compatible_camera_names?: string[];
+}
+
+function produktLabel(p: Produkt): string {
+  const base = `${p.marke ? p.marke + ' ' : ''}${p.name}${p.modell && p.modell !== p.name ? ` (${p.modell})` : ''}`.trim();
+  const compat = p.compatible_camera_names ?? [];
+  if (compat.length === 0) return base;
+  if (compat.length === 1 && compat[0] === 'Alle Kameras') return `${base} — Alle Kameras`;
+  return `${base} — fuer ${compat.join(', ')}`;
 }
 
 export default function NeuesInventarPage() {
@@ -90,9 +99,7 @@ export default function NeuesInventarPage() {
           <select value={produktId} onChange={(e) => setProduktId(e.target.value)} className="w-full bg-[#111827] border border-slate-700 rounded px-3 py-2 text-base">
             <option value="">— Kein Produkt zugeordnet —</option>
             {produkte.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.marke ? `${p.marke} ` : ''}{p.name}{p.modell && p.modell !== p.name ? ` (${p.modell})` : ''}
-              </option>
+              <option key={p.id} value={p.id}>{produktLabel(p)}</option>
             ))}
           </select>
           <p className="text-xs text-slate-500">

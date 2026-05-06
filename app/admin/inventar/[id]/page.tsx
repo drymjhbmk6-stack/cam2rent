@@ -29,6 +29,15 @@ interface Produkt {
   name: string;
   marke: string | null;
   modell: string | null;
+  compatible_camera_names?: string[];
+}
+
+function produktLabel(p: Produkt): string {
+  const base = `${p.marke ? p.marke + ' ' : ''}${p.name}`.trim();
+  const compat = p.compatible_camera_names ?? [];
+  if (compat.length === 0) return base; // Kamera-Produkt — keine Kompat-Info
+  if (compat.length === 1 && compat[0] === 'Alle Kameras') return `${base} — Alle Kameras`;
+  return `${base} — fuer ${compat.join(', ')}`;
 }
 
 interface Link {
@@ -228,9 +237,7 @@ export default function InventarDetailPage() {
                 <select value={produktInput} onChange={(e) => setProduktInput(e.target.value)} className="bg-[#0a0f1e] border border-slate-700 rounded px-2 py-1 text-sm">
                   <option value="">— Keins —</option>
                   {produkte.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.marke ? `${p.marke} ` : ''}{p.name}
-                    </option>
+                    <option key={p.id} value={p.id}>{produktLabel(p)}</option>
                   ))}
                 </select>
                 <button onClick={handleSetProdukt} disabled={busy} className="px-2 py-1 bg-cyan-500 hover:bg-cyan-400 text-slate-900 rounded text-xs font-semibold">Speichern</button>
