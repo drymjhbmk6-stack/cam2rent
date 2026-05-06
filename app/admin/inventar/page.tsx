@@ -123,6 +123,7 @@ export default function InventarPage() {
         <div className="flex flex-wrap justify-between gap-3 mb-6">
           <h1 className="text-2xl font-heading">Inventar</h1>
           <div className="flex gap-2">
+            <BackfillCodesButton />
             <BackfillMirrorsButton />
             <Link href="/admin/inventar/neu" className="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-900 rounded font-semibold">
               + Manuell anlegen
@@ -232,6 +233,83 @@ function Stat({ label, value, color = 'slate' }: { label: string; value: number;
     <div className="bg-[#111827] border border-slate-800 rounded p-3">
       <div className="text-xs text-slate-400">{label}</div>
       <div className={`text-2xl font-mono ${colorClass}`}>{value}</div>
+    </div>
+  );
+}
+
+function BackfillCodesButton() {
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+
+  async function run() {
+    // Erst Dry-Run, damit der User weiss was passiert
+    setBusy(true);
+    setResult(null);
+    try {
+      const dry = await fetch('/api/admin/inventar/backfill-codes', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ dry_run: true }),
+      });
+      const dryData = await dry.json();
+      if (!dry.ok) {
+        setResult(`Fehler: ${dryData.error ?? 'unbekannt'}`);
+        return;
+      }
+
+      const sampleText = (dryData.samples ?? [])
+        .map((s: { from_bezeichnung: string; to_bezeichnung: string; to_code: string }) =>
+          `  • "${s.from_bezeichnung}" → Bezeichnung: "${s.to_bezeichnung}", Code: ${s.to_code}`)
+        .join('\n');
+
+      const msg =
+        `Codes aufräumen?\n\n` +
+        `${dryData.updated} Kameras werden umgestellt:\n` +
+        `  • Bezeichnung wird zum Modellnamen (z.B. "DJI Action 5 Pro")\n` +
+        `  • inventar_code wird zum sauberen Label (z.B. "CAM-DJI-OA5-01")\n\n` +
+        (sampleText ? `Beispiele:\n${sampleText}\n\n` : '') +
+        `${dryData.skipped} bereits korrekt, ${dryData.conflicts} Konflikte.\n\n` +
+        `Idempotent — kann mehrfach laufen.`;
+
+      if (!confirm(msg)) {
+        setResult('Abgebrochen.');
+        return;
+      }
+
+      const res = await fetch('/api/admin/inventar/backfill-codes', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ dry_run: false }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setResult(`Fehler: ${data.error ?? 'unbekannt'}`);
+      } else {
+        const parts: string[] = [`${data.updated} aktualisiert`];
+        if (data.skipped > 0) parts.push(`${data.skipped} übersprungen`);
+        if (data.conflicts > 0) parts.push(`${data.conflicts} Konflikte`);
+        setResult(parts.join(' · '));
+        if (data.updated > 0) setTimeout(() => window.location.reload(), 1500);
+      }
+    } catch (err) {
+      setResult(`Netzwerk-Fehler: ${(err as Error).message}`);
+    } finally {
+      setBusy(false);
+      setTimeout(() => setResult(null), 8000);
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      {result && <span className="text-xs text-slate-400">{result}</span>}
+      <button
+        onClick={run}
+        disabled={busy}
+        title="Repariert Kamera-Inventar-Einträge: Bezeichnung wird auf den Modellnamen gesetzt, Code auf das saubere Label (z.B. CAM-DJI-OA5-01). Idempotent."
+        className="px-3 py-2 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:text-slate-500 text-slate-200 rounded text-sm"
+      >
+        {busy ? 'Räume auf…' : 'Codes aufräumen'}
+      </button>
     </div>
   );
 }
