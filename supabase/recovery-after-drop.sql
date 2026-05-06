@@ -142,43 +142,18 @@ CREATE INDEX IF NOT EXISTS idx_bookings_accessory_unit_ids ON bookings USING GIN
 
 
 -- ────────────────────────────────────────────────────────────────
--- 4. assets (Anlagenverzeichnis — wird von Mietvertrag-Floor genutzt)
+-- 4. assets (Anlagenverzeichnis) — NICHT NEU ANLEGEN
 -- ────────────────────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS assets (
-  id                          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  kind                        TEXT NOT NULL,
-  name                        TEXT NOT NULL,
-  serial_number               TEXT,
-  manufacturer                TEXT,
-  model                       TEXT,
-  purchase_price              NUMERIC(12,2) NOT NULL DEFAULT 0,
-  purchase_date               DATE,
-  useful_life_months          INTEGER NOT NULL DEFAULT 36,
-  depreciation_method         TEXT NOT NULL DEFAULT 'linear'
-                                CHECK (depreciation_method IN ('linear','immediate','none')),
-  residual_value              NUMERIC(12,2) NOT NULL DEFAULT 0,
-  current_value               NUMERIC(12,2) NOT NULL DEFAULT 0,
-  last_depreciation_at        DATE,
-  unit_id                     UUID REFERENCES product_units(id) ON DELETE SET NULL,
-  accessory_unit_id           UUID REFERENCES accessory_units(id) ON DELETE SET NULL,
-  supplier_id                 UUID,
-  purchase_id                 UUID,
-  status                      TEXT NOT NULL DEFAULT 'active'
-                                CHECK (status IN ('active','disposed','sold','lost')),
-  is_test                     BOOLEAN NOT NULL DEFAULT FALSE,
-  replacement_value_estimate  NUMERIC(12,2),
-  created_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_assets_unit_id           ON assets(unit_id);
-CREATE INDEX IF NOT EXISTS idx_assets_accessory_unit_id ON assets(accessory_unit_id);
-CREATE INDEX IF NOT EXISTS idx_assets_kind              ON assets(kind);
-CREATE INDEX IF NOT EXISTS idx_assets_status            ON assets(status);
-
-ALTER TABLE assets ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "assets_admin_all" ON assets;
-CREATE POLICY "assets_admin_all" ON assets FOR ALL USING (true) WITH CHECK (true);
+-- Die alte `assets`-Tabelle (mit unit_id, current_value, purchase_price)
+-- wurde im Drop-Step durch die neue Konsolidierungs-Variante ersetzt
+-- (assets_neu → assets-Rename). Die neue Tabelle hat eine vollkommen
+-- andere Struktur (beleg_position_id, aktueller_buchwert, etc.) und ist
+-- die finale Wahrheit fuer Anlagen.
+--
+-- Konsequenz: Mietvertraege koennen die alten Spalten nicht mehr lesen
+-- und fallen auf opts.deposit als Wiederbeschaffungswert zurueck — das
+-- ist OK fuer den Uebergang. Asset-spezifische Werte koennen spaeter
+-- ueber Belege + Anlagen neu gepflegt werden.
 
 
 -- ────────────────────────────────────────────────────────────────
