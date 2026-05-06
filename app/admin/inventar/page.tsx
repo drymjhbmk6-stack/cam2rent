@@ -40,6 +40,47 @@ function fmtEuro(n: number | null): string {
   return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(n);
 }
 
+/**
+ * Liefert die Display-Felder fuer die Listen-Spalten Bezeichnung / Code / SN.
+ *
+ * Hintergrund: Bei der Migration von product_units / accessory_units in die
+ * konsolidierte Tabelle inventar_units wurden Codes teilweise in das
+ * `bezeichnung`-Feld gepackt (z.B. "128 GB (STO-SAN-128-01)") oder als
+ * inventar_code mit DB-ID-Praefix erzeugt ("CAM-2-82JXN..."). Hier wird das
+ * fuer die Anzeige aufgedroeselt, ohne DB-Daten anzufassen.
+ */
+function displayFields(u: Unit): { bezeichnung: string; code: string; sn: string } {
+  const empty = '—';
+
+  if (u.typ === 'kamera') {
+    // Kamera: produkt.marke + produkt.modell als Bezeichnung,
+    // bezeichnung-Feld (= altes product_units.label, z.B. "CAM-DJI-OA5-01")
+    // als Code, seriennummer separat.
+    const modellName = [u.produkt?.marke, u.produkt?.modell].filter(Boolean).join(' ').trim()
+      || u.produkt?.name
+      || u.bezeichnung;
+    const codeFromLabel = u.bezeichnung && u.bezeichnung !== modellName ? u.bezeichnung : u.inventar_code;
+    return {
+      bezeichnung: modellName,
+      code: codeFromLabel ?? empty,
+      sn: u.seriennummer ?? empty,
+    };
+  }
+
+  // Zubehoer / Verbrauch: Code-Suffix " (XYZ-123)" am Ende der Bezeichnung
+  // abstreifen, damit nichts doppelt steht.
+  let bez = u.bezeichnung;
+  if (u.inventar_code) {
+    const suffix = ` (${u.inventar_code})`;
+    if (bez.endsWith(suffix)) bez = bez.slice(0, -suffix.length).trim();
+  }
+  return {
+    bezeichnung: bez || u.inventar_code || empty,
+    code: u.inventar_code ?? empty,
+    sn: u.seriennummer ?? empty,
+  };
+}
+
 export default function InventarPage() {
   const searchParams = useSearchParams();
   const produktId = searchParams.get('produkt_id') ?? '';
@@ -139,7 +180,8 @@ export default function InventarPage() {
               <thead className="bg-slate-900 text-left text-xs uppercase text-slate-400">
                 <tr>
                   <th className="px-3 py-2">Bezeichnung</th>
-                  <th className="px-3 py-2">Code/SN</th>
+                  <th className="px-3 py-2">Code</th>
+                  <th className="px-3 py-2">Seriennummer</th>
                   <th className="px-3 py-2">Typ</th>
                   <th className="px-3 py-2">Bestand</th>
                   <th className="px-3 py-2">Status</th>
@@ -148,14 +190,14 @@ export default function InventarPage() {
                 </tr>
               </thead>
               <tbody>
-                {units.map((u) => (
+                {units.map((u) => {
+                  const d = displayFields(u);
+                  return (
                   <tr key={u.id} className="border-t border-slate-800 hover:bg-slate-800/40 cursor-pointer"
                       onClick={() => { window.location.href = `/admin/inventar/${u.id}`; }}>
-                    <td className="px-3 py-2">
-                      {u.bezeichnung}
-                      {u.produkt?.marke && <div className="text-xs text-slate-500">{u.produkt.marke} {u.produkt.modell ?? ''}</div>}
-                    </td>
-                    <td className="px-3 py-2 font-mono text-xs">{u.inventar_code ?? u.seriennummer ?? '–'}</td>
+                    <td className="px-3 py-2">{d.bezeichnung}</td>
+                    <td className="px-3 py-2 font-mono text-xs">{d.code}</td>
+                    <td className="px-3 py-2 font-mono text-xs">{d.sn}</td>
                     <td className="px-3 py-2 text-xs">{TYP_LABEL[u.typ]}{u.tracking_mode === 'bulk' ? ' (Bulk)' : ''}</td>
                     <td className="px-3 py-2">{u.tracking_mode === 'bulk' ? u.bestand : '–'}</td>
                     <td className="px-3 py-2 text-xs">{STATUS_LABEL[u.status] ?? u.status}</td>
@@ -171,7 +213,8 @@ export default function InventarPage() {
                       {u.wbw_manuell_gesetzt && <span className="ml-1 text-cyan-400" title="Manueller Override">●</span>}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
