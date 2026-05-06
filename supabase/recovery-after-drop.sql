@@ -84,8 +84,11 @@ DROP POLICY IF EXISTS "product_units_admin_all"   ON product_units;
 CREATE POLICY "product_units_public_read" ON product_units FOR SELECT USING (true);
 CREATE POLICY "product_units_admin_all"   ON product_units FOR ALL    USING (true) WITH CHECK (true);
 
--- bookings.unit_id (FK auf product_units) ggf. nach dem Drop des FK
--- wiederherstellen — die Spalte selbst sollte noch existieren.
+-- bookings.unit_id (FK auf product_units) — bei CASCADE-Drop wurde die
+-- Spalte ggf. mitgenommen. Spalte und FK defensiv neu anlegen.
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS unit_id UUID;
+CREATE INDEX IF NOT EXISTS idx_bookings_unit_id ON bookings(unit_id);
+
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -132,6 +135,10 @@ DROP POLICY IF EXISTS "accessory_units_public_read" ON accessory_units;
 DROP POLICY IF EXISTS "accessory_units_admin_all"   ON accessory_units;
 CREATE POLICY "accessory_units_public_read" ON accessory_units FOR SELECT USING (true);
 CREATE POLICY "accessory_units_admin_all"   ON accessory_units FOR ALL    USING (true) WITH CHECK (true);
+
+-- bookings.accessory_unit_ids (UUID[]) — nach CASCADE-Drop ggf. weg.
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS accessory_unit_ids UUID[] NOT NULL DEFAULT '{}';
+CREATE INDEX IF NOT EXISTS idx_bookings_accessory_unit_ids ON bookings USING GIN (accessory_unit_ids);
 
 
 -- ────────────────────────────────────────────────────────────────
