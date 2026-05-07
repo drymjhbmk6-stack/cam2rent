@@ -61,6 +61,8 @@ export default function NeuerBelegWizard() {
   const summeNetto = positionen.reduce((s, p) => s + p.menge * p.einzelpreis_netto, 0);
   const summeBrutto = positionen.reduce((s, p) => s + p.menge * p.einzelpreis_netto * (1 + p.mwst_satz / 100), 0);
 
+  const [ocrInfo, setOcrInfo] = useState<string | null>(null);
+
   async function handleNextFromStep1() {
     if (!quelle) return;
     if (quelle === 'upload' && !file) {
@@ -68,7 +70,96 @@ export default function NeuerBelegWizard() {
       return;
     }
     setError(null);
-    setStep(2);
+
+    // Manueller Pfad: einfach Step wechseln
+    if (quelle !== 'upload' || !file) {
+      setStep(2);
+      return;
+    }
+
+    // Upload-Pfad: Beleg anlegen + Datei hochladen + OCR + Daten laden,
+    // dann Form-Felder mit den OCR-Ergebnissen vorbefuellen.
+    setBusy(true);
+    setOcrInfo('Beleg wird angelegt…');
+    try {
+      // 1. Leeren Beleg anlegen (mit minimalen Pflichtfeldern)
+      const createRes = await fetch('/api/admin/belege', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          beleg_datum: new Date().toISOString().slice(0, 10),
+          quelle: 'upload',
+          ist_eigenbeleg: false,
+          positionen: [],
+        }),
+      });
+      if (!createRes.ok) {
+        throw new Error((await createRes.json()).error ?? 'Beleg konnte nicht angelegt werden');
+      }
+      const { beleg } = await createRes.json();
+      setBelegId(beleg.id);
+
+      // 2. Datei hochladen
+      setOcrInfo('Datei wird hochgeladen…');
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('kind', 'rechnung');
+      const uploadRes = await fetch(`/api/admin/belege/${beleg.id}/anhaenge`, { method: 'POST', body: fd });
+      if (!uploadRes.ok) {
+        throw new Error('Datei-Upload fehlgeschlagen');
+      }
+
+      // 3. OCR ausfuehren — kann fehlschlagen, ist nicht fatal
+      setOcrInfo('OCR liest Daten aus dem Beleg…');
+      const ocrRes = await fetch(`/api/admin/belege/${beleg.id}/ocr`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      });
+      let ocrFailed = false;
+      let ocrErrMsg = '';
+      if (!ocrRes.ok) {
+        ocrFailed = true;
+        const e = await ocrRes.json().catch(() => ({}));
+        ocrErrMsg = (e as { error?: string }).error ?? 'OCR fehlgeschlagen';
+      }
+
+      // 4. Detail laden + Form-State befuellen
+      setOcrInfo('Daten werden geladen…');
+      const detailRes = await fetch(`/api/admin/belege/${beleg.id}`);
+      if (!detailRes.ok) throw new Error('Detail konnte nicht geladen werden');
+      const detail = await detailRes.json();
+      const b = detail.beleg;
+
+      if (b.lieferant_id) setLieferantId(String(b.lieferant_id));
+      if (b.beleg_datum) setBelegDatum(b.beleg_datum);
+      if (b.rechnungsnummer_lieferant) setRechnungsnummer(b.rechnungsnummer_lieferant);
+
+      const ocrPositions = (detail.positionen ?? []) as Array<{
+        bezeichnung: string; menge: number; einzelpreis_netto: number; mwst_satz: number;
+      }>;
+      if (ocrPositions.length > 0) {
+        setPositionen(ocrPositions.map((p) => ({
+          bezeichnung: p.bezeichnung || '',
+          menge: Number(p.menge) || 1,
+          einzelpreis_netto: Number(p.einzelpreis_netto) || 0,
+          mwst_satz: Number(p.mwst_satz ?? 19),
+        })));
+      }
+      // Lieferanten-Liste neu laden falls OCR einen neuen angelegt hat
+      const lr = await fetch('/api/admin/lieferanten').then((r) => r.json());
+      setLieferanten(lr.lieferanten ?? []);
+
+      setStep(2);
+      if (ocrFailed) {
+        setError(`Hinweis: OCR fehlgeschlagen (${ocrErrMsg}). Du kannst die Daten manuell ergaenzen.`);
+      }
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+      setOcrInfo(null);
+    }
   }
 
   async function handleSaveStep2() {
@@ -88,45 +179,82 @@ export default function NeuerBelegWizard() {
         lid = data.lieferant.id;
       }
 
-      // Beleg anlegen
       const sane = positionen.filter((p) => p.bezeichnung.trim().length > 0);
       if (sane.length === 0) throw new Error('Mindestens eine Position erforderlich');
 
-      const res = await fetch('/api/admin/belege', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          beleg_datum: belegDatum,
-          bezahl_datum: bezahlDatum || null,
-          lieferant_id: lid || null,
-          rechnungsnummer_lieferant: rechnungsnummer || null,
-          quelle,
-          ist_eigenbeleg: istEigenbeleg,
-          eigenbeleg_grund: istEigenbeleg ? (eigenbelegGrund.trim() || 'Kein Beleg verfügbar') : null,
-          positionen: sane.map((p, i) => ({
-            reihenfolge: i,
-            bezeichnung: p.bezeichnung,
-            menge: p.menge,
-            einzelpreis_netto: p.einzelpreis_netto,
-            mwst_satz: p.mwst_satz,
-            klassifizierung: 'pending',
-          })),
-        }),
-      });
-      if (!res.ok) throw new Error((await res.json()).error ?? 'Fehler beim Speichern');
-      const { beleg } = await res.json();
-      setBelegId(beleg.id);
+      let currentBelegId = belegId;
 
-      // Anhang hochladen falls upload-Pfad
-      if (quelle === 'upload' && file) {
-        const fd = new FormData();
-        fd.append('file', file);
-        fd.append('kind', 'rechnung');
-        await fetch(`/api/admin/belege/${beleg.id}/anhaenge`, { method: 'POST', body: fd });
+      if (currentBelegId) {
+        // Upload-Pfad: Beleg existiert bereits (in Step 1 angelegt). PATCH Header
+        // + Positionen komplett ersetzen (drop + insert), damit User-Korrekturen
+        // an den OCR-Werten greifen.
+        const patchRes = await fetch(`/api/admin/belege/${currentBelegId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            beleg_datum: belegDatum,
+            bezahl_datum: bezahlDatum || null,
+            lieferant_id: lid || null,
+            rechnungsnummer_lieferant: rechnungsnummer || null,
+            ist_eigenbeleg: istEigenbeleg,
+            eigenbeleg_grund: istEigenbeleg ? (eigenbelegGrund.trim() || 'Kein Beleg verfügbar') : null,
+          }),
+        });
+        if (!patchRes.ok) throw new Error((await patchRes.json()).error ?? 'Update fehlgeschlagen');
+
+        // Bestehende Positionen droppen
+        const detailRes = await fetch(`/api/admin/belege/${currentBelegId}`).then((r) => r.json());
+        for (const old of (detailRes.positionen ?? []) as Array<{ id: string }>) {
+          await fetch(`/api/admin/beleg-positionen/${old.id}`, { method: 'DELETE' });
+        }
+        // Neue Positionen mit User-Korrekturen einfuegen
+        for (let i = 0; i < sane.length; i++) {
+          const p = sane[i];
+          await fetch('/api/admin/beleg-positionen', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              beleg_id: currentBelegId,
+              reihenfolge: i,
+              bezeichnung: p.bezeichnung,
+              menge: p.menge,
+              einzelpreis_netto: p.einzelpreis_netto,
+              mwst_satz: p.mwst_satz,
+              klassifizierung: 'pending',
+            }),
+          });
+        }
+      } else {
+        // Manueller Pfad: kompletten Beleg neu anlegen
+        const res = await fetch('/api/admin/belege', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            beleg_datum: belegDatum,
+            bezahl_datum: bezahlDatum || null,
+            lieferant_id: lid || null,
+            rechnungsnummer_lieferant: rechnungsnummer || null,
+            quelle,
+            ist_eigenbeleg: istEigenbeleg,
+            eigenbeleg_grund: istEigenbeleg ? (eigenbelegGrund.trim() || 'Kein Beleg verfügbar') : null,
+            positionen: sane.map((p, i) => ({
+              reihenfolge: i,
+              bezeichnung: p.bezeichnung,
+              menge: p.menge,
+              einzelpreis_netto: p.einzelpreis_netto,
+              mwst_satz: p.mwst_satz,
+              klassifizierung: 'pending',
+            })),
+          }),
+        });
+        if (!res.ok) throw new Error((await res.json()).error ?? 'Fehler beim Speichern');
+        const { beleg } = await res.json();
+        currentBelegId = beleg.id;
+        setBelegId(beleg.id);
       }
 
       // Positionen vom Server holen (mit IDs)
-      const detail = await fetch(`/api/admin/belege/${beleg.id}`).then((r) => r.json());
+      const detail = await fetch(`/api/admin/belege/${currentBelegId}`).then((r) => r.json());
       setStep3Positionen(detail.positionen);
       setStep(3);
     } catch (err) {
@@ -230,12 +358,18 @@ export default function NeuerBelegWizard() {
               </div>
             )}
 
+            {busy && ocrInfo && (
+              <div className="p-3 bg-cyan-500/10 border border-cyan-500/30 text-cyan-200 rounded text-sm flex items-center gap-2">
+                <span className="inline-block w-3 h-3 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+                {ocrInfo}
+              </div>
+            )}
             <button
               onClick={handleNextFromStep1}
-              disabled={!quelle}
+              disabled={!quelle || busy}
               className="px-4 py-2 bg-cyan-500 disabled:bg-slate-700 hover:bg-cyan-400 text-slate-900 disabled:text-slate-500 rounded font-semibold"
             >
-              Weiter
+              {busy ? 'Verarbeite…' : 'Weiter'}
             </button>
           </div>
         )}
