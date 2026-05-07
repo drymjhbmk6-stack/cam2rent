@@ -66,7 +66,8 @@ export async function POST(req: NextRequest) {
       userId,
       deliveryMode,
       shippingMethod,
-      discountAmount,
+      // discountAmount aus body wird ignoriert — nur server-validierter Wert
+      // (Sweep 9 KRIT-1) fliesst in die DB.
       couponCode,
       productDiscount,
       durationDiscount,
@@ -80,7 +81,7 @@ export async function POST(req: NextRequest) {
       userId: string;
       deliveryMode: string;
       shippingMethod: string;
-      discountAmount: number;
+      discountAmount?: number;
       couponCode?: string;
       productDiscount?: number;
       durationDiscount?: number;
@@ -124,16 +125,18 @@ export async function POST(req: NextRequest) {
         .maybeSingle();
       if (coupon && coupon.active && (!coupon.valid_until || new Date(coupon.valid_until) > new Date())) {
         validatedCouponCode = coupon.code;
-        // Subtotal (ohne Discount) berechnen, dann Coupon-Wert ableiten
-        let subtotal = 0;
+        // Subtotal (ohne Discount) berechnen, dann Coupon-Wert ableiten.
+        // CartItem hat `subtotal` (priceRental+accessories+haftung) — Versand
+        // bleibt aus dem Coupon-Floor draussen.
+        let subtotalCalc = 0;
         for (const it of items) {
-          subtotal += Number(it.priceTotal ?? 0) * Number(it.qty ?? 1);
+          subtotalCalc += Number(it.subtotal ?? 0);
         }
-        if (Number(coupon.min_order_value ?? 0) <= subtotal) {
+        if (Number(coupon.min_order_value ?? 0) <= subtotalCalc) {
           if (coupon.type === 'percent') {
-            serverValidatedDiscount = Math.round(subtotal * (Number(coupon.value) / 100) * 100) / 100;
+            serverValidatedDiscount = Math.round(subtotalCalc * (Number(coupon.value) / 100) * 100) / 100;
           } else {
-            serverValidatedDiscount = Math.min(Number(coupon.value), subtotal);
+            serverValidatedDiscount = Math.min(Number(coupon.value), subtotalCalc);
           }
         }
       }
@@ -146,7 +149,6 @@ export async function POST(req: NextRequest) {
     // Body-discountAmount durch server-validierten Wert ersetzen
     const safeDiscountAmount = serverValidatedDiscount;
     void validatedCouponCode; // bereits in body.couponCode gepinnt
-    }
 
     const supabase = createServiceClient();
 

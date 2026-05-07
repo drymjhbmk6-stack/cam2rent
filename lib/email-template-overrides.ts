@@ -58,7 +58,7 @@ function normalize(raw: unknown): EmailTemplateOverrideMap {
     // direkt in admin_settings geschriebene Override-Rows mit <script>...
     // ungeprueft in Customer-Mails landen. Subject zusaetzlich CRLF-strip.
     if (typeof val.subject === 'string') {
-      const cleaned = val.subject.replace(/[\r\n  ]+/g, ' ').trim().slice(0, 250);
+      const cleaned = val.subject.replace(/[\r\n\u2028\u2029]+/g, ' ').trim().slice(0, 250);
       if (cleaned) entry.subject = cleaned;
     }
     if (typeof val.introHtml === 'string') {
