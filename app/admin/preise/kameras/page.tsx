@@ -90,11 +90,11 @@ export default function AdminKameraListePage() {
       <div className="max-w-7xl mx-auto px-6 py-8">
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="font-heading font-bold text-xl text-brand-black dark:text-white">Kameras</h1>
+            <h1 className="font-heading font-bold text-xl text-brand-black">Kameras</h1>
           </div>
           <Link
             href="/admin/preise/kameras/neu"
-            className="px-4 py-2 bg-brand-black dark:bg-accent-blue text-white text-sm font-heading font-semibold rounded-btn hover:bg-brand-dark dark:hover:bg-accent-blue/80 transition-colors"
+            className="px-4 py-2 bg-brand-black text-white text-sm font-heading font-semibold rounded-btn hover:bg-brand-dark transition-colors"
           >
             + Neue Kamera
           </Link>
@@ -106,43 +106,43 @@ export default function AdminKameraListePage() {
         </div>
 
         {loading ? (
-          <div className="text-center py-16 text-brand-muted dark:text-slate-400 font-body">Lädt…</div>
+          <div className="text-center py-16 text-brand-muted font-body">Lädt…</div>
         ) : products.length === 0 ? (
-          <div className="text-center py-16 text-brand-muted dark:text-slate-400 font-body">
+          <div className="text-center py-16 text-brand-muted font-body">
             Noch keine Kamera angelegt. Klicke auf &bdquo;+ Neue Kamera&ldquo;.
           </div>
         ) : (
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-brand-border dark:border-slate-700 overflow-hidden">
+          <div className="bg-white rounded-xl border border-brand-border overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-brand-bg dark:bg-slate-800 border-b border-brand-border dark:border-slate-700 text-left">
-                    <th className="px-4 py-3 font-heading font-semibold text-[11px] uppercase tracking-wider text-brand-muted dark:text-slate-400">Name</th>
-                    <th className="px-4 py-3 font-heading font-semibold text-[11px] uppercase tracking-wider text-brand-muted dark:text-slate-400 hidden lg:table-cell">Auslastung (30 T)</th>
-                    <th className="px-4 py-3 font-heading font-semibold text-[11px] uppercase tracking-wider text-brand-muted dark:text-slate-400 text-right whitespace-nowrap hidden md:table-cell">Tag 1 / Tag 30</th>
-                    <th className="px-4 py-3 font-heading font-semibold text-[11px] uppercase tracking-wider text-brand-muted dark:text-slate-400 text-right">Aktionen</th>
+                  <tr className="bg-brand-bg border-b border-brand-border text-left">
+                    <th className="px-4 py-3 font-heading font-semibold text-[11px] uppercase tracking-wider text-brand-muted">Name</th>
+                    <th className="px-4 py-3 font-heading font-semibold text-[11px] uppercase tracking-wider text-brand-muted hidden lg:table-cell">Auslastung (30 T)</th>
+                    <th className="px-4 py-3 font-heading font-semibold text-[11px] uppercase tracking-wider text-brand-muted text-right whitespace-nowrap hidden md:table-cell">Tag 1 / Tag 30</th>
+                    <th className="px-4 py-3 font-heading font-semibold text-[11px] uppercase tracking-wider text-brand-muted text-right">Aktionen</th>
                   </tr>
                 </thead>
                 <tbody>
                   {groupedProducts.map(([brand, brandProducts]) => (
                     <React.Fragment key={brand}>
-                      <tr className="bg-slate-100 dark:bg-slate-800 border-b border-brand-border dark:border-slate-700">
-                        <td colSpan={4} className="px-4 py-2 text-[11px] font-heading font-bold uppercase tracking-wider text-brand-steel dark:text-slate-200">
-                          {brand} <span className="text-brand-muted dark:text-slate-400 font-body normal-case tracking-normal ml-1">({brandProducts.length} {brandProducts.length === 1 ? 'Kamera' : 'Kameras'})</span>
+                      <tr className="bg-brand-bg/50 border-b border-brand-border">
+                        <td colSpan={4} className="px-4 py-2 text-[11px] font-heading font-bold uppercase tracking-wider text-brand-steel">
+                          {brand} <span className="text-brand-muted font-body normal-case tracking-normal ml-1">({brandProducts.length} {brandProducts.length === 1 ? 'Kamera' : 'Kameras'})</span>
                         </td>
                       </tr>
                       {brandProducts.map((p) => (
                         <tr
                           key={p.id}
-                          className="border-b border-brand-border dark:border-slate-700 last:border-b-0 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800"
+                          className="border-b border-brand-border last:border-b-0 transition-colors hover:bg-brand-bg/50"
                         >
                           {/* Name + Brand */}
                           <td className="px-4 py-3 align-top">
                             <Link href={`/admin/preise/kameras/${p.id}`} className="flex items-center gap-2 flex-wrap group">
                               <BrandBadge brand={p.brand} />
-                              <span className="font-heading font-semibold text-sm text-brand-black dark:text-slate-100 group-hover:text-accent-blue transition-colors">{p.name}</span>
+                              <span className="font-heading font-semibold text-sm text-brand-black group-hover:text-accent-blue transition-colors">{p.name}</span>
                               {!p.available && (
-                                <span className="text-[10px] font-body text-brand-muted dark:text-slate-400 bg-brand-bg dark:bg-slate-700 px-2 py-0.5 rounded-full">
+                                <span className="text-[10px] font-body text-brand-muted bg-brand-bg px-2 py-0.5 rounded-full">
                                   nicht verfügbar
                                 </span>
                               )}
@@ -152,15 +152,15 @@ export default function AdminKameraListePage() {
                               {utilization[p.id] != null && (
                                 <span className={`font-heading font-bold ${
                                   utilization[p.id].utilization >= 70
-                                    ? 'text-green-600 dark:text-green-400'
+                                    ? 'text-green-600'
                                     : utilization[p.id].utilization >= 40
-                                    ? 'text-yellow-600 dark:text-yellow-400'
-                                    : 'text-red-500 dark:text-red-400'
+                                    ? 'text-yellow-600'
+                                    : 'text-red-500'
                                 }`}>
                                   {utilization[p.id].utilization}% Auslastung
                                 </span>
                               )}
-                              <span className="font-body text-brand-muted dark:text-slate-400">
+                              <span className="font-body text-brand-muted">
                                 {p.priceTable[0] ?? '–'} € / {p.priceTable[29] ?? '–'} €
                               </span>
                             </div>
@@ -172,15 +172,15 @@ export default function AdminKameraListePage() {
                                 <div className="flex items-center gap-1.5 mb-1">
                                   <span className={`text-xs font-heading font-bold ${
                                     utilization[p.id].utilization >= 70
-                                      ? 'text-green-600 dark:text-green-400'
+                                      ? 'text-green-600'
                                       : utilization[p.id].utilization >= 40
-                                      ? 'text-yellow-600 dark:text-yellow-400'
-                                      : 'text-red-500 dark:text-red-400'
+                                      ? 'text-yellow-600'
+                                      : 'text-red-500'
                                   }`}>
                                     {utilization[p.id].utilization}%
                                   </span>
                                 </div>
-                                <div className="w-full h-1.5 bg-gray-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                                <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
                                   <div
                                     className={`h-full rounded-full transition-all ${
                                       utilization[p.id].utilization >= 70
@@ -194,29 +194,29 @@ export default function AdminKameraListePage() {
                                 </div>
                               </div>
                             ) : (
-                              <span className="text-[11px] font-body text-brand-muted dark:text-slate-400 italic">–</span>
+                              <span className="text-[11px] font-body text-brand-muted italic">–</span>
                             )}
                           </td>
                           {/* Preis Tag 1 / Tag 30 */}
                           <td className="px-4 py-3 align-top text-right whitespace-nowrap tabular-nums hidden md:table-cell">
-                            <div className="text-sm font-heading font-semibold text-brand-black dark:text-slate-100">
+                            <div className="text-sm font-heading font-semibold text-brand-black">
                               {p.priceTable[0] ?? '–'} € / {p.priceTable[29] ?? '–'} €
                             </div>
-                            <div className="text-[10px] font-body text-brand-muted dark:text-slate-400">Tag 1 / Tag 30</div>
+                            <div className="text-[10px] font-body text-brand-muted">Tag 1 / Tag 30</div>
                           </td>
                           {/* Aktionen */}
                           <td className="px-4 py-3 align-top text-right whitespace-nowrap">
                             <div className="inline-flex items-center gap-1">
                               <Link
                                 href={`/admin/preise/kameras/${p.id}`}
-                                className="px-3 py-1.5 text-xs font-heading font-semibold text-brand-black dark:text-slate-200 border border-brand-border dark:border-slate-600 rounded-lg hover:bg-white dark:hover:bg-slate-700 transition-colors"
+                                className="px-3 py-1.5 text-xs font-heading font-semibold text-brand-black border border-brand-border rounded-lg hover:bg-white transition-colors"
                               >
                                 Bearbeiten
                               </Link>
                               <button
                                 onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleDelete(p); }}
                                 disabled={deletingId === p.id}
-                                className="px-2.5 py-1.5 text-xs font-heading font-semibold text-red-600 dark:text-red-400 border border-red-200 dark:border-red-500/40 rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors disabled:opacity-40"
+                                className="px-2.5 py-1.5 text-xs font-heading font-semibold text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-40"
                                 title="Löschen"
                               >
                                 {deletingId === p.id ? '…' : '✕'}

@@ -362,23 +362,23 @@ export default function AdminSetsPage() {
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="font-heading font-bold text-xl text-brand-black dark:text-white">Sets verwalten</h1>
+            <h1 className="font-heading font-bold text-xl text-brand-black">Sets verwalten</h1>
             <p className="text-xs font-body text-brand-muted mt-0.5">
               ⟳ = Verfügbarkeit wird automatisch aus dem Zubehör-Lagerbestand berechnet
             </p>
           </div>
           <button onClick={() => setShowNew(true)}
-            className="px-4 py-2 bg-brand-black dark:bg-accent-blue text-white text-sm font-heading font-semibold rounded-btn hover:bg-brand-dark dark:hover:bg-accent-blue/80 transition-colors">
+            className="px-4 py-2 bg-brand-black text-white text-sm font-heading font-semibold rounded-btn hover:bg-brand-dark transition-colors">
             + Neues Set
           </button>
         </div>
 
         {/* Neues Set Form */}
         {showNew && (
-          <div className="bg-white dark:bg-slate-800/80 rounded-2xl border-2 border-accent-blue p-6 mb-6">
+          <div className="bg-white rounded-2xl border-2 border-accent-blue p-6 mb-6">
             <div className="flex items-center justify-between mb-5">
-              <h2 className="font-heading font-bold text-base text-brand-black dark:text-white">Neues Set anlegen</h2>
-              <button onClick={() => setShowNew(false)} className="text-brand-muted hover:text-brand-black dark:hover:text-white text-lg">✕</button>
+              <h2 className="font-heading font-bold text-base text-brand-black">Neues Set anlegen</h2>
+              <button onClick={() => setShowNew(false)} className="text-brand-muted hover:text-brand-black text-lg">✕</button>
             </div>
             <NewSetForm
               newSet={newSet} setNewSet={setNewSet}
@@ -388,11 +388,11 @@ export default function AdminSetsPage() {
             />
             <div className="flex justify-end mt-5 gap-2">
               <button onClick={() => setShowNew(false)}
-                className="px-4 py-2 text-sm font-heading font-semibold text-brand-muted border border-brand-border dark:border-slate-600 rounded-btn hover:bg-brand-bg dark:hover:bg-slate-700 transition-colors">
+                className="px-4 py-2 text-sm font-heading font-semibold text-brand-muted border border-brand-border rounded-btn hover:bg-brand-bg transition-colors">
                 Abbrechen
               </button>
               <button onClick={handleCreate} disabled={creating}
-                className="px-5 py-2 text-sm font-heading font-semibold rounded-btn bg-brand-black dark:bg-accent-blue text-white hover:bg-brand-dark dark:hover:bg-accent-blue/80 transition-colors disabled:opacity-40">
+                className="px-5 py-2 text-sm font-heading font-semibold rounded-btn bg-brand-black text-white hover:bg-brand-dark transition-colors disabled:opacity-40">
                 {creating ? 'Erstelle…' : 'Set erstellen'}
               </button>
             </div>
@@ -409,23 +409,23 @@ export default function AdminSetsPage() {
             Noch kein Set angelegt. Klicke auf &bdquo;+ Neues Set&ldquo;.
           </div>
         ) : (
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-brand-border dark:border-slate-700 overflow-hidden">
+          <div className="bg-white rounded-xl border border-brand-border overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-brand-bg dark:bg-slate-800 border-b border-brand-border dark:border-slate-700 text-left">
-                    <th className="px-4 py-3 font-heading font-semibold text-[11px] uppercase tracking-wider text-brand-muted dark:text-slate-400">Set</th>
-                    <th className="px-4 py-3 font-heading font-semibold text-[11px] uppercase tracking-wider text-brand-muted dark:text-slate-400 hidden md:table-cell">Status</th>
-                    <th className="px-4 py-3 font-heading font-semibold text-[11px] uppercase tracking-wider text-brand-muted dark:text-slate-400 text-right whitespace-nowrap">Preis</th>
-                    <th className="px-4 py-3 font-heading font-semibold text-[11px] uppercase tracking-wider text-brand-muted dark:text-slate-400 text-right">Aktionen</th>
+                  <tr className="bg-brand-bg border-b border-brand-border text-left">
+                    <th className="px-4 py-3 font-heading font-semibold text-[11px] uppercase tracking-wider text-brand-muted">Set</th>
+                    <th className="px-4 py-3 font-heading font-semibold text-[11px] uppercase tracking-wider text-brand-muted hidden md:table-cell">Status</th>
+                    <th className="px-4 py-3 font-heading font-semibold text-[11px] uppercase tracking-wider text-brand-muted text-right whitespace-nowrap">Preis</th>
+                    <th className="px-4 py-3 font-heading font-semibold text-[11px] uppercase tracking-wider text-brand-muted text-right">Aktionen</th>
                   </tr>
                 </thead>
                 <tbody>
                   {groupedSets.map(([groupName, groupSets]) => (
                     <React.Fragment key={groupName}>
-                      <tr className="bg-slate-100 dark:bg-slate-800 border-b border-brand-border dark:border-slate-700">
-                        <td colSpan={4} className="px-4 py-2 text-[11px] font-heading font-bold uppercase tracking-wider text-brand-steel dark:text-slate-200">
-                          {groupName} <span className="text-brand-muted dark:text-slate-400 font-body normal-case tracking-normal ml-1">({groupSets.length} {groupSets.length === 1 ? 'Set' : 'Sets'})</span>
+                      <tr className="bg-brand-bg/50 border-b border-brand-border">
+                        <td colSpan={4} className="px-4 py-2 text-[11px] font-heading font-bold uppercase tracking-wider text-brand-steel">
+                          {groupName} <span className="text-brand-muted font-body normal-case tracking-normal ml-1">({groupSets.length} {groupSets.length === 1 ? 'Set' : 'Sets'})</span>
                         </td>
                       </tr>
                       {groupSets.map((set) => {
@@ -435,7 +435,7 @@ export default function AdminSetsPage() {
 
                         return (
                           <React.Fragment key={set.id}>
-                            <tr className={`border-b border-brand-border dark:border-slate-700 last:border-b-0 transition-colors ${isExpanded ? 'bg-slate-50 dark:bg-slate-800' : 'hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
+                            <tr className={`border-b border-brand-border last:border-b-0 transition-colors ${isExpanded ? 'bg-brand-bg/50' : 'hover:bg-brand-bg/50'}`}>
                               {/* Set: Bild + Name + Badges */}
                               <td className="px-4 py-3 align-top">
                                 <div className="flex items-start gap-3">
@@ -445,23 +445,23 @@ export default function AdminSetsPage() {
                                       alt={set.name}
                                       width={64}
                                       height={64}
-                                      className="w-16 h-16 object-cover rounded-lg border border-brand-border dark:border-slate-700 shrink-0"
+                                      className="w-16 h-16 object-cover rounded-lg border border-brand-border shrink-0"
                                       unoptimized={set.image_url.startsWith('data:')}
                                     />
                                   ) : (
-                                    <div className="w-16 h-16 rounded-lg border-2 border-dashed border-brand-border dark:border-slate-600 flex items-center justify-center text-brand-muted dark:text-slate-400 text-[10px] shrink-0">
+                                    <div className="w-16 h-16 rounded-lg border-2 border-dashed border-brand-border flex items-center justify-center text-brand-muted text-[10px] shrink-0">
                                       Kein Bild
                                     </div>
                                   )}
                                   <div className="min-w-0 flex flex-col gap-1">
                                     <div className="flex items-center gap-1.5 flex-wrap">
-                                      <span className="font-heading font-semibold text-sm text-brand-black dark:text-slate-100">{set.name}</span>
+                                      <span className="font-heading font-semibold text-sm text-brand-black">{set.name}</span>
                                       {set.badge && (
                                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-heading font-semibold ${set.badgeColor}`}>
                                           {set.badge}
                                         </span>
                                       )}
-                                      {savedId === set.id && <span className="text-[10px] text-green-600 dark:text-green-400 font-body">✓ Gespeichert</span>}
+                                      {savedId === set.id && <span className="text-[10px] text-green-600 font-body">✓ Gespeichert</span>}
                                     </div>
                                     <div className="flex flex-wrap gap-1">
                                       {set.product_ids?.length > 0 ? (
@@ -472,7 +472,7 @@ export default function AdminSetsPage() {
                                           );
                                         })
                                       ) : (
-                                        <span className="text-[10px] font-body text-brand-muted dark:text-slate-400 self-center">Alle Kameras</span>
+                                        <span className="text-[10px] font-body text-brand-muted self-center">Alle Kameras</span>
                                       )}
                                     </div>
                                     {/* Mobile-only: Status unter Name */}
@@ -488,8 +488,8 @@ export default function AdminSetsPage() {
                               </td>
                               {/* Preis */}
                               <td className="px-4 py-3 align-top text-right whitespace-nowrap tabular-nums">
-                                <div className="text-sm font-heading font-semibold text-brand-black dark:text-slate-100">{fmtEuro(set.price)}</div>
-                                <div className="text-[10px] font-body text-brand-muted dark:text-slate-400">{set.pricingMode === 'perDay' ? '/Tag' : 'einmalig'}</div>
+                                <div className="text-sm font-heading font-semibold text-brand-black">{fmtEuro(set.price)}</div>
+                                <div className="text-[10px] font-body text-brand-muted">{set.pricingMode === 'perDay' ? '/Tag' : 'einmalig'}</div>
                               </td>
                               {/* Aktionen */}
                               <td className="px-4 py-3 align-top text-right whitespace-nowrap">
@@ -498,19 +498,19 @@ export default function AdminSetsPage() {
                                     onClick={() => handleDuplicate(set)}
                                     disabled={duplicatingId === set.id}
                                     title="Set duplizieren"
-                                    className="px-2.5 py-1.5 text-xs font-heading font-semibold text-cyan-600 dark:text-cyan-400 border border-cyan-200 dark:border-cyan-800/50 rounded-lg hover:bg-cyan-50 dark:hover:bg-cyan-950/30 transition-colors disabled:opacity-40"
+                                    className="px-2.5 py-1.5 text-xs font-heading font-semibold text-cyan-600 border border-cyan-200 rounded-lg hover:bg-cyan-50 transition-colors disabled:opacity-40"
                                   >
                                     {duplicatingId === set.id ? '…' : 'Kopieren'}
                                   </button>
                                   <button
                                     onClick={() => isExpanded ? setExpandedId(null) : openEdit(set)}
-                                    className="px-3 py-1.5 text-xs font-heading font-semibold text-brand-black dark:text-slate-200 border border-brand-border dark:border-slate-600 rounded-lg hover:bg-white dark:hover:bg-slate-700 transition-colors"
+                                    className="px-3 py-1.5 text-xs font-heading font-semibold text-brand-black border border-brand-border rounded-lg hover:bg-white transition-colors"
                                   >
                                     {isExpanded ? 'Schliessen' : 'Bearbeiten'}
                                   </button>
                                   <button
                                     onClick={() => handleDelete(set.id, set.name)}
-                                    className="px-2.5 py-1.5 text-xs font-heading font-semibold text-red-600 dark:text-red-400 border border-red-200 dark:border-red-500/40 rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
+                                    className="px-2.5 py-1.5 text-xs font-heading font-semibold text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors"
                                     title="Löschen"
                                   >
                                     ✕
@@ -521,8 +521,8 @@ export default function AdminSetsPage() {
 
                   {/* Edit Panel */}
                   {isExpanded && e && (
-                    <tr className="bg-slate-50 dark:bg-slate-800 border-b border-brand-border dark:border-slate-700">
-                      <td colSpan={4} className="px-5 py-5 dark:[&_input]:bg-slate-900 dark:[&_input]:text-slate-100 dark:[&_input]:border-slate-700 dark:[&_input]:placeholder-slate-500 dark:[&_select]:bg-slate-900 dark:[&_select]:text-slate-100 dark:[&_select]:border-slate-700 dark:[&_textarea]:bg-slate-900 dark:[&_textarea]:text-slate-100 dark:[&_textarea]:border-slate-700">
+                    <tr className="bg-brand-bg/50 border-b border-brand-border">
+                      <td colSpan={4} className="px-5 py-5">
                        <div className="space-y-5">
                       {/* Grunddaten */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -553,7 +553,7 @@ export default function AdminSetsPage() {
                       </div>
 
                       {/* Set-Bild */}
-                      <div className="bg-white dark:bg-slate-800/50 rounded-xl border border-brand-border dark:border-slate-700 p-4">
+                      <div className="bg-white rounded-xl border border-brand-border p-4">
                         <p className="text-xs font-heading font-semibold text-brand-muted mb-3">Set-Bild</p>
                         <div className="flex items-center gap-4">
                           {set.image_url ? (
@@ -574,7 +574,7 @@ export default function AdminSetsPage() {
                               >✕</button>
                             </div>
                           ) : (
-                            <div className="w-40 h-30 rounded-lg border-2 border-dashed border-brand-border dark:border-slate-600 flex items-center justify-center text-brand-muted text-xs">
+                            <div className="w-40 h-30 rounded-lg border-2 border-dashed border-brand-border flex items-center justify-center text-brand-muted text-xs">
                               Kein Bild
                             </div>
                           )}
@@ -601,18 +601,18 @@ export default function AdminSetsPage() {
                       </div>
 
                       {/* Preis */}
-                      <div className="bg-white dark:bg-slate-800/50 rounded-xl border border-brand-border dark:border-slate-700 p-4">
+                      <div className="bg-white rounded-xl border border-brand-border p-4">
                         <p className="text-xs font-heading font-semibold text-brand-muted mb-3">Preis</p>
                         <div className="flex gap-3 items-center">
                           <div className="relative w-32">
                             <input type="number" min="0" step="0.50" value={e.price}
                               onChange={(ev) => setEdit(set.id, 'price', ev.target.value)}
-                              className="w-full pr-8 pl-3 py-2.5 border border-brand-border dark:border-slate-600 rounded-[10px] text-sm font-body bg-white dark:bg-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-blue" />
+                              className="w-full pr-8 pl-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body bg-white focus:outline-none focus:ring-2 focus:ring-accent-blue" />
                             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-brand-muted">€</span>
                           </div>
                           <select value={e.pricing_mode}
                             onChange={(ev) => setEdit(set.id, 'pricing_mode', ev.target.value as 'perDay' | 'flat')}
-                            className="px-3 py-2.5 border border-brand-border dark:border-slate-600 rounded-[10px] text-sm font-body bg-white dark:bg-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-blue">
+                            className="px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body bg-white focus:outline-none focus:ring-2 focus:ring-accent-blue">
                             <option value="flat">€ einmalig</option>
                             <option value="perDay">€ / Tag</option>
                           </select>
@@ -620,7 +620,7 @@ export default function AdminSetsPage() {
                       </div>
 
                       {/* Zubehör */}
-                      <div className="bg-white dark:bg-slate-800/50 rounded-xl border border-brand-border dark:border-slate-700 p-4">
+                      <div className="bg-white rounded-xl border border-brand-border p-4">
                         <div className="flex items-center justify-between mb-3">
                           <div>
                             <p className="text-xs font-heading font-semibold text-brand-muted">Enthaltenes Zubehör</p>
@@ -663,7 +663,7 @@ export default function AdminSetsPage() {
 
                       {/* Passende Kameras */}
                       {Object.keys(products).length > 0 && (
-                        <div className="bg-white dark:bg-slate-800/50 rounded-xl border border-brand-border dark:border-slate-700 p-4">
+                        <div className="bg-white rounded-xl border border-brand-border p-4">
                           <p className="text-xs font-heading font-semibold text-brand-muted mb-3">Passende Kameras (optional)</p>
                           <div className="flex flex-wrap gap-2">
                             {Object.values(products).map((p) => (
@@ -677,11 +677,11 @@ export default function AdminSetsPage() {
                       {/* Aktionen */}
                       <div className="flex justify-end gap-2 pt-1">
                         <button onClick={() => setExpandedId(null)}
-                          className="px-4 py-2 text-sm font-heading font-semibold text-brand-muted border border-brand-border dark:border-slate-600 rounded-btn hover:bg-white dark:hover:bg-slate-700 transition-colors">
+                          className="px-4 py-2 text-sm font-heading font-semibold text-brand-muted border border-brand-border rounded-btn hover:bg-white transition-colors">
                           Abbrechen
                         </button>
                         <button onClick={() => handleSave(set.id)} disabled={savingId === set.id}
-                          className="px-5 py-2 text-sm font-heading font-semibold rounded-btn bg-brand-black dark:bg-accent-blue text-white hover:bg-brand-dark dark:hover:bg-accent-blue/80 transition-colors disabled:opacity-40">
+                          className="px-5 py-2 text-sm font-heading font-semibold rounded-btn bg-brand-black text-white hover:bg-brand-dark transition-colors disabled:opacity-40">
                           {savingId === set.id ? 'Speichern…' : 'Speichern'}
                         </button>
                       </div>
@@ -786,23 +786,23 @@ function NewSetForm({
         </div>
       </div>
 
-      <div className="bg-brand-bg dark:bg-slate-800/50 rounded-xl p-4 flex gap-3 items-center">
+      <div className="bg-brand-bg rounded-xl p-4 flex gap-3 items-center">
         <div className="relative w-32">
           <input type="number" min="0" step="0.50" value={newSet.price}
             onChange={(e) => setNewSet((f) => ({ ...f, price: parseFloat(e.target.value) || 0 }))}
-            className="w-full pr-8 pl-3 py-2.5 border border-brand-border dark:border-slate-600 rounded-[10px] text-sm font-body bg-white dark:bg-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-blue" />
+            className="w-full pr-8 pl-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body bg-white focus:outline-none focus:ring-2 focus:ring-accent-blue" />
           <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-brand-muted">€</span>
         </div>
         <select value={newSet.pricing_mode}
           onChange={(e) => setNewSet((f) => ({ ...f, pricing_mode: e.target.value as 'perDay' | 'flat' }))}
-          className="px-3 py-2.5 border border-brand-border dark:border-slate-600 rounded-[10px] text-sm font-body bg-white dark:bg-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-blue">
+          className="px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body bg-white focus:outline-none focus:ring-2 focus:ring-accent-blue">
           <option value="flat">€ einmalig</option>
           <option value="perDay">€ / Tag</option>
         </select>
       </div>
 
       {accessories.length > 0 && (
-        <div className="bg-brand-bg dark:bg-slate-800/50 rounded-xl p-4">
+        <div className="bg-brand-bg rounded-xl p-4">
           <div className="flex items-center justify-between mb-3">
             <p className="text-xs font-heading font-semibold text-brand-muted">Enthaltenes Zubehör</p>
             <button onClick={addItem}
@@ -825,7 +825,7 @@ function NewSetForm({
       )}
 
       {Object.keys(products).length > 0 && (
-        <div className="bg-brand-bg dark:bg-slate-800/50 rounded-xl p-4">
+        <div className="bg-brand-bg rounded-xl p-4">
           <p className="text-xs font-heading font-semibold text-brand-muted mb-3">Passende Kameras (optional)</p>
           <div className="flex flex-wrap gap-2">
             {Object.values(products).map((p) => (
