@@ -250,6 +250,21 @@ function DatenschutzFallback() {
 
         <section className="mb-10">
           <h2 className="font-heading font-semibold text-lg text-brand-black dark:text-white mb-4">
+            8a. Frontend-Fehlerprotokoll
+          </h2>
+          <p className="font-body text-brand-steel dark:text-gray-300 mb-3">
+            Zur Stabilitätssicherung des Shops protokollieren wir Browser-Fehler, die in
+            Ihrem Browser auftreten (z. B. JavaScript-Fehler, fehlgeschlagene API-Aufrufe).
+            Erfasst werden dabei IP-Adresse, Browser-Kennung, aufgerufene URL und der
+            Fehlertext. Diese Daten dienen ausschließlich der Diagnose von Bugs.
+            Rechtsgrundlage: Art. 6 Abs. 1 lit. f DSGVO (berechtigtes Interesse an einem
+            funktionierenden Onlineshop). Die Einträge werden nach <strong>30 Tagen</strong>{' '}
+            automatisch gelöscht und sind nur für interne IT-Zwecke zugänglich.
+          </p>
+        </section>
+
+        <section className="mb-10">
+          <h2 className="font-heading font-semibold text-lg text-brand-black dark:text-white mb-4">
             9. Kundenkonto & Buchungsdaten
           </h2>
           <p className="font-body text-brand-steel dark:text-gray-300 mb-3">

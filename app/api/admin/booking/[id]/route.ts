@@ -697,6 +697,24 @@ export async function DELETE(
 
   const supabase = createServiceClient();
 
+  // Sweep 9 Upload-M1: Storage-Files mit-loeschen (analog anonymize-customer
+  // K12). Vorher blieben Vertraege, Schadensfotos, Pack-/Uebergabefotos
+  // verwaist im Storage liegen. Best-effort — Fehler werden nur geloggt.
+  const cleanupBucketPrefix = async (bucket: string, prefix: string) => {
+    try {
+      const { data: files } = await supabase.storage.from(bucket).list(prefix);
+      if (files && files.length > 0) {
+        const paths = files.map((f) => `${prefix}/${f.name}`);
+        await supabase.storage.from(bucket).remove(paths);
+      }
+    } catch (e) {
+      console.warn(`[booking-delete] storage cleanup ${bucket}/${prefix}:`, e);
+    }
+  };
+  await cleanupBucketPrefix('damage-photos', id);
+  await cleanupBucketPrefix('packing-photos', id);
+  await cleanupBucketPrefix('handover-photos', id);
+
   // Zugehörige Daten löschen (rental_agreements, email_log)
   await supabase.from('rental_agreements').delete().eq('booking_id', id);
   await supabase.from('email_log').delete().eq('booking_id', id);

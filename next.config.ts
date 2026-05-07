@@ -82,8 +82,18 @@ const nextConfig: NextConfig = {
           { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
-          { key: 'Permissions-Policy', value: 'camera=(self), microphone=(), geolocation=(self), payment=(self)' },
-          { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
+          // Sweep 9 M1+M5: geolocation auf Hard-Deny + Sensoren + Topics/FLoC
+          // explizit ausgeschlossen. Defense-in-Depth gegen XSS und Tracking-APIs.
+          {
+            key: 'Permissions-Policy',
+            value:
+              'camera=(self), microphone=(), geolocation=(), payment=(self), ' +
+              'usb=(), serial=(), bluetooth=(), magnetometer=(), accelerometer=(), gyroscope=(), ' +
+              'midi=(), display-capture=(), xr-spatial-tracking=(), interest-cohort=(), browsing-topics=()',
+          },
+          // Sweep 9 M2: HSTS-preload ergaenzt (max-age 2 Jahre, Standard fuer
+          // hstspreload.org-Submission).
+          { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
           { key: 'X-DNS-Prefetch-Control', value: 'on' },
         ],
       },

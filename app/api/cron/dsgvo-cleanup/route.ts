@@ -38,19 +38,13 @@ async function handle(req: NextRequest) {
     const supabase = createServiceClient();
     const results: Record<string, unknown> = {};
 
-    // 1) Ausweis-Scans nach 90 Tagen ab verified_at loeschen
-    try {
-      const cutoff90 = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
-      const { data: profilesToWipe } = await supabase
-        .from('profiles')
-        .select('id, id_front_url, id_back_url, verified_at')
-        .eq('verification_status', 'verified')
-        .lt('verified_at', cutoff90)
-        .or('id_front_url.not.is.null,id_back_url.not.is.null')
-        .limit(200);
-
-      let idDeleted = 0;
-      for (const p of profilesToWipe ?? []) {
+    // Sweep 9 H2: 3 Branches statt 1 — Postgres `&lt; cutoff` matcht nie NULL,
+    // d.h. Profile mit verification_status='pending' (Ausweis hochgeladen, nie
+    // geprueft) und 'rejected' (abgelehnt) blieben fuer immer im Bucket.
+    // Datenschutzerklaerung verspricht aber Sofort-Loeschung bei Ablehnung.
+    const wipeIdDocs = async (rows: Array<{ id: string }> | null | undefined) => {
+      let n = 0;
+      for (const p of rows ?? []) {
         try {
           const { data: files } = await supabase.storage.from('id-documents').list(p.id);
           if (files && files.length > 0) {
@@ -61,14 +55,55 @@ async function handle(req: NextRequest) {
             .from('profiles')
             .update({ id_front_url: null, id_back_url: null })
             .eq('id', p.id);
-          idDeleted++;
+          n++;
         } catch (e) {
           console.error('[dsgvo-cleanup] id-doc cleanup error', p.id, e);
         }
       }
-      results.id_documents_deleted = idDeleted;
+      return n;
+    };
+
+    // 1a) Verifizierte Profile: Loeschung 90 Tage nach verified_at
+    try {
+      const cutoff90 = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+      const { data: verifiedRows } = await supabase
+        .from('profiles')
+        .select('id, id_front_url, id_back_url, verified_at')
+        .eq('verification_status', 'verified')
+        .lt('verified_at', cutoff90)
+        .or('id_front_url.not.is.null,id_back_url.not.is.null')
+        .limit(200);
+      results.id_documents_verified_deleted = await wipeIdDocs(verifiedRows);
     } catch (e) {
-      results.id_documents_error = (e as Error).message;
+      results.id_documents_verified_error = (e as Error).message;
+    }
+
+    // 1b) Abgelehnte Profile: SOFORT loeschen (Datenschutzerklaerung Versprechen)
+    try {
+      const { data: rejectedRows } = await supabase
+        .from('profiles')
+        .select('id, id_front_url, id_back_url')
+        .eq('verification_status', 'rejected')
+        .or('id_front_url.not.is.null,id_back_url.not.is.null')
+        .limit(200);
+      results.id_documents_rejected_deleted = await wipeIdDocs(rejectedRows);
+    } catch (e) {
+      results.id_documents_rejected_error = (e as Error).message;
+    }
+
+    // 1c) Pending Profile mit Upload >= 30 Tage ohne Verifizierungs-Aktion
+    try {
+      const cutoff30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+      const { data: pendingRows } = await supabase
+        .from('profiles')
+        .select('id, id_front_url, id_back_url, updated_at')
+        .eq('verification_status', 'pending')
+        .lt('updated_at', cutoff30)
+        .or('id_front_url.not.is.null,id_back_url.not.is.null')
+        .limit(200);
+      results.id_documents_pending_deleted = await wipeIdDocs(pendingRows);
+    } catch (e) {
+      results.id_documents_pending_error = (e as Error).message;
     }
 
     // 2) page_views nach 90 Tagen
@@ -100,7 +135,10 @@ async function handle(req: NextRequest) {
 
     // 4) email_log nach 24 Monaten OHNE booking_id (mit Booking → 10 Jahre GoBD)
     try {
-      const cutoff24m = new Date(Date.now() - 24 * 30 * 24 * 60 * 60 * 1000).toISOString();
+      // Sweep 9 M2: korrekt mit setMonth(-24) statt 24*30 Tage
+      const cutoffDate24m = new Date();
+      cutoffDate24m.setMonth(cutoffDate24m.getMonth() - 24);
+      const cutoff24m = cutoffDate24m.toISOString();
       const { count, error } = await supabase
         .from('email_log')
         .delete({ count: 'exact' })

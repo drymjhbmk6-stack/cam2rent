@@ -149,6 +149,28 @@ export async function POST(req: NextRequest) {
       .from('customer_ugc_submissions')
       .update({ status: 'withdrawn', file_paths: [], file_kinds: [] })
       .eq('user_id', customerId);
+
+    // Sweep 9 DSGVO-H3: admin_audit_log enthaelt Customer-PII in details-JSONB
+    // (z.B. customer_email, customer_name in booking.cancel/damage.create).
+    // Bei Anonymisierung muessen die details-Inhalte zu Buchungen des
+    // Kunden + zum Customer selbst gescrubbt werden — Eintrag bleibt
+    // erhalten (Audit-Trail-Pflicht), nur PII-Inhalt verschwindet.
+    const { data: customerBookings2 } = await supabase
+      .from('bookings')
+      .select('id')
+      .eq('user_id', customerId);
+    const bookingIds2 = (customerBookings2 ?? []).map((b) => b.id);
+    if (bookingIds2.length > 0) {
+      await supabase
+        .from('admin_audit_log')
+        .update({ details: { anonymized: true } })
+        .in('entity_id', bookingIds2);
+    }
+    await supabase
+      .from('admin_audit_log')
+      .update({ details: { anonymized: true } })
+      .eq('entity_type', 'customer')
+      .eq('entity_id', customerId);
   } catch (storageErr) {
     console.error('[anonymize] Storage-Cleanup-Fehler:', storageErr);
   }
