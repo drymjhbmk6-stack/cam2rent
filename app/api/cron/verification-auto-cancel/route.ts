@@ -100,20 +100,34 @@ async function handle(req: NextRequest) {
     // Status auf cancelled + Grund in notes (wie /api/admin/booking/[id])
     const { data: existing } = await supabase
       .from('bookings')
-      .select('notes')
+      .select('notes, status, verification_gate_passed_at')
       .eq('id', b.id)
       .maybeSingle();
-    const existingNotes = existing?.notes ? `${existing.notes} | ` : '';
+    // Sweep 8 H1: TOCTOU-Schutz — wenn Admin in der Zwischenzeit das Gate
+    // freigegeben hat oder Status nicht mehr 'confirmed' ist, ueberspringen.
+    if (!existing || existing.status !== 'confirmed' || existing.verification_gate_passed_at) {
+      results.push({ id: b.id, action: 'skipped', reason: 'status_changed' });
+      continue;
+    }
+    const existingNotes = existing.notes ? `${existing.notes} | ` : '';
     const reason = 'Automatische Stornierung: Ausweis-Upload wurde nicht fristgerecht erbracht';
-    const { error: updateErr } = await supabase
+    const { data: updatedRow, error: updateErr } = await supabase
       .from('bookings')
       .update({
         status: 'cancelled',
         notes: `${existingNotes}Stornierungsgrund: ${reason}`,
       })
-      .eq('id', b.id);
+      .eq('id', b.id)
+      .eq('status', 'confirmed')
+      .is('verification_gate_passed_at', null)
+      .select('id')
+      .maybeSingle();
     if (updateErr) {
       errors.push(`${b.id}: ${updateErr.message}`);
+      continue;
+    }
+    if (!updatedRow) {
+      results.push({ id: b.id, action: 'skipped', reason: 'race_lost' });
       continue;
     }
 

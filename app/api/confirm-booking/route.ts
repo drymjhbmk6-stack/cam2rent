@@ -184,7 +184,11 @@ export async function POST(req: NextRequest) {
           const product = productMap[meta.product_id];
           if (product && Array.isArray(product.priceTable)) {
             const expectedCents = Math.round(calcPriceFromTable(product, days) * 100);
-            const floorCents = Math.floor(expectedCents * 0.3); // 70 % Rabatt-Puffer
+            // Sweep 8 H1: Floor auf 50% (war 30%) — konsistent mit
+            // create-payment-intent (Sweep 7 #10) + checkout-intent.
+            // Single-Buchungen kennen keinen Coupon; 50% reicht als Buffer
+            // fuer Versand/Haftung-Staffeln, ohne Cart-Manipulation zu erlauben.
+            const floorCents = Math.floor(expectedCents * 0.5);
             if (intent.amount < floorCents) {
               console.error('[confirm-booking] Preis-Plausibilität verletzt:', {
                 paymentIntent: payment_intent_id,

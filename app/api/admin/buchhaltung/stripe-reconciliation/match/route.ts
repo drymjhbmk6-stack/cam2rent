@@ -17,6 +17,18 @@ export async function POST(req: NextRequest) {
 
   const supabase = createServiceClient();
 
+  // Sweep 8 M2: Validate booking exists — sonst koennte ein Mitarbeiter
+  // mit `finanzen`-Permission einen Stripe-Refund auf eine fremde Buchungs-
+  // ID matchen und dadurch USt-VA-Reports verzerren.
+  const { data: existingBooking } = await supabase
+    .from('bookings')
+    .select('id')
+    .eq('id', booking_id)
+    .maybeSingle();
+  if (!existingBooking) {
+    return NextResponse.json({ error: 'Buchung nicht gefunden.' }, { status: 404 });
+  }
+
   const { error } = await supabase
     .from('stripe_transactions')
     .update({

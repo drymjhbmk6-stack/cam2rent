@@ -149,8 +149,12 @@ export async function POST(req: NextRequest) {
   const priceDifference = paidCents / 100;
   const newTotal = (booking.price_total || 0) + priceDifference;
 
-  // Update booking
-  const { error: updateError } = await supabase
+  // Sweep 8 H2: Atomarer Idempotency-Guard. Doppelklick wuerde sonst zu zwei
+  // Verlaengerungs-Mails + zwei Admin-Notifications fuehren (Refund-Doppel-
+  // Buchung verhindert Stripe selbst via idempotencyKey, aber DB war offen).
+  // .is('extension_payment_intent_id', null) garantiert dass nur die erste
+  // der konkurrierenden Anfragen die Buchung aktualisiert.
+  const { data: updated, error: updateError } = await supabase
     .from('bookings')
     .update({
       original_rental_to: booking.original_rental_to || booking.rental_to,
@@ -162,7 +166,15 @@ export async function POST(req: NextRequest) {
       extension_payment_intent_id: paymentIntentId,
       extended_at: new Date().toISOString(),
     })
-    .eq('id', bookingId);
+    .eq('id', bookingId)
+    .is('extension_payment_intent_id', null)
+    .select('id')
+    .maybeSingle();
+
+  if (!updateError && !updated) {
+    // Race verloren — andere Anfrage hat die Verlaengerung schon eingebucht.
+    return NextResponse.json({ success: true, message: 'Bereits verlängert.' });
+  }
 
   if (updateError) {
     console.error('Extension update error:', updateError);

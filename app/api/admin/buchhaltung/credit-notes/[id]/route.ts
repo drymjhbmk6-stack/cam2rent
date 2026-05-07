@@ -19,7 +19,7 @@ export async function PATCH(
   // Nur pending_review darf bearbeitet werden
   const { data: existing } = await supabase
     .from('credit_notes')
-    .select('status, tax_mode, tax_rate')
+    .select('status, tax_mode, tax_rate, invoice_id')
     .eq('id', id)
     .maybeSingle();
 
@@ -38,6 +38,36 @@ export async function PATCH(
   if (body.reason_category !== undefined) updates.reason_category = body.reason_category;
 
   if (body.gross_amount !== undefined) {
+    // Sweep 8 K15: Cap-Check gegen Originalrechnung. Sweep 7 #18 hat das
+    // nur in POST eingebaut — PATCH liess Mitarbeiter beliebig hochsetzen.
+    // Wir holen die Rechnung + alle anderen aktiven Gutschriften, damit die
+    // Summe der CNs niemals den Rechnungs-Brutto uebersteigt.
+    if (existing.invoice_id) {
+      const { data: invoice } = await supabase
+        .from('invoices')
+        .select('gross_amount')
+        .eq('id', existing.invoice_id)
+        .maybeSingle();
+      if (!invoice) {
+        return NextResponse.json({ error: 'Originalrechnung nicht gefunden.' }, { status: 404 });
+      }
+      const { data: otherCns } = await supabase
+        .from('credit_notes')
+        .select('gross_amount, status')
+        .eq('invoice_id', existing.invoice_id)
+        .neq('id', id);
+      const sumActiveOther = (otherCns ?? [])
+        .filter((cn) => ['approved', 'sent', 'pending_review'].includes(cn.status))
+        .reduce((acc, cn) => acc + Number(cn.gross_amount ?? 0), 0);
+      const cap = Number(invoice.gross_amount ?? 0) - sumActiveOther;
+      if (Number(body.gross_amount) > cap + 0.005) {
+        return NextResponse.json(
+          { error: `Gutschrift uebersteigt verbleibenden Rechnungs-Cap. Max: ${cap.toFixed(2)} EUR.` },
+          { status: 400 },
+        );
+      }
+    }
+
     const taxCalc = calculateTax(
       body.gross_amount,
       existing.tax_mode as TaxMode,

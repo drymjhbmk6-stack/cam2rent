@@ -602,6 +602,22 @@ export async function PATCH(
         }
       }
 
+      // Sweep 8 H3: Kautions-Pre-Auth releasen — sonst bleibt der ~500-EUR-Hold
+      // 7 Tage auf der Karte des Kunden, obwohl die Buchung storniert ist.
+      // Beschwerden-Vektor + theoretische Schadens-Capture-Manipulation.
+      if (booking.deposit_intent_id && booking.deposit_status === 'held') {
+        try {
+          const stripe = await getStripe();
+          await stripe.paymentIntents.cancel(booking.deposit_intent_id);
+          await supabase
+            .from('bookings')
+            .update({ deposit_status: 'released', deposit_released_at: new Date().toISOString() })
+            .eq('id', id);
+        } catch (depositErr) {
+          console.error('[booking-cancel] Deposit-Release fehlgeschlagen:', depositErr);
+        }
+      }
+
       // Zubehoer-Exemplare freigeben (non-blocking)
       releaseAccessoryUnitsFromBooking(id).catch((err) =>
         console.error('[booking-cancel] accessory-unit release failed:', err),
