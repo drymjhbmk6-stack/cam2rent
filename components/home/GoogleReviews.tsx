@@ -128,15 +128,16 @@ export default function GoogleReviews() {
                 </p>
               )}
               <div className="flex items-center gap-2">
+                {/* Sweep 8 K14: Google-Profilfotos werden NICHT mehr direkt
+                    vom googleusercontent.com-CDN geladen — DSGVO/§ 25 TTDSG-
+                    Konflikt (Drittland-Fluss vor Cookie-Consent). Fallback
+                    auf Initialen-Avatar mit Markenfarbe.
+                    Wenn echte Profilbilder gewuenscht sind, muessen sie
+                    serverseitig gespiegelt werden. */}
                 <div className="w-8 h-8 rounded-full bg-accent-blue/20 flex items-center justify-center overflow-hidden">
-                  {review.profilePhoto ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={review.profilePhoto} alt="" className="w-8 h-8 rounded-full object-cover" />
-                  ) : (
-                    <span className="text-xs font-heading font-bold text-accent-blue">
-                      {review.author.charAt(0)}
-                    </span>
-                  )}
+                  <span className="text-xs font-heading font-bold text-accent-blue">
+                    {review.author.charAt(0).toUpperCase()}
+                  </span>
                 </div>
                 <div>
                   <p className="text-sm font-heading font-semibold text-brand-black dark:text-gray-100">

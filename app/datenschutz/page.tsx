@@ -164,6 +164,59 @@ function DatenschutzFallback() {
 
         <section className="mb-10">
           <h2 className="font-heading font-semibold text-lg text-brand-black dark:text-white mb-4">
+            7a. Weitere Auftragsverarbeiter und Empfänger
+          </h2>
+          <p className="font-body text-brand-steel dark:text-gray-300 mb-3">
+            Für die Bereitstellung weiterer Funktionen nutzen wir folgende Dienstleister
+            (Auftragsverarbeitung gemäß Art. 28 DSGVO bzw. Empfänger gemäß Art. 13 Abs. 1 lit. e DSGVO):
+          </p>
+          <ul className="list-disc list-inside font-body text-brand-steel dark:text-gray-300 space-y-1">
+            <li>
+              <strong>Meta Platforms Ireland Ltd.</strong> (4 Grand Canal Square, Dublin 2, Irland) — automatisches
+              Posten von Marketing-Inhalten auf cam2rent-eigenen Facebook- und Instagram-Kanälen.
+              Customer-PII wird nur weitergegeben, wenn Kunden dem ausdrücklich für ihr eingereichtes
+              Material ("UGC") zugestimmt haben. Drittland-Übermittlung in die USA auf Grundlage des
+              EU-US Data Privacy Framework.
+            </li>
+            <li>
+              <strong>OpenAI Ireland Ltd.</strong> (1st Floor, The Liffey Trust Centre, 117-126 Sheriff Street Upper, Dublin 1, Irland) —
+              Bild- und Sprachgenerierung für Marketing-Inhalte (DALL-E, gpt-image-1, Whisper, TTS).
+              Es werden keine personenbezogenen Kundendaten an OpenAI übermittelt.
+            </li>
+            <li>
+              <strong>Anthropic, PBC</strong> (548 Market St #890, San Francisco, CA 94104, USA) —
+              Generierung von Marketing-Texten und Klassifizierung von hochgeladenen Rechnungen.
+              Es werden keine personenbezogenen Kundendaten übermittelt.
+            </li>
+            <li>
+              <strong>ElevenLabs Inc.</strong> (169 Madison Avenue, STE 2683, New York, NY 10016, USA) —
+              optionale Sprach-Generierung für Marketing-Reels.
+            </li>
+            <li>
+              <strong>Pexels GmbH</strong> (Eichendorffstr. 8, 10115 Berlin, Deutschland) und
+              <strong> Pixabay GmbH</strong> (Friedhof 8, 86529 Schrobenhausen, Deutschland) — Bezug
+              lizenzfreier Stockvideos für Marketing-Reels. Keine Übermittlung personenbezogener Daten.
+            </li>
+            <li>
+              <strong>Unsplash Inc.</strong> (400-460 King Street West, Toronto, ON M5V 1L7, Kanada) —
+              Bezug lizenzfreier Bilder für den Blog. Keine Übermittlung personenbezogener Daten.
+            </li>
+            <li>
+              <strong>Google Ireland Ltd.</strong> (Gordon House, Barrow Street, Dublin 4, Irland) —
+              Anzeige unserer Google-Bewertungen. Profilbilder werden nicht direkt vom Google-CDN
+              geladen — auf der Startseite werden nur Initialen-Avatare gezeigt, um Drittland-
+              Datenflüsse vor dem Cookie-Consent zu vermeiden.
+            </li>
+          </ul>
+          <p className="font-body text-brand-steel dark:text-gray-300 mt-3">
+            Mit allen Auftragsverarbeitern bestehen Auftragsverarbeitungsverträge gemäß Art. 28 DSGVO,
+            soweit erforderlich. Bei Übermittlungen in Drittländer werden Standardvertragsklauseln
+            der EU-Kommission abgeschlossen.
+          </p>
+        </section>
+
+        <section className="mb-10">
+          <h2 className="font-heading font-semibold text-lg text-brand-black dark:text-white mb-4">
             8. Webanalyse (eigenes Tracking)
           </h2>
           <p className="font-body text-brand-steel dark:text-gray-300 mb-3">
