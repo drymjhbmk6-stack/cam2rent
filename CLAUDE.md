@@ -1359,6 +1359,59 @@ Automatische E-Mail mit **PDF-Anhang** jeden Sonntag 18:30 Uhr Server-Zeit. Samm
 - **Race Condition Unit-Zuweisung:** `assignUnitToBooking` nutzt jetzt die Postgres-Funktion `assign_free_unit` mit `pg_advisory_xact_lock` (serialisiert parallele Zuweisungen pro Produkt). Fallback auf die alte Logik, falls die Migration noch nicht ausgeführt wurde.
 - **Stripe-Webhook Idempotenz:** `.like()` → `.eq()` — `payment_intent_id` wird exakt gespeichert, Wildcard war unnötig.
 
+### Security-Audit-Fixes (2026-05-07 Sweep 8 — Tiefen-Audit + alle Fixes)
+Achter Audit-Sweep mit acht parallelen Spezialisten-Agents (TLS/Verschluesselung, Auth/Session/Crypto, Authorization/IDOR, Payment/Stripe, Upload/SSRF/Storage, XSS/Injection/E-Mail, DSGVO/Headers/Logs, Webhook/Cron/Race, Frontend/Client). Sweep 5+6+7 wurden alle verifiziert und halten. Diesmal kein "nur Bericht" — **alle ~80 Findings direkt auf master gefixt** (12 Commit-Batches).
+
+**KRITISCH (gefixt):**
+- **K1 fehlende API-Permissions** in `middleware.ts` — `/api/admin/anlagen-neu`, `/ausgaben`, `/buchhaltung-neu`, `/wiederbeschaffung` waren ohne Mapping. UI-Pfade `/admin/inventar`, `/scan`, `/kunden-uebersicht`, `/tagesgeschaeft` ergaenzt.
+- **K2 oeffentliche APIs anonym aufrufbar:** `PUT /api/shop-content` (Hero/CTA setzbar), `POST/PATCH/DELETE /api/sets` (Set-Preise auf 1ct), `GET/DELETE /api/beta-feedback` (PII-Leak) — alle drei mit `checkAdminAuth()` geschuetzt, beta-feedback POST mit Rate-Limit 5/h.
+- **K3 cron/auto-cancel Race:** atomarer Bulk-UPDATE mit Status-Guard + Cron-Lock — verhindert Storno bezahlter Buchungen bei Webhook-Race.
+- **K4 cron/reels-segment-cleanup + cron/afa-buchung Lock kaputt:** `if (!lock)` war immer falsch (lock = Objekt). Auf `!lock.acquired` korrigiert.
+- **K5 Stored XSS in 5 Customer-Mails:** shipping confirmation, cron/auto-cancel, awaiting-payment-cancel, verification-reminder, verification-auto-cancel — alle Variablen mit `escapeHtml()` + Subject mit `stripSubject()`.
+- **K6 Stored XSS in Admin-Druckansichten:** `/admin/buchungen/[id]` (Packliste, Übergabeprotokoll), `/admin/versand/page.tsx` (Pack-Druck), `/admin/buchungen/neu` (Rechnungsvorschau) — lokaler `esc()`-Helper an alle ~40 Interpolations-Stellen.
+- **K7 JSON-LD-Breakout** in `app/blog/[slug]/page.tsx` — `<` + `>` + U+2028/U+2029 unicode-escapen, sonst kann Blog-Titel mit `</script>` aus dem JSON-LD-Block ausbrechen.
+- **K8** siehe K2.
+- **K9 Service-Worker `clients.openWindow`** ohne URL-Validierung — `safePushUrl()` validiert gegen Origin (relativ oder cam2rent.de), Fallback auf `/admin`.
+- **K10 Meta-Token in Query-Parameter** statt Authorization-Header in `lib/meta/graph-api.ts` — Token landete sonst in Reverse-Proxy-Logs (60-Tage-Page-Token = praktisch never-expire).
+- **K11 PageTracker ohne Opt-In** (DSGVO/§ 25 TTDSG-Verstoss) — auf `cam2rent_consent === 'all'` umgestellt, Default OFF.
+- **K12 anonymize-customer ohne Storage-Cleanup** — Personalausweis-Scans + UGC-Files blieben fuer immer im Storage. Jetzt: vollstaendige Loeschung von `id-documents/{userId}/` + `customer-ugc/...`-Files. UGC-Rows -> `withdrawn`. Damage-Photos bleiben (booking-Pfad, GoBD-pflichtig).
+- **K13 fehlender DSGVO-Cleanup-Cron** — Datenschutzerklaerung versprach 90-Tage-Loeschung, kein Cron existierte. Neuer `/api/cron/dsgvo-cleanup` (Ausweis-Scans 90d, page_views 90d, client_errors 30d, email_log ohne booking_id 24m).
+- **K14 Google-Profilfotos** vor Cookie-Consent (analog Google-Fonts-Urteil LG Muenchen) — Initialen-Avatar als Fallback statt CDN-Bild.
+- **K15 CN PATCH ohne Cap** — Sweep 7 #18 hatte nur POST gefixt, PATCH liess Mitarbeiter Gutschriften beliebig hochsetzen. Cap-Check gegen Originalrechnung minus aktive CNs.
+
+**HOCH (gefixt):**
+- **H1 confirm-booking 30%->50% Floor** (konsistent mit create-payment-intent Sweep 7 #10), Reviews productId-Match-Pruefung, UGC `consent_use_website` strikt (vorher OR-Filter mit Social).
+- **H2 confirm-extension atomarer Idempotency-Guard** (.is('extension_payment_intent_id', null)). Push-Endpoint-Allowlist (4 Browser-Vendor-Hosts) in `/api/admin/push/subscribe` + `/api/customer-push/subscribe`. IDOR-Fixes in `/api/messages` (booking_id-Owner-Check), `/api/custom-sets` (userId aus Session).
+- **H3 Admin-Cancel-Booking releast Deposit-Pre-Auth** (`stripe.paymentIntents.cancel`). cron/verification-auto-cancel mit Status-Guard + Pre-Check.
+- **H4 PDFs ohne Cache-Control** — Rechnung + Vertrag mit `Cache-Control: private, no-store`.
+- **H5 Survey-Token ohne Expiry** — neues Format `<timestamp>.<32-hex-hmac>`, 90-Tage-Ablauf.
+- **H7 2FA-Disable Brute-Force** — Rate-Limit 10/h pro Owner-User-ID.
+- **H8 Sendcloud-Credentials an attacker.com** — `isSendcloudUrl()` Allowlist in 3 Label-Routen.
+- **H11 Open-Redirect** in `/login` + `/registrierung` — `safeRedirect()`-Helper (relativ + nicht `//` + kein `javascript:`).
+- **H16 BUSINESS-Felder + Tracking-URL** im Mail-Versand (shipping) escaped.
+- **5 Crons fehlten Cron-Lock** — `auto-cancel`, `blog-publish`, `reels-publish`, `depreciation`, `abandoned-cart`, `reminder-emails` ergaenzt (jetzt alle 11 Crons mit Lock).
+- **Stripe-Webhook event.id-Dedupe** + atomarer Status-Flip im checkout.session.completed-Branch + Promise.allSettled in handleSingleBooking + explizite runtime/dynamic/maxDuration exports.
+- **UGC-Feature atomar** (Status-Flip ZUERST, dann Coupon — verhindert Doppel-Bonus bei Doppelklick).
+
+**MEDIUM (gefixt):**
+- Magic-Byte-Check in `/api/admin/social/unsplash` POST + `/api/admin/seasonal-images/upload` Unsplash-Branch (vorher hartcodiert `image/jpeg`).
+- Path-Traversal-Schutz in DELETE von `/api/product-images`, `/api/set-images`, `/api/admin/blog/media` (Format-Whitelist + `..` + Cross-Bucket-Block).
+- Iframes in `/admin/emails/vorlagen` mit `sandbox=""` (analog Newsletter-Composer Sweep 7 #29).
+- ctaUrl in `/api/seasonal-action` + `link` in `/api/admin/notifications/create` mit `isAllowedNotificationLink()`.
+- ElevenLabs-Key wandert von Query in Body (POST) — landet nicht mehr in Access-Logs.
+- `/api/cart/sync` userId+email aus Session (verhindert Spam-Vehikel).
+- stripe-reconciliation/match: booking_id-Existenz-Pruefung vor UPDATE.
+
+**Neue Libs/Helper:**
+- `lib/url-allowlist.ts` erweitert um `isAllowedPushEndpoint`, `isAllowedNotificationLink`, `isSendcloudUrl`.
+- `lib/survey-token.ts` neu mit Timestamp + 90d Expiry.
+
+**Neuer Cron:** `/api/cron/dsgvo-cleanup` — Crontab: `30 3 * * * curl ... /api/cron/dsgvo-cleanup`.
+
+**Datenschutzerklaerung:** Neue Sektion 7a mit 8 Sub-Processoren (Meta, OpenAI, Anthropic, ElevenLabs, Pexels, Pixabay, Unsplash, Google) — vorher fehlten alle (Verstoss Art. 13 Abs. 1 lit. e DSGVO).
+
+**Sweep-7-Verifikation:** Alle 30 Sweep-7-Fixes weiterhin in Kraft (durch parallele Audit-Agents bestaetigt). Sweep-8-Findings wurden ZUSAETZLICH gefunden, nicht als Regression.
+
 ### Security-Audit-Fixes (2026-05-03 Sweep 7)
 Siebter Audit-Sweep mit fuenf parallelen Spezialisten-Agents (Auth/Session, Payment/Stripe, Authorization/IDOR, Upload/SSRF, XSS/E-Mail) auf dem aktuellen Production-Stand. Sweep 5+6 wurden verifiziert — alle dortigen Fixes halten. 30 zusaetzliche Findings (8 KRITISCH, 10 HOCH, 12 MEDIUM), alle direkt auf master gefixt.
 
@@ -1758,6 +1811,9 @@ Admin-Seite `/admin/newsletter` (in Sidebar-Gruppe „Rabatte & Aktionen", Permi
 - Nach der Push-Migration: alle Mitarbeiter müssen einmal Push neu aktivieren unter `/admin/einstellungen` → "Push aktivieren", damit ihre Subscription mit dem Mitarbeiter-Account verknüpft wird (sonst kriegen sie weiterhin alle Notifications wie ein Owner).
 - **Cron-Eintrag AfA monatlich in Hetzner-Crontab:**
   `0 3 1 * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/depreciation`
+- **Cron-Eintrag DSGVO-Cleanup taeglich (Sweep 8 K13):**
+  `30 3 * * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/dsgvo-cleanup`
+  Räumt Ausweis-Scans nach 90 Tagen, page_views nach 90 Tagen, client_errors nach 30 Tagen, email_log ohne booking_id nach 24 Monaten. Setzt das Versprechen aus der Datenschutzerklärung um.
 - **Cron-Härtung optional:** `CRON_DISABLE_URL_SECRET=true` in Coolify-Env setzen + Hetzner-Crontab auf Header-Auth umstellen (`-H "x-cron-secret: $CRON_SECRET"`), damit Secrets nicht mehr in Access-Logs landen.
 - **Sicherheit:** API-Keys rotieren (wurden in einer Session öffentlich geteilt). Nachdem der erste echte Owner unter `/admin/einstellungen/mitarbeiter` angelegt ist, zusätzlich `ADMIN_PASSWORD`-ENV in Coolify auf einen zufaelligen Wert drehen — der Master-Login soll nur noch Notfall-Backup sein.
 - **Deadline-Regeln** in `admin_settings.awaiting_payment_cancel_rules`: `{ versand: { days_before_rental: 3, cutoff_hour_berlin: 18 }, abholung: { days_before_rental: 1, cutoff_hour_berlin: 18 } }`. Bedeutung: Deadline = `(rental_from − days_before_rental Tage)` um `cutoff_hour:00 Berlin-Zeit`. Versand-Default = **3 Tage vor Mietbeginn um 18:00 Berlin** (entspricht 2 vollen Versand-Tagen zwischen Deadline und Mietbeginn). Abholung-Default = **1 Tag vorher um 18:00 Berlin**. Sommer-/Winterzeit-Umstellung wird korrekt behandelt über `getBerlinOffsetString()`.
