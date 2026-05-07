@@ -332,7 +332,7 @@ export default function AdminZubehoerPage() {
           <div className="flex flex-wrap gap-1.5 mb-6">
             <button
               onClick={() => setFilterCategory('')}
-              className={`px-3 py-1.5 rounded-full text-xs font-heading font-semibold transition-colors ${!filterCategory ? 'bg-brand-black text-white' : 'bg-brand-bg text-brand-steel border border-brand-border hover:bg-brand-border'}`}
+              className={`px-3 py-1.5 rounded-full text-xs font-heading font-semibold transition-colors ${!filterCategory ? 'bg-brand-black text-white dark:bg-slate-100 dark:text-slate-900' : 'bg-brand-bg dark:bg-slate-800 text-brand-steel dark:text-slate-300 border border-brand-border dark:border-slate-600 hover:bg-brand-border dark:hover:bg-slate-700'}`}
             >
               Alle
             </button>
@@ -340,7 +340,7 @@ export default function AdminZubehoerPage() {
               <button
                 key={cat}
                 onClick={() => setFilterCategory(filterCategory === cat ? '' : cat)}
-                className={`px-3 py-1.5 rounded-full text-xs font-heading font-semibold transition-colors ${filterCategory === cat ? 'bg-brand-black text-white' : 'bg-brand-bg text-brand-steel border border-brand-border hover:bg-brand-border'}`}
+                className={`px-3 py-1.5 rounded-full text-xs font-heading font-semibold transition-colors ${filterCategory === cat ? 'bg-brand-black text-white dark:bg-slate-100 dark:text-slate-900' : 'bg-brand-bg dark:bg-slate-800 text-brand-steel dark:text-slate-300 border border-brand-border dark:border-slate-600 hover:bg-brand-border dark:hover:bg-slate-700'}`}
               >
                 {cat} ({accessories.filter((a) => a.category === cat).length})
               </button>
@@ -536,38 +536,38 @@ export default function AdminZubehoerPage() {
         )}
 
         {/* Buchbar / Intern Tab-Leiste */}
-        <div className="flex flex-wrap gap-2 mb-5 border-b border-brand-border">
+        <div className="flex flex-wrap gap-2 mb-5 border-b border-brand-border dark:border-slate-700">
           <button
             onClick={() => setView('public')}
             className={`flex items-center gap-2 px-4 py-2.5 text-sm font-heading font-semibold border-b-2 -mb-px transition-colors ${
               view === 'public'
-                ? 'border-brand-black text-brand-black'
-                : 'border-transparent text-brand-muted hover:text-brand-black'
+                ? 'border-brand-black dark:border-slate-100 text-brand-black dark:text-slate-100'
+                : 'border-transparent text-brand-muted dark:text-slate-400 hover:text-brand-black dark:hover:text-slate-100'
             }`}
           >
             <span className="w-2 h-2 rounded-full bg-status-success" />
             Buchbar für Kunden
-            <span className={`text-xs font-body ${view === 'public' ? 'text-brand-muted' : 'text-brand-muted'}`}>({publicCount})</span>
+            <span className="text-xs font-body text-brand-muted dark:text-slate-400">({publicCount})</span>
           </button>
           <button
             onClick={() => setView('internal')}
             className={`flex items-center gap-2 px-4 py-2.5 text-sm font-heading font-semibold border-b-2 -mb-px transition-colors ${
               view === 'internal'
-                ? 'border-amber-500 text-brand-black'
-                : 'border-transparent text-brand-muted hover:text-brand-black'
+                ? 'border-amber-500 text-brand-black dark:text-slate-100'
+                : 'border-transparent text-brand-muted dark:text-slate-400 hover:text-brand-black dark:hover:text-slate-100'
             }`}
           >
             <span className="w-2 h-2 rounded-full bg-amber-500" />
-            Intern <span className="text-xs font-body text-brand-muted hidden sm:inline">(Kunde sieht es nicht)</span>
-            <span className="text-xs font-body text-brand-muted">({internalCount})</span>
+            Intern <span className="text-xs font-body text-brand-muted dark:text-slate-400 hidden sm:inline">(Kunde sieht es nicht)</span>
+            <span className="text-xs font-body text-brand-muted dark:text-slate-400">({internalCount})</span>
           </button>
         </div>
 
         {/* Liste — Tabellen-Layout für aktiven Tab */}
         {loading ? (
-          <div className="text-center py-16 text-brand-muted font-body">Lädt…</div>
+          <div className="text-center py-16 text-brand-muted dark:text-slate-400 font-body">Lädt…</div>
         ) : accessories.length === 0 ? (
-          <div className="text-center py-16 text-brand-muted font-body">
+          <div className="text-center py-16 text-brand-muted dark:text-slate-400 font-body">
             Noch kein Zubehör angelegt. Klicke auf &bdquo;+ Neues Zubehör&ldquo;.
           </div>
         ) : (
@@ -576,31 +576,31 @@ export default function AdminZubehoerPage() {
             const groups = groupByCategory(visible);
             const isInternal = view === 'internal';
             return (
-              <div className="bg-white rounded-xl border border-brand-border overflow-hidden">
+              <div className="bg-white dark:bg-slate-900 rounded-xl border border-brand-border dark:border-slate-700 overflow-hidden">
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="bg-brand-bg border-b border-brand-border text-left">
-                        <th className="px-4 py-3 font-heading font-semibold text-[11px] uppercase tracking-wider text-brand-muted">Name</th>
-                        <th className="px-4 py-3 font-heading font-semibold text-[11px] uppercase tracking-wider text-brand-muted hidden md:table-cell">Kategorie</th>
-                        <th className="px-4 py-3 font-heading font-semibold text-[11px] uppercase tracking-wider text-brand-muted text-right whitespace-nowrap">Preis</th>
-                        <th className="px-4 py-3 font-heading font-semibold text-[11px] uppercase tracking-wider text-brand-muted hidden lg:table-cell">Kompatibilität</th>
-                        <th className="px-4 py-3 font-heading font-semibold text-[11px] uppercase tracking-wider text-brand-muted text-right">Aktionen</th>
+                      <tr className="bg-brand-bg dark:bg-slate-800 border-b border-brand-border dark:border-slate-700 text-left">
+                        <th className="px-4 py-3 font-heading font-semibold text-[11px] uppercase tracking-wider text-brand-muted dark:text-slate-400">Name</th>
+                        <th className="px-4 py-3 font-heading font-semibold text-[11px] uppercase tracking-wider text-brand-muted dark:text-slate-400 hidden md:table-cell">Kategorie</th>
+                        <th className="px-4 py-3 font-heading font-semibold text-[11px] uppercase tracking-wider text-brand-muted dark:text-slate-400 text-right whitespace-nowrap">Preis</th>
+                        <th className="px-4 py-3 font-heading font-semibold text-[11px] uppercase tracking-wider text-brand-muted dark:text-slate-400 hidden lg:table-cell">Kompatibilität</th>
+                        <th className="px-4 py-3 font-heading font-semibold text-[11px] uppercase tracking-wider text-brand-muted dark:text-slate-400 text-right">Aktionen</th>
                       </tr>
                     </thead>
                     <tbody>
                       {visible.length === 0 ? (
                         <tr>
-                          <td colSpan={5} className="px-4 py-12 text-center text-brand-muted font-body text-sm">
+                          <td colSpan={5} className="px-4 py-12 text-center text-brand-muted dark:text-slate-400 font-body text-sm">
                             {isInternal ? 'Kein internes Zubehör. Erstelle welches mit „Nur intern".' : 'Kein buchbares Zubehör.'}
                           </td>
                         </tr>
                       ) : (
                         groups.map(({ category, items }) => (
                           <React.Fragment key={category}>
-                            <tr className="bg-brand-bg/60 border-b border-brand-border">
-                              <td colSpan={5} className="px-4 py-2 text-[11px] font-heading font-bold uppercase tracking-wider text-brand-steel">
-                                {category} <span className="text-brand-muted font-body normal-case tracking-normal ml-1">({items.length})</span>
+                            <tr className="bg-brand-bg/60 dark:bg-slate-800/70 border-b border-brand-border dark:border-slate-700">
+                              <td colSpan={5} className="px-4 py-2 text-[11px] font-heading font-bold uppercase tracking-wider text-brand-steel dark:text-slate-200">
+                                {category} <span className="text-brand-muted dark:text-slate-400 font-body normal-case tracking-normal ml-1">({items.length})</span>
                               </td>
                             </tr>
                             {items.map((acc) => (
@@ -673,28 +673,28 @@ function AccessoryRow({ acc, isOpen, isInternal, savedId, deletingId, productLis
   return (
     <tr
       id={`acc-card-${acc.id}`}
-      className={`border-b border-brand-border last:border-b-0 scroll-mt-20 transition-colors ${isOpen ? 'bg-brand-bg/40' : 'hover:bg-brand-bg/40'}`}
+      className={`border-b border-brand-border dark:border-slate-700 last:border-b-0 scroll-mt-20 transition-colors ${isOpen ? 'bg-brand-bg/40 dark:bg-slate-800/40' : 'hover:bg-brand-bg/40 dark:hover:bg-slate-800/40'}`}
     >
       {/* Name */}
-      <td className={`px-4 py-3 align-top ${isInternal ? 'border-l-2 border-amber-300' : ''}`}>
+      <td className={`px-4 py-3 align-top ${isInternal ? 'border-l-2 border-amber-300 dark:border-amber-400' : ''}`}>
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="font-heading font-semibold text-sm text-brand-black">{acc.name}</span>
+            <span className="font-heading font-semibold text-sm text-brand-black dark:text-slate-100">{acc.name}</span>
             {acc.upgrade_group && (
-              <span className="text-[10px] font-body text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded-full">
+              <span className="text-[10px] font-body text-indigo-600 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-500/15 px-1.5 py-0.5 rounded-full">
                 {acc.upgrade_group}{acc.is_upgrade_base ? ' (Standard)' : ''}
               </span>
             )}
             {!acc.available && (
-              <span className="text-[10px] font-body text-brand-muted bg-brand-bg px-1.5 py-0.5 rounded-full">nicht verfügbar</span>
+              <span className="text-[10px] font-body text-brand-muted dark:text-slate-400 bg-brand-bg dark:bg-slate-700 px-1.5 py-0.5 rounded-full">nicht verfügbar</span>
             )}
             {savedId === acc.id && (
-              <span className="text-[10px] font-body text-green-600">✓ Gespeichert</span>
+              <span className="text-[10px] font-body text-green-600 dark:text-green-400">✓ Gespeichert</span>
             )}
           </div>
           {/* Mobile-only: Kategorie + Kompat unter Name (md+ haben eigene Spalten) */}
           <div className="md:hidden flex flex-wrap gap-1 mt-1">
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-heading font-semibold bg-brand-bg text-brand-steel">
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-heading font-semibold bg-brand-bg dark:bg-slate-700 text-brand-steel dark:text-slate-200">
               {acc.category}
             </span>
             {(acc.compatible_product_ids?.length ?? 0) > 0 ? (
@@ -709,7 +709,7 @@ function AccessoryRow({ acc, isOpen, isInternal, savedId, deletingId, productLis
                 );
               })
             ) : (
-              <span className="text-[10px] font-body text-brand-muted self-center">Alle Kameras</span>
+              <span className="text-[10px] font-body text-brand-muted dark:text-slate-400 self-center">Alle Kameras</span>
             )}
           </div>
         </div>
@@ -717,15 +717,15 @@ function AccessoryRow({ acc, isOpen, isInternal, savedId, deletingId, productLis
 
       {/* Kategorie */}
       <td className="px-4 py-3 align-top hidden md:table-cell">
-        <span className="px-2 py-0.5 rounded-full text-[10px] font-heading font-semibold bg-brand-bg text-brand-steel">
+        <span className="px-2 py-0.5 rounded-full text-[10px] font-heading font-semibold bg-brand-bg dark:bg-slate-700 text-brand-steel dark:text-slate-200">
           {acc.category}
         </span>
       </td>
 
       {/* Preis */}
       <td className="px-4 py-3 align-top text-right whitespace-nowrap tabular-nums">
-        <div className="text-sm font-heading font-semibold text-brand-black">{fmtEuro(acc.price)}</div>
-        <div className="text-[10px] font-body text-brand-muted">{acc.pricing_mode === 'perDay' ? '/Tag' : 'einmalig'}</div>
+        <div className="text-sm font-heading font-semibold text-brand-black dark:text-slate-100">{fmtEuro(acc.price)}</div>
+        <div className="text-[10px] font-body text-brand-muted dark:text-slate-400">{acc.pricing_mode === 'perDay' ? '/Tag' : 'einmalig'}</div>
       </td>
 
       {/* Kompatibilität */}
@@ -744,7 +744,7 @@ function AccessoryRow({ acc, isOpen, isInternal, savedId, deletingId, productLis
             })}
           </div>
         ) : (
-          <span className="text-[11px] font-body text-brand-muted italic">Alle Kameras</span>
+          <span className="text-[11px] font-body text-brand-muted dark:text-slate-400 italic">Alle Kameras</span>
         )}
       </td>
 
@@ -752,11 +752,11 @@ function AccessoryRow({ acc, isOpen, isInternal, savedId, deletingId, productLis
       <td className="px-4 py-3 align-top text-right whitespace-nowrap">
         <div className="inline-flex items-center gap-1">
           <button onClick={() => isOpen ? onCloseEdit(acc.id) : onStartEdit(acc)}
-            className="px-3 py-1.5 text-xs font-heading font-semibold text-brand-black border border-brand-border rounded-lg hover:bg-white transition-colors">
+            className="px-3 py-1.5 text-xs font-heading font-semibold text-brand-black dark:text-slate-200 border border-brand-border dark:border-slate-600 rounded-lg hover:bg-white dark:hover:bg-slate-700 transition-colors">
             {isOpen ? 'Schliessen' : 'Bearbeiten'}
           </button>
           <button onClick={() => onDelete(acc.id, acc.name)} disabled={deletingId === acc.id}
-            className="px-2.5 py-1.5 text-xs font-heading font-semibold text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-40"
+            className="px-2.5 py-1.5 text-xs font-heading font-semibold text-red-600 dark:text-red-400 border border-red-200 dark:border-red-500/40 rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors disabled:opacity-40"
             title="Löschen">
             {deletingId === acc.id ? '…' : '✕'}
           </button>
@@ -778,7 +778,7 @@ function AccessoryEditRow({ acc, editForm, setEditForm, savingId, productList, o
   onSave: (id: string) => void;
 }) {
   return (
-    <tr className="bg-brand-bg/40 border-b border-brand-border">
+    <tr className="bg-brand-bg/40 dark:bg-slate-800/40 border-b border-brand-border dark:border-slate-700">
       <td colSpan={5} className="px-5 py-5">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
