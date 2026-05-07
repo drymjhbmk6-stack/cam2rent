@@ -1,5 +1,6 @@
 import { createServiceClient } from '@/lib/supabase';
 import { BUSINESS } from '@/lib/business-config';
+import { escapeHtml, stripSubject } from '@/lib/email';
 
 /**
  * Baut den Betreff + HTML-Body + Plain-Text fuer die Zahlungs-Link-E-Mail +
@@ -69,7 +70,20 @@ export async function buildPaymentLinkEmail(opts: {
   const priceFmt = Number(opts.priceTotal).toFixed(2).replace('.', ',');
   const customerName = opts.customerName || 'dort';
 
-  const subject = `Deine Buchung ${opts.bookingId} wurde freigegeben — jetzt bezahlen`;
+  // Sweep 9 H1: Alle User-/DB-Variablen escaped + Subject CRLF-stripped.
+  // Vorher konnten admin-controlled Felder (customerName aus Manual-Booking,
+  // productName aus Katalog) HTML/Subject-Header injizieren.
+  const safeName = escapeHtml(customerName);
+  const safeBookingId = escapeHtml(opts.bookingId);
+  const safeProduct = escapeHtml(opts.productName);
+  const safeDays = escapeHtml(String(opts.days));
+  const safeFrom = escapeHtml(opts.rentalFrom);
+  const safeTo = escapeHtml(opts.rentalTo);
+  const safePaymentUrl = escapeHtml(opts.paymentUrl);
+  const safeDeadline = escapeHtml(deadlineLabel);
+  const safePrice = escapeHtml(priceFmt);
+
+  const subject = stripSubject(`Deine Buchung ${opts.bookingId} wurde freigegeben — jetzt bezahlen`);
 
   const html = `
     <div style="font-family: 'DM Sans', Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px 16px; color: #1a1a1a;">
@@ -83,36 +97,36 @@ export async function buildPaymentLinkEmail(opts: {
         Deine Buchung wurde freigegeben!
       </h1>
       <p style="color: #64748b; font-size: 15px; line-height: 1.6; margin-bottom: 24px;">
-        Hallo ${customerName},<br/>
-        dein Konto wurde erfolgreich verifiziert und deine Buchung <strong>${opts.bookingId}</strong> ist bereit zur Bezahlung.
+        Hallo ${safeName},<br/>
+        dein Konto wurde erfolgreich verifiziert und deine Buchung <strong>${safeBookingId}</strong> ist bereit zur Bezahlung.
       </p>
 
       <div style="background: #f1f5f9; border-radius: 12px; padding: 20px; margin-bottom: 24px;">
         <p style="margin: 0 0 4px; font-size: 13px; color: #94a3b8;">Buchungsdetails</p>
-        <p style="margin: 0; font-weight: 700; font-size: 16px; color: #1a1a1a;">${opts.productName}</p>
+        <p style="margin: 0; font-weight: 700; font-size: 16px; color: #1a1a1a;">${safeProduct}</p>
         <p style="margin: 4px 0 0; font-size: 14px; color: #64748b;">
-          ${opts.days} Tage &middot; ${opts.rentalFrom} bis ${opts.rentalTo}
+          ${safeDays} Tage &middot; ${safeFrom} bis ${safeTo}
         </p>
         <p style="margin: 12px 0 0; font-weight: 700; font-size: 20px; color: #1a1a1a;">
-          ${priceFmt} €
+          ${safePrice} €
         </p>
       </div>
 
       <div style="text-align: center; margin-bottom: 24px;">
-        <a href="${opts.paymentUrl}" style="display: inline-block; background: #3b82f6; color: white; font-weight: 700; font-size: 16px; padding: 14px 36px; border-radius: 10px; text-decoration: none;">
+        <a href="${safePaymentUrl}" style="display: inline-block; background: #3b82f6; color: white; font-weight: 700; font-size: 16px; padding: 14px 36px; border-radius: 10px; text-decoration: none;">
           Jetzt bezahlen
         </a>
       </div>
 
       <p style="color: #94a3b8; font-size: 12px; text-align: center; margin: 0 0 24px;">
-        Bitte bezahle spätestens bis <strong>${deadlineLabel}</strong>. Erfolgt bis dahin keine Zahlung, wird die Buchung automatisch storniert.
+        Bitte bezahle spätestens bis <strong>${safeDeadline}</strong>. Erfolgt bis dahin keine Zahlung, wird die Buchung automatisch storniert.
       </p>
 
       <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
 
       <p style="color: #94a3b8; font-size: 11px; line-height: 1.5; margin: 0; text-align: center;">
-        ${BUSINESS.owner} &middot; ${BUSINESS.street} &middot; ${BUSINESS.zip} ${BUSINESS.city}<br/>
-        ${BUSINESS.emailKontakt} &middot; ${BUSINESS.phone}
+        ${escapeHtml(BUSINESS.owner)} &middot; ${escapeHtml(BUSINESS.street)} &middot; ${escapeHtml(BUSINESS.zip)} ${escapeHtml(BUSINESS.city)}<br/>
+        ${escapeHtml(BUSINESS.emailKontakt)} &middot; ${escapeHtml(BUSINESS.phone)}
       </p>
     </div>
   `;

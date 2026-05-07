@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { checkAdminAuth } from '@/lib/admin-auth';
 import { getSiteUrl } from '@/lib/env-mode';
+import { escapeCsvField } from '@/lib/csv';
 
 // Placeholder — generiert eine einfache Text-Repräsentation der EÜR
 // Vollständige React-PDF-Implementierung kann in zukünftiger Session folgen
@@ -53,10 +54,12 @@ export async function GET(req: NextRequest) {
       amount: number;
       items?: Array<{ date: string; vendor: string; description: string; amount: number }>;
     }) => {
-      const lines: string[] = [`${c.label};${fmt(c.amount)}`];
+      // Sweep 9 H5: CSV-Formula-Injection-Schutz. Vorher konnten Vendor/Description
+      // mit `=cmd|...`-Formel beim Excel-Oeffnen ausgefuehrt werden.
+      const lines: string[] = [`${escapeCsvField(c.label, ';')};${fmt(c.amount)}`];
       for (const it of c.items ?? []) {
-        const desc = [it.vendor, it.description].filter(Boolean).join(' · ').replace(/;/g, ',');
-        lines.push(`  ${it.date || ''};${desc};${fmt(it.amount)}`);
+        const desc = [it.vendor, it.description].filter(Boolean).join(' · ');
+        lines.push(`  ${escapeCsvField(it.date || '', ';')};${escapeCsvField(desc, ';')};${fmt(it.amount)}`);
       }
       return lines;
     }),

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
+import { isAllowedNotificationLink } from '@/lib/url-allowlist';
 
 const DEFAULT_NEWS_BANNER = {
   enabled: true,
@@ -128,6 +129,20 @@ export async function PUT(req: NextRequest) {
 
     if (!page || !section) {
       return NextResponse.json({ error: 'page und section sind erforderlich' }, { status: 400 });
+    }
+
+    // Sweep 9 H7: Hero/CTA-Links validieren — verhindert dass ein system-
+    // Permission-Mitarbeiter `javascript:`-URLs oder Phishing-Domains in
+    // den Shop-Hero einbaut. Next-Link prueft `javascript:` nicht selbst.
+    if (page === 'startseite' && section === 'hero' && content?.cta_link) {
+      const link = String(content.cta_link).slice(0, 500);
+      if (!isAllowedNotificationLink(link)) {
+        return NextResponse.json(
+          { error: 'cta_link muss relativ oder cam2rent.de sein.' },
+          { status: 400 },
+        );
+      }
+      content.cta_link = link;
     }
 
     const supabase = createServiceClient();

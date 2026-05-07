@@ -232,10 +232,20 @@ export default function NotificationDropdown({ position = 'sidebar' }: { positio
       setUnreadCount((prev) => Math.max(0, prev - 1));
     }
 
-    // Navigieren
+    // Navigieren — Sweep 9 M5: client-side validieren gegen Legacy-Notifications
+    // (vor Sweep 8 M3 konnte `link` beliebige URLs enthalten, auch javascript:).
     if (notification.link) {
-      setOpen(false);
-      router.push(notification.link);
+      const link = notification.link;
+      const isSafe = typeof link === 'string'
+        && link.startsWith('/')
+        && !link.startsWith('//')
+        && !/^\s*javascript:/i.test(link);
+      if (isSafe) {
+        setOpen(false);
+        router.push(link);
+      } else {
+        setOpen(false);
+      }
     }
   }
 

@@ -31,10 +31,16 @@ export default function QrDownloadButton({ dataUrl, filename }: DownloadButtonPr
       // in die Fotos speichern. Auf Desktop loest <a download> direkt aus.
       const isIOS = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent);
       if (isIOS) {
+        // Sweep 9 M4: filename ist eine Seriennummer aus DB — Admin-controlled,
+        // koennte HTML/Script enthalten. dataUrl ist Base64 (sicher).
+        const esc = (s: string) => String(s)
+          .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        const safeName = esc(filename);
         const newTab = window.open('', '_blank');
         if (newTab) {
           newTab.document.write(`
-            <html><head><title>${filename}</title>
+            <html><head><title>${safeName}</title>
             <meta name="viewport" content="width=device-width,initial-scale=1">
             <style>
               body{margin:0;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:-apple-system,sans-serif;padding:24px;box-sizing:border-box}
@@ -46,11 +52,11 @@ export default function QrDownloadButton({ dataUrl, filename }: DownloadButtonPr
               .btn-secondary{background:#374151;color:#fff}
             </style>
             </head><body>
-              <img src="${dataUrl}" alt="${filename}" />
+              <img src="${dataUrl}" alt="${safeName}" />
               <p>Lange auf das Bild tippen &rarr; <strong>"Zu Fotos hinzuf&uuml;gen"</strong></p>
               <div class="actions">
                 <button class="btn btn-secondary" onclick="window.close()">Schlie&szlig;en</button>
-                <a class="btn btn-primary" href="${dataUrl}" download="${filename}.png">Direkt herunterladen</a>
+                <a class="btn btn-primary" href="${dataUrl}" download="${safeName}.png">Direkt herunterladen</a>
               </div>
             </body></html>
           `);

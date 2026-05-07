@@ -30,7 +30,14 @@ import { rateLimit, getClientIp } from '@/lib/rate-limit';
 const limiter = rateLimit({ maxAttempts: 60, windowMs: 60 * 1000 });
 
 function normalizeCode(s: string): string {
-  return s.trim().toUpperCase().replace(/\s+/g, '');
+  // Sweep 9 H4: zusaetzlich PostgREST-Spezialzeichen `,()\` ausstreichen,
+  // damit kein .or()-Filter-Bypass moeglich ist.
+  return s
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, '')
+    .replace(/[,()\\]/g, '')
+    .slice(0, 100);
 }
 
 export async function POST(req: NextRequest) {

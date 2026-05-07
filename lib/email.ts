@@ -904,7 +904,10 @@ export async function sendAdminDamageNotification(data: DamageEmailData) {
 // ─── Damage resolution notification (to customer) ────────────────────────────
 
 export async function sendDamageResolution(data: DamageResolutionEmailData) {
-  const subject = `Schadensmeldung bearbeitet – ${data.bookingId}`;
+  // Sweep 9 H3: stripSubject gegen CRLF (Sweep 7 #16-Notiz erwaehnt es,
+  // aber dieser Subject blieb roh — review_request wurde gefixt, hier
+  // vergessen).
+  const subject = stripSubject(`Schadensmeldung bearbeitet – ${data.bookingId}`);
   const retainedInfo = data.depositRetained > 0
     ? `<tr><td style="padding:16px 20px;border-bottom:1px solid #e5e7eb;">
         <p style="margin:0 0 2px;font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:0.8px;">Einbehaltene Kaution</p>

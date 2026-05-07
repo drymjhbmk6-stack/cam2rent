@@ -54,13 +54,21 @@ function normalize(raw: unknown): EmailTemplateOverrideMap {
   for (const [id, val] of Object.entries(raw)) {
     if (!isPlainRecord(val)) continue;
     const entry: EmailTemplateOverride = {};
+    // Sweep 9 H6: Sanitizer auch im Read-Pfad anwenden — vorher konnten
+    // direkt in admin_settings geschriebene Override-Rows mit <script>...
+    // ungeprueft in Customer-Mails landen. Subject zusaetzlich CRLF-strip.
     if (typeof val.subject === 'string') {
-      const trimmed = val.subject.trim();
-      if (trimmed) entry.subject = trimmed;
+      const cleaned = val.subject.replace(/[\r\n  ]+/g, ' ').trim().slice(0, 250);
+      if (cleaned) entry.subject = cleaned;
     }
     if (typeof val.introHtml === 'string') {
       const trimmed = val.introHtml.trim();
-      if (trimmed) entry.introHtml = trimmed;
+      if (trimmed) {
+        // sanitizeIntroHtml ist weiter unten in dieser Datei deklariert —
+        // late-bind via Funktions-Lookup, weil Top-Level-Reihenfolge
+        // verhindert direkten Aufruf.
+        entry.introHtml = sanitizeIntroHtml(trimmed);
+      }
     }
     if (entry.subject || entry.introHtml) {
       out[id] = entry;
@@ -128,8 +136,10 @@ export async function setEmailTemplateOverride(
 function sanitizeOverride(raw: EmailTemplateOverride): EmailTemplateOverride {
   const out: EmailTemplateOverride = {};
   if (raw.subject) {
-    const trimmed = raw.subject.trim().slice(0, 250);
-    if (trimmed) out.subject = trimmed;
+    // Sweep 9 H6: CRLF + U+2028/U+2029 ausstreichen (sonst Subject-Spoofing
+    // durch admin_settings-Direkt-Schreib).
+    const cleaned = raw.subject.replace(/[\r\n  ]+/g, ' ').trim().slice(0, 250);
+    if (cleaned) out.subject = cleaned;
   }
   if (raw.introHtml) {
     const sanitized = sanitizeIntroHtml(raw.introHtml);

@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase';
 import { logAudit } from '@/lib/audit';
 import { explainWBW, loadWbwConfig } from '@/lib/inventar/wiederbeschaffungswert';
 import { mirrorInventarToLegacy } from '@/lib/inventar-mirror';
+import { sanitizeSearchInput } from '@/lib/search-sanitize';
 
 /**
  * GET /api/admin/inventar?typ=&status=&beleg_status=&q=
@@ -22,7 +23,7 @@ export async function GET(req: NextRequest) {
   if (sp.get('beleg_status')) q = q.eq('beleg_status', sp.get('beleg_status'));
   if (sp.get('tracking_mode')) q = q.eq('tracking_mode', sp.get('tracking_mode'));
   if (sp.get('produkt_id')) q = q.eq('produkt_id', sp.get('produkt_id'));
-  const search = sp.get('q')?.trim();
+  const search = sanitizeSearchInput(sp.get('q'));
   if (search) q = q.or(`bezeichnung.ilike.%${search}%,inventar_code.ilike.%${search}%,seriennummer.ilike.%${search}%`);
 
   const { data, error } = await q.limit(500);

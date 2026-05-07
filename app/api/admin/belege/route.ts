@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase';
 import { logAudit } from '@/lib/audit';
 import { isTestMode } from '@/lib/env-mode';
 import { nextBelegNr, sanitizePosition, recomputeBelegSummen, type BelegPositionInput } from '@/lib/buchhaltung/beleg-utils';
+import { sanitizeSearchInput } from '@/lib/search-sanitize';
 
 /**
  * GET /api/admin/belege?status=&lieferant_id=&from=&to=&q=&limit=&offset=
@@ -28,7 +29,7 @@ export async function GET(req: NextRequest) {
   const lieferantId = sp.get('lieferant_id');
   const from = sp.get('from');
   const to = sp.get('to');
-  const q = sp.get('q')?.trim() ?? '';
+  const q = sanitizeSearchInput(sp.get('q'));
   const limit = Math.min(200, Math.max(1, parseInt(sp.get('limit') ?? '50', 10)));
   const offset = Math.max(0, parseInt(sp.get('offset') ?? '0', 10));
 
