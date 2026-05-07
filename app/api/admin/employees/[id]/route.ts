@@ -170,6 +170,15 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
   }
   const target = await getAdminUserById(id);
   if (!target) return NextResponse.json({ error: 'Mitarbeiter nicht gefunden.' }, { status: 404 });
+  // Sweep 9: Owner-Schutz auch im DELETE — PATCH (Z. 37-42) hatte den Schutz schon,
+  // DELETE erlaubte bei zwei oder mehr Owner-Accounts dass Mitarbeiter mit
+  // mitarbeiter_verwalten andere Owner loescht. Jetzt: nur Owner duerfen Owner loeschen.
+  if (target.role === 'owner' && me?.role !== 'owner') {
+    return NextResponse.json(
+      { error: 'Nur Owner duerfen Owner-Accounts loeschen.' },
+      { status: 403 },
+    );
+  }
   if (target.role === 'owner') {
     const owners = await countOwners();
     if (owners <= 1) {

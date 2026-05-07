@@ -1,14 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { logAudit } from '@/lib/audit';
+import { getCurrentAdminUser } from '@/lib/admin-auth';
 
 /**
  * POST /api/admin/kunden/blacklist
  * Sperrt oder entsperrt einen Kunden.
  * Body: { userId: string, blacklisted: boolean, reason?: string }
+ *
+ * Sweep 9: Owner-Schutz — verhindert dass ein Mitarbeiter mit `kunden`-
+ * Permission Owner-Accounts blacklistet (Self-Lock-Out / Sabotage).
  */
 export async function POST(req: NextRequest) {
   try {
+    const me = await getCurrentAdminUser();
+    if (!me) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const { userId, blacklisted, reason } = (await req.json()) as {
       userId: string;
       blacklisted: boolean;
@@ -20,6 +29,27 @@ export async function POST(req: NextRequest) {
     }
 
     const supabase = createServiceClient();
+
+    // Pruefen ob das Ziel ein Owner-Admin-Account ist — Owner duerfen nicht
+    // blacklistet werden, ausser ein anderer Owner macht es bewusst.
+    const { data: targetAdmin } = await supabase
+      .from('admin_users')
+      .select('role')
+      .eq('id', userId)
+      .maybeSingle();
+    if (targetAdmin?.role === 'owner' && me.role !== 'owner') {
+      return NextResponse.json(
+        { error: 'Owner-Accounts duerfen nur von Owner-Accounts gesperrt werden.' },
+        { status: 403 },
+      );
+    }
+    // Self-Block fuer Owner ebenfalls verhindern (versehentliche Selbst-Lockout)
+    if (me.id === userId && blacklisted) {
+      return NextResponse.json(
+        { error: 'Selbst-Sperrung nicht erlaubt.' },
+        { status: 400 },
+      );
+    }
 
     const updateData: Record<string, unknown> = {
       blacklisted,

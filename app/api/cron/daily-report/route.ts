@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Resend } from 'resend';
 import { createServiceClient } from '@/lib/supabase';
 import { verifyCronAuth } from '@/lib/cron-auth';
+import { acquireCronLock, releaseCronLock } from '@/lib/cron-lock';
 import { BUSINESS } from '@/lib/business-config';
 import { fmtEuro } from '@/lib/format-utils';
 import { getBerlinDayStart } from '@/lib/timezone';
@@ -28,6 +29,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  // Sweep 9: Cron-Lock — vorher konnte ein Doppel-Trigger zwei Tagesreport-
+  // Mails an kontakt@cam2rent.de schicken (z.B. Coolify-Restart).
+  const lock = await acquireCronLock('daily-report');
+  if (!lock.acquired) {
+    return NextResponse.json({ skipped: 'lock_held', reason: lock.reason });
+  }
+
+  try {
   const supabase = createServiceClient();
   const BASE_URL = await getSiteUrl();
   const FROM_EMAIL = await getResendFromEmail();
@@ -178,4 +187,7 @@ export async function GET(req: NextRequest) {
   });
 
   return NextResponse.json({ ok: true, date: dateStr, views: totalViews, bookings: bookingCount });
+  } finally {
+    await releaseCronLock('daily-report');
+  }
 }
