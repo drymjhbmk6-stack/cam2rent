@@ -40,7 +40,31 @@ export async function GET(req: NextRequest) {
       return true;
     });
   }
-  return NextResponse.json({ positionen: results });
+
+  // Verknuepfungen-Counts pro Position dazuholen, damit das Frontend die
+  // Restmenge ('noch X von Y verknuepfbar') anzeigen + voll-belegte
+  // Positionen ausgrauen kann.
+  const positionIds = results.map((r) => (r as { id: string }).id);
+  const countsByPos: Record<string, number> = {};
+  if (positionIds.length > 0) {
+    try {
+      const { data: links } = await supabase
+        .from('inventar_verknuepfung')
+        .select('beleg_position_id')
+        .in('beleg_position_id', positionIds);
+      for (const l of (links ?? []) as Array<{ beleg_position_id: string }>) {
+        countsByPos[l.beleg_position_id] = (countsByPos[l.beleg_position_id] ?? 0) + 1;
+      }
+    } catch {
+      // defensiv
+    }
+  }
+  const enriched = results.map((r) => ({
+    ...(r as Record<string, unknown>),
+    verknuepfungen_count: countsByPos[(r as { id: string }).id] ?? 0,
+  }));
+
+  return NextResponse.json({ positionen: enriched });
 }
 
 export async function POST(req: NextRequest) {

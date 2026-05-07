@@ -52,7 +52,10 @@ interface Link {
 interface PositionMatch {
   id: string;
   bezeichnung: string;
+  menge: number;
   einzelpreis_netto: number;
+  klassifizierung?: string;
+  verknuepfungen_count?: number;
   beleg: { id: string; beleg_nr: string; beleg_datum: string; lieferant: { name: string } | null } | null;
 }
 
@@ -403,20 +406,61 @@ export default function InventarDetailPage() {
       {showLinkModal && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
           <div className="bg-[#111827] border border-slate-700 rounded-lg max-w-2xl w-full p-6">
-            <h2 className="text-lg font-semibold mb-3">Belegposition suchen</h2>
+            <h2 className="text-lg font-semibold mb-2">Belegposition suchen</h2>
+            <p className="text-xs text-slate-400 mb-3">
+              Pro Belegposition koennen nur so viele Inventar-Stuecke verknuepft werden wie die Position Mengen hat.
+              Bereits voll belegte Positionen sind ausgegraut.
+            </p>
             <input value={linkSearch} onChange={(e) => setLinkSearch(e.target.value)} placeholder="Bezeichnung, Lieferant…" className="w-full bg-[#0a0f1e] border border-slate-700 rounded px-3 py-2 text-base mb-3" autoFocus />
             <div className="max-h-96 overflow-y-auto space-y-1">
-              {linkResults.map((r) => (
-                <button key={r.id} onClick={() => handleLink(r.id)} disabled={busy} className="w-full text-left p-3 bg-slate-800/40 hover:bg-slate-700/40 rounded text-sm">
-                  <div className="font-medium">{r.bezeichnung}</div>
-                  <div className="text-xs text-slate-400">
-                    {r.beleg && `${r.beleg.beleg_nr} · ${new Date(r.beleg.beleg_datum).toLocaleDateString('de-DE')}`}
-                    {r.beleg?.lieferant && ` · ${r.beleg.lieferant.name}`}
-                    {' · '}
-                    {fmtEuro(Number(r.einzelpreis_netto))}
-                  </div>
-                </button>
-              ))}
+              {[...linkResults]
+                .sort((a, b) => {
+                  // voll-belegte Positionen ans Ende sortieren
+                  const restA = Math.max(0, Number(a.menge ?? 1) - Number(a.verknuepfungen_count ?? 0));
+                  const restB = Math.max(0, Number(b.menge ?? 1) - Number(b.verknuepfungen_count ?? 0));
+                  if ((restA === 0) !== (restB === 0)) return restA === 0 ? 1 : -1;
+                  return 0;
+                })
+                .map((r) => {
+                  const menge = Number(r.menge ?? 1);
+                  const used = Number(r.verknuepfungen_count ?? 0);
+                  const rest = Math.max(0, menge - used);
+                  const full = rest === 0;
+                  return (
+                    <button
+                      key={r.id}
+                      onClick={() => !full && handleLink(r.id)}
+                      disabled={busy || full}
+                      title={full ? 'Diese Position ist bereits voll belegt — alle Mengen sind verknuepft.' : `Noch ${rest} von ${menge} verfuegbar`}
+                      className={`w-full text-left p-3 rounded text-sm transition-colors ${
+                        full
+                          ? 'bg-slate-900/30 opacity-50 cursor-not-allowed'
+                          : 'bg-slate-800/40 hover:bg-slate-700/40'
+                      }`}
+                    >
+                      <div className="flex justify-between items-start gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium">{r.bezeichnung}</div>
+                          <div className="text-xs text-slate-400 mt-0.5">
+                            {r.beleg && `${r.beleg.beleg_nr} · ${new Date(r.beleg.beleg_datum).toLocaleDateString('de-DE')}`}
+                            {r.beleg?.lieferant && ` · ${r.beleg.lieferant.name}`}
+                            {' · '}
+                            {fmtEuro(Number(r.einzelpreis_netto))} netto/Stueck
+                          </div>
+                        </div>
+                        <span className={`text-[10px] px-2 py-0.5 rounded border shrink-0 font-mono ${
+                          full
+                            ? 'bg-slate-700/30 text-slate-500 border-slate-700'
+                            : rest < menge
+                              ? 'bg-amber-500/10 text-amber-300 border-amber-500/30'
+                              : 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'
+                        }`}>
+                          {full ? `${menge}/${menge} belegt` : `${rest}/${menge} frei`}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
               {linkResults.length === 0 && <p className="text-sm text-slate-500 italic p-3">Keine Treffer</p>}
             </div>
             <div className="mt-3">

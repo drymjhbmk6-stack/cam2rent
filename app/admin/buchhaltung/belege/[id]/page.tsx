@@ -10,6 +10,13 @@ type Klass = 'pending' | 'afa' | 'gwg' | 'ausgabe' | 'ignoriert';
 const KLASS_LABEL: Record<Klass, string> = {
   pending: 'Offen', afa: 'AfA', gwg: 'GWG', ausgabe: 'Ausgabe', ignoriert: 'Ignorieren',
 };
+const KLASS_HINT: Record<Klass, string> = {
+  pending: 'Noch nicht klassifiziert',
+  afa: 'AfA = Anlagegut über 800 € netto. Wird über mehrere Jahre abgeschrieben (linear, typisch 36 Monate). Erscheint im Anlagenverzeichnis.',
+  gwg: 'GWG = Geringwertiges Wirtschaftsgut zwischen 250 und 800 € netto. Wird im Jahr der Anschaffung sofort vollständig abgeschrieben, erscheint trotzdem im Anlagenverzeichnis (Verzeichnis-Pflicht).',
+  ausgabe: 'Direkte Betriebsausgabe. Sofort-Aufwand in der EÜR (Verbrauchsmaterial, Software-Abos, kleine Anschaffungen unter 250 € netto, Reparaturen etc.).',
+  ignoriert: 'Position wird NICHT verbucht — z. B. private Anschaffung versehentlich auf der Geschäftsrechnung, durchlaufender Posten, Pfand, Rabatt-Zeile.',
+};
 
 interface Beleg {
   id: string; beleg_nr: string; interne_beleg_no: string | null;
@@ -430,11 +437,12 @@ export default function BelegDetailPage() {
 
                 {/* Klassifikations-Buttons (nur wenn nicht locked) */}
                 {!p.locked && (
-                  <div className="px-3 pb-3 flex gap-2 flex-wrap">
+                  <div className="px-3 pb-3 flex gap-2 flex-wrap items-center">
                     {(['afa', 'gwg', 'ausgabe', 'ignoriert'] as const).map((k) => (
                       <button
                         key={k}
                         onClick={() => setKlassifizierung(p.id, k)}
+                        title={KLASS_HINT[k]}
                         className={`px-2 py-0.5 text-xs rounded border ${
                           p.klassifizierung === k ? 'bg-cyan-500 text-slate-900 border-cyan-400 font-semibold' : 'bg-slate-800 hover:bg-slate-700 border-slate-700'
                         }`}
@@ -442,6 +450,7 @@ export default function BelegDetailPage() {
                         {KLASS_LABEL[k]}
                       </button>
                     ))}
+                    <span className="text-xs text-slate-500" title="Hover über die Buttons für Erklärungen">ⓘ Hover für Details</span>
                   </div>
                 )}
               </div>

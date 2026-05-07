@@ -31,16 +31,42 @@ export async function POST(
 
   const { data: position, error: pErr } = await supabase
     .from('beleg_positionen')
-    .select('id, einzelpreis_netto, mwst_satz, beleg:belege(id, beleg_datum)')
+    .select('id, menge, einzelpreis_netto, mwst_satz, bezeichnung, beleg:belege(id, beleg_datum, beleg_nr)')
     .eq('id', body.beleg_position_id)
     .single();
   if (pErr) return NextResponse.json({ error: pErr.message }, { status: 404 });
+
+  // Mengen-Limit pruefen: pro Beleg-Position duerfen max. position.menge
+  // Inventar-Stuecke verknuepft sein. Pruefung nur fuer NEUE Verknuepfungen
+  // (bestehende Verknuepfung mit dieser Unit ist ueber UNIQUE(pos,unit) bereits
+  // vor Doppel-Insert geschuetzt — wir wollen aber nicht doppelt zaehlen).
+  const positionMenge = Number((position as { menge: number }).menge ?? 1);
+  const stueckAnteil = Number(body.stueck_anteil ?? 1);
+  const { data: existingLinks } = await supabase
+    .from('inventar_verknuepfung')
+    .select('id, inventar_unit_id, stueck_anteil')
+    .eq('beleg_position_id', body.beleg_position_id);
+  const isReLink = (existingLinks ?? []).some(
+    (l) => (l as { inventar_unit_id: string }).inventar_unit_id === id,
+  );
+  if (!isReLink) {
+    const sumExisting = (existingLinks ?? []).reduce(
+      (s, l) => s + Number((l as { stueck_anteil: number }).stueck_anteil ?? 1),
+      0,
+    );
+    if (sumExisting + stueckAnteil > positionMenge) {
+      const rest = Math.max(0, positionMenge - sumExisting);
+      return NextResponse.json({
+        error: `Position '${(position as { bezeichnung: string }).bezeichnung}' hat nur ${positionMenge} Stueck und ist bereits ${sumExisting}× verknuepft. Noch verfuegbar: ${rest}.`,
+      }, { status: 409 });
+    }
+  }
 
   // Verknuepfung anlegen
   const { error: insErr } = await supabase.from('inventar_verknuepfung').insert({
     beleg_position_id: body.beleg_position_id,
     inventar_unit_id: id,
-    stueck_anteil: body.stueck_anteil ?? 1,
+    stueck_anteil: stueckAnteil,
   });
   if (insErr && insErr.code !== '23505') {
     return NextResponse.json({ error: insErr.message }, { status: 500 });
