@@ -1359,6 +1359,51 @@ Automatische E-Mail mit **PDF-Anhang** jeden Sonntag 18:30 Uhr Server-Zeit. Samm
 - **Race Condition Unit-Zuweisung:** `assignUnitToBooking` nutzt jetzt die Postgres-Funktion `assign_free_unit` mit `pg_advisory_xact_lock` (serialisiert parallele Zuweisungen pro Produkt). Fallback auf die alte Logik, falls die Migration noch nicht ausgeführt wurde.
 - **Stripe-Webhook Idempotenz:** `.like()` → `.eq()` — `payment_intent_id` wird exakt gespeichert, Wildcard war unnötig.
 
+### Security-Audit-Fixes (2026-05-07 Sweep 9 — Verifikation + Lueckenschluss)
+Neunter Audit-Sweep mit acht parallelen Spezialisten-Agents (TLS, Auth, Authorization, Payment, Upload/SSRF, XSS, Webhook/Cron, DSGVO/Frontend). Alle Sweep-8-Fixes verifiziert (alle ~80 halten), zusaetzlich ~50 Findings entdeckt und gefixt — diesmal vor allem Defense-in-Depth + uebersehene Pfade.
+
+**KRITISCH:**
+- **K1 create-pending-booking ohne Coupon-Validation:** `discountAmount`/`productDiscount`/`durationDiscount`/`loyaltyDiscount` flossen ungeprueft aus dem Body in die DB. Im verificationDeferred-Modus konnte ein Angreifer beliebige Werte einreichen → Stripe-Payment-Link mit `unit_amount=0`. Jetzt: Coupon ueber `coupons`-Lookup validiert (active/valid_until/min_order_value), andere Discount-Felder mit `Math.max(0,...)`.
+
+**HOCH:**
+- **kunden/blacklist Owner-Schutz** + Self-Block-Verbot.
+- **employees DELETE Owner-Schutz** (PATCH hatte den schon, DELETE nicht).
+- **UGC-Approve Reorder:** Status-Flip ZUERST, dann Coupon (analog Feature-Endpoint Sweep 8). Vorher konnte Doppelklick zwei UGC-Coupons in DB erzeugen.
+- **daily-report Cron-Lock** (war im Sweep-8-Lock-Sweep uebersehen).
+- **verification-auto-cancel + confirm-extension Refund-Failure-Tracking:** `refund_status='failed_pending_admin'` + Admin-Notification analog cancel-booking Sweep 7 #24.
+- **payment-link-email kompletter Escape-Sweep:** alle User-/DB-Variablen + BUSINESS-Felder mit `escapeHtml`, Subject mit `stripSubject`. Sweep 8 H1-Audit hatte das dokumentiert aber nicht gefixt.
+- **email-template-overrides normalize() Sanitizer:** Read-Pfad ruft jetzt `sanitizeIntroHtml` + Subject-CRLF-Strip auf. Vorher konnten direkte DB-Manipulationen `<script>` in Customer-Mails einschleusen.
+- **shop-content cta_link Validation:** `isAllowedNotificationLink`-Check verhindert `javascript:`/Phishing-URLs im Hero-CTA.
+- **PostgREST `.or()`-Sanitizer in 3 Routen** (`inventar`, `belege`, `scan-lookup`) — verhindert Filter-Injection bei Such-Strings.
+- **EUeR-CSV escapeCsvField:** Excel-Formula-Injection (`=cmd|...`) in Vendor-/Description-Feldern geschlossen.
+- **damage_resolution Subject mit stripSubject** (Sweep 7 #16-Notiz hatte das versprochen, aber nur review_request gefixt).
+- **DSGVO-Cleanup-Cron H2-Bug:** Postgres `< cutoff` matcht NULL nie → pending/rejected Profile blieben fuer immer im Storage. Jetzt: 3 Branches (verified=90d, rejected=sofort, pending=30d).
+- **anonymize-customer audit-log Anonymize:** `admin_audit_log.details` fuer Buchungs-IDs + Customer-Eintraege werden auf `{anonymized:true}` ueberschrieben (DSGVO Art. 17 vollstaendig).
+- **Booking-DELETE Storage-Cleanup:** damage-photos, packing-photos, handover-photos werden mit-geloescht (analog anonymize-customer K12).
+- **/api/admin/damage-photo-url (NEU):** Signed-URL-Endpoint fuer privat-Bucket-Workflow (Admin-UI nutzt zukuenftig statt `getPublicUrl()`).
+- **Google-Reviews Legacy-Key in Header:** vorher `?key=...` → Outbound-Logs.
+- **downloadToFile Allowlist-Check** in Reels-Render: Defense-in-Depth gegen Pre-Sweep-7-Music-Rows mit beliebigen URLs.
+- **packlist + admin/legal/pdf Cache-Control:** Sweep 8 H4 hatte 4 PDF-Routen gefixt — diese 2 wurden uebersehen.
+- **`x-forwarded-host` Allowlist** in `auth/callback` + `social/oauth`: Account-Takeover via Phishing-Header-Spoofing geschlossen.
+- **lib/meta/publisher.ts auf zentralisierte URL-Allowlist** (loeschte lokale Kopie ohne Cloud-Metadata-Block).
+- **2fa/confirm Rate-Limit** (5/h pro Owner): Setup-Spam + Brute-Force bei gestohlenem Cookie geschlossen.
+- **Login Per-Account-Lockout:** zweiter Bucket (10/h pro loginIdentifier) gegen distributed Brute-Force.
+- **lib/audit.ts Forensik + Critical-Action-Notification:** UA wird mit-geloggt; bei DB-Outage und kritischer Aktion (delete/anonymize/env_mode/period/blacklist) wird zusaetzlich `payment_failed`-Notification erzeugt — Audit-Outages werden nicht mehr stillschweigend geschluckt.
+- **cancel-booking Promise.allSettled** statt `Promise.all` (analog Webhook Sweep 8 K1).
+
+**MEDIUM:**
+- ResetConsentButton loescht jetzt auch `cam2rent_vid` + `cam2rent_sid` (DSGVO Art. 7 Abs. 3).
+- Datenschutzerklaerung neue Sektion 8a "Frontend-Fehlerprotokoll" — beschreibt `client_errors`-Tabelle (IP+UA+URL+Stack, 30d Retention).
+- HSTS mit `preload` + max-age 2 Jahre. Permissions-Policy erweitert um geolocation=() + Sensoren + interest-cohort/browsing-topics-Block.
+- email_log-Cleanup mit `setMonth(-24)` statt 24*30 Tage.
+- QrDownloadButton: filename mit `esc()` (war pre-Sweep ungeschuetzt).
+- NotificationDropdown client-side `isSafe`-Pruefung fuer Pre-Sweep-8-Legacy-Notification-Links.
+- `productDiscount`/`durationDiscount`/`loyaltyDiscount` in `confirm-cart` aus Body auf 30%-des-Subtotal gecapt + >= 0.
+- Stripe-Webhook `Math.max(0, ...)` auf alle parseFloat-Preis-Komponenten gegen negative Body-Werte.
+- `/api/validate-coupon` Rueckgabe auf safe-Felder beschraenkt (kein `target_user_email`-Leak mehr).
+
+**Sweep 8 hielt vollstaendig:** Alle 80 Sweep-8-Fixes wurden durch parallele Audit-Agents bestaetigt — keine Regressionen.
+
 ### Security-Audit-Fixes (2026-05-07 Sweep 8 — Tiefen-Audit + alle Fixes)
 Achter Audit-Sweep mit acht parallelen Spezialisten-Agents (TLS/Verschluesselung, Auth/Session/Crypto, Authorization/IDOR, Payment/Stripe, Upload/SSRF/Storage, XSS/Injection/E-Mail, DSGVO/Headers/Logs, Webhook/Cron/Race, Frontend/Client). Sweep 5+6+7 wurden alle verifiziert und halten. Diesmal kein "nur Bericht" — **alle ~80 Findings direkt auf master gefixt** (12 Commit-Batches).
 
