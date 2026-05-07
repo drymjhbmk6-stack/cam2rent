@@ -99,7 +99,7 @@ export default async function BlogArticlePage({ params }: { params: Promise<{ sl
           // Titel mit </script> den JSON-LD-Block aufbrechen und Fremd-JS
           // injizieren (Stored XSS).
           __html: JSON.stringify(jsonLd).replace(
-            /[<>  ]/g,
+            /[<>\u2028\u2029]/g,
             (c) => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'),
           ),
         }}

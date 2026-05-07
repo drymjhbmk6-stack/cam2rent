@@ -106,7 +106,7 @@ async function handle(req: NextRequest) {
     // Sweep 8 H1: TOCTOU-Schutz — wenn Admin in der Zwischenzeit das Gate
     // freigegeben hat oder Status nicht mehr 'confirmed' ist, ueberspringen.
     if (!existing || existing.status !== 'confirmed' || existing.verification_gate_passed_at) {
-      results.push({ id: b.id, action: 'skipped', reason: 'status_changed' });
+      // Status hat sich geaendert — Skip (kein Storno, keine Mail)
       continue;
     }
     const existingNotes = existing.notes ? `${existing.notes} | ` : '';
@@ -127,7 +127,7 @@ async function handle(req: NextRequest) {
       continue;
     }
     if (!updatedRow) {
-      results.push({ id: b.id, action: 'skipped', reason: 'race_lost' });
+      // Race verloren (andere Anfrage hat gerade storniert) — skip
       continue;
     }
 

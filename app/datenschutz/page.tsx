@@ -175,7 +175,7 @@ function DatenschutzFallback() {
               <strong>Meta Platforms Ireland Ltd.</strong> (4 Grand Canal Square, Dublin 2, Irland) — automatisches
               Posten von Marketing-Inhalten auf cam2rent-eigenen Facebook- und Instagram-Kanälen.
               Customer-PII wird nur weitergegeben, wenn Kunden dem ausdrücklich für ihr eingereichtes
-              Material ("UGC") zugestimmt haben. Drittland-Übermittlung in die USA auf Grundlage des
+              Material (&bdquo;UGC&ldquo;) zugestimmt haben. Drittland-Übermittlung in die USA auf Grundlage des
               EU-US Data Privacy Framework.
             </li>
             <li>
