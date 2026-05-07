@@ -289,33 +289,56 @@ export default function NeuerBelegWizard() {
             {/* Positionen */}
             <div>
               <h3 className="text-sm font-semibold mb-2">Positionen</h3>
+              <div className="grid grid-cols-12 gap-2 mb-1 px-1 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">
+                <div className="col-span-4">Bezeichnung</div>
+                <div className="col-span-1 text-center">Menge</div>
+                <div className="col-span-2 text-right">Einzel netto</div>
+                <div className="col-span-2 text-right">Einzel brutto</div>
+                <div className="col-span-2 text-center">MwSt %</div>
+                <div className="col-span-1"></div>
+              </div>
               <div className="space-y-2">
-                {positionen.map((p, idx) => (
+                {positionen.map((p, idx) => {
+                  const factor = 1 + (p.mwst_satz || 0) / 100;
+                  const einzelBrutto = p.einzelpreis_netto * factor;
+                  return (
                   <div key={idx} className="grid grid-cols-12 gap-2 items-center">
                     <input
                       placeholder="Bezeichnung"
                       value={p.bezeichnung}
                       onChange={(e) => setPositionen((prev) => prev.map((pp, i) => i === idx ? { ...pp, bezeichnung: e.target.value } : pp))}
-                      className="col-span-5 bg-[#111827] border border-slate-700 rounded px-2 py-1.5 text-sm"
+                      className="col-span-4 bg-[#111827] border border-slate-700 rounded px-2 py-1.5 text-sm"
                     />
                     <input
                       type="number" min="1"
                       value={p.menge}
                       onChange={(e) => setPositionen((prev) => prev.map((pp, i) => i === idx ? { ...pp, menge: Math.max(1, parseInt(e.target.value || '1', 10)) } : pp))}
-                      className="col-span-1 bg-[#111827] border border-slate-700 rounded px-2 py-1.5 text-sm"
+                      className="col-span-1 bg-[#111827] border border-slate-700 rounded px-2 py-1.5 text-sm text-center"
                     />
                     <input
                       type="number" step="0.01" min="0"
-                      placeholder="Einzelpreis netto"
-                      value={p.einzelpreis_netto}
+                      placeholder="0,00"
+                      value={p.einzelpreis_netto || ''}
                       onChange={(e) => setPositionen((prev) => prev.map((pp, i) => i === idx ? { ...pp, einzelpreis_netto: parseFloat(e.target.value || '0') } : pp))}
-                      className="col-span-3 bg-[#111827] border border-slate-700 rounded px-2 py-1.5 text-sm"
+                      className="col-span-2 bg-[#111827] border border-slate-700 rounded px-2 py-1.5 text-sm text-right"
+                    />
+                    <input
+                      type="number" step="0.01" min="0"
+                      placeholder="0,00"
+                      value={einzelBrutto ? einzelBrutto.toFixed(2) : ''}
+                      onChange={(e) => {
+                        const brutto = parseFloat(e.target.value || '0');
+                        const f = 1 + (p.mwst_satz || 0) / 100;
+                        const netto = f > 0 ? brutto / f : brutto;
+                        setPositionen((prev) => prev.map((pp, i) => i === idx ? { ...pp, einzelpreis_netto: netto } : pp));
+                      }}
+                      className="col-span-2 bg-[#111827] border border-slate-700 rounded px-2 py-1.5 text-sm text-right"
                     />
                     <input
                       type="number" step="0.5" min="0" max="100"
                       value={p.mwst_satz}
-                      onChange={(e) => setPositionen((prev) => prev.map((pp, i) => i === idx ? { ...pp, mwst_satz: parseFloat(e.target.value || '19') } : pp))}
-                      className="col-span-2 bg-[#111827] border border-slate-700 rounded px-2 py-1.5 text-sm"
+                      onChange={(e) => setPositionen((prev) => prev.map((pp, i) => i === idx ? { ...pp, mwst_satz: parseFloat(e.target.value || '0') } : pp))}
+                      className="col-span-2 bg-[#111827] border border-slate-700 rounded px-2 py-1.5 text-sm text-center"
                     />
                     <button
                       onClick={() => setPositionen((prev) => prev.filter((_, i) => i !== idx))}
@@ -323,7 +346,8 @@ export default function NeuerBelegWizard() {
                       className="col-span-1 text-rose-400 hover:text-rose-300 disabled:text-slate-600"
                     >✕</button>
                   </div>
-                ))}
+                  );
+                })}
               </div>
               <button
                 onClick={() => setPositionen((p) => [...p, { bezeichnung: '', menge: 1, einzelpreis_netto: 0, mwst_satz: 19 }])}
