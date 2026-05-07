@@ -99,5 +99,17 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  return NextResponse.json({ coupon });
+  // Sweep 9 MED-3: Nur safe Felder zurueckgeben — vorher floss `target_user_email`
+  // mit raus, was DSGVO-relevant ist (E-Mail einer fremden Person bei
+  // erratenem Coupon-Code).
+  const safeCoupon = {
+    code: coupon.code,
+    type: coupon.type,
+    value: coupon.value,
+    valid_from: coupon.valid_from,
+    valid_until: coupon.valid_until,
+    min_order_value: coupon.min_order_value,
+    description: coupon.description,
+  };
+  return NextResponse.json({ coupon: safeCoupon });
 }

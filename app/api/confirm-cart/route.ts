@@ -471,6 +471,13 @@ export async function POST(req: NextRequest) {
             });
             r_discountAmount = validatedDiscountEur;
           }
+          // Sweep 9 MED-1: productDiscount/durationDiscount/loyaltyDiscount aus
+          // dem Body cappen, damit DB/Rechnung nicht durch negative oder
+          // ueberhoehte Werte verzerrt werden. Cap pro Feld = 30% des Subtotals.
+          const otherCapEur = Math.floor((expectedMinCents * 0.30) / 100);
+          r_productDiscount = Math.max(0, Math.min(Number(r_productDiscount ?? 0), otherCapEur));
+          r_durationDiscount = Math.max(0, Math.min(Number(r_durationDiscount ?? 0), otherCapEur));
+          r_loyaltyDiscount = Math.max(0, Math.min(Number(r_loyaltyDiscount ?? 0), otherCapEur));
           // duration/loyalty maximal 30% on top — uebliche Promo-Range.
           // Beide werden client-seitig berechnet und sind fuer cam2rent
           // keine bekannte Server-Quelle, daher konservativer Cap.

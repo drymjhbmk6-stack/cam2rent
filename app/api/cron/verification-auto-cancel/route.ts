@@ -148,7 +148,25 @@ async function handle(req: NextRequest) {
           { idempotencyKey: `verif-auto-cancel:${b.id}` }
         );
       } catch (refundErr) {
+        // Sweep 9 HOCH-1: Refund-Failure-Tracking (analog cancel-booking Sweep 7 #24).
+        // Vorher nur console.error → bei Stripe-Outage merkt der Admin nie, dass
+        // mehrere 100 EUR an Customers nicht zurueckgeflossen sind.
         console.error(`[verification-auto-cancel] Refund fehlgeschlagen fuer ${b.id}:`, refundErr);
+        try {
+          await supabase
+            .from('bookings')
+            .update({ refund_status: 'failed_pending_admin' })
+            .eq('id', b.id);
+          const { createAdminNotification } = await import('@/lib/admin-notifications');
+          await createAdminNotification(supabase, {
+            type: 'payment_failed',
+            title: `Refund fehlgeschlagen (${b.id})`,
+            message: `Auto-Storno wegen fehlendem Ausweis — Refund konnte nicht ausgefuehrt werden. Bitte manuell pruefen.`,
+            link: `/admin/buchungen/${b.id}`,
+          });
+        } catch (notifyErr) {
+          console.error('[verification-auto-cancel] Notification-Fehler:', notifyErr);
+        }
       }
 
       // Kaution-Vorautorisierung freigeben

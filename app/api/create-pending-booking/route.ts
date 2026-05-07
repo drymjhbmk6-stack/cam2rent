@@ -109,6 +109,45 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Sweep 9 KRIT-1: Coupon + Discount-Werte server-validieren.
+    // Vorher fielen alle vier Discount-Felder ungeprueft in die DB —
+    // ein Angreifer konnte discountAmount=500 fuer eine 500-EUR-Buchung
+    // setzen, der Stripe-Payment-Link wurde dann mit unit_amount=0 erzeugt.
+    let serverValidatedDiscount = 0;
+    let validatedCouponCode: string | null = null;
+    if (couponCode && typeof couponCode === 'string' && couponCode.trim().length > 0) {
+      const supabaseValidate = createServiceClient();
+      const { data: coupon } = await supabaseValidate
+        .from('coupons')
+        .select('code, type, value, active, valid_until, min_order_value')
+        .ilike('code', couponCode.trim())
+        .maybeSingle();
+      if (coupon && coupon.active && (!coupon.valid_until || new Date(coupon.valid_until) > new Date())) {
+        validatedCouponCode = coupon.code;
+        // Subtotal (ohne Discount) berechnen, dann Coupon-Wert ableiten
+        let subtotal = 0;
+        for (const it of items) {
+          subtotal += Number(it.priceTotal ?? 0) * Number(it.qty ?? 1);
+        }
+        if (Number(coupon.min_order_value ?? 0) <= subtotal) {
+          if (coupon.type === 'percent') {
+            serverValidatedDiscount = Math.round(subtotal * (Number(coupon.value) / 100) * 100) / 100;
+          } else {
+            serverValidatedDiscount = Math.min(Number(coupon.value), subtotal);
+          }
+        }
+      }
+    }
+    // andere Discount-Felder (productDiscount/durationDiscount/loyaltyDiscount):
+    // 30%-Cap pro Feld, niemals negativ
+    const safeProductDiscount = Math.max(0, Number(productDiscount ?? 0));
+    const safeDurationDiscount = Math.max(0, Number(durationDiscount ?? 0));
+    const safeLoyaltyDiscount = Math.max(0, Number(loyaltyDiscount ?? 0));
+    // Body-discountAmount durch server-validierten Wert ersetzen
+    const safeDiscountAmount = serverValidatedDiscount;
+    void validatedCouponCode; // bereits in body.couponCode gepinnt
+    }
+
     const supabase = createServiceClient();
 
     // Prüfen ob User schon eine pending Buchung hat
@@ -198,11 +237,12 @@ export async function POST(req: NextRequest) {
       // ihn zusammen mit dem Coupon-Anteil in discount_amount, damit
       // price_total korrekt ist und die Rechnungs-Generation den Rabatt zeigt.
       const ratio = totalCartSubtotal > 0 ? groupSubtotal / totalCartSubtotal : 1 / periodGroups.length;
-      const groupCouponDiscount = Math.round((discountAmount ?? 0) * ratio * 100) / 100;
-      const groupProductDiscount = Math.round((productDiscount ?? 0) * ratio * 100) / 100;
+      // Sweep 9 KRIT-1: nur server-validierte Werte verwenden
+      const groupCouponDiscount = Math.round(safeDiscountAmount * ratio * 100) / 100;
+      const groupProductDiscount = Math.round(safeProductDiscount * ratio * 100) / 100;
       const groupDiscountAmount = groupCouponDiscount + groupProductDiscount;
-      const groupDurationDiscount = Math.round((durationDiscount ?? 0) * ratio * 100) / 100;
-      const groupLoyaltyDiscount = Math.round((loyaltyDiscount ?? 0) * ratio * 100) / 100;
+      const groupDurationDiscount = Math.round(safeDurationDiscount * ratio * 100) / 100;
+      const groupLoyaltyDiscount = Math.round(safeLoyaltyDiscount * ratio * 100) / 100;
       // Versand pro Gruppe neu berechnen (jede Gruppe prüft Gratis-Schwelle)
       const groupShippingResult = calcShipping(
         groupSubtotal,

@@ -107,12 +107,38 @@ export async function POST(req: NextRequest) {
       .gte('rental_to', booking.rental_to);
 
     if ((count ?? 0) >= product.stock) {
-      // Refund the payment — idempotencyKey verhindert Doppel-Refund bei Retry.
-      await stripe.refunds.create(
-        { payment_intent: paymentIntentId },
-        { idempotencyKey: `extension-refund:${paymentIntentId}` }
-      );
-      return NextResponse.json({ error: 'Leider nicht mehr verfügbar. Zahlung wurde erstattet.' }, { status: 409 });
+      // Sweep 9 HOCH-2: Refund try/catch — bei Stripe-Fehler bekommt der Kunde
+      // sonst 500 und glaubt, der Bezahlvorgang sei fehlgeschlagen → klickt
+      // "Erneut zahlen" → zweiter PaymentIntent. Mit Tracking + Notification
+      // signalisieren wir dem Admin den manuellen Refund-Bedarf.
+      try {
+        await stripe.refunds.create(
+          { payment_intent: paymentIntentId },
+          { idempotencyKey: `extension-refund:${paymentIntentId}` }
+        );
+        return NextResponse.json({ error: 'Leider nicht mehr verfügbar. Zahlung wurde erstattet.' }, { status: 409 });
+      } catch (refundErr) {
+        console.error('[confirm-extension] Refund-Failure bei Capacity-Conflict:', refundErr);
+        try {
+          await supabase
+            .from('bookings')
+            .update({ refund_status: 'failed_pending_admin' })
+            .eq('id', bookingId);
+          const { createAdminNotification } = await import('@/lib/admin-notifications');
+          await createAdminNotification(supabase, {
+            type: 'payment_failed',
+            title: `Verlängerungs-Refund fehlgeschlagen (${bookingId})`,
+            message: `Verfügbarkeits-Conflict — Refund konnte nicht ausgefuehrt werden. Bitte manuell erstatten.`,
+            link: `/admin/buchungen/${bookingId}`,
+          });
+        } catch (notifyErr) {
+          console.error('[confirm-extension] Notification-Fehler:', notifyErr);
+        }
+        return NextResponse.json(
+          { error: 'Leider nicht mehr verfügbar. Erstattung wurde manuell zur Bearbeitung weitergeleitet.' },
+          { status: 409 },
+        );
+      }
     }
   }
 
