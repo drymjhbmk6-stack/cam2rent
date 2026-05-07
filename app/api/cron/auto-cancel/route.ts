@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
-import { sendAndLog } from '@/lib/email';
+import { sendAndLog, escapeHtml, stripSubject } from '@/lib/email';
 import { verifyCronAuth } from '@/lib/cron-auth';
+import { acquireCronLock, releaseCronLock } from '@/lib/cron-lock';
 import { createAdminNotification } from '@/lib/admin-notifications';
 import { releaseAccessoryUnitsFromBooking } from '@/lib/accessory-unit-assignment';
 
@@ -18,6 +19,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  const lock = await acquireCronLock('auto-cancel');
+  if (!lock.acquired) {
+    return NextResponse.json({ skipped: 'lock_held', reason: lock.reason });
+  }
+
+  try {
   const supabase = createServiceClient();
   // Heute in Berlin-Zeit — sonst wuerde der Cron zwischen 22-24 Uhr Berlin
   // schon fuer den naechsten Tag stornieren (UTC ist 1-2h zurueck)
@@ -39,17 +46,25 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ cancelled: 0, message: 'Keine Buchungen zu stornieren.' });
   }
 
-  // Batch-Update statt N einzelner UPDATE-Queries
+  // Atomarer Bulk-Update mit Status-Guard: Race-Schutz, falls zwischen
+  // SELECT und UPDATE der Stripe-Webhook eine Zahlung als 'confirmed' geschrieben hat.
+  // Sonst wuerde eine bezahlte Buchung trotzdem auf 'cancelled' gesetzt.
   const allIds = bookings.map((b) => b.id);
-  const { error: bulkUpdateErr } = await supabase
+  const { data: updated, error: bulkUpdateErr } = await supabase
     .from('bookings')
     .update({ status: 'cancelled' })
-    .in('id', allIds);
+    .in('id', allIds)
+    .in('status', ['pending_verification', 'awaiting_payment'])
+    .select('id');
   if (bulkUpdateErr) {
     console.error('Auto-cancel bulk update error:', bulkUpdateErr);
     return NextResponse.json({ error: bulkUpdateErr.message }, { status: 500 });
   }
-  const cancelledIds: string[] = [...allIds];
+  const cancelledIds: string[] = (updated ?? []).map((r) => r.id);
+  // bookings auf die wirklich stornierten reduzieren — wenn eine Buchung
+  // zwischenzeitlich bezahlt wurde, soll sie keine Storno-Mail bekommen.
+  const cancelledSet = new Set(cancelledIds);
+  const cancelledBookings = bookings.filter((b) => cancelledSet.has(b.id));
 
   // Zubehoer-Exemplare aller stornierten Buchungen freigeben (non-blocking,
   // einzeln pro Buchung damit nicht eine Buchung die andere mit-killt)
@@ -58,7 +73,7 @@ export async function GET(req: NextRequest) {
       .catch((err) => console.error('[auto-cancel] accessory-unit release failed', id, err));
   }
 
-  for (const booking of bookings) {
+  for (const booking of cancelledBookings) {
     // Admin-Benachrichtigung (fire-and-forget)
     createAdminNotification(supabase, {
       type: 'booking_cancelled',
@@ -67,11 +82,14 @@ export async function GET(req: NextRequest) {
       link: `/admin/buchungen/${booking.id}`,
     });
 
-    // Kunde informieren
+    // Kunde informieren — alle User-Werte escaped (Audit-Sweep 8: K5)
     if (booking.customer_email) {
+      const safeName = escapeHtml(booking.customer_name || 'dort');
+      const safeId = escapeHtml(booking.id);
+      const safeProduct = escapeHtml(booking.product_name || '');
       sendAndLog({
         to: booking.customer_email,
-        subject: `Buchung ${booking.id} automatisch storniert`,
+        subject: stripSubject(`Buchung ${booking.id} automatisch storniert`),
         html: `
           <div style="font-family: 'DM Sans', Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px 16px;">
             <div style="text-align: center; margin-bottom: 24px;">
@@ -81,8 +99,8 @@ export async function GET(req: NextRequest) {
               Buchung storniert
             </h1>
             <p style="color: #64748b; font-size: 14px; line-height: 1.6;">
-              Hallo ${booking.customer_name || 'dort'},<br/>
-              deine Buchung <strong>${booking.id}</strong> für <strong>${booking.product_name}</strong>
+              Hallo ${safeName},<br/>
+              deine Buchung <strong>${safeId}</strong> für <strong>${safeProduct}</strong>
               wurde automatisch storniert, da keine Zahlung vor dem Mietbeginn eingegangen ist.
             </p>
             <p style="color: #64748b; font-size: 14px; margin-top: 16px;">
@@ -103,4 +121,7 @@ export async function GET(req: NextRequest) {
     cancelled: cancelledIds.length,
     ids: cancelledIds,
   });
+  } finally {
+    await releaseCronLock('auto-cancel');
+  }
 }

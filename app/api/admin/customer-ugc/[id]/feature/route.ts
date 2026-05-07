@@ -52,32 +52,64 @@ export async function POST(req: NextRequest, { params }: { params: Params }) {
 
   const settings = await loadUgcSettings(supabase);
 
+  // Atomarer Status-Flip ZUERST — verhindert Doppel-Coupon bei Doppelklick.
+  // Wir setzen status='featured' bedingt nur wenn Status noch 'approved' ist.
+  // Wenn schon 'featured' (Re-Feature mit anderem Channel), Update OHNE Coupon.
   let bonusCode = submission.bonus_coupon_code;
-  if (!bonusCode && submission.customer_email) {
-    bonusCode = await createUgcCoupon(supabase, {
-      prefix: 'BONUS',
-      submissionId: id,
-      targetEmail: submission.customer_email,
-      discountPercent: settings.feature_discount_percent,
-      minOrderValue: settings.feature_min_order_value,
-      validityDays: settings.feature_validity_days,
-      description: `Feature-Bonus für Kundenmaterial (Buchung ${submission.booking_id})`,
-    });
-  }
+  const isReFeature = submission.status === 'featured';
 
-  const { error: updateErr } = await supabase
-    .from('customer_ugc_submissions')
-    .update({
-      status: 'featured',
-      bonus_coupon_code: bonusCode,
-      featured_at: new Date().toISOString(),
-      featured_channel: channel,
-      featured_reference: reference || null,
-    })
-    .eq('id', id);
+  if (!isReFeature) {
+    // Erstmaliger Feature: atomarer Status-Flip mit Guard
+    const { data: locked, error: lockErr } = await supabase
+      .from('customer_ugc_submissions')
+      .update({
+        status: 'featured',
+        featured_at: new Date().toISOString(),
+        featured_channel: channel,
+        featured_reference: reference || null,
+      })
+      .eq('id', id)
+      .eq('status', 'approved')
+      .select('id')
+      .maybeSingle();
 
-  if (updateErr) {
-    return NextResponse.json({ error: updateErr.message }, { status: 500 });
+    if (lockErr) {
+      return NextResponse.json({ error: lockErr.message }, { status: 500 });
+    }
+    if (!locked) {
+      return NextResponse.json({ error: 'Race-Bedingung — Status hat sich geändert. Bitte Seite neu laden.' }, { status: 409 });
+    }
+
+    // Coupon erst NACH erfolgreichem Status-Flip erstellen — verhindert
+    // Coupon-Erstellung ohne Effekt bei verlorenem Race.
+    if (!bonusCode && submission.customer_email) {
+      bonusCode = await createUgcCoupon(supabase, {
+        prefix: 'BONUS',
+        submissionId: id,
+        targetEmail: submission.customer_email,
+        discountPercent: settings.feature_discount_percent,
+        minOrderValue: settings.feature_min_order_value,
+        validityDays: settings.feature_validity_days,
+        description: `Feature-Bonus für Kundenmaterial (Buchung ${submission.booking_id})`,
+      });
+      // Coupon-Code im Datensatz nachreichen
+      await supabase
+        .from('customer_ugc_submissions')
+        .update({ bonus_coupon_code: bonusCode })
+        .eq('id', id);
+    }
+  } else {
+    // Re-Feature: nur Channel/Reference aktualisieren, kein neuer Coupon
+    const { error: updateErr } = await supabase
+      .from('customer_ugc_submissions')
+      .update({
+        featured_channel: channel,
+        featured_reference: reference || null,
+      })
+      .eq('id', id);
+    if (updateErr) {
+      return NextResponse.json({ error: updateErr.message }, { status: 500 });
+    }
   }
 
   if (bonusCode && submission.customer_email) {

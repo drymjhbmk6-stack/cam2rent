@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { verifyCronAuth } from '@/lib/cron-auth';
+import { acquireCronLock, releaseCronLock } from '@/lib/cron-lock';
 import { autoPost } from '@/lib/meta/auto-post';
 import { isTestMode } from '@/lib/env-mode';
 import { shouldPublishInTestMode } from '@/lib/test-mode-publish';
@@ -21,6 +22,12 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  const lock = await acquireCronLock('blog-publish');
+  if (!lock.acquired) {
+    return NextResponse.json({ skipped: 'lock_held', reason: lock.reason });
+  }
+
+  try {
   const supabase = createServiceClient();
   const now = new Date().toISOString();
 
@@ -175,4 +182,7 @@ export async function POST(req: NextRequest) {
     posts: allPublished,
     fixed: fixedPosts.length,
   });
+  } finally {
+    await releaseCronLock('blog-publish');
+  }
 }

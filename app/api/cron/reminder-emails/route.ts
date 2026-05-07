@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { verifyCronAuth } from '@/lib/cron-auth';
+import { acquireCronLock, releaseCronLock } from '@/lib/cron-lock';
 import {
   sendReturnReminder,
   sendReturnDueToday,
@@ -47,6 +48,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  const lock = await acquireCronLock('reminder-emails');
+  if (!lock.acquired) {
+    return NextResponse.json({ skipped: 'lock_held', reason: lock.reason });
+  }
+
+  try {
   const supabase = createServiceClient();
   const results: SendResult[] = [];
 
@@ -187,4 +194,7 @@ export async function GET(req: NextRequest) {
     summary: { sent, failed, total: results.length },
     details: results,
   });
+  } finally {
+    await releaseCronLock('reminder-emails');
+  }
 }

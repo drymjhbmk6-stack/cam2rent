@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { sendAbandonedCartReminder } from '@/lib/email';
 import { verifyCronAuth } from '@/lib/cron-auth';
+import { acquireCronLock, releaseCronLock } from '@/lib/cron-lock';
 
 /**
  * GET /api/cron/abandoned-cart
@@ -12,6 +13,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Nicht autorisiert.' }, { status: 401 });
   }
 
+  const lock = await acquireCronLock('abandoned-cart');
+  if (!lock.acquired) {
+    return NextResponse.json({ skipped: 'lock_held', reason: lock.reason });
+  }
+
+  try {
   const supabase = createServiceClient();
 
   // Einstellungen laden
@@ -123,4 +130,7 @@ export async function GET(req: NextRequest) {
   }
 
   return NextResponse.json({ sent, total: carts.length, errors });
+  } finally {
+    await releaseCronLock('abandoned-cart');
+  }
 }

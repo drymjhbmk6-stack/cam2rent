@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { verifyCronAuth } from '@/lib/cron-auth';
+import { acquireCronLock, releaseCronLock } from '@/lib/cron-lock';
 import {
   monthlyDepreciationRate,
   pendingDepreciationMonths,
@@ -53,6 +54,12 @@ async function runDepreciation(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  const lock = await acquireCronLock('depreciation');
+  if (!lock.acquired) {
+    return NextResponse.json({ skipped: 'lock_held', reason: lock.reason });
+  }
+
+  try {
   const supabase = createServiceClient();
   const testMode = await isTestMode();
 
@@ -189,6 +196,9 @@ async function runDepreciation(req: NextRequest) {
     total_assets: assets?.length ?? 0,
     results,
   });
+  } finally {
+    await releaseCronLock('depreciation');
+  }
 }
 
 function lastDayOfMonthIso(yyyyMm: string): string {

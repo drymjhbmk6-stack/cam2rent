@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { verifyCronAuth } from '@/lib/cron-auth';
+import { acquireCronLock, releaseCronLock } from '@/lib/cron-lock';
 import { isTestMode } from '@/lib/env-mode';
 import { shouldPublishInTestMode } from '@/lib/test-mode-publish';
 import { publishReel } from '@/lib/reels/publisher';
@@ -30,6 +31,12 @@ async function handle(req: NextRequest) {
     // sonst durchlaufen lassen
   }
 
+  const lock = await acquireCronLock('reels-publish');
+  if (!lock.acquired) {
+    return NextResponse.json({ skipped: 'lock_held', reason: lock.reason });
+  }
+
+  try {
   const supabase = createServiceClient();
   const now = new Date().toISOString();
 
@@ -90,6 +97,9 @@ async function handle(req: NextRequest) {
   }
 
   return NextResponse.json({ processed: results.length, results });
+  } finally {
+    await releaseCronLock('reels-publish');
+  }
 }
 
 export async function GET(req: NextRequest) { return handle(req); }

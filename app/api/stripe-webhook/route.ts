@@ -15,6 +15,10 @@ import { parseMetadataAccessoryItems, itemsToLegacyIds } from '@/lib/booking-acc
 import { assignUnitToBooking } from '@/lib/unit-assignment';
 import { assignAccessoryUnitsToBooking } from '@/lib/accessory-unit-assignment';
 
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+export const maxDuration = 30;
+
 /**
  * Vergleicht die Summe einzelner Preiskomponenten gegen den von Stripe
  * signierten Gesamtbetrag. Eine Abweichung > 5 Cent deutet auf manipulierte
@@ -72,6 +76,29 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     console.error('Webhook-Signatur ungueltig:', err);
     return NextResponse.json({ error: 'Ungueltige Signatur.' }, { status: 400 });
+  }
+
+  // event.id-basierter Replay-Schutz: Stripe garantiert at-least-once Delivery.
+  // Bei Retry/Replay wuerde unsere Verarbeitung zweimal laufen (Doppel-Mails,
+  // Doppel-Buchung wenn payment_intent_id-Lookup zwischen den beiden Events
+  // racet). admin_settings nutzen wir hier als simpler Idempotency-Store —
+  // Eintrag wird beim ersten Verarbeiten angelegt, beim zweiten sofort 200.
+  try {
+    const sbDedupe = createServiceClient();
+    const { error: dupErr } = await sbDedupe
+      .from('admin_settings')
+      .insert({ key: `stripe_event_${event.id}`, value: { processed_at: new Date().toISOString(), type: event.type } });
+    if (dupErr) {
+      // 23505 = unique violation → Event wurde schon verarbeitet
+      if (dupErr.code === '23505') {
+        return NextResponse.json({ received: true, duplicate: true });
+      }
+      // Andere Fehler nicht fatal: weiter machen, Idempotenz haengt dann
+      // an den restlichen Prufungen (z.B. payment_intent_id-Lookup).
+      console.warn('[Webhook] Dedupe-Insert Fehler (nicht-fatal):', dupErr.message);
+    }
+  } catch (e) {
+    console.warn('[Webhook] Dedupe-Check fehlgeschlagen (nicht-fatal):', e);
   }
 
   if (event.type === 'payment_intent.succeeded') {
@@ -158,13 +185,23 @@ export async function POST(req: NextRequest) {
         .single();
 
       if (booking && (booking.status === 'awaiting_payment' || booking.status === 'pending_verification')) {
-        await supabase
+        // Atomarer Status-Flip mit Guard — Schutz vor Doppel-Verarbeitung
+        // wenn checkout.session.completed + async_payment_succeeded
+        // schnell hintereinander ankommen.
+        const { data: updated } = await supabase
           .from('bookings')
           .update({
             status: 'confirmed',
             payment_intent_id: session.payment_intent as string ?? session.id,
           })
-          .eq('id', meta.booking_id);
+          .eq('id', meta.booking_id)
+          .in('status', ['awaiting_payment', 'pending_verification'])
+          .select('id')
+          .maybeSingle();
+        if (!updated) {
+          // Race verloren — Buchung wurde schon vom Schwester-Event auf 'confirmed' gesetzt
+          return NextResponse.json({ received: true, already_confirmed: true });
+        }
 
         console.log(`[Webhook] Pending-Buchung ${meta.booking_id} nach Zahlung bestätigt.`);
 
@@ -367,10 +404,19 @@ async function handleSingleBooking(
       taxRate: tax.taxRate,
       ustId: tax.ustId,
     };
-    Promise.all([
+    // Sweep 8: Promise.allSettled statt Promise.all, damit ein Fehler in der
+    // Customer-Mail nicht die Admin-Notification mit-killt (oder umgekehrt).
+    Promise.allSettled([
       sendBookingConfirmation(emailData),
       sendAdminNotification(emailData),
-    ]).catch((err) => console.error('[Webhook] Email-Fehler:', err));
+    ]).then((results) => {
+      results.forEach((r, i) => {
+        if (r.status === 'rejected') {
+          const which = i === 0 ? 'BookingConfirmation' : 'AdminNotification';
+          console.error(`[Webhook] ${which} fehlgeschlagen:`, r.reason);
+        }
+      });
+    });
   }
 }
 
