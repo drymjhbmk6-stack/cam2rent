@@ -423,7 +423,7 @@ export default function AdminSetsPage() {
                 <tbody>
                   {groupedSets.map(([groupName, groupSets]) => (
                     <React.Fragment key={groupName}>
-                      <tr className="bg-brand-bg/60 dark:bg-slate-800/70 border-b border-brand-border dark:border-slate-700">
+                      <tr className="bg-slate-100 dark:bg-slate-800 border-b border-brand-border dark:border-slate-700">
                         <td colSpan={4} className="px-4 py-2 text-[11px] font-heading font-bold uppercase tracking-wider text-brand-steel dark:text-slate-200">
                           {groupName} <span className="text-brand-muted dark:text-slate-400 font-body normal-case tracking-normal ml-1">({groupSets.length} {groupSets.length === 1 ? 'Set' : 'Sets'})</span>
                         </td>
@@ -435,7 +435,7 @@ export default function AdminSetsPage() {
 
                         return (
                           <React.Fragment key={set.id}>
-                            <tr className={`border-b border-brand-border dark:border-slate-700 last:border-b-0 transition-colors ${isExpanded ? 'bg-brand-bg/40 dark:bg-slate-800/40' : 'hover:bg-brand-bg/40 dark:hover:bg-slate-800/40'}`}>
+                            <tr className={`border-b border-brand-border dark:border-slate-700 last:border-b-0 transition-colors ${isExpanded ? 'bg-slate-50 dark:bg-slate-800/60' : 'hover:bg-slate-50 dark:hover:bg-slate-800/60'}`}>
                               {/* Set: Bild + Name + Badges */}
                               <td className="px-4 py-3 align-top">
                                 <div className="flex items-start gap-3">
@@ -521,7 +521,7 @@ export default function AdminSetsPage() {
 
                   {/* Edit Panel */}
                   {isExpanded && e && (
-                    <tr className="bg-brand-bg/40 dark:bg-slate-800/40 border-b border-brand-border dark:border-slate-700">
+                    <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-brand-border dark:border-slate-700">
                       <td colSpan={4} className="px-5 py-5">
                        <div className="space-y-5">
                       {/* Grunddaten */}

@@ -126,7 +126,7 @@ export default function AdminKameraListePage() {
                 <tbody>
                   {groupedProducts.map(([brand, brandProducts]) => (
                     <React.Fragment key={brand}>
-                      <tr className="bg-brand-bg/60 dark:bg-slate-800/70 border-b border-brand-border dark:border-slate-700">
+                      <tr className="bg-slate-100 dark:bg-slate-800 border-b border-brand-border dark:border-slate-700">
                         <td colSpan={4} className="px-4 py-2 text-[11px] font-heading font-bold uppercase tracking-wider text-brand-steel dark:text-slate-200">
                           {brand} <span className="text-brand-muted dark:text-slate-400 font-body normal-case tracking-normal ml-1">({brandProducts.length} {brandProducts.length === 1 ? 'Kamera' : 'Kameras'})</span>
                         </td>
@@ -134,7 +134,7 @@ export default function AdminKameraListePage() {
                       {brandProducts.map((p) => (
                         <tr
                           key={p.id}
-                          className="border-b border-brand-border dark:border-slate-700 last:border-b-0 transition-colors hover:bg-brand-bg/40 dark:hover:bg-slate-800/40"
+                          className="border-b border-brand-border dark:border-slate-700 last:border-b-0 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/60"
                         >
                           {/* Name + Brand */}
                           <td className="px-4 py-3 align-top">

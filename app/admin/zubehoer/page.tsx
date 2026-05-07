@@ -598,7 +598,7 @@ export default function AdminZubehoerPage() {
                       ) : (
                         groups.map(({ category, items }) => (
                           <React.Fragment key={category}>
-                            <tr className="bg-brand-bg/60 dark:bg-slate-800/70 border-b border-brand-border dark:border-slate-700">
+                            <tr className="bg-slate-100 dark:bg-slate-800 border-b border-brand-border dark:border-slate-700">
                               <td colSpan={5} className="px-4 py-2 text-[11px] font-heading font-bold uppercase tracking-wider text-brand-steel dark:text-slate-200">
                                 {category} <span className="text-brand-muted dark:text-slate-400 font-body normal-case tracking-normal ml-1">({items.length})</span>
                               </td>
@@ -673,7 +673,7 @@ function AccessoryRow({ acc, isOpen, isInternal, savedId, deletingId, productLis
   return (
     <tr
       id={`acc-card-${acc.id}`}
-      className={`border-b border-brand-border dark:border-slate-700 last:border-b-0 scroll-mt-20 transition-colors ${isOpen ? 'bg-brand-bg/40 dark:bg-slate-800/40' : 'hover:bg-brand-bg/40 dark:hover:bg-slate-800/40'}`}
+      className={`border-b border-brand-border dark:border-slate-700 last:border-b-0 scroll-mt-20 transition-colors ${isOpen ? 'bg-slate-50 dark:bg-slate-800/60' : 'hover:bg-slate-50 dark:hover:bg-slate-800/60'}`}
     >
       {/* Name */}
       <td className={`px-4 py-3 align-top ${isInternal ? 'border-l-2 border-amber-300 dark:border-amber-400' : ''}`}>
@@ -778,7 +778,7 @@ function AccessoryEditRow({ acc, editForm, setEditForm, savingId, productList, o
   onSave: (id: string) => void;
 }) {
   return (
-    <tr className="bg-brand-bg/40 dark:bg-slate-800/40 border-b border-brand-border dark:border-slate-700">
+    <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-brand-border dark:border-slate-700">
       <td colSpan={5} className="px-5 py-5">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
