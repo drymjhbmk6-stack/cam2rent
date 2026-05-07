@@ -3,6 +3,13 @@ import { createServiceClient } from '@/lib/supabase';
 import { verifyToken } from '@/lib/totp';
 import { logAudit } from '@/lib/audit';
 import { getCurrentAdminUser } from '@/lib/admin-auth';
+import { rateLimit } from '@/lib/rate-limit';
+
+// Sweep 8 H7: TOTP-Code-Brute-Force-Schutz. Ohne Rate-Limit kann ein
+// Angreifer mit gestohlenem Owner-Cookie 1 Mio 6-stellige Codes durchprobieren
+// und 2FA disablen. 10 Versuche pro Stunde reichen — der echte Owner braucht
+// max 1-2 Versuche (Authenticator zeigt klaren Code).
+const totpLimiter = rateLimit({ maxAttempts: 10, windowMs: 60 * 60 * 1000 });
 
 /**
  * POST /api/admin/2fa/disable
@@ -16,6 +23,15 @@ export async function POST(req: NextRequest) {
     const me = await getCurrentAdminUser();
     if (!me || me.role !== 'owner') {
       return NextResponse.json({ error: 'Nur Owner dürfen 2FA verwalten.' }, { status: 403 });
+    }
+
+    // Pro Owner-User-ID rate-limiten — gestohlenes Cookie kann nicht mehr brute-forcen
+    const { success } = totpLimiter.check(`2fa-disable:${me.id}`);
+    if (!success) {
+      return NextResponse.json(
+        { error: 'Zu viele Versuche. Bitte spaeter erneut versuchen.' },
+        { status: 429 }
+      );
     }
 
     const { token } = (await req.json()) as { token: string };

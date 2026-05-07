@@ -87,6 +87,16 @@ export async function DELETE(req: NextRequest) {
   const name = new URL(req.url).searchParams.get('name');
   if (!name) return NextResponse.json({ error: 'Name erforderlich.' }, { status: 400 });
 
+  // Sweep 8 M5: Path-Traversal-Schutz. Vorher konnte ein content-Mitarbeiter
+  // mit 'name=../social-crop-xyz.jpg' fremde Bilder im Bucket loeschen.
+  // Whitelist: nur einfacher Filename ohne Slashes/dot-dot-Sequenzen.
+  if (name.includes('..') || name.includes('/') || name.includes('\\')) {
+    return NextResponse.json({ error: 'Ungueltiger Dateiname.' }, { status: 400 });
+  }
+  if (!/^[a-zA-Z0-9_.-]+\.(jpg|jpeg|png|webp)$/i.test(name)) {
+    return NextResponse.json({ error: 'Dateiformat nicht erlaubt.' }, { status: 400 });
+  }
+
   const supabase = createServiceClient();
   const { error } = await supabase.storage.from('blog-images').remove([name]);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

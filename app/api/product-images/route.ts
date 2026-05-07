@@ -88,6 +88,16 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: 'path erforderlich.' }, { status: 400 });
     }
 
+    // Sweep 8 M3: Path-Traversal-Schutz. Vorher konnte ein Mitarbeiter mit
+    // 'katalog'-Permission beliebige Files im Bucket loeschen — auch Set-
+    // oder Zubehoer-Bilder. Format ist '<productId>/<random>.webp'.
+    if (path.includes('..') || path.startsWith('/') || path.startsWith('sets/') || path.startsWith('accessories/')) {
+      return NextResponse.json({ error: 'Ungueltiger Pfad.' }, { status: 400 });
+    }
+    if (!/^[a-z0-9_-]+\/[a-z0-9_.-]+\.(webp|jpg|jpeg|png)$/i.test(path)) {
+      return NextResponse.json({ error: 'Pfadformat nicht erlaubt.' }, { status: 400 });
+    }
+
     const supabase = createServiceClient();
     const { error } = await supabase.storage.from(BUCKET).remove([path]);
 

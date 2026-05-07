@@ -123,6 +123,9 @@ export async function GET(
               'Content-Type': 'application/pdf',
               'Content-Length': String(pdfBytes.length),
               'Content-Disposition': `inline; filename="Mietvertrag-${contractNumber}.pdf"`,
+              // Sweep 8 H4: Vertrags-PDF enthaelt PII + Unterschrift
+              'Cache-Control': 'private, no-store, no-cache, must-revalidate',
+              'Pragma': 'no-cache',
             },
           });
         } catch {
@@ -282,6 +285,9 @@ export async function GET(
       'Content-Type': 'application/pdf',
       'Content-Length': String(pdfBytes.length),
       'Content-Disposition': `inline; filename="Mietvertrag-${contractNumber}.pdf"`,
+      // Sweep 8 H4: Vertrag enthaelt PII
+      'Cache-Control': 'private, no-store, no-cache, must-revalidate',
+      'Pragma': 'no-cache',
     },
   });
 }

@@ -173,6 +173,10 @@ export async function GET(
       'Content-Type': 'application/pdf',
       'Content-Length': String(pdfBytes.length),
       'Content-Disposition': `inline; filename="${filename}"`,
+      // Sweep 8 H4: Rechnungs-PDF enthaelt PII (Name, Adresse, Bankdaten, IBAN-QR).
+      // Kein CDN-Cache, kein Browser-Cache auf Shared-Geraeten.
+      'Cache-Control': 'private, no-store, no-cache, must-revalidate',
+      'Pragma': 'no-cache',
     },
   });
 }

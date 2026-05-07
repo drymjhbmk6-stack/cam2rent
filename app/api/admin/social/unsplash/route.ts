@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { detectImageType, isAllowedImage } from '@/lib/file-type-check';
 
 /**
  * Erlaubt nur Unsplash-eigene Hosts. Verhindert SSRF und Schluessel-Exfiltration
@@ -138,12 +139,23 @@ export async function POST(req: NextRequest) {
   }
 
   const buffer = Buffer.from(await imageRes.arrayBuffer());
-  const filename = `social-unsplash-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
+
+  // Sweep 8 M2: Magic-Byte-Check vor Storage-Upload. Vorher haben wir
+  // Unsplash blind vertraut + hartcoded image/jpeg. Wenn Unsplash je eine
+  // SVG/HTML-Antwort liefert, wuerde sie als image/jpeg im public Bucket
+  // landen.
+  if (!isAllowedImage(buffer, ['jpeg', 'png', 'webp'])) {
+    return NextResponse.json({ error: 'Inhalt ist kein erlaubtes Bildformat.' }, { status: 502 });
+  }
+  const detectedType = detectImageType(buffer);
+  const ext = detectedType === 'jpeg' ? 'jpg' : detectedType ?? 'jpg';
+  const contentType = detectedType ? `image/${detectedType}` : 'image/jpeg';
+  const filename = `social-unsplash-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
 
   const supabase = createServiceClient();
   const { error: uploadError } = await supabase.storage
     .from('blog-images')
-    .upload(filename, buffer, { contentType: 'image/jpeg', upsert: false });
+    .upload(filename, buffer, { contentType, upsert: false });
 
   if (uploadError) {
     return NextResponse.json({ error: uploadError.message }, { status: 500 });

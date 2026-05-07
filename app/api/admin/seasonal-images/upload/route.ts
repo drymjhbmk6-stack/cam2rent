@@ -78,7 +78,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Bild konnte nicht heruntergeladen werden.' }, { status: 500 });
     }
     buffer = Buffer.from(await imageRes.arrayBuffer());
-    filename = `seasonal-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
+
+    // Sweep 8 M1: Magic-Byte-Check fuer Unsplash-Antworten — vorher hart
+    // image/jpeg gesetzt ohne Verifizierung des heruntergeladenen Buffers.
+    const detectedFromUnsplash = detectImageType(buffer);
+    if (!detectedFromUnsplash || !['jpeg', 'png', 'webp'].includes(detectedFromUnsplash)) {
+      return NextResponse.json({ error: 'Unsplash-Antwort ist kein erlaubtes Bildformat.' }, { status: 502 });
+    }
+    const ext = detectedFromUnsplash === 'jpeg' ? 'jpg' : detectedFromUnsplash;
+    contentType = `image/${detectedFromUnsplash}`;
+    filename = `seasonal-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
   } else if (body.base64) {
     // Custom Upload (Base64) — Magic-Byte-Check + Allowlist-MIME, sonst koennte
     // ein Mitarbeiter Content-Type frei setzen und z.B. text/html in den

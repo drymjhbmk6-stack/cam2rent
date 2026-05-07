@@ -243,6 +243,7 @@ function PreviewModal({ id, onClose }: { id: string; onClose: () => void }) {
           src={`/api/admin/email-templates/preview?id=${encodeURIComponent(id)}`}
           className="flex-1 w-full bg-white"
           title="E-Mail-Vorschau"
+          sandbox=""
         />
       </div>
     </div>
@@ -426,6 +427,7 @@ function EditModal({
               className="w-full bg-white rounded-xl"
               style={{ border: '1px solid #1e293b', height: '60vh' }}
               title="Live-Vorschau"
+              sandbox=""
             />
           )}
         </div>

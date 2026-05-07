@@ -90,6 +90,17 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: 'path und setId erforderlich.' }, { status: 400 });
     }
 
+    // Sweep 8 M3: Path-Traversal-Schutz + setId-Whitelist + Pfad muss
+    // mit 'sets/<setId>/' beginnen (sonst konnte Mitarbeiter beliebige
+    // Bilder im Bucket loeschen).
+    if (!/^[a-z0-9_-]{1,80}$/i.test(setId)) {
+      return NextResponse.json({ error: 'Ungueltige setId.' }, { status: 400 });
+    }
+    const expectedPrefix = `sets/${setId}/`;
+    if (path.includes('..') || !path.startsWith(expectedPrefix)) {
+      return NextResponse.json({ error: 'Pfad gehoert nicht zum Set.' }, { status: 400 });
+    }
+
     const supabase = createServiceClient();
     await supabase.storage.from(BUCKET).remove([path]);
     await supabase.from('sets').update({ image_url: null }).eq('id', setId);
