@@ -382,6 +382,9 @@ Manche Zubehöre bestehen physisch aus mehreren Teilen (z.B. Funkmikrofon-Set: 2
 - **Packliste-PDF** (`lib/packlist-pdf.tsx`): `resolvedItems[].included_parts` wird unter dem Item-Namen als 8pt-grauer Text „Enthält: 2× Sender · 1× Windschutz" gerendert (`wrap={false}` damit Zeile zusammen bleibt).
 - **Was nicht passiert:** Keine eigenen `accessory_units`, keine Verfügbarkeitsprüfung, keine eigenen Scan-Codes, keine Auswirkung auf den Lagerbestand. Bestandteile sind reine Zusatzanzeige.
 
+### Zubehör-Admin Layout (Stand 2026-05-07)
+`/admin/zubehoer` ist jetzt eine Tabellen-Ansicht statt 2-Spalten-Karten-Grid. Zwei Tabs oben: „Buchbar für Kunden (N)" + „Intern (M)" mit grünem/amber Punkt. Aktiver Tab bestimmt den Tabellen-Inhalt. Pro Tab werden die Items nach Kategorie gruppiert (Group-Header-Zeile mit Kategorie + Anzahl). Spalten: Name | Kategorie | Preis | Kompatibilität | Aktionen. Kategorie- und Kompatibilitäts-Spalten sind responsive ausgeblendet (`md:`/`lg:table-cell`); auf Mobile rutschen Kategorie-Pill + Kompat-Tags unter den Namen. Container von `max-w-6xl` auf `max-w-7xl` aufgeweitet. Edit-Modus expandiert eine zweite `<tr>` direkt unter der Item-Zeile (`<td colSpan={5}>`) mit dem **kompletten bisherigen Edit-Panel-Inhalt 1:1** — alle Felder, `IncludedPartsEditor`, `SpecFields`, `AccessoryUnitsManager`, Sammel-QR-Sektion, Bild-Upload, Buttons unverändert. Intern-Tab markiert die Name-Spalte mit einem dezenten amber Border-Left. Kategorie-Filter-Pills wirken zusätzlich. Reine Layout-Änderung, alle Handler/State/API-Calls/Form-Felder identisch.
+
 ### Verfügbarkeit + Gantt-Kalender
 - **Gantt-Kalender** (`/admin/verfuegbarkeit`): Alle 3 Tabs (Kameras, Zubehör, Sets) mit Gantt-Ansicht
   - **Durchgehend scrollbar:** 3 Monate zurück + 6 Monate voraus (kein Monatswechsel nötig)
