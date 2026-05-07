@@ -61,6 +61,7 @@ export async function GET(req: NextRequest) {
   const incomeTotal = rental + accessories + haftung + shipping - discounts;
 
   // Ausgaben (inkl. Detail-Items pro Kategorie fuer aufklappbare Ansicht)
+  // Quelle 1: alte expenses-Tabelle (Stripe-Gebuehren-Import, migrierte Altdaten)
   const { data: expenses } = await supabase
     .from('expenses')
     .select('id, category, gross_amount, description, vendor, expense_date')
@@ -89,6 +90,66 @@ export async function GET(req: NextRequest) {
       vendor: exp.vendor ?? '',
       amount: exp.gross_amount || 0,
     });
+  }
+
+  // Quelle 2: beleg_positionen aus der NEUEN Buchhaltungs-Welt
+  // (Konsolidierungs-Refactor 2026-05-05). Festgeschriebene Belege mit
+  // Klassifizierung='ausgabe' fliessen direkt in die EÜR.
+  // AfA/GWG-Positionen erzeugen separate Asset/Afa-Eintraege und werden
+  // hier NICHT mitgezaehlt (sonst Doppel-Buchung).
+  try {
+    const { data: belegPositionen } = await supabase
+      .from('beleg_positionen')
+      .select(`
+        id, bezeichnung, gesamt_brutto, kategorie, ki_vorschlag,
+        beleg:belege!inner(id, beleg_datum, status, is_test, lieferant:lieferanten(name))
+      `)
+      .eq('klassifizierung', 'ausgabe')
+      .order('reihenfolge');
+
+    type RawPos = {
+      id: string;
+      bezeichnung: string;
+      gesamt_brutto: number;
+      kategorie: string | null;
+      ki_vorschlag: { kategorie?: string } | null;
+      // PostgREST liefert nested joins als Array (auch bei !inner) oder Objekt
+      beleg: unknown;
+    };
+    for (const pos of ((belegPositionen ?? []) as unknown as RawPos[])) {
+      const belegRaw = pos.beleg;
+      const beleg = (Array.isArray(belegRaw) ? belegRaw[0] : belegRaw) as
+        | { id: string; beleg_datum: string; status: string; is_test: boolean; lieferant: unknown }
+        | null
+        | undefined;
+      if (!beleg) continue;
+      // Filter: nur festgeschriebene Belege, nicht-Test, im Zeitraum
+      if (beleg.status !== 'festgeschrieben') continue;
+      if (beleg.is_test) continue;
+      if (beleg.beleg_datum < from || beleg.beleg_datum > to) continue;
+
+      const lieferantRaw = beleg.lieferant;
+      const lieferant = (Array.isArray(lieferantRaw) ? lieferantRaw[0] : lieferantRaw) as
+        | { name: string }
+        | null
+        | undefined;
+
+      // Kategorie: explizit gesetzt > KI-Vorschlag > Fallback
+      const cat = pos.kategorie || pos.ki_vorschlag?.kategorie || 'other';
+      const amount = Number(pos.gesamt_brutto || 0);
+      categoryTotals[cat] = (categoryTotals[cat] || 0) + amount;
+      if (!categoryItems[cat]) categoryItems[cat] = [];
+      categoryItems[cat].push({
+        id: pos.id,
+        date: beleg.beleg_datum,
+        description: pos.bezeichnung,
+        vendor: lieferant?.name ?? '',
+        amount,
+      });
+    }
+  } catch (err) {
+    console.error('[EÜR] beleg_positionen lesen fehlgeschlagen:', err);
+    // defensiv — wenn Tabelle fehlt, läuft EÜR mit nur expenses + stripe weiter
   }
 
   // Stripe-Gebühren automatisch hinzufügen (einzelne Transaktionen als Posten)
