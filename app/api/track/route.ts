@@ -36,6 +36,13 @@ export async function POST(req: NextRequest) {
   const ua = req.headers.get('user-agent') ?? '';
   if (BOT_REGEX.test(ua)) return NextResponse.json({ ok: true });
 
+  // Admin-Self-Exclude: wenn Cookie cam2rent_no_track=1 gesetzt ist (z.B. vom
+  // Admin selbst beim Testen seiner eigenen Seite) → stumm verwerfen.
+  // Cookie wird per UI in /admin/einstellungen gesetzt und hält 1 Jahr.
+  if (req.cookies.get('cam2rent_no_track')?.value === '1') {
+    return NextResponse.json({ ok: true, skipped: 'admin' });
+  }
+
   const body = await req.json().catch(() => null);
   if (!body?.visitor_id || !body?.path) return NextResponse.json({ ok: false });
 

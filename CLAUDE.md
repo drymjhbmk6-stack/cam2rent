@@ -1170,6 +1170,14 @@ Kritischer Fix: `new Date().setHours(0,0,0,0).toISOString()` verschiebt das Datu
 - **Timezone-Bug** in 3 Stellen (live/today/bookings) behoben, nutzt jetzt `getBerlinDayStartISO()`
 - **Track-Endpoint loggt DB-Fehler** (vorher silent catch) — bei fehlender Tabelle / RLS-Problem sofort in Coolify-Logs sichtbar
 
+### Analytics-Self-Exclude für Admin (Stand 2026-05-07)
+Admin-Test-Besuche der Live-Seite verfälschten die Analytics. Toggle in `/admin/einstellungen` (Sektion 10 „Eigene Besuche aus Analytics ausschließen") setzt pro Browser/Gerät zwei Marker, die das Tracking unterdrücken — Schalter halt 1 Jahr.
+- **Marker:** localStorage `cam2rent_no_track='1'` + Cookie `cam2rent_no_track=1; max-age=1y; samesite=lax`. Beide werden client-seitig von der Komponente gesetzt/gelöscht.
+- **Client-Skip:** `components/PageTracker.tsx` — zusätzlicher Check direkt nach dem Consent-Check. Kein Network-Call, spart sogar Bandbreite.
+- **Server-Skip:** `app/api/track/route.ts` — Cookie-Check vor DB-Insert; Response `{ ok: true, skipped: 'admin' }`. Schützt auch wenn localStorage manipuliert wurde oder Tracking via anderem Endpoint läuft.
+- **UI:** `components/admin/AnalyticsOptOutSection.tsx` — Toggle-Switch. Pro Browser einmalig zu aktivieren (Hinweis im UI). Bei Cache-/Cookie-Löschung muss erneut aktiviert werden.
+- **Was nicht passiert:** Bestehende Datensätze in `page_views` werden NICHT rückwirkend gefiltert — nur neue Besuche ab Aktivierung werden ausgeschlossen.
+
 ## Blog-System (KI-automatisiert)
 Vollautomatisches Blog-System mit Redaktionsplan, KI-Generierung und Cron-Jobs.
 Ausführliche Dokumentation: `BLOG_SYSTEM_DOCS.md`

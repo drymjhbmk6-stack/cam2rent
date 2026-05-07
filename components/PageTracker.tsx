@@ -20,6 +20,9 @@ export default function PageTracker() {
         // bekommen hat. Default: kein Tracking, keine localStorage-IDs.
         if (localStorage.getItem('cam2rent_consent') !== 'all') return;
         if (pathname.startsWith('/admin')) return;
+        // Admin-Self-Exclude: Toggle in /admin/einstellungen setzt diesen Marker
+        // damit eigene Test-Besuche der Live-Seite nicht in den Analytics landen.
+        if (localStorage.getItem('cam2rent_no_track') === '1') return;
 
         let visitorId = localStorage.getItem('cam2rent_vid');
         if (!visitorId) {
