@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import Image from 'next/image';
 import DynamicSelect from '@/components/admin/DynamicSelect';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import AccessoryUnitsManager from '@/components/admin/AccessoryUnitsManager';
@@ -581,6 +582,7 @@ export default function AdminZubehoerPage() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="bg-brand-bg border-b border-brand-border text-left">
+                        <th className="px-4 py-3 font-heading font-semibold text-[11px] uppercase tracking-wider text-brand-muted w-[88px]">Bild</th>
                         <th className="px-4 py-3 font-heading font-semibold text-[11px] uppercase tracking-wider text-brand-muted">Name</th>
                         <th className="px-4 py-3 font-heading font-semibold text-[11px] uppercase tracking-wider text-brand-muted hidden md:table-cell">Kategorie</th>
                         <th className="px-4 py-3 font-heading font-semibold text-[11px] uppercase tracking-wider text-brand-muted text-right whitespace-nowrap">Preis</th>
@@ -591,7 +593,7 @@ export default function AdminZubehoerPage() {
                     <tbody>
                       {visible.length === 0 ? (
                         <tr>
-                          <td colSpan={5} className="px-4 py-12 text-center text-brand-muted font-body text-sm">
+                          <td colSpan={6} className="px-4 py-12 text-center text-brand-muted font-body text-sm">
                             {isInternal ? 'Kein internes Zubehör. Erstelle welches mit „Nur intern".' : 'Kein buchbares Zubehör.'}
                           </td>
                         </tr>
@@ -599,7 +601,7 @@ export default function AdminZubehoerPage() {
                         groups.map(({ category, items }) => (
                           <React.Fragment key={category}>
                             <tr className="bg-brand-bg/50 border-b border-brand-border">
-                              <td colSpan={5} className="px-4 py-2 text-[11px] font-heading font-bold uppercase tracking-wider text-brand-steel">
+                              <td colSpan={6} className="px-4 py-2 text-[11px] font-heading font-bold uppercase tracking-wider text-brand-steel">
                                 {category} <span className="text-brand-muted font-body normal-case tracking-normal ml-1">({items.length})</span>
                               </td>
                             </tr>
@@ -675,8 +677,25 @@ function AccessoryRow({ acc, isOpen, isInternal, savedId, deletingId, productLis
       id={`acc-card-${acc.id}`}
       className={`border-b border-brand-border last:border-b-0 scroll-mt-20 transition-colors ${isOpen ? 'bg-brand-bg/50' : 'hover:bg-brand-bg/50'}`}
     >
-      {/* Name */}
+      {/* Bild */}
       <td className={`px-4 py-3 align-top ${isInternal ? 'border-l-2 border-amber-300' : ''}`}>
+        {acc.image_url ? (
+          <Image
+            src={acc.image_url}
+            alt={acc.name}
+            width={64}
+            height={64}
+            className="w-16 h-16 object-cover rounded-lg border border-brand-border bg-white"
+            unoptimized={acc.image_url.startsWith('data:')}
+          />
+        ) : (
+          <div className="w-16 h-16 rounded-lg border-2 border-dashed border-brand-border flex items-center justify-center text-brand-muted text-[10px]">
+            Kein Bild
+          </div>
+        )}
+      </td>
+      {/* Name */}
+      <td className="px-4 py-3 align-top">
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-1.5 flex-wrap">
             <span className="font-heading font-semibold text-sm text-brand-black">{acc.name}</span>
@@ -779,7 +798,7 @@ function AccessoryEditRow({ acc, editForm, setEditForm, savingId, productList, o
 }) {
   return (
     <tr className="bg-brand-bg/50 border-b border-brand-border">
-      <td colSpan={5} className="px-5 py-5">
+      <td colSpan={6} className="px-5 py-5">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Name</label>

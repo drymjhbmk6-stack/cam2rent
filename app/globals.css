@@ -182,7 +182,18 @@
 /* Tabellen */
 .admin-dark table               { border-color: #1e293b; }
 .admin-dark thead tr            { background-color: #0f172a !important; border-color: #1e293b !important; }
+.admin-dark thead th            {
+  font-size: 13px !important;
+  color: #06b6d4 !important;
+  letter-spacing: 0.06em !important;
+  font-weight: 700 !important;
+  padding-top: 14px !important;
+  padding-bottom: 14px !important;
+}
 .admin-dark tbody tr            { border-color: #1e293b !important; }
+/* Zebra-Stripe: jede zweite Zeile dezent abgesetzt. Group-Header und
+   Edit-Rows haben eigene bg-brand-bg/50 mit !important und überschreiben. */
+.admin-dark tbody tr:nth-child(even) { background-color: rgba(255,255,255,0.025); }
 .admin-dark .bg-brand-bg\/50   { background-color: rgba(30,41,59,0.5) !important; }
 
 /* Hover-States */

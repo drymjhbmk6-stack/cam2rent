@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import BrandBadge from '@/components/BrandBadge';
 import BrandColorManager from '@/components/admin/BrandColorManager';
@@ -117,6 +118,7 @@ export default function AdminKameraListePage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-brand-bg border-b border-brand-border text-left">
+                    <th className="px-4 py-3 font-heading font-semibold text-[11px] uppercase tracking-wider text-brand-muted w-[88px]">Bild</th>
                     <th className="px-4 py-3 font-heading font-semibold text-[11px] uppercase tracking-wider text-brand-muted">Name</th>
                     <th className="px-4 py-3 font-heading font-semibold text-[11px] uppercase tracking-wider text-brand-muted hidden lg:table-cell">Auslastung (30 T)</th>
                     <th className="px-4 py-3 font-heading font-semibold text-[11px] uppercase tracking-wider text-brand-muted text-right whitespace-nowrap hidden md:table-cell">Tag 1 / Tag 30</th>
@@ -127,15 +129,36 @@ export default function AdminKameraListePage() {
                   {groupedProducts.map(([brand, brandProducts]) => (
                     <React.Fragment key={brand}>
                       <tr className="bg-brand-bg/50 border-b border-brand-border">
-                        <td colSpan={4} className="px-4 py-2 text-[11px] font-heading font-bold uppercase tracking-wider text-brand-steel">
+                        <td colSpan={5} className="px-4 py-2 text-[11px] font-heading font-bold uppercase tracking-wider text-brand-steel">
                           {brand} <span className="text-brand-muted font-body normal-case tracking-normal ml-1">({brandProducts.length} {brandProducts.length === 1 ? 'Kamera' : 'Kameras'})</span>
                         </td>
                       </tr>
-                      {brandProducts.map((p) => (
+                      {brandProducts.map((p) => {
+                        const imgSrc = p.imageUrl ?? p.images?.[0] ?? null;
+                        return (
                         <tr
                           key={p.id}
                           className="border-b border-brand-border last:border-b-0 transition-colors hover:bg-brand-bg/50"
                         >
+                          {/* Bild */}
+                          <td className="px-4 py-3 align-top">
+                            <Link href={`/admin/preise/kameras/${p.id}`} className="block">
+                              {imgSrc ? (
+                                <Image
+                                  src={imgSrc}
+                                  alt={p.name}
+                                  width={64}
+                                  height={64}
+                                  className="w-16 h-16 object-cover rounded-lg border border-brand-border bg-white"
+                                  unoptimized={imgSrc.startsWith('data:')}
+                                />
+                              ) : (
+                                <div className="w-16 h-16 rounded-lg border-2 border-dashed border-brand-border flex items-center justify-center text-brand-muted text-[10px]">
+                                  Kein Bild
+                                </div>
+                              )}
+                            </Link>
+                          </td>
                           {/* Name + Brand */}
                           <td className="px-4 py-3 align-top">
                             <Link href={`/admin/preise/kameras/${p.id}`} className="flex items-center gap-2 flex-wrap group">
@@ -224,7 +247,8 @@ export default function AdminKameraListePage() {
                             </div>
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </React.Fragment>
                   ))}
                 </tbody>

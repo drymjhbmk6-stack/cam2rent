@@ -36,6 +36,9 @@ interface Accessory {
   compatible_product_ids: string[];
   internal?: boolean;
   upgrade_group?: string | null;
+  // Fuer Einzelpreis-Berechnung in der Set-Liste (Spalte „Einzelmiete")
+  price?: number;
+  pricing_mode?: 'perDay' | 'flat';
 }
 
 const DEFAULT_BADGE_OPTIONS = [
@@ -490,6 +493,25 @@ export default function AdminSetsPage() {
                               <td className="px-4 py-3 align-top text-right whitespace-nowrap tabular-nums">
                                 <div className="text-sm font-heading font-semibold text-brand-black">{fmtEuro(set.price)}</div>
                                 <div className="text-[10px] font-body text-brand-muted">{set.pricingMode === 'perDay' ? '/Tag' : 'einmalig'}</div>
+                                {(() => {
+                                  const items = set.accessory_items ?? [];
+                                  if (items.length === 0) return null;
+                                  let single = 0;
+                                  for (const it of items) {
+                                    const a = accMap.get(it.accessory_id);
+                                    if (a) single += Number(a.price ?? 0) * (it.qty ?? 1);
+                                  }
+                                  if (single <= 0) return null;
+                                  const saving = single - Number(set.price ?? 0);
+                                  return (
+                                    <div className="mt-1.5 text-[10px] font-body text-brand-muted leading-tight">
+                                      <div>Einzelmiete: <span className="text-brand-steel font-semibold">{fmtEuro(single)}</span></div>
+                                      {saving > 0 && (
+                                        <div className="text-emerald-600">Ersparnis: {fmtEuro(saving)}</div>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
                               </td>
                               {/* Aktionen */}
                               <td className="px-4 py-3 align-top text-right whitespace-nowrap">
