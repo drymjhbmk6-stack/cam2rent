@@ -112,6 +112,47 @@ export async function POST(req: NextRequest) {
     console.error('Auth deactivation error:', authErr);
   }
 
+  // Sweep 8 K12: Storage-Files DSGVO-konform loeschen.
+  // Sweep 6 hat anonymize nur DB-Felder ueberschrieben — die Personalausweis-
+  // Scans (id-documents/{userId}/) und UGC-Uploads (customer-ugc/{userId}/)
+  // blieben fuer immer im Storage liegen. Art. 17 DSGVO verlangt vollstaendige
+  // Loeschung. Damage-Photos haben booking_id-Pfade und bleiben fuer
+  // GoBD-Aufbewahrung (10 Jahre) erhalten.
+  try {
+    // 1) Ausweis-Scans
+    const { data: idFiles } = await supabase.storage
+      .from('id-documents')
+      .list(customerId);
+    if (idFiles && idFiles.length > 0) {
+      const idPaths = idFiles.map((f) => `${customerId}/${f.name}`);
+      await supabase.storage.from('id-documents').remove(idPaths);
+    }
+    // ID-URLs auch im Profil leeren
+    await supabase
+      .from('profiles')
+      .update({ id_front_url: null, id_back_url: null })
+      .eq('id', customerId);
+
+    // 2) Customer-UGC: pro Submission alle file_paths aus dem Bucket loeschen
+    const { data: ugcRows } = await supabase
+      .from('customer_ugc_submissions')
+      .select('id, file_paths')
+      .eq('user_id', customerId);
+    for (const ugc of ugcRows ?? []) {
+      const paths = (ugc.file_paths ?? []) as string[];
+      if (paths.length > 0) {
+        await supabase.storage.from('customer-ugc').remove(paths);
+      }
+    }
+    // UGC-DB-Rows als zurueckgezogen markieren (Coupons bleiben gueltig)
+    await supabase
+      .from('customer_ugc_submissions')
+      .update({ status: 'withdrawn', file_paths: [], file_kinds: [] })
+      .eq('user_id', customerId);
+  } catch (storageErr) {
+    console.error('[anonymize] Storage-Cleanup-Fehler:', storageErr);
+  }
+
   await logAudit({
     action: 'customer.anonymize',
     entityType: 'customer',
