@@ -125,9 +125,28 @@ self.addEventListener('push', (event) => {
   event.waitUntil(self.registration.showNotification(title, options));
 });
 
+// Sweep 8 K9: Push-URLs gegen Allowlist validieren — ohne diese Pruefung
+// koennten kompromittierte Push-Sender beliebige externe URLs (Phishing,
+// javascript:-Schemes) im Browser des Nutzers oeffnen.
+function safePushUrl(raw) {
+  try {
+    if (!raw) return '/admin';
+    if (typeof raw !== 'string') return '/admin';
+    // Relative URLs (mit / beginnend, aber NICHT // = protocol-relative) erlaubt
+    if (raw.startsWith('/') && !raw.startsWith('//')) return raw;
+    // Absolute URLs nur fuer cam2rent.de-Origin
+    const u = new URL(raw, self.registration.scope);
+    const scopeOrigin = new URL(self.registration.scope).origin;
+    if (u.origin === scopeOrigin) return u.pathname + u.search + u.hash;
+    return '/admin';
+  } catch {
+    return '/admin';
+  }
+}
+
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const targetUrl = event.notification.data?.url || '/admin';
+  const targetUrl = safePushUrl(event.notification.data?.url);
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {

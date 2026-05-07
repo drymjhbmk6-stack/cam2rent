@@ -98,3 +98,44 @@ export function isUnsplashUrl(raw: string): boolean {
     return false;
   }
 }
+
+/**
+ * Web-Push-Subscription-Endpoints (Sweep 8 H2).
+ * Echte Browser-Push-Endpoints kommen nur von 4 Vendor-Hosts. Ohne
+ * Allowlist koennten Angreifer fingerter Subscriptions schreiben, sodass
+ * sendPushToAdmins() den Notification-Inhalt an einen Angreifer-Server postet.
+ */
+export function isAllowedPushEndpoint(raw: string): boolean {
+  try {
+    const u = new URL(raw);
+    if (u.protocol !== 'https:') return false;
+    if (isPrivateOrInternalHost(u.hostname)) return false;
+    const h = u.hostname.toLowerCase();
+    return (
+      h === 'fcm.googleapis.com' ||
+      h === 'updates.push.services.mozilla.com' ||
+      h.endsWith('.push.apple.com') ||
+      h.endsWith('.notify.windows.com') ||
+      h.endsWith('.googleapis.com') // FCM-CDN-Subdomains
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Kunden-Push und Admin-Notification-Links: nur relativ oder cam2rent.de.
+ * Verhindert Phishing-Pushs (Sweep 7 #3 fuer customer-push, hier zentralisiert).
+ */
+export function isAllowedNotificationLink(raw: string): boolean {
+  if (!raw || typeof raw !== 'string') return false;
+  // Relative URL (mit / beginnend, aber nicht //)
+  if (raw.startsWith('/') && !raw.startsWith('//')) return true;
+  try {
+    const u = new URL(raw);
+    if (u.protocol !== 'https:') return false;
+    return ['cam2rent.de', 'www.cam2rent.de', 'test.cam2rent.de'].includes(u.hostname.toLowerCase());
+  } catch {
+    return false;
+  }
+}

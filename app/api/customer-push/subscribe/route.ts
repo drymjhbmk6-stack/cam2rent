@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { isTestMode } from '@/lib/env-mode';
+import { isAllowedPushEndpoint } from '@/lib/url-allowlist';
 
 export const runtime = 'nodejs';
 
@@ -28,6 +29,14 @@ export async function POST(req: NextRequest) {
 
     if (!sub?.endpoint || !sub?.keys?.p256dh || !sub?.keys?.auth) {
       return NextResponse.json({ error: 'Ungültige Subscription.' }, { status: 400 });
+    }
+
+    // Sweep 8 H1: Endpoint muss von einem Browser-Vendor stammen.
+    if (!isAllowedPushEndpoint(sub.endpoint)) {
+      return NextResponse.json(
+        { error: 'Endpoint stammt nicht von einem unterstuetzten Push-Service.' },
+        { status: 400 },
+      );
     }
 
     const userAgent = req.headers.get('user-agent')?.slice(0, 200) ?? null;

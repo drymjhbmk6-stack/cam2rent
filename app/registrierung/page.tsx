@@ -29,10 +29,18 @@ export default function RegistrierungPage() {
   );
 }
 
+// Sweep 8 H11: Open-Redirect-Schutz analog Login.
+function safeRedirect(raw: string | null | undefined, fallback = '/konto'): string {
+  if (!raw || typeof raw !== 'string') return fallback;
+  if (!raw.startsWith('/') || raw.startsWith('//')) return fallback;
+  if (/^\s*javascript:/i.test(raw) || /^\s*data:/i.test(raw)) return fallback;
+  return raw;
+}
+
 function RegistrierungInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirectTo = searchParams.get('redirect') || '/konto';
+  const redirectTo = safeRedirect(searchParams.get('redirect'));
   const { user, loading } = useAuth();
 
   // Bereits eingeloggte User direkt weiterleiten

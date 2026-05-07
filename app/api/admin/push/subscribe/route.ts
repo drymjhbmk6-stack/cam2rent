@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { getCurrentAdminUser } from '@/lib/admin-auth';
+import { isAllowedPushEndpoint } from '@/lib/url-allowlist';
 
 /**
  * POST /api/admin/push/subscribe
@@ -29,6 +30,17 @@ export async function POST(req: NextRequest) {
     if (!sub?.endpoint || !sub?.keys?.p256dh || !sub?.keys?.auth) {
       return NextResponse.json(
         { error: 'Ungültige Subscription (endpoint/keys fehlen).' },
+        { status: 400 }
+      );
+    }
+
+    // Sweep 8 H1: Endpoint muss von einem Browser-Vendor stammen — sonst
+    // koennte ein Angreifer eine fingerte Subscription mit Endpoint
+    // 'https://attacker.com/push-collect' anlegen und damit alle kuenftigen
+    // Push-Inhalte (Buchungsbestaetigungen, Kundennamen) abfangen.
+    if (!isAllowedPushEndpoint(sub.endpoint)) {
+      return NextResponse.json(
+        { error: 'Endpoint stammt nicht von einem unterstuetzten Push-Service.' },
         { status: 400 }
       );
     }

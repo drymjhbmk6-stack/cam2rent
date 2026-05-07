@@ -5,10 +5,22 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createAuthBrowserClient } from '@/lib/supabase-auth';
 
+// Sweep 8 H11: Open-Redirect-Schutz fuer ?redirect=...
+// Verhindert Phishing-URLs wie /login?redirect=//attacker.com/.
+// Akzeptiert nur relative Pfade (mit / aber nicht //) — externe URLs droppen
+// auf den Default-Pfad zurueck.
+function safeRedirect(raw: string | null | undefined, fallback = '/konto'): string {
+  if (!raw || typeof raw !== 'string') return fallback;
+  if (!raw.startsWith('/') || raw.startsWith('//')) return fallback;
+  // javascript:, data: etc. ausschliessen (Trim auf Whitespace)
+  if (/^\s*javascript:/i.test(raw) || /^\s*data:/i.test(raw)) return fallback;
+  return raw;
+}
+
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirectTo = searchParams.get('redirect') ?? '/konto';
+  const redirectTo = safeRedirect(searchParams.get('redirect'));
   const urlError = searchParams.get('error');
   const urlSuccess = searchParams.get('success');
   const urlInfo = searchParams.get('info');
