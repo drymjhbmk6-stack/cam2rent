@@ -15,7 +15,10 @@ export default function PageTracker() {
 
     const timer = setTimeout(() => {
       try {
-        if (localStorage.getItem('cam2rent_tracking_optout') === 'true') return;
+        // Sweep 8 K11: Opt-In statt Opt-Out (DSGVO/§ 25 TTDSG).
+        // Tracking nur, wenn der Cookie-Banner explizit "Alle akzeptieren"
+        // bekommen hat. Default: kein Tracking, keine localStorage-IDs.
+        if (localStorage.getItem('cam2rent_consent') !== 'all') return;
         if (pathname.startsWith('/admin')) return;
 
         let visitorId = localStorage.getItem('cam2rent_vid');
