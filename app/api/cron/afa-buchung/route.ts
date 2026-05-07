@@ -20,7 +20,7 @@ async function handle(req: NextRequest) {
   if (!verifyCronAuth(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const lock = await acquireCronLock('afa-buchung');
-  if (!lock) return NextResponse.json({ skipped: true, reason: 'already running' });
+  if (!lock.acquired) return NextResponse.json({ skipped: true, reason: lock.reason ?? 'already running' });
 
   try {
     const supabase = createServiceClient();

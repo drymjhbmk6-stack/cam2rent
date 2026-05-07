@@ -33,8 +33,8 @@ async function handle(req: NextRequest) {
   }
 
   const lock = await acquireCronLock('reels-segment-cleanup');
-  if (!lock) {
-    return NextResponse.json({ skipped: 'lock_held' });
+  if (!lock.acquired) {
+    return NextResponse.json({ skipped: 'lock_held', reason: lock.reason });
   }
 
   try {

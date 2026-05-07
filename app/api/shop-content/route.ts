@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { createServiceClient } from '@/lib/supabase';
+import { checkAdminAuth } from '@/lib/admin-auth';
 
 const DEFAULT_NEWS_BANNER = {
   enabled: true,
@@ -118,6 +119,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
+  if (!(await checkAdminAuth())) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   try {
     const body = await req.json();
     const { page, section, content, is_active } = body;

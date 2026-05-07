@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { checkAdminAuth } from '@/lib/admin-auth';
 import type { RentalSet } from '@/data/sets';
 
 type AccessoryItem = { accessory_id: string; qty: number };
@@ -108,6 +109,9 @@ export async function GET(req: NextRequest) {
  * POST /api/sets — Neues Set anlegen
  */
 export async function POST(req: NextRequest) {
+  if (!(await checkAdminAuth())) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   try {
     const body = await req.json();
     const { name, description, badge, badge_color, pricing_mode, price, available, accessory_items, product_ids } = body as {
@@ -156,6 +160,9 @@ export async function POST(req: NextRequest) {
  * PATCH /api/sets — Set aktualisieren
  */
 export async function PATCH(req: NextRequest) {
+  if (!(await checkAdminAuth())) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   try {
     const body = await req.json();
     const { id, pricing_mode, price, available, name, description, badge, badge_color, accessory_items, product_ids } = body as {
@@ -205,6 +212,9 @@ export async function PATCH(req: NextRequest) {
  * DELETE /api/sets — Set löschen
  */
 export async function DELETE(req: NextRequest) {
+  if (!(await checkAdminAuth())) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   try {
     const { id } = await req.json() as { id: string };
     if (!id) return NextResponse.json({ error: 'id fehlt.' }, { status: 400 });

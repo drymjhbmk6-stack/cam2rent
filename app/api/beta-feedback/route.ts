@@ -1,11 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { checkAdminAuth } from '@/lib/admin-auth';
+import { rateLimit, getClientIp } from '@/lib/rate-limit';
 
 /**
- * POST /api/beta-feedback — Speichert Beta-Feedback
- * GET  /api/beta-feedback — Laedt alle Feedbacks (Admin)
+ * POST /api/beta-feedback — Speichert Beta-Feedback (public, Rate-Limit)
+ * GET  /api/beta-feedback — Laedt alle Feedbacks (Admin only)
+ * DELETE /api/beta-feedback?id=UUID — Loescht Feedback (Admin only)
  */
+const submitLimiter = rateLimit({ maxAttempts: 5, windowMs: 60 * 60 * 1000 });
+
 export async function POST(req: NextRequest) {
+  const ip = getClientIp(req);
+  const { success } = submitLimiter.check(`beta-feedback:${ip}`);
+  if (!success) {
+    return NextResponse.json({ error: 'Zu viele Anfragen. Bitte spaeter erneut versuchen.' }, { status: 429 });
+  }
   try {
     const body = await req.json();
     const supabase = createServiceClient();
@@ -31,6 +41,9 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET() {
+  if (!(await checkAdminAuth())) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   const supabase = createServiceClient();
 
   const { data, error } = await supabase
@@ -49,6 +62,9 @@ export async function GET() {
  * DELETE /api/beta-feedback?id=UUID — Löscht ein einzelnes Feedback
  */
 export async function DELETE(req: NextRequest) {
+  if (!(await checkAdminAuth())) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   const id = req.nextUrl.searchParams.get('id');
   if (!id) {
     return NextResponse.json({ error: 'id erforderlich.' }, { status: 400 });
