@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { createAdminNotification } from '@/lib/admin-notifications';
 import { getCurrentAdminUser } from '@/lib/admin-auth';
+import { isAllowedNotificationLink } from '@/lib/url-allowlist';
 
 /**
  * POST /api/admin/notifications/create
@@ -39,13 +40,26 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unbekannter Typ.' }, { status: 400 });
     }
 
+    // Sweep 8 M3: link gegen Allowlist (relativ oder cam2rent.de).
+    // Sweep 7 #3 hat das fuer customer-push gemacht, hier nachgezogen — sonst
+    // koennten Push-Klicks auf Phishing-Domains landen (Service-Worker
+    // notificationclick).
+    let safeLink: string | undefined;
+    if (body.link) {
+      const raw = String(body.link).slice(0, 500);
+      if (!isAllowedNotificationLink(raw)) {
+        return NextResponse.json({ error: 'link muss relativ oder cam2rent.de sein.' }, { status: 400 });
+      }
+      safeLink = raw;
+    }
+
     const supabase = createServiceClient();
 
     await createAdminNotification(supabase, {
       type: body.type,
       title: String(body.title).slice(0, 200),
       message: body.message ? String(body.message).slice(0, 500) : undefined,
-      link: body.link ? String(body.link).slice(0, 500) : undefined,
+      link: safeLink,
     });
 
     return NextResponse.json({ success: true });

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { isAllowedNotificationLink } from '@/lib/url-allowlist';
 
 export const runtime = 'nodejs';
 export const revalidate = 60;
@@ -35,7 +36,12 @@ export async function GET() {
         subtitle: String(v.subtitle ?? '').slice(0, 200),
         badgeText: String(v.badgeText ?? '').slice(0, 30),
         ctaLabel: String(v.ctaLabel ?? 'Jetzt sichern').slice(0, 40),
-        ctaUrl: String(v.ctaUrl ?? '/kameras').slice(0, 200),
+        ctaUrl: (() => {
+          // Sweep 8 M6: nur relative oder cam2rent.de-URLs erlauben.
+          // Verhindert Phishing-Banner mit attacker.com-Link.
+          const raw = String(v.ctaUrl ?? '/kameras').slice(0, 200);
+          return isAllowedNotificationLink(raw) ? raw : '/kameras';
+        })(),
         couponCode: v.couponCode ? String(v.couponCode).slice(0, 30) : null,
         validUntil: v.validUntil ?? null,
       },

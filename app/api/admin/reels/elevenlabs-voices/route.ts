@@ -1,13 +1,11 @@
 /**
- * GET /api/admin/reels/elevenlabs-voices
+ * GET/POST /api/admin/reels/elevenlabs-voices
  *
- * Holt die Stimmen-Liste vom ElevenLabs-Account des Users. Bei kostenfreien
- * Plaenen sind das ~10 Default-Voices, in bezahlten Plaenen kommen
- * Eigen-Voices und der "Voice Library"-Pool dazu.
+ * Holt die Stimmen-Liste vom ElevenLabs-Account des Users.
  *
- * Optional `?api_key=...` als Override (z.B. wenn der Admin den Key gerade
- * eintippt und vor dem Speichern testen will). Sonst wird der gespeicherte
- * Key aus reels_settings gelesen.
+ * - GET (ohne Override): liest gespeicherten Key aus reels_settings.
+ * - POST mit Body { apiKey } (Sweep 8 M5): Override fuer Test vor dem Speichern.
+ *   Vorher GET ?api_key=... — der Key landete in Hetzner/Coolify-Access-Logs.
  *
  * Response: { voices: [{ voice_id, name, category, labels, preview_url }] }
  */
@@ -39,19 +37,10 @@ async function getApiKey(): Promise<string> {
   }
 }
 
-export async function GET(req: NextRequest) {
-  if (!(await checkAdminAuth())) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  const { searchParams } = new URL(req.url);
-  const overrideKey = searchParams.get('api_key')?.trim();
-  const apiKey = overrideKey || (await getApiKey());
-
+async function loadVoices(apiKey: string) {
   if (!apiKey) {
     return NextResponse.json({ error: 'ElevenLabs API Key fehlt — bitte zuerst eintragen und speichern.' }, { status: 400 });
   }
-
   try {
     const res = await fetch('https://api.elevenlabs.io/v1/voices', {
       headers: { 'xi-api-key': apiKey, Accept: 'application/json' },
@@ -62,7 +51,6 @@ export async function GET(req: NextRequest) {
     }
     const body = await res.json();
     const voices: ElevenLabsVoice[] = Array.isArray(body?.voices) ? body.voices : [];
-    // Schlanker für UI: nur die Felder, die wir wirklich anzeigen
     const slim = voices.map((v) => ({
       voice_id: v.voice_id,
       name: v.name,
@@ -75,4 +63,20 @@ export async function GET(req: NextRequest) {
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Netzwerk-Fehler' }, { status: 500 });
   }
+}
+
+export async function GET() {
+  if (!(await checkAdminAuth())) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  return loadVoices(await getApiKey());
+}
+
+export async function POST(req: NextRequest) {
+  if (!(await checkAdminAuth())) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  const body = await req.json().catch(() => ({}));
+  const overrideKey = typeof body?.apiKey === 'string' ? body.apiKey.trim() : '';
+  return loadVoices(overrideKey || (await getApiKey()));
 }
