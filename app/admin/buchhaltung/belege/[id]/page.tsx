@@ -18,6 +18,7 @@ interface Beleg {
   status: 'offen'|'teilweise'|'klassifiziert'|'festgeschrieben';
   quelle: string; ist_eigenbeleg: boolean; eigenbeleg_grund: string | null;
   notizen: string | null; festgeschrieben_at: string | null;
+  created_at?: string | null; updated_at?: string | null; is_test?: boolean;
   lieferant: { id: string; name: string; adresse?: string | null; email?: string | null; ust_id?: string | null } | null;
 }
 interface Position {
@@ -25,10 +26,36 @@ interface Position {
   einzelpreis_netto: number; mwst_satz: number;
   gesamt_netto: number; gesamt_brutto: number;
   klassifizierung: Klass; kategorie: string | null; notizen: string | null;
-  locked: boolean; ki_vorschlag: { klassifizierung: string; begruendung: string; confidence: number } | null;
+  locked: boolean; ki_vorschlag: {
+    klassifizierung?: string; begruendung?: string; confidence?: number;
+    art?: string; nutzungsdauer_monate?: number; kategorie?: string;
+  } | null;
+  folgekosten_asset_id?: string | null;
 }
 interface Anhang {
   id: string; storage_path: string; dateiname: string; typ: string; mime_type: string; size_bytes: number | null;
+}
+interface Verknuepfung {
+  id: string;
+  stueck_anteil: number;
+  inventar_unit: { id: string; bezeichnung: string; inventar_code: string | null; seriennummer: string | null } | null;
+}
+
+const QUELLE_LABEL: Record<string, string> = {
+  upload: '📄 PDF/Foto-Upload (OCR)',
+  manuell: '✍ Manuell erfasst',
+  stripe_sync: '💳 Stripe-Import',
+  migration: '🔄 Migration',
+};
+
+function fmtDateTime(s: string | null | undefined) {
+  return s ? new Date(s).toLocaleString('de-DE', { timeZone: 'Europe/Berlin' }) : '–';
+}
+function fmtBytes(n: number | null) {
+  if (n == null) return '';
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / 1024 / 1024).toFixed(2)} MB`;
 }
 
 function fmtEuro(n: number) {
@@ -46,6 +73,7 @@ export default function BelegDetailPage() {
   const [beleg, setBeleg] = useState<Beleg | null>(null);
   const [positionen, setPositionen] = useState<Position[]>([]);
   const [anhaenge, setAnhaenge] = useState<Anhang[]>([]);
+  const [linksByPosition, setLinksByPosition] = useState<Record<string, Verknuepfung[]>>({});
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -62,6 +90,7 @@ export default function BelegDetailPage() {
     setBeleg(data.beleg);
     setPositionen(data.positionen);
     setAnhaenge(data.anhaenge);
+    setLinksByPosition(data.linksByPosition ?? {});
     setLoading(false);
   }
 
@@ -157,6 +186,117 @@ export default function BelegDetailPage() {
         )}
         {error && <div className="p-3 bg-rose-500/10 border border-rose-500/30 text-rose-300 rounded text-sm">{error}</div>}
 
+        {/* Stammdaten */}
+        <section className="bg-[#111827] border border-slate-800 rounded p-4">
+          <h2 className="font-semibold mb-3">Stammdaten</h2>
+          <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
+            <div className="flex justify-between border-b border-slate-800/60 pb-1.5">
+              <dt className="text-slate-400">Beleg-Nr</dt>
+              <dd className="font-mono">{beleg.beleg_nr}</dd>
+            </div>
+            <div className="flex justify-between border-b border-slate-800/60 pb-1.5">
+              <dt className="text-slate-400">Status</dt>
+              <dd className="capitalize">{beleg.status}{beleg.is_test ? ' · TEST' : ''}</dd>
+            </div>
+            {beleg.interne_beleg_no && (
+              <div className="flex justify-between border-b border-slate-800/60 pb-1.5">
+                <dt className="text-slate-400">Interne Beleg-Nr</dt>
+                <dd className="font-mono">{beleg.interne_beleg_no}</dd>
+              </div>
+            )}
+            <div className="flex justify-between border-b border-slate-800/60 pb-1.5">
+              <dt className="text-slate-400">Beleg-Datum</dt>
+              <dd>{fmtDate(beleg.beleg_datum)}</dd>
+            </div>
+            <div className="flex justify-between border-b border-slate-800/60 pb-1.5">
+              <dt className="text-slate-400">Bezahl-Datum</dt>
+              <dd>{beleg.bezahl_datum ? fmtDate(beleg.bezahl_datum) : <span className="text-slate-500 italic">offen</span>}</dd>
+            </div>
+            <div className="flex justify-between border-b border-slate-800/60 pb-1.5">
+              <dt className="text-slate-400">Rechnungs-Nr Lieferant</dt>
+              <dd className="font-mono">{beleg.rechnungsnummer_lieferant ?? <span className="text-slate-500 italic">—</span>}</dd>
+            </div>
+            <div className="flex justify-between border-b border-slate-800/60 pb-1.5">
+              <dt className="text-slate-400">Quelle</dt>
+              <dd>{QUELLE_LABEL[beleg.quelle] ?? beleg.quelle}</dd>
+            </div>
+            {beleg.ist_eigenbeleg && (
+              <div className="flex justify-between border-b border-slate-800/60 pb-1.5 sm:col-span-2">
+                <dt className="text-slate-400">Eigenbeleg-Begründung</dt>
+                <dd className="text-amber-300 text-right max-w-md">{beleg.eigenbeleg_grund ?? '—'}</dd>
+              </div>
+            )}
+            <div className="flex justify-between border-b border-slate-800/60 pb-1.5">
+              <dt className="text-slate-400">Angelegt</dt>
+              <dd className="text-slate-300">{fmtDateTime(beleg.created_at)}</dd>
+            </div>
+            <div className="flex justify-between border-b border-slate-800/60 pb-1.5">
+              <dt className="text-slate-400">Zuletzt geändert</dt>
+              <dd className="text-slate-300">{fmtDateTime(beleg.updated_at)}</dd>
+            </div>
+            {beleg.festgeschrieben_at && (
+              <div className="flex justify-between border-b border-slate-800/60 pb-1.5 sm:col-span-2">
+                <dt className="text-slate-400">Festgeschrieben am</dt>
+                <dd className="text-emerald-300">{fmtDateTime(beleg.festgeschrieben_at)}</dd>
+              </div>
+            )}
+          </dl>
+        </section>
+
+        {/* Lieferant */}
+        {beleg.lieferant && (beleg.lieferant.adresse || beleg.lieferant.email || beleg.lieferant.ust_id) && (
+          <section className="bg-[#111827] border border-slate-800 rounded p-4">
+            <h2 className="font-semibold mb-3">Lieferant: {beleg.lieferant.name}</h2>
+            <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
+              {beleg.lieferant.adresse && (
+                <div className="flex justify-between border-b border-slate-800/60 pb-1.5 sm:col-span-2">
+                  <dt className="text-slate-400">Adresse</dt>
+                  <dd className="text-right whitespace-pre-line">{beleg.lieferant.adresse}</dd>
+                </div>
+              )}
+              {beleg.lieferant.email && (
+                <div className="flex justify-between border-b border-slate-800/60 pb-1.5">
+                  <dt className="text-slate-400">E-Mail</dt>
+                  <dd><a href={`mailto:${beleg.lieferant.email}`} className="text-cyan-400 hover:text-cyan-300">{beleg.lieferant.email}</a></dd>
+                </div>
+              )}
+              {beleg.lieferant.ust_id && (
+                <div className="flex justify-between border-b border-slate-800/60 pb-1.5">
+                  <dt className="text-slate-400">USt-ID</dt>
+                  <dd className="font-mono">{beleg.lieferant.ust_id}</dd>
+                </div>
+              )}
+            </dl>
+          </section>
+        )}
+
+        {/* Notizen */}
+        {beleg.notizen && (
+          <section className="bg-[#111827] border border-slate-800 rounded p-4">
+            <h2 className="font-semibold mb-2">Notizen</h2>
+            <p className="text-sm text-slate-300 whitespace-pre-line">{beleg.notizen}</p>
+          </section>
+        )}
+
+        {/* Summen */}
+        <section className="bg-[#111827] border border-slate-800 rounded p-4">
+          <h2 className="font-semibold mb-3">Summen</h2>
+          <dl className="grid grid-cols-3 gap-3 text-sm">
+            <div>
+              <dt className="text-xs text-slate-400 uppercase tracking-wider">Netto</dt>
+              <dd className="text-lg font-mono mt-1">{fmtEuro(Number(beleg.summe_netto))}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-slate-400 uppercase tracking-wider">MwSt-Anteil</dt>
+              <dd className="text-lg font-mono mt-1 text-slate-300">{fmtEuro(Number(beleg.summe_brutto) - Number(beleg.summe_netto))}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-slate-400 uppercase tracking-wider">Brutto</dt>
+              <dd className="text-lg font-mono mt-1 text-cyan-300">{fmtEuro(Number(beleg.summe_brutto))}</dd>
+            </div>
+          </dl>
+        </section>
+
         {/* Anhaenge */}
         <section className="bg-[#111827] border border-slate-800 rounded p-4">
           <h2 className="font-semibold mb-3">Anhänge ({anhaenge.length})</h2>
@@ -165,10 +305,15 @@ export default function BelegDetailPage() {
           )}
           <div className="space-y-2">
             {anhaenge.map((a) => (
-              <div key={a.id} className="flex justify-between items-center p-2 bg-slate-900/40 rounded">
-                <button onClick={() => openAnhang(a)} className="text-cyan-400 hover:text-cyan-300 text-sm flex-1 text-left">
-                  📎 {a.dateiname} ({a.typ})
+              <div key={a.id} className="flex justify-between items-center p-2 bg-slate-900/40 rounded gap-3">
+                <button onClick={() => openAnhang(a)} className="text-cyan-400 hover:text-cyan-300 text-sm flex-1 text-left truncate">
+                  📎 {a.dateiname}
                 </button>
+                <span className="text-xs text-slate-500 shrink-0">
+                  {a.typ}
+                  {a.size_bytes != null && ` · ${fmtBytes(a.size_bytes)}`}
+                  {a.mime_type && ` · ${a.mime_type}`}
+                </span>
               </div>
             ))}
           </div>
@@ -191,21 +336,69 @@ export default function BelegDetailPage() {
             )}
           </div>
           <div className="space-y-2">
-            {positionen.map((p) => (
+            {positionen.map((p) => {
+              const links = linksByPosition[p.id] ?? [];
+              const ki = p.ki_vorschlag;
+              return (
               <div key={p.id} className="p-3 bg-slate-900/40 rounded">
-                <div className="flex justify-between items-start mb-2">
-                  <div className="flex-1">
+                <div className="flex justify-between items-start mb-2 gap-3">
+                  <div className="flex-1 min-w-0">
                     <div className="font-medium">{p.bezeichnung}</div>
-                    <div className="text-xs text-slate-400">
-                      {p.menge}× {fmtEuro(Number(p.einzelpreis_netto))} netto · {p.mwst_satz}% MwSt = {fmtEuro(Number(p.gesamt_brutto))} brutto
+                    <div className="text-xs text-slate-400 mt-0.5">
+                      {p.menge}× {fmtEuro(Number(p.einzelpreis_netto))} netto · {p.mwst_satz}% MwSt
+                      {' = '}{fmtEuro(Number(p.gesamt_netto))} netto / {fmtEuro(Number(p.gesamt_brutto))} brutto
                     </div>
-                    {p.ki_vorschlag && p.klassifizierung === 'pending' && (
-                      <div className="text-xs text-cyan-400 italic mt-1">
-                        💡 KI: {p.ki_vorschlag.klassifizierung} — {p.ki_vorschlag.begruendung}
+                    {p.kategorie && (
+                      <div className="text-xs text-slate-400 mt-0.5">
+                        Kategorie: <span className="text-slate-300">{p.kategorie}</span>
+                      </div>
+                    )}
+                    {ki && (
+                      <div className="text-xs mt-1 p-2 bg-cyan-500/5 border border-cyan-500/20 rounded">
+                        <div className="text-cyan-300 font-semibold">💡 KI-Vorschlag</div>
+                        <div className="text-slate-300 mt-0.5">
+                          {ki.klassifizierung && <span>Klassifizierung: <span className="text-cyan-300">{ki.klassifizierung}</span></span>}
+                          {typeof ki.confidence === 'number' && <span> · Sicherheit {Math.round(ki.confidence * 100)}%</span>}
+                        </div>
+                        {ki.art && <div className="text-slate-400">Art: {ki.art}</div>}
+                        {ki.kategorie && <div className="text-slate-400">Kategorie: {ki.kategorie}</div>}
+                        {typeof ki.nutzungsdauer_monate === 'number' && (
+                          <div className="text-slate-400">Nutzungsdauer: {ki.nutzungsdauer_monate} Monate</div>
+                        )}
+                        {ki.begruendung && <div className="text-slate-400 italic mt-0.5">{ki.begruendung}</div>}
+                      </div>
+                    )}
+                    {p.notizen && (
+                      <div className="text-xs text-slate-400 mt-1 italic">📝 {p.notizen}</div>
+                    )}
+                    {links.length > 0 && (
+                      <div className="text-xs mt-2 p-2 bg-slate-800/40 border border-slate-700 rounded">
+                        <div className="text-slate-300 font-semibold mb-1">🔗 Verknüpfte Inventar-Stücke ({links.length})</div>
+                        <ul className="space-y-1">
+                          {links.map((l) => (
+                            <li key={l.id} className="flex justify-between gap-2">
+                              {l.inventar_unit ? (
+                                <Link href={`/admin/inventar/${l.inventar_unit.id}`} className="text-cyan-400 hover:text-cyan-300 truncate">
+                                  {l.inventar_unit.bezeichnung}
+                                  {l.inventar_unit.inventar_code && <span className="text-slate-500 font-mono ml-1">({l.inventar_unit.inventar_code})</span>}
+                                  {l.inventar_unit.seriennummer && <span className="text-slate-500 ml-1">· SN {l.inventar_unit.seriennummer}</span>}
+                                </Link>
+                              ) : (
+                                <span className="text-slate-500 italic">— gelöscht —</span>
+                              )}
+                              {l.stueck_anteil !== 1 && <span className="text-slate-400 shrink-0">Anteil {l.stueck_anteil}</span>}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {p.folgekosten_asset_id && (
+                      <div className="text-xs mt-1 text-amber-300">
+                        Folgekosten verknüpft mit Anlage: <span className="font-mono">{p.folgekosten_asset_id}</span>
                       </div>
                     )}
                   </div>
-                  <span className={`text-xs px-2 py-0.5 rounded border ${
+                  <span className={`text-xs px-2 py-0.5 rounded border shrink-0 ${
                     p.klassifizierung === 'pending' ? 'bg-amber-500/10 text-amber-300 border-amber-500/30' :
                     p.klassifizierung === 'afa' ? 'bg-cyan-500/10 text-cyan-300 border-cyan-500/30' :
                     p.klassifizierung === 'gwg' ? 'bg-amber-500/10 text-amber-300 border-amber-500/30' :
@@ -231,7 +424,8 @@ export default function BelegDetailPage() {
                   </div>
                 )}
               </div>
-            ))}
+              );
+            })}
           </div>
         </section>
 

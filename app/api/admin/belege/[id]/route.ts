@@ -28,7 +28,30 @@ export async function GET(
     .eq('beleg_id', id)
     .order('created_at');
 
-  return NextResponse.json({ beleg, positionen: positionen ?? [], anhaenge: anhaenge ?? [] });
+  // Verknuepfungen pro Position (Inventar-Stuecke) defensiv mitladen
+  const positionIds = (positionen ?? []).map((p) => (p as { id: string }).id);
+  let linksByPosition: Record<string, Array<{ id: string; stueck_anteil: number; inventar_unit: { id: string; bezeichnung: string; inventar_code: string | null; seriennummer: string | null } | null }>> = {};
+  if (positionIds.length > 0) {
+    try {
+      const { data: links } = await supabase
+        .from('inventar_verknuepfung')
+        .select('id, stueck_anteil, beleg_position_id, inventar_unit:inventar_units(id, bezeichnung, inventar_code, seriennummer)')
+        .in('beleg_position_id', positionIds);
+      const map: typeof linksByPosition = {};
+      for (const l of (links ?? []) as Array<{ id: string; stueck_anteil: number; beleg_position_id: string; inventar_unit: unknown }>) {
+        const inv = Array.isArray(l.inventar_unit)
+          ? (l.inventar_unit[0] as { id: string; bezeichnung: string; inventar_code: string | null; seriennummer: string | null } | undefined) ?? null
+          : (l.inventar_unit as { id: string; bezeichnung: string; inventar_code: string | null; seriennummer: string | null } | null) ?? null;
+        if (!map[l.beleg_position_id]) map[l.beleg_position_id] = [];
+        map[l.beleg_position_id].push({ id: l.id, stueck_anteil: l.stueck_anteil, inventar_unit: inv });
+      }
+      linksByPosition = map;
+    } catch {
+      // defensiv — Tabelle könnte fehlen
+    }
+  }
+
+  return NextResponse.json({ beleg, positionen: positionen ?? [], anhaenge: anhaenge ?? [], linksByPosition });
 }
 
 export async function PATCH(
