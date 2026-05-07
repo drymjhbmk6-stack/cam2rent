@@ -187,10 +187,19 @@ export async function POST(req: NextRequest) {
     refundPercentage,
   };
 
-  Promise.all([
+  // Sweep 9 M3: Promise.allSettled statt Promise.all — wenn Customer-Mail
+  // rejected, wird Admin-Mail nicht mit-gekillt + per-Send-Logging.
+  Promise.allSettled([
     sendCancellationConfirmation(emailData),
     sendAdminCancellationNotification(emailData),
-  ]).catch((err) => console.error('[cancel-booking] Email error:', err));
+  ]).then((results) => {
+    results.forEach((r, i) => {
+      if (r.status === 'rejected') {
+        const which = i === 0 ? 'customer' : 'admin';
+        console.error(`[cancel-booking] ${which} email failed:`, r.reason);
+      }
+    });
+  });
 
   // Admin-Benachrichtigung (fire-and-forget)
   createAdminNotification(supabase, {

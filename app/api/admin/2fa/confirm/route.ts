@@ -3,6 +3,12 @@ import { createServiceClient } from '@/lib/supabase';
 import { verifyToken } from '@/lib/totp';
 import { logAudit } from '@/lib/audit';
 import { getCurrentAdminUser } from '@/lib/admin-auth';
+import { rateLimit } from '@/lib/rate-limit';
+
+// Sweep 9 M1: Rate-Limit gegen Setup-Spam + TOTP-Brute-Force.
+// Bei gestohlenem Owner-Cookie kann ein Angreifer sonst das TOTP-Secret
+// mit eigenem Geheimnis ueberschreiben — Owner-Lock-Out.
+const totpConfirmLimiter = rateLimit({ maxAttempts: 5, windowMs: 60 * 60 * 1000 });
 
 /**
  * POST /api/admin/2fa/confirm
@@ -16,6 +22,14 @@ export async function POST(req: NextRequest) {
     const me = await getCurrentAdminUser();
     if (!me || me.role !== 'owner') {
       return NextResponse.json({ error: 'Nur Owner dürfen 2FA verwalten.' }, { status: 403 });
+    }
+
+    const { success } = totpConfirmLimiter.check(`2fa-confirm:${me.id}`);
+    if (!success) {
+      return NextResponse.json(
+        { error: 'Zu viele Versuche. Bitte spaeter erneut versuchen.' },
+        { status: 429 }
+      );
     }
 
     const { secret, token } = (await req.json()) as { secret: string; token: string };

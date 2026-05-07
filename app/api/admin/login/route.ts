@@ -20,7 +20,10 @@ function safeEqualStrings(a: string, b: string): boolean {
   }
 }
 
-const loginLimiter = rateLimit({ maxAttempts: 5, windowMs: 15 * 60 * 1000 }); // 5 pro 15 Min
+const loginLimiter = rateLimit({ maxAttempts: 5, windowMs: 15 * 60 * 1000 }); // 5 pro 15 Min pro IP
+// Sweep 9 H2: Per-Account-Lockout zusaetzlich zum IP-Limit. Verhindert
+// distributed Brute-Force ueber Bot-Netz gegen einen einzelnen Account.
+const loginAccountLimiter = rateLimit({ maxAttempts: 10, windowMs: 60 * 60 * 1000 }); // 10/h pro Identifier
 
 /**
  * POST /api/admin/login
@@ -69,6 +72,17 @@ export async function POST(req: NextRequest) {
   // E-Mail oder Benutzername — beides moeglich, beides optional.
   // Wenn nichts kommt, faellt der Flow auf Legacy-ENV-Passwort.
   const loginIdentifier = (loginId || email || username || '').trim();
+
+  // Per-Account-Limit (Sweep 9 H2)
+  if (loginIdentifier) {
+    const { success: accSuccess } = loginAccountLimiter.check(`login-acc:${loginIdentifier.toLowerCase()}`);
+    if (!accSuccess) {
+      return NextResponse.json(
+        { error: 'Zu viele Anmeldeversuche fuer dieses Konto. Bitte spaeter erneut versuchen.' },
+        { status: 429 }
+      );
+    }
+  }
 
   // ── Variante A: Multi-User-Login (E-Mail/Benutzername + Passwort) ──────────
   if (loginIdentifier) {

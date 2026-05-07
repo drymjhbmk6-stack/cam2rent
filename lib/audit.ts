@@ -51,6 +51,12 @@ export async function logAudit(params: AuditParams): Promise<void> {
 
     const details: Record<string, unknown> = { ...(params.changes ?? {}) };
     if (ipAddress) details.ip_address = ipAddress;
+    // Sweep 9 M3: User-Agent zusaetzlich loggen — bei Cookie-Diebstahl
+    // wertvolle Forensik-Information.
+    if (params.request) {
+      const ua = params.request.headers.get('user-agent');
+      if (ua) details.user_agent = ua.slice(0, 500);
+    }
 
     const { error } = await supabase.from('admin_audit_log').insert({
       action: params.action,
@@ -64,6 +70,29 @@ export async function logAudit(params: AuditParams): Promise<void> {
 
     if (error) {
       console.error('Audit-Log DB-Fehler:', error.message);
+      // Sweep 9 M3: Fallback-Notification — bei Audit-Log-Outage merkt der
+      // Owner das sonst nicht, kritisches Compliance-Risiko bei DSGVO/GoBD.
+      // Critical-Aktionen (delete/anonymize/env_mode) loggen wir doppelt
+      // ueber admin_notifications, damit der Vorfall aufgespuert werden kann.
+      const isCritical =
+        params.action.includes('delete') ||
+        params.action.includes('anonymize') ||
+        params.action.startsWith('env_mode.') ||
+        params.action.startsWith('period.') ||
+        params.action.includes('blacklist');
+      if (isCritical) {
+        try {
+          await supabase.from('admin_notifications').insert({
+            type: 'payment_failed',
+            title: 'Audit-Log Schreibfehler (kritische Aktion)',
+            message: `${params.action} auf ${params.entityType}/${params.entityId ?? '?'} konnte nicht protokolliert werden: ${error.message}`,
+            link: null,
+            is_read: false,
+          });
+        } catch (notifErr) {
+          console.error('Audit-Notification-Fehler:', notifErr);
+        }
+      }
     }
   } catch (err) {
     // Audit-Logging darf niemals den Hauptprozess blockieren
