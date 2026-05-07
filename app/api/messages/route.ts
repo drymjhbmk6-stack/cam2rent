@@ -112,13 +112,29 @@ export async function POST(req: NextRequest) {
 
   const supabase = createServiceClient();
 
+  // Sweep 8 H2: booking_id pruefen — vorher konnte ein Customer eine
+  // fremde Buchungs-ID mitschicken und damit Support-Mitarbeiter taeuschen.
+  let validBookingId: string | null = null;
+  if (booking_id) {
+    const { data: bk } = await supabase
+      .from('bookings')
+      .select('id')
+      .eq('id', booking_id)
+      .eq('user_id', user.id)
+      .maybeSingle();
+    if (!bk) {
+      return NextResponse.json({ error: 'Buchung nicht gefunden.' }, { status: 404 });
+    }
+    validBookingId = bk.id;
+  }
+
   // Create conversation
   const { data: conv, error: convError } = await supabase
     .from('conversations')
     .insert({
       customer_id: user.id,
       subject: subject.trim(),
-      booking_id: booking_id || null,
+      booking_id: validBookingId,
     })
     .select('id')
     .single();

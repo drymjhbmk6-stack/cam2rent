@@ -1,27 +1,39 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { createServerClient } from '@supabase/ssr';
+import { cookies } from 'next/headers';
 
 /**
  * POST /api/cart/sync
- * Synchronisiert den Warenkorb eines eingeloggten Users mit Supabase.
- * Wird vom CartProvider aufgerufen wenn sich der Warenkorb ändert.
- *
- * Body: { userId, email, items, cartTotal }
- * Bei items=[] wird der Eintrag gelöscht.
+ * Sweep 8 M4: User-ID + E-Mail werden aus der Session gepinnt.
+ * Vorher: Body-userId/email — anonymer Angreifer konnte Cart-Recovery-Mails
+ * an beliebige fremde Adressen ausloesen (Spam-Vehikel mit cam2rent-Branding).
  */
 export async function POST(req: NextRequest) {
+  const cookieStore = await cookies();
+  const supabaseAuth = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() { return cookieStore.getAll(); },
+        setAll(cookiesToSet) { cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options)); },
+      },
+    },
+  );
+  const { data: { user } } = await supabaseAuth.auth.getUser();
+  if (!user || !user.email) {
+    return NextResponse.json({ error: 'Nicht eingeloggt.' }, { status: 401 });
+  }
+
   try {
-    const { userId, email, items, cartTotal } = (await req.json()) as {
-      userId?: string;
-      email?: string;
+    const { items, cartTotal } = (await req.json()) as {
       items?: unknown[];
       cartTotal?: number;
     };
 
-    if (!userId || !email) {
-      return NextResponse.json({ error: 'userId und email erforderlich.' }, { status: 400 });
-    }
-
+    const userId = user.id;
+    const email = user.email;
     const supabase = createServiceClient();
 
     // Wenn Warenkorb leer: Eintrag löschen

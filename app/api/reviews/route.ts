@@ -100,6 +100,16 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Sweep 8 H1: productId muss zur tatsaechlich gemieteten Kamera passen.
+  // Vorher konnte ein Kunde fuer Buchung X eine 5-Sterne-Bewertung fuer
+  // Konkurrenz-Kamera Y einreichen.
+  if (booking.product_id !== productId) {
+    return NextResponse.json(
+      { error: 'productId passt nicht zur Buchung.' },
+      { status: 400 }
+    );
+  }
+
   // Prüfen: Noch keine Bewertung für diese Buchung
   const { data: existingReview } = await supabase
     .from('reviews')
@@ -111,11 +121,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Du hast diese Buchung bereits bewertet.' }, { status: 409 });
   }
 
-  // Review erstellen
+  // Review erstellen — productId aus DB statt Body verwenden (Defense-in-Depth)
   const { error } = await supabase.from('reviews').insert({
     booking_id: bookingId,
     user_id: user.id,
-    product_id: productId,
+    product_id: booking.product_id,
     rating,
     title: title?.trim() || null,
     text: text?.trim() || null,

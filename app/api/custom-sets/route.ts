@@ -1,15 +1,37 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { createServerClient } from '@supabase/ssr';
+import { cookies } from 'next/headers';
 
 /**
- * GET /api/custom-sets?userId=...
- * Gibt alle gespeicherten eigenen Sets eines Users zurück.
+ * Sweep 8 H2: User-ID kommt jetzt nur aus der Supabase-Session.
+ * Vorher: userId aus Query/Body — IDOR. Angreifer mit Opfer-UUID konnte
+ * fremde Konfigurationen lesen, anlegen, loeschen.
  */
-export async function GET(req: NextRequest) {
-  try {
-    const userId = req.nextUrl.searchParams.get('userId');
-    if (!userId) return NextResponse.json({ error: 'userId fehlt.' }, { status: 400 });
+async function getSessionUserId(): Promise<string | null> {
+  const cookieStore = await cookies();
+  const supabaseAuth = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() { return cookieStore.getAll(); },
+        setAll(cookiesToSet) { cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options)); },
+      },
+    },
+  );
+  const { data: { user } } = await supabaseAuth.auth.getUser();
+  return user?.id ?? null;
+}
 
+/**
+ * GET /api/custom-sets — User aus Session.
+ */
+export async function GET() {
+  const userId = await getSessionUserId();
+  if (!userId) return NextResponse.json({ error: 'Nicht eingeloggt.' }, { status: 401 });
+
+  try {
     const supabase = createServiceClient();
     const { data, error } = await supabase
       .from('custom_sets')
@@ -26,21 +48,22 @@ export async function GET(req: NextRequest) {
 }
 
 /**
- * POST /api/custom-sets
- * Speichert ein eigenes Set.
+ * POST /api/custom-sets — User aus Session, Body-userId ignoriert.
  */
 export async function POST(req: NextRequest) {
+  const userId = await getSessionUserId();
+  if (!userId) return NextResponse.json({ error: 'Nicht eingeloggt.' }, { status: 401 });
+
   try {
     const body = await req.json();
-    const { userId, cameraId, accessoryIds, name } = body as {
-      userId: string;
+    const { cameraId, accessoryIds, name } = body as {
       cameraId: string;
       accessoryIds: string[];
       name?: string;
     };
 
-    if (!userId || !cameraId) {
-      return NextResponse.json({ error: 'userId und cameraId erforderlich.' }, { status: 400 });
+    if (!cameraId) {
+      return NextResponse.json({ error: 'cameraId erforderlich.' }, { status: 400 });
     }
 
     const supabase = createServiceClient();
@@ -65,14 +88,16 @@ export async function POST(req: NextRequest) {
 }
 
 /**
- * DELETE /api/custom-sets
- * Löscht ein eigenes Set.
+ * DELETE /api/custom-sets — User aus Session, Body-userId ignoriert.
  */
 export async function DELETE(req: NextRequest) {
+  const userId = await getSessionUserId();
+  if (!userId) return NextResponse.json({ error: 'Nicht eingeloggt.' }, { status: 401 });
+
   try {
-    const { id, userId } = await req.json() as { id: string; userId: string };
-    if (!id || !userId) {
-      return NextResponse.json({ error: 'id und userId fehlen.' }, { status: 400 });
+    const { id } = await req.json() as { id: string };
+    if (!id) {
+      return NextResponse.json({ error: 'id fehlt.' }, { status: 400 });
     }
 
     const supabase = createServiceClient();
