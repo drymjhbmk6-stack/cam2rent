@@ -100,6 +100,23 @@ export function isUnsplashUrl(raw: string): boolean {
 }
 
 /**
+ * Sendcloud-API-URLs (Label-Download).
+ * Sweep 8 H8: bookings.label_url wird mit Sendcloud-Basic-Auth geladen.
+ * Wenn die URL durch DB-Manipulation auf attacker.com umgebogen wird,
+ * gehen Sendcloud-Credentials an Angreifer.
+ */
+export function isSendcloudUrl(raw: string): boolean {
+  try {
+    const u = new URL(raw);
+    if (u.protocol !== 'https:') return false;
+    if (isPrivateOrInternalHost(u.hostname)) return false;
+    return u.hostname === 'panel.sendcloud.sc' || u.hostname.endsWith('.sendcloud.sc');
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Web-Push-Subscription-Endpoints (Sweep 8 H2).
  * Echte Browser-Push-Endpoints kommen nur von 4 Vendor-Hosts. Ohne
  * Allowlist koennten Angreifer fingerter Subscriptions schreiben, sodass

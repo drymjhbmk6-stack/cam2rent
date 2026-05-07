@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { cookies } from 'next/headers';
 import { getSendcloudKeys } from '@/lib/env-mode';
+import { isSendcloudUrl } from '@/lib/url-allowlist';
 
 export async function GET(
   _req: NextRequest,
@@ -25,6 +26,13 @@ export async function GET(
 
   if (error || !booking?.label_url) {
     return NextResponse.json({ error: 'Kein Versandetikett vorhanden.' }, { status: 404 });
+  }
+
+  // Sweep 8 H8: Defense-in-Depth — Sendcloud-Credentials nur an Sendcloud-Host
+  // schicken. Falls bookings.label_url durch eine andere Schwachstelle
+  // manipuliert wurde, bleiben die Credentials safe.
+  if (!isSendcloudUrl(booking.label_url)) {
+    return NextResponse.json({ error: 'Label-URL ist keine Sendcloud-URL.' }, { status: 502 });
   }
 
   const { publicKey, secretKey } = await getSendcloudKeys();

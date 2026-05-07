@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { cookies } from 'next/headers';
 import { getSendcloudKeys } from '@/lib/env-mode';
+import { isSendcloudUrl } from '@/lib/url-allowlist';
 
 export async function GET(
   _req: NextRequest,
@@ -25,6 +26,10 @@ export async function GET(
 
   if (error || !booking?.return_label_url) {
     return NextResponse.json({ error: 'Kein Rücksendeetikett vorhanden.' }, { status: 404 });
+  }
+
+  if (!isSendcloudUrl(booking.return_label_url)) {
+    return NextResponse.json({ error: 'Label-URL ist keine Sendcloud-URL.' }, { status: 502 });
   }
 
   const { publicKey, secretKey } = await getSendcloudKeys();

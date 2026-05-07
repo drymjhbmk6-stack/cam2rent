@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { getSendcloudKeys } from '@/lib/env-mode';
+import { isSendcloudUrl } from '@/lib/url-allowlist';
 
 /**
  * GET /api/konto/return-label/[id]
@@ -51,6 +52,10 @@ export async function GET(
 
   if (!booking.return_label_url) {
     return NextResponse.json({ error: 'Kein Rücksendeetikett vorhanden. Bitte beim Support melden.' }, { status: 404 });
+  }
+
+  if (!isSendcloudUrl(booking.return_label_url)) {
+    return NextResponse.json({ error: 'Label-URL ist keine Sendcloud-URL.' }, { status: 502 });
   }
 
   // Sendcloud Label-PDF als Proxy laden

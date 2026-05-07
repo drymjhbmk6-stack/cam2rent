@@ -33,14 +33,21 @@ async function graphFetch<T = unknown>(
   { method = 'GET', token, body, query }: { method?: 'GET' | 'POST' | 'DELETE'; token?: string; body?: Record<string, unknown>; query?: Record<string, string | number | undefined> } = {}
 ): Promise<T> {
   const url = new URL(`${GRAPH_BASE}${path.startsWith('/') ? path : `/${path}`}`);
-  if (token) url.searchParams.set('access_token', token);
+  // Sweep 8 K10: Token NICHT als Query-Parameter senden (sonst landet er in
+  // Reverse-Proxy-Logs/Access-Logs/Browser-History). Stattdessen Authorization-
+  // Header. Meta Graph API akzeptiert beides; Header ist Best-Practice.
+  // Ausnahme: OAuth-Endpoints brauchen Token in Query (kein Bearer-Setup) —
+  // siehe getTokenAsQuery() unten fuer diese Faelle.
   if (query) {
     for (const [k, v] of Object.entries(query)) {
       if (v !== undefined) url.searchParams.set(k, String(v));
     }
   }
 
-  const init: RequestInit = { method, headers: { 'Content-Type': 'application/json' } };
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  const init: RequestInit = { method, headers };
   if (body) init.body = JSON.stringify(body);
 
   const res = await fetch(url.toString(), init);
