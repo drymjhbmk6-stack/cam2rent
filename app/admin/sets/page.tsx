@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
 import type { AdminProduct } from '@/lib/price-config';
 import AdminBackLink from '@/components/admin/AdminBackLink';
@@ -357,7 +357,7 @@ export default function AdminSetsPage() {
 
   return (
     <div className="min-h-screen bg-brand-bg">
-      <div className="max-w-4xl mx-auto px-6 py-8">
+      <div className="max-w-7xl mx-auto px-6 py-8">
         <AdminBackLink label="Zurück" />
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
@@ -409,101 +409,121 @@ export default function AdminSetsPage() {
             Noch kein Set angelegt. Klicke auf &bdquo;+ Neues Set&ldquo;.
           </div>
         ) : (
-          <div className="space-y-6">
-            {groupedSets.map(([groupName, groupSets]) => (
-              <div key={groupName}>
-                {/* Gruppen-Header */}
-                <div className="flex items-center gap-3 mb-2 px-1">
-                  <h2 className="font-heading font-bold text-sm text-brand-black dark:text-slate-300">
-                    {groupName}
-                  </h2>
-                  <span className="text-xs font-body text-brand-muted">
-                    ({groupSets.length} {groupSets.length === 1 ? 'Set' : 'Sets'})
-                  </span>
-                  <div className="flex-1 border-t border-brand-border dark:border-slate-700" />
-                </div>
-                <div className="space-y-3">
-            {groupSets.map((set) => {
-              const isExpanded = expandedId === set.id;
-              const e = editState[set.id];
-              const _isStatic = STATIC_IDS.has(set.id); void _isStatic;
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-brand-border dark:border-slate-700 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-brand-bg dark:bg-slate-800 border-b border-brand-border dark:border-slate-700 text-left">
+                    <th className="px-4 py-3 font-heading font-semibold text-[11px] uppercase tracking-wider text-brand-muted dark:text-slate-400">Set</th>
+                    <th className="px-4 py-3 font-heading font-semibold text-[11px] uppercase tracking-wider text-brand-muted dark:text-slate-400 hidden md:table-cell">Status</th>
+                    <th className="px-4 py-3 font-heading font-semibold text-[11px] uppercase tracking-wider text-brand-muted dark:text-slate-400 text-right whitespace-nowrap">Preis</th>
+                    <th className="px-4 py-3 font-heading font-semibold text-[11px] uppercase tracking-wider text-brand-muted dark:text-slate-400 text-right">Aktionen</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {groupedSets.map(([groupName, groupSets]) => (
+                    <React.Fragment key={groupName}>
+                      <tr className="bg-brand-bg/60 dark:bg-slate-800/70 border-b border-brand-border dark:border-slate-700">
+                        <td colSpan={4} className="px-4 py-2 text-[11px] font-heading font-bold uppercase tracking-wider text-brand-steel dark:text-slate-200">
+                          {groupName} <span className="text-brand-muted dark:text-slate-400 font-body normal-case tracking-normal ml-1">({groupSets.length} {groupSets.length === 1 ? 'Set' : 'Sets'})</span>
+                        </td>
+                      </tr>
+                      {groupSets.map((set) => {
+                        const isExpanded = expandedId === set.id;
+                        const e = editState[set.id];
+                        const _isStatic = STATIC_IDS.has(set.id); void _isStatic;
 
-              return (
-                <div key={set.id} className="bg-white dark:bg-slate-800/60 rounded-xl border border-brand-border dark:border-slate-700 overflow-hidden">
-                  {/* Row */}
-                  <div className="px-5 py-4">
-                    <div className="flex items-center gap-4">
-                      {/* Vorschaubild links */}
-                      {set.image_url ? (
-                        <Image
-                          src={set.image_url}
-                          alt={set.name}
-                          width={80}
-                          height={80}
-                          className="w-20 h-20 object-cover rounded-lg border border-brand-border dark:border-slate-700 shrink-0"
-                          unoptimized={set.image_url.startsWith('data:')}
-                        />
-                      ) : (
-                        <div className="w-20 h-20 rounded-lg border-2 border-dashed border-brand-border dark:border-slate-600 flex items-center justify-center text-brand-muted text-[10px] shrink-0">
-                          Kein Bild
-                        </div>
-                      )}
-                      {/* Name/Badges + Preis/Aktionen rechts daneben */}
-                      <div className="flex-1 min-w-0 space-y-3">
-                    {/* Zeile 1: Name + Badges */}
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-heading font-semibold text-sm text-brand-black dark:text-slate-200">{set.name}</span>
-                      <AvailBadge set={set} />
-                      {set.product_ids?.length > 0 ? (
-                        set.product_ids.map((pid) => {
-                          const p = products[pid];
-                          return (
-                            <BrandBadge key={pid} brand={p?.brand ?? 'Sonstige'} className="text-[10px]" />
-                          );
-                        })
-                      ) : (
-                        <span className="text-[10px] font-body text-brand-muted">Alle Kameras</span>
-                      )}
-                      {set.badge && (
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-heading font-semibold ${set.badgeColor}`}>
-                          {set.badge}
-                        </span>
-                      )}
-                      {savedId === set.id && <span className="text-xs text-green-600 font-body">Gespeichert</span>}
-                    </div>
-                    {/* Zeile 2: Preis + Aktionen */}
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-heading font-semibold text-brand-black dark:text-slate-200 mr-auto">
-                        {fmtEuro(set.price)} {set.pricingMode === 'perDay' ? '/Tag' : 'einmalig'}
-                      </span>
-                      <button
-                        onClick={() => handleDuplicate(set)}
-                        disabled={duplicatingId === set.id}
-                        title="Set duplizieren"
-                        className="px-3 py-1.5 text-xs font-heading font-semibold text-cyan-600 dark:text-cyan-400 border border-cyan-200 dark:border-cyan-800/50 rounded-lg hover:bg-cyan-50 dark:hover:bg-cyan-950/30 transition-colors disabled:opacity-40"
-                      >
-                        {duplicatingId === set.id ? '…' : 'Kopieren'}
-                      </button>
-                      <button
-                        onClick={() => handleDelete(set.id, set.name)}
-                        className="px-3 py-1.5 text-xs font-heading font-semibold text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800/50 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
-                      >
-                        Löschen
-                      </button>
-                      <button
-                        onClick={() => isExpanded ? setExpandedId(null) : openEdit(set)}
-                        className="text-sm font-heading font-semibold text-brand-muted hover:text-brand-black transition-colors px-2"
-                      >
-                        {isExpanded ? '▲ Schließen' : '▼ Bearbeiten'}
-                      </button>
-                    </div>
-                      </div>
-                    </div>
-                  </div>
+                        return (
+                          <React.Fragment key={set.id}>
+                            <tr className={`border-b border-brand-border dark:border-slate-700 last:border-b-0 transition-colors ${isExpanded ? 'bg-brand-bg/40 dark:bg-slate-800/40' : 'hover:bg-brand-bg/40 dark:hover:bg-slate-800/40'}`}>
+                              {/* Set: Bild + Name + Badges */}
+                              <td className="px-4 py-3 align-top">
+                                <div className="flex items-start gap-3">
+                                  {set.image_url ? (
+                                    <Image
+                                      src={set.image_url}
+                                      alt={set.name}
+                                      width={64}
+                                      height={64}
+                                      className="w-16 h-16 object-cover rounded-lg border border-brand-border dark:border-slate-700 shrink-0"
+                                      unoptimized={set.image_url.startsWith('data:')}
+                                    />
+                                  ) : (
+                                    <div className="w-16 h-16 rounded-lg border-2 border-dashed border-brand-border dark:border-slate-600 flex items-center justify-center text-brand-muted dark:text-slate-400 text-[10px] shrink-0">
+                                      Kein Bild
+                                    </div>
+                                  )}
+                                  <div className="min-w-0 flex flex-col gap-1">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span className="font-heading font-semibold text-sm text-brand-black dark:text-slate-100">{set.name}</span>
+                                      {set.badge && (
+                                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-heading font-semibold ${set.badgeColor}`}>
+                                          {set.badge}
+                                        </span>
+                                      )}
+                                      {savedId === set.id && <span className="text-[10px] text-green-600 dark:text-green-400 font-body">✓ Gespeichert</span>}
+                                    </div>
+                                    <div className="flex flex-wrap gap-1">
+                                      {set.product_ids?.length > 0 ? (
+                                        set.product_ids.map((pid) => {
+                                          const p = products[pid];
+                                          return (
+                                            <BrandBadge key={pid} brand={p?.brand ?? 'Sonstige'} className="text-[10px]" />
+                                          );
+                                        })
+                                      ) : (
+                                        <span className="text-[10px] font-body text-brand-muted dark:text-slate-400 self-center">Alle Kameras</span>
+                                      )}
+                                    </div>
+                                    {/* Mobile-only: Status unter Name */}
+                                    <div className="md:hidden mt-1">
+                                      <AvailBadge set={set} />
+                                    </div>
+                                  </div>
+                                </div>
+                              </td>
+                              {/* Status */}
+                              <td className="px-4 py-3 align-top hidden md:table-cell">
+                                <AvailBadge set={set} />
+                              </td>
+                              {/* Preis */}
+                              <td className="px-4 py-3 align-top text-right whitespace-nowrap tabular-nums">
+                                <div className="text-sm font-heading font-semibold text-brand-black dark:text-slate-100">{fmtEuro(set.price)}</div>
+                                <div className="text-[10px] font-body text-brand-muted dark:text-slate-400">{set.pricingMode === 'perDay' ? '/Tag' : 'einmalig'}</div>
+                              </td>
+                              {/* Aktionen */}
+                              <td className="px-4 py-3 align-top text-right whitespace-nowrap">
+                                <div className="inline-flex items-center gap-1">
+                                  <button
+                                    onClick={() => handleDuplicate(set)}
+                                    disabled={duplicatingId === set.id}
+                                    title="Set duplizieren"
+                                    className="px-2.5 py-1.5 text-xs font-heading font-semibold text-cyan-600 dark:text-cyan-400 border border-cyan-200 dark:border-cyan-800/50 rounded-lg hover:bg-cyan-50 dark:hover:bg-cyan-950/30 transition-colors disabled:opacity-40"
+                                  >
+                                    {duplicatingId === set.id ? '…' : 'Kopieren'}
+                                  </button>
+                                  <button
+                                    onClick={() => isExpanded ? setExpandedId(null) : openEdit(set)}
+                                    className="px-3 py-1.5 text-xs font-heading font-semibold text-brand-black dark:text-slate-200 border border-brand-border dark:border-slate-600 rounded-lg hover:bg-white dark:hover:bg-slate-700 transition-colors"
+                                  >
+                                    {isExpanded ? 'Schliessen' : 'Bearbeiten'}
+                                  </button>
+                                  <button
+                                    onClick={() => handleDelete(set.id, set.name)}
+                                    className="px-2.5 py-1.5 text-xs font-heading font-semibold text-red-600 dark:text-red-400 border border-red-200 dark:border-red-500/40 rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
+                                    title="Löschen"
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
 
                   {/* Edit Panel */}
                   {isExpanded && e && (
-                    <div className="border-t border-brand-border dark:border-slate-700 px-5 py-5 bg-brand-bg dark:bg-slate-800/30 space-y-5">
+                    <tr className="bg-brand-bg/40 dark:bg-slate-800/40 border-b border-brand-border dark:border-slate-700">
+                      <td colSpan={4} className="px-5 py-5">
+                       <div className="space-y-5">
                       {/* Grunddaten */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
@@ -665,15 +685,19 @@ export default function AdminSetsPage() {
                           {savingId === set.id ? 'Speichern…' : 'Speichern'}
                         </button>
                       </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-                </div>
-              </div>
-            ))}
-          </div>
+                                       </div>
+                                     </td>
+                                   </tr>
+                                 )}
+                               </React.Fragment>
+                             );
+                           })}
+                         </React.Fragment>
+                       ))}
+                     </tbody>
+                   </table>
+                 </div>
+               </div>
         )}
       </div>
     </div>
