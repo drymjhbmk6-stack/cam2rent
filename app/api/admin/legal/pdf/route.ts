@@ -73,6 +73,9 @@ export async function GET(req: Request) {
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': `inline; filename="${filename}"`,
+        // Sweep 9 TLS-M-A: Versionierte Legal-PDFs sollen nicht von
+        // Zwischenproxies gecached werden (alte Version → falsche Auslieferung).
+        'Cache-Control': 'private, max-age=300',
       },
     });
   } catch (err) {

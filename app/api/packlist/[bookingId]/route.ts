@@ -196,6 +196,9 @@ export async function GET(
       'Content-Type': 'application/pdf',
       'Content-Length': String(pdfBytes.length),
       'Content-Disposition': `inline; filename="Packliste-${booking.id}.pdf"`,
+      // Sweep 9 TLS-M-B: Packliste enthaelt Kundenadresse + Buchungsdetails (PII).
+      'Cache-Control': 'private, no-store, no-cache, must-revalidate',
+      'Pragma': 'no-cache',
     },
   });
 }

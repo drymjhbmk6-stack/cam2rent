@@ -220,6 +220,7 @@ const API_PATH_PERMISSIONS: PermRule[] = [
   { prefix: '/api/admin/anonymize-customer', perm: 'kunden' },
   { prefix: '/api/admin/verify-customer', perm: 'kunden' },
   { prefix: '/api/admin/id-document-url', perm: 'kunden' },
+  { prefix: '/api/admin/damage-photo-url', perm: 'tagesgeschaeft' },
   { prefix: '/api/admin/waitlist', perm: 'kunden' },
   { prefix: '/api/admin/nachrichten', perm: 'kunden' },
   { prefix: '/api/admin/reviews', perm: 'kunden' },

@@ -56,38 +56,10 @@ function parseFocalPoint(value: string | null | undefined): { x: number; y: numb
  * zurueck. Wenn sharp nicht verfuegbar ist oder Position=center, gibt die
  * Original-URL zurueck (kein Crop noetig).
  */
-/**
- * Erlaubt nur Bild-Hosts, denen wir vertrauen — verhindert SSRF auf interne
- * Adressen (http://10.x, http://localhost, file://) sowie Daten-Exfiltration
- * an attacker-controlled Hosts. Falls die URL einer der Allowlist-Suffixe
- * ist (Supabase, Unsplash, OpenAI-CDN, eigene cam2rent-Domain), wird sie
- * akzeptiert.
- */
-function isAllowedSourceUrl(raw: string): boolean {
-  try {
-    const u = new URL(raw);
-    if (u.protocol !== 'https:') return false;
-    const host = u.hostname;
-    // Loopback / private Ranges hart blocken
-    if (host === 'localhost' || host === '0.0.0.0' || host === '127.0.0.1') return false;
-    if (/^10\./.test(host) || /^192\.168\./.test(host)) return false;
-    if (/^172\.(1[6-9]|2\d|3[01])\./.test(host)) return false;
-    const allowed = [
-      '.supabase.co',
-      '.supabase.in',
-      'images.unsplash.com',
-      'plus.unsplash.com',
-      'oaidalleapiprodscus.blob.core.windows.net',
-      'cam2rent.de',
-      'test.cam2rent.de',
-    ];
-    return allowed.some((suffix) =>
-      suffix.startsWith('.') ? host.endsWith(suffix) : host === suffix
-    );
-  } catch {
-    return false;
-  }
-}
+// Sweep 9 TLS-M-C: zentralisierte Allowlist nutzen (lib/url-allowlist.ts hat
+// vollstaendigeren IP-/Cloud-Metadata-Block als die alte lokale Kopie).
+import { isAllowedImageSourceUrl } from '@/lib/url-allowlist';
+const isAllowedSourceUrl = isAllowedImageSourceUrl;
 
 async function cropImageForPlatform(
   sourceUrl: string,

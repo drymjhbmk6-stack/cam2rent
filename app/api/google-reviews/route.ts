@@ -52,8 +52,11 @@ export async function GET(req: Request) {
     // 1. Places API (alt) — neueste Bewertungen (reviews_sort=newest)
     // 2. Places API (New) — Rating + Gesamtanzahl
     const [oldRes, newRes] = await Promise.all([
+      // Sweep 9 TLS-H-C: Key in Authorization-Header analog zur neuen API.
+      // Vorher landete er als ?key=... in Reverse-Proxy-/Outbound-Logs.
       fetch(
-        `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=reviews&reviews_sort=newest&language=de&key=${apiKey}`
+        `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=reviews&reviews_sort=newest&language=de`,
+        { headers: { 'X-Goog-Api-Key': apiKey } },
       ),
       fetch(
         `https://places.googleapis.com/v1/places/${placeId}`,

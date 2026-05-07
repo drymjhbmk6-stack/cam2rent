@@ -280,6 +280,14 @@ export async function runFfmpeg(args: string[]): Promise<{ stderr: string }> {
 }
 
 export async function downloadToFile(url: string, destPath: string): Promise<void> {
+  // Sweep 9 TLS-H-D: Defense-in-Depth-Allowlist. Stock-URLs werden zwar bei
+  // Write-Path validiert (Sweep 7 #7), aber Pre-Sweep-7-Music-Rows oder
+  // andere DB-Manipulationen koennten beliebige URLs einschleusen — der
+  // Render wuerde sonst SSRF auf interne Adressen machen.
+  const { isAllowedStockUrl } = await import('@/lib/url-allowlist');
+  if (!isAllowedStockUrl(url)) {
+    throw new Error(`URL nicht in Stock-Allowlist: ${url.slice(0, 120)}`);
+  }
   // Hotfix: 60s-Timeout — Stock-Videos sind 5-30 MB, bei langsamer Hetzner-zu-
   // Pexels-Verbindung okay, aber ohne Timeout konnte der Render bei einem haengenden
   // Download ewig hocken bleiben (Reel auf status='rendering' fixiert).

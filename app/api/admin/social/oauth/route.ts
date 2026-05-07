@@ -19,7 +19,11 @@ import { randomBytes } from 'crypto';
 import { logAudit } from '@/lib/audit';
 
 function getBaseUrl(req: NextRequest): string {
-  const host = req.headers.get('x-forwarded-host') ?? req.headers.get('host') ?? 'cam2rent.de';
+  // Sweep 9 H1: x-forwarded-host + host gegen Allowlist — sonst kann ein
+  // Phishing-Header die OAuth-Redirect-URI auf attacker.com setzen.
+  const ALLOWED_HOSTS = ['cam2rent.de', 'www.cam2rent.de', 'test.cam2rent.de'];
+  const rawHost = (req.headers.get('x-forwarded-host') ?? req.headers.get('host') ?? '').toLowerCase();
+  const host = ALLOWED_HOSTS.includes(rawHost) ? rawHost : 'cam2rent.de';
   const proto = req.headers.get('x-forwarded-proto') ?? 'https';
   return `${proto}://${host}`;
 }

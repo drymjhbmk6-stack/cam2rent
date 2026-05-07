@@ -43,12 +43,16 @@ export async function GET(request: NextRequest) {
   const errorCode = searchParams.get('error_code');
   const errorDescription = searchParams.get('error_description');
 
-  // Sichere Base-URL
+  // Sichere Base-URL — Sweep 9 H1: x-forwarded-host gegen Allowlist pruefen.
+  // Vorher konnte ein Phishing-Link mit gespooftem Header den Auth-Token an
+  // attacker.com leiten (Account-Takeover via OTP-Leak).
+  const ALLOWED_HOSTS = ['cam2rent.de', 'www.cam2rent.de', 'test.cam2rent.de'];
   const forwardedHost = request.headers.get('x-forwarded-host');
   const forwardedProto = request.headers.get('x-forwarded-proto') ?? 'https';
-  const baseUrl = forwardedHost
-    ? `${forwardedProto}://${forwardedHost}`
-    : await getSiteUrl();
+  const baseUrl =
+    forwardedHost && ALLOWED_HOSTS.includes(forwardedHost.toLowerCase())
+      ? `${forwardedProto}://${forwardedHost}`
+      : await getSiteUrl();
 
   // Fehler von Supabase (z.B. otp_expired)
   if (errorParam) {
