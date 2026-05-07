@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
 
   // Pro Beleg die Anzahl + Status der Positionen anhaengen
   const ids = (data ?? []).map((b) => (b as { id: string }).id);
-  let posByBeleg = new Map<string, { total: number; pending: number }>();
+  const posByBeleg = new Map<string, { total: number; pending: number }>();
   if (ids.length) {
     const { data: posRows } = await supabase
       .from('beleg_positionen')
@@ -83,7 +83,12 @@ export async function POST(req: NextRequest) {
   const quelle = (body.quelle ?? 'manuell') as 'upload' | 'manuell';
 
   if (!belegDatum) return NextResponse.json({ error: 'beleg_datum ist Pflicht' }, { status: 400 });
-  if (!Array.isArray(positionen) || positionen.length === 0) {
+  if (!Array.isArray(positionen)) {
+    return NextResponse.json({ error: 'positionen muss ein Array sein' }, { status: 400 });
+  }
+  // Beim Upload-Pfad ist ein leerer Beleg erlaubt — Positionen werden gleich
+  // per OCR oder manuell ergaenzt. Im manuellen Pfad bleibt mind. eine Pflicht.
+  if (quelle === 'manuell' && positionen.length === 0) {
     return NextResponse.json({ error: 'mindestens eine Position erforderlich' }, { status: 400 });
   }
 
@@ -120,16 +125,18 @@ export async function POST(req: NextRequest) {
     .single();
   if (belErr) return NextResponse.json({ error: belErr.message }, { status: 500 });
 
-  // Positionen einfuegen
-  const sanitized = positionen.map((p, i) => ({
-    ...sanitizePosition({ ...p, reihenfolge: p.reihenfolge ?? i }),
-    beleg_id: beleg.id,
-  }));
-  const { error: posErr } = await supabase.from('beleg_positionen').insert(sanitized);
-  if (posErr) {
-    // Rollback: Beleg wieder loeschen
-    await supabase.from('belege').delete().eq('id', beleg.id);
-    return NextResponse.json({ error: posErr.message }, { status: 500 });
+  // Positionen einfuegen (nur wenn welche da sind — Upload-Pfad startet leer)
+  if (positionen.length > 0) {
+    const sanitized = positionen.map((p, i) => ({
+      ...sanitizePosition({ ...p, reihenfolge: p.reihenfolge ?? i }),
+      beleg_id: beleg.id,
+    }));
+    const { error: posErr } = await supabase.from('beleg_positionen').insert(sanitized);
+    if (posErr) {
+      // Rollback: Beleg wieder loeschen
+      await supabase.from('belege').delete().eq('id', beleg.id);
+      return NextResponse.json({ error: posErr.message }, { status: 500 });
+    }
   }
 
   await recomputeBelegSummen(supabase, beleg.id);
