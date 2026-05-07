@@ -92,7 +92,18 @@ export default async function BlogArticlePage({ params }: { params: Promise<{ sl
 
   return (
     <>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          // Sweep 8: </ + < + Unicode-Linebreaks escapen, sonst kann ein Blog-
+          // Titel mit </script> den JSON-LD-Block aufbrechen und Fremd-JS
+          // injizieren (Stored XSS).
+          __html: JSON.stringify(jsonLd).replace(
+            /[<>  ]/g,
+            (c) => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'),
+          ),
+        }}
+      />
       <BlogArticleClient post={post} related={related} />
     </>
   );

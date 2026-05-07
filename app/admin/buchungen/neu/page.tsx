@@ -494,6 +494,12 @@ export default function ManualBookingPage() {
       items.push({ description: 'Selbstabholung', amount: 0 });
     }
 
+    // Sweep 8 K6: XSS-Schutz fuer window.open()-Rechnungsvorschau (cam2rent.de-Origin)
+    const esc = (s: unknown): string => {
+      if (s === null || s === undefined) return '';
+      return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    };
+
     const html = `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>Rechnungsvorschau – cam2rent</title>
 <style>
@@ -557,9 +563,9 @@ export default function ManualBookingPage() {
   </div>
   <div class="addr">
     <div class="addr-label">Rechnungsempfänger</div>
-    <div class="addr-name">${customerName || 'Kunde'}</div>
-    ${customerEmail ? `<div class="addr-email">${customerEmail}</div>` : ''}
-    ${street ? `<div class="addr-email">${street}, ${zip} ${city}</div>` : ''}
+    <div class="addr-name">${customerName ? esc(customerName) : 'Kunde'}</div>
+    ${customerEmail ? `<div class="addr-email">${esc(customerEmail)}</div>` : ''}
+    ${street ? `<div class="addr-email">${esc(street)}, ${esc(zip)} ${esc(city)}</div>` : ''}
   </div>
   <div class="section">Buchungsdetails</div>
   <div class="detail"><div class="detail-label">Lieferung</div><div class="detail-value">${deliveryMode === 'abholung' ? 'Selbstabholung' : shippingMethod === 'express' ? 'Express-Versand' : 'Standard-Versand'}</div></div>
@@ -569,20 +575,20 @@ export default function ManualBookingPage() {
   <table>
     <thead><tr><th>Beschreibung</th><th>Betrag</th></tr></thead>
     <tbody>
-      ${items.map(item => `<tr><td>${item.description}</td><td${item.amount === 0 ? ' class="zero-amount"' : ''}>${item.amount > 0 ? fmtEuro(item.amount) : '–'}</td></tr>`).join('\n      ')}
-      ${discountAmount > 0 ? `<tr><td style="color:#16a34a"><strong>Rabatt${discountMode === 'percent' && discountValue ? ` (${discountValue}%)` : ''}${discountReason ? ` – ${discountReason.replace(/[<>]/g, '')}` : ''}</strong></td><td style="color:#16a34a"><strong>−${fmtEuro(discountAmount)}</strong></td></tr>` : ''}
+      ${items.map(item => `<tr><td>${esc(item.description)}</td><td${item.amount === 0 ? ' class="zero-amount"' : ''}>${item.amount > 0 ? fmtEuro(item.amount) : '–'}</td></tr>`).join('\n      ')}
+      ${discountAmount > 0 ? `<tr><td style="color:#16a34a"><strong>Rabatt${discountMode === 'percent' && discountValue ? ` (${esc(discountValue)}%)` : ''}${discountReason ? ` – ${esc(discountReason)}` : ''}</strong></td><td style="color:#16a34a"><strong>−${fmtEuro(discountAmount)}</strong></td></tr>` : ''}
     </tbody>
   </table>
   <table style="margin-top:4px"><tbody><tr class="total-row"><td>Gesamtbetrag</td><td>${fmtEuro(total)}</td></tr></tbody></table>
   ${(depositMode === 'kaution') && deposit > 0 ? `<div style="font-size:8pt;color:#6b7280;margin-top:6px;text-align:right">* Enthält Kaution ${fmtEuro(deposit)} – wird nach Rückgabe erstattet</div>` : ''}
-  ${remark ? `<div class="note" style="margin-top:16px"><strong>Bemerkung:</strong><br>${remark.replace(/\n/g, '<br>')}</div>` : ''}
+  ${remark ? `<div class="note" style="margin-top:16px"><strong>Bemerkung:</strong><br>${esc(remark).replace(/\n/g, '<br>')}</div>` : ''}
   <div class="note"${remark ? ' style="margin-top:8px"' : ''}>${BIZ.taxHinweis}</div>
   ${paymentStatus === 'unpaid' ? `<div class="note" style="margin-top:12px;border:1px solid #d97706;background:#fffbeb">
     <strong style="color:#d97706">Überweisungsdaten:</strong><br>
     Kontoinhaber: ${BIZ.owner}<br>
     IBAN: ${BIZ.iban}<br>
     BIC: ${BIZ.bic}<br>
-    Verwendungszweck: <strong>${customerName || 'Kunde'} - ${createdBookingId ? createdBookingId.replace(/^(C2R|BK)-/, 'RE-') : 'RE-XXXXX'}</strong>
+    Verwendungszweck: <strong>${customerName ? esc(customerName) : 'Kunde'} - ${createdBookingId ? esc(createdBookingId.replace(/^(C2R|BK)-/, 'RE-')) : 'RE-XXXXX'}</strong>
   </div>
   <div style="display:flex;gap:24px;margin-top:12px;align-items:flex-start">
     <div style="text-align:center">

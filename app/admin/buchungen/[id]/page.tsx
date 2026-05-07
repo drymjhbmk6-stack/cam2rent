@@ -395,6 +395,20 @@ export default function BuchungDetailPage() {
     return result;
   }
 
+  // Sweep 8 K6: Stored XSS-Schutz fuer window.open()-Druckansichten.
+  // Der neu geoeffnete Tab erbt cam2rent.de-Origin via document.write, also
+  // laeuft jedes injizierte Script mit Admin-Cookies. User-Eingaben (Name,
+  // Adresse, Produktname, Seriennummer) werden mit `esc()` geescaped.
+  const esc = (s: unknown): string => {
+    if (s === null || s === undefined) return '';
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  };
+
   // ─── Gemeinsame Styles für A4-Dokumente (kompakt, 1 Seite) ───
   const docStyles = `
     @page { size: A4 portrait; margin: 12mm 15mm; }
@@ -442,33 +456,33 @@ export default function BuchungDetailPage() {
     const accRows = resolvedAcc.map((name) => {
       const isSetHeader = name.startsWith('── ');
       if (isSetHeader) {
-        return `<tr><td style="width:40px"></td><td style="font-weight:700;font-size:9pt;color:#1e3a5f;padding-top:6px">${name}</td><td style="width:50px"></td></tr>`;
+        return `<tr><td style="width:40px"></td><td style="font-weight:700;font-size:9pt;color:#1e3a5f;padding-top:6px">${esc(name)}</td><td style="width:50px"></td></tr>`;
       }
       accNum++;
-      return `<tr><td style="width:40px">${accNum}</td><td>${name}</td><td style="width:50px"></td></tr>`;
+      return `<tr><td style="width:40px">${accNum}</td><td>${esc(name)}</td><td style="width:50px"></td></tr>`;
     });
     const emptyCount = accNum > 0 ? 0 : 2;
     const zubehoerRows = accRows.join('') + Array.from({ length: emptyCount }, (_, i) => `<tr><td style="width:40px">${accNum + i + 1}</td><td></td><td style="width:50px"></td></tr>`).join('');
     const adresse = booking.shipping_address || (customer ? `${customer.address_street || ''}, ${customer.address_zip || ''} ${customer.address_city || ''}` : '');
 
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Versand-Packliste – ${booking.id}</title><style>${docStyles}</style></head><body>
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Versand-Packliste – ${esc(booking.id)}</title><style>${docStyles}</style></head><body>
   ${toolbarHtml}
   <h1>Versand-Packliste</h1>
-  <div class="subtitle">cam2rent · ${booking.id} · ${dateStr}</div>
+  <div class="subtitle">cam2rent · ${esc(booking.id)} · ${esc(dateStr)}</div>
   <div style="display:flex;gap:24px;margin-bottom:8px">
     <div class="info-grid" style="flex:1">
-      <span class="info-label">Kunde:</span><span class="info-value">${kundenName}</span>
-      <span class="info-label">Zeitraum:</span><span class="info-value">${zeitraum}</span>
+      <span class="info-label">Kunde:</span><span class="info-value">${esc(kundenName)}</span>
+      <span class="info-label">Zeitraum:</span><span class="info-value">${esc(zeitraum)}</span>
       <span class="info-label">Versandart:</span><span class="info-value">${booking.shipping_method === 'express' ? 'Express' : 'Standard'}</span>
     </div>
     <div class="info-grid" style="flex:1">
-      <span class="info-label">Adresse:</span><span class="info-value">${adresse}</span>
+      <span class="info-label">Adresse:</span><span class="info-value">${esc(adresse)}</span>
     </div>
   </div>
   <h2>1. Versandgegenstand</h2>
   <div style="display:flex;gap:16px;margin-bottom:4px">
-    <span><strong>Kamera:</strong> ${produktName}</span>
-    <span><strong>SN:</strong> ${booking.serial_number || '<span class="line line-short"></span>'}</span>
+    <span><strong>Kamera:</strong> ${esc(produktName)}</span>
+    <span><strong>SN:</strong> ${booking.serial_number ? esc(booking.serial_number) : '<span class="line line-short"></span>'}</span>
   </div>
   <p style="margin:4px 0 2px;font-weight:600;font-size:8.5pt">Zubehör:</p>
   <table><thead><tr><th style="width:30px">Nr.</th><th>Bezeichnung</th><th style="width:40px">OK</th></tr></thead><tbody>${zubehoerRows}</tbody></table>
@@ -496,7 +510,7 @@ export default function BuchungDetailPage() {
     // Kameras mit Seriennummern — Produktnamen aufsplitten (kommagetrennt)
     const productNames = (booking.product_name || '').split(',').map((n: string) => n.trim()).filter(Boolean);
     const kameraRows = productNames.map((name: string) =>
-      `<p style="margin-bottom:2px"><strong>Kamera:</strong> ${name} &nbsp;&nbsp; <strong>SN:</strong> ${booking.serial_number || '<span class="line line-short"></span>'}</p>`
+      `<p style="margin-bottom:2px"><strong>Kamera:</strong> ${esc(name)} &nbsp;&nbsp; <strong>SN:</strong> ${booking.serial_number ? esc(booking.serial_number) : '<span class="line line-short"></span>'}</p>`
     ).join('');
 
     // Zubehör-Namen auflösen (Sets → Einzelteile)
@@ -505,10 +519,10 @@ export default function BuchungDetailPage() {
     const accRows2 = resolvedAcc2.map((name: string) => {
       const isSetHeader = name.startsWith('── ');
       if (isSetHeader) {
-        return `<tr><td style="width:40px"></td><td style="font-weight:700;font-size:9pt;color:#1e3a5f;padding-top:6px">${name}</td><td style="width:50px"></td></tr>`;
+        return `<tr><td style="width:40px"></td><td style="font-weight:700;font-size:9pt;color:#1e3a5f;padding-top:6px">${esc(name)}</td><td style="width:50px"></td></tr>`;
       }
       accNum2++;
-      return `<tr><td style="width:40px">${accNum2}</td><td>${name}</td><td style="width:50px"></td></tr>`;
+      return `<tr><td style="width:40px">${accNum2}</td><td>${esc(name)}</td><td style="width:50px"></td></tr>`;
     });
     const emptyCount2 = accNum2 > 0 ? 0 : 2;
     const zubehoerRows = accRows2.join('') + Array.from({ length: emptyCount2 }, (_, i) => `<tr><td style="width:40px">${accNum2 + i + 1}</td><td></td><td style="width:50px"></td></tr>`).join('');
@@ -516,23 +530,23 @@ export default function BuchungDetailPage() {
     // Lieferart
     const lieferart = booking.delivery_mode === 'abholung' ? 'Abgeholt' : 'Versand';
 
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Übergabeprotokoll – ${booking.id}</title><style>${docStyles}</style></head><body>
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Übergabeprotokoll – ${esc(booking.id)}</title><style>${docStyles}</style></head><body>
   ${toolbarHtml}
   <h1>Übergabeprotokoll</h1>
-  <div class="subtitle">cam2rent · ${booking.id} · ${lieferart}</div>
+  <div class="subtitle">cam2rent · ${esc(booking.id)} · ${esc(lieferart)}</div>
 
   <div style="display:flex;gap:20px;margin-bottom:8px">
     <div style="flex:1">
       <p style="font-weight:700;font-size:8pt;color:#1e3a5f;margin-bottom:2px">Vermieter</p>
-      <p style="font-size:8.5pt">${BUSINESS.owner} · ${BUSINESS.fullAddress}</p>
+      <p style="font-size:8.5pt">${esc(BUSINESS.owner)} · ${esc(BUSINESS.fullAddress)}</p>
     </div>
     <div style="flex:1">
       <p style="font-weight:700;font-size:8pt;color:#1e3a5f;margin-bottom:2px">Mieter</p>
       <div class="info-grid" style="grid-template-columns:90px 1fr;margin-bottom:0">
-        <span class="info-label">Name:</span><span class="info-value">${kundenName || '<span style="display:inline-block;border-bottom:1px solid #333;width:140px"></span>'}</span>
-        <span class="info-label">Adresse:</span><span class="info-value">${kundenAdresse || '<span style="display:inline-block;border-bottom:1px solid #333;width:140px"></span>'}</span>
+        <span class="info-label">Name:</span><span class="info-value">${kundenName ? esc(kundenName) : '<span style="display:inline-block;border-bottom:1px solid #333;width:140px"></span>'}</span>
+        <span class="info-label">Adresse:</span><span class="info-value">${kundenAdresse ? esc(kundenAdresse) : '<span style="display:inline-block;border-bottom:1px solid #333;width:140px"></span>'}</span>
         <span class="info-label">Ausweis-Nr.:</span><span class="info-value"><span class="line" style="width:140px"></span></span>
-        <span class="info-label">Tel. / E-Mail:</span><span class="info-value">${kundenEmail || '<span class="line" style="width:140px"></span>'}</span>
+        <span class="info-label">Tel. / E-Mail:</span><span class="info-value">${kundenEmail ? esc(kundenEmail) : '<span class="line" style="width:140px"></span>'}</span>
       </div>
     </div>
   </div>
@@ -552,7 +566,7 @@ export default function BuchungDetailPage() {
 
   <h2>4. Bestätigung</h2>
   <p class="confirm-text">Der Mieter bestätigt den ordnungsgemäßen Erhalt des Equipments in beschriebenem Zustand. Schäden oder fehlendes Zubehör sind vermerkt.</p>
-  <p class="confirm-text">Mietzeitraum: <strong>${zeitraum}</strong> · Buchung: <strong>${booking.id}</strong></p>
+  <p class="confirm-text">Mietzeitraum: <strong>${esc(zeitraum)}</strong> · Buchung: <strong>${esc(booking.id)}</strong></p>
   <div class="sig-row"><div class="sig-block"><div class="sig-line"></div><div class="sig-label">(Vermieter, Ort/Datum)</div></div><div class="sig-block"><div class="sig-line"></div><div class="sig-label">(Mieter, Ort/Datum)</div></div></div>
 </body></html>`;
 

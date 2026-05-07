@@ -191,16 +191,20 @@ async function handle(req: NextRequest) {
 
     if (b.customer_email) {
       try {
-        const { sendAndLog } = await import('@/lib/email');
+        const { sendAndLog, escapeHtml, stripSubject } = await import('@/lib/email');
+        const safeId = escapeHtml(b.id);
+        const safeName = escapeHtml(b.customer_name || 'dort');
+        const safeProduct = escapeHtml(b.product_name || '');
+        const safeFrom = escapeHtml(b.rental_from || '');
         await sendAndLog({
           to: b.customer_email,
-          subject: `Deine Buchung ${b.id} wurde storniert`,
+          subject: stripSubject(`Deine Buchung ${b.id} wurde storniert`),
           html: `
             <div style="font-family: 'DM Sans', Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px 16px;">
-              <h1 style="font-size: 22px; font-weight: 700; color: #1a1a1a;">Buchung ${b.id} storniert</h1>
+              <h1 style="font-size: 22px; font-weight: 700; color: #1a1a1a;">Buchung ${safeId} storniert</h1>
               <p style="color: #64748b; font-size: 15px; line-height: 1.6;">
-                Hallo ${b.customer_name || 'dort'},<br/><br/>
-                leider konnten wir bis zur Zahlungsfrist keine Zahlung für deine Buchung "<strong>${b.product_name}</strong>" (Start ${b.rental_from}) verbuchen. Die Buchung wurde daher automatisch storniert.
+                Hallo ${safeName},<br/><br/>
+                leider konnten wir bis zur Zahlungsfrist keine Zahlung für deine Buchung "<strong>${safeProduct}</strong>" (Start ${safeFrom}) verbuchen. Die Buchung wurde daher automatisch storniert.
               </p>
               <p style="color: #64748b; font-size: 14px; line-height: 1.6;">
                 Wenn du dein Gerät trotzdem noch mieten möchtest, leg die Buchung einfach neu an — ab dem Zeitpunkt der Zahlung ist die Kamera wieder für dich reserviert.

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyCronAuth } from '@/lib/cron-auth';
 import { createServiceClient } from '@/lib/supabase';
-import { sendAndLog } from '@/lib/email';
+import { sendAndLog, escapeHtml, stripSubject } from '@/lib/email';
 import { createAdminNotification } from '@/lib/admin-notifications';
 import { getStripe } from '@/lib/stripe';
 import { BUSINESS } from '@/lib/business-config';
@@ -161,19 +161,23 @@ async function handle(req: NextRequest) {
     // Kunde informieren
     if (b.customer_email) {
       try {
+        const safeBusiness = escapeHtml(BUSINESS.name);
+        const safeName = escapeHtml(b.customer_name || 'Kunde');
+        const safeId = escapeHtml(b.id);
+        const safeProduct = escapeHtml(b.product_name || 'Kamera');
         await sendAndLog({
           to: b.customer_email,
-          subject: `Buchung ${b.id} storniert — Ausweis fehlte`,
+          subject: stripSubject(`Buchung ${b.id} storniert — Ausweis fehlte`),
           html: `<!DOCTYPE html><html lang="de"><body style="margin:0;padding:0;background:#f5f5f0;font-family:'DM Sans',Arial,sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f0;padding:40px 16px;"><tr><td align="center">
 <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
   <tr><td style="background:#0a0a0a;border-radius:12px 12px 0 0;padding:24px 32px;">
-    <p style="margin:0;font-size:20px;font-weight:700;color:#ffffff;">${BUSINESS.name}</p>
+    <p style="margin:0;font-size:20px;font-weight:700;color:#ffffff;">${safeBusiness}</p>
   </td></tr>
   <tr><td style="background:#ffffff;padding:32px;">
     <h1 style="margin:0 0 12px;font-size:20px;font-weight:700;color:#991b1b;">Deine Buchung wurde storniert</h1>
-    <p style="margin:0 0 12px;font-size:15px;color:#374151;">Hallo ${b.customer_name || 'Kunde'},</p>
-    <p style="margin:0 0 16px;font-size:15px;color:#374151;">deine Buchung <strong>${b.id}</strong> (${b.product_name || 'Kamera'}) wurde storniert, weil bis zum Versand-Termin kein verifizierter Ausweis vorlag. Ohne Ausweisprueung koennen wir aus rechtlichen Gruenden keine Kamera versenden.</p>
+    <p style="margin:0 0 12px;font-size:15px;color:#374151;">Hallo ${safeName},</p>
+    <p style="margin:0 0 16px;font-size:15px;color:#374151;">deine Buchung <strong>${safeId}</strong> (${safeProduct}) wurde storniert, weil bis zum Versand-Termin kein verifizierter Ausweis vorlag. Ohne Ausweisprueung koennen wir aus rechtlichen Gruenden keine Kamera versenden.</p>
     <p style="margin:0 0 16px;font-size:15px;color:#374151;">Die Zahlung haben wir automatisch erstattet — das Geld sollte innerhalb von 5–10 Werktagen wieder auf deinem Konto sein.</p>
     <p style="margin:0;font-size:14px;color:#6b7280;">Gerne kannst du eine neue Buchung anlegen. Lade vorab deinen Ausweis unter <a href="https://cam2rent.de/konto/verifizierung" style="color:#3b82f6;">Mein Konto → Verifizierung</a> hoch, damit wir beim naechsten Mal direkt versenden koennen.</p>
   </td></tr>

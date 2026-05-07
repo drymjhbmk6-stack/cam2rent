@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyCronAuth } from '@/lib/cron-auth';
 import { createServiceClient } from '@/lib/supabase';
-import { sendAndLog } from '@/lib/email';
+import { sendAndLog, escapeHtml, stripSubject } from '@/lib/email';
 import { BUSINESS } from '@/lib/business-config';
 import { getSiteUrl } from '@/lib/env-mode';
 import { acquireCronLock, releaseCronLock } from '@/lib/cron-lock';
@@ -110,20 +110,25 @@ async function handle(req: NextRequest) {
     const uploadUrl = `${baseUrl}/konto/verifizierung?booking=${encodeURIComponent(b.id)}`;
     const urgency = `in ${diffDays} Tagen`;
     const isFinal = diffDays === 3; // letzte Erinnerung vor Auto-Storno
-    const subject = isFinal
+    const subject = stripSubject(isFinal
       ? `LETZTE ERINNERUNG: Ausweis fuer Buchung ${b.id} — Storno in 24h`
-      : `Ausweis-Upload fuer deine Buchung ${b.id} (${urgency})`;
+      : `Ausweis-Upload fuer deine Buchung ${b.id} (${urgency})`);
+    const safeId = escapeHtml(b.id);
+    const safeName = escapeHtml(b.customer_name || 'Kunde');
+    const safeProduct = escapeHtml(b.product_name || 'Kamera');
+    const safeUrgency = escapeHtml(urgency);
+    const safeBusiness = escapeHtml(BUSINESS.name);
     const html = `<!DOCTYPE html>
 <html lang="de"><body style="margin:0;padding:0;background:#f5f5f0;font-family:'DM Sans',Arial,sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f0;padding:40px 16px;"><tr><td align="center">
 <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
   <tr><td style="background:#0a0a0a;border-radius:12px 12px 0 0;padding:24px 32px;">
-    <p style="margin:0;font-size:20px;font-weight:700;color:#ffffff;">${BUSINESS.name}</p>
+    <p style="margin:0;font-size:20px;font-weight:700;color:#ffffff;">${safeBusiness}</p>
   </td></tr>
   <tr><td style="background:#ffffff;padding:32px;">
     <h1 style="margin:0 0 12px;font-size:20px;font-weight:700;color:#9a3412;">${isFinal ? 'Letzte Erinnerung — morgen wird storniert' : 'Ausweis fehlt noch'}</h1>
-    <p style="margin:0 0 12px;font-size:15px;color:#374151;">Hallo ${b.customer_name || 'Kunde'},</p>
-    <p style="margin:0 0 16px;font-size:15px;color:#374151;">deine Buchung <strong>${b.id}</strong> (${b.product_name || 'Kamera'}) startet <strong>${urgency}</strong>. Damit wir die Kamera rechtzeitig versenden koennen, brauchen wir eine Kopie deines Personalausweises.</p>
+    <p style="margin:0 0 12px;font-size:15px;color:#374151;">Hallo ${safeName},</p>
+    <p style="margin:0 0 16px;font-size:15px;color:#374151;">deine Buchung <strong>${safeId}</strong> (${safeProduct}) startet <strong>${safeUrgency}</strong>. Damit wir die Kamera rechtzeitig versenden koennen, brauchen wir eine Kopie deines Personalausweises.</p>
     <p style="margin:0 0 24px;"><a href="${uploadUrl}" style="display:inline-block;padding:14px 28px;background:#ea580c;color:#ffffff;text-decoration:none;border-radius:8px;font-weight:700;font-size:15px;">Ausweis jetzt hochladen</a></p>
     <p style="margin:0 0 8px;font-size:13px;color:#6b7280;">${isFinal
       ? 'Wenn bis morgen Mittag kein Ausweis vorliegt, stornieren wir die Buchung automatisch und erstatten dir den vollen Betrag. Einfacher fuer alle, wenn du den Upload jetzt erledigst — dauert 30 Sekunden.'

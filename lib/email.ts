@@ -1006,9 +1006,9 @@ export function buildShippingEmail(d: ShippingEmailData): { html: string; subjec
 
           <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;border:2px solid #e5e7eb;border-radius:10px;margin-bottom:24px;">
             <tr><td style="padding:20px 24px;">
-              <p style="margin:0 0 4px;font-size:12px;color:#9ca3af;text-transform:uppercase;letter-spacing:1px;">Tracking-Nummer (${d.carrier})</p>
-              <p style="margin:0 0 16px;font-size:20px;font-weight:700;color:#0a0a0a;letter-spacing:2px;">${d.trackingNumber}</p>
-              <a href="${d.trackingUrl}"
+              <p style="margin:0 0 4px;font-size:12px;color:#9ca3af;text-transform:uppercase;letter-spacing:1px;">Tracking-Nummer (${h(d.carrier)})</p>
+              <p style="margin:0 0 16px;font-size:20px;font-weight:700;color:#0a0a0a;letter-spacing:2px;">${h(d.trackingNumber)}</p>
+              <a href="${h(d.trackingUrl)}"
                  style="display:inline-block;background:#3b82f6;color:#ffffff;font-size:14px;font-weight:600;padding:10px 24px;border-radius:8px;text-decoration:none;">
                 Sendung verfolgen →
               </a>
@@ -1018,7 +1018,7 @@ export function buildShippingEmail(d: ShippingEmailData): { html: string; subjec
           <table width="100%" cellpadding="0" cellspacing="0">
             <tr>
               <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#6b7280;width:45%;">Buchungsnummer</td>
-              <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;font-weight:600;color:#0a0a0a;">${d.bookingId}</td>
+              <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;font-weight:600;color:#0a0a0a;">${h(d.bookingId)}</td>
             </tr>
             <tr>
               <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:14px;color:#6b7280;">Kamera</td>
