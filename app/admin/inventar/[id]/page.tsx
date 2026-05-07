@@ -318,6 +318,28 @@ export default function InventarDetailPage() {
           <div className="flex justify-between items-center mb-3">
             <h2 className="font-semibold">Wiederbeschaffungswert</h2>
             <div className="flex gap-2">
+              {links.length > 0 && (
+                <button
+                  onClick={async () => {
+                    if (!confirm('Kaufpreis + Wiederbeschaffungswert anhand der Beleg-Position neu berechnen? Bei Kleinunternehmer wird der Brutto-Betrag genommen (Vorsteuer ist nicht abziehbar).')) return;
+                    try {
+                      const res = await fetch(`/api/admin/inventar/${unit.id}/refresh-from-beleg`, { method: 'POST' });
+                      if (!res.ok) {
+                        const d = await res.json().catch(() => ({}));
+                        alert(d.error || 'Fehler beim Neuberechnen');
+                        return;
+                      }
+                      window.location.reload();
+                    } catch {
+                      alert('Netzwerkfehler beim Neuberechnen');
+                    }
+                  }}
+                  className="text-cyan-400 text-sm hover:text-cyan-300"
+                  title="Bei Kleinunternehmer wird brutto (netto + MwSt) als Anschaffungswert genommen"
+                >
+                  🔄 Aus Beleg neu berechnen
+                </button>
+              )}
               {!showWbwEdit ? (
                 <button onClick={() => { setShowWbwEdit(true); setWbwInput(unit.wiederbeschaffungswert ?? unit.kaufpreis_netto ?? 0); }} className="text-cyan-400 text-sm hover:text-cyan-300">
                   {unit.wbw_manuell_gesetzt ? 'Override anpassen' : 'Manuell setzen'}

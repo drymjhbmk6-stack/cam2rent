@@ -31,7 +31,7 @@ export async function POST(
 
   const { data: position, error: pErr } = await supabase
     .from('beleg_positionen')
-    .select('id, einzelpreis_netto, beleg:belege(id, beleg_datum)')
+    .select('id, einzelpreis_netto, mwst_satz, beleg:belege(id, beleg_datum)')
     .eq('id', body.beleg_position_id)
     .single();
   if (pErr) return NextResponse.json({ error: pErr.message }, { status: 404 });
@@ -46,21 +46,39 @@ export async function POST(
     return NextResponse.json({ error: insErr.message }, { status: 500 });
   }
 
+  // Steuermodus laden — Kleinunternehmer kann keine Vorsteuer abziehen,
+  // also ist der wirtschaftliche Anschaffungswert = Brutto (netto + MwSt).
+  // Bei Regelbesteuerung wird die MwSt als Vorsteuer geltend gemacht,
+  // also bleibt der Anschaffungswert = netto.
+  const { data: taxRow } = await supabase
+    .from('admin_settings').select('value').eq('key', 'tax_mode').maybeSingle();
+  const taxMode = ((taxRow?.value as { mode?: string } | string | undefined) as string) === 'regelbesteuerung'
+    ? 'regelbesteuerung'
+    : (typeof taxRow?.value === 'object' && (taxRow!.value as { mode?: string }).mode === 'regelbesteuerung'
+        ? 'regelbesteuerung'
+        : 'kleinunternehmer');
+
   // Unit-Felder updaten falls leer
   const update: Record<string, unknown> = { beleg_status: 'verknuepft' };
   const u = unit as { kaufpreis_netto: number | null; kaufdatum: string | null; wbw_manuell_gesetzt: boolean; wiederbeschaffungswert: number | null };
   const beleg = (position as unknown as { beleg: { beleg_datum: string } }).beleg;
-  const positionPrice = Number((position as { einzelpreis_netto: number }).einzelpreis_netto);
+  const positionNetto = Number((position as { einzelpreis_netto: number }).einzelpreis_netto);
+  const positionMwst = Number((position as { mwst_satz: number | null }).mwst_satz ?? 0);
+  // Anschaffungswert: bei Kleinunternehmer brutto, sonst netto.
+  const anschaffungsWert = taxMode === 'kleinunternehmer'
+    ? positionNetto * (1 + positionMwst / 100)
+    : positionNetto;
+  const anschaffungsWertRounded = Math.round(anschaffungsWert * 100) / 100;
 
   if (u.kaufpreis_netto === null || u.kaufpreis_netto === undefined) {
-    update.kaufpreis_netto = positionPrice;
+    update.kaufpreis_netto = anschaffungsWertRounded;
   }
   if (!u.kaufdatum && beleg?.beleg_datum) {
     update.kaufdatum = beleg.beleg_datum;
   }
   // WBW nur initialisieren wenn KEIN Override + WBW noch leer
   if (!u.wbw_manuell_gesetzt && (u.wiederbeschaffungswert === null || u.wiederbeschaffungswert === undefined)) {
-    update.wiederbeschaffungswert = positionPrice;
+    update.wiederbeschaffungswert = anschaffungsWertRounded;
     update.wbw_manuell_gesetzt = false;  // wichtig: bleibt false, damit Formel greift
   }
 
