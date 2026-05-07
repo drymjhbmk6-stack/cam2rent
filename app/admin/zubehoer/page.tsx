@@ -673,7 +673,7 @@ function AccessoryRow({ acc, isOpen, isInternal, savedId, deletingId, productLis
   return (
     <tr
       id={`acc-card-${acc.id}`}
-      className={`border-b border-brand-border dark:border-slate-700 last:border-b-0 scroll-mt-20 transition-colors ${isOpen ? 'bg-slate-50 dark:bg-slate-800/60' : 'hover:bg-slate-50 dark:hover:bg-slate-800/60'}`}
+      className={`border-b border-brand-border dark:border-slate-700 last:border-b-0 scroll-mt-20 transition-colors ${isOpen ? 'bg-slate-50 dark:bg-slate-800' : 'hover:bg-slate-50 dark:hover:bg-slate-800'}`}
     >
       {/* Name */}
       <td className={`px-4 py-3 align-top ${isInternal ? 'border-l-2 border-amber-300 dark:border-amber-400' : ''}`}>
@@ -778,8 +778,8 @@ function AccessoryEditRow({ acc, editForm, setEditForm, savingId, productList, o
   onSave: (id: string) => void;
 }) {
   return (
-    <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-brand-border dark:border-slate-700">
-      <td colSpan={5} className="px-5 py-5">
+    <tr className="bg-slate-50 dark:bg-slate-800 border-b border-brand-border dark:border-slate-700">
+      <td colSpan={5} className="px-5 py-5 dark:[&_input]:bg-slate-900 dark:[&_input]:text-slate-100 dark:[&_input]:border-slate-700 dark:[&_input]:placeholder-slate-500 dark:[&_select]:bg-slate-900 dark:[&_select]:text-slate-100 dark:[&_select]:border-slate-700 dark:[&_textarea]:bg-slate-900 dark:[&_textarea]:text-slate-100 dark:[&_textarea]:border-slate-700">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Name</label>

@@ -435,7 +435,7 @@ export default function AdminSetsPage() {
 
                         return (
                           <React.Fragment key={set.id}>
-                            <tr className={`border-b border-brand-border dark:border-slate-700 last:border-b-0 transition-colors ${isExpanded ? 'bg-slate-50 dark:bg-slate-800/60' : 'hover:bg-slate-50 dark:hover:bg-slate-800/60'}`}>
+                            <tr className={`border-b border-brand-border dark:border-slate-700 last:border-b-0 transition-colors ${isExpanded ? 'bg-slate-50 dark:bg-slate-800' : 'hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
                               {/* Set: Bild + Name + Badges */}
                               <td className="px-4 py-3 align-top">
                                 <div className="flex items-start gap-3">
@@ -521,8 +521,8 @@ export default function AdminSetsPage() {
 
                   {/* Edit Panel */}
                   {isExpanded && e && (
-                    <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-brand-border dark:border-slate-700">
-                      <td colSpan={4} className="px-5 py-5">
+                    <tr className="bg-slate-50 dark:bg-slate-800 border-b border-brand-border dark:border-slate-700">
+                      <td colSpan={4} className="px-5 py-5 dark:[&_input]:bg-slate-900 dark:[&_input]:text-slate-100 dark:[&_input]:border-slate-700 dark:[&_input]:placeholder-slate-500 dark:[&_select]:bg-slate-900 dark:[&_select]:text-slate-100 dark:[&_select]:border-slate-700 dark:[&_textarea]:bg-slate-900 dark:[&_textarea]:text-slate-100 dark:[&_textarea]:border-slate-700">
                        <div className="space-y-5">
                       {/* Grunddaten */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

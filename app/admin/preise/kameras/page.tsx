@@ -134,7 +134,7 @@ export default function AdminKameraListePage() {
                       {brandProducts.map((p) => (
                         <tr
                           key={p.id}
-                          className="border-b border-brand-border dark:border-slate-700 last:border-b-0 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/60"
+                          className="border-b border-brand-border dark:border-slate-700 last:border-b-0 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800"
                         >
                           {/* Name + Brand */}
                           <td className="px-4 py-3 align-top">
