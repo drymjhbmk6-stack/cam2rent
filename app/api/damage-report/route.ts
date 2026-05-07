@@ -153,13 +153,11 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
-      const { data: urlData } = supabase.storage
-        .from('damage-photos')
-        .getPublicUrl(fileName);
-
-      if (urlData?.publicUrl) {
-        photoUrls.push(urlData.publicUrl);
-      }
+      // Sweep 9 Followup: Storage-Pfad statt PublicURL speichern.
+      // Bucket muss privat sein (DSGVO — Schadensfotos enthalten ggf. Personen
+      // und Locations). Admin-UI laedt via /api/admin/damage-photo-url
+      // signed URLs (5 Min Lifetime).
+      photoUrls.push(fileName);
     }
 
     // Schadensmeldung erstellen

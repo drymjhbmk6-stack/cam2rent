@@ -12,6 +12,18 @@ interface AuditParams {
   request?: Request;
 }
 
+// Kritische Aktionen, deren Audit-Log NICHT stillschweigend verloren gehen
+// darf — bei DB-Fehler wird zusaetzlich eine Owner-Notification erzeugt.
+function isCriticalAction(action: string): boolean {
+  return (
+    action.includes('delete') ||
+    action.includes('anonymize') ||
+    action.startsWith('env_mode.') ||
+    action.startsWith('period.') ||
+    action.includes('blacklist')
+  );
+}
+
 /**
  * Zentrale Audit-Log-Funktion.
  * Schreibt in die bestehende `admin_audit_log`-Tabelle.
@@ -74,12 +86,7 @@ export async function logAudit(params: AuditParams): Promise<void> {
       // Owner das sonst nicht, kritisches Compliance-Risiko bei DSGVO/GoBD.
       // Critical-Aktionen (delete/anonymize/env_mode) loggen wir doppelt
       // ueber admin_notifications, damit der Vorfall aufgespuert werden kann.
-      const isCritical =
-        params.action.includes('delete') ||
-        params.action.includes('anonymize') ||
-        params.action.startsWith('env_mode.') ||
-        params.action.startsWith('period.') ||
-        params.action.includes('blacklist');
+      const isCritical = isCriticalAction(params.action);
       if (isCritical) {
         try {
           await supabase.from('admin_notifications').insert({

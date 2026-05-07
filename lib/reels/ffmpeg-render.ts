@@ -24,6 +24,7 @@ import path from 'path';
 import type { ReelScript } from './script-ai';
 import type { StockClip } from './stock-sources/types';
 import { stableHash } from './stock-sources';
+import { isAllowedStockUrl } from '@/lib/url-allowlist';
 
 export type MotionStyle = 'static' | 'kenburns' | 'mixed';
 
@@ -284,7 +285,6 @@ export async function downloadToFile(url: string, destPath: string): Promise<voi
   // Write-Path validiert (Sweep 7 #7), aber Pre-Sweep-7-Music-Rows oder
   // andere DB-Manipulationen koennten beliebige URLs einschleusen — der
   // Render wuerde sonst SSRF auf interne Adressen machen.
-  const { isAllowedStockUrl } = await import('@/lib/url-allowlist');
   if (!isAllowedStockUrl(url)) {
     throw new Error(`URL nicht in Stock-Allowlist: ${url.slice(0, 120)}`);
   }

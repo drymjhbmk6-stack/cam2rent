@@ -340,16 +340,25 @@ export default function AdminSchaedenPage() {
                   Fotos ({selectedReport.photos.length})
                 </p>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  {selectedReport.photos.map((url, i) => (
-                    <button
-                      key={i}
-                      onClick={() => setPhotoModal(url)}
-                      style={{ width: 80, height: 80, borderRadius: 8, overflow: 'hidden', border: '1px solid #1e293b', cursor: 'pointer', padding: 0, background: 'none' }}
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={url} alt={`Schaden ${i + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    </button>
-                  ))}
+                  {selectedReport.photos.map((urlOrPath, i) => {
+                    // Sweep 9 Followup: neue Eintraege sind Storage-Pfade,
+                    // Legacy-Eintraege sind volle URLs (PublicURL aus Pre-
+                    // Sweep-9-Zeit). Beide unterstuetzen.
+                    const isLegacyUrl = /^https?:\/\//.test(urlOrPath);
+                    const src = isLegacyUrl
+                      ? urlOrPath
+                      : `/api/admin/damage-photo-url?path=${encodeURIComponent(urlOrPath)}`;
+                    return (
+                      <button
+                        key={i}
+                        onClick={() => setPhotoModal(src)}
+                        style={{ width: 80, height: 80, borderRadius: 8, overflow: 'hidden', border: '1px solid #1e293b', cursor: 'pointer', padding: 0, background: 'none' }}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={src} alt={`Schaden ${i + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}

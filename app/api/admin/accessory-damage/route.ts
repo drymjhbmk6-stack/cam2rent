@@ -194,8 +194,9 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
-      const { data: urlData } = supabase.storage.from('damage-photos').getPublicUrl(fileName);
-      if (urlData?.publicUrl) photoUrls.push(urlData.publicUrl);
+      // Sweep 9 Followup: Storage-Pfad statt PublicURL — Bucket privat, Anzeige
+      // ueber /api/admin/damage-photo-url (signed URLs).
+      photoUrls.push(fileName);
     }
 
     if (photoUrls.length === 0) {
