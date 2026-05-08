@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 
 interface Beleg {
@@ -31,6 +31,17 @@ const STATUS_COLOR: Record<string, string> = {
   festgeschrieben: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30',
 };
 
+// Reihenfolge fuer Status-Sortierung: offen (oben/neu) → festgeschrieben (unten/erledigt)
+const STATUS_ORDER: Record<string, number> = {
+  offen: 0,
+  teilweise: 1,
+  klassifiziert: 2,
+  festgeschrieben: 3,
+};
+
+type SortKey = 'beleg_nr' | 'beleg_datum' | 'lieferant' | 'summe_brutto' | 'klassifizierung' | 'status';
+type SortDir = 'asc' | 'desc';
+
 function fmtEuro(n: number): string {
   return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(n);
 }
@@ -38,11 +49,25 @@ function fmtDate(s: string): string {
   return new Date(s).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' });
 }
 
+function getSortValue(b: Beleg, key: SortKey): string | number {
+  switch (key) {
+    case 'beleg_nr': return b.beleg_nr ?? '';
+    case 'beleg_datum': return b.beleg_datum ?? '';   // ISO YYYY-MM-DD ist lex-sortierbar
+    case 'lieferant': return (b.lieferant?.name ?? '').toLocaleLowerCase('de-DE');
+    case 'summe_brutto': return Number(b.summe_brutto ?? 0);
+    case 'klassifizierung': return b.positions_total === 0 ? 0 : (b.positions_total - b.positions_pending) / b.positions_total;
+    case 'status': return STATUS_ORDER[b.status] ?? 99;
+  }
+}
+
 export default function BelegeListePage() {
   const [belege, setBelege] = useState<Beleg[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
   const [q, setQ] = useState('');
+  // Default: neueste oben — Datum absteigend.
+  const [sortKey, setSortKey] = useState<SortKey>('beleg_datum');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
 
   useEffect(() => {
     const load = async () => {
@@ -60,8 +85,56 @@ export default function BelegeListePage() {
     return () => clearTimeout(debounce);
   }, [statusFilter, q]);
 
+  // Client-seitige Sortierung — bei 100 Eintraegen vernachlaessigbarer Aufwand
+  // gegenueber dem Network-Roundtrip einer Server-Sortierung.
+  const sortedBelege = useMemo(() => {
+    const arr = [...belege];
+    arr.sort((a, b) => {
+      const va = getSortValue(a, sortKey);
+      const vb = getSortValue(b, sortKey);
+      if (va === vb) return 0;
+      const cmp = typeof va === 'number' && typeof vb === 'number'
+        ? va - vb
+        : String(va).localeCompare(String(vb), 'de-DE');
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+    return arr;
+  }, [belege, sortKey, sortDir]);
+
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) {
+      // gleicher Key → Richtung wechseln
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      // neuer Key → bei Datum/Brutto/Klassifizierung default desc, sonst asc
+      setSortKey(key);
+      setSortDir(key === 'beleg_datum' || key === 'summe_brutto' || key === 'klassifizierung' ? 'desc' : 'asc');
+    }
+  }
+
+  function SortHeader({
+    label, k, align,
+  }: { label: string; k: SortKey; align?: 'left' | 'right' }) {
+    const active = sortKey === k;
+    const arrow = !active ? '↕' : sortDir === 'asc' ? '↑' : '↓';
+    return (
+      <th className={`px-3 py-2 ${align === 'right' ? 'text-right' : 'text-left'}`}>
+        <button
+          onClick={() => toggleSort(k)}
+          className={`inline-flex items-center gap-1 uppercase text-xs font-semibold tracking-wider transition-colors ${
+            active ? 'text-cyan-300' : 'text-slate-400 hover:text-slate-200'
+          }`}
+          aria-label={`Sortieren nach ${label}${active ? `, aktuell ${sortDir === 'asc' ? 'aufsteigend' : 'absteigend'}` : ''}`}
+        >
+          <span>{label}</span>
+          <span className={active ? '' : 'opacity-50'}>{arrow}</span>
+        </button>
+      </th>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-[#0a0f1e] text-slate-50 px-4 sm:px-6 py-6">
+    <div className="min-h-dvh bg-[#0a0f1e] text-slate-50 px-4 sm:px-6 py-6">
       <AdminBackLink href="/admin/buchhaltung" />
       <div className="max-w-7xl mx-auto mt-4">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
@@ -102,41 +175,43 @@ export default function BelegeListePage() {
 
         {loading ? (
           <p className="text-slate-400">Lädt…</p>
-        ) : belege.length === 0 ? (
+        ) : sortedBelege.length === 0 ? (
           <p className="text-slate-400">Keine Belege gefunden.</p>
         ) : (
-          <div className="bg-[#111827] rounded border border-slate-800 overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-900 text-left text-xs uppercase text-slate-400">
+          // overflow-x-auto + min-w auf der Tabelle = horizontal scrollbar auf
+          // schmalen Viewports, Lieferanten-Namen werden nicht mehr umbrochen.
+          <div className="bg-[#111827] rounded border border-slate-800 overflow-x-auto">
+            <table className="w-full min-w-[760px] text-sm">
+              <thead className="bg-slate-900 text-left">
                 <tr>
-                  <th className="px-3 py-2">Beleg-Nr</th>
-                  <th className="px-3 py-2">Datum</th>
-                  <th className="px-3 py-2">Lieferant</th>
-                  <th className="px-3 py-2 text-right">Brutto</th>
-                  <th className="px-3 py-2">Klassif.</th>
-                  <th className="px-3 py-2">Status</th>
+                  <SortHeader label="Beleg-Nr" k="beleg_nr" />
+                  <SortHeader label="Datum" k="beleg_datum" />
+                  <SortHeader label="Lieferant" k="lieferant" />
+                  <SortHeader label="Brutto" k="summe_brutto" align="right" />
+                  <SortHeader label="Klassif." k="klassifizierung" />
+                  <SortHeader label="Status" k="status" />
                 </tr>
               </thead>
               <tbody>
-                {belege.map((b) => (
+                {sortedBelege.map((b) => (
                   <tr
                     key={b.id}
                     className="border-t border-slate-800 hover:bg-slate-800/40 cursor-pointer"
                     onClick={() => { window.location.href = `/admin/buchhaltung/belege/${b.id}`; }}
                   >
-                    <td className="px-3 py-2 font-mono text-xs">{b.beleg_nr}</td>
-                    <td className="px-3 py-2">{fmtDate(b.beleg_datum)}</td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2 font-mono text-xs whitespace-nowrap">{b.beleg_nr}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">{fmtDate(b.beleg_datum)}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">
                       {b.lieferant?.name ?? <span className="text-slate-500 italic">–</span>}
                       {b.ist_eigenbeleg && <span className="ml-2 text-xs text-amber-400">(Eigenbeleg)</span>}
                     </td>
-                    <td className="px-3 py-2 text-right">{fmtEuro(Number(b.summe_brutto))}</td>
-                    <td className="px-3 py-2 text-xs">
+                    <td className="px-3 py-2 text-right whitespace-nowrap">{fmtEuro(Number(b.summe_brutto))}</td>
+                    <td className="px-3 py-2 text-xs whitespace-nowrap">
                       {b.positions_pending > 0
                         ? <span className="text-amber-400">{b.positions_total - b.positions_pending}/{b.positions_total}</span>
                         : <span className="text-emerald-400">{b.positions_total}/{b.positions_total} ✓</span>}
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2 whitespace-nowrap">
                       <span className={`inline-block px-2 py-0.5 rounded text-xs border ${STATUS_COLOR[b.status]}`}>
                         {STATUS_LABEL[b.status]}
                       </span>
