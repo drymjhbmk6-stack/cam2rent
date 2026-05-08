@@ -1,8 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
-import { extractInvoice } from '@/lib/ai/invoice-extract';
+import { extractInvoice, type InvoiceMimeType } from '@/lib/ai/invoice-extract';
 import { sanitizePosition, recomputeBelegSummen } from '@/lib/buchhaltung/beleg-utils';
 import { logAudit } from '@/lib/audit';
+
+const ALLOWED_MIME: ReadonlySet<InvoiceMimeType> = new Set([
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+]);
 
 /**
  * POST /api/admin/belege/[id]/ocr
@@ -47,19 +54,30 @@ export async function POST(
   if (dlErr || !blob) return NextResponse.json({ error: dlErr?.message ?? 'Download fehlgeschlagen' }, { status: 500 });
 
   const buffer = Buffer.from(await blob.arrayBuffer());
-  const mime = (anhang as { mime_type: string }).mime_type;
+  const rawMime = (anhang as { mime_type: string }).mime_type;
+  // Eingehende Mime-Types vom Storage sind Plain-Strings — Claude akzeptiert
+  // nur eine schmale Allowlist, sonst antwortet das Modell mit "Format nicht
+  // unterstuetzt" und der OCR-Step schlaegt mit kryptischer Meldung fehl.
+  if (!ALLOWED_MIME.has(rawMime as InvoiceMimeType)) {
+    return NextResponse.json(
+      { error: `OCR-Format ${rawMime} nicht unterstützt (erlaubt: PDF, JPG, PNG, WebP)` },
+      { status: 415 },
+    );
+  }
+  const mime = rawMime as InvoiceMimeType;
 
-  let extracted;
+  let invoice;
   try {
-    extracted = await extractInvoice(buffer, mime);
+    const result = await extractInvoice(buffer, mime);
+    invoice = result.invoice;
   } catch (err) {
     return NextResponse.json({ error: `OCR fehlgeschlagen: ${(err as Error).message}` }, { status: 500 });
   }
 
   // Lieferant: existierender oder neuer
   let lieferantId: string | null = beleg.lieferant_id;
-  if (!lieferantId && extracted.supplier?.name) {
-    const supplierName = extracted.supplier.name.trim().slice(0, 200);
+  if (!lieferantId && invoice.supplier?.name) {
+    const supplierName = invoice.supplier.name.trim().slice(0, 200);
     const { data: existing } = await supabase
       .from('lieferanten').select('id').ilike('name', supplierName).maybeSingle();
     if (existing) {
@@ -67,9 +85,9 @@ export async function POST(
     } else {
       const { data: created } = await supabase.from('lieferanten').insert({
         name: supplierName,
-        adresse: extracted.supplier.address ?? null,
-        email: extracted.supplier.email ?? null,
-        ust_id: extracted.supplier.vat_id ?? null,
+        adresse: invoice.supplier.address ?? null,
+        email: invoice.supplier.email ?? null,
+        ust_id: invoice.supplier.vat_id ?? null,
       }).select('id').single();
       if (created) lieferantId = (created as { id: string }).id;
     }
@@ -78,8 +96,8 @@ export async function POST(
   // Beleg-Header updaten
   await supabase.from('belege').update({
     lieferant_id: lieferantId,
-    beleg_datum: extracted.invoice_date ?? beleg.beleg_datum,
-    rechnungsnummer_lieferant: extracted.invoice_number ?? beleg.rechnungsnummer_lieferant,
+    beleg_datum: invoice.invoice_date ?? beleg.beleg_datum,
+    rechnungsnummer_lieferant: invoice.invoice_number ?? beleg.rechnungsnummer_lieferant,
   }).eq('id', id);
 
   // Existierende Positionen droppen (nur bei "leerem" Beleg ohne Klassifizierung)
@@ -90,7 +108,7 @@ export async function POST(
   }
 
   // Positionen anlegen
-  const newPositions = extracted.items.map((it, i) => ({
+  const newPositions = invoice.items.map((it, i) => ({
     ...sanitizePosition({
       reihenfolge: i,
       bezeichnung: it.description,
@@ -122,5 +140,5 @@ export async function POST(
   await recomputeBelegSummen(supabase, id);
   await logAudit({ action: 'beleg.ocr', entityType: 'beleg', entityId: id, changes: { items: newPositions.length }, request: req });
 
-  return NextResponse.json({ ok: true, items_extracted: newPositions.length, supplier: extracted.supplier?.name ?? null });
+  return NextResponse.json({ ok: true, items_extracted: newPositions.length, supplier: invoice.supplier?.name ?? null });
 }

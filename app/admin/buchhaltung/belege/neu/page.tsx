@@ -121,7 +121,10 @@ export default function NeuerBelegWizard() {
       if (!ocrRes.ok) {
         ocrFailed = true;
         const e = await ocrRes.json().catch(() => ({}));
-        ocrErrMsg = (e as { error?: string }).error ?? 'OCR fehlgeschlagen';
+        // Server liefert i.d.R. schon "OCR fehlgeschlagen: <details>" — falls nicht
+        // (z.B. 500 ohne Body), ersatzweise den HTTP-Status zeigen, damit der UI-
+        // Text nicht doppelt "OCR fehlgeschlagen (OCR fehlgeschlagen)" lautet.
+        ocrErrMsg = (e as { error?: string }).error ?? `Server antwortete mit HTTP ${ocrRes.status}`;
       }
 
       // 4. Detail laden + Form-State befuellen
@@ -152,7 +155,7 @@ export default function NeuerBelegWizard() {
 
       setStep(2);
       if (ocrFailed) {
-        setError(`Hinweis: OCR fehlgeschlagen (${ocrErrMsg}). Du kannst die Daten manuell ergaenzen.`);
+        setError(`Hinweis: ${ocrErrMsg}. Du kannst die Daten manuell ergänzen.`);
       }
     } catch (err) {
       setError((err as Error).message);
