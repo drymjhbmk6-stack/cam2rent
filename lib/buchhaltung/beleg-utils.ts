@@ -78,7 +78,7 @@ export type BelegPositionInput = {
   menge: number;
   einzelpreis_netto: number;
   mwst_satz?: number;
-  klassifizierung?: 'pending' | 'afa' | 'gwg' | 'ausgabe' | 'ignoriert';
+  klassifizierung?: 'pending' | 'afa' | 'gwg' | 'ausgabe' | 'verbrauch' | 'ignoriert';
   kategorie?: string | null;
   notizen?: string | null;
   ki_vorschlag?: Record<string, unknown> | null;

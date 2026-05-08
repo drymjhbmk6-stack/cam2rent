@@ -104,7 +104,9 @@ export async function GET(req: NextRequest) {
         id, bezeichnung, gesamt_brutto, kategorie, ki_vorschlag,
         beleg:belege!inner(id, beleg_datum, status, is_test, lieferant:lieferanten(name))
       `)
-      .eq('klassifizierung', 'ausgabe')
+      // 'verbrauch' (SD-Karten/ND-Filter/Schrauben) ist steuerlich identisch
+      // zu 'ausgabe' und gehoert genauso in die EUeR.
+      .in('klassifizierung', ['ausgabe', 'verbrauch'])
       .order('reihenfolge');
 
     type RawPos = {

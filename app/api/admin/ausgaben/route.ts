@@ -4,17 +4,20 @@ import { createServiceClient } from '@/lib/supabase';
 /**
  * GET /api/admin/ausgaben
  *
- * Vereinheitlichte Ausgaben-Liste aus beleg_positionen WHERE klassifizierung='ausgabe'.
+ * Vereinheitlichte Ausgaben-Liste aus beleg_positionen.
+ * Klassifizierungen: 'ausgabe' (Versand/Stripe/Marketing/Software/Versicherung)
+ *                    'verbrauch' (SD-Karten/ND-Filter/Schrauben — steuerlich
+ *                                 ebenfalls Ausgabe, zusaetzlich im Inventar)
  * Filter: ?from=&to=&kategorie=&quelle=&lieferant_id=&include_test=1
  */
 export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
   const supabase = createServiceClient();
 
-  let q = supabase
+  const q = supabase
     .from('beleg_positionen')
-    .select('id, bezeichnung, gesamt_brutto, gesamt_netto, kategorie, beleg:belege(id, beleg_nr, beleg_datum, quelle, is_test, lieferant:lieferanten(id, name))')
-    .eq('klassifizierung', 'ausgabe')
+    .select('id, bezeichnung, gesamt_brutto, gesamt_netto, kategorie, klassifizierung, beleg:belege(id, beleg_nr, beleg_datum, quelle, is_test, lieferant:lieferanten(id, name))')
+    .in('klassifizierung', ['ausgabe', 'verbrauch'])
     .order('created_at', { ascending: false });
 
   // Datumsfilter geht ueber nested beleg → client-seitig

@@ -5,17 +5,18 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 
-type Klass = 'pending' | 'afa' | 'gwg' | 'ausgabe' | 'ignoriert';
+type Klass = 'pending' | 'afa' | 'gwg' | 'ausgabe' | 'verbrauch' | 'ignoriert';
 
 const KLASS_LABEL: Record<Klass, string> = {
-  pending: 'Offen', afa: 'AfA', gwg: 'GWG', ausgabe: 'Ausgabe', ignoriert: 'Ignorieren',
+  pending: 'Offen', afa: 'AfA', gwg: 'GWG', verbrauch: 'Verbrauch', ausgabe: 'Ausgabe', ignoriert: 'Ignorieren',
 };
 const KLASS_HINT: Record<Klass, string> = {
   pending: 'Noch nicht klassifiziert',
-  afa: 'AfA = Anlagegut über 800 € netto. Wird über mehrere Jahre abgeschrieben (linear, typisch 36 Monate). Erscheint im Anlagenverzeichnis.',
-  gwg: 'GWG = Geringwertiges Wirtschaftsgut zwischen 250 und 800 € netto. Wird im Jahr der Anschaffung sofort vollständig abgeschrieben, erscheint trotzdem im Anlagenverzeichnis (Verzeichnis-Pflicht).',
-  ausgabe: 'Direkte Betriebsausgabe. Sofort-Aufwand in der EÜR (Verbrauchsmaterial, Software-Abos, kleine Anschaffungen unter 250 € netto, Reparaturen etc.).',
-  ignoriert: 'Position wird NICHT verbucht — z. B. private Anschaffung versehentlich auf der Geschäftsrechnung, durchlaufender Posten, Pfand, Rabatt-Zeile.',
+  afa: 'AfA = Anlagegut über 800 € netto. Wird über mehrere Jahre abgeschrieben (linear, typisch 36 Monate). Erscheint im Anlagenverzeichnis und kann ins Inventar übernommen werden.',
+  gwg: 'GWG = Geringwertiges Wirtschaftsgut zwischen 250 und 800 € netto. Wird im Jahr der Anschaffung sofort vollständig abgeschrieben, erscheint trotzdem im Anlagenverzeichnis (Verzeichnis-Pflicht). Kann ins Inventar übernommen werden.',
+  verbrauch: 'Verbrauchsmaterial unter 250 € netto (SD-Karten, ND-Filter, Schrauben, Akkus, Reinigungsmittel). Sofort-Aufwand in der EÜR — kann aber als Bulk- oder Einzel-Inventar geführt werden, weil es auf Lager liegt und beim Versand mitgepackt wird.',
+  ausgabe: 'Ausgabe ohne Inventar (Versand, Stripe-Gebühren, Marketing, Software-Abos, Versicherung, Rabatt-Zeile). Sofort-Aufwand in der EÜR, taucht NICHT im Inventar-Picker auf.',
+  ignoriert: 'Position wird NICHT verbucht — z. B. private Anschaffung versehentlich auf der Geschäftsrechnung, durchlaufender Posten, Pfand.',
 };
 
 interface Beleg {
@@ -370,6 +371,7 @@ export default function BelegDetailPage() {
                       p.klassifizierung === 'pending' ? 'bg-amber-500/10 text-amber-300 border-amber-500/30' :
                       p.klassifizierung === 'afa' ? 'bg-cyan-500/10 text-cyan-300 border-cyan-500/30' :
                       p.klassifizierung === 'gwg' ? 'bg-amber-500/10 text-amber-300 border-amber-500/30' :
+                      p.klassifizierung === 'verbrauch' ? 'bg-violet-500/10 text-violet-300 border-violet-500/30' :
                       p.klassifizierung === 'ausgabe' ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30' :
                       'bg-slate-700/30 text-slate-400 border-slate-700'
                     }`}>
@@ -438,7 +440,7 @@ export default function BelegDetailPage() {
                 {/* Klassifikations-Buttons (nur wenn nicht locked) */}
                 {!p.locked && (
                   <div className="px-3 pb-3 flex gap-2 flex-wrap items-center">
-                    {(['afa', 'gwg', 'ausgabe', 'ignoriert'] as const).map((k) => (
+                    {(['afa', 'gwg', 'verbrauch', 'ausgabe', 'ignoriert'] as const).map((k) => (
                       <button
                         key={k}
                         onClick={() => setKlassifizierung(p.id, k)}

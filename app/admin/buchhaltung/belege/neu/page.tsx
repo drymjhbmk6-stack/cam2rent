@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 
-type Klass = 'pending' | 'afa' | 'gwg' | 'ausgabe' | 'ignoriert';
+type Klass = 'pending' | 'afa' | 'gwg' | 'ausgabe' | 'verbrauch' | 'ignoriert';
 
 interface Lieferant { id: string; name: string; }
 interface Position {
@@ -21,6 +21,7 @@ const KLASS_LABEL: Record<Klass, string> = {
   pending: 'Offen',
   afa: 'AfA',
   gwg: 'GWG',
+  verbrauch: 'Verbrauch',
   ausgabe: 'Ausgabe',
   ignoriert: 'Ignorieren',
 };
@@ -527,6 +528,7 @@ export default function NeuerBelegWizard() {
                     p.klassifizierung === 'pending' ? 'bg-amber-500/10 text-amber-300 border-amber-500/30' :
                     p.klassifizierung === 'afa' ? 'bg-cyan-500/10 text-cyan-300 border-cyan-500/30' :
                     p.klassifizierung === 'gwg' ? 'bg-amber-500/10 text-amber-300 border-amber-500/30' :
+                    p.klassifizierung === 'verbrauch' ? 'bg-violet-500/10 text-violet-300 border-violet-500/30' :
                     p.klassifizierung === 'ausgabe' ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30' :
                     'bg-slate-700/30 text-slate-400 border-slate-700'
                   }`}>
@@ -539,10 +541,17 @@ export default function NeuerBelegWizard() {
                   </div>
                 )}
                 <div className="flex gap-2 flex-wrap">
-                  {(['afa', 'gwg', 'ausgabe', 'ignoriert'] as const).map((k) => (
+                  {(['afa', 'gwg', 'verbrauch', 'ausgabe', 'ignoriert'] as const).map((k) => (
                     <button
                       key={k}
                       onClick={() => setKlassifizierung(p.id, k)}
+                      title={
+                        k === 'afa' ? 'Anlagegut > 800 € netto, lineare Abschreibung. Wird als Asset + Inventar gefuehrt.' :
+                        k === 'gwg' ? 'Geringwertiges Wirtschaftsgut 250–800 € netto, Sofort-AfA. Wird als Asset + Inventar gefuehrt.' :
+                        k === 'verbrauch' ? 'Verbrauchsmaterial < 250 € netto (SD-Karten, ND-Filter, Schrauben, Akkus). Sofort als Aufwand, aber im Inventar fuehrbar (Bulk oder einzeln).' :
+                        k === 'ausgabe' ? 'Ausgabe ohne Inventar (Versand, Stripe, Marketing, Software-Abo, Versicherung, Rabatt). Geht direkt in EÜR.' :
+                        'Ignorieren — keine Buchung, keine Inventar.'
+                      }
                       className={`px-3 py-1 text-xs rounded border ${
                         p.klassifizierung === k ? 'bg-cyan-500 text-slate-900 border-cyan-400 font-semibold' : 'bg-slate-800 hover:bg-slate-700 border-slate-700'
                       }`}

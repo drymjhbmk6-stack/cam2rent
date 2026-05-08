@@ -13,7 +13,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { createServiceClient } from '@/lib/supabase';
 
 export type InvoiceKind = 'rental_camera' | 'rental_accessory' | 'office_equipment' | 'tool' | 'other';
-export type InvoiceClassification = 'asset' | 'gwg' | 'expense';
+export type InvoiceClassification = 'asset' | 'gwg' | 'consumable' | 'expense';
 
 export interface ExtractedInvoiceItem {
   description: string;
@@ -71,16 +71,34 @@ Klassifikations-Regeln (deutsches Steuerrecht, § 6 EStG):
   - Buero-Equipment 250-800 EUR netto (kind: office_equipment)
   - Werkzeug 250-800 EUR netto (kind: tool)
   - WICHTIG: Vermietkameras (kind: rental_camera) IMMER als "asset", auch wenn unter 800 EUR — wegen Inventur und Geraete-Lebenszyklus (Mietvertrags-Bezug)
-- "expense" = Betriebsausgabe, direkt abziehbar:
-  - Verbrauchsmaterial (Akkus unter 250 EUR, SD-Karten, Reinigungsmittel)
-  - Software-Abos, Dienstleistungen
-  - Versandkosten, Verpackung
-  - Kleinteile unter 250 EUR netto
+- "consumable" = greifbares Verbrauchsmaterial < 250 EUR netto, das auf Lager liegt
+  und beim Versand mitgepackt wird. Steuerlich Sofort-Aufwand wie "expense", aber im
+  Inventar gefuehrt:
+  - SD-Karten, microSD, USB-Sticks (kind: rental_accessory)
+  - ND-Filter, Polfilter, Filter-Adaptierringe (kind: rental_accessory)
+  - Schrauben, Schnellwechselplatten, Stativ-Adapter, GoPro-Mount-Kleinteile (kind: rental_accessory)
+  - Akkus < 250 EUR (kind: rental_accessory)
+  - Eigenmarken-Verpackungsmaterial (Karton, Schaumstoff, Versandtaschen)
+  - Reinigungstuecher, Linsen-Reiniger, Druckluft-Spray
+- "expense" = Betriebsausgabe ohne Inventar (Service / Durchlauf):
+  - Versand-Porto (DHL, Hermes, Sendcloud-Aufschlag)
+  - Stripe-/PayPal-Gebuehren, Bankgebuehren
+  - Software-Abos, Cloud-Hosting, Domains
+  - Marketing, Werbung, SEO-Tools
+  - Versicherungspraemien, Steuerberater, Buchhaltungssoftware
+  - Reparatur-DIENSTLEISTUNGEN (Service-Rechnung) — KEINE Ersatzteile (die waeren consumable/gwg/asset)
+  - Rabatt-Zeilen (negativer Betrag)
 
-Faustregel:
-  netto < 250 EUR  → "expense"
-  netto 250-800 EUR → "gwg" (ausser Vermietkameras, die immer "asset")
+Faustregel zur Trennung consumable vs expense:
+  Frage: kann man das Stueck physisch auf einen Tisch legen und ins Regal stellen?
+  → JA → "consumable" oder bei > 250 EUR netto "gwg"/"asset"
+  → NEIN (Service, Lizenz, Porto, Gebuehr) → "expense"
+
+Schwellwert-Faustregel (immer Einzelpreis netto, NICHT Gesamtsumme!):
   netto > 800 EUR  → "asset"
+  netto 250-800 EUR (greifbar) → "gwg" (ausser Vermietkameras, die immer "asset")
+  netto < 250 EUR (greifbar, lagerbar)  → "consumable"
+  netto < 250 EUR (Service/Durchlauf)   → "expense"
 
 Gaengige Nutzungsdauern (useful_life_months) — nur fuer "asset" relevant, GWG ignoriert das:
 - Kamera/Drohne: 36 (3 Jahre)
@@ -105,7 +123,7 @@ Antworte AUSSCHLIESSLICH als JSON ohne Markdown-Codefences. Schema:
       "tax_rate": 19,
       "line_total_net": 0.00,
       "line_total_gross": 0.00,
-      "suggested_classification": "asset" | "gwg" | "expense",
+      "suggested_classification": "asset" | "gwg" | "consumable" | "expense",
       "suggested_category": "hardware",
       "suggested_kind": "rental_camera",
       "suggested_useful_life_months": 36,

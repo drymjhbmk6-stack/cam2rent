@@ -6,7 +6,9 @@ import { createServiceClient } from '@/lib/supabase';
  *
  * EUeR-Berechnung auf Basis der NEUEN Welt:
  *   Einnahmen: invoices (unveraendert)
- *   Ausgaben:  beleg_positionen WHERE klassifizierung='ausgabe' (Brutto)
+ *   Ausgaben:  beleg_positionen WHERE klassifizierung IN ('ausgabe','verbrauch') (Brutto)
+ *              — 'verbrauch' (SD-Karten/ND-Filter/Schrauben) ist steuerlich
+ *              identisch zu 'ausgabe', wird nur zusaetzlich im Inventar gefuehrt.
  *   Sofort-AfA: afa_buchungen WHERE typ='sofort'
  *   Lineare AfA: afa_buchungen WHERE typ='monatlich'
  *
@@ -36,11 +38,11 @@ export async function GET(req: NextRequest) {
     .neq('status', 'cancelled');
   const einnahmen = (invoices ?? []).reduce((s, r) => s + Number((r as { total_amount: number }).total_amount ?? 0), 0);
 
-  // Ausgaben aus beleg_positionen
+  // Ausgaben aus beleg_positionen — 'verbrauch' ist steuerlich gleich 'ausgabe'
   const { data: positionen } = await supabase
     .from('beleg_positionen')
     .select('gesamt_brutto, kategorie, beleg:belege(beleg_datum, is_test)')
-    .eq('klassifizierung', 'ausgabe');
+    .in('klassifizierung', ['ausgabe', 'verbrauch']);
   const filtered = (positionen ?? []).filter((p) => {
     const b = (p as { beleg: { beleg_datum: string; is_test: boolean } | null }).beleg;
     return b && !b.is_test && b.beleg_datum >= from && b.beleg_datum <= to;

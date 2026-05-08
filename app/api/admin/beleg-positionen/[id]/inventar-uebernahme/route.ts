@@ -46,15 +46,28 @@ export async function POST(
   const supabase = createServiceClient();
   const { data: position, error: pErr } = await supabase
     .from('beleg_positionen')
-    .select('id, bezeichnung, einzelpreis_netto, menge, beleg_id, locked, beleg:belege(beleg_datum)')
+    .select('id, bezeichnung, einzelpreis_netto, menge, beleg_id, locked, klassifizierung, beleg:belege(beleg_datum)')
     .eq('id', id).single();
   if (pErr) return NextResponse.json({ error: pErr.message }, { status: 404 });
 
   const pos = position as unknown as {
     id: string; bezeichnung: string; einzelpreis_netto: number; menge: number;
-    beleg_id: string; locked: boolean;
+    beleg_id: string; locked: boolean; klassifizierung: string;
     beleg: { beleg_datum: string };
   };
+
+  // Sicherheitsschranke: nur Positionen, die als Inventar gefuehrt werden
+  // sollen, duerfen Inventar-Units erzeugen. Verhindert, dass Versand-/
+  // Rabatt-/Stripe-Positionen versehentlich im Inventar landen, falls der
+  // UI-Filter umgangen wird.
+  if (!['afa', 'gwg', 'verbrauch'].includes(pos.klassifizierung)) {
+    return NextResponse.json(
+      {
+        error: `Position ist als '${pos.klassifizierung}' klassifiziert und kann nicht als Inventar gefuehrt werden. Erlaubt sind: afa, gwg, verbrauch.`,
+      },
+      { status: 409 },
+    );
+  }
   const kaufpreis = Number(pos.einzelpreis_netto);
   const kaufdatum = pos.beleg.beleg_datum;
 

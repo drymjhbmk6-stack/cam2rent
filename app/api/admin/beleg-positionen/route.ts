@@ -14,6 +14,10 @@ export async function GET(req: NextRequest) {
   const lieferantId = sp.get('lieferant_id');
   const fromDate = sp.get('from');
   const toDate = sp.get('to');
+  // inventarbar=1 → nur Positionen, die als Inventar gefuehrt werden duerfen
+  // (afa/gwg/verbrauch). Ohne den Param bleibt das Verhalten kompatibel zur
+  // bisherigen Volltextsuche, damit andere Konsumenten nicht gebrochen werden.
+  const inventarbar = sp.get('inventarbar') === '1';
 
   const supabase = createServiceClient();
   let query = supabase
@@ -23,6 +27,7 @@ export async function GET(req: NextRequest) {
     .limit(50);
 
   if (q) query = query.ilike('bezeichnung', `%${q}%`);
+  if (inventarbar) query = query.in('klassifizierung', ['afa', 'gwg', 'verbrauch']);
   // Hinweis: Filter auf nested beleg-Felder funktioniert in PostgREST nicht direkt,
   // deshalb wird in den Kandidaten danach client-seitig nachgefiltert.
 
@@ -84,7 +89,7 @@ export async function POST(req: NextRequest) {
     menge: Number(body.menge ?? 1),
     einzelpreis_netto: Number(body.einzelpreis_netto ?? 0),
     mwst_satz: typeof body.mwst_satz === 'number' ? body.mwst_satz : 19,
-    klassifizierung: (body.klassifizierung as 'pending' | 'afa' | 'gwg' | 'ausgabe' | 'ignoriert') ?? 'pending',
+    klassifizierung: (body.klassifizierung as 'pending' | 'afa' | 'gwg' | 'ausgabe' | 'verbrauch' | 'ignoriert') ?? 'pending',
     kategorie: body.kategorie as string | null,
     notizen: body.notizen as string | null,
     reihenfolge: typeof body.reihenfolge === 'number' ? body.reihenfolge : 999,

@@ -12,7 +12,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { createServiceClient } from '@/lib/supabase';
 
-export type PositionKlass = 'afa' | 'gwg' | 'ausgabe' | 'ignoriert';
+export type PositionKlass = 'afa' | 'gwg' | 'ausgabe' | 'verbrauch' | 'ignoriert';
 
 export interface KlassifizierungsVorschlag {
   klassifizierung: PositionKlass;
@@ -61,23 +61,42 @@ export async function klassifizierePositionen(
   const systemPrompt = `Du bist ein deutscher Buchhaltungs-Experte fuer cam2rent (Action-Cam-Verleih in Berlin).
 
 Fuer jede gelistete Belegposition entscheidest du nach §6 EStG die korrekte
-steuerliche Behandlung:
+steuerliche Behandlung. Fuenf Klassifizierungen stehen zur Verfuegung — die
+Trennung zwischen "verbrauch" und "ausgabe" ist wichtig:
 
 - afa (Anlagegut, lineare AfA): Anschaffungswert > 800 EUR netto pro Stueck
-  oder zwingend ins Anlagenverzeichnis (Vermietkameras IMMER, egal Preis)
-- gwg (Geringwertiges Wirtschaftsgut): 250-800 EUR netto pro Stueck,
-  Sofortabschreibung erlaubt, Verzeichnis-Pflicht
-- ausgabe (Betriebsausgabe): < 250 EUR netto pro Stueck oder Verbrauchsmaterial
-  egal welcher Preis (Reinigung, Versand, Buero-Verbrauch)
-- ignoriert: kein Bezug zum Geschaeft (sollte sehr selten vorkommen)
+  oder zwingend ins Anlagenverzeichnis (Vermietkameras IMMER, egal Preis).
+  → Asset + Inventar.
+- gwg (Geringwertiges Wirtschaftsgut): 250–800 EUR netto pro Stueck,
+  Sofortabschreibung, Verzeichnis-Pflicht. → Asset + Inventar.
+- verbrauch (greifbares Material < 250 EUR netto, das auf Lager liegt):
+  SD-Karten, ND-Filter, Schrauben, Kleinteile, Akkus < 250 EUR, Reinigungs-
+  tuecher, Stative-Schnellwechselplatten, Klebeband, Reissverschluss-Beutel,
+  Verpackungsmaterial das mit dem Mietgeraet rausgeht. Steuerlich Sofort-
+  Aufwand, im System aber als Bulk-/Einzel-Inventar gefuehrt.
+- ausgabe (Service/Durchlauf, NICHT als Inventar gefuehrt):
+  Versand-Porto, Stripe-/PayPal-Gebuehren, Software-Abos, Marketing,
+  Werbung, Versicherungspraemien, Domain-/Hosting-Rechnungen, Steuerberater,
+  Kontofuehrung, Telefon, Strom, Miete, Reinigungs-Service-Rechnung,
+  Rabatt-Zeile (negativ), Reparatur-Service. Sofort-Aufwand in der EUeR.
+- ignoriert: kein Bezug zum Geschaeft (sollte sehr selten vorkommen).
 
-WICHTIG:
-- Ueber "Stueck" ist der Einzelpreis entscheidend, NICHT die Gesamtsumme.
-- 5 SD-Karten je 30 EUR sind 5 mal "ausgabe", nicht 1 mal "asset".
+WICHTIG zur Verbrauch-vs.-Ausgabe-Unterscheidung:
+- Frage dich: kann man das Stueck physisch auf einen Tisch legen und in
+  ein Regal stellen? Wenn ja → "verbrauch". Wenn nein (Service, Lizenz,
+  Porto) → "ausgabe".
+- 5 SD-Karten je 30 EUR sind 5 mal "verbrauch" (auf Lager fuer Mieten),
+  NICHT "ausgabe".
+- Verpackung/Pappkarton der mit dem Geraet rausgeht: "verbrauch" wenn
+  Eigenmarken-Material auf Lager, "ausgabe" wenn DHL/Hermes-Versandlabel.
+- Reinigungsmittel-Flasche: "verbrauch". Reinigungs-Dienstleister-Rechnung: "ausgabe".
+
+WICHTIG zu Stueckpreisen:
+- Ueber den Schwellwert (800 / 250 EUR) entscheidet der EINZELPREIS, nicht die Gesamtsumme.
 - Vermietkameras (GoPro, DJI, Insta360) IMMER "afa", auch unter 800 EUR.
-- Verpackung, Versandkosten, Reinigungsmaterial IMMER "ausgabe".
-- Bei "afa" oder "gwg": gib ein passendes "art" mit (kamera/zubehoer/buero/werkzeug/sonstiges)
-  und bei "afa" eine plausible Nutzungsdauer in Monaten (Standard: 84 fuer Kameras, 36-60 fuer Zubehoer).
+
+Bei "afa" oder "gwg": gib ein passendes "art" mit (kamera/zubehoer/buero/werkzeug/sonstiges)
+und bei "afa" eine plausible Nutzungsdauer in Monaten (Standard: 84 fuer Kameras, 36-60 fuer Zubehoer).
 
 Antworte AUSSCHLIESSLICH mit gueltigem JSON in diesem Schema, ohne Markdown-Codeblock:
 
@@ -85,7 +104,7 @@ Antworte AUSSCHLIESSLICH mit gueltigem JSON in diesem Schema, ohne Markdown-Code
   "results": [
     {
       "position_id": "<id>",
-      "klassifizierung": "afa" | "gwg" | "ausgabe" | "ignoriert",
+      "klassifizierung": "afa" | "gwg" | "verbrauch" | "ausgabe" | "ignoriert",
       "begruendung": "<1 Satz auf Deutsch>",
       "confidence": <0..1>,
       "art": "kamera" | "zubehoer" | "buero" | "werkzeug" | "sonstiges",

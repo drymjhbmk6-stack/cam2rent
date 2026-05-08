@@ -122,6 +122,9 @@ export default function InventarDetailPage() {
     const timer = setTimeout(async () => {
       const sp = new URLSearchParams();
       if (linkSearch) sp.set('q', linkSearch);
+      // Nur inventarbare Positionen anzeigen — Versand, Stripe-Gebuehren,
+      // Marketing, Rabatte (alles 'ausgabe') tauchen nicht im Picker auf.
+      sp.set('inventarbar', '1');
       const res = await fetch(`/api/admin/beleg-positionen?${sp.toString()}`);
       if (res.ok) setLinkResults((await res.json()).positionen ?? []);
     }, 300);

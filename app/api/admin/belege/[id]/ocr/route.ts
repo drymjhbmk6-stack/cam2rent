@@ -118,6 +118,7 @@ export async function POST(
       ki_vorschlag: {
         klassifizierung: it.suggested_classification === 'asset' ? 'afa'
           : it.suggested_classification === 'gwg' ? 'gwg'
+          : it.suggested_classification === 'consumable' ? 'verbrauch'
           : 'ausgabe',
         begruendung: 'OCR-Vorschlag',
         confidence: it.confidence,
