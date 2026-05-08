@@ -143,6 +143,24 @@ export default function InventarDetailPage() {
     setBusy(false);
   }
 
+  async function handleUnlink(linkId: string, label: string) {
+    if (!confirm(
+      `Verknüpfung zu "${label}" wirklich lösen?\n\n` +
+      `Wenn keine weitere Verknüpfung übrig bleibt, werden Kaufpreis, ` +
+      `Kaufdatum und Wiederbeschaffungswert auf diesem Stück zurückgesetzt ` +
+      `(manueller WBW-Override bleibt erhalten). Bei mehreren Verknüpfungen ` +
+      `werden die Werte aus der verbleibenden Quelle neu berechnet.`,
+    )) return;
+    setBusy(true);
+    const res = await fetch(
+      `/api/admin/inventar/${id}/verknuepfen?verknuepfung_id=${encodeURIComponent(linkId)}`,
+      { method: 'DELETE' },
+    );
+    if (!res.ok) setError((await res.json().catch(() => ({}))).error ?? 'Lösen fehlgeschlagen');
+    await reload();
+    setBusy(false);
+  }
+
   async function handleSetWbw() {
     setBusy(true);
     const res = await fetch(`/api/admin/inventar/${id}`, {
@@ -384,15 +402,25 @@ export default function InventarDetailPage() {
           {links.length === 0 ? (
             <p className="text-sm text-slate-500 italic">Keine Verknüpfung</p>
           ) : (
-            <div className="space-y-1">
+            <div className="space-y-2">
               {links.map((l) => l.beleg_position && (
-                <div key={l.id} className="text-sm">
-                  <Link href={`/admin/buchhaltung/belege/${l.beleg_position.beleg.id}`} className="text-cyan-400 hover:text-cyan-300">
-                    {l.beleg_position.beleg.beleg_nr}
-                  </Link>
-                  {' · '}
-                  <span className="text-slate-400">{l.beleg_position.bezeichnung}</span>
-                  {l.stueck_anteil > 1 && <span className="text-xs text-slate-500"> ({l.stueck_anteil}× Anteil)</span>}
+                <div key={l.id} className="flex justify-between items-start gap-3 text-sm">
+                  <div className="min-w-0 flex-1">
+                    <Link href={`/admin/buchhaltung/belege/${l.beleg_position.beleg.id}`} className="text-cyan-400 hover:text-cyan-300">
+                      {l.beleg_position.beleg.beleg_nr}
+                    </Link>
+                    {' · '}
+                    <span className="text-slate-400">{l.beleg_position.bezeichnung}</span>
+                    {l.stueck_anteil > 1 && <span className="text-xs text-slate-500"> ({l.stueck_anteil}× Anteil)</span>}
+                  </div>
+                  <button
+                    onClick={() => handleUnlink(l.id, l.beleg_position!.bezeichnung)}
+                    disabled={busy}
+                    className="shrink-0 text-xs text-red-400 hover:text-red-300 underline-offset-2 hover:underline disabled:opacity-40"
+                    title="Verknüpfung lösen — Kaufpreis/WBW werden bereinigt"
+                  >
+                    Lösen
+                  </button>
                 </div>
               ))}
             </div>
