@@ -36,6 +36,16 @@ export interface PushPayload {
   icon?: string;    // Default: /icon-192.png
 }
 
+export interface PushSendStats {
+  vapidConfigured: boolean;
+  totalSubscriptions: number;   // Geraete in der DB insgesamt
+  attempted: number;            // nach Permission-Filter uebrig
+  sent: number;                 // Erfolgreich an den Push-Service uebergeben
+  failed: number;               // Fehlschlag mit anderem Status (z.B. 403, 5xx)
+  expired: number;              // 404/410 — aus DB entfernt
+  firstError?: string;          // Erste echte Fehlermeldung fuer das UI
+}
+
 /**
  * Sendet eine Push-Notification an alle registrierten Admin-Geräte.
  * Bei expired/invalid Subscriptions (404, 410) wird die Subscription
@@ -48,15 +58,29 @@ export interface PushPayload {
  * nur an Geraete, deren Mitarbeiter die Permission hat (Owner immer).
  * Subscriptions ohne `admin_user_id` (Legacy-ENV-Login) gelten als Owner
  * und bekommen alles — Backward-Compat fuer Bestands-Setups.
+ *
+ * Rueckgabe: Diagnose-Statistik. Aufrufer wie Notification-Trigger nutzen
+ * `void sendPushToAdmins(...)` und ignorieren den Wert — der Test-Endpoint
+ * verwendet ihn, um in der UI ehrlich zu zeigen, ob etwas angekommen ist.
  */
 export async function sendPushToAdmins(
   payload: PushPayload,
   opts?: { requiredPermission?: PermissionKey },
-): Promise<void> {
+): Promise<PushSendStats> {
+  const stats: PushSendStats = {
+    vapidConfigured: false,
+    totalSubscriptions: 0,
+    attempted: 0,
+    sent: 0,
+    failed: 0,
+    expired: 0,
+  };
+
   if (!configureVapid()) {
     // VAPID-Keys nicht konfiguriert — Push ist optional, kein Fehler.
-    return;
+    return stats;
   }
+  stats.vapidConfigured = true;
 
   try {
     const supabase = createServiceClient();
@@ -66,10 +90,12 @@ export async function sendPushToAdmins(
 
     if (error) {
       console.error('[push] Subscriptions-Load-Fehler:', error.message);
-      return;
+      stats.firstError = `DB: ${error.message}`;
+      return stats;
     }
 
-    if (!subs || subs.length === 0) return;
+    if (!subs || subs.length === 0) return stats;
+    stats.totalSubscriptions = subs.length;
 
     // Permission-Filter
     const required = opts?.requiredPermission;
@@ -84,7 +110,8 @@ export async function sendPushToAdmins(
       return perms.includes(required);
     });
 
-    if (filtered.length === 0) return;
+    stats.attempted = filtered.length;
+    if (filtered.length === 0) return stats;
 
     const notificationPayload = JSON.stringify({
       title: payload.title,
@@ -107,6 +134,7 @@ export async function sendPushToAdmins(
             },
             notificationPayload
           );
+          stats.sent += 1;
           // last_used_at aktualisieren (best-effort, kein await blocking)
           void supabase
             .from('push_subscriptions')
@@ -114,11 +142,17 @@ export async function sendPushToAdmins(
             .eq('id', sub.id);
         } catch (err: unknown) {
           const status = (err as { statusCode?: number })?.statusCode;
+          const message = (err as Error)?.message || 'Unbekannter Fehler';
           // 404 = Subscription endpoint not found, 410 = Subscription expired
           if (status === 404 || status === 410) {
             expiredIds.push(sub.id);
+            stats.expired += 1;
           } else {
-            console.error('[push] Send-Fehler:', (err as Error).message);
+            stats.failed += 1;
+            if (!stats.firstError) {
+              stats.firstError = status ? `HTTP ${status}: ${message}` : message;
+            }
+            console.error('[push] Send-Fehler:', message);
           }
         }
       })
@@ -129,8 +163,12 @@ export async function sendPushToAdmins(
       await supabase.from('push_subscriptions').delete().in('id', expiredIds);
     }
   } catch (err) {
-    console.error('[push] Unerwarteter Fehler:', (err as Error).message);
+    const message = (err as Error).message;
+    console.error('[push] Unerwarteter Fehler:', message);
+    if (!stats.firstError) stats.firstError = message;
   }
+
+  return stats;
 }
 
 export function getVapidPublicKey(): string | null {

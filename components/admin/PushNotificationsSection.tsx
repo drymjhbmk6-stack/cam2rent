@@ -167,11 +167,63 @@ export default function PushNotificationsSection() {
     setBusy(true);
     try {
       const res = await fetch('/api/admin/push/test', { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
         throw new Error(data.error || 'Test-Push fehlgeschlagen');
       }
-      setSuccess('Test-Push gesendet — sollte gleich erscheinen.');
+
+      const stats = data.stats as
+        | {
+            totalSubscriptions: number;
+            attempted: number;
+            sent: number;
+            failed: number;
+            expired: number;
+            firstError?: string;
+          }
+        | undefined;
+
+      if (!stats) {
+        setSuccess('Test-Push abgeschickt.');
+        return;
+      }
+
+      if (stats.totalSubscriptions === 0) {
+        setError(
+          'Es ist kein Gerät für Push registriert. Klicke „Push auf diesem Gerät aktivieren&ldquo; und probiere es danach erneut.',
+        );
+        return;
+      }
+
+      if (stats.attempted === 0) {
+        setError(
+          `${stats.totalSubscriptions} Gerät(e) registriert, aber keines hat die nötigen Rechte. Prüfe unter „Mitarbeiter&ldquo;, ob dein Konto aktiv ist.`,
+        );
+        return;
+      }
+
+      if (stats.expired > 0 && stats.sent === 0) {
+        setError(
+          `Subscription auf diesem Gerät ist abgelaufen (${stats.expired}× HTTP 404/410). Bitte „Push deaktivieren&ldquo; klicken und danach neu aktivieren.`,
+        );
+        // Status neu prüfen — abgelaufener Endpoint ist serverseitig schon weg
+        void detectStatus();
+        return;
+      }
+
+      if (stats.failed > 0 && stats.sent === 0) {
+        setError(
+          `Push fehlgeschlagen (${stats.failed} von ${stats.attempted}). ${stats.firstError ?? 'Server-Logs prüfen.'}`,
+        );
+        return;
+      }
+
+      const tail = stats.failed > 0 ? ` (${stats.failed} fehlgeschlagen)` : '';
+      const expiredTail = stats.expired > 0 ? ` · ${stats.expired} Endpoints abgelaufen entfernt` : '';
+      setSuccess(
+        `Test-Push an ${stats.sent}/${stats.attempted} Gerät(e) verschickt${tail}${expiredTail}. ` +
+          'Wenn auf dem iPhone nichts ankommt: Einstellungen → Mitteilungen → cam2rent Admin → „Mitteilungen erlauben&ldquo; aktivieren und PWA vom Homescreen öffnen.',
+      );
     } catch (e) {
       setError((e as Error).message);
     } finally {
