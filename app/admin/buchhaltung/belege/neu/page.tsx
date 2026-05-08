@@ -350,6 +350,14 @@ export default function NeuerBelegWizard() {
               </button>
             </div>
 
+            <Link
+              href="/admin/buchhaltung/belege/bulk"
+              className="block p-3 bg-[#111827] border border-slate-800 hover:border-slate-600 rounded text-sm text-slate-300"
+            >
+              📚 <span className="font-semibold">Mehrere Belege auf einmal?</span>{' '}
+              <span className="text-slate-400">Bis zu 10 Dateien hochladen — zur Bulk-Seite →</span>
+            </Link>
+
             {quelle === 'upload' && (
               <div className="p-4 bg-[#111827] border border-slate-800 rounded">
                 <label className="block text-sm mb-2">Datei wählen (PDF, JPG, PNG, WebP, max 20 MB)</label>

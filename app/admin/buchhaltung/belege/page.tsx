@@ -66,9 +66,17 @@ export default function BelegeListePage() {
       <div className="max-w-7xl mx-auto mt-4">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
           <h1 className="text-2xl font-heading">Belege</h1>
-          <Link href="/admin/buchhaltung/belege/neu" className="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-900 rounded font-semibold">
-            + Neuer Beleg
-          </Link>
+          <div className="flex gap-2">
+            <Link
+              href="/admin/buchhaltung/belege/bulk"
+              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded font-semibold"
+            >
+              📚 Mehrere hochladen
+            </Link>
+            <Link href="/admin/buchhaltung/belege/neu" className="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-900 rounded font-semibold">
+              + Neuer Beleg
+            </Link>
+          </div>
         </div>
 
         <div className="flex flex-wrap gap-3 mb-4">
