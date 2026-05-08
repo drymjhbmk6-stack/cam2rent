@@ -1693,6 +1693,18 @@ Systematischer Sweep ueber Admin- und Kundenkonto-UI nach Darstellungsfehlern. G
   - `POST /api/admin/env-mode` → `env_mode.change` (Inline-Insert ersetzt durch `logAudit()`-Helper, da Inline-Insert denselben Spaltennamen-Bug hatte)
   - `POST /api/admin/settings` → `settings.update` (transiente Status-Keys wie `social_plan_job` sind von der Protokollierung ausgenommen)
 
+### Reliability-Audit Welle 1 (2026-05-08)
+Erster Tech-Debt-/Reliability-Pass mit `engineering:tech-debt` + `engineering:code-review`-Mindset, fokussiert auf Race-Conditions, Idempotenz und tote Code-Pfade. Drei parallele Explore-Agents (Performance, Dead/Duplicate-Code, Reliability-Gaps) haben konkrete Findings ausserhalb der Sweep-5-9-Befunde aufgespuert.
+
+- **`social-generate` Cron-Lock**: `acquireCronLock('social-generate')` ergaenzt — Sweep 8 hat 6 andere Crons gelockt, dieser hier hatte nur das alte manuelle Stale-Lock-Pattern via `social_generation_status`. Bei Coolify-Restart + Cron-Tick konnten doppelte `social_posts`-Drafts mit gleichem `scheduled_at` entstehen. Body in `runGeneration(req)` ausgelagert, Lock im try/finally drumherum.
+- **`mark-paid` Status-Guard**: `app/api/admin/buchhaltung/invoices/[id]/mark-paid` UPDATE jetzt mit `.eq('payment_status', invoice.payment_status).select('id').maybeSingle()` — bei Doppelklick zwei Admins parallel bekommt einer 200, der andere 409 statt zwei Audit-Log-Eintraegen + zwei Quittungsmails. Plus: Idempotenz-Path bei `payment_status==='paid'` returnt sofort 200.
+- **`dunning/bulk` Status-Guard**: Reihenfolge umgedreht — erst atomarer Invoice-UPDATE auf `overdue` mit `.eq('status', inv.status).eq('payment_status', inv.payment_status).select('id').maybeSingle()`, dann Mahn-Notice-Insert. Vorher konnte ein zwischenzeitlich bezahlter Invoice (`mark-paid` parallel) trotzdem auf `overdue` zurueckgezogen werden + falsche Mahnung erzeugt.
+- **`credit-notes/approve` Amount-Cap (Defense-in-Depth)**: Sweep 7 #18 hat den Cap beim ANLEGEN gefixt. Beim APPROVE jetzt zusaetzlich Pre-Refund-Check `SUM(other approved/sent CNs) + this.gross_amount <= booking.price_total + 0.01`. Bei Ueberschreitung wird CN-Status auf `pending_review` rollbacked und 422 zurueckgegeben, **vor** dem Stripe-Refund-Call. Schuetzt vor manuellem DB-Edit zwischen Insert und Approve.
+- **`claim-guest-bookings` komplett entfernt**: Route + AuthProvider-Aufruf. Sweep 6 hatte die Route auf no-op gesetzt (Express-Signup-Hijack-Vehikel), aber `AuthProvider.tsx` rief sie nach jedem Login + USER_UPDATED weiterhin auf — toter Round-Trip pro Auth-Wechsel. Gastbuchungen werden jetzt vom Admin manuell unter `/admin/buchungen/[id]` zugewiesen (Hinweis war seit Sweep 6 in CLAUDE.md, Aufruf hat es nicht gemerkt).
+- **Pure-Function-Tests**: Vitest-Suite fuer die zwei kritischsten Lib-Funktionen unter `lib/inventar/__tests__/wiederbeschaffungswert.test.ts` (16 Tests, deckt den vollen Entscheidungsbaum ab: Override → null → linear → Floor) und `lib/buchhaltung/__tests__/beleg-utils.test.ts` (18 Tests fuer `sanitizePosition`-Clamps und Defaults). Format analog `lib/accounting/__tests__/{tax,dunning,reconciliation}.test.ts`.
+
+**Welle 2 + 3** (Timeouts auf externe Calls, N+1-Patches, `lib/email.ts` logEmail-Catch, Permission-Mapping-Lueck e, `pickAssetsTable` Konsolidierung, DB-Indizes) folgen in separaten Sessions.
+
 ## Offene Punkte
 
 ### Reel-Workflow-Refactor (in Arbeit, Stand 2026-04-27)

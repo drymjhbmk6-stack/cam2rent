@@ -99,6 +99,24 @@ export async function POST(req: NextRequest) {
     const newDueDate = new Date();
     newDueDate.setDate(newDueDate.getDate() + 7);
 
+    // Erst Rechnung atomar auf overdue setzen — Guard verhindert dass wir
+    // eine zwischenzeitlich bezahlte Rechnung wieder auf overdue ziehen.
+    const { data: updatedInv } = await supabase
+      .from('invoices')
+      .update({ status: 'overdue', payment_status: 'overdue' })
+      .eq('id', inv.id)
+      .eq('status', inv.status)
+      .eq('payment_status', inv.payment_status)
+      .select('id')
+      .maybeSingle();
+
+    if (!updatedInv) {
+      skipped++;
+      skippedReasons.push(`${inv.invoice_number}: Status zwischenzeitlich geaendert`);
+      continue;
+    }
+
+    // Erst nach erfolgreichem Status-Flip die Mahn-Notice einfuegen.
     const { error: insertError } = await supabase
       .from('dunning_notices')
       .insert({
@@ -115,12 +133,6 @@ export async function POST(req: NextRequest) {
       skippedReasons.push(`${inv.invoice_number}: ${insertError.message}`);
       continue;
     }
-
-    // Rechnung-Status auf overdue
-    await supabase
-      .from('invoices')
-      .update({ status: 'overdue', payment_status: 'overdue' })
-      .eq('id', inv.id);
 
     created++;
   }

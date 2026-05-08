@@ -27,8 +27,14 @@ export async function POST(
     return NextResponse.json({ error: 'Rechnung nicht gefunden.' }, { status: 404 });
   }
 
-  // Rechnung als bezahlt markieren
-  const { error } = await supabase
+  // Idempotenz: schon bezahlt -> stillschweigend OK zurueckgeben
+  if (invoice.payment_status === 'paid') {
+    return NextResponse.json({ ok: true, alreadyPaid: true });
+  }
+
+  // Atomares UPDATE mit Status-Guard: wenn ein zweiter Admin parallel
+  // klickt, schreibt nur einer von beiden — der andere bekommt 0 Rows.
+  const { data: updated, error } = await supabase
     .from('invoices')
     .update({
       status: 'paid',
@@ -37,10 +43,19 @@ export async function POST(
       payment_notes: note || null,
       paid_at: date ? `${date}T12:00:00Z` : new Date().toISOString(),
     })
-    .eq('id', id);
+    .eq('id', id)
+    .eq('payment_status', invoice.payment_status)
+    .select('id')
+    .maybeSingle();
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+  if (!updated) {
+    return NextResponse.json(
+      { error: 'Rechnung wurde gerade von einem anderen Admin als bezahlt markiert.' },
+      { status: 409 },
+    );
   }
 
   // Offene Mahnungen auf "paid" setzen

@@ -62,9 +62,41 @@ export async function POST(
   if (creditNote.booking_id) {
     const { data: booking } = await supabase
       .from('bookings')
-      .select('payment_intent_id')
+      .select('payment_intent_id, price_total')
       .eq('id', creditNote.booking_id)
       .maybeSingle();
+
+    // Defense-in-Depth Amount-Cap: Sweep 7 #18 hat den Cap beim ANLEGEN gefixt.
+    // Hier zweiter Check beim APPROVE — schuetzt vor manuellem DB-Edit, der
+    // zwischen Insert und Approve den Betrag hochschraubt. Summe aller
+    // approved+sent CNs (inkl. dieser hier) darf den Rechnungsbetrag nicht
+    // uebersteigen.
+    const { data: otherCNs } = await supabase
+      .from('credit_notes')
+      .select('gross_amount')
+      .eq('booking_id', creditNote.booking_id)
+      .neq('id', id)
+      .in('status', ['approved', 'sent']);
+
+    const sumOther = (otherCNs ?? []).reduce(
+      (s, c) => s + Number(c.gross_amount || 0),
+      0,
+    );
+    const grossThis = Number(creditNote.gross_amount || 0);
+    const bookingTotal = Number(booking?.price_total ?? 0);
+    if (bookingTotal > 0 && sumOther + grossThis > bookingTotal + 0.01) {
+      // Rollback: Gutschrift zurueck auf pending_review damit Admin korrigieren kann
+      await supabase
+        .from('credit_notes')
+        .update({ status: 'pending_review', approved_at: null })
+        .eq('id', id);
+      return NextResponse.json(
+        {
+          error: `Gutschrifts-Summe (${(sumOther + grossThis).toFixed(2)} EUR) uebersteigt Rechnungsbetrag (${bookingTotal.toFixed(2)} EUR).`,
+        },
+        { status: 422 },
+      );
+    }
 
     const stripeKey = await getStripeSecretKey();
     // Manuelle Buchungen haben payment_intent_id wie "MANUAL-..." — Stripe

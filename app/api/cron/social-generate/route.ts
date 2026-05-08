@@ -16,6 +16,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { verifyCronAuth } from '@/lib/cron-auth';
+import { acquireCronLock, releaseCronLock } from '@/lib/cron-lock';
 import Anthropic from '@anthropic-ai/sdk';
 import { generateCaption, generateSocialImage } from '@/lib/meta/ai-content';
 import { isTestMode } from '@/lib/env-mode';
@@ -111,6 +112,21 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Atomarer Lock zusaetzlich zum manuellen social_generation_status —
+  // verhindert doppelte Plan-Eintraege bei Coolify-Restart + Cron-Tick.
+  const lock = await acquireCronLock('social-generate');
+  if (!lock.acquired) {
+    return NextResponse.json({ skipped: lock.reason ?? 'locked' });
+  }
+
+  try {
+    return await runGeneration(req);
+  } finally {
+    await releaseCronLock('social-generate');
+  }
+}
+
+async function runGeneration(req: NextRequest): Promise<NextResponse> {
   const supabase = createServiceClient();
   const settings = await getSocialSettings();
   const mode = settings.auto_generate_mode ?? 'semi';

@@ -44,17 +44,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
+    } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
-
-      // Nach Login/Registrierung: Gast-Buchungen dem Konto zuweisen
-      if (
-        session?.user &&
-        (event === 'SIGNED_IN' || event === 'USER_UPDATED')
-      ) {
-        fetch('/api/claim-guest-bookings', { method: 'POST' }).catch(() => {});
-      }
+      // claim-guest-bookings wurde Sweep 6 deaktiviert (Account-Hijack-Vehikel).
+      // Gastbuchungen werden jetzt vom Admin manuell zugewiesen.
     });
 
     return () => subscription.unsubscribe();
