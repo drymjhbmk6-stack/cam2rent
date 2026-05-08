@@ -435,7 +435,7 @@ export default function NeuerBelegWizard() {
             {/* Positionen */}
             <div>
               <h3 className="text-sm font-semibold mb-2">Positionen</h3>
-              <div className="grid grid-cols-12 gap-2 mb-1 px-1 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">
+              <div className="hidden md:grid grid-cols-12 gap-2 mb-1 px-1 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">
                 <div className="col-span-4">Bezeichnung</div>
                 <div className="col-span-1 text-center">Menge</div>
                 <div className="col-span-2 text-right">Einzel netto</div>
@@ -443,54 +443,69 @@ export default function NeuerBelegWizard() {
                 <div className="col-span-2 text-center">MwSt %</div>
                 <div className="col-span-1"></div>
               </div>
-              <div className="space-y-2">
+              <div className="space-y-3 md:space-y-2">
                 {positionen.map((p, idx) => {
                   const factor = 1 + (p.mwst_satz || 0) / 100;
                   const einzelBrutto = p.einzelpreis_netto * factor;
                   return (
-                  <div key={idx} className="grid grid-cols-12 gap-2 items-center">
+                  <div
+                    key={idx}
+                    className="rounded border border-slate-800 bg-slate-900/30 p-2 space-y-2 md:p-0 md:bg-transparent md:border-0 md:rounded-none md:grid md:grid-cols-12 md:gap-2 md:items-center md:space-y-0"
+                  >
                     <input
                       placeholder="Bezeichnung"
                       value={p.bezeichnung}
+                      aria-label="Bezeichnung"
                       onChange={(e) => setPositionen((prev) => prev.map((pp, i) => i === idx ? { ...pp, bezeichnung: e.target.value } : pp))}
-                      className="col-span-4 bg-[#111827] border border-slate-700 rounded px-2 py-1.5 text-sm"
+                      className="w-full md:col-span-4 bg-[#111827] border border-slate-700 rounded px-2 py-1.5 text-sm"
                     />
-                    <input
-                      type="number" min="1"
-                      value={p.menge}
-                      onChange={(e) => setPositionen((prev) => prev.map((pp, i) => i === idx ? { ...pp, menge: Math.max(1, parseInt(e.target.value || '1', 10)) } : pp))}
-                      className="col-span-1 bg-[#111827] border border-slate-700 rounded px-2 py-1.5 text-sm text-center"
-                    />
-                    <input
-                      type="number" step="0.01" min="0"
-                      placeholder="0,00"
-                      value={p.einzelpreis_netto || ''}
-                      onChange={(e) => setPositionen((prev) => prev.map((pp, i) => i === idx ? { ...pp, einzelpreis_netto: parseFloat(e.target.value || '0') } : pp))}
-                      className="col-span-2 bg-[#111827] border border-slate-700 rounded px-2 py-1.5 text-sm text-right"
-                    />
-                    <input
-                      type="number" step="0.01" min="0"
-                      placeholder="0,00"
-                      value={einzelBrutto ? einzelBrutto.toFixed(2) : ''}
-                      onChange={(e) => {
-                        const brutto = parseFloat(e.target.value || '0');
-                        const f = 1 + (p.mwst_satz || 0) / 100;
-                        const netto = f > 0 ? brutto / f : brutto;
-                        setPositionen((prev) => prev.map((pp, i) => i === idx ? { ...pp, einzelpreis_netto: netto } : pp));
-                      }}
-                      className="col-span-2 bg-[#111827] border border-slate-700 rounded px-2 py-1.5 text-sm text-right"
-                    />
-                    <input
-                      type="number" step="0.5" min="0" max="100"
-                      value={p.mwst_satz}
-                      onChange={(e) => setPositionen((prev) => prev.map((pp, i) => i === idx ? { ...pp, mwst_satz: parseFloat(e.target.value || '0') } : pp))}
-                      className="col-span-2 bg-[#111827] border border-slate-700 rounded px-2 py-1.5 text-sm text-center"
-                    />
+                    <div className="grid grid-cols-4 gap-2 md:contents">
+                      <label className="md:hidden text-[10px] uppercase tracking-wider text-slate-500 col-span-1">Menge</label>
+                      <label className="md:hidden text-[10px] uppercase tracking-wider text-slate-500 col-span-1 text-right">Netto</label>
+                      <label className="md:hidden text-[10px] uppercase tracking-wider text-slate-500 col-span-1 text-right">Brutto</label>
+                      <label className="md:hidden text-[10px] uppercase tracking-wider text-slate-500 col-span-1 text-center">MwSt</label>
+                      <input
+                        type="number" min="1"
+                        value={p.menge}
+                        aria-label="Menge"
+                        onChange={(e) => setPositionen((prev) => prev.map((pp, i) => i === idx ? { ...pp, menge: Math.max(1, parseInt(e.target.value || '1', 10)) } : pp))}
+                        className="col-span-1 md:col-span-1 bg-[#111827] border border-slate-700 rounded px-2 py-1.5 text-sm text-center"
+                      />
+                      <input
+                        type="number" step="0.01" min="0"
+                        placeholder="0,00"
+                        value={p.einzelpreis_netto || ''}
+                        aria-label="Einzelpreis netto"
+                        onChange={(e) => setPositionen((prev) => prev.map((pp, i) => i === idx ? { ...pp, einzelpreis_netto: parseFloat(e.target.value || '0') } : pp))}
+                        className="col-span-1 md:col-span-2 bg-[#111827] border border-slate-700 rounded px-2 py-1.5 text-sm text-right"
+                      />
+                      <input
+                        type="number" step="0.01" min="0"
+                        placeholder="0,00"
+                        value={einzelBrutto ? einzelBrutto.toFixed(2) : ''}
+                        aria-label="Einzelpreis brutto"
+                        onChange={(e) => {
+                          const brutto = parseFloat(e.target.value || '0');
+                          const f = 1 + (p.mwst_satz || 0) / 100;
+                          const netto = f > 0 ? brutto / f : brutto;
+                          setPositionen((prev) => prev.map((pp, i) => i === idx ? { ...pp, einzelpreis_netto: netto } : pp));
+                        }}
+                        className="col-span-1 md:col-span-2 bg-[#111827] border border-slate-700 rounded px-2 py-1.5 text-sm text-right"
+                      />
+                      <input
+                        type="number" step="0.5" min="0" max="100"
+                        value={p.mwst_satz}
+                        aria-label="MwSt-Satz"
+                        onChange={(e) => setPositionen((prev) => prev.map((pp, i) => i === idx ? { ...pp, mwst_satz: parseFloat(e.target.value || '0') } : pp))}
+                        className="col-span-1 md:col-span-2 bg-[#111827] border border-slate-700 rounded px-2 py-1.5 text-sm text-center"
+                      />
+                    </div>
                     <button
                       onClick={() => setPositionen((prev) => prev.filter((_, i) => i !== idx))}
                       disabled={positionen.length === 1}
-                      className="col-span-1 text-rose-400 hover:text-rose-300 disabled:text-slate-600"
-                    >✕</button>
+                      aria-label="Position entfernen"
+                      className="md:col-span-1 self-end md:self-auto px-2 py-1 text-rose-400 hover:text-rose-300 disabled:text-slate-600 text-sm md:text-base"
+                    >✕ <span className="md:hidden">Entfernen</span></button>
                   </div>
                   );
                 })}

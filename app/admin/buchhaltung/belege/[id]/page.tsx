@@ -321,8 +321,8 @@ export default function BelegDetailPage() {
             )}
           </div>
 
-          {/* Spaltenkopf wie im Wizard */}
-          <div className="grid grid-cols-12 gap-2 mb-1 px-1 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">
+          {/* Spaltenkopf nur auf Desktop — Mobile stacked Card-Layout */}
+          <div className="hidden md:grid grid-cols-12 gap-2 mb-1 px-1 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">
             <div className="col-span-4">Bezeichnung</div>
             <div className="col-span-1 text-center">Menge</div>
             <div className="col-span-2 text-right">Einzel netto</div>
@@ -339,34 +339,47 @@ export default function BelegDetailPage() {
               const hasDetails = (p.kategorie || ki || p.notizen || links.length > 0 || p.folgekosten_asset_id);
               return (
               <div key={p.id} className="rounded border border-slate-800 bg-slate-900/40">
-                {/* Hauptzeile */}
-                <div className="grid grid-cols-12 gap-2 items-center p-2">
+                {/* Hauptzeile — Mobile: Stack mit Bezeichnung voll oben, Zahlen drunter; Desktop: 12-Grid */}
+                <div className="p-2 space-y-2 md:grid md:grid-cols-12 md:gap-2 md:items-center md:space-y-0">
+                  {/* Bezeichnung: volle Breite auf Mobile, 4/12 auf Desktop */}
                   <input
                     value={p.bezeichnung}
                     disabled
-                    className="col-span-4 bg-[#111827] border border-slate-700 rounded px-2 py-1.5 text-sm disabled:opacity-90"
+                    aria-label="Bezeichnung"
+                    className="w-full md:col-span-4 bg-[#111827] border border-slate-700 rounded px-2 py-1.5 text-sm disabled:opacity-90"
                   />
-                  <input
-                    value={p.menge}
-                    disabled
-                    className="col-span-1 bg-[#111827] border border-slate-700 rounded px-2 py-1.5 text-sm text-center disabled:opacity-90"
-                  />
-                  <input
-                    value={Number(p.einzelpreis_netto).toFixed(2)}
-                    disabled
-                    className="col-span-2 bg-[#111827] border border-slate-700 rounded px-2 py-1.5 text-sm text-right disabled:opacity-90"
-                  />
-                  <input
-                    value={einzelBrutto.toFixed(2)}
-                    disabled
-                    className="col-span-2 bg-[#111827] border border-slate-700 rounded px-2 py-1.5 text-sm text-right disabled:opacity-90"
-                  />
-                  <input
-                    value={p.mwst_satz}
-                    disabled
-                    className="col-span-1 bg-[#111827] border border-slate-700 rounded px-2 py-1.5 text-sm text-center disabled:opacity-90"
-                  />
-                  <div className="col-span-2 flex justify-end">
+                  {/* Mobile: Mini-Labels uebers Feld; md:contents loest den Wrapper im Grid auf */}
+                  <div className="grid grid-cols-4 gap-2 md:contents">
+                    <label className="md:hidden text-[10px] uppercase tracking-wider text-slate-500 col-span-1">Menge</label>
+                    <label className="md:hidden text-[10px] uppercase tracking-wider text-slate-500 col-span-1 text-right">Netto</label>
+                    <label className="md:hidden text-[10px] uppercase tracking-wider text-slate-500 col-span-1 text-right">Brutto</label>
+                    <label className="md:hidden text-[10px] uppercase tracking-wider text-slate-500 col-span-1 text-center">MwSt</label>
+                    <input
+                      value={p.menge}
+                      disabled
+                      aria-label="Menge"
+                      className="col-span-1 md:col-span-1 bg-[#111827] border border-slate-700 rounded px-2 py-1.5 text-sm text-center disabled:opacity-90"
+                    />
+                    <input
+                      value={Number(p.einzelpreis_netto).toFixed(2)}
+                      disabled
+                      aria-label="Einzelpreis netto"
+                      className="col-span-1 md:col-span-2 bg-[#111827] border border-slate-700 rounded px-2 py-1.5 text-sm text-right disabled:opacity-90"
+                    />
+                    <input
+                      value={einzelBrutto.toFixed(2)}
+                      disabled
+                      aria-label="Einzelpreis brutto"
+                      className="col-span-1 md:col-span-2 bg-[#111827] border border-slate-700 rounded px-2 py-1.5 text-sm text-right disabled:opacity-90"
+                    />
+                    <input
+                      value={p.mwst_satz}
+                      disabled
+                      aria-label="MwSt-Satz"
+                      className="col-span-1 md:col-span-1 bg-[#111827] border border-slate-700 rounded px-2 py-1.5 text-sm text-center disabled:opacity-90"
+                    />
+                  </div>
+                  <div className="flex justify-end md:col-span-2">
                     <span className={`text-xs px-2 py-0.5 rounded border ${
                       p.klassifizierung === 'pending' ? 'bg-amber-500/10 text-amber-300 border-amber-500/30' :
                       p.klassifizierung === 'afa' ? 'bg-cyan-500/10 text-cyan-300 border-cyan-500/30' :
