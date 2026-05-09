@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { logAudit } from '@/lib/audit';
 
-async function pickTable(supabase: ReturnType<typeof createServiceClient>): Promise<'assets_neu' | 'assets'> {
-  const { error } = await supabase.from('assets_neu').select('id', { head: true }).limit(1);
-  if (error && error.code === '42P01') return 'assets';
-  return 'assets_neu';
+function isMissingTableError(e: { code?: string; message?: string } | null | undefined): boolean {
+  if (!e) return false;
+  if (e.code === '42P01' || e.code === 'PGRST205' || e.code === 'PGRST202') return true;
+  if (typeof e.message === 'string' && /could not find the table .* in the schema cache/i.test(e.message)) return true;
+  return false;
 }
 
 export async function GET(
@@ -14,13 +15,44 @@ export async function GET(
 ) {
   const { id } = await params;
   const supabase = createServiceClient();
-  const tabelle = await pickTable(supabase);
 
-  const { data: asset, error } = await supabase
-    .from(tabelle)
-    .select('*, beleg_position:beleg_positionen(id, bezeichnung, beleg:belege(id, beleg_nr, beleg_datum, lieferant:lieferanten(name)))')
-    .eq('id', id).single();
-  if (error) return NextResponse.json({ error: error.message }, { status: 404 });
+  // Beide Tabellen probieren — kein FK-Join (siehe anlagen-neu/route.ts).
+  let { data: asset, error } = await supabase
+    .from('assets').select('*').eq('id', id).maybeSingle();
+  if (isMissingTableError(error) || !asset) {
+    const r2 = await supabase.from('assets_neu').select('*').eq('id', id).maybeSingle();
+    if (!isMissingTableError(r2.error) && r2.data) {
+      asset = r2.data;
+      error = null;
+    }
+  }
+  if (!asset) return NextResponse.json({ error: 'Asset nicht gefunden' }, { status: 404 });
+
+  // Beleg-Position + Beleg + Lieferant separat laden
+  const belegPositionId = (asset as { beleg_position_id: string }).beleg_position_id;
+  let belegPosition: unknown = null;
+  if (belegPositionId) {
+    const { data: pos } = await supabase
+      .from('beleg_positionen').select('id, bezeichnung, beleg_id').eq('id', belegPositionId).maybeSingle();
+    if (pos) {
+      const p = pos as { id: string; bezeichnung: string; beleg_id: string };
+      const { data: beleg } = await supabase
+        .from('belege').select('id, beleg_nr, beleg_datum, lieferant_id').eq('id', p.beleg_id).maybeSingle();
+      const b = beleg as { id: string; beleg_nr: string; beleg_datum: string; lieferant_id: string | null } | null;
+      let lieferant: { name: string } | null = null;
+      if (b?.lieferant_id) {
+        const { data: lf } = await supabase
+          .from('lieferanten').select('name').eq('id', b.lieferant_id).maybeSingle();
+        if (lf) lieferant = lf as { name: string };
+      }
+      belegPosition = {
+        id: p.id,
+        bezeichnung: p.bezeichnung,
+        beleg: b ? { id: b.id, beleg_nr: b.beleg_nr, beleg_datum: b.beleg_datum, lieferant } : null,
+      };
+    }
+  }
+  asset = { ...(asset as Record<string, unknown>), beleg_position: belegPosition };
 
   const { data: afaHistory } = await supabase
     .from('afa_buchungen')
@@ -30,17 +62,29 @@ export async function GET(
 
   // Inventar-Link uber beleg_position
   let inventarUnit = null;
-  const belegPositionId = (asset as { beleg_position_id: string }).beleg_position_id;
   if (belegPositionId) {
     const { data: link } = await supabase
       .from('inventar_verknuepfung')
-      .select('inventar_unit:inventar_units(id, bezeichnung, inventar_code, seriennummer)')
+      .select('inventar_unit_id')
       .eq('beleg_position_id', belegPositionId)
       .limit(1).maybeSingle();
-    if (link) inventarUnit = (link as { inventar_unit: { id: string } | null }).inventar_unit;
+    const invId = link ? (link as { inventar_unit_id: string }).inventar_unit_id : null;
+    if (invId) {
+      const { data: unit } = await supabase
+        .from('inventar_units').select('id, bezeichnung, inventar_code, seriennummer').eq('id', invId).maybeSingle();
+      if (unit) inventarUnit = unit;
+    }
   }
 
   return NextResponse.json({ asset, afa_history: afaHistory ?? [], inventar_unit: inventarUnit });
+}
+
+async function pickTable(supabase: ReturnType<typeof createServiceClient>): Promise<'assets_neu' | 'assets'> {
+  // Probe-fallback fuer PATCH (Update). Wenn assets_neu wirklich nicht
+  // existiert, nimm assets — sonst assets_neu.
+  const { error } = await supabase.from('assets_neu').select('id', { head: true }).limit(1);
+  if (isMissingTableError(error)) return 'assets';
+  return 'assets_neu';
 }
 
 export async function PATCH(

@@ -15,9 +15,26 @@ export async function GET(req: NextRequest) {
   const belegId = sp.get('beleg_id');
   const supabase = createServiceClient();
 
+  // Falls beleg_id gegeben: erst die zugehoerigen position-IDs holen,
+  // damit wir spaeter clientseitig filtern koennen (kein FK-Join, der
+  // ueber stale Schema-Cache failen koennte).
+  let posIds: string[] = [];
+  if (belegId) {
+    const { data: rows } = await supabase
+      .from('beleg_positionen').select('id').eq('beleg_id', belegId);
+    posIds = (rows ?? []).map((r) => (r as { id: string }).id);
+  }
+
   async function probeTable(table: 'assets' | 'assets_neu') {
-    let q = supabase.from(table).select('id, beleg_position_id, bezeichnung, art, afa_methode, anschaffungskosten_netto, aktueller_buchwert, status, is_test, created_at, beleg_position:beleg_positionen(id, beleg_id, bezeichnung)');
-    if (belegId) q = q.eq('beleg_position.beleg_id', belegId);
+    let q = supabase
+      .from(table)
+      .select('id, beleg_position_id, bezeichnung, art, afa_methode, anschaffungskosten_netto, aktueller_buchwert, status, is_test, created_at');
+    if (belegId) {
+      if (posIds.length === 0) {
+        return { table, exists: true, error_code: null, error_message: null, rows: [], row_count: 0 };
+      }
+      q = q.in('beleg_position_id', posIds);
+    }
     const { data, error } = await q;
     if (error) {
       return {
