@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase';
 import { extractInvoice, type InvoiceMimeType } from '@/lib/ai/invoice-extract';
 import { sanitizePosition, recomputeBelegSummen } from '@/lib/buchhaltung/beleg-utils';
 import { logAudit } from '@/lib/audit';
+import { createAdminNotification } from '@/lib/admin-notifications';
 
 const ALLOWED_MIME: ReadonlySet<InvoiceMimeType> = new Set([
   'application/pdf',
@@ -13,21 +14,50 @@ const ALLOWED_MIME: ReadonlySet<InvoiceMimeType> = new Set([
 
 /**
  * POST /api/admin/belege/[id]/ocr
- * Body: { anhang_id: uuid }   (optional, sonst wird der erste rechnung-Anhang genommen)
+ * Body: { anhang_id?: uuid, notify?: boolean }
  *
  * Laedt die Datei aus Storage, ruft extractInvoice auf, schreibt:
  *   - belege.beleg_datum, rechnungsnummer_lieferant, summe_netto, summe_brutto
  *   - lieferant_id (suche/erstelle)
  *   - beleg_positionen (eine pro Item) mit ki_vorschlag (klassifizierung)
  *
+ * Schreibt zusaetzlich belege.ocr_status durch den Lebenszyklus
+ * (running → done | failed) plus Timestamps. UI kann darauf pollen, der
+ * Bulk-Pfad feuert die Route fire-and-forget.
+ *
+ * Bei `notify: true` (Bulk-Pfad) wird am Ende eine Admin-Notification
+ * erzeugt — fuer Admins mit `finanzen`-Permission gibt's dann auch einen
+ * Web-Push, sodass der User die Seite verlassen kann und trotzdem
+ * informiert wird, sobald die Analyse fertig ist.
+ *
  * NICHT idempotent: ueberschreibt bestehende Positionen wenn der Beleg leer ist.
  */
+
+// Defensive Status-Helper. Wenn die Migration noch nicht durch ist, fehlen
+// ocr_status und ocr_error in der Tabelle und ein normaler UPDATE wuerde
+// scheitern. Wir wollen dann lautlos weitermachen, sonst bricht der OCR-Pfad.
+async function setOcrStatus(
+  supabase: ReturnType<typeof createServiceClient>,
+  belegId: string,
+  patch: { ocr_status: string; ocr_error?: string | null; ocr_started_at?: string | null; ocr_finished_at?: string | null },
+) {
+  const { error } = await supabase.from('belege').update(patch).eq('id', belegId);
+  if (error && /ocr_status|ocr_error|ocr_started_at|ocr_finished_at/i.test(error.message)) {
+    // Migration fehlt — nichts zu tun.
+    return;
+  }
+  if (error) {
+    // anderer Fehler: nur loggen, nicht werfen — OCR-Hauptpfad soll weiterlaufen.
+    console.error('[ocr] setOcrStatus:', error.message);
+  }
+}
+
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  const body = await req.json().catch(() => ({})) as { anhang_id?: string };
+  const body = await req.json().catch(() => ({})) as { anhang_id?: string; notify?: boolean };
   const supabase = createServiceClient();
 
   const { data: beleg } = await supabase.from('belege').select('*').eq('id', id).single();
@@ -35,6 +65,32 @@ export async function POST(
   if (beleg.status === 'festgeschrieben') {
     return NextResponse.json({ error: 'Festgeschrieben' }, { status: 409 });
   }
+
+  await setOcrStatus(supabase, id, {
+    ocr_status: 'running',
+    ocr_error: null,
+    ocr_started_at: new Date().toISOString(),
+    ocr_finished_at: null,
+  });
+
+  // Ab hier: bei jedem Fehler den Status auf 'failed' setzen (mit Push falls
+  // notify=true), damit das UI nicht ewig auf 'running' haengt.
+  const fail = async (status: number, message: string) => {
+    await setOcrStatus(supabase, id, {
+      ocr_status: 'failed',
+      ocr_error: message.slice(0, 1000),
+      ocr_finished_at: new Date().toISOString(),
+    });
+    if (body.notify) {
+      await createAdminNotification(supabase, {
+        type: 'beleg_failed',
+        title: `Beleg-Analyse fehlgeschlagen: ${beleg.beleg_nr}`,
+        message: message.slice(0, 200),
+        link: `/admin/buchhaltung/belege/${id}`,
+      }).catch(() => {});
+    }
+    return NextResponse.json({ error: message }, { status });
+  };
 
   // Anhang holen
   let anhang;
@@ -46,12 +102,12 @@ export async function POST(
       .select('*').eq('beleg_id', id).eq('typ', 'rechnung').order('created_at').limit(1).maybeSingle();
     anhang = data;
   }
-  if (!anhang) return NextResponse.json({ error: 'Kein passender Anhang gefunden' }, { status: 400 });
+  if (!anhang) return fail(400, 'Kein passender Anhang gefunden');
 
   // File aus Storage laden
   const { data: blob, error: dlErr } = await supabase.storage
     .from('purchase-invoices').download((anhang as { storage_path: string }).storage_path);
-  if (dlErr || !blob) return NextResponse.json({ error: dlErr?.message ?? 'Download fehlgeschlagen' }, { status: 500 });
+  if (dlErr || !blob) return fail(500, dlErr?.message ?? 'Download fehlgeschlagen');
 
   const buffer = Buffer.from(await blob.arrayBuffer());
   const rawMime = (anhang as { mime_type: string }).mime_type;
@@ -59,10 +115,7 @@ export async function POST(
   // nur eine schmale Allowlist, sonst antwortet das Modell mit "Format nicht
   // unterstuetzt" und der OCR-Step schlaegt mit kryptischer Meldung fehl.
   if (!ALLOWED_MIME.has(rawMime as InvoiceMimeType)) {
-    return NextResponse.json(
-      { error: `OCR-Format ${rawMime} nicht unterstützt (erlaubt: PDF, JPG, PNG, WebP)` },
-      { status: 415 },
-    );
+    return fail(415, `OCR-Format ${rawMime} nicht unterstützt (erlaubt: PDF, JPG, PNG, WebP)`);
   }
   const mime = rawMime as InvoiceMimeType;
 
@@ -71,7 +124,7 @@ export async function POST(
     const result = await extractInvoice(buffer, mime);
     invoice = result.invoice;
   } catch (err) {
-    return NextResponse.json({ error: `OCR fehlgeschlagen: ${(err as Error).message}` }, { status: 500 });
+    return fail(500, `OCR fehlgeschlagen: ${(err as Error).message}`);
   }
 
   // Lieferant: existierender oder neuer
@@ -135,11 +188,27 @@ export async function POST(
 
   if (newPositions.length > 0) {
     const { error: insErr } = await supabase.from('beleg_positionen').insert(newPositions);
-    if (insErr) return NextResponse.json({ error: insErr.message }, { status: 500 });
+    if (insErr) return fail(500, insErr.message);
   }
 
   await recomputeBelegSummen(supabase, id);
+  await setOcrStatus(supabase, id, {
+    ocr_status: 'done',
+    ocr_error: null,
+    ocr_finished_at: new Date().toISOString(),
+  });
   await logAudit({ action: 'beleg.ocr', entityType: 'beleg', entityId: id, changes: { items: newPositions.length }, request: req });
+
+  if (body.notify) {
+    const supplier = invoice.supplier?.name ?? beleg.lieferant_id ?? 'unbekannt';
+    const itemsLabel = newPositions.length === 1 ? '1 Position' : `${newPositions.length} Positionen`;
+    await createAdminNotification(supabase, {
+      type: 'beleg_ready',
+      title: `Beleg analysiert: ${beleg.beleg_nr}`,
+      message: `${supplier} · ${itemsLabel} erkannt — bitte klassifizieren.`,
+      link: `/admin/buchhaltung/belege/${id}`,
+    }).catch(() => {});
+  }
 
   return NextResponse.json({ ok: true, items_extracted: newPositions.length, supplier: invoice.supplier?.name ?? null });
 }

@@ -25,6 +25,8 @@ const TYPE_TO_PERMISSION: Record<string, PermissionKey> = {
   blog_ready: 'content',
   social_ready: 'content',
   reel_ready: 'content',
+  beleg_ready: 'finanzen',
+  beleg_failed: 'finanzen',
 };
 
 /**

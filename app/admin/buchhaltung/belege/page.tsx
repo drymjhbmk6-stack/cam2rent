@@ -16,6 +16,8 @@ interface Beleg {
   positions_pending: number;
   lieferant: { name: string } | null;
   ist_eigenbeleg: boolean;
+  ocr_status?: 'pending' | 'running' | 'done' | 'failed' | null;
+  ocr_error?: string | null;
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -204,6 +206,23 @@ export default function BelegeListePage() {
                     <td className="px-3 py-2 whitespace-nowrap">
                       {b.lieferant?.name ?? <span className="text-slate-500 italic">–</span>}
                       {b.ist_eigenbeleg && <span className="ml-2 text-xs text-amber-400">(Eigenbeleg)</span>}
+                      {(b.ocr_status === 'running' || b.ocr_status === 'pending') && (
+                        <span
+                          className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-violet-500/15 text-violet-300 border border-violet-500/30"
+                          title="Die KI liest den Beleg gerade aus — eine Push-Notification kommt, sobald fertig."
+                        >
+                          <span className="inline-block w-2 h-2 bg-violet-400 rounded-full animate-pulse" />
+                          KI läuft
+                        </span>
+                      )}
+                      {b.ocr_status === 'failed' && (
+                        <span
+                          className="ml-2 inline-block px-2 py-0.5 rounded text-xs bg-red-500/15 text-red-300 border border-red-500/30"
+                          title={b.ocr_error ?? 'OCR-Fehler — Daten manuell ergänzen.'}
+                        >
+                          OCR-Fehler
+                        </span>
+                      )}
                     </td>
                     <td className="px-3 py-2 text-right whitespace-nowrap">{fmtEuro(Number(b.summe_brutto))}</td>
                     <td className="px-3 py-2 text-xs whitespace-nowrap">

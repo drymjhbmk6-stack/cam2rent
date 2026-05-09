@@ -10,17 +10,21 @@ import AdminBackLink from '@/components/admin/AdminBackLink';
  * Bis zu 10 Dateien (PDF/JPG/PNG/WebP, je max 20 MB) auf einmal hochladen.
  * Pro Datei laeuft sequentiell:
  *   1. POST /api/admin/belege            (leeren Beleg anlegen)
- *   2. POST /api/admin/belege/[id]/anhaenge  (Datei hochladen)
- *   3. POST /api/admin/belege/[id]/ocr   (Claude liest Daten aus)
+ *   2. POST /api/admin/belege/[id]/anhaenge  (Datei hochladen + Duplikat-Check)
+ *   3. POST /api/admin/belege/[id]/ocr   (fire-and-forget, Push am Ende)
  *
- * Sequenziell statt parallel, weil:
- *   - Claude-API ist rate-limitiert (parallel = 429-Storm)
- *   - jeder OCR-Call kostet Geld (Cancel-Knopf bricht den Rest ab)
+ * OCR laeuft im Hintergrund: Der Server-Request wird mit `keepalive: true`
+ * abgesetzt und NICHT abgewartet. Der User kann die Seite verlassen — wenn die
+ * Analyse durch ist, kommt eine Push-Notification (Permission `finanzen`) und
+ * die Belege-Liste zeigt den fertigen Eintrag.
+ *
+ * Sequenziell fuer Schritte 1+2, weil:
  *   - Storage-Burst auf Supabase Free-Tier triggert sonst Throttle
+ *   - parallele Beleg-Inserts haetten alle die gleiche Datums-Default-Sequenz
  *
- * OCR-Fehler sind nicht fatal — der Beleg ist trotzdem angelegt, der User
- * pflegt die Daten danach manuell. Die Status-Karte zeigt den OCR-Fehler
- * separat (gelb) statt komplett rot.
+ * Duplikate: Server antwortet mit 409 + existing_beleg_id wenn der File-Hash
+ * schon mal hochgeladen wurde. Wir loeschen dann den frisch angelegten leeren
+ * Beleg wieder und zeigen den Verweis im UI.
  */
 
 const MAX_FILES = 10;
@@ -30,9 +34,8 @@ const ACCEPTED = 'application/pdf,image/jpeg,image/png,image/webp';
 type RowStatus =
   | 'pending'
   | 'uploading'
-  | 'ocr'
-  | 'done'
-  | 'done_no_ocr'
+  | 'queued'        // hochgeladen, OCR laeuft im Hintergrund
+  | 'duplicate'     // gleicher Datei-Hash existiert schon
   | 'error'
   | 'cancelled';
 
@@ -43,7 +46,8 @@ interface Row {
   belegId?: string;
   belegNr?: string;
   message?: string;
-  ocrWarning?: string;
+  duplicateBelegId?: string;
+  duplicateBelegNr?: string | null;
 }
 
 export default function BelegeBulkUploadPage() {
@@ -117,32 +121,64 @@ export default function BelegeBulkUploadPage() {
     const belegNr = createJson.beleg.beleg_nr as string;
     patchRow(row.id, { belegId, belegNr, message: 'Datei wird hochgeladen…' });
 
-    // 2. Datei hochladen
+    // 2. Datei hochladen — Duplikat-Check passiert im Server.
     const fd = new FormData();
     fd.append('file', row.file);
     fd.append('kind', 'rechnung');
     const uploadRes = await fetch(`/api/admin/belege/${belegId}/anhaenge`, { method: 'POST', body: fd });
+
+    if (uploadRes.status === 409) {
+      const dup = (await uploadRes.json().catch(() => ({}))) as {
+        error?: string;
+        message?: string;
+        existing_beleg_id?: string;
+        existing_beleg_nr?: string | null;
+      };
+      // Wenn Server das Duplikat-Signal liefert: leeren Beleg wieder loeschen
+      // und Row als 'duplicate' markieren mit Verweis.
+      if (dup.error === 'duplicate') {
+        await fetch(`/api/admin/belege/${belegId}`, { method: 'DELETE' }).catch(() => {});
+        patchRow(row.id, {
+          status: 'duplicate',
+          message: dup.message ?? 'Datei bereits vorhanden.',
+          duplicateBelegId: dup.existing_beleg_id,
+          duplicateBelegNr: dup.existing_beleg_nr ?? null,
+          belegId: undefined,
+          belegNr: undefined,
+        });
+        return;
+      }
+      // 409 mit anderer Bedeutung (z.B. festgeschrieben) — als Fehler behandeln
+      throw new Error(dup.message ?? dup.error ?? 'Konflikt beim Upload');
+    }
+
     if (!uploadRes.ok) {
       throw new Error((await uploadRes.json().catch(() => ({}))).error ?? 'Datei-Upload fehlgeschlagen');
     }
 
-    // 3. OCR — soft-fail. Beleg ist trotzdem angelegt; User pflegt manuell.
-    patchRow(row.id, { status: 'ocr', message: 'OCR liest Daten aus…' });
-    const ocrRes = await fetch(`/api/admin/belege/${belegId}/ocr`, {
+    // 3. OCR fire-and-forget — Server schickt am Ende eine Push-Notification
+    //    an alle Admins mit `finanzen`-Permission. Wir warten NICHT auf die
+    //    Antwort, der User kann die Seite verlassen.
+    //
+    //    `keepalive: true` sorgt dafuer, dass der Browser die Anfrage auch
+    //    nach Tab-Close noch zu Ende sendet. Body ist klein genug fuer das
+    //    64 KB-Limit.
+    void fetch(`/api/admin/belege/${belegId}/ocr`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: '{}',
+      body: JSON.stringify({ notify: true }),
+      keepalive: true,
+    }).catch((err) => {
+      // Netzwerkfehler beim Auslösen — ignorieren, der User sieht den Beleg
+      // trotzdem in der Liste mit ocr_status='running' und kann manuell neu
+      // triggern.
+      console.warn('[bulk] ocr trigger failed:', err);
     });
-    if (!ocrRes.ok) {
-      const err = (await ocrRes.json().catch(() => ({}))).error ?? `OCR-HTTP ${ocrRes.status}`;
-      patchRow(row.id, {
-        status: 'done_no_ocr',
-        message: undefined,
-        ocrWarning: err,
-      });
-      return;
-    }
-    patchRow(row.id, { status: 'done', message: undefined, ocrWarning: undefined });
+
+    patchRow(row.id, {
+      status: 'queued',
+      message: 'KI-Analyse läuft im Hintergrund — Push kommt, sobald fertig.',
+    });
   }
 
   async function processAll() {
@@ -180,16 +216,16 @@ export default function BelegeBulkUploadPage() {
   const counts = {
     total: rows.length,
     pending: rows.filter((r) => r.status === 'pending').length,
-    done: rows.filter((r) => r.status === 'done' || r.status === 'done_no_ocr').length,
+    queued: rows.filter((r) => r.status === 'queued').length,
+    duplicate: rows.filter((r) => r.status === 'duplicate').length,
     error: rows.filter((r) => r.status === 'error').length,
   };
 
   function statusBadge(s: RowStatus) {
     if (s === 'pending') return <span className="text-xs px-2 py-0.5 rounded bg-slate-700/40 text-slate-300">⏳ wartet</span>;
     if (s === 'uploading') return <span className="text-xs px-2 py-0.5 rounded bg-blue-500/15 text-blue-300">📤 hochladen</span>;
-    if (s === 'ocr') return <span className="text-xs px-2 py-0.5 rounded bg-violet-500/15 text-violet-300">🤖 OCR…</span>;
-    if (s === 'done') return <span className="text-xs px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300">✅ fertig</span>;
-    if (s === 'done_no_ocr') return <span className="text-xs px-2 py-0.5 rounded bg-amber-500/15 text-amber-300">⚠ ohne OCR</span>;
+    if (s === 'queued') return <span className="text-xs px-2 py-0.5 rounded bg-violet-500/15 text-violet-300">🤖 in Warteschlange</span>;
+    if (s === 'duplicate') return <span className="text-xs px-2 py-0.5 rounded bg-amber-500/15 text-amber-300">⚠ Duplikat</span>;
     if (s === 'error') return <span className="text-xs px-2 py-0.5 rounded bg-red-500/15 text-red-300">❌ Fehler</span>;
     return <span className="text-xs px-2 py-0.5 rounded bg-slate-700/40 text-slate-400">— abgebrochen</span>;
   }
@@ -208,7 +244,8 @@ export default function BelegeBulkUploadPage() {
           <h1 className="text-2xl font-heading">Bulk-Upload Belege</h1>
           <p className="text-sm text-slate-400 mt-1">
             Bis zu {MAX_FILES} Dateien (PDF, JPG, PNG, WebP — je max 20 MB) auf einmal. Jede Datei wird
-            angelegt, hochgeladen und per KI ausgelesen. Klassifizierung passiert danach pro Beleg.
+            hochgeladen, geprüft (Duplikat-Erkennung) und im Hintergrund per KI ausgelesen. Du kannst die
+            Seite verlassen — eine Push-Notification informiert dich, sobald die Analyse fertig ist.
           </p>
         </div>
 
@@ -268,8 +305,8 @@ export default function BelegeBulkUploadPage() {
                 key={r.id}
                 className={`bg-[#111827] border rounded p-3 ${
                   r.status === 'error' ? 'border-red-500/40' :
-                  r.status === 'done_no_ocr' ? 'border-amber-500/40' :
-                  r.status === 'done' ? 'border-emerald-500/40' :
+                  r.status === 'duplicate' ? 'border-amber-500/40' :
+                  r.status === 'queued' ? 'border-violet-500/40' :
                   'border-slate-800'
                 }`}
               >
@@ -281,15 +318,18 @@ export default function BelegeBulkUploadPage() {
                       {r.belegNr && ` · ${r.belegNr}`}
                     </div>
                     {r.message && <div className="text-xs text-slate-400 mt-1">{r.message}</div>}
-                    {r.ocrWarning && (
-                      <div className="text-xs text-amber-300 mt-1">
-                        OCR-Hinweis: {r.ocrWarning} — Beleg ist angelegt, du kannst die Daten manuell ergänzen.
-                      </div>
+                    {r.status === 'duplicate' && r.duplicateBelegId && (
+                      <Link
+                        href={`/admin/buchhaltung/belege/${r.duplicateBelegId}`}
+                        className="text-xs text-amber-300 hover:text-amber-200 underline mt-1 inline-block"
+                      >
+                        → Bestehenden Beleg {r.duplicateBelegNr ?? 'öffnen'}
+                      </Link>
                     )}
                   </div>
                   <div className="shrink-0 flex flex-col items-end gap-2">
                     {statusBadge(r.status)}
-                    {r.belegId && (r.status === 'done' || r.status === 'done_no_ocr') && (
+                    {r.belegId && r.status === 'queued' && (
                       <Link
                         href={`/admin/buchhaltung/belege/${r.belegId}`}
                         className="text-xs text-cyan-400 hover:text-cyan-300"
@@ -313,13 +353,19 @@ export default function BelegeBulkUploadPage() {
         )}
 
         {/* Footer-Bilanz */}
-        {!busy && counts.done > 0 && (
-          <div className="bg-emerald-500/10 border border-emerald-500/40 rounded p-3 text-sm text-emerald-200">
-            {counts.done} Beleg(e) angelegt. Klassifizierung erfolgt pro Beleg unter{' '}
-            <Link href="/admin/buchhaltung/belege" className="underline hover:text-emerald-100">
-              Belege-Übersicht
+        {!busy && counts.queued > 0 && (
+          <div className="bg-violet-500/10 border border-violet-500/40 rounded p-3 text-sm text-violet-200">
+            {counts.queued} Beleg(e) hochgeladen — KI-Analyse läuft im Hintergrund. Du kannst die Seite
+            verlassen. Push-Notifications kommen, sobald jeder Beleg analysiert ist. Übersicht:{' '}
+            <Link href="/admin/buchhaltung/belege" className="underline hover:text-violet-100">
+              Belege-Liste
             </Link>
             .
+          </div>
+        )}
+        {!busy && counts.duplicate > 0 && (
+          <div className="bg-amber-500/10 border border-amber-500/40 rounded p-3 text-sm text-amber-200">
+            {counts.duplicate} Datei(en) waren bereits vorhanden und wurden übersprungen.
           </div>
         )}
       </div>

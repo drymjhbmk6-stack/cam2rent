@@ -63,6 +63,7 @@ export default function NeuerBelegWizard() {
   const summeBrutto = positionen.reduce((s, p) => s + p.menge * p.einzelpreis_netto * (1 + p.mwst_satz / 100), 0);
 
   const [ocrInfo, setOcrInfo] = useState<string | null>(null);
+  const [duplicateRef, setDuplicateRef] = useState<{ id: string; nr: string | null } | null>(null);
 
   async function handleNextFromStep1() {
     if (!quelle) return;
@@ -81,6 +82,7 @@ export default function NeuerBelegWizard() {
     // Upload-Pfad: Beleg anlegen + Datei hochladen + OCR + Daten laden,
     // dann Form-Felder mit den OCR-Ergebnissen vorbefuellen.
     setBusy(true);
+    setDuplicateRef(null);
     setOcrInfo('Beleg wird angelegt…');
     try {
       // 1. Leeren Beleg anlegen (mit minimalen Pflichtfeldern)
@@ -100,12 +102,32 @@ export default function NeuerBelegWizard() {
       const { beleg } = await createRes.json();
       setBelegId(beleg.id);
 
-      // 2. Datei hochladen
+      // 2. Datei hochladen — Server prueft Datei-Hash und antwortet 409 falls
+      //    diese Datei bereits einem anderen Beleg angehaengt wurde.
       setOcrInfo('Datei wird hochgeladen…');
       const fd = new FormData();
       fd.append('file', file);
       fd.append('kind', 'rechnung');
       const uploadRes = await fetch(`/api/admin/belege/${beleg.id}/anhaenge`, { method: 'POST', body: fd });
+
+      if (uploadRes.status === 409) {
+        const dup = (await uploadRes.json().catch(() => ({}))) as {
+          error?: string;
+          message?: string;
+          existing_beleg_id?: string;
+          existing_beleg_nr?: string | null;
+        };
+        if (dup.error === 'duplicate' && dup.existing_beleg_id) {
+          // Den frisch angelegten leeren Beleg wieder loeschen — sonst haetten
+          // wir Karteileichen ohne Anhang in der Liste.
+          await fetch(`/api/admin/belege/${beleg.id}`, { method: 'DELETE' }).catch(() => {});
+          setBelegId(null);
+          setDuplicateRef({ id: dup.existing_beleg_id, nr: dup.existing_beleg_nr ?? null });
+          setError(dup.message ?? 'Diese Datei wurde bereits hochgeladen.');
+          return;
+        }
+        throw new Error(dup.message ?? dup.error ?? 'Konflikt beim Upload');
+      }
       if (!uploadRes.ok) {
         throw new Error('Datei-Upload fehlgeschlagen');
       }
@@ -328,7 +350,21 @@ export default function NeuerBelegWizard() {
           ))}
         </div>
 
-        {error && <div className="mb-4 p-3 bg-rose-500/10 border border-rose-500/30 text-rose-300 rounded text-sm">{error}</div>}
+        {error && !duplicateRef && (
+          <div className="mb-4 p-3 bg-rose-500/10 border border-rose-500/30 text-rose-300 rounded text-sm">{error}</div>
+        )}
+        {duplicateRef && (
+          <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/40 text-amber-200 rounded text-sm">
+            <div className="font-semibold mb-1">⚠ Diese Datei wurde bereits hochgeladen</div>
+            <div className="text-amber-100/80 mb-2">{error}</div>
+            <Link
+              href={`/admin/buchhaltung/belege/${duplicateRef.id}`}
+              className="inline-block px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 rounded text-amber-100 font-semibold"
+            >
+              → Bestehenden Beleg{duplicateRef.nr ? ` ${duplicateRef.nr}` : ''} öffnen
+            </Link>
+          </div>
+        )}
 
         {/* Step 1: Quelle */}
         {step === 1 && (
