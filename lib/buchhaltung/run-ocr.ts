@@ -103,6 +103,7 @@ export async function runOcrForBeleg(
     status: string;
     lieferant_id: string | null;
     beleg_datum: string;
+    bezahl_datum: string | null;
     rechnungsnummer_lieferant: string | null;
   };
   if (beleg.status === 'festgeschrieben') {
@@ -181,10 +182,14 @@ export async function runOcrForBeleg(
   }
 
   // Beleg-Header updaten
+  const newBelegDatum = invoice.invoice_date ?? beleg.beleg_datum;
   await supabase.from('belege').update({
     lieferant_id: lieferantId,
-    beleg_datum: invoice.invoice_date ?? beleg.beleg_datum,
+    beleg_datum: newBelegDatum,
     rechnungsnummer_lieferant: invoice.invoice_number ?? beleg.rechnungsnummer_lieferant,
+    // Bezahl-Datum-Default: wenn noch nicht gesetzt, auf Beleg-Datum spiegeln.
+    // Manueller Override bleibt erhalten — wir ueberschreiben nur null.
+    bezahl_datum: beleg.bezahl_datum ?? newBelegDatum,
   }).eq('id', belegId);
 
   // Existierende Positionen droppen (nur bei "leerem" Beleg ohne Klassifizierung)

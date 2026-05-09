@@ -111,7 +111,10 @@ export async function POST(req: NextRequest) {
       beleg_nr: belegNr,
       lieferant_id: body.lieferant_id ?? null,
       beleg_datum: belegDatum,
-      bezahl_datum: body.bezahl_datum ?? null,
+      // Bezahl-Datum-Default: wenn nicht angegeben, automatisch auf Beleg-Datum
+      // spiegeln. Real-life-Annahme: die meisten kleinen Eingangsrechnungen
+      // werden zeitnah bezahlt — manueller Override bleibt jederzeit moeglich.
+      bezahl_datum: body.bezahl_datum ?? belegDatum,
       rechnungsnummer_lieferant: body.rechnungsnummer_lieferant ?? null,
       summe_netto: 0,
       summe_brutto: 0,
