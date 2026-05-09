@@ -219,13 +219,30 @@ export default function BelegDetailPage() {
               ⚠ {assetStatus.actual} von {assetStatus.expected} erwarteten Anlagen wurden erzeugt.
               Vermutlich Silent-Fail beim Festschreiben (z.B. ungültiger <code className="font-mono">art</code>-Wert in der KI-Klassifikation).
             </div>
-            <button
-              onClick={handleRegenerateAssets}
-              disabled={busy}
-              className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 disabled:bg-slate-700 text-slate-900 rounded text-sm font-semibold whitespace-nowrap"
-            >
-              {busy ? 'Erzeuge…' : '↻ Anlagen jetzt erzeugen'}
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={handleRegenerateAssets}
+                disabled={busy}
+                className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 disabled:bg-slate-700 text-slate-900 rounded text-sm font-semibold whitespace-nowrap"
+              >
+                {busy ? 'Erzeuge…' : '↻ Anlagen jetzt erzeugen'}
+              </button>
+              <button
+                onClick={async () => {
+                  const res = await fetch(`/api/admin/buchhaltung/asset-debug?beleg_id=${belegId}`);
+                  const data = await res.json();
+                  const w = window.open('', '_blank');
+                  if (w) {
+                    w.document.body.style.cssText = 'background:#0a0f1e;color:#e2e8f0;font-family:monospace;padding:20px;';
+                    w.document.body.innerText = JSON.stringify(data, null, 2);
+                  }
+                }}
+                className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded text-sm whitespace-nowrap"
+                title="Zeigt was wirklich in den Tabellen assets / assets_neu liegt"
+              >
+                🔍 Debug
+              </button>
+            </div>
           </div>
         )}
         {regenWarnings && regenWarnings.length > 0 && (
