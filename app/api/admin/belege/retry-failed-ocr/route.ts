@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { isTestMode } from '@/lib/env-mode';
 import { logAudit } from '@/lib/audit';
+import { runOcrForBeleg } from '@/lib/buchhaltung/run-ocr';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -14,9 +15,15 @@ export const maxDuration = 300;
  * Calls), gibt dann zurueck wieviele uebrig sind. UI ruft den Endpoint in
  * einer Schleife, bis remaining=0.
  *
- * Warum nicht alle auf einmal: Anthropic-Rate-Limit. Mit dem in-flight-
- * Semaphor in der OCR-Route + SDK-Retries reichen 5 sequenzielle Aufrufe
- * pro Request locker, ohne ins ITPM-Limit zu rennen.
+ * WICHTIG: Wir rufen `runOcrForBeleg()` als direkte Funktion auf — KEIN
+ * internal-fetch. Internal-fetch wuerde das UA-Binding (Sweep 6/7) triggern,
+ * weil Node-Fetch einen anderen UA sendet als der Browser. Folge: die
+ * Middleware loescht die admin_sessions-Row, der Admin wird hart ausgeloggt,
+ * alle Retries scheitern.
+ *
+ * Throttle-Quelle der Wahrheit ist der Semaphor in lib/buchhaltung/run-ocr.ts
+ * (max 3 parallel). Hier reicht ein kleiner Delay zwischen sequenziellen
+ * Aufrufen, um die Anthropic-Tokens zu schonen.
  */
 export async function POST(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
@@ -35,33 +42,24 @@ export async function POST(req: NextRequest) {
     .limit(max);
 
   const candidates = (failed ?? []) as Array<{ id: string; beleg_nr: string }>;
-  const cookieHeader = req.headers.get('cookie') ?? '';
-  const origin = new URL(req.url).origin;
-
   const results: Array<{ id: string; beleg_nr: string; ok: boolean; error?: string }> = [];
 
   for (const b of candidates) {
     try {
-      // Internal Fetch — Auth-Cookie weiterreichen, damit die OCR-Route die
-      // gleiche Session sieht. notify=false, sonst kaeme pro Retry eine
-      // Push-Notification.
-      const ocrRes = await fetch(`${origin}/api/admin/belege/${b.id}/ocr`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', cookie: cookieHeader },
-        body: JSON.stringify({ notify: false }),
-      });
-      const data = await ocrRes.json().catch(() => ({}));
+      const r = await runOcrForBeleg(supabase, b.id);
       results.push({
         id: b.id,
         beleg_nr: b.beleg_nr,
-        ok: ocrRes.ok,
-        error: ocrRes.ok ? undefined : ((data as { error?: string }).error ?? 'OCR fehlgeschlagen'),
+        ok: r.ok,
+        error: r.ok ? undefined : r.error,
       });
     } catch (err) {
+      // runOcrForBeleg sollte nie throwen, defensiv trotzdem
       results.push({ id: b.id, beleg_nr: b.beleg_nr, ok: false, error: (err as Error).message });
     }
-    // 1 s Pause zwischen den Calls — Atempause fuer die Anthropic-Tokens
-    await new Promise((r) => setTimeout(r, 1000));
+    // 500 ms Pause zwischen den sequenziellen Calls — Atempause fuer die
+    // Anthropic-Tokens zusaetzlich zum 3er-Semaphor.
+    await new Promise((r) => setTimeout(r, 500));
   }
 
   // Wieviele sind noch uebrig?
@@ -72,13 +70,15 @@ export async function POST(req: NextRequest) {
     .neq('status', 'festgeschrieben')
     .eq('is_test', isTest);
 
+  const succeeded = results.filter((r) => r.ok).length;
+
   await logAudit({
     action: 'beleg.retry_failed_ocr',
     entityType: 'beleg',
     entityId: 'bulk',
     changes: {
       retried: results.length,
-      succeeded: results.filter((r) => r.ok).length,
+      succeeded,
       remaining: count ?? 0,
     },
     request: req,
@@ -86,7 +86,7 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({
     retried: results.length,
-    succeeded: results.filter((r) => r.ok).length,
+    succeeded,
     remaining: count ?? 0,
     results,
   });
