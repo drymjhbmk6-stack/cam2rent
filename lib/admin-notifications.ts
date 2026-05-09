@@ -27,6 +27,7 @@ const TYPE_TO_PERMISSION: Record<string, PermissionKey> = {
   reel_ready: 'content',
   beleg_ready: 'finanzen',
   beleg_failed: 'finanzen',
+  beleg_duplicate: 'finanzen',
 };
 
 /**

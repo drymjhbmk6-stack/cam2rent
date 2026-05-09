@@ -28,6 +28,10 @@ interface Beleg {
   notizen: string | null; festgeschrieben_at: string | null;
   created_at?: string | null; updated_at?: string | null; is_test?: boolean;
   lieferant: { id: string; name: string; adresse?: string | null; email?: string | null; ust_id?: string | null } | null;
+  verdacht_duplikat_beleg_id?: string | null;
+  verdacht_duplikat_grund?: string | null;
+  verdacht_duplikat_dismissed_at?: string | null;
+  verdacht_duplikat_existing?: { id: string; beleg_nr: string } | null;
 }
 interface Position {
   id: string; reihenfolge: number; bezeichnung: string; menge: number;
@@ -178,10 +182,25 @@ export default function BelegDetailPage() {
     else setError((await res.json()).error);
   }
 
+  async function handleDismissDuplicate() {
+    if (!confirm('Wirklich kein Duplikat? Der Beleg kann danach festgeschrieben werden.')) return;
+    setBusy(true);
+    setError(null);
+    const res = await fetch(`/api/admin/belege/${belegId}/dismiss-duplicate`, { method: 'POST' });
+    if (!res.ok) {
+      setError((await res.json()).error ?? 'Konnte Verdacht nicht aufheben');
+      setBusy(false);
+      return;
+    }
+    await reload();
+    setBusy(false);
+  }
+
   if (loading) return <div className="p-6 text-slate-400">Lädt…</div>;
   if (!beleg) return <div className="p-6 text-rose-400">{error ?? 'Nicht gefunden'}</div>;
 
   const isLocked = beleg.status === 'festgeschrieben';
+  const hasOpenDuplicate = !!beleg.verdacht_duplikat_beleg_id && !beleg.verdacht_duplikat_dismissed_at;
   const allClassified = positionen.length > 0 && positionen.every((p) => p.klassifizierung !== 'pending');
 
   return (
@@ -208,6 +227,59 @@ export default function BelegDetailPage() {
           </div>
         </div>
 
+        {hasOpenDuplicate && (
+          <div className="p-4 bg-rose-500/10 border-2 border-rose-500/50 text-rose-200 rounded text-sm space-y-2">
+            <div className="flex items-start gap-2">
+              <span className="text-lg leading-none">⚠</span>
+              <div className="flex-1">
+                <div className="font-semibold text-rose-100">Verdacht auf Duplikat</div>
+                <div className="text-xs text-rose-300 mt-1">{beleg.verdacht_duplikat_grund ?? 'Inhaltlicher Treffer mit anderem Beleg'}</div>
+                {beleg.verdacht_duplikat_existing && (
+                  <Link
+                    href={`/admin/buchhaltung/belege/${beleg.verdacht_duplikat_existing.id}`}
+                    className="inline-block mt-2 text-cyan-300 hover:text-cyan-200 underline font-mono text-xs"
+                  >
+                    → Original-Beleg {beleg.verdacht_duplikat_existing.beleg_nr} öffnen
+                  </Link>
+                )}
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2 pt-2 border-t border-rose-500/30">
+              <button
+                onClick={handleDelete}
+                disabled={busy}
+                className="px-3 py-1.5 bg-rose-500 hover:bg-rose-400 disabled:bg-slate-700 text-slate-900 rounded text-sm font-semibold"
+              >
+                🗑 Diesen Beleg löschen
+              </button>
+              <button
+                onClick={handleDismissDuplicate}
+                disabled={busy}
+                className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-slate-200 rounded text-sm"
+              >
+                Kein Duplikat — fortfahren
+              </button>
+            </div>
+            <p className="text-xs text-rose-300/80 pt-1">
+              Festschreiben ist gesperrt, bis der Verdacht aufgelöst ist.
+            </p>
+          </div>
+        )}
+        {beleg.verdacht_duplikat_beleg_id && beleg.verdacht_duplikat_dismissed_at && (
+          <div className="p-2 bg-slate-700/30 border border-slate-600 text-slate-400 rounded text-xs">
+            Duplikat-Verdacht wurde bestätigt aufgehoben.
+            {beleg.verdacht_duplikat_existing && (
+              <> Vergleich:{' '}
+                <Link
+                  href={`/admin/buchhaltung/belege/${beleg.verdacht_duplikat_existing.id}`}
+                  className="text-cyan-400 hover:text-cyan-300 underline font-mono"
+                >
+                  {beleg.verdacht_duplikat_existing.beleg_nr}
+                </Link>
+              </>
+            )}
+          </div>
+        )}
         {isLocked && (
           <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 rounded text-sm">
             🔒 Beleg ist festgeschrieben (am {fmtDate(beleg.festgeschrieben_at)}). Keine Änderungen mehr möglich.

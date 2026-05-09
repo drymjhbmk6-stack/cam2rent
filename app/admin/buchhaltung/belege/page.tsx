@@ -18,6 +18,8 @@ interface Beleg {
   ist_eigenbeleg: boolean;
   ocr_status?: 'pending' | 'running' | 'done' | 'failed' | null;
   ocr_error?: string | null;
+  verdacht_duplikat_beleg_id?: string | null;
+  verdacht_duplikat_dismissed_at?: string | null;
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -67,6 +69,8 @@ export default function BelegeListePage() {
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
   const [q, setQ] = useState('');
+  const [scanResult, setScanResult] = useState<{ scanned: number; flagged: number } | null>(null);
+  const [scanning, setScanning] = useState(false);
   // Default: neueste oben — Datum absteigend.
   const [sortKey, setSortKey] = useState<SortKey>('beleg_datum');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
@@ -141,7 +145,37 @@ export default function BelegeListePage() {
       <div className="max-w-7xl mx-auto mt-4">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
           <h1 className="text-2xl font-heading">Belege</h1>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
+            <button
+              onClick={async () => {
+                if (scanning) return;
+                setScanning(true);
+                setScanResult(null);
+                try {
+                  const res = await fetch('/api/admin/belege/scan-duplicates', { method: 'POST' });
+                  const data = await res.json();
+                  if (res.ok) {
+                    setScanResult({ scanned: data.scanned ?? 0, flagged: data.flagged ?? 0 });
+                    // Liste neu laden, damit Badges erscheinen
+                    const sp = new URLSearchParams();
+                    if (statusFilter) sp.set('status', statusFilter);
+                    if (q) sp.set('q', q);
+                    sp.set('limit', '100');
+                    const r = await fetch(`/api/admin/belege?${sp.toString()}`);
+                    setBelege((await r.json()).belege ?? []);
+                  } else {
+                    alert(data.error ?? 'Scan fehlgeschlagen');
+                  }
+                } finally {
+                  setScanning(false);
+                }
+              }}
+              disabled={scanning}
+              className="px-4 py-2 bg-amber-500 hover:bg-amber-400 disabled:bg-slate-700 text-slate-900 rounded font-semibold"
+              title="Sucht inhaltliche Duplikate im gesamten Bestand und markiert sie"
+            >
+              {scanning ? 'Scanne…' : '🔍 Duplikate scannen'}
+            </button>
             <Link
               href="/admin/buchhaltung/belege/bulk"
               className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded font-semibold"
@@ -153,6 +187,18 @@ export default function BelegeListePage() {
             </Link>
           </div>
         </div>
+        {scanResult && (
+          <div className={`p-3 rounded text-sm mb-4 ${
+            scanResult.flagged > 0
+              ? 'bg-rose-500/10 border border-rose-500/30 text-rose-200'
+              : 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-300'
+          }`}>
+            {scanResult.flagged > 0
+              ? <>⚠ <b>{scanResult.flagged}</b> verdächtige Duplikate gefunden (von {scanResult.scanned} geprüften Belegen). Markierte Belege haben jetzt einen ⚠-Badge.</>
+              : <>✓ Keine Duplikate gefunden (alle {scanResult.scanned} offenen Belege geprüft).</>
+            }
+          </div>
+        )}
 
         <div className="flex flex-wrap gap-3 mb-4">
           <input
@@ -221,6 +267,14 @@ export default function BelegeListePage() {
                           title={b.ocr_error ?? 'OCR-Fehler — Daten manuell ergänzen.'}
                         >
                           OCR-Fehler
+                        </span>
+                      )}
+                      {b.verdacht_duplikat_beleg_id && !b.verdacht_duplikat_dismissed_at && (
+                        <span
+                          className="ml-2 inline-block px-2 py-0.5 rounded text-xs bg-rose-500/15 text-rose-300 border border-rose-500/30"
+                          title="Verdacht auf Duplikat — gleicher Lieferant + Datum/Rg-Nr/Betrag wie ein anderer Beleg. Bitte im Detail prüfen."
+                        >
+                          ⚠ Duplikat-Verdacht
                         </span>
                       )}
                     </td>

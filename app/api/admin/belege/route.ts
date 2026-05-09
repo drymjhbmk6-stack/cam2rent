@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase';
 import { logAudit } from '@/lib/audit';
 import { isTestMode } from '@/lib/env-mode';
 import { nextBelegNr, sanitizePosition, recomputeBelegSummen, type BelegPositionInput } from '@/lib/buchhaltung/beleg-utils';
+import { findContentDuplicate, persistDuplicateWarning } from '@/lib/buchhaltung/duplicate-check';
 import { sanitizeSearchInput } from '@/lib/search-sanitize';
 
 /**
@@ -140,6 +141,28 @@ export async function POST(req: NextRequest) {
   }
 
   await recomputeBelegSummen(supabase, beleg.id);
+
+  // Inhaltsbasierter Duplikat-Check. Beim manuellen Anlegen sind Lieferant/Rg-Nr
+  // typisch direkt vom Admin gesetzt — also gute Treffer-Chance fuer den
+  // Strict-Match. Reload, weil recomputeBelegSummen die Brutto-Spalte gerade
+  // frisch geschrieben hat.
+  const { data: belegPostInsert } = await supabase
+    .from('belege')
+    .select('id, lieferant_id, beleg_datum, rechnungsnummer_lieferant, summe_brutto, is_test')
+    .eq('id', beleg.id)
+    .single();
+  if (belegPostInsert) {
+    const dup = await findContentDuplicate(supabase, {
+      belegId: beleg.id,
+      lieferantId: (belegPostInsert as { lieferant_id: string | null }).lieferant_id,
+      belegDatum: (belegPostInsert as { beleg_datum: string | null }).beleg_datum,
+      rechnungsnummerLieferant: (belegPostInsert as { rechnungsnummer_lieferant: string | null }).rechnungsnummer_lieferant,
+      summeBrutto: Number((belegPostInsert as { summe_brutto: number | string }).summe_brutto ?? 0),
+      isTest: !!(belegPostInsert as { is_test: boolean }).is_test,
+    });
+    await persistDuplicateWarning(supabase, beleg.id, dup);
+  }
+
   await logAudit({ action: 'beleg.create', entityType: 'beleg', entityId: beleg.id, entityLabel: belegNr, changes: { positionen: positionen.length }, request: req });
 
   const { data: full } = await supabase

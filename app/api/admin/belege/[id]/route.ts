@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { logAudit } from '@/lib/audit';
+import { findContentDuplicate, persistDuplicateWarning } from '@/lib/buchhaltung/duplicate-check';
 
 export async function GET(
   _req: NextRequest,
@@ -14,6 +15,18 @@ export async function GET(
     .eq('id', id)
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 404 });
+
+  // Bei aktivem Duplikat-Verdacht den verlinkten Original-Beleg dazuladen
+  // (separater Roundtrip statt FK-Embed, weil Self-Join in PostgREST mehr
+  // Setup braucht und wir hier defensiv gegen fehlende Migration sein
+  // muessen). Defensiv: bei fehlender Spalte einfach null lassen.
+  let verdachtExisting: { id: string; beleg_nr: string } | null = null;
+  const verdachtId = (beleg as { verdacht_duplikat_beleg_id?: string | null }).verdacht_duplikat_beleg_id ?? null;
+  if (verdachtId) {
+    const { data: orig } = await supabase
+      .from('belege').select('id, beleg_nr').eq('id', verdachtId).maybeSingle();
+    if (orig) verdachtExisting = orig as { id: string; beleg_nr: string };
+  }
 
   const { data: positionen } = await supabase
     .from('beleg_positionen')
@@ -88,7 +101,7 @@ export async function GET(
   }
 
   return NextResponse.json({
-    beleg,
+    beleg: { ...beleg, verdacht_duplikat_existing: verdachtExisting },
     positionen: positionen ?? [],
     anhaenge: anhaenge ?? [],
     linksByPosition,
@@ -126,6 +139,29 @@ export async function PATCH(
   const { data, error } = await supabase
     .from('belege').update(update).eq('id', id).select('*').single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Wenn dup-relevante Felder geaendert wurden, neu pruefen — sonst koennte
+  // ein stehender Verdacht-Banner haengenbleiben (oder umgekehrt: ein neu
+  // entstandenes Duplikat wuerde nicht entdeckt).
+  const dupRelevantChanged = ['lieferant_id', 'beleg_datum', 'rechnungsnummer_lieferant'].some((k) => k in update);
+  if (dupRelevantChanged) {
+    const { data: fresh } = await supabase
+      .from('belege')
+      .select('id, lieferant_id, beleg_datum, rechnungsnummer_lieferant, summe_brutto, is_test')
+      .eq('id', id)
+      .single();
+    if (fresh) {
+      const dup = await findContentDuplicate(supabase, {
+        belegId: id,
+        lieferantId: (fresh as { lieferant_id: string | null }).lieferant_id,
+        belegDatum: (fresh as { beleg_datum: string | null }).beleg_datum,
+        rechnungsnummerLieferant: (fresh as { rechnungsnummer_lieferant: string | null }).rechnungsnummer_lieferant,
+        summeBrutto: Number((fresh as { summe_brutto: number | string }).summe_brutto ?? 0),
+        isTest: !!(fresh as { is_test: boolean }).is_test,
+      });
+      await persistDuplicateWarning(supabase, id, dup);
+    }
+  }
 
   await logAudit({ action: 'beleg.update', entityType: 'beleg', entityId: id, changes: update, request: req });
   return NextResponse.json({ beleg: data });

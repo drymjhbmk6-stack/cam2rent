@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { extractInvoice, type InvoiceMimeType } from '@/lib/ai/invoice-extract';
 import { sanitizePosition, recomputeBelegSummen } from '@/lib/buchhaltung/beleg-utils';
+import { findContentDuplicate, persistDuplicateWarning } from '@/lib/buchhaltung/duplicate-check';
 import { logAudit } from '@/lib/audit';
 import { createAdminNotification } from '@/lib/admin-notifications';
 
@@ -192,23 +193,64 @@ export async function POST(
   }
 
   await recomputeBelegSummen(supabase, id);
+
+  // Inhaltsbasierter Duplikat-Check. Reload zuerst, weil summe_brutto
+  // gerade frisch berechnet wurde — der lokale `beleg`-Snapshot von oben
+  // hat noch 0,00 EUR. Strict-Match (Lieferant + Rg-Nr) und Soft-Match
+  // (Lieferant + Datum + Brutto) werden gleich behandelt — Festschreiben
+  // wird in beiden Faellen geblockt, der Admin entscheidet manuell.
+  const { data: belegPostOcr } = await supabase
+    .from('belege')
+    .select('id, lieferant_id, beleg_datum, rechnungsnummer_lieferant, summe_brutto, is_test')
+    .eq('id', id)
+    .single();
+  let duplicate: Awaited<ReturnType<typeof findContentDuplicate>> = null;
+  if (belegPostOcr) {
+    duplicate = await findContentDuplicate(supabase, {
+      belegId: id,
+      lieferantId: (belegPostOcr as { lieferant_id: string | null }).lieferant_id,
+      belegDatum: (belegPostOcr as { beleg_datum: string | null }).beleg_datum,
+      rechnungsnummerLieferant: (belegPostOcr as { rechnungsnummer_lieferant: string | null }).rechnungsnummer_lieferant,
+      summeBrutto: Number((belegPostOcr as { summe_brutto: number | string }).summe_brutto ?? 0),
+      isTest: !!(belegPostOcr as { is_test: boolean }).is_test,
+    });
+  }
+  await persistDuplicateWarning(supabase, id, duplicate);
+
   await setOcrStatus(supabase, id, {
     ocr_status: 'done',
     ocr_error: null,
     ocr_finished_at: new Date().toISOString(),
   });
-  await logAudit({ action: 'beleg.ocr', entityType: 'beleg', entityId: id, changes: { items: newPositions.length }, request: req });
+  await logAudit({ action: 'beleg.ocr', entityType: 'beleg', entityId: id, changes: { items: newPositions.length, duplicate_kind: duplicate?.kind ?? null }, request: req });
 
   if (body.notify) {
     const supplier = invoice.supplier?.name ?? beleg.lieferant_id ?? 'unbekannt';
     const itemsLabel = newPositions.length === 1 ? '1 Position' : `${newPositions.length} Positionen`;
-    await createAdminNotification(supabase, {
-      type: 'beleg_ready',
-      title: `Beleg analysiert: ${beleg.beleg_nr}`,
-      message: `${supplier} · ${itemsLabel} erkannt — bitte klassifizieren.`,
-      link: `/admin/buchhaltung/belege/${id}`,
-    }).catch(() => {});
+    if (duplicate) {
+      // Bei Verdacht: eigene Notification mit roter Dringlichkeit, statt der
+      // gruenen "Beleg analysiert"-Push. Admin sieht direkt, dass etwas zu
+      // pruefen ist.
+      await createAdminNotification(supabase, {
+        type: 'beleg_duplicate',
+        title: `⚠ Verdacht auf Duplikat: ${beleg.beleg_nr}`,
+        message: `${supplier} — ${duplicate.reason}. Bitte pruefen.`,
+        link: `/admin/buchhaltung/belege/${id}`,
+      }).catch(() => {});
+    } else {
+      await createAdminNotification(supabase, {
+        type: 'beleg_ready',
+        title: `Beleg analysiert: ${beleg.beleg_nr}`,
+        message: `${supplier} · ${itemsLabel} erkannt — bitte klassifizieren.`,
+        link: `/admin/buchhaltung/belege/${id}`,
+      }).catch(() => {});
+    }
   }
 
-  return NextResponse.json({ ok: true, items_extracted: newPositions.length, supplier: invoice.supplier?.name ?? null });
+  return NextResponse.json({
+    ok: true,
+    items_extracted: newPositions.length,
+    supplier: invoice.supplier?.name ?? null,
+    duplicate: duplicate ? { kind: duplicate.kind, existing_beleg_nr: duplicate.existing.beleg_nr } : null,
+  });
 }

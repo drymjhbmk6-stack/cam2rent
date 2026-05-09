@@ -26,6 +26,17 @@ export async function POST(
     return NextResponse.json({ error: 'Beleg ist bereits festgeschrieben' }, { status: 409 });
   }
 
+  // Duplikat-Verdacht muss vor Festschreiben aktiv vom Admin entschieden
+  // sein — entweder durch "Kein Duplikat" (dismiss) oder durch Loeschen des
+  // einen der beiden Belege. Sonst landet der Doppel-Beleg in EÜR + Anlagen.
+  // Defensiv: bei fehlender Migration ist das Feld undefined → kein Block.
+  if (beleg.verdacht_duplikat_beleg_id && !beleg.verdacht_duplikat_dismissed_at) {
+    return NextResponse.json(
+      { error: 'Beleg steht unter Duplikat-Verdacht — bitte oben pruefen und entweder "Kein Duplikat" bestaetigen oder den doppelten Beleg loeschen.' },
+      { status: 409 },
+    );
+  }
+
   // Eigenbeleg ohne Anhang? Pruefe das
   if (!beleg.ist_eigenbeleg) {
     const { count } = await supabase
