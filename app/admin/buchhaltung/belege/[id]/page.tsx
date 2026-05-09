@@ -84,6 +84,7 @@ export default function BelegDetailPage() {
   const [linksByPosition, setLinksByPosition] = useState<Record<string, Verknuepfung[]>>({});
   const [assetStatus, setAssetStatus] = useState<{ expected: number; actual: number }>({ expected: 0, actual: 0 });
   const [regenWarnings, setRegenWarnings] = useState<string[] | null>(null);
+  const [regenInfo, setRegenInfo] = useState<{ created: number; afa: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -109,12 +110,14 @@ export default function BelegDetailPage() {
     setBusy(true);
     setError(null);
     setRegenWarnings(null);
+    setRegenInfo(null);
     const res = await fetch(`/api/admin/belege/${belegId}/regenerate-assets`, { method: 'POST' });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       setError(data.error ?? 'Fehler beim Anlegen der Anlagen');
     } else {
       setRegenWarnings(data.warnings ?? []);
+      setRegenInfo({ created: data.assets_created ?? 0, afa: data.afa_buchungen_created ?? 0 });
     }
     await reload();
     setBusy(false);
@@ -231,11 +234,21 @@ export default function BelegDetailPage() {
             <ul className="list-disc list-inside space-y-0.5 text-xs font-mono">
               {regenWarnings.map((w, i) => <li key={i}>{w}</li>)}
             </ul>
+            {regenInfo && (
+              <div className="text-xs mt-2 opacity-80">Neu angelegt: {regenInfo.created} Asset(s), {regenInfo.afa} AfA-Buchung(en).</div>
+            )}
           </div>
         )}
-        {regenWarnings && regenWarnings.length === 0 && (
+        {regenWarnings && regenWarnings.length === 0 && regenInfo && regenInfo.created > 0 && (
           <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 rounded text-sm">
-            ✓ Anlagen wurden erzeugt — siehe <Link href="/admin/buchhaltung/anlagen" className="underline">Anlagenverzeichnis</Link>.
+            ✓ {regenInfo.created} Anlage(n) erzeugt, {regenInfo.afa} AfA-Buchung(en) — siehe <Link href="/admin/buchhaltung/anlagen" className="underline">Anlagenverzeichnis</Link>.
+          </div>
+        )}
+        {regenWarnings && regenWarnings.length === 0 && regenInfo && regenInfo.created === 0 && (
+          <div className="p-3 bg-amber-500/10 border border-amber-500/30 text-amber-300 rounded text-sm">
+            ⚠ Keine neuen Anlagen erzeugt — der Auto-Generator hat 0 Inserts gemacht und keine Warnung geworfen.
+            Wahrscheinlich existierten bereits Assets (Idempotenz-Skip). Falls du im Anlagenverzeichnis nichts siehst,
+            ist das Asset evtl. in einer anderen Tabelle gelandet (assets vs. assets_neu) — bitte melden.
           </div>
         )}
         {error && <div className="p-3 bg-rose-500/10 border border-rose-500/30 text-rose-300 rounded text-sm">{error}</div>}

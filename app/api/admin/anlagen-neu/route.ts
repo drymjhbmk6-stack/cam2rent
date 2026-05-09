@@ -38,14 +38,24 @@ export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
   const supabase = createServiceClient();
 
-  // Insert-Time-Fallback: erst assets_neu, bei Schema-Cache-Miss auf assets.
-  // Probe-basierte Auswahl (HEAD-Request) reicht nicht, weil PostgREST seinen
-  // Cache fuer SELECT manchmal bedient bevor er bei richtigen Calls auffrischt.
-  let { data, error } = await buildAssetsQuery(supabase, 'assets_neu', sp);
-  if (isMissingTableError(error)) {
-    ({ data, error } = await buildAssetsQuery(supabase, 'assets', sp));
-  }
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  // Beide Tabellen abfragen + mergen statt Fallback. PostgREST kann pro
+  // Replica einen anderen Schema-Cache-Stand haben (Probe sagt OK, INSERT
+  // failed mit Schema-Cache-Miss — dadurch landen Assets je nach Request
+  // mal in assets, mal in assets_neu). Errors fuer nicht-existente Tabellen
+  // werden ignoriert, ueber id wird dedupliziert.
+  const [r1, r2] = await Promise.all([
+    buildAssetsQuery(supabase, 'assets', sp),
+    buildAssetsQuery(supabase, 'assets_neu', sp),
+  ]);
+  const realError = [r1, r2].find((r) => r.error && !isMissingTableError(r.error));
+  if (realError) return NextResponse.json({ error: realError.error!.message }, { status: 500 });
+  const merged = [
+    ...((r1.error ? [] : r1.data) ?? []),
+    ...((r2.error ? [] : r2.data) ?? []),
+  ];
+  const data = Array.from(
+    new Map(merged.map((a) => [(a as { id: string }).id, a])).values(),
+  ) as typeof merged;
 
   // Per-Asset Zugriff auf inventar_units uber inventar_verknuepfung > beleg_position
   // (clientseitig — fuer den optionalen Inventar-Link in der Tabelle)
