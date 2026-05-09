@@ -1877,6 +1877,16 @@ Admin-Seite `/admin/newsletter` (in Sidebar-Gruppe „Rabatte & Aktionen", Permi
 
 **Audit-Log-Aktionen:** `newsletter.send_campaign`, `newsletter.update_subscriber`, `newsletter.delete_subscriber`, `customer_push.send`.
 
+### OCR-Rate-Limit-Schutz (Stand 2026-05-09)
+Bulk-Upload (50 Dateien) feuerte vorher fire-and-forget alle OCR-Calls quasi parallel an Claude Vision → bei Anthropic Tier 1 (50K ITPM) brachen 30+ Belege mit OCR-Fehler ab. Drei-stufige Härtung:
+- **Server-Semaphor** in `app/api/admin/belege/[id]/ocr/route.ts`: process-lokale Queue mit `OCR_MAX_CONCURRENT=3`. Anfragen warten in `ocrWaiters[]` bis ein Slot frei ist. Bei 50 parallelen Bulk-Uploads laufen also nur 3 OCRs gleichzeitig, Rest staut sich am Semaphor — kein Hard-Fail mehr durch ITPM-Burst.
+- **Anthropic-SDK `maxRetries: 5`** in `lib/ai/invoice-extract.ts`: SDK macht jetzt 5 Retries mit exponential backoff bei 429/529, vorher waren das die SDK-Defaults (2). Fängt verbleibende Rate-Limit-Hits zwischen den Semaphor-Slots auf.
+- **Retry-Endpoint** `POST /api/admin/belege/retry-failed-ocr`: scannt `ocr_status='failed'` im aktuellen Test/Live-Modus, verarbeitet bis zu 5 Belege sequenziell pro Request via Internal-Fetch auf den OCR-Endpoint (mit Cookie-Forward für Session-Auth), 1 s Delay zwischen Calls. UI-Button auf `/admin/buchhaltung/belege` mit Auto-Loop bis `remaining=0`, Stoppen-Button für Abbruch.
+- **`maxDuration = 300`** auf der OCR-Route, da Coolify-Default-Timeout bei langen Vision-Calls + Semaphor-Wartezeit sonst greift.
+- **Fehler prominent auf Detail-Seite** (`/admin/buchhaltung/belege/[id]`): roter Banner mit `ocr_error`-Text + „🔄 OCR neu starten"-Button für Einzelfälle. Vorher war der Fehler nur via Hover-Tooltip auf der Liste sichtbar.
+
+**Audit-Log:** `beleg.retry_failed_ocr` mit `{retried, succeeded, remaining}` in changes.
+
 ### Belege-Duplikat-Erkennung (Stand 2026-05-09)
 Zusätzlich zum bestehenden file-hash-Check (byte-identische Datei) erkennt das System jetzt **inhaltliche Duplikate**:
 - **Strict-Match:** gleicher `lieferant_id` + gleiche `rechnungsnummer_lieferant` (de-facto-Beweis, weil jeder Lieferant Rechnungsnummern nur einmal vergibt)
