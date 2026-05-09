@@ -7,7 +7,7 @@ import AdminBackLink from '@/components/admin/AdminBackLink';
 /**
  * Bulk-Upload fuer Belege.
  *
- * Bis zu 10 Dateien (PDF/JPG/PNG/WebP, je max 20 MB) auf einmal hochladen.
+ * Bis zu 50 Dateien (PDF/JPG/PNG/WebP, je max 20 MB) auf einmal hochladen.
  * Pro Datei laeuft sequentiell:
  *   1. POST /api/admin/belege            (leeren Beleg anlegen)
  *   2. POST /api/admin/belege/[id]/anhaenge  (Datei hochladen + Duplikat-Check)
@@ -27,7 +27,7 @@ import AdminBackLink from '@/components/admin/AdminBackLink';
  * Beleg wieder und zeigen den Verweis im UI.
  */
 
-const MAX_FILES = 10;
+const MAX_FILES = 50;
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
 const ACCEPTED = 'application/pdf,image/jpeg,image/png,image/webp';
 
