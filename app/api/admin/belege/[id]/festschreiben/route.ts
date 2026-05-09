@@ -70,12 +70,18 @@ export async function POST(
 
   // Auto-Asset-Generierung (afa/gwg)
   let assetsCreated = 0;
+  let afaBuchungenCreated = 0;
+  let warnings: string[] = [];
+  let autoGenError: string | null = null;
   try {
     const result = await erzeugeAssetsFuerBeleg(supabase, id);
     assetsCreated = result.assetsCreated;
+    afaBuchungenCreated = result.afaBuchungenCreated;
+    warnings = result.warnings;
   } catch (err) {
+    autoGenError = (err as Error).message;
     console.error('Asset-Auto-Gen fehlgeschlagen:', err);
-    // Festschreibung bleibt trotzdem — Admin kann Assets manuell anlegen
+    // Festschreibung bleibt trotzdem — Admin kann Re-Generate triggern
   }
 
   await logAudit({
@@ -83,9 +89,16 @@ export async function POST(
     entityType: 'beleg',
     entityId: id,
     entityLabel: beleg.beleg_nr,
-    changes: { interne_beleg_no: interne, assets_created: assetsCreated },
+    changes: { interne_beleg_no: interne, assets_created: assetsCreated, afa_buchungen: afaBuchungenCreated, warnings, auto_gen_error: autoGenError },
     request: req,
   });
 
-  return NextResponse.json({ ok: true, interne_beleg_no: interne, assets_created: assetsCreated });
+  return NextResponse.json({
+    ok: true,
+    interne_beleg_no: interne,
+    assets_created: assetsCreated,
+    afa_buchungen_created: afaBuchungenCreated,
+    warnings,
+    auto_gen_error: autoGenError,
+  });
 }

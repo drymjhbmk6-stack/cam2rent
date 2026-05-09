@@ -82,6 +82,8 @@ export default function BelegDetailPage() {
   const [positionen, setPositionen] = useState<Position[]>([]);
   const [anhaenge, setAnhaenge] = useState<Anhang[]>([]);
   const [linksByPosition, setLinksByPosition] = useState<Record<string, Verknuepfung[]>>({});
+  const [assetStatus, setAssetStatus] = useState<{ expected: number; actual: number }>({ expected: 0, actual: 0 });
+  const [regenWarnings, setRegenWarnings] = useState<string[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -99,7 +101,23 @@ export default function BelegDetailPage() {
     setPositionen(data.positionen);
     setAnhaenge(data.anhaenge);
     setLinksByPosition(data.linksByPosition ?? {});
+    setAssetStatus(data.asset_status ?? { expected: 0, actual: 0 });
     setLoading(false);
+  }
+
+  async function handleRegenerateAssets() {
+    setBusy(true);
+    setError(null);
+    setRegenWarnings(null);
+    const res = await fetch(`/api/admin/belege/${belegId}/regenerate-assets`, { method: 'POST' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setError(data.error ?? 'Fehler beim Anlegen der Anlagen');
+    } else {
+      setRegenWarnings(data.warnings ?? []);
+    }
+    await reload();
+    setBusy(false);
   }
 
   useEffect(() => { reload(); }, [belegId]);
@@ -190,6 +208,34 @@ export default function BelegDetailPage() {
         {isLocked && (
           <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 rounded text-sm">
             🔒 Beleg ist festgeschrieben (am {fmtDate(beleg.festgeschrieben_at)}). Keine Änderungen mehr möglich.
+          </div>
+        )}
+        {isLocked && assetStatus.expected > assetStatus.actual && (
+          <div className="p-3 bg-amber-500/10 border border-amber-500/30 text-amber-200 rounded text-sm flex flex-wrap items-center justify-between gap-3">
+            <div>
+              ⚠ {assetStatus.actual} von {assetStatus.expected} erwarteten Anlagen wurden erzeugt.
+              Vermutlich Silent-Fail beim Festschreiben (z.B. ungültiger <code className="font-mono">art</code>-Wert in der KI-Klassifikation).
+            </div>
+            <button
+              onClick={handleRegenerateAssets}
+              disabled={busy}
+              className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 disabled:bg-slate-700 text-slate-900 rounded text-sm font-semibold whitespace-nowrap"
+            >
+              {busy ? 'Erzeuge…' : '↻ Anlagen jetzt erzeugen'}
+            </button>
+          </div>
+        )}
+        {regenWarnings && regenWarnings.length > 0 && (
+          <div className="p-3 bg-rose-500/10 border border-rose-500/30 text-rose-300 rounded text-sm">
+            <div className="font-semibold mb-1">Beim Erzeugen sind {regenWarnings.length} Warnungen aufgetreten:</div>
+            <ul className="list-disc list-inside space-y-0.5 text-xs font-mono">
+              {regenWarnings.map((w, i) => <li key={i}>{w}</li>)}
+            </ul>
+          </div>
+        )}
+        {regenWarnings && regenWarnings.length === 0 && (
+          <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 rounded text-sm">
+            ✓ Anlagen wurden erzeugt — siehe <Link href="/admin/buchhaltung/anlagen" className="underline">Anlagenverzeichnis</Link>.
           </div>
         )}
         {error && <div className="p-3 bg-rose-500/10 border border-rose-500/30 text-rose-300 rounded text-sm">{error}</div>}

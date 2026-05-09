@@ -39,6 +39,7 @@ export default function AnlagenNeuPage() {
   const [kpi, setKpi] = useState({ total: 0, total_anschaffung: 0, total_buchwert: 0, gwg_count: 0, gwg_sum: 0 });
   const [art, setArt] = useState('');
   const [methode, setMethode] = useState('');
+  const [includeTest, setIncludeTest] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -47,6 +48,7 @@ export default function AnlagenNeuPage() {
       const sp = new URLSearchParams();
       if (art) sp.set('art', art);
       if (methode) sp.set('afa_methode', methode);
+      if (includeTest) sp.set('include_test', '1');
       const res = await fetch(`/api/admin/anlagen-neu?${sp.toString()}`);
       const data = await res.json();
       setAssets(data.assets ?? []);
@@ -54,7 +56,7 @@ export default function AnlagenNeuPage() {
       setLoading(false);
     };
     load();
-  }, [art, methode]);
+  }, [art, methode, includeTest]);
 
   return (
     <div className="min-h-screen bg-[#0a0f1e] text-slate-50 px-4 sm:px-6 py-6">
@@ -88,6 +90,10 @@ export default function AnlagenNeuPage() {
             <option value="sofort_gwg">GWG sofort</option>
             <option value="keine">Keine</option>
           </select>
+          <label className="flex items-center gap-2 text-sm text-slate-300 px-3 py-2 bg-[#111827] border border-slate-700 rounded cursor-pointer">
+            <input type="checkbox" checked={includeTest} onChange={(e) => setIncludeTest(e.target.checked)} />
+            Test-Anlagen einbeziehen
+          </label>
         </div>
 
         {loading ? (

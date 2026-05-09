@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { logAudit } from '@/lib/audit';
-import { recomputeBelegSummen } from '@/lib/buchhaltung/beleg-utils';
 
 export async function GET(
   _req: NextRequest,
@@ -51,7 +50,44 @@ export async function GET(
     }
   }
 
-  return NextResponse.json({ beleg, positionen: positionen ?? [], anhaenge: anhaenge ?? [], linksByPosition });
+  // Asset-Status: pro afa/gwg-Position pruefen, ob bereits ein Asset existiert.
+  // UI nutzt das, um nach dem Festschreiben einen Recovery-Banner zu zeigen,
+  // falls die Auto-Generierung still gescheitert ist.
+  const assetExpectedPosIds = (positionen ?? [])
+    .filter((p) => {
+      const r = p as { klassifizierung: string; folgekosten_asset_id: string | null };
+      return ['afa', 'gwg'].includes(r.klassifizierung) && !r.folgekosten_asset_id;
+    })
+    .map((p) => (p as { id: string }).id);
+  const assetExpected = assetExpectedPosIds.length;
+  let assetActual = 0;
+  if (assetExpected > 0) {
+    // Probe-Read: erst assets_neu, dann assets (defensiv vor/nach Drop-Migration)
+    let table: 'assets_neu' | 'assets' = 'assets_neu';
+    let probe = await supabase.from('assets_neu')
+      .select('beleg_position_id', { count: 'exact', head: false })
+      .in('beleg_position_id', assetExpectedPosIds);
+    if (probe.error?.code === '42P01') {
+      table = 'assets';
+      probe = await supabase.from('assets')
+        .select('beleg_position_id', { count: 'exact', head: false })
+        .in('beleg_position_id', assetExpectedPosIds);
+    }
+    if (!probe.error) {
+      assetActual = (probe.data ?? []).length;
+    }
+    // Falls die assets-Tabelle gar nicht existiert (uralter Datenstand vor
+    // Migration), assetActual bleibt 0 — UI zeigt dann den Hinweis, was OK ist.
+    void table;
+  }
+
+  return NextResponse.json({
+    beleg,
+    positionen: positionen ?? [],
+    anhaenge: anhaenge ?? [],
+    linksByPosition,
+    asset_status: { expected: assetExpected, actual: assetActual },
+  });
 }
 
 export async function PATCH(
