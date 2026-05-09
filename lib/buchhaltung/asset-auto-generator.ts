@@ -25,6 +25,10 @@ import { SupabaseClient } from '@supabase/supabase-js';
 
 type AssetArt = 'kamera' | 'zubehoer' | 'buero' | 'werkzeug' | 'sonstiges';
 
+const ALLOWED_ART: ReadonlySet<AssetArt> = new Set([
+  'kamera', 'zubehoer', 'buero', 'werkzeug', 'sonstiges',
+]);
+
 const DEFAULT_NUTZUNGSDAUER: Record<AssetArt, number> = {
   kamera: 84,
   zubehoer: 60,
@@ -32,6 +36,25 @@ const DEFAULT_NUTZUNGSDAUER: Record<AssetArt, number> = {
   buero: 96,
   sonstiges: 60,
 };
+
+/**
+ * Coerce einen ki_vorschlag.art-Wert auf das CHECK-Constraint-Enum.
+ * Claude haelt sich nicht immer an das Schema (z.B. "action_camera",
+ * "kamera-drohne", leerer String) — ohne diesen Filter fliegt der
+ * INSERT auf assets_neu mit Constraint-Violation und das Asset wird
+ * nicht angelegt, ohne dass der User es merkt.
+ */
+function coerceArt(raw: unknown): AssetArt {
+  if (typeof raw !== 'string') return 'sonstiges';
+  const lower = raw.trim().toLowerCase();
+  if (ALLOWED_ART.has(lower as AssetArt)) return lower as AssetArt;
+  // Tolerante Heuristik fuer haeufige Halluzinationen
+  if (lower.includes('kamera') || lower.includes('cam') || lower.includes('drohne') || lower.includes('drone')) return 'kamera';
+  if (lower.includes('zubeh') || lower.includes('akku') || lower.includes('karte') || lower.includes('objektiv') || lower.includes('mikro')) return 'zubehoer';
+  if (lower.includes('werkzeug') || lower.includes('tool')) return 'werkzeug';
+  if (lower.includes('buero') || lower.includes('büro') || lower.includes('office') || lower.includes('moebel') || lower.includes('möbel')) return 'buero';
+  return 'sonstiges';
+}
 
 /**
  * Liefert die Tabellen-Namen abhaengig vom Stand des Refactors.
@@ -79,7 +102,7 @@ export async function erzeugeAssetsFuerBeleg(
       einzelpreis_netto: number;
       gesamt_netto: number;
       klassifizierung: 'afa' | 'gwg';
-      ki_vorschlag: { art?: AssetArt; nutzungsdauer_monate?: number } | null;
+      ki_vorschlag: { art?: string; nutzungsdauer_monate?: number } | null;
       folgekosten_asset_id: string | null;
     };
 
@@ -90,7 +113,7 @@ export async function erzeugeAssetsFuerBeleg(
       .from(assetsTable).select('*', { count: 'exact', head: true }).eq('beleg_position_id', pos.id);
     if ((existingCount ?? 0) > 0) continue;
 
-    const art: AssetArt = pos.ki_vorschlag?.art ?? 'sonstiges';
+    const art: AssetArt = coerceArt(pos.ki_vorschlag?.art);
     const nutzungsdauer = pos.ki_vorschlag?.nutzungsdauer_monate ?? DEFAULT_NUTZUNGSDAUER[art];
     const anschaffung = Number(pos.gesamt_netto ?? pos.einzelpreis_netto);
 
@@ -137,7 +160,11 @@ export async function erzeugeAssetsFuerBeleg(
         typ: 'sofort',
         notizen: 'GWG-Sofortabschreibung (auto)',
       });
-      if (!afaErr) result.afaBuchungenCreated++;
+      if (afaErr) {
+        result.warnings.push(`afa_buchungen[${pos.id}]: ${afaErr.message}`);
+      } else {
+        result.afaBuchungenCreated++;
+      }
     }
   }
 
