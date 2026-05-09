@@ -79,12 +79,15 @@ function isMissingTableError(error: { code?: string; message?: string } | null |
   return false;
 }
 
-async function pickAssetsTable(supabase: SupabaseClient): Promise<'assets_neu' | 'assets'> {
-  // Probe-Query
-  const { error } = await supabase.from('assets_neu').select('id', { count: 'exact', head: true }).limit(1);
-  if (isMissingTableError(error)) return 'assets';
-  return 'assets_neu';
-}
+/**
+ * PostgREST cached die Schema-Info nach dem Erst-Hit und bleibt damit
+ * inkonsistent, wenn die DB zwischendrin Tabellen umbenennt. Eine
+ * Probe-Query (HEAD/SELECT) kann "OK" liefern, der nachgelagerte
+ * INSERT scheitert dann aber mit Schema-Cache-Miss. Deshalb verlassen
+ * wir uns auf Insert-Time-Detection: wenn der INSERT auf `assets_neu`
+ * mit Missing-Table fehlschlaegt, wird hart auf `assets` umgeschaltet
+ * (gilt dann auch fuer alle nachfolgenden Positionen).
+ */
 
 export interface AutoGenResult {
   assetsCreated: number;
@@ -109,7 +112,9 @@ export async function erzeugeAssetsFuerBeleg(
     .in('klassifizierung', ['afa', 'gwg']);
   if (posErr) throw posErr;
 
-  const assetsTable = await pickAssetsTable(supabase);
+  // Start mit assets_neu (pre-Drop-Migration Default), Insert-Time-Fallback
+  // schaltet auf assets um, sobald die Tabelle weg ist.
+  let assetsTable: 'assets_neu' | 'assets' = 'assets_neu';
 
   for (const p of positionen ?? []) {
     const pos = p as {
@@ -124,10 +129,16 @@ export async function erzeugeAssetsFuerBeleg(
 
     if (pos.folgekosten_asset_id) continue; // Position ist Folgekosten-Anhang, kein eigenes Asset
 
-    // Existiert ggf. schon ein Asset (idempotenz: Re-Festschreibung sollte nicht doppelt anlegen)
-    const { count: existingCount } = await supabase
+    // Existiert ggf. schon ein Asset (idempotenz: Re-Festschreibung sollte nicht doppelt anlegen).
+    // Bei Schema-Cache-Miss auf assets_neu hart auf assets umschalten.
+    let probeRes = await supabase
       .from(assetsTable).select('*', { count: 'exact', head: true }).eq('beleg_position_id', pos.id);
-    if ((existingCount ?? 0) > 0) continue;
+    if (isMissingTableError(probeRes.error) && assetsTable === 'assets_neu') {
+      assetsTable = 'assets';
+      probeRes = await supabase
+        .from(assetsTable).select('*', { count: 'exact', head: true }).eq('beleg_position_id', pos.id);
+    }
+    if ((probeRes.count ?? 0) > 0) continue;
 
     const art: AssetArt = coerceArt(pos.ki_vorschlag?.art);
     const nutzungsdauer = pos.ki_vorschlag?.nutzungsdauer_monate ?? DEFAULT_NUTZUNGSDAUER[art];
@@ -143,25 +154,36 @@ export async function erzeugeAssetsFuerBeleg(
       nutzungsdauerMonate = null;
     }
 
-    const { data: asset, error: insErr } = await supabase
-      .from(assetsTable)
-      .insert({
-        beleg_position_id: pos.id,
-        bezeichnung: pos.bezeichnung,
-        art,
-        anschaffungsdatum: beleg.beleg_datum,
-        anschaffungskosten_netto: anschaffung,
-        afa_methode: afaMethode,
-        nutzungsdauer_monate: nutzungsdauerMonate,
-        aktueller_buchwert: aktuellerBuchwert,
-        restwert: 0,
-        status: 'aktiv',
-        is_test: !!beleg.is_test,
-      })
-      .select('id')
-      .single();
-    if (insErr) {
-      result.warnings.push(`Position ${pos.id}: ${insErr.message}`);
+    const insertPayload = {
+      beleg_position_id: pos.id,
+      bezeichnung: pos.bezeichnung,
+      art,
+      anschaffungsdatum: beleg.beleg_datum,
+      anschaffungskosten_netto: anschaffung,
+      afa_methode: afaMethode,
+      nutzungsdauer_monate: nutzungsdauerMonate,
+      aktueller_buchwert: aktuellerBuchwert,
+      restwert: 0,
+      status: 'aktiv',
+      is_test: !!beleg.is_test,
+    };
+
+    let insertRes = await supabase
+      .from(assetsTable).insert(insertPayload).select('id').single();
+    // Insert-Time-Fallback: wenn assets_neu im PostgREST-Cache existiert,
+    // aber nicht mehr in der DB, kommt der Schema-Cache-Miss erst hier raus.
+    if (isMissingTableError(insertRes.error) && assetsTable === 'assets_neu') {
+      assetsTable = 'assets';
+      insertRes = await supabase
+        .from(assetsTable).insert(insertPayload).select('id').single();
+    }
+    if (insertRes.error) {
+      result.warnings.push(`Position ${pos.id}: ${insertRes.error.message}`);
+      continue;
+    }
+    const asset = insertRes.data;
+    if (!asset) {
+      result.warnings.push(`Position ${pos.id}: Asset wurde nicht zurueckgegeben`);
       continue;
     }
     result.assetsCreated++;

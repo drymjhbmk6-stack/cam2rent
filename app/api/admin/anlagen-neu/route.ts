@@ -20,30 +20,31 @@ function isMissingTableError(error: { code?: string; message?: string } | null |
   return false;
 }
 
-async function pickTable(supabase: ReturnType<typeof createServiceClient>): Promise<'assets_neu' | 'assets'> {
-  const { error } = await supabase.from('assets_neu').select('id', { head: true }).limit(1);
-  if (isMissingTableError(error)) return 'assets';
-  return 'assets_neu';
-}
-
-export async function GET(req: NextRequest) {
-  const sp = req.nextUrl.searchParams;
-  const supabase = createServiceClient();
-  const tabelle = await pickTable(supabase);
-
+function buildAssetsQuery(supabase: ReturnType<typeof createServiceClient>, table: 'assets_neu' | 'assets', sp: URLSearchParams) {
   let q = supabase
-    .from(tabelle)
+    .from(table)
     .select('*, beleg_position:beleg_positionen(id, bezeichnung, beleg:belege(id, beleg_nr, beleg_datum, lieferant:lieferanten(name)))')
     .order('anschaffungsdatum', { ascending: false });
-
   if (sp.get('art')) q = q.eq('art', sp.get('art'));
   if (sp.get('afa_methode')) q = q.eq('afa_methode', sp.get('afa_methode'));
   if (sp.get('status')) q = q.eq('status', sp.get('status'));
   if (sp.get('include_test') !== '1') q = q.eq('is_test', false);
   const search = sp.get('q')?.trim();
   if (search) q = q.ilike('bezeichnung', `%${search}%`);
+  return q;
+}
 
-  const { data, error } = await q;
+export async function GET(req: NextRequest) {
+  const sp = req.nextUrl.searchParams;
+  const supabase = createServiceClient();
+
+  // Insert-Time-Fallback: erst assets_neu, bei Schema-Cache-Miss auf assets.
+  // Probe-basierte Auswahl (HEAD-Request) reicht nicht, weil PostgREST seinen
+  // Cache fuer SELECT manchmal bedient bevor er bei richtigen Calls auffrischt.
+  let { data, error } = await buildAssetsQuery(supabase, 'assets_neu', sp);
+  if (isMissingTableError(error)) {
+    ({ data, error } = await buildAssetsQuery(supabase, 'assets', sp));
+  }
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   // Per-Asset Zugriff auf inventar_units uber inventar_verknuepfung > beleg_position
