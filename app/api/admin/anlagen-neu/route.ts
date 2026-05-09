@@ -62,9 +62,30 @@ export async function GET(req: NextRequest) {
     ...((r1.error ? [] : r1.data) ?? []),
     ...((r2.error ? [] : r2.data) ?? []),
   ];
-  const data = Array.from(
+  // Dedup #1: gleiche id (Tabellen-Rename-Fall — Query auf assets_neu und
+  // assets resolvt physisch auf die selbe Row).
+  const byId = Array.from(
     new Map(merged.map((a) => [(a as { id: string }).id, a])).values(),
   ) as typeof merged;
+  // Dedup #2: gleiche beleg_position_id mit unterschiedlichen ids
+  // (Schema-Cache-Bug: Asset wurde zweimal angelegt waehrend der Cache
+  // inkonsistent war). Aelteren Eintrag behalten — der hat die laengere
+  // Historie an afa_buchungen-FKs. NULL beleg_position_id → eigenes Bucket
+  // pro id, damit manuell angelegte Assets ohne Beleg nicht zusammenfallen.
+  const byBelegPos = new Map<string, typeof byId[number]>();
+  for (const a of byId) {
+    const aRow = a as { id: string; beleg_position_id: string | null; created_at?: string };
+    const key = aRow.beleg_position_id ? `bp:${aRow.beleg_position_id}` : `id:${aRow.id}`;
+    const existing = byBelegPos.get(key) as { created_at?: string } | undefined;
+    if (!existing) {
+      byBelegPos.set(key, a);
+      continue;
+    }
+    const aTs = aRow.created_at ?? '';
+    const eTs = existing.created_at ?? '';
+    if (aTs && (!eTs || aTs < eTs)) byBelegPos.set(key, a);
+  }
+  const data = Array.from(byBelegPos.values());
 
   // Beleg-Positionen + Inventar-Units separat laden — kein FK-Join mehr,
   // robuster gegen stale PostgREST-Schema-Cache nach Drop-Migration.

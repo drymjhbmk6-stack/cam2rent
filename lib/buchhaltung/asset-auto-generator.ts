@@ -130,15 +130,20 @@ export async function erzeugeAssetsFuerBeleg(
     if (pos.folgekosten_asset_id) continue; // Position ist Folgekosten-Anhang, kein eigenes Asset
 
     // Existiert ggf. schon ein Asset (idempotenz: Re-Festschreibung sollte nicht doppelt anlegen).
-    // Bei Schema-Cache-Miss auf assets_neu hart auf assets umschalten.
-    let probeRes = await supabase
-      .from(assetsTable).select('*', { count: 'exact', head: true }).eq('beleg_position_id', pos.id);
-    if (isMissingTableError(probeRes.error) && assetsTable === 'assets_neu') {
+    // Probe in BEIDEN Tabellen — wenn assets_neu im PostgREST-Cache fehlt,
+    // landete der vorige INSERT in assets, und umgekehrt. Vor Sweep des
+    // Schema-Cache-Bugs konnte dasselbe Asset doppelt angelegt werden.
+    const probeNeu = await supabase
+      .from('assets_neu').select('id', { count: 'exact', head: true }).eq('beleg_position_id', pos.id);
+    const probeAlt = await supabase
+      .from('assets').select('id', { count: 'exact', head: true }).eq('beleg_position_id', pos.id);
+    const cntNeu = isMissingTableError(probeNeu.error) ? 0 : (probeNeu.count ?? 0);
+    const cntAlt = isMissingTableError(probeAlt.error) ? 0 : (probeAlt.count ?? 0);
+    if (cntNeu + cntAlt > 0) continue;
+    // Wenn assets_neu fehlt, fuer den Insert direkt auf assets umschalten.
+    if (isMissingTableError(probeNeu.error) && assetsTable === 'assets_neu') {
       assetsTable = 'assets';
-      probeRes = await supabase
-        .from(assetsTable).select('*', { count: 'exact', head: true }).eq('beleg_position_id', pos.id);
     }
-    if ((probeRes.count ?? 0) > 0) continue;
 
     const art: AssetArt = coerceArt(pos.ki_vorschlag?.art);
     const nutzungsdauer = pos.ki_vorschlag?.nutzungsdauer_monate ?? DEFAULT_NUTZUNGSDAUER[art];
