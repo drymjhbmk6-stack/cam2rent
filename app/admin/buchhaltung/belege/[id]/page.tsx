@@ -184,6 +184,26 @@ export default function BelegDetailPage() {
     else setError((await res.json()).error);
   }
 
+  async function handleAufheben() {
+    const confirmed = confirm(
+      'Festschreibung aufheben?\n\n' +
+      'Der Beleg wird wieder editierbar. Falls beim Festschreiben automatisch eine Anlage (AfA/GWG) erzeugt wurde, ' +
+      'wird diese mit gelöscht — solange der monatliche AfA-Cron noch nichts weitergeschrieben hat. ' +
+      'Inventar-Verknüpfungen bleiben bestehen.\n\nFortfahren?',
+    );
+    if (!confirmed) return;
+    setBusy(true);
+    setError(null);
+    const res = await fetch(`/api/admin/belege/${belegId}/aufheben`, { method: 'POST' });
+    if (!res.ok) {
+      setError((await res.json()).error ?? 'Aufheben fehlgeschlagen');
+      setBusy(false);
+      return;
+    }
+    await reload();
+    setBusy(false);
+  }
+
   async function handleRetryOcr() {
     setBusy(true);
     setError(null);
@@ -331,8 +351,18 @@ export default function BelegDetailPage() {
           </div>
         )}
         {isLocked && (
-          <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 rounded text-sm">
-            🔒 Beleg ist festgeschrieben (am {fmtDate(beleg.festgeschrieben_at)}). Keine Änderungen mehr möglich.
+          <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 rounded text-sm flex flex-wrap items-center justify-between gap-3">
+            <div>
+              🔒 Beleg ist festgeschrieben (am {fmtDate(beleg.festgeschrieben_at)}). Keine Änderungen mehr möglich.
+            </div>
+            <button
+              onClick={handleAufheben}
+              disabled={busy}
+              className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 disabled:bg-slate-700 text-slate-900 rounded text-sm font-semibold whitespace-nowrap"
+              title="Macht die Festschreibung rückgängig — z.B. um eine falsche Klassifikation zu korrigieren."
+            >
+              {busy ? 'Wird aufgehoben…' : '↺ Aufheben'}
+            </button>
           </div>
         )}
         {isLocked && assetStatus.expected > assetStatus.actual && (
