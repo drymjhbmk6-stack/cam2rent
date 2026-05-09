@@ -1877,7 +1877,30 @@ Admin-Seite `/admin/newsletter` (in Sidebar-Gruppe „Rabatte & Aktionen", Permi
 
 **Audit-Log-Aktionen:** `newsletter.send_campaign`, `newsletter.update_subscriber`, `newsletter.delete_subscriber`, `customer_push.send`.
 
+### Belege-Duplikat-Erkennung (Stand 2026-05-09)
+Zusätzlich zum bestehenden file-hash-Check (byte-identische Datei) erkennt das System jetzt **inhaltliche Duplikate**:
+- **Strict-Match:** gleicher `lieferant_id` + gleiche `rechnungsnummer_lieferant` (de-facto-Beweis, weil jeder Lieferant Rechnungsnummern nur einmal vergibt)
+- **Soft-Match:** gleicher `lieferant_id` + gleiches `beleg_datum` + gleiche `summe_brutto` (cents-genau, ±0,005 €)
+
+**Trigger:** Nach OCR-Abschluss, nach manueller Anlage (`POST /api/admin/belege`) und nach PATCH dup-relevanter Felder.
+
+**DB:** Drei neue Spalten auf `belege`: `verdacht_duplikat_beleg_id` (UUID FK Self), `verdacht_duplikat_grund` (TEXT), `verdacht_duplikat_dismissed_at` (TIMESTAMPTZ). Migration `supabase/supabase-belege-content-dedup.sql` (idempotent, defensiver Code falls noch nicht durch).
+
+**UI:**
+- Detail-Page (`/admin/buchhaltung/belege/[id]`): Roter Banner mit Link auf Original + zwei Buttons („Diesen Beleg löschen" / „Kein Duplikat — fortfahren")
+- Liste (`/admin/buchhaltung/belege`): rosa Badge „⚠ Duplikat-Verdacht" neben dem OCR-Fehler-Badge
+- Liste hat zusätzlich Button „🔍 Duplikate scannen" → markiert auch bereits bestehende Duplikate (POST `/api/admin/belege/scan-duplicates`)
+
+**Hard-Block:** `POST /api/admin/belege/[id]/festschreiben` lehnt mit 409 ab solange `verdacht_duplikat_beleg_id` gesetzt und nicht dismissed ist.
+
+**Dismiss:** `POST /api/admin/belege/[id]/dismiss-duplicate` setzt `verdacht_duplikat_dismissed_at = now()`. Die FK-Referenz bleibt für Audit-Trail erhalten.
+
+**Notification:** Neuer Typ `beleg_duplicate` (amber, Permission `finanzen`). OCR-Pfad sendet bei Verdacht statt der gewohnten `beleg_ready`-Push diese amber Variante.
+
+**Audit-Aktionen:** `beleg.dismiss_duplicate`, `beleg.scan_duplicates`. `beleg.ocr` enthält jetzt `duplicate_kind: 'strict'|'soft'|null` in changes.
+
 ### Noch offen
+- **Belege-Duplikat-Migration auszuführen:** `supabase/supabase-belege-content-dedup.sql` (idempotent). Drei neue Spalten auf `belege`. Ohne Migration laufen OCR/Anlage/PATCH per defensivem Retry weiter (Verdacht-Flag wird einfach nicht persistiert), Dismiss-Endpoint liefert 503, Festschreiben blockt nichts. Nach Migration sofort einmal „🔍 Duplikate scannen" auf `/admin/buchhaltung/belege` klicken — markiert die bereits eingebuchten Duplikate.
 - **Wiederbeschaffungswert-Migration auszuführen:** `supabase/supabase-assets-replacement-value-estimate.sql` (idempotent). Legt Spalte `assets.replacement_value_estimate` an. Ohne Migration laufen GWG-Anlage und Anlagen-POST per defensivem Retry weiter ohne die Spalte; Vertrag und Zubehör-Schaden-Modal fallen dann auf den Buchwert zurueck (bei GWG = 0 EUR — fuehrt zu falschen Vorschlaegen).
 - **Tech-Debt-Performance-Indizes auszuführen:** `supabase/supabase-tech-debt-indizes.sql` (additiv, idempotent, CONCURRENTLY — kein Live-Lock). Drei Indizes fuer Hot-Paths: `invoices(is_test, invoice_date)`, `expenses(category) WHERE deleted_at IS NULL`, `inventar_verknuepfung(beleg_position_id)` (3. nur wenn neue Buchhaltungs-Welt migriert). Ohne Migration laeuft alles weiter, nur Listen unter `/admin/buchhaltung` sind langsamer bei vielen Eintraegen.
 - **GWG-Klassifikation Migration auszuführen:** `supabase/supabase-purchase-items-gwg.sql` (idempotent). Erweitert den CHECK-Constraint von `purchase_items.classification` um `'gwg'`. Ohne Migration laeuft der Asset-/Expense-Pfad weiter, aber die Speicherung von GWG-Klassifizierungen schlaegt mit constraint-violation fehl. Die UI zeigt den Button trotzdem an — er wirft dann beim Save einen Fehler.
