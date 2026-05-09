@@ -162,7 +162,9 @@ export async function extractInvoice(
   mimeType: InvoiceMimeType
 ): Promise<{ invoice: ExtractedInvoice; rawResponse: unknown }> {
   const apiKey = await getAnthropicKey();
-  const client = new Anthropic({ apiKey });
+  // maxRetries=5 mit exponentiellem Backoff fuer 429/529 — bei Bulk-Upload
+  // (50 Belege parallel) schiesst sonst der Anthropic-Rate-Limit alles ab.
+  const client = new Anthropic({ apiKey, maxRetries: 5 });
 
   const base64 = fileBuffer.toString('base64');
 

@@ -6,6 +6,35 @@ import { findContentDuplicate, persistDuplicateWarning } from '@/lib/buchhaltung
 import { logAudit } from '@/lib/audit';
 import { createAdminNotification } from '@/lib/admin-notifications';
 
+export const runtime = 'nodejs';
+// Bulk-Upload feuert bis zu 50 OCR-Calls fire-and-forget — Coolify-Default-
+// Timeout greift sonst mitten in der Vision-Analyse.
+export const maxDuration = 300;
+
+// Process-lokaler Semaphor — begrenzt OCR-Calls auf 3 parallel.
+// Anthropic Tier 1 hat 50K ITPM (input tokens per minute), eine Vision-OCR
+// braucht ~3-5K Tokens. Bei 3 parallel & ~10 s pro Call kommen wir auf ca.
+// 9-15 RPM und 27-75K ITPM — knapp unter Tier-1-Limit, knapp ueber Tier-1
+// bei grossen PDFs aber dann fangen die SDK-Retries (maxRetries=5 mit
+// Exponential-Backoff) den Rest auf.
+const OCR_MAX_CONCURRENT = 3;
+let ocrInFlight = 0;
+const ocrWaiters: Array<() => void> = [];
+
+async function acquireOcrSlot(): Promise<void> {
+  if (ocrInFlight < OCR_MAX_CONCURRENT) {
+    ocrInFlight++;
+    return;
+  }
+  await new Promise<void>((resolve) => ocrWaiters.push(resolve));
+  ocrInFlight++;
+}
+function releaseOcrSlot(): void {
+  ocrInFlight--;
+  const next = ocrWaiters.shift();
+  if (next) next();
+}
+
 const ALLOWED_MIME: ReadonlySet<InvoiceMimeType> = new Set([
   'application/pdf',
   'image/jpeg',
@@ -121,11 +150,14 @@ export async function POST(
   const mime = rawMime as InvoiceMimeType;
 
   let invoice;
+  await acquireOcrSlot();
   try {
     const result = await extractInvoice(buffer, mime);
     invoice = result.invoice;
   } catch (err) {
     return fail(500, `OCR fehlgeschlagen: ${(err as Error).message}`);
+  } finally {
+    releaseOcrSlot();
   }
 
   // Lieferant: existierender oder neuer

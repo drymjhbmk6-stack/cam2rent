@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 
 interface Beleg {
@@ -71,6 +71,9 @@ export default function BelegeListePage() {
   const [q, setQ] = useState('');
   const [scanResult, setScanResult] = useState<{ scanned: number; flagged: number } | null>(null);
   const [scanning, setScanning] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+  const [retryStatus, setRetryStatus] = useState<{ done: number; remaining: number; succeeded: number } | null>(null);
+  const retryAbortRef = useRef(false);
   // Default: neueste oben — Datum absteigend.
   const [sortKey, setSortKey] = useState<SortKey>('beleg_datum');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
@@ -90,6 +93,56 @@ export default function BelegeListePage() {
     const debounce = setTimeout(load, 300);
     return () => clearTimeout(debounce);
   }, [statusFilter, q]);
+
+  const failedOcrCount = useMemo(
+    () => belege.filter((b) => b.ocr_status === 'failed').length,
+    [belege],
+  );
+
+  async function refreshList() {
+    const sp = new URLSearchParams();
+    if (statusFilter) sp.set('status', statusFilter);
+    if (q) sp.set('q', q);
+    sp.set('limit', '100');
+    const r = await fetch(`/api/admin/belege?${sp.toString()}`);
+    setBelege((await r.json()).belege ?? []);
+  }
+
+  async function handleRetryFailed() {
+    if (retrying) {
+      // Zweiter Klick = abbrechen
+      retryAbortRef.current = true;
+      return;
+    }
+    setRetrying(true);
+    retryAbortRef.current = false;
+    let done = 0;
+    let succeeded = 0;
+    let remaining = failedOcrCount;
+    setRetryStatus({ done, remaining, succeeded });
+
+    while (remaining > 0 && !retryAbortRef.current) {
+      try {
+        const res = await fetch('/api/admin/belege/retry-failed-ocr', { method: 'POST' });
+        if (!res.ok) {
+          alert('Retry fehlgeschlagen — bitte später erneut versuchen.');
+          break;
+        }
+        const data = await res.json();
+        done += data.retried ?? 0;
+        succeeded += data.succeeded ?? 0;
+        remaining = data.remaining ?? 0;
+        setRetryStatus({ done, remaining, succeeded });
+        if ((data.retried ?? 0) === 0) break; // Sicherheits-Bremse
+      } catch {
+        alert('Netzwerkfehler beim Retry — bitte erneut versuchen.');
+        break;
+      }
+    }
+
+    await refreshList();
+    setRetrying(false);
+  }
 
   // Client-seitige Sortierung — bei 100 Eintraegen vernachlaessigbarer Aufwand
   // gegenueber dem Network-Roundtrip einer Server-Sortierung.
@@ -146,6 +199,17 @@ export default function BelegeListePage() {
         <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
           <h1 className="text-2xl font-heading">Belege</h1>
           <div className="flex gap-2 flex-wrap">
+            {failedOcrCount > 0 && (
+              <button
+                onClick={handleRetryFailed}
+                className="px-4 py-2 bg-rose-500 hover:bg-rose-400 text-slate-900 rounded font-semibold"
+                title="Re-triggert OCR mit Throttle (3 parallel max), umgeht Rate-Limits."
+              >
+                {retrying
+                  ? `⏸ Stoppen (${retryStatus?.done ?? 0}/${(retryStatus?.done ?? 0) + (retryStatus?.remaining ?? 0)})`
+                  : `🔄 OCR-Fehler neu starten (${failedOcrCount})`}
+              </button>
+            )}
             <button
               onClick={async () => {
                 if (scanning) return;
@@ -156,13 +220,7 @@ export default function BelegeListePage() {
                   const data = await res.json();
                   if (res.ok) {
                     setScanResult({ scanned: data.scanned ?? 0, flagged: data.flagged ?? 0 });
-                    // Liste neu laden, damit Badges erscheinen
-                    const sp = new URLSearchParams();
-                    if (statusFilter) sp.set('status', statusFilter);
-                    if (q) sp.set('q', q);
-                    sp.set('limit', '100');
-                    const r = await fetch(`/api/admin/belege?${sp.toString()}`);
-                    setBelege((await r.json()).belege ?? []);
+                    await refreshList();
                   } else {
                     alert(data.error ?? 'Scan fehlgeschlagen');
                   }
@@ -197,6 +255,23 @@ export default function BelegeListePage() {
               ? <>⚠ <b>{scanResult.flagged}</b> verdächtige Duplikate gefunden (von {scanResult.scanned} geprüften Belegen). Markierte Belege haben jetzt einen ⚠-Badge.</>
               : <>✓ Keine Duplikate gefunden (alle {scanResult.scanned} offenen Belege geprüft).</>
             }
+          </div>
+        )}
+        {retryStatus && (
+          <div className={`p-3 rounded text-sm mb-4 ${
+            retrying
+              ? 'bg-cyan-500/10 border border-cyan-500/30 text-cyan-200'
+              : retryStatus.remaining === 0 && retryStatus.succeeded > 0
+                ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-300'
+                : 'bg-amber-500/10 border border-amber-500/30 text-amber-200'
+          }`}>
+            {retrying ? (
+              <>⏳ Retry läuft… {retryStatus.done} verarbeitet, {retryStatus.succeeded} erfolgreich, noch {retryStatus.remaining} übrig.</>
+            ) : retryStatus.remaining === 0 ? (
+              <>✓ Alle OCR-Retries fertig — {retryStatus.succeeded} von {retryStatus.done} erfolgreich.</>
+            ) : (
+              <>⏸ Retry gestoppt — {retryStatus.done} verarbeitet ({retryStatus.succeeded} erfolgreich), {retryStatus.remaining} noch fehlgeschlagen.</>
+            )}
           </div>
         )}
 

@@ -27,6 +27,8 @@ interface Beleg {
   quelle: string; ist_eigenbeleg: boolean; eigenbeleg_grund: string | null;
   notizen: string | null; festgeschrieben_at: string | null;
   created_at?: string | null; updated_at?: string | null; is_test?: boolean;
+  ocr_status?: 'pending' | 'running' | 'done' | 'failed' | null;
+  ocr_error?: string | null;
   lieferant: { id: string; name: string; adresse?: string | null; email?: string | null; ust_id?: string | null } | null;
   verdacht_duplikat_beleg_id?: string | null;
   verdacht_duplikat_grund?: string | null;
@@ -182,6 +184,23 @@ export default function BelegDetailPage() {
     else setError((await res.json()).error);
   }
 
+  async function handleRetryOcr() {
+    setBusy(true);
+    setError(null);
+    const res = await fetch(`/api/admin/belege/${belegId}/ocr`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notify: false }),
+    });
+    if (!res.ok) {
+      setError((await res.json()).error ?? 'OCR-Retry fehlgeschlagen');
+      setBusy(false);
+      return;
+    }
+    await reload();
+    setBusy(false);
+  }
+
   async function handleDismissDuplicate() {
     if (!confirm('Wirklich kein Duplikat? Der Beleg kann danach festgeschrieben werden.')) return;
     setBusy(true);
@@ -278,6 +297,37 @@ export default function BelegDetailPage() {
                 </Link>
               </>
             )}
+          </div>
+        )}
+        {beleg.ocr_status === 'failed' && (
+          <div className="p-4 bg-rose-500/10 border-2 border-rose-500/50 text-rose-200 rounded text-sm space-y-2">
+            <div className="flex items-start gap-2">
+              <span className="text-lg leading-none">❌</span>
+              <div className="flex-1 min-w-0">
+                <div className="font-semibold text-rose-100">KI-Analyse fehlgeschlagen</div>
+                {beleg.ocr_error && (
+                  <div className="text-xs text-rose-300 mt-1 font-mono whitespace-pre-wrap break-words">{beleg.ocr_error}</div>
+                )}
+                <p className="text-xs text-rose-300/80 mt-2">
+                  Häufigster Grund nach Bulk-Upload: Anthropic-Rate-Limit. Einfach erneut starten — der Server drosselt jetzt auf 3 OCRs parallel.
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2 pt-2 border-t border-rose-500/30">
+              <button
+                onClick={handleRetryOcr}
+                disabled={busy}
+                className="px-3 py-1.5 bg-rose-500 hover:bg-rose-400 disabled:bg-slate-700 text-slate-900 rounded text-sm font-semibold"
+              >
+                {busy ? 'Läuft…' : '🔄 OCR neu starten'}
+              </button>
+            </div>
+          </div>
+        )}
+        {(beleg.ocr_status === 'running' || beleg.ocr_status === 'pending') && (
+          <div className="p-3 bg-violet-500/10 border border-violet-500/30 text-violet-200 rounded text-sm flex items-center gap-2">
+            <span className="inline-block w-2 h-2 bg-violet-400 rounded-full animate-pulse" />
+            KI analysiert den Beleg gerade — Seite zeigt das Ergebnis automatisch (manchmal hilft Reload).
           </div>
         )}
         {isLocked && (
