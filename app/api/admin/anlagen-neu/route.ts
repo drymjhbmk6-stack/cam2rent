@@ -11,9 +11,18 @@ import { createServiceClient } from '@/lib/supabase';
  * Filter: ?art=&afa_methode=&status=&include_test=1&q=
  */
 
+function isMissingTableError(error: { code?: string; message?: string } | null | undefined): boolean {
+  if (!error) return false;
+  if (error.code === '42P01') return true;
+  if (error.code === 'PGRST205') return true;
+  if (error.code === 'PGRST202') return true;
+  if (typeof error.message === 'string' && /could not find the table|schema cache/i.test(error.message)) return true;
+  return false;
+}
+
 async function pickTable(supabase: ReturnType<typeof createServiceClient>): Promise<'assets_neu' | 'assets'> {
   const { error } = await supabase.from('assets_neu').select('id', { head: true }).limit(1);
-  if (error && error.code === '42P01') return 'assets';
+  if (isMissingTableError(error)) return 'assets';
   return 'assets_neu';
 }
 
@@ -42,7 +51,7 @@ export async function GET(req: NextRequest) {
   const beleg_position_ids = (data ?? [])
     .map((a) => (a as { beleg_position_id: string }).beleg_position_id)
     .filter(Boolean);
-  let inventarMap = new Map<string, { id: string; bezeichnung: string }>();
+  const inventarMap = new Map<string, { id: string; bezeichnung: string }>();
   if (beleg_position_ids.length > 0) {
     const { data: links } = await supabase
       .from('inventar_verknuepfung')

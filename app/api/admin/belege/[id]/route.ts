@@ -62,13 +62,20 @@ export async function GET(
   const assetExpected = assetExpectedPosIds.length;
   let assetActual = 0;
   if (assetExpected > 0) {
-    // Probe-Read: erst assets_neu, dann assets (defensiv vor/nach Drop-Migration)
-    let table: 'assets_neu' | 'assets' = 'assets_neu';
+    // Probe-Read: erst assets_neu, dann assets (defensiv vor/nach Drop-Migration).
+    // PostgREST liefert bei "Tabelle nicht im Schema-Cache" code='PGRST205'
+    // mit Schema-Cache-Meldung — NICHT den PG-Errorcode 42P01. Wir muessen
+    // also auf beide Faelle pruefen.
+    const isMissingTable = (e: { code?: string; message?: string } | null | undefined): boolean => {
+      if (!e) return false;
+      if (e.code === '42P01' || e.code === 'PGRST205' || e.code === 'PGRST202') return true;
+      if (typeof e.message === 'string' && /could not find the table|schema cache/i.test(e.message)) return true;
+      return false;
+    };
     let probe = await supabase.from('assets_neu')
       .select('beleg_position_id', { count: 'exact', head: false })
       .in('beleg_position_id', assetExpectedPosIds);
-    if (probe.error?.code === '42P01') {
-      table = 'assets';
+    if (isMissingTable(probe.error)) {
       probe = await supabase.from('assets')
         .select('beleg_position_id', { count: 'exact', head: false })
         .in('beleg_position_id', assetExpectedPosIds);
@@ -76,9 +83,8 @@ export async function GET(
     if (!probe.error) {
       assetActual = (probe.data ?? []).length;
     }
-    // Falls die assets-Tabelle gar nicht existiert (uralter Datenstand vor
-    // Migration), assetActual bleibt 0 — UI zeigt dann den Hinweis, was OK ist.
-    void table;
+    // Falls beide Tabellen fehlen (uralter Datenstand vor Migration),
+    // assetActual bleibt 0 — UI zeigt dann den Hinweis, was OK ist.
   }
 
   return NextResponse.json({

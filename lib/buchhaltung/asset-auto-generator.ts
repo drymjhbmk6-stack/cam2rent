@@ -62,11 +62,27 @@ function coerceArt(raw: unknown): AssetArt {
  * `assets_neu` parallel zur alten `assets`. Nach dem Drop ist `assets`
  * die neue Tabelle. Wir versuchen `assets_neu` zuerst, fallen auf
  * `assets` zurueck wenn nicht vorhanden.
+ *
+ * Achtung: PostgREST/Supabase liefert bei "Tabelle nicht im Schema-
+ * Cache" code='PGRST205' mit Meldung "Could not find the table ...
+ * in the schema cache", NICHT den PG-Errorcode 42P01. Wir muessen
+ * also auf BEIDE Faelle und zusaetzlich auf die Meldung pruefen,
+ * sonst landet ein INSERT auf der nicht mehr existierenden Tabelle
+ * und das Asset wird nie angelegt.
  */
+function isMissingTableError(error: { code?: string; message?: string } | null | undefined): boolean {
+  if (!error) return false;
+  if (error.code === '42P01') return true;        // PostgreSQL: undefined_table
+  if (error.code === 'PGRST205') return true;     // PostgREST: schema cache miss
+  if (error.code === 'PGRST202') return true;     // PostgREST: function/relation not found
+  if (typeof error.message === 'string' && /could not find the table|schema cache/i.test(error.message)) return true;
+  return false;
+}
+
 async function pickAssetsTable(supabase: SupabaseClient): Promise<'assets_neu' | 'assets'> {
   // Probe-Query
   const { error } = await supabase.from('assets_neu').select('id', { count: 'exact', head: true }).limit(1);
-  if (error && error.code === '42P01') return 'assets';  // table does not exist
+  if (isMissingTableError(error)) return 'assets';
   return 'assets_neu';
 }
 
