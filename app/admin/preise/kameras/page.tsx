@@ -118,18 +118,18 @@ export default function AdminKameraListePage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-brand-bg border-b border-brand-border text-left">
-                    <th className="px-4 py-3 font-heading font-semibold text-[11px] uppercase tracking-wider text-brand-muted w-[88px]">Bild</th>
-                    <th className="px-4 py-3 font-heading font-semibold text-[11px] uppercase tracking-wider text-brand-muted">Name</th>
+                    <th className="px-3 sm:px-4 py-3 font-heading font-semibold text-[11px] uppercase tracking-wider text-brand-muted w-[64px] sm:w-[88px]">Bild</th>
+                    <th className="px-3 sm:px-4 py-3 font-heading font-semibold text-[11px] uppercase tracking-wider text-brand-muted">Name</th>
                     <th className="px-4 py-3 font-heading font-semibold text-[11px] uppercase tracking-wider text-brand-muted hidden lg:table-cell">Auslastung (30 T)</th>
                     <th className="px-4 py-3 font-heading font-semibold text-[11px] uppercase tracking-wider text-brand-muted text-right whitespace-nowrap hidden md:table-cell">Tag 1 / Tag 30</th>
-                    <th className="px-4 py-3 font-heading font-semibold text-[11px] uppercase tracking-wider text-brand-muted text-right">Aktionen</th>
+                    <th className="px-4 py-3 font-heading font-semibold text-[11px] uppercase tracking-wider text-brand-muted text-right hidden md:table-cell">Aktionen</th>
                   </tr>
                 </thead>
                 <tbody>
                   {groupedProducts.map(([brand, brandProducts]) => (
                     <React.Fragment key={brand}>
                       <tr className="bg-brand-bg/50 border-b border-brand-border">
-                        <td colSpan={5} className="px-4 py-2 text-[11px] font-heading font-bold uppercase tracking-wider text-brand-steel">
+                        <td colSpan={5} className="px-3 sm:px-4 py-2 text-[11px] font-heading font-bold uppercase tracking-wider text-brand-steel">
                           {brand} <span className="text-brand-muted font-body normal-case tracking-normal ml-1">({brandProducts.length} {brandProducts.length === 1 ? 'Kamera' : 'Kameras'})</span>
                         </td>
                       </tr>
@@ -141,7 +141,7 @@ export default function AdminKameraListePage() {
                           className="border-b border-brand-border last:border-b-0 transition-colors hover:bg-brand-bg/50"
                         >
                           {/* Bild */}
-                          <td className="px-4 py-3 align-top">
+                          <td className="px-3 sm:px-4 py-3 align-top">
                             <Link href={`/admin/preise/kameras/${p.id}`} className="block">
                               {imgSrc ? (
                                 <Image
@@ -149,18 +149,18 @@ export default function AdminKameraListePage() {
                                   alt={p.name}
                                   width={64}
                                   height={64}
-                                  className="w-16 h-16 object-cover rounded-lg border border-brand-border bg-white"
+                                  className="w-12 h-12 sm:w-16 sm:h-16 object-cover rounded-lg border border-brand-border bg-white"
                                   unoptimized={imgSrc.startsWith('data:')}
                                 />
                               ) : (
-                                <div className="w-16 h-16 rounded-lg border-2 border-dashed border-brand-border flex items-center justify-center text-brand-muted text-[10px]">
-                                  Kein Bild
+                                <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-lg border-2 border-dashed border-brand-border flex items-center justify-center text-brand-muted text-[10px]">
+                                  –
                                 </div>
                               )}
                             </Link>
                           </td>
                           {/* Name + Brand */}
-                          <td className="px-4 py-3 align-top">
+                          <td className="px-3 sm:px-4 py-3 align-top">
                             <Link href={`/admin/preise/kameras/${p.id}`} className="flex items-center gap-2 flex-wrap group">
                               <BrandBadge brand={p.brand} />
                               <span className="font-heading font-semibold text-sm text-brand-black group-hover:text-accent-blue transition-colors">{p.name}</span>
@@ -171,7 +171,7 @@ export default function AdminKameraListePage() {
                               )}
                             </Link>
                             {/* Mobile: Auslastung + Preis unter Name */}
-                            <div className="md:hidden mt-2 flex items-center gap-3 text-[11px]">
+                            <div className="md:hidden mt-2 flex items-center gap-3 flex-wrap text-[11px] whitespace-nowrap">
                               {utilization[p.id] != null && (
                                 <span className={`font-heading font-bold ${
                                   utilization[p.id].utilization >= 70
@@ -183,9 +183,26 @@ export default function AdminKameraListePage() {
                                   {utilization[p.id].utilization}% Auslastung
                                 </span>
                               )}
-                              <span className="font-body text-brand-muted">
+                              <span className="font-body text-brand-muted tabular-nums">
                                 {p.priceTable[0] ?? '–'} € / {p.priceTable[29] ?? '–'} €
                               </span>
+                            </div>
+                            {/* Mobile: Aktionen unter Name */}
+                            <div className="md:hidden mt-3 flex items-center gap-2">
+                              <Link
+                                href={`/admin/preise/kameras/${p.id}`}
+                                className="px-3 py-1.5 text-xs font-heading font-semibold text-brand-black border border-brand-border rounded-lg hover:bg-white transition-colors"
+                              >
+                                Bearbeiten
+                              </Link>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleDelete(p); }}
+                                disabled={deletingId === p.id}
+                                className="px-2.5 py-1.5 text-xs font-heading font-semibold text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-40"
+                                title="Löschen"
+                              >
+                                {deletingId === p.id ? '…' : '✕'}
+                              </button>
                             </div>
                           </td>
                           {/* Auslastung */}
@@ -227,8 +244,8 @@ export default function AdminKameraListePage() {
                             </div>
                             <div className="text-[10px] font-body text-brand-muted">Tag 1 / Tag 30</div>
                           </td>
-                          {/* Aktionen */}
-                          <td className="px-4 py-3 align-top text-right whitespace-nowrap">
+                          {/* Aktionen (Desktop only — Mobile sind in der Name-Zelle) */}
+                          <td className="px-4 py-3 align-top text-right whitespace-nowrap hidden md:table-cell">
                             <div className="inline-flex items-center gap-1">
                               <Link
                                 href={`/admin/preise/kameras/${p.id}`}
