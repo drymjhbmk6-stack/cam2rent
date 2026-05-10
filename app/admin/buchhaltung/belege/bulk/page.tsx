@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useRef, useState } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import { shrinkImageFileIfNeeded } from '@/lib/shrink-image-client';
 
 /**
  * Bulk-Upload fuer Belege.
@@ -122,8 +123,10 @@ export default function BelegeBulkUploadPage() {
     patchRow(row.id, { belegId, belegNr, message: 'Datei wird hochgeladen…' });
 
     // 2. Datei hochladen — Duplikat-Check passiert im Server.
+    // Foto-Belege > 3.5 MB werden im Browser verkleinert (Claude Vision 5 MB).
+    const uploadFile = await shrinkImageFileIfNeeded(row.file);
     const fd = new FormData();
-    fd.append('file', row.file);
+    fd.append('file', uploadFile);
     fd.append('kind', 'rechnung');
     const uploadRes = await fetch(`/api/admin/belege/${belegId}/anhaenge`, { method: 'POST', body: fd });
 
