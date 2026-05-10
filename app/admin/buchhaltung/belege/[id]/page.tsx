@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import { shrinkImageFileIfNeeded } from '@/lib/shrink-image-client';
 
 type Klass = 'pending' | 'afa' | 'gwg' | 'ausgabe' | 'verbrauch' | 'ignoriert';
 
@@ -150,8 +151,10 @@ export default function BelegDetailPage() {
   async function handleUploadAnhang(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    // Foto-Belege > 3.5 MB werden im Browser verkleinert (Claude Vision 5 MB-Limit).
+    const uploadFile = await shrinkImageFileIfNeeded(file);
     const fd = new FormData();
-    fd.append('file', file);
+    fd.append('file', uploadFile);
     fd.append('kind', 'rechnung');
     const res = await fetch(`/api/admin/belege/${belegId}/anhaenge`, { method: 'POST', body: fd });
     if (res.ok) reload();

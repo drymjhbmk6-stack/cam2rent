@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import { shrinkImageFileIfNeeded } from '@/lib/shrink-image-client';
 
 type Klass = 'pending' | 'afa' | 'gwg' | 'ausgabe' | 'verbrauch' | 'ignoriert';
 
@@ -104,9 +105,13 @@ export default function NeuerBelegWizard() {
 
       // 2. Datei hochladen — Server prueft Datei-Hash und antwortet 409 falls
       //    diese Datei bereits einem anderen Beleg angehaengt wurde.
+      // Foto-Belege > 3.5 MB werden client-seitig verkleinert, damit der
+      // Claude-Vision-OCR-Call (5 MB-Limit) nicht abgewiesen wird.
+      setOcrInfo('Datei wird vorbereitet…');
+      const uploadFile = await shrinkImageFileIfNeeded(file);
       setOcrInfo('Datei wird hochgeladen…');
       const fd = new FormData();
-      fd.append('file', file);
+      fd.append('file', uploadFile);
       fd.append('kind', 'rechnung');
       const uploadRes = await fetch(`/api/admin/belege/${beleg.id}/anhaenge`, { method: 'POST', body: fd });
 
