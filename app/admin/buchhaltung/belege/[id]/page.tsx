@@ -159,9 +159,26 @@ export default function BelegDetailPage() {
   }
 
   async function openAnhang(anhang: Anhang) {
-    const res = await fetch(`/api/admin/belege/${belegId}/anhaenge/${anhang.id}?signed=1`);
-    const data = await res.json();
-    if (data.url) window.open(data.url, '_blank');
+    // iOS Safari blockt window.open() nach await — Tab synchron oeffnen, dann
+    // navigieren. Bei blockiertem Popup faellt der Aufruf auf Same-Tab zurueck.
+    const win = window.open('', '_blank');
+    try {
+      const res = await fetch(`/api/admin/belege/${belegId}/anhaenge/${anhang.id}?signed=1`);
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+        throw new Error(errBody.error ?? `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      if (!data.url) throw new Error('Keine Signed-URL erhalten');
+      if (win && !win.closed) {
+        win.location.href = data.url;
+      } else {
+        window.location.href = data.url;
+      }
+    } catch (err) {
+      win?.close();
+      setError(`Anhang konnte nicht geoeffnet werden: ${(err as Error).message}`);
+    }
   }
 
   async function handleFestschreiben() {
