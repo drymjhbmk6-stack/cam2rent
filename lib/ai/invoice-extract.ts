@@ -56,6 +56,68 @@ export type InvoiceMimeType =
   | 'image/png'
   | 'image/webp';
 
+// Anthropic Vision limitiert Bilder auf 5 MB base64-Payload. base64 hat ~4/3
+// Overhead, also raw <= 3,932,160 Bytes. Wir zielen auf 3,5 MB raw fuer Puffer.
+const MAX_RAW_IMAGE_BYTES = 3_500_000;
+
+async function loadSharp(): Promise<typeof import('sharp').default | null> {
+  try {
+    return (await import('sharp')).default;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Verkleinert grosse Foto-Belege so weit, dass sie unter dem 5-MB-Limit von
+ * Claude Vision liegen. PDFs bleiben unberuehrt — die werden serverseitig
+ * gerendert, da gilt das Limit anders. iPhone-Fotos sind regelmaessig 5-8 MB
+ * und mussten frueher manuell verkleinert werden.
+ */
+async function shrinkImageIfNeeded(
+  buffer: Buffer,
+  mimeType: InvoiceMimeType,
+): Promise<{ buffer: Buffer; mimeType: InvoiceMimeType }> {
+  if (mimeType === 'application/pdf') return { buffer, mimeType };
+  if (buffer.length <= MAX_RAW_IMAGE_BYTES) return { buffer, mimeType };
+
+  const sharp = await loadSharp();
+  if (!sharp) {
+    throw new Error(
+      `Bild ist ${(buffer.length / 1024 / 1024).toFixed(1)} MB — Claude Vision erlaubt nur 5 MB. Sharp ist auf dem Server nicht verfuegbar, bitte das Bild vor dem Upload verkleinern.`,
+    );
+  }
+
+  const sizeSteps = [2400, 2000, 1600, 1200];
+  const qualitySteps = [85, 75, 65, 55];
+
+  for (const maxDim of sizeSteps) {
+    for (const quality of qualitySteps) {
+      const out = await sharp(buffer)
+        .rotate()
+        .resize(maxDim, maxDim, { fit: 'inside', withoutEnlargement: true })
+        .jpeg({ quality, mozjpeg: true })
+        .toBuffer();
+      if (out.length <= MAX_RAW_IMAGE_BYTES) {
+        return { buffer: out, mimeType: 'image/jpeg' };
+      }
+    }
+  }
+
+  const lastResort = await sharp(buffer)
+    .rotate()
+    .resize(1000, 1000, { fit: 'inside', withoutEnlargement: true })
+    .jpeg({ quality: 40, mozjpeg: true })
+    .toBuffer();
+
+  if (lastResort.length > MAX_RAW_IMAGE_BYTES) {
+    throw new Error(
+      `Beleg-Bild konnte nicht unter 5 MB komprimiert werden (${(lastResort.length / 1024 / 1024).toFixed(1)} MB nach maximaler Reduktion).`,
+    );
+  }
+  return { buffer: lastResort, mimeType: 'image/jpeg' };
+}
+
 const SYSTEM_PROMPT = `Du bist ein Buchhaltungs-Assistent fuer cam2rent, einen deutschen Action-Cam-Verleih (GoPro, DJI, Insta360 und Zubehoer).
 Deine Aufgabe: aus Eingangsrechnungen strukturierte Daten extrahieren und jede Position klassifizieren.
 
@@ -166,11 +228,13 @@ export async function extractInvoice(
   // (50 Belege parallel) schiesst sonst der Anthropic-Rate-Limit alles ab.
   const client = new Anthropic({ apiKey, maxRetries: 5 });
 
-  const base64 = fileBuffer.toString('base64');
+  const shrunk = await shrinkImageIfNeeded(fileBuffer, mimeType);
+  const base64 = shrunk.buffer.toString('base64');
+  const effectiveMime = shrunk.mimeType;
 
   // Claude Vision Document Input (SDK v0.85 unterstuetzt document + image)
   const userContent =
-    mimeType === 'application/pdf'
+    effectiveMime === 'application/pdf'
       ? [
           {
             type: 'document' as const,
@@ -184,7 +248,7 @@ export async function extractInvoice(
       : [
           {
             type: 'image' as const,
-            source: { type: 'base64' as const, media_type: mimeType, data: base64 },
+            source: { type: 'base64' as const, media_type: effectiveMime as Exclude<InvoiceMimeType, 'application/pdf'>, data: base64 },
           },
           {
             type: 'text' as const,
