@@ -503,11 +503,12 @@ export default function AdminSetsPage() {
                                   }
                                   if (single <= 0) return null;
                                   const saving = single - Number(set.price ?? 0);
+                                  const savingPct = saving > 0 ? Math.round((saving / single) * 100) : 0;
                                   return (
                                     <div className="mt-1.5 text-[10px] font-body text-brand-muted leading-tight">
                                       <div>Einzelmiete: <span className="text-brand-steel font-semibold">{fmtEuro(single)}</span></div>
                                       {saving > 0 && (
-                                        <div className="text-emerald-600">Ersparnis: {fmtEuro(saving)}</div>
+                                        <div className="text-emerald-600">Ersparnis: {fmtEuro(saving)} ({savingPct} %)</div>
                                       )}
                                     </div>
                                   );
