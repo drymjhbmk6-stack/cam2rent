@@ -1,8 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import ContentCalendar, { CalendarEvent } from '@/components/admin/ContentCalendar';
 import { fmtDateTime } from '@/lib/format-utils';
 
 interface PlanEntry {
@@ -46,8 +48,21 @@ interface Series {
   parts: Array<{ id: string; part_number: number; topic: string; angle?: string | null; keywords: string[]; used: boolean }>;
 }
 
+interface ReelEntry {
+  id: string;
+  caption?: string | null;
+  status: string;
+  scheduled_at?: string | null;
+  created_at: string;
+}
+
+type ViewMode = 'kalender' | 'liste';
+
 export default function ZeitplanPage() {
+  const router = useRouter();
+  const [view, setView] = useState<ViewMode>('kalender');
   const [plan, setPlan] = useState<PlanEntry[]>([]);
+  const [reels, setReels] = useState<ReelEntry[]>([]);
   const [topics, setTopics] = useState<Topic[]>([]);
   const [series, setSeries] = useState<Series[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,19 +72,67 @@ export default function ZeitplanPage() {
   });
   const [importTime, setImportTime] = useState('10:00');
 
-  async function loadAll() {
-    const [planRes, topicsRes, seriesRes] = await Promise.all([
-      fetch('/api/admin/social/editorial-plan').then((r) => r.json()),
-      fetch('/api/admin/social/topics').then((r) => r.json()),
-      fetch('/api/admin/social/series').then((r) => r.json()),
+  const loadAll = useCallback(async () => {
+    const [planRes, topicsRes, seriesRes, reelsRes] = await Promise.all([
+      fetch('/api/admin/social/editorial-plan').then(r => r.json()),
+      fetch('/api/admin/social/topics').then(r => r.json()),
+      fetch('/api/admin/social/series').then(r => r.json()),
+      fetch('/api/admin/reels?limit=100').then(r => r.json()),
     ]);
     setPlan(planRes.plan ?? []);
     setTopics((topicsRes.topics ?? []).filter((t: Topic) => !t.used));
     setSeries(seriesRes.series ?? []);
+    setReels((reelsRes.reels ?? []).filter((r: ReelEntry) => r.scheduled_at));
     setLoading(false);
+  }, []);
+
+  useEffect(() => { loadAll(); }, [loadAll]);
+
+  // Build calendar events from posts + reels
+  const calendarEvents: CalendarEvent[] = [
+    ...plan.map((e): CalendarEvent => ({
+      id: `post-${e.id}`,
+      date: e.scheduled_date,
+      time: e.scheduled_time.slice(0, 5),
+      title: e.topic,
+      status: e.status,
+      type: 'post',
+      href: e.post_id ? `/admin/social/posts/${e.post_id}` : undefined,
+    })),
+    ...reels
+      .filter(r => r.scheduled_at)
+      .map((r): CalendarEvent => {
+        const dt = new Date(r.scheduled_at!);
+        return {
+          id: `reel-${r.id}`,
+          date: dt.toISOString().split('T')[0],
+          time: `${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`,
+          title: r.caption ? r.caption.slice(0, 60) : 'Reel',
+          status: r.status,
+          type: 'reel',
+          href: `/admin/social/reels/${r.id}`,
+        };
+      }),
+  ];
+
+  function handleEventClick(ev: CalendarEvent) {
+    if (ev.href) {
+      router.push(ev.href);
+    } else if (ev.type === 'post') {
+      // Find the plan entry and open list view
+      const entryId = ev.id.replace('post-', '');
+      setView('liste');
+      setTimeout(() => {
+        document.getElementById(`plan-entry-${entryId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 100);
+    }
   }
 
-  useEffect(() => { loadAll(); }, []);
+  function handleDayClick(date: string) {
+    // Pre-fill the import date and switch to list view with sidebar
+    setImportDate(date);
+    setView('liste');
+  }
 
   async function importTopic(topic: Topic) {
     await fetch('/api/admin/social/editorial-plan', {
@@ -87,7 +150,6 @@ export default function ZeitplanPage() {
         from_topic_id: topic.id,
       }),
     });
-    // naechsten Tag erhöhen fuer schnelles Bulk-Importieren
     const d = new Date(importDate);
     d.setDate(d.getDate() + 1);
     setImportDate(d.toISOString().split('T')[0]);
@@ -180,39 +242,90 @@ export default function ZeitplanPage() {
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
       <AdminBackLink />
-      <h1 className="text-2xl font-bold text-white mt-4 mb-4">Redaktionsplan</h1>
+
+      <div className="flex items-center justify-between mt-4 mb-2">
+        <h1 className="text-2xl font-bold text-white">Redaktionsplan</h1>
+        {/* View toggle */}
+        <div className="flex rounded-lg border border-slate-700 overflow-hidden">
+          <button
+            onClick={() => setView('kalender')}
+            className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+              view === 'kalender'
+                ? 'bg-cyan-600 text-white'
+                : 'bg-slate-900 text-slate-400 hover:text-white'
+            }`}
+          >
+            📅 Kalender
+          </button>
+          <button
+            onClick={() => setView('liste')}
+            className={`px-3 py-1.5 text-sm font-medium transition-colors border-l border-slate-700 ${
+              view === 'liste'
+                ? 'bg-cyan-600 text-white'
+                : 'bg-slate-900 text-slate-400 hover:text-white'
+            }`}
+          >
+            ☰ Liste
+          </button>
+        </div>
+      </div>
+
       <p className="text-sm text-slate-400 mb-6">
-        Konkreter Plan mit Datum und Uhrzeit. Cron generiert Posts 2 Tage vorher, du gibst sie frei (im Semi-Modus), Cron veröffentlicht zur Uhrzeit.
+        Konkreter Plan mit Datum und Uhrzeit. Posts (cyan) und Reels (lila) auf einen Blick.
       </p>
 
       {loading && <p className="text-slate-400">Lade…</p>}
 
-      {!loading && (
+      {!loading && view === 'kalender' && (
+        <div>
+          <ContentCalendar
+            events={calendarEvents}
+            onEventClick={handleEventClick}
+            onDayClick={handleDayClick}
+          />
+          <p className="text-xs text-slate-600 mt-2 text-center">
+            Klick auf einen leeren Tag → öffnet Listenansicht mit vorausgefülltem Datum
+          </p>
+        </div>
+      )}
+
+      {!loading && view === 'liste' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Linke Spalte: Pool + Serien */}
           <div className="lg:col-span-1 space-y-6">
-            {/* Import-Datum */}
             <div className="rounded-xl bg-slate-900/50 border border-slate-800 p-4">
               <h2 className="font-semibold text-white mb-3 text-sm">Importieren am</h2>
-              <input type="date" value={importDate} onChange={(e) => setImportDate(e.target.value)}
-                className="w-full mb-2 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm" />
-              <input type="time" value={importTime} onChange={(e) => setImportTime(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm" />
+              <input
+                type="date"
+                value={importDate}
+                onChange={e => setImportDate(e.target.value)}
+                className="w-full mb-2 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm"
+              />
+              <input
+                type="time"
+                value={importTime}
+                onChange={e => setImportTime(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm"
+              />
               <p className="text-xs text-slate-500 mt-2">
-                Nach jedem Import zaehlt das Datum +1 Tag. Ideal fuer Bulk-Einplanen.
+                Nach jedem Import zählt das Datum +1 Tag. Ideal für Bulk-Einplanen.
               </p>
             </div>
 
-            {/* Offene Themen */}
             <div className="rounded-xl bg-slate-900/50 border border-slate-800 p-4">
               <h2 className="font-semibold text-white mb-3 text-sm">Offene Themen ({topics.length})</h2>
               {topics.length === 0 && <p className="text-xs text-slate-500">Keine offenen Themen im Pool.</p>}
               <div className="space-y-2 max-h-80 overflow-y-auto">
-                {topics.map((t) => (
+                {topics.map(t => (
                   <div key={t.id} className="p-2 rounded bg-slate-950/50 border border-slate-800">
                     <p className="text-sm text-slate-200 line-clamp-2">{t.topic}</p>
-                    <button type="button" onClick={() => importTopic(t)}
-                      className="text-xs text-cyan-400 hover:text-cyan-300 mt-1">+ In Plan</button>
+                    <button
+                      type="button"
+                      onClick={() => importTopic(t)}
+                      className="text-xs text-cyan-400 hover:text-cyan-300 mt-1"
+                    >
+                      + In Plan
+                    </button>
                   </div>
                 ))}
               </div>
@@ -221,22 +334,26 @@ export default function ZeitplanPage() {
               </Link>
             </div>
 
-            {/* Serien */}
             {series.length > 0 && (
               <div className="rounded-xl bg-slate-900/50 border border-slate-800 p-4">
                 <h2 className="font-semibold text-white mb-3 text-sm">Serien</h2>
                 <div className="space-y-3">
-                  {series.map((s) => {
-                    const openParts = s.parts.filter((p) => !p.used);
+                  {series.map(s => {
+                    const openParts = s.parts.filter(p => !p.used);
                     if (openParts.length === 0) return null;
                     return (
                       <div key={s.id}>
                         <p className="text-xs text-slate-300 font-semibold mb-1">{s.title}</p>
-                        {openParts.map((p) => (
+                        {openParts.map(p => (
                           <div key={p.id} className="p-2 rounded bg-slate-950/50 border border-slate-800 mb-1">
                             <p className="text-xs text-slate-200">Teil {p.part_number}: {p.topic}</p>
-                            <button type="button" onClick={() => importSeriesPart(s.id, s.title, p)}
-                              className="text-xs text-cyan-400 hover:text-cyan-300 mt-0.5">+ In Plan</button>
+                            <button
+                              type="button"
+                              onClick={() => importSeriesPart(s.id, s.title, p)}
+                              className="text-xs text-cyan-400 hover:text-cyan-300 mt-0.5"
+                            >
+                              + In Plan
+                            </button>
                           </div>
                         ))}
                       </div>
@@ -247,7 +364,7 @@ export default function ZeitplanPage() {
             )}
           </div>
 
-          {/* Rechte Spalte: Plan */}
+          {/* Rechte Spalte: Liste */}
           <div className="lg:col-span-2">
             <div className="flex items-center justify-between mb-3">
               <h2 className="font-semibold text-white">Geplante Posts ({plan.length})</h2>
@@ -260,14 +377,17 @@ export default function ZeitplanPage() {
             )}
 
             <div className="space-y-2">
-              {plan.map((entry) => (
-                <PlanRow key={entry.id} entry={entry}
+              {plan.map(entry => (
+                <PlanRow
+                  key={entry.id}
+                  entry={entry}
                   onToggleReviewed={() => toggleReviewed(entry)}
                   onDelete={() => deleteEntry(entry.id)}
                   onSkip={() => skipEntry(entry.id)}
                   onGenerate={() => generateNow(entry.id)}
                   onPublish={() => entry.post_id && publishNow(entry.post_id, entry.platforms)}
-                  onReschedule={(date, time) => reschedule(entry.id, date, time)} />
+                  onReschedule={(date, time) => reschedule(entry.id, date, time)}
+                />
               ))}
             </div>
           </div>
@@ -292,27 +412,28 @@ function PlanRow({ entry, onToggleReviewed, onDelete, onSkip, onGenerate, onPubl
   const [editTime, setEditTime] = useState(entry.scheduled_time.slice(0, 5));
 
   const canReschedule = entry.status !== 'published' && entry.status !== 'skipped';
+
   const statusColor: Record<string, string> = {
-    planned: 'bg-slate-800 text-slate-300',
+    planned:    'bg-slate-800 text-slate-300',
     generating: 'bg-amber-900/40 text-amber-300 animate-pulse',
-    generated: 'bg-cyan-900/40 text-cyan-300',
-    reviewed: 'bg-emerald-900/40 text-emerald-300',
-    published: 'bg-emerald-900/60 text-emerald-200',
-    skipped: 'bg-slate-800 text-slate-500',
-    failed: 'bg-red-900/40 text-red-300',
+    generated:  'bg-cyan-900/40 text-cyan-300',
+    reviewed:   'bg-emerald-900/40 text-emerald-300',
+    published:  'bg-emerald-900/60 text-emerald-200',
+    skipped:    'bg-slate-800 text-slate-500',
+    failed:     'bg-red-900/40 text-red-300',
   };
   const statusLabel: Record<string, string> = {
-    planned: 'Geplant',
+    planned:    'Geplant',
     generating: 'Wird generiert',
-    generated: 'Generiert',
-    reviewed: 'Freigegeben',
-    published: 'Veröffentlicht',
-    skipped: 'Übersprungen',
-    failed: 'Fehler',
+    generated:  'Generiert',
+    reviewed:   'Freigegeben',
+    published:  'Veröffentlicht',
+    skipped:    'Übersprungen',
+    failed:     'Fehler',
   };
 
   return (
-    <div className="rounded-xl bg-slate-900/50 border border-slate-800 overflow-hidden">
+    <div id={`plan-entry-${entry.id}`} className="rounded-xl bg-slate-900/50 border border-slate-800 overflow-hidden">
       <div className="p-3 flex items-start gap-3">
         <div className="flex-shrink-0">
           {!editingSchedule ? (
@@ -323,8 +444,12 @@ function PlanRow({ entry, onToggleReviewed, onDelete, onSkip, onGenerate, onPubl
               className={`rounded-lg bg-slate-950/60 border border-slate-800 px-2 py-1 text-center min-w-[60px] transition-colors ${canReschedule ? 'hover:border-cyan-600 cursor-pointer' : 'cursor-default opacity-60'}`}
               title={canReschedule ? 'Datum/Uhrzeit ändern' : ''}
             >
-              <p className="text-[10px] text-slate-500 uppercase">{new Date(entry.scheduled_date).toLocaleDateString('de-DE', { month: 'short' })}</p>
-              <p className="text-lg font-bold text-slate-200 leading-none">{new Date(entry.scheduled_date).getDate()}</p>
+              <p className="text-[10px] text-slate-500 uppercase">
+                {new Date(entry.scheduled_date).toLocaleDateString('de-DE', { month: 'short' })}
+              </p>
+              <p className="text-lg font-bold text-slate-200 leading-none">
+                {new Date(entry.scheduled_date).getDate()}
+              </p>
               <p className="text-[10px] text-slate-500">{entry.scheduled_time.slice(0, 5)}</p>
             </button>
           ) : (
@@ -332,33 +457,26 @@ function PlanRow({ entry, onToggleReviewed, onDelete, onSkip, onGenerate, onPubl
               <input
                 type="date"
                 value={editDate}
-                onChange={(e) => setEditDate(e.target.value)}
+                onChange={e => setEditDate(e.target.value)}
                 className="text-xs px-1.5 py-1 rounded bg-slate-900 border border-slate-700 text-slate-200"
               />
               <input
                 type="time"
                 value={editTime}
-                onChange={(e) => setEditTime(e.target.value)}
+                onChange={e => setEditTime(e.target.value)}
                 className="text-xs px-1.5 py-1 rounded bg-slate-900 border border-slate-700 text-slate-200"
               />
               <div className="flex gap-1">
                 <button
                   type="button"
-                  onClick={() => {
-                    onReschedule(editDate, editTime);
-                    setEditingSchedule(false);
-                  }}
+                  onClick={() => { onReschedule(editDate, editTime); setEditingSchedule(false); }}
                   className="flex-1 px-1.5 py-1 text-[10px] rounded bg-cyan-600 text-white font-semibold hover:bg-cyan-500"
                 >
                   ✓ Speichern
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    setEditDate(entry.scheduled_date);
-                    setEditTime(entry.scheduled_time.slice(0, 5));
-                    setEditingSchedule(false);
-                  }}
+                  onClick={() => { setEditDate(entry.scheduled_date); setEditTime(entry.scheduled_time.slice(0, 5)); setEditingSchedule(false); }}
                   className="px-1.5 py-1 text-[10px] rounded bg-slate-700 text-slate-200 hover:bg-slate-600"
                 >
                   ✕
@@ -367,17 +485,25 @@ function PlanRow({ entry, onToggleReviewed, onDelete, onSkip, onGenerate, onPubl
             </div>
           )}
         </div>
+
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1 flex-wrap">
-            <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${statusColor[entry.status]}`}>{statusLabel[entry.status]}</span>
-            {entry.reviewed && <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-900/40 text-emerald-300">✓ gesehen</span>}
-            {entry.series && <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-900/40 text-purple-300">Serie</span>}
-            <span className="text-[10px] text-slate-500">{entry.platforms.map((p) => (p === 'facebook' ? 'FB' : 'IG')).join(' + ')}</span>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${statusColor[entry.status]}`}>
+              {statusLabel[entry.status]}
+            </span>
+            {entry.reviewed && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-900/40 text-emerald-300">✓ gesehen</span>
+            )}
+            {entry.series && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-900/40 text-purple-300">Serie</span>
+            )}
+            <span className="text-[10px] text-slate-500">
+              {entry.platforms.map(p => p === 'facebook' ? 'FB' : 'IG').join(' + ')}
+            </span>
           </div>
           <p className="text-sm text-slate-200 font-medium">{entry.topic}</p>
           {entry.angle && <p className="text-xs text-slate-400 mt-1 line-clamp-1">{entry.angle}</p>}
 
-          {/* Generierter Post-Preview */}
           {entry.post && (
             <div className="mt-2 p-2 rounded bg-slate-950/50 border border-slate-800">
               <p className="text-xs text-slate-400 mb-1">Generierter Post:</p>
@@ -392,24 +518,20 @@ function PlanRow({ entry, onToggleReviewed, onDelete, onSkip, onGenerate, onPubl
             <p className="text-xs text-red-400 mt-1">⚠ {entry.error_message}</p>
           )}
         </div>
+
         <div className="flex-shrink-0 flex flex-col gap-1 items-end">
           {entry.status === 'planned' && (
-            <button type="button" onClick={onGenerate}
-              className="text-xs text-cyan-400 hover:text-cyan-300 font-semibold"
-              title="Jetzt sofort den Entwurf generieren (ohne auf den Cron zu warten)">
+            <button type="button" onClick={onGenerate} className="text-xs text-cyan-400 hover:text-cyan-300 font-semibold">
               ⚡ Jetzt generieren
             </button>
           )}
           {entry.status === 'generated' && entry.post_id && (
-            <button type="button" onClick={onPublish}
-              className="text-xs text-emerald-400 hover:text-emerald-300 font-semibold"
-              title="Sofort auf FB/IG veröffentlichen (überspringt geplante Uhrzeit)">
+            <button type="button" onClick={onPublish} className="text-xs text-emerald-400 hover:text-emerald-300 font-semibold">
               🚀 Jetzt posten
             </button>
           )}
           {entry.status === 'generated' && (
-            <button type="button" onClick={onToggleReviewed}
-              className="text-xs text-slate-400 hover:text-slate-200" title="Als gesehen markieren — erst dann wird im Semi-Modus veröffentlicht">
+            <button type="button" onClick={onToggleReviewed} className="text-xs text-slate-400 hover:text-slate-200">
               {entry.reviewed ? '✓ gesehen' : 'Als gesehen markieren'}
             </button>
           )}
