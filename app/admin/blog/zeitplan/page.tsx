@@ -325,8 +325,8 @@ export default function BlogZeitplanPage() {
                           onDrop={() => handleDropOnDay(ds)}
                           style={{
                             verticalAlign: 'top',
-                            padding: '3px 2px',
-                            minHeight: 52,
+                            padding: '4px 3px',
+                            height: 150,
                             background: isDragTarget ? '#06b6d415' : isToday ? '#06b6d408' : 'transparent',
                             border: isDragTarget ? '1px dashed #06b6d450' : isToday ? '1px solid #06b6d430' : '1px solid #1e293b',
                             borderRadius: 4,
@@ -337,17 +337,17 @@ export default function BlogZeitplanPage() {
                             fontSize: 11,
                             fontWeight: isToday ? 700 : 400,
                             textAlign: 'center',
-                            marginBottom: 2,
+                            marginBottom: 3,
                             color: isToday ? '#06b6d4' : isCurrentMonth ? (isPast ? '#475569' : '#94a3b8') : '#2d3f54',
                           }}>
                             {day.getDate()}
                           </div>
                           {/* Eintrags-Chips */}
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                             {dayEntries.map(entry => {
                               const color = chipColor(entry.status);
                               const timeStr = (entry.scheduled_time || '').slice(0, 5);
-                              const shortTitle = entry.topic.length > 22 ? entry.topic.slice(0, 20) + '…' : entry.topic;
+                              const shortTitle = entry.topic.length > 26 ? entry.topic.slice(0, 24) + '…' : entry.topic;
                               return (
                                 <div
                                   key={entry.id}
@@ -356,10 +356,10 @@ export default function BlogZeitplanPage() {
                                   onClick={() => setEditEntry(entry)}
                                   title={entry.topic}
                                   style={{
-                                    fontSize: 9,
-                                    lineHeight: 1.3,
-                                    padding: '2px 4px',
-                                    borderRadius: 3,
+                                    fontSize: 11,
+                                    lineHeight: 1.4,
+                                    padding: '5px 6px',
+                                    borderRadius: 4,
                                     background: color + '22',
                                     borderLeft: `2px solid ${color}`,
                                     color: isCurrentMonth ? '#e2e8f0' : '#475569',
