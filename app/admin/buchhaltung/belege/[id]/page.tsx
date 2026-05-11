@@ -56,6 +56,19 @@ interface Verknuepfung {
   inventar_unit: { id: string; bezeichnung: string; inventar_code: string | null; seriennummer: string | null } | null;
 }
 
+const AUSGABE_KATEGORIEN: { value: string; label: string }[] = [
+  { value: 'stripe_fees', label: 'Zahlungsgebühren' },
+  { value: 'shipping', label: 'Versand' },
+  { value: 'software', label: 'Software/Abos' },
+  { value: 'hardware', label: 'Hardware' },
+  { value: 'marketing', label: 'Marketing' },
+  { value: 'office', label: 'Büro/Allgemein' },
+  { value: 'travel', label: 'Reisen' },
+  { value: 'insurance', label: 'Versicherung' },
+  { value: 'legal', label: 'Rechtsberatung' },
+  { value: 'other', label: 'Sonstiges' },
+];
+
 const QUELLE_LABEL: Record<string, string> = {
   upload: '📄 PDF/Foto-Upload (OCR)',
   manuell: '✍ Manuell erfasst',
@@ -136,6 +149,28 @@ export default function BelegDetailPage() {
     const res = await fetch(`/api/admin/beleg-positionen/${posId}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ klassifizierung: klass }),
+    });
+    if (res.ok) reload();
+  }
+
+  async function setKategorie(posId: string, kategorie: string) {
+    const res = await fetch(`/api/admin/beleg-positionen/${posId}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kategorie: kategorie || null }),
+    });
+    if (res.ok) reload();
+  }
+
+  async function applyKiVorschlag(p: Position) {
+    const ki = p.ki_vorschlag;
+    if (!ki) return;
+    const update: Record<string, unknown> = {};
+    if (ki.klassifizierung) update.klassifizierung = ki.klassifizierung;
+    if (ki.kategorie) update.kategorie = ki.kategorie;
+    if (!Object.keys(update).length) return;
+    const res = await fetch(`/api/admin/beleg-positionen/${p.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(update),
     });
     if (res.ok) reload();
   }
@@ -653,7 +688,17 @@ export default function BelegDetailPage() {
                   <div className="px-3 pb-3 space-y-2">
                     {ki && (
                       <div className="text-xs p-2 bg-cyan-500/5 border border-cyan-500/20 rounded">
-                        <div className="text-cyan-300 font-semibold">💡 KI-Vorschlag</div>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="text-cyan-300 font-semibold">💡 KI-Vorschlag</div>
+                          {!p.locked && (ki.klassifizierung || ki.kategorie) && (
+                            <button
+                              onClick={() => applyKiVorschlag(p)}
+                              className="px-2 py-0.5 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 rounded border border-cyan-500/30 text-[11px]"
+                            >
+                              Übernehmen
+                            </button>
+                          )}
+                        </div>
                         <div className="text-slate-300 mt-0.5">
                           {ki.klassifizierung && <span>Klassifizierung: <span className="text-cyan-300">{ki.klassifizierung}</span></span>}
                           {typeof ki.confidence === 'number' && <span> · Sicherheit {Math.round(ki.confidence * 100)}%</span>}
@@ -698,22 +743,39 @@ export default function BelegDetailPage() {
                   </div>
                 )}
 
-                {/* Klassifikations-Buttons (nur wenn nicht locked) */}
+                {/* Klassifikations-Buttons + Kategorie (nur wenn nicht locked) */}
                 {!p.locked && (
-                  <div className="px-3 pb-3 flex gap-2 flex-wrap items-center">
-                    {(['afa', 'gwg', 'verbrauch', 'ausgabe', 'ignoriert'] as const).map((k) => (
-                      <button
-                        key={k}
-                        onClick={() => setKlassifizierung(p.id, k)}
-                        title={KLASS_HINT[k]}
-                        className={`px-2 py-0.5 text-xs rounded border ${
-                          p.klassifizierung === k ? 'bg-cyan-500 text-slate-900 border-cyan-400 font-semibold' : 'bg-slate-800 hover:bg-slate-700 border-slate-700'
-                        }`}
-                      >
-                        {KLASS_LABEL[k]}
-                      </button>
-                    ))}
-                    <span className="text-xs text-slate-500" title="Hover über die Buttons für Erklärungen">ⓘ Hover für Details</span>
+                  <div className="px-3 pb-3 space-y-2">
+                    <div className="flex gap-2 flex-wrap items-center">
+                      {(['afa', 'gwg', 'verbrauch', 'ausgabe', 'ignoriert'] as const).map((k) => (
+                        <button
+                          key={k}
+                          onClick={() => setKlassifizierung(p.id, k)}
+                          title={KLASS_HINT[k]}
+                          className={`px-2 py-0.5 text-xs rounded border ${
+                            p.klassifizierung === k ? 'bg-cyan-500 text-slate-900 border-cyan-400 font-semibold' : 'bg-slate-800 hover:bg-slate-700 border-slate-700'
+                          }`}
+                        >
+                          {KLASS_LABEL[k]}
+                        </button>
+                      ))}
+                      <span className="text-xs text-slate-500" title="Hover über die Buttons für Erklärungen">ⓘ Hover für Details</span>
+                    </div>
+                    {p.klassifizierung === 'ausgabe' && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-slate-400 shrink-0">Kategorie:</span>
+                        <select
+                          value={p.kategorie ?? ''}
+                          onChange={(e) => setKategorie(p.id, e.target.value)}
+                          className="bg-[#111827] border border-slate-700 rounded px-2 py-1 text-sm text-slate-200 focus:outline-none focus:border-cyan-500"
+                        >
+                          <option value="">— wählen —</option>
+                          {AUSGABE_KATEGORIEN.map((k) => (
+                            <option key={k.value} value={k.value}>{k.label}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
