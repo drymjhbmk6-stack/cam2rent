@@ -9,12 +9,11 @@ import { getStripe } from '@/lib/stripe';
  * POST /api/admin/buchhaltung/stripe-reconciliation/import-fees
  * Importiert Stripe-Zahlungsgebühren als Ausgaben (idempotent via source_type + source_id).
  *
- * Für nicht-rückerstattete Transaktionen: Bruttobetrag (z.B. 0,87 €).
- * Für rückerstattete Transaktionen: Nettobetrag nach Gebühren-Gutschrift von Stripe
- * (z.B. 0,87 € − 0,36 € Gutschrift = 0,51 €).
- *
- * Der Credit wird direkt über die Stripe-API aus dem Rückerstattungs-Balancetransfer
- * ermittelt, damit der Betrag exakt dem Stripe-Dashboard entspricht.
+ * Für jede Transaktion wird über die Stripe-API geprüft, ob es
+ * Rückerstattungs-Balancetransaktionen (payment_refund) gibt.
+ * Falls ja, wird der Gebühren-Credit abgezogen:
+ *   z.B. 0,87 € Gebühr − 0,36 € Gutschrift = 0,51 € effektive Gebühr.
+ * Falls keine Rückerstattung: Bruttobetrag wird importiert.
  */
 export async function POST(req: NextRequest) {
   if (!(await checkAdminAuth())) {
@@ -52,30 +51,32 @@ export async function POST(req: NextRequest) {
     if (existing) continue;
 
     // Effektive Gebühr ermitteln:
-    // Bei rückerstatteten Transaktionen Gebühren-Gutschrift von Stripe abziehen.
+    // Immer Stripe-API prüfen ob es Rückerstattungs-Credits gibt —
+    // unabhängig vom match_status, da z.B. 'unmatched' auch rückerstattet sein kann.
     let effectiveFee: number = tx.fee;
 
-    if (tx.match_status === 'refunded' && tx.stripe_charge_id) {
+    if (tx.stripe_charge_id) {
       try {
         const stripe = await getStripe();
-        // Alle Balance-Transaktionen für diese Charge laden (inkl. Rückerstattungen)
+        // Alle Balance-Transaktionen für diese Charge (inkl. Refund-BTs)
         const bts = await stripe.balanceTransactions.list({
           source: tx.stripe_charge_id,
           limit: 10,
         });
-        // Rückerstattungs-Balancetransfer haben negativen fee (= Gutschrift)
+        // payment_refund-BTs haben negativen fee (= Gebühren-Gutschrift von Stripe)
         let refundFeeCredit = 0;
         for (const bt of bts.data) {
           if (bt.type === 'payment_refund') {
-            // bt.fee ist negativ, z.B. -36 (Cent) → wird zu -0,36 €
-            refundFeeCredit += bt.fee / 100;
+            refundFeeCredit += bt.fee / 100; // Cent → Euro, Wert ist negativ
           }
         }
-        // Gutschrift abziehen (refundFeeCredit ist negativ, daher Subtraktion)
-        effectiveFee = Math.max(0, tx.fee + refundFeeCredit);
+        if (refundFeeCredit < 0) {
+          // Gutschrift abziehen (z.B. 0,87 + (−0,36) = 0,51)
+          effectiveFee = Math.max(0, tx.fee + refundFeeCredit);
+        }
       } catch (err) {
         // Bei Stripe-API-Fehler: Bruttobetrag als Fallback
-        console.error('[import-fees] Stripe-API-Fehler beim Laden der Rückerstattungs-BT:', err);
+        console.error('[import-fees] Stripe-API-Fehler:', err);
         effectiveFee = tx.fee;
       }
     }
