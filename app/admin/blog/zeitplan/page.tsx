@@ -350,6 +350,8 @@ export default function BlogZeitplanPage() {
                               const color = chipColor(entry.status);
                               const timeStr = (entry.scheduled_time || '').slice(0, 5);
                               const shortTitle = entry.topic.length > 30 ? entry.topic.slice(0, 28) + '…' : entry.topic;
+                              const catName = entry.blog_categories?.name;
+                              const catColor = entry.blog_categories?.color || '#475569';
                               return (
                                 <div
                                   key={entry.id}
@@ -371,9 +373,14 @@ export default function BlogZeitplanPage() {
                                     overflow: 'hidden',
                                   }}
                                 >
-                                  {timeStr && (
-                                    <div style={{ fontSize: 10, fontWeight: 700, color, lineHeight: 1.3 }}>{timeStr}</div>
-                                  )}
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
+                                    {timeStr && (
+                                      <div style={{ fontSize: 10, fontWeight: 700, color, lineHeight: 1.3, flexShrink: 0 }}>{timeStr}</div>
+                                    )}
+                                    {catName && (
+                                      <div style={{ fontSize: 9, fontWeight: 600, color: catColor, lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right' }}>{catName}</div>
+                                    )}
+                                  </div>
                                   <div style={{
                                     fontSize: 11,
                                     lineHeight: 1.4,
