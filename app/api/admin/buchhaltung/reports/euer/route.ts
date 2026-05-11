@@ -101,12 +101,12 @@ export async function GET(req: NextRequest) {
     const { data: belegPositionen } = await supabase
       .from('beleg_positionen')
       .select(`
-        id, bezeichnung, gesamt_brutto, kategorie, ki_vorschlag,
+        id, bezeichnung, gesamt_brutto, kategorie, klassifizierung, ki_vorschlag,
         beleg:belege!inner(id, beleg_datum, status, is_test, lieferant:lieferanten(name))
       `)
       // 'verbrauch' (SD-Karten/ND-Filter/Schrauben) ist steuerlich identisch
       // zu 'ausgabe' und gehoert genauso in die EUeR.
-      .in('klassifizierung', ['ausgabe', 'verbrauch'])
+      .in('klassifizierung', ['ausgabe', 'verbrauch', 'gwg'])
       .order('reihenfolge');
 
     type RawPos = {
@@ -114,6 +114,7 @@ export async function GET(req: NextRequest) {
       bezeichnung: string;
       gesamt_brutto: number;
       kategorie: string | null;
+      klassifizierung: string | null;
       ki_vorschlag: { kategorie?: string } | null;
       // PostgREST liefert nested joins als Array (auch bei !inner) oder Objekt
       beleg: unknown;
@@ -136,8 +137,11 @@ export async function GET(req: NextRequest) {
         | null
         | undefined;
 
-      // Kategorie: explizit gesetzt > KI-Vorschlag > Fallback
-      const cat = pos.kategorie || pos.ki_vorschlag?.kategorie || 'other';
+      // GWG-Positionen immer als asset_purchase (GWG-Sofortabzug) buchen.
+      const cat =
+        pos.klassifizierung === 'gwg'
+          ? 'asset_purchase'
+          : pos.kategorie || pos.ki_vorschlag?.kategorie || 'other';
       const amount = Number(pos.gesamt_brutto || 0);
       categoryTotals[cat] = (categoryTotals[cat] || 0) + amount;
       if (!categoryItems[cat]) categoryItems[cat] = [];
