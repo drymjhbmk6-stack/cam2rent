@@ -63,12 +63,21 @@ export async function POST(req: NextRequest) {
     if (!error) imported++;
   }
 
-  // ── 2. Rückerstattungsgebühren direkt aus Stripe Balance-Transactions ──────
+  // ── 2. Rückerstattungsgebühren über Stripe Refunds API ───────────────────
   // Stripe behält bei PaymentIntent-Refunds einen Teil der ursprünglichen Gebühr.
-  // Diese erscheinen als Balance-Transactions vom Typ 'payment_refund' mit fee > 0.
-  // (Typ 'refund' wäre für alte direkte Charges — wir nutzen PaymentIntents.)
+  // Ansatz: Alle Refunds im Zeitraum laden, dann die nicht zurückerstattete
+  // Gebühr als Differenz aus Original-Fee (stripe_transactions) und
+  // zurückgegebenem Fee-Anteil (refund.balance_transaction.fee) berechnen.
   let refundFeesImported = 0;
   let refundFeeError: string | null = null;
+  const diagRefunds: Array<{
+    refund_id: string;
+    payment_intent_id: string | null;
+    refund_amount_eur: number;
+    bt_fee_cents: number;
+    payment_fee_eur: number | null;
+    retained_eur: number;
+  }> = [];
 
   if (await getStripeSecretKey()) {
     try {
@@ -76,23 +85,69 @@ export async function POST(req: NextRequest) {
       const fromTs = Math.floor(new Date(`${from}T00:00:00`).getTime() / 1000);
       const toTs = Math.floor(new Date(`${to}T23:59:59`).getTime() / 1000);
 
+      // Originale Zahlungsgebühren aus DB für Abgleich laden
+      const { data: paymentFeeRows } = await supabase
+        .from('stripe_transactions')
+        .select('stripe_payment_intent_id, fee');
+      const paymentFeeMap = new Map<string, number>(
+        (paymentFeeRows || []).map((r) => [r.stripe_payment_intent_id, r.fee ?? 0]),
+      );
+
       let hasMore = true;
       let startingAfter: string | undefined;
 
       while (hasMore) {
-        const bts = await stripe.balanceTransactions.list({
-          type: 'payment_refund',
+        const page = await stripe.refunds.list({
           created: { gte: fromTs, lte: toTs },
           limit: 100,
-          expand: ['data.source'],
+          expand: ['data.balance_transaction'],
           ...(startingAfter ? { starting_after: startingAfter } : {}),
         });
 
-        for (const bt of bts.data) {
-          // Nur wenn Stripe tatsächlich eine Gebühr einbehalten hat
-          if (!bt.fee || bt.fee <= 0) continue;
+        for (const refund of page.data) {
+          const bt = refund.balance_transaction;
+          if (!bt || typeof bt === 'string') continue;
 
-          const feeEur = bt.fee / 100;
+          const piId =
+            refund.payment_intent && typeof refund.payment_intent === 'string'
+              ? refund.payment_intent
+              : null;
+
+          const paymentFeeEur = piId ? (paymentFeeMap.get(piId) ?? null) : null;
+
+          // Einbehaltene Gebühr berechnen:
+          // bt.fee ist positiv  → Stripe verrechnet direkt eine Gebühr (neues Modell)
+          // bt.fee ist negativ  → Stripe gibt Teilgebühr zurück; einbehalten = original - |bt.fee|
+          // bt.fee ist 0        → Stripe gibt alles zurück, nichts einbehalten
+          let retainedCents = 0;
+          if (bt.fee > 0) {
+            // Stripe verrechnet direkt 0,36 € als Rückerstattungsgebühr
+            retainedCents = bt.fee;
+          } else if (bt.fee < 0 && paymentFeeEur !== null) {
+            // Stripe gibt nur Teil des Original-Fees zurück
+            const paymentFeeCents = Math.round(paymentFeeEur * 100);
+            const returnedFeeCents = Math.abs(bt.fee);
+            // Proportional bei Teilrückerstattungen
+            const refundFraction =
+              refund.amount > 0
+                ? Math.min(1, refund.amount / (refund.charge ? 1 : refund.amount))
+                : 1;
+            const expectedReturnCents = Math.round(paymentFeeCents * refundFraction);
+            retainedCents = Math.max(0, expectedReturnCents - returnedFeeCents);
+          }
+
+          diagRefunds.push({
+            refund_id: refund.id,
+            payment_intent_id: piId,
+            refund_amount_eur: refund.amount / 100,
+            bt_fee_cents: bt.fee,
+            payment_fee_eur: paymentFeeEur,
+            retained_eur: retainedCents / 100,
+          });
+
+          if (retainedCents <= 0) continue;
+
+          const retainedEur = retainedCents / 100;
 
           // Idempotenz: source_type='stripe_refund_fee', source_id=balance_transaction_id
           const { data: existing } = await supabase
@@ -104,22 +159,16 @@ export async function POST(req: NextRequest) {
 
           if (existing) continue;
 
-          // Refund-ID aus der source ermitteln für die Beschreibung
-          const refundId =
-            bt.source && typeof bt.source !== 'string' && 'id' in bt.source
-              ? (bt.source as { id: string }).id
-              : bt.id;
-
           const { error } = await supabase
             .from('expenses')
             .insert({
-              expense_date: new Date(bt.created * 1000).toISOString().split('T')[0],
+              expense_date: new Date(refund.created * 1000).toISOString().split('T')[0],
               category: 'stripe_fees',
-              description: `Stripe-Rückerstattungsgebühr für ${refundId.slice(0, 20)}...`,
+              description: `Stripe-Rückerstattungsgebühr ${refund.id.slice(0, 20)}`,
               vendor: 'Stripe',
-              net_amount: feeEur,
+              net_amount: retainedEur,
               tax_amount: 0,
-              gross_amount: feeEur,
+              gross_amount: retainedEur,
               source_type: 'stripe_refund_fee',
               source_id: bt.id,
               is_test: testMode,
@@ -128,12 +177,16 @@ export async function POST(req: NextRequest) {
           if (!error) refundFeesImported++;
         }
 
-        hasMore = bts.has_more;
-        startingAfter = bts.data.length > 0 ? bts.data[bts.data.length - 1].id : undefined;
+        hasMore = page.has_more;
+        startingAfter = page.data.length > 0 ? page.data[page.data.length - 1].id : undefined;
         if (!startingAfter) hasMore = false;
       }
+
+      if (diagRefunds.length > 0) {
+        console.log('[import-fees] Refunds gefunden:', JSON.stringify(diagRefunds));
+      }
     } catch (err) {
-      console.error('[import-fees] Stripe Balance-Transactions Fehler:', err);
+      console.error('[import-fees] Stripe Refunds Fehler:', err);
       refundFeeError = err instanceof Error ? err.message : String(err);
     }
   }
@@ -158,5 +211,6 @@ export async function POST(req: NextRequest) {
     total: (transactions || []).length,
     refundFeesImported,
     ...(refundFeeError ? { refundFeeError } : {}),
+    ...(diagRefunds.length > 0 ? { diagRefunds } : {}),
   });
 }
