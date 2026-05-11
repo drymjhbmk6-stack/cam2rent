@@ -133,8 +133,8 @@ export async function POST(req: NextRequest) {
 
     const client = new Anthropic({ apiKey });
     const message = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 4096,
+      model: 'claude-sonnet-4-6',
+      max_tokens: 16000,
       system: `Du bist Redaktionsplaner für cam2rent.de, einen deutschen Action-Cam Verleih.
 
 AKTUELLES DATUM: ${currentMonth}
@@ -182,6 +182,9 @@ WICHTIG für das "prompt"-Feld:
       messages: [{ role: 'user', content: `Erstelle ${totalPosts} Blog-Themen für die nächsten ${weeks} Wochen ab ${currentMonth}.` }],
     });
 
+    if (message.stop_reason === 'max_tokens') {
+      throw new Error(`Antwort wurde durch Token-Limit abgeschnitten (${totalPosts} Themen zu lang). Weniger Themen wählen.`);
+    }
     const text = message.content[0].type === 'text' ? message.content[0].text : '';
     function parseKiJson(raw: string): unknown {
       // Versuch 1: direkt
