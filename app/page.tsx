@@ -27,8 +27,10 @@ export default async function Home() {
   return (
     <>
       {data.showConstructionBanner && <UnderConstructionBanner serverVisible />}
-      <PromoBanner />
-      <Hero serverData={data.hero} serverImage={data.seasonalImage} serverMonth={data.seasonalMonth} />
+      <div className="relative overflow-x-hidden">
+        <Hero serverData={data.hero} serverImage={data.seasonalImage} serverMonth={data.seasonalMonth} />
+        <PromoBanner />
+      </div>
       <HomeSeasonalAction />
       <TrustBanner />
       <ProductGrid />
