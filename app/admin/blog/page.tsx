@@ -49,6 +49,7 @@ export default function BlogDashboardPage() {
   const [plannedSchedule, setPlannedSchedule] = useState(0);
   const [schedule, setSchedule] = useState<ScheduleEntry[]>([]);
   const [recentAiPosts, setRecentAiPosts] = useState<RecentPost[]>([]);
+  const [vorlaufzeit, setVorlaufzeit] = useState(3);
 
   const loadStatus = useCallback(async () => {
     try {
@@ -71,6 +72,7 @@ export default function BlogDashboardPage() {
         setAutoWeekdays(parsed.auto_generate_weekdays || []);
         setAutoTimeFrom(parsed.auto_generate_time_from || '');
         setAutoTimeTo(parsed.auto_generate_time_to || '');
+        setVorlaufzeit(Number(parsed.schedule_days_before ?? parsed.auto_generate_days_before ?? 3));
       }
 
       // Offene Themen zaehlen
@@ -230,17 +232,26 @@ export default function BlogDashboardPage() {
                 {(() => {
                   const next = schedule.find(e => e.status === 'planned');
                   if (!next) return null;
-                  const d = new Date(`${next.scheduled_date}T${(next.scheduled_time || '09:00').slice(0, 5)}:00`);
+                  const pubDate = new Date(`${next.scheduled_date}T${(next.scheduled_time || '09:00').slice(0, 5)}:00`);
+                  const genDate = new Date(pubDate.getTime() - vorlaufzeit * 86400000);
                   const now = new Date();
-                  const isToday = d.toDateString() === now.toDateString();
-                  const isTomorrow = d.toDateString() === new Date(now.getTime() + 86400000).toDateString();
-                  const timeStr = d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Berlin' });
-                  const datePrefix = isToday ? 'heute' : isTomorrow ? 'morgen' : d.toLocaleDateString('de-DE', { day: 'numeric', month: 'short', timeZone: 'Europe/Berlin' });
-                  const action = autoMode === 'voll' ? 'Schreiben & veröffentlichen' : 'Schreiben (dann Review)';
+                  function dateFmt(d: Date) {
+                    const isToday = d.toDateString() === now.toDateString();
+                    const isTomorrow = d.toDateString() === new Date(now.getTime() + 86400000).toDateString();
+                    const timeStr = d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Berlin' });
+                    const datePrefix = isToday ? 'heute' : isTomorrow ? 'morgen' : d.toLocaleDateString('de-DE', { day: 'numeric', month: 'short', timeZone: 'Europe/Berlin' });
+                    return `${datePrefix} ${timeStr} Uhr`;
+                  }
+                  const title = next.topic.length > 40 ? next.topic.slice(0, 38) + '…' : next.topic;
                   return (
-                    <p className="text-xs mt-1" style={{ color: '#06b6d4' }}>
-                      Nächste Aktion: {datePrefix} {timeStr} Uhr — {action}
-                    </p>
+                    <div className="mt-1 space-y-0.5">
+                      <p className="text-xs" style={{ color: '#06b6d4' }}>
+                        <span className="font-semibold">Generieren:</span> {dateFmt(genDate)} — {title}
+                      </p>
+                      <p className="text-xs" style={{ color: '#94a3b8' }}>
+                        <span className="font-semibold">Veröffentlichen:</span> {dateFmt(pubDate)} — {title}
+                      </p>
+                    </div>
                   );
                 })()}
               </>
