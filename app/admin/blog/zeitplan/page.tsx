@@ -769,7 +769,7 @@ export default function BlogZeitplanPage() {
           ) : (
             <div className="space-y-4">
               {seriesList.map((series) => {
-                const openParts = (series.blog_series_parts ?? []).filter((p) => !p.used).sort((a, b) => a.part_number - b.part_number);
+                const allParts = (series.blog_series_parts ?? []).sort((a, b) => a.part_number - b.part_number);
                 return (
                   <div key={series.id} className="rounded-xl p-5" style={{ background: '#1e293b', border: '1px solid #8b5cf630' }}>
                     <div className="flex items-center gap-2 mb-1">
@@ -779,21 +779,40 @@ export default function BlogZeitplanPage() {
                       </span>
                     </div>
                     {series.description && <p className="text-xs mb-3" style={{ color: '#475569' }}>{series.description}</p>}
-                    {openParts.length === 0 ? (
-                      <p className="text-xs" style={{ color: '#22c55e' }}>Alle Teile abgeschlossen oder eingeplant.</p>
+                    {allParts.length === 0 ? (
+                      <p className="text-xs" style={{ color: '#475569' }}>Keine Teile vorhanden.</p>
                     ) : (
                       <div className="space-y-1.5">
-                        {openParts.map((part) => (
-                          <div key={part.id} className="flex items-center justify-between px-3 py-2 rounded-lg" style={{ background: '#0f172a' }}>
-                            <span className="text-xs font-body truncate flex-1" style={{ color: '#e2e8f0' }}>
-                              <span className="font-heading font-bold mr-1.5" style={{ color: '#8b5cf6' }}>Teil {part.part_number}</span>
-                              {part.topic}
-                            </span>
-                            <button onClick={() => importSeriesPart(series, part)} className="px-3 py-1 rounded text-[11px] font-heading font-semibold shrink-0 ml-2" style={{ background: '#8b5cf6', color: 'white' }}>
-                              + In Zeitplan
-                            </button>
-                          </div>
-                        ))}
+                        {allParts.map((part) => {
+                          const scheduleEntry = schedule.find(e =>
+                            e.topic.includes(`${series.title}`) && e.topic.includes(`Teil ${part.part_number}`)
+                          );
+                          const plannedDate = scheduleEntry?.scheduled_date;
+                          const plannedLabel = plannedDate
+                            ? `Geplant am ${plannedDate.split('-').reverse().join('.')}`
+                            : null;
+                          return (
+                            <div key={part.id} className="flex items-center justify-between px-3 py-2 rounded-lg" style={{ background: '#0f172a', opacity: part.used && !scheduleEntry ? 0.5 : 1 }}>
+                              <span className="text-xs font-body truncate flex-1" style={{ color: '#e2e8f0' }}>
+                                <span className="font-heading font-bold mr-1.5" style={{ color: '#8b5cf6' }}>Teil {part.part_number}</span>
+                                {part.topic}
+                              </span>
+                              {plannedLabel ? (
+                                <span className="text-[10px] font-heading px-2 py-0.5 rounded shrink-0 ml-2" style={{ background: '#06b6d420', color: '#06b6d4', border: '1px solid #06b6d440' }}>
+                                  {plannedLabel}
+                                </span>
+                              ) : part.used ? (
+                                <span className="text-[10px] font-heading px-2 py-0.5 rounded shrink-0 ml-2" style={{ background: '#22c55e20', color: '#22c55e' }}>
+                                  Generiert
+                                </span>
+                              ) : (
+                                <button onClick={() => importSeriesPart(series, part)} className="px-3 py-1 rounded text-[11px] font-heading font-semibold shrink-0 ml-2" style={{ background: '#8b5cf6', color: 'white' }}>
+                                  + In Zeitplan
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
