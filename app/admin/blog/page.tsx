@@ -227,6 +227,22 @@ export default function BlogDashboardPage() {
                     </span>
                   )}
                 </div>
+                {(() => {
+                  const next = schedule.find(e => e.status === 'planned');
+                  if (!next) return null;
+                  const d = new Date(`${next.scheduled_date}T${(next.scheduled_time || '09:00').slice(0, 5)}:00`);
+                  const now = new Date();
+                  const isToday = d.toDateString() === now.toDateString();
+                  const isTomorrow = d.toDateString() === new Date(now.getTime() + 86400000).toDateString();
+                  const timeStr = d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Berlin' });
+                  const datePrefix = isToday ? 'heute' : isTomorrow ? 'morgen' : d.toLocaleDateString('de-DE', { day: 'numeric', month: 'short', timeZone: 'Europe/Berlin' });
+                  const action = autoMode === 'voll' ? 'Schreiben & veröffentlichen' : 'Schreiben (dann Review)';
+                  return (
+                    <p className="text-xs mt-1" style={{ color: '#06b6d4' }}>
+                      Nächste Aktion: {datePrefix} {timeStr} Uhr — {action}
+                    </p>
+                  );
+                })()}
               </>
             ) : (
               <>
