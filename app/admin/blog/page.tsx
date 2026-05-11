@@ -49,6 +49,7 @@ export default function BlogDashboardPage() {
   const [plannedSchedule, setPlannedSchedule] = useState(0);
   const [schedule, setSchedule] = useState<ScheduleEntry[]>([]);
   const [recentAiPosts, setRecentAiPosts] = useState<RecentPost[]>([]);
+  const [vorlaufzeit, setVorlaufzeit] = useState(3);
 
   const loadStatus = useCallback(async () => {
     try {
@@ -71,6 +72,7 @@ export default function BlogDashboardPage() {
         setAutoWeekdays(parsed.auto_generate_weekdays || []);
         setAutoTimeFrom(parsed.auto_generate_time_from || '');
         setAutoTimeTo(parsed.auto_generate_time_to || '');
+        setVorlaufzeit(Number(parsed.schedule_days_before ?? parsed.auto_generate_days_before ?? 3));
       }
 
       // Offene Themen zaehlen
@@ -228,27 +230,25 @@ export default function BlogDashboardPage() {
                   )}
                 </div>
                 {(() => {
-                  const next = schedule.find(e => e.status === 'planned');
-                  if (!next) return null;
-                  const pubDate = new Date(`${next.scheduled_date}T${(next.scheduled_time || '09:00').slice(0, 5)}:00`);
+                  const planned = schedule.filter(e => e.status === 'planned');
+                  if (planned.length === 0) return null;
                   const now = new Date();
 
-                  // Nächsten tatsächlichen Cron-Slot berechnen (stündlicher Cron im konfigurierten Fenster)
-                  function nextCronSlot(): Date | null {
-                    const fromHour = autoTimeFrom ? parseInt(autoTimeFrom.split(':')[0]) : 6;
-                    const toHour = autoTimeTo ? parseInt(autoTimeTo.split(':')[0]) : 22;
-                    const dayNames = ['so', 'mo', 'di', 'mi', 'do', 'fr', 'sa'];
-                    const allowedDays = autoInterval === 'daily'
-                      ? dayNames
-                      : autoWeekdays.length > 0 ? autoWeekdays : dayNames;
-                    const candidate = new Date(now);
+                  const fromHour = autoTimeFrom ? parseInt(autoTimeFrom.split(':')[0]) : 6;
+                  const toHour = autoTimeTo ? parseInt(autoTimeTo.split(':')[0]) : 22;
+                  const dayNames = ['so', 'mo', 'di', 'mi', 'do', 'fr', 'sa'];
+                  const allowedDays = autoInterval === 'daily'
+                    ? dayNames
+                    : autoWeekdays.length > 0 ? autoWeekdays : dayNames;
+
+                  // Ersten Cron-Slot ab `notBefore` suchen (stündlicher Cron im konfigurierten Fenster)
+                  function firstCronSlotFrom(notBefore: Date, pubDate: Date): Date | null {
+                    const candidate = new Date(Math.max(notBefore.getTime(), now.getTime()));
                     candidate.setMinutes(0, 0, 0);
-                    // Nächste volle Stunde
-                    candidate.setHours(candidate.getHours() + 1);
-                    for (let i = 0; i < 14 * 24; i++) {
+                    if (candidate <= now) candidate.setHours(candidate.getHours() + 1);
+                    for (let i = 0; i < 30 * 24; i++) {
                       const dayName = dayNames[candidate.getDay()];
                       const hour = candidate.getHours();
-                      // Cron-Slot muss vor der Publication liegen
                       if (candidate < pubDate && allowedDays.includes(dayName) && hour >= fromHour && hour < toHour) {
                         return new Date(candidate);
                       }
@@ -256,6 +256,25 @@ export default function BlogDashboardPage() {
                     }
                     return null;
                   }
+
+                  // Für jeden geplanten Artikel den frühestmöglichen Cron-Slot finden,
+                  // ab dem er ins Vorlaufzeit-Fenster fällt (pubDate - vorlaufzeit Tage)
+                  let bestSlot: Date | null = null;
+                  let bestEntry: typeof planned[0] | null = null;
+                  let bestPubDate: Date | null = null;
+
+                  for (const entry of planned) {
+                    const pub = new Date(`${entry.scheduled_date}T${(entry.scheduled_time || '09:00').slice(0, 5)}:00`);
+                    const eligibleFrom = new Date(pub.getTime() - vorlaufzeit * 86400000);
+                    const slot = firstCronSlotFrom(eligibleFrom, pub);
+                    if (slot && (!bestSlot || slot < bestSlot)) {
+                      bestSlot = slot;
+                      bestEntry = entry;
+                      bestPubDate = pub;
+                    }
+                  }
+
+                  if (!bestEntry || !bestSlot || !bestPubDate) return null;
 
                   function dateFmt(d: Date) {
                     const isToday = d.toDateString() === now.toDateString();
@@ -265,16 +284,14 @@ export default function BlogDashboardPage() {
                     return `${datePrefix} ${timeStr} Uhr`;
                   }
 
-                  const genSlot = nextCronSlot();
-                  const title = next.topic.length > 40 ? next.topic.slice(0, 38) + '…' : next.topic;
+                  const title = bestEntry.topic.length > 40 ? bestEntry.topic.slice(0, 38) + '…' : bestEntry.topic;
                   return (
                     <div className="mt-1 space-y-0.5">
                       <p className="text-xs" style={{ color: '#06b6d4' }}>
-                        <span className="font-semibold">Generieren:</span>{' '}
-                        {genSlot ? dateFmt(genSlot) : 'kein passender Slot'} — {title}
+                        <span className="font-semibold">Generieren:</span> {dateFmt(bestSlot)} — {title}
                       </p>
                       <p className="text-xs" style={{ color: '#94a3b8' }}>
-                        <span className="font-semibold">Veröffentlichen:</span> {dateFmt(pubDate)} — {title}
+                        <span className="font-semibold">Veröffentlichen:</span> {dateFmt(bestPubDate)} — {title}
                       </p>
                     </div>
                   );
