@@ -4,6 +4,7 @@ import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import Anthropic from '@anthropic-ai/sdk';
 import { sanitizePromptInput, sanitizePromptInputList } from '@/lib/prompt-sanitize';
 import { buildBlogSystemPrompt, HUMANIZER_PASS } from '@/lib/blog/system-prompt';
+import { wrapImagePromptForRealism } from '@/lib/blog/image-prompt';
 
 // Anthropic-Calls kosten Geld (~3-6 Cent pro Generierung). Auch wenn der
 // Endpoint admin-only ist (Middleware-Schutz), verhindert das hier einen
@@ -164,6 +165,11 @@ Antworte NUR mit dem korrigierten Artikel-Text in Markdown. Keine Erklärungen, 
     // Lesezeit berechnen (ca. 200 Wörter/Minute)
     const wordCount = (parsed.content || '').split(/\s+/).length;
     const readingTime = Math.max(1, Math.ceil(wordCount / 200));
+
+    // imagePrompt mit Photorealismus-Wrapper versehen, bevor die UI es an DALL-E schickt
+    if (parsed.imagePrompt) {
+      parsed.imagePrompt = wrapImagePromptForRealism(parsed.imagePrompt);
+    }
 
     return NextResponse.json({
       ...parsed,

@@ -200,7 +200,7 @@ Antworte AUSSCHLIESSLICH im folgenden JSON-Format (kein Markdown-Codeblock, nur 
   "seoTitle": "SEO-Titel (max 60 Zeichen)",
   "seoDescription": "Meta-Description (max 155 Zeichen)",
   "suggestedTags": ["tag1", "tag2", "tag3"],
-  "imagePrompt": "Write a detailed DALL-E 3 prompt IN ENGLISH for a stunning photorealistic blog header. CRITICAL RULES: Do NOT render any cameras, electronics, gadgets or tech products — they always look fake. Instead, show the ACTIVITY or SCENERY the article is about (e.g. surfing, mountain biking, underwater diving, travel landscapes, skiing, hiking). Style: Shot on Sony A7IV, 35mm lens, f/2.8, golden hour lighting, shallow depth of field. No text, no logos, no UI elements, no hands holding devices. Think National Geographic or Red Bull magazine photo. The scene should evoke adventure, freedom and excitement."
+  "imagePrompt": "Describe IN ENGLISH the exact scene for the blog header photo. Focus 100% on WHAT IS IN THE FRAME — the action, the environment, the light, the moment. Do NOT include camera specs, photography terms, or adjectives like 'stunning/epic/breathtaking'. RULES: (1) Show the ACTIVITY or SCENERY — never cameras, gadgets, or tech products. (2) Be specific: not 'a mountain biker' but 'a mountain biker mid-air off a rocky drop, pine forest blurred below, low orange sun behind'. (3) Include the light situation: overcast, golden hour, blue hour, harsh midday, etc. (4) One concrete human or environmental detail that makes it feel real: mud splashes, wet rocks, condensation on a lens, tired face."
 }`;
 }
 

@@ -6,6 +6,7 @@ import OpenAI from 'openai';
 import { isTestMode } from '@/lib/env-mode';
 import { shouldPublishInTestMode } from '@/lib/test-mode-publish';
 import { buildBlogSystemPrompt, HUMANIZER_PASS } from '@/lib/blog/system-prompt';
+import { wrapImagePromptForRealism } from '@/lib/blog/image-prompt';
 import { sanitizePromptInput, sanitizePromptInputList } from '@/lib/prompt-sanitize';
 import { createAdminNotification } from '@/lib/admin-notifications';
 
@@ -377,7 +378,7 @@ Antworte NUR mit dem korrigierten Artikel-Text in Markdown. Keine Erklärungen, 
         const openai = new OpenAI({ apiKey: openaiKey });
         const imgResponse = await openai.images.generate({
           model: 'dall-e-3',
-          prompt: parsed.imagePrompt,
+          prompt: wrapImagePromptForRealism(parsed.imagePrompt),
           n: 1,
           size: '1792x1024',
           quality: 'hd',
