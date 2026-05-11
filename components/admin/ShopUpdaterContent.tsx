@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import SeasonalActionAdmin from '@/components/admin/SeasonalActionAdmin';
+import PromoBannerAdmin from '@/components/admin/PromoBannerAdmin';
 
 // ============================================================
 // Types
@@ -428,9 +429,6 @@ export default function ShopUpdaterContent() {
       const res = await fetch(`/api/shop-content?page=${selectedPage}`);
       const data = await res.json();
       if (Array.isArray(data)) {
-        // Alle erwarteten Sections garantieren — auch wenn DB leer/partial ist.
-        // Ohne diesen Schritt schlägt updateSectionLocal (map) fehl und Eingaben
-        // verpuffen, weil die Section im State nicht existiert.
         const expected: Array<{ section: string; content: HeroContent | NewsBannerContent | UspsContent | ReviewsContent; sort_order: number }> = [
           { section: 'hero', content: { ueberschrift: '', untertitel: '', cta_text: '', cta_link: '' }, sort_order: 0 },
           { section: 'news_banner', content: { enabled: true, messages: [] }, sort_order: 1 },
@@ -633,6 +631,7 @@ export default function ShopUpdaterContent() {
             />
           </SectionCard>
 
+          <PromoBannerAdmin />
           <SeasonalActionAdmin />
         </div>
       )}
