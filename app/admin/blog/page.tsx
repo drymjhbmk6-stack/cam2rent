@@ -235,7 +235,6 @@ export default function BlogDashboardPage() {
                 </div>
                 {(() => {
                   const planned = schedule.filter(e => e.status === 'planned');
-                  if (planned.length === 0) return null;
                   const now = new Date();
 
                   const fromHour = autoTimeFrom ? parseInt(autoTimeFrom.split(':')[0]) : 6;
@@ -261,11 +260,9 @@ export default function BlogDashboardPage() {
                     return null;
                   }
 
-                  // Für jeden geplanten Artikel den frühestmöglichen Cron-Slot finden,
-                  // ab dem er ins Vorlaufzeit-Fenster fällt (pubDate - vorlaufzeit Tage)
+                  // Für jeden geplanten Artikel den frühestmöglichen Cron-Slot finden
                   let bestSlot: Date | null = null;
                   let bestEntry: typeof planned[0] | null = null;
-                  let bestPubDate: Date | null = null;
 
                   for (const entry of planned) {
                     const pub = new Date(`${entry.scheduled_date}T${(entry.scheduled_time || '09:00').slice(0, 5)}:00`);
@@ -274,11 +271,19 @@ export default function BlogDashboardPage() {
                     if (slot && (!bestSlot || slot < bestSlot)) {
                       bestSlot = slot;
                       bestEntry = entry;
-                      bestPubDate = pub;
                     }
                   }
 
-                  if (!bestEntry || !bestSlot || !bestPubDate) return null;
+                  // Nächster zu veröffentlichender Artikel (frühester generated/reviewed-Eintrag)
+                  const nextToPub = schedule
+                    .filter(e => e.status === 'generated' || e.status === 'reviewed')
+                    .sort((a, b) => {
+                      const dtA = `${a.scheduled_date}T${(a.scheduled_time || '09:00').slice(0, 5)}`;
+                      const dtB = `${b.scheduled_date}T${(b.scheduled_time || '09:00').slice(0, 5)}`;
+                      return dtA.localeCompare(dtB);
+                    })[0] ?? null;
+
+                  if (!bestEntry && !nextToPub) return null;
 
                   function dateFmt(d: Date) {
                     const isToday = d.toDateString() === now.toDateString();
@@ -288,15 +293,25 @@ export default function BlogDashboardPage() {
                     return `${datePrefix} ${timeStr} Uhr`;
                   }
 
-                  const title = bestEntry.topic.length > 40 ? bestEntry.topic.slice(0, 38) + '…' : bestEntry.topic;
                   return (
                     <div className="mt-1 space-y-0.5">
-                      <p className="text-xs" style={{ color: '#06b6d4' }}>
-                        <span className="font-semibold">Generieren:</span> {dateFmt(bestSlot)} — {title}
-                      </p>
-                      <p className="text-xs" style={{ color: '#94a3b8' }}>
-                        <span className="font-semibold">Veröffentlichen:</span> {dateFmt(bestPubDate)} — {title}
-                      </p>
+                      {bestEntry && bestSlot && (() => {
+                        const title = bestEntry!.topic.length > 40 ? bestEntry!.topic.slice(0, 38) + '…' : bestEntry!.topic;
+                        return (
+                          <p className="text-xs" style={{ color: '#06b6d4' }}>
+                            <span className="font-semibold">Generieren:</span> {dateFmt(bestSlot!)} — {title}
+                          </p>
+                        );
+                      })()}
+                      {nextToPub && (() => {
+                        const pubDate = new Date(`${nextToPub.scheduled_date}T${(nextToPub.scheduled_time || '09:00').slice(0, 5)}:00`);
+                        const title = nextToPub.topic.length > 40 ? nextToPub.topic.slice(0, 38) + '…' : nextToPub.topic;
+                        return (
+                          <p className="text-xs" style={{ color: '#94a3b8' }}>
+                            <span className="font-semibold">Veröffentlichen:</span> {dateFmt(pubDate)} — {title}
+                          </p>
+                        );
+                      })()}
                     </div>
                   );
                 })()}
