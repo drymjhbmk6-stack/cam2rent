@@ -308,7 +308,7 @@ WICHTIG für das "prompt"-Feld:
   }
 
   // Option B: Einzelnen Eintrag hinzufügen
-  const { topic, keywords, category_id, tone, target_length, scheduled_date, scheduled_time } = body;
+  const { topic, prompt, keywords, category_id, tone, target_length, scheduled_date, scheduled_time } = body;
   if (!topic || !scheduled_date) {
     return NextResponse.json({ error: 'Thema und Datum sind erforderlich.' }, { status: 400 });
   }
@@ -316,7 +316,7 @@ WICHTIG für das "prompt"-Feld:
   const { data, error } = await supabase
     .from('blog_schedule')
     .insert({
-      topic, keywords: keywords ?? [], category_id: category_id || null,
+      topic, prompt: prompt || null, keywords: keywords ?? [], category_id: category_id || null,
       tone: tone ?? 'informativ', target_length: target_length ?? 'mittel',
       scheduled_date, scheduled_time: scheduled_time ?? '09:00', status: 'planned',
     })
