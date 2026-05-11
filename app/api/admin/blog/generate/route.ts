@@ -3,7 +3,7 @@ import { createServiceClient } from '@/lib/supabase';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import Anthropic from '@anthropic-ai/sdk';
 import { sanitizePromptInput, sanitizePromptInputList } from '@/lib/prompt-sanitize';
-import { buildBlogSystemPrompt } from '@/lib/blog/system-prompt';
+import { buildBlogSystemPrompt, HUMANIZER_PASS } from '@/lib/blog/system-prompt';
 
 // Anthropic-Calls kosten Geld (~3-6 Cent pro Generierung). Auch wenn der
 // Endpoint admin-only ist (Middleware-Schutz), verhindert das hier einen
@@ -144,6 +144,22 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'KI-Antwort konnte nicht geparst werden.', raw: text }, { status: 500 });
       }
     }
+
+    // Humanisierungs-Pass — gleiche Pipeline wie im Cron
+    try {
+      const humanizeMsg = await client.messages.create({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 4096,
+        system: `Du bist ${HUMANIZER_PASS.role} bei cam2rent.de. ${HUMANIZER_PASS.instruction}
+
+Antworte NUR mit dem korrigierten Artikel-Text in Markdown. Keine Erklärungen, keine Kommentare — nur der fertige Text.`,
+        messages: [{ role: 'user', content: parsed.content }],
+      });
+      const humanized = humanizeMsg.content[0].type === 'text' ? humanizeMsg.content[0].text : '';
+      if (humanized.trim().length > 100) {
+        parsed.content = humanized;
+      }
+    } catch { /* Humanizer fehlgeschlagen — Original behalten */ }
 
     // Lesezeit berechnen (ca. 200 Wörter/Minute)
     const wordCount = (parsed.content || '').split(/\s+/).length;
