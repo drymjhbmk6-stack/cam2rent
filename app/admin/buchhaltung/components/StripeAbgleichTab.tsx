@@ -39,6 +39,8 @@ export default function StripeAbgleichTab() {
   const [matchModal, setMatchModal] = useState<StripeTx | null>(null);
   const [matchBookingId, setMatchBookingId] = useState('');
   const [processing, setProcessing] = useState(false);
+  const [suggestions, setSuggestions] = useState<{ id: string; customer_name: string; price_total: number; created_at: string }[]>([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
   const [importingFees, setImportingFees] = useState(false);
 
@@ -223,7 +225,21 @@ export default function StripeAbgleichTab() {
                     <td style={{ padding: '10px 8px', textAlign: 'center' }}>
                       {tx.match_status === 'unmatched' && (
                         <button
-                          onClick={() => { setMatchModal(tx); setMatchBookingId(''); }}
+                          onClick={async () => {
+                            setMatchModal(tx);
+                            setMatchBookingId('');
+                            setSuggestions([]);
+                            setLoadingSuggestions(true);
+                            try {
+                              const res = await fetch(`/api/admin/buchhaltung/stripe-reconciliation/suggestions?amount=${tx.amount}`);
+                              if (res.ok) {
+                                const json = await res.json();
+                                setSuggestions(json.suggestions || []);
+                              }
+                            } finally {
+                              setLoadingSuggestions(false);
+                            }
+                          }}
                           style={{ padding: '4px 10px', borderRadius: 6, background: 'transparent', border: '1px solid #1e293b', color: '#06b6d4', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
                         >
                           Verknüpfen
@@ -250,9 +266,46 @@ export default function StripeAbgleichTab() {
               <div>Stripe-PI: <span style={{ fontFamily: 'monospace', color: '#e2e8f0' }}>{matchModal.stripe_payment_intent_id.slice(0, 30)}...</span></div>
               <div>Betrag: <span style={{ color: '#e2e8f0', fontWeight: 600 }}>{formatCurrency(matchModal.amount)}</span></div>
             </div>
+            {/* Vorschläge */}
             <div style={{ marginBottom: 20 }}>
-              <label style={{ display: 'block', fontSize: 13, color: '#94a3b8', fontWeight: 600, marginBottom: 4 }}>Buchungs-ID</label>
-              <input value={matchBookingId} onChange={(e) => setMatchBookingId(e.target.value)} placeholder="z.B. BK-2026-00001" style={inputStyle} />
+              <label style={{ display: 'block', fontSize: 13, color: '#94a3b8', fontWeight: 600, marginBottom: 8 }}>
+                Buchung auswählen
+              </label>
+              {loadingSuggestions ? (
+                <div style={{ fontSize: 13, color: '#64748b', padding: '8px 0' }}>Suche passende Buchungen…</div>
+              ) : suggestions.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
+                  {suggestions.map((s) => (
+                    <button
+                      key={s.id}
+                      onClick={() => setMatchBookingId(s.id)}
+                      style={{
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                        padding: '8px 12px', borderRadius: 8, cursor: 'pointer', textAlign: 'left',
+                        background: matchBookingId === s.id ? '#0e7490' : '#1e293b',
+                        border: matchBookingId === s.id ? '1px solid #06b6d4' : '1px solid #334155',
+                        color: '#e2e8f0', fontSize: 13,
+                      }}
+                    >
+                      <span>
+                        <span style={{ fontWeight: 700, color: '#06b6d4', marginRight: 8 }}>{s.id}</span>
+                        <span style={{ color: '#94a3b8' }}>{s.customer_name}</span>
+                      </span>
+                      <span style={{ fontWeight: 600, color: '#10b981' }}>{formatCurrency(s.price_total)}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ fontSize: 13, color: '#64748b', marginBottom: 8 }}>
+                  Keine passenden Buchungen gefunden — ID manuell eingeben:
+                </div>
+              )}
+              <input
+                value={matchBookingId}
+                onChange={(e) => setMatchBookingId(e.target.value)}
+                placeholder="z.B. C2R-2618-001"
+                style={inputStyle}
+              />
             </div>
             <div style={{ display: 'flex', gap: 12 }}>
               <button onClick={handleMatch} disabled={processing || !matchBookingId} style={{ padding: '10px 20px', borderRadius: 8, fontWeight: 600, fontSize: 14, cursor: 'pointer', background: '#06b6d4', color: '#0f172a', border: 'none', opacity: processing || !matchBookingId ? 0.5 : 1 }}>
