@@ -49,7 +49,6 @@ export default function BlogDashboardPage() {
   const [plannedSchedule, setPlannedSchedule] = useState(0);
   const [schedule, setSchedule] = useState<ScheduleEntry[]>([]);
   const [recentAiPosts, setRecentAiPosts] = useState<RecentPost[]>([]);
-  const [vorlaufzeit, setVorlaufzeit] = useState(3);
 
   const loadStatus = useCallback(async () => {
     try {
@@ -72,7 +71,6 @@ export default function BlogDashboardPage() {
         setAutoWeekdays(parsed.auto_generate_weekdays || []);
         setAutoTimeFrom(parsed.auto_generate_time_from || '');
         setAutoTimeTo(parsed.auto_generate_time_to || '');
-        setVorlaufzeit(Number(parsed.schedule_days_before ?? parsed.auto_generate_days_before ?? 3));
       }
 
       // Offene Themen zaehlen
@@ -233,8 +231,32 @@ export default function BlogDashboardPage() {
                   const next = schedule.find(e => e.status === 'planned');
                   if (!next) return null;
                   const pubDate = new Date(`${next.scheduled_date}T${(next.scheduled_time || '09:00').slice(0, 5)}:00`);
-                  const genDate = new Date(pubDate.getTime() - vorlaufzeit * 86400000);
                   const now = new Date();
+
+                  // Nächsten tatsächlichen Cron-Slot berechnen (stündlicher Cron im konfigurierten Fenster)
+                  function nextCronSlot(): Date | null {
+                    const fromHour = autoTimeFrom ? parseInt(autoTimeFrom.split(':')[0]) : 6;
+                    const toHour = autoTimeTo ? parseInt(autoTimeTo.split(':')[0]) : 22;
+                    const dayNames = ['so', 'mo', 'di', 'mi', 'do', 'fr', 'sa'];
+                    const allowedDays = autoInterval === 'daily'
+                      ? dayNames
+                      : autoWeekdays.length > 0 ? autoWeekdays : dayNames;
+                    const candidate = new Date(now);
+                    candidate.setMinutes(0, 0, 0);
+                    // Nächste volle Stunde
+                    candidate.setHours(candidate.getHours() + 1);
+                    for (let i = 0; i < 14 * 24; i++) {
+                      const dayName = dayNames[candidate.getDay()];
+                      const hour = candidate.getHours();
+                      // Cron-Slot muss vor der Publication liegen
+                      if (candidate < pubDate && allowedDays.includes(dayName) && hour >= fromHour && hour < toHour) {
+                        return new Date(candidate);
+                      }
+                      candidate.setHours(candidate.getHours() + 1);
+                    }
+                    return null;
+                  }
+
                   function dateFmt(d: Date) {
                     const isToday = d.toDateString() === now.toDateString();
                     const isTomorrow = d.toDateString() === new Date(now.getTime() + 86400000).toDateString();
@@ -242,11 +264,14 @@ export default function BlogDashboardPage() {
                     const datePrefix = isToday ? 'heute' : isTomorrow ? 'morgen' : d.toLocaleDateString('de-DE', { day: 'numeric', month: 'short', timeZone: 'Europe/Berlin' });
                     return `${datePrefix} ${timeStr} Uhr`;
                   }
+
+                  const genSlot = nextCronSlot();
                   const title = next.topic.length > 40 ? next.topic.slice(0, 38) + '…' : next.topic;
                   return (
                     <div className="mt-1 space-y-0.5">
                       <p className="text-xs" style={{ color: '#06b6d4' }}>
-                        <span className="font-semibold">Generieren:</span> {dateFmt(genDate)} — {title}
+                        <span className="font-semibold">Generieren:</span>{' '}
+                        {genSlot ? dateFmt(genSlot) : 'kein passender Slot'} — {title}
                       </p>
                       <p className="text-xs" style={{ color: '#94a3b8' }}>
                         <span className="font-semibold">Veröffentlichen:</span> {dateFmt(pubDate)} — {title}
