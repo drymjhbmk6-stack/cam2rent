@@ -88,7 +88,11 @@ export default function BlogDashboardPage() {
         .filter((e: ScheduleEntry) => ['planned', 'generating', 'generated', 'reviewed'].includes(e.status));
       setPlannedSchedule(allEntries.filter((e: ScheduleEntry) => e.status === 'planned').length);
       const entries = allEntries
-        .sort((a: ScheduleEntry, b: ScheduleEntry) => a.scheduled_date.localeCompare(b.scheduled_date))
+        .sort((a: ScheduleEntry, b: ScheduleEntry) => {
+          const dtA = `${a.scheduled_date}T${(a.scheduled_time || '00:00').slice(0, 5)}`;
+          const dtB = `${b.scheduled_date}T${(b.scheduled_time || '00:00').slice(0, 5)}`;
+          return dtA.localeCompare(dtB);
+        })
         .slice(0, 8);
       setSchedule(entries);
     } catch { /* leer */ }
