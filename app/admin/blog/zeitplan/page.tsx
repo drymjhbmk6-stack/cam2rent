@@ -90,7 +90,7 @@ export default function BlogZeitplanPage() {
           } else if (parsed.status === 'error') {
             clearInterval(poll);
             setGenerating(false);
-            flash(parsed.error || 'Fehler bei der Planung');
+            flash(`Fehler: ${parsed.error || 'Unbekannter Fehler bei der Planung'}`);
           }
         }
       } catch { /* weiter pollen */ }
@@ -194,7 +194,7 @@ export default function BlogZeitplanPage() {
         </div>
       </div>
 
-      {msg && <div className="mb-4 px-4 py-2 rounded-lg text-sm font-heading" style={{ background: '#0f172a', color: msg.includes('Fehler') ? '#ef4444' : '#22c55e' }}>{msg}</div>}
+      {msg && <div className="mb-4 px-4 py-2 rounded-lg text-sm font-heading" style={{ background: '#0f172a', color: (msg.startsWith('Fehler') || msg.includes('Error') || msg.includes('Expected')) ? '#ef4444' : '#22c55e' }}>{msg}</div>}
 
       {/* Tabs */}
       <div className="flex gap-1 mb-6">

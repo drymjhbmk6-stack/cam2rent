@@ -183,14 +183,26 @@ WICHTIG für das "prompt"-Feld:
     });
 
     const text = message.content[0].type === 'text' ? message.content[0].text : '';
-    let topics;
-    try {
-      topics = JSON.parse(text);
-    } catch {
-      const match = text.match(/\[[\s\S]*\]/);
-      if (match) topics = JSON.parse(match[0]);
-      else return NextResponse.json({ error: 'KI-Antwort konnte nicht geparst werden.' }, { status: 500 });
+    function parseKiJson(raw: string): unknown {
+      // Versuch 1: direkt
+      try { return JSON.parse(raw); } catch { /* weiter */ }
+      // Versuch 2: Array extrahieren
+      const match = raw.match(/\[[\s\S]*\]/);
+      if (!match) throw new Error('Kein JSON-Array in der KI-Antwort gefunden.');
+      // Versuch 3: extrahiertes Array direkt
+      try { return JSON.parse(match[0]); } catch { /* weiter */ }
+      // Versuch 4: Steuerzeichen entfernen
+      const noCtrl = match[0].replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+      try { return JSON.parse(noCtrl); } catch { /* weiter */ }
+      // Versuch 5: unescapte Newlines/Tabs in String-Werten ersetzen
+      const repaired = noCtrl
+        .replace(/([^\\])\n/g, '$1\\n')
+        .replace(/([^\\])\r/g, '$1\\r')
+        .replace(/([^\\])\t/g, '$1\\t');
+      return JSON.parse(repaired);
     }
+
+    const topics = parseKiJson(text) as Record<string, unknown>[];
 
     // Blog-Einstellungen laden (Wochentage + Uhrzeit)
     const { data: blogSettingsData } = await supabase
@@ -233,7 +245,7 @@ WICHTIG für das "prompt"-Feld:
 
       if (allowedDayNumbers.includes(dayOfWeek)) {
         const t = topics[topicIndex];
-        const cat = categories?.find((c) => c.name.toLowerCase() === (t.category || '').toLowerCase());
+        const cat = categories?.find((c) => c.name.toLowerCase() === (String(t.category || '')).toLowerCase());
 
         scheduleEntries.push({
           topic: t.topic,
