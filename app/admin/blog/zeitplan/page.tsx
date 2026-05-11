@@ -326,7 +326,7 @@ export default function BlogZeitplanPage() {
                           style={{
                             verticalAlign: 'top',
                             padding: '4px 3px',
-                            height: 270,
+                            height: 180,
                             background: isDragTarget ? '#06b6d415' : isToday ? '#06b6d408' : 'transparent',
                             border: isDragTarget ? '1px dashed #06b6d450' : isToday ? '1px solid #06b6d430' : '1px solid #1e293b',
                             borderRadius: 4,
