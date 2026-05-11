@@ -326,7 +326,7 @@ export default function BlogZeitplanPage() {
                           style={{
                             verticalAlign: 'top',
                             padding: '4px 3px',
-                            height: 150,
+                            height: 270,
                             background: isDragTarget ? '#06b6d415' : isToday ? '#06b6d408' : 'transparent',
                             border: isDragTarget ? '1px dashed #06b6d450' : isToday ? '1px solid #06b6d430' : '1px solid #1e293b',
                             borderRadius: 4,
@@ -347,7 +347,7 @@ export default function BlogZeitplanPage() {
                             {dayEntries.map(entry => {
                               const color = chipColor(entry.status);
                               const timeStr = (entry.scheduled_time || '').slice(0, 5);
-                              const shortTitle = entry.topic.length > 26 ? entry.topic.slice(0, 24) + '…' : entry.topic;
+                              const shortTitle = entry.topic.length > 30 ? entry.topic.slice(0, 28) + '…' : entry.topic;
                               return (
                                 <div
                                   key={entry.id}
@@ -356,22 +356,31 @@ export default function BlogZeitplanPage() {
                                   onClick={() => setEditEntry(entry)}
                                   title={entry.topic}
                                   style={{
-                                    fontSize: 11,
-                                    lineHeight: 1.4,
-                                    padding: '5px 6px',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: 3,
+                                    minHeight: 58,
+                                    padding: '6px 7px',
                                     borderRadius: 4,
                                     background: color + '22',
                                     borderLeft: `2px solid ${color}`,
-                                    color: isCurrentMonth ? '#e2e8f0' : '#475569',
                                     cursor: 'pointer',
                                     userSelect: 'none',
                                     overflow: 'hidden',
-                                    whiteSpace: 'nowrap',
-                                    textOverflow: 'ellipsis',
                                   }}
                                 >
-                                  {timeStr && <span style={{ color, marginRight: 3, fontWeight: 700 }}>{timeStr}</span>}
-                                  {shortTitle}
+                                  {timeStr && (
+                                    <div style={{ fontSize: 10, fontWeight: 700, color, lineHeight: 1.3 }}>{timeStr}</div>
+                                  )}
+                                  <div style={{
+                                    fontSize: 11,
+                                    lineHeight: 1.4,
+                                    color: isCurrentMonth ? '#e2e8f0' : '#475569',
+                                    overflow: 'hidden',
+                                    display: '-webkit-box',
+                                    WebkitLineClamp: 2,
+                                    WebkitBoxOrient: 'vertical',
+                                  }}>{shortTitle}</div>
                                 </div>
                               );
                             })}
