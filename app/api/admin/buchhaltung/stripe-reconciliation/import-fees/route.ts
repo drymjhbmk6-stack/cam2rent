@@ -64,9 +64,11 @@ export async function POST(req: NextRequest) {
   }
 
   // ── 2. Rückerstattungsgebühren direkt aus Stripe Balance-Transactions ──────
-  // Stripe behält bei Refunds einen Teil der ursprünglichen Gebühr (z.B. 0,36 €).
-  // Diese erscheinen als eigene Balance-Transactions vom Typ 'refund' mit fee > 0.
+  // Stripe behält bei PaymentIntent-Refunds einen Teil der ursprünglichen Gebühr.
+  // Diese erscheinen als Balance-Transactions vom Typ 'payment_refund' mit fee > 0.
+  // (Typ 'refund' wäre für alte direkte Charges — wir nutzen PaymentIntents.)
   let refundFeesImported = 0;
+  let refundFeeError: string | null = null;
 
   if (await getStripeSecretKey()) {
     try {
@@ -79,7 +81,7 @@ export async function POST(req: NextRequest) {
 
       while (hasMore) {
         const bts = await stripe.balanceTransactions.list({
-          type: 'refund',
+          type: 'payment_refund',
           created: { gte: fromTs, lte: toTs },
           limit: 100,
           expand: ['data.source'],
@@ -130,8 +132,9 @@ export async function POST(req: NextRequest) {
         startingAfter = bts.data.length > 0 ? bts.data[bts.data.length - 1].id : undefined;
         if (!startingAfter) hasMore = false;
       }
-    } catch {
-      // Stripe nicht erreichbar — Zahlungsgebühren wurden trotzdem importiert
+    } catch (err) {
+      console.error('[import-fees] Stripe Balance-Transactions Fehler:', err);
+      refundFeeError = err instanceof Error ? err.message : String(err);
     }
   }
 
@@ -154,5 +157,6 @@ export async function POST(req: NextRequest) {
     imported,
     total: (transactions || []).length,
     refundFeesImported,
+    ...(refundFeeError ? { refundFeeError } : {}),
   });
 }
