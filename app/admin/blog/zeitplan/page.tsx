@@ -19,7 +19,7 @@ interface ScheduleEntry {
 }
 
 interface AutoTopic { id: string; topic: string; keywords: string[]; used: boolean; category_id: string | null; tone: string; target_length: string; }
-interface Series { id: string; title: string; description: string; total_parts: number; generated_parts: number; status: string; blog_series_parts?: { id: string; part_number: number; topic: string; used: boolean }[]; }
+interface Series { id: string; title: string; description: string; total_parts: number; generated_parts: number; status: string; blog_series_parts?: { id: string; part_number: number; topic: string; prompt: string | null; keywords: string[]; used: boolean }[]; }
 
 const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> = {
   planned: { label: 'Geplant', color: '#94a3b8', bg: '#94a3b820' },
@@ -151,12 +151,14 @@ export default function BlogZeitplanPage() {
     }
   }
 
-  async function importSeriesPart(series: Series, part: { id: string; part_number: number; topic: string }) {
+  async function importSeriesPart(series: Series, part: { id: string; part_number: number; topic: string; prompt?: string | null; keywords?: string[] }) {
     const res = await fetch('/api/admin/blog/schedule', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         topic: `${series.title} — Teil ${part.part_number}: ${part.topic}`,
-        keywords: [], category_id: null,
+        prompt: part.prompt || null,
+        keywords: part.keywords ?? [],
+        category_id: null,
         tone: 'informativ', target_length: 'mittel', scheduled_date: importDate,
       }),
     });
