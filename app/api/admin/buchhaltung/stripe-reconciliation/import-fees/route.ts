@@ -9,11 +9,10 @@ import { getStripe } from '@/lib/stripe';
  * POST /api/admin/buchhaltung/stripe-reconciliation/import-fees
  * Importiert Stripe-Zahlungsgebühren als Ausgaben (idempotent via source_type + source_id).
  *
- * Für jede Transaktion wird über die Stripe-API geprüft, ob es
- * Rückerstattungs-Balancetransaktionen (payment_refund) gibt.
- * Falls ja, wird der Gebühren-Credit abgezogen:
- *   z.B. 0,87 € Gebühr − 0,36 € Gutschrift = 0,51 € effektive Gebühr.
- * Falls keine Rückerstattung: Bruttobetrag wird importiert.
+ * Für jede Transaktion werden über stripe.refunds.list() alle Rückerstattungen
+ * geladen (expand: balance_transaction). Die Gebühren-Gutschrift (negativer fee
+ * auf dem Refund-Balancetransfer) wird vom Bruttobetrag abgezogen:
+ *   z.B. 0,87 € − 0,36 € = 0,51 € effektive Gebühr.
  */
 export async function POST(req: NextRequest) {
   if (!(await checkAdminAuth())) {
@@ -51,34 +50,38 @@ export async function POST(req: NextRequest) {
     if (existing) continue;
 
     // Effektive Gebühr ermitteln:
-    // Immer Stripe-API prüfen ob es Rückerstattungs-Credits gibt —
-    // unabhängig vom match_status, da z.B. 'unmatched' auch rückerstattet sein kann.
+    // Stripe-Rückerstattungs-Balance-Transaktionen hängen an der REFUND-ID
+    // (nicht an der Charge-ID), daher über stripe.refunds.list() mit expand.
     let effectiveFee: number = tx.fee;
 
-    if (tx.stripe_charge_id) {
-      try {
-        const stripe = await getStripe();
-        // Alle Balance-Transaktionen für diese Charge (inkl. Refund-BTs)
-        const bts = await stripe.balanceTransactions.list({
-          source: tx.stripe_charge_id,
-          limit: 10,
-        });
-        // payment_refund-BTs haben negativen fee (= Gebühren-Gutschrift von Stripe)
-        let refundFeeCredit = 0;
-        for (const bt of bts.data) {
-          if (bt.type === 'payment_refund') {
-            refundFeeCredit += bt.fee / 100; // Cent → Euro, Wert ist negativ
-          }
+    try {
+      const stripe = await getStripe();
+
+      // Alle Rückerstattungen für diesen PaymentIntent mit Balancetransfer laden
+      const refunds = await stripe.refunds.list({
+        payment_intent: tx.stripe_payment_intent_id,
+        limit: 10,
+        expand: ['data.balance_transaction'],
+      });
+
+      let refundFeeCredit = 0;
+      for (const refund of refunds.data) {
+        const bt = refund.balance_transaction;
+        // balance_transaction ist expandiert → Objekt mit fee-Feld
+        if (bt && typeof bt === 'object' && 'fee' in bt) {
+          // fee ist negativ bei Rückerstattungen (Gutschrift von Stripe), z.B. -36 Cent
+          refundFeeCredit += (bt as { fee: number }).fee / 100;
         }
-        if (refundFeeCredit < 0) {
-          // Gutschrift abziehen (z.B. 0,87 + (−0,36) = 0,51)
-          effectiveFee = Math.max(0, tx.fee + refundFeeCredit);
-        }
-      } catch (err) {
-        // Bei Stripe-API-Fehler: Bruttobetrag als Fallback
-        console.error('[import-fees] Stripe-API-Fehler:', err);
-        effectiveFee = tx.fee;
       }
+
+      if (refundFeeCredit < 0) {
+        // Gutschrift abziehen: 0,87 + (−0,36) = 0,51
+        effectiveFee = Math.max(0, tx.fee + refundFeeCredit);
+      }
+    } catch (err) {
+      // Bei Stripe-API-Fehler: Bruttobetrag als Fallback
+      console.error('[import-fees] Stripe-API-Fehler für', tx.stripe_payment_intent_id, err);
+      effectiveFee = tx.fee;
     }
 
     // Gebühr als Ausgabe verbuchen
