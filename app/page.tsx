@@ -1,4 +1,5 @@
 import Hero from '@/components/home/Hero';
+import PromoBanner from '@/components/home/PromoBanner';
 import HomeSeasonalAction from '@/components/home/HomeSeasonalAction';
 import ProductGrid from '@/components/home/ProductGrid';
 import HomeFresh from '@/components/home/HomeFresh';
@@ -26,6 +27,7 @@ export default async function Home() {
   return (
     <>
       {data.showConstructionBanner && <UnderConstructionBanner serverVisible />}
+      <PromoBanner />
       <Hero serverData={data.hero} serverImage={data.seasonalImage} serverMonth={data.seasonalMonth} />
       <HomeSeasonalAction />
       <TrustBanner />
