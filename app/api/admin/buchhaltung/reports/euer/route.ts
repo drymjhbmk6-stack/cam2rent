@@ -158,40 +158,9 @@ export async function GET(req: NextRequest) {
     // defensiv — wenn Tabelle fehlt, läuft EÜR mit nur expenses + stripe weiter
   }
 
-  // Stripe-Gebühren automatisch hinzufügen (einzelne Transaktionen als Posten)
-  const { data: stripeTx } = await supabase
-    .from('stripe_transactions')
-    .select('id, stripe_payment_intent_id, booking_id, fee, stripe_created_at')
-    .eq('is_test', false)
-    .gte('stripe_created_at', `${from}T00:00:00`)
-    .lte('stripe_created_at', `${to}T23:59:59`)
-    .order('stripe_created_at', { ascending: false });
-
-  const stripeFees = (stripeTx || []).reduce((sum, t) => sum + (t.fee || 0), 0);
-  if (stripeFees > 0) {
-    categoryTotals.stripe_fees = (categoryTotals.stripe_fees || 0) + stripeFees;
-    if (!categoryItems.stripe_fees) categoryItems.stripe_fees = [];
-    for (const t of stripeTx || []) {
-      if (!t.fee || t.fee <= 0) continue;
-      // Nur Stripe-Gebuehren-Posten ergaenzen, die nicht schon als expense
-      // importiert wurden (sonst Dopplung). source_type='stripe_fee' wird
-      // in import-fees beim Import gesetzt; wir pruefen hier defensiv via
-      // stripe_payment_intent_id in der Beschreibung.
-      const alreadyImported = categoryItems.stripe_fees.some(
-        (it) => it.description.includes(t.stripe_payment_intent_id),
-      );
-      if (alreadyImported) continue;
-      categoryItems.stripe_fees.push({
-        id: t.id,
-        date: (t.stripe_created_at || '').slice(0, 10),
-        description: t.booking_id
-          ? `Stripe-Gebühr Buchung ${t.booking_id}`
-          : `Stripe-Gebühr ${t.stripe_payment_intent_id?.slice(0, 14) ?? ''}`,
-        vendor: 'Stripe',
-        amount: t.fee,
-      });
-    }
-  }
+  // Stripe-Gebühren kommen ausschliesslich aus der expenses-Tabelle
+  // (importiert via "Gebühren als Ausgaben" im Stripe-Abgleich).
+  // stripe_transactions wird hier NICHT mehr gelesen — sonst Dopplung.
 
   const categories = Object.entries(categoryTotals)
     .map(([category, amount]) => ({
