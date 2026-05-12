@@ -370,10 +370,10 @@ AKTUELLE THEMEN (bei Bedarf mal einbauen):
             {/* Wochentage */}
             <label className="block text-xs uppercase tracking-wider text-slate-500 mb-2">Wochentage</label>
             <div className="flex flex-wrap gap-2 mb-1">
-              {
-                [{ k: 'mo', l: 'Mo' }, { k: 'di', l: 'Di' }, { k: 'mi', l: 'Mi' },
+              {[
+                { k: 'mo', l: 'Mo' }, { k: 'di', l: 'Di' }, { k: 'mi', l: 'Mi' },
                 { k: 'do', l: 'Do' }, { k: 'fr', l: 'Fr' }, { k: 'sa', l: 'Sa' }, { k: 'so', l: 'So' },
-                ].map((d) => {
+              ].map((d) => {
                 const active = weekdays.includes(d.k);
                 return (
                   <button

@@ -4,6 +4,14 @@ import { useEffect, useRef, useState } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 
 interface ReelsSettings {
+  // Auto-Generierung (Redaktionsplan-Cron)
+  auto_generate?: boolean;
+  auto_generate_mode?: 'semi' | 'voll';
+  auto_generate_weekdays?: string[];
+  auto_generate_time_from?: string;
+  auto_generate_time_to?: string;
+  auto_generate_schedule_days_before?: number;
+  // Stock-Footage
   pexels_api_key?: string;
   pixabay_api_key?: string;
   voice_enabled?: boolean;
@@ -322,7 +330,7 @@ export default function ReelsEinstellungenPage() {
                   Reels, Social-Posts und Blog auch im Test-Modus echt veröffentlichen
                 </span>
                 <span className="block text-xs text-brand-steel dark:text-gray-400 mt-1">
-                  Greift in allen drei Kanälen — manuelle „Jetzt veröffentlichen“-Buttons und alle Crons
+                  Greift in allen drei Kanälen — manuelle „Jetzt veröffentlichen"-Buttons und alle Crons
                   (<code className="text-[10px]">reels-publish</code>, <code className="text-[10px]">social-publish</code>,
                   {' '}<code className="text-[10px]">social-generate</code>, <code className="text-[10px]">blog-publish</code>,
                   {' '}<code className="text-[10px]">blog-generate</code>). Andere Test-Modus-Schutzmechanismen
@@ -714,6 +722,135 @@ export default function ReelsEinstellungenPage() {
                   <p className="text-xs text-red-600 dark:text-red-400">{previewError}</p>
                 )}
               </div>
+            )}
+          </Card>
+
+          {/* Automatische Generierung */}
+          <Card title="Automatische Generierung" description="Steuert den Cron /api/cron/reels-generate, der Reels aus dem Redaktionsplan automatisch erstellt.">
+            {/* Master-Toggle */}
+            <div className="flex items-center gap-3 mb-5">
+              <button
+                type="button"
+                onClick={() => setSettings({ ...settings, auto_generate: !(settings.auto_generate !== false) })}
+                style={{
+                  width: 48, height: 26, borderRadius: 13, border: 'none', cursor: 'pointer',
+                  background: settings.auto_generate !== false ? '#06b6d4' : '#6b7280',
+                  transition: 'background 0.2s', position: 'relative', flexShrink: 0,
+                }}
+              >
+                <span style={{
+                  position: 'absolute', top: 3,
+                  left: settings.auto_generate !== false ? 25 : 3,
+                  width: 20, height: 20, borderRadius: '50%', background: '#fff',
+                  transition: 'left 0.2s',
+                }} />
+              </button>
+              <span className="text-sm text-brand-dark dark:text-white">
+                {settings.auto_generate !== false ? 'Automatische Generierung aktiv' : 'Automatische Generierung deaktiviert'}
+              </span>
+            </div>
+
+            {settings.auto_generate !== false && (
+              <>
+                {/* Modus-Karten */}
+                <label className="block text-xs font-medium text-brand-steel dark:text-gray-400 mb-2">Modus</label>
+                <div className="grid grid-cols-2 gap-3 mb-5">
+                  {([
+                    { key: 'semi', title: 'Entwurf (Semi)', desc: 'KI generiert, Admin gibt frei — empfohlen für den Start' },
+                    { key: 'voll', title: 'Vollautomatisch', desc: 'KI generiert + veröffentlicht direkt — kein Review' },
+                  ] as const).map((m) => {
+                    const active = (settings.auto_generate_mode ?? 'semi') === m.key;
+                    return (
+                      <button
+                        key={m.key}
+                        type="button"
+                        onClick={() => setSettings({ ...settings, auto_generate_mode: m.key })}
+                        className={`text-left rounded-lg border px-4 py-3 transition ${active ? 'border-cyan-500 bg-cyan-500/10' : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 hover:border-cyan-500/50'}`}
+                      >
+                        <div className={`font-semibold text-sm mb-1 ${active ? 'text-cyan-600 dark:text-cyan-400' : 'text-brand-dark dark:text-white'}`}>{m.title}</div>
+                        <div className="text-xs text-brand-steel dark:text-gray-500 leading-snug">{m.desc}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Wochentage */}
+                <label className="block text-xs font-medium text-brand-steel dark:text-gray-400 mb-2">Wochentage</label>
+                {(() => {
+                  const wd = settings.auto_generate_weekdays ?? ['mo', 'do'];
+                  return (
+                    <>
+                      <div className="flex flex-wrap gap-2 mb-1">
+                        {[
+                          { k: 'mo', l: 'Mo' }, { k: 'di', l: 'Di' }, { k: 'mi', l: 'Mi' },
+                          { k: 'do', l: 'Do' }, { k: 'fr', l: 'Fr' }, { k: 'sa', l: 'Sa' }, { k: 'so', l: 'So' },
+                        ].map((d) => {
+                          const active = wd.includes(d.k);
+                          return (
+                            <button
+                              key={d.k}
+                              type="button"
+                              onClick={() => {
+                                const next = active ? wd.filter((x) => x !== d.k) : [...wd, d.k];
+                                setSettings({ ...settings, auto_generate_weekdays: next });
+                              }}
+                              className={`w-10 h-10 rounded-lg text-xs font-semibold border transition ${active ? 'bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 border-cyan-500' : 'bg-white dark:bg-gray-900 text-brand-steel dark:text-gray-400 border-gray-300 dark:border-gray-600 hover:border-cyan-500/50'}`}
+                            >
+                              {d.l}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <p className="text-xs text-cyan-600 dark:text-cyan-400 mb-5">
+                        {'→'} {wd.length} {wd.length === 1 ? 'Reel' : 'Reels'} pro Woche
+                      </p>
+                    </>
+                  );
+                })()}
+
+                {/* Zeitfenster */}
+                <div className="grid grid-cols-2 gap-3 mb-5">
+                  <Field label="Zeitfenster von">
+                    <input
+                      type="time"
+                      value={settings.auto_generate_time_from ?? '09:00'}
+                      onChange={(e) => setSettings({ ...settings, auto_generate_time_from: e.target.value })}
+                      className={inputClass}
+                    />
+                  </Field>
+                  <Field label="Zeitfenster bis">
+                    <input
+                      type="time"
+                      value={settings.auto_generate_time_to ?? '18:00'}
+                      onChange={(e) => setSettings({ ...settings, auto_generate_time_to: e.target.value })}
+                      className={inputClass}
+                    />
+                  </Field>
+                </div>
+
+                {/* Vorlaufzeit */}
+                <Field
+                  label={`Vorlaufzeit: ${settings.auto_generate_schedule_days_before ?? 3} ${(settings.auto_generate_schedule_days_before ?? 3) === 1 ? 'Tag' : 'Tage'}`}
+                  hint="Reels werden N Tage vor dem geplanten Datum generiert — damit du im Semi-Modus Zeit zum Reviewen hast."
+                >
+                  <input
+                    type="range"
+                    min={1}
+                    max={7}
+                    value={settings.auto_generate_schedule_days_before ?? 3}
+                    onChange={(e) => setSettings({ ...settings, auto_generate_schedule_days_before: Number(e.target.value) })}
+                    className="w-full mt-1"
+                  />
+                </Field>
+
+                {/* Cron-URL */}
+                <div className="mt-5 rounded-lg bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 p-3">
+                  <p className="text-xs text-brand-steel dark:text-gray-500 mb-2">Cron-Eintrag auf dem Hetzner-Server:</p>
+                  <code className="block text-xs text-cyan-600 dark:text-cyan-400 break-all">
+                    {'0 * * * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/reels-generate'}
+                  </code>
+                </div>
+              </>
             )}
           </Card>
 
