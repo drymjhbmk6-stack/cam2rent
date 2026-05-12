@@ -68,8 +68,10 @@ const nextConfig: NextConfig = {
       { source: '/admin/preise/versand', destination: '/admin/einstellungen?tab=versand', permanent: false },
       { source: '/admin/preise/haftung', destination: '/admin/einstellungen?tab=haftung', permanent: false },
       { source: '/admin/legal/vertragsparagraphen', destination: '/admin/einstellungen?tab=vertrag', permanent: false },
-      { source: '/admin/blog/einstellungen', destination: '/admin/einstellungen?tab=blog-ki', permanent: false },
-      { source: '/admin/social/einstellungen', destination: '/admin/einstellungen?tab=social-ki', permanent: false },
+      // Content-Einstellungen — alle drei Kanäle unter /admin/content/einstellungen
+      { source: '/admin/blog/einstellungen', destination: '/admin/content/einstellungen?tab=blog', permanent: false },
+      { source: '/admin/social/einstellungen', destination: '/admin/content/einstellungen?tab=posts', permanent: false },
+      { source: '/admin/social/reels/einstellungen', destination: '/admin/content/einstellungen?tab=reels', permanent: false },
     ];
   },
   // Security-Headers (ohne CSP — dafür braucht es eine separate Analyse
