@@ -1802,7 +1802,7 @@ Datei `app/admin/social/reels/page.tsx` (vorher 188 Z.). Lädt jetzt unbedingt a
 - Audit-Log: `reel.bulk_approve` bzw. `reel.bulk_delete` mit allen IDs als comma-separated entityId + Count in changes.
 
 **Schritt 5 — Redaktionsplan + Bulk-Generator (TODO, größter Aufwand)**
-Tabelle `social_reel_plan` ist seit `supabase-reels.sql` da, wird aber **nirgendwo im Code genutzt**. Spalten: `id, scheduled_date, scheduled_time, topic, template_id, status, generated_reel_id, error_message, …` (analog `social_editorial_plan` für Posts).
+Tabelle `social_reel_plan` ist seit `supabase-reels.sql` da. Spalten: `id, scheduled_date, scheduled_time, topic, template_id, status, generated_reel_id, error_message, …` (analog `social_editorial_plan` für Posts). Der Cron `app/api/cron/reels-generate/route.ts` liest jetzt daraus und generiert Reels automatisch.
 
 Vorbild: `/admin/social/zeitplan` (Posts) + `/admin/social/plan` (Bulk-Generator). Blueprint:
 - **Neue Seite `app/admin/social/reels/zeitplan/page.tsx`** — 3-Spalten-Layout: Plan-Liste (Datum-Kacheln, klickbar für Inline-Edit) | rechts Plan-Eintrag-Detail mit Buttons „⚡ Jetzt generieren" / „🚀 Sofort posten" / „Bearbeiten" / „Löschen" / „Überspringen". Status-Workflow `planned → generating → generated → reviewed → published`.
@@ -1812,8 +1812,9 @@ Vorbild: `/admin/social/zeitplan` (Posts) + `/admin/social/plan` (Bulk-Generator
   - `GET/PATCH/DELETE /api/admin/reels/plan/[id]`
   - `POST /api/admin/reels/plan/[id]/generate` — sofort generieren (extrahierte Logik aus dem bestehenden `POST /api/admin/reels` als reusable Helper in `lib/reels/`)
   - Optional `POST /api/admin/reels/plan/bulk` für Bulk-Generator
-- **Neuer Cron `/api/cron/reels-generate`** (stündlich `0 * * * *`) analog `social-generate`: scannt fällige Plan-Einträge mit `scheduled_date <= today + reels_settings.schedule_days_before`, ruft Generate-Helper auf, setzt Status `generating → generated`. Im Voll-Modus direkt `scheduled` setzen, im Semi-Modus auf `pending_review` lassen. Nach Cron-Eintrag: `0 * * * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/reels-generate`.
-- **Settings-Block in `/admin/social/reels/einstellungen`** für „Automatische Generierung" (Toggle, Modus Semi/Voll, Vorlaufzeit, Wochentage, Zeitfenster) — analog `social_settings.auto_generate_*`. Speicherung in `admin_settings.reels_settings.auto_generate_config`.
+- **Cron `app/api/cron/reels-generate/route.ts` ✓ implementiert** (stündlich `0 * * * *`) analog `social-generate`: prüft `reels_settings.auto_generate`, Wochentag + Zeitfenster (Berlin), scannt fällige `social_reel_plan`-Einträge (`status='planned'`, `scheduled_date <= today + auto_generate_schedule_days_before`), generiert via `generateReel()` aus `lib/reels/orchestrator`. Semi-Modus: `pending_review` + Admin-Notification `reel_ready`. Voll-Modus: direkt `status='scheduled'` mit `scheduled_at`.
+- **Settings-Block in `/admin/social/reels/einstellungen` ✓ implementiert** — neue Card „Automatische Generierung" mit Toggle, Semi/Voll-Modus-Karten, Wochentage-Pills (zeigt „X Reels/Woche"), Zeitfenster, Vorlaufzeit-Slider. Neue Felder in `reels_settings`: `auto_generate`, `auto_generate_mode`, `auto_generate_weekdays[]`, `auto_generate_time_from`, `auto_generate_time_to`, `auto_generate_schedule_days_before`.
+- **Social-Posts Einstellungen (`components/admin/SocialEinstellungenContent.tsx`) ✓ umstrukturiert** — drei separate Cards: „Automatische Generierung" (Blog-Stil: Toggle, Semi/Voll, Wochentage-Pills mit „X Posts/Woche", Zeitfenster, Vorlaufzeit, Faktencheck, Cron-URL), „Auto-Post-Trigger" (blog_publish etc.), „KI-Konfiguration" (Ton, Kontext, Hashtags).
 
 **Test/Live-Hinweis:** Im Test-Modus springt der Cron früh raus (kein OpenAI/Pexels-Spend), analog `social-generate`.
 
@@ -1940,6 +1941,9 @@ Zusätzlich zum bestehenden file-hash-Check (byte-identische Datei) erkennt das 
     5 * * * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/awaiting-payment-cancel
     ```
   Storniert `awaiting_payment`-Buchungen deren Deadline (siehe Regeln oben) erreicht ist. Deaktiviert den Stripe Payment Link via `stripe.paymentLinks.update(id, {active:false})`, setzt Status `cancelled`, schickt Storno-Mail. Grace-Period: 1h nach Buchungs-Erstellung.
+- **Cron-Eintrag reels-generate in Hetzner-Crontab eintragen:**
+  `0 * * * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/reels-generate`
+  Generiert stündlich Reels aus dem `social_reel_plan`-Redaktionsplan. Wochentag + Zeitfenster werden aus `admin_settings.reels_settings` (Auto-Generierungs-Card in `/admin/social/reels/einstellungen`) geladen. Im Test-Modus automatisch deaktiviert (kein OpenAI/Pexels-Spend).
 - **Auto-Reels Restschritte:** (1) Pexels API-Key (kostenlos) registrieren + in `admin_settings.reels_settings.pexels_api_key` hinterlegen oder als `PEXELS_API_KEY`-Env. (2) Docker-Image neu bauen (Dockerfile installiert jetzt `ffmpeg + ttf-dejavu + fontconfig` und kopiert `assets/fonts/InterTight.ttf` ins Image). (3) Crontab-Eintrag: `*/5 * * * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/reels-publish`. (4) **Phase 1 Quick-Wins:** SQL-Migration `supabase/supabase-reels-pixabay-key.sql` ausführen + optional `PIXABAY_API_KEY` als zweite Stock-Footage-Quelle in `admin_settings.reels_settings.pixabay_api_key` oder als Env hinterlegen (Free-Tier 5000 req/h, kostenlos: pixabay.com/api/docs/). (5) **Phase 2 Stilistische Aufwertung:** SQL-Migrationen `supabase/supabase-reels-motion-style.sql` + `supabase/supabase-reels-quality-metrics.sql` ausführen (beide idempotent, additiv). (6) **Phase 3 Pro-Szene-Re-Render:** SQL-Migration `supabase/supabase-reel-segments.sql` ausführen + Crontab-Eintrag `0 4 * * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/reels-segment-cleanup` (täglich 04:00, löscht Segmente nach 30 Tagen).
 - ~~**Go-Live 01.05.2026:** Test/Live-Switch auf Live umschalten~~ ✓ (live seit 2026-05-01)
 - ~~**Go-Live 01.05.2026:** Domain test.cam2rent.de → cam2rent.de~~ ✓ (live seit 2026-05-01)

@@ -545,7 +545,12 @@ AKTUELLE THEMEN (bei Bedarf mal einbauen):
           value={settings.ki_context ?? ''}
           onChange={(e) => update('ki_context', e.target.value)}
           rows={8}
-          placeholder={`Aktuelle Themen und Aktionen, die die KI einbauen soll. Zum Beispiel:\n\n- Neue Kameras: GoPro Hero 14 ab Mai, Insta360 Ace Pro 3 Leak\n- Aktuelle Aktion: Sommer-Rabatt 10% mit Code SUMMER26\n- USPs: Versand deutschlandweit, Haftungsschutz ab 15€, 1-Tag-Miete möglich\n- Stilistische Hinweise: Duzen, keine Werbe-Floskeln`}
+          placeholder={`Aktuelle Themen und Aktionen, die die KI einbauen soll. Zum Beispiel:
+
+- Neue Kameras: GoPro Hero 14 ab Mai, Insta360 Ace Pro 3 Leak
+- Aktuelle Aktion: Sommer-Rabatt 10% mit Code SUMMER26
+- USPs: Versand deutschlandweit, Haftungsschutz ab 15€, 1-Tag-Miete möglich
+- Stilistische Hinweise: Duzen, keine Werbe-Floskeln`}
           className="w-full mb-2 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm font-mono text-xs"
         />
         <p className="text-xs text-slate-500 mb-4">
