@@ -301,203 +301,283 @@ AKTUELLE THEMEN (bei Bedarf mal einbauen):
     { key: 'voucher_created', label: 'Neuer Gutschein erstellt' },
   ];
 
+  const weekdays = settings.weekdays ?? ['mo', 'di', 'mi', 'do', 'fr', 'sa', 'so'];
+
   return (
-    <div className="mt-8 rounded-xl bg-slate-900/50 border border-slate-800 p-5">
-      <h2 className="font-semibold text-white mb-3">Auto-Posting-Einstellungen</h2>
-      <p className="text-sm text-slate-400 mb-4">
-        Bestimmt, was passiert wenn ein Ereignis einen Social-Post auslöst (z.B. neuer Blogartikel).
-      </p>
+    <div className="mt-8 space-y-6">
 
-      <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">Modus</label>
-      <select
-        value={settings.auto_post_mode ?? 'draft'}
-        onChange={(e) => update('auto_post_mode', e.target.value as 'draft' | 'scheduled' | 'published')}
-        className="w-full mb-3 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm"
-      >
-        <option value="draft">Nur Entwurf — Admin muss freigeben</option>
-        <option value="scheduled">Planen — automatisch posten nach Verzögerung</option>
-        <option value="published">Sofort posten — ohne Freigabe</option>
-      </select>
+      {/* ───── Card: Automatische Generierung ───── */}
+      <div className="rounded-xl bg-slate-900/50 border border-slate-800 p-5">
+        <h2 className="font-semibold text-white mb-1">Automatische Generierung</h2>
+        <p className="text-xs text-slate-400 mb-4">
+          Steuert den Cron <code className="text-cyan-400">/api/cron/social-generate</code>, der Posts aus dem Redaktionsplan automatisch erstellt.
+        </p>
 
-      {settings.auto_post_mode === 'scheduled' && (
-        <>
-          <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">Verzögerung (Minuten)</label>
-          <input
-            type="number"
-            min={1}
-            max={1440}
-            value={settings.auto_post_delay_minutes ?? 30}
-            onChange={(e) => update('auto_post_delay_minutes', Number(e.target.value))}
-            className="w-full mb-3 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm"
-          />
-          <p className="text-xs text-slate-500 mb-3">
-            Der Post wird N Minuten nach dem Trigger auf „geplant“ gesetzt. Der Cron veröffentlicht ihn dann.
-          </p>
-        </>
-      )}
+        {/* Master-Toggle */}
+        <div className="flex items-center gap-3 mb-5">
+          <button
+            type="button"
+            onClick={() => update('auto_generate', !(settings.auto_generate !== false))}
+            style={{
+              width: 48, height: 26, borderRadius: 13, border: 'none', cursor: 'pointer',
+              background: settings.auto_generate !== false ? '#06b6d4' : '#334155',
+              transition: 'background 0.2s', position: 'relative', flexShrink: 0,
+            }}
+          >
+            <span style={{
+              position: 'absolute', top: 3,
+              left: settings.auto_generate !== false ? 25 : 3,
+              width: 20, height: 20, borderRadius: '50%', background: '#fff',
+              transition: 'left 0.2s',
+            }} />
+          </button>
+          <span className="text-sm text-slate-200">
+            {settings.auto_generate !== false ? 'Automatische Generierung aktiv' : 'Automatische Generierung deaktiviert'}
+          </span>
+        </div>
 
-      <label className="block text-xs uppercase tracking-wider text-slate-500 mb-2">Aktive Trigger</label>
-      <div className="space-y-2 mb-6">
-        {triggers.map((t) => (
-          <label key={t.key} className="flex items-center gap-2 text-sm text-slate-200 cursor-pointer">
+        {settings.auto_generate !== false && (
+          <>
+            {/* Modus-Karten */}
+            <label className="block text-xs uppercase tracking-wider text-slate-500 mb-2">Modus</label>
+            <div className="grid grid-cols-2 gap-3 mb-5">
+              {([
+                { key: 'semi', title: 'Entwurf (Semi)', desc: 'KI generiert, Admin gibt frei — empfohlen für den Start' },
+                { key: 'voll', title: 'Vollautomatisch', desc: 'KI generiert + veröffentlicht direkt — kein Review' },
+              ] as const).map((m) => {
+                const active = (settings.auto_generate_mode ?? 'semi') === m.key;
+                return (
+                  <button
+                    key={m.key}
+                    type="button"
+                    onClick={() => update('auto_generate_mode', m.key)}
+                    style={{
+                      padding: '12px 16px', borderRadius: 10, textAlign: 'left', cursor: 'pointer',
+                      background: active ? 'rgba(6,182,212,0.1)' : 'rgba(30,41,59,0.5)',
+                      border: `2px solid ${active ? '#06b6d4' : '#334155'}`,
+                      transition: 'all 0.15s',
+                    }}
+                  >
+                    <div style={{ fontWeight: 600, fontSize: 13, color: active ? '#06b6d4' : '#e2e8f0', marginBottom: 4 }}>
+                      {m.title}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#94a3b8', lineHeight: 1.4 }}>{m.desc}</div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Wochentage */}
+            <label className="block text-xs uppercase tracking-wider text-slate-500 mb-2">Wochentage</label>
+            <div className="flex flex-wrap gap-2 mb-1">
+              {
+                [{ k: 'mo', l: 'Mo' }, { k: 'di', l: 'Di' }, { k: 'mi', l: 'Mi' },
+                { k: 'do', l: 'Do' }, { k: 'fr', l: 'Fr' }, { k: 'sa', l: 'Sa' }, { k: 'so', l: 'So' },
+                ].map((d) => {
+                const active = weekdays.includes(d.k);
+                return (
+                  <button
+                    key={d.k}
+                    type="button"
+                    onClick={() => {
+                      const next = active ? weekdays.filter((x) => x !== d.k) : [...weekdays, d.k];
+                      update('weekdays', next);
+                    }}
+                    style={{
+                      width: 40, height: 40, borderRadius: 8, border: '1px solid',
+                      fontWeight: 600, fontSize: 12, cursor: 'pointer',
+                      background: active ? 'rgba(6,182,212,0.2)' : 'transparent',
+                      color: active ? '#06b6d4' : '#94a3b8',
+                      borderColor: active ? '#06b6d4' : '#334155',
+                    }}
+                  >
+                    {d.l}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-xs text-cyan-400 mb-5">
+              {'→'} {weekdays.length} {weekdays.length === 1 ? 'Post' : 'Posts'} pro Woche
+            </p>
+
+            {/* Zeitfenster */}
+            <label className="block text-xs uppercase tracking-wider text-slate-500 mb-2">Zeitfenster (Berlin)</label>
+            <div className="grid grid-cols-2 gap-3 mb-5">
+              <div>
+                <label className="block text-xs text-slate-500 mb-1">Von</label>
+                <input
+                  type="time"
+                  value={settings.time_from ?? '09:00'}
+                  onChange={(e) => update('time_from', e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-500 mb-1">Bis</label>
+                <input
+                  type="time"
+                  value={settings.time_to ?? '18:00'}
+                  onChange={(e) => update('time_to', e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm"
+                />
+              </div>
+            </div>
+
+            {/* Vorlaufzeit */}
+            <label className="block text-xs uppercase tracking-wider text-slate-500 mb-2">
+              Vorlaufzeit: {settings.schedule_days_before ?? 2} {(settings.schedule_days_before ?? 2) === 1 ? 'Tag' : 'Tage'}
+            </label>
             <input
-              type="checkbox"
-              checked={settings.enabled_triggers?.[t.key] !== false}
-              onChange={() => toggleTrigger(t.key)}
+              type="range"
+              min={1}
+              max={7}
+              value={settings.schedule_days_before ?? 2}
+              onChange={(e) => update('schedule_days_before', Number(e.target.value))}
+              className="w-full mb-1"
             />
-            {t.label}
-          </label>
-        ))}
+            <p className="text-xs text-slate-500 mb-5">
+              Posts werden N Tage vor dem geplanten Datum generiert — damit du im Semi-Modus Zeit zum Reviewen hast.
+            </p>
+
+            {/* Faktencheck */}
+            <label className="flex items-center gap-2 text-sm text-slate-200 cursor-pointer mb-5">
+              <input
+                type="checkbox"
+                checked={settings.fact_check_enabled !== false}
+                onChange={(e) => update('fact_check_enabled', e.target.checked)}
+              />
+              3-stufiger Faktencheck aktiv (Brand-Wächter + Stil-Prüfer)
+            </label>
+
+            {/* Cron-URLs */}
+            <div className="rounded-lg bg-slate-950 border border-slate-800 p-3 space-y-1">
+              <p className="text-xs text-slate-500 mb-2">Cron-Einträge auf dem Hetzner-Server:</p>
+              <code className="block text-xs text-cyan-300 break-all">
+                {'0 * * * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/social-generate'}
+              </code>
+              <code className="block text-xs text-cyan-300 break-all">
+                {'*/5 * * * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/social-publish'}
+              </code>
+            </div>
+          </>
+        )}
       </div>
 
-      <div className="h-px bg-slate-800 mb-5" />
+      {/* ───── Card: Auto-Post-Trigger ───── */}
+      <div className="rounded-xl bg-slate-900/50 border border-slate-800 p-5">
+        <h2 className="font-semibold text-white mb-1">Auto-Post-Trigger</h2>
+        <p className="text-sm text-slate-400 mb-4">
+          Bestimmt, was passiert wenn ein Ereignis einen Social-Post auslöst (z.B. neuer Blogartikel).
+        </p>
 
-      {/* ───── Auto-Generate (Redaktionsplan-Cron) ───── */}
-      <h3 className="font-semibold text-white mb-2">Automatische Generierung (Redaktionsplan)</h3>
-      <p className="text-xs text-slate-400 mb-3">
-        Steuert den Cron <code className="text-cyan-400">/api/cron/social-generate</code>, der Posts aus dem Redaktionsplan automatisch erstellt.
-      </p>
-
-      <label className="flex items-center gap-2 text-sm text-slate-200 cursor-pointer mb-3">
-        <input type="checkbox" checked={settings.auto_generate !== false}
-          onChange={(e) => update('auto_generate', e.target.checked)} />
-        Automatische Generierung aktiv
-      </label>
-
-      <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">Modus</label>
-      <select value={settings.auto_generate_mode ?? 'semi'}
-        onChange={(e) => update('auto_generate_mode', e.target.value as 'semi' | 'voll')}
-        className="w-full mb-3 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm">
-        <option value="semi">Semi — KI generiert Entwurf, Admin gibt frei (Häkchen)</option>
-        <option value="voll">Voll — KI generiert + veröffentlicht automatisch</option>
-      </select>
-
-      <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">Vorlaufzeit (Tage)</label>
-      <input type="number" min={0} max={7}
-        value={settings.schedule_days_before ?? 2}
-        onChange={(e) => update('schedule_days_before', Number(e.target.value))}
-        className="w-full mb-3 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm" />
-      <p className="text-xs text-slate-500 -mt-2 mb-3">
-        Posts werden N Tage vor dem geplanten Datum generiert (damit du Zeit zum Freigeben hast).
-      </p>
-
-      <label className="block text-xs uppercase tracking-wider text-slate-500 mb-2">Aktive Wochentage</label>
-      <div className="flex flex-wrap gap-2 mb-3">
-        {[
-          { k: 'mo', l: 'Mo' },
-          { k: 'di', l: 'Di' },
-          { k: 'mi', l: 'Mi' },
-          { k: 'do', l: 'Do' },
-          { k: 'fr', l: 'Fr' },
-          { k: 'sa', l: 'Sa' },
-          { k: 'so', l: 'So' },
-        ].map((d) => {
-          const active = (settings.weekdays ?? ['mo','di','mi','do','fr','sa','so']).includes(d.k);
-          return (
-            <button key={d.k} type="button"
-              onClick={() => {
-                const current = settings.weekdays ?? ['mo','di','mi','do','fr','sa','so'];
-                const next = current.includes(d.k) ? current.filter((x) => x !== d.k) : [...current, d.k];
-                update('weekdays', next);
-              }}
-              className="px-3 py-1.5 rounded-lg text-xs font-medium border"
-              style={active ? { background: 'rgba(6,182,212,0.2)', color: '#06b6d4', borderColor: '#06b6d4' } : { background: 'transparent', color: '#94a3b8', borderColor: '#334155' }}>
-              {d.l}
-            </button>
-          );
-        })}
-      </div>
-
-      <div className="grid grid-cols-2 gap-3 mb-3">
-        <div>
-          <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">Zeit von</label>
-          <input type="time" value={settings.time_from ?? '09:00'}
-            onChange={(e) => update('time_from', e.target.value)}
-            className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm" />
-        </div>
-        <div>
-          <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">Zeit bis</label>
-          <input type="time" value={settings.time_to ?? '18:00'}
-            onChange={(e) => update('time_to', e.target.value)}
-            className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm" />
-        </div>
-      </div>
-
-      <label className="flex items-center gap-2 text-sm text-slate-200 cursor-pointer mb-5">
-        <input type="checkbox" checked={settings.fact_check_enabled !== false}
-          onChange={(e) => update('fact_check_enabled', e.target.checked)} />
-        3-stufiger Faktencheck aktiv (Brand + Stil-Pruefer)
-      </label>
-
-      <div className="h-px bg-slate-800 mb-5" />
-
-      <div className="flex items-center justify-between mb-2">
-        <h3 className="font-semibold text-white">KI-Konfiguration</h3>
-        <button
-          type="button"
-          onClick={loadRecommended}
-          className="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-200 font-medium text-xs hover:bg-slate-700 border border-slate-700"
-          title="Fuellt die Felder mit optimalen cam2rent-Vorgaben"
+        <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">Modus</label>
+        <select
+          value={settings.auto_post_mode ?? 'draft'}
+          onChange={(e) => update('auto_post_mode', e.target.value as 'draft' | 'scheduled' | 'published')}
+          className="w-full mb-3 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm"
         >
-          ⚡ Empfohlene Einstellungen laden
-        </button>
+          <option value="draft">Nur Entwurf — Admin muss freigeben</option>
+          <option value="scheduled">Planen — automatisch posten nach Verzögerung</option>
+          <option value="published">Sofort posten — ohne Freigabe</option>
+        </select>
+
+        {settings.auto_post_mode === 'scheduled' && (
+          <>
+            <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">Verzögerung (Minuten)</label>
+            <input
+              type="number"
+              min={1}
+              max={1440}
+              value={settings.auto_post_delay_minutes ?? 30}
+              onChange={(e) => update('auto_post_delay_minutes', Number(e.target.value))}
+              className="w-full mb-3 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm"
+            />
+            <p className="text-xs text-slate-500 mb-3">
+              Der Post wird N Minuten nach dem Trigger auf „geplant" gesetzt. Der Cron veröffentlicht ihn dann.
+            </p>
+          </>
+        )}
+
+        <label className="block text-xs uppercase tracking-wider text-slate-500 mb-2">Aktive Trigger</label>
+        <div className="space-y-2 mb-4">
+          {triggers.map((t) => (
+            <label key={t.key} className="flex items-center gap-2 text-sm text-slate-200 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={settings.enabled_triggers?.[t.key] !== false}
+                onChange={() => toggleTrigger(t.key)}
+              />
+              {t.label}
+            </label>
+          ))}
+        </div>
       </div>
-      <p className="text-xs text-slate-400 mb-4">
-        Diese Einstellungen nutzt Claude bei jeder automatisch generierten Caption
-        (Neuer Post, Plan-Generator, Auto-Trigger).
-      </p>
 
-      <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">Standard-Ton</label>
-      <input
-        type="text"
-        value={settings.default_tone ?? ''}
-        onChange={(e) => update('default_tone', e.target.value)}
-        placeholder="z.B. locker, mit Action-Cam-Insider-Slang und 2-4 Emojis"
-        className="w-full mb-3 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm"
-      />
+      {/* ───── Card: KI-Konfiguration ───── */}
+      <div className="rounded-xl bg-slate-900/50 border border-slate-800 p-5">
+        <div className="flex items-center justify-between mb-1">
+          <h2 className="font-semibold text-white">KI-Konfiguration</h2>
+          <button
+            type="button"
+            onClick={loadRecommended}
+            className="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-200 font-medium text-xs hover:bg-slate-700 border border-slate-700"
+            title="Füllt die Felder mit optimalen cam2rent-Vorgaben"
+          >
+            ⚡ Empfohlene Einstellungen laden
+          </button>
+        </div>
+        <p className="text-xs text-slate-400 mb-4">
+          Diese Einstellungen nutzt Claude bei jeder automatisch generierten Caption
+          (Neuer Post, Plan-Generator, Auto-Trigger).
+        </p>
 
-      <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">Zusatz-Kontext für die KI</label>
-      <textarea
-        value={settings.ki_context ?? ''}
-        onChange={(e) => update('ki_context', e.target.value)}
-        rows={8}
-        placeholder={`Aktuelle Themen und Aktionen, die die KI einbauen soll. Zum Beispiel:
+        <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">Standard-Ton</label>
+        <input
+          type="text"
+          value={settings.default_tone ?? ''}
+          onChange={(e) => update('default_tone', e.target.value)}
+          placeholder="z.B. locker, mit Action-Cam-Insider-Slang und 2-4 Emojis"
+          className="w-full mb-3 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm"
+        />
 
-- Neue Kameras: GoPro Hero 14 ab Mai, Insta360 Ace Pro 3 Leak
-- Aktuelle Aktion: Sommer-Rabatt 10% mit Code SUMMER26
-- USPs: Versand deutschlandweit, Haftungsschutz ab 15€, 1-Tag-Miete möglich
-- Stilistische Hinweise: Duzen, keine Werbe-Floskeln`}
-        className="w-full mb-2 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm font-mono text-xs"
-      />
-      <p className="text-xs text-slate-500 mb-4">
-        Wird der KI bei jeder Generierung mitgegeben — für aktuelle Produkte, Preise, Aktionen etc.
-        Die Kameras aus deinem Shop werden automatisch geladen.
-      </p>
+        <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">Zusatz-Kontext für die KI</label>
+        <textarea
+          value={settings.ki_context ?? ''}
+          onChange={(e) => update('ki_context', e.target.value)}
+          rows={8}
+          placeholder={`Aktuelle Themen und Aktionen, die die KI einbauen soll. Zum Beispiel:\n\n- Neue Kameras: GoPro Hero 14 ab Mai, Insta360 Ace Pro 3 Leak\n- Aktuelle Aktion: Sommer-Rabatt 10% mit Code SUMMER26\n- USPs: Versand deutschlandweit, Haftungsschutz ab 15€, 1-Tag-Miete möglich\n- Stilistische Hinweise: Duzen, keine Werbe-Floskeln`}
+          className="w-full mb-2 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm font-mono text-xs"
+        />
+        <p className="text-xs text-slate-500 mb-4">
+          Wird der KI bei jeder Generierung mitgegeben — für aktuelle Produkte, Preise, Aktionen etc.
+          Die Kameras aus deinem Shop werden automatisch geladen.
+        </p>
 
-      <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">
-        Globale Standard-Hashtags (immer mitgepostet)
-      </label>
-      <input
-        type="text"
-        value={(settings.default_hashtags ?? []).join(' ')}
-        onChange={(e) => {
-          const list = e.target.value.split(/[\s,]+/).map((h) => h.trim()).filter(Boolean).map((h) => (h.startsWith('#') ? h : `#${h}`));
-          update('default_hashtags', list);
-        }}
-        placeholder="#cam2rent #kameramieten #actioncam"
-        className="w-full mb-5 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm"
-      />
+        <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">
+          Globale Standard-Hashtags (immer mitgepostet)
+        </label>
+        <input
+          type="text"
+          value={(settings.default_hashtags ?? []).join(' ')}
+          onChange={(e) => {
+            const list = e.target.value.split(/[\s,]+/).map((h) => h.trim()).filter(Boolean).map((h) => (h.startsWith('#') ? h : `#${h}`));
+            update('default_hashtags', list);
+          }}
+          placeholder="#cam2rent #kameramieten #actioncam"
+          className="w-full mb-5 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm"
+        />
 
-      <div className="flex items-center gap-3">
-        <button
-          type="button"
-          onClick={save}
-          disabled={busy}
-          className="px-4 py-2 rounded-lg bg-cyan-600 text-white font-semibold text-sm hover:bg-cyan-500 disabled:opacity-50"
-        >
-          {busy ? 'Speichere…' : 'Speichern'}
-        </button>
-        {saved && <span className="text-sm text-emerald-400">✓ Gespeichert</span>}
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={save}
+            disabled={busy}
+            className="px-4 py-2 rounded-lg bg-cyan-600 text-white font-semibold text-sm hover:bg-cyan-500 disabled:opacity-50"
+          >
+            {busy ? 'Speichere…' : 'Speichern'}
+          </button>
+          {saved && <span className="text-sm text-emerald-400">✓ Gespeichert</span>}
+        </div>
       </div>
     </div>
   );
