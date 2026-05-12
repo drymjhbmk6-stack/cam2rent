@@ -512,12 +512,13 @@ export async function GET(req: NextRequest) {
       .slice(0, 10)
       .map(p => ({ title: p.title, slug: p.slug, views: p.views ?? 0, published_at: p.published_at }));
 
-    // Blog Page Views aus page_views Tabelle
+    // Blog Page Views aus page_views Tabelle (ohne Admin-Vorschau-Pfade)
     const { data: blogViews } = await supabase
       .from('page_views')
       .select('path, created_at')
       .gte('created_at', since30)
-      .like('path', '/blog/%');
+      .like('path', '/blog/%')
+      .not('path', 'like', '/blog/preview/%');
 
     const blogPageViews30d = blogViews?.length ?? 0;
 
