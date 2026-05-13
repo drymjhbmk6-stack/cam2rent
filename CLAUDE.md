@@ -153,13 +153,14 @@ liest WBW zuerst aus `inventar_units` (via migration_audit-Lookup auf
 - **API:** GET/PATCH `/api/admin/notifications`, POST `/api/admin/notifications/create`
 - **Helper:** `createAdminNotification(supabase, { type, title, message?, link? })` in `lib/admin-notifications.ts`
 - **UI:** `NotificationDropdown` in Admin-Sidebar + Mobile-Header, pollt alle 30s
-- **10 Events angeschlossen:**
+- **11 Events angeschlossen:**
   - `new_booking`: confirm-booking, confirm-cart, manual-booking, confirm-extension
   - `booking_cancelled`: cancel-booking, cron/auto-cancel
   - `new_damage`: damage-report
   - `new_message`: messages
   - `new_review`: reviews
   - `new_waitlist`: api/waitlist
+  - `new_customer`: api/auth/express-signup (Stand 2026-05-13) — feuert nach Konto-Anlage. Permission-gefiltert auf `kunden`. Message enthaelt E-Mail (+Telefon falls angegeben), Link auf `/admin/kunden/[userId]`. Express-Signup ist seit dem Audit der einzige Pfad zur Konto-Anlage — `/registrierung` nutzt denselben Flow.
 - **Typen mit Icons:** new_booking (cyan), booking_cancelled (rot), new_damage (amber), new_message (lila), new_customer (grün), overdue_return (rot), new_review (amber), payment_failed (rot), new_waitlist (cyan), blog_ready (grün), social_ready (lila), reel_ready (pink)
 
 ### Content-Review-Pushes (Stand 2026-04-27)

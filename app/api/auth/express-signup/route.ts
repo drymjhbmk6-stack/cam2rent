@@ -4,6 +4,7 @@ import { getClientIp } from '@/lib/rate-limit';
 import { getCheckoutConfig } from '@/lib/checkout-config';
 import { sendAndLog, escapeHtml } from '@/lib/email';
 import { BUSINESS } from '@/lib/business-config';
+import { createAdminNotification } from '@/lib/admin-notifications';
 
 /**
  * Express-Signup — Konto-Erstellung direkt im Checkout.
@@ -166,6 +167,17 @@ export async function POST(req: NextRequest) {
       console.error('[express-signup] Profil-Upsert fehlgeschlagen (nicht kritisch):', err);
     }
   }
+
+  // Admin-Push: neue Registrierung. Permission-gefiltert auf `kunden`.
+  // Adresse fehlt absichtlich (Sweep 7 #23), darum bleibt die Message minimal.
+  // Die Verifizierung-Pflichtcheck-Logik blockiert eh, bis der Kunde im Konto
+  // Name + Adresse ergaenzt hat — vorher gibt's nichts zu tun.
+  createAdminNotification(supabase, {
+    type: 'new_customer',
+    title: 'Neuer Kunde registriert',
+    message: `${email}${phone ? ` · Tel ${phone}` : ''}`,
+    link: userId ? `/admin/kunden/${userId}` : '/admin/kunden',
+  }).catch((err) => console.error('[express-signup] admin notification failed:', err));
 
   // Sicherheits-Hinweis an die E-Mail-Adresse: jemand hat ein Konto mit dieser
   // Adresse angelegt. Falls das nicht der Eigentuemer der Adresse war, wird er
