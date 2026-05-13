@@ -6,7 +6,7 @@ import { calcHaftungTieredPrice } from '@/lib/price-config';
 import SignatureStep, { type SignatureResult } from '@/components/booking/SignatureStep';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import SerialScanner from '@/components/admin/SerialScanner';
-import { fmtEuro } from '@/lib/format-utils';
+import { fmtEuro, escapeHtml } from '@/lib/format-utils';
 
 // ─── Business-Daten (zentral definiert in lib/business-config.ts) ────────────
 const BIZ = {
@@ -495,10 +495,8 @@ export default function ManualBookingPage() {
     }
 
     // Sweep 8 K6: XSS-Schutz fuer window.open()-Rechnungsvorschau (cam2rent.de-Origin)
-    const esc = (s: unknown): string => {
-      if (s === null || s === undefined) return '';
-      return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-    };
+    // Nutzt zentralen escapeHtml aus lib/format-utils (client-safe).
+    const esc = escapeHtml;
 
     const html = `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>Rechnungsvorschau – cam2rent</title>

@@ -6,7 +6,7 @@ import Link from 'next/link';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import AccessoryDamageModal from '@/components/admin/AccessoryDamageModal';
 import { BUSINESS } from '@/lib/business-config';
-import { fmtEuro as fmtEuroCanonical, fmtDateTime as fmtDateTimeCanonical } from '@/lib/format-utils';
+import { fmtEuro as fmtEuroCanonical, fmtDateTime as fmtDateTimeCanonical, escapeHtml } from '@/lib/format-utils';
 
 interface BookingDetail {
   id: string;
@@ -398,15 +398,8 @@ export default function BuchungDetailPage() {
   // Der neu geoeffnete Tab erbt cam2rent.de-Origin via document.write, also
   // laeuft jedes injizierte Script mit Admin-Cookies. User-Eingaben (Name,
   // Adresse, Produktname, Seriennummer) werden mit `esc()` geescaped.
-  const esc = (s: unknown): string => {
-    if (s === null || s === undefined) return '';
-    return String(s)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
-  };
+  // Nutzt zentralen escapeHtml aus lib/format-utils (client-safe).
+  const esc = escapeHtml;
 
   // ─── Gemeinsame Styles für A4-Dokumente (kompakt, 1 Seite) ───
   const docStyles = `

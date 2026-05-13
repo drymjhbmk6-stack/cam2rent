@@ -78,3 +78,23 @@ export function isoToDE(iso: string): string {
 export function roundTo2(n: number): number {
   return Math.round(n * 100) / 100;
 }
+
+// ─── HTML-Escaping ───────────────────────────────────────────────────────────
+
+/**
+ * Escapet HTML-Sonderzeichen in beliebigen Werten — schuetzt vor XSS, wenn
+ * User-Input (Kundenname, Produktname, Notizen) ins HTML interpoliert wird.
+ *
+ * Client-safe Variante (dieselbe Logik wie `escapeHtml` aus `lib/email.ts`,
+ * aber ohne Resend-Abhaengigkeiten — kann in Client Components importiert
+ * werden ohne den Server-Mail-Stack ins Client-Bundle zu ziehen).
+ */
+export function escapeHtml(val: unknown): string {
+  if (val === null || val === undefined) return '';
+  return String(val)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;');
+}

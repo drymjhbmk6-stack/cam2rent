@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useAccessories } from '@/components/AccessoriesProvider';
 import AdminBackLink from '@/components/admin/AdminBackLink';
-import { fmtDate } from '@/lib/format-utils';
+import { fmtDate, escapeHtml } from '@/lib/format-utils';
 
 interface Booking {
   id: string;
@@ -249,10 +249,8 @@ export default function AdminVersandPage() {
   // ── Packliste / Übergabeprotokoll öffnen ──────────────────────────────────
   function openPackliste(b: Booking) {
     // Sweep 8 K6: XSS-Schutz im neuen Tab (cam2rent.de-Origin)
-    const esc = (s: unknown): string => {
-      if (s === null || s === undefined) return '';
-      return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-    };
+    // Nutzt zentralen escapeHtml aus lib/format-utils (client-safe).
+    const esc = escapeHtml;
     const today = new Date();
     const dateStr = `${today.getDate().toString().padStart(2, '0')}.${(today.getMonth() + 1).toString().padStart(2, '0')}.${today.getFullYear()}`;
     const accR = b.accessories?.map((a, i) => `<tr><td style="padding:4px 8px;border:1px solid #ccc;width:40px">${i + 1}</td><td style="padding:4px 8px;border:1px solid #ccc">${esc(accName(a))}</td><td style="padding:4px 8px;border:1px solid #ccc;width:50px"></td></tr>`) ?? [];
