@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
-import { rateLimit, getClientIp } from '@/lib/rate-limit';
+import { getClientIp } from '@/lib/rate-limit';
 import { getCheckoutConfig } from '@/lib/checkout-config';
 import { sendAndLog, escapeHtml } from '@/lib/email';
 import { BUSINESS } from '@/lib/business-config';
@@ -13,19 +13,13 @@ import { BUSINESS } from '@/lib/business-config';
  * Mail wird asynchron ueber das normale Login-/Passwort-Vergessen-System
  * verschickt (siehe /auth/callback fuer den Token-Flow).
  *
- * Rate-Limit: 5 Signups pro Stunde pro IP. Schoent dein Supabase-Free-Tier-
- * Limit (4/h) und verhindert Account-Flooding.
- *
  * Rueckgabe-Codes:
  *   200 { success: true }           — Account erstellt, Client kann einloggen
  *   200 { exists: true }            — E-Mail existiert schon → Login empfehlen
  *   403 { error: 'feature_disabled' } — Admin hat Express-Signup deaktiviert
  *   400 { error: 'invalid_body' }   — Validierung fehlgeschlagen
- *   429 { error: 'rate_limited' }   — Zu viele Versuche
  *   500 { error: '...' }            — Supabase-Fehler
  */
-
-const signupLimiter = rateLimit({ maxAttempts: 5, windowMs: 60 * 60 * 1000 });
 
 type Body = {
   email?: string;
@@ -46,13 +40,6 @@ function validateEmail(email: string): boolean {
 
 export async function POST(req: NextRequest) {
   const ip = getClientIp(req);
-  const limit = signupLimiter.check(`express-signup:${ip}`);
-  if (!limit.success) {
-    return NextResponse.json(
-      { error: 'rate_limited', message: 'Zu viele Registrierungen. Bitte spaeter erneut versuchen.' },
-      { status: 429 },
-    );
-  }
 
   const cfg = await getCheckoutConfig();
   if (!cfg.expressSignupEnabled) {

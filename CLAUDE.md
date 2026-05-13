@@ -1282,12 +1282,6 @@ Jede Buchungsbestätigung enthält automatisch als PDF-Anhang:
 - **ISR:** Cache wird beim Publish über `revalidateTag` invalidiert → neue Version sofort sichtbar ohne Redeploy
 - **Fallback:** Bestehende hardcoded JSX-Seiten greifen wenn DB nicht erreichbar
 
-### Registrierungs-Rate-Limiter
-- **API:** `GET/POST /api/auth/signup` — serverseitiger Zähler, max 3 Signups/Stunde
-- Supabase Free Tier erlaubt max 4 Signups/Stunde → eigener Zähler mit Puffer
-- Bei Limit: Gelber Hinweis-Banner + Button deaktiviert + Countdown in Minuten
-- Fängt auch Supabase-eigene Rate-Limit-Fehler ab (Fallback)
-
 ### Feedback → Gutschein-System
 - **Umfrage-Seite** (`/umfrage/[bookingId]`): 2-Schritt-Flow
   - Schritt 1: Rating + optionales Feedback
@@ -1603,7 +1597,7 @@ Dritte Audit-Runde — Findings nach Sweep 2 verifiziert (manuelle Stichproben),
 - **Cron-Re-Entry-Lock-Helper (CRITICAL, neue Lib)** `lib/cron-lock.ts`: zentrale `acquireCronLock(name)` / `releaseCronLock(name)`-Pair, persistiert in `admin_settings.cron_lock_<name>` mit 15min Stale-Detection. Eingebaut in 5 Crons (`dunning-check`, `verification-reminder`, `verification-auto-cancel`, `awaiting-payment-cancel`, `social-publish`). Verhindert dass Coolify-Restart + Crontab-Tick parallel die selbe Mahn-/Storno-/Mail-Logik durchlaufen und dabei Mails / Stornos / Mahnungen duplizieren.
 - **`Promise.allSettled` in social-publish-Cron (HIGH)** `app/api/cron/social-publish/route.ts`: vorher konnte ein Fehler in einer Phase (z.B. `processScheduleEntries`) die anderen (`processRetries`) mit-killen → Posts blieben in `failed`-Status haengen. Jetzt allSettled mit per-Phase-Logging.
 - **damage-report Magic-Byte-Check (HIGH)** in `app/api/damage-report/route.ts`: vorher reichte `photo.type` (Client-MIME). Jetzt `isAllowedImage(buffer)` + `detectImageType` und Datei wird mit dem ECHTEN MIME ausgeliefert. Path-Traversal bleibt durch Whitelist-Mapping ausgeschlossen. `damage-photos`-Bucket nimmt nur noch JPEG/PNG/WebP/HEIC/GIF.
-- **Signup-Rate-Limit per IP (HIGH)** in `app/api/auth/signup/route.ts`: vorher globaler In-Memory-Counter — 1 Angreifer konnte alle 3 Slots/h aufbrauchen und damit jeden legitimen Signup blockieren. Jetzt `rateLimit({ maxAttempts: 3, windowMs: 1h })` mit Bucket-Key `signup:${ip}` (nutzt den bestehenden `lib/rate-limit.ts`-Helper).
+- **Signup-Rate-Limit per IP (HIGH)** in `app/api/auth/signup/route.ts`: vorher globaler In-Memory-Counter — 1 Angreifer konnte alle 3 Slots/h aufbrauchen und damit jeden legitimen Signup blockieren. Jetzt `rateLimit({ maxAttempts: 3, windowMs: 1h })` mit Bucket-Key `signup:${ip}` (nutzt den bestehenden `lib/rate-limit.ts`-Helper). **Obsolet seit 2026-05-14 (Supabase Pro):** Route `/api/auth/signup` ist gelöscht (war tot, nie vom Frontend aufgerufen), und das parallele 5/h-Limit auf `/api/auth/express-signup` ist ebenfalls entfernt. DoS-Schutz liegt jetzt vollständig auf Supabase Pro + den weiteren Pre-Checks der Express-Signup-Route (E-Mail-Existenz-Check, Sicherheits-Warnmail an Pre-Claim-Adressen, Passwort-/Adress-Validierung). Anti-E-Mail-Enumeration `/api/auth/check-email` (10/min) bleibt aktiv.
 - **N+1 in 3 Admin-APIs behoben (HIGH)**:
   - `/api/admin/buchhaltung/invoices`: 1 Bookings-Lookup pro Rechnung → 1 Bulk `in('id', ids)` + Memory-Map.
   - `/api/admin/buchhaltung/open-items`: 2 Lookups pro Rechnung (Bookings + Dunning) → 2 Bulk-Queries + 2 Memory-Maps. Zusaetzlich `select('*')` auf Spaltenliste reduziert.
