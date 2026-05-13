@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import SeasonalActionAdmin from '@/components/admin/SeasonalActionAdmin';
 import PromoBannerAdmin from '@/components/admin/PromoBannerAdmin';
+import HomeSeoTextAdmin from '@/components/admin/HomeSeoTextAdmin';
 
 // ============================================================
 // Types
@@ -634,6 +635,7 @@ export default function ShopUpdaterContent() {
 
           <PromoBannerAdmin />
           <SeasonalActionAdmin />
+          <HomeSeoTextAdmin />
         </div>
       )}
     </div>

@@ -62,15 +62,16 @@ export const metadata: Metadata = {
     'apple-mobile-web-app-title': 'cam2rent',
   },
   title: {
-    default: 'Cam2Rent – Action-Cams mieten statt kaufen',
+    default: 'Cam2Rent – Action-Cams mieten: GoPro, DJI & Insta360 ab 9,90 €/Tag',
     template: '%s – Cam2Rent',
   },
   description:
-    'Hochwertige Action-Kameras von GoPro, DJI und Insta360 mieten. Ab 9,90 €/Tag. Mit Haftungsschutz, kostenloser Versand, 24h Lieferung.',
+    'Action-Cams mieten statt kaufen: GoPro, DJI & Insta360 ab 9,90 €/Tag. Mit Haftungsschutz, kostenlosem Versand, 24h Lieferung und schneller Rückgabe.',
   keywords: 'Action Cam mieten, GoPro mieten, DJI mieten, Insta360 mieten, Kamera mieten',
   openGraph: {
-    title: 'Cam2Rent – Action-Cams mieten statt kaufen',
-    description: 'Hochwertige Action-Kameras von GoPro, DJI und Insta360 mieten. Ab 9,90 €/Tag.',
+    title: 'Cam2Rent – Action-Cams mieten: GoPro, DJI & Insta360 ab 9,90 €/Tag',
+    description:
+      'Action-Cams mieten statt kaufen: GoPro, DJI & Insta360 ab 9,90 €/Tag. Mit Haftungsschutz, kostenlosem Versand, 24h Lieferung und schneller Rückgabe.',
     url: 'https://cam2rent.de',
     siteName: 'Cam2Rent',
     locale: 'de_DE',
@@ -78,8 +79,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Cam2Rent – Action-Cams mieten statt kaufen',
-    description: 'Hochwertige Action-Kameras von GoPro, DJI und Insta360 mieten. Ab 9,90 €/Tag.',
+    title: 'Cam2Rent – Action-Cams mieten: GoPro, DJI & Insta360 ab 9,90 €/Tag',
+    description:
+      'Action-Cams mieten statt kaufen: GoPro, DJI & Insta360 ab 9,90 €/Tag. Mit Haftungsschutz, kostenlosem Versand, 24h Lieferung und schneller Rückgabe.',
   },
   robots: {
     index: true,

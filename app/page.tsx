@@ -14,6 +14,7 @@ import NewsletterSignup from '@/components/home/NewsletterSignup';
 import AppInstallBanner from '@/components/home/AppInstallBanner';
 import UnderConstructionBanner from '@/components/home/UnderConstructionBanner';
 import CustomerPushPrompt from '@/components/home/CustomerPushPrompt';
+import HomeSeoText from '@/components/home/HomeSeoText';
 import { getHomePageData } from '@/lib/get-homepage-data';
 
 // ISR-Cache: max. 60 Sek alt. Shop-Updater ruft revalidatePath('/') auf,
@@ -42,6 +43,7 @@ export default async function Home() {
       <GoogleReviews />
       <NewsletterSignup />
       <AppInstallBanner />
+      <HomeSeoText data={data.seoText} />
       <CtaBanner />
       <CustomerPushPrompt />
     </>

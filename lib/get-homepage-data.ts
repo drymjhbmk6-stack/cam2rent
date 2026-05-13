@@ -16,6 +16,7 @@ export interface HomePageData {
   seasonalImage: SeasonalImage | null;
   seasonalMonth: number;
   showConstructionBanner: boolean;
+  seoText: { title: string; markdown: string } | null;
 }
 
 const HERO_FALLBACK = {
@@ -30,7 +31,7 @@ export async function getHomePageData(): Promise<HomePageData> {
   const supabase = createServiceClient();
 
   // Alle Daten parallel laden
-  const [heroResult, seasonalResult, bannerResult] = await Promise.all([
+  const [heroResult, seasonalResult, bannerResult, seoTextResult] = await Promise.all([
     // Hero-Text — Tabelle muss mit /api/shop-content übereinstimmen,
     // sonst zeigt die Startseite immer den Fallback (siehe Bug 2026-04-17).
     supabase
@@ -52,6 +53,13 @@ export async function getHomePageData(): Promise<HomePageData> {
       .from('admin_settings')
       .select('value')
       .eq('key', 'show_construction_banner')
+      .maybeSingle(),
+
+    // SEO-Textblock (Server-rendered, sichtbar für Crawler)
+    supabase
+      .from('admin_settings')
+      .select('value')
+      .eq('key', 'home_seo_text')
       .maybeSingle(),
   ]);
 
@@ -85,10 +93,27 @@ export async function getHomePageData(): Promise<HomePageData> {
   const bannerValue = bannerResult.data?.value;
   const showConstructionBanner = bannerValue === null || bannerValue === 'true' || bannerValue === true;
 
+  // SEO-Textblock
+  let seoText: HomePageData['seoText'] = null;
+  if (seoTextResult.data?.value) {
+    try {
+      const parsed = typeof seoTextResult.data.value === 'string'
+        ? JSON.parse(seoTextResult.data.value)
+        : seoTextResult.data.value;
+      const enabled = parsed?.enabled === true;
+      const markdown = typeof parsed?.markdown === 'string' ? parsed.markdown.trim() : '';
+      const title = typeof parsed?.title === 'string' ? parsed.title.trim() : '';
+      if (enabled && markdown) {
+        seoText = { title: title || 'Action-Cams mieten – das musst du wissen', markdown };
+      }
+    } catch {}
+  }
+
   return {
     hero,
     seasonalImage,
     seasonalMonth: month,
     showConstructionBanner,
+    seoText,
   };
 }
