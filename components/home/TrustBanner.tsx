@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import ShippingLogos from '../ShippingLogos';
 
 interface UspItem {
   icon: string;
@@ -10,7 +11,7 @@ interface UspItem {
 const FALLBACK_ITEMS: UspItem[] = [
   { icon: 'shield', text: 'Mit Haftungsschutz' },
   { icon: 'truck', text: 'Kostenloser Versand' },
-  { icon: 'clock', text: '24h Lieferung' },
+  { icon: 'shipping', text: 'Versand mit DHL & DPD' },
   { icon: 'star', text: 'Top-bewerteter Service' },
 ];
 
@@ -74,9 +75,15 @@ export default function TrustBanner() {
                 index < items.length - 1 ? 'lg:border-r lg:border-white/10' : ''
               }`}
             >
-              <div className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center text-cyan-400">
-                <UspIcon icon={item.icon} />
-              </div>
+              {item.icon === 'shipping' ? (
+                <div className="h-12 flex items-center justify-center">
+                  <ShippingLogos size="md" />
+                </div>
+              ) : (
+                <div className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center text-cyan-400">
+                  <UspIcon icon={item.icon} />
+                </div>
+              )}
               <span className="font-body text-sm text-white/80 font-medium">{item.text}</span>
             </div>
           ))}

@@ -64,6 +64,7 @@ const ICON_OPTIONS = [
   { value: 'gift', label: 'Geschenk' },
   { value: 'zap', label: 'Blitz' },
   { value: 'thumbs-up', label: 'Daumen hoch' },
+  { value: 'shipping', label: 'DHL & DPD' },
 ];
 
 // ============================================================

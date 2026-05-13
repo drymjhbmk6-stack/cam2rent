@@ -1,10 +1,22 @@
-const steps = [
+import type { ReactNode } from 'react';
+import ShippingLogos from '../ShippingLogos';
+
+type Step = {
+  number: string;
+  title: string;
+  description: string;
+  color: 'blue' | 'teal' | 'amber';
+  icon: ReactNode;
+  extra?: ReactNode;
+};
+
+const steps: Step[] = [
   {
     number: '1',
     title: 'Kamera auswählen',
     description:
       'Stöbere durch unser Sortiment an hochwertigen Action-Cams. Filter nach Marke, Preis oder Verfügbarkeit und finde die perfekte Kamera für dein Abenteuer.',
-    color: 'blue' as const,
+    color: 'blue',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-7 h-7" aria-hidden="true">
         <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
@@ -17,7 +29,7 @@ const steps = [
     title: 'Zeitraum buchen',
     description:
       'Wähle deinen Wunschzeitraum – tageweise, Wochenende oder ganze Woche. Bezahle sicher online und wähle ob du die Kamera lieferst oder abholst.',
-    color: 'teal' as const,
+    color: 'teal',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-7 h-7" aria-hidden="true">
         <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
@@ -29,11 +41,17 @@ const steps = [
     title: 'Losfilmen!',
     description:
       'Die Kamera wird zu dir geliefert – mit optionalem Haftungsschutz und einsatzbereit. Film dein Abenteuer, sende die Kamera zurück und wir erledigen den Rest.',
-    color: 'amber' as const,
+    color: 'amber',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-7 h-7" aria-hidden="true">
         <path strokeLinecap="round" strokeLinejoin="round" d="M15.59 14.37a6 6 0 01-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 006.16-12.12A14.98 14.98 0 009.631 8.41m5.96 5.96a14.926 14.926 0 01-5.841 2.58m-.119-8.54a6 6 0 00-7.381 5.84h4.8m2.581-5.84a14.927 14.927 0 00-2.58 5.84m2.699 2.7c-.103.021-.207.041-.311.06a15.09 15.09 0 01-2.448-2.448 14.9 14.9 0 01.06-.312m-2.24 2.39a4.493 4.493 0 00-1.757 4.306 4.493 4.493 0 004.306-1.758M16.5 9a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z" />
       </svg>
+    ),
+    extra: (
+      <div className="mt-4 flex items-center gap-2 justify-center">
+        <span className="font-body text-xs text-brand-steel dark:text-gray-400">Versand mit:</span>
+        <ShippingLogos size="sm" />
+      </div>
     ),
   },
 ];
@@ -108,6 +126,7 @@ export default function HowItWorks({ hideHeader = false }: { hideHeader?: boolea
                 <p className="font-body text-sm text-brand-steel dark:text-gray-400 leading-relaxed max-w-xs">
                   {step.description}
                 </p>
+                {step.extra}
               </div>
             );
           })}
