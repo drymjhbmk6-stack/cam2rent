@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import { formatCurrency, fmtDate as fmtDateCanonical } from '@/lib/format-utils';
 
 interface Asset {
   id: string;
@@ -27,12 +28,9 @@ const STATUS_LABEL: Record<string, string> = {
   aktiv: 'Aktiv', verkauft: 'Verkauft', ausgemustert: 'Ausgemustert', verloren: 'Verloren',
 };
 
-function fmtEuro(n: number) {
-  return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(n);
-}
-function fmtDate(s: string) {
-  return new Date(s).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' });
-}
+// Zentrale Helper aus lib/format-utils
+const fmtEuro = formatCurrency;
+const fmtDate = fmtDateCanonical;
 
 export default function AnlagenNeuPage() {
   const [assets, setAssets] = useState<Asset[]>([]);

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import { formatCurrency, fmtDate as fmtDateCanonical } from '@/lib/format-utils';
 
 interface Ausgabe {
   id: string;
@@ -20,8 +21,10 @@ const QUELLE_BADGE: Record<string, { label: string; color: string }> = {
   migration: { label: 'Migration', color: 'slate' },
 };
 
-function fmtEuro(n: number) { return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(n); }
-function fmtDate(s: string) { return new Date(s).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' }); }
+// Zentrale Helper aus lib/format-utils — formatCurrency liefert Intl-Output
+// inkl. non-breaking-space, fmtDate ist Berlin-TZ-aware.
+const fmtEuro = formatCurrency;
+const fmtDate = fmtDateCanonical;
 
 export default function AusgabenNeuPage() {
   const today = new Date();

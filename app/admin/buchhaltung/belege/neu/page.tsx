@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { shrinkImageFileIfNeeded } from '@/lib/shrink-image-client';
+import { formatCurrency } from '@/lib/format-utils';
 
 type Klass = 'pending' | 'afa' | 'gwg' | 'ausgabe' | 'verbrauch' | 'ignoriert';
 
@@ -27,9 +28,8 @@ const KLASS_LABEL: Record<Klass, string> = {
   ignoriert: 'Ignorieren',
 };
 
-function fmtEuro(n: number) {
-  return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(n);
-}
+// Zentraler fmtEuro aus lib/format-utils
+const fmtEuro = formatCurrency;
 
 export default function NeuerBelegWizard() {
   const router = useRouter();

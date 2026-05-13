@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { formatCurrency } from '@/lib/format-utils';
 
 interface UnitDetail {
   id: string;
@@ -37,7 +38,8 @@ interface Props {
   onSuccess?: (msg: string) => void;
 }
 
-const fmtEuro = (n: number) => new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(n);
+// Zentraler fmtEuro aus lib/format-utils
+const fmtEuro = formatCurrency;
 
 export default function AccessoryDamageModal({ bookingId, open, onClose, onSuccess }: Props) {
   const [loading, setLoading] = useState(true);

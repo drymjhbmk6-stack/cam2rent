@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import { formatCurrency, fmtDate as fmtDateCanonical } from '@/lib/format-utils';
 
 interface Beleg {
   id: string;
@@ -46,12 +47,9 @@ const STATUS_ORDER: Record<string, number> = {
 type SortKey = 'beleg_nr' | 'beleg_datum' | 'lieferant' | 'summe_brutto' | 'klassifizierung' | 'status';
 type SortDir = 'asc' | 'desc';
 
-function fmtEuro(n: number): string {
-  return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(n);
-}
-function fmtDate(s: string): string {
-  return new Date(s).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' });
-}
+// Zentrale Helper aus lib/format-utils
+const fmtEuro = formatCurrency;
+const fmtDate = fmtDateCanonical;
 
 function getSortValue(b: Beleg, key: SortKey): string | number {
   switch (key) {

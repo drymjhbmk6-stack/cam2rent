@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import { formatCurrency, fmtDate as fmtDateCanonical } from '@/lib/format-utils';
 
 interface Asset {
   id: string;
@@ -26,8 +27,9 @@ interface InventarUnit {
   id: string; bezeichnung: string; inventar_code: string | null; seriennummer: string | null;
 }
 
-function fmtEuro(n: number) { return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(n); }
-function fmtDate(s: string) { return new Date(s).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' }); }
+// Zentrale Helper aus lib/format-utils
+const fmtEuro = formatCurrency;
+const fmtDate = fmtDateCanonical;
 
 export default function AnlageDetailPage() {
   const params = useParams();

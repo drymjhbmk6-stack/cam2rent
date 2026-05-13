@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { shrinkImageFileIfNeeded } from '@/lib/shrink-image-client';
+import { formatCurrency } from '@/lib/format-utils';
 
 type Klass = 'pending' | 'afa' | 'gwg' | 'ausgabe' | 'verbrauch' | 'ignoriert';
 
@@ -86,9 +87,8 @@ function fmtBytes(n: number | null) {
   return `${(n / 1024 / 1024).toFixed(2)} MB`;
 }
 
-function fmtEuro(n: number) {
-  return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(n);
-}
+// Zentraler fmtEuro aus lib/format-utils
+const fmtEuro = formatCurrency;
 function fmtDate(s: string | null) {
   return s ? new Date(s).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' }) : '–';
 }
