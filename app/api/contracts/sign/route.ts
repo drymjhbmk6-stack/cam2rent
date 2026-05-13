@@ -6,6 +6,7 @@ import { checkAdminAuth } from '@/lib/admin-auth';
 import { generateContractPDF } from '@/lib/contracts/generate-contract';
 import { storeContract } from '@/lib/contracts/store-contract';
 import { sendContractEmail } from '@/lib/contracts/send-contract-email';
+import { getClientIp } from '@/lib/rate-limit';
 
 export async function POST(request: NextRequest) {
   try {
@@ -81,10 +82,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, contractUrl: existing.pdf_url, alreadySigned: true });
     }
 
-    // 4. IP-Adresse aus Request-Header
-    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
-      || request.headers.get('x-real-ip')
-      || 'unknown';
+    // 4. IP-Adresse via zentralen Helper (Cloudflare-aware: cf-connecting-ip → x-forwarded-for → x-real-ip)
+    const ipFromHelper = getClientIp(request);
+    const ip = ipFromHelper === '127.0.0.1' ? 'unknown' : ipFromHelper;
 
     // 5. Steuer-Konfiguration laden
     const { data: taxSettings } = await supabase

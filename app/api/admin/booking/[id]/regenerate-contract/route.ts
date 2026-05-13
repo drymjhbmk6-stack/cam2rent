@@ -4,6 +4,7 @@ import { checkAdminAuth } from '@/lib/admin-auth';
 import { generateContractPDF } from '@/lib/contracts/generate-contract';
 import { storeContract } from '@/lib/contracts/store-contract';
 import { logAudit } from '@/lib/audit';
+import { getClientIp } from '@/lib/rate-limit';
 
 /**
  * POST /api/admin/booking/[id]/regenerate-contract
@@ -49,8 +50,8 @@ export async function POST(
     }, { status: 400 });
   }
 
-  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
-    || req.headers.get('x-real-ip') || 'admin-recovery';
+  const ipFromHelper = getClientIp(req);
+  const ip = ipFromHelper === '127.0.0.1' ? 'admin-recovery' : ipFromHelper;
 
   const fmtD = (iso: string) => {
     if (!iso) return '';

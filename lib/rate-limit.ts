@@ -1,4 +1,4 @@
-import { NextRequest } from 'next/server';
+import type { NextRequest } from 'next/server';
 
 interface RateLimitEntry {
   count: number;
@@ -71,14 +71,24 @@ export function rateLimit({ maxAttempts, windowMs }: RateLimitConfig) {
 /**
  * Extrahiert die Client-IP aus dem Request.
  *
- * Per default werden X-Forwarded-For / X-Real-IP NUR vertraut, wenn die App
- * laut TRUST_PROXY_HEADERS=true hinter einem vertrauenswürdigen Reverse-Proxy
- * läuft (Coolify/nginx auf dem Hetzner-Server). Das ist der Standardfall im
- * Produktionsbetrieb — daher Default-an in Production.
+ * Reihenfolge (Cloudflare-aware):
+ *   1. `cf-connecting-ip` — von Cloudflare gesetzt, **vertrauenswürdig**.
+ *      Cloudflare strippt User-gesetzte Werte und überschreibt mit der
+ *      echten Client-IP. Damit ein Angreifer den Header nicht direkt zum
+ *      Hetzner-Server schickt, MUSS die Hetzner-Firewall Port 443/80 auf
+ *      Cloudflare-IP-Ranges einschränken — siehe Go-Live-TODO unten.
+ *   2. `x-forwarded-for` — vom Reverse-Proxy (Coolify/nginx) hinzugefügt;
+ *      erstes Element ist die Original-IP.
+ *   3. `x-real-ip` — manche Proxies setzen nur diesen.
  *
- * Ohne diesen Vertrauens-Switch könnten Angreifer beliebige IPs senden und
- * IP-basiertes Rate-Limiting komplett umgehen (jede Request mit anderer
- * gefälschter IP → eigener Rate-Limit-Bucket).
+ * Per default werden Proxy-Header NUR vertraut, wenn die App laut
+ * TRUST_PROXY_HEADERS=true hinter einem vertrauenswürdigen Reverse-Proxy
+ * läuft. Default-an in Production (Coolify/nginx). Ohne den Vertrauens-
+ * Switch könnten Angreifer beliebige IPs senden und IP-basiertes Rate-
+ * Limiting komplett umgehen (jede Request mit anderer gefälschter IP →
+ * eigener Bucket).
+ *
+ * Funktioniert mit `Request` und `NextRequest` (beide haben `headers.get`).
  */
 function trustsProxyHeaders(): boolean {
   const env = process.env.TRUST_PROXY_HEADERS;
@@ -88,11 +98,15 @@ function trustsProxyHeaders(): boolean {
   return process.env.NODE_ENV === 'production';
 }
 
-export function getClientIp(req: NextRequest): string {
+export function getClientIp(req: Request | NextRequest): string {
   if (trustsProxyHeaders()) {
+    // 1. Cloudflare-Connecting-IP hat Vorrang — von Cloudflare gesetzt,
+    //    strippt User-gefälschte Werte.
+    const cfIp = req.headers.get('cf-connecting-ip');
+    if (cfIp) return cfIp.trim();
+
     const forwarded = req.headers.get('x-forwarded-for');
     if (forwarded) {
-      // Vom Reverse-Proxy hinzugefügt: erstes Element ist die Original-IP.
       return forwarded.split(',')[0].trim();
     }
     const realIp = req.headers.get('x-real-ip');

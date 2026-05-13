@@ -100,8 +100,8 @@ export async function POST(req: NextRequest) {
       // 2-4 s synchron auf PDF + Storage zu warten.
       console.log('[confirm-booking] Idempotent: existing=', existing.id, 'contractSignature=', contractSignature ? 'vorhanden' : 'FEHLT');
       if (contractSignature?.agreedToTerms && contractSignature?.signerName) {
-        const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
-          || req.headers.get('x-real-ip') || 'unknown';
+        const ipFromHelperEarly = getClientIp(req);
+        const ip = ipFromHelperEarly === '127.0.0.1' ? 'unknown' : ipFromHelperEarly;
         const sig = contractSignature;
         after(async () => {
           try {
@@ -348,9 +348,8 @@ export async function POST(req: NextRequest) {
     // Serverless: `after()` von Next.js 15 garantiert die Ausfuehrung. Die
     // Route antwortet sofort (Buchungsnummer sichtbar), Vertrag + Mails
     // laufen kurz danach.
-    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
-      || req.headers.get('x-real-ip')
-      || 'unknown';
+    const ipFromHelperLate = getClientIp(req);
+    const ip = ipFromHelperLate === '127.0.0.1' ? 'unknown' : ipFromHelperLate;
 
     // Stripe-PaymentIntent mit der finalen Buchungsnummer bestempeln, damit
     // sie in der Stripe-Quittung + Stripe-Dashboard erscheint. Non-blocking,

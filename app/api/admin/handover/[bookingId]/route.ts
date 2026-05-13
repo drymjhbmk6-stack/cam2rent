@@ -3,6 +3,7 @@ import { checkAdminAuth } from '@/lib/admin-auth';
 import { createServiceClient } from '@/lib/supabase';
 import { logAudit } from '@/lib/audit';
 import { detectImageType, isAllowedImage } from '@/lib/file-type-check';
+import { getClientIp } from '@/lib/rate-limit';
 
 const MAX_PHOTO_SIZE = 10 * 1024 * 1024; // 10 MB
 
@@ -120,9 +121,8 @@ export async function POST(
     return NextResponse.json({ error: `Foto-Upload fehlgeschlagen: ${uploadError.message}` }, { status: 500 });
   }
 
-  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
-    || req.headers.get('x-real-ip')
-    || 'unknown';
+  const ipFromHelper = getClientIp(req);
+  const ip = ipFromHelper === '127.0.0.1' ? 'unknown' : ipFromHelper;
   const now = new Date().toISOString();
 
   const handoverData = {

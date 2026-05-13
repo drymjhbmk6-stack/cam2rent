@@ -28,7 +28,7 @@ import {
   type TTSProvider,
   type ElevenLabsModel,
 } from '@/lib/reels/tts';
-import { rateLimit } from '@/lib/rate-limit';
+import { rateLimit, getClientIp } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
@@ -48,7 +48,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+  const ipFromHelper = getClientIp(req);
+  const ip = ipFromHelper === '127.0.0.1' ? 'unknown' : ipFromHelper;
   const rl = limiter.check(`voice-preview:${ip}`);
   if (!rl.success) {
     return NextResponse.json({ error: 'Rate-Limit erreicht — bitte 1 Minute warten.' }, { status: 429 });

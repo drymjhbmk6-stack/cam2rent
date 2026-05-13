@@ -4,6 +4,7 @@ import { generateContractPDF } from '@/lib/contracts/generate-contract';
 import { storeContract } from '@/lib/contracts/store-contract';
 import { sendContractEmail } from '@/lib/contracts/send-contract-email';
 import { logAudit } from '@/lib/audit';
+import { getClientIp } from '@/lib/rate-limit';
 
 /**
  * POST /api/admin/sign-contract
@@ -36,8 +37,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Vertrag ist bereits unterschrieben.' }, { status: 400 });
     }
 
-    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
-      || req.headers.get('x-real-ip') || 'admin';
+    const ipFromHelper = getClientIp(req);
+    const ip = ipFromHelper === '127.0.0.1' ? 'admin' : ipFromHelper;
 
     const fmtD = (iso: string) => {
       if (!iso) return '';

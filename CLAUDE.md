@@ -1859,6 +1859,13 @@ Fünf neue Frontend-Module, die die Startseite lebendig halten — alle nutzen v
 - **`components/home/CustomerPushPrompt.tsx`** — Dezenter Prompt unten rechts (8s Delay), aktiviert Web-Push für Endkunden. DB: `customer_push_subscriptions` (Migration `supabase-customer-push.sql`). Lib: `lib/customer-push.ts` → `sendPushToCustomers(payload, { topic? })`. Nutzt dieselben VAPID-Keys wie Admin-Push. Public-Vapid-Endpoint: `GET /api/customer-push/vapid-key`.
 - **`components/home/HomeSeoText.tsx`** (Stand 2026-05-13) — Server-Komponente am Seitenende (zwischen `AppInstallBanner` und `CtaBanner`). Lädt Markdown-Block aus `admin_settings.home_seo_text` über `getHomePageData()` und rendert ihn server-seitig via `MarkdownContent`. Versteckt sich wenn `enabled=false` oder leer. **Zweck:** SEO-Wortanzahl der Startseite > 500 Wörter heben — Inhalt landet im SSR-HTML, Crawler zählen ihn. Plus: Title + Meta-Description in `app/layout.tsx` von 42/133 auf 67/152 Zeichen verlängert (GoPro/DJI/Insta360 + Preis-Hook im Title). Admin-UI: `components/admin/HomeSeoTextAdmin.tsx` als Card im Settings-Hub unter `/admin/startseite?tab=inhalte` mit Toggle + Titel + Markdown-Textarea + **Live-Wortzähler** (rot < 300, amber 300–499, grün ≥ 500). Setting-Key: `home_seo_text = { enabled, title, markdown }`.
 
+### Cloudflare-Ready IP-Extraktion (Stand 2026-05-13)
+`lib/rate-limit.ts:getClientIp(req)` ist jetzt Cloudflare-aware: liest **`cf-connecting-ip` mit Vorrang** vor `x-forwarded-for` und `x-real-ip`. Cloudflare strippt User-gefälschte `cf-connecting-ip`-Werte am Edge — der Header ist also vertrauenswürdig, sobald Cloudflare als Proxy davor steht. Funktioniert mit `Request` und `NextRequest` (Typ-Erweiterung). Backward-kompatibel: ohne Cloudflare ist der Header leer, Fallback bleibt `x-forwarded-for[0]` wie bisher.
+
+Migriert: `lib/audit.ts` nutzt jetzt den zentralen Helper statt eigener Header-Lookup-Logik. Direkt-Reads in 7 weiteren Routen ersetzt (`contracts/sign`, `confirm-cart` 2×, `confirm-booking` 2×, `admin/sign-contract`, `admin/booking/[id]/regenerate-contract`, `admin/handover/[bookingId]`, `admin/manual-booking`, `admin/reels/voice-preview`). `.env.example` dokumentiert die Cloudflare-Konvention.
+
+**Wichtig vor Cloudflare-Live-Schaltung:** Hetzner-Firewall (UFW oder Coolify-Firewall) muss Port 443/80 auf die offiziellen Cloudflare-IP-Ranges (`https://www.cloudflare.com/ips/`) einschränken. Sonst kann ein Angreifer den Hetzner direkt anfragen und `cf-connecting-ip` selbst setzen → IP-Rate-Limit komplett umgangen.
+
 ### Newsletter-Verwaltung (Stand 2026-04-26)
 Admin-Seite `/admin/newsletter` (in Sidebar-Gruppe „Rabatte & Aktionen", Permission `preise`). Drei Tabs:
 

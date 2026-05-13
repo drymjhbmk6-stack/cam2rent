@@ -10,6 +10,7 @@ import { sendBookingConfirmation, sendAdminNotification, type BookingEmailData }
 import { isTestMode } from '@/lib/env-mode';
 import { isUserTester } from '@/lib/tester-mode';
 import { logAudit } from '@/lib/audit';
+import { getClientIp } from '@/lib/rate-limit';
 
 /**
  * POST /api/admin/manual-booking
@@ -180,8 +181,8 @@ export async function POST(req: NextRequest) {
 
     // ── Response sofort senden — PDF + E-Mail im Hintergrund ──
 
-    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
-      || req.headers.get('x-real-ip') || 'unknown';
+    const ipFromHelper = getClientIp(req);
+    const ip = ipFromHelper === '127.0.0.1' ? 'unknown' : ipFromHelper;
 
     const fmtD = (iso: string) => {
       if (!iso) return '';

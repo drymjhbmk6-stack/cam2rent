@@ -178,8 +178,8 @@ export async function POST(req: NextRequest) {
       // sofort statt 2-4 s synchron auf PDF + Storage zu warten.
       console.log('[confirm-cart] Idempotent: existingRows=', existingRows.length, 'contractSignature=', contractSignature ? 'vorhanden' : 'FEHLT');
       if (contractSignature?.agreedToTerms && contractSignature?.signerName) {
-        const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
-          || req.headers.get('x-real-ip') || 'unknown';
+        const ipFromHelper = getClientIp(req);
+        const ip = ipFromHelper === '127.0.0.1' ? 'unknown' : ipFromHelper;
         const ids = existingRows.map((r) => r.id);
         const sig = contractSignature;
 
@@ -933,9 +933,8 @@ export async function POST(req: NextRequest) {
     const txMap: Record<string, string> = {};
     for (const s of taxResultCart?.data ?? []) txMap[s.key] = s.value;
 
-    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
-      || req.headers.get('x-real-ip')
-      || 'unknown';
+    const ipFromHelperLate = getClientIp(req);
+    const ip = ipFromHelperLate === '127.0.0.1' ? 'unknown' : ipFromHelperLate;
 
     const fmtDateForContract = (iso: string) => {
       if (!iso) return '';

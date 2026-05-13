@@ -1,5 +1,6 @@
 import { createServiceClient } from '@/lib/supabase';
 import { getCurrentAdminUser } from '@/lib/admin-auth';
+import { getClientIp } from '@/lib/rate-limit';
 
 interface AuditParams {
   action: string;
@@ -39,12 +40,14 @@ export async function logAudit(params: AuditParams): Promise<void> {
   try {
     const supabase = createServiceClient();
 
+    // IP via zentralen Helper — kennt Cloudflare-Header (cf-connecting-ip).
+    // Liefert '127.0.0.1' als Fallback, wenn kein Proxy-Header vorhanden ist;
+    // wir behandeln das als "keine IP loggen" damit Audit-Log nicht mit
+    // Localhost-Eintraegen gefuellt wird.
     let ipAddress: string | null = null;
     if (params.request) {
-      ipAddress =
-        params.request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-        params.request.headers.get('x-real-ip') ||
-        null;
+      const ip = getClientIp(params.request);
+      if (ip && ip !== '127.0.0.1') ipAddress = ip;
     }
 
     let adminUserId = params.adminUserId ?? null;
