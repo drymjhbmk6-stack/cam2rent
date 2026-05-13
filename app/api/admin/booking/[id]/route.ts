@@ -548,6 +548,9 @@ export async function PATCH(
   }
 
   // Status aktualisieren
+  // Bei Status-Wechsel: Pre-Status laden fuer atomaren Status-Guard (Race-Schutz
+  // gegen parallele Aktionen wie Stripe-Webhook oder Doppel-Klick auf Storno).
+  let preStatus: string | null = null;
   if (status) {
     const allowed = ['pending_verification', 'awaiting_payment', 'confirmed', 'shipped', 'picked_up', 'completed', 'cancelled', 'damaged'];
     if (!allowed.includes(status)) {
@@ -555,14 +558,21 @@ export async function PATCH(
     }
     updates.status = status;
 
+    // Pre-Status holen (kombiniert mit Notes-Lookup fuer Storno-Grund)
+    const { data: existing } = await supabase
+      .from('bookings')
+      .select('status, notes')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (!existing) {
+      return NextResponse.json({ error: 'Buchung nicht gefunden.' }, { status: 404 });
+    }
+    preStatus = existing.status;
+
     // Bei Stornierung: Grund in Notizen speichern
     if (status === 'cancelled' && cancellation_reason) {
-      const { data: existing } = await supabase
-        .from('bookings')
-        .select('notes')
-        .eq('id', id)
-        .maybeSingle();
-      const existingNotes = existing?.notes ? `${existing.notes} | ` : '';
+      const existingNotes = existing.notes ? `${existing.notes} | ` : '';
       updates.notes = `${existingNotes}Stornierungsgrund: ${cancellation_reason}`;
     }
   }
@@ -571,14 +581,25 @@ export async function PATCH(
     return NextResponse.json({ error: 'Keine Änderungen.' }, { status: 400 });
   }
 
-  const { error } = await supabase
-    .from('bookings')
-    .update(updates)
-    .eq('id', id);
+  // Atomar updaten — bei Status-Wechsel mit Pre-Status-Guard, sonst nur per id.
+  let updateQuery = supabase.from('bookings').update(updates).eq('id', id);
+  if (preStatus !== null) {
+    updateQuery = updateQuery.eq('status', preStatus);
+  }
+  const { data: updated, error } = await updateQuery.select('id').maybeSingle();
 
   if (error) {
     console.error('Booking update error:', error);
     return NextResponse.json({ error: 'Aktualisierung fehlgeschlagen.' }, { status: 500 });
+  }
+
+  if (!updated && preStatus !== null) {
+    // 0 Rows geändert — Status wurde zwischenzeitlich von woanders geflippt
+    // (Webhook, Doppel-Klick, paralleler Admin). Sauber 409 statt blind ueberschreiben.
+    return NextResponse.json(
+      { error: `Status hat sich zwischenzeitlich geändert (war: ${preStatus}). Bitte Buchung neu laden.` },
+      { status: 409 },
+    );
   }
 
   // Bei Stornierung: Stripe-Link deaktivieren, Zubehoer freigeben, Mails raus.

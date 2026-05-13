@@ -190,17 +190,29 @@ export async function POST(req: NextRequest) {
   const seriesContext = null as { id: string; title: string; part_number: number; total_parts: number; description: string; partId: string } | null;
 
   if (scheduleEntry) {
-    topicData = {
-      id: scheduleEntry.id,
-      topic: scheduleEntry.topic,
-      prompt: scheduleEntry.prompt || null,
-      keywords: scheduleEntry.keywords,
-      category_id: scheduleEntry.category_id,
-      tone: scheduleEntry.tone ?? 'informativ',
-      target_length: scheduleEntry.target_length ?? 'mittel',
-    };
-    scheduleId = scheduleEntry.id;
-    await supabase.from('blog_schedule').update({ status: 'generating' }).eq('id', scheduleEntry.id);
+    // Atomarer Status-Flip mit Race-Schutz: nur EIN paralleler Cron darf den
+    // Eintrag schnappen. Falls bereits jemand auf 'generating' geflippt hat,
+    // kommen 0 Rows zurueck und wir behandeln das wie "kein faelliger Artikel".
+    const { data: claimed } = await supabase
+      .from('blog_schedule')
+      .update({ status: 'generating' })
+      .eq('id', scheduleEntry.id)
+      .eq('status', 'planned')
+      .select('id')
+      .maybeSingle();
+
+    if (claimed) {
+      topicData = {
+        id: scheduleEntry.id,
+        topic: scheduleEntry.topic,
+        prompt: scheduleEntry.prompt || null,
+        keywords: scheduleEntry.keywords,
+        category_id: scheduleEntry.category_id,
+        tone: scheduleEntry.tone ?? 'informativ',
+        target_length: scheduleEntry.target_length ?? 'mittel',
+      };
+      scheduleId = scheduleEntry.id;
+    }
   }
 
   if (!topicData) {

@@ -126,6 +126,8 @@ export async function POST(
   // und auch die Originalrechnung NICHT auf 'cancelled' setzen. Vorher: bei
   // Refund-Fail wurde der CN trotzdem sent + Invoice cancelled → USt-Voran-
   // meldung enthielt eine Gutschrift, ohne dass je Geld zurueckgegangen waere.
+  // Zusaetzlicher TOCTOU-Schutz: atomar gegen `.eq('status','approved')`, damit
+  // ein zwischenzeitlicher manueller DB-Edit nicht ueberschrieben wird.
   const refundFailed = refundStatus === 'failed';
   await supabase
     .from('credit_notes')
@@ -135,7 +137,8 @@ export async function POST(
       status: refundFailed ? 'approved' : 'sent',
       sent_at: refundFailed ? null : new Date().toISOString(),
     })
-    .eq('id', id);
+    .eq('id', id)
+    .eq('status', 'approved');
 
   // Originalrechnung nur bei erfolgreichem Refund stornieren
   if (creditNote.invoice_id && !refundFailed) {
