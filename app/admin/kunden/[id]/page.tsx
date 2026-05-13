@@ -226,12 +226,17 @@ export default function KundenDetailPage() {
       reason = input.trim() || undefined;
     }
     setVerifyLoading(true);
-    await fetch('/api/admin/verify-customer', {
+    const res = await fetch('/api/admin/verify-customer', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ customerId, status, ...(reason ? { reason } : {}) }),
     });
     setVerifyLoading(false);
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      alert(body.message ?? body.error ?? 'Verifizierung fehlgeschlagen.');
+      return;
+    }
     fetchData();
   }
 
@@ -531,40 +536,61 @@ export default function KundenDetailPage() {
               )}
 
               {/* Verifizierungs-Buttons — nur wenn Ausweis hochgeladen oder Status pending/rejected */}
-              {customer.verification_status !== 'verified' && (customer.id_front_url || customer.id_back_url || customer.verification_status === 'pending' || customer.verification_status === 'rejected') && (
-                <div style={{ display: 'flex', gap: 12 }}>
-                  <button
-                    onClick={() => handleVerify('verified')}
-                    disabled={verifyLoading}
-                    style={{
-                      padding: '10px 24px', borderRadius: 8, fontSize: 14, fontWeight: 700,
-                      background: '#10b981', color: 'white', border: 'none', cursor: 'pointer',
-                      opacity: verifyLoading ? 0.5 : 1,
-                      display: 'flex', alignItems: 'center', gap: 8,
-                    }}
-                  >
-                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                    Verifizieren
-                  </button>
-                  <button
-                    onClick={() => handleVerify('rejected')}
-                    disabled={verifyLoading}
-                    style={{
-                      padding: '10px 24px', borderRadius: 8, fontSize: 14, fontWeight: 700,
-                      background: '#1e293b', color: '#ef4444', border: '1px solid #ef444440', cursor: 'pointer',
-                      opacity: verifyLoading ? 0.5 : 1,
-                      display: 'flex', alignItems: 'center', gap: 8,
-                    }}
-                  >
-                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                    Ablehnen
-                  </button>
-                </div>
-              )}
+              {customer.verification_status !== 'verified' && (customer.id_front_url || customer.id_back_url || customer.verification_status === 'pending' || customer.verification_status === 'rejected') && (() => {
+                const stammdatenMissing: string[] = [];
+                if (!customer.full_name?.trim()) stammdatenMissing.push('Name');
+                if (!customer.address_street?.trim()) stammdatenMissing.push('Straße');
+                if (!customer.address_zip?.trim()) stammdatenMissing.push('PLZ');
+                if (!customer.address_city?.trim()) stammdatenMissing.push('Stadt');
+                const blockVerify = stammdatenMissing.length > 0;
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    {blockVerify && (
+                      <div style={{
+                        padding: '12px 14px', borderRadius: 8, fontSize: 13,
+                        background: 'rgba(245, 158, 11, 0.08)', color: '#fbbf24',
+                        border: '1px solid rgba(245, 158, 11, 0.3)',
+                      }}>
+                        ⚠ Stammdaten unvollständig — fehlt: {stammdatenMissing.join(', ')}. Der Kunde muss diese im Konto ergänzen, bevor er verifiziert werden kann.
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', gap: 12 }}>
+                      <button
+                        onClick={() => handleVerify('verified')}
+                        disabled={verifyLoading || blockVerify}
+                        title={blockVerify ? `Stammdaten fehlen: ${stammdatenMissing.join(', ')}` : undefined}
+                        style={{
+                          padding: '10px 24px', borderRadius: 8, fontSize: 14, fontWeight: 700,
+                          background: '#10b981', color: 'white', border: 'none',
+                          cursor: (verifyLoading || blockVerify) ? 'not-allowed' : 'pointer',
+                          opacity: (verifyLoading || blockVerify) ? 0.4 : 1,
+                          display: 'flex', alignItems: 'center', gap: 8,
+                        }}
+                      >
+                        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        Verifizieren
+                      </button>
+                      <button
+                        onClick={() => handleVerify('rejected')}
+                        disabled={verifyLoading}
+                        style={{
+                          padding: '10px 24px', borderRadius: 8, fontSize: 14, fontWeight: 700,
+                          background: '#1e293b', color: '#ef4444', border: '1px solid #ef444440', cursor: 'pointer',
+                          opacity: verifyLoading ? 0.5 : 1,
+                          display: 'flex', alignItems: 'center', gap: 8,
+                        }}
+                      >
+                        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                        Ablehnen
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {customer.verification_status === 'verified' && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#10b981', fontSize: 14 }}>

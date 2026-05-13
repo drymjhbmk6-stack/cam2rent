@@ -25,6 +25,43 @@ export async function POST(req: NextRequest) {
 
     const supabase = createServiceClient();
 
+    // Vor dem Verifizieren: Stammdaten-Pflichtcheck.
+    // Express-Signup legt Konten ohne full_name/Adresse an (Sweep 7 #23),
+    // damit ein Angreifer nicht im Namen fremder Mailadressen Daten persistieren
+    // kann. Bevor wir verifizieren, muss der echte Besitzer einmal Name +
+    // Adresse ergaenzt haben — sonst hat der Mietvertrag keine Vertragspartei.
+    if (status === 'verified') {
+      const { data: profile, error: profileErr } = await supabase
+        .from('profiles')
+        .select('full_name, address_street, address_zip, address_city')
+        .eq('id', customerId)
+        .maybeSingle();
+
+      if (profileErr || !profile) {
+        return NextResponse.json(
+          { error: 'Kundenprofil nicht gefunden.' },
+          { status: 404 }
+        );
+      }
+
+      const missing: string[] = [];
+      if (!profile.full_name?.trim()) missing.push('Name');
+      if (!profile.address_street?.trim()) missing.push('Strasse');
+      if (!profile.address_zip?.trim()) missing.push('PLZ');
+      if (!profile.address_city?.trim()) missing.push('Stadt');
+
+      if (missing.length > 0) {
+        return NextResponse.json(
+          {
+            error: 'STAMMDATEN_UNVOLLSTAENDIG',
+            message: `Verifizierung blockiert — folgende Stammdaten fehlen: ${missing.join(', ')}. Der Kunde muss diese im Konto ergänzen, bevor er verifiziert werden kann.`,
+            missing,
+          },
+          { status: 422 }
+        );
+      }
+    }
+
     const updateData: Record<string, unknown> = {
       verification_status: status,
     };
