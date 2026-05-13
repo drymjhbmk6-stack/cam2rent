@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import { fmtDateTime } from '@/lib/format-utils';
 
 interface LegalDoc {
   id: string;
@@ -24,12 +25,9 @@ const SLUG_LABELS: Record<string, { icon: string; color: string }> = {
   impressum: { icon: '🏢', color: '#3b82f6' },
 };
 
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString('de-DE', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  });
-}
+// Lokaler fmtDate entfernt — nutzt jetzt zentralen fmtDateTime aus lib/format-utils
+// (vorher: fehlende Europe/Berlin-TZ -> falscher Tag zwischen 22-02 Uhr auf UTC-Server)
+const fmtDate = fmtDateTime;
 
 export default function LegalDocumentsContent() {
   const [docs, setDocs] = useState<LegalDoc[]>([]);

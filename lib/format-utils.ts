@@ -66,3 +66,15 @@ export function isoToDE(iso: string): string {
   const [y, m, d] = iso.split('-');
   return `${d}.${m}.${y}`;
 }
+
+// ─── Rundung ─────────────────────────────────────────────────────────────────
+
+/**
+ * Auf 2 Nachkommastellen runden. Standard fuer Euro-Betraege,
+ * die nicht direkt aus DB kommen (z.B. Rabatt-Berechnung, Brutto/Netto-Konversion).
+ *
+ * Beispiel: 12.34567 → 12.35
+ */
+export function roundTo2(n: number): number {
+  return Math.round(n * 100) / 100;
+}

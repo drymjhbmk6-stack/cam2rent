@@ -6,7 +6,7 @@ import Link from 'next/link';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import AccessoryDamageModal from '@/components/admin/AccessoryDamageModal';
 import { BUSINESS } from '@/lib/business-config';
-import { fmtEuro as fmtEuroCanonical } from '@/lib/format-utils';
+import { fmtEuro as fmtEuroCanonical, fmtDateTime as fmtDateTimeCanonical } from '@/lib/format-utils';
 
 interface BookingDetail {
   id: string;
@@ -151,12 +151,11 @@ function fmtDate(iso: string) {
   return `${d}.${m}.${y}`;
 }
 
+// Null-safe Wrapper um zentralen fmtDateTime (Europe/Berlin-TZ).
+// Vorher: fehlende Europe/Berlin-TZ -> falscher Tag zwischen 22-02 Uhr auf UTC-Server.
 function fmtDateTime(iso: string) {
   if (!iso) return '–';
-  return new Date(iso).toLocaleString('de-DE', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  });
+  return fmtDateTimeCanonical(iso);
 }
 
 function fmtEuro(n: number | null | undefined) {
