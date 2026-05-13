@@ -134,11 +134,11 @@ export async function GET(req: NextRequest) {
       status: 'sent' | 'failed';
       resend_message_id: string | null;
     };
-    const logRows: LogRow[] = [];
-
-    for (const booking of bookings) {
-      if (sentSet.has(booking.id)) continue;
-
+    // Parallel-Send statt sequenziell: jeder Resend-Call dauert ~200-400ms.
+    // Bei 20 Bookings/Job × 5 Jobs sequenziell = 30-40s, parallel ~5s.
+    // allSettled, damit ein einzelner Resend-Fehler die Schleife nicht killt.
+    const pending = bookings.filter((b) => !sentSet.has(b.id));
+    const sendPromises = pending.map((booking) => {
       const emailData: ReminderEmailData = {
         bookingId: booking.id,
         customerName: booking.customer_name,
@@ -146,34 +146,30 @@ export async function GET(req: NextRequest) {
         productName: booking.product_name,
         rentalTo: booking.rental_to,
       };
+      return job.sendFn(emailData);
+    });
 
-      let messageId: string | null = null;
-      let status: 'sent' | 'failed' = 'sent';
-      let errorMsg: string | undefined;
-
-      try {
-        messageId = await job.sendFn(emailData);
-      } catch (err) {
-        status = 'failed';
-        errorMsg = err instanceof Error ? err.message : String(err);
-      }
-
-      logRows.push({
-        booking_id: booking.id,
-        customer_email: booking.customer_email,
-        email_type: job.emailType,
-        status,
-        resend_message_id: messageId,
-      });
-
+    const settled = await Promise.allSettled(sendPromises);
+    const logRows: LogRow[] = settled.map((s, idx) => {
+      const booking = pending[idx];
+      const ok = s.status === 'fulfilled';
+      const messageId = ok ? s.value : null;
+      const errorMsg = ok ? undefined : (s.reason instanceof Error ? s.reason.message : String(s.reason));
       results.push({
         bookingId: booking.id,
         emailType: job.emailType,
-        status,
+        status: ok ? 'sent' : 'failed',
         messageId,
         error: errorMsg,
       });
-    }
+      return {
+        booking_id: booking.id,
+        customer_email: booking.customer_email,
+        email_type: job.emailType,
+        status: ok ? 'sent' : 'failed',
+        resend_message_id: messageId,
+      };
+    });
 
     // 4. Batch-Insert aller Log-Rows fuer diesen Job statt N einzelner Inserts
     if (logRows.length) {

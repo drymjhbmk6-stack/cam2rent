@@ -77,15 +77,23 @@ async function handle(req: NextRequest) {
       .in('id', stale);
   }
 
-  const results = [];
-  for (const reel of fresh) {
-    try {
-      const r = await publishReel(reel.id);
-      results.push({ id: reel.id, success: r.success, errors: r.errors });
-    } catch (err) {
-      results.push({ id: reel.id, success: false, errors: [{ platform: 'system', message: err instanceof Error ? err.message : String(err) }] });
+  // Parallel publizieren: jede publishReel-Operation umfasst Video-Upload zu
+  // Meta + Polling auf FINISHED-Status (3-5s pro Reel). Bei 5 Reels sequenziell
+  // 15-25s, parallel ~5s. allSettled, damit ein einzelner Meta-Fehler die
+  // anderen nicht killt.
+  const settled = await Promise.allSettled(fresh.map((reel) => publishReel(reel.id)));
+  const results = settled.map((s, idx) => {
+    const reel = fresh[idx];
+    if (s.status === 'fulfilled') {
+      return { id: reel.id, success: s.value.success, errors: s.value.errors };
     }
-  }
+    const err = s.reason;
+    return {
+      id: reel.id,
+      success: false,
+      errors: [{ platform: 'system', message: err instanceof Error ? err.message : String(err) }],
+    };
+  });
   if (stale.length) {
     results.push(
       ...stale.map((id) => ({

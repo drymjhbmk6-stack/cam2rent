@@ -193,56 +193,44 @@ export async function GET() {
     const sumPrices = (rows: { price_total: number }[] | null) =>
       (rows ?? []).reduce((sum, r) => sum + (r.price_total || 0), 0);
 
-    // ── Enrich damage list with booking info ─────────────────────
+    // ── Enrich damage list + reviews mit Booking-Info ────────────
+    // Damages und Reviews holen jeweils Bookings-Infos zur Anzeige. Statt zwei
+    // separater Queries laden wir alle benoetigten Bookings in einem einzigen
+    // Roundtrip und mappen client-side.
 
-    let openDamagesList: Array<{ id: string; description: string; status: string; created_at: string; product_name: string; customer_name: string }> = [];
-    if (openDamagesListRes.data && openDamagesListRes.data.length > 0) {
-      const bIds = [...new Set(openDamagesListRes.data.map((d) => d.booking_id))];
-      const { data: damageBookings } = await supabase
+    const damageBookingIds = openDamagesListRes.data?.map((d) => d.booking_id) ?? [];
+    const reviewBookingIds = recentReviewsRes.data?.map((r) => r.booking_id) ?? [];
+    const allEnrichBookingIds = [...new Set([...damageBookingIds, ...reviewBookingIds])];
+
+    const enrichMap: Record<string, { product_name: string; customer_name: string }> = {};
+    if (allEnrichBookingIds.length > 0) {
+      const { data: enrichBookings } = await supabase
         .from('bookings')
         .select('id, product_name, customer_name')
-        .in('id', bIds);
-
-      const bMap: Record<string, { product_name: string; customer_name: string }> = {};
-      for (const b of damageBookings ?? []) {
-        bMap[b.id] = { product_name: b.product_name, customer_name: b.customer_name };
+        .in('id', allEnrichBookingIds);
+      for (const b of enrichBookings ?? []) {
+        enrichMap[b.id] = { product_name: b.product_name, customer_name: b.customer_name };
       }
-
-      openDamagesList = openDamagesListRes.data.map((d) => ({
-        id: d.id,
-        description: d.description || '',
-        status: d.status,
-        created_at: d.created_at,
-        product_name: bMap[d.booking_id]?.product_name || '',
-        customer_name: bMap[d.booking_id]?.customer_name || '',
-      }));
     }
 
-    // ── Enrich reviews with booking info ─────────────────────────
+    const openDamagesList = (openDamagesListRes.data ?? []).map((d) => ({
+      id: d.id,
+      description: d.description || '',
+      status: d.status,
+      created_at: d.created_at,
+      product_name: enrichMap[d.booking_id]?.product_name || '',
+      customer_name: enrichMap[d.booking_id]?.customer_name || '',
+    }));
 
-    let reviewsList: Array<{ id: string; rating: number; comment: string; approved: boolean; created_at: string; product_name: string; customer_name: string }> = [];
-    if (recentReviewsRes.data && recentReviewsRes.data.length > 0) {
-      const reviewBookingIds = [...new Set(recentReviewsRes.data.map((r) => r.booking_id))];
-      const { data: reviewBookings } = await supabase
-        .from('bookings')
-        .select('id, product_name, customer_name')
-        .in('id', reviewBookingIds);
-
-      const rbMap: Record<string, { product_name: string; customer_name: string }> = {};
-      for (const b of reviewBookings ?? []) {
-        rbMap[b.id] = { product_name: b.product_name, customer_name: b.customer_name };
-      }
-
-      reviewsList = recentReviewsRes.data.map((r) => ({
-        id: r.id,
-        rating: r.rating,
-        comment: (r.comment || '').substring(0, 120),
-        approved: r.approved,
-        created_at: r.created_at,
-        product_name: rbMap[r.booking_id]?.product_name || '',
-        customer_name: rbMap[r.booking_id]?.customer_name || '',
-      }));
-    }
+    const reviewsList = (recentReviewsRes.data ?? []).map((r) => ({
+      id: r.id,
+      rating: r.rating,
+      comment: (r.comment || '').substring(0, 120),
+      approved: r.approved,
+      created_at: r.created_at,
+      product_name: enrichMap[r.booking_id]?.product_name || '',
+      customer_name: enrichMap[r.booking_id]?.customer_name || '',
+    }));
 
     // ── Camera Utilization (30 Tage) — zentrale Lib, gleiche Logik wie /api/admin/utilization
     const utilizationProducts = await computeCameraUtilization(supabase, 30);
