@@ -1883,9 +1883,10 @@ Cloudflare laeuft als Proxy + Edge-Schicht vor cam2rent.de. Die „Wichtig vor C
   - Wildcard `*` A-Record → `85.13.154.63` (KAS-Legacy-IP): graue Wolke. Kein Origin-Leak weil andere IP als Hetzner. Stehengelassen fuer eventuell noch genutzte KAS-Subdomains.
   - MX + TXT (SPF, DMARC, DKIM, Resend, Google-Verification): grau wie ueblich (MX kann nicht geproxied werden).
 - **Hetzner Cloud Firewall `firewall-1` (Beschreibung `cam2rent-cloudflare-only`):**
-  - Eingehend: TCP/22 (SSH, Any IPv4 + IPv6), TCP/443 (HTTPS, nur 22 Cloudflare-CIDRs), TCP/80 (HTTP, nur 22 Cloudflare-CIDRs — fuer Let's-Encrypt-HTTP-01-Challenge + Cloudflare-Redirect)
+  - Eingehend: TCP/22 (SSH, Any IPv4 + IPv6), TCP/443 (HTTPS, nur 22 Cloudflare-CIDRs), TCP/80 (HTTP, nur 22 Cloudflare-CIDRs — fuer Let's-Encrypt-HTTP-01-Challenge + Cloudflare-Redirect), TCP/8000 (Coolify-Admin, nur eigene Heim-IP `<IPv4>/32` + IPv6-Prefix `<IPv6>/64`)
   - Ausgehend: alles erlaubt (Default)
   - Server `cam2rent` zugewiesen
+  - **Coolify-Zugang bei IP-Wechsel:** DSL-Provider (Telekom/Vodafone) rotieren die IPv4 typischerweise taeglich. Wenn `http://178.104.117.135:8000/...` ploetzlich Timeout liefert, eigene IP unter https://wieistmeineip.de pruefen und die TCP/8000-Regel in Hetzner aktualisieren. IPv6 mit `/64` deckt das ganze Heim-Prefix ab (Privacy-Extensions wechseln nur die letzten 64 Bits) — IPv4 muss als `/32` exakt gesetzt werden, oder als `/24`-Block des Providers, wenn der Wechsel zu oft nervt. Alternative: SSH-Tunnel `ssh -L 8000:localhost:8000 root@178.104.117.135` braucht keinen offenen Port (SSH ist Any-IP).
 - **Wartung:** Cloudflare-IP-Ranges quartalsweise gegen https://www.cloudflare.com/ips/ pruefen — Hetzner Cloud Firewall hat keine Auto-Update. Bei Erweiterung neue Ranges manuell ergaenzen, sonst kommt der Origin nicht mehr durch.
 - **Bekannte Free-Tier-Limits:** Verwaltete WAF-Regeln (Managed Ruleset, OWASP) sind Pro-only. Rate-Limit-Period + Duration sind auf 10 Sekunden gecapt (Pro: 10s/1m/5m/15m/1h/24h waehlbar). Falls cam2rent in Zukunft ueber 100k Requests/Monat geht oder eine aktive Angriffswelle erlebt, Pro-Plan in Betracht ziehen.
 - **Spaeter optional:**
