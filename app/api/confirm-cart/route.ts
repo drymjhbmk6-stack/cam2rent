@@ -488,17 +488,33 @@ export async function POST(req: NextRequest) {
           );
           const floorCents = Math.max(50, expectedMinCents - totalAllowedDiscountCents - 50); // 50 ct Rundungs-Toleranz
           if (intent.amount < floorCents) {
-            console.error('[confirm-cart] Preis-Plausibilität verletzt:', {
+            // WICHTIG: Nach erfolgreicher Stripe-Zahlung NICHT mehr ablehnen.
+            // Das Geld ist eingegangen — Buchung NICHT anzulegen wuerde den
+            // Kunden ohne Vertrag ohne Buchung dastehen lassen (Geld in
+            // Stripe, nichts in DB). Der harte 400 hier hat genau das verursacht.
+            // Statt Reject: Admin-Notification + weiter im Flow. Buchung wird
+            // angelegt, Admin prueft + erstattet bei Bedarf manuell.
+            // Der praeventive Schutz lebt in checkout-intent (50%-Floor vor
+            // Payment) und in der webhook-Plausibilitaet (verifyAmountConsistency).
+            const diffEur = ((floorCents - intent.amount) / 100).toFixed(2);
+            console.error('[confirm-cart] Preis-Plausibilität verletzt — Buchung wird trotzdem angelegt:', {
               paymentIntent: payment_intent_id,
               paidAmount: intent.amount,
               expectedMinCents,
               validatedDiscountCents,
               floorCents,
+              shortfallEur: diffEur,
             });
-            return NextResponse.json(
-              { error: 'Preis-Plausibilitätsprüfung fehlgeschlagen. Buchung wurde nicht bestätigt.' },
-              { status: 400 },
-            );
+            try {
+              await createAdminNotification(supabase, {
+                type: 'payment_failed',
+                title: `Preis-Plausibilität verletzt (${r_preBookingId ?? payment_intent_id})`,
+                message: `Stripe hat ${(intent.amount / 100).toFixed(2)} € abgebucht, erwartet wurden mindestens ${(floorCents / 100).toFixed(2)} € (Listenpreis ${(expectedMinCents / 100).toFixed(2)} € abzgl. validiertem Rabatt). Differenz: ${diffEur} €. Bitte Buchung pruefen und ggf. Differenz nachfordern oder erstatten.`,
+                link: r_preBookingId ? `/admin/buchungen/${r_preBookingId}` : '/admin/buchungen',
+              });
+            } catch (notifErr) {
+              console.error('[confirm-cart] Konnte Plausibilitaets-Notification nicht anlegen:', notifErr);
+            }
           }
         }
       }

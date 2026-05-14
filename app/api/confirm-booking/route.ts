@@ -190,16 +190,30 @@ export async function POST(req: NextRequest) {
             // fuer Versand/Haftung-Staffeln, ohne Cart-Manipulation zu erlauben.
             const floorCents = Math.floor(expectedCents * 0.5);
             if (intent.amount < floorCents) {
-              console.error('[confirm-booking] Preis-Plausibilität verletzt:', {
+              // Nach erfolgreicher Stripe-Zahlung NICHT mehr ablehnen.
+              // Geld ist eingegangen — Reject wuerde Kunden ohne Buchung
+              // dastehen lassen. Stattdessen Admin-Notification, Flow geht
+              // weiter, Buchung wird angelegt. Praeventiver Schutz bleibt
+              // in checkout-intent (50%-Floor vor Payment) bzw. in der
+              // create-payment-intent-Route.
+              const diffEur = ((floorCents - intent.amount) / 100).toFixed(2);
+              console.error('[confirm-booking] Preis-Plausibilität verletzt — Buchung wird trotzdem angelegt:', {
                 paymentIntent: payment_intent_id,
                 paidAmount: intent.amount,
                 expectedCents,
                 floorCents,
+                shortfallEur: diffEur,
               });
-              return NextResponse.json(
-                { error: 'Preis-Plausibilitätsprüfung fehlgeschlagen. Buchung wurde nicht bestätigt.' },
-                { status: 400 },
-              );
+              try {
+                await createAdminNotification(supabase, {
+                  type: 'payment_failed',
+                  title: `Preis-Plausibilität verletzt (${payment_intent_id})`,
+                  message: `Stripe hat ${(intent.amount / 100).toFixed(2)} € abgebucht, erwartet wurden mindestens ${(floorCents / 100).toFixed(2)} € (Listenpreis ${(expectedCents / 100).toFixed(2)} €). Differenz: ${diffEur} €. Bitte Buchung pruefen und ggf. Differenz nachfordern oder erstatten.`,
+                  link: '/admin/buchungen',
+                });
+              } catch (notifErr) {
+                console.error('[confirm-booking] Konnte Plausibilitaets-Notification nicht anlegen:', notifErr);
+              }
             }
           }
         }
