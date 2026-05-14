@@ -489,6 +489,17 @@ export default function CheckoutPage() {
   const finalShipping = shippingOnOriginal.price;
   const total = discountedSubtotal + finalShipping;
 
+  // Haftung wird in der Bestellaufstellung separat ausgewiesen, damit Kunden
+  // die Rechnung leichter nachvollziehen koennen. priceHaftung steckt schon
+  // in item.subtotal (und damit in cartTotal) — wir ziehen es fuer die
+  // Anzeige pro Item + Zwischensumme wieder raus und zeigen es als eigene
+  // Zeile unter dem Rabatt. Das Gesamt aendert sich dadurch nicht.
+  const haftungTotal = useMemo(
+    () => items.reduce((s, it) => s + (it.priceHaftung || 0), 0),
+    [items],
+  );
+  const subtotalWithoutHaftung = cartTotal - haftungTotal;
+
   const handleApplyCoupon = async () => {
     setCouponError('');
     setCouponLoading(true);
@@ -792,7 +803,7 @@ export default function CheckoutPage() {
                                 </div>
                               )}
                             </div>
-                            <span className="font-heading font-semibold text-sm text-brand-black dark:text-white flex-shrink-0">{fmt(item.subtotal)}</span>
+                            <span className="font-heading font-semibold text-sm text-brand-black dark:text-white flex-shrink-0">{fmt(item.subtotal - (item.priceHaftung || 0))}</span>
                           </div>
                         ))}
                       </div>
@@ -803,8 +814,20 @@ export default function CheckoutPage() {
                   <div className="mt-4 pt-3 border-t border-brand-border dark:border-white/10 space-y-1.5">
                     <div className="flex justify-between text-sm">
                       <span className="text-brand-steel dark:text-gray-400">Zwischensumme</span>
-                      <span className="text-brand-black dark:text-white">{fmt(cartTotal)}</span>
+                      <span className="text-brand-black dark:text-white">{fmt(subtotalWithoutHaftung)}</span>
                     </div>
+                    {totalDiscount > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-brand-steel dark:text-gray-400">Rabatt</span>
+                        <span className="text-status-success font-semibold">-{fmt(totalDiscount)}</span>
+                      </div>
+                    )}
+                    {haftungTotal > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-brand-steel dark:text-gray-400">Haftungsschutz</span>
+                        <span className="text-brand-black dark:text-white">{fmt(haftungTotal)}</span>
+                      </div>
+                    )}
                     {finalShipping > 0 ? (
                       <div className="flex justify-between text-sm">
                         <span className="text-brand-steel dark:text-gray-400">Versand ({shippingMethod === 'express' ? 'Express' : 'Standard'})</span>
@@ -816,12 +839,6 @@ export default function CheckoutPage() {
                         <span className="text-status-success font-semibold">Kostenlos</span>
                       </div>
                     ) : null}
-                    {totalDiscount > 0 && (
-                      <div className="flex justify-between text-sm">
-                        <span className="text-brand-steel dark:text-gray-400">Rabatt</span>
-                        <span className="text-status-success font-semibold">-{fmt(totalDiscount)}</span>
-                      </div>
-                    )}
                     <div className="flex justify-between pt-2 border-t border-brand-border dark:border-white/10">
                       <span className="font-heading font-bold text-brand-black dark:text-white">Gesamt</span>
                       <span className="font-heading font-bold text-lg text-brand-black dark:text-white">{fmt(total)}</span>
