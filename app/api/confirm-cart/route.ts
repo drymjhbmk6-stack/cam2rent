@@ -472,17 +472,22 @@ export async function POST(req: NextRequest) {
             });
             r_discountAmount = validatedDiscountEur;
           }
-          // Sweep 9 MED-1: productDiscount/durationDiscount/loyaltyDiscount aus
-          // dem Body cappen, damit DB/Rechnung nicht durch negative oder
-          // ueberhoehte Werte verzerrt werden. Cap pro Feld = 30% des Subtotals.
-          const otherCapEur = Math.floor((expectedMinCents * 0.30) / 100);
-          r_productDiscount = Math.max(0, Math.min(Number(r_productDiscount ?? 0), otherCapEur));
-          r_durationDiscount = Math.max(0, Math.min(Number(r_durationDiscount ?? 0), otherCapEur));
-          r_loyaltyDiscount = Math.max(0, Math.min(Number(r_loyaltyDiscount ?? 0), otherCapEur));
-          // duration/loyalty maximal 30% on top — uebliche Promo-Range.
-          // Beide werden client-seitig berechnet und sind fuer cam2rent
-          // keine bekannte Server-Quelle, daher konservativer Cap.
-          const otherDiscountCap = Math.floor(expectedMinCents * 0.30);
+          // Cap pro Feld defensiv setzen, damit ein manipulierter Body keine
+          // unsinnig grossen Werte schreibt. Frueher 30% pro Feld — das hat
+          // legitime Aktionsrabatte (z.B. Release50 = 50%) gekappt. Jetzt
+          // 95% pro Feld, damit eine 50%-Aktion + 10% Treuerabatt durchgehen.
+          // Total-Discount weiter unten zusaetzlich auf 95% des Subtotals
+          // gecapt.
+          // Idealerweise sollten product/duration/loyalty server-seitig
+          // recomputed werden (analog Coupon-Validation). Solange das noch
+          // aussteht, ist 95% pro Feld der pragmatische Mittelweg.
+          const perFieldCapEur = Math.floor((expectedMinCents * 0.95) / 100);
+          r_productDiscount = Math.max(0, Math.min(Number(r_productDiscount ?? 0), perFieldCapEur));
+          r_durationDiscount = Math.max(0, Math.min(Number(r_durationDiscount ?? 0), perFieldCapEur));
+          r_loyaltyDiscount = Math.max(0, Math.min(Number(r_loyaltyDiscount ?? 0), perFieldCapEur));
+          // Total-Discount: Coupon-Wert (server-validiert) + bis zu 95 % aus
+          // den client-Discounts kombiniert; insgesamt nicht mehr als 95 %.
+          const otherDiscountCap = Math.floor(expectedMinCents * 0.95);
           const totalAllowedDiscountCents = Math.min(
             validatedDiscountCents + otherDiscountCap,
             Math.floor(expectedMinCents * 0.95),

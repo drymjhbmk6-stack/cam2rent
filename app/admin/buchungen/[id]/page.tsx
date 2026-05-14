@@ -697,7 +697,11 @@ export default function BuchungDetailPage() {
                 {(booking.shipping_price ?? 0) > 0 && <PriceRow label="Versand" amount={booking.shipping_price!} />}
                 {(booking.discount_amount ?? 0) > 0 && (
                   <div className="flex justify-between items-center">
-                    <span className="text-sm font-body text-green-600">Gutschein ({booking.coupon_code})</span>
+                    <span className="text-sm font-body text-green-600">
+                      {booking.coupon_code
+                        ? `Rabatt (${booking.coupon_code})`
+                        : 'Rabatt'}
+                    </span>
                     <span className="text-sm font-body text-green-600">-{fmtEuro(booking.discount_amount!)}</span>
                   </div>
                 )}

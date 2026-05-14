@@ -15,7 +15,7 @@ import type { RentalSet } from '@/data/sets';
 import AvailabilityCalendar, { type CalendarRange } from '@/components/AvailabilityCalendar';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { shippingConfig, calcShipping, type ShippingMethod } from '@/data/shipping';
-import { calcPriceFromKeyDays, calcPriceFromTable, calcHaftungTieredPrice, getEigenbeteiligung, type PriceConfig, type AdminProduct, type HaftungConfig } from '@/lib/price-config';
+import { calcPriceFromKeyDays, calcPriceFromTable, calcHaftungTieredPrice, getEigenbeteiligung, getDiscountMatchesForItem, calcItemDiscountTotal, calcCartLevelDiscount, type PriceConfig, type AdminProduct, type HaftungConfig, type ProductDiscount } from '@/lib/price-config';
 import { fmtEuro } from '@/lib/format-utils';
 import SignatureStep, { type SignatureResult } from '@/components/booking/SignatureStep';
 import { getStripePromise } from '@/lib/stripe-client';
@@ -151,6 +151,10 @@ interface Breakdown {
   haftungPrice: number; // flat fee
   shippingPrice: number;
   shippingIsFree: boolean;
+  /** Produktrabatt (Aktion wie "Release50") — bereits vom Total abgezogen. */
+  productDiscount: number;
+  /** Name der angewandten Aktion (z.B. "Release50") fuer UI/Rechnung. */
+  productDiscountLabel: string | null;
   total: number;
 }
 
@@ -201,6 +205,39 @@ function calcBreakdown(
   const shippingCfg = dynPrices?.shipping ?? shippingConfig;
   const shipping = calcShipping(subtotal, shippingMethod, deliveryMode, shippingCfg);
 
+  // Produkt-Rabatte (Aktionen wie "Release50") — gelten auch im Einzel-Buchungs-
+  // flow. Vorher wurden sie nur im Cart angewendet, das Single-Product /buchen
+  // hat den vollen Mietpreis an Stripe geschickt → Aktion war wirkungslos.
+  const productDiscounts: ProductDiscount[] = ((dynPrices && 'productDiscounts' in dynPrices)
+    ? (dynPrices as { productDiscounts?: ProductDiscount[] }).productDiscounts
+    : undefined) ?? [];
+  let productDiscount = 0;
+  let productDiscountLabel: string | null = null;
+  if (productDiscounts.length > 0) {
+    const matches = getDiscountMatchesForItem(
+      product.id,
+      rentalPrice,
+      accessoryPrice,
+      accessories,
+      productDiscounts,
+    );
+    const itemDisc = calcItemDiscountTotal(matches, rentalPrice, accessoryPrice);
+    const cartLevel = calcCartLevelDiscount(rentalPrice + accessoryPrice - itemDisc, productDiscounts);
+    productDiscount = Math.round((itemDisc + cartLevel) * 100) / 100;
+    // Label = Name des hoechsten Discount-Match (fuer UI/Rechnung)
+    if (matches.length > 0) {
+      const best = [...matches].sort((a, b) => b.amount - a.amount)[0];
+      productDiscountLabel = best.discount.name ?? null;
+    } else if (cartLevel > 0) {
+      // Fallback: ersten passenden Cart-Level-Discount nehmen
+      const cartLevelMatch = productDiscounts.find((d) => d.applies_to_cart);
+      productDiscountLabel = cartLevelMatch?.name ?? null;
+    }
+  }
+
+  const totalBeforeDiscount = subtotal + shipping.price;
+  const total = Math.max(0, totalBeforeDiscount - productDiscount);
+
   return {
     days,
     rentalPrice,
@@ -208,7 +245,9 @@ function calcBreakdown(
     haftungPrice,
     shippingPrice: shipping.price,
     shippingIsFree: shipping.isFree,
-    total: subtotal + shipping.price,
+    productDiscount,
+    productDiscountLabel,
+    total,
   };
 }
 
@@ -659,6 +698,15 @@ export default function BuchenPage() {
             price_rental: String(breakdown.rentalPrice),
             price_accessories: String(priceAccessoriesMeta),
             price_haftung: String(breakdown.haftungPrice),
+            // Produkt-Rabatt (Aktion wie "Release50"). Wird im Frontend bereits
+            // vom Stripe-Betrag abgezogen — Metadata dient nur als Beleg fuer
+            // confirm-booking, damit discount_amount + Label in der DB landen.
+            ...(breakdown.productDiscount > 0
+              ? {
+                  product_discount: String(breakdown.productDiscount),
+                  product_discount_label: breakdown.productDiscountLabel ?? '',
+                }
+              : {}),
             user_id: user?.id ?? '',
             customer_email: user?.email ?? '',
             customer_name: user?.user_metadata?.full_name ?? user?.email ?? '',

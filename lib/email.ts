@@ -382,6 +382,13 @@ export function buildCustomerEmail(d: BookingEmailData): { html: string; subject
     ? `<tr><td style="padding:6px 0;color:#6b7280;font-size:14px;">Versandkosten</td><td style="padding:6px 0;text-align:right;font-size:14px;">${fmtEuro(d.shippingPrice)}</td></tr>`
     : '';
 
+  // Rabatt-Zeile (Aktionsrabatt / Gutschein) — vor dem Gesamtbetrag.
+  // couponCode wird sowohl fuer echte Gutscheine als auch fuer Aktionsnamen
+  // (z.B. "Release50") verwendet, damit der Kunde sieht WAS abgezogen wurde.
+  const discountRow = (d.discountAmount ?? 0) > 0
+    ? `<tr><td style="padding:6px 0;color:#10b981;font-size:14px;">${d.couponCode ? `Rabatt (${escapeHtml(d.couponCode)})` : 'Rabatt'}</td><td style="padding:6px 0;text-align:right;font-size:14px;color:#10b981;">-${fmtEuro(d.discountAmount!)}</td></tr>`
+    : '';
+
   const depositNote = d.deposit > 0
     ? `<p style="margin:0 0 8px;font-size:13px;color:#6b7280;">* Kaution ${fmtEuro(d.deposit)} wird nach Rückgabe erstattet.</p>`
     : '';
@@ -459,6 +466,7 @@ export function buildCustomerEmail(d: BookingEmailData): { html: string; subject
             ${accessoriesRow}
             ${haftungRow}
             ${shippingRow}
+            ${discountRow}
             <tr><td colspan="2" style="padding:4px 0;border-top:1px solid #e5e7eb;"></td></tr>
             <tr>
               <td style="padding:8px 0;font-weight:700;color:#0a0a0a;font-size:15px;">Gesamtbetrag</td>

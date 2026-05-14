@@ -263,6 +263,13 @@ export async function POST(req: NextRequest) {
     const testMode = isTesterBooking || (await isTestMode());
     // Verifizierungsflag aus Stripe-Metadata (von checkout-intent gesetzt).
     const verificationRequired = meta.verification_required === '1';
+    // Produkt-Rabatt aus Metadata uebernehmen (Aktion wie "Release50").
+    // Frontend zieht ihn bereits vom Stripe-Betrag ab; hier landet er in
+    // bookings.discount_amount + bookings.coupon_code (= Aktionsname), damit
+    // Rechnung + Buchungsdetail die Aufschluesselung zeigen.
+    const productDiscountFromMeta = Math.max(0, parseFloat(meta.product_discount ?? '0') || 0);
+    const productDiscountLabel = (meta.product_discount_label ?? '').toString().trim();
+
     const { error } = await supabase.from('bookings').insert({
       id: bookingId,
       payment_intent_id,
@@ -290,6 +297,12 @@ export async function POST(req: NextRequest) {
       customer_email: meta.customer_email || null,
       customer_name: meta.customer_name || null,
       shipping_address: shippingAddress,
+      ...(productDiscountFromMeta > 0
+        ? {
+            discount_amount: productDiscountFromMeta,
+            ...(productDiscountLabel ? { coupon_code: productDiscountLabel } : {}),
+          }
+        : {}),
       // Signatur direkt persistieren — ohne das geht sie bei Container-Restart
       // verloren und der after()-Block kann den Vertrag nicht mehr erzeugen.
       // Mit Persistenz kann der Admin den Vertrag jederzeit ueber den Recovery-
@@ -497,6 +510,15 @@ export async function POST(req: NextRequest) {
           taxRate: parseFloat(txMap['tax_rate'] || '19'),
           ustId: txMap['ust_id'] || '',
           verificationRequired,
+          // Produkt-Rabatt aus Metadata in die Kunden-Mail durchreichen, damit
+          // die Kostenuebersicht den Aktionsrabatt (z.B. "Release50 -7,50 €")
+          // zeigt — analog Buchungsdetail + Rechnung.
+          ...(productDiscountFromMeta > 0
+            ? {
+                discountAmount: productDiscountFromMeta,
+                ...(productDiscountLabel ? { couponCode: productDiscountLabel } : {}),
+              }
+            : {}),
         };
 
         try {
