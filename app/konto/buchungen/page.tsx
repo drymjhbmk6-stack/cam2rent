@@ -150,7 +150,16 @@ function ExtendPaymentForm({ booking, newDate, priceInfo }: {
         <div className="mb-3 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">{formError}</div>
       )}
       <div className="mb-4">
-        <PaymentElement options={{ layout: 'tabs' }} />
+        <PaymentElement
+          options={{
+            layout: {
+              type: 'accordion',
+              defaultCollapsed: false,
+              radios: 'always',
+              spacedAccordionItems: true,
+            },
+          }}
+        />
       </div>
       <button
         type="submit"

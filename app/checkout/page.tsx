@@ -138,7 +138,21 @@ function PaymentForm({
   return (
     <form onSubmit={handleSubmit}>
       <div className="mb-6">
-        <PaymentElement options={{ layout: 'tabs' }} />
+        <PaymentElement
+          options={{
+            // accordion zeigt alle aktivierten Zahlungsmethoden vertikal
+            // gestapelt — Kunde sieht PayPal, Karte, Klarna, Apple/Google
+            // Pay, Amazon Pay etc. auf einen Blick und waehlt per Radio.
+            // 'tabs' hatte alles ueber zwei Spalten verteilt und den Rest
+            // unter einem Mehr-Dropdown versteckt.
+            layout: {
+              type: 'accordion',
+              defaultCollapsed: false,
+              radios: 'always',
+              spacedAccordionItems: true,
+            },
+          }}
+        />
       </div>
 
       {error && (

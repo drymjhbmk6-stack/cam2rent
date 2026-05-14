@@ -354,7 +354,16 @@ function PaymentStep({ total, onBack }: { total: number; onBack: () => void }) {
       </p>
 
       <div className="mb-6">
-        <PaymentElement options={{ layout: 'tabs' }} />
+        <PaymentElement
+          options={{
+            layout: {
+              type: 'accordion',
+              defaultCollapsed: false,
+              radios: 'always',
+              spacedAccordionItems: true,
+            },
+          }}
+        />
       </div>
 
       {error && (
