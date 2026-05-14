@@ -101,6 +101,53 @@ export async function POST(req: NextRequest) {
     console.warn('[Webhook] Dedupe-Check fehlgeschlagen (nicht-fatal):', e);
   }
 
+  // Fehlgeschlagene Zahlungen — Admin sofort benachrichtigen.
+  // Stripe feuert dieses Event bei Karten-Ablehnung, 3DS-Abbruch,
+  // unzureichender Deckung, Fraud-Block etc. Ohne diesen Handler haetten
+  // wir keine zentrale Sicht auf abgelehnte Zahlungen — der Kunde haut
+  // einfach ab, Admin merkt's nicht.
+  if (event.type === 'payment_intent.payment_failed') {
+    const intent = event.data.object as Stripe.PaymentIntent;
+    // Deposit-Holds ignorieren — bei Pre-Auth-Versagen kommt eh kein Geld,
+    // und die Buchung ist meist trotzdem gluecklich (Stripe versucht es
+    // automatisch erneut beim Capture).
+    if (intent.metadata?.type === 'deposit_hold') {
+      return NextResponse.json({ received: true });
+    }
+
+    const supabase = createServiceClient();
+    const meta = intent.metadata ?? {};
+    const lastErr = intent.last_payment_error;
+    const declineCode = lastErr?.decline_code ?? null;
+    const errorCode = lastErr?.code ?? null;
+    const errorMsg = lastErr?.message ?? 'Kein Fehlertext';
+    const amountEur = (intent.amount / 100).toFixed(2);
+    const customerName = meta.customer_name || meta.customerName || '';
+    const customerEmail = meta.customer_email || meta.customerEmail || '';
+    const preBookingId = meta.pre_booking_id || meta.preBookingId || '';
+
+    const titleSuffix = preBookingId ? ` (${preBookingId})` : '';
+    const senderInfo = customerEmail
+      ? `${customerName ? `${customerName} (${customerEmail})` : customerEmail}`
+      : 'Unbekannter Kunde';
+    const codeInfo = declineCode || errorCode
+      ? ` · Code: ${declineCode || errorCode}`
+      : '';
+
+    try {
+      await createAdminNotification(supabase, {
+        type: 'payment_failed',
+        title: `Zahlung fehlgeschlagen${titleSuffix}`,
+        message: `${senderInfo} · ${amountEur} € · ${errorMsg}${codeInfo}`,
+        link: `/admin/buchungen`,
+      });
+    } catch (notifErr) {
+      console.error('[Webhook] payment_failed-Notification fehlgeschlagen:', notifErr);
+    }
+    console.log(`[Webhook] payment_failed: ${intent.id} · ${amountEur} € · ${errorMsg} · ${declineCode || errorCode || 'n/a'}`);
+    return NextResponse.json({ received: true });
+  }
+
   if (event.type === 'payment_intent.succeeded') {
     const intent = event.data.object as Stripe.PaymentIntent;
     const meta = intent.metadata;
@@ -158,6 +205,35 @@ export async function POST(req: NextRequest) {
   //   ist. Ohne diesen Branch wuerde die Buchung ewig auf 'awaiting_payment'
   //   stehen, obwohl PayPal abgebucht hat.
   // Beide Events haben dieselbe Session-Form und Metadata.
+  // Async-Zahlungs-Fehler (PayPal/Klarna/SEPA bestaetigen erst Stunden
+  // spaeter, falls die Abbuchung tatsaechlich fehlschlaegt). Hier
+  // benachrichtigen wir den Admin, damit er den Kunden kontaktieren oder
+  // die Payment-Link-Buchung stornieren kann.
+  if (event.type === 'checkout.session.async_payment_failed') {
+    const session = event.data.object as Stripe.Checkout.Session;
+    const meta = session.metadata ?? {};
+    const supabase = createServiceClient();
+    const amountEur = ((session.amount_total ?? 0) / 100).toFixed(2);
+    const customerName = meta.customer_name || meta.customerName || '';
+    const customerEmail = (session.customer_details?.email || meta.customer_email || meta.customerEmail || '') as string;
+    const bookingId = (meta.booking_id || meta.bookingId || '') as string;
+    const senderInfo = customerEmail
+      ? `${customerName ? `${customerName} (${customerEmail})` : customerEmail}`
+      : 'Unbekannter Kunde';
+    try {
+      await createAdminNotification(supabase, {
+        type: 'payment_failed',
+        title: `Async-Zahlung fehlgeschlagen${bookingId ? ` (${bookingId})` : ''}`,
+        message: `${senderInfo} · ${amountEur} € · Zahlungsart (PayPal/Klarna/SEPA) hat die Belastung abgelehnt. Buchung pruefen + ggf. Kunde kontaktieren.`,
+        link: bookingId ? `/admin/buchungen/${bookingId}` : '/admin/buchungen',
+      });
+    } catch (notifErr) {
+      console.error('[Webhook] async_payment_failed-Notification fehlgeschlagen:', notifErr);
+    }
+    console.log(`[Webhook] async_payment_failed: ${session.id} · ${amountEur} €`);
+    return NextResponse.json({ received: true });
+  }
+
   if (
     event.type === 'checkout.session.completed' ||
     event.type === 'checkout.session.async_payment_succeeded'
