@@ -326,16 +326,10 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
     }
   }
 
-  // Haftungsschutz
+  // Haftungsschutz wird NICHT mehr als POS-Zeile aufgefuehrt — er erscheint
+  // unten als eigene Summenzeile nach dem Rabatt (analog zur Checkout-
+  // Zusammenfassung, damit Bestellung und Rechnung gleich strukturiert sind).
   const hLabel = haftungLabel(data.haftung);
-  if (hLabel && data.priceHaftung > 0) {
-    items.push({
-      pos: pos++,
-      description: hLabel,
-      qty: '1',
-      total: data.priceHaftung,
-    });
-  }
 
   // Versand / Abholung
   if (data.deliveryMode === 'abholung') {
@@ -368,8 +362,11 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
   const netAmount = isRegel ? data.priceTotal / (1 + taxRate / 100) : data.priceTotal;
   const taxAmount = isRegel ? data.priceTotal - netAmount : 0;
   const discountAmount = data.discountAmount ?? 0;
-  // Zwischensumme vor Rabatt = Gesamt + Rabatt (ergibt sich aus Mietpreis + Zubehoer + Haftung + Versand)
-  const subtotalBeforeDiscount = data.priceTotal + discountAmount;
+  // Zwischensumme zeigt nur Miete + Zubehoer + Versand (OHNE Haftungsschutz),
+  // damit die Rechnung dieselbe Aufteilung wie die Checkout-Zusammenfassung
+  // hat. Haftungsschutz erscheint weiter unten als eigene Summenzeile.
+  const subtotalBeforeDiscount = Math.max(0, data.priceTotal + discountAmount - (data.priceHaftung || 0));
+  const showSummaryBlock = discountAmount > 0 || (data.priceHaftung || 0) > 0;
 
   const isUnpaid = data.paymentStatus === 'unpaid' || data.paymentMethod === 'Ausstehend';
   const verwendungszweck = `${invoiceNumber} ${data.customerName}`;
@@ -466,19 +463,32 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
           </View>
         ))}
 
-        {/* ── Rabatt-Zeile (vor Steuern + Gesamt) ── */}
-        {discountAmount > 0 && (
+        {/* ── Zwischensumme + Rabatt + Haftungsschutz (vor Steuern + Gesamt) ──
+            Reihenfolge spiegelt die Checkout-Zusammenfassung wider:
+              Zwischensumme (Miete + Zubehoer + Versand, OHNE Haftung)
+              Rabatt (falls vorhanden)
+              Haftungsschutz (falls > 0)
+            So sieht der Kunde Rechnung 1:1 wie die Bestellaufstellung. */}
+        {showSummaryBlock && (
           <View style={{ marginTop: 6 }}>
             <View style={s.sumRow}>
               <Text style={s.sumLabel}>Zwischensumme:</Text>
               <Text style={s.sumValue}>{fmtEuro(subtotalBeforeDiscount)}</Text>
             </View>
-            <View style={s.sumRow}>
-              <Text style={s.sumLabel}>
-                Rabatt{data.couponCode ? ` (${data.couponCode})` : ''}:
-              </Text>
-              <Text style={s.sumValue}>-{fmtEuro(discountAmount)}</Text>
-            </View>
+            {discountAmount > 0 && (
+              <View style={s.sumRow}>
+                <Text style={s.sumLabel}>
+                  Rabatt{data.couponCode ? ` (${data.couponCode})` : ''}:
+                </Text>
+                <Text style={s.sumValue}>-{fmtEuro(discountAmount)}</Text>
+              </View>
+            )}
+            {hLabel && (data.priceHaftung || 0) > 0 && (
+              <View style={s.sumRow}>
+                <Text style={s.sumLabel}>{hLabel}:</Text>
+                <Text style={s.sumValue}>{fmtEuro(data.priceHaftung)}</Text>
+              </View>
+            )}
           </View>
         )}
 
