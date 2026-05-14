@@ -54,19 +54,22 @@ export async function POST(req: NextRequest) {
     }
 
     const supabase = createServiceClient();
-    const bookingId = await generateBookingId();
+
+    // is_test = globaler Test-Modus ODER ausgewaehlter Kunde ist Tester-Konto.
+    // Bei manueller Buchung gibt es kein Stripe — nur das DB-Flag ist relevant,
+    // damit die Buchung in Reports/EUeR/DATEV ausgefiltert wird.
+    // Wichtig: Den is_test-Wert MUSS der Generator kennen, damit Tester- und
+    // Live-Buchungen nicht auf derselben Wochennummer kollidieren.
+    const globalTestMode = await isTestMode();
+    const userIsTester = body.user_id ? await isUserTester(body.user_id) : false;
+    const testMode = globalTestMode || userIsTester;
+
+    const bookingId = await generateBookingId({ isTest: testMode });
     const isUnpaid = payment_status === 'unpaid';
     const paymentIntentId = isUnpaid
       ? `MANUAL-UNPAID-${bookingId}-${Date.now()}`
       : `MANUAL-${bookingId}-${Date.now()}`;
     const bookingNotes = body.notes || null;
-
-    // is_test = globaler Test-Modus ODER ausgewaehlter Kunde ist Tester-Konto.
-    // Bei manueller Buchung gibt es kein Stripe — nur das DB-Flag ist relevant,
-    // damit die Buchung in Reports/EUeR/DATEV ausgefiltert wird.
-    const globalTestMode = await isTestMode();
-    const userIsTester = body.user_id ? await isUserTester(body.user_id) : false;
-    const testMode = globalTestMode || userIsTester;
 
     const insertData: Record<string, unknown> = {
       id: bookingId,

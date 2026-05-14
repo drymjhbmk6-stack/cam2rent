@@ -256,7 +256,13 @@ export async function POST(req: NextRequest) {
       const groupTotalDiscount = groupDiscountAmount + groupDurationDiscount + groupLoyaltyDiscount;
       const priceTotal = groupSubtotal - groupTotalDiscount + groupShipping;
 
-      const bookingId = await generateBookingId();
+      // Tester-User → is_test=true (auch im Live-Modus). Im Pending-Flow
+      // landet ein Tester selten (weil verifiziert), aber defensiv markieren.
+      // Generator muss den is_test-Wert kennen, sonst Counter-Pool-Mismatch.
+      const tester = await isUserTester(verifiedUserId);
+      const testMode = tester || (await isTestMode());
+
+      const bookingId = await generateBookingId({ isTest: testMode });
       bookingIds.push(bookingId);
 
       const productName = groupItems.length === 1
@@ -282,11 +288,6 @@ export async function POST(req: NextRequest) {
       const groupAccessoryItems: BookingAccessoryItem[] = [...aggMap.entries()]
         .map(([accessory_id, qty]) => ({ accessory_id, qty }));
       const allAccessories = itemsToLegacyIds(groupAccessoryItems);
-
-      // Tester-User → is_test=true (auch im Live-Modus). Im Pending-Flow
-      // landet ein Tester selten (weil verifiziert), aber defensiv markieren.
-      const tester = await isUserTester(verifiedUserId);
-      const testMode = tester || (await isTestMode());
       const { error } = await supabase.from('bookings').insert({
         id: bookingId,
         payment_intent_id: gi === 0 ? `PENDING-${bookingId}` : `PENDING-${bookingId}_g${gi + 1}`,

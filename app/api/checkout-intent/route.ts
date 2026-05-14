@@ -260,9 +260,12 @@ export async function POST(req: NextRequest) {
     // statt eine neue zu erzeugen. Theoretische Race (zwei Checkouts in
     // derselben Woche zur selben Zeit) wird in confirm-cart per Fallback auf
     // generateBookingId() abgefangen, falls der Insert mit 23505 scheitert.
+    // Tester-User behalten is_test=true auch im Live-Modus — der Generator
+    // muss diesen Wert kennen, damit Tester- und Live-Buchungen NICHT auf
+    // derselben Wochennummer kollidieren (zwei getrennte Counter-Pools).
     let preBookingId: string | null = null;
     try {
-      preBookingId = await generateBookingId();
+      preBookingId = await generateBookingId({ isTest: tester || undefined });
     } catch (idErr) {
       console.warn('[checkout-intent] generateBookingId failed, fallback to no-id description:', idErr);
     }

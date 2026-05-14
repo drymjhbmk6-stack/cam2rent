@@ -266,7 +266,11 @@ async function handleSingleBooking(
   meta: Stripe.Metadata,
   tax: { taxMode: string; taxRate: number; ustId: string },
 ) {
-  const bookingId = await generateBookingId();
+  // Tester-User → eigener Counter-Pool, damit Live- und Tester-Nummern in
+  // derselben Woche nicht kollidieren.
+  const isTesterSingle = meta.tester === '1';
+  const testModeForIdSingle = isTesterSingle || (await isTestMode());
+  const bookingId = await generateBookingId({ isTest: testModeForIdSingle });
 
   // Neue qty-aware Darstellung aus metadata.accessory_items (id:qty,...).
   // Fallback auf meta.accessories (reine IDs) wenn Metadata alt ist.
@@ -485,8 +489,11 @@ async function handleCartBooking(
     }
   }
 
-  // EINE Buchung für den gesamten Warenkorb
-  const bookingId = await generateBookingId();
+  // EINE Buchung für den gesamten Warenkorb. Tester-User → separater
+  // Counter-Pool (siehe handleSingleBooking).
+  const isTesterCart = intent.metadata?.tester === '1';
+  const testModeForIdCart = isTesterCart || (await isTestMode());
+  const bookingId = await generateBookingId({ isTest: testModeForIdCart });
   const firstItem = items[0];
   const productName = items.length === 1
     ? firstItem.productName

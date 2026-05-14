@@ -147,11 +147,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, booking_id: existing.id });
     }
 
-    // 3. Buchungsnummer generieren
-    const bookingId = await generateBookingId();
+    // 3. Buchungsnummer generieren — Tester-User-Pool getrennt zaehlen
+    // (sonst Kollision zwischen Live- und Tester-Buchungen in derselben Woche).
+    const meta = intent.metadata;
+    const isTesterBookingNum = meta.tester === '1';
+    const bookingTestModeForId = isTesterBookingNum || (await isTestMode());
+    const bookingId = await generateBookingId({ isTest: bookingTestModeForId });
 
     // 4. Parse Stripe metadata
-    const meta = intent.metadata;
     const accessoryItems = parseMetadataAccessoryItems(meta.accessory_items, meta.accessories);
     // Wenn ein Set gewaehlt wurde, kommt die Set-ID als eigene meta.set_id.
     // Damit Rechnung, Mietvertrag und Packliste das Set aufloesen koennen,

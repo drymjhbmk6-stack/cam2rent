@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { after } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
-import { generateBookingId } from '@/lib/booking-id';
+import { generateBookingId, incrementBookingIdSuffix } from '@/lib/booking-id';
 import { detectSuspicious } from '@/lib/suspicious';
 import type { CartItem } from '@/components/CartProvider';
 import { calcShipping } from '@/data/shipping';
@@ -562,6 +562,13 @@ export async function POST(req: NextRequest) {
     const totalCartSubtotal = r_items.reduce((s, it) => s + it.subtotal, 0);
     const bookingIds: string[] = [];
 
+    // is_test einmal vorab berechnen — Tester-User behalten ihre is_test=true
+    // Buchungen auch im Live-Modus, damit Reports und Berichte sie ausschliessen.
+    // Generator-Nummerierung muss diesen Wert kennen, sonst kollidieren
+    // Tester- und Live-Buchungen auf derselben Wochennummer.
+    const isTesterBooking = tester || intent.metadata?.tester === '1';
+    const testMode = isTesterBooking || (await isTestMode());
+
     for (let gi = 0; gi < periodGroups.length; gi++) {
       const groupItems = periodGroups[gi];
       const firstItem = groupItems[0];
@@ -595,7 +602,7 @@ export async function POST(req: NextRequest) {
       if (gi === 0 && r_preBookingId) {
         bookingId = r_preBookingId;
       } else {
-        bookingId = await generateBookingId();
+        bookingId = await generateBookingId({ isTest: testMode });
       }
       bookingIds.push(bookingId);
 
@@ -629,10 +636,7 @@ export async function POST(req: NextRequest) {
       // payment_intent_id: erste Gruppe bekommt die originale ID, weitere bekommen Suffix
       const piId = gi === 0 ? payment_intent_id : `${payment_intent_id}_g${gi + 1}`;
 
-      // is_test ist true wenn entweder global Test-Mode ODER der User ein
-      // Tester-Konto ist (Live-Modus, aber Buchung soll aus Reports raus).
-      const isTesterBooking = tester || intent.metadata?.tester === '1';
-      const testMode = isTesterBooking || (await isTestMode());
+      // is_test wurde oben bereits einmal berechnet (siehe vor der Loop).
       const buildInsertPayload = (id: string) => ({
         id,
         payment_intent_id: piId,
@@ -675,17 +679,45 @@ export async function POST(req: NextRequest) {
         ...(r_verificationRequired ? { verification_required: true } : {}),
       });
 
-      let { error } = await supabase.from('bookings').insert(buildInsertPayload(bookingId));
-      // Race-Fallback: vorab-generierte ID kollidiert mit anderer Buchung
-      // derselben Woche → neue ID erzeugen und nochmal versuchen.
-      if (error?.code === '23505' && gi === 0 && r_preBookingId === bookingId) {
-        console.warn(`[confirm-cart] Pre-booking-id ${bookingId} kollidiert, generiere neu.`);
-        const fresh = await generateBookingId();
-        bookingId = fresh;
-        bookingIds[gi] = fresh;
-        const retry = await supabase.from('bookings').insert(buildInsertPayload(fresh));
-        error = retry.error;
+      // Race-sicherer Insert: bei 23505 auf der ID (Primary Key) zaehlen wir
+      // das Suffix lokal hoch und versuchen es erneut, statt generateBookingId
+      // (COUNT-basiert) zu rufen — der wuerde wegen Race auf die gleiche
+      // Nummer fallen, wenn parallele Aufrufer in derselben Sekunde laufen.
+      let insertError: { code?: string; message?: string } | null = null;
+      const MAX_ID_COLLISION_RETRIES = 30;
+      for (let idAttempt = 0; idAttempt < MAX_ID_COLLISION_RETRIES; idAttempt++) {
+        const { error: insErr } = await supabase.from('bookings').insert(buildInsertPayload(bookingId));
+        if (!insErr) {
+          insertError = null;
+          break;
+        }
+        if (insErr.code !== '23505') {
+          insertError = insErr;
+          break;
+        }
+        // 23505 — wir mussen rausfinden, ob die ID-Collision oder die
+        // payment_intent_id-Collision (Webhook hat schneller geschrieben)
+        // gemeint ist. Postgres meldet das im Error-Text:
+        //   "bookings_pkey" / "bookings_id_key"  → ID-Collision (lokal weiterzaehlen)
+        //   "bookings_payment_intent_id_key"     → Webhook-Race (Idempotenz unten)
+        const msg = insErr.message ?? '';
+        const idConflict = /pkey|bookings_id_key/i.test(msg) && !/payment_intent/i.test(msg);
+        if (idConflict) {
+          const next = incrementBookingIdSuffix(bookingId);
+          if (next === bookingId) {
+            insertError = insErr;
+            break;
+          }
+          console.warn(`[confirm-cart] ID ${bookingId} kollidiert, probiere ${next}.`);
+          bookingId = next;
+          bookingIds[gi] = next;
+          continue;
+        }
+        // Andere 23505 (z.B. payment_intent_id) → an die Idempotenz-Logik unten
+        insertError = insErr;
+        break;
       }
+      const error = insertError;
 
       if (error) {
         // Vuln 17 (Audit Sweep 6): Bei 23505 (Unique-Verletzung auf

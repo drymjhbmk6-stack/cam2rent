@@ -9,6 +9,13 @@ import { isTestMode } from '@/lib/env-mode';
  * damit die fortlaufende Live-Nummerierung nicht von Test-Buchungen
  * hochgezaehlt wird (GoBD-konform).
  *
+ * `opts.isTest` ueberschreibt den globalen Env-Modus — wichtig fuer
+ * Tester-User im Live-Modus: ihre Buchungen sind is_test=true, der globale
+ * Env-Modus ist live, und ohne diesen Parameter wuerde der Counter live
+ * statt test zaehlen → Nummernkollisionen ueber unterschiedliche is_test-
+ * Pools moeglich (eine Live-Buchung und eine Tester-Buchung in derselben
+ * Woche bekommen sonst beide `001`).
+ *
  * Jahr + KW werden in Berlin-Zeit berechnet — sonst kippt die Nummer
  * zwischen 22:00-02:00 Berlin auf den UTC-Tag (Vorwoche bzw. -jahr)
  * weil der Server in UTC laeuft.
@@ -19,14 +26,20 @@ import { isTestMode } from '@/lib/env-mode';
  * 50 ms, weil hoechstens die Eintraege der aktuellen Woche gezaehlt
  * werden — voraussetzung ist ein Index auf bookings.created_at (siehe
  * supabase-performance-indizes.sql).
+ *
+ * Race-Hinweis: Der COUNT-basierte Generator ist nicht atomar — zwei
+ * parallel laufende Aufrufe bekommen ggf. die gleiche Nummer zurueck.
+ * Aufrufer mussen einen Insert-Retry (23505) implementieren ODER die
+ * Funktion `nextBookingIdAfterCollision` nutzen, die die naechste freie
+ * Nummer iterativ findet.
  */
-export async function generateBookingId(): Promise<string> {
+export async function generateBookingId(opts?: { isTest?: boolean }): Promise<string> {
   const berlin = getBerlinDateParts(new Date());
   const yearTwoDigit = String(berlin.year).slice(-2); // "26"
   const week = String(getISOWeekFromParts(berlin)).padStart(2, '0'); // "15"
 
   const supabase = createServiceClient();
-  const testMode = await isTestMode();
+  const testMode = opts?.isTest ?? (await isTestMode());
 
   // Beginn + Ende der ISO-Woche (Montag 00:00 Berlin .. Montag 00:00 naechste Woche)
   const { weekStartUTC, weekEndUTC } = isoWeekRangeUTC(berlin);
@@ -41,6 +54,25 @@ export async function generateBookingId(): Promise<string> {
   const seq = String((count ?? 0) + 1).padStart(3, '0');
   const base = `C2R-${yearTwoDigit}${week}-${seq}`;
   return testMode ? `TEST-${base}` : base;
+}
+
+/**
+ * Erhoeht das numerische Suffix einer Buchungsnummer um eins.
+ * Beispiele:
+ *   C2R-2620-001          →  C2R-2620-002
+ *   TEST-C2R-2620-001     →  TEST-C2R-2620-002
+ *   C2R-2620-999          →  C2R-2620-1000 (selten, aber nicht falsch)
+ *
+ * Nuetzlich nach einem 23505-Insert-Konflikt: statt erneut zu zaehlen
+ * (was wegen Race auf dieselbe Nummer fallen kann), wird das Suffix
+ * lokal hochgezaehlt bis ein freier Slot gefunden ist.
+ */
+export function incrementBookingIdSuffix(bookingId: string): string {
+  const match = bookingId.match(/^(.+-)(\d+)$/);
+  if (!match) return bookingId;
+  const [, prefix, numStr] = match;
+  const next = String(parseInt(numStr, 10) + 1).padStart(numStr.length, '0');
+  return `${prefix}${next}`;
 }
 
 interface BerlinParts { year: number; month: number; day: number }
