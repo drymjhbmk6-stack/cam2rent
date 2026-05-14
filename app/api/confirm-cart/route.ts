@@ -567,6 +567,18 @@ export async function POST(req: NextRequest) {
     const totalCartSubtotal = r_items.reduce((s, it) => s + it.subtotal, 0);
     const bookingIds: string[] = [];
 
+    // Versand pro Gruppe vorab berechnen, damit wir den Anteil-Faktor
+    // (subtotal+shipping pro Gruppe / Gesamt) kennen, ueber den intent.amount
+    // proportional auf die Gruppen verteilt wird.
+    type GroupCalc = { subtotal: number; shipping: number; baseTotal: number };
+    const groupCalcs: GroupCalc[] = periodGroups.map((g) => {
+      const sub = g.reduce((s, it) => s + it.subtotal, 0);
+      const sh = calcShipping(sub, r_shippingMethod as ShippingMethod, r_deliveryMode as 'versand' | 'abholung', shippingCfg).price;
+      return { subtotal: sub, shipping: sh, baseTotal: sub + sh };
+    });
+    const sumGroupBaseTotals = groupCalcs.reduce((s, g) => s + g.baseTotal, 0) || 1;
+    const paidEuros = intent.amount / 100;
+
     // is_test einmal vorab berechnen — Tester-User behalten ihre is_test=true
     // Buchungen auch im Live-Modus, damit Reports und Berichte sie ausschliessen.
     // Generator-Nummerierung muss diesen Wert kennen, sonst kollidieren
@@ -580,25 +592,58 @@ export async function POST(req: NextRequest) {
       const groupSubtotal = groupItems.reduce((s, it) => s + it.subtotal, 0);
 
       // Rabatte proportional aufteilen.
-      // Hinweis: productDiscount (Aktionen wie -50% auf Hero13) wurde bisher
-      // nicht durchgereicht — Stripe lud zwar korrekt ab, aber price_total in
-      // der DB war zu hoch und damit auch die Rechnung. Wir summieren ihn jetzt
-      // mit in groupDiscount, sodass discount_amount = Coupon + Produktrabatt.
+      // Versand pro Gruppe (vorab in groupCalcs[gi] berechnet).
+      const groupShipping = groupCalcs[gi].shipping;
+      const groupBaseTotal = groupCalcs[gi].baseTotal; // = subtotal + shipping
+
+      // STRIPE IST SOURCE OF TRUTH: groupTotal wird aus intent.amount abgeleitet,
+      // NICHT aus den Body-Discount-Feldern. Frueher konnten Body und Stripe
+      // auseinanderlaufen (z.B. Body sagt productDiscount=7,50 EUR aber Stripe
+      // hat 15 EUR abgebucht) → DB zeigte 11 EUR, Stripe-Charge 15 EUR, Kunde
+      // verwirrt. Jetzt: price_total = anteiliger Stripe-Betrag.
+      let groupTotal: number;
+      if (gi === periodGroups.length - 1) {
+        // Letzte Gruppe bekommt den Rest (Rundungs-Cent landen hier)
+        const prevSum = groupCalcs
+          .slice(0, gi)
+          .reduce((s, gc) => s + Math.round(paidEuros * (gc.baseTotal / sumGroupBaseTotals) * 100) / 100, 0);
+        groupTotal = Math.max(0, Math.round((paidEuros - prevSum) * 100) / 100);
+      } else {
+        groupTotal = Math.max(0, Math.round(paidEuros * (groupBaseTotal / sumGroupBaseTotals) * 100) / 100);
+      }
+      // Effektiver Rabatt = base - gezahlt (= das, was tatsaechlich abgezogen wurde)
+      const effectiveDiscount = Math.max(0, Math.round((groupBaseTotal - groupTotal) * 100) / 100);
+
+      // Body-Discount-Felder fuer Aufschluesselung skalieren, sodass sie zum
+      // effektiven Rabatt passen (Stripe ist verbindlich).
+      const bodyDiscountSum =
+        Number(r_discountAmount ?? 0) +
+        Number(r_productDiscount ?? 0) +
+        Number(r_durationDiscount ?? 0) +
+        Number(r_loyaltyDiscount ?? 0);
+      const scale = bodyDiscountSum > 0 ? effectiveDiscount / bodyDiscountSum : 0;
       const ratio = totalCartSubtotal > 0 ? groupSubtotal / totalCartSubtotal : 1 / periodGroups.length;
-      const groupCouponDiscount = Math.round((r_discountAmount ?? 0) * ratio * 100) / 100;
-      const groupProductDiscount = Math.round((r_productDiscount ?? 0) * ratio * 100) / 100;
+      const groupCouponDiscount = Math.round((r_discountAmount ?? 0) * ratio * scale * 100) / 100;
+      const groupProductDiscount = Math.round((r_productDiscount ?? 0) * ratio * scale * 100) / 100;
       const groupDiscount = groupCouponDiscount + groupProductDiscount;
-      const groupDurationDiscount = Math.round((r_durationDiscount ?? 0) * ratio * 100) / 100;
-      const groupLoyaltyDiscount = Math.round((r_loyaltyDiscount ?? 0) * ratio * 100) / 100;
-      // Versand pro Gruppe neu berechnen (jede Gruppe prüft Gratis-Schwelle)
-      const groupShippingResult = calcShipping(
-        groupSubtotal,
-        r_shippingMethod as ShippingMethod,
-        r_deliveryMode as 'versand' | 'abholung',
-        shippingCfg
-      );
-      const groupShipping = groupShippingResult.price;
-      const groupTotal = groupSubtotal - groupDiscount - groupDurationDiscount - groupLoyaltyDiscount + groupShipping;
+      const groupDurationDiscount = Math.round((r_durationDiscount ?? 0) * ratio * scale * 100) / 100;
+      const groupLoyaltyDiscount = Math.round((r_loyaltyDiscount ?? 0) * ratio * scale * 100) / 100;
+
+      // Mismatch-Detection: wenn Body-Discount-Summe und effektiver Rabatt mehr
+      // als 0,50 EUR auseinander liegen, ist das ein Hinweis auf einen Frontend-
+      // Bug oder Manipulationsversuch — Admin-Notification.
+      if (Math.abs(bodyDiscountSum - effectiveDiscount) > 0.5 && gi === 0) {
+        try {
+          await createAdminNotification(supabase, {
+            type: 'payment_failed',
+            title: `Rabatt-Mismatch (${r_preBookingId ?? payment_intent_id})`,
+            message: `Body meldet ${bodyDiscountSum.toFixed(2)} EUR Rabatt, Stripe hat aber ${effectiveDiscount.toFixed(2)} EUR weniger als Listenpreis (${groupBaseTotal.toFixed(2)} EUR) abgebucht. Differenz: ${(bodyDiscountSum - effectiveDiscount).toFixed(2)} EUR. Bitte Buchung pruefen.`,
+            link: r_preBookingId ? `/admin/buchungen/${r_preBookingId}` : '/admin/buchungen',
+          });
+        } catch (notifErr) {
+          console.error('[confirm-cart] Rabatt-Mismatch-Notification fehlgeschlagen:', notifErr);
+        }
+      }
 
       // Erste Gruppe nutzt die in checkout-intent vorab generierte Nummer
       // (steht so schon in der PayPal-Quittung). Weitere Gruppen + Fallback
