@@ -242,6 +242,28 @@ export default function RechnungenTab() {
           <option value={100}>100</option>
         </select>
         <ExportButton label="CSV-Export" onClick={handleCsvExport} />
+        <button
+          type="button"
+          onClick={async () => {
+            if (!confirm('Fehlende Rechnungen aus bezahlten Buchungen nachtragen?\n\nIdempotent — bereits vorhandene Rechnungen werden uebersprungen.')) return;
+            try {
+              const res = await fetch('/api/admin/buchhaltung/invoices/backfill', { method: 'POST' });
+              const j = await res.json();
+              if (!res.ok) throw new Error(j.error || 'Fehler');
+              setToast({ msg: `${j.created} Rechnungen angelegt · ${j.skipped} bereits vorhanden · ${j.total} Buchungen geprueft`, type: 'ok' });
+              fetchInvoices();
+            } catch (e) {
+              setToast({ msg: e instanceof Error ? e.message : 'Backfill fehlgeschlagen', type: 'err' });
+            }
+          }}
+          style={{
+            padding: '8px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600,
+            background: '#1e293b', color: '#cbd5e1', border: '1px solid #334155',
+            cursor: 'pointer',
+          }}
+        >
+          Rechnungen nachtragen
+        </button>
       </div>
 
       {/* Tabelle */}

@@ -471,6 +471,29 @@ async function handleSingleBooking(
 
   console.log(`[Webhook] Einzelbuchung ${bookingId} nachgeholt.`);
 
+  // invoices-Row anlegen (non-blocking)
+  try {
+    const { storeInvoiceForBooking } = await import('@/lib/buchhaltung/store-invoice');
+    await storeInvoiceForBooking(supabase, {
+      id: bookingId,
+      customer_email: meta.customer_email || null,
+      customer_name: meta.customer_name || null,
+      price_total: intent.amount / 100,
+      price_rental: parseFloat(meta.price_rental ?? '0'),
+      price_accessories: parseFloat(meta.price_accessories ?? '0'),
+      price_haftung: parseFloat(meta.price_haftung ?? '0'),
+      shipping_price: parseFloat(meta.shipping_price ?? '0'),
+      discount_amount: Math.max(0, parseFloat(meta.product_discount ?? '0') || 0),
+      coupon_code: meta.product_discount_label ? String(meta.product_discount_label).trim() : null,
+      payment_intent_id: intent.id,
+      status: 'confirmed',
+      is_test: testModeForIdSingle,
+      created_at: new Date().toISOString(),
+    }, { taxMode: tax.taxMode as 'kleinunternehmer' | 'regelbesteuerung', taxRate: tax.taxRate });
+  } catch (err) {
+    console.error('[Webhook] Rechnung-Anlage fehlgeschlagen:', err);
+  }
+
   // Email senden
   const customerEmail = meta.customer_email ?? '';
   const customerName = meta.customer_name ?? '';
@@ -674,6 +697,29 @@ async function handleCartBooking(
   }
 
   console.log(`[Webhook] Cart-Buchung ${bookingId} nachgeholt.`);
+
+  // invoices-Row anlegen (non-blocking)
+  try {
+    const { storeInvoiceForBooking } = await import('@/lib/buchhaltung/store-invoice');
+    await storeInvoiceForBooking(supabase, {
+      id: bookingId,
+      customer_email: customerEmail,
+      customer_name: customerName,
+      price_total: intent.amount / 100,
+      price_rental: items.reduce((s, it) => s + it.priceRental, 0),
+      price_accessories: items.reduce((s, it) => s + it.priceAccessories, 0),
+      price_haftung: items.reduce((s, it) => s + it.priceHaftung, 0),
+      shipping_price: shippingPrice,
+      discount_amount: discountAmount,
+      coupon_code: couponCode || null,
+      payment_intent_id: intent.id,
+      status: 'confirmed',
+      is_test: testModeCart,
+      created_at: new Date().toISOString(),
+    }, { taxMode: txMap['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung', taxRate: parseFloat(txMap['tax_rate'] || '19') });
+  } catch (err) {
+    console.error('[Webhook] Cart-Rechnung-Anlage fehlgeschlagen:', err);
+  }
 
   // Coupon used_count erhoehen
   if (couponCode) {

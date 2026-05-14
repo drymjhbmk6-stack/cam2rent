@@ -356,7 +356,43 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 6a. Unit automatisch zuordnen (non-blocking)
+    // 6a. invoices-Row anlegen (non-blocking) — damit die Rechnung in
+    // "Alle Rechnungen" (/admin/buchhaltung → Einnahmen) auftaucht.
+    (async () => {
+      try {
+        const { storeInvoiceForBooking } = await import('@/lib/buchhaltung/store-invoice');
+        // Steuer-Settings inline laden (txMap weiter unten ist erst spaeter
+        // initialisiert; hier holen wir die zwei Werte direkt, damit der
+        // IIFE-Block self-contained ist).
+        const { data: txRows } = await supabase
+          .from('admin_settings').select('key, value').in('key', ['tax_mode', 'tax_rate']);
+        const tx: Record<string, string> = {};
+        for (const r of txRows ?? []) tx[r.key] = r.value as string;
+        await storeInvoiceForBooking(supabase, {
+          id: bookingId,
+          customer_email: meta.customer_email || null,
+          customer_name: meta.customer_name || null,
+          price_total: intent.amount / 100,
+          price_rental: parseFloat(meta.price_rental ?? '0'),
+          price_accessories: parseFloat(meta.price_accessories ?? '0'),
+          price_haftung: parseFloat(meta.price_haftung ?? '0'),
+          shipping_price: parseFloat(meta.shipping_price ?? '0'),
+          discount_amount: productDiscountFromMeta,
+          coupon_code: productDiscountLabel || null,
+          payment_intent_id,
+          status: 'confirmed',
+          is_test: testMode,
+          created_at: new Date().toISOString(),
+        }, {
+          taxMode: (tx['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer',
+          taxRate: parseFloat(tx['tax_rate'] || '19'),
+        });
+      } catch (err) {
+        console.error('[confirm-booking] Rechnung-Anlage fehlgeschlagen:', err);
+      }
+    })();
+
+    // 6b. Unit automatisch zuordnen (non-blocking)
     assignUnitToBooking(bookingId, meta.product_id, meta.rental_from, meta.rental_to)
       .catch((err) => console.error(`Unit assignment error for ${bookingId}:`, err));
 

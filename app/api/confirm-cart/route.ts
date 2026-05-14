@@ -801,6 +801,40 @@ export async function POST(req: NextRequest) {
         );
       }
 
+      // invoices-Row anlegen (non-blocking) — damit die Rechnung in
+      // "Alle Rechnungen" (/admin/buchhaltung → Einnahmen) auftaucht.
+      (async (currentBookingId, currentGroupTotal, currentDiscount, currentCouponLabel, currentPiId) => {
+        try {
+          const { storeInvoiceForBooking } = await import('@/lib/buchhaltung/store-invoice');
+          const txMap: Record<string, string> = {};
+          const taxRows = taxResultCart?.data;
+          if (Array.isArray(taxRows)) {
+            for (const r of taxRows) txMap[r.key] = r.value;
+          }
+          await storeInvoiceForBooking(supabase, {
+            id: currentBookingId,
+            customer_email: r_email,
+            customer_name: r_name,
+            price_total: currentGroupTotal,
+            price_rental: groupItems.reduce((s, it) => s + it.priceRental, 0),
+            price_accessories: groupItems.reduce((s, it) => s + it.priceAccessories, 0),
+            price_haftung: groupItems.reduce((s, it) => s + it.priceHaftung, 0),
+            shipping_price: groupShipping,
+            discount_amount: currentDiscount,
+            coupon_code: currentCouponLabel,
+            payment_intent_id: currentPiId,
+            status: 'confirmed',
+            is_test: testMode,
+            created_at: new Date().toISOString(),
+          }, {
+            taxMode: (txMap['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer',
+            taxRate: parseFloat(txMap['tax_rate'] || '19'),
+          });
+        } catch (err) {
+          console.error('[confirm-cart] Rechnung-Anlage fehlgeschlagen:', err);
+        }
+      })(bookingId, groupTotal, effectiveDiscount, r_couponCode || null, piId);
+
       // Unit automatisch zuordnen (non-blocking)
       assignUnitToBooking(bookingId, firstItem.productId, firstItem.rentalFrom, firstItem.rentalTo)
         .catch((err) => console.error(`Unit assignment error for ${bookingId}:`, err));
