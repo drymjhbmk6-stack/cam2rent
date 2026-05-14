@@ -115,19 +115,20 @@ export async function POST(req: NextRequest) {
   // bevor der User sich einloggen kann. Damit kann der Kunde direkt im Checkout weiter.
   // Trotzdem wird ueber sendWelcomeEmail (asynchron) eine Willkommens-Mail geschickt.
   //
-  // Sweep 7 Vuln 23 — Display-Name NICHT in user_metadata speichern:
-  // Da die E-Mail-Adresse bei email_confirm:true noch nicht verifiziert ist,
-  // koennte ein Angreifer ein Konto auf eine fremde E-Mail mit einem
-  // beleidigenden/diskreditierenden Namen anlegen. Spaetere Buchungen unter
-  // der E-Mail wuerden den Angreifer-Namen auf Rechnung/Vertrag/Versand-Label
-  // tragen. Der echte Eigentuemer der Adresse muesste manuell korrigieren.
-  // Loesung: full_name erst beim ersten echten Login (oder Buchung) setzen,
-  // wenn der Kunde das Profil selbst ausfuellt.
+  // Sweep 7 Vuln 23 (Stand 2026-05-14 revidiert): Display-Name + Adresse werden
+  // jetzt wieder persistiert, weil zwei Mitigationen aktiv sind:
+  //   1) "Sicherheits-Hinweis-Mail" geht an den Email-Eigentuemer (siehe unten),
+  //      sodass ein Pre-Claim-Versuch sofort sichtbar wird.
+  //   2) Stammdaten-Pflichtcheck + Admin-Verifizierung der Ausweis-Bilder
+  //      (Stand 2026-05-13) blockieren jede Buchung, bis der Admin manuell
+  //      freigibt — ein Pre-Claim-Account kann also nichts buchen.
+  // Vorher: full_name=null, address_*=null → User musste alles erneut im Konto
+  // eingeben, sehr schlechte UX.
   const createResult = await supabase.auth.admin.createUser({
     email,
     password,
     email_confirm: true,
-    user_metadata: {},
+    user_metadata: fullName ? { full_name: fullName } : {},
   });
 
   if (createResult.error) {
@@ -144,21 +145,20 @@ export async function POST(req: NextRequest) {
 
   const userId = createResult.data.user?.id;
 
-  // Profil-Zeile anlegen wenn der handle_new_user-Trigger nicht greift.
-  // Idempotent durch UPSERT auf id.
-  // Sweep 7 Vuln 23: full_name + Adresse werden NICHT im Profil persistiert,
-  // bis die E-Mail durch einen echten Login bestaetigt ist. Phone bleibt drin,
-  // weil der Kunde sie aktiv eingegeben hat und sie kein Display-Name ist.
+  // Profil-Zeile anlegen/aktualisieren. Idempotent durch UPSERT auf id.
+  // Stammdaten werden jetzt persistiert (siehe Kommentar oben zu Sweep 7 #23
+  // Revision) — sonst muesste der Kunde alle Daten nach dem ersten Login
+  // erneut eingeben, obwohl er sie bei der Registrierung schon angegeben hat.
   if (userId) {
     try {
       await supabase.from('profiles').upsert(
         {
           id: userId,
-          full_name: null,
+          full_name: fullName || null,
           phone: phone,
-          address_street: null,
-          address_zip: null,
-          address_city: null,
+          address_street: street || null,
+          address_zip: zip || null,
+          address_city: city || null,
           verification_status: 'unverified',
         },
         { onConflict: 'id', ignoreDuplicates: false },
@@ -169,13 +169,10 @@ export async function POST(req: NextRequest) {
   }
 
   // Admin-Push: neue Registrierung. Permission-gefiltert auf `kunden`.
-  // Adresse fehlt absichtlich (Sweep 7 #23), darum bleibt die Message minimal.
-  // Die Verifizierung-Pflichtcheck-Logik blockiert eh, bis der Kunde im Konto
-  // Name + Adresse ergaenzt hat — vorher gibt's nichts zu tun.
   createAdminNotification(supabase, {
     type: 'new_customer',
-    title: 'Neuer Kunde registriert',
-    message: `${email}${phone ? ` · Tel ${phone}` : ''}`,
+    title: fullName ? `Neuer Kunde: ${fullName}` : 'Neuer Kunde registriert',
+    message: `${email}${phone ? ` · Tel ${phone}` : ''}${street && city ? ` · ${street}, ${zip} ${city}` : ''}`,
     link: userId ? `/admin/kunden/${userId}` : '/admin/kunden',
   }).catch((err) => console.error('[express-signup] admin notification failed:', err));
 

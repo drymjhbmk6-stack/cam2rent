@@ -127,18 +127,25 @@ function ProfilEdit() {
     setSaving(true);
 
     const supabase = createAuthBrowserClient();
-    const { error: dbError } = await supabase.from('profiles').upsert(
-      {
-        id: user.id,
+    // Wichtig: UPDATE statt UPSERT — die `supabase-profiles-rls-column-level.sql`-
+    // Migration GRANTet nur UPDATE auf erlaubte Spalten (full_name, phone,
+    // address_*) an die `authenticated`-Rolle. UPSERT braucht zusaetzlich
+    // INSERT, das ist bewusst NICHT gewaehrt (sensible Spalten wie
+    // verification_status, blacklisted, is_tester duerfen nicht durch
+    // beliebige Customer-INSERTs gesetzt werden). Die profiles-Row existiert
+    // ohnehin bereits durch den handle_new_user-Trigger bzw. den
+    // service-role-Upsert in /api/auth/express-signup.
+    const { error: dbError } = await supabase
+      .from('profiles')
+      .update({
         full_name: profile.full_name,
         phone: profile.phone,
         address_street: profile.address_street,
         address_zip: profile.address_zip,
         address_city: profile.address_city,
         updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'id' }
-    );
+      })
+      .eq('id', user.id);
 
     if (!dbError) {
       await supabase.auth.updateUser({ data: { full_name: profile.full_name } });
