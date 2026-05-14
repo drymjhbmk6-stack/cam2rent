@@ -1862,6 +1862,36 @@ Migriert: `lib/audit.ts` nutzt jetzt den zentralen Helper statt eigener Header-L
 
 **Wichtig vor Cloudflare-Live-Schaltung:** Hetzner-Firewall (UFW oder Coolify-Firewall) muss Port 443/80 auf die offiziellen Cloudflare-IP-Ranges (`https://www.cloudflare.com/ips/`) einschränken. Sonst kann ein Angreifer den Hetzner direkt anfragen und `cf-connecting-ip` selbst setzen → IP-Rate-Limit komplett umgangen.
 
+### Cloudflare-Vollintegration (Stand 2026-05-14)
+Cloudflare laeuft als Proxy + Edge-Schicht vor cam2rent.de. Die „Wichtig vor Cloudflare-Live-Schaltung"-Warnung aus dem 05-13-Eintrag oben ist umgesetzt: Hetzner Cloud Firewall blockt Port 80/443 fuer alle Quellen ausser den 22 offiziellen Cloudflare-IP-Ranges (15 IPv4 + 7 IPv6). Damit ist der `cf-connecting-ip`-Header vertrauenswuerdig — ein Angreifer kann den Origin nicht mehr direkt anfragen und den Header selbst setzen.
+
+- **Cloudflare-Konfiguration:**
+  - SSL/TLS-Modus: `Vollstaendig (strikt)` — End-to-End-HTTPS Cloudflare ↔ Hetzner mit Cert-Validierung
+  - Always Use HTTPS: ON — HTTP → HTTPS-301 am Edge
+  - Mindest-TLS-Version: TLS 1.2 (TLS 1.3 zusaetzlich aktiv, wird automatisch gewaehlt wo unterstuetzt)
+  - HSTS: 6 Monate, IncludeSubDomains: ON, Preload: OFF (vorsichtiger Einstieg — App-Header in `next.config.ts` liefert weiterhin 2 Jahre mit `preload`, Cloudflare-Layer ist nur Edge-Reinforcement)
+  - Bot Fight Mode: ON — JS-Challenge fuer Headless-Bots, verifizierte Suchmaschinen-Crawler (Googlebot, Bingbot) bleiben durch
+  - DDoS-Schutz: Always-on (Cloudflare-Default)
+- **WAF-Regeln (Free-Tier):**
+  - Rate-Limit `auth-bruteforce`: 10 Requests / 10 Sek auf `/api/admin/login` und `/api/auth/*` → 10 Sek Block. Free-Tier-Limit (Period + Duration jeweils nur 10 s waehlbar). Echter Brute-Force-Schutz laeuft im App-Code (`lib/rate-limit.ts`: 5 Versuche / 15 Min pro IP + Per-Account-Lockout aus Sweep 7); Cloudflare-Layer ist Bandbreiten-Schutz vor Hetzner-Overload bei Massen-Attack.
+  - Cloudflare Managed Ruleset / OWASP Core Ruleset sind **Pro-Feature** ($20/Monat) — bewusst nicht aktiv. Stattdessen: 5 Custom-WAF-Slots (0/5 belegt, fuer spaeter), Bot Fight Mode + Sicherheitsstufe „Mittel" als Baseline.
+- **Cache-Regeln:**
+  - `Bypass dynamic` (Position 1): `/api/*`, `/admin/*` → Cache umgehen. Verhindert dass dynamische Inhalte am Edge gecached werden (Buchungen, Admin-Daten, JSON-Responses).
+  - `Cache static` (Position 2): `/_next/static/*` + Bilder (`.jpg|jpeg|png|webp|svg|gif|ico|woff2`) → Edge-TTL 1 Monat, Browser-TTL 1 Tag. Cache-Rate sollte von 0 % auf 30–60 % steigen.
+- **DNS:**
+  - `cam2rent.de` + `www` A-Records: orange Wolke (Proxied) ✓
+  - Wildcard `*` A-Record → `85.13.154.63` (KAS-Legacy-IP): graue Wolke. Kein Origin-Leak weil andere IP als Hetzner. Stehengelassen fuer eventuell noch genutzte KAS-Subdomains.
+  - MX + TXT (SPF, DMARC, DKIM, Resend, Google-Verification): grau wie ueblich (MX kann nicht geproxied werden).
+- **Hetzner Cloud Firewall `firewall-1` (Beschreibung `cam2rent-cloudflare-only`):**
+  - Eingehend: TCP/22 (SSH, Any IPv4 + IPv6), TCP/443 (HTTPS, nur 22 Cloudflare-CIDRs), TCP/80 (HTTP, nur 22 Cloudflare-CIDRs — fuer Let's-Encrypt-HTTP-01-Challenge + Cloudflare-Redirect)
+  - Ausgehend: alles erlaubt (Default)
+  - Server `cam2rent` zugewiesen
+- **Wartung:** Cloudflare-IP-Ranges quartalsweise gegen https://www.cloudflare.com/ips/ pruefen — Hetzner Cloud Firewall hat keine Auto-Update. Bei Erweiterung neue Ranges manuell ergaenzen, sonst kommt der Origin nicht mehr durch.
+- **Bekannte Free-Tier-Limits:** Verwaltete WAF-Regeln (Managed Ruleset, OWASP) sind Pro-only. Rate-Limit-Period + Duration sind auf 10 Sekunden gecapt (Pro: 10s/1m/5m/15m/1h/24h waehlbar). Falls cam2rent in Zukunft ueber 100k Requests/Monat geht oder eine aktive Angriffswelle erlebt, Pro-Plan in Betracht ziehen.
+- **Spaeter optional:**
+  - HSTS-Max-Age auf 12 Monate hochziehen + Preload aktivieren, wenn 6 Monate stabil
+  - Zertifikatstransparenz-Monitoring aktivieren (Card auf SSL/TLS → Edge-Zertifikate) → E-Mail-Warnung bei neuer Cert-Ausstellung fuer cam2rent.de, hilft bei Phishing-Erkennung
+
 ### Newsletter-Verwaltung (Stand 2026-04-26)
 Admin-Seite `/admin/newsletter` (in Sidebar-Gruppe „Rabatte & Aktionen", Permission `preise`). Drei Tabs:
 
