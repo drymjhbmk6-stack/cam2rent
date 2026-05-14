@@ -406,6 +406,18 @@ async function handleSingleBooking(
     customer_email: meta.customer_email || null,
     customer_name: meta.customer_name || null,
     shipping_address: shippingAddress,
+    // Produkt-Rabatt aus Metadata (Aktion wie "Release50"). Sonst gehen die
+    // Felder verloren, wenn der Webhook die Buchung schneller anlegt als
+    // confirm-booking nach dem Stripe-Redirect — Rechnung + Buchungsdetail
+    // wuerden den Rabatt nicht zeigen, obwohl Stripe ihn abgezogen hat.
+    ...(Math.max(0, parseFloat(meta.product_discount ?? '0') || 0) > 0
+      ? {
+          discount_amount: Math.max(0, parseFloat(meta.product_discount ?? '0') || 0),
+          ...(meta.product_discount_label
+            ? { coupon_code: String(meta.product_discount_label).trim() }
+            : {}),
+        }
+      : {}),
   });
 
   if (error) {

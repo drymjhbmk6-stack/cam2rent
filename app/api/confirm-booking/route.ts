@@ -99,6 +99,41 @@ export async function POST(req: NextRequest) {
       // Ausführung nach der Response. Damit antwortet die Route sofort (~50 ms) statt
       // 2-4 s synchron auf PDF + Storage zu warten.
       console.log('[confirm-booking] Idempotent: existing=', existing.id, 'contractSignature=', contractSignature ? 'vorhanden' : 'FEHLT');
+
+      // Webhook-Race-Patch: wenn der Webhook die Buchung schneller angelegt
+      // hat, fehlt evtl. discount_amount/coupon_code (alte Webhook-Version
+      // hat die nicht aus den Metadata gelesen, oder Webhook lief vor dem
+      // Deploy unseres Discount-Fix). Hier patchen wir nach, sonst sieht
+      // der Kunde in der Rechnung / im Buchungsdetail keinen Rabatt.
+      const intentMeta = intent.metadata ?? {};
+      const productDiscountFromMeta = Math.max(0, parseFloat(intentMeta.product_discount ?? '0') || 0);
+      const productDiscountLabel = (intentMeta.product_discount_label ?? '').toString().trim();
+      if (productDiscountFromMeta > 0) {
+        try {
+          const { data: existingFull } = await supabase
+            .from('bookings')
+            .select('discount_amount, coupon_code')
+            .eq('id', existing.id)
+            .maybeSingle();
+          const needsPatch =
+            !existingFull?.discount_amount ||
+            Number(existingFull.discount_amount) === 0 ||
+            (productDiscountLabel && !existingFull.coupon_code);
+          if (needsPatch) {
+            await supabase
+              .from('bookings')
+              .update({
+                discount_amount: productDiscountFromMeta,
+                ...(productDiscountLabel ? { coupon_code: productDiscountLabel } : {}),
+              })
+              .eq('id', existing.id);
+            console.log(`[confirm-booking] Rabatt nachgetragen: ${existing.id} -${productDiscountFromMeta} € (${productDiscountLabel})`);
+          }
+        } catch (patchErr) {
+          console.error('[confirm-booking] Discount-Patch fehlgeschlagen (nicht kritisch):', patchErr);
+        }
+      }
+
       if (contractSignature?.agreedToTerms && contractSignature?.signerName) {
         const ipFromHelperEarly = getClientIp(req);
         const ip = ipFromHelperEarly === '127.0.0.1' ? 'unknown' : ipFromHelperEarly;
