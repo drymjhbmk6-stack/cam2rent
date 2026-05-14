@@ -6,21 +6,25 @@ import { useRouter } from 'next/navigation';
 import { useCart } from '@/components/CartProvider';
 import { fmtDate, fmtEuro } from '@/lib/format-utils';
 import { calcShipping, shippingConfig as defaultShippingConfig, type ShippingConfig } from '@/data/shipping';
+import { getDiscountMatchesForItem, calcItemDiscountTotal, calcCartLevelDiscount, type ProductDiscount } from '@/lib/price-config';
 
 export default function WarenkorbPage() {
   const { items, removeItem, cartTotal, itemCount } = useCart();
   const router = useRouter();
   const [showDateModal, setShowDateModal] = useState(false);
 
-  // Dynamische Shipping-Config aus DB nachladen, damit der hier angezeigte
-  // Versandpreis exakt dem entspricht, was im Checkout berechnet wird.
-  // Fallback: Werte aus data/shipping.ts.
+  // Dynamische Shipping-Config + Produktrabatte aus DB nachladen, damit der
+  // hier angezeigte Versandpreis und Rabatt EXAKT dem entspricht, was im
+  // Checkout berechnet wird. Sonst sieht der Kunde im Warenkorb 15 EUR und
+  // im Checkout 7,50 EUR — er denkt der Rabatt "verschwindet".
   const [dynShipping, setDynShipping] = useState<ShippingConfig>(defaultShippingConfig);
+  const [productDiscounts, setProductDiscounts] = useState<ProductDiscount[]>([]);
   useEffect(() => {
     fetch('/api/prices')
       .then((r) => r.json())
       .then((d) => {
         if (d?.shipping) setDynShipping(d.shipping);
+        if (d?.productDiscounts) setProductDiscounts(d.productDiscounts);
       })
       .catch(() => {});
   }, []);
@@ -44,7 +48,46 @@ export default function WarenkorbPage() {
     () => calcShipping(cartTotal, cartShippingMethod, cartDeliveryMode, dynShipping),
     [cartTotal, dynShipping, cartShippingMethod, cartDeliveryMode],
   );
-  const grandTotal = cartTotal + shipping.price;
+
+  // Aktionsrabatte (z.B. Release50) hier ebenfalls anwenden — analog Checkout.
+  // CartItem.subtotal speichert den Brutto-Preis ohne Rabatt; wir berechnen
+  // den Item-/Cart-Level-Rabatt aus productDiscounts genauso wie in /checkout.
+  const { discountAmount: cartDiscount, discountLabel: cartDiscountLabel } = useMemo(() => {
+    if (productDiscounts.length === 0 || items.length === 0) {
+      return { discountAmount: 0, discountLabel: null as string | null };
+    }
+    let itemDisc = 0;
+    let bestLabel: string | null = null;
+    let bestAmount = 0;
+    for (const item of items) {
+      const matches = getDiscountMatchesForItem(
+        item.productId,
+        item.priceRental,
+        item.priceAccessories,
+        item.accessories ?? [],
+        productDiscounts,
+      );
+      itemDisc += calcItemDiscountTotal(matches, item.priceRental, item.priceAccessories);
+      for (const m of matches) {
+        if (m.amount > bestAmount) {
+          bestAmount = m.amount;
+          bestLabel = m.discount.name ?? null;
+        }
+      }
+    }
+    const cartTotalNetItems = items.reduce((s, it) => s + it.priceRental + it.priceAccessories, 0) - itemDisc;
+    const cartLevelDisc = calcCartLevelDiscount(cartTotalNetItems, productDiscounts);
+    if (cartLevelDisc > bestAmount) {
+      const cartMatch = productDiscounts.find((d) => d.applies_to_cart);
+      if (cartMatch?.name) bestLabel = cartMatch.name;
+    }
+    return {
+      discountAmount: Math.round((itemDisc + cartLevelDisc) * 100) / 100,
+      discountLabel: bestLabel,
+    };
+  }, [items, productDiscounts]);
+
+  const grandTotal = Math.max(0, cartTotal - cartDiscount + shipping.price);
   const shippingLabel = cartDeliveryMode === 'abholung'
     ? 'Abholung vor Ort'
     : `Hin- und Rückversand (${cartShippingMethod === 'express' ? 'Express' : 'Standard'})`;
@@ -311,6 +354,16 @@ export default function WarenkorbPage() {
                     {fmtEuro(cartTotal)}
                   </span>
                 </div>
+                {cartDiscount > 0 && (
+                  <div className="flex justify-between items-baseline gap-2 text-sm">
+                    <span className="text-status-success">
+                      {cartDiscountLabel ? `Rabatt (${cartDiscountLabel})` : 'Rabatt'}
+                    </span>
+                    <span className="text-status-success font-medium whitespace-nowrap flex-shrink-0">
+                      -{fmtEuro(cartDiscount)}
+                    </span>
+                  </div>
+                )}
                 <div className="flex justify-between items-baseline gap-2 text-sm">
                   <span className="text-brand-text dark:text-gray-300">
                     {shippingLabel}
