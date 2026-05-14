@@ -91,46 +91,66 @@ function PaymentForm({
     setIsLoading(true);
     setError(null);
 
-    // Save checkout context to sessionStorage so confirm page can read it
-    // Vertragssignatur aus separatem Key einbetten (falls vorhanden)
-    let contractSignature: unknown = undefined;
     try {
-      const sigRaw = sessionStorage.getItem('cam2rent_contract_signature');
-      if (sigRaw) contractSignature = JSON.parse(sigRaw);
-    } catch { /* ignore */ }
+      // Save checkout context to sessionStorage so confirm page can read it
+      // Vertragssignatur aus separatem Key einbetten (falls vorhanden)
+      let contractSignature: unknown = undefined;
+      try {
+        const sigRaw = sessionStorage.getItem('cam2rent_contract_signature');
+        if (sigRaw) contractSignature = JSON.parse(sigRaw);
+      } catch { /* ignore */ }
 
-    sessionStorage.setItem(
-      'cam2rent_checkout_context',
-      JSON.stringify({
-        items: cartItems,
-        customerName,
-        customerEmail,
-        userId: userId ?? null,
-        deliveryMode,
-        shippingMethod,
-        shippingPrice,
-        discountAmount,
-        couponCode,
-        productDiscount,
-        durationDiscount,
-        loyaltyDiscount,
-        referralCode,
-        street,
-        zip,
-        city,
-        contractSignature,
-      })
-    );
+      sessionStorage.setItem(
+        'cam2rent_checkout_context',
+        JSON.stringify({
+          items: cartItems,
+          customerName,
+          customerEmail,
+          userId: userId ?? null,
+          deliveryMode,
+          shippingMethod,
+          shippingPrice,
+          discountAmount,
+          couponCode,
+          productDiscount,
+          durationDiscount,
+          loyaltyDiscount,
+          referralCode,
+          street,
+          zip,
+          city,
+          contractSignature,
+        })
+      );
 
-    const { error: stripeError } = await stripe.confirmPayment({
-      elements,
-      confirmParams: {
-        return_url: `${window.location.origin}/buchung-bestaetigt?from=cart`,
-      },
-    });
+      // Elements-Validierung vor Stripe-Submit. Faengt clientseitig fehlende
+      // Pflichtfelder (z.B. Karten-Inhaber, ungueltige Karte) ab, bevor wir
+      // Stripe ueberhaupt anfragen — sonst kann Stripe.js mit einem
+      // unerwarteten Fehler hochlaufen und in die Error-Boundary kippen.
+      const submitResult = await elements.submit();
+      if (submitResult?.error) {
+        setError(submitResult.error.message ?? 'Bitte vervollständige deine Zahlungsdaten.');
+        setIsLoading(false);
+        return;
+      }
 
-    if (stripeError) {
-      setError(stripeError.message ?? 'Ein Fehler ist aufgetreten.');
+      const { error: stripeError } = await stripe.confirmPayment({
+        elements,
+        confirmParams: {
+          return_url: `${window.location.origin}/buchung-bestaetigt?from=cart`,
+        },
+      });
+
+      if (stripeError) {
+        setError(stripeError.message ?? 'Ein Fehler ist aufgetreten.');
+        setIsLoading(false);
+      }
+    } catch (unexpectedErr) {
+      // Defensive: niemals die Error-Boundary mit unerwarteten Stripe-Fehlern
+      // ausloesen. Stattdessen Fehlertext anzeigen und User retry-ermoeglichen.
+      console.error('[checkout] Unexpected error in handleSubmit:', unexpectedErr);
+      const msg = unexpectedErr instanceof Error ? unexpectedErr.message : 'Unerwarteter Fehler.';
+      setError(`Zahlung konnte nicht gestartet werden: ${msg}`);
       setIsLoading(false);
     }
   };

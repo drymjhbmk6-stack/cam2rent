@@ -332,16 +332,30 @@ function PaymentStep({ total, onBack }: { total: number; onBack: () => void }) {
     setIsLoading(true);
     setError(null);
 
-    const { error: stripeError } = await stripe.confirmPayment({
-      elements,
-      confirmParams: {
-        return_url: `${window.location.origin}/buchung-bestaetigt`,
-      },
-    });
+    try {
+      // Elements-Validierung vor Stripe-Submit — siehe checkout/page.tsx
+      const submitResult = await elements.submit();
+      if (submitResult?.error) {
+        setError(submitResult.error.message ?? 'Bitte vervollständige deine Zahlungsdaten.');
+        setIsLoading(false);
+        return;
+      }
 
-    // Only runs if redirect failed or payment was declined
-    if (stripeError) {
-      setError(stripeError.message ?? 'Ein Fehler ist aufgetreten.');
+      const { error: stripeError } = await stripe.confirmPayment({
+        elements,
+        confirmParams: {
+          return_url: `${window.location.origin}/buchung-bestaetigt`,
+        },
+      });
+
+      if (stripeError) {
+        setError(stripeError.message ?? 'Ein Fehler ist aufgetreten.');
+        setIsLoading(false);
+      }
+    } catch (unexpectedErr) {
+      console.error('[buchen] Unexpected error in handleSubmit:', unexpectedErr);
+      const msg = unexpectedErr instanceof Error ? unexpectedErr.message : 'Unerwarteter Fehler.';
+      setError(`Zahlung konnte nicht gestartet werden: ${msg}`);
       setIsLoading(false);
     }
   };

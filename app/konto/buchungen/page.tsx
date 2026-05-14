@@ -115,33 +115,40 @@ function ExtendPaymentForm({ booking, newDate, priceInfo }: {
     setPaying(true);
     setFormError('');
 
-    const { error: submitError } = await elements.submit();
-    if (submitError) {
-      setFormError(submitError.message || 'Zahlungsfehler.');
+    try {
+      const { error: submitError } = await elements.submit();
+      if (submitError) {
+        setFormError(submitError.message || 'Zahlungsfehler.');
+        setPaying(false);
+        return;
+      }
+
+      // Save extension context so we can confirm after redirect
+      sessionStorage.setItem('cam2rent_extension', JSON.stringify({
+        bookingId: booking.id,
+        newRentalTo: newDate,
+      }));
+
+      // Stripe will redirect to return_url after payment
+      const { error: confirmError } = await stripe.confirmPayment({
+        elements,
+        confirmParams: {
+          return_url: `${window.location.origin}/konto/buchungen?extend_confirm=1`,
+        },
+      });
+
+      // Only reached if redirect fails (e.g. card error without redirect)
+      if (confirmError) {
+        setFormError(confirmError.message || 'Zahlung fehlgeschlagen.');
+        sessionStorage.removeItem('cam2rent_extension');
+      }
       setPaying(false);
-      return;
+    } catch (unexpectedErr) {
+      console.error('[extend] Unexpected error in handleSubmit:', unexpectedErr);
+      const msg = unexpectedErr instanceof Error ? unexpectedErr.message : 'Unerwarteter Fehler.';
+      setFormError(`Zahlung konnte nicht gestartet werden: ${msg}`);
+      setPaying(false);
     }
-
-    // Save extension context so we can confirm after redirect
-    sessionStorage.setItem('cam2rent_extension', JSON.stringify({
-      bookingId: booking.id,
-      newRentalTo: newDate,
-    }));
-
-    // Stripe will redirect to return_url after payment
-    const { error: confirmError } = await stripe.confirmPayment({
-      elements,
-      confirmParams: {
-        return_url: `${window.location.origin}/konto/buchungen?extend_confirm=1`,
-      },
-    });
-
-    // Only reached if redirect fails (e.g. card error without redirect)
-    if (confirmError) {
-      setFormError(confirmError.message || 'Zahlung fehlgeschlagen.');
-      sessionStorage.removeItem('cam2rent_extension');
-    }
-    setPaying(false);
   };
 
   return (
