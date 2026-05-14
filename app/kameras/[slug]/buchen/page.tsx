@@ -1978,6 +1978,8 @@ export default function BuchenPage() {
                             priceHaftung: breakdown.haftungPrice,
                             subtotal: breakdown.rentalPrice + (selectedSet ? setPrice : breakdown.accessoryPrice) + breakdown.haftungPrice,
                             deposit: product.deposit,
+                            deliveryMode,
+                            shippingMethod: deliveryMode === 'versand' ? shippingMethod : 'standard',
                           });
                           router.push('/warenkorb');
                         }}

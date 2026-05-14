@@ -238,7 +238,24 @@ export default function CheckoutPage() {
   // Shipping
   const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>('versand');
   const [shippingMethod, setShippingMethod] = useState<ShippingMethod>('standard');
+  const [shippingPrefillDone, setShippingPrefillDone] = useState(false);
   const [dynShipping, setDynShipping] = useState<ShippingPriceConfig>(shippingConfig);
+
+  // Versandart aus dem Cart vorbefuellen, sobald Items hydrated sind. So
+  // landet der Kunde im Checkout nicht mit "Versand" als Default, obwohl er
+  // auf der Buchen-Seite "Abholung" gewaehlt hat. Nur einmal vorbefuellen —
+  // danach respektieren wir Aenderungen, die der User hier vornimmt.
+  useEffect(() => {
+    if (!hydrated || shippingPrefillDone || items.length === 0) return;
+    const allAbholung = items.every((it) => it.deliveryMode === 'abholung');
+    const versandItems = items.filter((it) => (it.deliveryMode ?? 'versand') === 'versand');
+    if (allAbholung) {
+      setDeliveryMode('abholung');
+    } else if (versandItems.length > 0 && versandItems.every((it) => it.shippingMethod === 'express')) {
+      setShippingMethod('express');
+    }
+    setShippingPrefillDone(true);
+  }, [hydrated, items, shippingPrefillDone]);
 
   // Auto-discounts config (fetched from /api/prices)
   const [durationDiscounts, setDurationDiscounts] = useState<DurationDiscount[]>([]);

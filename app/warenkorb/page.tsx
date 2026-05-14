@@ -25,12 +25,29 @@ export default function WarenkorbPage() {
       .catch(() => {});
   }, []);
 
-  // Default: Versand + Standard. Im Checkout kann der Kunde umstellen.
+  // Versandart aus dem ersten Cart-Item lesen (Buchen-Seite persistiert sie).
+  // Wenn alle Items Abholung haben → Abholung. Sobald EIN Item Versand hat,
+  // greift Versand (sicherer Default, Kunde kann im Checkout umschalten).
+  const cartDeliveryMode = useMemo<'versand' | 'abholung'>(() => {
+    if (items.length === 0) return 'versand';
+    return items.every((it) => it.deliveryMode === 'abholung') ? 'abholung' : 'versand';
+  }, [items]);
+  const cartShippingMethod = useMemo<'standard' | 'express'>(() => {
+    // Express nur wenn alle Versand-Items express gewaehlt haben.
+    if (cartDeliveryMode !== 'versand') return 'standard';
+    const versandItems = items.filter((it) => (it.deliveryMode ?? 'versand') === 'versand');
+    if (versandItems.length === 0) return 'standard';
+    return versandItems.every((it) => it.shippingMethod === 'express') ? 'express' : 'standard';
+  }, [items, cartDeliveryMode]);
+
   const shipping = useMemo(
-    () => calcShipping(cartTotal, 'standard', 'versand', dynShipping),
-    [cartTotal, dynShipping],
+    () => calcShipping(cartTotal, cartShippingMethod, cartDeliveryMode, dynShipping),
+    [cartTotal, dynShipping, cartShippingMethod, cartDeliveryMode],
   );
   const grandTotal = cartTotal + shipping.price;
+  const shippingLabel = cartDeliveryMode === 'abholung'
+    ? 'Abholung vor Ort'
+    : `Hin- und Rückversand (${cartShippingMethod === 'express' ? 'Express' : 'Standard'})`;
 
   // Artikel nach Mietzeitraum gruppieren
   const periodGroups = useMemo(() => {
@@ -219,10 +236,14 @@ export default function WarenkorbPage() {
                     {itemCount === 1 && (
                       <div className="mt-3 pt-3 border-t border-brand-border dark:border-white/10 flex justify-between items-center text-sm">
                         <span className="text-brand-text dark:text-gray-300">
-                          + Hin- und Rückversand (Standard)
+                          + {shippingLabel}
                         </span>
                         <span className="font-medium text-brand-black dark:text-white">
-                          {shipping.isFree ? 'Gratis' : fmtEuro(shipping.price)}
+                          {cartDeliveryMode === 'abholung'
+                            ? 'Gratis'
+                            : shipping.isFree
+                              ? 'Gratis'
+                              : fmtEuro(shipping.price)}
                         </span>
                       </div>
                     )}
@@ -292,10 +313,14 @@ export default function WarenkorbPage() {
                 </div>
                 <div className="flex justify-between items-baseline gap-2 text-sm">
                   <span className="text-brand-text dark:text-gray-300">
-                    Hin- und Rückversand (Standard)
+                    {shippingLabel}
                   </span>
                   <span className="text-brand-black dark:text-white font-medium whitespace-nowrap flex-shrink-0">
-                    {shipping.isFree ? 'Gratis' : fmtEuro(shipping.price)}
+                    {cartDeliveryMode === 'abholung'
+                      ? 'Gratis'
+                      : shipping.isFree
+                        ? 'Gratis'
+                        : fmtEuro(shipping.price)}
                   </span>
                 </div>
                 <div className="flex justify-between items-baseline gap-2 pt-2 border-t border-brand-border dark:border-white/10">

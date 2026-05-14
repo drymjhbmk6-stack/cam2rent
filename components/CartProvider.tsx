@@ -37,6 +37,14 @@ export interface CartItem {
   priceHaftung: number;
   subtotal: number;     // rental + accessories + haftung (ohne Versand)
   deposit: number;
+  /**
+   * Vom Kunden auf der Buchen-Seite gewaehlte Versandart. Wird im Warenkorb
+   * fuer die Versandzeile angezeigt und im Checkout als Vorauswahl genommen.
+   * Optional fuer Abwaertskompat mit aelteren localStorage-Carts — Default
+   * an den Konsum-Stellen ist 'versand' bzw. 'standard'.
+   */
+  deliveryMode?: 'versand' | 'abholung';
+  shippingMethod?: 'standard' | 'express';
 }
 
 interface CartContextType {
