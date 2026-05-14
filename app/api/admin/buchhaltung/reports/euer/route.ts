@@ -45,17 +45,31 @@ export async function GET(req: NextRequest) {
   // Zuordnung verzerrt waere.
   const { data: bookings } = await supabase
     .from('bookings')
-    .select('price_rental, price_accessories, price_haftung, shipping_price, price_total, discount_amount, duration_discount, loyalty_discount, status, delivery_mode')
+    .select('id, product_name, rental_from, rental_to, days, price_rental, price_accessories, price_haftung, shipping_price, price_total, discount_amount, duration_discount, loyalty_discount, coupon_code, status, delivery_mode, created_at')
     .eq('is_test', false)
     .neq('status', 'cancelled')
     .gte('created_at', `${from}T00:00:00`)
-    .lte('created_at', `${to}T23:59:59`);
+    .lte('created_at', `${to}T23:59:59`)
+    .order('created_at', { ascending: false });
+
+  type IncomeItem = {
+    id: string;
+    date: string;
+    description: string;
+    amount: number;
+    note?: string;
+  };
 
   let rental = 0;
   let accessories = 0;
   let haftung = 0;
   let shipping = 0;
   let discounts = 0;
+  const rentalItems: IncomeItem[] = [];
+  const accessoryItems: IncomeItem[] = [];
+  const haftungItems: IncomeItem[] = [];
+  const shippingItems: IncomeItem[] = [];
+
   for (const b of bookings ?? []) {
     const r = Number(b.price_rental ?? 0);
     const a = Number(b.price_accessories ?? 0);
@@ -63,24 +77,69 @@ export async function GET(req: NextRequest) {
     const s = Number(b.shipping_price ?? 0);
     const d = Number(b.discount_amount ?? 0) + Number(b.duration_discount ?? 0) + Number(b.loyalty_discount ?? 0);
     discounts += d;
-    haftung += h;
-    shipping += s;
+
     // Rabatt proportional auf Miete + Zubehoer verteilen — sonst zeigt die
     // EUeR z.B. 12 EUR Kamera-Einnahmen obwohl effektiv nur 6 EUR (12 - 6 EUR
-    // Release50-Rabatt) realisiert wurden. Falls die Basis 0 ist (nur Versand
-    // o.ae.), Rabatt nicht zuteilen — der wird unten am Total ohnehin
-    // abgezogen, sodass die Gesamtsumme stimmt.
+    // Release50-Rabatt) realisiert wurden. Haftung + Versand bleiben gross.
     const base = r + a;
+    let rentalNet = r;
+    let accessoriesNet = a;
+    let rentalDiscountCut = 0;
+    let accDiscountCut = 0;
     if (d > 0 && base > 0) {
       const rentalShare = r / base;
       const accessoriesShare = a / base;
-      const rentalCut = Math.min(r, Math.round(d * rentalShare * 100) / 100);
-      const accCut = Math.min(a, Math.round(d * accessoriesShare * 100) / 100);
-      rental += Math.max(0, r - rentalCut);
-      accessories += Math.max(0, a - accCut);
-    } else {
-      rental += r;
-      accessories += a;
+      rentalDiscountCut = Math.min(r, Math.round(d * rentalShare * 100) / 100);
+      accDiscountCut = Math.min(a, Math.round(d * accessoriesShare * 100) / 100);
+      rentalNet = Math.max(0, r - rentalDiscountCut);
+      accessoriesNet = Math.max(0, a - accDiscountCut);
+    }
+
+    rental += rentalNet;
+    accessories += accessoriesNet;
+    haftung += h;
+    shipping += s;
+
+    const bookingId = String(b.id);
+    const dateIso = (b.created_at ?? '').toString().slice(0, 10);
+    const productName = (b.product_name ?? '').toString();
+    const days = b.days ?? 1;
+    const rentalFromShort = (b.rental_from ?? '').toString().slice(0, 10);
+    const couponNote = b.coupon_code ? ` · ${b.coupon_code}` : '';
+
+    if (rentalNet > 0 || r > 0) {
+      rentalItems.push({
+        id: `${bookingId}-rental`,
+        date: dateIso,
+        description: `${bookingId} · ${productName} · ${days} ${days === 1 ? 'Tag' : 'Tage'} ab ${rentalFromShort}`,
+        amount: rentalNet,
+        note: rentalDiscountCut > 0 ? `brutto ${r.toFixed(2)} EUR − ${rentalDiscountCut.toFixed(2)} EUR Rabatt${couponNote}` : undefined,
+      });
+    }
+    if (accessoriesNet > 0 || a > 0) {
+      accessoryItems.push({
+        id: `${bookingId}-acc`,
+        date: dateIso,
+        description: `${bookingId} · Zubehör/Set`,
+        amount: accessoriesNet,
+        note: accDiscountCut > 0 ? `brutto ${a.toFixed(2)} EUR − ${accDiscountCut.toFixed(2)} EUR Rabatt${couponNote}` : undefined,
+      });
+    }
+    if (h > 0) {
+      haftungItems.push({
+        id: `${bookingId}-haftung`,
+        date: dateIso,
+        description: `${bookingId} · Haftungsschutz`,
+        amount: h,
+      });
+    }
+    if (s > 0) {
+      shippingItems.push({
+        id: `${bookingId}-shipping`,
+        date: dateIso,
+        description: `${bookingId} · Versand`,
+        amount: s,
+      });
     }
   }
   const bookingCount = (bookings || []).length;
@@ -212,6 +271,15 @@ export async function GET(req: NextRequest) {
       discounts,
       other: 0,
       total: incomeTotal,
+      // Pro-Buchung-Items fuer aufklappbare Anzeige in der UI — analog
+      // zu expenses.categories. Betraege sind bereits NETTO nach Rabatt-
+      // Verrechnung (Miete/Zubehoer); Haftung/Versand sind brutto.
+      items: {
+        rental: rentalItems,
+        accessories: accessoryItems,
+        haftung: haftungItems,
+        shipping: shippingItems,
+      },
     },
     bookingStats: {
       count: bookingCount,

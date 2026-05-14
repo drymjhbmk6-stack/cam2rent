@@ -14,6 +14,14 @@ interface ExpenseItem {
   amount: number;
 }
 
+interface IncomeItem {
+  id: string;
+  date: string;
+  description: string;
+  amount: number;
+  note?: string;
+}
+
 interface EuerData {
   income: {
     rental: number;
@@ -23,6 +31,12 @@ interface EuerData {
     discounts: number;
     other: number;
     total: number;
+    items?: {
+      rental?: IncomeItem[];
+      accessories?: IncomeItem[];
+      haftung?: IncomeItem[];
+      shipping?: IncomeItem[];
+    };
   };
   bookingStats?: { count: number; pickup: number; shipped: number };
   expenses: {
@@ -126,12 +140,32 @@ function EuerReport() {
           )}
 
           <Section title="Einnahmen" color="#10b981">
-            <EuerRow label={data.income.discounts > 0 ? 'Kamera-Miete (netto nach Rabatt)' : 'Kamera-Miete'} amount={data.income.rental} />
+            <IncomeCategoryRow
+              label={data.income.discounts > 0 ? 'Kamera-Miete (netto nach Rabatt)' : 'Kamera-Miete'}
+              amount={data.income.rental}
+              items={data.income.items?.rental ?? []}
+            />
             {data.income.accessories > 0 && (
-              <EuerRow label={data.income.discounts > 0 ? 'Zubehör & Sets (netto nach Rabatt)' : 'Zubehör & Sets'} amount={data.income.accessories} />
+              <IncomeCategoryRow
+                label={data.income.discounts > 0 ? 'Zubehör & Sets (netto nach Rabatt)' : 'Zubehör & Sets'}
+                amount={data.income.accessories}
+                items={data.income.items?.accessories ?? []}
+              />
             )}
-            {data.income.haftung > 0 && <EuerRow label="Haftungsschutz" amount={data.income.haftung} />}
-            {data.income.shipping > 0 && <EuerRow label="Versandkostenpauschalen" amount={data.income.shipping} />}
+            {data.income.haftung > 0 && (
+              <IncomeCategoryRow
+                label="Haftungsschutz"
+                amount={data.income.haftung}
+                items={data.income.items?.haftung ?? []}
+              />
+            )}
+            {data.income.shipping > 0 && (
+              <IncomeCategoryRow
+                label="Versandkostenpauschalen"
+                amount={data.income.shipping}
+                items={data.income.items?.shipping ?? []}
+              />
+            )}
             {data.income.other > 0 && <EuerRow label="Sonstige Einnahmen" amount={data.income.other} />}
             <TotalRow label="Summe Einnahmen" amount={data.income.total} />
             {data.income.discounts > 0 && (
@@ -255,6 +289,99 @@ function ExpenseCategoryRow({ cat }: {
               <span>{it.date ? fmtDateShort(it.date) : '–'}</span>
               <span style={{ color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {it.vendor ? `${it.vendor} · ` : ''}{it.description || '—'}
+              </span>
+              <span style={{ color: '#cbd5e1', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+                {formatCurrency(it.amount)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Aufklappbare Einnahmen-Kategorie analog zu ExpenseCategoryRow: Klick zeigt
+ * die einzelnen Buchungen mit deren Netto-Anteilen pro Kategorie (Datum,
+ * Buchungs-Nr. + Produktname + Mietzeitraum, Betrag).
+ */
+function IncomeCategoryRow({ label, amount, items }: {
+  label: string;
+  amount: number;
+  items: IncomeItem[];
+}) {
+  const [open, setOpen] = useState(false);
+  const hasItems = items.length > 0;
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => hasItems && setOpen(!open)}
+        style={{
+          width: '100%',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          padding: '6px 0',
+          fontSize: 14,
+          background: 'transparent',
+          border: 'none',
+          color: 'inherit',
+          cursor: hasItems ? 'pointer' : 'default',
+          textAlign: 'left',
+        }}
+      >
+        <span style={{ color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 6 }}>
+          {hasItems && (
+            <span style={{
+              display: 'inline-block',
+              width: 10,
+              color: '#475569',
+              transform: open ? 'rotate(90deg)' : 'none',
+              transition: 'transform 0.15s',
+              fontSize: 10,
+            }}>▶</span>
+          )}
+          {label}
+          {hasItems && <span style={{ color: '#475569', fontSize: 11 }}>({items.length})</span>}
+        </span>
+        <span style={{ color: '#e2e8f0', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+          {formatCurrency(amount)}
+        </span>
+      </button>
+      {open && hasItems && (
+        <div style={{
+          marginLeft: 16,
+          marginTop: 4,
+          marginBottom: 8,
+          paddingLeft: 12,
+          borderLeft: '2px solid #1e293b',
+        }}>
+          {items.map((it) => (
+            <div
+              key={it.id}
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '90px 1fr auto',
+                gap: 10,
+                padding: '4px 0',
+                fontSize: 12,
+                color: '#64748b',
+                borderBottom: '1px solid #0f172a',
+              }}
+            >
+              <span>{it.date ? fmtDateShort(it.date) : '–'}</span>
+              <span style={{ color: '#94a3b8', overflow: 'hidden' }}>
+                <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {it.description}
+                </div>
+                {it.note && (
+                  <div style={{ fontSize: 10, color: '#64748b', fontStyle: 'italic', marginTop: 2 }}>
+                    {it.note}
+                  </div>
+                )}
               </span>
               <span style={{ color: '#cbd5e1', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
                 {formatCurrency(it.amount)}
