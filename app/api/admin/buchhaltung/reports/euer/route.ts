@@ -38,7 +38,11 @@ export async function GET(req: NextRequest) {
     .maybeSingle();
   const taxMode = taxRow?.value || 'kleinunternehmer';
 
-  // Einnahmen aus Buchungen — Test-Daten ausgeschlossen
+  // Einnahmen aus Buchungen — Test-Daten ausgeschlossen.
+  // Aktionsrabatte (discount_amount, duration_discount, loyalty_discount)
+  // werden proportional auf Miete + Zubehoer verteilt. Haftung + Versand
+  // bleiben gross, weil die typisch nicht rabattiert sind und sonst die
+  // Zuordnung verzerrt waere.
   const { data: bookings } = await supabase
     .from('bookings')
     .select('price_rental, price_accessories, price_haftung, shipping_price, price_total, discount_amount, duration_discount, loyalty_discount, status, delivery_mode')
@@ -47,18 +51,44 @@ export async function GET(req: NextRequest) {
     .gte('created_at', `${from}T00:00:00`)
     .lte('created_at', `${to}T23:59:59`);
 
-  const rental = (bookings || []).reduce((sum, b) => sum + (b.price_rental || 0), 0);
-  const accessories = (bookings || []).reduce((sum, b) => sum + (b.price_accessories || 0), 0);
-  const haftung = (bookings || []).reduce((sum, b) => sum + (b.price_haftung || 0), 0);
-  const shipping = (bookings || []).reduce((sum, b) => sum + (b.shipping_price || 0), 0);
-  const discounts = (bookings || []).reduce(
-    (sum, b) => sum + (b.discount_amount || 0) + (b.duration_discount || 0) + (b.loyalty_discount || 0),
-    0,
-  );
+  let rental = 0;
+  let accessories = 0;
+  let haftung = 0;
+  let shipping = 0;
+  let discounts = 0;
+  for (const b of bookings ?? []) {
+    const r = Number(b.price_rental ?? 0);
+    const a = Number(b.price_accessories ?? 0);
+    const h = Number(b.price_haftung ?? 0);
+    const s = Number(b.shipping_price ?? 0);
+    const d = Number(b.discount_amount ?? 0) + Number(b.duration_discount ?? 0) + Number(b.loyalty_discount ?? 0);
+    discounts += d;
+    haftung += h;
+    shipping += s;
+    // Rabatt proportional auf Miete + Zubehoer verteilen — sonst zeigt die
+    // EUeR z.B. 12 EUR Kamera-Einnahmen obwohl effektiv nur 6 EUR (12 - 6 EUR
+    // Release50-Rabatt) realisiert wurden. Falls die Basis 0 ist (nur Versand
+    // o.ae.), Rabatt nicht zuteilen — der wird unten am Total ohnehin
+    // abgezogen, sodass die Gesamtsumme stimmt.
+    const base = r + a;
+    if (d > 0 && base > 0) {
+      const rentalShare = r / base;
+      const accessoriesShare = a / base;
+      const rentalCut = Math.min(r, Math.round(d * rentalShare * 100) / 100);
+      const accCut = Math.min(a, Math.round(d * accessoriesShare * 100) / 100);
+      rental += Math.max(0, r - rentalCut);
+      accessories += Math.max(0, a - accCut);
+    } else {
+      rental += r;
+      accessories += a;
+    }
+  }
   const bookingCount = (bookings || []).length;
   const pickupCount = (bookings || []).filter((b) => b.delivery_mode === 'abholung').length;
   const shippedCount = bookingCount - pickupCount;
-  const incomeTotal = rental + accessories + haftung + shipping - discounts;
+  // discounts wird nicht mehr separat abgezogen — schon in rental/accessories
+  // verrechnet. Total = direkter Sum der Netto-Kategorien.
+  const incomeTotal = Math.round((rental + accessories + haftung + shipping) * 100) / 100;
 
   // Ausgaben (inkl. Detail-Items pro Kategorie fuer aufklappbare Ansicht)
   // Quelle 1: alte expenses-Tabelle (Stripe-Gebuehren-Import, migrierte Altdaten)

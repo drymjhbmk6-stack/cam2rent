@@ -36,13 +36,15 @@ export async function GET(req: NextRequest) {
     `Steuermodus: ${data.taxMode === 'kleinunternehmer' ? 'Kleinunternehmer (§19 UStG)' : 'Regelbesteuerung'}`,
     '',
     'EINNAHMEN',
-    `Kamera-Miete;${fmt(data.income.rental)}`,
-    `Zubehör & Sets;${fmt(data.income.accessories ?? 0)}`,
+    `Kamera-Miete${(data.income.discounts ?? 0) > 0 ? ' (netto nach Rabatt)' : ''};${fmt(data.income.rental)}`,
+    `Zubehör & Sets${(data.income.discounts ?? 0) > 0 ? ' (netto nach Rabatt)' : ''};${fmt(data.income.accessories ?? 0)}`,
     `Haftungsschutz;${fmt(data.income.haftung)}`,
     `Versandkostenpauschalen;${fmt(data.income.shipping)}`,
     `Sonstige Einnahmen;${fmt(data.income.other)}`,
-    `Gewährte Rabatte;${fmt(-(data.income.discounts ?? 0))}`,
     `Summe Einnahmen;${fmt(data.income.total)}`,
+    ...((data.income.discounts ?? 0) > 0
+      ? [`Davon verrechnete Rabatte (informativ);-${fmt(data.income.discounts ?? 0)}`]
+      : []),
     '',
     `Buchungen gesamt;${data.bookingStats?.count ?? 0}`,
     `davon Versand;${data.bookingStats?.shipped ?? 0}`,

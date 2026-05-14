@@ -126,15 +126,19 @@ function EuerReport() {
           )}
 
           <Section title="Einnahmen" color="#10b981">
-            <EuerRow label="Kamera-Miete" amount={data.income.rental} />
-            {data.income.accessories > 0 && <EuerRow label="Zubehör & Sets" amount={data.income.accessories} />}
+            <EuerRow label={data.income.discounts > 0 ? 'Kamera-Miete (netto nach Rabatt)' : 'Kamera-Miete'} amount={data.income.rental} />
+            {data.income.accessories > 0 && (
+              <EuerRow label={data.income.discounts > 0 ? 'Zubehör & Sets (netto nach Rabatt)' : 'Zubehör & Sets'} amount={data.income.accessories} />
+            )}
             {data.income.haftung > 0 && <EuerRow label="Haftungsschutz" amount={data.income.haftung} />}
             {data.income.shipping > 0 && <EuerRow label="Versandkostenpauschalen" amount={data.income.shipping} />}
             {data.income.other > 0 && <EuerRow label="Sonstige Einnahmen" amount={data.income.other} />}
-            {data.income.discounts > 0 && (
-              <EuerRow label="Gewährte Rabatte (Gutscheine, Dauer-/Treue-Rabatte)" amount={-data.income.discounts} negative />
-            )}
             <TotalRow label="Summe Einnahmen" amount={data.income.total} />
+            {data.income.discounts > 0 && (
+              <div style={{ fontSize: 11, color: '#94a3b8', paddingTop: 6, fontStyle: 'italic' }}>
+                Informationshalber: Im Zeitraum bereits in Kamera-Miete / Zubehör verrechnete Rabatte: -{data.income.discounts.toLocaleString('de-DE', { minimumFractionDigits: 2 })} €
+              </div>
+            )}
           </Section>
           <Section title="Ausgaben" color="#ef4444">
             {data.expenses.categories.length === 0 ? (
