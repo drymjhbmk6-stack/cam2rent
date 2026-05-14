@@ -1811,6 +1811,19 @@ export default function BuchenPage() {
                     </div>
                   )}
 
+                  {breakdown.productDiscount > 0 && (
+                    <div className="flex justify-between items-center text-sm font-body">
+                      <span className="text-status-success">
+                        {breakdown.productDiscountLabel
+                          ? `Rabatt (${breakdown.productDiscountLabel})`
+                          : 'Rabatt'}
+                      </span>
+                      <span className="font-semibold text-status-success">
+                        -{fmt(breakdown.productDiscount)} €
+                      </span>
+                    </div>
+                  )}
+
                   {deliveryMode === 'versand' && (
                     <div className="flex justify-between items-center text-sm font-body">
                       <span className="text-brand-steel dark:text-gray-400 flex items-center gap-1.5 flex-wrap">
@@ -2191,6 +2204,18 @@ export default function BuchenPage() {
                           {haftungsoptionen.find((h) => h.id === haftung)?.name ?? 'Haftungsschutz'}
                         </span>
                         <span className="text-brand-black dark:text-gray-100">{breakdown.haftungPrice} €</span>
+                      </div>
+                    )}
+                    {breakdown.productDiscount > 0 && (
+                      <div className="flex justify-between text-sm font-body">
+                        <span className="text-status-success truncate pr-2">
+                          {breakdown.productDiscountLabel
+                            ? `Rabatt (${breakdown.productDiscountLabel})`
+                            : 'Rabatt'}
+                        </span>
+                        <span className="text-status-success font-semibold flex-shrink-0">
+                          -{fmt(breakdown.productDiscount)} €
+                        </span>
                       </div>
                     )}
                     {deliveryMode === 'versand' && (
