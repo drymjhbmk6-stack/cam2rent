@@ -6,6 +6,7 @@ import { RentalContractPDF, buildContractText, type RentalContractData, type Mie
 import { DEFAULT_HAFTUNG, getEigenbeteiligung, type HaftungConfig } from '@/lib/price-config';
 import { isTestMode } from '@/lib/env-mode';
 import { computeReplacementValue, loadReplacementValueConfig } from '@/lib/replacement-value';
+import { getInventarWbwAverageByLegacyAccessoryIds } from '@/lib/inventar/wbw-bridge';
 
 /**
  * Lädt die aktuelle Haftungs-Konfiguration aus admin_settings.
@@ -69,33 +70,45 @@ async function resolveAccessoryInfo(ids: string[]): Promise<Record<string, Acces
 
   // Sets laden und Gesamt-Zeitwert aus accessory_items berechnen
   const missingIds = ids.filter((id) => !infoMap[id]);
+  const setSubAccIds = new Set<string>();
   if (missingIds.length > 0) {
     const { data: sets } = await supabase
       .from('sets')
       .select('id, name, accessory_items')
       .in('id', missingIds);
     // Zeitwerte aller im Set enthaltenen Zubehoere laden
-    const setAccessoryIds = new Set<string>();
     for (const s of sets ?? []) {
       const items = Array.isArray(s.accessory_items) ? s.accessory_items : [];
       for (const it of items) {
-        if (it?.accessory_id) setAccessoryIds.add(String(it.accessory_id));
+        if (it?.accessory_id) setSubAccIds.add(String(it.accessory_id));
       }
     }
     let accValues: Record<string, number> = {};
-    if (setAccessoryIds.size > 0) {
+    if (setSubAccIds.size > 0) {
       const { data: accs } = await supabase
         .from('accessories')
         .select('id, replacement_value')
-        .in('id', [...setAccessoryIds]);
+        .in('id', [...setSubAccIds]);
       accValues = Object.fromEntries(
         (accs ?? []).map((a) => [a.id, a.replacement_value != null ? Number(a.replacement_value) : 0]),
       );
     }
+    // Bridge: pro Sub-Accessory zusaetzlich inventar_units-Durchschnitt holen,
+    // falls accessories.replacement_value 0/NULL ist (Daten leben in neuer Welt).
+    let inventarValuesForSub = new Map<string, number>();
+    if (setSubAccIds.size > 0) {
+      try {
+        inventarValuesForSub = await getInventarWbwAverageByLegacyAccessoryIds(supabase, [...setSubAccIds]);
+      } catch {
+        // Bridge ist Defense-in-Depth — bei Fehler bleibt accValues primaer.
+      }
+    }
     for (const s of sets ?? []) {
       const items = Array.isArray(s.accessory_items) ? s.accessory_items as { accessory_id: string; qty: number }[] : [];
       const setTotal = items.reduce((sum, it) => {
-        const val = accValues[it.accessory_id] ?? 0;
+        const legacy = accValues[it.accessory_id] ?? 0;
+        const inv = inventarValuesForSub.get(it.accessory_id) ?? 0;
+        const val = legacy > 0 ? legacy : inv; // legacy hat Vorrang wenn gepflegt
         const qty = typeof it.qty === 'number' ? it.qty : 1;
         return sum + val * qty;
       }, 0);
@@ -104,6 +117,23 @@ async function resolveAccessoryInfo(ids: string[]): Promise<Record<string, Acces
         replacementValue: setTotal,
         isSet: true,
       };
+    }
+  }
+
+  // Bridge fuer direkte Zubehoer-IDs (keine Sets): falls accessories.replacement_value
+  // 0 ist, inventar_units-Durchschnitt einsetzen.
+  const accDirectIdsWithoutValue = ids.filter((id) => infoMap[id] && !infoMap[id].isSet && infoMap[id].replacementValue <= 0);
+  if (accDirectIdsWithoutValue.length > 0) {
+    try {
+      const bridge = await getInventarWbwAverageByLegacyAccessoryIds(supabase, accDirectIdsWithoutValue);
+      for (const accId of accDirectIdsWithoutValue) {
+        const v = bridge.get(accId);
+        if (v && v > 0 && infoMap[accId]) {
+          infoMap[accId].replacementValue = v;
+        }
+      }
+    } catch {
+      // Defensive: Bridge-Fehler ignorieren, Original-Wert bleibt
     }
   }
 

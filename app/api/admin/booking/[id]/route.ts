@@ -6,6 +6,7 @@ import { releaseAccessoryUnitsFromBooking } from '@/lib/accessory-unit-assignmen
 import { getStripe } from '@/lib/stripe';
 import { DEFAULT_HAFTUNG, getEigenbeteiligung, type HaftungConfig } from '@/lib/price-config';
 import { computeReplacementValue, loadReplacementValueConfig } from '@/lib/replacement-value';
+import { getInventarWbwByLegacyUnitIds, getInventarWbwForBookingAccessories } from '@/lib/inventar/wbw-bridge';
 
 /**
  * GET /api/admin/booking/[id]
@@ -334,8 +335,21 @@ async function computeLiabilitySummary(
       cameraSource = 'asset';
     }
   }
+  // Fallback 1: inventar_units (neue Welt) via migration_audit → unit_id
+  if (cameraValue === 0 && booking.unit_id) {
+    try {
+      const m = await getInventarWbwByLegacyUnitIds(supabase, [booking.unit_id as string], 'product_units');
+      const v = m.get(booking.unit_id as string);
+      if (v && v > 0) {
+        cameraValue = v;
+        cameraSource = 'asset';
+      }
+    } catch {
+      // weiter zum Deposit-Fallback
+    }
+  }
   if (cameraValue === 0) {
-    // Fallback: Kautionswert (im Haftung-Modus nur Anker, im Kaution-Modus echt)
+    // Fallback 2: Kautionswert (im Haftung-Modus nur Anker, im Kaution-Modus echt)
     cameraValue = productDeposit;
     cameraSource = productDeposit > 0 ? 'product_deposit' : 'unknown';
   }
@@ -424,23 +438,36 @@ async function computeLiabilitySummary(
     }
   }
 
+  // Inventar-Bridge (neue Welt): wenn weder Asset noch accessories.replacement_value
+  // einen Wert liefern, holen wir den WBW aus inventar_units ueber migration_audit.
+  // Vorteil: deckt den Fall ab, dass alle Werte nach der Buchhaltungs-Konsolidierung
+  // in der neuen Welt leben und die alten Tabellen 0 zeigen.
+  const inventarBridge = await getInventarWbwForBookingAccessories(supabase, {
+    accessoryIds: accIds,
+    accessoryUnitIds: accUnitIds,
+  });
+
   // Pro physische Position eine Line bauen.
-  // Pro accessory_id wird der Pro-Stueck-Wert genommen aus:
-  //   1) Asset-Wert (Mittelwert wenn mehrere Units), wenn Asset fuer diesen
-  //      accessory_id existiert UND > 0
-  //   2) sonst accessories.replacement_value
+  // Reihenfolge (best-first):
+  //   1) Asset-Wert pro Unit (genauester, weil exemplar-spezifisch)
+  //   2) inventar_units (neue Welt) — direkt zur Unit oder als Produkt-Durchschnitt
+  //   3) accessories.replacement_value (alte, gepflegte Fallback-Werte)
   const accessoryLines: Line[] = [];
   for (const item of physicalAccItems) {
     const assetValues = assetValuesPerAccId.get(item.id) ?? [];
     const assetAvg = assetValues.length > 0
       ? assetValues.reduce((s, v) => s + v, 0) / assetValues.length
       : 0;
+    const inventarValue = inventarBridge.perAccessoryId.get(item.id) ?? 0;
     const repValue = accRepMap.get(item.id) ?? 0;
 
     let unitValue: number;
     let source: Line['source'];
     if (assetAvg > 0) {
       unitValue = assetAvg;
+      source = 'asset';
+    } else if (inventarValue > 0) {
+      unitValue = inventarValue;
       source = 'asset';
     } else if (repValue > 0) {
       unitValue = repValue;
