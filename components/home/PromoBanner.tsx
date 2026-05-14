@@ -71,17 +71,20 @@ export default function PromoBanner() {
         pointerEvents: 'auto',
       }}
     >
-      <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-8 px-8 text-center">
-        <div>
+      <div
+        className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-8 px-4 sm:px-8 text-center mx-auto"
+        style={{ maxWidth: 'min(100%, calc(100vw - 1.5rem))' }}
+      >
+        <div className="min-w-0 max-w-full">
           <p
-            className="font-heading font-extrabold text-xl sm:text-2xl md:text-3xl leading-tight tracking-tight"
+            className="font-heading font-extrabold text-lg sm:text-2xl md:text-3xl leading-tight tracking-tight break-words [text-wrap:balance]"
             style={{ color: textHex, textShadow: '0 2px 8px rgba(0,0,0,0.35)' }}
           >
             {banner.headline}
           </p>
           {banner.subline && (
             <p
-              className="font-body text-sm sm:text-base mt-1"
+              className="font-body text-xs sm:text-base mt-1 break-words [text-wrap:balance]"
               style={{ color: textHex, opacity: 0.9, textShadow: '0 1px 4px rgba(0,0,0,0.25)' }}
             >
               {banner.subline}
