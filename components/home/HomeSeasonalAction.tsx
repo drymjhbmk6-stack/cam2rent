@@ -41,26 +41,28 @@ export default function HomeSeasonalAction() {
     : null;
 
   return (
-    <section className="py-8 bg-white dark:bg-brand-black">
+    <section className="py-8 bg-white dark:bg-brand-black overflow-hidden">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-accent-blue via-blue-600 to-purple-600 p-6 sm:p-8 text-white shadow-lg">
-          <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center gap-5 justify-between">
-            <div className="flex-1">
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-accent-blue via-blue-600 to-purple-600 p-5 sm:p-8 text-white shadow-lg">
+          <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-5 justify-between">
+            <div className="flex-1 min-w-0 w-full">
               {action.badgeText && (
                 <span className="inline-block px-3 py-1 bg-white/20 backdrop-blur rounded-full text-xs font-heading font-bold uppercase tracking-wide mb-3">
                   {action.badgeText}
                 </span>
               )}
-              <h2 className="font-heading font-bold text-2xl sm:text-3xl mb-2">{action.title}</h2>
+              <h2 className="font-heading font-bold text-xl sm:text-2xl md:text-3xl mb-2 leading-tight break-words [text-wrap:balance]">
+                {action.title}
+              </h2>
               {action.subtitle && (
-                <p className="font-body text-white/90 text-sm sm:text-base max-w-xl">
+                <p className="font-body text-white/90 text-sm sm:text-base max-w-xl break-words">
                   {action.subtitle}
                 </p>
               )}
               {(action.couponCode || validUntilLabel) && (
                 <div className="mt-3 flex flex-wrap items-center gap-3 text-xs font-body text-white/80">
                   {action.couponCode && (
-                    <span className="inline-flex items-center gap-1">
+                    <span className="inline-flex items-center gap-1 flex-wrap">
                       Code: <span className="font-mono font-bold bg-white/15 px-2 py-0.5 rounded">{action.couponCode}</span>
                     </span>
                   )}
@@ -70,7 +72,7 @@ export default function HomeSeasonalAction() {
             </div>
             <Link
               href={action.ctaUrl}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-white text-brand-black font-heading font-bold rounded-btn hover:bg-white/90 transition-colors whitespace-nowrap shadow-md"
+              className="inline-flex items-center gap-2 px-6 py-3 bg-white text-brand-black font-heading font-bold rounded-btn hover:bg-white/90 transition-colors whitespace-nowrap shadow-md flex-shrink-0 self-stretch sm:self-auto justify-center"
             >
               {action.ctaLabel}
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
