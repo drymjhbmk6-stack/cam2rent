@@ -229,6 +229,7 @@ export async function POST(req: NextRequest) {
               signerName: contractSignature.signerName,
               ipAddress: ip,
               unitId: body.unit_id ?? null,
+              productId: product_id ?? undefined,
               // Tester-User → Wasserzeichen "MUSTER / TESTVERTRAG" auch im
               // Live-Modus, damit klar ist dass das ein Test war.
               ...(userIsTester ? { forceTestMode: true } : {}),

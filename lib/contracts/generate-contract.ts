@@ -6,7 +6,7 @@ import { RentalContractPDF, buildContractText, type RentalContractData, type Mie
 import { DEFAULT_HAFTUNG, getEigenbeteiligung, type HaftungConfig } from '@/lib/price-config';
 import { isTestMode } from '@/lib/env-mode';
 import { computeReplacementValue, loadReplacementValueConfig } from '@/lib/replacement-value';
-import { getInventarWbwAverageByLegacyAccessoryIds } from '@/lib/inventar/wbw-bridge';
+import { getInventarWbwAverageByLegacyAccessoryIds, getInventarWbwAverageByLegacyProductId } from '@/lib/inventar/wbw-bridge';
 
 /**
  * Lädt die aktuelle Haftungs-Konfiguration aus admin_settings.
@@ -149,9 +149,26 @@ async function resolveAccessoryInfo(ids: string[]): Promise<Record<string, Acces
  * Laedt den aktuellen Zeitwert eines Assets ueber die Unit-ID.
  * Gibt null zurueck, wenn der Unit kein Asset zugeordnet ist (Altbestand).
  * In dem Fall faellt der Vertrag auf opts.deposit als Wiederbeschaffungswert zurueck.
+ *
+ * Wenn `productId` zusaetzlich uebergeben wird, versucht die Funktion einen
+ * Durchschnitts-WBW ueber alle inventar_units des Produkts zu bilden, falls
+ * der direkte Unit-Lookup keinen Treffer hat. Damit hat der Vertrag auch
+ * dann einen plausiblen Zeitwert, wenn die Buchung keine konkrete Unit
+ * zugewiesen bekommen hat.
  */
-async function loadAssetCurrentValue(unitId: string): Promise<number | null> {
+async function loadAssetCurrentValue(unitId: string | null, productId?: string | null): Promise<number | null> {
   const supabase = createServiceClient();
+  if (!unitId && !productId) return null;
+  if (!unitId && productId) {
+    // Kein Unit-ID, aber Produkt bekannt → direkt zum Produkt-Fallback
+    try {
+      const avg = await getInventarWbwAverageByLegacyProductId(supabase, productId);
+      if (avg && avg > 0) return avg;
+    } catch {
+      // ignore
+    }
+    return null;
+  }
 
   // 1) NEUE Welt — inventar_units (nach Konsolidierungs-Migration).
   //    bookings.unit_id ist eine product_units.id aus der alten Welt;
@@ -209,15 +226,29 @@ async function loadAssetCurrentValue(unitId: string): Promise<number | null> {
         .maybeSingle();
       row = fallback.data;
     }
-    if (!row || !row.purchase_date || row.purchase_price == null) return null;
-    const config = await loadReplacementValueConfig(supabase);
-    return computeReplacementValue({
-      purchase_price: row.purchase_price,
-      purchase_date: row.purchase_date,
-      replacement_value_estimate: row.replacement_value_estimate ?? null,
-    }, config);
+    if (row && row.purchase_date && row.purchase_price != null) {
+      const config = await loadReplacementValueConfig(supabase);
+      return computeReplacementValue({
+        purchase_price: row.purchase_price,
+        purchase_date: row.purchase_date,
+        replacement_value_estimate: row.replacement_value_estimate ?? null,
+      }, config);
+    }
   } catch {
-    // Fallback: deposit
+    // weiter zum Produkt-Fallback
+  }
+
+  // 3) Produkt-Fallback: kein Unit-Treffer, aber Produkt ist bekannt → Durchschnitts-WBW
+  //    aller inventar_units desselben Produkts. Greift z.B. wenn unit_id auf
+  //    eine geloeschte product_units-Zeile zeigt oder die Buchung neu ist und
+  //    der mirror-Eintrag noch nicht angelegt wurde.
+  if (productId) {
+    try {
+      const avg = await getInventarWbwAverageByLegacyProductId(supabase, productId);
+      if (avg && avg > 0) return avg;
+    } catch {
+      // ignore
+    }
   }
   return null;
 }
@@ -309,6 +340,12 @@ export async function generateContractPDF(opts: {
   productCategory?: string;
   serialNumber?: string;
   /**
+   * Legacy product_id (admin_config.products.id, z.B. "1"). Wenn gesetzt
+   * und kein Unit-Treffer existiert, wird der WBW aus dem Durchschnitt
+   * aller inventar_units desselben Produkts berechnet.
+   */
+  productId?: string;
+  /**
    * Unit-ID der physischen Kamera. Wenn gesetzt, laedt der Contract den
    * aktuellen asset.current_value als Wiederbeschaffungswert. Fallback:
    * opts.deposit.
@@ -349,7 +386,9 @@ export async function generateContractPDF(opts: {
   // Wiederbeschaffungspreis einer gebrauchten Kamera liegt aber immer deutlich
   // darueber. Die Kaution ist eine realistische Untergrenze fuer den Ersatzwert
   // bei Totalschaden.
-  const assetCurrentValue = opts.unitId ? await loadAssetCurrentValue(opts.unitId) : null;
+  const assetCurrentValue = (opts.unitId || opts.productId)
+    ? await loadAssetCurrentValue(opts.unitId ?? null, opts.productId ?? null)
+    : null;
   const wiederbeschaffungswert = Math.max(
     assetCurrentValue ?? 0,
     opts.deposit ?? 0,

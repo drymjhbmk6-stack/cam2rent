@@ -6,7 +6,7 @@ import { releaseAccessoryUnitsFromBooking } from '@/lib/accessory-unit-assignmen
 import { getStripe } from '@/lib/stripe';
 import { DEFAULT_HAFTUNG, getEigenbeteiligung, type HaftungConfig } from '@/lib/price-config';
 import { computeReplacementValue, loadReplacementValueConfig } from '@/lib/replacement-value';
-import { getInventarWbwByLegacyUnitIds, getInventarWbwForBookingAccessories } from '@/lib/inventar/wbw-bridge';
+import { getInventarWbwByLegacyUnitIds, getInventarWbwForBookingAccessories, getInventarWbwAverageByLegacyProductId } from '@/lib/inventar/wbw-bridge';
 
 /**
  * GET /api/admin/booking/[id]
@@ -335,7 +335,8 @@ async function computeLiabilitySummary(
       cameraSource = 'asset';
     }
   }
-  // Fallback 1: inventar_units (neue Welt) via migration_audit → unit_id
+  // Fallback 1: inventar_units (neue Welt) via migration_audit → unit_id.
+  // Greift wenn die Buchung eine konkrete product_unit zugeordnet hat.
   if (cameraValue === 0 && booking.unit_id) {
     try {
       const m = await getInventarWbwByLegacyUnitIds(supabase, [booking.unit_id as string], 'product_units');
@@ -345,11 +346,25 @@ async function computeLiabilitySummary(
         cameraSource = 'asset';
       }
     } catch {
+      // weiter zum naechsten Fallback
+    }
+  }
+  // Fallback 2: inventar_units-Durchschnitt ueber product_id. Greift wenn die
+  // Buchung kein konkretes unit_id hat (Assignment gescheitert) — der Admin
+  // soll trotzdem einen plausiblen WBW sehen, nicht 0,00 EUR.
+  if (cameraValue === 0 && cameraId) {
+    try {
+      const avg = await getInventarWbwAverageByLegacyProductId(supabase, cameraId);
+      if (avg && avg > 0) {
+        cameraValue = avg;
+        cameraSource = 'asset';
+      }
+    } catch {
       // weiter zum Deposit-Fallback
     }
   }
   if (cameraValue === 0) {
-    // Fallback 2: Kautionswert (im Haftung-Modus nur Anker, im Kaution-Modus echt)
+    // Fallback 3: Kautionswert (im Haftung-Modus nur Anker, im Kaution-Modus echt)
     cameraValue = productDeposit;
     cameraSource = productDeposit > 0 ? 'product_deposit' : 'unknown';
   }

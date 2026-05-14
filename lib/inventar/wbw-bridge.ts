@@ -194,3 +194,59 @@ export async function getInventarWbwForBookingAccessories(
   const perAccessoryId = await getInventarWbwAverageByLegacyAccessoryIds(supabase, opts.accessoryIds);
   return { perAccessoryId, perUnitId };
 }
+
+/**
+ * Loest eine alte product_id (admin_config.products.id, z.B. "1" fuer GoPro
+ * Hero13 Black) ueber produkte.id auf und liefert den durchschnittlichen WBW
+ * aller dazu gehoerigen inventar_units (verfuegbar/vermietet/wartung).
+ *
+ * Nutzt sich, wenn die Buchung kein konkretes unit_id hat (Assignment
+ * gescheitert) — der Vertrag/das Schadensmodul brauchen trotzdem einen
+ * realistischen Wert fuer die Kamera.
+ *
+ * Liefert null, wenn weder Mapping noch passende Units gefunden werden.
+ */
+export async function getInventarWbwAverageByLegacyProductId(
+  supabase: SupabaseClient,
+  productId: string,
+): Promise<number | null> {
+  if (!productId) return null;
+
+  let produkteId: string | null = null;
+  try {
+    const { data } = await supabase
+      .from('migration_audit')
+      .select('neue_id')
+      .eq('alte_tabelle', 'admin_config.products')
+      .eq('alte_id', productId)
+      .eq('neue_tabelle', 'produkte')
+      .maybeSingle();
+    produkteId = (data as { neue_id?: string } | null)?.neue_id ?? null;
+  } catch {
+    return null;
+  }
+  if (!produkteId) return null;
+
+  let units: InventarUnitRow[] = [];
+  try {
+    const { data } = await supabase
+      .from('inventar_units')
+      .select('id, produkt_id, wbw_manuell_gesetzt, wiederbeschaffungswert, kaufpreis_netto, kaufdatum, status')
+      .eq('produkt_id', produkteId)
+      .in('status', ['verfuegbar', 'vermietet', 'wartung']);
+    units = (data ?? []) as InventarUnitRow[];
+  } catch {
+    return null;
+  }
+  if (units.length === 0) return null;
+
+  const config = await loadReplacementValueConfig(supabase);
+  const values: number[] = [];
+  for (const u of units) {
+    const v = computeUnitWbw(u, config);
+    if (v > 0) values.push(v);
+  }
+  if (values.length === 0) return null;
+  const avg = values.reduce((s, v) => s + v, 0) / values.length;
+  return Math.round(avg * 100) / 100;
+}

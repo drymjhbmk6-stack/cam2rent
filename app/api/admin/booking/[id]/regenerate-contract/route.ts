@@ -93,6 +93,7 @@ export async function POST(
       signerName,
       ipAddress: ip,
       unitId: booking.unit_id ?? null,
+      productId: booking.product_id ?? undefined,
     });
 
     await storeContract(id, result.pdfBuffer, {

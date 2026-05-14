@@ -81,6 +81,7 @@ export async function POST(req: NextRequest) {
       signerName,
       ipAddress: ip,
       unitId: booking.unit_id ?? null,
+      productId: booking.product_id ?? undefined,
     });
 
     // Vertrag speichern

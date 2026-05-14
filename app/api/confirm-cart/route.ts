@@ -267,6 +267,7 @@ export async function POST(req: NextRequest) {
                       signatureMethod: sig.signatureMethod,
                       signerName: sig.signerName, ipAddress: ip,
                       unitId: fullBooking.unit_id ?? null,
+                      productId: fullBooking.product_id ?? undefined,
                     });
                     await storeContract(fullBooking.id, result.pdfBuffer, {
                       contractHash: result.contractHash, customerName: sig.signerName,
@@ -1067,6 +1068,7 @@ export async function POST(req: NextRequest) {
                   signerName: contractSignature.signerName,
                   ipAddress: ip,
                   unitId: bookingUnitId,
+                  productId: firstItem.productId ?? undefined,
                 });
                 contractPdfBuffer = result.pdfBuffer;
                 await storeContract(bookingIds[gi], result.pdfBuffer, {
