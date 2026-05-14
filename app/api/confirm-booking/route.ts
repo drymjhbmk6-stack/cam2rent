@@ -305,6 +305,37 @@ export async function POST(req: NextRequest) {
     const productDiscountFromMeta = Math.max(0, parseFloat(meta.product_discount ?? '0') || 0);
     const productDiscountLabel = (meta.product_discount_label ?? '').toString().trim();
 
+    // Server-seitige Plausibilitaets-Pruefung der Zubehoer-Preise.
+    // Wenn das Frontend ein Item in accessory_items mitgegeben hat, dessen
+    // Preis aber nicht in price_accessories summiert wurde (z.B. weil der
+    // dbAccessories-Cache stale war), korrigieren wir hier. Stripe-Charge
+    // ist dann zwar zu niedrig — Admin-Notification meldet die Differenz,
+    // damit manuell nachgeladen oder erstattet werden kann.
+    const reportedAccPrice = Math.max(0, parseFloat(meta.price_accessories ?? '0') || 0);
+    const daysParsed = parseInt(meta.days, 10) || 1;
+    const { verifyAccessoryPrice } = await import('@/lib/booking/verify-accessory-price');
+    const accCheck = await verifyAccessoryPrice(supabase, {
+      items: accessoryItems,
+      days: daysParsed,
+      reportedTotal: reportedAccPrice,
+    });
+    const finalPriceAccessories = accCheck.mismatch ? accCheck.computed : reportedAccPrice;
+    if (accCheck.mismatch) {
+      console.error('[confirm-booking] Zubehoer-Preis-Mismatch:', {
+        bookingId, reported: reportedAccPrice, computed: accCheck.computed, details: accCheck.details,
+      });
+      try {
+        await createAdminNotification(supabase, {
+          type: 'payment_failed',
+          title: `Zubehoer-Preis-Mismatch (${bookingId})`,
+          message: `Frontend meldete ${reportedAccPrice.toFixed(2)} EUR fuer Zubehoer, Server-Recompute ergab ${accCheck.computed.toFixed(2)} EUR. Differenz: ${(accCheck.computed - reportedAccPrice).toFixed(2)} EUR. Stripe-Charge basiert auf dem Frontend-Wert — ggf. via Payment Link nachladen oder die Buchung manuell korrigieren.`,
+          link: `/admin/buchungen/${bookingId}`,
+        });
+      } catch (notifErr) {
+        console.error('[confirm-booking] Admin-Notification fehlgeschlagen:', notifErr);
+      }
+    }
+
     const { error } = await supabase.from('bookings').insert({
       id: bookingId,
       payment_intent_id,
@@ -313,7 +344,7 @@ export async function POST(req: NextRequest) {
       product_name: meta.product_name,
       rental_from: meta.rental_from,
       rental_to: meta.rental_to,
-      days: parseInt(meta.days, 10),
+      days: daysParsed,
       delivery_mode: meta.delivery_mode,
       shipping_method: meta.shipping_method ?? null,
       shipping_price: parseFloat(meta.shipping_price ?? '0'),
@@ -321,7 +352,7 @@ export async function POST(req: NextRequest) {
       accessories,
       accessory_items: accessoryItems.length > 0 ? accessoryItems : null,
       price_rental: parseFloat(meta.price_rental ?? '0'),
-      price_accessories: parseFloat(meta.price_accessories ?? '0'),
+      price_accessories: finalPriceAccessories,
       price_haftung: parseFloat(meta.price_haftung ?? '0'),
       price_total: intent.amount / 100,
       deposit: parseFloat(meta.deposit ?? '0'),

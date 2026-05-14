@@ -686,6 +686,35 @@ export async function POST(req: NextRequest) {
       // payment_intent_id: erste Gruppe bekommt die originale ID, weitere bekommen Suffix
       const piId = gi === 0 ? payment_intent_id : `${payment_intent_id}_g${gi + 1}`;
 
+      // Server-seitige Plausibilitaets-Pruefung der Zubehoer-Preise.
+      // Faengt Frontend-Bugs ab (z.B. Cross-Product-Leak), bei denen ein
+      // Zubehoer in accessory_items landet ohne dass sein Preis summiert
+      // wurde. Bei Mismatch: korrigieren + Admin-Notification.
+      const reportedAccPriceGroup = groupItems.reduce((s, it) => s + it.priceAccessories, 0);
+      const { verifyAccessoryPrice } = await import('@/lib/booking/verify-accessory-price');
+      const accCheck = await verifyAccessoryPrice(supabase, {
+        items: groupAccessoryItems,
+        days: firstItem.days,
+        reportedTotal: reportedAccPriceGroup,
+      });
+      const finalGroupAccPrice = accCheck.mismatch ? accCheck.computed : reportedAccPriceGroup;
+      if (accCheck.mismatch) {
+        console.error('[confirm-cart] Zubehoer-Preis-Mismatch fuer Gruppe', gi, accCheck);
+        // Admin-Notification nur fuer erste Gruppe, sonst Spam bei Multi-Period.
+        if (gi === 0) {
+          try {
+            await createAdminNotification(supabase, {
+              type: 'payment_failed',
+              title: `Zubehoer-Preis-Mismatch (${r_preBookingId ?? payment_intent_id})`,
+              message: `Frontend meldete ${reportedAccPriceGroup.toFixed(2)} EUR Zubehoer, Server-Recompute ergab ${accCheck.computed.toFixed(2)} EUR. Differenz: ${(accCheck.computed - reportedAccPriceGroup).toFixed(2)} EUR. Stripe-Charge basiert auf dem Frontend-Wert.`,
+              link: r_preBookingId ? `/admin/buchungen/${r_preBookingId}` : '/admin/buchungen',
+            });
+          } catch (notifErr) {
+            console.error('[confirm-cart] Mismatch-Notification fehlgeschlagen:', notifErr);
+          }
+        }
+      }
+
       // is_test wurde oben bereits einmal berechnet (siehe vor der Loop).
       const buildInsertPayload = (id: string) => ({
         id,
@@ -703,7 +732,7 @@ export async function POST(req: NextRequest) {
         accessories: allAccessories,
         accessory_items: groupAccessoryItems.length > 0 ? groupAccessoryItems : null,
         price_rental: groupItems.reduce((s, it) => s + it.priceRental, 0),
-        price_accessories: groupItems.reduce((s, it) => s + it.priceAccessories, 0),
+        price_accessories: finalGroupAccPrice,
         price_haftung: groupItems.reduce((s, it) => s + it.priceHaftung, 0),
         price_total: Math.max(0, groupTotal),
         deposit: groupItems.reduce((s, it) => s + it.deposit, 0),
@@ -817,7 +846,7 @@ export async function POST(req: NextRequest) {
             customer_name: r_name,
             price_total: currentGroupTotal,
             price_rental: groupItems.reduce((s, it) => s + it.priceRental, 0),
-            price_accessories: groupItems.reduce((s, it) => s + it.priceAccessories, 0),
+            price_accessories: finalGroupAccPrice,
             price_haftung: groupItems.reduce((s, it) => s + it.priceHaftung, 0),
             shipping_price: groupShipping,
             discount_amount: currentDiscount,
