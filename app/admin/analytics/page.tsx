@@ -578,36 +578,69 @@ export default function AnalyticsPage() {
     return () => clearInterval(id);
   }, []);
 
-  // Mappt UI-TimeRange auf API-range-Parameter
+  // Mappt UI-TimeRange auf API-range-Parameter (1:1 fuer alle Optionen)
   const apiRange = (() => {
     if (filters.timeRange === 'heute') return 'today';
     if (filters.timeRange === '24h') return '24h';
     if (filters.timeRange === '7tage') return '7d';
     if (filters.timeRange === '30tage') return '30d';
     if (filters.timeRange === 'monat') return 'month';
-    return 'today'; // jahr/custom fallback
+    if (filters.timeRange === 'jahr') return 'year';
+    if (filters.timeRange === 'custom') return 'custom';
+    return 'today';
   })();
 
+  // Baut Query-String mit range + ggf. custom from/to. Bei custom ohne
+  // gueltige Daten faellt der API-Pfad still auf 'today' zurueck.
+  const rangeQS = useCallback((extra?: Record<string, string>) => {
+    const params = new URLSearchParams();
+    params.set('range', apiRange);
+    if (apiRange === 'custom' && filters.customFrom && filters.customTo) {
+      params.set('from', filters.customFrom);
+      params.set('to', filters.customTo);
+    }
+    if (extra) for (const [k, v] of Object.entries(extra)) params.set(k, v);
+    return params.toString();
+  }, [apiRange, filters.customFrom, filters.customTo]);
+
+  // True wenn der Filter noch unvollstaendig ist (custom ohne Daten).
+  // In dem Fall wuerde die API auf 'today' zurueckfallen — wir warten
+  // lieber, bis der User beide Daten gewaehlt hat.
+  const filtersIncomplete =
+    filters.timeRange === 'custom' && (!filters.customFrom || !filters.customTo);
+
+  // Generischer JSON-fetch mit Error-Handling: bei Network/HTTP-Fehler
+  // bleibt der State auf null und der Fehler wird in der Konsole geloggt,
+  // damit die UI wenigstens "Laden..." statt ewiger Spinner zeigen kann.
+  const safeFetch = useCallback(async <T,>(url: string): Promise<T | null> => {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) {
+        console.warn(`Analytics-Fetch ${url} → ${res.status}`);
+        return null;
+      }
+      return (await res.json()) as T;
+    } catch (e) {
+      console.warn(`Analytics-Fetch ${url} fehlgeschlagen`, e);
+      return null;
+    }
+  }, []);
+
   const fetchLive = useCallback(async () => {
-    // today-Endpoint nimmt nur '24h' als optionalen Range an und liefert dann
-    // ein rollendes 24h-Fenster (statt ab Berlin-Mitternacht). Fuer alle
-    // anderen Zeitraeume bleibt today bei seinem Default — die Chart- und
-    // KPI-Daten kommen dort entweder weiterhin aus todayData (heute) oder aus
-    // historyData (>1 Tag), nicht aus today.
-    const todayUrl = apiRange === '24h'
-      ? '/api/admin/analytics?type=today&range=24h'
-      : '/api/admin/analytics?type=today';
+    if (filtersIncomplete) return;
+    const liveUrl = `/api/admin/analytics?type=live&${rangeQS()}`;
+    const todayUrl = `/api/admin/analytics?type=today&${rangeQS()}`;
     const [liveRes, todayRes] = await Promise.all([
-      fetch(`/api/admin/analytics?type=live&range=${apiRange}`).then((r) => r.json()),
-      fetch(todayUrl).then((r) => r.json()),
+      safeFetch<LiveData>(liveUrl),
+      safeFetch<TodayData>(todayUrl),
     ]);
-    setLiveData(liveRes);
-    setTodayData(todayRes);
-  }, [apiRange]);
+    if (liveRes) setLiveData(liveRes);
+    if (todayRes) setTodayData(todayRes);
+  }, [filtersIncomplete, rangeQS, safeFetch]);
 
   // Tage fuer History-Fetch aus dem aktuellen Filter ableiten —
-  // heute: 0 (kein History-Fetch noetig), 7/30 direkt, monat: bis heute vom
-  // Monatsanfang (max 31), jahr: 365 (fuer Monats-Aggregation).
+  // heute/24h: 0 (Hourly-Chart deckt das ab), 7/30 direkt, monat: bis heute,
+  // jahr: 365, custom: aus from/to.
   const historyDays = (() => {
     const now = new Date();
     if (filters.timeRange === 'heute') return 0;
@@ -616,35 +649,55 @@ export default function AnalyticsPage() {
     if (filters.timeRange === '30tage') return 30;
     if (filters.timeRange === 'monat') return now.getDate();
     if (filters.timeRange === 'jahr') return 365;
-    return 30;
+    if (filters.timeRange === 'custom' && filters.customFrom && filters.customTo) {
+      const diff = Math.ceil((new Date(filters.customTo).getTime() - new Date(filters.customFrom).getTime()) / 86400000);
+      return Math.min(400, Math.max(1, diff + 1));
+    }
+    return 0;
   })();
 
   const fetchHistory = useCallback(async (daysOverride?: number) => {
     const days = daysOverride ?? 30;
     if (days <= 0) return;
-    const res = await fetch(`/api/admin/analytics?type=history&days=${days}`).then((r) => r.json());
-    setHistoryData(res);
-  }, []);
+    const res = await safeFetch<HistoryData>(`/api/admin/analytics?type=history&days=${days}`);
+    if (res) setHistoryData(res);
+  }, [safeFetch]);
 
   const fetchBookings = useCallback(async () => {
-    if (bookingsData && funnelData && productsData) return;
+    if (filtersIncomplete) return;
     const [b, f, p] = await Promise.all([
-      fetch('/api/admin/analytics?type=bookings').then((r) => r.json()),
-      fetch('/api/admin/analytics?type=funnel').then((r) => r.json()),
-      fetch('/api/admin/analytics?type=products').then((r) => r.json()),
+      safeFetch<BookingsData>(`/api/admin/analytics?type=bookings&${rangeQS()}`),
+      safeFetch<FunnelData>(`/api/admin/analytics?type=funnel&${rangeQS()}`),
+      safeFetch<ProductsData>(`/api/admin/analytics?type=products&${rangeQS()}`),
     ]);
-    setBookingsData(b);
-    setFunnelData(f);
-    setProductsData(p);
-  }, [bookingsData, funnelData, productsData]);
+    if (b) setBookingsData(b);
+    if (f) setFunnelData(f);
+    if (p) setProductsData(p);
+  }, [filtersIncomplete, rangeQS, safeFetch]);
 
   const fetchTraffic = useCallback(async () => {
-    if (trafficData) return;
-    const res = await fetch('/api/admin/analytics?type=traffic').then((r) => r.json());
-    setTrafficData(res);
-  }, [trafficData]);
+    if (filtersIncomplete) return;
+    const res = await safeFetch<TrafficData>(`/api/admin/analytics?type=traffic&${rangeQS()}`);
+    if (res) setTrafficData(res);
+  }, [filtersIncomplete, rangeQS, safeFetch]);
 
-  // Initial load + auto-refresh
+  const fetchCustomers = useCallback(async () => {
+    if (filtersIncomplete) return;
+    const res = await safeFetch<{
+      totalCustomers: number; repeatCustomers: number; repeatRate: number;
+      avgLifetimeValue: number; avgOrderValue: number; newCustomers30d: number;
+      abandonedCarts: number; recoveredCarts: number; recoveryRate: number;
+    }>(`/api/admin/analytics?type=customers&${rangeQS()}`);
+    if (res) setCustomersData(res);
+  }, [filtersIncomplete, rangeQS, safeFetch]);
+
+  const fetchBlog = useCallback(async () => {
+    if (filtersIncomplete) return;
+    const res = await safeFetch(`/api/admin/analytics?type=blog&${rangeQS()}`);
+    if (res) setBlogData(res);
+  }, [filtersIncomplete, rangeQS, safeFetch]);
+
+  // Initial load + auto-refresh fuer Live-Tab
   useEffect(() => { fetchLive(); }, [fetchLive]);
 
   useEffect(() => {
@@ -655,22 +708,14 @@ export default function AnalyticsPage() {
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [activeTab, fetchLive]);
 
+  // Tab-Datenladen bei Tab-Wechsel ODER Filter-Aenderung (ohne Cache-Guard,
+  // damit Filter-Switches die KPIs frisch ziehen).
   useEffect(() => {
     if (activeTab === 'bookings') fetchBookings();
-    if (activeTab === 'traffic') { fetchTraffic(); fetchHistory(30); }
-    if (activeTab === 'customers') {
-      fetchTraffic();
-      fetchHistory(30);
-      if (!customersData) {
-        fetch('/api/admin/analytics?type=customers').then((r) => r.json()).then(setCustomersData).catch(() => {});
-      }
-    }
-    if (activeTab === 'blog') {
-      if (!blogData) {
-        fetch('/api/admin/analytics?type=blog').then((r) => r.json()).then(setBlogData).catch(() => {});
-      }
-    }
-  }, [activeTab, fetchBookings, fetchTraffic, fetchHistory]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (activeTab === 'traffic') { fetchTraffic(); fetchHistory(historyDays || 30); }
+    if (activeTab === 'customers') { fetchTraffic(); fetchHistory(historyDays || 30); fetchCustomers(); }
+    if (activeTab === 'blog') fetchBlog();
+  }, [activeTab, fetchBookings, fetchTraffic, fetchHistory, fetchCustomers, fetchBlog, historyDays]);
 
   // Live-Tab: History-Range folgt dem Zeitraum-Filter (fuer den dynamischen Chart)
   useEffect(() => {
@@ -965,6 +1010,11 @@ export default function AnalyticsPage() {
                 onChange={e => setFilters(f => ({ ...f, customTo: e.target.value }))}
                 style={dateInputStyle}
               />
+              {filtersIncomplete && (
+                <span style={{ color: C.yellow, fontSize: 11 }}>
+                  Bitte beide Daten wählen, sonst werden keine Daten geladen.
+                </span>
+              )}
             </div>
           )}
 
@@ -1198,35 +1248,35 @@ export default function AnalyticsPage() {
         <div className="tab-content">
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 20 }}>
             <StatCard
-              label="Buchungen heute"
+              label={`Buchungen — ${getTimeRangeLabel(filters.timeRange)}`}
               value={bookingsData?.today_bookings ?? '–'}
               color={C.green}
-              tooltip="Anzahl der heute eingegangenen Buchungen (ohne stornierte)."
+              tooltip="Anzahl der eingegangenen Buchungen im gewählten Zeitraum (ohne stornierte)."
             />
             <StatCard
-              label="Umsatz heute"
+              label={`Umsatz — ${getTimeRangeLabel(filters.timeRange)}`}
               value={bookingsData ? fmtEur(bookingsData.today_revenue) : '–'}
               color={C.cyanLight}
-              tooltip="Gesamtumsatz aller heutigen Buchungen in Euro."
+              tooltip="Gesamtumsatz aller Buchungen im gewählten Zeitraum (in Euro)."
             />
             <StatCard
               label="Abschlussquote"
               value={bookingsData ? `${bookingsData.conversion_rate}%` : '–'}
               color={C.yellow}
-              tooltip="Anteil der Besucher, die tatsächlich eine Buchung abgeschlossen haben. Berechnet als Buchungen geteilt durch Besuche."
+              tooltip="Anteil der Besuche im Zeitraum, die zu einer Buchung führten. Berechnet als Buchungen ÷ Sitzungen × 100. Hinweis: Wiederkehrende Kunden ohne Cookie-Zustimmung werden nicht als Sitzung getrackt — die Quote kann dadurch etwas niedriger erscheinen als sie tatsächlich ist."
             />
             <StatCard
               label="Durchschnittl. Buchungswert"
               value={bookingsData ? fmtEur(bookingsData.avg_booking_value) : '–'}
-              tooltip="Durchschnittlicher Betrag pro Buchung. Berechnet als Gesamtumsatz geteilt durch Anzahl der Buchungen."
+              tooltip="Durchschnittlicher Betrag pro Buchung im Zeitraum. Berechnet als Gesamtumsatz ÷ Anzahl der Buchungen."
             />
           </div>
 
           {/* Conversion Funnel */}
           <Card style={{ marginBottom: 20 }}>
             <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16 }}>
-              Buchungstrichter — Letzte 30 Tage
-              <InfoTooltip text="Zeigt, wie viele Besucher jeden Schritt des Buchungsprozesses erreichen. So siehst du, wo Besucher abspringen." />
+              Buchungstrichter — {getTimeRangeLabel(filters.timeRange)}
+              <InfoTooltip text="Zeigt, wie viele Sitzungen jeden Schritt des Buchungsprozesses erreichen. So siehst du, wo Besucher abspringen. Stufen 1-4 zählen Sitzungen, Stufe 5 zählt tatsächliche Buchungen — ein Direktkunde ohne Cookie-Zustimmung erscheint nur in Stufe 5." />
             </div>
             {funnelData ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -1266,8 +1316,8 @@ export default function AnalyticsPage() {
           {/* Camera Performance */}
           <Card>
             <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16 }}>
-              Kamera-Performance — 30 Tage
-              <InfoTooltip text="Übersicht über Aufrufe, Buchungen, Umsatz und Auslastung je Kamera." />
+              Kamera-Performance — {getTimeRangeLabel(filters.timeRange)}
+              <InfoTooltip text="Übersicht über Aufrufe, Buchungen, Umsatz und Auslastung je Kamera im gewählten Zeitraum. Auslastung = vermietete Tage ÷ Tage im Zeitraum." />
             </div>
             {productsData ? (
               <div style={{ overflowX: 'auto' }}>
@@ -1314,7 +1364,7 @@ export default function AnalyticsPage() {
             {/* Traffic Sources */}
             <Card>
               <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16 }}>
-                Traffic-Quellen — 30 Tage
+                Traffic-Quellen — {getTimeRangeLabel(filters.timeRange)}
                 <InfoTooltip text="Zeigt, woher deine Besucher kommen (z.B. Google, Instagram, direkte Eingabe)." />
               </div>
               {trafficData ? (
@@ -1342,8 +1392,8 @@ export default function AnalyticsPage() {
             {/* Top Pages */}
             <Card>
               <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16 }}>
-                Top Seiten — Heute
-                <InfoTooltip text="Die meistbesuchten Seiten deines Shops heute." />
+                Top Seiten — {getTimeRangeLabel(filters.timeRange)}
+                <InfoTooltip text="Die meistbesuchten Seiten deines Shops im gewählten Zeitraum." />
               </div>
               {todayData ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -1362,7 +1412,7 @@ export default function AnalyticsPage() {
           <Card style={{ marginBottom: 20 }}>
             <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16 }}>
               Besucher-Verlauf — {getTimeRangeLabel(filters.timeRange)}
-              <InfoTooltip text="Seitenaufrufe pro Tag im gewählten Zeitraum." />
+              <InfoTooltip text="Seitenaufrufe pro Tag im gewählten Zeitraum. Bei 'Heute' und '24h' werden keine Tagesbalken angezeigt — nutze den Live-Tab für die Stunden-Verteilung." />
             </div>
             {historyData ? (
               <BarChart data={getFilteredHistory().map((d) => d.views)} color={C.cyan} height={100} />
@@ -1387,13 +1437,13 @@ export default function AnalyticsPage() {
         <div className="tab-content">
           {/* Kundenwert + Warenkorbabbrüche */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginBottom: 20 }}>
-            <StatCard label="Kunden gesamt" value={customersData?.totalCustomers ?? '–'} color={C.cyan} tooltip="Gesamtanzahl aller Kunden die mindestens eine Buchung haben." />
-            <StatCard label="Wiederbuchungen" value={customersData ? `${customersData.repeatRate}%` : '–'} color={C.purple} tooltip="Anteil der Kunden die mehr als einmal gebucht haben." />
-            <StatCard label="Durchschn. Kundenwert" value={customersData ? formatCurrency(customersData.avgLifetimeValue) : '–'} color={C.green} tooltip="Durchschnittlicher Gesamtumsatz pro Kunde über alle Buchungen." />
-            <StatCard label="Durchschn. Bestellwert" value={customersData ? formatCurrency(customersData.avgOrderValue) : '–'} color={C.cyanLight} tooltip="Durchschnittlicher Umsatz pro einzelne Buchung." />
-            <StatCard label="Neue Kunden (30 Tage)" value={customersData?.newCustomers30d ?? '–'} color={C.yellow} tooltip="Anzahl neuer Kunden in den letzten 30 Tagen." />
-            <StatCard label="Warenkorbabbrüche" value={customersData?.abandonedCarts ?? '–'} color={C.red} tooltip="Anzahl abgebrochener Warenkörbe in den letzten 30 Tagen." />
-            <StatCard label="Zurückgewonnen" value={customersData ? `${customersData.recoveryRate}%` : '–'} color={C.green} tooltip="Anteil der abgebrochenen Warenkörbe die durch Erinnerungs-Emails zurückgewonnen wurden." />
+            <StatCard label={`Kunden — ${getTimeRangeLabel(filters.timeRange)}`} value={customersData?.totalCustomers ?? '–'} color={C.cyan} tooltip="Anzahl Kunden mit mindestens einer Buchung im gewählten Zeitraum. Identifiziert über E-Mail (Gast-Buchung + späteres Konto werden zusammengefasst)." />
+            <StatCard label="Wiederbuchungen" value={customersData ? `${customersData.repeatRate}%` : '–'} color={C.purple} tooltip="Anteil der Kunden im Zeitraum mit mehr als einer Buchung im Zeitraum." />
+            <StatCard label="Durchschn. Kundenwert" value={customersData ? formatCurrency(customersData.avgLifetimeValue) : '–'} color={C.green} tooltip="Durchschnittlicher Umsatz pro Kunde im Zeitraum (alle Buchungen des Kunden im Range summiert ÷ Anzahl Kunden)." />
+            <StatCard label="Durchschn. Bestellwert" value={customersData ? formatCurrency(customersData.avgOrderValue) : '–'} color={C.cyanLight} tooltip="Durchschnittlicher Umsatz pro einzelne Buchung im Zeitraum." />
+            <StatCard label={`Neue Kunden — ${getTimeRangeLabel(filters.timeRange)}`} value={customersData?.newCustomers30d ?? '–'} color={C.yellow} tooltip="Anzahl Kunden, deren allererste Buchung im gewählten Zeitraum liegt." />
+            <StatCard label={`Warenkorbabbrüche — ${getTimeRangeLabel(filters.timeRange)}`} value={customersData?.abandonedCarts ?? '–'} color={C.red} tooltip="Abgebrochene Warenkörbe im gewählten Zeitraum." />
+            <StatCard label="Zurückgewonnen" value={customersData ? `${customersData.recoveryRate}%` : '–'} color={C.green} tooltip="Anteil der abgebrochenen Warenkörbe im Zeitraum, die durch Erinnerungs-Emails zurückgewonnen wurden." />
           </div>
 
           {/* Traffic Stats */}
@@ -1401,8 +1451,8 @@ export default function AnalyticsPage() {
             {/* New vs Returning */}
             <Card>
               <div style={{ fontSize: 11, color: C.textDim, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>
-                Neu vs. Wiederkehrend
-                <InfoTooltip text="Verhältnis zwischen Erstbesuchern und wiederkehrenden Besuchern in den letzten 30 Tagen." />
+                Neu vs. Wiederkehrend — {getTimeRangeLabel(filters.timeRange)}
+                <InfoTooltip text="Verhältnis zwischen Erstbesuchern (allerster Besuch im Zeitraum) und wiederkehrenden Besuchern im gewählten Zeitraum." />
               </div>
               {trafficData ? (
                 <>
@@ -1425,16 +1475,16 @@ export default function AnalyticsPage() {
               tooltip="Anteil der Besucher, die nur eine einzige Seite aufrufen und dann die Website verlassen. Ein niedriger Wert ist besser."
             />
             <StatCard
-              label="Besuche (30 Tage)"
+              label={`Besuche — ${getTimeRangeLabel(filters.timeRange)}`}
               value={trafficData?.total_sessions ?? '–'}
               color={C.text}
-              tooltip="Gesamtanzahl aller Sitzungen in den letzten 30 Tagen. Eine Sitzung ist ein zusammenhängender Besuch auf der Website."
+              tooltip="Gesamtanzahl aller Sitzungen im gewählten Zeitraum. Eine Sitzung ist ein zusammenhängender Besuch auf der Website."
             />
             <StatCard
-              label="Einzelne Besucher (heute)"
+              label={`Einzelne Besucher — ${getTimeRangeLabel(filters.timeRange)}`}
               value={todayData?.unique_visitors ?? '–'}
               color={C.cyanLight}
-              tooltip="Anzahl verschiedener Besucher heute. Jede Person wird nur einmal gezählt, auch bei mehreren Besuchen."
+              tooltip="Anzahl verschiedener Besucher im Zeitraum. Jede Person wird nur einmal gezählt, auch bei mehreren Besuchen."
             />
           </div>
 
@@ -1442,7 +1492,7 @@ export default function AnalyticsPage() {
             {/* Device Distribution */}
             <Card>
               <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16 }}>
-                Geräte-Verteilung — 30 Tage
+                Geräte-Verteilung — {getTimeRangeLabel(filters.timeRange)}
                 <InfoTooltip text="Zeigt, mit welchen Geräten deine Besucher die Website aufrufen." />
               </div>
               {trafficData ? (
@@ -1466,8 +1516,8 @@ export default function AnalyticsPage() {
             {/* Browser Distribution */}
             <Card>
               <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16 }}>
-                Browser — 30 Tage
-                <InfoTooltip text="Welche Browser deine Besucher verwenden." />
+                Browser — {getTimeRangeLabel(filters.timeRange)}
+                <InfoTooltip text="Welche Browser deine Besucher im gewählten Zeitraum verwenden." />
               </div>
               {trafficData ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -1494,13 +1544,13 @@ export default function AnalyticsPage() {
         <div className="tab-content">
           {/* KPI-Karten */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 20 }}>
-            <StatCard label="Artikel gesamt" value={blogData?.totalPosts ?? '–'} color={C.cyan} tooltip="Gesamtanzahl aller Blog-Artikel (veröffentlicht + Entwürfe)." />
-            <StatCard label="Veröffentlicht" value={blogData?.publishedPosts ?? '–'} color={C.green} tooltip="Anzahl veröffentlichter Artikel." />
-            <StatCard label="Entwürfe" value={blogData?.draftPosts ?? '–'} color={C.yellow} tooltip="Anzahl noch nicht veröffentlichter Entwürfe." />
-            <StatCard label="Neu (30 Tage)" value={blogData?.recentPosts ?? '–'} color={C.purple} tooltip="Artikel die in den letzten 30 Tagen erstellt wurden." />
-            <StatCard label="Blog-Aufrufe (30 Tage)" value={blogData?.blogPageViews30d ?? '–'} color={C.cyanLight} tooltip="Seitenaufrufe auf Blog-Seiten in den letzten 30 Tagen." />
-            <StatCard label="Kommentare gesamt" value={blogData?.totalComments ?? '–'} tooltip="Gesamtanzahl aller Blog-Kommentare." />
-            <StatCard label="Neue Kommentare" value={blogData?.recentComments ?? '–'} color={C.cyan} tooltip="Kommentare der letzten 30 Tage." />
+            <StatCard label="Artikel gesamt" value={blogData?.totalPosts ?? '–'} color={C.cyan} tooltip="Gesamtanzahl aller Blog-Artikel (veröffentlicht + Entwürfe). Unabhängig vom Zeitraum-Filter." />
+            <StatCard label="Veröffentlicht" value={blogData?.publishedPosts ?? '–'} color={C.green} tooltip="Anzahl veröffentlichter Artikel (all-time)." />
+            <StatCard label="Entwürfe" value={blogData?.draftPosts ?? '–'} color={C.yellow} tooltip="Anzahl noch nicht veröffentlichter Entwürfe (all-time)." />
+            <StatCard label={`Neu — ${getTimeRangeLabel(filters.timeRange)}`} value={blogData?.recentPosts ?? '–'} color={C.purple} tooltip="Artikel die im gewählten Zeitraum erstellt wurden." />
+            <StatCard label={`Blog-Aufrufe — ${getTimeRangeLabel(filters.timeRange)}`} value={blogData?.blogPageViewsRange ?? blogData?.blogPageViews30d ?? '–'} color={C.cyanLight} tooltip="Seitenaufrufe auf Blog-Seiten im gewählten Zeitraum." />
+            <StatCard label="Kommentare gesamt" value={blogData?.totalComments ?? '–'} tooltip="Gesamtanzahl aller Blog-Kommentare (all-time)." />
+            <StatCard label={`Neue Kommentare — ${getTimeRangeLabel(filters.timeRange)}`} value={blogData?.recentComments ?? '–'} color={C.cyan} tooltip="Kommentare im gewählten Zeitraum." />
             <StatCard label="Im Zeitplan" value={blogData?.scheduledCount ?? '–'} color={C.yellow} tooltip="Artikel die im Redaktionsplan stehen und noch nicht generiert wurden." />
           </div>
 
@@ -1508,8 +1558,8 @@ export default function AnalyticsPage() {
             {/* Top Blog-Artikel nach Aufrufen */}
             <Card>
               <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16 }}>
-                Top Blog-Artikel — Aufrufe (30 Tage)
-                <InfoTooltip text="Die meistbesuchten Blog-Artikel der letzten 30 Tage (gemessen an Seitenaufrufen)." />
+                Top Blog-Artikel — Aufrufe ({getTimeRangeLabel(filters.timeRange)})
+                <InfoTooltip text="Die meistbesuchten Blog-Artikel im gewählten Zeitraum (gemessen an Seitenaufrufen aus dem internen Tracking)." />
               </div>
               {blogData?.topBlogPages?.length > 0 ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -1535,8 +1585,8 @@ export default function AnalyticsPage() {
             {/* Blog-Aufrufe Trend */}
             <Card>
               <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16 }}>
-                Blog-Aufrufe pro Tag — 30 Tage
-                <InfoTooltip text="Tägliche Seitenaufrufe auf Blog-Seiten." />
+                Blog-Aufrufe pro Tag — {getTimeRangeLabel(filters.timeRange)}
+                <InfoTooltip text="Tägliche Seitenaufrufe auf Blog-Seiten im gewählten Zeitraum (max. letzte 14 Tage werden angezeigt)." />
               </div>
               {blogData?.viewTrend?.length > 0 ? (
                 <HourlyChart data={(() => {

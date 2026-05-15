@@ -1186,6 +1186,22 @@ Kritischer Fix: `new Date().setHours(0,0,0,0).toISOString()` verschiebt das Datu
 - **Timezone-Bug** in 3 Stellen (live/today/bookings) behoben, nutzt jetzt `getBerlinDayStartISO()`
 - **Track-Endpoint loggt DB-Fehler** (vorher silent catch) — bei fehlender Tabelle / RLS-Problem sofort in Coolify-Logs sichtbar
 
+### Statistik-Audit + Daten-/Filter-Fixes (Stand 2026-05-15)
+Tiefen-Audit der Statistik-Seite (`/admin/analytics` + `/api/admin/analytics`) — sechs echte Daten- und Filter-Bugs gefixt, plus Reliability:
+
+- **Funnel "Buchung gestartet" matchte zu viel:** vorher `path.includes('/buchen')` — matchte auch `/konto/buchungen` (Endkundenkonto-Liste) → zu hohe Anzahl gestarteter Buchungen. Neuer Helper `isBookingWizardPath()` matcht strikt auf `^/kameras/<slug>/buchen`. Plus: "Produkt angesehen" filtert jetzt Wizard-Pfade raus, sonst doppelt gezählt.
+- **Funnel-Stufe 5 konnte > 100% anzeigen:** Stufen 1-4 zählen Sessions, Stufe 5 zählt Bookings (Entitäten). Wenn ein Direktkunde ohne Cookie-Zustimmung bucht, gibt es Bookings ohne Sessions → pct > 100%. Cap auf 100% + Tooltip-Hinweis ergänzt.
+- **Live-`range=month` UTC-Monatsanfang statt Berlin:** inkonsistent zum Rest. Neue Helper `getBerlinMonthStartISO()` + `getBerlinYearStartISO()` in `lib/timezone.ts`.
+- **Customer-Doppelzählung user_id vs email:** vorher `key = user_id ?? customer_email` — gleicher Kunde wurde 2× gezählt, wenn er erst als Gast bucht und später ein Konto anlegt. Jetzt: E-Mail (lowercase, trimmed) ist primärer Key, `user_id` nur Fallback.
+- **Live-Tab Filter "Jahr"/"Custom" fielen still auf "Heute" zurück:** Label sagte "Jahr" → Daten waren Heute. UI mappt jetzt 1:1 auf API-`range=year|custom` mit `from`/`to`-Parametern. Bei unvollständigem Custom (kein from/to) wird der Fetch unterdrückt + amber Hinweis-Text.
+- **Bookings/Customers/Blog-Tab ignorierten Filter:** Cache-Guards in `fetchBookings`/`fetchTraffic` haben Refetch bei Filter-Änderung verhindert + API-Calls hatten keinen Range-Parameter (hardcoded 30d). Neuer zentraler Range-Helper `lib/analytics-range.ts` mit `parseAnalyticsRange(req)` + `applyRange(query, parsed)` — alle 9 API-Branches (live/today/history/funnel/customers/products/traffic/bookings/blog) nutzen ihn jetzt einheitlich. Cache-Guards entfernt, alle Tabs reloaden bei Filter-Wechsel.
+- **Auslastung jetzt Range-aware:** vorher hardcoded `booking.days / 30 * 100`. Bei Jahr/Custom war die Auslastung unsinnig. Jetzt: `booking.days / parsed.days * 100` mit `parsed.days` aus dem Range-Helper.
+- **Top-Pages "Heute" hardcoded:** Label sagte "Heute" egal welcher Filter aktiv. Jetzt dynamisch.
+- **Alle Tab-Labels "30 Tage" hardcoded:** Traffic-Quellen, Geräte-Verteilung, Browser, Kamera-Performance, Buchungstrichter, Buchungen heute, Umsatz heute → alle nutzen jetzt `getTimeRangeLabel(filters.timeRange)`.
+- **Reliability:** alle `fetch()`-Calls in der Page nutzen jetzt einen `safeFetch<T>()`-Helper mit try/catch + HTTP-Status-Check. Vorher zeigte die UI bei API-Fehler ewig "Laden..." ohne Fehler-Anzeige.
+- **Top-Pages defensiv:** `isTrackablePagePath()` filtert `/admin` + `/api`-Pfade raus — die werden zwar ohnehin nicht getrackt (PageTracker-Skip), aber als Defense-in-Depth.
+- **Dateien:** `lib/timezone.ts` (4 neue Helper), `lib/analytics-range.ts` (neu), `app/api/admin/analytics/route.ts` (komplett refaktoriert), `app/admin/analytics/page.tsx` (Filter-Pipeline + Labels + safeFetch).
+
 ### Analytics-Self-Exclude für Admin (Stand 2026-05-07)
 Admin-Test-Besuche der Live-Seite verfälschten die Analytics. Toggle in `/admin/einstellungen` (Sektion 10 „Eigene Besuche aus Analytics ausschließen") setzt pro Browser/Gerät zwei Marker, die das Tracking unterdrücken — Schalter halt 1 Jahr.
 - **Marker:** localStorage `cam2rent_no_track='1'` + Cookie `cam2rent_no_track=1; max-age=1y; samesite=lax`. Beide werden client-seitig von der Komponente gesetzt/gelöscht.

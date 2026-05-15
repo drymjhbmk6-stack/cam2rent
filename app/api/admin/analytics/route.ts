@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
-import { getBerlinDayStartISO, getBerlinHour, getBerlinDateKey } from '@/lib/timezone';
+import { getBerlinHour, getBerlinDateKey } from '@/lib/timezone';
+import { parseAnalyticsRange, applyRange, type ParsedRange } from '@/lib/analytics-range';
 
 function formatReferrer(ref: string | null): string {
   if (!ref) return 'direkt';
@@ -20,6 +21,24 @@ function formatReferrer(ref: string | null): string {
   }
 }
 
+/**
+ * Pruefe ob ein getrackter Pfad zu "Buchung gestartet" zaehlt.
+ * Muss das Buchungs-Wizard auf einer Produktseite sein — NICHT
+ * /konto/buchungen (Endkundenkonto-Liste). Frueher matchte
+ * `path.includes('/buchen')` beides und verfaelschte den Funnel.
+ */
+function isBookingWizardPath(path: string): boolean {
+  return /^\/kameras\/[^/]+\/buchen(\/|$|\?)/.test(path);
+}
+
+/** True wenn Pfad zu Top-Pages zaehlt (nicht /admin, nicht /api). */
+function isTrackablePagePath(path: string): boolean {
+  if (!path) return false;
+  if (path.startsWith('/admin')) return false;
+  if (path.startsWith('/api')) return false;
+  return true;
+}
+
 export async function GET(req: NextRequest) {
   if (!await checkAdminAuth()) {
     return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 });
@@ -27,9 +46,11 @@ export async function GET(req: NextRequest) {
 
   const type = req.nextUrl.searchParams.get('type') ?? 'today';
   const supabase = createServiceClient();
+  const parsed: ParsedRange = parseAnalyticsRange(req);
 
   // ── LIVE ──────────────────────────────────────────────────────────────────
   if (type === 'live') {
+    // "Gerade online" ist immer die letzten 5 Minuten — unabhaengig vom Filter.
     const since = new Date(Date.now() - 5 * 60 * 1000).toISOString();
     const { data } = await supabase
       .from('page_views')
@@ -65,27 +86,12 @@ export async function GET(req: NextRequest) {
 
     const visitors = Array.from(sessionMap.values());
 
-    // Range-abhaengige Stats (respektiert ?range=today|24h|7d|30d|month aus URL)
-    const range = req.nextUrl.searchParams.get('range') ?? 'today';
-    let startDateISO: string;
-    if (range === '24h') {
-      startDateISO = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    } else if (range === '7d') {
-      startDateISO = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-    } else if (range === '30d') {
-      startDateISO = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-    } else if (range === 'month') {
-      const now = new Date();
-      startDateISO = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
-    } else {
-      // today (default) — Berlin-Mitternacht als UTC
-      startDateISO = getBerlinDayStartISO();
-    }
-
-    const { data: rangeData } = await supabase
-      .from('page_views')
-      .select('session_id, visitor_id')
-      .gte('created_at', startDateISO);
+    // KPIs respektieren den Range-Filter (today/24h/7d/30d/month/year/custom).
+    const rangeQuery = applyRange(
+      supabase.from('page_views').select('session_id, visitor_id'),
+      parsed,
+    );
+    const { data: rangeData } = await rangeQuery;
 
     const totalViews = rangeData?.length ?? 0;
     const uniqueVisitors = new Set(rangeData?.map((r) => r.visitor_id)).size;
@@ -97,41 +103,37 @@ export async function GET(req: NextRequest) {
       total_views: totalViews,
       unique_visitors: uniqueVisitors,
       avg_pages_per_session: sessions > 0 ? +(totalViews / sessions).toFixed(1) : 0,
-      range,
+      range: parsed.range,
     });
   }
 
   // ── TODAY ─────────────────────────────────────────────────────────────────
+  // Liefert Hourly-Chart (24 Buckets), Top-Pages und Device-Distribution
+  // fuer den gewaehlten Range. Bei range != today/24h sind die Hourly-Buckets
+  // "Stunde-des-Tages" aggregiert ueber den ganzen Bereich.
   if (type === 'today') {
-    // Optional ?range=24h → rollendes 24-Stunden-Fenster statt Berlin-Mitternacht.
-    // Hourly-Buckets bleiben nach Stunde-des-Tages (0-23) gruppiert; in den
-    // letzten 24h kommt jede Clock-Hour genau einmal vor, also kein
-    // Doppelzaehlen.
-    const range = req.nextUrl.searchParams.get('range');
-    const startISO = range === '24h'
-      ? new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-      : getBerlinDayStartISO();
-
-    const { data } = await supabase
-      .from('page_views')
-      .select('session_id, visitor_id, path, device_type, created_at')
-      .gte('created_at', startISO);
-
+    const q = applyRange(
+      supabase.from('page_views').select('session_id, visitor_id, path, device_type, created_at'),
+      parsed,
+    );
+    const { data } = await q;
     const rows = data ?? [];
+
     const totalViews = rows.length;
     const uniqueVisitors = new Set(rows.map((r) => r.visitor_id)).size;
     const sessions = new Set(rows.map((r) => r.session_id)).size;
 
-    // Hourly distribution — Stunde in Europe/Berlin berechnen, damit der
-    // Chart auf UTC-Servern (Hetzner) nicht um 2h verschoben ist.
+    // Hourly distribution — Stunde in Europe/Berlin.
     const hourly = Array(24).fill(0);
     for (const row of rows) {
       hourly[getBerlinHour(row.created_at)]++;
     }
 
-    // Top pages
+    // Top pages (ohne Admin/API-Pfade — die sind ohnehin nicht getrackt,
+    // aber als Defense-in-Depth filtern wir nochmal).
     const pageMap = new Map<string, number>();
     for (const row of rows) {
+      if (!isTrackablePagePath(row.path)) continue;
       pageMap.set(row.path, (pageMap.get(row.path) ?? 0) + 1);
     }
     const topPages = Array.from(pageMap.entries())
@@ -159,6 +161,7 @@ export async function GET(req: NextRequest) {
         mobile: Math.round((mobile / total) * 100),
         tablet: Math.round((tablet / total) * 100),
       },
+      range: parsed.range,
     });
   }
 
@@ -200,83 +203,122 @@ export async function GET(req: NextRequest) {
 
   // ── FUNNEL ────────────────────────────────────────────────────────────────
   if (type === 'funnel') {
-    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-    const { data } = await supabase
-      .from('page_views')
-      .select('session_id, path')
-      .gte('created_at', since);
+    const viewsQ = applyRange(supabase.from('page_views').select('session_id, path'), parsed);
+    const { data } = await viewsQ;
 
     const rows = data ?? [];
     const allSessions = new Set(rows.map((r) => r.session_id)).size;
 
     const sessionsWithHome = new Set(rows.filter((r) => r.path === '/').map((r) => r.session_id)).size;
-    const sessionsWithProduct = new Set(rows.filter((r) => r.path.startsWith('/kameras/')).map((r) => r.session_id)).size;
-    const sessionsWithBooking = new Set(rows.filter((r) => r.path.includes('/buchen')).map((r) => r.session_id)).size;
-    const sessionsWithCheckout = new Set(rows.filter((r) => r.path === '/checkout' || r.path.startsWith('/buchung-bestaetigt')).map((r) => r.session_id)).size;
+    const sessionsWithProduct = new Set(rows.filter((r) => r.path.startsWith('/kameras/') && !isBookingWizardPath(r.path)).map((r) => r.session_id)).size;
+    // FIX: vorher matchte `path.includes('/buchen')` auch /konto/buchungen.
+    const sessionsWithBooking = new Set(rows.filter((r) => isBookingWizardPath(r.path)).map((r) => r.session_id)).size;
+    const sessionsWithCheckout = new Set(rows.filter((r) => r.path === '/checkout' || r.path.startsWith('/checkout/') || r.path.startsWith('/buchung-bestaetigt')).map((r) => r.session_id)).size;
 
-    const { count: bookingCount } = await supabase
-      .from('bookings')
-      .select('id', { count: 'exact', head: true })
-      .gte('created_at', since)
-      .neq('status', 'cancelled');
+    const bookingsQ = applyRange(
+      supabase.from('bookings').select('id', { count: 'exact', head: true }),
+      parsed,
+    ).neq('status', 'cancelled');
+    const { count: bookingCount } = await bookingsQ;
 
     const base = allSessions || 1;
+    // FIX: pct kann sonst > 100 werden, weil Bookings (Entitaet) gegen
+    // Sessions (page_views) gerechnet wird — Returning-Customer ohne
+    // Tracking-Consent erzeugen Bookings ohne Sessions. Cap auf 100.
+    const cappedPct = (n: number) => Math.min(100, Math.round((n / base) * 100));
 
     return NextResponse.json({
       funnel: [
-        { step: 'Startseite besucht', count: sessionsWithHome, pct: Math.round((sessionsWithHome / base) * 100) },
-        { step: 'Produkt angesehen', count: sessionsWithProduct, pct: Math.round((sessionsWithProduct / base) * 100) },
-        { step: 'Buchung gestartet', count: sessionsWithBooking, pct: Math.round((sessionsWithBooking / base) * 100) },
-        { step: 'Checkout erreicht', count: sessionsWithCheckout, pct: Math.round((sessionsWithCheckout / base) * 100) },
-        { step: 'Erfolgreich bezahlt', count: bookingCount ?? 0, pct: Math.round(((bookingCount ?? 0) / base) * 100) },
+        { step: 'Startseite besucht', count: sessionsWithHome, pct: cappedPct(sessionsWithHome) },
+        { step: 'Produkt angesehen', count: sessionsWithProduct, pct: cappedPct(sessionsWithProduct) },
+        { step: 'Buchung gestartet', count: sessionsWithBooking, pct: cappedPct(sessionsWithBooking) },
+        { step: 'Checkout erreicht', count: sessionsWithCheckout, pct: cappedPct(sessionsWithCheckout) },
+        { step: 'Erfolgreich bezahlt', count: bookingCount ?? 0, pct: cappedPct(bookingCount ?? 0) },
       ],
+      range: parsed.range,
     });
   }
 
   // ── CUSTOMERS ────────────────────────────────────────────────────────────
   if (type === 'customers') {
-    const since30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    // Buchungs-bezogene KPIs respektieren den Range-Filter.
+    const bookingsQ = applyRange(
+      supabase.from('bookings').select('user_id, customer_email, price_total, status, created_at'),
+      parsed,
+    ).neq('status', 'cancelled');
+    const { data: rangeBookings } = await bookingsQ;
 
-    // Alle Buchungen für Kundenwert-Berechnung
+    // Zusaetzlich: ALLE Buchungen fuer die korrekte "neuer-Kunde-im-Range"-Berechnung
+    // (vergleicht das Erst-Booking-Datum eines Kunden gegen den Range-Start).
     const { data: allBookings } = await supabase
       .from('bookings')
-      .select('user_id, customer_email, price_total, status, created_at')
+      .select('user_id, customer_email, created_at, status')
       .neq('status', 'cancelled');
 
-    const bookings = allBookings ?? [];
+    const bookings = rangeBookings ?? [];
+    const all = allBookings ?? [];
 
-    // Kunden nach Email gruppieren
-    const customerMap = new Map<string, { total: number; count: number; first: string }>();
+    // Customer-Dedup: E-Mail (lowercase) ist primaerer Key, weil ein Kunde
+    // erst als Gast (nur email) bucht und spaeter ein Konto anlegt — vorher
+    // wurde derselbe Kunde 2x gezaehlt (key=email, key=user_id).
+    const customerKey = (b: { user_id: string | null; customer_email: string | null }): string => {
+      const email = b.customer_email?.toLowerCase().trim();
+      if (email) return `email:${email}`;
+      if (b.user_id) return `uid:${b.user_id}`;
+      return 'unknown';
+    };
+
+    // Gruppierung im Range
+    const customerMap = new Map<string, { total: number; count: number }>();
     for (const b of bookings) {
-      const key = b.user_id ?? b.customer_email ?? 'unknown';
-      const existing = customerMap.get(key) ?? { total: 0, count: 0, first: b.created_at };
+      const key = customerKey(b);
+      const existing = customerMap.get(key) ?? { total: 0, count: 0 };
       existing.total += b.price_total ?? 0;
       existing.count += 1;
-      if (b.created_at < existing.first) existing.first = b.created_at;
       customerMap.set(key, existing);
+    }
+
+    // Erst-Buchung pro Kunde aus ALLEN Buchungen (fuer "neue Kunden im Range")
+    const firstBooking = new Map<string, string>();
+    for (const b of all) {
+      const key = customerKey(b);
+      const existing = firstBooking.get(key);
+      if (!existing || b.created_at < existing) firstBooking.set(key, b.created_at);
     }
 
     const totalCustomers = customerMap.size;
     const repeatCustomers = [...customerMap.values()].filter((c) => c.count > 1).length;
-    const avgLifetimeValue = totalCustomers > 0
-      ? Math.round([...customerMap.values()].reduce((s, c) => s + c.total, 0) / totalCustomers * 100) / 100
-      : 0;
+    const totalRevenue = [...customerMap.values()].reduce((s, c) => s + c.total, 0);
+    const avgLifetimeValue = totalCustomers > 0 ? +(totalRevenue / totalCustomers).toFixed(2) : 0;
     const avgOrderValue = bookings.length > 0
-      ? Math.round(bookings.reduce((s, b) => s + (b.price_total ?? 0), 0) / bookings.length * 100) / 100
+      ? +(bookings.reduce((s, b) => s + (b.price_total ?? 0), 0) / bookings.length).toFixed(2)
       : 0;
 
-    // Warenkorbabbrueche (Tabelle existiert ggf. nicht)
+    // Neue Kunden = Kunden, deren Erst-Buchung in den Range faellt.
+    const startMs = new Date(parsed.startISO).getTime();
+    const endMs = parsed.endISO ? new Date(parsed.endISO).getTime() : Date.now();
+    const newCustomersInRange = [...firstBooking.values()].filter((iso) => {
+      const t = new Date(iso).getTime();
+      return t >= startMs && t <= endMs;
+    }).length;
+
+    // Warenkorbabbrueche im Range (Tabelle existiert ggf. nicht).
     let abandonedTotal = 0;
     let abandonedRecovered = 0;
     try {
-      const { count: at } = await supabase.from('abandoned_carts').select('id', { count: 'exact', head: true }).gte('created_at', since30);
-      const { count: ar } = await supabase.from('abandoned_carts').select('id', { count: 'exact', head: true }).eq('recovered', true).gte('created_at', since30);
+      const atQ = applyRange(
+        supabase.from('abandoned_carts').select('id', { count: 'exact', head: true }),
+        parsed,
+      );
+      const { count: at } = await atQ;
+      const arQ = applyRange(
+        supabase.from('abandoned_carts').select('id', { count: 'exact', head: true }),
+        parsed,
+      ).eq('recovered', true);
+      const { count: ar } = await arQ;
       abandonedTotal = at ?? 0;
       abandonedRecovered = ar ?? 0;
     } catch { /* Tabelle existiert nicht — ignorieren */ }
-
-    // Neue Kunden letzter 30 Tage
-    const newCustomers30d = [...customerMap.values()].filter((c) => c.first >= since30).length;
 
     return NextResponse.json({
       totalCustomers,
@@ -284,41 +326,38 @@ export async function GET(req: NextRequest) {
       repeatRate: totalCustomers > 0 ? Math.round((repeatCustomers / totalCustomers) * 100) : 0,
       avgLifetimeValue,
       avgOrderValue,
-      newCustomers30d,
-      abandonedCarts: abandonedTotal ?? 0,
-      recoveredCarts: abandonedRecovered ?? 0,
-      recoveryRate: (abandonedTotal ?? 0) > 0
-        ? Math.round(((abandonedRecovered ?? 0) / (abandonedTotal ?? 0)) * 100)
-        : 0,
+      newCustomersInRange,
+      // Backwards-Compat: alter Feldname (UI nutzt evtl. noch newCustomers30d)
+      newCustomers30d: newCustomersInRange,
+      abandonedCarts: abandonedTotal,
+      recoveredCarts: abandonedRecovered,
+      recoveryRate: abandonedTotal > 0 ? Math.round((abandonedRecovered / abandonedTotal) * 100) : 0,
+      range: parsed.range,
     });
   }
 
   // ── PRODUCTS ──────────────────────────────────────────────────────────────
   if (type === 'products') {
-    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const viewQ = applyRange(supabase.from('page_views').select('path'), parsed).like('path', '/kameras/%');
+    const { data: viewData } = await viewQ;
 
-    const { data: viewData } = await supabase
-      .from('page_views')
-      .select('path')
-      .gte('created_at', since)
-      .like('path', '/kameras/%');
+    const bookingQ = applyRange(
+      supabase.from('bookings').select('product_id, product_name, price_total, rental_from, rental_to, status'),
+      parsed,
+    ).neq('status', 'cancelled');
+    const { data: bookingData } = await bookingQ;
 
-    const { data: bookingData } = await supabase
-      .from('bookings')
-      .select('product_id, product_name, price_total, rental_from, rental_to, status')
-      .gte('created_at', since)
-      .neq('status', 'cancelled');
-
-    // Count views per slug
+    // Count views per slug (skip /kameras/<slug>/buchen — ist Buchungs-Wizard, nicht Produkt-Detail)
     const viewMap = new Map<string, number>();
     for (const row of viewData ?? []) {
       const slug = row.path.replace('/kameras/', '').split('/')[0];
-      if (slug && slug !== 'buchen') {
+      const isWizard = isBookingWizardPath(row.path);
+      if (slug && slug !== 'buchen' && !isWizard) {
         viewMap.set(slug, (viewMap.get(slug) ?? 0) + 1);
       }
     }
 
-    // Count bookings & revenue per product (key by product_id AND slug for matching)
+    // Count bookings & revenue per product
     const bookingByIdMap = new Map<string, { count: number; revenue: number; days: number; name: string }>();
     const slugToIdMap = new Map<string, string>();
     for (const row of bookingData ?? []) {
@@ -348,28 +387,28 @@ export async function GET(req: NextRequest) {
       if (p.slug) slugToIdMap.set(p.slug, p.id);
     }
 
-    // Combine: views per slug + bookings per product_id
+    // Auslastung gegen die Range-Tage normalisieren (vorher hartcodiert /30).
+    const rangeDays = Math.max(1, parsed.days);
     const products = Array.from(viewMap.entries())
       .sort((a, b) => b[1] - a[1])
       .slice(0, 10)
       .map(([slug, views]) => {
         const productId = slugToIdMap.get(slug);
         const booking = productId ? (bookingByIdMap.get(productId) ?? { count: 0, revenue: 0, days: 0, name: slug }) : { count: 0, revenue: 0, days: 0, name: slug };
-        const utilization = Math.min(100, Math.round((booking.days / 30) * 100));
+        const utilization = Math.min(100, Math.round((booking.days / rangeDays) * 100));
         return { slug, name: booking.name, views, bookings: booking.count, revenue: booking.revenue, utilization };
       });
 
-    return NextResponse.json({ products });
+    return NextResponse.json({ products, range: parsed.range, range_days: rangeDays });
   }
 
   // ── TRAFFIC SOURCES ───────────────────────────────────────────────────────
   if (type === 'traffic') {
-    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-    const { data } = await supabase
-      .from('page_views')
-      .select('referrer, session_id, visitor_id, device_type, browser, created_at')
-      .gte('created_at', since);
-
+    const q = applyRange(
+      supabase.from('page_views').select('referrer, session_id, visitor_id, device_type, browser, created_at'),
+      parsed,
+    );
+    const { data } = await q;
     const rows = data ?? [];
 
     // Traffic sources
@@ -410,15 +449,31 @@ export async function GET(req: NextRequest) {
     const bounced = Array.from(sessionPageCount.values()).filter((c) => c === 1).length;
     const bounceRate = sessionPageCount.size > 0 ? Math.round((bounced / sessionPageCount.size) * 100) : 0;
 
-    // New vs returning (visitor seen in last 30 days before their first hit)
-    const visitorFirstSeen = new Map<string, string>();
-    for (const row of (data ?? []).sort((a, b) => a.created_at.localeCompare(b.created_at))) {
-      if (!visitorFirstSeen.has(row.visitor_id)) visitorFirstSeen.set(row.visitor_id, row.created_at);
+    // New vs returning: Besucher gilt als "neu im Range" wenn sein erster
+    // jemals getrackter Besuch im Range liegt. Vorher wurde nur innerhalb
+    // des Ranges sortiert — ein Besucher der vor dem Range schon mal da war
+    // wurde faelschlich als "neu" gezaehlt.
+    const visitorIdsInRange = new Set(rows.map((r) => r.visitor_id).filter(Boolean));
+    let newVisitors = 0;
+    let returningVisitors = 0;
+    if (visitorIdsInRange.size > 0) {
+      const { data: firstSeen } = await supabase
+        .from('page_views')
+        .select('visitor_id, created_at')
+        .in('visitor_id', Array.from(visitorIdsInRange))
+        .order('created_at', { ascending: true });
+      const firstByVisitor = new Map<string, string>();
+      for (const r of firstSeen ?? []) {
+        if (!firstByVisitor.has(r.visitor_id)) firstByVisitor.set(r.visitor_id, r.created_at);
+      }
+      const startMs = new Date(parsed.startISO).getTime();
+      const endMs = parsed.endISO ? new Date(parsed.endISO).getTime() : Date.now();
+      for (const iso of firstByVisitor.values()) {
+        const t = new Date(iso).getTime();
+        if (t >= startMs && t <= endMs) newVisitors++;
+        else returningVisitors++;
+      }
     }
-    const newVisitors = Array.from(visitorFirstSeen.values()).filter(
-      (d) => new Date(d) >= new Date(since)
-    ).length;
-    const returningVisitors = visitorFirstSeen.size - newVisitors;
 
     return NextResponse.json({
       sources,
@@ -432,32 +487,24 @@ export async function GET(req: NextRequest) {
       new_visitors: newVisitors,
       returning_visitors: returningVisitors,
       total_sessions: sessionPageCount.size,
+      range: parsed.range,
     });
   }
 
   // ── BOOKINGS STATS ────────────────────────────────────────────────────────
   if (type === 'bookings') {
-    const todayStartISO = getBerlinDayStartISO();
-    const since30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const rangeBookingsQ = applyRange(
+      supabase.from('bookings').select('price_total, created_at'),
+      parsed,
+    ).neq('status', 'cancelled');
+    const { data: rangeBookings } = await rangeBookingsQ;
 
-    const { data: todayBookings } = await supabase
-      .from('bookings')
-      .select('price_total, created_at')
-      .gte('created_at', todayStartISO)
-      .neq('status', 'cancelled');
+    const totalBookings = (rangeBookings ?? []).length;
+    const totalRevenue = (rangeBookings ?? []).reduce((s, b) => s + (b.price_total ?? 0), 0);
 
-    const { data: allBookings } = await supabase
-      .from('bookings')
-      .select('price_total, created_at')
-      .gte('created_at', since30)
-      .neq('status', 'cancelled');
-
-    const todayRevenue = (todayBookings ?? []).reduce((s, b) => s + (b.price_total ?? 0), 0);
-    const todayCount = (todayBookings ?? []).length;
-
-    // Booking trend: per day — Berlin-Tag, nicht UTC-Tag
+    // Trend pro Berlin-Tag im Range
     const dayMap = new Map<string, { count: number; revenue: number }>();
-    for (const row of allBookings ?? []) {
+    for (const row of rangeBookings ?? []) {
       const day = getBerlinDateKey(row.created_at);
       if (!dayMap.has(day)) dayMap.set(day, { count: 0, revenue: 0 });
       const d = dayMap.get(day)!;
@@ -468,29 +515,30 @@ export async function GET(req: NextRequest) {
       .sort((a, b) => a[0].localeCompare(b[0]))
       .map(([date, d]) => ({ date, count: d.count, revenue: d.revenue }));
 
-    // Page views today for conversion rate
-    const { data: todayViews } = await supabase
-      .from('page_views')
-      .select('session_id', { count: 'exact', head: false })
-      .gte('created_at', todayStartISO);
-    const sessionCount = new Set((todayViews ?? []).map((r) => r.session_id)).size;
-    const conversionRate = sessionCount > 0 ? +((todayCount / sessionCount) * 100).toFixed(1) : 0;
-    const avgBookingValue = todayCount > 0 ? +(todayRevenue / todayCount).toFixed(2) : 0;
+    // Conversion-Rate: Bookings im Range / Sessions im Range.
+    const viewsQ = applyRange(supabase.from('page_views').select('session_id'), parsed);
+    const { data: rangeViews } = await viewsQ;
+    const sessionCount = new Set((rangeViews ?? []).map((r) => r.session_id)).size;
+    const conversionRate = sessionCount > 0 ? +((totalBookings / sessionCount) * 100).toFixed(1) : 0;
+    const avgBookingValue = totalBookings > 0 ? +(totalRevenue / totalBookings).toFixed(2) : 0;
 
     return NextResponse.json({
-      today_bookings: todayCount,
-      today_revenue: todayRevenue,
+      // Range-bezogene KPIs (Label-Formatierung passiert im UI).
+      total_bookings: totalBookings,
+      total_revenue: totalRevenue,
+      // Backward-compat (UI las vorher today_*); zeigt jetzt Range-Werte.
+      today_bookings: totalBookings,
+      today_revenue: totalRevenue,
       conversion_rate: conversionRate,
       avg_booking_value: avgBookingValue,
       trend,
+      range: parsed.range,
     });
   }
 
   // ── BLOG ────────────────────────────────────────────────────────────────────
   if (type === 'blog') {
-    const since30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-
-    // Alle Blog-Artikel
+    // Alle Blog-Artikel (nicht range-gefiltert — "Artikel gesamt" ist all-time)
     const { data: allPosts } = await supabase
       .from('blog_posts')
       .select('id, title, slug, status, published_at, views, created_at')
@@ -500,29 +548,34 @@ export async function GET(req: NextRequest) {
     const totalPosts = posts.length;
     const publishedPosts = posts.filter(p => p.status === 'published').length;
     const draftPosts = posts.filter(p => p.status === 'draft').length;
-    const recentPosts = posts.filter(p => p.created_at >= since30).length;
+    // "Neu im Range": Artikel die im gewaehlten Zeitraum erstellt wurden.
+    const startMs = new Date(parsed.startISO).getTime();
+    const endMs = parsed.endISO ? new Date(parsed.endISO).getTime() : Date.now();
+    const recentPosts = posts.filter(p => {
+      const t = new Date(p.created_at).getTime();
+      return t >= startMs && t <= endMs;
+    }).length;
 
-    // Gesamte Blog-Views
+    // Gesamte Blog-Views (all-time, aus blog_posts.views)
     const totalViews = posts.reduce((s, p) => s + (p.views ?? 0), 0);
 
-    // Top-Artikel nach Views
+    // Top-Artikel nach Views (all-time — blog_posts.views ist kumuliert)
     const topArticles = posts
       .filter(p => p.status === 'published')
       .sort((a, b) => (b.views ?? 0) - (a.views ?? 0))
       .slice(0, 10)
       .map(p => ({ title: p.title, slug: p.slug, views: p.views ?? 0, published_at: p.published_at }));
 
-    // Blog Page Views aus page_views Tabelle (ohne Admin-Vorschau-Pfade)
-    const { data: blogViews } = await supabase
-      .from('page_views')
-      .select('path, created_at')
-      .gte('created_at', since30)
-      .like('path', '/blog/%')
-      .not('path', 'like', '/blog/preview/%');
+    // Blog Page Views aus page_views Tabelle (Range-bezogen)
+    const blogViewsQ = applyRange(
+      supabase.from('page_views').select('path, created_at'),
+      parsed,
+    ).like('path', '/blog/%').not('path', 'like', '/blog/preview/%');
+    const { data: blogViews } = await blogViewsQ;
 
-    const blogPageViews30d = blogViews?.length ?? 0;
+    const blogPageViewsRange = blogViews?.length ?? 0;
 
-    // Views pro Tag (letzte 30 Tage) — Berlin-Tag
+    // Views pro Tag im Range — Berlin-Tag
     const dayMap = new Map<string, number>();
     for (const row of blogViews ?? []) {
       const day = getBerlinDateKey(row.created_at);
@@ -532,7 +585,7 @@ export async function GET(req: NextRequest) {
       .sort((a, b) => a[0].localeCompare(b[0]))
       .map(([date, views]) => ({ date, views }));
 
-    // Top Blog-Seiten aus page_views
+    // Top Blog-Seiten aus page_views (Range-bezogen)
     const blogPageMap = new Map<string, number>();
     for (const row of blogViews ?? []) {
       const slug = row.path.replace('/blog/', '').split('?')[0];
@@ -548,16 +601,17 @@ export async function GET(req: NextRequest) {
         return { slug, title: post?.title ?? slug, views };
       });
 
-    // Kommentare
+    // Kommentare: gesamt all-time, neu = im Range
     const { count: totalComments } = await supabase
       .from('blog_comments')
       .select('id', { count: 'exact', head: true });
-    const { count: recentComments } = await supabase
-      .from('blog_comments')
-      .select('id', { count: 'exact', head: true })
-      .gte('created_at', since30);
+    const recentCommentsQ = applyRange(
+      supabase.from('blog_comments').select('id', { count: 'exact', head: true }),
+      parsed,
+    );
+    const { count: recentComments } = await recentCommentsQ;
 
-    // Zeitplan
+    // Zeitplan (all-time — wartende Plan-Eintraege)
     const { data: scheduleData } = await supabase
       .from('blog_schedule')
       .select('id, status')
@@ -570,13 +624,16 @@ export async function GET(req: NextRequest) {
       draftPosts,
       recentPosts,
       totalViews,
-      blogPageViews30d,
+      // Backward-compat: alter Name war hardcoded auf 30d
+      blogPageViews30d: blogPageViewsRange,
+      blogPageViewsRange,
       topArticles,
       topBlogPages,
       viewTrend,
       totalComments: totalComments ?? 0,
       recentComments: recentComments ?? 0,
       scheduledCount,
+      range: parsed.range,
     });
   }
 
