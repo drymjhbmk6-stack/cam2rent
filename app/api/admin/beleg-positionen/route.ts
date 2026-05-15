@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { logAudit } from '@/lib/audit';
-import { sanitizePosition, recomputeBelegSummen } from '@/lib/buchhaltung/beleg-utils';
+import { sanitizePosition, recomputeBelegSummen, insertPositionWithVerbrauchFallback } from '@/lib/buchhaltung/beleg-utils';
 
 /**
  * POST /api/admin/beleg-positionen     → neue Position anlegen
@@ -95,8 +95,10 @@ export async function POST(req: NextRequest) {
     reihenfolge: typeof body.reihenfolge === 'number' ? body.reihenfolge : 999,
   });
 
-  const { data, error } = await supabase
-    .from('beleg_positionen').insert({ ...sanitized, beleg_id: body.beleg_id }).select('*').single();
+  const { data, error } = await insertPositionWithVerbrauchFallback(
+    supabase,
+    { ...sanitized, beleg_id: body.beleg_id },
+  );
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   await recomputeBelegSummen(supabase, String(body.beleg_id));

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth, getCurrentAdminUser } from '@/lib/admin-auth';
 import { logAudit } from '@/lib/audit';
+import { getBerlinDayStartFromDateString, getBerlinDayEndFromDateString } from '@/lib/timezone';
 
 /**
  * Monatsabschluss-Wizard.
@@ -72,12 +73,14 @@ export async function GET(req: NextRequest) {
   let stripeUnmatched = 0;
   let stripeTotal = 0;
   try {
+    const fromIso = getBerlinDayStartFromDateString(from) ?? `${from}T00:00:00Z`;
+    const toIso = getBerlinDayEndFromDateString(to) ?? `${to}T23:59:59Z`;
     const { data: txs } = await supabase
       .from('stripe_transactions')
       .select('id, match_status')
       .eq('is_test', false)
-      .gte('stripe_created_at', `${from}T00:00:00`)
-      .lte('stripe_created_at', `${to}T23:59:59`);
+      .gte('stripe_created_at', fromIso)
+      .lte('stripe_created_at', toIso);
     stripeTotal = (txs ?? []).length;
     stripeUnmatched = (txs ?? []).filter((t) => t.match_status === 'unmatched').length;
   } catch {

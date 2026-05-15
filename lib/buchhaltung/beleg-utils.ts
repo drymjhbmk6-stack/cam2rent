@@ -85,6 +85,57 @@ export type BelegPositionInput = {
 };
 
 /**
+ * Pruefe ob es sich um einen CHECK-Constraint-Verstoss auf
+ * beleg_positionen.klassifizierung handelt — passiert solange die Migration
+ * supabase-beleg-positionen-verbrauch.sql noch nicht ausgefuehrt wurde und
+ * der Code 'verbrauch' speichern will.
+ */
+export function isVerbrauchConstraintError(err: unknown): boolean {
+  const e = err as { code?: string; message?: string } | null;
+  if (!e) return false;
+  if (e.code !== '23514') return false;
+  return /klassifizierung/i.test(e.message ?? '');
+}
+
+/**
+ * Insert mit defensivem Fallback — wenn die DB 'verbrauch' noch nicht
+ * kennt (Migration steht aus), wird die Position als 'ausgabe' gespeichert
+ * mit Hinweis im notes-Feld. Damit verschluckt sich der KI-Workflow nicht.
+ */
+export async function insertPositionWithVerbrauchFallback(
+  supabase: SupabaseClient,
+  payload: Record<string, unknown>,
+) {
+  const isVerbrauch = payload.klassifizierung === 'verbrauch';
+  const first = await supabase.from('beleg_positionen').insert(payload).select('*').single();
+  if (!first.error || !isVerbrauch || !isVerbrauchConstraintError(first.error)) return first;
+
+  const fallback = {
+    ...payload,
+    klassifizierung: 'ausgabe' as const,
+    notizen: [(payload.notizen as string | null) ?? '', '[ursprünglich verbrauch — Migration ausstehend]']
+      .filter(Boolean).join(' ').trim().slice(0, 2000),
+  };
+  return supabase.from('beleg_positionen').insert(fallback).select('*').single();
+}
+
+/**
+ * Update-Variante mit gleichem Fallback.
+ */
+export async function updatePositionWithVerbrauchFallback(
+  supabase: SupabaseClient,
+  id: string,
+  update: Record<string, unknown>,
+) {
+  const isVerbrauch = update.klassifizierung === 'verbrauch';
+  const first = await supabase.from('beleg_positionen').update(update).eq('id', id).select('*').single();
+  if (!first.error || !isVerbrauch || !isVerbrauchConstraintError(first.error)) return first;
+
+  const fallback = { ...update, klassifizierung: 'ausgabe' as const };
+  return supabase.from('beleg_positionen').update(fallback).eq('id', id).select('*').single();
+}
+
+/**
  * Sanity-Check fuer Position-Inputs (clamping, defaults).
  */
 export function sanitizePosition(input: BelegPositionInput): BelegPositionInput {

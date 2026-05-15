@@ -47,12 +47,16 @@ export async function GET(req: NextRequest) {
     parseFloat(cfg.accounting_dunning_fee_3 || '10'),
   ];
 
-  // Offene Rechnungen laden — keine Test-Rechnungen mahnen
+  // Offene Rechnungen laden — keine Test-Rechnungen, keine bezahlten/stornierten.
+  // Vorher: or(...) konnte bezahlte Rechnungen reinholen, deren eines Feld noch
+  // nicht synchron auf 'paid' war (Race oder manueller Edit).
   const { data: invoices } = await supabase
     .from('invoices')
-    .select('id, invoice_number, invoice_date, due_date, gross_amount, sent_to_email')
+    .select('id, invoice_number, invoice_date, due_date, gross_amount, sent_to_email, status, payment_status')
     .eq('is_test', false)
-    .or('status.in.(open,overdue),payment_status.in.(open,overdue)')
+    .neq('payment_status', 'paid')
+    .neq('status', 'paid')
+    .neq('status', 'cancelled')
     .limit(100);
 
   let draftsCreated = 0;
@@ -98,7 +102,21 @@ export async function GET(req: NextRequest) {
     const [ny, nm, nd] = todayBerlin.split('-').map((n) => parseInt(n, 10));
     const newDueDate = new Date(Date.UTC(ny, nm - 1, nd + 7));
 
-    await supabase
+    // Atomarer Status-Flip ZUERST. Wenn parallel mark-paid laeuft, soll
+    // die Mahnung nicht angelegt werden — der Guard auf die alten Status-Werte
+    // verhindert, dass eine zwischenzeitlich bezahlte Rechnung zurueck auf
+    // 'overdue' gezogen wird.
+    const { data: flipped } = await supabase
+      .from('invoices')
+      .update({ status: 'overdue', payment_status: 'overdue' })
+      .eq('id', inv.id)
+      .eq('status', (inv as { status: string }).status)
+      .eq('payment_status', (inv as { payment_status: string }).payment_status)
+      .select('id')
+      .maybeSingle();
+    if (!flipped) continue; // Race verloren — Rechnung wurde gerade bezahlt.
+
+    const { error: insErr } = await supabase
       .from('dunning_notices')
       .insert({
         invoice_id: inv.id,
@@ -108,12 +126,14 @@ export async function GET(req: NextRequest) {
         new_due_date: newDueDate.toISOString().split('T')[0],
         sent_to_email: inv.sent_to_email,
       });
-
-    // Rechnung auf overdue setzen
-    await supabase
-      .from('invoices')
-      .update({ status: 'overdue', payment_status: 'overdue' })
-      .eq('id', inv.id);
+    if (insErr) {
+      // Rollback Status, sonst lebt eine "overdue"-Rechnung ohne Mahnung weiter
+      await supabase
+        .from('invoices')
+        .update({ status: (inv as { status: string }).status, payment_status: (inv as { payment_status: string }).payment_status })
+        .eq('id', inv.id);
+      continue;
+    }
 
     draftsCreated++;
   }

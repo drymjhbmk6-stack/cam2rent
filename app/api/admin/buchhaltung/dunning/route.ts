@@ -4,6 +4,7 @@ import { checkAdminAuth } from '@/lib/admin-auth';
 import { logAudit } from '@/lib/audit';
 import { getResendFromEmail } from '@/lib/env-mode';
 import { escapeHtml as h, stripSubject } from '@/lib/email';
+import { getBerlinDateString } from '@/lib/timezone';
 
 export async function POST(req: NextRequest) {
   if (!(await checkAdminAuth())) {
@@ -53,13 +54,42 @@ export async function POST(req: NextRequest) {
     feeAmount = parseFloat(feeSetting?.value || '0');
   }
 
-  // Neue Zahlungsfrist (7 Tage ab jetzt)
-  const newDueDate = new Date();
-  newDueDate.setDate(newDueDate.getDate() + 7);
+  // Atomarer Status-Flip ZUERST: Wenn parallel ein mark-paid laeuft, soll
+  // die Mahnung nicht angelegt werden. Der Guard gegen die alten Status-Werte
+  // verhindert, dass eine bezahlte Rechnung wieder auf 'overdue' gezogen wird.
+  if (invoice.payment_status === 'paid' || invoice.status === 'paid') {
+    return NextResponse.json(
+      { error: 'Rechnung ist bereits bezahlt — Mahnung wird nicht angelegt.' },
+      { status: 409 },
+    );
+  }
+  const { data: flipped, error: flipErr } = await supabase
+    .from('invoices')
+    .update({ status: 'overdue', payment_status: 'overdue' })
+    .eq('id', invoice_id)
+    .eq('status', invoice.status)
+    .eq('payment_status', invoice.payment_status)
+    .select('id')
+    .maybeSingle();
+  if (flipErr) {
+    return NextResponse.json({ error: flipErr.message }, { status: 500 });
+  }
+  if (!flipped) {
+    return NextResponse.json(
+      { error: 'Rechnungsstatus hat sich gerade geaendert (vermutlich zwischenzeitlich bezahlt). Bitte aktualisieren.' },
+      { status: 409 },
+    );
+  }
+
+  // Neue Zahlungsfrist (7 Tage ab jetzt) in Berlin-Datum.
+  // Vorher: toISOString().split('T')[0] auf einem UTC-Server konnte um 1 Tag
+  // verschieben (z.B. 22:00 Berlin = 20:00 UTC → bei +7d landet 21:00 UTC,
+  // der UTC-Date-String ist dann 1 Tag frueher als der Berlin-Datums-Tick).
+  const newDueDate = getBerlinDateString(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000));
 
   const status = send ? 'sent' : 'draft';
 
-  // Mahnung erstellen
+  // Mahnung erstellen — Status-Flip ist bereits passiert.
   const { data: dunning, error } = await supabase
     .from('dunning_notices')
     .insert({
@@ -67,7 +97,7 @@ export async function POST(req: NextRequest) {
       level,
       fee_amount: feeAmount,
       custom_text: custom_text || null,
-      new_due_date: newDueDate.toISOString().split('T')[0],
+      new_due_date: newDueDate,
       status,
       sent_at: send ? new Date().toISOString() : null,
       sent_to_email: invoice.sent_to_email,
@@ -76,14 +106,14 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (error) {
+    // Rollback: Status zurueckdrehen, damit der Folge-Versuch nicht denkt
+    // die Rechnung sei schon overdue.
+    await supabase
+      .from('invoices')
+      .update({ status: invoice.status, payment_status: invoice.payment_status })
+      .eq('id', invoice_id);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
-
-  // Rechnung-Status auf overdue setzen
-  await supabase
-    .from('invoices')
-    .update({ status: 'overdue', payment_status: 'overdue' })
-    .eq('id', invoice_id);
 
   // E-Mail senden wenn send=true
   if (send && invoice.sent_to_email && process.env.RESEND_API_KEY) {

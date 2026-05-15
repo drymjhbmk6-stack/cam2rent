@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
+import { getBerlinDayStartFromDateString, getBerlinDayEndFromDateString } from '@/lib/timezone';
 
 const CATEGORY_LABELS: Record<string, string> = {
   stripe_fees: 'Zahlungsgebühren',
@@ -43,13 +44,20 @@ export async function GET(req: NextRequest) {
   // werden proportional auf Miete + Zubehoer verteilt. Haftung + Versand
   // bleiben gross, weil die typisch nicht rabattiert sind und sonst die
   // Zuordnung verzerrt waere.
+  // Datumsgrenzen in Berlin-Zeit. Vorher wurden die Strings ohne TZ-Suffix
+  // an Postgres geschickt — auf dem UTC-Server interpretierte die DB sie als
+  // UTC-Mitternacht. Eine Buchung am 01.01. 00:30 Berlin (= 31.12. 23:30 UTC)
+  // landete dann ausserhalb des Januar-Filters.
+  const fromIso = getBerlinDayStartFromDateString(from) ?? `${from}T00:00:00Z`;
+  const toIso = getBerlinDayEndFromDateString(to) ?? `${to}T23:59:59Z`;
+
   const { data: bookings } = await supabase
     .from('bookings')
     .select('id, product_name, rental_from, rental_to, days, price_rental, price_accessories, price_haftung, shipping_price, price_total, discount_amount, duration_discount, loyalty_discount, coupon_code, status, delivery_mode, created_at')
     .eq('is_test', false)
     .neq('status', 'cancelled')
-    .gte('created_at', `${from}T00:00:00`)
-    .lte('created_at', `${to}T23:59:59`)
+    .gte('created_at', fromIso)
+    .lte('created_at', toIso)
     .order('created_at', { ascending: false });
 
   type IncomeItem = {

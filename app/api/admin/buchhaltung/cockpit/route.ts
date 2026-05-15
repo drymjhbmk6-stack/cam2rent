@@ -134,9 +134,11 @@ export async function GET() {
     const prevLocked = !!locks[prevKey];
 
     // Heute = im aktuellen Monat. Wenn der Vormonat nicht abgeschlossen ist und wir
-    // sind nach dem 5. des neuen Monats — dann ist es Zeit.
+    // sind nach dem 5. des neuen Monats — dann ist es Zeit. (Vorher: >= 1 — also
+    // schon ab dem 1. des Folgemonats. Das warnte am 02.03. zur Februar-Closure,
+    // bevor noch alle Februar-Eingangsbelege erfasst waren.)
     const dayOfMonth = parseInt(berlinNow.split('-')[2], 10);
-    if (!prevLocked && dayOfMonth >= 1) {
+    if (!prevLocked && dayOfMonth >= 5) {
       const monthLabel = new Date(prevYear, prevMonth - 1, 15).toLocaleDateString('de-DE', {
         month: 'long',
         year: 'numeric',

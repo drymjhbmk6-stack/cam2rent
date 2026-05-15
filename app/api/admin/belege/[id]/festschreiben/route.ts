@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase';
 import { logAudit } from '@/lib/audit';
 import { isBelegFullyClassified, recomputeBelegSummen } from '@/lib/buchhaltung/beleg-utils';
 import { erzeugeAssetsFuerBeleg } from '@/lib/buchhaltung/asset-auto-generator';
+import { createAdminNotification } from '@/lib/admin-notifications';
 
 /**
  * POST /api/admin/belege/[id]/festschreiben
@@ -92,7 +93,17 @@ export async function POST(
   } catch (err) {
     autoGenError = (err as Error).message;
     console.error('Asset-Auto-Gen fehlgeschlagen:', err);
-    // Festschreibung bleibt trotzdem — Admin kann Re-Generate triggern
+    // Festschreibung bleibt trotzdem — Admin kann Re-Generate triggern.
+    // Aber wir feuern eine Admin-Notification, weil ein Beleg ohne Asset
+    // ein bilanzrelevanter Fehler ist (Anlagenverzeichnis unvollstaendig).
+    try {
+      await createAdminNotification(supabase, {
+        type: 'payment_failed',
+        title: `Asset-Generierung fehlgeschlagen: ${beleg.beleg_nr}`,
+        message: `Beleg wurde festgeschrieben, aber Asset/AfA konnten nicht angelegt werden: ${autoGenError}`,
+        link: `/admin/buchhaltung/belege/${id}`,
+      });
+    } catch { /* Notifications-Insert non-blocking */ }
   }
 
   await logAudit({

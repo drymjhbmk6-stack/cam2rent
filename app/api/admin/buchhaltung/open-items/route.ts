@@ -10,11 +10,16 @@ export async function GET() {
   const supabase = createServiceClient();
 
   // Offene Rechnungen laden — keine `select('*')` (manche Spalten sind grosse JSONBs).
+  // Beide Felder muessen offen/ueberfaellig sein. Vorher reichte EINES, dadurch
+  // landete eine Rechnung mit status='paid' aber payment_status='open' (manueller
+  // DB-Edit oder Race) trotzdem in der Liste.
   const { data: invoices, error } = await supabase
     .from('invoices')
     .select('id, invoice_number, booking_id, sent_to_email, gross_amount, invoice_date, due_date')
     .eq('is_test', false)
-    .or('status.in.(open,overdue),payment_status.in.(open,overdue)')
+    .neq('payment_status', 'paid')
+    .neq('status', 'paid')
+    .neq('status', 'cancelled')
     .order('invoice_date', { ascending: true });
 
   if (error) {

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { logAudit } from '@/lib/audit';
-import { recomputeBelegSummen, sanitizePosition } from '@/lib/buchhaltung/beleg-utils';
+import { recomputeBelegSummen, updatePositionWithVerbrauchFallback } from '@/lib/buchhaltung/beleg-utils';
 
 export async function PATCH(
   req: NextRequest,
@@ -36,8 +36,7 @@ export async function PATCH(
   }
   if (typeof update.bezeichnung === 'string') update.bezeichnung = update.bezeichnung.trim().slice(0, 500);
 
-  const { data, error } = await supabase
-    .from('beleg_positionen').update(update).eq('id', id).select('*').single();
+  const { data, error } = await updatePositionWithVerbrauchFallback(supabase, id, update);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   await recomputeBelegSummen(supabase, (pos as { beleg_id: string }).beleg_id);

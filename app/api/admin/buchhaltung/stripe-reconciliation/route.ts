@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
+import { getBerlinDayStartFromDateString, getBerlinDayEndFromDateString } from '@/lib/timezone';
 
 export async function GET(req: NextRequest) {
   if (!(await checkAdminAuth())) {
@@ -9,6 +10,8 @@ export async function GET(req: NextRequest) {
 
   const from = req.nextUrl.searchParams.get('from');
   const to = req.nextUrl.searchParams.get('to');
+  const fromIso = from ? (getBerlinDayStartFromDateString(from) ?? `${from}T00:00:00Z`) : null;
+  const toIso = to ? (getBerlinDayEndFromDateString(to) ?? `${to}T23:59:59Z`) : null;
 
   const supabase = createServiceClient();
 
@@ -17,8 +20,8 @@ export async function GET(req: NextRequest) {
     .select('id, stripe_payment_intent_id, stripe_created_at, booking_id, amount, fee, net, match_status')
     .order('stripe_created_at', { ascending: false });
 
-  if (from) query = query.gte('stripe_created_at', `${from}T00:00:00`);
-  if (to) query = query.lte('stripe_created_at', `${to}T23:59:59`);
+  if (fromIso) query = query.gte('stripe_created_at', fromIso);
+  if (toIso) query = query.lte('stripe_created_at', toIso);
 
   const { data, error } = await query;
 
@@ -33,13 +36,13 @@ export async function GET(req: NextRequest) {
 
   // Buchungen ohne Stripe prüfen
   let unmatchedBooking = 0;
-  if (from && to) {
+  if (fromIso && toIso) {
     const { data: bookings } = await supabase
       .from('bookings')
       .select('id, payment_intent_id')
       .neq('status', 'cancelled')
-      .gte('created_at', `${from}T00:00:00`)
-      .lte('created_at', `${to}T23:59:59`);
+      .gte('created_at', fromIso)
+      .lte('created_at', toIso);
 
     const stripeIds = new Set(transactions.map(t => t.stripe_payment_intent_id));
     unmatchedBooking = (bookings || []).filter(b => b.payment_intent_id && !stripeIds.has(b.payment_intent_id)).length;

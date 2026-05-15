@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
+import { getBerlinDayStartFromDateString, getBerlinDayEndFromDateString } from '@/lib/timezone';
 
 export async function GET(req: NextRequest) {
   if (!(await checkAdminAuth())) {
@@ -24,13 +25,17 @@ export async function GET(req: NextRequest) {
       .maybeSingle();
     const taxMode = taxRow?.value || 'kleinunternehmer';
 
+    // Datumsgrenzen Berlin-TZ-bewusst (sonst Januar/Dezember-Verschiebung am Tagesrand).
+    const fromIso = getBerlinDayStartFromDateString(from) ?? `${from}T00:00:00Z`;
+    const toIso = getBerlinDayEndFromDateString(to) ?? `${to}T23:59:59Z`;
+
     // Buchungen im Zeitraum — Test-Daten ausgeschlossen (GoBD-konform)
     const { data: bookings, error: bookingsError } = await supabase
       .from('bookings')
       .select('id, product_name, price_total, status, created_at')
       .eq('is_test', false)
-      .gte('created_at', `${from}T00:00:00`)
-      .lte('created_at', `${to}T23:59:59`)
+      .gte('created_at', fromIso)
+      .lte('created_at', toIso)
       .order('created_at', { ascending: false });
 
     if (bookingsError) {
@@ -48,12 +53,16 @@ export async function GET(req: NextRequest) {
     const prevTo = new Date(fromDate.getTime() - 1);
     const prevFrom = new Date(prevTo.getTime() - days * 24 * 60 * 60 * 1000);
 
+    const prevFromKey = prevFrom.toISOString().split('T')[0];
+    const prevToKey = prevTo.toISOString().split('T')[0];
+    const prevFromIso = getBerlinDayStartFromDateString(prevFromKey) ?? `${prevFromKey}T00:00:00Z`;
+    const prevToIso = getBerlinDayEndFromDateString(prevToKey) ?? `${prevToKey}T23:59:59Z`;
     const { data: prevBookings } = await supabase
       .from('bookings')
       .select('price_total, status')
       .eq('is_test', false)
-      .gte('created_at', `${prevFrom.toISOString().split('T')[0]}T00:00:00`)
-      .lte('created_at', `${prevTo.toISOString().split('T')[0]}T23:59:59`);
+      .gte('created_at', prevFromIso)
+      .lte('created_at', prevToIso);
 
     const prevActive = (prevBookings || []).filter(b => b.status !== 'cancelled');
     const currentRevenue = activeBookings.reduce((sum, b) => sum + (b.price_total || 0), 0);

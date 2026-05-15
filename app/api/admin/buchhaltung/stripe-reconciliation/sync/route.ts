@@ -5,6 +5,7 @@ import { logAudit } from '@/lib/audit';
 import type Stripe from 'stripe';
 import { getStripe } from '@/lib/stripe';
 import { getStripeSecretKey, isTestMode } from '@/lib/env-mode';
+import { getBerlinDayStartFromDateString, getBerlinDayEndFromDateString } from '@/lib/timezone';
 
 export async function POST(req: NextRequest) {
   if (!(await checkAdminAuth())) {
@@ -26,9 +27,13 @@ export async function POST(req: NextRequest) {
   const testMode = await isTestMode();
   const supabase = createServiceClient();
 
-  // PaymentIntents von Stripe laden
-  const fromTs = Math.floor(new Date(`${from}T00:00:00`).getTime() / 1000);
-  const toTs = Math.floor(new Date(`${to}T23:59:59`).getTime() / 1000);
+  // PaymentIntents von Stripe laden — Berlin-TZ-bewusste Tagesgrenzen,
+  // sonst wird ein Stripe-Zahlungs-Sync z.B. am Monatswechsel um Stunden
+  // verschoben (Stripe arbeitet mit Unix-Timestamps, also UTC).
+  const fromIso = getBerlinDayStartFromDateString(from) ?? `${from}T00:00:00Z`;
+  const toIso = getBerlinDayEndFromDateString(to) ?? `${to}T23:59:59Z`;
+  const fromTs = Math.floor(new Date(fromIso).getTime() / 1000);
+  const toTs = Math.floor(new Date(toIso).getTime() / 1000);
 
   let synced = 0;
   let hasMore = true;

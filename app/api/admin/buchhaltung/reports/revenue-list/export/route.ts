@@ -19,6 +19,7 @@ export async function GET(req: NextRequest) {
   const { data: invoices } = await supabase
     .from('invoices')
     .select('invoice_number, invoice_date, sent_to_email, net_amount, tax_amount, gross_amount')
+    .eq('is_test', false)
     .neq('status', 'cancelled')
     .gte('invoice_date', from)
     .lte('invoice_date', to)

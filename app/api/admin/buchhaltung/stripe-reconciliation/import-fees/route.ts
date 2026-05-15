@@ -4,6 +4,7 @@ import { checkAdminAuth } from '@/lib/admin-auth';
 import { logAudit } from '@/lib/audit';
 import { isTestMode } from '@/lib/env-mode';
 import { getStripe } from '@/lib/stripe';
+import { getBerlinDayStartFromDateString, getBerlinDayEndFromDateString } from '@/lib/timezone';
 
 /**
  * POST /api/admin/buchhaltung/stripe-reconciliation/import-fees
@@ -30,13 +31,15 @@ export async function POST(req: NextRequest) {
   const testMode = await isTestMode();
   let imported = 0;
 
-  // Zahlungsgebühren aus stripe_transactions laden
+  // Zahlungsgebühren aus stripe_transactions laden — Berlin-TZ-bewusst
+  const fromIso = getBerlinDayStartFromDateString(from) ?? `${from}T00:00:00Z`;
+  const toIso = getBerlinDayEndFromDateString(to) ?? `${to}T23:59:59Z`;
   const { data: transactions } = await supabase
     .from('stripe_transactions')
     .select('id, stripe_payment_intent_id, stripe_charge_id, fee, stripe_created_at, booking_id, match_status')
     .gt('fee', 0)
-    .gte('stripe_created_at', `${from}T00:00:00`)
-    .lte('stripe_created_at', `${to}T23:59:59`);
+    .gte('stripe_created_at', fromIso)
+    .lte('stripe_created_at', toIso);
 
   for (const tx of transactions || []) {
     // Idempotenz: bereits importiert? → überspringen

@@ -1186,6 +1186,43 @@ Kritischer Fix: `new Date().setHours(0,0,0,0).toISOString()` verschiebt das Datu
 - **Timezone-Bug** in 3 Stellen (live/today/bookings) behoben, nutzt jetzt `getBerlinDayStartISO()`
 - **Track-Endpoint loggt DB-Fehler** (vorher silent catch) — bei fehlender Tabelle / RLS-Problem sofort in Coolify-Logs sichtbar
 
+### Buchhaltungs-Audit + Daten-/Berlin-TZ-/Race-Fixes (Stand 2026-05-15)
+Vier parallele Spezialisten-Audits (Einnahmen, Ausgaben/Belege, Anlagen/AfA/WBW, Reports/DATEV/Cockpit) auf der Buchhaltungs-Welt. 11 echte Bugs verifiziert (Zeilen-Refs gepruft, halluzinierte Findings rausgefiltert) und alle direkt gefixt.
+
+**Daten-Korrektheit (Geld-/GoBD-relevant):**
+- **KI-Vorschlag 'verbrauch' wurde verschluckt** (`lib/ai/klassifiziere-positionen.ts` definiert 5 Werte; DB-CHECK kennt nur 4) — Migration `supabase-beleg-positionen-verbrauch.sql` existiert, war aber noch nicht ausgefuehrt. Defensive Fallback-Helper `insertPositionWithVerbrauchFallback` + `updatePositionWithVerbrauchFallback` in `lib/buchhaltung/beleg-utils.ts`: bei Constraint-23514 wird auf 'ausgabe' gewechselt + Hinweis in `notes`. Eingebaut in `/api/admin/beleg-positionen` POST + PATCH. KI-Workflow blockt nicht mehr.
+- **Revenue-List-CSV-Export ohne is_test-Filter** (`buchhaltung/reports/revenue-list/export/route.ts:22`) — Test-Buchungen leakten in den Buchhaltungsbericht. `.eq('is_test', false)` ergaenzt.
+- **DATEV-Export hartcodierte Konten** (`datev-export/route.ts:38-41`: 8400/1590/3800) — Buchhalter-Kontoaenderungen unter `admin_settings.kontenrahmen_mapping` (Sweep 6) wurden ignoriert. Jetzt nutzt der Export `loadKontenrahmen()` + `accountForBestand()`. `admin_config.datev_config` (Beraternummer/Mandantennummer) hat weiterhin Vorrang.
+- **DATEV AfA-Datum Dead Code** (Z. 282 `expDate` als TT.MM+YYYY berechnet, aber Z. 289 nutzt direkt `slice(8,10)+slice(5,7)` und `void expDate` markiert es als tot) — auf konsistenten `formatDateDATEV()`-Helper umgestellt.
+- **USt-Voranmeldung im Klein-Modus erfand "negative Zahllast"** (`reports/ust-vorbereitung/route.ts`): Vorsteuer aus Lieferanten-Rechnungen wurde im Kleinunternehmer-Modus weiter abgezogen (`zahllast = 0 - vorsteuer = -X EUR` als vermeintliche Erstattung — § 19 UStG schliesst Vorsteuerabzug aus). Jetzt: harter Early-Return mit `ust19=0, vorsteuer=0, zahllast=0` + Hinweis fuer die UI. Umsatz wird weiter zur § 19-Grenzbeobachtung gezeigt.
+- **Festschreibung ohne Asset-Gen-Fehler-Notification** (`belege/[id]/festschreiben/route.ts`) — wenn `erzeugeAssetsFuerBeleg` fehlschlug, blieb `auto_gen_error` nur im Response. Jetzt zusaetzlich `payment_failed`-Admin-Notification mit Link zum Beleg, damit der Admin den Re-Generate-Button findet.
+
+**Berlin-Timezone-Sweep (11 Stellen):**
+Vorher schickten alle Reports `${from}T00:00:00` ohne TZ-Suffix an Postgres. Auf dem Hetzner-UTC-Server interpretierte die DB das als UTC-Mitternacht — eine Buchung am 01.01. 00:30 Berlin (= 31.12. 23:30 UTC) landete dann ausserhalb des Januar-Filters. Alle 11 Stellen nutzen jetzt `getBerlinDayStartFromDateString()` / `getBerlinDayEndFromDateString()`:
+  - `reports/euer/route.ts`
+  - `reports/ust-vorbereitung/route.ts`
+  - `reports/revenue-list/export/route.ts` (war is_test-Bug, plus Date-Filter wurde direkt mitgefixt)
+  - `dashboard/route.ts` (2× — current + previous Period)
+  - `period-close/route.ts`
+  - `stripe-reconciliation/route.ts` (2×)
+  - `stripe-reconciliation/export/route.ts`
+  - `stripe-reconciliation/import-fees/route.ts`
+  - `stripe-reconciliation/sync/route.ts` (Stripe-Unix-TS aus Berlin-Datum)
+  - `datev-export/route.ts`
+  - `datev-export/preview-rows/route.ts`
+
+**Race-Conditions / atomare Status-Flips:**
+- **Manuelle Mahnung-Erstellung** (`buchhaltung/dunning/route.ts`): vorher Insert → UPDATE invoice ohne Guard → eine parallel laufende `mark-paid` konnte die bezahlte Rechnung wieder auf `overdue` ziehen, plus eine Mahnung zu einer bezahlten Rechnung wurde angelegt. Jetzt: zuerst pre-Check `payment_status === 'paid'` → atomarer UPDATE mit `.eq('status', invoice.status).eq('payment_status', invoice.payment_status)` als Guard → bei Race 409, Insert nur wenn Flip erfolgreich. Bei Insert-Fehler Rollback des Status. Plus: Frist-Berechnung umgestellt auf `getBerlinDateString(now+7d)` — vorher konnte `toISOString().split('T')[0]` auf UTC-Server die Frist um 1 Tag versetzen.
+- **Cron `dunning-check`**: gleiches Pattern wie manuelle Mahnung — atomarer Status-Flip ZUERST, dann Insert, bei Insert-Fehler Rollback. Plus: Status-Filter umgestellt von `or(status.in.(open,overdue), payment_status.in.(open,overdue))` auf strikte AND-Variante (`neq('payment_status','paid').neq('status','paid').neq('status','cancelled')`), damit bezahlte Rechnungen nicht mehr in der Mahn-Schleife landen.
+
+**Filter-Defense-in-Depth:**
+- **Open-Items-Filter** (`buchhaltung/open-items/route.ts:17`) zeigte bezahlte Rechnungen, wenn `status` oder `payment_status` nicht synchron auf `'paid'` waren (manueller DB-Edit oder Race). Jetzt: AND-Filter statt OR.
+
+**Cockpit:**
+- **Monatsabschluss-Erinnerung Day-of-Month-Bug** (`cockpit/route.ts:138`): Comment sagte "nach dem 5.", Code prueft `>= 1` (immer wahr). Korrigiert auf `>= 5`. Vorher warnte das Cockpit am 02.03. zur Februar-Closure, bevor noch alle Februar-Eingangsbelege erfasst waren.
+
+**Bekannte Limitierung:** Sweep-Migration `supabase-beleg-positionen-verbrauch.sql` ist im Repo aber noch nicht ausgefuehrt — bis dahin landen 'verbrauch'-Klassifizierungen als 'ausgabe' mit Notiz im `notes`-Feld. Steuerlich identisch (beide sind Sofort-Aufwand), aber ohne Inventar-Listung. Migration soll bei naechster Sitzung mit DB-Zugang nachgeholt werden. Plus die alte `buchhaltung-neu/euer/route.ts` (Refactor-Zombie) bleibt unangetastet — wird vom UI nicht aufgerufen, kann separat aufgeraeumt werden.
+
 ### Statistik-Audit + Daten-/Filter-Fixes (Stand 2026-05-15)
 Tiefen-Audit der Statistik-Seite (`/admin/analytics` + `/api/admin/analytics`) — sechs echte Daten- und Filter-Bugs gefixt, plus Reliability:
 
@@ -1984,6 +2021,7 @@ Zusätzlich zum bestehenden file-hash-Check (byte-identische Datei) erkennt das 
 - **Einkauf-Belege-Migration auszuführen:** `supabase/supabase-purchase-attachments.sql` (idempotent). Legt Tabelle `purchase_attachments` an (id, purchase_id FK CASCADE, storage_path, filename, mime_type, size_bytes, kind `invoice|receipt|delivery_note|other`, created_at) + RLS service-role-only. Ohne Migration läuft alles weiter (defensive Fallbacks: `/api/admin/purchases` liefert leere `attachments[]`, `/api/admin/purchases/upload` Haupt-Beleg-Insert wird stumm geskippt). Anhang-Upload-Endpunkt liefert dann 500 — manueller Workflow + KI-Workflow beim ersten Beleg unverändert. Bucket `purchase-invoices` wird wiederverwendet.
 - **Zubehör-Bestandteile Migration auszuführen:** `supabase/supabase-accessories-included-parts.sql` (idempotent). Fügt nullable Spalte `included_parts TEXT[] DEFAULT '{}'` zu `accessories`. Ohne Migration ignorieren die APIs den Wert (defensiver Retry-Pfad), die Admin-UI speichert dann leer, Pack-Workflow + PDF zeigen keine Bestandteile.
 - **Buchhaltungs-Refactor Migration auszuführen:** `supabase/supabase-buchhaltung-foundation.sql` (idempotent). Fügt nullable Spalten `account_code` + `internal_beleg_no` zu invoices/expenses/credit_notes/purchases/purchase_items/assets hinzu, initialisiert `period_locks` + `kontenrahmen_mapping` Settings. Heute keine Wirkung — bereit fuer Belegjournal/Regelbesteuerung-Wechsel.
+- **Beleg-Klassifizierung 'verbrauch' Migration auszuführen:** `supabase/supabase-beleg-positionen-verbrauch.sql` (idempotent). Erweitert den CHECK-Constraint von `beleg_positionen.klassifizierung` um `'verbrauch'`. Bis Migration durch ist, mappt der Code (Sweep 2026-05-15) 'verbrauch'-Eintraege defensiv auf 'ausgabe' mit Notiz im notes-Feld — steuerlich identisch (Sofort-Aufwand), aber ohne Inventar-Listung. Nach Migration funktionieren sie nativ.
 - **Zubehör-Exemplar-Tracking Phase 3A + 3B (Migrationen auszuführen, beide idempotent):**
   1. `supabase/supabase-assets-accessory-unit-id.sql` (3A) — Spalte `assets.accessory_unit_id` mit FK auf `accessory_units(id)` + Index. Ohne Migration schlägt der „+ erfassen"-Button im AccessoryUnitsManager mit 500 fehl.
   2. `supabase/supabase-damage-reports-accessory-unit.sql` (3B) — Spalte `damage_reports.accessory_unit_id` mit FK auf `accessory_units(id)` + Index. Ohne Migration schlägt der Submit im Zubehör-Schaden-Modal mit 500 fehl.

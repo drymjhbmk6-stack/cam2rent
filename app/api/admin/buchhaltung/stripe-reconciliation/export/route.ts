@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
 import { buildCsvRow } from '@/lib/csv';
+import { getBerlinDayStartFromDateString, getBerlinDayEndFromDateString } from '@/lib/timezone';
 
 export async function GET(req: NextRequest) {
   if (!(await checkAdminAuth())) {
@@ -18,8 +19,8 @@ export async function GET(req: NextRequest) {
     .select('*')
     .order('stripe_created_at', { ascending: false });
 
-  if (from) query = query.gte('stripe_created_at', `${from}T00:00:00`);
-  if (to) query = query.lte('stripe_created_at', `${to}T23:59:59`);
+  if (from) query = query.gte('stripe_created_at', getBerlinDayStartFromDateString(from) ?? `${from}T00:00:00Z`);
+  if (to) query = query.lte('stripe_created_at', getBerlinDayEndFromDateString(to) ?? `${to}T23:59:59Z`);
 
   const { data } = await query;
 

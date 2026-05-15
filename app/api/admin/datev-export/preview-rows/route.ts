@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
+import { getBerlinDayStartFromDateString, getBerlinDayEndFromDateString } from '@/lib/timezone';
 
 export async function GET(req: NextRequest) {
   if (!(await checkAdminAuth())) {
@@ -31,12 +32,14 @@ export async function GET(req: NextRequest) {
   const { data: taxRow } = await supabase.from('admin_settings').select('value').eq('key', 'tax_mode').maybeSingle();
   const taxMode = taxRow?.value || 'kleinunternehmer';
 
+  const fromIso = getBerlinDayStartFromDateString(from) ?? `${from}T00:00:00Z`;
+  const toIso = getBerlinDayEndFromDateString(to) ?? `${to}T23:59:59Z`;
   const { data: bookings } = await supabase
     .from('bookings')
     .select('id, product_name, customer_name, price_rental, price_accessories, price_haftung, shipping_price, discount_amount, status, created_at')
     .eq('is_test', false)
-    .gte('created_at', `${from}T00:00:00`)
-    .lte('created_at', `${to}T23:59:59`)
+    .gte('created_at', fromIso)
+    .lte('created_at', toIso)
     .order('created_at', { ascending: true })
     .limit(10);
 

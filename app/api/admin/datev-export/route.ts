@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
+import { loadKontenrahmen, accountForBestand, type BestandKey } from '@/lib/accounting/kontenrahmen';
+import { getBerlinDayStartFromDateString, getBerlinDayEndFromDateString } from '@/lib/timezone';
 
 /**
  * GET /api/admin/datev-export?from=2026-01-01&to=2026-03-31
@@ -84,13 +86,18 @@ export async function GET(req: NextRequest) {
 
   const supabase = createServiceClient();
 
+  // Datumsgrenzen Berlin-TZ-bewusst — sonst rutscht 01.01. 00:30 Berlin
+  // (= 31.12. 23:30 UTC) aus dem Januar-Filter raus.
+  const fromIso = getBerlinDayStartFromDateString(from) ?? `${from}T00:00:00Z`;
+  const toIso = getBerlinDayEndFromDateString(to) ?? `${to}T23:59:59Z`;
+
   // Fetch bookings in date range — Test-Daten ausgeschlossen (GoBD)
   const { data: bookings, error: bookingsError } = await supabase
     .from('bookings')
     .select('id, product_name, customer_name, customer_email, price_total, price_rental, price_accessories, price_haftung, shipping_price, discount_amount, status, created_at')
     .eq('is_test', false)
-    .gte('created_at', `${from}T00:00:00`)
-    .lte('created_at', `${to}T23:59:59`)
+    .gte('created_at', fromIso)
+    .lte('created_at', toIso)
     .order('created_at', { ascending: true });
 
   if (bookingsError) {
@@ -106,16 +113,36 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ count: allBookings.length, revenue });
   }
 
-  // Load DATEV config
+  // Load DATEV config — admin_config.datev_config (Beraternummer/Mandantennummer/
+  // Wirtschaftsjahr) hat Vorrang. Konto-Codes werden aus dem zentralen Kontenrahmen
+  // (admin_settings.kontenrahmen_mapping) gezogen, damit der Buchhalter Konten
+  // ueber die Einstellungen-UI veraendern kann ohne Code-Deploy.
   const { data: configRow } = await supabase
     .from('admin_config')
     .select('value')
     .eq('key', 'datev_config')
     .maybeSingle();
 
-  const cfg: DatevConfig = configRow?.value
-    ? { ...DEFAULT_CONFIG, ...(configRow.value as Partial<DatevConfig>) }
-    : DEFAULT_CONFIG;
+  const adminCfg = (configRow?.value as Partial<DatevConfig>) ?? {};
+  const kontenrahmen = await loadKontenrahmen();
+
+  // Steuermodus pre-load (wird unten nochmal gelesen — hier fuer Konten-Auswahl)
+  const { data: taxModeRow } = await supabase
+    .from('admin_settings').select('value').eq('key', 'tax_mode').maybeSingle();
+  const preTaxMode = (taxModeRow?.value as 'kleinunternehmer' | 'regelbesteuerung' | undefined) ?? 'kleinunternehmer';
+  const erloesKonto = preTaxMode === 'kleinunternehmer'
+    ? kontenrahmen.erloese.mietumsatz_kleinunternehmer
+    : kontenrahmen.erloese.mietumsatz;
+
+  const cfg: DatevConfig = {
+    erloeskonto: adminCfg.erloeskonto ?? erloesKonto,
+    umsatzsteuerkonto: adminCfg.umsatzsteuerkonto ?? kontenrahmen.ust_19,
+    kautionskonto: adminCfg.kautionskonto ?? kontenrahmen.erloese.haftungsschutz,
+    versandkostenkonto: adminCfg.versandkostenkonto ?? kontenrahmen.erloese.versand_an_kunden,
+    beraternummer: adminCfg.beraternummer ?? DEFAULT_CONFIG.beraternummer,
+    mandantennummer: adminCfg.mandantennummer ?? DEFAULT_CONFIG.mandantennummer,
+    wirtschaftsjahr_beginn: adminCfg.wirtschaftsjahr_beginn ?? DEFAULT_CONFIG.wirtschaftsjahr_beginn,
+  };
 
   // Load tax settings
   const { data: taxRows } = await supabase
@@ -267,31 +294,28 @@ export async function GET(req: NextRequest) {
       .gte('expense_date', from)
       .lte('expense_date', to);
 
-    const kontenMap: Record<string, string> = {
-      rental_camera: '0420',
-      rental_accessory: '0430',
-      office_equipment: '0400',
-      tool: '0490',
-      other: '0490',
-    };
-    const afaKonto = '4830';
+    // Bestandskonten aus dem Kontenrahmen — Buchhalter kann Konten in
+    // /admin/buchhaltung Einstellungen aendern ohne Code-Deploy.
+    const afaKonto = kontenrahmen.aufwand.depreciation;
 
     for (const exp of depExpenses ?? []) {
-      const assetKind = (Array.isArray(exp.assets) ? exp.assets[0]?.kind : (exp.assets as { kind?: string } | null)?.kind) || 'other';
-      const bestandskonto = kontenMap[assetKind] ?? '0490';
-      const expDate = exp.expense_date.replace(/-/g, '').slice(4, 8) + exp.expense_date.slice(0, 4);
+      const rawKind = (Array.isArray(exp.assets) ? exp.assets[0]?.kind : (exp.assets as { kind?: string } | null)?.kind) || 'other';
+      // 'tool'/'other' aus assets.kind sind keine BestandKey-Werte — auf Default mappen.
+      const bestandKey: BestandKey = ['rental_camera','rental_accessory','office_equipment','vehicle','software_asset'].includes(rawKind)
+        ? (rawKind as BestandKey)
+        : 'office_equipment';
+      const bestandskonto = await accountForBestand(bestandKey);
       const line = buildLine(
         formatAmount(Number(exp.gross_amount)),
         'S',
         afaKonto,
         bestandskonto,
         '',
-        exp.expense_date.slice(8, 10) + exp.expense_date.slice(5, 7), // TTMM
+        formatDateDATEV(exp.expense_date),
         `AfA-${exp.id.slice(0, 6)}`,
         escapeField(exp.description || 'Abschreibung'),
       );
       lines.push(line);
-      void expDate;
     }
   } catch (err) {
     console.error('[datev-export] AfA-Abruf fehlgeschlagen', err);
