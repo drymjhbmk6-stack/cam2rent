@@ -1,20 +1,39 @@
 import Image from 'next/image';
 
 type Size = 'sm' | 'md';
+type Variant = 'color' | 'light';
 
-const SIZE_CONFIG: Record<Size, { width: number; height: number; gap: string }> = {
-  sm: { width: 56, height: 24, gap: 'gap-2' },
-  md: { width: 80, height: 32, gap: 'gap-3' },
+// Hoehen pro Variante (Breite folgt aus Aspect-Ratio des Original-Logos).
+const HEIGHT: Record<Size, number> = {
+  sm: 20,
+  md: 28,
 };
+
+// Original-Aspect-Ratios der mitgelieferten Logo-Dateien.
+const DHL_RATIO = 900 / 127.278; // ~7.07
+const DPD_RATIO = 4097 / 1822;   // ~2.25
 
 interface Props {
   size?: Size;
+  variant?: Variant;
   label?: string;
   className?: string;
 }
 
-export default function ShippingLogos({ size = 'md', label, className = '' }: Props) {
-  const { width, height, gap } = SIZE_CONFIG[size];
+export default function ShippingLogos({
+  size = 'md',
+  variant = 'color',
+  label,
+  className = '',
+}: Props) {
+  const h = HEIGHT[size];
+  const dhlW = Math.round(h * DHL_RATIO);
+  const dpdW = Math.round(h * DPD_RATIO);
+  const gap = size === 'sm' ? 'gap-3' : 'gap-4';
+
+  const dhlSrc = variant === 'light' ? '/logos/shipping/dhl-white.svg' : '/logos/shipping/dhl.svg';
+  const dpdSrc = variant === 'light' ? '/logos/shipping/dpd-white.png' : '/logos/shipping/dpd.png';
+
   return (
     <div className={`flex items-center ${gap} ${className}`}>
       {label && (
@@ -23,22 +42,22 @@ export default function ShippingLogos({ size = 'md', label, className = '' }: Pr
         </span>
       )}
       <Image
-        src="/logos/shipping/dhl.svg"
+        src={dhlSrc}
         alt="DHL Versandpartner"
-        width={width}
-        height={height}
-        className="h-auto w-auto"
-        style={{ height: `${height}px`, width: 'auto' }}
+        width={dhlW}
+        height={h}
+        style={{ height: `${h}px`, width: `${dhlW}px` }}
         unoptimized
+        priority={false}
       />
       <Image
-        src="/logos/shipping/dpd.svg"
+        src={dpdSrc}
         alt="DPD Versandpartner"
-        width={width}
-        height={height}
-        className="h-auto w-auto"
-        style={{ height: `${height}px`, width: 'auto' }}
+        width={dpdW}
+        height={h}
+        style={{ height: `${h}px`, width: `${dpdW}px` }}
         unoptimized
+        priority={false}
       />
     </div>
   );

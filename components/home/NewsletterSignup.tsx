@@ -46,7 +46,7 @@ export default function NewsletterSignup() {
         <span className="inline-block text-xs font-heading font-bold uppercase tracking-wide bg-white/10 backdrop-blur px-3 py-1 rounded-full mb-4">
           📬 Newsletter
         </span>
-        <h2 className="font-heading font-bold text-2xl sm:text-3xl mb-3">
+        <h2 className="font-heading font-bold text-2xl sm:text-3xl mb-3 text-white">
           Sei zuerst dabei
         </h2>
         <p className="font-body text-sm sm:text-base text-white/80 max-w-xl mx-auto mb-7">

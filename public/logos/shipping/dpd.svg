@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 40" role="img" aria-label="DPD">
-  <rect width="100" height="40" rx="4" fill="#DC0032"/>
-  <g font-family="Helvetica, Arial, sans-serif" font-weight="700">
-    <text x="50" y="27" font-size="20" text-anchor="middle" fill="#FFFFFF" letter-spacing="1">DPD</text>
-    <circle cx="14" cy="20" r="2.5" fill="#FFFFFF"/>
-    <circle cx="86" cy="20" r="2.5" fill="#FFFFFF"/>
-  </g>
-</svg>

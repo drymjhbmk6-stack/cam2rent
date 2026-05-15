@@ -994,6 +994,20 @@ Neues Logo-Paket mit Kamera-Icon + blauem Farbverlauf (Primary #3B82F6, Dark #1E
   - Slate 900 `#0F172A` (Text, Objektiv)
   - Slate 50 `#F8FAFC` (Text auf Dark, Hintergrund)
 
+### Versandpartner-Logos (Stand 2026-05-15)
+Originale DHL- und DPD-Logos statt der bisherigen Fake-Pillen (gelb/rot mit Textbuchstaben).
+- **Quelle:** `public/logos/shipping/DHL_Logo_2025-V1-0/Screen/` (offizielles DHL-Paket: BF/rgb/black/white-Varianten als SVG+PNG+PDF) + `public/logos/shipping/DPD_logo_{redgrad,redwhite,black,white}_rgb.png`
+- **In der App verbaut:**
+  - `public/logos/shipping/dhl.svg` (= DHL_Logo_rgb.svg, rot, 900×127, Aspect ~7:1)
+  - `public/logos/shipping/dpd.png` (= DPD_logo_redgrad_rgb.png, roter Wuerfel + "dpd", 4097×1822, Aspect ~2.25:1)
+  - `public/logos/shipping/dhl-white.svg` + `dpd-white.png` (weisse Varianten fuer dunkle Hintergruende)
+- **Komponente:** `components/ShippingLogos.tsx` mit Props `size: 'sm'|'md'` (Hoehe 20px/28px, Breite folgt aus Aspect-Ratio) + `variant: 'color'|'light'`. Default: `md` + `color`.
+- **Eingesetzt in:** `components/home/HowItWorks.tsx` (size=sm, color — heller Hintergrund), `components/home/TrustBanner.tsx` (size=md, light — dunkler Hintergrund), `components/layout/Footer.tsx` (size=sm, light — dunkler Hintergrund).
+- **Fix mit-gemacht:** Footer-Pillen + alte `dhl.svg`/`dpd.svg` (gelbe Box mit "DHL"-Text bzw. rote Box mit "DPD"-Text) durch die echten Logos abgeloest.
+
+### Newsletter-H2 (Stand 2026-05-15)
+`components/home/NewsletterSignup.tsx` — die `<h2>Sei zuerst dabei</h2>` erbte `color: #1a1a1a` aus dem globalen `app/globals.css`-h1-h6-Selector. Auf dem dunklen Newsletter-Gradient (slate-900/blue-950) war der Titel kaum lesbar. Fix: explizit `text-white` an die H2 gehaengt. Die `.dark`-Override in globals.css greift hier nicht, weil die Section selbst keinen Dark-Mode-Kontext setzt.
+
 ### next/image
 - ProductCard + ProductImageGallery nutzen `next/image` (WebP, Lazy Loading)
 - `next.config.ts`: Supabase + cam2rent.de Domains für Bilder erlaubt

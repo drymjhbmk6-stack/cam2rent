@@ -77,7 +77,7 @@ export default function TrustBanner() {
             >
               {item.icon === 'shipping' ? (
                 <div className="h-12 flex items-center justify-center">
-                  <ShippingLogos size="md" />
+                  <ShippingLogos size="md" variant="light" />
                 </div>
               ) : (
                 <div className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center text-cyan-400">

@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { BUSINESS } from '@/lib/business-config';
 import ThemeToggle from '@/components/ThemeToggle';
+import ShippingLogos from '@/components/ShippingLogos';
 
 const shopLinks = [
   { href: '/kameras', label: 'Alle Kameras' },
@@ -221,14 +222,7 @@ export default function Footer() {
 
             {/* Versand */}
             <p className="text-xs font-body text-brand-muted mb-3 mt-5 uppercase tracking-wider">Versand</p>
-            <div className="flex items-center gap-2">
-              <div className="bg-[#ffcc00] rounded px-2 py-1">
-                <span className="text-[10px] font-bold text-[#d40511] font-body">DHL</span>
-              </div>
-              <div className="bg-[#dc0032] rounded px-2 py-1">
-                <span className="text-[10px] font-bold text-white font-body">DPD</span>
-              </div>
-            </div>
+            <ShippingLogos size="sm" variant="light" />
           </div>
         </div>
 
