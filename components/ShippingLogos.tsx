@@ -28,13 +28,9 @@ export default function ShippingLogos({
   label,
   className = '',
 }: Props) {
-  // DHL BF-Box hat oben/unten Padding um das eigentliche Logo herum,
-  // DPD nutzt die volle Hoehe — ohne Korrektur wirkt DPD deutlich kleiner.
-  // Faktor 1.35 gleicht die optische Hoehe an.
   const h = HEIGHT[size];
-  const dpdH = Math.round(h * 1.35);
   const dhlW = Math.round(h * DHL_RATIO);
-  const dpdW = Math.round(dpdH * DPD_RATIO);
+  const dpdW = Math.round(h * DPD_RATIO);
   const gap = size === 'sm' ? 'gap-3' : 'gap-4';
 
   const dhlSrc = variant === 'light' ? '/logos/shipping/dhl-white.svg' : '/logos/shipping/dhl.svg';
@@ -60,8 +56,8 @@ export default function ShippingLogos({
         src={dpdSrc}
         alt="DPD Versandpartner"
         width={dpdW}
-        height={dpdH}
-        style={{ height: `${dpdH}px`, width: `${dpdW}px` }}
+        height={h}
+        style={{ height: `${h}px`, width: `${dpdW}px` }}
         unoptimized
         priority={false}
       />
