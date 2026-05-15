@@ -10,7 +10,9 @@ const HEIGHT: Record<Size, number> = {
 };
 
 // Original-Aspect-Ratios der mitgelieferten Logo-Dateien.
-const DHL_RATIO = 900 / 127.278; // ~7.07
+// DHL nutzt die BF-Variante (Brand Frame, gelbe Box) — dadurch ueberall
+// als DHL erkennbar, auch auf dunklem Hintergrund.
+const DHL_RATIO = 900 / 299;     // ~3.01
 const DPD_RATIO = 4097 / 1822;   // ~2.25
 
 interface Props {
