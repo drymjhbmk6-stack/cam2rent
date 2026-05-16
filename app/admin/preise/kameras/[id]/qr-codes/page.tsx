@@ -64,14 +64,21 @@ export default async function KameraQrCodesPage({
     }));
   }
 
-  // QR-Inhalt = vollstaendige Scan-URL ueber die Bezeichnung (label).
-  // Beim Scannen oeffnet der Browser /admin/scan/<bezeichnung> und zeigt die
-  // Detail-Ansicht. Wenn label nicht gesetzt, faellt's auf die Seriennummer
-  // zurueck — die scan-Page akzeptiert beide.
+  // QR-Inhalt = vollstaendige Scan-URL ueber einen MASCHINEN-SAUBEREN Code.
+  // Wichtig: NICHT die Bezeichnung (label) nehmen, wenn sie Leerzeichen
+  // enthaelt — bei neue-Welt-Kameras ist label = inventar_units.bezeichnung
+  // (z.B. "DJI Action 5 Pro"). Ein Leerzeichen im QR fuehrt zu
+  // /admin/scan/DJI%20Action%205%20Pro; der Pack-/Uebergabe-Scanner
+  // normalisiert den Code (Whitespace raus) und findet ihn dann nicht mehr.
+  // Der Zubehoer-Generator macht es genauso (inventar_code zuerst). Regel:
+  // label nur verwenden, wenn es KEIN Whitespace enthaelt, sonst die
+  // (saubere) serial_number = seriennummer ?? inventar_code. Die scan-Page
+  // und scan-lookup akzeptieren label UND serial_number.
   const siteUrl = (await getSiteUrl()).replace(/\/+$/, '');
   const qrItems = await Promise.all(
     units.map(async (u) => {
-      const code = u.label && u.label.trim() ? u.label.trim() : u.serial_number;
+      const labelTrim = u.label && u.label.trim() ? u.label.trim() : '';
+      const code = labelTrim && !/\s/.test(labelTrim) ? labelTrim : u.serial_number;
       return {
         ...u,
         qr: await QRCode.toDataURL(`${siteUrl}/admin/scan/${encodeURIComponent(code)}`, {
