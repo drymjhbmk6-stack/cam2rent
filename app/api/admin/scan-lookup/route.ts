@@ -27,7 +27,15 @@ import { rateLimit, getClientIp } from '@/lib/rate-limit';
  * Response (kind='unknown'): { kind: 'unknown' }
  */
 
-const limiter = rateLimit({ maxAttempts: 60, windowMs: 60 * 1000 });
+// Interaktiver Pack-/Uebergabe-Scanner: der Continuous-Scanner re-detektiert
+// denselben QR alle 1.5s + jeder Kamera-Scan erzwingt einen Server-Call
+// (Zubehoer matcht oft lokal, Kamera nie). Eine normale Mehr-Item-Session
+// macht damit leicht > 60 Lookups/min — 60 war zu eng (False-Trip → HTTP 429
+// → Client zeigt "unbekannt"). Anti-Abuse bleibt: 240/min kann ein Mensch
+// am Scanner nicht sinnvoll ueberschreiten. Key = eingeloggter Admin statt
+// IP, weil hinter Cloudflare alle Admins dieselbe cf-connecting-ip teilen
+// und sich sonst gegenseitig aus dem Budget draengen.
+const limiter = rateLimit({ maxAttempts: 240, windowMs: 60 * 1000 });
 
 function normalizeCode(s: string): string {
   let v = s.trim();
@@ -72,7 +80,8 @@ export async function POST(req: NextRequest) {
   if (!user) {
     return NextResponse.json({ error: 'Nicht autorisiert.' }, { status: 401 });
   }
-  if (!limiter.check(getClientIp(req)).success) {
+  const rlKey = `scanlookup:${user.id || getClientIp(req)}`;
+  if (!limiter.check(rlKey).success) {
     return NextResponse.json({ error: 'Zu viele Anfragen.' }, { status: 429 });
   }
 

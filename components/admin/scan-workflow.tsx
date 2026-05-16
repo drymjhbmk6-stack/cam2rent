@@ -277,10 +277,15 @@ export async function applyScan(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ code, rawCode, bookingId }),
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) {
+      if (res.status === 429) {
+        return { ok: false, message: 'Zu viele Scans hintereinander — kurz warten und erneut scannen.' };
+      }
+      return { ok: false, message: `Scan-Server-Fehler (HTTP ${res.status}) bei „${rawCode}".` };
+    }
     info = await res.json();
   } catch {
-    return { ok: false, message: `Code ${rawCode} unbekannt.` };
+    return { ok: false, message: `Netzwerkfehler beim Scan von „${rawCode}".` };
   }
 
   if (info.kind === 'unknown') {
