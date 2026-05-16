@@ -137,12 +137,24 @@ export async function POST(req: NextRequest) {
   // ueber migration_audit zur Legacy-Welt zurueck — sonst zeigen wir die
   // Inventar-IDs, die fuer Booking-Overlay nicht passen.
   if (!cameraUnit) {
-    const { data: invUnit } = await supabase
+    // KEIN harter .eq('typ','kamera')-Filter: die Browser-Aufloesung in
+    // /admin/scan/[code] filtert ebenfalls nicht nach typ und funktioniert
+    // genau deshalb fuer neue-Welt-Kameras. Wenn typ fehlerhaft/leer/anders
+    // als exakt 'kamera' gesetzt ist, wuerde der Scan sonst "unbekannt"
+    // liefern, obwohl der QR im Browser sauber auf die Kamera aufloest.
+    // Wir holen die Inventar-Zeile typ-agnostisch und behandeln nur explizit
+    // als Zubehoer/Verbrauch markierte Stuecke NICHT als Kamera (die faengt
+    // dann der Zubehoer-Zweig weiter unten ab).
+    const { data: invUnitRaw } = await supabase
       .from('inventar_units')
       .select('id, produkt_id, seriennummer, inventar_code, bezeichnung, status, typ')
       .or(`seriennummer.ilike.${code},inventar_code.ilike.${code},bezeichnung.ilike.${code}`)
-      .eq('typ', 'kamera')
       .maybeSingle();
+    const invUnit = invUnitRaw
+      && (invUnitRaw as { typ: string | null }).typ !== 'zubehoer'
+      && (invUnitRaw as { typ: string | null }).typ !== 'verbrauch'
+      ? invUnitRaw
+      : null;
     if (invUnit) {
       const inv = invUnit as { id: string; produkt_id: string | null; seriennummer: string | null; inventar_code: string | null; bezeichnung: string; status: string };
       // legacy product_units.id ueber migration_audit suchen
