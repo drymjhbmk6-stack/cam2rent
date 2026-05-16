@@ -9,6 +9,7 @@ import { resolveProdukteId, loadInventarUnitsForProdukt } from '@/lib/legacy-bri
 interface DisplayUnit {
   id: string;
   serial_number: string;
+  inventar_code: string;
   label: string;
   notes: string | null;
 }
@@ -43,6 +44,7 @@ export default async function KameraQrCodesPage({
     units = inventarUnits.map((u) => ({
       id: u.id,
       serial_number: u.serial_number,
+      inventar_code: u.inventar_code || '',
       label: u.label || u.serial_number,
       notes: u.notes,
     }));
@@ -59,28 +61,40 @@ export default async function KameraQrCodesPage({
     units = ((legacy ?? []) as Array<{ id: string; serial_number: string; label: string | null; notes: string | null }>).map((u) => ({
       id: u.id,
       serial_number: u.serial_number,
+      inventar_code: '',
       label: u.label || u.serial_number,
       notes: u.notes,
     }));
   }
 
   // QR-Inhalt = vollstaendige Scan-URL ueber einen MASCHINEN-SAUBEREN Code.
-  // Wichtig: NICHT die Bezeichnung (label) nehmen, wenn sie Leerzeichen
-  // enthaelt — bei neue-Welt-Kameras ist label = inventar_units.bezeichnung
-  // (z.B. "DJI Action 5 Pro"). Ein Leerzeichen im QR fuehrt zu
-  // /admin/scan/DJI%20Action%205%20Pro; der Pack-/Uebergabe-Scanner
-  // normalisiert den Code (Whitespace raus) und findet ihn dann nicht mehr.
-  // Der Zubehoer-Generator macht es genauso (inventar_code zuerst). Regel:
-  // label nur verwenden, wenn es KEIN Whitespace enthaelt, sonst die
-  // (saubere) serial_number = seriennummer ?? inventar_code. Die scan-Page
-  // und scan-lookup akzeptieren label UND serial_number.
+  // IDENTISCHE Prioritaet wie der Zubehoer-Generator (inventar_code zuerst),
+  // damit Kamera- und Zubehoer-Etiketten konsistent den kanonischen
+  // inventar_code (z.B. "CAM-GPR-H13B-01") tragen — NICHT die GoPro-/DJI-
+  // Hardware-Seriennummer und NICHT die Bezeichnung mit Leerzeichen.
+  // Reihenfolge:
+  //   1) inventar_code (kanonischer Maschinen-Code, per Konvention clean)
+  //   2) serial_number, falls gesetzt UND ohne Whitespace
+  //   3) label, falls ohne Whitespace
+  //   4) Fallback serial_number (besser ein Code als gar keiner)
+  // scan-Page UND scan-lookup matchen inventar_code, seriennummer UND
+  // bezeichnung — alle vier Faelle loesen also sauber auf.
+  const pickCode = (u: DisplayUnit): string => {
+    const inv = u.inventar_code?.trim();
+    if (inv && !/\s/.test(inv)) return inv;
+    const sn = u.serial_number?.trim();
+    if (sn && !/\s/.test(sn)) return sn;
+    const lbl = u.label?.trim();
+    if (lbl && !/\s/.test(lbl)) return lbl;
+    return (sn || lbl || '').trim();
+  };
   const siteUrl = (await getSiteUrl()).replace(/\/+$/, '');
   const qrItems = await Promise.all(
     units.map(async (u) => {
-      const labelTrim = u.label && u.label.trim() ? u.label.trim() : '';
-      const code = labelTrim && !/\s/.test(labelTrim) ? labelTrim : u.serial_number;
+      const code = pickCode(u);
       return {
         ...u,
+        code,
         qr: await QRCode.toDataURL(`${siteUrl}/admin/scan/${encodeURIComponent(code)}`, {
           margin: 1,
           width: 360,
@@ -156,13 +170,13 @@ export default async function KameraQrCodesPage({
                 style={{ pageBreakInside: 'avoid' }}
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={u.qr} alt={u.serial_number} className="w-full max-w-[160px] aspect-square" />
+                <img src={u.qr} alt={u.code} className="w-full max-w-[160px] aspect-square" />
                 <div className="text-center mt-2 w-full px-1 overflow-hidden">
-                  <p className="text-base font-mono font-bold text-black break-all leading-tight">{u.serial_number}</p>
+                  <p className="text-base font-mono font-bold text-black break-all leading-tight">{u.code}</p>
                   <p className="text-xs text-gray-700 mt-1 truncate">{productLabel}</p>
                 </div>
                 <div className="w-full mt-2 print:hidden">
-                  <QrDownloadButton dataUrl={u.qr} filename={u.serial_number} />
+                  <QrDownloadButton dataUrl={u.qr} filename={u.code} />
                 </div>
               </div>
             ))}
