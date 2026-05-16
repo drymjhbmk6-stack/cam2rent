@@ -4,16 +4,22 @@ import { useEffect, useMemo, useRef, useState, use } from 'react';
 import Link from 'next/link';
 import SignatureCanvas from 'react-signature-canvas';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import SerialScanner from '@/components/admin/SerialScanner';
+import {
+  expandItems,
+  groupItems,
+  buildScanLookup,
+  applyScan,
+  ItemList,
+  ScannerBar,
+  ScannerLiveList,
+  type ResolvedItem,
+  type UnitCode,
+  type GroupedItem,
+  type ScanFeedback,
+} from '@/components/admin/scan-workflow';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
-
-interface ResolvedItem {
-  id: string;
-  name: string;
-  qty: number;
-  isFromSet?: boolean;
-  setName?: string;
-}
 
 interface BookingDetail {
   id: string;
@@ -24,8 +30,23 @@ interface BookingDetail {
   rental_to: string;
   delivery_mode: string;
   serial_number?: string | null;
+  unit_id?: string | null;
   resolved_items?: ResolvedItem[];
+  unit_codes?: UnitCode[];
   shipping_address?: string | null;
+}
+
+function bookingToScanInput(b: BookingDetail) {
+  return {
+    productName: b.product_name,
+    serialNumber: b.serial_number ?? null,
+    resolvedItems: b.resolved_items,
+    unitCodes: b.unit_codes,
+    unitId: b.unit_id ?? null,
+    // Bei Übergabe (Abholung) gibt es kein Rücksendeetikett — der Scanner-
+    // Fortschritt soll nur die physisch übergebenen Stücke zählen.
+    skipReturnLabel: true,
+  };
 }
 
 interface HandoverData {
@@ -41,22 +62,6 @@ interface HandoverData {
 }
 
 type Step = 'condition' | 'landlord' | 'renter' | 'done';
-
-// Items expandieren — analog zum Pack-Workflow, eine Zeile pro Stück
-function expandItems(b: BookingDetail): { key: string; label: string; subLabel: string }[] {
-  const out: { key: string; label: string; subLabel: string }[] = [];
-  out.push({ key: 'camera', label: b.product_name, subLabel: b.serial_number ? `Seriennummer: ${b.serial_number}` : 'Kamera' });
-  for (const it of b.resolved_items ?? []) {
-    for (let i = 0; i < it.qty; i++) {
-      out.push({
-        key: `${it.id}::${i}`,
-        label: it.name,
-        subLabel: it.isFromSet && it.setName ? `Im Set: ${it.setName}` : 'Zubehör',
-      });
-    }
-  }
-  return out;
-}
 
 export default function UebergabePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -92,7 +97,10 @@ export default function UebergabePage({ params }: { params: Promise<{ id: string
 }
 
 function Wizard({ booking }: { booking: BookingDetail }) {
-  const items = useMemo(() => expandItems(booking), [booking]);
+  const scanInput = useMemo(() => bookingToScanInput(booking), [booking]);
+  const items = useMemo(() => expandItems(scanInput), [scanInput]);
+  const groups = useMemo(() => groupItems(items), [items]);
+  const scanLookup = useMemo(() => buildScanLookup(scanInput), [scanInput]);
   const [step, setStep] = useState<Step>('condition');
 
   // Step 1 state
@@ -102,11 +110,16 @@ function Wizard({ booking }: { booking: BookingDetail }) {
   const [otherNote, setOtherNote] = useState('');
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
-  const [itemChecks, setItemChecks] = useState<Record<string, boolean>>(() => {
-    const init: Record<string, boolean> = {};
-    for (const it of items) init[it.key] = false;
-    return init;
-  });
+  const [checked, setChecked] = useState<Record<string, boolean>>({});
+
+  // Scanner-State (analog zum Versand-Pack-Workflow)
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [scanFeedback, setScanFeedback] = useState<ScanFeedback>(null);
+  // Welche physischen Units in dieser Scan-Session schon erfasst wurden —
+  // verhindert Doppel-Scans desselben Stücks. Wird nicht ans Backend
+  // geschickt (Übergabe speichert nur Name + ok pro Position).
+  const [scannedCameraUnitId, setScannedCameraUnitId] = useState<string | null>(null);
+  const [scannedAccessoryUnitIds, setScannedAccessoryUnitIds] = useState<string[]>([]);
 
   // Step 2 + 3 state
   const [landlordName, setLandlordName] = useState('');
@@ -117,7 +130,65 @@ function Wizard({ booking }: { booking: BookingDetail }) {
   const [saving, setSaving] = useState(false);
   const [submitError, setSubmitError] = useState('');
 
-  const allItemsChecked = items.every((it) => itemChecks[it.key]);
+  const totalPackable = useMemo(
+    () => items.filter((it) => it.type !== 'return-label').length,
+    [items],
+  );
+  const checkedPackable = useMemo(
+    () => items.filter((it) => it.type !== 'return-label' && checked[it.key]).length,
+    [items, checked],
+  );
+
+  function incGroup(g: GroupedItem) {
+    const next = g.slotKeys.find((k) => !checked[k]);
+    if (next) setChecked((p) => ({ ...p, [next]: true }));
+  }
+  function decGroup(g: GroupedItem) {
+    for (let i = g.slotKeys.length - 1; i >= 0; i--) {
+      if (checked[g.slotKeys[i]]) {
+        const k = g.slotKeys[i];
+        setChecked((p) => ({ ...p, [k]: false }));
+        return;
+      }
+    }
+  }
+
+  async function handleScan(code: string) {
+    const scannedSet = new Set([
+      ...(scannedCameraUnitId ? [scannedCameraUnitId] : []),
+      ...scannedAccessoryUnitIds,
+    ]);
+    const result = await applyScan(code, booking.id, items, checked, scanLookup, scannedSet);
+    if (result.ok && result.key) {
+      setChecked((p) => ({ ...p, [result.key!]: true }));
+      if (result.scannedUnitId) {
+        if (result.scannedKind === 'camera') {
+          setScannedCameraUnitId(result.scannedUnitId);
+        } else if (result.scannedKind === 'accessory') {
+          setScannedAccessoryUnitIds((p) =>
+            p.includes(result.scannedUnitId!) ? p : [...p, result.scannedUnitId!]);
+        }
+      }
+      setScanFeedback({ type: 'ok', msg: result.message, parts: result.includedParts });
+    } else if (result.alreadyChecked) {
+      setScanFeedback({ type: 'warn', msg: result.message });
+    } else {
+      setScanFeedback({ type: 'err', msg: result.message });
+    }
+    const dur = result.includedParts && result.includedParts.length > 0 ? 6000 : 3500;
+    window.setTimeout(() => setScanFeedback(null), dur);
+  }
+
+  // Scanner automatisch schließen, sobald alle scanbaren Stücke abgehakt sind.
+  useEffect(() => {
+    if (!scannerOpen) return;
+    if (totalPackable > 0 && checkedPackable >= totalPackable) {
+      const t = window.setTimeout(() => setScannerOpen(false), 800);
+      return () => window.clearTimeout(t);
+    }
+  }, [scannerOpen, checkedPackable, totalPackable]);
+
+  const allItemsChecked = items.every((it) => checked[it.key]);
   const canProceedFromStep1 = allItemsChecked && location.trim().length > 0 && tested && noDamage && !!photoFile;
 
   // Vermieter-Name aus admin/me vorausfüllen
@@ -138,7 +209,9 @@ function Wizard({ booking }: { booking: BookingDetail }) {
     setSaving(true);
     setSubmitError('');
     try {
-      const itemsArray = items.map((it) => ({ name: it.label, ok: !!itemChecks[it.key] }));
+      const itemsArray = items
+        .filter((it) => it.type !== 'return-label')
+        .map((it) => ({ name: it.label, ok: !!checked[it.key] }));
       const formData = new FormData();
       formData.append('photo', photoFile);
       formData.append('data', JSON.stringify({
@@ -185,7 +258,11 @@ function Wizard({ booking }: { booking: BookingDetail }) {
 
         {step === 'condition' && (
           <Step1 {...{
-            items, itemChecks, setItemChecks,
+            bookingId: booking.id,
+            groups, checked, incGroup, decGroup,
+            scannerOpen, setScannerOpen,
+            scanFeedback, handleScan,
+            totalPackable, checkedPackable,
             location, setLocation,
             tested, setTested, noDamage, setNoDamage,
             photoFile, setPhotoFile, photoPreview, setPhotoPreview,
@@ -287,9 +364,17 @@ function BookingInfo({ booking }: { booking: BookingDetail }) {
 // ─── Step 1: Zustand + Items ─────────────────────────────────────────────────
 
 function Step1(props: {
-  items: { key: string; label: string; subLabel: string }[];
-  itemChecks: Record<string, boolean>;
-  setItemChecks: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+  bookingId: string;
+  groups: GroupedItem[];
+  checked: Record<string, boolean>;
+  incGroup: (g: GroupedItem) => void;
+  decGroup: (g: GroupedItem) => void;
+  scannerOpen: boolean;
+  setScannerOpen: (v: boolean) => void;
+  scanFeedback: ScanFeedback;
+  handleScan: (code: string) => void;
+  totalPackable: number;
+  checkedPackable: number;
   location: string;
   setLocation: (v: string) => void;
   tested: boolean;
@@ -305,8 +390,6 @@ function Step1(props: {
   canProceed: boolean;
   onNext: () => void;
 }) {
-  const toggle = (key: string) => props.setItemChecks((prev) => ({ ...prev, [key]: !prev[key] }));
-
   function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     if (!f) return;
@@ -333,25 +416,39 @@ function Step1(props: {
         />
       </div>
 
-      {/* Item-Checkliste */}
+      {/* Item-Checkliste + Scanner */}
       <div className="mb-5">
         <p className="text-xs uppercase tracking-wider text-slate-500 mb-2">Übergebene Gegenstände *</p>
-        <div className="space-y-2">
-          {props.items.map((it) => (
-            <label key={it.key} className="flex items-start gap-3 p-3 rounded-lg bg-slate-950 border border-slate-800 cursor-pointer hover:border-slate-700 transition-colors">
-              <input
-                type="checkbox"
-                checked={!!props.itemChecks[it.key]}
-                onChange={() => toggle(it.key)}
-                className="mt-0.5 w-5 h-5 accent-cyan-500"
-              />
-              <div className="flex-1 min-w-0">
-                <div className="font-medium text-sm">{it.label}</div>
-                <div className="text-xs text-slate-500">{it.subLabel}</div>
-              </div>
-            </label>
-          ))}
-        </div>
+
+        <ScannerBar
+          onOpen={() => props.setScannerOpen(true)}
+          feedback={props.scanFeedback}
+          totalCount={props.totalPackable}
+          checkedCount={props.checkedPackable}
+        />
+
+        <ItemList
+          groups={props.groups}
+          checked={props.checked}
+          onIncrement={props.incGroup}
+          onDecrement={props.decGroup}
+        />
+
+        <SerialScanner
+          open={props.scannerOpen}
+          onResult={props.handleScan}
+          onClose={() => props.setScannerOpen(false)}
+          title={`Übergabe · ${props.checkedPackable}/${props.totalPackable}`}
+          continuous
+        >
+          <ScannerLiveList
+            groups={props.groups}
+            checked={props.checked}
+            feedback={props.scanFeedback}
+            onIncrement={props.incGroup}
+            onDecrement={props.decGroup}
+          />
+        </SerialScanner>
       </div>
 
       {/* Zustand-Checkboxen */}

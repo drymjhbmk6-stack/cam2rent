@@ -492,6 +492,9 @@ Manche Zubehöre bestehen physisch aus mehreren Teilen (z.B. Funkmikrofon-Set: 2
 - Übergabeprotokoll: Vermieter/Mieter nebeneinander, Checkboxen kompakt
 - Packliste: Info-Blöcke nebeneinander, Zustand+Verpackung zusammengefasst
 
+### Übergabeprotokoll-Wizard mit Scanner (Stand 2026-05-16)
+Die digitale Übergabe-Seite `/admin/buchungen/[id]/uebergabe` (4-Schritt-Wizard: Zustand → Vermieter → Mieter → Fertig) nutzt in Schritt 1 jetzt denselben Scanner-Workflow wie das Versand-Packen. Statt der reinen Checkbox-Liste: `<ScannerBar>` + `<ItemList>` (gruppiert, Mengen-Counter) + `<SerialScanner continuous>` + `<ScannerLiveList>` aus `components/admin/scan-workflow.tsx`. Kamera-Seriennummer / Zubehör-Exemplar-Code wird gescannt → Slot automatisch abgehakt, Toast-Feedback (grün/amber/rot), Auto-Close wenn alle scanbaren Stücke erfasst sind, Substitution erlaubt (analog Pack-Schritt 1). `bookingToScanInput()` setzt `skipReturnLabel: true` (Abholung → kein Rücksendeetikett). Die Übergabe-API speichert unverändert nur `items: [{name, ok}]` — die gescannten Unit-IDs werden nur clientseitig zur Doppel-Scan-Vermeidung gehalten, nicht ans Backend geschickt. Manuelles Abhaken per Klick auf die Item-Zeile bleibt parallel möglich.
+
 ### Digitales Pack-Workflow (Versand) mit 4-Augen-Prinzip (Stand 2026-04-24)
 3-Schritt-Flow auf `/admin/versand/[id]/packen`: Packer haakt jedes Item digital ab + unterschreibt → Kontrolleur (zweite Person, hart erzwungen!) prüft + macht Foto + unterschreibt → System generiert Packlisten-PDF mit beiden Signaturen.
 
