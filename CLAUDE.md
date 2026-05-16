@@ -497,6 +497,10 @@ Die digitale Übergabe-Seite `/admin/buchungen/[id]/uebergabe` (4-Schritt-Wizard
 
 **Scanned-Units-Persistierung (Stand 2026-05-16):** Die Übergabe sendet jetzt — wie der Versand-Pack-Flow — die tatsächlich gescannten Unit-IDs (`scannedUnits: {cameraUnitId, accessoryUnitIds}`) im `data`-JSON ans Backend. `POST /api/admin/handover/[bookingId]` ruft `applyScannedUnits()` aus `lib/scan-substitutions.ts` auf, bevor `handover_data` geschrieben wird (reihenfolge-egal, idempotent, best-effort). Damit wird bei Abholung `bookings.unit_id` / `bookings.accessory_unit_ids` auf das tatsächlich übergebene physische Exemplar umgeschrieben (inkl. Substitution) — relevant für die exemplar-genaue Schadensabwicklung. `handover_data` selbst speichert weiterhin nur `items: [{name, ok}]`; die Unit-IDs landen ausschließlich über `applyScannedUnits` in den Buchungs-Spalten.
 
+**Scan-Match-Fixes (Stand 2026-05-16):** Zwei Bugs, die dazu führten, dass der Pack-/Übergabe-Scanner Codes als „unbekannt" abwies, obwohl sie im System sind:
+1. **cam2rent-QR ist eine URL:** Die Inventar-Etiketten (`/admin/preise/kameras/[id]/qr-codes` + `/admin/zubehoer/[id]/qr-codes`) kodieren `https://cam2rent.de/admin/scan/<code>`, kein nacktes Kürzel. `normalizeCode()` in `components/admin/scan-workflow.tsx` UND in `app/api/admin/scan-lookup/route.ts` zieht jetzt per Regex `/\/admin\/scan\/([^/?#]+)/` den `<code>`-Teil raus (URL-decoded), bevor normalisiert wird.
+2. **Lookup ignorierte `label`:** Der QR wird bevorzugt aus `product_units.label` erzeugt (Fallback `serial_number`), und `/admin/scan/[code]` löst auch zuerst über `label` auf. `scan-lookup` matchte aber nur `serial_number`. Jetzt: `.or(serial_number.ilike.<code>,label.ilike.<code>)`, `serial_number`-Rückgabe fällt auf `label` zurück. Gilt für Pack- UND Übergabe-Scanner (gemeinsame Lib).
+
 ### Digitales Pack-Workflow (Versand) mit 4-Augen-Prinzip (Stand 2026-04-24)
 3-Schritt-Flow auf `/admin/versand/[id]/packen`: Packer haakt jedes Item digital ab + unterschreibt → Kontrolleur (zweite Person, hart erzwungen!) prüft + macht Foto + unterschreibt → System generiert Packlisten-PDF mit beiden Signaturen.
 

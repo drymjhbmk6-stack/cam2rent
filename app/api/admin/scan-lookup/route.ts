@@ -30,9 +30,20 @@ import { rateLimit, getClientIp } from '@/lib/rate-limit';
 const limiter = rateLimit({ maxAttempts: 60, windowMs: 60 * 1000 });
 
 function normalizeCode(s: string): string {
+  let v = s.trim();
+  // cam2rent-QR enthaelt eine Info-URL .../admin/scan/<code> — den nackten
+  // Code rausziehen, sonst matcht der Lookup nie.
+  const m = v.match(/\/admin\/scan\/([^/?#]+)/i);
+  if (m) {
+    try {
+      v = decodeURIComponent(m[1]);
+    } catch {
+      v = m[1];
+    }
+  }
   // Sweep 9 H4: zusaetzlich PostgREST-Spezialzeichen `,()\` ausstreichen,
   // damit kein .or()-Filter-Bypass moeglich ist.
-  return s
+  return v
     .trim()
     .toUpperCase()
     .replace(/\s+/g, '')
@@ -98,14 +109,28 @@ export async function POST(req: NextRequest) {
   // Kamera-Seriennummern sind nicht garantiert komplett unique systemweit
   // (theoretisch koennte eine Hero11- und eine Hero13-Charge dieselbe Endung
   // teilen), deshalb maybeSingle + casefold gegen die Spalte mit ilike.
+  // Match gegen serial_number ODER label — der cam2rent-QR wird aus `label`
+  // erzeugt (Fallback serial_number) und die Info-Seite /admin/scan/[code]
+  // loest auch zuerst ueber label auf. Ohne den label-Zweig schlaegt der
+  // Pack-/Uebergabe-Scan fehl, wenn die Kennung im label-Feld steht.
   let cameraUnit: { id: string; product_id: string; serial_number: string; status: string } | null = null;
   {
     const { data } = await supabase
       .from('product_units')
-      .select('id, product_id, serial_number, status')
-      .ilike('serial_number', code)
+      .select('id, product_id, serial_number, label, status')
+      .or(`serial_number.ilike.${code},label.ilike.${code}`)
+      .limit(1)
       .maybeSingle();
-    cameraUnit = data as typeof cameraUnit;
+    cameraUnit = data
+      ? {
+          id: (data as { id: string }).id,
+          product_id: (data as { product_id: string }).product_id,
+          serial_number: (data as { serial_number: string | null; label: string | null }).serial_number
+            ?? (data as { label: string | null }).label
+            ?? code,
+          status: (data as { status: string }).status,
+        }
+      : null;
   }
 
   // Fallback: inventar_units (neue Welt). Wenn dort gefunden, mappen wir

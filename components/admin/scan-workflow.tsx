@@ -108,7 +108,20 @@ interface ServerScanLookup {
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 export function normalizeCode(s: string): string {
-  return s.trim().toUpperCase().replace(/\s+/g, '');
+  let v = s.trim();
+  // Der cam2rent-QR auf den Inventar-Etiketten enthaelt KEINEN nackten Code,
+  // sondern eine Info-URL: https://cam2rent.de/admin/scan/<code>. Wenn so ein
+  // Link gescannt wird, ziehen wir den <code>-Teil raus (URL-decoded), sonst
+  // wuerde der Match gegen Seriennummer/Exemplar-Code immer fehlschlagen.
+  const m = v.match(/\/admin\/scan\/([^/?#]+)/i);
+  if (m) {
+    try {
+      v = decodeURIComponent(m[1]);
+    } catch {
+      v = m[1];
+    }
+  }
+  return v.trim().toUpperCase().replace(/\s+/g, '');
 }
 
 export function expandItems(b: ScanWorkflowInput): PackItem[] {
