@@ -4,6 +4,7 @@ import { createServiceClient } from '@/lib/supabase';
 import { logAudit } from '@/lib/audit';
 import { detectImageType, isAllowedImage } from '@/lib/file-type-check';
 import { getClientIp } from '@/lib/rate-limit';
+import { applyScannedUnits, parseScannedUnits } from '@/lib/scan-substitutions';
 
 const MAX_PHOTO_SIZE = 10 * 1024 * 1024; // 10 MB
 
@@ -74,6 +75,11 @@ export async function POST(
       landlord?: { dataUrl?: string; name?: string };
       renter?: { dataUrl?: string; name?: string };
     };
+    // Tatsaechlich gescannte Unit-IDs aus dem Scanner-Workflow (Kamera +
+    // Zubehoer-Exemplare, inkl. Substitute). Analog zum Versand-Pack-Flow:
+    // applyScannedUnits() tauscht die Buchungs-Zuordnung aus, damit das
+    // Schadens-Tracking auf das tatsaechlich uebergebene Stueck zeigt.
+    scannedUnits?: unknown;
   };
   try {
     body = JSON.parse(dataJson);
@@ -94,6 +100,12 @@ export async function POST(
   }
 
   const supabase = createServiceClient();
+
+  // Gescannte Units anwenden (Substitution bei Abholung) — reihenfolge-egal,
+  // idempotent, best-effort. Muss vor dem handover_data-Write laufen, damit
+  // accessory_unit_ids / unit_id mit dem uebereinstimmen, was wirklich
+  // uebergeben wurde.
+  await applyScannedUnits(supabase, bookingId, parseScannedUnits(body.scannedUnits));
 
   // Foto pruefen + hochladen
   const photoBuffer = Buffer.from(await photo.arrayBuffer());

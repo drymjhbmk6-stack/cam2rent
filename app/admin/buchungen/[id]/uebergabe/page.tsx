@@ -222,6 +222,10 @@ function Wizard({ booking }: { booking: BookingDetail }) {
           landlord: { dataUrl: landlordSig, name: landlordName.trim() },
           renter: { dataUrl: renterSig, name: renterName.trim() },
         },
+        scannedUnits: {
+          cameraUnitId: scannedCameraUnitId,
+          accessoryUnitIds: scannedAccessoryUnitIds,
+        },
       }));
 
       const res = await fetch(`/api/admin/handover/${booking.id}`, {
