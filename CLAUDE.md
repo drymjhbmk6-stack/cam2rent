@@ -1906,6 +1906,7 @@ Vorbild: `/admin/social/zeitplan` (Posts) + `/admin/social/plan` (Bulk-Generator
 - **`supabase-migrationen-status-check.sql`** — Read-only SQL-Script im Repo-Root. Listet je Migration "ERLEDIGT" oder "OFFEN". Nach jedem Deploy neuer Migrationen einfach nochmal laufen lassen und erledigte manuell nach `erledigte supabase/` verschieben.
 
 ### Ausgeführte Migrationen (erledigt)
+- ~~`supabase-bookings-wbw-finalized.sql`~~ (WBW-Finalisierung + PDF-E-Mail — am 2026-05-16 ausgeführt, Datei nach `erledigte supabase/` verschoben)
 - ~~Google Reviews: Places API (New) eingebunden~~
 - ~~`supabase-zubehoer-verfuegbarkeit.sql`~~
 - ~~`supabase-widerruf-consent.sql`~~ (§ 356 Abs. 4 BGB Consent)
@@ -2031,7 +2032,6 @@ Zusätzlich zum bestehenden file-hash-Check (byte-identische Datei) erkennt das 
 **Audit-Aktionen:** `beleg.dismiss_duplicate`, `beleg.scan_duplicates`. `beleg.ocr` enthält jetzt `duplicate_kind: 'strict'|'soft'|null` in changes.
 
 ### Noch offen
-- **WBW-Finalisierung-Migration auszuführen:** `supabase/supabase-bookings-wbw-finalized.sql` (idempotent). Legt `bookings.wbw_final`/`wbw_finalized`/`wbw_finalized_at`/`wbw_email_sent_at` an. Ohne Migration zeigt das Panel „nicht finalisiert", der Finalisieren-Call liefert 503 (defensiver Guard). Nach Migration funktioniert die WBW-Finalisierung + PDF-E-Mail. Storage nutzt den bestehenden `contracts`-Bucket (kein neuer Bucket noetig).
 - **Haftungs-Box-Override-Migration auszuführen:** `supabase/supabase-bookings-liability-override.sql` (idempotent). Legt Spalte `bookings.liability_override JSONB` an. Ohne Migration laufen GET (Anzeige) + Status-/E-Mail-PATCHs per defensivem Retry weiter; reine „Speichern"-Klicks im Haftungs-Box-Editor liefern dann 503. Nach Migration funktioniert die manuelle Kamera-/Zubehoer-Anpassung der internen Box.
 - **Buchungsnummer-Counter-Migration auszuführen:** `supabase/supabase-booking-id-counter.sql` (idempotent). Legt Tabelle `booking_id_counter` + RPC `next_booking_counter` an, seedet aus existierenden `bookings.id`-Suffixen. Ohne Migration läuft `generateBookingId()` über den Fallback (COUNT-Kandidat + SELECT-Verifikation gegen `bookings.id` mit Suffix-Increment-Loop) — sequenziell sicher, aber NICHT parallel-sicher. Mit Migration zusätzlich parallel-sicher via atomarem `INSERT ON CONFLICT`. Empfohlen ASAP ausführen.
 - **Belege-Duplikat-Migration auszuführen:** `supabase/supabase-belege-content-dedup.sql` (idempotent). Drei neue Spalten auf `belege`. Ohne Migration laufen OCR/Anlage/PATCH per defensivem Retry weiter (Verdacht-Flag wird einfach nicht persistiert), Dismiss-Endpoint liefert 503, Festschreiben blockt nichts. Nach Migration sofort einmal „🔍 Duplikate scannen" auf `/admin/buchhaltung/belege` klicken — markiert die bereits eingebuchten Duplikate.
