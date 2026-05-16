@@ -20,6 +20,27 @@ function sanitizeIncludedParts(input: unknown): string[] {
   return cleaned;
 }
 
+// Bilder per Index zu included_parts. Erwartet ein bereits ausgerichtetes
+// Array (Client filtert leere Bestandteil-Zeilen paarweise raus). Jede
+// Position: gueltige http(s)-URL oder '' (kein Bild). Auf parts-Laenge
+// geklemmt, damit kein Index-Versatz entsteht.
+function sanitizeIncludedPartsImages(input: unknown, partsCount: number): string[] {
+  if (!Array.isArray(input) || partsCount <= 0) return [];
+  const out: string[] = [];
+  for (const raw of input) {
+    let v = '';
+    if (typeof raw === 'string') {
+      const t = raw.trim().slice(0, 500);
+      if (/^https?:\/\//i.test(t)) v = t;
+    }
+    out.push(v);
+    if (out.length >= 30) break;
+  }
+  const aligned = out.slice(0, partsCount);
+  while (aligned.length < partsCount) aligned.push('');
+  return aligned;
+}
+
 /**
  * GET  /api/admin/accessories     → alle Zubehörteile
  * POST /api/admin/accessories     → neues Zubehörteil anlegen
@@ -37,7 +58,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { name, category, description, pricing_mode, price, available_qty, available, image_url, compatible_product_ids, internal, upgrade_group, is_upgrade_base, allow_multi_qty, max_qty_per_booking, replacement_value, is_bulk, specs, included_parts } = body;
+  const { name, category, description, pricing_mode, price, available_qty, available, image_url, compatible_product_ids, internal, upgrade_group, is_upgrade_base, allow_multi_qty, max_qty_per_booking, replacement_value, is_bulk, specs, included_parts, included_parts_images } = body;
 
   if (!name || !category) {
     return NextResponse.json({ error: 'name und category erforderlich.' }, { status: 400 });
@@ -94,6 +115,12 @@ export async function POST(req: NextRequest) {
   const insertPayload: Record<string, unknown> = { id, name, category, description: description ?? null, pricing_mode: pricing_mode ?? 'perDay', price: parseFloat(price) || 0, available_qty: parseInt(available_qty) || 1, available: available ?? true, image_url: image_url ?? null, sort_order, compatible_product_ids: compatible_product_ids ?? [], internal: internal ?? false, upgrade_group: upgrade_group || null, is_upgrade_base: is_upgrade_base ?? false, allow_multi_qty: allow_multi_qty ?? false, max_qty_per_booking: maxQty, replacement_value: replacementValue, is_bulk: is_bulk ?? false };
   if (specs !== undefined) insertPayload.specs = sanitizeSpecs(specs);
   if (included_parts !== undefined) insertPayload.included_parts = sanitizeIncludedParts(included_parts);
+  if (included_parts_images !== undefined) {
+    insertPayload.included_parts_images = sanitizeIncludedPartsImages(
+      included_parts_images,
+      ((insertPayload.included_parts as string[] | undefined) ?? sanitizeIncludedParts(included_parts)).length,
+    );
+  }
 
   let { data, error } = await supabase
     .from('accessories')
@@ -113,8 +140,17 @@ export async function POST(req: NextRequest) {
     error = retry.error;
   }
 
+  if (error && /column .*included_parts_images/i.test(error.message) && 'included_parts_images' in insertPayload) {
+    delete insertPayload.included_parts_images;
+    warnings.push('Bestandteil-Bilder konnten nicht gespeichert werden — Migration `supabase-accessories-included-parts-images.sql` fehlt in der Datenbank.');
+    const retry = await supabase.from('accessories').insert(insertPayload).select().single();
+    data = retry.data;
+    error = retry.error;
+  }
+
   if (error && /column .*included_parts/i.test(error.message) && 'included_parts' in insertPayload) {
     delete insertPayload.included_parts;
+    delete insertPayload.included_parts_images;
     warnings.push('Bestandteile konnten nicht gespeichert werden — Migration `supabase-accessories-included-parts.sql` fehlt in der Datenbank.');
     const retry = await supabase.from('accessories').insert(insertPayload).select().single();
     data = retry.data;

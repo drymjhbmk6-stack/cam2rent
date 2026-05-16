@@ -17,6 +17,26 @@ function sanitizeIncludedParts(input: unknown): string[] {
   return cleaned;
 }
 
+// Bilder per Index zu included_parts (siehe POST-Route). Client liefert ein
+// bereits paarweise gefiltertes Array; hier nur validieren + auf parts-
+// Laenge klemmen.
+function sanitizeIncludedPartsImages(input: unknown, partsCount: number): string[] {
+  if (!Array.isArray(input) || partsCount <= 0) return [];
+  const out: string[] = [];
+  for (const raw of input) {
+    let v = '';
+    if (typeof raw === 'string') {
+      const t = raw.trim().slice(0, 500);
+      if (/^https?:\/\//i.test(t)) v = t;
+    }
+    out.push(v);
+    if (out.length >= 30) break;
+  }
+  const aligned = out.slice(0, partsCount);
+  while (aligned.length < partsCount) aligned.push('');
+  return aligned;
+}
+
 /**
  * PUT    /api/admin/accessories/[id]  → Zubehörteil aktualisieren
  * DELETE /api/admin/accessories/[id]  → Zubehörteil löschen
@@ -143,6 +163,12 @@ export async function PUT(
   };
   if (body.specs !== undefined) updatePayload.specs = sanitizeSpecs(body.specs);
   if (body.included_parts !== undefined) updatePayload.included_parts = sanitizeIncludedParts(body.included_parts);
+  if (body.included_parts_images !== undefined) {
+    updatePayload.included_parts_images = sanitizeIncludedPartsImages(
+      body.included_parts_images,
+      ((updatePayload.included_parts as string[] | undefined) ?? sanitizeIncludedParts(body.included_parts)).length,
+    );
+  }
 
   let { error } = await supabase
     .from('accessories')
@@ -161,10 +187,20 @@ export async function PUT(
     error = retry.error;
   }
 
+  // Defensiv: included_parts_images-Spalte fehlt (Migration
+  // `supabase-accessories-included-parts-images.sql` nicht durch).
+  if (error && /column .*included_parts_images/i.test(error.message) && 'included_parts_images' in updatePayload) {
+    delete updatePayload.included_parts_images;
+    warnings.push('Bestandteil-Bilder konnten nicht gespeichert werden — Migration `supabase-accessories-included-parts-images.sql` fehlt in der Datenbank.');
+    const retry = await supabase.from('accessories').update(updatePayload).eq('id', effectiveId);
+    error = retry.error;
+  }
+
   // Gleiches Defensiv-Muster fuer included_parts (Migration
   // `supabase-accessories-included-parts.sql`).
   if (error && /column .*included_parts/i.test(error.message) && 'included_parts' in updatePayload) {
     delete updatePayload.included_parts;
+    delete updatePayload.included_parts_images;
     warnings.push('Bestandteile konnten nicht gespeichert werden — Migration `supabase-accessories-included-parts.sql` fehlt in der Datenbank.');
     const retry = await supabase.from('accessories').update(updatePayload).eq('id', effectiveId);
     error = retry.error;

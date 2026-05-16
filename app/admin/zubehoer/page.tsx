@@ -43,6 +43,8 @@ interface Accessory {
   // Bestandteile dieses Zubehoers (z.B. "2x Sender", "1x Windschutz") —
   // reine Anzeige fuer Pack-Workflow + Packliste, kein eigenes Inventar.
   included_parts?: string[] | null;
+  // Optionales Referenzbild pro Bestandteil, per Index zu included_parts.
+  included_parts_images?: string[] | null;
 }
 
 const CATEGORIES = ['Akku', 'Speicher', 'Halterung', 'Schutz', 'Audio', 'Stativ', 'Sonstiges'];
@@ -68,7 +70,24 @@ function emptyForm() {
     is_bulk: false,
     specs: {} as Record<string, string>, // Form-State: Strings, beim Submit zu AccessorySpecs konvertiert
     included_parts: [] as string[],
+    included_parts_images: [] as string[],
   };
+}
+
+// Baut aus parts+images paarweise ausgerichtete Arrays, verwirft Zeilen
+// ohne Text (Bild wandert dann mit raus → kein Index-Versatz).
+function buildIncludedPartsPayload(parts: unknown, images: unknown) {
+  const p = Array.isArray(parts) ? parts : [];
+  const im = Array.isArray(images) ? images : [];
+  const outParts: string[] = [];
+  const outImages: string[] = [];
+  p.forEach((part, i) => {
+    if (typeof part === 'string' && part.trim().length > 0) {
+      outParts.push(part.trim());
+      outImages.push(typeof im[i] === 'string' ? (im[i] as string) : '');
+    }
+  });
+  return { included_parts: outParts, included_parts_images: outImages };
 }
 
 function specsToFormState(specs: AccessorySpecs | null | undefined): Record<string, string> {
@@ -151,9 +170,7 @@ export default function AdminZubehoerPage() {
           description: newForm.description || null,
           image_url: newForm.image_url || null,
           specs: formStateToSpecs(newForm.specs),
-          included_parts: Array.isArray(newForm.included_parts)
-            ? newForm.included_parts.filter((p) => typeof p === 'string' && p.trim().length > 0)
-            : [],
+          ...buildIncludedPartsPayload(newForm.included_parts, newForm.included_parts_images),
         }),
       });
       if (!res.ok) {
@@ -200,6 +217,9 @@ export default function AdminZubehoerPage() {
       is_bulk: acc.is_bulk ?? false,
       specs: specsToFormState(acc.specs ?? null) as unknown as AccessorySpecs,
       included_parts: Array.isArray(acc.included_parts) ? [...acc.included_parts] : [],
+      included_parts_images: Array.isArray(acc.included_parts_images)
+        ? [...acc.included_parts_images]
+        : [],
     });
   }
 
@@ -248,9 +268,7 @@ export default function AdminZubehoerPage() {
           image_url: editForm.image_url || null,
           new_id: newId,
           specs: formStateToSpecs(editForm.specs as unknown as Record<string, string>),
-          included_parts: Array.isArray(editForm.included_parts)
-            ? (editForm.included_parts as string[]).filter((p) => typeof p === 'string' && p.trim().length > 0)
-            : [],
+          ...buildIncludedPartsPayload(editForm.included_parts, editForm.included_parts_images),
         }),
       });
       if (!res.ok) {
@@ -385,7 +403,8 @@ export default function AdminZubehoerPage() {
               {/* Bestandteile (z.B. Funkmikrofon-Set) */}
               <IncludedPartsEditor
                 value={newForm.included_parts}
-                onChange={(parts) => setNewForm((f) => ({ ...f, included_parts: parts }))}
+                images={newForm.included_parts_images}
+                onChange={(parts, images) => setNewForm((f) => ({ ...f, included_parts: parts, included_parts_images: images }))}
               />
               {/* Kategorie-spezifische Spezifikationen */}
               <SpecFields
@@ -584,16 +603,15 @@ export default function AdminZubehoerPage() {
                       <tr className="bg-brand-bg border-b border-brand-border text-left">
                         <th className="px-4 py-3 font-heading font-semibold text-[11px] uppercase tracking-wider text-brand-muted w-[88px]">Bild</th>
                         <th className="px-4 py-3 font-heading font-semibold text-[11px] uppercase tracking-wider text-brand-muted">Name</th>
-                        <th className="px-4 py-3 font-heading font-semibold text-[11px] uppercase tracking-wider text-brand-muted hidden md:table-cell">Kategorie</th>
                         <th className="px-4 py-3 font-heading font-semibold text-[11px] uppercase tracking-wider text-brand-muted text-right whitespace-nowrap">Preis</th>
-                        <th className="px-4 py-3 font-heading font-semibold text-[11px] uppercase tracking-wider text-brand-muted hidden lg:table-cell">Kompatibilität</th>
+                        <th className="px-4 py-3 font-heading font-semibold text-[11px] uppercase tracking-wider text-brand-muted hidden md:table-cell">Kompatible Kameras</th>
                         <th className="px-4 py-3 font-heading font-semibold text-[11px] uppercase tracking-wider text-brand-muted text-right">Aktionen</th>
                       </tr>
                     </thead>
                     <tbody>
                       {visible.length === 0 ? (
                         <tr>
-                          <td colSpan={6} className="px-4 py-12 text-center text-brand-muted font-body text-sm">
+                          <td colSpan={5} className="px-4 py-12 text-center text-brand-muted font-body text-sm">
                             {isInternal ? 'Kein internes Zubehör. Erstelle welches mit „Nur intern".' : 'Kein buchbares Zubehör.'}
                           </td>
                         </tr>
@@ -601,7 +619,7 @@ export default function AdminZubehoerPage() {
                         groups.map(({ category, items }) => (
                           <React.Fragment key={category}>
                             <tr className="bg-brand-bg/50 border-b border-brand-border">
-                              <td colSpan={6} className="px-4 py-2 text-[11px] font-heading font-bold uppercase tracking-wider text-brand-steel">
+                              <td colSpan={5} className="px-4 py-2 text-[11px] font-heading font-bold uppercase tracking-wider text-brand-steel">
                                 {category} <span className="text-brand-muted font-body normal-case tracking-normal ml-1">({items.length})</span>
                               </td>
                             </tr>
@@ -711,11 +729,9 @@ function AccessoryRow({ acc, isOpen, isInternal, savedId, deletingId, productLis
               <span className="text-[10px] font-body text-green-600">✓ Gespeichert</span>
             )}
           </div>
-          {/* Mobile-only: Kategorie + Kompat unter Name (md+ haben eigene Spalten) */}
+          {/* Mobile-only: Kompatible Kameras unter Name (Kategorie steht im
+              Gruppen-Header; md+ hat eigene Spalte) */}
           <div className="md:hidden flex flex-wrap gap-1 mt-1">
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-heading font-semibold bg-brand-bg text-brand-steel">
-              {acc.category}
-            </span>
             {(acc.compatible_product_ids?.length ?? 0) > 0 ? (
               acc.compatible_product_ids.map((pid) => {
                 const p = productList.find((pr) => pr.id === pid);
@@ -734,21 +750,14 @@ function AccessoryRow({ acc, isOpen, isInternal, savedId, deletingId, productLis
         </div>
       </td>
 
-      {/* Kategorie */}
-      <td className="px-4 py-3 align-top hidden md:table-cell">
-        <span className="px-2 py-0.5 rounded-full text-[10px] font-heading font-semibold bg-brand-bg text-brand-steel">
-          {acc.category}
-        </span>
-      </td>
-
       {/* Preis */}
       <td className="px-4 py-3 align-top text-right whitespace-nowrap tabular-nums">
         <div className="text-sm font-heading font-semibold text-brand-black">{fmtEuro(acc.price)}</div>
         <div className="text-[10px] font-body text-brand-muted">{acc.pricing_mode === 'perDay' ? '/Tag' : 'einmalig'}</div>
       </td>
 
-      {/* Kompatibilität */}
-      <td className="px-4 py-3 align-top hidden lg:table-cell">
+      {/* Kompatible Kameras */}
+      <td className="px-4 py-3 align-top hidden md:table-cell">
         {(acc.compatible_product_ids?.length ?? 0) > 0 ? (
           <div className="flex flex-wrap gap-1">
             {acc.compatible_product_ids.map((pid) => {
@@ -798,7 +807,7 @@ function AccessoryEditRow({ acc, editForm, setEditForm, savingId, productList, o
 }) {
   return (
     <tr className="bg-brand-bg/50 border-b border-brand-border">
-      <td colSpan={6} className="px-5 py-5">
+      <td colSpan={5} className="px-5 py-5">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Name</label>
@@ -826,7 +835,9 @@ function AccessoryEditRow({ acc, editForm, setEditForm, savingId, productList, o
                       {/* Bestandteile (z.B. Funkmikrofon-Set) */}
                       <IncludedPartsEditor
                         value={Array.isArray(editForm.included_parts) ? editForm.included_parts : []}
-                        onChange={(parts) => setEditForm((f) => ({ ...f, included_parts: parts }))}
+                        images={Array.isArray(editForm.included_parts_images) ? editForm.included_parts_images : []}
+                        accessoryId={acc.id}
+                        onChange={(parts, images) => setEditForm((f) => ({ ...f, included_parts: parts, included_parts_images: images }))}
                       />
                       {/* Kategorie-spezifische Spezifikationen */}
                       <SpecFields
@@ -1072,30 +1083,90 @@ function AccessoryEditRow({ acc, editForm, setEditForm, savingId, productList, o
 
 function IncludedPartsEditor({
   value,
+  images,
+  accessoryId,
   onChange,
 }: {
   value: string[];
-  onChange: (next: string[]) => void;
+  images?: string[];
+  accessoryId?: string;
+  onChange: (parts: string[], images: string[]) => void;
 }) {
   const items = Array.isArray(value) ? value : [];
+  // Bilder immer parallel zur parts-Laenge halten (kein Index-Versatz).
+  const imgs = items.map((_, i) => (Array.isArray(images) && typeof images[i] === 'string' ? images[i] : ''));
 
+  const fileRef = React.useRef<HTMLInputElement>(null);
+  const pendingIdx = React.useRef<number | null>(null);
+  const [uploadingIdx, setUploadingIdx] = useState<number | null>(null);
+  const [zoom, setZoom] = useState<string | null>(null);
+
+  function emit(nextParts: string[], nextImgs: string[]) {
+    onChange(nextParts, nextImgs);
+  }
   function update(idx: number, next: string) {
-    const arr = [...items];
-    arr[idx] = next;
-    onChange(arr);
+    const p = [...items]; p[idx] = next;
+    emit(p, [...imgs]);
   }
   function removeAt(idx: number) {
-    onChange(items.filter((_, i) => i !== idx));
+    emit(items.filter((_, i) => i !== idx), imgs.filter((_, i) => i !== idx));
   }
   function add() {
     if (items.length >= 30) return;
-    onChange([...items, '']);
+    emit([...items, ''], [...imgs, '']);
   }
   function moveUp(idx: number) {
     if (idx === 0) return;
-    const arr = [...items];
-    [arr[idx - 1], arr[idx]] = [arr[idx], arr[idx - 1]];
-    onChange(arr);
+    const p = [...items]; const im = [...imgs];
+    [p[idx - 1], p[idx]] = [p[idx], p[idx - 1]];
+    [im[idx - 1], im[idx]] = [im[idx], im[idx - 1]];
+    emit(p, im);
+  }
+  function setImage(idx: number, url: string) {
+    const im = [...imgs]; im[idx] = url;
+    emit([...items], im);
+  }
+  async function removeImage(idx: number) {
+    const url = imgs[idx];
+    setImage(idx, '');
+    // Storage-Datei best-effort aufraeumen (Pfad aus der public URL ableiten).
+    if (accessoryId && url) {
+      const m = url.match(/\/accessories\/[^/]+\/parts\/[^/?#]+/);
+      if (m) {
+        const path = m[0].replace(/^\//, '');
+        fetch('/api/admin/accessory-part-images', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path, accessoryId }),
+        }).catch(() => { /* egal */ });
+      }
+    }
+  }
+  function triggerUpload(idx: number) {
+    pendingIdx.current = idx;
+    fileRef.current?.click();
+  }
+  async function onFilePicked(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    const idx = pendingIdx.current;
+    e.target.value = '';
+    pendingIdx.current = null;
+    if (!file || idx == null || !accessoryId) return;
+    setUploadingIdx(idx);
+    try {
+      const fd = new FormData();
+      fd.append('accessoryId', accessoryId);
+      fd.append('file', file);
+      const res = await fetch('/api/admin/accessory-part-images', { method: 'POST', body: fd });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok || !d.url) {
+        alert(d.error || 'Bild-Upload fehlgeschlagen.');
+        return;
+      }
+      setImage(idx, d.url as string);
+    } finally {
+      setUploadingIdx(null);
+    }
   }
 
   return (
@@ -1113,6 +1184,13 @@ function IncludedPartsEditor({
           Keine Bestandteile hinterlegt.
         </p>
       )}
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        className="hidden"
+        onChange={onFilePicked}
+      />
       <div className="space-y-1.5">
         {items.map((line, idx) => (
           <div key={idx} className="flex items-center gap-2">
@@ -1125,6 +1203,44 @@ function IncludedPartsEditor({
               maxLength={120}
               className="flex-1 px-3 py-1.5 border border-brand-border rounded-[8px] text-sm font-body bg-white focus:outline-none focus:ring-2 focus:ring-accent-blue"
             />
+            {/* Bild-Slot: Thumbnail (klickbar → gross) oder Hochladen-Button */}
+            {imgs[idx] ? (
+              <div className="relative shrink-0">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={imgs[idx]}
+                  alt={line || `Bestandteil ${idx + 1}`}
+                  onClick={() => setZoom(imgs[idx])}
+                  className="w-9 h-9 object-cover rounded-[6px] border border-brand-border cursor-zoom-in"
+                />
+                <button
+                  type="button"
+                  onClick={() => removeImage(idx)}
+                  aria-label="Bild entfernen"
+                  className="absolute -top-1.5 -right-1.5 w-4 h-4 flex items-center justify-center rounded-full bg-red-600 text-white text-[9px] leading-none"
+                >
+                  ✕
+                </button>
+              </div>
+            ) : accessoryId ? (
+              <button
+                type="button"
+                onClick={() => triggerUpload(idx)}
+                disabled={uploadingIdx === idx}
+                aria-label="Bild hinzufügen"
+                title="Bild hinzufügen"
+                className="shrink-0 w-9 h-9 flex items-center justify-center text-xs text-brand-muted border border-dashed border-brand-border rounded-[6px] hover:bg-white disabled:opacity-40"
+              >
+                {uploadingIdx === idx ? '…' : '📷'}
+              </button>
+            ) : (
+              <span
+                title="Bild nach dem Speichern hinzufügen"
+                className="shrink-0 w-9 h-9 flex items-center justify-center text-[9px] text-center text-brand-muted border border-dashed border-brand-border rounded-[6px] opacity-50"
+              >
+                Bild
+              </span>
+            )}
             {items.length > 1 && (
               <button
                 type="button"
@@ -1155,6 +1271,22 @@ function IncludedPartsEditor({
       >
         + Bestandteil hinzufügen
       </button>
+
+      {zoom && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4"
+          onClick={() => setZoom(null)}
+          role="dialog"
+          aria-label="Bild gross"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={zoom}
+            alt="Bestandteil gross"
+            className="max-w-full max-h-full object-contain rounded-[8px]"
+          />
+        </div>
+      )}
     </div>
   );
 }
