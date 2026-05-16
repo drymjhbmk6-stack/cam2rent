@@ -778,13 +778,13 @@ function AccessoryRow({ acc, isOpen, isInternal, savedId, deletingId, productLis
 
       {/* Aktionen */}
       <td className="px-4 py-3 align-top text-right whitespace-nowrap">
-        <div className="inline-flex items-center gap-1">
+        <div className="inline-flex items-center gap-1.5">
           <button onClick={() => isOpen ? onCloseEdit(acc.id) : onStartEdit(acc)}
-            className="px-3 py-1.5 text-xs font-heading font-semibold text-brand-black border border-brand-border rounded-lg hover:bg-white transition-colors">
+            className="px-3 py-1.5 text-xs font-heading font-semibold rounded-lg border border-accent-blue/40 text-accent-blue hover:bg-accent-blue hover:text-white transition-colors">
             {isOpen ? 'Schliessen' : 'Bearbeiten'}
           </button>
           <button onClick={() => onDelete(acc.id, acc.name)} disabled={deletingId === acc.id}
-            className="px-2.5 py-1.5 text-xs font-heading font-semibold text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-40"
+            className="px-2.5 py-1.5 text-xs font-heading font-semibold rounded-lg border border-red-400/50 text-red-500 hover:bg-red-500 hover:text-white transition-colors disabled:opacity-40"
             title="Löschen">
             {deletingId === acc.id ? '…' : '✕'}
           </button>
