@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { logAudit } from '@/lib/audit';
 import { sanitizeSpecs } from '@/lib/accessory-specs';
+import { lookupProdukteId } from '@/lib/legacy-bridge';
 
 // Bestandteile-Liste auf saubere String-Eintraege normalisieren — gleiche
 // Regeln wie im POST-Pfad (siehe ../route.ts).
@@ -207,6 +208,38 @@ export async function PUT(
   }
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Namen in die neue Welt (produkte + inventar_units) nachziehen.
+  // Best-effort, non-blocking — der Accessory-Save ist bereits erfolgreich.
+  // Referenz ist der AKTUELLE produkte.name (nicht der vorige accessories-
+  // Name): so wird auch bereits gedrifteter Bestand beim naechsten Speichern
+  // geheilt, nicht nur kuenftige Umbenennungen. Konservativ: inventar_units
+  // nur dort umbenennen, wo die bezeichnung noch dem alten produkte.name
+  // entspricht (manuell vergebene Unit-Bezeichnungen bleiben unberuehrt).
+  const newName = typeof body.name === 'string' ? body.name.trim() : null;
+  if (newName) {
+    try {
+      const produkteId = await lookupProdukteId(supabase, 'accessories', effectiveId);
+      if (produkteId) {
+        const { data: prod } = await supabase
+          .from('produkte')
+          .select('name')
+          .eq('id', produkteId)
+          .maybeSingle();
+        const oldName = (prod as { name?: string } | null)?.name ?? null;
+        if (oldName && oldName !== newName) {
+          await supabase
+            .from('inventar_units')
+            .update({ bezeichnung: newName })
+            .eq('produkt_id', produkteId)
+            .eq('bezeichnung', oldName);
+          await supabase.from('produkte').update({ name: newName }).eq('id', produkteId);
+        }
+      }
+    } catch (err) {
+      console.error('[accessories PUT] Namens-Propagation fehlgeschlagen:', err);
+    }
+  }
 
   await logAudit({
     action: newId ? 'accessory.rename' : 'accessory.update',
