@@ -51,6 +51,22 @@ function normalizeCode(s: string): string {
     .slice(0, 100);
 }
 
+// Mirror von /admin/scan/[code]: nur URL-Segment + decode + trim, Case und
+// Sonderzeichen bleiben erhalten. Fuer exakte .eq()-Lookups gegen die
+// neue-Welt-Inventar-Spalten.
+function extractRawScanCode(s: string): string {
+  let v = s.trim();
+  const m = v.match(/\/admin\/scan\/([^/?#]+)/i);
+  if (m) {
+    try {
+      v = decodeURIComponent(m[1]);
+    } catch {
+      v = m[1];
+    }
+  }
+  return v.trim().slice(0, 200);
+}
+
 export async function POST(req: NextRequest) {
   const user = await getCurrentAdminUser();
   if (!user) {
@@ -64,6 +80,18 @@ export async function POST(req: NextRequest) {
   const rawCode = typeof body.code === 'string' ? body.code : '';
   const bookingId = typeof body.bookingId === 'string' ? body.bookingId : '';
   const code = normalizeCode(rawCode);
+  // looseCode spiegelt EXAKT das Verhalten der funktionierenden Browser-Seite
+  // /admin/scan/[code] (decodedCode = decodeURIComponent(seg).trim()):
+  // nur URL-Segment rausziehen + URL-decoden + trimmen, KEIN Uppercase, KEIN
+  // Whitespace-/Sonderzeichen-Strip. Neue-Welt-Inventar-Codes (bezeichnung/
+  // inventar_code/seriennummer) koennen Kleinbuchstaben/Leerzeichen/Sonder-
+  // zeichen enthalten — die aggressive normalizeCode-Normalisierung (richtig
+  // fuer hand-gescannte Seriennummern) zerstoert dann den Match, obwohl der
+  // identische QR im Browser sauber aufloest. Quelle: body.rawCode (neuer
+  // Client) mit Fallback auf body.code (alter Client → bleibt normalisiert,
+  // kein Regress fuer saubere Codes).
+  const looseSource = typeof body.rawCode === 'string' && body.rawCode ? body.rawCode : rawCode;
+  const looseCode = extractRawScanCode(looseSource);
   if (!code || !bookingId) {
     return NextResponse.json({ error: 'code + bookingId erforderlich.' }, { status: 400 });
   }
@@ -133,6 +161,37 @@ export async function POST(req: NextRequest) {
       : null;
   }
 
+  // Browser-exakter Fallback fuer product_units (Legacy-Welt): /admin/scan/
+  // [code] matcht label bzw. serial_number per .eq() auf den ROHEN Code.
+  // Wenn die Kennung Kleinbuchstaben/Leerzeichen enthielt, hat die ilike-
+  // Suche auf dem normalisierten Code oben nicht gegriffen.
+  if (!cameraUnit && looseCode) {
+    type PuRow = { id: string; product_id: string; serial_number: string | null; label: string | null; status: string };
+    let pu: PuRow | null = null;
+    const byLabel = await supabase
+      .from('product_units')
+      .select('id, product_id, serial_number, label, status')
+      .eq('label', looseCode)
+      .maybeSingle();
+    pu = (byLabel.data as PuRow | null) ?? null;
+    if (!pu) {
+      const bySerial = await supabase
+        .from('product_units')
+        .select('id, product_id, serial_number, label, status')
+        .eq('serial_number', looseCode)
+        .maybeSingle();
+      pu = (bySerial.data as PuRow | null) ?? null;
+    }
+    if (pu) {
+      cameraUnit = {
+        id: pu.id,
+        product_id: pu.product_id,
+        serial_number: pu.serial_number ?? pu.label ?? looseCode,
+        status: pu.status,
+      };
+    }
+  }
+
   // Fallback: inventar_units (neue Welt). Wenn dort gefunden, mappen wir
   // ueber migration_audit zur Legacy-Welt zurueck — sonst zeigen wir die
   // Inventar-IDs, die fuer Booking-Overlay nicht passen.
@@ -145,14 +204,32 @@ export async function POST(req: NextRequest) {
     // Wir holen die Inventar-Zeile typ-agnostisch und behandeln nur explizit
     // als Zubehoer/Verbrauch markierte Stuecke NICHT als Kamera (die faengt
     // dann der Zubehoer-Zweig weiter unten ab).
-    const { data: invUnitRaw } = await supabase
-      .from('inventar_units')
-      .select('id, produkt_id, seriennummer, inventar_code, bezeichnung, status, typ')
-      .or(`seriennummer.ilike.${code},inventar_code.ilike.${code},bezeichnung.ilike.${code}`)
-      .maybeSingle();
+    type InvRow = { id: string; produkt_id: string | null; seriennummer: string | null; inventar_code: string | null; bezeichnung: string; status: string; typ: string | null };
+    let invUnitRaw: InvRow | null = null;
+    // 1) Browser-exakt: .eq() auf den ROHEN Code pro Spalte — identisch zur
+    //    funktionierenden /admin/scan/[code]-Aufloesung (Schritt 4).
+    if (looseCode) {
+      for (const col of ['bezeichnung', 'inventar_code', 'seriennummer'] as const) {
+        const { data } = await supabase
+          .from('inventar_units')
+          .select('id, produkt_id, seriennummer, inventar_code, bezeichnung, status, typ')
+          .eq(col, looseCode)
+          .maybeSingle();
+        if (data) { invUnitRaw = data as InvRow; break; }
+      }
+    }
+    // 2) Fallback: normalisierte ilike-Suche (saubere Codes / Tippeingabe).
+    if (!invUnitRaw) {
+      const { data } = await supabase
+        .from('inventar_units')
+        .select('id, produkt_id, seriennummer, inventar_code, bezeichnung, status, typ')
+        .or(`seriennummer.ilike.${code},inventar_code.ilike.${code},bezeichnung.ilike.${code}`)
+        .maybeSingle();
+      invUnitRaw = (data as InvRow) ?? null;
+    }
     const invUnit = invUnitRaw
-      && (invUnitRaw as { typ: string | null }).typ !== 'zubehoer'
-      && (invUnitRaw as { typ: string | null }).typ !== 'verbrauch'
+      && invUnitRaw.typ !== 'zubehoer'
+      && invUnitRaw.typ !== 'verbrauch'
       ? invUnitRaw
       : null;
     if (invUnit) {

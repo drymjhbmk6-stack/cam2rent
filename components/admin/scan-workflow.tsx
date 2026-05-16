@@ -275,7 +275,7 @@ export async function applyScan(
     const res = await fetch('/api/admin/scan-lookup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code, bookingId }),
+      body: JSON.stringify({ code, rawCode, bookingId }),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     info = await res.json();
