@@ -8,6 +8,105 @@ import { DEFAULT_HAFTUNG, getEigenbeteiligung, type HaftungConfig } from '@/lib/
 import { computeReplacementValue, loadReplacementValueConfig } from '@/lib/replacement-value';
 import { getInventarWbwByLegacyUnitIds, getInventarWbwForBookingAccessories, getInventarWbwAverageByLegacyProductId } from '@/lib/inventar/wbw-bridge';
 
+type ResolvedItem = { id: string; name: string; qty: number; isFromSet?: boolean; setName?: string; included_parts?: string[] };
+
+/**
+ * Loest eine Liste { accessory_id, qty } in benannte Positionen auf.
+ * Sets werden expandiert (Container-Zeile + Sub-Items mit isFromSet).
+ * Wird sowohl fuer die echte Buchung (Packliste/Vertrag) als auch fuer
+ * die manuell ueberschriebene interne Haftungs-Box genutzt.
+ */
+async function resolveAccessoryItems(
+  supabase: ReturnType<typeof createServiceClient>,
+  rawItems: { accessory_id: string; qty: number }[],
+): Promise<ResolvedItem[]> {
+  const resolved: ResolvedItem[] = [];
+  if (rawItems.length === 0) return resolved;
+
+  const allIds = [...new Set(rawItems.map((r) => r.accessory_id))];
+  type AccLookup = { name: string; included_parts: string[] };
+  const accLookup: Record<string, AccLookup> = {};
+  let accs: Array<{ id: string; name: string; included_parts?: string[] | null }> | null = null;
+
+  // Zwei Versuche: erst inkl. included_parts (neue Migration), bei
+  // fehlender Spalte ohne — kein 500 wenn Migration noch aussteht.
+  const accFull = await supabase.from('accessories').select('id, name, included_parts').in('id', allIds);
+  if (accFull.error && /column .*included_parts/i.test(accFull.error.message)) {
+    const accFallback = await supabase.from('accessories').select('id, name').in('id', allIds);
+    accs = accFallback.data ?? [];
+  } else {
+    accs = accFull.data ?? [];
+  }
+  const { data: sets } = await supabase.from('sets').select('id, name, accessory_items').in('id', allIds);
+
+  for (const a of accs ?? []) {
+    accLookup[a.id] = {
+      name: a.name as string,
+      included_parts: Array.isArray(a.included_parts) ? a.included_parts as string[] : [],
+    };
+  }
+  const setMap: Record<string, { name: string; items: { accessory_id: string; qty: number }[] }> = {};
+  for (const s of sets ?? []) {
+    setMap[s.id] = {
+      name: s.name as string,
+      items: Array.isArray(s.accessory_items) ? (s.accessory_items as { accessory_id: string; qty: number }[]) : [],
+    };
+  }
+
+  // Set-Sub-Item-Namen separat nachladen (wenn nicht schon im accLookup)
+  const setSubIds = new Set<string>();
+  for (const setInfo of Object.values(setMap)) {
+    for (const it of setInfo.items) {
+      if (!accLookup[it.accessory_id]) setSubIds.add(it.accessory_id);
+    }
+  }
+  if (setSubIds.size > 0) {
+    const subFull = await supabase
+      .from('accessories')
+      .select('id, name, included_parts')
+      .in('id', [...setSubIds]);
+    let subRows: Array<{ id: string; name: string; included_parts?: string[] | null }> = subFull.data ?? [];
+    if (subFull.error && /column .*included_parts/i.test(subFull.error.message)) {
+      const subFallback = await supabase.from('accessories').select('id, name').in('id', [...setSubIds]);
+      subRows = subFallback.data ?? [];
+    }
+    for (const a of subRows) {
+      accLookup[a.id] = {
+        name: a.name as string,
+        included_parts: Array.isArray(a.included_parts) ? a.included_parts as string[] : [],
+      };
+    }
+  }
+
+  for (const item of rawItems) {
+    const setInfo = setMap[item.accessory_id];
+    if (setInfo) {
+      // Set-Container-Zeile zur Orientierung, dann Sub-Items expandiert
+      resolved.push({ id: item.accessory_id, name: setInfo.name, qty: item.qty });
+      for (const sub of setInfo.items) {
+        const subAcc = accLookup[sub.accessory_id];
+        resolved.push({
+          id: sub.accessory_id,
+          name: subAcc?.name ?? sub.accessory_id,
+          qty: (sub.qty || 1) * item.qty,
+          isFromSet: true,
+          setName: setInfo.name,
+          included_parts: subAcc?.included_parts && subAcc.included_parts.length > 0 ? subAcc.included_parts : undefined,
+        });
+      }
+    } else {
+      const acc = accLookup[item.accessory_id];
+      resolved.push({
+        id: item.accessory_id,
+        name: acc?.name ?? item.accessory_id,
+        qty: item.qty,
+        included_parts: acc?.included_parts && acc.included_parts.length > 0 ? acc.included_parts : undefined,
+      });
+    }
+  }
+  return resolved;
+}
+
 /**
  * GET /api/admin/booking/[id]
  * Gibt eine einzelne Buchung mit allen Feldern + Kundenprofil +
@@ -73,95 +172,11 @@ export async function GET(
   // damit die Packliste das vollstaendige Inventar zeigt.
   // included_parts (Bestandteile) werden mitgeladen — Pack-Workflow zeigt sie
   // als Hinweis an, sie sind kein eigenes Inventar.
-  type ResolvedItem = { id: string; name: string; qty: number; isFromSet?: boolean; setName?: string; included_parts?: string[] };
   const rawItems: { accessory_id: string; qty: number }[] = Array.isArray(booking.accessory_items) && booking.accessory_items.length > 0
     ? (booking.accessory_items as { accessory_id: string; qty: number }[])
     : (Array.isArray(booking.accessories) ? booking.accessories as string[] : []).map((aid) => ({ accessory_id: aid, qty: 1 }));
 
-  const resolved: ResolvedItem[] = [];
-  if (rawItems.length > 0) {
-    const allIds = [...new Set(rawItems.map((r) => r.accessory_id))];
-    type AccLookup = { name: string; included_parts: string[] };
-    const accLookup: Record<string, AccLookup> = {};
-    let accs: Array<{ id: string; name: string; included_parts?: string[] | null }> | null = null;
-
-    // Zwei Versuche: erst inkl. included_parts (neue Migration), bei
-    // fehlender Spalte ohne — kein 500 wenn Migration noch aussteht.
-    const accFull = await supabase.from('accessories').select('id, name, included_parts').in('id', allIds);
-    if (accFull.error && /column .*included_parts/i.test(accFull.error.message)) {
-      const accFallback = await supabase.from('accessories').select('id, name').in('id', allIds);
-      accs = accFallback.data ?? [];
-    } else {
-      accs = accFull.data ?? [];
-    }
-    const { data: sets } = await supabase.from('sets').select('id, name, accessory_items').in('id', allIds);
-
-    for (const a of accs ?? []) {
-      accLookup[a.id] = {
-        name: a.name as string,
-        included_parts: Array.isArray(a.included_parts) ? a.included_parts as string[] : [],
-      };
-    }
-    const setMap: Record<string, { name: string; items: { accessory_id: string; qty: number }[] }> = {};
-    for (const s of sets ?? []) {
-      setMap[s.id] = {
-        name: s.name as string,
-        items: Array.isArray(s.accessory_items) ? (s.accessory_items as { accessory_id: string; qty: number }[]) : [],
-      };
-    }
-
-    // Set-Sub-Item-Namen separat nachladen (wenn nicht schon im accLookup)
-    const setSubIds = new Set<string>();
-    for (const setInfo of Object.values(setMap)) {
-      for (const it of setInfo.items) {
-        if (!accLookup[it.accessory_id]) setSubIds.add(it.accessory_id);
-      }
-    }
-    if (setSubIds.size > 0) {
-      const subFull = await supabase
-        .from('accessories')
-        .select('id, name, included_parts')
-        .in('id', [...setSubIds]);
-      let subRows: Array<{ id: string; name: string; included_parts?: string[] | null }> = subFull.data ?? [];
-      if (subFull.error && /column .*included_parts/i.test(subFull.error.message)) {
-        const subFallback = await supabase.from('accessories').select('id, name').in('id', [...setSubIds]);
-        subRows = subFallback.data ?? [];
-      }
-      for (const a of subRows) {
-        accLookup[a.id] = {
-          name: a.name as string,
-          included_parts: Array.isArray(a.included_parts) ? a.included_parts as string[] : [],
-        };
-      }
-    }
-
-    for (const item of rawItems) {
-      const setInfo = setMap[item.accessory_id];
-      if (setInfo) {
-        // Set-Container-Zeile zur Orientierung, dann Sub-Items expandiert
-        resolved.push({ id: item.accessory_id, name: setInfo.name, qty: item.qty });
-        for (const sub of setInfo.items) {
-          const subAcc = accLookup[sub.accessory_id];
-          resolved.push({
-            id: sub.accessory_id,
-            name: subAcc?.name ?? sub.accessory_id,
-            qty: (sub.qty || 1) * item.qty,
-            isFromSet: true,
-            setName: setInfo.name,
-            included_parts: subAcc?.included_parts && subAcc.included_parts.length > 0 ? subAcc.included_parts : undefined,
-          });
-        }
-      } else {
-        const acc = accLookup[item.accessory_id];
-        resolved.push({
-          id: item.accessory_id,
-          name: acc?.name ?? item.accessory_id,
-          qty: item.qty,
-          included_parts: acc?.included_parts && acc.included_parts.length > 0 ? acc.included_parts : undefined,
-        });
-      }
-    }
-  }
+  const resolved = await resolveAccessoryItems(supabase, rawItems);
   booking.resolved_items = resolved;
 
   // Zubehoer-Exemplar-Codes laden — fuer den Scanner-Workflow auf der Pack-
@@ -300,16 +315,43 @@ async function computeLiabilitySummary(
 ) {
   type Line = { name: string; qty: number; unit_value: number; total_value: number; source: 'asset' | 'accessory_replacement' | 'product_deposit' | 'unknown' };
 
-  const cameraId = booking.product_id as string;
-  const cameraName = booking.product_name as string;
-  const productDeposit = Number(booking.deposit ?? 0);
+  // Manuelle Anpassung (intern, NUR fuer diese Box). Aendert nichts an der
+  // echten Buchung — bestimmt nur, welche Katalog-Kamera bzw. welches
+  // Zubehoer fuer die Wiederbeschaffungswert-Berechnung herangezogen wird.
+  const override = booking.liability_override && typeof booking.liability_override === 'object'
+    ? booking.liability_override as { camera_product_id?: string | null; accessories?: { id: string; qty: number }[] | null }
+    : null;
+
+  // admin_config.products — fuer Override-Kamera (Name/Kaution/Kategorie)
+  // und fuer die Eigenbeteiligungs-Kategorie weiter unten.
+  const { data: cfgRow } = await supabase
+    .from('admin_config')
+    .select('products')
+    .eq('id', 1)
+    .maybeSingle();
+  const allProducts = Array.isArray(cfgRow?.products)
+    ? cfgRow!.products as Array<{ id: string; name?: string; deposit?: number; category?: string }>
+    : [];
+
+  const cameraOverridden = !!(override?.camera_product_id && override.camera_product_id !== booking.product_id);
+  const overrideProduct = cameraOverridden
+    ? allProducts.find((p) => p.id === override!.camera_product_id)
+    : undefined;
+
+  const cameraId = cameraOverridden ? override!.camera_product_id! : booking.product_id as string;
+  const cameraName = cameraOverridden ? (overrideProduct?.name ?? cameraId) : booking.product_name as string;
+  const productDeposit = cameraOverridden
+    ? Number(overrideProduct?.deposit ?? 0)
+    : Number(booking.deposit ?? 0);
   const haftung = (booking.haftung as string | null) ?? null;
 
-  // 1. Kamera-WBW — pauschal berechnet (linear -> Floor)
+  // 1. Kamera-WBW — pauschal berechnet (linear -> Floor).
+  // Bei Override-Kamera entfaellt der unit_id-Asset-Pfad (die unit_id
+  // gehoert zur Original-Kamera) → direkt Inventar-Durchschnitt → Kaution.
   const wbwConfig = await loadReplacementValueConfig(supabase);
   let cameraValue = 0;
   let cameraSource: Line['source'] = 'unknown';
-  if (booking.unit_id) {
+  if (!cameraOverridden && booking.unit_id) {
     const primary = await supabase
       .from('assets')
       .select('purchase_price, purchase_date, current_value, replacement_value_estimate')
@@ -337,7 +379,7 @@ async function computeLiabilitySummary(
   }
   // Fallback 1: inventar_units (neue Welt) via migration_audit → unit_id.
   // Greift wenn die Buchung eine konkrete product_unit zugeordnet hat.
-  if (cameraValue === 0 && booking.unit_id) {
+  if (cameraValue === 0 && !cameraOverridden && booking.unit_id) {
     try {
       const m = await getInventarWbwByLegacyUnitIds(supabase, [booking.unit_id as string], 'product_units');
       const v = m.get(booking.unit_id as string);
@@ -379,16 +421,28 @@ async function computeLiabilitySummary(
 
   // 2. Zubehoer + Sets (auf Sub-Items expandiert) → Set-Container ueberspringen,
   // weil wir die Sub-Items mitgezaehlt haben (vermeidet Doppelzaehlung).
+  // Bei Override-Zubehoer wird die manuell gewaehlte Liste statt der
+  // echten Buchungs-Positionen aufgeloest (nur fuer diese Box).
+  const accessoriesOverridden = Array.isArray(override?.accessories);
+  const effectiveResolved = accessoriesOverridden
+    ? await resolveAccessoryItems(
+        supabase,
+        (override!.accessories ?? []).map((a) => ({ accessory_id: a.id, qty: a.qty })),
+      )
+    : resolvedItems;
   const setContainerNames = new Set(
-    resolvedItems.filter((i) => i.isFromSet).map((i) => i.setName ?? ''),
+    effectiveResolved.filter((i) => i.isFromSet).map((i) => i.setName ?? ''),
   );
-  const physicalAccItems = resolvedItems.filter((i) => !setContainerNames.has(i.name) || i.isFromSet);
+  const physicalAccItems = effectiveResolved.filter((i) => !setContainerNames.has(i.name) || i.isFromSet);
 
   const accIds = [...new Set(physicalAccItems.map((i) => i.id))];
 
   // Asset-Lookup ueber accessory_unit_ids (genauer, wenn vorhanden).
   // Ergebnis: Map accessory_id -> Liste aller Asset-Werte (= Anzahl Units mit Asset).
-  const accUnitIds: string[] = Array.isArray(booking.accessory_unit_ids)
+  // Bei Override-Zubehoer keine exemplar-genaue Asset-Aufloesung — die
+  // accessory_unit_ids gehoeren zur Original-Buchung, nicht zur manuellen
+  // Auswahl. Dann zaehlt der accessories.replacement_value / Inventar-Pfad.
+  const accUnitIds: string[] = !accessoriesOverridden && Array.isArray(booking.accessory_unit_ids)
     ? (booking.accessory_unit_ids as string[]).filter(Boolean)
     : [];
   const assetValuesPerAccId = new Map<string, number[]>();
@@ -522,15 +576,9 @@ async function computeLiabilitySummary(
       .eq('key', 'haftung_config')
       .maybeSingle();
     const haftungConfig: HaftungConfig = (setting?.value as HaftungConfig) ?? DEFAULT_HAFTUNG;
-    // Produkt-Kategorie nachladen
-    const { data: cfg } = await supabase
-      .from('admin_config')
-      .select('products')
-      .eq('id', 1)
-      .maybeSingle();
-    const products = Array.isArray(cfg?.products) ? cfg?.products as Array<{ id: string; category?: string }> : [];
-    const product = products.find((p) => p.id === cameraId);
-    const category: string | undefined = product?.category;
+    // Kategorie der (ggf. ueberschriebenen) Kamera aus dem bereits
+    // geladenen admin_config.products bestimmen.
+    const category: string | undefined = allProducts.find((p) => p.id === cameraId)?.category;
     customerMax = getEigenbeteiligung(haftungConfig, category);
     customerMaxLabel = 'Basis-Schadenspauschale';
     customerMaxNote = `Eigenbeteiligung des Mieters je Schadensereignis. Restschaden ueber das Reparaturdepot.`;
@@ -550,6 +598,10 @@ async function computeLiabilitySummary(
     customer_max_note: customerMaxNote,
     haftung_option: haftung,
     deposit_anchor: productDeposit,
+    camera_overridden: cameraOverridden,
+    accessories_overridden: accessoriesOverridden,
+    override_camera_product_id: cameraOverridden ? cameraId : null,
+    override_accessories: accessoriesOverridden ? (override!.accessories ?? []) : null,
   };
 }
 
@@ -564,11 +616,15 @@ export async function PATCH(
 ) {
   const { id } = await params;
   const body = await req.json();
-  const { status, cancellation_reason, customer_email, verification_gate } = body as {
+  const { status, cancellation_reason, customer_email, verification_gate, liability_override } = body as {
     status?: string;
     cancellation_reason?: string;
     customer_email?: string;
     verification_gate?: 'approve' | 'revoke';
+    liability_override?: {
+      camera_product_id?: string | null;
+      accessories?: { id: string; qty: number }[] | null;
+    } | null;
   };
 
   const supabase = createServiceClient();
@@ -577,6 +633,33 @@ export async function PATCH(
   // E-Mail aktualisieren
   if (customer_email !== undefined) {
     updates.customer_email = customer_email || null;
+  }
+
+  // Manuelle Haftungs-Box-Anpassung (intern). null = zuruecksetzen auf
+  // automatische Berechnung. Strikt validiert + saniert, damit kein Muell
+  // ins JSONB-Feld landet.
+  if (liability_override !== undefined) {
+    if (liability_override === null) {
+      updates.liability_override = null;
+    } else {
+      const sanitized: { camera_product_id?: string; accessories?: { id: string; qty: number }[] } = {};
+      const camId = liability_override.camera_product_id;
+      if (typeof camId === 'string' && camId.trim()) {
+        sanitized.camera_product_id = camId.trim().slice(0, 100);
+      }
+      if (Array.isArray(liability_override.accessories)) {
+        sanitized.accessories = liability_override.accessories
+          .filter((a) => a && typeof a.id === 'string' && a.id.trim())
+          .map((a) => ({
+            id: a.id.trim().slice(0, 100),
+            qty: Math.min(99, Math.max(1, Math.round(Number(a.qty) || 1))),
+          }))
+          .slice(0, 50);
+      }
+      // Kein einziges sinnvolles Feld → wie zuruecksetzen behandeln.
+      updates.liability_override =
+        sanitized.camera_product_id || sanitized.accessories ? sanitized : null;
+    }
   }
 
   // Verification-Gate manuell freigeben / widerrufen
@@ -628,7 +711,27 @@ export async function PATCH(
   if (preStatus !== null) {
     updateQuery = updateQuery.eq('status', preStatus);
   }
-  const { data: updated, error } = await updateQuery.select('id').maybeSingle();
+  let { data: updated, error } = await updateQuery.select('id').maybeSingle();
+
+  // Defensiver Fallback: Migration supabase-bookings-liability-override.sql
+  // noch nicht durch → Update ohne die unbekannte Spalte erneut versuchen,
+  // damit Status-/E-Mail-Aenderungen nicht mit 500 abbrechen.
+  if (error && 'liability_override' in updates && /liability_override/i.test(error.message || '')) {
+    const { liability_override: _drop, ...rest } = updates;
+    void _drop;
+    if (Object.keys(rest).length > 0) {
+      let retry = supabase.from('bookings').update(rest).eq('id', id);
+      if (preStatus !== null) retry = retry.eq('status', preStatus);
+      const r = await retry.select('id').maybeSingle();
+      updated = r.data;
+      error = r.error;
+    } else {
+      return NextResponse.json(
+        { error: 'Manuelle Anpassung nicht moeglich — DB-Migration steht noch aus.' },
+        { status: 503 },
+      );
+    }
+  }
 
   if (error) {
     console.error('Booking update error:', error);

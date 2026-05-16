@@ -81,6 +81,10 @@ interface LiabilitySummary {
   customer_max_note: string;
   haftung_option: string | null;
   deposit_anchor: number;
+  camera_overridden?: boolean;
+  accessories_overridden?: boolean;
+  override_camera_product_id?: string | null;
+  override_accessories?: { id: string; qty: number }[] | null;
 }
 
 interface RentalAgreement {
@@ -173,6 +177,8 @@ export default function BuchungDetailPage() {
   const [emails, setEmails] = useState<EmailLogEntry[]>([]);
   const [accessoryMap, setAccessoryMap] = useState<Record<string, string>>({});
   const [setMap, setSetMap] = useState<Record<string, { name: string; items: { accessory_id: string; qty: number }[] }>>({});
+  const [productList, setProductList] = useState<{ id: string; name: string }[]>([]);
+  const [accessoryList, setAccessoryList] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [statusUpdating, setStatusUpdating] = useState(false);
@@ -201,10 +207,11 @@ export default function BuchungDetailPage() {
     setLoading(true);
     setError('');
     try {
-      const [res, accRes, setsRes] = await Promise.all([
+      const [res, accRes, setsRes, prodRes] = await Promise.all([
         fetch(`/api/admin/booking/${bookingId}`),
         fetch('/api/admin/accessories'),
         fetch('/api/sets'),
+        fetch('/api/products'),
       ]);
       if (!res.ok) throw new Error('Nicht gefunden');
       const data = await res.json();
@@ -219,6 +226,15 @@ export default function BuchungDetailPage() {
       const aMap: Record<string, string> = {};
       for (const a of accData.accessories ?? []) aMap[a.id] = a.name;
       setAccessoryMap(aMap);
+      setAccessoryList(
+        (accData.accessories ?? []).map((a: { id: string; name: string }) => ({ id: a.id, name: a.name })),
+      );
+
+      // Katalog-Kameras fuer das Override-Dropdown (id + name)
+      const pData = prodRes.ok ? await prodRes.json() : [];
+      setProductList(
+        (Array.isArray(pData) ? pData : []).map((p: { id: string; name: string }) => ({ id: p.id, name: p.name })),
+      );
 
       // Sets-Map (ID → { name, items })
       const sData = setsRes.ok ? await setsRes.json() : { sets: [] };
@@ -685,7 +701,15 @@ export default function BuchungDetailPage() {
 
             {/* Wiederbeschaffung & Haftung (intern) */}
             {booking.liability_summary && (
-              <LiabilitySection summary={booking.liability_summary} />
+              <LiabilitySection
+                summary={booking.liability_summary}
+                bookingId={booking.id}
+                productId={booking.product_id}
+                accessoryItems={booking.accessory_items ?? null}
+                productList={productList}
+                accessoryList={accessoryList}
+                onSaved={fetchBooking}
+              />
             )}
 
             {/* Preisaufstellung */}
@@ -1446,7 +1470,17 @@ function PriceRow({ label, amount }: { label: string; amount: number }) {
   );
 }
 
-function LiabilitySection({ summary }: { summary: LiabilitySummary }) {
+function LiabilitySection({
+  summary, bookingId, productId, accessoryItems, productList, accessoryList, onSaved,
+}: {
+  summary: LiabilitySummary;
+  bookingId: string;
+  productId: string;
+  accessoryItems: { accessory_id: string; qty: number }[] | null;
+  productList: { id: string; name: string }[];
+  accessoryList: { id: string; name: string }[];
+  onSaved: () => void;
+}) {
   const haftung = summary.haftung_option;
   // Farbschema je nach Modus: Premium grün (Kunde sicher), Basis amber, Ohne rot.
   const accentColor =
@@ -1456,9 +1490,205 @@ function LiabilitySection({ summary }: { summary: LiabilitySummary }) {
     haftung === 'premium' ? 'rgba(16,185,129,0.08)' :
     haftung === 'standard' ? 'rgba(245,158,11,0.08)' : 'rgba(239,68,68,0.08)';
 
+  const isOverridden = !!(summary.camera_overridden || summary.accessories_overridden);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [editErr, setEditErr] = useState('');
+  const [camOn, setCamOn] = useState(!!summary.camera_overridden);
+  const [camId, setCamId] = useState(summary.override_camera_product_id || productId);
+  const [accOn, setAccOn] = useState(!!summary.accessories_overridden);
+  const [accRows, setAccRows] = useState<{ id: string; qty: number }[]>(
+    summary.override_accessories && summary.override_accessories.length > 0
+      ? summary.override_accessories
+      : (accessoryItems ?? []).map((a) => ({ id: a.accessory_id, qty: a.qty })),
+  );
+
+  function startEdit() {
+    setCamOn(!!summary.camera_overridden);
+    setCamId(summary.override_camera_product_id || productId);
+    setAccOn(!!summary.accessories_overridden);
+    setAccRows(
+      summary.override_accessories && summary.override_accessories.length > 0
+        ? summary.override_accessories
+        : (accessoryItems ?? []).map((a) => ({ id: a.accessory_id, qty: a.qty })),
+    );
+    setEditErr('');
+    setEditing(true);
+  }
+
+  async function patchOverride(payload: unknown) {
+    setSaving(true);
+    setEditErr('');
+    try {
+      const res = await fetch(`/api/admin/booking/${bookingId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ liability_override: payload }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || 'Speichern fehlgeschlagen.');
+      }
+      setEditing(false);
+      onSaved();
+    } catch (e) {
+      setEditErr(e instanceof Error ? e.message : 'Speichern fehlgeschlagen.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function handleSave() {
+    if (!camOn && !accOn) {
+      patchOverride(null);
+      return;
+    }
+    const payload: { camera_product_id?: string; accessories?: { id: string; qty: number }[] } = {};
+    if (camOn) payload.camera_product_id = camId;
+    if (accOn) payload.accessories = accRows.filter((r) => r.id);
+    patchOverride(payload);
+  }
+
+  if (editing) {
+    return (
+      <Section title="Wiederbeschaffung & Haftung (intern)">
+        <div className="space-y-4">
+          <p className="text-xs text-brand-muted leading-relaxed">
+            Nur fuer diese interne Box. Aendert nichts an der echten Buchung
+            (Preis, Mietvertrag, Packliste, Verfuegbarkeit bleiben unveraendert).
+          </p>
+
+          {/* Kamera-Override */}
+          <div className="rounded-lg border border-brand-border p-3 space-y-2">
+            <label className="flex items-center gap-2 text-sm font-heading font-semibold text-brand-black">
+              <input type="checkbox" checked={camOn} onChange={(e) => setCamOn(e.target.checked)} />
+              Kamera fuer Berechnung ueberschreiben
+            </label>
+            {camOn && (
+              <select
+                value={camId}
+                onChange={(e) => setCamId(e.target.value)}
+                className="w-full text-base border border-brand-border rounded-lg px-3 py-2"
+              >
+                {!productList.some((p) => p.id === productId) && (
+                  <option value={productId}>Original ({productId})</option>
+                )}
+                {productList.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          {/* Zubehoer-Override */}
+          <div className="rounded-lg border border-brand-border p-3 space-y-2">
+            <label className="flex items-center gap-2 text-sm font-heading font-semibold text-brand-black">
+              <input type="checkbox" checked={accOn} onChange={(e) => setAccOn(e.target.checked)} />
+              Zubehoer fuer Berechnung ueberschreiben
+            </label>
+            {accOn && (
+              <div className="space-y-2">
+                {accRows.map((row, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <select
+                      value={row.id}
+                      onChange={(e) => setAccRows((rs) => rs.map((r, j) => j === i ? { ...r, id: e.target.value } : r))}
+                      className="flex-1 min-w-0 text-base border border-brand-border rounded-lg px-2 py-2"
+                    >
+                      <option value="">— waehlen —</option>
+                      {accessoryList.map((a) => (
+                        <option key={a.id} value={a.id}>{a.name}</option>
+                      ))}
+                    </select>
+                    <input
+                      type="number"
+                      min={1}
+                      max={99}
+                      value={row.qty}
+                      onChange={(e) => setAccRows((rs) => rs.map((r, j) => j === i ? { ...r, qty: Math.max(1, Math.min(99, Number(e.target.value) || 1)) } : r))}
+                      className="w-16 text-base border border-brand-border rounded-lg px-2 py-2"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setAccRows((rs) => rs.filter((_, j) => j !== i))}
+                      className="text-red-500 text-sm px-2 py-2 hover:bg-red-50 rounded-lg"
+                      aria-label="Zeile entfernen"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setAccRows((rs) => [...rs, { id: '', qty: 1 }])}
+                  className="text-sm text-accent-blue font-heading font-semibold"
+                >
+                  + Zubehoer hinzufuegen
+                </button>
+                {accRows.length === 0 && (
+                  <p className="text-xs text-brand-muted">Keine Zeile = 0 € Zubehoer in dieser Box.</p>
+                )}
+              </div>
+            )}
+          </div>
+
+          {editErr && <p className="text-xs text-red-600">{editErr}</p>}
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving}
+              className="px-4 py-2 rounded-btn bg-brand-black text-white text-sm font-heading font-semibold hover:bg-brand-dark transition-colors disabled:opacity-50"
+            >
+              {saving ? 'Speichert…' : 'Speichern'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setEditing(false)}
+              disabled={saving}
+              className="px-4 py-2 rounded-lg border border-brand-border text-sm font-heading font-semibold"
+            >
+              Abbrechen
+            </button>
+          </div>
+        </div>
+      </Section>
+    );
+  }
+
   return (
     <Section title="Wiederbeschaffung & Haftung (intern)">
       <div className="space-y-4">
+        {/* Bearbeiten / Status */}
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          {isOverridden ? (
+            <span className="text-[11px] font-heading font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
+              manuell angepasst
+            </span>
+          ) : <span />}
+          <div className="flex items-center gap-2">
+            {isOverridden && (
+              <button
+                type="button"
+                onClick={() => patchOverride(null)}
+                disabled={saving}
+                className="text-xs text-brand-muted underline disabled:opacity-50"
+              >
+                Auf automatisch zuruecksetzen
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={startEdit}
+              className="text-xs text-accent-blue font-heading font-semibold"
+            >
+              Bearbeiten
+            </button>
+          </div>
+        </div>
+        {editErr && !editing && <p className="text-xs text-red-600">{editErr}</p>}
+
         {/* Wiederbeschaffungswert gesamt */}
         <div>
           <p className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider mb-2">

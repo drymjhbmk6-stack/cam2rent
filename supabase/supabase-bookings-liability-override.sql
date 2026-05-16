@@ -1,0 +1,21 @@
+-- bookings.liability_override: manuelle Anpassung der internen
+-- "Wiederbeschaffung & Haftung (intern)"-Box pro Buchung.
+--
+-- Zweck: Der Admin kann auf /admin/buchungen/[id] in dieser Box eine
+-- andere Katalog-Kamera und/oder ein anderes Zubehoer-Set fuer die
+-- Wiederbeschaffungswert-Berechnung zuweisen — z.B. wenn die
+-- automatische Quelle (Anlage/Inventar) fehlt oder falsch ist.
+--
+-- WICHTIG: Wirkt ausschliesslich auf diese interne Anzeige-Box.
+-- Die echte Buchung (product_id, accessory_items, Preis, Mietvertrag,
+-- Packliste, Verfuegbarkeit) bleibt komplett unveraendert.
+--
+-- Shape (alle Keys optional, NULL = automatische Berechnung):
+--   {
+--     "camera_product_id": "3",
+--     "accessories": [ { "id": "battery", "qty": 2 } ]
+--   }
+--
+-- Idempotent.
+
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS liability_override JSONB NULL;
