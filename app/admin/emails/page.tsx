@@ -54,6 +54,7 @@ const TYPE_LABELS: Record<string, { label: string; color: string; bg: string }> 
   auto_cancel: { label: 'Auto-Storno', color: '#ef4444', bg: '#ef444414' },
   auto_cancel_payment: { label: 'Auto-Storno (unbezahlt)', color: '#ef4444', bg: '#ef444414' },
   shipping_confirmation: { label: 'Versandbestätigung', color: '#10b981', bg: '#10b98114' },
+  wbw_confirmation: { label: 'Wiederbeschaffungswerte (final)', color: '#06b6d4', bg: '#06b6d414' },
   damage_report_customer: { label: 'Schadensmeldung', color: '#f97316', bg: '#f9731614' },
   damage_report_admin: { label: 'Schadensmeldung (Admin)', color: '#f97316', bg: '#f9731614' },
   damage_resolution: { label: 'Schadensauflösung', color: '#f59e0b', bg: '#f59e0b14' },

@@ -61,6 +61,10 @@ interface BookingDetail {
   stripe_payment_link_id: string | null;
   is_test: boolean | null;
   liability_summary?: LiabilitySummary | null;
+  wbw_finalized?: boolean | null;
+  wbw_finalized_at?: string | null;
+  wbw_email_sent_at?: string | null;
+  wbw_final?: { name: string; serial: string | null; value: number }[] | null;
 }
 
 interface LiabilityLine {
@@ -710,6 +714,9 @@ export default function BuchungDetailPage() {
                 accessoryList={accessoryList}
                 onSaved={fetchBooking}
               />
+            )}
+            {booking.status === 'confirmed' && (
+              <WbwFinalizePanel booking={booking} onChanged={fetchBooking} />
             )}
 
             {/* Preisaufstellung */}
@@ -1735,6 +1742,199 @@ function LiabilitySection({
             </p>
           )}
         </div>
+      </div>
+    </Section>
+  );
+}
+
+function WbwFinalizePanel({ booking, onChanged }: { booking: BookingDetail; onChanged: () => void }) {
+  const finalized = !!booking.wbw_finalized;
+
+  // Vorschlagszeilen aus der internen Haftungs-Berechnung (Kamera + Zubehoer).
+  const initialRows = (() => {
+    const sum = booking.liability_summary;
+    if (!sum) return [] as { name: string; serial: string | null; value: string }[];
+    const rows: { name: string; serial: string | null; value: string }[] = [
+      { name: sum.camera.name, serial: booking.serial_number || null, value: String(sum.camera.total_value || '') },
+    ];
+    for (const a of sum.accessories) {
+      rows.push({ name: a.name, serial: null, value: String(a.total_value || '') });
+    }
+    return rows;
+  })();
+
+  const [rows, setRows] = useState(initialRows);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ t: 'ok' | 'err'; m: string } | null>(null);
+
+  const allValid = rows.length > 0 && rows.every((r) => Number(r.value) > 0);
+
+  async function doFinalize(resend: boolean) {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const res = await fetch(`/api/admin/booking/${booking.id}/finalize-wbw`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(
+          resend
+            ? { resend: true }
+            : { items: rows.map((r) => ({ name: r.name, serial: r.serial, value: Number(r.value) })) },
+        ),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || 'Fehlgeschlagen.');
+      if (d.success === false) {
+        setMsg({ t: 'err', m: d.error || 'E-Mail fehlgeschlagen.' });
+      } else {
+        setMsg({ t: 'ok', m: resend ? 'E-Mail erneut gesendet.' : `Finalisiert & E-Mail an ${d.sentTo} gesendet.` });
+      }
+      setConfirmOpen(false);
+      onChanged();
+    } catch (e) {
+      setMsg({ t: 'err', m: e instanceof Error ? e.message : 'Fehlgeschlagen.' });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (finalized) {
+    const fin = booking.wbw_final ?? [];
+    const total = fin.reduce((s, r) => s + (Number(r.value) || 0), 0);
+    return (
+      <Section title="Finale Wiederbeschaffungswerte">
+        <div className="space-y-4">
+          <div className="rounded-lg border border-green-300 bg-green-50 p-3">
+            <p className="text-sm font-heading font-semibold text-green-800">
+              WBW finalisiert am {fmtDateTime(booking.wbw_finalized_at || '')}
+            </p>
+            <p className="text-xs text-green-700 mt-0.5">
+              {booking.wbw_email_sent_at
+                ? `E-Mail gesendet an ${booking.customer_email || '—'}`
+                : 'E-Mail noch nicht versendet — bitte erneut senden.'}
+            </p>
+          </div>
+
+          <div className="bg-brand-bg rounded-lg p-3 space-y-1.5">
+            {fin.map((r, i) => (
+              <div key={i} className="flex justify-between items-baseline gap-3">
+                <span className="text-xs font-body text-brand-black truncate flex-1 min-w-0">
+                  {r.name}{r.serial ? ` · ${r.serial}` : ''}
+                </span>
+                <span className="text-xs font-heading font-semibold text-brand-black">{fmtEuro(r.value)}</span>
+              </div>
+            ))}
+            <div className="pt-1.5 mt-1.5 border-t border-brand-border flex justify-between items-center">
+              <span className="text-xs font-heading font-semibold text-brand-muted">Gesamt</span>
+              <span className="text-sm font-heading font-bold text-brand-black">{fmtEuro(total)}</span>
+            </div>
+          </div>
+
+          {msg && (
+            <p className={`text-xs ${msg.t === 'ok' ? 'text-green-600' : 'text-red-600'}`}>{msg.m}</p>
+          )}
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <a
+              href={`/api/admin/booking/${booking.id}/finalize-wbw`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-4 py-2 rounded-btn border border-brand-border text-sm font-heading font-semibold text-brand-black hover:bg-brand-bg transition-colors"
+            >
+              PDF herunterladen
+            </a>
+            <button
+              type="button"
+              onClick={() => doFinalize(true)}
+              disabled={busy}
+              className="px-4 py-2 rounded-btn bg-brand-black text-white text-sm font-heading font-semibold hover:bg-brand-dark transition-colors disabled:opacity-50"
+            >
+              {busy ? 'Sendet…' : 'E-Mail erneut senden'}
+            </button>
+          </div>
+        </div>
+      </Section>
+    );
+  }
+
+  return (
+    <Section title="Wiederbeschaffungswerte finalisieren">
+      <div className="space-y-4">
+        <p className="text-xs text-brand-muted leading-relaxed">
+          Lege die finalen Wiederbeschaffungswerte der tatsächlich mitgelieferten
+          Ausrüstung fest. Sie werden dem Mieter als PDF per E-Mail gesendet und
+          sind laut Mietvertrag ab dann maßgeblich für Ersatzansprüche.
+        </p>
+
+        <div className="space-y-2">
+          {rows.map((r, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-body text-brand-black truncate">{r.name}</p>
+                <p className="text-[11px] text-brand-muted">
+                  {r.serial ? `SN: ${r.serial}` : 'Keine Seriennummer'}
+                </p>
+              </div>
+              <input
+                type="number"
+                min={0}
+                step="0.01"
+                value={r.value}
+                onChange={(e) => setRows((rs) => rs.map((x, j) => j === i ? { ...x, value: e.target.value } : x))}
+                className="w-28 text-base border border-brand-border rounded-lg px-2 py-2 text-right"
+              />
+              <span className="text-sm text-brand-muted">€</span>
+            </div>
+          ))}
+          {rows.length === 0 && (
+            <p className="text-xs text-red-600">Keine Positionen aus der Haftungs-Berechnung verfügbar.</p>
+          )}
+        </div>
+
+        {msg && (
+          <p className={`text-xs ${msg.t === 'ok' ? 'text-green-600' : 'text-red-600'}`}>{msg.m}</p>
+        )}
+
+        <button
+          type="button"
+          onClick={() => setConfirmOpen(true)}
+          disabled={!allValid || busy}
+          className="px-4 py-2 rounded-btn bg-brand-black text-white text-sm font-heading font-semibold hover:bg-brand-dark transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          WBW finalisieren &amp; E-Mail senden
+        </button>
+
+        {confirmOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className="bg-white rounded-xl max-w-md w-full p-6 space-y-4">
+              <h3 className="font-heading font-bold text-base text-brand-black">Finalisieren bestätigen</h3>
+              <p className="text-sm text-brand-steel leading-relaxed">
+                Die finalen Wiederbeschaffungswerte werden dem Mieter per E-Mail
+                als PDF mitgeteilt und sind danach maßgeblich für etwaige
+                Schadensersatzansprüche. Fortfahren?
+              </p>
+              <div className="flex items-center gap-2 justify-end">
+                <button
+                  type="button"
+                  onClick={() => setConfirmOpen(false)}
+                  disabled={busy}
+                  className="px-4 py-2 rounded-btn border border-brand-border text-sm font-heading font-semibold"
+                >
+                  Abbrechen
+                </button>
+                <button
+                  type="button"
+                  onClick={() => doFinalize(false)}
+                  disabled={busy}
+                  className="px-4 py-2 rounded-btn bg-brand-black text-white text-sm font-heading font-semibold hover:bg-brand-dark transition-colors disabled:opacity-50"
+                >
+                  {busy ? 'Wird gesendet…' : 'Ja, finalisieren & senden'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </Section>
   );
