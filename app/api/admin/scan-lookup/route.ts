@@ -76,6 +76,7 @@ function extractRawScanCode(s: string): string {
 }
 
 export async function POST(req: NextRequest) {
+  try {
   const user = await getCurrentAdminUser();
   if (!user) {
     return NextResponse.json({ error: 'Nicht autorisiert.' }, { status: 401 });
@@ -294,17 +295,28 @@ export async function POST(req: NextRequest) {
         }
       : null;
 
-    // Produkt-Name nachladen
+    // Produkt-Name nachladen. WICHTIG: admin_config.value fuer key='products'
+    // ist ein Objekt-Map (Record<id, product>), KEIN Array — siehe
+    // lib/get-products.ts (Object.values(adminProducts)) und der Kamera-QR-
+    // Generator. Frueher wurde hier .find() auf das Objekt aufgerufen
+    // (`products.find is not a function`) -> HTTP 500, sobald die Kamera
+    // ueberhaupt aufgeloest wurde. Beide Formen defensiv behandeln.
     let productName = '';
     if (cameraUnit.product_id) {
+      const pid = cameraUnit.product_id;
       const { data: prod } = await supabase
         .from('admin_config')
         .select('value')
         .eq('key', 'products')
         .maybeSingle();
-      const products = (prod?.value as Array<{ id: string; name: string }> | null) ?? [];
-      const match = products.find((p) => p.id === cameraUnit.product_id);
-      productName = match?.name ?? cameraUnit.product_id;
+      const val = prod?.value as unknown;
+      let pname: string | undefined;
+      if (Array.isArray(val)) {
+        pname = (val as Array<{ id: string; name?: string }>).find((p) => p.id === pid)?.name;
+      } else if (val && typeof val === 'object') {
+        pname = (val as Record<string, { name?: string }>)[pid]?.name;
+      }
+      productName = pname ?? pid;
     }
 
     return NextResponse.json({
@@ -404,4 +416,12 @@ export async function POST(req: NextRequest) {
 
   // Komplett unbekannter Code
   return NextResponse.json({ kind: 'unknown' });
+  } catch (err) {
+    // Sicherheitsnetz: jede unerwartete Ausnahme wird als lesbarer Fehler
+    // zurueckgegeben (Admin-only Endpoint) + serverseitig geloggt, statt als
+    // opaker 500. Der Client zeigt diesen Text an -> sofort diagnostizierbar.
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[scan-lookup] fatal:', msg, err);
+    return NextResponse.json({ kind: 'error', error: msg }, { status: 500 });
+  }
 }

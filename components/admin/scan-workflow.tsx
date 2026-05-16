@@ -281,7 +281,12 @@ export async function applyScan(
       if (res.status === 429) {
         return { ok: false, message: 'Zu viele Scans hintereinander — kurz warten und erneut scannen.' };
       }
-      return { ok: false, message: `Scan-Server-Fehler (HTTP ${res.status}) bei „${rawCode}".` };
+      let detail = '';
+      try {
+        const b = await res.json();
+        if (b && typeof b.error === 'string') detail = ` — ${b.error}`;
+      } catch { /* kein JSON-Body */ }
+      return { ok: false, message: `Scan-Server-Fehler (HTTP ${res.status}) bei „${rawCode}"${detail}.` };
     }
     info = await res.json();
   } catch {
