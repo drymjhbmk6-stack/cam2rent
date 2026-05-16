@@ -1906,6 +1906,7 @@ Vorbild: `/admin/social/zeitplan` (Posts) + `/admin/social/plan` (Bulk-Generator
 - **`supabase-migrationen-status-check.sql`** — Read-only SQL-Script im Repo-Root. Listet je Migration "ERLEDIGT" oder "OFFEN". Nach jedem Deploy neuer Migrationen einfach nochmal laufen lassen und erledigte manuell nach `erledigte supabase/` verschieben.
 
 ### Ausgeführte Migrationen (erledigt)
+- ~~`supabase-bookings-liability-override.sql`~~ (manuelle Kamera-/Zubehör-Anpassung der internen Haftungs-Box — am 2026-05-16 ausgeführt, Datei nach `erledigte supabase/` verschoben)
 - ~~`supabase-bookings-wbw-finalized.sql`~~ (WBW-Finalisierung + PDF-E-Mail — am 2026-05-16 ausgeführt, Datei nach `erledigte supabase/` verschoben)
 - ~~Google Reviews: Places API (New) eingebunden~~
 - ~~`supabase-zubehoer-verfuegbarkeit.sql`~~
@@ -2032,7 +2033,6 @@ Zusätzlich zum bestehenden file-hash-Check (byte-identische Datei) erkennt das 
 **Audit-Aktionen:** `beleg.dismiss_duplicate`, `beleg.scan_duplicates`. `beleg.ocr` enthält jetzt `duplicate_kind: 'strict'|'soft'|null` in changes.
 
 ### Noch offen
-- **Haftungs-Box-Override-Migration auszuführen:** `supabase/supabase-bookings-liability-override.sql` (idempotent). Legt Spalte `bookings.liability_override JSONB` an. Ohne Migration laufen GET (Anzeige) + Status-/E-Mail-PATCHs per defensivem Retry weiter; reine „Speichern"-Klicks im Haftungs-Box-Editor liefern dann 503. Nach Migration funktioniert die manuelle Kamera-/Zubehoer-Anpassung der internen Box.
 - **Buchungsnummer-Counter-Migration auszuführen:** `supabase/supabase-booking-id-counter.sql` (idempotent). Legt Tabelle `booking_id_counter` + RPC `next_booking_counter` an, seedet aus existierenden `bookings.id`-Suffixen. Ohne Migration läuft `generateBookingId()` über den Fallback (COUNT-Kandidat + SELECT-Verifikation gegen `bookings.id` mit Suffix-Increment-Loop) — sequenziell sicher, aber NICHT parallel-sicher. Mit Migration zusätzlich parallel-sicher via atomarem `INSERT ON CONFLICT`. Empfohlen ASAP ausführen.
 - **Belege-Duplikat-Migration auszuführen:** `supabase/supabase-belege-content-dedup.sql` (idempotent). Drei neue Spalten auf `belege`. Ohne Migration laufen OCR/Anlage/PATCH per defensivem Retry weiter (Verdacht-Flag wird einfach nicht persistiert), Dismiss-Endpoint liefert 503, Festschreiben blockt nichts. Nach Migration sofort einmal „🔍 Duplikate scannen" auf `/admin/buchhaltung/belege` klicken — markiert die bereits eingebuchten Duplikate.
 - **Wiederbeschaffungswert-Migration auszuführen:** `supabase/supabase-assets-replacement-value-estimate.sql` (idempotent). Legt Spalte `assets.replacement_value_estimate` an. Ohne Migration laufen GWG-Anlage und Anlagen-POST per defensivem Retry weiter ohne die Spalte; Vertrag und Zubehör-Schaden-Modal fallen dann auf den Buchwert zurueck (bei GWG = 0 EUR — fuehrt zu falschen Vorschlaegen).
