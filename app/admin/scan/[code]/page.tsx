@@ -134,6 +134,79 @@ interface UnitCardData {
   compatibleCameras?: CompatibleCamera[] | null;
 }
 
+const BULK_ACC_SELECT =
+  'id, name, category, description, image_url, price, pricing_mode, available, available_qty, is_bulk, compatible_product_ids, internal, upgrade_group, is_upgrade_base, allow_multi_qty, max_qty_per_booking, replacement_value, specs';
+
+interface BulkAccRow {
+  id: string; name?: string; category?: string; description?: string;
+  image_url?: string; price?: number; pricing_mode?: string;
+  available?: boolean; available_qty?: number;
+  compatible_product_ids?: string[]; internal?: boolean;
+  upgrade_group?: string | null; is_upgrade_base?: boolean;
+  allow_multi_qty?: boolean; max_qty_per_booking?: number | null;
+  replacement_value?: number; specs?: AccessorySpecs | null;
+}
+
+/**
+ * Rendert die Sammel-Zubehoer-Karte. `displayCode` ist der Code, der gross
+ * angezeigt wird — bei Scan ueber den Inventar-Code der Bulk-Einheit also der
+ * Inventar-Code, beim Slug-Pfad der accessories-Slug.
+ */
+async function renderBulkAccessoryCard(
+  supabase: ReturnType<typeof createServiceClient>,
+  bulkAcc: BulkAccRow,
+  displayCode: string,
+) {
+  const specs = (bulkAcc.specs ?? null) as AccessorySpecs | null;
+  const bulkInitial: BulkAccessoryFullData = {
+    id: bulkAcc.id,
+    name: bulkAcc.name ?? bulkAcc.id,
+    category: bulkAcc.category ?? '',
+    description: bulkAcc.description ?? null,
+    pricing_mode: bulkAcc.pricing_mode ?? 'oneTime',
+    price: typeof bulkAcc.price === 'number' ? bulkAcc.price : 0,
+    available_qty: typeof bulkAcc.available_qty === 'number' ? bulkAcc.available_qty : 0,
+    available: bulkAcc.available !== false,
+    image_url: bulkAcc.image_url ?? null,
+    compatible_product_ids: Array.isArray(bulkAcc.compatible_product_ids) ? bulkAcc.compatible_product_ids : [],
+    internal: bulkAcc.internal === true,
+    upgrade_group: bulkAcc.upgrade_group ?? null,
+    is_upgrade_base: bulkAcc.is_upgrade_base === true,
+    allow_multi_qty: bulkAcc.allow_multi_qty === true,
+    max_qty_per_booking: typeof bulkAcc.max_qty_per_booking === 'number' ? bulkAcc.max_qty_per_booking : null,
+    replacement_value: typeof bulkAcc.replacement_value === 'number' ? bulkAcc.replacement_value : 0,
+    specs: specs ?? {},
+  };
+  const compatibleCameras = await resolveCompatibleCameras(supabase, bulkInitial.compatible_product_ids);
+  const specItems = buildSpecDataGridItems(bulkAcc.category, specs);
+  const data: UnitCardData = {
+    layoutTitle: 'Sammel-Zubehör',
+    kind: 'accessory',
+    bulk: true,
+    unitId: bulkAcc.id,
+    headerLabel: bulkAcc.category ?? 'Zubehör',
+    name: bulkAcc.name ?? bulkAcc.id,
+    subtitle: bulkAcc.description ?? null,
+    code: displayCode,
+    statusKey: bulkAcc.available ? 'available' : 'retired',
+    heroImage: bulkAcc.image_url ?? null,
+    dataGrid: [
+      { label: 'Verfügbare Menge', value: `${bulkAcc.available_qty ?? 0} Stück`, highlight: true },
+      { label: 'Mietpreis', value: bulkAcc.price != null ? `${fmtEuro(bulkAcc.price)}${bulkAcc.pricing_mode === 'perDay' ? '/Tag' : ' (einmalig)'}` : '—' },
+      { label: 'Typ', value: 'Sammel-Zubehör (Verbrauchsmaterial)' },
+      ...specItems,
+    ],
+    compatibleCameras,
+    note: null,
+    bookings: [],
+    actions: [
+      { href: '/admin/zubehoer', label: 'Zubehör-Editor', primary: true },
+    ],
+    bulkInitial,
+  };
+  return <UnitCard data={data} />;
+}
+
 export default async function ScanLandingPage({ params }: PageProps) {
   const { code } = await params;
   const decodedCode = decodeURIComponent(code).trim();
@@ -283,63 +356,53 @@ export default async function ScanLandingPage({ params }: PageProps) {
     return <UnitCard data={data} />;
   }
 
-  // 3) Versuche Sammel-Zubehoer (Bulk-Accessory direkt ueber accessory.id)
+  // 3) Versuche Sammel-Zubehoer (Bulk-Accessory direkt ueber accessory.id —
+  //    Alt-QRs, die noch den Slug kodieren).
   const { data: bulkAcc } = await supabase
     .from('accessories')
-    .select('id, name, category, description, image_url, price, pricing_mode, available, available_qty, is_bulk, compatible_product_ids, internal, upgrade_group, is_upgrade_base, allow_multi_qty, max_qty_per_booking, replacement_value, specs')
+    .select(BULK_ACC_SELECT)
     .eq('id', decodedCode)
     .eq('is_bulk', true)
     .maybeSingle();
 
   if (bulkAcc) {
-    const specs = (bulkAcc.specs ?? null) as AccessorySpecs | null;
-    const bulkInitial: BulkAccessoryFullData = {
-      id: bulkAcc.id,
-      name: bulkAcc.name ?? bulkAcc.id,
-      category: bulkAcc.category ?? '',
-      description: bulkAcc.description ?? null,
-      pricing_mode: bulkAcc.pricing_mode ?? 'oneTime',
-      price: typeof bulkAcc.price === 'number' ? bulkAcc.price : 0,
-      available_qty: typeof bulkAcc.available_qty === 'number' ? bulkAcc.available_qty : 0,
-      available: bulkAcc.available !== false,
-      image_url: bulkAcc.image_url ?? null,
-      compatible_product_ids: Array.isArray(bulkAcc.compatible_product_ids) ? bulkAcc.compatible_product_ids : [],
-      internal: bulkAcc.internal === true,
-      upgrade_group: bulkAcc.upgrade_group ?? null,
-      is_upgrade_base: bulkAcc.is_upgrade_base === true,
-      allow_multi_qty: bulkAcc.allow_multi_qty === true,
-      max_qty_per_booking: typeof bulkAcc.max_qty_per_booking === 'number' ? bulkAcc.max_qty_per_booking : null,
-      replacement_value: typeof bulkAcc.replacement_value === 'number' ? bulkAcc.replacement_value : 0,
-      specs: specs ?? {},
-    };
-    const compatibleCameras = await resolveCompatibleCameras(supabase, bulkInitial.compatible_product_ids);
-    const specItems = buildSpecDataGridItems(bulkAcc.category, specs);
-    const data: UnitCardData = {
-      layoutTitle: 'Sammel-Zubehör',
-      kind: 'accessory',
-      bulk: true,
-      unitId: bulkAcc.id,
-      headerLabel: bulkAcc.category ?? 'Zubehör',
-      name: bulkAcc.name ?? bulkAcc.id,
-      subtitle: bulkAcc.description ?? null,
-      code: bulkAcc.id,
-      statusKey: bulkAcc.available ? 'available' : 'retired',
-      heroImage: bulkAcc.image_url ?? null,
-      dataGrid: [
-        { label: 'Verfügbare Menge', value: `${bulkAcc.available_qty ?? 0} Stück`, highlight: true },
-        { label: 'Mietpreis', value: bulkAcc.price != null ? `${fmtEuro(bulkAcc.price)}${bulkAcc.pricing_mode === 'perDay' ? '/Tag' : ' (einmalig)'}` : '—' },
-        { label: 'Typ', value: 'Sammel-Zubehör (Verbrauchsmaterial)' },
-        ...specItems,
-      ],
-      compatibleCameras,
-      note: null,
-      bookings: [],
-      actions: [
-        { href: '/admin/zubehoer', label: 'Zubehör-Editor', primary: true },
-      ],
-      bulkInitial,
-    };
-    return <UnitCard data={data} />;
+    return renderBulkAccessoryCard(supabase, bulkAcc as BulkAccRow, bulkAcc.id);
+  }
+
+  // 3b) Sammel-Zubehoer ueber den Inventar-Code der Bulk-Einheit. Der
+  //     Sammel-QR kodiert seit Auto-Inventar den inventar_code, nicht den
+  //     accessories-Slug. Aufloesung: inventar_code → produkt_id →
+  //     accessories-Slug (migration_audit reverse). Zeigt dieselbe
+  //     Sammel-Zubehoer-Karte, nur mit dem Inventar-Code als Label.
+  {
+    const { data: invBulk } = await supabase
+      .from('inventar_units')
+      .select('produkt_id')
+      .eq('inventar_code', decodedCode)
+      .eq('tracking_mode', 'bulk')
+      .maybeSingle();
+    const produktId = (invBulk as { produkt_id?: string | null } | null)?.produkt_id ?? null;
+    if (produktId) {
+      const { data: auditRow } = await supabase
+        .from('migration_audit')
+        .select('alte_id')
+        .eq('alte_tabelle', 'accessories')
+        .eq('neue_tabelle', 'produkte')
+        .eq('neue_id', produktId)
+        .maybeSingle();
+      const slug = (auditRow as { alte_id?: string } | null)?.alte_id ?? null;
+      if (slug) {
+        const { data: bulkAcc2 } = await supabase
+          .from('accessories')
+          .select(BULK_ACC_SELECT)
+          .eq('id', slug)
+          .eq('is_bulk', true)
+          .maybeSingle();
+        if (bulkAcc2) {
+          return renderBulkAccessoryCard(supabase, bulkAcc2 as BulkAccRow, decodedCode);
+        }
+      }
+    }
   }
 
   // 4) Letzter Versuch: inventar_units (neue Welt). Wenn der Code als

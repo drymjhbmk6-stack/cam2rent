@@ -37,12 +37,26 @@ export default async function ZubehoerQrCodesPage({
   let qrItems: Array<{ id: string; exemplar_code: string; status: string; notes: string | null; qr: string }> = [];
 
   if (isBulk) {
+    // Sammel-QR soll den Inventar-Code der Bulk-Einheit kodieren (nicht den
+    // accessories-Slug). Fallback auf den Slug, falls noch keine
+    // inventar_units-Bulk-Einheit existiert (Alt-Bestand vor dem
+    // Auto-Inventar bei Sammel-Zubehoer).
+    let scanCode = id;
+    const produkteId = await resolveProdukteId(supabase, 'accessories', id, { autoCreate: false });
+    if (produkteId) {
+      const bulkUnits = await loadInventarUnitsForProdukt(supabase, produkteId, {
+        excludeRetired: true,
+        trackingMode: 'bulk',
+      });
+      const withCode = bulkUnits.find((u) => u.inventar_code);
+      if (withCode?.inventar_code) scanCode = withCode.inventar_code;
+    }
     qrItems = [{
       id: id,
-      exemplar_code: id,
+      exemplar_code: scanCode,
       status: 'available',
       notes: null,
-      qr: await QRCode.toDataURL(`${siteUrl}/admin/scan/${encodeURIComponent(id)}`, {
+      qr: await QRCode.toDataURL(`${siteUrl}/admin/scan/${encodeURIComponent(scanCode)}`, {
         margin: 1,
         width: 360,
         errorCorrectionLevel: 'M',
