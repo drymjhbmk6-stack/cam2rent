@@ -1831,7 +1831,19 @@ Erster Tech-Debt-/Reliability-Pass mit `engineering:tech-debt` + `engineering:co
 - **Tests fuer 4 weitere Pure-Function-Libs**: `lib/__tests__/depreciation.test.ts` (24 Tests fuer monatliche AfA-Rate, monthsBetween, Zeitwert-Berechnung mit Restwert-Floor, pendingDepreciationMonths-Catchup, isFullyDepreciated). `lib/__tests__/timezone.test.ts` (18 Tests fuer Berlin-Offset Sommer/Winter, getBerlinDateString, getBerlinHour, utc↔local Round-Trip). `lib/__tests__/csv.test.ts` (20 Tests fuer Formula-Injection-Schutz `=`/`+`/`-`/`@`/TAB/CR + RFC4180-Quoting + BOM). `lib/__tests__/url-allowlist.test.ts` (28 Tests fuer alle 6 SSRF-Allowlist-Helpers inkl. RFC1918, Cloud-Metadata, IPv6-Loopback). Insgesamt 90 neue Tests.
 - **DB-Indizes-Migration** unter `supabase/supabase-tech-debt-indizes.sql` (additiv, idempotent, manuell auszufuehren). Drei neue Indizes: `invoices(is_test, invoice_date DESC)` fuer Buchhaltungs-Liste, `expenses(category) WHERE deleted_at IS NULL` fuer EÜR-Filter, `inventar_verknuepfung(beleg_position_id)` fuer Belege-Detail (optional, nur wenn neue Buchhaltungs-Welt migriert ist). `CREATE INDEX CONCURRENTLY` — kein Lock waehrend Live-Betrieb.
 
-**Welle 2 + 3** (Timeouts auf externe Calls, N+1-Patches, `lib/email.ts` logEmail-Catch, Permission-Mapping-Luecken, `pickAssetsTable` Konsolidierung) folgen in separaten Sessions, sobald gewuenscht.
+**Welle 2 + 3** (Timeouts auf externe Calls, N+1-Patches, `lib/email.ts` logEmail-Catch, Permission-Mapping-Luecken) folgen in separaten Sessions, sobald gewuenscht.
+
+> **`pickAssetsTable` NICHT „konsolidieren" (Stand 2026-05-17).** Die Notiz
+> stammte aus dem aufgegebenen Drop-Denkmodell (nach `assets_neu`→`assets`-Rename
+> waere es „nur noch assets"). Da der Drop tot ist (siehe „STRATEGIE-WECHSEL"),
+> ist die Dual-Table-Logik (`assets` UND `assets_neu` parallel abfragen/schreiben,
+> Insert-Time-Fallback, PostgREST-Schema-Cache-Defensive in
+> `anlagen-neu`, `belege/[id]`, `aufheben`, `asset-auto-generator`, `afa-cron`)
+> der **korrekte dauerhafte Soll-Zustand**, kein Tech-Debt. Hartverdrahten auf
+> eine Tabelle würde real existierende Assets in der jeweils anderen Tabelle
+> unauffindbar machen (Finanz-Regression). Die abweichenden
+> `isMissingTableError`-Varianten (afa-cron nur `42P01`; andere zusaetzlich
+> `PGRST205/PGRST202`) sind absichtlich — nicht vereinheitlichen.
 
 ## Offene Punkte
 
