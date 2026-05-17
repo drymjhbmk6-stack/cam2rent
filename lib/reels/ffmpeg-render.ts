@@ -32,8 +32,6 @@ export interface RenderInput {
   script: ReelScript;
   templateType: 'stock_footage' | 'motion_graphics';
   // Phase 1.5: StockClip ist die plattform-neutrale Form (Pexels + Pixabay).
-  // Alter Pexels-spezifischer Typ ist im Re-Export `lib/reels/pexels.ts`
-  // weiterhin verfuegbar fuer Backward-Compat.
   clips?: StockClip[]; // nur für stock_footage
   musicUrl?: string;                                            // optional
   bgColorFrom?: string;                                         // motion_graphics

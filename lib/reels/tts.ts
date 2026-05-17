@@ -149,12 +149,6 @@ export async function generateSpeechOpenAI(text: string, opts: GenerateSpeechOpe
   return Buffer.from(await response.arrayBuffer());
 }
 
-/**
- * @deprecated Backward-Compat-Alias. Neue Aufrufer sollten
- * `generateSpeechOpenAI` oder `generateSpeechFromSettings` nutzen.
- */
-export const generateSpeech = generateSpeechOpenAI;
-
 export interface GenerateSpeechElevenLabsOptions {
   voiceId: string;
   modelId?: ElevenLabsModel;
