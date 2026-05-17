@@ -11,6 +11,7 @@ import {
   G,
 } from '@react-pdf/renderer';
 import { BUSINESS } from '@/lib/business-config';
+import { fmtEuro } from '@/lib/format-utils';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -90,9 +91,7 @@ export interface RentalContractData {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function fmt(n: number) {
-  return n.toFixed(2).replace('.', ',') + ' \u20ac';
-}
+// fmt \u2192 zentral aus lib/format-utils (fmtEuro)
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
@@ -306,12 +305,12 @@ export function buildContractText(data: RentalContractData): string {
     `Mieter: ${data.customerName} | ${data.customerEmail}`,
     `Buchungsnummer: ${data.bookingNumber}`,
     `Mietbeginn: ${data.rentalFrom} | Mietende: ${data.rentalTo} | Dauer: ${data.rentalDays} Tage`,
-    `Gesamtbetrag: ${fmt(data.priceTotal)}`,
+    `Gesamtbetrag: ${fmtEuro(data.priceTotal)}`,
     `Haftungsoption: ${data.haftungOption}`,
     '',
   ];
   for (const item of data.items) {
-    lines.push(`Pos ${item.position}: ${item.bezeichnung} | ${item.seriennr} | ${fmt(item.preis)} | Wert: ${fmt(item.wiederbeschaffungswert)}`);
+    lines.push(`Pos ${item.position}: ${item.bezeichnung} | ${item.seriennr} | ${fmtEuro(item.preis)} | Wert: ${fmtEuro(item.wiederbeschaffungswert)}`);
   }
   lines.push('');
   const paragraphs = data.customParagraphs ?? getParagraphen(data.eigenbeteiligung);
@@ -449,7 +448,7 @@ export function RentalContractPDF({ data }: { data: RentalContractData }) {
               <Text style={{ width: '37%', fontSize: 8, color: DARK }}>{item.bezeichnung}</Text>
               <Text style={{ width: '20%', fontSize: 8, color: GRAY }}>{item.seriennr || '\u2013'}</Text>
               <Text style={{ width: '15%', fontSize: 8, color: DARK, textAlign: 'right' }}>{item.tage}</Text>
-              <Text style={{ width: '20%', fontSize: 8, color: DARK, textAlign: 'right' }}>{fmt(item.preis)}</Text>
+              <Text style={{ width: '20%', fontSize: 8, color: DARK, textAlign: 'right' }}>{fmtEuro(item.preis)}</Text>
             </View>
           ))}
         </View>
@@ -465,7 +464,7 @@ export function RentalContractPDF({ data }: { data: RentalContractData }) {
           {data.items.map((item, i) => (
             <View key={i} style={{ flexDirection: 'row', backgroundColor: i % 2 === 1 ? ALT_ROW : '#fff', paddingVertical: 3, paddingHorizontal: 6 }}>
               <Text style={{ width: '60%', fontSize: 8, color: DARK }}>{item.bezeichnung}</Text>
-              <Text style={{ width: '40%', fontSize: 8, color: DARK, textAlign: 'right' }}>{fmt(item.wiederbeschaffungswert)}</Text>
+              <Text style={{ width: '40%', fontSize: 8, color: DARK, textAlign: 'right' }}>{fmtEuro(item.wiederbeschaffungswert)}</Text>
             </View>
           ))}
         </View>
@@ -473,12 +472,12 @@ export function RentalContractPDF({ data }: { data: RentalContractData }) {
         {/* Entgelt und Zahlung */}
         <Text style={s.sectionHeading}>Entgelt und Zahlung</Text>
         <View style={{ borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 4, overflow: 'hidden', marginBottom: 8 }}>
-          <TableRow label="Mietpreis" value={fmt(data.priceRental)} />
-          <TableRow label="Versandkosten" value={fmt(data.priceShipping)} alt />
-          <TableRow label={`Schadenspauschale (${data.haftungOption})`} value={fmt(data.priceHaftung)} />
+          <TableRow label="Mietpreis" value={fmtEuro(data.priceRental)} />
+          <TableRow label="Versandkosten" value={fmtEuro(data.priceShipping)} alt />
+          <TableRow label={`Schadenspauschale (${data.haftungOption})`} value={fmtEuro(data.priceHaftung)} />
           <View style={{ flexDirection: 'row', backgroundColor: NAVY, paddingVertical: 5, paddingHorizontal: 8 }}>
             <Text style={{ width: '38%', fontSize: 9, fontFamily: 'Helvetica-Bold', color: '#fff' }}>Gesamtbetrag</Text>
-            <Text style={{ width: '62%', fontSize: 9, fontFamily: 'Helvetica-Bold', color: '#fff' }}>{fmt(data.priceTotal)}</Text>
+            <Text style={{ width: '62%', fontSize: 9, fontFamily: 'Helvetica-Bold', color: '#fff' }}>{fmtEuro(data.priceTotal)}</Text>
           </View>
           <TableRow label="Zahlungsart" value="Kreditkarte via Stripe" />
           {data.stripePaymentIntentId && <TableRow label="Stripe Payment Intent" value={data.stripePaymentIntentId} alt />}
@@ -487,7 +486,7 @@ export function RentalContractPDF({ data }: { data: RentalContractData }) {
         <Text style={{ fontSize: 7, color: GRAY, fontStyle: 'italic', marginBottom: 2 }}>Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.</Text>
         {data.depositMode === 'kaution' ? (
           <Text style={{ fontSize: 7, color: GRAY, fontStyle: 'italic', marginBottom: 12 }}>
-            Zusaetzlich zum Mietpreis wird eine Kaution in Hoehe von {fmt(data.deposit ?? 0)} per Kreditkartenvorautorisierung reserviert (kein Geldfluss). Die Reservierung wird spaetestens 7 Tage nach Vertragsende aufgehoben, sofern keine Schaeden geltend gemacht werden.
+            Zusaetzlich zum Mietpreis wird eine Kaution in Hoehe von {fmtEuro(data.deposit ?? 0)} per Kreditkartenvorautorisierung reserviert (kein Geldfluss). Die Reservierung wird spaetestens 7 Tage nach Vertragsende aufgehoben, sofern keine Schaeden geltend gemacht werden.
           </Text>
         ) : (
           <Text style={{ fontSize: 7, color: GRAY, fontStyle: 'italic', marginBottom: 12 }}>
@@ -516,7 +515,7 @@ export function RentalContractPDF({ data }: { data: RentalContractData }) {
           ) : data.haftungOption === 'Basis-Schadenspauschale' ? (
             <>
               <Text style={{ fontSize: 8, color: DARK, lineHeight: 1.5, marginBottom: 3 }}>
-                <Text style={{ fontFamily: 'Helvetica-Bold' }}>Maximale Eigenbeteiligung des Mieters je Schadensereignis:</Text> {fmt(data.eigenbeteiligung ?? 200)}
+                <Text style={{ fontFamily: 'Helvetica-Bold' }}>Maximale Eigenbeteiligung des Mieters je Schadensereignis:</Text> {fmtEuro(data.eigenbeteiligung ?? 200)}
               </Text>
               <Text style={{ fontSize: 7, color: GRAY, lineHeight: 1.5 }}>
                 Bei reparablen Schaeden traegt der Mieter die Reparaturkosten bis zu diesem Betrag. Bei Totalschaden / Verlust ebenfalls bis zu diesem Betrag — der Restschaden wird durch das Reparaturdepot gedeckt. Ausnahmen siehe § 7 Abs. 4.

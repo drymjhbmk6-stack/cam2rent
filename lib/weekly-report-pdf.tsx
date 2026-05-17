@@ -1,6 +1,6 @@
 import { Document, Page, Text, View, StyleSheet, Svg, Rect, Circle, G } from '@react-pdf/renderer';
 import { BUSINESS } from '@/lib/business-config';
-import { fmtEuro } from '@/lib/format-utils';
+import { fmtEuro, fmtDate } from '@/lib/format-utils';
 import type { WeeklyReportData } from '@/lib/weekly-report';
 
 const NAVY = '#0f172a';
@@ -48,10 +48,9 @@ function trendText(curr: number, prev: number): string {
   return `${diff >= 0 ? '↑' : '↓'} ${pct}% (Vorwoche: ${prev})`;
 }
 
+// Numerisches Datum (TT.MM.JJJJ) zentral aus format-utils; leerer Input → ''
 function fmtDateShort(iso: string): string {
-  if (!iso) return '';
-  const d = new Date(iso);
-  return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Europe/Berlin' });
+  return iso ? fmtDate(iso) : '';
 }
 
 export function WeeklyReportPDF({ data }: { data: WeeklyReportData }) {

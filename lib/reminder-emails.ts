@@ -3,6 +3,7 @@ import { BUSINESS } from '@/lib/business-config';
 import { escapeHtml as h } from '@/lib/email';
 import { getResendFromEmail, getSiteUrl } from '@/lib/env-mode';
 import { generateSurveyToken } from '@/lib/survey-token';
+import { isoToDE } from '@/lib/format-utils';
 
 // Platzhalter-Key, damit Modul-Import beim Build ohne RESEND_API_KEY nicht kippt.
 const resend = new Resend(process.env.RESEND_API_KEY || 're_build_placeholder');
@@ -22,10 +23,6 @@ export interface ReminderEmailData {
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
 
-function fmtDate(iso: string): string {
-  const [y, m, d] = iso.split('-');
-  return `${d}.${m}.${y}`;
-}
 
 function buildBookingUrl(bookingId: string, custom: string | undefined, baseUrl: string): string {
   return custom ?? `${baseUrl}/buchung/${bookingId}`;
@@ -93,7 +90,7 @@ export async function sendReturnReminder(data: ReminderEmailData): Promise<strin
     <p style="margin:0 0 20px;font-size:15px;color:#4b5563;">
       Hallo ${h(data.customerName)},<br><br>
       nur eine kurze Erinnerung: Dein Mietartikel <strong>${h(data.productName)}</strong>
-      muss bis zum <strong>${fmtDate(data.rentalTo)}</strong> zurückgesendet werden.
+      muss bis zum <strong>${isoToDE(data.rentalTo)}</strong> zurückgesendet werden.
     </p>
     <p style="margin:0 0 8px;font-size:15px;color:#4b5563;">
       Bitte denke daran, das Paket rechtzeitig aufzugeben, damit es pünktlich bei uns ankommt.
@@ -173,7 +170,7 @@ export async function sendOverdueNotice(data: ReminderEmailData): Promise<string
     <p style="margin:0 0 20px;font-size:15px;color:#4b5563;">
       Hallo ${h(data.customerName)},<br><br>
       der Mietzeitraum für <strong>${h(data.productName)}</strong> ist seit gestern
-      (<strong>${fmtDate(data.rentalTo)}</strong>) abgelaufen.
+      (<strong>${isoToDE(data.rentalTo)}</strong>) abgelaufen.
       Bitte sende den Artikel umgehend an uns zurück.
     </p>
     <p style="margin:0 0 8px;font-size:15px;color:#4b5563;">
@@ -215,7 +212,7 @@ export async function sendSecondOverdueNotice(data: ReminderEmailData): Promise<
     <p style="margin:0 0 20px;font-size:15px;color:#4b5563;">
       Hallo ${h(data.customerName)},<br><br>
       dein Mietzeitraum für <strong>${h(data.productName)}</strong> ist seit dem
-      <strong>${fmtDate(data.rentalTo)}</strong> abgelaufen – das sind bereits 3 Tage.
+      <strong>${isoToDE(data.rentalTo)}</strong> abgelaufen – das sind bereits 3 Tage.
       Wir bitten dich dringend, den Artikel sofort zurückzusenden.
     </p>
     <p style="margin:0 0 8px;font-size:15px;color:#4b5563;">
