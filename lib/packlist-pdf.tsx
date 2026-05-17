@@ -4,14 +4,11 @@ import {
   Text,
   View,
   StyleSheet,
-  Svg,
-  Rect,
-  Circle,
-  G,
   Image,
 } from '@react-pdf/renderer';
 import { BUSINESS } from '@/lib/business-config';
 import { isoToDE } from '@/lib/format-utils';
+import { PdfLogo } from '@/lib/pdf/common';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -303,15 +300,7 @@ export function PacklistPDF({ data }: { data: PacklistData }) {
           {/* ── Header Bar ── */}
           <View style={s.headerBar}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <Svg width={38} height={25} viewBox="0 0 160 100">
-                <G transform="translate(80, 50)">
-                  <Rect x={-40} y={-18} width={80} height={48} rx={6} fill={C.cyan} />
-                  <Rect x={-22} y={-26} width={20} height={10} rx={2} fill={C.cyan} />
-                  <Circle cx={0} cy={6} r={14} fill={C.navy} />
-                  <Circle cx={0} cy={6} r={9} fill={C.cyan} />
-                  <Circle cx={26} cy={-10} r={2} fill={C.white} />
-                </G>
-              </Svg>
+              <PdfLogo width={38} height={25} />
               <Text style={[s.headerBrand, { marginLeft: 10 }]}>{BUSINESS.name || 'cam2rent'}</Text>
             </View>
             <View style={s.headerRight}>

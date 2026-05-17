@@ -468,6 +468,7 @@ Optionales kleines Referenzbild pro `included_parts`-Zeile, anklickbar → Light
 - Kamera-Editor zeigt nur relevante Optionen basierend auf globalem Modus
 
 ### PDF-Dokumente (DIN A4)
+- **Gemeinsames Logo (Stand 2026-05-17):** `lib/pdf/common.tsx` exportiert `<PdfLogo width height />` (Marken-Kameraicon, Cyan/Navy) + `PDF_NAVY`/`PDF_CYAN`. Genutzt von weekly-report / legal / haftungsbedingungen / packlist / contract-template (vorher 5× inline-SVG-Kopie, pixel-identisch dedupliziert). **Bewusst NICHT zentralisiert:** Header-/Footer-Balken (Style-Werte weichen pro Template ab) und das schwarz/weiße Rechnungs-Logo (`lib/invoice-pdf.tsx` — eigenständige B/W-Variante laut Design-Regel).
 - **Alle PDFs nutzen explizite Seitengröße:** `size={[595.28, 841.89]}` (exakt DIN A4 in Punkten)
 - **Content-Disposition: inline** + **Content-Length** Header für korrekte Anzeige/Druck
 - **Rechnungs-PDF** (`lib/invoice-pdf.tsx`):

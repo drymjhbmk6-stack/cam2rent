@@ -1,6 +1,7 @@
-import { Document, Page, Text, View, StyleSheet, Svg, Rect, Circle, G } from '@react-pdf/renderer';
+import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
 import { BUSINESS } from '@/lib/business-config';
 import { fmtEuro, fmtDate } from '@/lib/format-utils';
+import { PdfLogo } from '@/lib/pdf/common';
 import type { WeeklyReportData } from '@/lib/weekly-report';
 
 const NAVY = '#0f172a';
@@ -61,15 +62,7 @@ export function WeeklyReportPDF({ data }: { data: WeeklyReportData }) {
 
         <View style={s.headerBar}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <Svg width={38} height={25} viewBox="0 0 160 100">
-              <G transform="translate(80, 50)">
-                <Rect x={-40} y={-18} width={80} height={48} rx={6} fill={CYAN} />
-                <Rect x={-22} y={-26} width={20} height={10} rx={2} fill={CYAN} />
-                <Circle cx={0} cy={6} r={14} fill={NAVY} />
-                <Circle cx={0} cy={6} r={9} fill={CYAN} />
-                <Circle cx={26} cy={-10} r={2} fill="#fff" />
-              </G>
-            </Svg>
+            <PdfLogo width={38} height={25} />
             <View style={{ marginLeft: 10 }}>
               <Text style={s.headerTitle}>Wochenbericht</Text>
               <Text style={s.headerSub}>

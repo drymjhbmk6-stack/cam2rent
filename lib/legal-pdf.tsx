@@ -5,12 +5,9 @@ import {
   View,
   StyleSheet,
   Link,
-  Svg,
-  Rect,
-  Circle,
-  G,
 } from '@react-pdf/renderer';
 import { BUSINESS } from '@/lib/business-config';
+import { PdfLogo } from '@/lib/pdf/common';
 import { marked, type Token, type Tokens } from 'marked';
 
 // ─── Farben (gleicher Stil wie Vertrags-PDF) ─────────────────────────────────
@@ -400,15 +397,7 @@ export function LegalDocumentPDF({ data }: { data: LegalPDFData }) {
         {/* Header */}
         <View style={s.headerBar}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <Svg width={38} height={25} viewBox="0 0 160 100">
-              <G transform="translate(80, 50)">
-                <Rect x={-40} y={-18} width={80} height={48} rx={6} fill={CYAN} />
-                <Rect x={-22} y={-26} width={20} height={10} rx={2} fill={CYAN} />
-                <Circle cx={0} cy={6} r={14} fill={NAVY} />
-                <Circle cx={0} cy={6} r={9} fill={CYAN} />
-                <Circle cx={26} cy={-10} r={2} fill="#ffffff" />
-              </G>
-            </Svg>
+            <PdfLogo width={38} height={25} />
             <View style={{ marginLeft: 10 }}>
               <Text style={s.headerTitle}>{data.title}</Text>
               <Text style={{ fontSize: 8, color: '#94a3b8', marginTop: 2 }}>
