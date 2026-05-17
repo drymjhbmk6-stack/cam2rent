@@ -5,6 +5,7 @@ import Image from 'next/image';
 import DynamicSelect from '@/components/admin/DynamicSelect';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import AccessoryUnitsManager from '@/components/admin/AccessoryUnitsManager';
+import InventarCodeBuilder from '@/components/admin/InventarCodeBuilder';
 import { type AdminProduct } from '@/lib/price-config';
 import { getBrandStyle } from '@/lib/brand-colors';
 import { useBrandColors } from '@/hooks/useBrandColors';
@@ -68,6 +69,9 @@ function emptyForm() {
     max_qty_per_booking: null as number | null,
     replacement_value: '',
     is_bulk: false,
+    // Pflicht-Inventar-Code bei Sammel-Zubehoer — legt automatisch eine
+    // Bulk-Inventar-Einheit an (siehe POST /api/admin/accessories).
+    inventar_code: '',
     specs: {} as Record<string, string>, // Form-State: Strings, beim Submit zu AccessorySpecs konvertiert
     included_parts: [] as string[],
     included_parts_images: [] as string[],
@@ -160,6 +164,10 @@ export default function AdminZubehoerPage() {
 
   async function handleCreate() {
     if (!newForm.name.trim()) { alert('Bitte einen Namen eingeben.'); return; }
+    if (newForm.is_bulk && !newForm.inventar_code) {
+      alert('Bei Sammel-Zubehör ist ein vollständiger Inventar-Code Pflicht (alle 4 Segmente).');
+      return;
+    }
     setCreating(true);
     try {
       const res = await fetch('/api/admin/accessories', {
@@ -462,16 +470,29 @@ export default function AdminZubehoerPage() {
                 </p>
               </div>
               {newForm.is_bulk && (
-                <div>
-                  <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Verfügbare Menge</label>
-                  <input
-                    type="number" min="0" step="1"
-                    value={newForm.available_qty}
-                    onChange={(e) => setNewForm((f) => ({ ...f, available_qty: Math.max(0, parseInt(e.target.value, 10) || 0) }))}
-                    placeholder="z.B. 200"
-                    className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue"
-                  />
-                </div>
+                <>
+                  <div className="sm:col-span-2">
+                    <InventarCodeBuilder
+                      variant="light"
+                      value={newForm.inventar_code}
+                      onChange={(code) => setNewForm((f) => ({ ...f, inventar_code: code }))}
+                    />
+                    <p className="text-xs text-brand-muted mt-1">
+                      Pflicht — legt automatisch eine Bulk-Einheit im Inventar an
+                      (Sammel-QR, Bestand wird unten gepflegt).
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-heading font-semibold text-brand-muted mb-1.5">Anfangsbestand / Verfügbare Menge</label>
+                    <input
+                      type="number" min="0" step="1"
+                      value={newForm.available_qty}
+                      onChange={(e) => setNewForm((f) => ({ ...f, available_qty: Math.max(0, parseInt(e.target.value, 10) || 0) }))}
+                      placeholder="z.B. 200"
+                      className="w-full px-3 py-2.5 border border-brand-border rounded-[10px] text-sm font-body focus:outline-none focus:ring-2 focus:ring-accent-blue"
+                    />
+                  </div>
+                </>
               )}
               <div className="flex items-center gap-6 flex-wrap">
                 <label className="flex items-center gap-2 cursor-pointer">
@@ -547,7 +568,7 @@ export default function AdminZubehoerPage() {
                 className="px-4 py-2 text-sm font-heading font-semibold text-brand-muted border border-brand-border rounded-btn hover:bg-brand-bg transition-colors">
                 Abbrechen
               </button>
-              <button onClick={handleCreate} disabled={creating}
+              <button onClick={handleCreate} disabled={creating || (newForm.is_bulk && !newForm.inventar_code)}
                 className="px-5 py-2 text-sm font-heading font-semibold rounded-btn bg-brand-black text-white hover:bg-brand-dark transition-colors disabled:opacity-40">
                 {creating ? 'Erstelle…' : 'Zubehör erstellen'}
               </button>

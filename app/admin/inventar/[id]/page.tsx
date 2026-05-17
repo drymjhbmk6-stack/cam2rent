@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 
 interface Unit {
@@ -66,6 +66,7 @@ function fmtEuro(n: number | null): string {
 
 export default function InventarDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const id = String(params?.id ?? '');
 
   const [unit, setUnit] = useState<Unit | null>(null);
@@ -192,6 +193,32 @@ export default function InventarDetailPage() {
     });
     await reload();
     setBusy(false);
+  }
+
+  async function handleDelete() {
+    if (!unit) return;
+    if (!confirm(
+      `"${unit.bezeichnung}" endgültig aus dem Inventar löschen?\n\n` +
+      `Vermietete Stücke können nicht gelöscht werden. Der gespiegelte ` +
+      `Eintrag in der alten Welt (product_units/accessory_units) wird mit entfernt.`,
+    )) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/inventar/${id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(res.status === 409
+          ? (data.error ?? 'Stück ist vermietet — kann nicht gelöscht werden.')
+          : `Löschen fehlgeschlagen: ${data.error ?? 'Status ' + res.status}`);
+        setBusy(false);
+        return;
+      }
+      router.push('/admin/inventar');
+    } catch (err) {
+      setError(`Netzwerk-Fehler: ${(err as Error).message}`);
+      setBusy(false);
+    }
   }
 
   async function patchField(payload: Record<string, unknown>): Promise<boolean> {
@@ -431,6 +458,26 @@ export default function InventarDetailPage() {
           value={unit.notizen ?? ''}
           onSave={(v) => patchField({ notizen: v.trim() || null })}
         />
+
+        <section className="bg-[#111827] border border-rose-500/30 rounded p-4">
+          <div className="flex flex-wrap justify-between items-center gap-3">
+            <div>
+              <h2 className="font-semibold text-rose-300">Gefahrenzone</h2>
+              <p className="text-xs text-slate-400 mt-1">
+                {unit.status === 'vermietet'
+                  ? 'Stück ist aktuell vermietet — Löschen ist gesperrt.'
+                  : 'Entfernt das Stück endgültig aus dem Inventar (inkl. gespiegeltem Legacy-Eintrag).'}
+              </p>
+            </div>
+            <button
+              onClick={handleDelete}
+              disabled={busy || unit.status === 'vermietet'}
+              className="px-4 py-2 bg-rose-600 hover:bg-rose-500 disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed text-white rounded text-sm font-semibold"
+            >
+              {busy ? 'Löscht…' : 'Endgültig löschen'}
+            </button>
+          </div>
+        </section>
       </div>
 
       {/* Verknuepfungs-Modal */}

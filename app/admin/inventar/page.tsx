@@ -90,6 +90,32 @@ export default function InventarPage() {
   const [status, setStatus] = useState('');
   const [belegStatus, setBelegStatus] = useState('');
   const [q, setQ] = useState('');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  async function handleDelete(id: string, label: string) {
+    if (!confirm(
+      `"${label}" endgültig aus dem Inventar löschen?\n\n` +
+      `Vermietete Stücke können nicht gelöscht werden. ` +
+      `Der gespiegelte Eintrag in der alten Welt (product_units/accessory_units) ` +
+      `wird mit entfernt.`,
+    )) return;
+    setDeletingId(id);
+    try {
+      const res = await fetch(`/api/admin/inventar/${id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        alert(res.status === 409
+          ? (data.error ?? 'Stück ist vermietet — kann nicht gelöscht werden.')
+          : `Löschen fehlgeschlagen: ${data.error ?? 'Status ' + res.status}`);
+        return;
+      }
+      setUnits((prev) => prev.filter((u) => u.id !== id));
+    } catch (err) {
+      alert(`Netzwerk-Fehler: ${(err as Error).message}`);
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   useEffect(() => {
     const load = async () => {
@@ -191,6 +217,7 @@ export default function InventarPage() {
                   <th className="px-3 py-2">Status</th>
                   <th className="px-3 py-2">Beleg</th>
                   <th className="px-3 py-2 text-right">WBW</th>
+                  <th className="px-3 py-2 text-right">Aktion</th>
                 </tr>
               </thead>
               <tbody>
@@ -215,6 +242,16 @@ export default function InventarPage() {
                         {fmtEuro(u.wbw_computed)}
                       </span>
                       {u.wbw_manuell_gesetzt && <span className="ml-1 text-cyan-400" title="Manueller Override">●</span>}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleDelete(u.id, d.bezeichnung); }}
+                        disabled={deletingId === u.id || u.status === 'vermietet'}
+                        title={u.status === 'vermietet' ? 'Vermietet — kann nicht gelöscht werden' : 'Endgültig löschen'}
+                        className="text-xs text-rose-400 hover:text-rose-300 disabled:text-slate-600 disabled:cursor-not-allowed"
+                      >
+                        {deletingId === u.id ? 'Löscht…' : 'Löschen'}
+                      </button>
                     </td>
                   </tr>
                   );

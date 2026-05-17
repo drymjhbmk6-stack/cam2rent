@@ -135,6 +135,38 @@ migration_audit-Lookup auf `product_units`) und faellt auf alte `assets`-Tabelle
 zurueck. Die `pickAssetsTable`-Aufraeumung ist reine Code-Hygiene INNERHALB des
 Hybrids (siehe „Welle 2+3"), kein Drop.
 
+### Inventar-Löschen + Sammel-Zubehör-Autoinventar (Stand 2026-05-17)
+Zwei Lücken im Inventar/Zubehör-Flow geschlossen:
+
+- **Löschen-Aktion in der Inventar-Liste + Detailseite.** Der
+  `DELETE /api/admin/inventar/[id]`-Endpoint existierte (lehnt `status='vermietet'`
+  mit 409 ab, räumt via `deleteMirror()` die Legacy-Spiegel mit weg), hatte aber
+  **keinen UI-Einstieg**. Jetzt: `/admin/inventar` hat eine „Aktion"-Spalte mit
+  Löschen-Button pro Zeile (`stopPropagation` gegen den Row-Klick, disabled +
+  Tooltip bei `vermietet`, 409-Handling). `/admin/inventar/[id]` hat eine
+  „Gefahrenzone"-Section mit „Endgültig löschen" (Confirm, 409 → Inline-Fehler,
+  Erfolg → Redirect auf `/admin/inventar`). Schutz unverändert serverseitig —
+  vermietete Stücke bleiben unlöschbar.
+- **Neues Sammel-Zubehör legt automatisch eine Bulk-Inventar-Einheit an.**
+  Vorher schrieb `POST /api/admin/accessories` nur die `accessories`-Row; ein
+  `is_bulk=true`-Zubehör tauchte nie unter `/admin/inventar` auf und hatte keinen
+  Inventar-Code/Bestand. Jetzt: bei `is_bulk` ist im „Neues Zubehör"-Formular der
+  **Inventar-Code Pflicht** (gleicher 4-Segment-Builder wie `/admin/inventar/neu`)
+  + „Anfangsbestand". Der Server ruft nach dem Accessory-Insert
+  `resolveProdukteId(supabase,'accessories',id,{autoCreate:true})` und legt eine
+  `inventar_units`-Row an (`typ='zubehoer'`, `tracking_mode='bulk'`,
+  `inventar_code`, `bestand=available_qty`, `status='verfuegbar'`,
+  `beleg_status='beleg_fehlt'`). Defensiv: schlägt die Inventar-Anlage fehl
+  (Migration fehlt / Code doppelt → 23505), bleibt das Zubehör erhalten und der
+  User bekommt eine `warnings`-Meldung (bestehender Alert-Pfad in `handleCreate`).
+- **Neuer Shared-Component `components/admin/InventarCodeBuilder.tsx`** —
+  selbstverwaltender 4-Segment-Code-Builder (lädt code-segmente /
+  seg3-suggestions / next-code-number selbst, meldet fertigen Code per
+  `onChange`). `variant='dark'|'light'` für Theme. `/admin/inventar/neu` wurde
+  auf diese Komponente umgestellt (lokaler `CodeBuilder` + seg-State + 3 Effekte
+  dedupliziert, Verhalten 1:1), das Sammel-Zubehör-Formular nutzt sie mit
+  `variant='light'`.
+
 ## Architektur-Übersicht (Stand 2026-04-16)
 
 ### Datenquellen — ALLES aus DB, keine statischen Fallbacks

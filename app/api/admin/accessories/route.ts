@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { logAudit } from '@/lib/audit';
 import { sanitizeSpecs } from '@/lib/accessory-specs';
+import { resolveProdukteId } from '@/lib/legacy-bridge';
 
 // Bestandteile-Liste auf saubere String-Eintraege normalisieren.
 // Whitespace trimmen, Leereintraege raus, max 30 Zeilen, max 120 Zeichen pro
@@ -58,7 +59,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { name, category, description, pricing_mode, price, available_qty, available, image_url, compatible_product_ids, internal, upgrade_group, is_upgrade_base, allow_multi_qty, max_qty_per_booking, replacement_value, is_bulk, specs, included_parts, included_parts_images } = body;
+  const { name, category, description, pricing_mode, price, available_qty, available, image_url, compatible_product_ids, internal, upgrade_group, is_upgrade_base, allow_multi_qty, max_qty_per_booking, replacement_value, is_bulk, inventar_code, specs, included_parts, included_parts_images } = body;
 
   if (!name || !category) {
     return NextResponse.json({ error: 'name und category erforderlich.' }, { status: 400 });
@@ -158,6 +159,42 @@ export async function POST(req: NextRequest) {
   }
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Sammel-Zubehoer: automatisch eine Bulk-Einheit im Inventar anlegen, damit
+  // das Stueck unter /admin/inventar sichtbar ist und einen Bestand fuehrt.
+  // Defensiv — schlaegt die Inventar-Anlage fehl (Migration fehlt / Code
+  // doppelt), bleibt das Zubehoer trotzdem erhalten, der User bekommt eine
+  // Warnung.
+  if ((is_bulk ?? false) && typeof inventar_code === 'string' && inventar_code.trim() && data?.id) {
+    const code = inventar_code.trim().slice(0, 60);
+    try {
+      const produkteId = await resolveProdukteId(supabase, 'accessories', data.id, { autoCreate: true });
+      if (!produkteId) {
+        warnings.push('Inventar-Einheit konnte nicht angelegt werden — die Produkt-Brücke (migration_audit/produkte) fehlt. Bitte die Einheit manuell unter /admin/inventar/neu anlegen.');
+      } else {
+        const bestand = Math.max(0, parseInt(String(available_qty ?? 0), 10) || 0);
+        const { error: invErr } = await supabase.from('inventar_units').insert({
+          bezeichnung: data.name,
+          typ: 'zubehoer',
+          tracking_mode: 'bulk',
+          produkt_id: produkteId,
+          inventar_code: code,
+          bestand,
+          status: 'verfuegbar',
+          beleg_status: 'beleg_fehlt',
+        });
+        if (invErr) {
+          if (invErr.code === '23505') {
+            warnings.push(`Inventar-Code „${code}" ist bereits vergeben — die Inventar-Einheit wurde nicht angelegt. Bitte unter /admin/inventar einen anderen Code verwenden.`);
+          } else {
+            warnings.push('Inventar-Einheit konnte nicht angelegt werden: ' + invErr.message);
+          }
+        }
+      }
+    } catch (e) {
+      warnings.push('Inventar-Einheit konnte nicht angelegt werden: ' + (e instanceof Error ? e.message : String(e)));
+    }
+  }
 
   await logAudit({
     action: 'accessory.create',
