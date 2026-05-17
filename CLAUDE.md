@@ -99,18 +99,41 @@ einheitliche, beleg-zentrierte Architektur.
 0 6 1 * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/afa-buchung
 ```
 
-**Migrations-Reihenfolge (bei Go-Live):**
-1. `supabase/buchhaltung-konsolidierung.sql` (Schema, idempotent)
-2. `npx tsx scripts/migrate-buchhaltung.ts --dry-run` (Counts pruefen)
-3. `npx tsx scripts/migrate-buchhaltung.ts --confirm` (echte Migration)
-4. `npx tsx scripts/verify-migration.ts` (muss gruen sein)
-5. `supabase/buchhaltung-konsolidierung-drop.sql` (alte Tabellen weg, assets_neu→assets)
-6. `supabase/buchhaltung-konsolidierung-final-cleanup.sql` (Reste aufraeumen)
+**⚠️ STRATEGIE-WECHSEL (Stand 2026-05-17) — Big-Bang-Drop AUFGEGEBEN:**
+Der urspruengliche „migrieren → alte Tabellen droppen"-Plan wurde durch ein
+**dauerhaftes Hybrid-/Spiegel-Modell** ersetzt und ist NICHT mehr gueltig.
+Die alten Tabellen (`accessories`, `product_units`, `accessory_units`,
+`expenses`, `assets`, …) bleiben **absichtlich lasttragend** — die Buchungs-RPCs
+lesen sie weiterhin.
 
-Solange Schritt 5 nicht durchgelaufen ist, koexistieren alte und neue Welt:
-APIs/Libs nutzen `pickAssetsTable()` mit Fallback assets_neu→assets. Mietvertrag
-liest WBW zuerst aus `inventar_units` (via migration_audit-Lookup auf
-`product_units`) und faellt auf alte `assets`-Tabelle zurueck.
+- **`lib/legacy-bridge.ts`** — Lazy-Backfill: der laufende App-Code legt pro
+  Legacy-ID bei Bedarf `produkte` + `migration_audit`-Zeile an. `migration_audit`
+  wird also fortlaufend im Normalbetrieb befuellt (≠ Beweis abgeschlossener
+  Migration).
+- **`lib/inventar-mirror.ts`** + `POST /api/admin/inventar/backfill-mirrors`
+  (Button „Mirror-Backfill" auf `/admin/inventar`) — synct die alten Tabellen
+  aus der neuen Welt, damit Buchungs-RPCs Daten finden. Das ist der
+  **unterstuetzte Reparaturweg**, NICHT der Drop.
+- **`supabase/recovery-after-drop.sql`** — Notfall: legt alte Tabellen wieder an,
+  falls doch mal gedroppt wurde.
+
+**NICHT AUSFUEHREN (verwaister, aufgegebener Ansatz):**
+`scripts/migrate-buchhaltung.ts --confirm`, `supabase/buchhaltung-konsolidierung-drop.sql`,
+`supabase/buchhaltung-konsolidierung-final-cleanup.sql`. Der Drop loescht
+lasttragende Tabellen → Buchungs-Engine bricht (ist schon einmal passiert,
+daher existiert recovery-after-drop.sql). `verify-migration.ts` ist ein
+Pre-Drop-Einmal-Pruefer und im Hybrid-Modell bedeutungslos — seine „Fehler"
+sind KEIN Datenverlust.
+
+`supabase/buchhaltung-konsolidierung.sql` (reines Schema, idempotent, legt nur
+neue Tabellen an) ist weiterhin ok/notwendig — nur die Daten-Migration + Drop
+sind tot.
+
+Aktiver Zwischenzustand: APIs/Libs nutzen `pickAssetsTable()` mit Fallback
+assets_neu→assets. Mietvertrag liest WBW zuerst aus `inventar_units` (via
+migration_audit-Lookup auf `product_units`) und faellt auf alte `assets`-Tabelle
+zurueck. Die `pickAssetsTable`-Aufraeumung ist reine Code-Hygiene INNERHALB des
+Hybrids (siehe „Welle 2+3"), kein Drop.
 
 ## Architektur-Übersicht (Stand 2026-04-16)
 

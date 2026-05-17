@@ -1,3 +1,11 @@
+-- ████████████████████████████████████████████████████████████████████
+-- ⚠️  NICHT AUSFUEHREN — AUFGEGEBENER ANSATZ (Stand 2026-05-17)
+-- ────────────────────────────────────────────────────────────────────
+-- Gehoert zum aufgegebenen Big-Bang-Drop (siehe
+-- buchhaltung-konsolidierung-drop.sql). Die App laeuft dauerhaft im
+-- Hybrid-/Spiegel-Modell (lib/legacy-bridge.ts + lib/inventar-mirror.ts).
+-- Datei bleibt nur als Historie. Details: CLAUDE.md "STRATEGIE-WECHSEL".
+-- ████████████████████████████████████████████████████████████████████
 -- ════════════════════════════════════════════════════════════════════
 -- Buchhaltungs-/Inventar-Konsolidierung — FINAL CLEANUP (Session E)
 -- ════════════════════════════════════════════════════════════════════

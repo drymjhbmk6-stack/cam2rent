@@ -1,3 +1,18 @@
+/* ════════════════════════════════════════════════════════════════════════
+ * ⚠️  AUFGEGEBENER ANSATZ — NICHT MEHR AUSFUEHREN (Stand 2026-05-17)
+ * ────────────────────────────────────────────────────────────────────────
+ * Der Big-Bang-Migrations-/Drop-Plan wurde durch ein dauerhaftes Hybrid-/
+ * Spiegel-Modell ersetzt (lib/legacy-bridge.ts Lazy-Backfill +
+ * lib/inventar-mirror.ts + /api/admin/inventar/backfill-mirrors). Die alten
+ * Tabellen bleiben absichtlich lasttragend (Buchungs-RPCs lesen sie).
+ * `migration_audit` wird im Normalbetrieb fortlaufend vom Lazy-Bridge
+ * befuellt — nicht-leer ist hier KEIN Migrations-Beweis.
+ * Dieses Skript + buchhaltung-konsolidierung-drop.sql +
+ * buchhaltung-konsolidierung-final-cleanup.sql NICHT laufen lassen.
+ * Reparaturweg bei fehlendem Bestand: /admin/inventar → "Mirror-Backfill".
+ * Datei bleibt nur als Historie erhalten. Details: CLAUDE.md
+ * "STRATEGIE-WECHSEL (Stand 2026-05-17)".
+ * ════════════════════════════════════════════════════════════════════════ */
 /**
  * migrate-buchhaltung.ts — Daten-Migration alte Welt → neue Welt
  * (Buchhaltung + Inventar Konsolidierung, Session A Schritt 2)

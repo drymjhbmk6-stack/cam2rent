@@ -1,3 +1,14 @@
+-- ████████████████████████████████████████████████████████████████████
+-- ⚠️  NICHT AUSFUEHREN — AUFGEGEBENER ANSATZ (Stand 2026-05-17)
+-- ────────────────────────────────────────────────────────────────────
+-- Dieses Skript loescht LASTTRAGENDE Tabellen (accessories, product_units,
+-- accessory_units, expenses, assets, ...). Die App laeuft auf einem
+-- dauerhaften Hybrid-/Spiegel-Modell (lib/legacy-bridge.ts +
+-- lib/inventar-mirror.ts). Ein Drop bricht die Buchungs-Engine — ist schon
+-- einmal passiert, deshalb existiert supabase/recovery-after-drop.sql.
+-- Reparatur bei fehlendem Bestand: /admin/inventar → "Mirror-Backfill".
+-- Datei bleibt nur als Historie. Details: CLAUDE.md "STRATEGIE-WECHSEL".
+-- ████████████████████████████████████████████████████████████████████
 -- ════════════════════════════════════════════════════════════════════
 -- Buchhaltungs-/Inventar-Konsolidierung — Drop alte Tabellen
 -- Session A Schritt 4 (NACH erfolgreicher Migration + Verifikation!)
