@@ -243,7 +243,6 @@ const API_PATH_PERMISSIONS: PermRule[] = [
   { prefix: '/api/admin/anlagen', perm: 'finanzen' },
   { prefix: '/api/admin/anlagen-neu', perm: 'finanzen' },
   { prefix: '/api/admin/ausgaben', perm: 'finanzen' },
-  { prefix: '/api/admin/buchhaltung-neu', perm: 'finanzen' },
   { prefix: '/api/admin/wiederbeschaffung', perm: 'finanzen' },
   { prefix: '/api/admin/assets', perm: 'finanzen' },
   { prefix: '/api/admin/buchhaltung', perm: 'finanzen' },

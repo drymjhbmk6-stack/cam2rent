@@ -117,13 +117,14 @@ lesen sie weiterhin.
 - **`supabase/recovery-after-drop.sql`** — Notfall: legt alte Tabellen wieder an,
   falls doch mal gedroppt wurde.
 
-**NICHT AUSFUEHREN (verwaister, aufgegebener Ansatz):**
-`scripts/migrate-buchhaltung.ts --confirm`, `supabase/buchhaltung-konsolidierung-drop.sql`,
-`supabase/buchhaltung-konsolidierung-final-cleanup.sql`. Der Drop loescht
-lasttragende Tabellen → Buchungs-Engine bricht (ist schon einmal passiert,
-daher existiert recovery-after-drop.sql). `verify-migration.ts` ist ein
-Pre-Drop-Einmal-Pruefer und im Hybrid-Modell bedeutungslos — seine „Fehler"
-sind KEIN Datenverlust.
+**GELÖSCHT (verwaister, aufgegebener Ansatz — Stand 2026-05-17):**
+`scripts/migrate-buchhaltung.ts`, `scripts/verify-migration.ts`,
+`supabase/buchhaltung-konsolidierung-drop.sql`,
+`supabase/buchhaltung-konsolidierung-final-cleanup.sql` wurden aus dem Repo
+entfernt (toter Code, nirgends referenziert, der Drop hätte lasttragende
+Tabellen gelöscht → Buchungs-Engine bricht; ist schon einmal passiert, daher
+existiert `recovery-after-drop.sql`). Git-History bewahrt sie, falls je
+gebraucht. `recovery-after-drop.sql` bleibt als Notfall-Skript bestehen.
 
 `supabase/buchhaltung-konsolidierung.sql` (reines Schema, idempotent, legt nur
 neue Tabellen an) ist weiterhin ok/notwendig — nur die Daten-Migration + Drop
@@ -1314,7 +1315,7 @@ Vorher schickten alle Reports `${from}T00:00:00` ohne TZ-Suffix an Postgres. Auf
 **Cockpit:**
 - **Monatsabschluss-Erinnerung Day-of-Month-Bug** (`cockpit/route.ts:138`): Comment sagte "nach dem 5.", Code prueft `>= 1` (immer wahr). Korrigiert auf `>= 5`. Vorher warnte das Cockpit am 02.03. zur Februar-Closure, bevor noch alle Februar-Eingangsbelege erfasst waren.
 
-**Bekannte Limitierung:** Die alte `buchhaltung-neu/euer/route.ts` (Refactor-Zombie) bleibt unangetastet — wird vom UI nicht aufgerufen, kann separat aufgeraeumt werden.
+**Aufgeräumt (Stand 2026-05-17):** Die alte `app/api/admin/buchhaltung-neu/euer/route.ts` (Refactor-Zombie, vom UI nie aufgerufen) wurde gelöscht — inkl. der jetzt toten `/api/admin/buchhaltung-neu`-Permission-Zeile in `middleware.ts`. Beseitigt nebenbei 6 vorbestehende tsc-Fehler aus dieser Datei.
 
 ### Statistik-Audit + Daten-/Filter-Fixes (Stand 2026-05-15)
 Tiefen-Audit der Statistik-Seite (`/admin/analytics` + `/api/admin/analytics`) — sechs echte Daten- und Filter-Bugs gefixt, plus Reliability:
