@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase';
 import { getProducts } from '@/lib/get-products';
 import { RESERVING_BOOKING_STATUSES } from '@/lib/booking-statuses';
 import { isTestMode } from '@/lib/env-mode';
+import { resolveBookingCameras } from '@/lib/booking-cameras';
 
 interface BufferDays {
   versand_before: number;
@@ -71,26 +72,46 @@ export async function GET(
   // Test-Buchungen (Tester-User auf Live-Seite) blocken den Kunden-Kalender NICHT.
   // Im globalen Test-Modus laufen alle Buchungen als is_test=true → dann zaehlen alle.
   const globalTest = await isTestMode();
-  let bookingQuery = supabase
+  const sel = 'id, rental_from, rental_to, delivery_mode, product_name, product_id, unit_id, cameras';
+
+  // (a) Legacy + Gleichmodell-Mehrkamera: product_id == productId.
+  // (b) Gemischte Modelle: Buchung trägt productId nur in cameras[] (ihr
+  //     bookings.product_id ist eine andere/erste Kamera).
+  let q1 = supabase
     .from('bookings')
-    .select('rental_from, rental_to, delivery_mode, product_name')
+    .select(sel)
     .eq('product_id', productId)
+    .in('status', [...RESERVING_BOOKING_STATUSES])
+    .lte('rental_from', extLast)
+    .gte('rental_to', extFirst);
+  let q2 = supabase
+    .from('bookings')
+    .select(sel)
+    .contains('cameras', [{ product_id: productId }])
     .in('status', [...RESERVING_BOOKING_STATUSES])
     .lte('rental_from', extLast)
     .gte('rental_to', extFirst);
   if (!globalTest) {
     // matcht is_test=false UND is_test=NULL (defensive bei alter Buchung ohne Spalte)
-    bookingQuery = bookingQuery.not('is_test', 'is', true);
+    q1 = q1.not('is_test', 'is', true);
+    q2 = q2.not('is_test', 'is', true);
   }
-  const { data: bookings, error: bookErr } = await bookingQuery;
+  const [r1, r2] = await Promise.all([q1, q2]);
 
-  if (bookErr) {
-    console.error('Availability bookings query error:', bookErr);
+  if (r1.error) {
+    console.error('Availability bookings query error:', r1.error);
     return NextResponse.json(
       { error: 'Verfügbarkeit konnte nicht geladen werden.' },
       { status: 500 }
     );
   }
+  // q2 schlägt fehl wenn cameras-Spalte fehlt (Migration nicht durch) →
+  // defensiv ignorieren, q1 trägt dann das Legacy-Verhalten.
+  const mergedById = new Map<string, Record<string, unknown>>();
+  for (const b of [...(r1.data ?? []), ...(r2.error ? [] : r2.data ?? [])]) {
+    mergedById.set((b as { id: string }).id, b as Record<string, unknown>);
+  }
+  const bookings = [...mergedById.values()];
 
   // ── Blockierte Tage abfragen ───────────────────────────────────────────────
   const { data: blocked, error: blockErr } = await supabase
@@ -134,7 +155,12 @@ export async function GET(
 
     let bookedCount = 0;
     if (bookings) {
-      for (const b of bookings) {
+      for (const bRaw of bookings) {
+        const b = bRaw as {
+          rental_from: string; rental_to: string;
+          delivery_mode?: string; product_name?: string;
+          product_id?: string; unit_id?: string; cameras?: unknown;
+        };
         const bMode = b.delivery_mode ?? 'versand';
         const bBefore = bMode === 'abholung' ? buf.abholung_before : buf.versand_before;
         const bAfter = bMode === 'abholung' ? buf.abholung_after : buf.versand_after;
@@ -148,17 +174,13 @@ export async function GET(
         const effTo = bTo.toISOString().split('T')[0];
 
         if (effFrom <= dateStr && effTo >= dateStr) {
-          // Multi-Kamera-Buchungen liegen als EINE Zeile mit kommagetrenntem
-          // product_name vor (z.B. "OSMO Action 5 Pro , OSMO Action 5 Pro").
-          // Sie belegen so viele Einheiten wie Kameras genannt sind — sonst
-          // zeigt ein 2er-Bestand bei einer 2-Kamera-Buchung faelschlich noch
-          // 1 frei an (Ueberbuchung). Konsistent mit der Comma-Split-Logik in
-          // contract/invoice/packlist/scan + booking/[id] computeLiabilitySummary.
-          const cams = String((b as { product_name?: string }).product_name ?? '')
-            .split(',')
-            .map((s) => s.trim())
-            .filter(Boolean).length;
-          bookedCount += Math.max(1, cams);
+          // Eine Buchung belegt so viele Einheiten DIESES Produkts wie sie
+          // Kameras dieses Produkts enthält (cameras[] = Wahrheit; Legacy:
+          // product_name-Split, product_id = dieses Produkt). Gemischte
+          // Modelle zählen pro Produkt korrekt — sonst Überbuchung.
+          bookedCount += resolveBookingCameras(b).filter(
+            (c) => c.product_id === productId,
+          ).length;
         }
       }
     }

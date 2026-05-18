@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { getProducts } from '@/lib/get-products';
 import { resolveProdukteIdMap, loadInventarUnitsForProdukteBulk } from '@/lib/legacy-bridge';
+import { resolveBookingCameras } from '@/lib/booking-cameras';
 
 /**
  * GET /api/admin/availability-gantt?from=2025-04-16&to=2027-04-15
@@ -82,7 +83,7 @@ export async function GET(req: NextRequest) {
     getProducts(),
     supabase
       .from('bookings')
-      .select('id, product_id, product_name, rental_from, rental_to, days, status, delivery_mode, customer_name, unit_id, accessories, accessory_items, accessory_unit_ids, is_test')
+      .select('id, product_id, product_name, rental_from, rental_to, days, status, delivery_mode, customer_name, unit_id, cameras, accessories, accessory_items, accessory_unit_ids, is_test')
       .in('status', ['confirmed', 'shipped', 'picked_up', 'completed'])
       .lte('rental_from', extLast)
       .gte('rental_to', extFirst),
@@ -133,9 +134,24 @@ export async function GET(req: NextRequest) {
     (legacyUnitsByProduct[u.product_id] ||= []).push(u);
   }
 
-  const bookingsByProduct: Record<string, typeof bookings> = {};
+  // Pro Kamera der Buchung ein Overlay-Eintrag mit DEREN unit_id, gruppiert
+  // nach DEREN Produkt — so erscheinen gemischte Modelle auf der richtigen
+  // Produkt-/Unit-Zeile (nicht nur die erste Kamera). Legacy/cameras=NULL →
+  // Resolver liefert eine Kamera = altes Verhalten.
+  type GanttBooking = (typeof bookings)[number] & { _unitId: string | null };
+  const bookingsByProduct: Record<string, GanttBooking[]> = {};
   for (const b of bookings) {
-    if (b.product_id) (bookingsByProduct[b.product_id] ||= []).push(b);
+    const cams = resolveBookingCameras(b);
+    if (cams.length === 0) {
+      if (b.product_id)
+        (bookingsByProduct[b.product_id] ||= []).push({ ...b, _unitId: b.unit_id ?? null });
+      continue;
+    }
+    for (const c of cams) {
+      const pid = c.product_id ?? b.product_id;
+      if (!pid) continue;
+      (bookingsByProduct[pid] ||= []).push({ ...b, _unitId: c.unit_id });
+    }
   }
   const blockedByProduct: Record<string, typeof blocked> = {};
   for (const bl of blocked) {
@@ -190,7 +206,7 @@ export async function GET(req: NextRequest) {
         customer_name: b.customer_name,
         delivery_mode: b.delivery_mode,
         status: b.status,
-        unit_id: b.unit_id,
+        unit_id: b._unitId,
         is_test: b.is_test ?? false,
       })),
       blocked: productBlocked,

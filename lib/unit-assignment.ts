@@ -28,14 +28,15 @@ export async function findFreeUnit(
 
   if (unitsErr || !units || units.length === 0) return null;
 
-  // 2. Alle Buchungen im Zeitraum laden (die eine Unit zugeordnet haben).
-  //    Test-/Live-Isolation: Nur Buchungen mit gleichem is_test-Wert blocken.
+  // 2. Alle ueberlappenden aktiven Buchungen laden (gleicher is_test-Wert).
+  //    KEIN product_id-Filter: eine Kamera-Unit dieses Produkts kann auch
+  //    in einer Buchung stecken, deren bookings.product_id (= erste Kamera)
+  //    ein anderes Modell ist (gemischte Modelle leben in cameras[]).
+  //    Belegt = Legacy bookings.unit_id ODER irgendein cameras[].unit_id.
   let bookingQuery = supabase
     .from('bookings')
-    .select('unit_id')
-    .eq('product_id', productId)
+    .select('unit_id, cameras')
     .in('status', ['confirmed', 'shipped', 'active'])
-    .not('unit_id', 'is', null)
     .lte('rental_from', rentalTo)
     .gte('rental_to', rentalFrom);
   bookingQuery = isTest
@@ -43,9 +44,17 @@ export async function findFreeUnit(
     : bookingQuery.not('is_test', 'is', true);
   const { data: bookings } = await bookingQuery;
 
-  const occupiedUnitIds = new Set(
-    (bookings ?? []).map((b) => b.unit_id).filter(Boolean)
-  );
+  const occupiedUnitIds = new Set<string>();
+  for (const b of bookings ?? []) {
+    if (b.unit_id) occupiedUnitIds.add(b.unit_id as string);
+    const cams = b.cameras;
+    if (Array.isArray(cams)) {
+      for (const c of cams) {
+        const uid = c && typeof c === 'object' ? (c as { unit_id?: unknown }).unit_id : null;
+        if (typeof uid === 'string' && uid) occupiedUnitIds.add(uid);
+      }
+    }
+  }
 
   // 3. Erste freie Unit finden
   const freeUnit = units.find((u) => !occupiedUnitIds.has(u.id));
