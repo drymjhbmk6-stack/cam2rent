@@ -7,7 +7,8 @@ import type { CartItem } from '@/components/CartProvider';
 import { calcShipping } from '@/data/shipping';
 import type { ShippingMethod } from '@/data/shipping';
 import { DEFAULT_SHIPPING, type ShippingPriceConfig, calcPriceFromTable, type AdminProduct } from '@/lib/price-config';
-import { assignUnitToBooking } from '@/lib/unit-assignment';
+import { assignCamerasToBooking } from '@/lib/camera-unit-assignment';
+import { desiredFromBooking, resolveBookingCameras } from '@/lib/booking-cameras';
 import { assignAccessoryUnitsToBooking } from '@/lib/accessory-unit-assignment';
 import { createAdminNotification } from '@/lib/admin-notifications';
 import { generateContractPDF } from '@/lib/contracts/generate-contract';
@@ -193,19 +194,27 @@ export async function POST(req: NextRequest) {
             // Falls der Webhook die Buchung zuerst angelegt hat, fehlt moeglicherweise
             // die unit_id — dann wird der Zeitwert aus dem Asset nicht gefunden und
             // landet im Vertrag als 0 €. Hier nachholen, bevor wir den Vertrag erzeugen.
-            const needsUnit = (fullBookings ?? []).filter(
-              (fb) => !fb.unit_id && fb.product_id && fb.rental_from && fb.rental_to && fb.status !== 'cancelled',
-            );
+            const needsUnit = (fullBookings ?? []).filter((fb) => {
+              if (fb.status === 'cancelled' || !fb.rental_from || !fb.rental_to) return false;
+              const cams = resolveBookingCameras(fb);
+              return cams.length > 0 && cams.some((c) => !c.unit_id);
+            });
             if (needsUnit.length > 0) {
               await Promise.all(
                 needsUnit.map(async (fb) => {
                   try {
-                    const unitId = await assignUnitToBooking(
-                      fb.id, fb.product_id, fb.rental_from, fb.rental_to,
+                    await assignCamerasToBooking(
+                      fb.id, desiredFromBooking(fb), fb.rental_from, fb.rental_to,
                     );
-                    if (unitId) fb.unit_id = unitId;
+                    const { data: re } = await supabase
+                      .from('bookings')
+                      .select('unit_id, cameras')
+                      .eq('id', fb.id)
+                      .single();
+                    if (re?.unit_id) fb.unit_id = re.unit_id;
+                    if (re?.cameras) fb.cameras = re.cameras;
                   } catch (e) {
-                    console.error('[confirm-cart] unit-assign idem failed', fb.id, e);
+                    console.error('[confirm-cart] camera-assign idem failed', fb.id, e);
                   }
                 }),
               );
@@ -864,9 +873,18 @@ export async function POST(req: NextRequest) {
         }
       })(bookingId, groupTotal, effectiveDiscount, r_couponCode || null, piId);
 
-      // Unit automatisch zuordnen (non-blocking)
-      assignUnitToBooking(bookingId, firstItem.productId, firstItem.rentalFrom, firstItem.rentalTo)
-        .catch((err) => console.error(`Unit assignment error for ${bookingId}:`, err));
+      // Kamera-Exemplare automatisch zuordnen (Multi-Kamera, non-blocking).
+      // Jedes Cart-Item ist genau eine Kamera → gemischte Modelle möglich.
+      assignCamerasToBooking(
+        bookingId,
+        groupItems.map((it) => ({
+          product_id: it.productId,
+          product_name: it.productName,
+          qty: 1,
+        })),
+        firstItem.rentalFrom,
+        firstItem.rentalTo,
+      ).catch((err) => console.error(`Camera-unit assignment error for ${bookingId}:`, err));
 
       // Zubehoer-Exemplare automatisch zuordnen (non-blocking)
       if (groupAccessoryItems.length > 0) {

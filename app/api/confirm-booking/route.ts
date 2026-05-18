@@ -4,7 +4,7 @@ import { createServiceClient } from '@/lib/supabase';
 import { detectSuspicious } from '@/lib/suspicious';
 import { ensureBusinessConfig } from '@/lib/load-business-config';
 import { generateBookingId } from '@/lib/booking-id';
-import { assignUnitToBooking } from '@/lib/unit-assignment';
+import { assignCamerasToBooking } from '@/lib/camera-unit-assignment';
 import { assignAccessoryUnitsToBooking } from '@/lib/accessory-unit-assignment';
 import { createAdminNotification } from '@/lib/admin-notifications';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
@@ -423,9 +423,13 @@ export async function POST(req: NextRequest) {
       }
     })();
 
-    // 6b. Unit automatisch zuordnen (non-blocking)
-    assignUnitToBooking(bookingId, meta.product_id, meta.rental_from, meta.rental_to)
-      .catch((err) => console.error(`Unit assignment error for ${bookingId}:`, err));
+    // 6b. Kamera-Exemplar automatisch zuordnen (Multi-Kamera-fähig, non-blocking)
+    assignCamerasToBooking(
+      bookingId,
+      [{ product_id: meta.product_id, product_name: meta.product_name, qty: 1 }],
+      meta.rental_from,
+      meta.rental_to,
+    ).catch((err) => console.error(`Camera-unit assignment error for ${bookingId}:`, err));
 
     // 6a.2. Zubehoer-Exemplare automatisch zuordnen (non-blocking)
     if (accessoryItems.length > 0) {

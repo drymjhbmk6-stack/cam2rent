@@ -12,7 +12,7 @@ import { getStripe, getStripeWebhookSecretOrThrow } from '@/lib/stripe';
 import { isTestMode } from '@/lib/env-mode';
 import { createAdminNotification } from '@/lib/admin-notifications';
 import { parseMetadataAccessoryItems, itemsToLegacyIds } from '@/lib/booking-accessories';
-import { assignUnitToBooking } from '@/lib/unit-assignment';
+import { assignCamerasToBooking } from '@/lib/camera-unit-assignment';
 import { assignAccessoryUnitsToBooking } from '@/lib/accessory-unit-assignment';
 
 export const runtime = 'nodejs';
@@ -454,9 +454,14 @@ async function handleSingleBooking(
   // Fehler ignorieren — non-blocking.
   if (meta.product_id && meta.rental_from && meta.rental_to) {
     try {
-      await assignUnitToBooking(bookingId, meta.product_id, meta.rental_from, meta.rental_to);
+      await assignCamerasToBooking(
+        bookingId,
+        [{ product_id: meta.product_id, product_name: meta.product_name, qty: 1 }],
+        meta.rental_from,
+        meta.rental_to,
+      );
     } catch (e) {
-      console.error('[Webhook] unit-assign single failed', bookingId, e);
+      console.error('[Webhook] camera-assign single failed', bookingId, e);
     }
   }
 
@@ -681,9 +686,18 @@ async function handleCartBooking(
   // Unit zuweisen (fuer Asset-Zeitwert im Vertrag)
   if (firstItem.productId && firstItem.rentalFrom && firstItem.rentalTo) {
     try {
-      await assignUnitToBooking(bookingId, firstItem.productId, firstItem.rentalFrom, firstItem.rentalTo);
+      await assignCamerasToBooking(
+        bookingId,
+        items.map((it) => ({
+          product_id: it.productId,
+          product_name: it.productName,
+          qty: 1,
+        })),
+        firstItem.rentalFrom,
+        firstItem.rentalTo,
+      );
     } catch (e) {
-      console.error('[Webhook] unit-assign cart failed', bookingId, e);
+      console.error('[Webhook] camera-assign cart failed', bookingId, e);
     }
   }
 

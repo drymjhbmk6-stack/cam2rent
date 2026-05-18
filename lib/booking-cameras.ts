@@ -117,6 +117,22 @@ export function buildCameraSkeleton(items: DesiredCamera[]): BookingCamera[] {
   return out;
 }
 
+/**
+ * Leitet die Wunschliste (DesiredCamera[]) aus einer bestehenden Buchungs-
+ * zeile ab — fuer Recovery-/Webhook-Pfade, die nur die persistierte Zeile
+ * kennen. Nutzt den Resolver (cameras[] bevorzugt, sonst product_name-Split),
+ * ein DesiredCamera pro physischer Kamera.
+ */
+export function desiredFromBooking(
+  booking: BookingCameraSource | null | undefined,
+): DesiredCamera[] {
+  return resolveBookingCameras(booking).map((c) => ({
+    product_id: c.product_id,
+    product_name: c.product_name,
+    qty: 1,
+  }));
+}
+
 /** Legacy `product_name` (Komma-String) aus einer Kamera-Liste. */
 export function camerasToProductName(cameras: BookingCamera[]): string {
   return cameras.map((c) => c.product_name).filter(Boolean).join(', ');

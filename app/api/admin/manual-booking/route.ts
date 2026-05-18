@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { generateBookingId } from '@/lib/booking-id';
-import { assignUnitToBooking } from '@/lib/unit-assignment';
+import { assignCamerasToBooking } from '@/lib/camera-unit-assignment';
+import { buildCameraSkeleton } from '@/lib/booking-cameras';
 import { assignAccessoryUnitsToBooking } from '@/lib/accessory-unit-assignment';
 import { createAdminNotification } from '@/lib/admin-notifications';
 import { generateContractPDF } from '@/lib/contracts/generate-contract';
@@ -140,10 +141,25 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Unit automatisch zuordnen falls keine manuell gewählt
-    if (!body.unit_id) {
-      assignUnitToBooking(bookingId, product_id, rental_from, rental_to)
-        .catch((err) => console.error(`Unit assignment error for ${bookingId}:`, err));
+    // Kamera-Exemplare zuordnen (Multi-Kamera: product_name kann eine
+    // Komma-Liste sein). Eine vom Admin manuell gewählte unit_id wird als
+    // erste Kamera vorbelegt, restliche Slots werden automatisch gefüllt.
+    {
+      const camNames = String(product_name || '')
+        .split(',')
+        .map((s: string) => s.trim())
+        .filter((s: string) => s.length > 0);
+      const desiredCams = (camNames.length > 0 ? camNames : [String(product_name || '')]).map(
+        (n: string) => ({ product_id, product_name: n, qty: 1 }),
+      );
+      if (body.unit_id) {
+        const skel = buildCameraSkeleton(desiredCams);
+        if (skel[0]) skel[0].unit_id = body.unit_id;
+        await supabase.from('bookings').update({ cameras: skel }).eq('id', bookingId);
+      }
+      assignCamerasToBooking(bookingId, desiredCams, rental_from, rental_to).catch((err) =>
+        console.error(`Camera-unit assignment error for ${bookingId}:`, err),
+      );
     }
 
     // Zubehoer-Exemplare automatisch zuordnen (non-blocking)
