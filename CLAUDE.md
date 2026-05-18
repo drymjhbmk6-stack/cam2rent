@@ -669,6 +669,11 @@ Tab-basiertes Cockpit mit **6 Top-Level-Tabs** (frueher 9, zusammengelegt). Quer
 - `lib/accounting/__tests__/dunning.test.ts` — 10 Tests: Mahnstufen-Logik mit Standard-/benutzerdefinierten Fristen
 - `lib/accounting/__tests__/reconciliation.test.ts` — 10 Tests: Stripe-Match-Logik
 
+### Stripe-Abgleich: manuelle Verknüpfung mit Buchungsauswahl (Stand 2026-05-18)
+Das „Manuell verknüpfen"-Modal im Stripe-Abgleich (`StripeAbgleichTab.tsx`) zeigte fast immer „Keine passenden Buchungen gefunden — ID manuell eingeben", weil der Suggestions-Endpoint `app/api/admin/buchhaltung/stripe-reconciliation/suggestions/route.ts` (a) stornierte Buchungen per `.neq('status','cancelled')` ausschloss und (b) hart auf ±2 € Betragstoleranz filterte ohne Fallback. Stripe-Zahlungen/Erstattungen stornierter Buchungen liessen sich so nur per auswendig getippter ID zuordnen.
+- **API:** Storno-Filter entfernt (stornierte Buchungen sind jetzt Kandidaten, `is_test=false` bleibt). Neuer optionaler `q`-Param (über `sanitizeSearchInput` aus `lib/search-sanitize.ts` → `.or(id/customer_name/customer_email ilike)`). Antwort jetzt `{ suggestions, others }`: `suggestions` = betragsgleich ±2 € nach Nähe sortiert (nur wenn `amount` gesetzt und kein `q`), `others` = restliche unverknüpfte Buchungen bzw. Suchtreffer (`created_at` desc, limit 200). Beide schliessen bereits verknüpfte `matchedIds` aus. Rückwärtskompatibel (`suggestions` bleibt, `others` additiv).
+- **UI:** Modal hat jetzt ein Suchfeld (debounced 300 ms → `suggestions?q=`), zeigt zwei Abschnitte „Betragsgleiche Buchungen" (gepinnt) + „Alle Buchungen"/„Suchergebnisse" als scrollbare Liste (maxHeight 280, bis 200 Einträge), pro Zeile `StatusBadge` mit deutschem Booking-Status-Label (`BOOKING_STATUS_LABEL`, „Storniert" sichtbar). Freitext-ID-Feld bleibt als letzter Fallback. `match/route.ts` unverändert — verknüpft stornierte Buchungen bereits problemlos (kein Status-Filter).
+
 ### Push-Notifications (Admin-PWA, Stand 2026-04-17)
 Web-Push-Notifications für die Admin-PWA. Alle Events, die `createAdminNotification()` triggern (neue Buchung, Stornierung, Schaden, Nachricht, Bewertung), erzeugen automatisch auch eine Push-Notification — auch wenn die PWA gerade nicht offen ist.
 
