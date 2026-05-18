@@ -659,7 +659,7 @@ export async function PATCH(
 
     const { data: booking } = await supabase
       .from('bookings')
-      .select('id, status, rental_from, rental_to, accessory_items, accessory_unit_ids, accessories, notes, price_total, delivery_mode, product_id')
+      .select('id, status, rental_from, rental_to, accessory_items, accessory_unit_ids, accessories, notes, price_total, delivery_mode, product_id, pack_status, pack_photo_url')
       .eq('id', id)
       .maybeSingle();
     if (!booking) {
@@ -858,6 +858,36 @@ export async function PATCH(
     };
     if (priceValid) upd.price_total = newPrice;
 
+    // Pack-Workflow zuruecksetzen, falls schon gepackt/kontrolliert — die
+    // 4-Augen-Snapshots + Signaturen wuerden sonst den ALTEN Inhalt
+    // bescheinigen. Packliste-PDF/HTML liest live aus accessory_items und
+    // zieht automatisch nach; nur der digitale Pack-Status muss neu.
+    const packWasStarted = !!booking.pack_status;
+    if (packWasStarted) {
+      Object.assign(upd, {
+        pack_status: null,
+        pack_packed_by: null,
+        pack_packed_by_user_id: null,
+        pack_packed_at: null,
+        pack_packed_signature: null,
+        pack_packed_items: null,
+        pack_packed_condition: null,
+        pack_checked_by: null,
+        pack_checked_by_user_id: null,
+        pack_checked_at: null,
+        pack_checked_signature: null,
+        pack_checked_items: null,
+        pack_checked_notes: null,
+        pack_photo_url: null,
+      });
+      if (booking.pack_photo_url) {
+        await supabase.storage
+          .from('packing-photos')
+          .remove([booking.pack_photo_url as string])
+          .catch(() => { /* best-effort */ });
+      }
+    }
+
     const { error: upErr } = await supabase.from('bookings').update(upd).eq('id', id);
     if (upErr) {
       console.error('[booking-accessory-edit] update failed:', upErr);
@@ -874,6 +904,7 @@ export async function PATCH(
         price_old: booking.price_total ?? null,
         price_new: priceValid ? newPrice : null,
         reason,
+        pack_workflow_reset: packWasStarted,
       },
       request: req,
     });

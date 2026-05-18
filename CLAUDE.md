@@ -1168,6 +1168,26 @@ WBW-Box/-Vorschlag und Verfügbarkeit automatisch nachziehen (alles liest live a
   korrigiert (über bestehenden Buchhaltungs-Gutschrift-Workflow regeln).
 - **Mietvertrag bleibt Original** (Entscheidung) — Doku via Notiz + Audit + die
   bestehende WBW-Finalisierungs-Mail.
+- **Verfügbarkeit:** `computeAccessoryAvailability` (`lib/accessory-availability.ts`,
+  aus dem ehemaligen `/api/accessory-availability`-Route-Body extrahiert, Route
+  ist jetzt dünner Wrapper) wird **in-process** aufgerufen (kein HTTP-Self-Fetch
+  — hinter Cloudflare/Hetzner-Firewall unzuverlässig). Neuer Opt-Param
+  `excludeBookingId` schließt die bearbeitete Buchung aus der Zählung aus →
+  **keine Selbst-Blockade** (kritisch bei Set-Buchungen, deren `accessory_items`
+  nur die Set-ID enthält → Einzelteil-Baseline sonst fälschlich 0). Geprüft wird
+  die **gesamte** neue Menge pro Position gegen den bereinigten Restbestand;
+  Bulk/nicht-trackbar (kein availMap-Eintrag) blockiert nicht.
+- **Unit-Delta** basiert auf den **tatsächlich zugewiesenen** `accessory_units`
+  (`unitsByAcc`), NICHT auf `accessory_items` (Set-ID-behaftet): pro Accessory
+  bis `want` behalten, Überzähliges freigeben, `assignQty = want − keep.length`
+  neu zuweisen (keine Self-Kollision mit eigenen rented-Units).
+- **Pack-Workflow-Reset:** war die Buchung schon gepackt/kontrolliert
+  (`pack_status` gesetzt), werden bei der Änderung alle `pack_*`-Snapshot-Felder
+  + 4-Augen-Signaturen genullt + `packing-photos`-Foto best-effort gelöscht
+  (analog `versand/[id]/pack-reset`), sonst würden sie den ALTEN Inhalt
+  bescheinigen. Packliste-PDF/HTML (`/api/packlist/[bookingId]`) liest live aus
+  `accessory_items` → zieht automatisch nach, kein Reset nötig. Audit-Feld
+  `pack_workflow_reset`.
 - **`resolved_items`** wurde additiv um optionales `accessory_id` erweitert
   (Set-Container-Zeile hat keins → UI filtert sie aus dem Editor). UI:
   `BookingAccessoryEditSection` (Read = expandierte Ist-Positionen, Edit =
