@@ -386,8 +386,34 @@ export async function generateContractPDF(opts: {
   // Wiederbeschaffungspreis einer gebrauchten Kamera liegt aber immer deutlich
   // darueber. Die Kaution ist eine realistische Untergrenze fuer den Ersatzwert
   // bei Totalschaden.
-  const assetCurrentValue = (opts.unitId || opts.productId)
-    ? await loadAssetCurrentValue(opts.unitId ?? null, opts.productId ?? null)
+  // WBW IMMER aus dem Buchungs-Datensatz selbst aufloesen (bookings.product_id
+  // / bookings.unit_id), nicht aus den evtl. abweichenden opts. Grund: der
+  // Cart-Pfad (confirm-cart) uebergibt firstItem.productId — eine
+  // Warenkorb-Item-ID, die NICHT zwingend der admin_config.products-ID
+  // entspricht, ueber die migration_audit den Inventar-WBW findet. Die
+  // Buchungs-Detailseite nutzt booking.product_id und zeigt deshalb den
+  // korrekten Wert (~354 EUR), der Vertrag bekam 0 EUR. Mit dem Booking-
+  // Lookup ist der Vertrag konsistent zur Buchungs-/WBW-Box.
+  let resolveUnitId: string | null = opts.unitId ?? null;
+  let resolveProductId: string | null = opts.productId ?? null;
+  if (opts.bookingId) {
+    try {
+      const sb = createServiceClient();
+      const { data: bk } = await sb
+        .from('bookings')
+        .select('product_id, unit_id')
+        .eq('id', opts.bookingId)
+        .maybeSingle();
+      if (bk) {
+        if (bk.unit_id) resolveUnitId = bk.unit_id as string;
+        if (bk.product_id) resolveProductId = String(bk.product_id);
+      }
+    } catch {
+      // Fallback auf opts-Werte
+    }
+  }
+  const assetCurrentValue = (resolveUnitId || resolveProductId)
+    ? await loadAssetCurrentValue(resolveUnitId, resolveProductId)
     : null;
   const wiederbeschaffungswert = Math.max(
     assetCurrentValue ?? 0,
