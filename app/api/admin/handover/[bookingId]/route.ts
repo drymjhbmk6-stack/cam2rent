@@ -124,9 +124,32 @@ export async function POST(
                detectedType === 'webp' ? 'image/webp' : 'image/heic';
   const storagePath = `${bookingId}/${Date.now()}.${ext}`;
 
-  const { error: uploadError } = await supabase.storage
-    .from('handover-photos')
-    .upload(storagePath, photoBuffer, { contentType: mime, upsert: true });
+  const HANDOVER_BUCKET = 'handover-photos';
+  const doUpload = () =>
+    supabase.storage
+      .from(HANDOVER_BUCKET)
+      .upload(storagePath, photoBuffer, { contentType: mime, upsert: true });
+
+  let { error: uploadError } = await doUpload();
+
+  // Bucket existiert nicht (nie manuell angelegt) → einmalig anlegen +
+  // Upload wiederholen. Privat (photo-url nutzt Signed URLs).
+  if (uploadError && /bucket not found|not found/i.test(uploadError.message || '')) {
+    const { error: createErr } = await supabase.storage.createBucket(HANDOVER_BUCKET, {
+      public: false,
+      fileSizeLimit: MAX_PHOTO_SIZE,
+      allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'],
+    });
+    // "already exists" = Race mit parallelem Request → trotzdem retry
+    if (createErr && !/already exists|exists/i.test(createErr.message || '')) {
+      console.error('[handover/save] bucket create error:', createErr);
+      return NextResponse.json(
+        { error: `Foto-Upload fehlgeschlagen: Bucket konnte nicht angelegt werden (${createErr.message}).` },
+        { status: 500 },
+      );
+    }
+    ({ error: uploadError } = await doUpload());
+  }
 
   if (uploadError) {
     console.error('[handover/save] photo upload error:', uploadError);
