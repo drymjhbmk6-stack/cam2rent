@@ -1158,7 +1158,25 @@ WBW-Box/-Vorschlag und Verfügbarkeit automatisch nachziehen (alles liest live a
   internem Fetch auf `/api/accessory-availability` (zählt die eigene Buchung
   bereits mit → Delta exakt). Block → 409, **keine Mutation**. Status-Guard:
   terminale Buchungen (`cancelled/completed/returned`) → 409 / Sektion
-  ausgeblendet. Set-IDs werden abgelehnt (nur Einzel-Accessories).
+  ausgeblendet.
+- **Sets erlaubt (Stand 2026-05-18, geändert):** Die frühere „Set-IDs werden
+  abgelehnt"-Regel ist aufgehoben. Auswahl-Validierung akzeptiert jetzt
+  Accessory- **ODER** Set-IDs (parallel-Lookup `accessories` + `sets`,
+  unbekannt → 422 `Unbekanntes Zubehör/Set`). Gewählte Sets werden
+  serverseitig via `resolveAccessoryItems` in ihre Einzelteile expandiert
+  (`sub.qty × gewählte Menge`, Leaf-Zeilen mit `accessory_id`, Set-Container
+  verworfen, gemerged, Cap 50). Danach läuft die **unveränderte** Pipeline
+  (Verfügbarkeit/Unit-Zuweisung/Speicherung) nur auf echten Accessories —
+  konsistent mit „nach dem Speichern eigenständige Positionen". Ohne Set in
+  der Auswahl ist die Expansion ein No-op → keine Regression für reine
+  Accessory-Edits. UI: Dropdown in `BookingAccessoryEditSection` ist jetzt
+  nach `<optgroup>` „Sets (werden in Einzelteile aufgelöst)" + „Zubehör"
+  gruppiert; jede Option zeigt ein Kompatibilitäts-Label
+  (`accessories.compatible_product_ids` bzw. `sets.product_ids` → Kameranamen
+  via `/api/products`, leer = „alle Kameras") — disambiguiert auch
+  gleichnamige Einträge (z.B. zwei „Selfi-Stick"). Neue Prop `options`
+  (id/name/kind/compat) ersetzt `accessoryList` nur in dieser Komponente;
+  `LiabilitySection` nutzt weiterhin unverändert `accessoryList`.
 - **Mutation near-atomar:** neue Units zuerst via
   `assignAccessoryUnitsToBooking` (alte bleiben vorerst `rented`); bei
   `missing>0` (Race) → frische Units freigeben + `accessory_unit_ids` auf alt

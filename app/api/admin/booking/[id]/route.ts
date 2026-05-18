@@ -697,26 +697,50 @@ export async function PATCH(
     for (const it of cleaned) {
       mergedMap.set(it.accessory_id, Math.min(99, (mergedMap.get(it.accessory_id) ?? 0) + it.qty));
     }
-    const newItems = [...mergedMap.entries()].map(([accessory_id, qty]) => ({ accessory_id, qty }));
+    const rawSelection = [...mergedMap.entries()].map(([accessory_id, qty]) => ({ accessory_id, qty }));
 
-    // IDs muessen existierende Accessories sein — keine Set-IDs zulassen
-    const ids = newItems.map((i) => i.accessory_id);
-    if (ids.length > 0) {
-      const { data: accChk } = await supabase.from('accessories').select('id').in('id', ids);
-      const known = new Set((accChk ?? []).map((a) => a.id as string));
-      const unknown = ids.filter((i) => !known.has(i));
+    // IDs muessen existierende Accessories ODER Sets sein. Sets sind erlaubt
+    // und werden unten in ihre Einzelteile (x gewaehlte Menge) expandiert —
+    // danach arbeitet die gesamte Pipeline (Verfuegbarkeit, Unit-Zuweisung,
+    // Speicherung) nur mit echten Accessories. Konsistent mit dem Verhalten
+    // "Set-Teile werden eigenstaendige Positionen".
+    const rawIds = rawSelection.map((i) => i.accessory_id);
+    if (rawIds.length > 0) {
+      const [accChk, setChk] = await Promise.all([
+        supabase.from('accessories').select('id').in('id', rawIds),
+        supabase.from('sets').select('id').in('id', rawIds),
+      ]);
+      const known = new Set<string>([
+        ...((accChk.data ?? []).map((a) => a.id as string)),
+        ...((setChk.data ?? []).map((s) => s.id as string)),
+      ]);
+      const unknown = rawIds.filter((i) => !known.has(i));
       if (unknown.length > 0) {
-        const { data: setChk } = await supabase.from('sets').select('id').in('id', unknown);
-        const setHit = (setChk ?? []).map((s) => s.id as string);
         return NextResponse.json(
-          {
-            error: setHit.length > 0
-              ? 'Sets sind hier nicht erlaubt — bitte die enthaltenen Einzelteile auswählen.'
-              : `Unbekanntes Zubehör: ${unknown.join(', ')}`,
-          },
+          { error: `Unbekanntes Zubehör/Set: ${unknown.join(', ')}` },
           { status: 422 },
         );
       }
+    }
+
+    // Sets -> Einzelteile aufloesen. resolveAccessoryItems expandiert Sets
+    // (Leaf-Zeilen tragen accessory_id, Set-Container-Zeilen nicht). Ohne
+    // Set in der Auswahl ist das Ergebnis identisch zur Rohauswahl ->
+    // keine Verhaltensaenderung fuer reine Accessory-Edits.
+    let newItems = rawSelection;
+    if (rawSelection.length > 0) {
+      const expandedResolved = await resolveAccessoryItems(supabase, rawSelection);
+      const expMap = new Map<string, number>();
+      for (const r of expandedResolved) {
+        if (!r.accessory_id) continue; // Set-Container-Zeile droppen
+        expMap.set(
+          r.accessory_id,
+          Math.min(99, (expMap.get(r.accessory_id) ?? 0) + (r.qty || 0)),
+        );
+      }
+      newItems = [...expMap.entries()]
+        .map(([accessory_id, qty]) => ({ accessory_id, qty }))
+        .slice(0, 50);
     }
 
     // Roh-Bestand fuer Audit-Log (kann Set-IDs enthalten — nur Doku)

@@ -185,6 +185,9 @@ export default function BuchungDetailPage() {
   const [setMap, setSetMap] = useState<Record<string, { name: string; items: { accessory_id: string; qty: number }[] }>>({});
   const [productList, setProductList] = useState<{ id: string; name: string }[]>([]);
   const [accessoryList, setAccessoryList] = useState<{ id: string; name: string }[]>([]);
+  const [accessoryEditOptions, setAccessoryEditOptions] = useState<
+    { id: string; name: string; kind: 'accessory' | 'set'; compat: string }[]
+  >([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [statusUpdating, setStatusUpdating] = useState(false);
@@ -247,6 +250,35 @@ export default function BuchungDetailPage() {
       const sMap: Record<string, { name: string; items: { accessory_id: string; qty: number }[] }> = {};
       for (const s of sData.sets ?? []) sMap[s.id] = { name: s.name, items: s.accessory_items ?? [] };
       setSetMap(sMap);
+
+      // Optionen fuer den Zubehoer-Editor: Accessories + Sets, jeweils mit
+      // Kompatibilitaets-Label (welche Kameras passen) — disambiguiert auch
+      // gleichnamige Eintraege (z.B. zwei „Selfi-Stick").
+      const prodNameById = new Map<string, string>(
+        (Array.isArray(pData) ? pData : []).map((p: { id: string; name: string }) => [p.id, p.name]),
+      );
+      const compatLabel = (ids: unknown): string => {
+        const arr = Array.isArray(ids) ? (ids as string[]).filter(Boolean) : [];
+        if (arr.length === 0) return 'alle Kameras';
+        return arr.map((pid) => prodNameById.get(pid) ?? pid).join(', ');
+      };
+      const accOpts = ((accData.accessories ?? []) as { id: string; name: string; compatible_product_ids?: string[] }[])
+        .map((a) => ({
+          id: a.id,
+          name: a.name,
+          kind: 'accessory' as const,
+          compat: compatLabel(a.compatible_product_ids),
+        }))
+        .sort((x, y) => x.name.localeCompare(y.name, 'de'));
+      const setOpts = ((sData.sets ?? []) as { id: string; name: string; product_ids?: string[] }[])
+        .map((s) => ({
+          id: s.id,
+          name: s.name,
+          kind: 'set' as const,
+          compat: compatLabel(s.product_ids),
+        }))
+        .sort((x, y) => x.name.localeCompare(y.name, 'de'));
+      setAccessoryEditOptions([...setOpts, ...accOpts]);
     } catch {
       setError('Buchung konnte nicht geladen werden.');
     } finally {
@@ -723,7 +755,7 @@ export default function BuchungDetailPage() {
                 resolvedItems={booking.resolved_items ?? []}
                 accessoryItems={booking.accessory_items ?? null}
                 priceTotal={booking.price_total}
-                accessoryList={accessoryList}
+                options={accessoryEditOptions}
                 onSaved={fetchBooking}
               />
             )}
@@ -1490,15 +1522,17 @@ function PriceRow({ label, amount }: { label: string; amount: number }) {
 }
 
 function BookingAccessoryEditSection({
-  bookingId, resolvedItems, accessoryItems, priceTotal, accessoryList, onSaved,
+  bookingId, resolvedItems, accessoryItems, priceTotal, options, onSaved,
 }: {
   bookingId: string;
   resolvedItems: { id: string; name: string; qty: number; accessory_id?: string; isFromSet?: boolean; setName?: string }[];
   accessoryItems: { accessory_id: string; qty: number }[] | null;
   priceTotal: number;
-  accessoryList: { id: string; name: string }[];
+  options: { id: string; name: string; kind: 'accessory' | 'set'; compat: string }[];
   onSaved: () => void;
 }) {
+  const setOptions = options.filter((o) => o.kind === 'set');
+  const accOptions = options.filter((o) => o.kind === 'accessory');
   // Vorbefuellung: expandierte Einzel-Positionen (Set-Teile einzeln). Set-
   // Container-Zeilen haben kein accessory_id und werden ausgefiltert.
   const leafRows = resolvedItems.filter((r) => !!r.accessory_id);
@@ -1622,9 +1656,18 @@ function BookingAccessoryEditSection({
                 className="flex-1 min-w-0 text-base border border-brand-border rounded-lg px-2 py-2"
               >
                 <option value="">— wählen —</option>
-                {accessoryList.map((a) => (
-                  <option key={a.id} value={a.id}>{a.name}</option>
-                ))}
+                {setOptions.length > 0 && (
+                  <optgroup label="Sets (werden in Einzelteile aufgelöst)">
+                    {setOptions.map((o) => (
+                      <option key={o.id} value={o.id}>{o.name} — {o.compat}</option>
+                    ))}
+                  </optgroup>
+                )}
+                <optgroup label="Zubehör">
+                  {accOptions.map((o) => (
+                    <option key={o.id} value={o.id}>{o.name} — {o.compat}</option>
+                  ))}
+                </optgroup>
               </select>
               <input
                 type="number"
