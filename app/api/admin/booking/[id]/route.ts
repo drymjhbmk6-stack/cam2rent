@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase';
 import { logAudit } from '@/lib/audit';
 import { sendCancellationConfirmation, sendAdminCancellationNotification } from '@/lib/email';
 import { assignAccessoryUnitsToBooking, releaseAccessoryUnitsFromBooking } from '@/lib/accessory-unit-assignment';
+import { computeAccessoryAvailability } from '@/lib/accessory-availability';
 import { getStripe } from '@/lib/stripe';
 import { DEFAULT_HAFTUNG, getEigenbeteiligung, type HaftungConfig } from '@/lib/price-config';
 import { computeReplacementValue, loadReplacementValueConfig } from '@/lib/replacement-value';
@@ -716,22 +717,22 @@ export async function PATCH(
       oldQty.set(it.accessory_id, (oldQty.get(it.accessory_id) ?? 0) + (it.qty || 1));
     }
 
-    // Verfuegbarkeit HART pruefen — nur fuer neue/erhoehte Positionen
+    // Verfuegbarkeit HART pruefen — nur fuer neue/erhoehte Positionen.
+    // Direkt in-process (kein HTTP-Self-Fetch — hinter Cloudflare/Firewall
+    // unzuverlaessig).
     const needCheck = newItems.filter((it) => it.qty > (oldQty.get(it.accessory_id) ?? 0));
     if (needCheck.length > 0) {
       const dm = (booking.delivery_mode as string) || 'versand';
-      const availUrl = new URL('/api/accessory-availability', req.nextUrl.origin);
-      availUrl.searchParams.set('from', String(booking.rental_from));
-      availUrl.searchParams.set('to', String(booking.rental_to));
-      if (booking.product_id) availUrl.searchParams.set('product_id', String(booking.product_id));
-      availUrl.searchParams.set('delivery_mode', dm);
       const availMap = new Map<string, { name: string; remaining: number }>();
       try {
-        const r = await fetch(availUrl, { cache: 'no-store' });
-        if (!r.ok) throw new Error(`availability ${r.status}`);
-        const j = await r.json();
-        for (const a of (j.accessories ?? []) as { id: string; name: string; available_qty_remaining?: number }[]) {
-          availMap.set(a.id, { name: a.name, remaining: a.available_qty_remaining ?? 0 });
+        const avail = await computeAccessoryAvailability({
+          from: String(booking.rental_from),
+          to: String(booking.rental_to),
+          productId: booking.product_id ? String(booking.product_id) : null,
+          deliveryMode: dm,
+        });
+        for (const a of avail.accessories) {
+          availMap.set(a.id, { name: a.name, remaining: a.available_qty_remaining });
         }
       } catch (e) {
         console.error('[booking-accessory-edit] availability check failed:', e);
