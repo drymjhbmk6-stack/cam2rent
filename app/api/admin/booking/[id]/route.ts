@@ -2,13 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { logAudit } from '@/lib/audit';
 import { sendCancellationConfirmation, sendAdminCancellationNotification } from '@/lib/email';
-import { releaseAccessoryUnitsFromBooking } from '@/lib/accessory-unit-assignment';
+import { assignAccessoryUnitsToBooking, releaseAccessoryUnitsFromBooking } from '@/lib/accessory-unit-assignment';
 import { getStripe } from '@/lib/stripe';
 import { DEFAULT_HAFTUNG, getEigenbeteiligung, type HaftungConfig } from '@/lib/price-config';
 import { computeReplacementValue, loadReplacementValueConfig } from '@/lib/replacement-value';
 import { getInventarWbwByLegacyUnitIds, getInventarWbwForBookingAccessories, getInventarWbwAverageByLegacyProductId } from '@/lib/inventar/wbw-bridge';
 
-type ResolvedItem = { id: string; name: string; qty: number; isFromSet?: boolean; setName?: string; included_parts?: string[] };
+type ResolvedItem = { id: string; name: string; qty: number; accessory_id?: string; isFromSet?: boolean; setName?: string; included_parts?: string[] };
 
 /**
  * Loest eine Liste { accessory_id, qty } in benannte Positionen auf.
@@ -87,6 +87,7 @@ async function resolveAccessoryItems(
         const subAcc = accLookup[sub.accessory_id];
         resolved.push({
           id: sub.accessory_id,
+          accessory_id: sub.accessory_id,
           name: subAcc?.name ?? sub.accessory_id,
           qty: (sub.qty || 1) * item.qty,
           isFromSet: true,
@@ -98,6 +99,7 @@ async function resolveAccessoryItems(
       const acc = accLookup[item.accessory_id];
       resolved.push({
         id: item.accessory_id,
+        accessory_id: item.accessory_id,
         name: acc?.name ?? item.accessory_id,
         qty: item.qty,
         included_parts: acc?.included_parts && acc.included_parts.length > 0 ? acc.included_parts : undefined,
@@ -628,6 +630,206 @@ export async function PATCH(
   };
 
   const supabase = createServiceClient();
+
+  // ── Echte Zubehoer-Zusammensetzung bearbeiten ──────────────────────────
+  // Eigenstaendiger, frueh zurueckkehrender Zweig. Aendert die ECHTE Buchung
+  // (accessory_items / accessory_unit_ids / accessories), schlaegt damit in
+  // Packliste, Uebergabeprotokoll, Scan-Workflow, WBW und Verfuegbarkeit
+  // durch. Verfuegbarkeit wird hart geprueft (kein Ueberbuchen). Preis nur
+  // optional, ohne Stripe-Bewegung. Mietvertrag bleibt unangetastet.
+  const accessoryEdit = (body as {
+    accessory_edit?: {
+      items?: { accessory_id?: string; qty?: number }[];
+      reason?: string;
+      new_price_total?: number | null;
+    };
+  }).accessory_edit;
+  if (accessoryEdit !== undefined) {
+    if (!accessoryEdit || typeof accessoryEdit !== 'object' || !Array.isArray(accessoryEdit.items)) {
+      return NextResponse.json({ error: 'Ungültige Anfrage.' }, { status: 422 });
+    }
+    const reason = typeof accessoryEdit.reason === 'string' ? accessoryEdit.reason.trim() : '';
+    if (reason.length < 10) {
+      return NextResponse.json(
+        { error: 'Bitte einen Grund mit mindestens 10 Zeichen angeben.' },
+        { status: 422 },
+      );
+    }
+
+    const { data: booking } = await supabase
+      .from('bookings')
+      .select('id, status, rental_from, rental_to, accessory_items, accessory_unit_ids, accessories, notes, price_total, delivery_mode, product_id')
+      .eq('id', id)
+      .maybeSingle();
+    if (!booking) {
+      return NextResponse.json({ error: 'Buchung nicht gefunden.' }, { status: 404 });
+    }
+    const TERMINAL = ['cancelled', 'completed', 'returned'];
+    if (TERMINAL.includes(booking.status)) {
+      return NextResponse.json(
+        { error: `Buchung im Status „${booking.status}" kann nicht mehr bearbeitet werden.` },
+        { status: 409 },
+      );
+    }
+
+    // Items sanitisieren + Duplikate (gleiche accessory_id) zusammenfassen
+    const cleaned = accessoryEdit.items
+      .filter((x) => x && typeof x.accessory_id === 'string' && x.accessory_id.trim())
+      .map((x) => ({
+        accessory_id: (x.accessory_id as string).trim().slice(0, 100),
+        qty: Math.min(99, Math.max(1, Math.round(Number(x.qty) || 1))),
+      }))
+      .slice(0, 50);
+    const mergedMap = new Map<string, number>();
+    for (const it of cleaned) {
+      mergedMap.set(it.accessory_id, Math.min(99, (mergedMap.get(it.accessory_id) ?? 0) + it.qty));
+    }
+    const newItems = [...mergedMap.entries()].map(([accessory_id, qty]) => ({ accessory_id, qty }));
+
+    // IDs muessen existierende Accessories sein — keine Set-IDs zulassen
+    const ids = newItems.map((i) => i.accessory_id);
+    if (ids.length > 0) {
+      const { data: accChk } = await supabase.from('accessories').select('id').in('id', ids);
+      const known = new Set((accChk ?? []).map((a) => a.id as string));
+      const unknown = ids.filter((i) => !known.has(i));
+      if (unknown.length > 0) {
+        const { data: setChk } = await supabase.from('sets').select('id').in('id', unknown);
+        const setHit = (setChk ?? []).map((s) => s.id as string);
+        return NextResponse.json(
+          {
+            error: setHit.length > 0
+              ? 'Sets sind hier nicht erlaubt — bitte die enthaltenen Einzelteile auswählen.'
+              : `Unbekanntes Zubehör: ${unknown.join(', ')}`,
+          },
+          { status: 422 },
+        );
+      }
+    }
+
+    // Alt-Mengen (qty-aware) fuer Delta-Verfuegbarkeitspruefung
+    const oldItemsArr: { accessory_id: string; qty: number }[] =
+      Array.isArray(booking.accessory_items) && booking.accessory_items.length > 0
+        ? (booking.accessory_items as { accessory_id: string; qty: number }[])
+        : (Array.isArray(booking.accessories) ? (booking.accessories as string[]) : []).map((a) => ({ accessory_id: a, qty: 1 }));
+    const oldQty = new Map<string, number>();
+    for (const it of oldItemsArr) {
+      oldQty.set(it.accessory_id, (oldQty.get(it.accessory_id) ?? 0) + (it.qty || 1));
+    }
+
+    // Verfuegbarkeit HART pruefen — nur fuer neue/erhoehte Positionen
+    const needCheck = newItems.filter((it) => it.qty > (oldQty.get(it.accessory_id) ?? 0));
+    if (needCheck.length > 0) {
+      const dm = (booking.delivery_mode as string) || 'versand';
+      const availUrl = new URL('/api/accessory-availability', req.nextUrl.origin);
+      availUrl.searchParams.set('from', String(booking.rental_from));
+      availUrl.searchParams.set('to', String(booking.rental_to));
+      if (booking.product_id) availUrl.searchParams.set('product_id', String(booking.product_id));
+      availUrl.searchParams.set('delivery_mode', dm);
+      const availMap = new Map<string, { name: string; remaining: number }>();
+      try {
+        const r = await fetch(availUrl, { cache: 'no-store' });
+        if (!r.ok) throw new Error(`availability ${r.status}`);
+        const j = await r.json();
+        for (const a of (j.accessories ?? []) as { id: string; name: string; available_qty_remaining?: number }[]) {
+          availMap.set(a.id, { name: a.name, remaining: a.available_qty_remaining ?? 0 });
+        }
+      } catch (e) {
+        console.error('[booking-accessory-edit] availability check failed:', e);
+        return NextResponse.json(
+          { error: 'Verfügbarkeit konnte nicht geprüft werden. Bitte erneut versuchen.' },
+          { status: 503 },
+        );
+      }
+      const blocked: string[] = [];
+      for (const it of needCheck) {
+        const delta = it.qty - (oldQty.get(it.accessory_id) ?? 0);
+        const av = availMap.get(it.accessory_id);
+        if ((av?.remaining ?? 0) < delta) blocked.push(av?.name ?? it.accessory_id);
+      }
+      if (blocked.length > 0) {
+        return NextResponse.json(
+          { error: `Im Mietzeitraum nicht genug freie Exemplare: ${blocked.join(', ')}. Änderung wurde NICHT gespeichert.` },
+          { status: 409 },
+        );
+      }
+    }
+
+    // Mutation — neue Units ZUERST zuweisen (alte bleiben vorerst 'rented'),
+    // damit ein Race bei der RPC sauber zurueckgerollt werden kann.
+    const oldUnitIds: string[] = Array.isArray(booking.accessory_unit_ids)
+      ? (booking.accessory_unit_ids as string[]).filter(Boolean)
+      : [];
+    const assignRes = await assignAccessoryUnitsToBooking(
+      id,
+      newItems,
+      String(booking.rental_from),
+      String(booking.rental_to),
+    );
+    if (assignRes.missing.length > 0) {
+      // Race zwischen Pruefung und RPC — frisch zugewiesene Units freigeben,
+      // Array auf alten Stand zuruecksetzen, Buchung bleibt unveraendert.
+      const fresh = Object.values(assignRes.assigned).flat();
+      if (fresh.length > 0) {
+        try { await releaseAccessoryUnitsFromBooking(id, fresh); } catch { /* best-effort */ }
+      }
+      await supabase.from('bookings').update({ accessory_unit_ids: oldUnitIds }).eq('id', id);
+      return NextResponse.json(
+        { error: `Exemplar wurde zwischenzeitlich vergeben: ${assignRes.missing.join(', ')}. Änderung wurde NICHT gespeichert.` },
+        { status: 409 },
+      );
+    }
+    const newUnitIds = Object.values(assignRes.assigned).flat();
+
+    // Alte Units freigeben (nur Status, schont Units in anderen Buchungen)
+    if (oldUnitIds.length > 0) {
+      try {
+        await releaseAccessoryUnitsFromBooking(id, oldUnitIds);
+      } catch (e) {
+        console.error('[booking-accessory-edit] release old units failed:', e);
+      }
+    }
+
+    const priceProvided =
+      accessoryEdit.new_price_total !== undefined && accessoryEdit.new_price_total !== null;
+    const newPrice = priceProvided ? Math.max(0, Number(accessoryEdit.new_price_total)) : null;
+    const priceValid = priceProvided && newPrice !== null && Number.isFinite(newPrice);
+
+    const dateStr = new Date().toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' });
+    let noteLine = `Zubehör-Anpassung (${dateStr}): ${reason}`;
+    if (priceValid) noteLine += ` — Preis neu: ${(newPrice as number).toFixed(2).replace('.', ',')} €`;
+    const existingNotes = booking.notes ? `${booking.notes} | ` : '';
+
+    const upd: Record<string, unknown> = {
+      accessory_items: newItems,
+      accessories: [...new Set(newItems.map((i) => i.accessory_id))],
+      accessory_unit_ids: newUnitIds,
+      notes: `${existingNotes}${noteLine}`,
+    };
+    if (priceValid) upd.price_total = newPrice;
+
+    const { error: upErr } = await supabase.from('bookings').update(upd).eq('id', id);
+    if (upErr) {
+      console.error('[booking-accessory-edit] update failed:', upErr);
+      return NextResponse.json({ error: 'Speichern fehlgeschlagen.' }, { status: 500 });
+    }
+
+    await logAudit({
+      action: 'booking.accessory_edit',
+      entityType: 'booking',
+      entityId: id,
+      changes: {
+        old_items: oldItemsArr,
+        new_items: newItems,
+        price_old: booking.price_total ?? null,
+        price_new: priceValid ? newPrice : null,
+        reason,
+      },
+      request: req,
+    });
+
+    return NextResponse.json({ success: true });
+  }
+
   const updates: Record<string, unknown> = {};
 
   // E-Mail aktualisieren

@@ -1134,6 +1134,48 @@ Der Admin kann in dieser Box pro Buchung eine **andere Katalog-Kamera und/oder e
 - **Refactor mitgenommen:** Der Zubehoer-Resolver (Sets→Sub-Items-Expansion) wurde aus dem GET-Handler in die modulweite Helper-Funktion `resolveAccessoryItems()` extrahiert und wird von beiden Pfaden (echte Buchung + Override) genutzt.
 - **UI** (`LiabilitySection` in `/admin/buchungen/[id]`): „Bearbeiten"-Button + Badge „manuell angepasst" + „Auf automatisch zuruecksetzen". Edit-Modus: zwei unabhaengige Checkboxen („Kamera ueberschreiben" → Katalog-Dropdown, „Zubehoer ueberschreiben" → editierbare Zeilenliste mit Dropdown + Menge + Hinzufuegen/Entfernen). Page laedt zusaetzlich `/api/products` + `/api/admin/accessories` fuer die Dropdowns.
 
+### Zubehör einer bestehenden Buchung echt bearbeiten (Stand 2026-05-18)
+Eigene Sektion „Zubehör der Buchung bearbeiten" auf `/admin/buchungen/[id]` —
+**unabhängig** von der reinen Anzeige-`liability_override`-Box (die bleibt 1:1
+für WBW-/Kamera-Korrektur ohne Buchungsänderung). Hier ändert der Admin die
+**echte** Zusammensetzung (`bookings.accessory_items`/`accessory_unit_ids`/
+`accessories`), wodurch Packliste (PDF+HTML), Übergabeprotokoll, Scan-Workflow,
+WBW-Box/-Vorschlag und Verfügbarkeit automatisch nachziehen (alles liest live aus
+`GET /api/admin/booking/[id]`).
+- **API:** `PATCH /api/admin/booking/[id]` neuer eigenständiger, früh
+  zurückkehrender Body-Zweig `accessory_edit { items:[{accessory_id,qty}],
+  reason, new_price_total? }`. **Keine Migration** (nur bestehende Spalten).
+- **Grund Pflicht** (min. 10 Zeichen, analog Storno) → an `bookings.notes`
+  angehängt (`Zubehör-Anpassung (TT.MM.JJJJ): … [— Preis neu: X,XX €]`) +
+  `logAudit('booking.accessory_edit')` (ACTION_LABELS ergänzt).
+- **Verfügbarkeit hart blockiert:** pro neuer/erhöhter Position
+  `requiredDelta = max(0, neu − alt)` gegen `available_qty_remaining` aus
+  internem Fetch auf `/api/accessory-availability` (zählt die eigene Buchung
+  bereits mit → Delta exakt). Block → 409, **keine Mutation**. Status-Guard:
+  terminale Buchungen (`cancelled/completed/returned`) → 409 / Sektion
+  ausgeblendet. Set-IDs werden abgelehnt (nur Einzel-Accessories).
+- **Mutation near-atomar:** neue Units zuerst via
+  `assignAccessoryUnitsToBooking` (alte bleiben vorerst `rented`); bei
+  `missing>0` (Race) → frische Units freigeben + `accessory_unit_ids` auf alt
+  zurücksetzen → 409, Buchung unverändert. Bei Erfolg:
+  `accessory_unit_ids` explizit auf die neu zugewiesenen IDs setzen (RPC hängt
+  nur an), dann `releaseAccessoryUnitsFromBooking(id, oldUnitIds)` (leert das
+  Array nicht selbst, schont Units in anderen aktiven Buchungen),
+  `accessory_items`/`accessories` überschreiben.
+- **Preis OPTIONAL, keine Stripe-Bewegung** (Entscheidung): nur `price_total` +
+  Notiz; Rechnungs-PDF (`/api/invoice/[bookingId]`) ist on-the-fly und zeigt den
+  neuen Wert; eine evtl. persistente `invoices`-Row wird **nicht** automatisch
+  korrigiert (über bestehenden Buchhaltungs-Gutschrift-Workflow regeln).
+- **Mietvertrag bleibt Original** (Entscheidung) — Doku via Notiz + Audit + die
+  bestehende WBW-Finalisierungs-Mail.
+- **`resolved_items`** wurde additiv um optionales `accessory_id` erweitert
+  (Set-Container-Zeile hat keins → UI filtert sie aus dem Editor). UI:
+  `BookingAccessoryEditSection` (Read = expandierte Ist-Positionen, Edit =
+  Dropdown-Tausch/Menge/✕/„+ Zubehör hinzufügen" + Pflicht-Grund + optionale
+  Preis-Checkbox), nutzt die schon geladene `accessoryList`. 409/422 inline.
+- **Nebeneffekt (gewollt):** geänderte Set-Teile verlieren das „(aus Set: …)"-
+  Label (flache Positionen). Werte/WBW pro Position bleiben korrekt.
+
 ### WBW-Finalisierung mit PDF-E-Mail an den Mieter (Stand 2026-05-16)
 Beim Versandfertigmachen legt der Admin die **finalen** Wiederbeschaffungswerte der tatsaechlich mitgelieferten Ausruestung fest. Diese werden als rechtlich relevantes PDF generiert, in Storage abgelegt und automatisch per E-Mail an den Mieter geschickt. Laut Mietvertrag ist ab dann ausschliesslich der per E-Mail mitgeteilte finale WBW massgeblich.
 - **Vertrags-Passus** (in `lib/contracts/contract-template.tsx`, immer gerendert, NICHT DB-overridable, bereits gespeicherte Vertrags-PDFs bleiben unberuehrt): „Die ausgewiesenen Wiederbeschaffungswerte stellen eine vorläufige Schätzung … Maßgeblich … ist ausschließlich der in dieser E-Mail ausgewiesene finale Wiederbeschaffungswert."

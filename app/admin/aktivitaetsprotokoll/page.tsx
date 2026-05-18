@@ -20,6 +20,7 @@ const ACTION_LABELS: Record<string, string> = {
   // Buchungen
   'booking.cancel': 'Buchung storniert',
   'booking.update': 'Buchung aktualisiert',
+  'booking.accessory_edit': 'Zubehör der Buchung bearbeitet',
   'booking.delete': 'Buchung endgültig gelöscht',
   'booking.email_updated': 'Kunden-E-Mail geändert',
   'booking.verification_gate': 'Verifizierungs-Gate',
