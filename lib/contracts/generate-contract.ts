@@ -402,32 +402,46 @@ export async function generateContractPDF(opts: {
 
   const items: MietgegenstandItem[] = opts.items && opts.items.length > 0
     ? opts.items
-    : [
-        {
-          position: 1,
-          bezeichnung: opts.productName,
-          seriennr: opts.serialNumber || '',
-          tage: opts.rentalDays,
-          preis: opts.priceRental,
-          wiederbeschaffungswert,
-        },
-        ...accessoryEntries.map((entry, i) => {
-          const info = accessoryInfoMap[entry.id];
-          const baseName = info?.name ?? entry.id;
-          // Sets enthalten bereits den Gesamt-Zeitwert pro Set-Einheit.
-          // Zubehoer: Wert pro Stueck × qty.
-          const unitValue = info?.replacementValue ?? 0;
-          const lineValue = unitValue * entry.qty;
-          return {
-            position: i + 2,
-            bezeichnung: entry.qty > 1 ? `${entry.qty}x ${baseName}` : baseName,
-            seriennr: '',
+    : (() => {
+        // Mehrere Kameras (Warenkorb-Buchung): productName ist kommagetrennt
+        // ("OSMO Action 5 Pro , OSMO Action 5 Pro"). Pro Kamera EINE Zeile
+        // mit eigenem Wiederbeschaffungswert (gleiches Modell ×N angenommen —
+        // der Concat-Name impliziert das). Seriennummer nur auf der ersten
+        // Zeile (Datenmodell trackt eine unit_id pro Buchung).
+        const cameraNames = String(opts.productName ?? '')
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean);
+        const camLines: MietgegenstandItem[] = (cameraNames.length > 0 ? cameraNames : [opts.productName])
+          .map((nm, i) => ({
+            position: i + 1,
+            bezeichnung: nm,
+            seriennr: i === 0 ? (opts.serialNumber || '') : '',
             tage: opts.rentalDays,
-            preis: 0,
-            wiederbeschaffungswert: lineValue,
-          };
-        }),
-      ].filter(item => item.bezeichnung);
+            preis: i === 0 ? opts.priceRental : 0,
+            wiederbeschaffungswert,
+          }));
+        const camCount = camLines.length;
+        return [
+          ...camLines,
+          ...accessoryEntries.map((entry, i) => {
+            const info = accessoryInfoMap[entry.id];
+            const baseName = info?.name ?? entry.id;
+            // Sets enthalten bereits den Gesamt-Zeitwert pro Set-Einheit.
+            // Zubehoer: Wert pro Stueck × qty.
+            const unitValue = info?.replacementValue ?? 0;
+            const lineValue = unitValue * entry.qty;
+            return {
+              position: camCount + i + 1,
+              bezeichnung: entry.qty > 1 ? `${entry.qty}x ${baseName}` : baseName,
+              seriennr: '',
+              tage: opts.rentalDays,
+              preis: 0,
+              wiederbeschaffungswert: lineValue,
+            };
+          }),
+        ].filter((item) => item.bezeichnung);
+      })();
 
   // Haftungsoption bestimmen
   const haftungOption = opts.haftungOption || (
