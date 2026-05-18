@@ -8,6 +8,7 @@ import { getStripe } from '@/lib/stripe';
 import { DEFAULT_HAFTUNG, getEigenbeteiligung, type HaftungConfig } from '@/lib/price-config';
 import { computeReplacementValue, loadReplacementValueConfig } from '@/lib/replacement-value';
 import { getInventarWbwByLegacyUnitIds, getInventarWbwForBookingAccessories, getInventarWbwAverageByLegacyProductId } from '@/lib/inventar/wbw-bridge';
+import { resolveBookingCameras } from '@/lib/booking-cameras';
 
 type ResolvedItem = { id: string; name: string; qty: number; accessory_id?: string; isFromSet?: boolean; setName?: string; included_parts?: string[] };
 
@@ -132,17 +133,15 @@ export async function GET(
     return NextResponse.json({ error: 'Buchung nicht gefunden.' }, { status: 404 });
   }
 
-  // Seriennummer laden falls Unit zugeordnet — bevorzugt aus inventar_units
-  // (neue Welt) via migration_audit-Mapping. Fallback auf product_units fuer
-  // Pre-Migration-Buchungen.
-  let serialNumber: string | null = null;
-  if (booking.unit_id) {
+  // Seriennummer pro Kamera-Einheit auflösen — bevorzugt aus inventar_units
+  // (neue Welt) via migration_audit-Mapping, Fallback product_units.
+  const resolveSerialForUnit = async (unitId: string): Promise<string | null> => {
     try {
       const { data: audit } = await supabase
         .from('migration_audit')
         .select('neue_id')
         .eq('alte_tabelle', 'product_units')
-        .eq('alte_id', booking.unit_id)
+        .eq('alte_id', unitId)
         .eq('neue_tabelle', 'inventar_units')
         .maybeSingle();
       if ((audit as { neue_id?: string } | null)?.neue_id) {
@@ -152,21 +151,34 @@ export async function GET(
           .eq('id', (audit as { neue_id: string }).neue_id)
           .maybeSingle();
         const u = invUnit as { seriennummer: string | null; inventar_code: string | null; bezeichnung: string } | null;
-        serialNumber = u?.seriennummer ?? u?.inventar_code ?? u?.bezeichnung ?? null;
+        const s = u?.seriennummer ?? u?.inventar_code ?? u?.bezeichnung ?? null;
+        if (s) return s;
       }
     } catch {
-      // migration_audit fehlt → Fallback unten
+      // migration_audit fehlt → Fallback
     }
-    if (!serialNumber) {
-      const { data: unit } = await supabase
-        .from('product_units')
-        .select('serial_number')
-        .eq('id', booking.unit_id)
-        .maybeSingle();
-      serialNumber = unit?.serial_number ?? null;
-    }
-  }
-  booking.serial_number = serialNumber;
+    const { data: unit } = await supabase
+      .from('product_units')
+      .select('serial_number')
+      .eq('id', unitId)
+      .maybeSingle();
+    return unit?.serial_number ?? null;
+  };
+
+  // Multi-Kamera: pro physischer Kamera eigene Seriennummer. Legacy /
+  // cameras=NULL → Resolver liefert eine Kamera = bisheriges Verhalten.
+  const bookingCameras = resolveBookingCameras(booking);
+  const camerasResolved = await Promise.all(
+    bookingCameras.map(async (c) => ({
+      product_id: c.product_id,
+      product_name: c.product_name,
+      unit_id: c.unit_id,
+      serial_number: c.unit_id ? await resolveSerialForUnit(c.unit_id) : null,
+    })),
+  );
+  booking.cameras_resolved = camerasResolved;
+  booking.serial_number =
+    camerasResolved.find((c) => c.serial_number)?.serial_number ?? null;
 
   // Zubehoer + Sets aufloesen — fuer Packliste, Uebergabeprotokoll, Vertrag.
   // accessory_items hat Vorrang (qty-aware), sonst accessories[] mit qty=1.
@@ -348,89 +360,98 @@ async function computeLiabilitySummary(
     : Number(booking.deposit ?? 0);
   const haftung = (booking.haftung as string | null) ?? null;
 
-  // 1. Kamera-WBW — pauschal berechnet (linear -> Floor).
-  // Bei Override-Kamera entfaellt der unit_id-Asset-Pfad (die unit_id
-  // gehoert zur Original-Kamera) → direkt Inventar-Durchschnitt → Kaution.
+  // 1. Kamera-WBW pro physischer Kamera (linear -> Floor).
+  // Pro Kamera wird DEREN eigene unit_id aufgelöst (Asset → Inventar-Unit →
+  // Inventar-Schnitt je Produkt → Kaution). Gemischte Modelle bekommen so
+  // jeweils ihren echten Wert. Bei Override (interne Box) genau eine Zeile
+  // ohne unit_id-Pfad (die unit_id gehört zur Original-Kamera).
   const wbwConfig = await loadReplacementValueConfig(supabase);
-  let cameraValue = 0;
-  let cameraSource: Line['source'] = 'unknown';
-  if (!cameraOverridden && booking.unit_id) {
-    const primary = await supabase
-      .from('assets')
-      .select('purchase_price, purchase_date, current_value, replacement_value_estimate')
-      .eq('unit_id', booking.unit_id as string)
-      .eq('status', 'active')
-      .maybeSingle();
-    let row: { purchase_price?: number | null; purchase_date?: string | null; current_value?: number | null; replacement_value_estimate?: number | null } | null = primary.data;
-    if (primary.error && /replacement_value_estimate/i.test(primary.error.message)) {
-      const fb = await supabase
+
+  const resolveCamWbw = async (
+    unitId: string | null,
+    pid: string | null,
+    deposit: number,
+  ): Promise<{ value: number; source: Line['source'] }> => {
+    let value = 0;
+    let source: Line['source'] = 'unknown';
+    if (unitId) {
+      const primary = await supabase
         .from('assets')
-        .select('purchase_price, purchase_date, current_value')
-        .eq('unit_id', booking.unit_id as string)
+        .select('purchase_price, purchase_date, current_value, replacement_value_estimate')
+        .eq('unit_id', unitId)
         .eq('status', 'active')
         .maybeSingle();
-      row = fb.data;
-    }
-    if (row && row.purchase_date && row.purchase_price != null) {
-      cameraValue = computeReplacementValue({
-        purchase_price: row.purchase_price,
-        purchase_date: row.purchase_date,
-        replacement_value_estimate: row.replacement_value_estimate ?? null,
-      }, wbwConfig);
-      cameraSource = 'asset';
-    }
-  }
-  // Fallback 1: inventar_units (neue Welt) via migration_audit → unit_id.
-  // Greift wenn die Buchung eine konkrete product_unit zugeordnet hat.
-  if (cameraValue === 0 && !cameraOverridden && booking.unit_id) {
-    try {
-      const m = await getInventarWbwByLegacyUnitIds(supabase, [booking.unit_id as string], 'product_units');
-      const v = m.get(booking.unit_id as string);
-      if (v && v > 0) {
-        cameraValue = v;
-        cameraSource = 'asset';
+      let row: { purchase_price?: number | null; purchase_date?: string | null; current_value?: number | null; replacement_value_estimate?: number | null } | null = primary.data;
+      if (primary.error && /replacement_value_estimate/i.test(primary.error.message)) {
+        const fb = await supabase
+          .from('assets')
+          .select('purchase_price, purchase_date, current_value')
+          .eq('unit_id', unitId)
+          .eq('status', 'active')
+          .maybeSingle();
+        row = fb.data;
       }
-    } catch {
-      // weiter zum naechsten Fallback
-    }
-  }
-  // Fallback 2: inventar_units-Durchschnitt ueber product_id. Greift wenn die
-  // Buchung kein konkretes unit_id hat (Assignment gescheitert) — der Admin
-  // soll trotzdem einen plausiblen WBW sehen, nicht 0,00 EUR.
-  if (cameraValue === 0 && cameraId) {
-    try {
-      const avg = await getInventarWbwAverageByLegacyProductId(supabase, cameraId);
-      if (avg && avg > 0) {
-        cameraValue = avg;
-        cameraSource = 'asset';
+      if (row && row.purchase_date && row.purchase_price != null) {
+        value = computeReplacementValue({
+          purchase_price: row.purchase_price,
+          purchase_date: row.purchase_date,
+          replacement_value_estimate: row.replacement_value_estimate ?? null,
+        }, wbwConfig);
+        source = 'asset';
       }
-    } catch {
-      // weiter zum Deposit-Fallback
+      if (value === 0) {
+        try {
+          const m = await getInventarWbwByLegacyUnitIds(supabase, [unitId], 'product_units');
+          const v = m.get(unitId);
+          if (v && v > 0) { value = v; source = 'asset'; }
+        } catch { /* nächster Fallback */ }
+      }
     }
-  }
-  if (cameraValue === 0) {
-    // Fallback 3: Kautionswert (im Haftung-Modus nur Anker, im Kaution-Modus echt)
-    cameraValue = productDeposit;
-    cameraSource = productDeposit > 0 ? 'product_deposit' : 'unknown';
-  }
+    if (value === 0 && pid) {
+      try {
+        const avg = await getInventarWbwAverageByLegacyProductId(supabase, pid);
+        if (avg && avg > 0) { value = avg; source = 'asset'; }
+      } catch { /* Deposit-Fallback */ }
+    }
+    if (value === 0) {
+      value = deposit;
+      source = deposit > 0 ? 'product_deposit' : 'unknown';
+    }
+    return { value, source };
+  };
 
-  // Mehrere Kameras (Warenkorb-Buchung): product_name ist kommagetrennt →
-  // PRO Kamera eine eigene WBW-Zeile mit eigenem Wert. Bei Override ist es
-  // ein einzelner Katalogname → genau eine Zeile.
-  const cameraNamesList = cameraOverridden
-    ? [String(cameraName)]
-    : (() => {
-        const parts = String(cameraName).split(',').map((s) => s.trim()).filter(Boolean);
-        return parts.length > 0 ? parts : [String(cameraName)];
-      })();
-  const cameraCount = cameraNamesList.length;
-  const cameraLines: Line[] = cameraNamesList.map((nm) => ({
-    name: nm,
-    qty: 1,
-    unit_value: cameraValue,
-    total_value: cameraValue,
-    source: cameraSource,
-  }));
+  let cameraLines: Line[];
+  if (cameraOverridden) {
+    const { value, source } = await resolveCamWbw(null, cameraId, productDeposit);
+    cameraLines = [{
+      name: String(cameraName), qty: 1,
+      unit_value: value, total_value: value, source,
+    }];
+  } else {
+    const cams = resolveBookingCameras(booking);
+    cameraLines = await Promise.all(
+      cams.map(async (c) => {
+        const pid = c.product_id ?? (booking.product_id as string | null) ?? null;
+        const dep = pid
+          ? Number(allProducts.find((p) => p.id === pid)?.deposit ?? booking.deposit ?? 0)
+          : Number(booking.deposit ?? 0);
+        const { value, source } = await resolveCamWbw(c.unit_id, pid, dep);
+        return {
+          name: c.product_name, qty: 1,
+          unit_value: value, total_value: value, source,
+        } as Line;
+      }),
+    );
+    if (cameraLines.length === 0) {
+      const { value, source } = await resolveCamWbw(
+        (booking.unit_id as string | null) ?? null, cameraId, productDeposit,
+      );
+      cameraLines = [{
+        name: String(cameraName), qty: 1,
+        unit_value: value, total_value: value, source,
+      }];
+    }
+  }
   const cameraLine: Line = cameraLines[0];
 
   // 2. Zubehoer + Sets (auf Sub-Items expandiert) → Set-Container ueberspringen,
@@ -571,7 +592,8 @@ async function computeLiabilitySummary(
   }
 
   const accessoriesTotal = accessoryLines.reduce((s, l) => s + l.total_value, 0);
-  const totalWbw = cameraValue * cameraCount + accessoriesTotal;
+  const camerasTotal = cameraLines.reduce((s, l) => s + l.total_value, 0);
+  const totalWbw = camerasTotal + accessoriesTotal;
 
   // 3. Kunden-Maximum je nach Haftungsoption
   // booking.haftung Werte: 'standard' (Basis), 'premium', sonst (null/'none'/'')
