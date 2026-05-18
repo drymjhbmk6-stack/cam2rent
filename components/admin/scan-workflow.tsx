@@ -366,6 +366,36 @@ export async function applyScan(
     if (!info.matchesBooking) {
       return { ok: false, message: `Kamera „${info.productName ?? rawCode}" wird nicht benötigt.` };
     }
+    // Clean-Match per Unit-ID: der gescannte Code loest (cross-world robust
+    // ueber scan-lookup) auf GENAU die Kamera-Einheit auf, die dieser Buchung
+    // zugewiesen ist. Der lokale camHit oben greift hier NICHT, weil der QR
+    // eine andere Code-Repraesentation traegt (neue Welt: inventar_code; alte
+    // Welt evtl. label) als die in cameraSlots[].serial aufgeloeste
+    // Seriennummer — der String-Vergleich scheitert dann immer und es landete
+    // faelschlich im Substitutions-Zweig ("Kamera ersetzt …"). Der Vergleich
+    // ueber die kanonische unit_id ist die verlaessliche Quelle: stimmt sie
+    // mit einem Buchungs-Slot ueberein, ist es KEINE Substitution.
+    if (info.unitId) {
+      const assignedSlot = lookup.cameraSlots.find(
+        (s) => s.unitId && s.unitId === info.unitId,
+      );
+      if (assignedSlot) {
+        if (checked[assignedSlot.key]) {
+          return {
+            ok: false,
+            alreadyChecked: true,
+            message: `Kamera (${info.serialNumber ?? rawCode}) schon abgehakt.`,
+          };
+        }
+        return {
+          ok: true,
+          key: assignedSlot.key,
+          message: `✓ Kamera (${info.serialNumber ?? rawCode})`,
+          scannedKind: 'camera',
+          scannedUnitId: info.unitId,
+        };
+      }
+    }
     if (!allowSubstitution) {
       return { ok: false, message: `Diese Kamera passt nicht zu dieser Buchung — bitte gegen die Seriennummer der Buchung pruefen.` };
     }
@@ -377,14 +407,23 @@ export async function applyScan(
     if (!freeCam) {
       return { ok: false, alreadyChecked: true, message: `Alle Kameras schon abgehakt.` };
     }
+    // Hatte die Buchung ueberhaupt keine Kamera-Einheit zugewiesen (Legacy /
+    // neue-Welt-Inventar ohne unit_id), ist das keine "Ersetzung" sondern die
+    // Erst-Zuweisung — sonst wirkt jeder normale Scan faelschlich wie ein
+    // Tausch ("wird immer nur ersetzt"). Substitution bleibt es nur, wenn ein
+    // Slot eine andere Einheit hatte.
+    const hadAnyAssignment = lookup.cameraSlots.some((s) => s.unitId);
+    const camCode = info.serialNumber ?? rawCode;
     return {
       ok: true,
       key: freeCam.key,
-      message: `✓ Kamera ersetzt: ${info.serialNumber ?? rawCode}`,
+      message: hadAnyAssignment
+        ? `✓ Kamera ersetzt: ${camCode}`
+        : `✓ Kamera erfasst: ${camCode}`,
       scannedKind: 'camera',
       scannedUnitId: info.unitId,
       isSubstitute: true,
-      substituteCode: info.serialNumber ?? rawCode,
+      substituteCode: camCode,
     };
   }
 
