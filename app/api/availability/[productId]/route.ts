@@ -73,7 +73,7 @@ export async function GET(
   const globalTest = await isTestMode();
   let bookingQuery = supabase
     .from('bookings')
-    .select('rental_from, rental_to, delivery_mode')
+    .select('rental_from, rental_to, delivery_mode, product_name')
     .eq('product_id', productId)
     .in('status', [...RESERVING_BOOKING_STATUSES])
     .lte('rental_from', extLast)
@@ -148,7 +148,17 @@ export async function GET(
         const effTo = bTo.toISOString().split('T')[0];
 
         if (effFrom <= dateStr && effTo >= dateStr) {
-          bookedCount++;
+          // Multi-Kamera-Buchungen liegen als EINE Zeile mit kommagetrenntem
+          // product_name vor (z.B. "OSMO Action 5 Pro , OSMO Action 5 Pro").
+          // Sie belegen so viele Einheiten wie Kameras genannt sind — sonst
+          // zeigt ein 2er-Bestand bei einer 2-Kamera-Buchung faelschlich noch
+          // 1 frei an (Ueberbuchung). Konsistent mit der Comma-Split-Logik in
+          // contract/invoice/packlist/scan + booking/[id] computeLiabilitySummary.
+          const cams = String((b as { product_name?: string }).product_name ?? '')
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean).length;
+          bookedCount += Math.max(1, cams);
         }
       }
     }

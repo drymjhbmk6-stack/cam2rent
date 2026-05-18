@@ -69,6 +69,8 @@ interface GanttSimpleBooking {
   rental_to: string;
   customer_name: string;
   delivery_mode: string;
+  /** Anzahl belegter Exemplare dieser Buchung (qty-aware). Sets/Legacy = 1. */
+  qty?: number;
 }
 
 interface GanttSet {
@@ -401,7 +403,9 @@ export default function AdminVerfuegbarkeitPage() {
       if (effFrom <= dateStr && effTo >= dateStr) matchedBookings.push(b);
     }
 
-    const count = matchedBookings.length;
+    // qty-aware: eine Buchung kann mehrere Exemplare belegen (Mengen-/
+    // Multi-Kamera-Buchung). Fallback 1 fuer Legacy-/Set-Eintraege ohne qty.
+    const count = matchedBookings.reduce((sum, b) => sum + (b.qty ?? 1), 0);
     const free = acc.available_qty - count;
     let type = 'free';
     if (free <= 0) type = 'booked';

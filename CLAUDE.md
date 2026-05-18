@@ -1217,6 +1217,12 @@ WBW-Box/-Vorschlag und Verfügbarkeit automatisch nachziehen (alles liest live a
     (scanbar via Seriennummer — die `applyScan`-Logik referenziert `'camera'`
     hart), die weiteren `camera::1..` (manuell). `groupItems` fasst alle
     `type:'camera'` zu EINER Gruppe → „Kamera 0/N"-Counter.
+#### Verfügbarkeits-Unterzählung bei Multi-Kamera-/Mengen-Buchungen (Stand 2026-05-18)
+Gleicher Concat-Name-Effekt traf die Verfügbarkeit — eine 2-Kamera-Buchung (1 Zeile) zählte als 1 Einheit, ein 2er-Bestand zeigte fälschlich noch „verfügbar" → Kunde konnte überbuchen.
+- **Fix Kunden-Kalender** `app/api/availability/[productId]/route.ts`: `product_name` mitselektiert; pro überlappender Buchung `bookedCount += max(1, product_name.split(',').filter().length)` statt `bookedCount++` (gleiche Comma-Split-Konvention wie WBW/Invoice/Pack/Contract).
+- **Fix Admin-Gantt-Zubehör** `app/api/admin/availability-gantt/route.ts` + `app/admin/verfuegbarkeit/page.tsx`: Gantt las nur Legacy `bookings.accessories[]` (1× je Buchung) → „1/2 belegt" obwohl qty 2. Jetzt qty-aware mit gleicher Priorität wie `computeAccessoryAvailability` (unit_ids → accessory_items.qty → legacy, inkl. Set-Expansion). Route gibt `qty` pro Buchungseintrag, Client summiert `qty` statt `.length`. **Kunden-Zubehör-Verfügbarkeit (`lib/accessory-availability.ts`) war bereits korrekt** (qty-aware) — die „1/2"-Anzeige war reiner Gantt-Display-Bug.
+- **BEKANNTE Rest-Lücke (nicht gefixt — Architektur/hohe Blast-Radius):** `bookings.unit_id` ist EIN einzelnes uuid-Feld; `assign_free_unit` (Postgres-RPC) reserviert pro Buchungszeile genau 1 `product_unit`. Eine Multi-Kamera-Buchung reserviert physisch nur 1 Einheit — die weiteren Kameras sind unit-seitig nicht belegt. Der Kunden-Kalender (oben gefixt) verhindert die Überbuchung jetzt vorgelagert; eine echte N-Einheiten-Reservierung bräuchte Schema-Änderung (`unit_ids`-Array) + RPC-Rewrite + Gantt/Packliste/Vertrag-Anpassung → bewusst als Folge-Entscheidung offengelassen, NICHT blind am Buchungs-RPC geändert.
+
 - **In-App-PDF-Viewer** `app/admin/pdf-viewer/page.tsx` (`?u=<rel /api-Pfad>&t=`):
   In der iOS-PWA öffneten `target="_blank"`-Links auf `/api/...`-PDFs eine
   chrome-lose Vollbildansicht OHNE Zurück → App musste geschlossen werden.

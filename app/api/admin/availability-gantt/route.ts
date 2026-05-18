@@ -82,7 +82,7 @@ export async function GET(req: NextRequest) {
     getProducts(),
     supabase
       .from('bookings')
-      .select('id, product_id, product_name, rental_from, rental_to, days, status, delivery_mode, customer_name, unit_id, accessories, is_test')
+      .select('id, product_id, product_name, rental_from, rental_to, days, status, delivery_mode, customer_name, unit_id, accessories, accessory_items, accessory_unit_ids, is_test')
       .in('status', ['confirmed', 'shipped', 'picked_up', 'completed'])
       .lte('rental_from', extLast)
       .gte('rental_to', extFirst),
@@ -209,43 +209,93 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // Buchungen die Zubehör enthalten
-  const accBookings = bookings
-    .filter((b) => Array.isArray(b.accessories) && b.accessories.length > 0)
-    .map((b) => ({
+  // Unit→Accessory-Mapping (Prio 1 fuer accessory_unit_ids — die konkret
+  // reservierten Exemplare). Mengen-/Multi-Kamera-Buchungen reservieren
+  // mehrere Einheiten; ohne qty-Aufloesung zaehlt der Gantt jede Buchung
+  // nur 1× und zeigt z.B. "1/2 belegt" obwohl 2 Karten gebucht sind.
+  const allAccUnitIds = new Set<string>();
+  for (const b of bookings) {
+    const uids = (b as { accessory_unit_ids?: string[] }).accessory_unit_ids;
+    if (Array.isArray(uids)) for (const u of uids) if (u) allAccUnitIds.add(u);
+  }
+  const unitToAcc = new Map<string, string>();
+  if (allAccUnitIds.size > 0) {
+    const { data: accUnits } = await supabase
+      .from('accessory_units')
+      .select('id, accessory_id')
+      .in('id', [...allAccUnitIds]);
+    for (const u of accUnits ?? []) unitToAcc.set(u.id as string, u.accessory_id as string);
+  }
+
+  interface AccBookingLite {
+    id: string; rental_from: string; rental_to: string;
+    customer_name: string; delivery_mode: string;
+  }
+
+  // Pro Buchung qty-aware aufloesen — gleiche Prioritaet wie der
+  // kundenseitige computeAccessoryAvailability (unit_ids → items → legacy).
+  const bookingsByAccessory: Record<string, (AccBookingLite & { qty: number })[]> = {};
+  const bookingsBySet: Record<string, AccBookingLite[]> = {};
+
+  for (const b of bookings) {
+    const accessories = Array.isArray(b.accessories) ? (b.accessories as string[]) : [];
+    const items = Array.isArray((b as { accessory_items?: { accessory_id: string; qty?: number }[] }).accessory_items)
+      ? ((b as { accessory_items: { accessory_id: string; qty?: number }[] }).accessory_items)
+      : [];
+    const unitIds = Array.isArray((b as { accessory_unit_ids?: string[] }).accessory_unit_ids)
+      ? ((b as { accessory_unit_ids: string[] }).accessory_unit_ids)
+      : [];
+    if (accessories.length === 0 && items.length === 0 && unitIds.length === 0) continue;
+
+    const lite: AccBookingLite = {
       id: b.id,
       rental_from: b.rental_from,
       rental_to: b.rental_to,
       customer_name: b.customer_name,
       delivery_mode: b.delivery_mode,
-      accessories: b.accessories as string[],
-    }));
+    };
 
-  // Einmal pro Buchung auflösen: welche Accessory-IDs + Set-IDs sind betroffen?
-  // Dadurch O(bookings * setItems) statt O(accessories * bookings * setItems).
-  const bookingsByAccessory: Record<string, typeof accBookings> = {};
-  const bookingsBySet: Record<string, typeof accBookings> = {};
-  for (const b of accBookings) {
-    const touchedAccessories = new Set<string>();
+    const accQty = new Map<string, number>();
     const touchedSets = new Set<string>();
-    for (const id of b.accessories) {
+
+    const addAcc = (id: string, q: number) => {
       const setItems = setAccessoryMap[id];
       if (setItems) {
         touchedSets.add(id);
-        for (const si of setItems) touchedAccessories.add(si.accessory_id);
+        for (const si of setItems) {
+          accQty.set(si.accessory_id, (accQty.get(si.accessory_id) ?? 0) + (si.qty ?? 1) * q);
+        }
       } else {
-        touchedAccessories.add(id);
+        accQty.set(id, (accQty.get(id) ?? 0) + q);
       }
+    };
+
+    if (unitIds.length > 0) {
+      for (const uid of unitIds) {
+        const accId = unitToAcc.get(uid);
+        if (accId) accQty.set(accId, (accQty.get(accId) ?? 0) + 1);
+      }
+      // Set-Zeilen fuer die Set-Ansicht weiterhin markieren.
+      for (const id of accessories) if (setAccessoryMap[id]) touchedSets.add(id);
+    } else if (items.length > 0) {
+      for (const it of items) {
+        if (!it?.accessory_id) continue;
+        const q = typeof it.qty === 'number' && it.qty > 0 ? Math.floor(it.qty) : 1;
+        addAcc(it.accessory_id, q);
+      }
+    } else {
+      for (const id of accessories) { if (id) addAcc(id, 1); }
     }
-    for (const accId of touchedAccessories) {
-      (bookingsByAccessory[accId] ||= []).push(b);
+
+    for (const [accId, q] of accQty) {
+      (bookingsByAccessory[accId] ||= []).push({ ...lite, qty: q });
     }
     for (const setId of touchedSets) {
-      (bookingsBySet[setId] ||= []).push(b);
+      (bookingsBySet[setId] ||= []).push(lite);
     }
   }
 
-  // Pro Zubehörteil: Welche Buchungen nutzen es? (inkl. Set-Auflösung)
+  // Pro Zubehörteil: Welche Buchungen nutzen es? (inkl. Set-Auflösung, qty-aware)
   const accessoryData = allAccessories.map((acc) => {
     const relevantBookings = bookingsByAccessory[acc.id] ?? [];
 
@@ -260,6 +310,7 @@ export async function GET(req: NextRequest) {
         rental_to: b.rental_to,
         customer_name: b.customer_name,
         delivery_mode: b.delivery_mode,
+        qty: b.qty,
       })),
     };
   });
