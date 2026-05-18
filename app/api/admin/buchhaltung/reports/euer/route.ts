@@ -51,14 +51,36 @@ export async function GET(req: NextRequest) {
   const fromIso = getBerlinDayStartFromDateString(from) ?? `${from}T00:00:00Z`;
   const toIso = getBerlinDayEndFromDateString(to) ?? `${to}T23:59:59Z`;
 
-  const { data: bookings } = await supabase
+  const bookingCols = 'id, product_name, rental_from, rental_to, days, price_rental, price_accessories, price_haftung, shipping_price, price_total, discount_amount, duration_discount, loyalty_discount, refund_amount, coupon_code, status, delivery_mode, created_at';
+  const buildBookingQuery = (cols: string) => supabase
     .from('bookings')
-    .select('id, product_name, rental_from, rental_to, days, price_rental, price_accessories, price_haftung, shipping_price, price_total, discount_amount, duration_discount, loyalty_discount, coupon_code, status, delivery_mode, created_at')
+    .select(cols)
     .eq('is_test', false)
     .neq('status', 'cancelled')
     .gte('created_at', fromIso)
     .lte('created_at', toIso)
     .order('created_at', { ascending: false });
+
+  let { data: bookings, error: bookingsErr } = await buildBookingQuery(bookingCols);
+  if (bookingsErr && /refund_amount|column|schema cache|PGRST/i.test(bookingsErr.message)) {
+    // Migration supabase-bookings-refund.sql noch nicht durch — ohne die
+    // Spalte weiterlaufen (refund_amount wird dann als 0 behandelt).
+    ({ data: bookings, error: bookingsErr } = await buildBookingQuery(bookingCols.replace(', refund_amount', '')));
+  }
+
+  // .select(<string-variable>) verliert die PostgREST-Typinferenz → expliziter
+  // Cast (etabliertes Muster, vgl. beleg_positionen weiter unten).
+  type BookingRow = {
+    id: string; product_name: string | null; rental_from: string | null;
+    rental_to: string | null; days: number | null;
+    price_rental: number | null; price_accessories: number | null;
+    price_haftung: number | null; shipping_price: number | null;
+    price_total: number | null; discount_amount: number | null;
+    duration_discount: number | null; loyalty_discount: number | null;
+    refund_amount: number | null; coupon_code: string | null;
+    status: string | null; delivery_mode: string | null; created_at: string | null;
+  };
+  const bookingRows = (bookings ?? []) as unknown as BookingRow[];
 
   type IncomeItem = {
     id: string;
@@ -73,12 +95,13 @@ export async function GET(req: NextRequest) {
   let haftung = 0;
   let shipping = 0;
   let discounts = 0;
+  let refunds = 0;
   const rentalItems: IncomeItem[] = [];
   const accessoryItems: IncomeItem[] = [];
   const haftungItems: IncomeItem[] = [];
   const shippingItems: IncomeItem[] = [];
 
-  for (const b of bookings ?? []) {
+  for (const b of bookingRows) {
     const r = Number(b.price_rental ?? 0);
     const a = Number(b.price_accessories ?? 0);
     const h = Number(b.price_haftung ?? 0);
@@ -103,10 +126,31 @@ export async function GET(req: NextRequest) {
       accessoriesNet = Math.max(0, a - accDiscountCut);
     }
 
+    // Rückerstattungen (Teilerstattung / Fehlbuchung, bookings.refund_amount)
+    // mindern das realisierte Einkommen. Wasserfall Miete → Zubehör →
+    // Haftung → Versand, damit keine Kategorie negativ wird und die Summe
+    // exakt um die erstattete Summe sinkt (gedeckelt auf die Einnahme).
+    let refundLeft = Number(b.refund_amount ?? 0);
+    const applyRefund = (val: number): number => {
+      if (refundLeft <= 0 || val <= 0) return val;
+      const c = Math.min(val, refundLeft);
+      refundLeft = Math.round((refundLeft - c) * 100) / 100;
+      return Math.round((val - c) * 100) / 100;
+    };
+    const rentalRefBefore = rentalNet;
+    const accRefBefore = accessoriesNet;
+    rentalNet = applyRefund(rentalNet);
+    accessoriesNet = applyRefund(accessoriesNet);
+    const hNet = applyRefund(h);
+    const sNet = applyRefund(s);
+    const rentalRefCut = Math.round((rentalRefBefore - rentalNet) * 100) / 100;
+    const accRefCut = Math.round((accRefBefore - accessoriesNet) * 100) / 100;
+    refunds += Math.round(((rentalRefBefore - rentalNet) + (accRefBefore - accessoriesNet) + (h - hNet) + (s - sNet)) * 100) / 100;
+
     rental += rentalNet;
     accessories += accessoriesNet;
-    haftung += h;
-    shipping += s;
+    haftung += hNet;
+    shipping += sNet;
 
     const bookingId = String(b.id);
     const dateIso = (b.created_at ?? '').toString().slice(0, 10);
@@ -115,13 +159,20 @@ export async function GET(req: NextRequest) {
     const rentalFromShort = (b.rental_from ?? '').toString().slice(0, 10);
     const couponNote = b.coupon_code ? ` · ${b.coupon_code}` : '';
 
+    const buildNote = (gross: number, discountCut: number, refundCut: number): string | undefined => {
+      const parts: string[] = [];
+      if (discountCut > 0) parts.push(`${discountCut.toFixed(2)} EUR Rabatt${couponNote}`);
+      if (refundCut > 0) parts.push(`${refundCut.toFixed(2)} EUR Erstattung`);
+      return parts.length ? `brutto ${gross.toFixed(2)} EUR − ${parts.join(' − ')}` : undefined;
+    };
+
     if (rentalNet > 0 || r > 0) {
       rentalItems.push({
         id: `${bookingId}-rental`,
         date: dateIso,
         description: `${bookingId} · ${productName} · ${days} ${days === 1 ? 'Tag' : 'Tage'} ab ${rentalFromShort}`,
         amount: rentalNet,
-        note: rentalDiscountCut > 0 ? `brutto ${r.toFixed(2)} EUR − ${rentalDiscountCut.toFixed(2)} EUR Rabatt${couponNote}` : undefined,
+        note: buildNote(r, rentalDiscountCut, rentalRefCut),
       });
     }
     if (accessoriesNet > 0 || a > 0) {
@@ -130,28 +181,30 @@ export async function GET(req: NextRequest) {
         date: dateIso,
         description: `${bookingId} · Zubehör/Set`,
         amount: accessoriesNet,
-        note: accDiscountCut > 0 ? `brutto ${a.toFixed(2)} EUR − ${accDiscountCut.toFixed(2)} EUR Rabatt${couponNote}` : undefined,
+        note: buildNote(a, accDiscountCut, accRefCut),
       });
     }
-    if (h > 0) {
+    if (hNet > 0 || h > 0) {
       haftungItems.push({
         id: `${bookingId}-haftung`,
         date: dateIso,
         description: `${bookingId} · Haftungsschutz`,
-        amount: h,
+        amount: hNet,
+        note: h - hNet > 0 ? `brutto ${h.toFixed(2)} EUR − ${(h - hNet).toFixed(2)} EUR Erstattung` : undefined,
       });
     }
-    if (s > 0) {
+    if (sNet > 0 || s > 0) {
       shippingItems.push({
         id: `${bookingId}-shipping`,
         date: dateIso,
         description: `${bookingId} · Versand`,
-        amount: s,
+        amount: sNet,
+        note: s - sNet > 0 ? `brutto ${s.toFixed(2)} EUR − ${(s - sNet).toFixed(2)} EUR Erstattung` : undefined,
       });
     }
   }
-  const bookingCount = (bookings || []).length;
-  const pickupCount = (bookings || []).filter((b) => b.delivery_mode === 'abholung').length;
+  const bookingCount = bookingRows.length;
+  const pickupCount = bookingRows.filter((b) => b.delivery_mode === 'abholung').length;
   const shippedCount = bookingCount - pickupCount;
   // discounts wird nicht mehr separat abgezogen — schon in rental/accessories
   // verrechnet. Total = direkter Sum der Netto-Kategorien.
@@ -277,6 +330,7 @@ export async function GET(req: NextRequest) {
       haftung,
       shipping,
       discounts,
+      refunds,
       other: 0,
       total: incomeTotal,
       // Pro-Buchung-Items fuer aufklappbare Anzeige in der UI — analog

@@ -17,6 +17,7 @@ interface StripeTx {
   booking_id: string | null;
   match_status: string;
   stripe_created_at: string;
+  reconciliation_note?: string | null;
 }
 
 interface ReconciliationData {
@@ -54,6 +55,11 @@ export default function StripeAbgleichTab() {
   const [searchingBookings, setSearchingBookings] = useState(false);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
   const [importingFees, setImportingFees] = useState(false);
+  const [refundModal, setRefundModal] = useState<StripeTx | null>(null);
+  const [refundMode, setRefundMode] = useState<'full' | 'partial'>('full');
+  const [refundAmount, setRefundAmount] = useState('');
+  const [refundNote, setRefundNote] = useState('');
+  const [refundProcessing, setRefundProcessing] = useState(false);
 
   function showToast(msg: string, type: 'ok' | 'err') {
     setToast({ msg, type });
@@ -118,6 +124,48 @@ export default function StripeAbgleichTab() {
       }
     } finally {
       setProcessing(false);
+    }
+  }
+
+  function openRefundModal(tx: StripeTx) {
+    setRefundModal(tx);
+    setRefundMode('full');
+    setRefundAmount(tx.amount.toFixed(2).replace('.', ','));
+    setRefundNote(tx.reconciliation_note || '');
+  }
+
+  async function handleRefund() {
+    if (!refundModal) return;
+    const note = refundNote.trim();
+    if (note.length < 3) { showToast('Kommentar erforderlich (mind. 3 Zeichen).', 'err'); return; }
+    let amount: number | undefined;
+    if (refundMode === 'partial') {
+      amount = parseFloat(refundAmount.replace(',', '.'));
+      if (!(amount > 0)) { showToast('Erstattungsbetrag muss größer als 0 sein.', 'err'); return; }
+    }
+    setRefundProcessing(true);
+    try {
+      const res = await fetch('/api/admin/buchhaltung/stripe-reconciliation/refund', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transaction_id: refundModal.id, mode: refundMode, amount, note }),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        showToast(
+          json.target === 'booking'
+            ? 'Erstattung der Buchung gutgeschrieben (wird in EÜR + DATEV abgezogen)'
+            : 'Als Fehlbuchung markiert',
+          'ok',
+        );
+        setRefundModal(null);
+        fetchData(range);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        showToast(err.error || 'Fehler beim Erfassen der Erstattung', 'err');
+      }
+    } finally {
+      setRefundProcessing(false);
     }
   }
 
@@ -287,33 +335,48 @@ export default function StripeAbgleichTab() {
                     <td style={{ padding: '10px 8px', color: '#e2e8f0', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{formatCurrency(tx.amount)}</td>
                     <td style={{ padding: '10px 8px', color: '#ef4444', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{formatCurrency(tx.fee)}</td>
                     <td style={{ padding: '10px 8px', color: '#10b981', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{formatCurrency(tx.net)}</td>
-                    <td style={{ padding: '10px 8px', textAlign: 'center' }}><StatusBadge status={tx.match_status} /></td>
                     <td style={{ padding: '10px 8px', textAlign: 'center' }}>
-                      {tx.match_status === 'unmatched' && (
-                        <button
-                          onClick={async () => {
-                            setMatchModal(tx);
-                            setMatchBookingId('');
-                            setSuggestions([]);
-                            setOtherBookings([]);
-                            setSuggestionSearch('');
-                            setLoadingSuggestions(true);
-                            try {
-                              const res = await fetch(`/api/admin/buchhaltung/stripe-reconciliation/suggestions?amount=${tx.amount}`);
-                              if (res.ok) {
-                                const json = await res.json();
-                                setSuggestions(json.suggestions || []);
-                                setOtherBookings(json.others || []);
-                              }
-                            } finally {
-                              setLoadingSuggestions(false);
-                            }
-                          }}
-                          style={{ padding: '4px 10px', borderRadius: 6, background: 'transparent', border: '1px solid #1e293b', color: '#06b6d4', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
-                        >
-                          Verknüpfen
-                        </button>
+                      <StatusBadge status={tx.match_status} />
+                      {tx.reconciliation_note && (
+                        <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4, maxWidth: 180, marginLeft: 'auto', marginRight: 'auto', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={tx.reconciliation_note}>
+                          {tx.reconciliation_note}
+                        </div>
                       )}
+                    </td>
+                    <td style={{ padding: '10px 8px', textAlign: 'center' }}>
+                      <div style={{ display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap' }}>
+                        {tx.match_status === 'unmatched' && (
+                          <button
+                            onClick={async () => {
+                              setMatchModal(tx);
+                              setMatchBookingId('');
+                              setSuggestions([]);
+                              setOtherBookings([]);
+                              setSuggestionSearch('');
+                              setLoadingSuggestions(true);
+                              try {
+                                const res = await fetch(`/api/admin/buchhaltung/stripe-reconciliation/suggestions?amount=${tx.amount}`);
+                                if (res.ok) {
+                                  const json = await res.json();
+                                  setSuggestions(json.suggestions || []);
+                                  setOtherBookings(json.others || []);
+                                }
+                              } finally {
+                                setLoadingSuggestions(false);
+                              }
+                            }}
+                            style={{ padding: '4px 10px', borderRadius: 6, background: 'transparent', border: '1px solid #1e293b', color: '#06b6d4', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
+                          >
+                            Verknüpfen
+                          </button>
+                        )}
+                        <button
+                          onClick={() => openRefundModal(tx)}
+                          style={{ padding: '4px 10px', borderRadius: 6, background: 'transparent', border: '1px solid #1e293b', color: '#f97316', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
+                        >
+                          Erstattung
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -384,6 +447,68 @@ export default function StripeAbgleichTab() {
                 {processing ? 'Verknüpfe...' : 'Verknüpfen'}
               </button>
               <button onClick={() => setMatchModal(null)} style={{ padding: '10px 20px', borderRadius: 8, fontWeight: 600, fontSize: 14, cursor: 'pointer', background: 'transparent', color: '#94a3b8', border: '1px solid #1e293b' }}>Abbrechen</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Erstattung / Fehlbuchung Modal */}
+      {refundModal && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={(e) => { if (e.target === e.currentTarget) setRefundModal(null); }}
+        >
+          <div style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 16, padding: 28, maxWidth: 460, width: '90%' }}>
+            <h3 style={{ color: '#e2e8f0', fontSize: 18, fontWeight: 700, marginTop: 0, marginBottom: 16 }}>Erstattung / Fehlbuchung erfassen</h3>
+            <div style={{ marginBottom: 16, fontSize: 14, color: '#94a3b8' }}>
+              <div>Stripe-PI: <span style={{ fontFamily: 'monospace', color: '#e2e8f0' }}>{refundModal.stripe_payment_intent_id.slice(0, 30)}...</span></div>
+              <div>Betrag: <span style={{ color: '#e2e8f0', fontWeight: 600 }}>{formatCurrency(refundModal.amount)}</span></div>
+              <div>Buchung: <span style={{ color: refundModal.booking_id ? '#06b6d4' : '#64748b', fontWeight: 600 }}>{refundModal.booking_id || 'keine (nicht zugeordnet)'}</span></div>
+            </div>
+
+            <div style={{ marginBottom: 16, fontSize: 13, color: '#94a3b8', background: '#0f172a', border: '1px solid #1e293b', borderRadius: 8, padding: '10px 12px' }}>
+              {refundModal.booking_id
+                ? 'Die Erstattung wird der verknüpften Buchung gutgeschrieben und in EÜR + DATEV vom Einkommen abgezogen.'
+                : 'Diese Zahlung ist keiner Buchung zugeordnet — sie zählt ohnehin nicht als Einnahme. Die Markierung dokumentiert die Fehlbuchung. Die Stripe-Gebühr bleibt als Ausgabe (wird von Stripe bei Rückerstattung nicht erstattet).'}
+            </div>
+
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, color: '#e2e8f0', marginBottom: 8, cursor: 'pointer' }}>
+                <input type="radio" checked={refundMode === 'full'} onChange={() => setRefundMode('full')} />
+                Komplette Fehlbuchung / voll erstattet
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, color: '#e2e8f0', cursor: 'pointer' }}>
+                <input type="radio" checked={refundMode === 'partial'} onChange={() => setRefundMode('partial')} />
+                Teilerstattung
+              </label>
+              {refundMode === 'partial' && (
+                <input
+                  value={refundAmount}
+                  onChange={(e) => setRefundAmount(e.target.value)}
+                  inputMode="decimal"
+                  placeholder="Erstattungsbetrag in € (z.B. 3,95)"
+                  style={{ ...inputStyle, marginTop: 10 }}
+                />
+              )}
+            </div>
+
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ display: 'block', fontSize: 13, color: '#94a3b8', fontWeight: 600, marginBottom: 8 }}>
+                Kommentar (Pflicht)
+              </label>
+              <textarea
+                value={refundNote}
+                onChange={(e) => setRefundNote(e.target.value)}
+                rows={3}
+                placeholder="z.B. Kunde hat doppelt bezahlt — komplett erstattet"
+                style={{ ...inputStyle, resize: 'vertical' }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button onClick={handleRefund} disabled={refundProcessing || refundNote.trim().length < 3} style={{ padding: '10px 20px', borderRadius: 8, fontWeight: 600, fontSize: 14, cursor: refundProcessing || refundNote.trim().length < 3 ? 'not-allowed' : 'pointer', background: '#f97316', color: '#0f172a', border: 'none', opacity: refundProcessing || refundNote.trim().length < 3 ? 0.5 : 1 }}>
+                {refundProcessing ? 'Speichere...' : 'Erstattung erfassen'}
+              </button>
+              <button onClick={() => setRefundModal(null)} style={{ padding: '10px 20px', borderRadius: 8, fontWeight: 600, fontSize: 14, cursor: 'pointer', background: 'transparent', color: '#94a3b8', border: '1px solid #1e293b' }}>Abbrechen</button>
             </div>
           </div>
         </div>

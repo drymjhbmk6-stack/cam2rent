@@ -34,14 +34,20 @@ export async function GET(req: NextRequest) {
 
   const fromIso = getBerlinDayStartFromDateString(from) ?? `${from}T00:00:00Z`;
   const toIso = getBerlinDayEndFromDateString(to) ?? `${to}T23:59:59Z`;
-  const { data: bookings } = await supabase
+  const previewCols = 'id, product_name, customer_name, price_rental, price_accessories, price_haftung, shipping_price, discount_amount, refund_amount, status, created_at';
+  const buildPreviewQuery = (cols: string) => supabase
     .from('bookings')
-    .select('id, product_name, customer_name, price_rental, price_accessories, price_haftung, shipping_price, discount_amount, status, created_at')
+    .select(cols)
     .eq('is_test', false)
     .gte('created_at', fromIso)
     .lte('created_at', toIso)
     .order('created_at', { ascending: true })
     .limit(10);
+
+  let { data: bookings, error: previewErr } = await buildPreviewQuery(previewCols);
+  if (previewErr && /refund_amount|column|schema cache|PGRST/i.test(previewErr.message)) {
+    ({ data: bookings, error: previewErr } = await buildPreviewQuery(previewCols.replace(', refund_amount', '')));
+  }
 
   const rows: Array<{
     datum: string;
@@ -52,12 +58,19 @@ export async function GET(req: NextRequest) {
     buchungstext: string;
   }> = [];
 
-  for (const b of bookings || []) {
+  type PreviewRow = {
+    id: string; product_name: string | null; customer_name: string | null;
+    price_rental: number | null; price_accessories: number | null;
+    price_haftung: number | null; shipping_price: number | null;
+    discount_amount: number | null; refund_amount: number | null;
+    status: string | null; created_at: string;
+  };
+  for (const b of ((bookings ?? []) as unknown as PreviewRow[])) {
     const date = new Date(b.created_at);
     const datum = date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Europe/Berlin' });
     const isCancelled = b.status === 'cancelled';
 
-    const rental = (b.price_rental || 0) + (b.price_accessories || 0) - (b.discount_amount || 0);
+    const rental = (b.price_rental || 0) + (b.price_accessories || 0) - (b.discount_amount || 0) - (b.refund_amount || 0);
     if (rental > 0) {
       rows.push({
         datum,

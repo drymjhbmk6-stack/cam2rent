@@ -22,6 +22,7 @@ interface Booking {
   price_haftung: number;
   shipping_price: number;
   discount_amount: number;
+  refund_amount: number;
   status: string;
   created_at: string;
 }
@@ -92,19 +93,27 @@ export async function GET(req: NextRequest) {
   const toIso = getBerlinDayEndFromDateString(to) ?? `${to}T23:59:59Z`;
 
   // Fetch bookings in date range — Test-Daten ausgeschlossen (GoBD)
-  const { data: bookings, error: bookingsError } = await supabase
+  const datevCols = 'id, product_name, customer_name, customer_email, price_total, price_rental, price_accessories, price_haftung, shipping_price, discount_amount, refund_amount, status, created_at';
+  const buildDatevQuery = (cols: string) => supabase
     .from('bookings')
-    .select('id, product_name, customer_name, customer_email, price_total, price_rental, price_accessories, price_haftung, shipping_price, discount_amount, status, created_at')
+    .select(cols)
     .eq('is_test', false)
     .gte('created_at', fromIso)
     .lte('created_at', toIso)
     .order('created_at', { ascending: true });
 
+  let { data: bookings, error: bookingsError } = await buildDatevQuery(datevCols);
+  if (bookingsError && /refund_amount|column|schema cache|PGRST/i.test(bookingsError.message)) {
+    // Migration supabase-bookings-refund.sql noch nicht durch — ohne die
+    // Spalte exportieren (refund_amount zählt dann als 0).
+    ({ data: bookings, error: bookingsError } = await buildDatevQuery(datevCols.replace(', refund_amount', '')));
+  }
+
   if (bookingsError) {
     return NextResponse.json({ error: bookingsError.message }, { status: 500 });
   }
 
-  const allBookings = (bookings || []) as Booking[];
+  const allBookings = (bookings || []) as unknown as Booking[];
 
   // Preview mode: return count and revenue
   if (isPreview) {
@@ -233,7 +242,7 @@ export async function GET(req: NextRequest) {
     );
 
     // Main rental revenue
-    const rentalAmount = (booking.price_rental || 0) + (booking.price_accessories || 0) - (booking.discount_amount || 0);
+    const rentalAmount = (booking.price_rental || 0) + (booking.price_accessories || 0) - (booking.discount_amount || 0) - (booking.refund_amount || 0);
     if (rentalAmount > 0) {
       const buSchluessel = taxMode === 'regelbesteuerung' ? '3' : '';
       const line = buildLine(
