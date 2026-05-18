@@ -369,12 +369,17 @@ export async function applyScan(
     if (!allowSubstitution) {
       return { ok: false, message: `Diese Kamera passt nicht zu dieser Buchung — bitte gegen die Seriennummer der Buchung pruefen.` };
     }
-    if (checked['camera']) {
-      return { ok: false, alreadyChecked: true, message: `Kamera schon abgehakt.` };
+    // Multi-Kamera-Buchung: NICHT hart auf Slot 'camera' setzen, sonst kann
+    // die 2. (3. …) Kamera nie abgehakt werden (Slot 'camera::1' bleibt offen,
+    // Counter haengt bei 1/N). Naechsten freien Kamera-Slot suchen.
+    const camSlots = items.filter((it) => it.type === 'camera');
+    const freeCam = camSlots.find((it) => !checked[it.key]);
+    if (!freeCam) {
+      return { ok: false, alreadyChecked: true, message: `Alle Kameras schon abgehakt.` };
     }
     return {
       ok: true,
-      key: 'camera',
+      key: freeCam.key,
       message: `✓ Kamera ersetzt: ${info.serialNumber ?? rawCode}`,
       scannedKind: 'camera',
       scannedUnitId: info.unitId,

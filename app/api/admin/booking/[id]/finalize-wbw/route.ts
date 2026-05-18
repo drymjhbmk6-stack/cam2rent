@@ -52,7 +52,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const { data: booking } = await supabase
     .from('bookings')
-    .select('id, status, rental_from, rental_to, user_id, customer_name, customer_email, serial_number, wbw_finalized, wbw_finalized_at, wbw_final')
+    .select('id, status, rental_from, rental_to, user_id, customer_name, customer_email, wbw_finalized, wbw_finalized_at, wbw_final')
     .eq('id', id)
     .maybeSingle();
 
