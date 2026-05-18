@@ -7,6 +7,7 @@ import { DEFAULT_HAFTUNG, getEigenbeteiligung, type HaftungConfig } from '@/lib/
 import { isTestMode } from '@/lib/env-mode';
 import { computeReplacementValue, loadReplacementValueConfig } from '@/lib/replacement-value';
 import { getInventarWbwAverageByLegacyAccessoryIds, getInventarWbwAverageByLegacyProductId } from '@/lib/inventar/wbw-bridge';
+import { resolveBookingCameras, type BookingCamera } from '@/lib/booking-cameras';
 
 /**
  * Lädt die aktuelle Haftungs-Konfiguration aus admin_settings.
@@ -396,29 +397,24 @@ export async function generateContractPDF(opts: {
   // Lookup ist der Vertrag konsistent zur Buchungs-/WBW-Box.
   let resolveUnitId: string | null = opts.unitId ?? null;
   let resolveProductId: string | null = opts.productId ?? null;
+  let bkCameras: BookingCamera[] = [];
   if (opts.bookingId) {
     try {
       const sb = createServiceClient();
       const { data: bk } = await sb
         .from('bookings')
-        .select('product_id, unit_id')
+        .select('product_id, unit_id, product_name, cameras')
         .eq('id', opts.bookingId)
         .maybeSingle();
       if (bk) {
         if (bk.unit_id) resolveUnitId = bk.unit_id as string;
         if (bk.product_id) resolveProductId = String(bk.product_id);
+        bkCameras = resolveBookingCameras(bk);
       }
     } catch {
       // Fallback auf opts-Werte
     }
   }
-  const assetCurrentValue = (resolveUnitId || resolveProductId)
-    ? await loadAssetCurrentValue(resolveUnitId, resolveProductId)
-    : null;
-  const wiederbeschaffungswert = Math.max(
-    assetCurrentValue ?? 0,
-    opts.deposit ?? 0,
-  );
 
   // Items aus productName + accessories generieren falls nicht explizit übergeben.
   // Bei qty>1 wird der Bezeichner zu "Nx Name" (aus accessoryItems wenn vorhanden).
@@ -426,19 +422,17 @@ export async function generateContractPDF(opts: {
     ? opts.accessoryItems.map((i) => ({ id: i.accessory_id, qty: i.qty }))
     : opts.accessories.map((id) => ({ id, qty: 1 }));
 
-  // Seriennummer der zugewiesenen Kamera aufloesen (analog Buchungs-Detail):
-  // viele Aufrufer (u.a. regenerate-contract) uebergeben keine serialNumber,
-  // die Buchung kennt sie aber ueber unit_id. Datenmodell trackt EINE
-  // Kamera-Unit pro Buchung → Seriennr. nur auf der ersten Kamera-Zeile.
-  let effectiveSerial = opts.serialNumber || '';
-  if (!effectiveSerial && resolveUnitId) {
+  // Seriennummer einer Kamera-Einheit auflösen (inventar_units bevorzugt,
+  // Fallback product_units). Pro Kamera einzeln aufgerufen.
+  const resolveSerial = async (unitId: string | null): Promise<string> => {
+    if (!unitId) return '';
     try {
       const sb2 = createServiceClient();
       const { data: audit } = await sb2
         .from('migration_audit')
         .select('neue_id')
         .eq('alte_tabelle', 'product_units')
-        .eq('alte_id', resolveUnitId)
+        .eq('alte_id', unitId)
         .eq('neue_tabelle', 'inventar_units')
         .maybeSingle();
       const neueId = (audit as { neue_id?: string } | null)?.neue_id;
@@ -449,42 +443,69 @@ export async function generateContractPDF(opts: {
           .eq('id', neueId)
           .maybeSingle();
         const u = iu as { seriennummer: string | null; inventar_code: string | null; bezeichnung: string } | null;
-        effectiveSerial = u?.seriennummer ?? u?.inventar_code ?? u?.bezeichnung ?? '';
+        const s = u?.seriennummer ?? u?.inventar_code ?? u?.bezeichnung ?? '';
+        if (s) return s;
       }
-      if (!effectiveSerial) {
-        const { data: pu } = await sb2
-          .from('product_units')
-          .select('serial_number')
-          .eq('id', resolveUnitId)
-          .maybeSingle();
-        effectiveSerial = (pu as { serial_number?: string } | null)?.serial_number ?? '';
-      }
+      const { data: pu } = await sb2
+        .from('product_units')
+        .select('serial_number')
+        .eq('id', unitId)
+        .maybeSingle();
+      return (pu as { serial_number?: string } | null)?.serial_number ?? '';
     } catch {
-      // Seriennr. bleibt leer
+      return '';
     }
-  }
+  };
+
+  const depositFloor = opts.deposit ?? 0;
 
   const items: MietgegenstandItem[] = opts.items && opts.items.length > 0
     ? opts.items
-    : (() => {
-        // Mehrere Kameras (Warenkorb-Buchung): productName ist kommagetrennt
-        // ("OSMO Action 5 Pro , OSMO Action 5 Pro"). Pro Kamera EINE Zeile
-        // mit eigenem Wiederbeschaffungswert (gleiches Modell ×N angenommen —
-        // der Concat-Name impliziert das). Seriennummer nur auf der ersten
-        // Zeile (Datenmodell trackt eine unit_id pro Buchung).
-        const cameraNames = String(opts.productName ?? '')
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean);
-        const camLines: MietgegenstandItem[] = (cameraNames.length > 0 ? cameraNames : [opts.productName])
-          .map((nm, i) => ({
-            position: i + 1,
-            bezeichnung: nm,
-            seriennr: i === 0 ? effectiveSerial : '',
-            tage: opts.rentalDays,
-            preis: i === 0 ? opts.priceRental : 0,
-            wiederbeschaffungswert,
-          }));
+    : await (async () => {
+        let camLines: MietgegenstandItem[];
+        if (bkCameras.length > 0) {
+          // Multi-Kamera: pro physischer Kamera EINE Zeile mit DEREN eigener
+          // Seriennummer + eigenem Wiederbeschaffungswert (Asset → Produkt-
+          // Schnitt → Kautions-Floor). Gemischte Modelle korrekt.
+          const perCamFloor = depositFloor / Math.max(1, bkCameras.length);
+          camLines = await Promise.all(
+            bkCameras.map(async (c, i) => {
+              const av = await loadAssetCurrentValue(
+                c.unit_id, c.product_id ?? resolveProductId,
+              );
+              return {
+                position: i + 1,
+                bezeichnung: c.product_name,
+                seriennr: await resolveSerial(c.unit_id),
+                tage: opts.rentalDays,
+                preis: i === 0 ? opts.priceRental : 0,
+                wiederbeschaffungswert: Math.max(av ?? 0, perCamFloor),
+              };
+            }),
+          );
+        } else {
+          // Legacy-Fallback (kein bookingId / cameras): productName-Split,
+          // eine aufgelöste unit_id auf der ersten Zeile.
+          const assetCurrentValue = (resolveUnitId || resolveProductId)
+            ? await loadAssetCurrentValue(resolveUnitId, resolveProductId)
+            : null;
+          const wiederbeschaffungswert = Math.max(assetCurrentValue ?? 0, depositFloor);
+          const effectiveSerial = opts.serialNumber || (await resolveSerial(resolveUnitId));
+          const cameraNames = String(opts.productName ?? '')
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean);
+          camLines = (cameraNames.length > 0 ? cameraNames : [opts.productName]).map(
+            (nm, i) => ({
+              position: i + 1,
+              bezeichnung: nm,
+              seriennr: i === 0 ? effectiveSerial : '',
+              tage: opts.rentalDays,
+              preis: i === 0 ? opts.priceRental : 0,
+              wiederbeschaffungswert,
+            }),
+          );
+        }
         const camCount = camLines.length;
         return [
           ...camLines,

@@ -7,6 +7,7 @@ import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
 import { PacklistPDF, type PacklistData } from '@/lib/packlist-pdf';
 import { ensureBusinessConfig } from '@/lib/load-business-config';
+import { resolveBookingCameras } from '@/lib/booking-cameras';
 
 export async function GET(
   _req: NextRequest,
@@ -65,16 +66,25 @@ export async function GET(
     }
   }
 
-  // Seriennummer aus zugewiesener Unit
-  let serialNumber: string | null = null;
-  if (booking.unit_id) {
-    const { data: unit } = await supabase
-      .from('product_units')
-      .select('serial_number')
-      .eq('id', booking.unit_id)
-      .maybeSingle();
-    serialNumber = unit?.serial_number ?? null;
-  }
+  // Seriennummer pro Kamera-Einheit (Multi-Kamera). Legacy/cameras=NULL →
+  // Resolver liefert eine Kamera = bisheriges Verhalten.
+  const bookingCameras = resolveBookingCameras(booking);
+  const camerasOut = await Promise.all(
+    bookingCameras.map(async (c) => {
+      let sn: string | null = null;
+      if (c.unit_id) {
+        const { data: unit } = await supabase
+          .from('product_units')
+          .select('serial_number')
+          .eq('id', c.unit_id)
+          .maybeSingle();
+        sn = unit?.serial_number ?? null;
+      }
+      return { product_name: c.product_name, serial_number: sn };
+    }),
+  );
+  const serialNumber: string | null =
+    camerasOut.find((c) => c.serial_number)?.serial_number ?? null;
 
   // Zubehoer + Sets aufloesen — gleiche Logik wie /api/admin/booking/[id],
   // damit Packliste auch Set-Inhalte expandiert anzeigt. included_parts werden
@@ -169,6 +179,7 @@ export async function GET(
     accessories: Array.isArray(booking.accessories) ? booking.accessories : [],
     resolvedItems,
     serialNumber,
+    cameras: camerasOut,
     haftung: booking.haftung ?? 'none',
     // Pack-Workflow-Daten (Sektion 3 + 5: Haakchen aus dem digitalen Flow)
     packedBy: booking.pack_packed_by ?? null,

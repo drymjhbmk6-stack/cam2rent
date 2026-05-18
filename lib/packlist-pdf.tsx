@@ -35,6 +35,8 @@ export interface PacklistData {
   /** Seriennummer der gebuchten Kamera. Wenn vorhanden, wird sie statt der
    *  leeren Eintrage-Linie ausgegeben. */
   serialNumber?: string | null;
+  /** Multi-Kamera: pro physischer Kamera Name + eigene Seriennummer. */
+  cameras?: { product_name: string; serial_number: string | null }[];
   haftung: string;
   /** Fertig signiert vom Packer (Schritt 1 des Pack-Workflows). */
   packedBy?: string | null;
@@ -257,8 +259,16 @@ function Checkbox({ checked = false }: { checked?: boolean }) {
 // ─── PDF Document ────────────────────────────────────────────────────────────
 
 export function PacklistPDF({ data }: { data: PacklistData }) {
-  // Kameras aufspalten (können kommagetrennt sein)
-  const cameras = data.productName.split(',').map((n) => n.trim());
+  // Pro physischer Kamera eine Seite mit DEREN eigener Seriennummer.
+  // Bevorzugt data.cameras (Multi-Kamera), sonst Legacy productName-Split
+  // mit einer Seriennummer auf der ersten Seite.
+  const cameras: { name: string; serial: string | null }[] =
+    Array.isArray(data.cameras) && data.cameras.length > 0
+      ? data.cameras.map((c) => ({ name: c.product_name, serial: c.serial_number }))
+      : data.productName.split(',').map((n, i) => ({
+          name: n.trim(),
+          serial: i === 0 ? (data.serialNumber ?? null) : null,
+        }));
 
   // Zubehör-Namen auflösen.
   // Vorrang: resolvedItems (vom Server bereits expandiert, inkl. Set-Items),
@@ -355,13 +365,13 @@ export function PacklistPDF({ data }: { data: PacklistData }) {
 
             <View style={s.metaRow}>
               <Text style={s.metaLabel}>Kamera / Gerät:</Text>
-              <Text style={[s.metaValue, { color: C.navy }]}>{camera}</Text>
+              <Text style={[s.metaValue, { color: C.navy }]}>{camera.name}</Text>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'flex-end', marginBottom: 10 }}>
               <Text style={{ fontSize: 10 }}>Seriennummer: </Text>
-              {data.serialNumber ? (
+              {camera.serial ? (
                 <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: C.navy }}>
-                  {data.serialNumber}
+                  {camera.serial}
                 </Text>
               ) : (
                 <View style={[s.writeLine, s.writeLineLong]} />
