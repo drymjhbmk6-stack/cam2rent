@@ -736,10 +736,26 @@ export async function PATCH(
     }
     const resolvableOld = new Set(unitAcc.map((u) => u.id));
 
-    // Verfuegbarkeit HART pruefen — DIESE Buchung wird ausgeschlossen, damit
-    // sie nicht gegen sich selbst blockiert. Es muss die GESAMTE neue Menge
-    // pro Position in den (um diese Buchung bereinigten) Restbestand passen.
-    // In-process (kein HTTP-Self-Fetch — hinter Cloudflare/Firewall unzuverl.).
+    // Ist-Komposition der Buchung EXPANDIERT (Sets → Einzelteile). Das ist
+    // die Wahrheit, was die Buchung bereits reserviert hat — bei einer
+    // Set-Buchung enthaelt accessory_items nur die Set-ID, die Einzelteile
+    // sind aber faktisch ueber das Set gebucht. Diese Menge ist KEINE neue
+    // Reservierung und darf weder blockieren noch neu Units anfordern.
+    const oldExpanded = new Map<string, number>();
+    try {
+      const resolvedOld = await resolveAccessoryItems(supabase, oldItemsArr);
+      for (const r of resolvedOld) {
+        if (!r.accessory_id) continue; // Set-Container-Zeile überspringen
+        oldExpanded.set(r.accessory_id, (oldExpanded.get(r.accessory_id) ?? 0) + (r.qty || 0));
+      }
+    } catch (e) {
+      console.error('[booking-accessory-edit] resolve old composition failed:', e);
+    }
+
+    // Verfuegbarkeit HART pruefen — nur fuer den ECHTEN Zuwachs gegenueber
+    // der bereits gebuchten (expandierten) Komposition. Diese Buchung wird
+    // zusaetzlich aus der Zaehlung ausgeschlossen. In-process (kein
+    // HTTP-Self-Fetch — hinter Cloudflare/Firewall unzuverlaessig).
     if (newItems.length > 0) {
       const dm = (booking.delivery_mode as string) || 'versand';
       const availMap = new Map<string, { name: string; remaining: number }>();
@@ -763,9 +779,11 @@ export async function PATCH(
       }
       const blocked: string[] = [];
       for (const it of newItems) {
+        const requiredDelta = it.qty - (oldExpanded.get(it.accessory_id) ?? 0);
+        if (requiredDelta <= 0) continue; // bereits über Buchung/Set gedeckt
         const av = availMap.get(it.accessory_id);
         // Kein Eintrag in availMap = Bulk/nicht-trackbar → nicht blockieren.
-        if (av && av.remaining < it.qty) blocked.push(av.name);
+        if (av && av.remaining < requiredDelta) blocked.push(av.name);
       }
       if (blocked.length > 0) {
         return NextResponse.json(
@@ -776,9 +794,8 @@ export async function PATCH(
     }
 
     // Mutation — bestehende Units pro Accessory behalten (bis zur neuen
-    // Menge), nur den echten Fehlbestand neu zuweisen, Ueberzaehliges
-    // freigeben. Basis ist der tatsaechliche Unit-Bestand (unitsByAcc),
-    // NICHT die Set-ID-behaftete accessory_items — sonst Self-Kollision.
+    // Menge), nur den echten Fehlbestand ueber die bereits gebuchte
+    // (expandierte) Menge hinaus neu zuweisen, Ueberzaehliges freigeben.
     const newQtyMap = new Map(newItems.map((i) => [i.accessory_id, i.qty]));
     const allAccIds = new Set<string>([...unitsByAcc.keys(), ...newItems.map((i) => i.accessory_id)]);
 
@@ -791,7 +808,9 @@ export async function PATCH(
       const keep = existing.slice(0, want);
       keptUnitIds.push(...keep);
       releaseUnitIds.push(...existing.slice(keep.length));
-      const assignQty = want - keep.length; // nur echter Fehlbestand
+      // Bereits gedeckt = max(echte Units, ueber Set/Buchung reservierte Menge)
+      const baseline = Math.max(keep.length, oldExpanded.get(accId) ?? 0);
+      const assignQty = Math.max(0, want - baseline); // nur echter Zuwachs
       if (assignQty > 0) deltaItems.push({ accessory_id: accId, qty: assignQty });
     }
     // Alte Unit-IDs ohne aufloesbares Accessory (geloeschte Unit-Row) freigeben
