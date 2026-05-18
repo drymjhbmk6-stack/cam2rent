@@ -707,64 +707,19 @@ export async function PATCH(
       }
     }
 
-    // Alt-Mengen (qty-aware) fuer Delta-Verfuegbarkeitspruefung
+    // Roh-Bestand fuer Audit-Log (kann Set-IDs enthalten — nur Doku)
     const oldItemsArr: { accessory_id: string; qty: number }[] =
       Array.isArray(booking.accessory_items) && booking.accessory_items.length > 0
         ? (booking.accessory_items as { accessory_id: string; qty: number }[])
         : (Array.isArray(booking.accessories) ? (booking.accessories as string[]) : []).map((a) => ({ accessory_id: a, qty: 1 }));
-    const oldQty = new Map<string, number>();
-    for (const it of oldItemsArr) {
-      oldQty.set(it.accessory_id, (oldQty.get(it.accessory_id) ?? 0) + (it.qty || 1));
-    }
 
-    // Verfuegbarkeit HART pruefen — nur fuer neue/erhoehte Positionen.
-    // Direkt in-process (kein HTTP-Self-Fetch — hinter Cloudflare/Firewall
-    // unzuverlaessig).
-    const needCheck = newItems.filter((it) => it.qty > (oldQty.get(it.accessory_id) ?? 0));
-    if (needCheck.length > 0) {
-      const dm = (booking.delivery_mode as string) || 'versand';
-      const availMap = new Map<string, { name: string; remaining: number }>();
-      try {
-        const avail = await computeAccessoryAvailability({
-          from: String(booking.rental_from),
-          to: String(booking.rental_to),
-          productId: booking.product_id ? String(booking.product_id) : null,
-          deliveryMode: dm,
-        });
-        for (const a of avail.accessories) {
-          availMap.set(a.id, { name: a.name, remaining: a.available_qty_remaining });
-        }
-      } catch (e) {
-        console.error('[booking-accessory-edit] availability check failed:', e);
-        return NextResponse.json(
-          { error: 'Verfügbarkeit konnte nicht geprüft werden. Bitte erneut versuchen.' },
-          { status: 503 },
-        );
-      }
-      const blocked: string[] = [];
-      for (const it of needCheck) {
-        const delta = it.qty - (oldQty.get(it.accessory_id) ?? 0);
-        const av = availMap.get(it.accessory_id);
-        if ((av?.remaining ?? 0) < delta) blocked.push(av?.name ?? it.accessory_id);
-      }
-      if (blocked.length > 0) {
-        return NextResponse.json(
-          { error: `Im Mietzeitraum nicht genug freie Exemplare: ${blocked.join(', ')}. Änderung wurde NICHT gespeichert.` },
-          { status: 409 },
-        );
-      }
-    }
-
-    // Mutation — DELTA-basiert. Bestehende Units der Buchung bleiben fuer
-    // unveraenderte/reduzierte Positionen erhalten (kein Churn, kein
-    // Self-Kollision: nur den ECHTEN Zuwachs neu zuweisen). Sonst wuerde die
-    // RPC fuer ein Teil, dessen einziges Exemplar diese Buchung selbst haelt,
-    // „kein freies Exemplar" melden, obwohl sich gar nichts geaendert hat.
     const oldUnitIds: string[] = Array.isArray(booking.accessory_unit_ids)
       ? (booking.accessory_unit_ids as string[]).filter(Boolean)
       : [];
 
-    // Bestehende Unit→Accessory-Zuordnung laden
+    // Bestehende Unit→Accessory-Zuordnung laden (das ist die WAHRHEIT ueber
+    // den Ist-Bestand der Buchung — NICHT accessory_items, das bei
+    // Set-Buchungen nur die Set-ID enthaelt).
     let unitAcc: { id: string; accessory_id: string }[] = [];
     if (oldUnitIds.length > 0) {
       const { data: ua } = await supabase
@@ -781,6 +736,49 @@ export async function PATCH(
     }
     const resolvableOld = new Set(unitAcc.map((u) => u.id));
 
+    // Verfuegbarkeit HART pruefen — DIESE Buchung wird ausgeschlossen, damit
+    // sie nicht gegen sich selbst blockiert. Es muss die GESAMTE neue Menge
+    // pro Position in den (um diese Buchung bereinigten) Restbestand passen.
+    // In-process (kein HTTP-Self-Fetch — hinter Cloudflare/Firewall unzuverl.).
+    if (newItems.length > 0) {
+      const dm = (booking.delivery_mode as string) || 'versand';
+      const availMap = new Map<string, { name: string; remaining: number }>();
+      try {
+        const avail = await computeAccessoryAvailability({
+          from: String(booking.rental_from),
+          to: String(booking.rental_to),
+          productId: booking.product_id ? String(booking.product_id) : null,
+          deliveryMode: dm,
+          excludeBookingId: id,
+        });
+        for (const a of avail.accessories) {
+          availMap.set(a.id, { name: a.name, remaining: a.available_qty_remaining });
+        }
+      } catch (e) {
+        console.error('[booking-accessory-edit] availability check failed:', e);
+        return NextResponse.json(
+          { error: 'Verfügbarkeit konnte nicht geprüft werden. Bitte erneut versuchen.' },
+          { status: 503 },
+        );
+      }
+      const blocked: string[] = [];
+      for (const it of newItems) {
+        const av = availMap.get(it.accessory_id);
+        // Kein Eintrag in availMap = Bulk/nicht-trackbar → nicht blockieren.
+        if (av && av.remaining < it.qty) blocked.push(av.name);
+      }
+      if (blocked.length > 0) {
+        return NextResponse.json(
+          { error: `Im Mietzeitraum nicht genug freie Exemplare: ${blocked.join(', ')}. Änderung wurde NICHT gespeichert.` },
+          { status: 409 },
+        );
+      }
+    }
+
+    // Mutation — bestehende Units pro Accessory behalten (bis zur neuen
+    // Menge), nur den echten Fehlbestand neu zuweisen, Ueberzaehliges
+    // freigeben. Basis ist der tatsaechliche Unit-Bestand (unitsByAcc),
+    // NICHT die Set-ID-behaftete accessory_items — sonst Self-Kollision.
     const newQtyMap = new Map(newItems.map((i) => [i.accessory_id, i.qty]));
     const allAccIds = new Set<string>([...unitsByAcc.keys(), ...newItems.map((i) => i.accessory_id)]);
 
@@ -790,13 +788,10 @@ export async function PATCH(
     for (const accId of allAccIds) {
       const existing = unitsByAcc.get(accId) ?? [];
       const want = newQtyMap.get(accId) ?? 0;
-      const oQ = oldQty.get(accId) ?? 0;
       const keep = existing.slice(0, want);
       keptUnitIds.push(...keep);
       releaseUnitIds.push(...existing.slice(keep.length));
-      // Nur bei echtem Zuwachs (oder neu hinzugefuegt) Units nachfordern —
-      // exakt das Delta, das die Verfuegbarkeitspruefung oben validiert hat.
-      const assignQty = oQ === 0 ? want : (want > oQ ? want - oQ : 0);
+      const assignQty = want - keep.length; // nur echter Fehlbestand
       if (assignQty > 0) deltaItems.push({ accessory_id: accId, qty: assignQty });
     }
     // Alte Unit-IDs ohne aufloesbares Accessory (geloeschte Unit-Row) freigeben

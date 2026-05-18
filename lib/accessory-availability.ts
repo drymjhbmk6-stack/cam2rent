@@ -69,10 +69,15 @@ export async function computeAccessoryAvailability(opts: {
   to: string;
   productId?: string | null;
   deliveryMode?: string;
+  /** Diese Buchung NICHT mitzaehlen — fuer den Buchungs-Zubehoer-Edit, damit
+   *  die Buchung nicht gegen sich selbst blockiert (insb. Set-Buchungen, deren
+   *  accessory_items nur die Set-ID enthalten). */
+  excludeBookingId?: string;
 }): Promise<AccessoryAvailabilityResult> {
   const { from, to } = opts;
   const productId = opts.productId ?? null;
   const deliveryMode = opts.deliveryMode ?? 'versand';
+  const excludeBookingId = opts.excludeBookingId ?? null;
 
   const supabase = createServiceClient();
 
@@ -113,11 +118,14 @@ export async function computeAccessoryAvailability(opts: {
   const globalTest = await isTestMode();
   let bookingsQuery = supabase
     .from('bookings')
-    .select('accessories, accessory_items, accessory_unit_ids, rental_from, rental_to, delivery_mode')
+    .select('id, accessories, accessory_items, accessory_unit_ids, rental_from, rental_to, delivery_mode')
     .in('status', [...RESERVING_BOOKING_STATUSES])
     .or('accessories.neq.{},accessory_items.not.is.null,accessory_unit_ids.neq.{}');
   if (!globalTest) {
     bookingsQuery = bookingsQuery.not('is_test', 'is', true);
+  }
+  if (excludeBookingId) {
+    bookingsQuery = bookingsQuery.neq('id', excludeBookingId);
   }
   const { data: bookings } = await bookingsQuery.returns<ReservingBooking[]>();
 
