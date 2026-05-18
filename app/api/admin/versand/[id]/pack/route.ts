@@ -60,14 +60,19 @@ export async function POST(
   // dann faellt die Check-API auf den weichen Namensvergleich zurueck.
   const packedByUserId = user.id !== 'legacy-env' ? user.id : null;
 
+  // Ungefaehres Paketgewicht (vom Packer erfasst/bestaetigt) — befuellt
+  // spaeter das Versandetikett vor. Nur > 0 persistieren.
+  const rawWeight = Number(body.packWeightKg);
+  const packWeightKg = Number.isFinite(rawWeight) && rawWeight > 0
+    ? Math.round(rawWeight * 1000) / 1000
+    : null;
+
   const supabase = createServiceClient();
 
   await applyScannedUnits(supabase, id, scannedUnits);
 
-  const { error } = await supabase
-    .from('bookings')
-    .update({
-      pack_status: 'packed',
+  const basePayload: Record<string, unknown> = {
+    pack_status: 'packed',
       pack_packed_by: packedBy,
       pack_packed_by_user_id: packedByUserId,
       pack_packed_at: new Date().toISOString(),
@@ -84,8 +89,18 @@ export async function POST(
       pack_checked_items: null,
       pack_checked_notes: null,
       pack_photo_url: null,
-    })
-    .eq('id', id);
+  };
+
+  const updatePayload = packWeightKg != null
+    ? { ...basePayload, pack_weight_kg: packWeightKg }
+    : basePayload;
+
+  let { error } = await supabase.from('bookings').update(updatePayload).eq('id', id);
+  // Migration `supabase-bookings-pack-weight.sql` noch nicht durch → Spalte
+  // fehlt: ohne das Gewicht erneut speichern, Pack-Flow bricht nicht ab.
+  if (error && /column .*pack_weight_kg/i.test(error.message)) {
+    ({ error } = await supabase.from('bookings').update(basePayload).eq('id', id));
+  }
 
   if (error) {
     console.error('[versand/pack] error:', error);

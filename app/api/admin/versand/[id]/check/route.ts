@@ -49,6 +49,11 @@ export async function POST(
   const notes = String(formData.get('notes') ?? '').trim();
   const signatureDataUrl = String(formData.get('signatureDataUrl') ?? '');
   const photo = formData.get('photo');
+  // Kontrolleur kann das vom Packer erfasste Paketgewicht korrigieren.
+  const rawWeight = Number(formData.get('packWeightKg'));
+  const packWeightKg = Number.isFinite(rawWeight) && rawWeight > 0
+    ? Math.round(rawWeight * 1000) / 1000
+    : null;
 
   if (!checkedBy || checkedBy.length < 2) {
     return NextResponse.json({ error: 'Bitte deinen vollen Namen eintragen.' }, { status: 400 });
@@ -142,21 +147,35 @@ export async function POST(
   // Buchung updaten — atomar gegen Doppelklick: nur wenn Status noch 'packed' ist.
   // Ohne diesen Guard koennten zwei parallele Kontrolleure beide einen Check
   // durchfuehren und doppelte Foto-/Signatur-Daten in dieselbe Buchung schreiben.
-  const { data: updateRows, error: updateError } = await supabase
+  const checkBase: Record<string, unknown> = {
+    pack_status: 'checked',
+    pack_checked_by: checkedBy,
+    pack_checked_by_user_id: checkedByUserId,
+    pack_checked_at: new Date().toISOString(),
+    pack_checked_signature: signatureDataUrl,
+    pack_checked_items: checkedItems,
+    pack_checked_notes: notes || null,
+    pack_photo_url: storagePath,
+  };
+  const checkPayload = packWeightKg != null
+    ? { ...checkBase, pack_weight_kg: packWeightKg }
+    : checkBase;
+
+  let { data: updateRows, error: updateError } = await supabase
     .from('bookings')
-    .update({
-      pack_status: 'checked',
-      pack_checked_by: checkedBy,
-      pack_checked_by_user_id: checkedByUserId,
-      pack_checked_at: new Date().toISOString(),
-      pack_checked_signature: signatureDataUrl,
-      pack_checked_items: checkedItems,
-      pack_checked_notes: notes || null,
-      pack_photo_url: storagePath,
-    })
+    .update(checkPayload)
     .eq('id', id)
     .eq('pack_status', 'packed')
     .select('id');
+  // Migration fehlt → ohne Gewicht erneut (atomarer Guard bleibt erhalten).
+  if (updateError && /column .*pack_weight_kg/i.test(updateError.message)) {
+    ({ data: updateRows, error: updateError } = await supabase
+      .from('bookings')
+      .update(checkBase)
+      .eq('id', id)
+      .eq('pack_status', 'packed')
+      .select('id'));
+  }
 
   if (updateError) {
     console.error('[versand/check] update error:', updateError);

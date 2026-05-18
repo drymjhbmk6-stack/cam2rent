@@ -182,6 +182,18 @@ export default function AdminVersandPage() {
       }
     }
 
+    // Beim Packen erfasstes Gewicht (Fallback: Schaetzung aus Einzel-
+    // gewichten) als Etikett-Vorschlag laden — bleibt hier aenderbar.
+    let prefillWeight = 0.5;
+    try {
+      const wr = await fetch(`/api/admin/booking/${b.id}`);
+      if (wr.ok) {
+        const { booking: wb } = await wr.json();
+        const w = wb?.pack_weight_kg ?? wb?.pack_weight_estimate_kg;
+        if (typeof w === 'number' && w > 0) prefillWeight = w;
+      }
+    } catch { /* Netzfehler → Default 0,5 kg */ }
+
     setLabelForm({
       name: b.customer_name ?? '',
       address: parsedStreet,
@@ -189,7 +201,7 @@ export default function AdminVersandPage() {
       postalCode: parsedZip,
       email: b.customer_email ?? '',
       methodId: shippingMethods[0]?.id ?? 0,
-      weightKg: 0.5,
+      weightKg: prefillWeight,
     });
     if (shippingMethods.length === 0) {
       setMethodsLoading(true);

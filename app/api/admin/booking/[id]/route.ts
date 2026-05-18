@@ -9,6 +9,8 @@ import { DEFAULT_HAFTUNG, getEigenbeteiligung, type HaftungConfig } from '@/lib/
 import { computeReplacementValue, loadReplacementValueConfig } from '@/lib/replacement-value';
 import { getInventarWbwByLegacyUnitIds, getInventarWbwForBookingAccessories, getInventarWbwAverageByLegacyProductId } from '@/lib/inventar/wbw-bridge';
 import { resolveBookingCameras } from '@/lib/booking-cameras';
+import { getProducts } from '@/lib/get-products';
+import { parseWeightToGrams, computePackWeightKg } from '@/lib/pack-weight';
 
 type ResolvedItem = { id: string; name: string; qty: number; accessory_id?: string; isFromSet?: boolean; setName?: string; included_parts?: string[] };
 
@@ -215,6 +217,52 @@ export async function GET(
     }
   }
   booking.unit_codes = unitCodes;
+
+  // Paketgewicht-Schaetzung fuer den Versand-Workflow: Kamera-Gewicht
+  // (Produkt-Spec `weight`) + Zubehoer-Gewicht (accessories.specs.weight_g).
+  // Defensiv: fehlen Specs/Spalten, bleibt der Anteil 0; bei komplett
+  // unbekannten Gewichten liefert computePackWeightKg() null.
+  try {
+    const leafAccIds = [...new Set(
+      (resolved as ResolvedItem[])
+        .filter((r) => r.accessory_id)
+        .map((r) => r.accessory_id as string),
+    )];
+    const accWeightById: Record<string, number> = {};
+    if (leafAccIds.length > 0) {
+      const accSpecs = await supabase
+        .from('accessories')
+        .select('id, specs')
+        .in('id', leafAccIds);
+      for (const a of accSpecs.data ?? []) {
+        const w = (a as { specs?: { weight_g?: number } | null }).specs?.weight_g;
+        if (typeof w === 'number' && w > 0) accWeightById[(a as { id: string }).id] = w;
+      }
+    }
+    const accessoriesForWeight = (resolved as ResolvedItem[])
+      .filter((r) => r.accessory_id)
+      .map((r) => ({ grams: accWeightById[r.accessory_id as string] ?? 0, qty: r.qty }));
+
+    let cameraGrams: number[] = [];
+    try {
+      const products = await getProducts();
+      const weightByPid: Record<string, number> = {};
+      for (const p of products) {
+        const g = parseWeightToGrams((p.specs as { weight?: string } | undefined)?.weight);
+        if (g > 0) weightByPid[p.id] = g;
+      }
+      cameraGrams = (camerasResolved ?? []).map((c) =>
+        c.product_id ? (weightByPid[c.product_id] ?? 0) : 0,
+      );
+    } catch { /* Produkt-Load fehlgeschlagen → Kamera-Anteil 0 */ }
+
+    booking.pack_weight_estimate_kg = computePackWeightKg({
+      cameraGrams,
+      accessories: accessoriesForWeight,
+    });
+  } catch {
+    booking.pack_weight_estimate_kg = null;
+  }
 
   // Kundenprofil laden
   let customer = null;

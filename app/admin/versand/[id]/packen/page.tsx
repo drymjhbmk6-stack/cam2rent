@@ -44,6 +44,8 @@ interface BookingDetail {
   pack_checked_by_user_id?: string | null;
   pack_checked_at?: string | null;
   pack_photo_url?: string | null;
+  pack_weight_kg?: number | null;
+  pack_weight_estimate_kg?: number | null;
 }
 
 interface CurrentAdminUser {
@@ -220,6 +222,12 @@ function PackStep({
   const [tested, setTested] = useState(false);
   const [noVisible, setNoVisible] = useState(false);
   const [note, setNote] = useState('');
+  // Ungefaehres Paketgewicht — vorbefuellt aus den hinterlegten Einzel-
+  // gewichten (Kamera + Zubehoer), bleibt fuer den Packer aenderbar.
+  const weightDefault = booking.pack_weight_kg ?? booking.pack_weight_estimate_kg ?? null;
+  const [weightKg, setWeightKg] = useState<string>(
+    weightDefault != null ? String(weightDefault) : '',
+  );
   const [name, setName] = useState('');
   const [namePrefilled, setNamePrefilled] = useState(false);
   const sigRef = useRef<SignatureCanvas>(null);
@@ -339,6 +347,7 @@ function PackStep({
           packedBy: name.trim(),
           packedItems: items.filter((it) => checked[it.key]).map((it) => it.key),
           condition: { tested, noVisibleDamage: noVisible, note: note.trim() || undefined },
+          packWeightKg: parseFloat(weightKg.replace(',', '.')) || undefined,
           signatureDataUrl: sig,
           scannedUnits: {
             cameraUnitIds: scannedCameraUnitIds,
@@ -410,6 +419,28 @@ function PackStep({
         />
       </div>
 
+      <div className="mt-6 border-t border-slate-800 pt-4">
+        <h3 className="text-sm font-semibold text-slate-300 mb-1">Ungefähres Paketgewicht</h3>
+        <p className="text-xs text-slate-500 mb-2">
+          Für das Versandetikett. {booking.pack_weight_estimate_kg != null
+            ? `Vorschlag aus hinterlegten Einzelgewichten: ${String(booking.pack_weight_estimate_kg).replace('.', ',')} kg (inkl. Verpackung).`
+            : 'Kein Gewicht hinterlegt — bitte schätzen.'}
+        </p>
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            inputMode="decimal"
+            step="0.1"
+            min="0.1"
+            value={weightKg}
+            onChange={(e) => setWeightKg(e.target.value)}
+            placeholder="z. B. 1,2"
+            className="w-32 px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-base text-slate-100"
+          />
+          <span className="text-sm text-slate-400">kg</span>
+        </div>
+      </div>
+
       <SignatureBlock
         title="Deine Unterschrift (Packer)"
         name={name}
@@ -452,6 +483,11 @@ function CheckStep({
   const [name, setName] = useState('');
   const [namePrefilled, setNamePrefilled] = useState(false);
   const [notes, setNotes] = useState('');
+  // Vom Packer erfasstes Gewicht — Kontrolleur kann korrigieren.
+  const checkWeightDefault = booking.pack_weight_kg ?? booking.pack_weight_estimate_kg ?? null;
+  const [weightKg, setWeightKg] = useState<string>(
+    checkWeightDefault != null ? String(checkWeightDefault) : '',
+  );
   const sigRef = useRef<SignatureCanvas>(null);
   const [hasDrawn, setHasDrawn] = useState(false);
   const [photo, setPhoto] = useState<File | null>(null);
@@ -555,6 +591,7 @@ function CheckStep({
       fd.append('checkedBy', name.trim());
       fd.append('checkedItems', JSON.stringify(items.filter((it) => checked[it.key]).map((it) => it.key)));
       fd.append('notes', notes.trim());
+      { const w = parseFloat(weightKg.replace(',', '.')); if (w > 0) fd.append('packWeightKg', String(w)); }
       fd.append('signatureDataUrl', sig);
       fd.append('photo', photo);
       const res = await fetch(`/api/admin/versand/${booking.id}/check`, {
@@ -625,6 +662,25 @@ function CheckStep({
           placeholder="z.B. Akku 2 fehlt aber Ersatz beigelegt …"
           className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-sm text-slate-100"
         />
+      </div>
+
+      <div className="mt-4">
+        <label className="block text-xs text-slate-500 uppercase tracking-wider mb-1">
+          Ungefähres Paketgewicht (fürs Etikett)
+        </label>
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            inputMode="decimal"
+            step="0.1"
+            min="0.1"
+            value={weightKg}
+            onChange={(e) => setWeightKg(e.target.value)}
+            placeholder="z. B. 1,2"
+            className="w-32 px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-base text-slate-100"
+          />
+          <span className="text-sm text-slate-400">kg</span>
+        </div>
       </div>
 
       {/* Foto-Upload */}
