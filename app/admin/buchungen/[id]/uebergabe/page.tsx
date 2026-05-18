@@ -606,13 +606,17 @@ function Step2Sign(props: {
 
       <div className="mb-5">
         <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1.5">Unterschrift *</label>
-        <div className="bg-white rounded-lg overflow-hidden">
+        <div
+          className="rounded-lg overflow-hidden border-2 border-slate-400"
+          style={{ backgroundColor: '#ffffff' }}
+        >
           <SignatureCanvas
             ref={sigRef}
             penColor="#0f172a"
+            backgroundColor="#ffffff"
             minWidth={1.5}
             maxWidth={3}
-            canvasProps={{ className: 'w-full h-48' }}
+            canvasProps={{ className: 'w-full h-48 block', style: { backgroundColor: '#ffffff' } }}
             onEnd={capture}
           />
         </div>
