@@ -273,7 +273,12 @@ function PackStep({
     ]);
     const result = await applyScan(code, booking.id, items, checked, scanLookup, scannedSet);
     if (result.ok && result.key) {
-      setChecked((p) => ({ ...p, [result.key!]: true }));
+      const keysToCheck = result.keys && result.keys.length > 0 ? result.keys : [result.key];
+      setChecked((p) => {
+        const next = { ...p };
+        for (const k of keysToCheck) next[k] = true;
+        return next;
+      });
       if (result.scannedUnitId) {
         if (result.scannedKind === 'camera') {
           setScannedCameraUnitIds((p) => p.includes(result.scannedUnitId!) ? p : [...p, result.scannedUnitId!]);
@@ -485,7 +490,12 @@ function CheckStep({
     // CheckStep: keine Substitution mehr — Codes sind durch Step 1 gesetzt.
     const result = await applyScan(code, booking.id, items, checked, scanLookup, new Set(), false);
     if (result.ok && result.key) {
-      setChecked((p) => ({ ...p, [result.key!]: true }));
+      const keysToCheck = result.keys && result.keys.length > 0 ? result.keys : [result.key];
+      setChecked((p) => {
+        const next = { ...p };
+        for (const k of keysToCheck) next[k] = true;
+        return next;
+      });
       setScanFeedback({ type: 'ok', msg: result.message, parts: result.includedParts });
     } else if (result.alreadyChecked) {
       setScanFeedback({ type: 'warn', msg: result.message });

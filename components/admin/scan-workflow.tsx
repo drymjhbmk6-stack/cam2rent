@@ -88,6 +88,10 @@ export interface ScanResult {
   ok: boolean;
   alreadyChecked?: boolean;
   key?: string;
+  /** Bei Sammel-Zubehoer (ein QR fuer N Stueck) werden mit einem Scan ALLE
+   *  noch offenen Slots dieser Position abgehakt — der Aufrufer setzt jeden
+   *  Key aus dieser Liste. Wenn gesetzt, hat sie Vorrang vor `key`. */
+  keys?: string[];
   message: string;
   scannedUnitId?: string;
   scannedKind?: 'camera' | 'accessory';
@@ -108,6 +112,8 @@ interface ServerScanLookup {
   unitId?: string;
   serialNumber?: string;
   exemplarCode?: string;
+  /** true = Sammel-Zubehoer (ein gemeinsamer QR fuer alle Stueck). */
+  isBulk?: boolean;
   matchesBooking?: boolean;
   conflict?: { bookingId: string; customerName: string | null } | null;
 }
@@ -339,7 +345,12 @@ export async function applyScan(
   if (info.kind === 'unknown') {
     return { ok: false, message: `Code ${rawCode} ist im System nicht hinterlegt.` };
   }
-  if (info.unitId && scannedUnitIds.has(info.unitId)) {
+  // Sammel-Zubehoer hat NUR EINEN QR fuer alle Stueck — derselbe Code wird
+  // bewusst mehrfach gescannt (1 Scan pro physischem Stueck). Die unitId-
+  // Dedup wuerde das ab dem 2. Stueck als Duplikat blocken. Fuer Bulk daher
+  // ueberspringen; das qty-Limit haelt die Slot-Logik unten ein.
+  const isBulkAccessory = info.kind === 'accessory' && info.isBulk === true;
+  if (info.unitId && scannedUnitIds.has(info.unitId) && !isBulkAccessory) {
     return { ok: false, alreadyChecked: true, message: `Code ${rawCode} schon abgehakt.` };
   }
   if (info.conflict) {
@@ -374,6 +385,32 @@ export async function applyScan(
 
   if (!info.matchesBooking) {
     return { ok: false, message: `Zubehör „${info.accessoryName ?? rawCode}" wird nicht benötigt.` };
+  }
+  // Sammel-Zubehoer: ein gemeinsamer QR steht fuer ALLE Stueck dieser
+  // Position (es gibt keinen Code pro Einzelstueck). Ein Scan hakt deshalb
+  // alle noch offenen Slots dieser Position ab. Das ist keine Substitution
+  // (der Code ist der vorgesehene), greift daher auch im Kontroll-/Retouren-
+  // Schritt (allowSubstitution=false).
+  if (isBulkAccessory) {
+    const bulkSlots = items.filter(
+      (it) => it.type === 'accessory' && it.accessoryId === info.accessoryId,
+    );
+    const freeBulk = bulkSlots.filter((it) => !checked[it.key]);
+    if (freeBulk.length === 0) {
+      return { ok: false, alreadyChecked: true, message: `Alle „${info.accessoryName}" schon abgehakt.` };
+    }
+    const label = freeBulk[0].label;
+    return {
+      ok: true,
+      key: freeBulk[0].key,
+      keys: freeBulk.map((s) => s.key),
+      message:
+        freeBulk.length > 1
+          ? `✓ ${label} — ${freeBulk.length} Stück erfasst (Sammel-QR)`
+          : `✓ ${label}`,
+      scannedKind: 'accessory',
+      includedParts: freeBulk[0].includedParts,
+    };
   }
   if (!allowSubstitution) {
     return { ok: false, message: `Dieses „${info.accessoryName}" passt nicht zu dieser Buchung — bitte gegen den Buchungs-Code pruefen.` };

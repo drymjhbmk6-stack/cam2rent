@@ -116,7 +116,12 @@ export default function RetourenPruefenPage({ params }: { params: Promise<{ id: 
     // festgelegt und stehen in der Buchung.
     const result = await applyScan(code, booking.id, items, checked, scanLookup, new Set(), false);
     if (result.ok && result.key) {
-      setChecked((p) => ({ ...p, [result.key!]: true }));
+      const keysToCheck = result.keys && result.keys.length > 0 ? result.keys : [result.key];
+      setChecked((p) => {
+        const next = { ...p };
+        for (const k of keysToCheck) next[k] = true;
+        return next;
+      });
       setScanFeedback({ type: 'ok', msg: result.message });
     } else if (result.alreadyChecked) {
       setScanFeedback({ type: 'warn', msg: result.message });

@@ -399,7 +399,7 @@ export async function POST(req: NextRequest) {
 
     const { data: acc } = await supabase
       .from('accessories')
-      .select('name')
+      .select('name, is_bulk')
       .eq('id', accessoryUnit.accessory_id)
       .maybeSingle();
 
@@ -409,6 +409,11 @@ export async function POST(req: NextRequest) {
       accessoryName: (acc?.name as string | undefined) ?? accessoryUnit.accessory_id,
       unitId: accessoryUnit.id,
       exemplarCode: accessoryUnit.exemplar_code,
+      // Sammel-Zubehoer (is_bulk) hat NUR EINEN gemeinsamen QR-Code fuer alle
+      // physischen Stuecke (siehe /admin/zubehoer/[id]/qr-codes). Der Client
+      // darf denselben Code dann mehrfach gegen die qty zaehlen, statt ihn als
+      // Duplikat zu blocken.
+      isBulk: (acc as { is_bulk?: boolean } | null)?.is_bulk === true,
       matchesBooking: bookingAccessoryIds.has(accessoryUnit.accessory_id),
       conflict,
     });
