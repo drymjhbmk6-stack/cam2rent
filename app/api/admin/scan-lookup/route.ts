@@ -114,7 +114,7 @@ export async function POST(req: NextRequest) {
   // erscheint, die Sub-Items aber physisch gepackt werden.
   const { data: booking } = await supabase
     .from('bookings')
-    .select('id, product_id, accessory_items, accessories')
+    .select('id, product_id, product_name, accessory_items, accessories')
     .eq('id', bookingId)
     .maybeSingle();
   if (!booking) {
@@ -122,6 +122,17 @@ export async function POST(req: NextRequest) {
   }
 
   const bookingProductId = booking.product_id as string | null;
+  // Kamera-Match auch ueber den Namen (cross-world robust): bei Multi-Kamera
+  // ist product_name kommagetrennt, und bei neue-Welt-Kameras ohne
+  // migration_audit-Mapping ist die legacy product_id leer — dann scheitert
+  // der reine ID-Vergleich, obwohl die Kamera klar zur Buchung gehoert.
+  const normName = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');
+  const bookingCameraNames = new Set<string>(
+    String(booking.product_name ?? '')
+      .split(',')
+      .map((n) => normName(n))
+      .filter(Boolean),
+  );
 
   type RawItem = { accessory_id: string; qty: number };
   const rawItems: RawItem[] = Array.isArray(booking.accessory_items) && booking.accessory_items.length > 0
@@ -152,6 +163,10 @@ export async function POST(req: NextRequest) {
   // loest auch zuerst ueber label auf. Ohne den label-Zweig schlaegt der
   // Pack-/Uebergabe-Scan fehl, wenn die Kennung im label-Feld steht.
   let cameraUnit: { id: string; product_id: string; serial_number: string; status: string } | null = null;
+  // Neue-Welt-Produktname der Kamera (falls ueber inventar_units aufgeloest) —
+  // dient als Namens-Fallback fuer matchesBooking, wenn die legacy product_id
+  // nicht mappbar ist.
+  let invCameraProductName: string | null = null;
   {
     const { data } = await supabase
       .from('product_units')
@@ -269,6 +284,14 @@ export async function POST(req: NextRequest) {
             .maybeSingle();
           legacyProductId = (audit2 as { alte_id?: string } | null)?.alte_id ?? null;
         } catch { /* egal */ }
+        try {
+          const { data: prod } = await supabase
+            .from('produkte')
+            .select('name')
+            .eq('id', inv.produkt_id)
+            .maybeSingle();
+          invCameraProductName = (prod as { name?: string } | null)?.name ?? null;
+        } catch { /* produkte-Welt fehlt */ }
       }
       cameraUnit = {
         id: legacyUnitId ?? inv.id,
@@ -318,6 +341,17 @@ export async function POST(req: NextRequest) {
       }
       productName = pname ?? pid;
     }
+    // Fallback: neue-Welt-Name, wenn legacy product_id nicht mappbar war.
+    if (!productName && invCameraProductName) productName = invCameraProductName;
+
+    // Match: legacy product_id ODER Produktname gegen die (ggf. komma-
+    // getrennten) Buchungs-Kameranamen. Letzteres greift, wenn die Kamera
+    // in der neuen Inventar-Welt lebt und kein migration_audit-Mapping auf
+    // die legacy product_id existiert (sonst faelschlich "wird nicht
+    // benoetigt", obwohl die Kamera klar zur Buchung gehoert).
+    const idMatches = !!cameraUnit.product_id && cameraUnit.product_id === bookingProductId;
+    const candidateName = normName(productName || invCameraProductName || '');
+    const nameMatches = !!candidateName && bookingCameraNames.has(candidateName);
 
     return NextResponse.json({
       kind: 'camera',
@@ -325,7 +359,7 @@ export async function POST(req: NextRequest) {
       productName,
       unitId: cameraUnit.id,
       serialNumber: cameraUnit.serial_number,
-      matchesBooking: cameraUnit.product_id === bookingProductId,
+      matchesBooking: idMatches || nameMatches,
       conflict,
     });
   }
