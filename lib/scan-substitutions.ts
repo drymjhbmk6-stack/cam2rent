@@ -1,21 +1,34 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { resolveBookingCameras } from '@/lib/booking-cameras';
 
 export type ScannedUnits = {
+  /** Legacy-Einzelkamera (Back-Compat). cameraUnitIds hat Vorrang. */
   cameraUnitId: string | null;
+  /** Multi-Kamera: alle tatsächlich gescannten Kamera-Einheiten. */
+  cameraUnitIds: string[];
   accessoryUnitIds: string[];
 };
 
 export function parseScannedUnits(input: unknown): ScannedUnits {
-  if (!input || typeof input !== 'object') return { cameraUnitId: null, accessoryUnitIds: [] };
+  if (!input || typeof input !== 'object') {
+    return { cameraUnitId: null, cameraUnitIds: [], accessoryUnitIds: [] };
+  }
   const obj = input as Record<string, unknown>;
   const cameraUnitId = typeof obj.cameraUnitId === 'string' && obj.cameraUnitId.length > 0
     ? obj.cameraUnitId
     : null;
+  const cameraUnitIdsRaw = Array.isArray(obj.cameraUnitIds)
+    ? (obj.cameraUnitIds as unknown[])
+        .filter((id): id is string => typeof id === 'string' && id.length > 0)
+    : [];
+  const cameraUnitIds = cameraUnitIdsRaw.length > 0
+    ? Array.from(new Set(cameraUnitIdsRaw))
+    : (cameraUnitId ? [cameraUnitId] : []);
   const accessoryUnitIds = Array.isArray(obj.accessoryUnitIds)
     ? (obj.accessoryUnitIds as unknown[])
         .filter((id): id is string => typeof id === 'string' && id.length > 0)
     : [];
-  return { cameraUnitId, accessoryUnitIds };
+  return { cameraUnitId, cameraUnitIds, accessoryUnitIds };
 }
 
 /**
@@ -43,33 +56,83 @@ export async function applyScannedUnits(
   bookingId: string,
   scanned: ScannedUnits,
 ): Promise<void> {
-  const hasCameraInput = scanned.cameraUnitId !== null;
+  const hasCameraInput = scanned.cameraUnitIds.length > 0;
   const hasAccessoryInput = scanned.accessoryUnitIds.length > 0;
   if (!hasCameraInput && !hasAccessoryInput) return;
 
   const { data: bookingBefore } = await supabase
     .from('bookings')
-    .select('unit_id, accessory_unit_ids')
+    .select('unit_id, product_id, product_name, cameras, accessory_unit_ids')
     .eq('id', bookingId)
     .maybeSingle();
   if (!bookingBefore) return;
 
-  // ── 1) Kamera ────────────────────────────────────────────────────────────
+  // ── 1) Kameras (Multi-Kamera, Substitution pro Produkt) ──────────────────
   if (hasCameraInput) {
-    const oldCameraUnitId = bookingBefore.unit_id as string | null;
-    const newCameraUnitId = scanned.cameraUnitId;
-    if (oldCameraUnitId !== newCameraUnitId && newCameraUnitId) {
-      await supabase.from('bookings').update({ unit_id: newCameraUnitId }).eq('id', bookingId);
-      if (oldCameraUnitId) {
-        await supabase.from('product_units')
-          .update({ status: 'available' })
-          .eq('id', oldCameraUnitId)
-          .eq('status', 'rented');
+    const cams = resolveBookingCameras(bookingBefore).map((c) => ({ ...c }));
+    if (cams.length > 0) {
+      const scannedSet = new Set(scanned.cameraUnitIds);
+      const reservedUnits = new Set(
+        cams.map((c) => c.unit_id).filter((u): u is string => !!u),
+      );
+      // Substitute/Fills = gescannte Units, die noch keinem Slot zugeordnet sind
+      const extras = scanned.cameraUnitIds.filter((u) => !reservedUnits.has(u));
+
+      // product_id der Substitute-Units bestimmen (Match pro Produkt)
+      const extraProduct = new Map<string, string | null>();
+      if (extras.length > 0) {
+        const { data: pus } = await supabase
+          .from('product_units')
+          .select('id, product_id')
+          .in('id', extras);
+        for (const u of pus ?? []) {
+          extraProduct.set(u.id as string, (u.product_id as string | null) ?? null);
+        }
       }
-      await supabase.from('product_units')
-        .update({ status: 'rented' })
-        .eq('id', newCameraUnitId)
-        .in('status', ['available', 'rented']);
+
+      const remainingExtras = extras.slice();
+      const swappedOut: string[] = [];
+      for (let i = 0; i < cams.length; i++) {
+        const slot = cams[i];
+        if (slot.unit_id && scannedSet.has(slot.unit_id)) continue; // gescannt → bleibt
+        // Slot ist "missing" (nicht gescannt) ODER leer (kein Unit) → Substitut
+        // desselben Produkts suchen.
+        const idx = remainingExtras.findIndex(
+          (eid) => (extraProduct.get(eid) ?? null) === (slot.product_id ?? null),
+        );
+        if (idx >= 0) {
+          const [eid] = remainingExtras.splice(idx, 1);
+          if (slot.unit_id) swappedOut.push(slot.unit_id);
+          cams[i] = { ...slot, unit_id: eid };
+        }
+      }
+
+      const oldCams = resolveBookingCameras(bookingBefore);
+      const changed =
+        cams.length !== oldCams.length ||
+        cams.some((c, i) => c.unit_id !== oldCams[i]?.unit_id);
+      if (changed) {
+        const firstUnit = cams.find((c) => c.unit_id)?.unit_id ?? null;
+        await supabase
+          .from('bookings')
+          .update({ cameras: cams, unit_id: firstUnit })
+          .eq('id', bookingId);
+        if (swappedOut.length > 0) {
+          await supabase.from('product_units')
+            .update({ status: 'available' })
+            .in('id', swappedOut)
+            .eq('status', 'rented');
+        }
+        const swappedIn = cams
+          .map((c) => c.unit_id)
+          .filter((u): u is string => !!u && !reservedUnits.has(u));
+        if (swappedIn.length > 0) {
+          await supabase.from('product_units')
+            .update({ status: 'rented' })
+            .in('id', swappedIn)
+            .in('status', ['available', 'rented']);
+        }
+      }
     }
   }
 

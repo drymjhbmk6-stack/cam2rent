@@ -32,6 +32,7 @@ interface BookingDetail {
   rental_to: string;
   serial_number?: string | null;
   unit_id?: string | null;
+  cameras_resolved?: { product_name: string; serial_number: string | null; unit_id: string | null; product_id?: string | null }[];
   resolved_items?: ResolvedItem[];
   unit_codes?: UnitCode[];
   pack_status?: string | null;
@@ -59,6 +60,13 @@ function bookingToScanInput(b: BookingDetail) {
     resolvedItems: b.resolved_items,
     unitCodes: b.unit_codes,
     unitId: b.unit_id ?? null,
+    cameras: Array.isArray(b.cameras_resolved) && b.cameras_resolved.length > 0
+      ? b.cameras_resolved.map((c) => ({
+          product_name: c.product_name,
+          serial_number: c.serial_number,
+          unit_id: c.unit_id,
+        }))
+      : undefined,
   };
 }
 
@@ -225,7 +233,7 @@ function PackStep({
   // Pack-Submit die finale Buchungs-Zuordnung aus, indem es ungescannte
   // reservierte Units mit gescannten Substituten gleicher accessory_id
   // matched.
-  const [scannedCameraUnitId, setScannedCameraUnitId] = useState<string | null>(null);
+  const [scannedCameraUnitIds, setScannedCameraUnitIds] = useState<string[]>([]);
   const [scannedAccessoryUnitIds, setScannedAccessoryUnitIds] = useState<string[]>([]);
   // Klartext-Codes der Substitute fuer den Banner ueber der Liste.
   const [substituteBadges, setSubstituteBadges] = useState<string[]>([]);
@@ -260,7 +268,7 @@ function PackStep({
 
   async function handleScan(code: string) {
     const scannedSet = new Set([
-      ...(scannedCameraUnitId ? [scannedCameraUnitId] : []),
+      ...scannedCameraUnitIds,
       ...scannedAccessoryUnitIds,
     ]);
     const result = await applyScan(code, booking.id, items, checked, scanLookup, scannedSet);
@@ -268,7 +276,7 @@ function PackStep({
       setChecked((p) => ({ ...p, [result.key!]: true }));
       if (result.scannedUnitId) {
         if (result.scannedKind === 'camera') {
-          setScannedCameraUnitId(result.scannedUnitId);
+          setScannedCameraUnitIds((p) => p.includes(result.scannedUnitId!) ? p : [...p, result.scannedUnitId!]);
         } else if (result.scannedKind === 'accessory') {
           setScannedAccessoryUnitIds((p) => p.includes(result.scannedUnitId!) ? p : [...p, result.scannedUnitId!]);
         }
@@ -328,7 +336,7 @@ function PackStep({
           condition: { tested, noVisibleDamage: noVisible, note: note.trim() || undefined },
           signatureDataUrl: sig,
           scannedUnits: {
-            cameraUnitId: scannedCameraUnitId,
+            cameraUnitIds: scannedCameraUnitIds,
             accessoryUnitIds: scannedAccessoryUnitIds,
           },
         }),

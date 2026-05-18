@@ -31,6 +31,7 @@ interface BookingDetail {
   delivery_mode: string;
   serial_number?: string | null;
   unit_id?: string | null;
+  cameras_resolved?: { product_name: string; serial_number: string | null; unit_id: string | null; product_id?: string | null }[];
   resolved_items?: ResolvedItem[];
   unit_codes?: UnitCode[];
   shipping_address?: string | null;
@@ -43,6 +44,13 @@ function bookingToScanInput(b: BookingDetail) {
     resolvedItems: b.resolved_items,
     unitCodes: b.unit_codes,
     unitId: b.unit_id ?? null,
+    cameras: Array.isArray(b.cameras_resolved) && b.cameras_resolved.length > 0
+      ? b.cameras_resolved.map((c) => ({
+          product_name: c.product_name,
+          serial_number: c.serial_number,
+          unit_id: c.unit_id,
+        }))
+      : undefined,
     // Bei Übergabe (Abholung) gibt es kein Rücksendeetikett — der Scanner-
     // Fortschritt soll nur die physisch übergebenen Stücke zählen.
     skipReturnLabel: true,
@@ -118,7 +126,7 @@ function Wizard({ booking }: { booking: BookingDetail }) {
   // Welche physischen Units in dieser Scan-Session schon erfasst wurden —
   // verhindert Doppel-Scans desselben Stücks. Wird nicht ans Backend
   // geschickt (Übergabe speichert nur Name + ok pro Position).
-  const [scannedCameraUnitId, setScannedCameraUnitId] = useState<string | null>(null);
+  const [scannedCameraUnitIds, setScannedCameraUnitIds] = useState<string[]>([]);
   const [scannedAccessoryUnitIds, setScannedAccessoryUnitIds] = useState<string[]>([]);
 
   // Step 2 + 3 state
@@ -155,7 +163,7 @@ function Wizard({ booking }: { booking: BookingDetail }) {
 
   async function handleScan(code: string) {
     const scannedSet = new Set([
-      ...(scannedCameraUnitId ? [scannedCameraUnitId] : []),
+      ...scannedCameraUnitIds,
       ...scannedAccessoryUnitIds,
     ]);
     const result = await applyScan(code, booking.id, items, checked, scanLookup, scannedSet);
@@ -163,7 +171,7 @@ function Wizard({ booking }: { booking: BookingDetail }) {
       setChecked((p) => ({ ...p, [result.key!]: true }));
       if (result.scannedUnitId) {
         if (result.scannedKind === 'camera') {
-          setScannedCameraUnitId(result.scannedUnitId);
+          setScannedCameraUnitIds((p) => p.includes(result.scannedUnitId!) ? p : [...p, result.scannedUnitId!]);
         } else if (result.scannedKind === 'accessory') {
           setScannedAccessoryUnitIds((p) =>
             p.includes(result.scannedUnitId!) ? p : [...p, result.scannedUnitId!]);
@@ -223,7 +231,7 @@ function Wizard({ booking }: { booking: BookingDetail }) {
           renter: { dataUrl: renterSig, name: renterName.trim() },
         },
         scannedUnits: {
-          cameraUnitId: scannedCameraUnitId,
+          cameraUnitIds: scannedCameraUnitIds,
           accessoryUnitIds: scannedAccessoryUnitIds,
         },
       }));

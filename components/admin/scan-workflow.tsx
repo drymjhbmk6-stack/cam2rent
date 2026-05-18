@@ -59,6 +59,8 @@ export interface GroupedItem {
 export interface ScanLookup {
   cameraSerial: string | null;
   cameraUnitId: string | null;
+  /** Pro Kamera-Slot: Slot-Key + (normalisierte) Seriennr + unit_id. */
+  cameraSlots: { key: string; serial: string | null; unitId: string | null }[];
   codeToAccessory: Map<string, string>;
   codeToUnit: Map<string, string>;
   scannableCount: number;
@@ -70,6 +72,11 @@ export interface ScanWorkflowInput {
   resolvedItems?: ResolvedItem[];
   unitCodes?: UnitCode[];
   unitId?: string | null;
+  /**
+   * Multi-Kamera: pro physischer Kamera Name + eigene Seriennr + unit_id.
+   * Wenn gesetzt, hat das Vorrang vor productName-Split + serialNumber.
+   */
+  cameras?: { product_name: string; serial_number?: string | null; unit_id?: string | null }[];
   /**
    * Wenn true, wird KEIN "Rücksendeetikett beilegen"-Slot angehaengt.
    * Sinnvoll fuer den Retouren-Workflow.
@@ -135,27 +142,23 @@ export function expandItems(b: ScanWorkflowInput): PackItem[] {
   // ("OSMO Action 5 Pro , OSMO Action 5 Pro"). Pro Kamera ein Slot. Der
   // erste behaelt key 'camera' (scanbar, Seriennummer), die weiteren sind
   // manuell abzuhaken — alle gruppieren als EIN "Kamera N/M"-Block.
-  const cameraNames = (b.productName ?? '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
-  if (cameraNames.length <= 1) {
+  const camArr: { name: string; serial: string | null }[] =
+    Array.isArray(b.cameras) && b.cameras.length > 0
+      ? b.cameras.map((c) => ({ name: c.product_name, serial: c.serial_number ?? null }))
+      : (b.productName ?? '')
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+          .map((nm, i) => ({ name: nm, serial: i === 0 ? (b.serialNumber ?? null) : null }));
+  const camList = camArr.length > 0 ? camArr : [{ name: b.productName, serial: b.serialNumber ?? null }];
+  camList.forEach((cam, i) => {
     out.push({
-      key: 'camera',
+      key: i === 0 ? 'camera' : `camera::${i}`,
       type: 'camera',
-      label: b.productName,
-      subLabel: b.serialNumber ? `Seriennummer: ${b.serialNumber}` : 'Kamera',
+      label: cam.name,
+      subLabel: cam.serial ? `Seriennummer: ${cam.serial}` : 'Kamera',
     });
-  } else {
-    cameraNames.forEach((nm, i) => {
-      out.push({
-        key: i === 0 ? 'camera' : `camera::${i}`,
-        type: 'camera',
-        label: nm,
-        subLabel: i === 0 && b.serialNumber ? `Seriennummer: ${b.serialNumber}` : 'Kamera',
-      });
-    });
-  }
+  });
   for (const it of items) {
     if (!it.isFromSet && usedSetNames.has(it.name)) continue;
     const parts = Array.isArray(it.included_parts) && it.included_parts.length > 0
@@ -225,12 +228,32 @@ export function buildScanLookup(b: ScanWorkflowInput): ScanLookup {
       codeToUnit.set(norm, u.id);
     }
   }
+  const camSrc: { serial: string | null; unitId: string | null }[] =
+    Array.isArray(b.cameras) && b.cameras.length > 0
+      ? b.cameras.map((c) => ({ serial: c.serial_number ?? null, unitId: c.unit_id ?? null }))
+      : (b.productName ?? '')
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+          .map((_, i) => ({
+            serial: i === 0 ? (b.serialNumber ?? null) : null,
+            unitId: i === 0 ? (b.unitId ?? null) : null,
+          }));
+  const camList = camSrc.length > 0 ? camSrc : [{ serial: b.serialNumber ?? null, unitId: b.unitId ?? null }];
+  const cameraSlots = camList.map((c, i) => ({
+    key: i === 0 ? 'camera' : `camera::${i}`,
+    serial: c.serial ? normalizeCode(c.serial) : null,
+    unitId: c.unitId ?? null,
+  }));
+  const scannableCameras = cameraSlots.filter((s) => s.serial).length;
+
   return {
-    cameraSerial: b.serialNumber ? normalizeCode(b.serialNumber) : null,
-    cameraUnitId: b.unitId ?? null,
+    cameraSerial: cameraSlots[0]?.serial ?? null,
+    cameraUnitId: cameraSlots[0]?.unitId ?? null,
+    cameraSlots,
     codeToAccessory,
     codeToUnit,
-    scannableCount: (b.serialNumber ? 1 : 0) + codeToAccessory.size,
+    scannableCount: scannableCameras + codeToAccessory.size,
   };
 }
 
@@ -255,16 +278,17 @@ export async function applyScan(
   const code = normalizeCode(rawCode);
   if (!code) return { ok: false, message: 'Leerer Code.' };
 
-  if (lookup.cameraSerial && lookup.cameraSerial === code) {
-    if (checked['camera']) {
+  const camHit = lookup.cameraSlots.find((s) => s.serial && s.serial === code);
+  if (camHit) {
+    if (checked[camHit.key]) {
       return { ok: false, alreadyChecked: true, message: `Kamera (${rawCode}) schon abgehakt.` };
     }
     return {
       ok: true,
-      key: 'camera',
+      key: camHit.key,
       message: `✓ Kamera (${rawCode})`,
       scannedKind: 'camera',
-      scannedUnitId: lookup.cameraUnitId ?? undefined,
+      scannedUnitId: camHit.unitId ?? undefined,
     };
   }
 
