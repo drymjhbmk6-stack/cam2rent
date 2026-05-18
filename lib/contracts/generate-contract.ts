@@ -426,6 +426,44 @@ export async function generateContractPDF(opts: {
     ? opts.accessoryItems.map((i) => ({ id: i.accessory_id, qty: i.qty }))
     : opts.accessories.map((id) => ({ id, qty: 1 }));
 
+  // Seriennummer der zugewiesenen Kamera aufloesen (analog Buchungs-Detail):
+  // viele Aufrufer (u.a. regenerate-contract) uebergeben keine serialNumber,
+  // die Buchung kennt sie aber ueber unit_id. Datenmodell trackt EINE
+  // Kamera-Unit pro Buchung → Seriennr. nur auf der ersten Kamera-Zeile.
+  let effectiveSerial = opts.serialNumber || '';
+  if (!effectiveSerial && resolveUnitId) {
+    try {
+      const sb2 = createServiceClient();
+      const { data: audit } = await sb2
+        .from('migration_audit')
+        .select('neue_id')
+        .eq('alte_tabelle', 'product_units')
+        .eq('alte_id', resolveUnitId)
+        .eq('neue_tabelle', 'inventar_units')
+        .maybeSingle();
+      const neueId = (audit as { neue_id?: string } | null)?.neue_id;
+      if (neueId) {
+        const { data: iu } = await sb2
+          .from('inventar_units')
+          .select('seriennummer, inventar_code, bezeichnung')
+          .eq('id', neueId)
+          .maybeSingle();
+        const u = iu as { seriennummer: string | null; inventar_code: string | null; bezeichnung: string } | null;
+        effectiveSerial = u?.seriennummer ?? u?.inventar_code ?? u?.bezeichnung ?? '';
+      }
+      if (!effectiveSerial) {
+        const { data: pu } = await sb2
+          .from('product_units')
+          .select('serial_number')
+          .eq('id', resolveUnitId)
+          .maybeSingle();
+        effectiveSerial = (pu as { serial_number?: string } | null)?.serial_number ?? '';
+      }
+    } catch {
+      // Seriennr. bleibt leer
+    }
+  }
+
   const items: MietgegenstandItem[] = opts.items && opts.items.length > 0
     ? opts.items
     : (() => {
@@ -442,7 +480,7 @@ export async function generateContractPDF(opts: {
           .map((nm, i) => ({
             position: i + 1,
             bezeichnung: nm,
-            seriennr: i === 0 ? (opts.serialNumber || '') : '',
+            seriennr: i === 0 ? effectiveSerial : '',
             tage: opts.rentalDays,
             preis: i === 0 ? opts.priceRental : 0,
             wiederbeschaffungswert,
