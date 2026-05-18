@@ -414,18 +414,24 @@ async function computeLiabilitySummary(
     cameraSource = productDeposit > 0 ? 'product_deposit' : 'unknown';
   }
 
-  // Mehrere Kameras (Warenkorb-Buchung): product_name ist kommagetrennt.
-  // Bei Override ist es ein einzelner Katalogname → count 1.
-  const cameraCount = cameraOverridden
-    ? 1
-    : Math.max(1, String(cameraName).split(',').map((s) => s.trim()).filter(Boolean).length);
-  const cameraLine: Line = {
-    name: cameraName,
-    qty: cameraCount,
+  // Mehrere Kameras (Warenkorb-Buchung): product_name ist kommagetrennt →
+  // PRO Kamera eine eigene WBW-Zeile mit eigenem Wert. Bei Override ist es
+  // ein einzelner Katalogname → genau eine Zeile.
+  const cameraNamesList = cameraOverridden
+    ? [String(cameraName)]
+    : (() => {
+        const parts = String(cameraName).split(',').map((s) => s.trim()).filter(Boolean);
+        return parts.length > 0 ? parts : [String(cameraName)];
+      })();
+  const cameraCount = cameraNamesList.length;
+  const cameraLines: Line[] = cameraNamesList.map((nm) => ({
+    name: nm,
+    qty: 1,
     unit_value: cameraValue,
-    total_value: cameraValue * cameraCount,
+    total_value: cameraValue,
     source: cameraSource,
-  };
+  }));
+  const cameraLine: Line = cameraLines[0];
 
   // 2. Zubehoer + Sets (auf Sub-Items expandiert) → Set-Container ueberspringen,
   // weil wir die Sub-Items mitgezaehlt haben (vermeidet Doppelzaehlung).
@@ -565,7 +571,7 @@ async function computeLiabilitySummary(
   }
 
   const accessoriesTotal = accessoryLines.reduce((s, l) => s + l.total_value, 0);
-  const totalWbw = cameraValue + accessoriesTotal;
+  const totalWbw = cameraValue * cameraCount + accessoriesTotal;
 
   // 3. Kunden-Maximum je nach Haftungsoption
   // booking.haftung Werte: 'standard' (Basis), 'premium', sonst (null/'none'/'')
@@ -598,6 +604,7 @@ async function computeLiabilitySummary(
 
   return {
     camera: cameraLine,
+    cameras: cameraLines,
     accessories: accessoryLines,
     total_wbw: Math.round(totalWbw * 100) / 100,
     accessories_total: Math.round(accessoriesTotal * 100) / 100,

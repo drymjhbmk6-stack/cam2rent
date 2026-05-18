@@ -78,6 +78,7 @@ interface LiabilityLine {
 
 interface LiabilitySummary {
   camera: LiabilityLine;
+  cameras?: LiabilityLine[];
   accessories: LiabilityLine[];
   total_wbw: number;
   accessories_total: number;
@@ -1950,7 +1951,9 @@ function LiabilitySection({
 
         {/* Breakdown */}
         <div className="bg-brand-bg-soft rounded-lg p-3 space-y-1.5">
-          <LiabilityLineRow line={summary.camera} />
+          {(summary.cameras && summary.cameras.length > 0 ? summary.cameras : [summary.camera]).map((line, i) => (
+            <LiabilityLineRow key={`cam-${i}`} line={line} />
+          ))}
           {summary.accessories.map((line, i) => (
             <LiabilityLineRow key={i} line={line} />
           ))}
@@ -1995,9 +1998,12 @@ function WbwFinalizePanel({ booking, onChanged }: { booking: BookingDetail; onCh
   const initialRows = (() => {
     const sum = booking.liability_summary;
     if (!sum) return [] as { name: string; serial: string | null; value: string }[];
-    const rows: { name: string; serial: string | null; value: string }[] = [
-      { name: sum.camera.name, serial: booking.serial_number || null, value: String(sum.camera.total_value || '') },
-    ];
+    const camList = sum.cameras && sum.cameras.length > 0 ? sum.cameras : [sum.camera];
+    const rows: { name: string; serial: string | null; value: string }[] = camList.map((c, i) => ({
+      name: c.name,
+      serial: i === 0 ? (booking.serial_number || null) : null,
+      value: String(c.total_value || ''),
+    }));
     for (const a of sum.accessories) {
       rows.push({ name: a.name, serial: null, value: String(a.total_value || '') });
     }
