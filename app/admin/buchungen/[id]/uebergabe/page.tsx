@@ -348,6 +348,36 @@ function Stepper({ step }: { step: Step }) {
   );
 }
 
+function EquipmentSummary({ booking }: { booking: BookingDetail }) {
+  const items = booking.resolved_items ?? [];
+  return (
+    <div className="mt-3 pt-3 border-t border-slate-800">
+      <div className="text-slate-500 text-xs uppercase tracking-wider mb-1.5">Mietgegenstände</div>
+      <ul className="space-y-1 text-sm">
+        <li className="flex justify-between gap-3">
+          <span className="font-medium">
+            📷 {booking.product_name}
+            {booking.serial_number ? <span className="text-slate-400 font-normal"> · SN {booking.serial_number}</span> : null}
+          </span>
+          <span className="text-slate-400 shrink-0">1×</span>
+        </li>
+        {items.map((it, i) => (
+          <li
+            key={i}
+            className={`flex justify-between gap-3 ${it.isFromSet ? 'pl-4 text-slate-300' : 'font-medium'}`}
+          >
+            <span className="min-w-0 truncate">
+              {it.isFromSet ? '└ ' : '🎒 '}{it.name}
+            </span>
+            <span className="text-slate-400 shrink-0">{it.qty}×</span>
+          </li>
+        ))}
+        {items.length === 0 && <li className="text-slate-500 italic">Kein Zubehör gebucht</li>}
+      </ul>
+    </div>
+  );
+}
+
 function BookingInfo({ booking }: { booking: BookingDetail }) {
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 mb-6 text-sm">
@@ -361,6 +391,7 @@ function BookingInfo({ booking }: { booking: BookingDetail }) {
           <div>{booking.delivery_mode === 'abholung' ? 'Abholung' : 'Versand'}</div>
         </div>
       </div>
+      <EquipmentSummary booking={booking} />
     </div>
   );
 }
@@ -578,7 +609,9 @@ function Step2Sign(props: {
         <div className="bg-white rounded-lg overflow-hidden">
           <SignatureCanvas
             ref={sigRef}
-            penColor="black"
+            penColor="#0f172a"
+            minWidth={1.5}
+            maxWidth={3}
             canvasProps={{ className: 'w-full h-48' }}
             onEnd={capture}
           />
@@ -681,6 +714,10 @@ function DoneView({ booking, handover }: { booking: BookingDetail; handover: Han
             </div>
           )}
 
+          <div className="mb-4 bg-slate-950/50 rounded-lg p-3 border border-slate-800">
+            <EquipmentSummary booking={booking} />
+          </div>
+
           <div className="mb-4">
             <div className="text-xs uppercase tracking-wider text-slate-500 mb-1">Zustand</div>
             <ul className="text-sm space-y-1">
@@ -709,13 +746,13 @@ function DoneView({ booking, handover }: { booking: BookingDetail; handover: Han
               <div className="text-xs uppercase tracking-wider text-slate-500 mb-1">Vermieter</div>
               <div className="font-medium text-sm mb-1">{handover.signatures.landlord.name}</div>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={handover.signatures.landlord.dataUrl} alt="Vermieter-Signatur" className="bg-white rounded p-1 max-h-24" />
+              <img src={handover.signatures.landlord.dataUrl} alt="Vermieter-Signatur" className="w-full bg-white rounded-lg p-2 h-32 object-contain border border-slate-300" />
             </div>
             <div>
               <div className="text-xs uppercase tracking-wider text-slate-500 mb-1">Mieter</div>
               <div className="font-medium text-sm mb-1">{handover.signatures.renter.name}</div>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={handover.signatures.renter.dataUrl} alt="Mieter-Signatur" className="bg-white rounded p-1 max-h-24" />
+              <img src={handover.signatures.renter.dataUrl} alt="Mieter-Signatur" className="w-full bg-white rounded-lg p-2 h-32 object-contain border border-slate-300" />
             </div>
           </div>
         </div>
