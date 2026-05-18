@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { releaseAccessoryUnitsFromBooking } from '@/lib/accessory-unit-assignment';
 import { logAudit } from '@/lib/audit';
+import { resolveBookingCameras } from '@/lib/booking-cameras';
 
 /**
  * POST /api/admin/return-booking
@@ -39,7 +40,7 @@ export async function POST(req: NextRequest) {
     // Buchung laden
     const { data: booking, error: fetchErr } = await supabase
       .from('bookings')
-      .select('id, product_id, accessories, status')
+      .select('id, product_id, product_name, cameras, accessories, status')
       .eq('id', bookingId)
       .single();
 
@@ -98,22 +99,37 @@ export async function POST(req: NextRequest) {
         });
     }
 
-    // 2. Kamera-Lagerbestand erhöhen
-    const productId = booking.product_id as string;
-    const { data: configRow } = await supabase
-      .from('admin_config')
-      .select('value')
-      .eq('key', 'products')
-      .maybeSingle();
+    // 2. Kamera-Lagerbestand erhöhen — pro Kamera-Modell so oft wie die
+    // Buchung Kameras dieses Modells enthält (Multi-Kamera / gemischte
+    // Modelle). Legacy/cameras=NULL → Resolver liefert eine Kamera = +1.
+    const returnedByProduct = new Map<string, number>();
+    for (const cam of resolveBookingCameras(booking)) {
+      const pid = cam.product_id ?? (booking.product_id as string | null);
+      if (!pid) continue;
+      returnedByProduct.set(pid, (returnedByProduct.get(pid) ?? 0) + 1);
+    }
+    if (returnedByProduct.size > 0) {
+      const { data: configRow } = await supabase
+        .from('admin_config')
+        .select('value')
+        .eq('key', 'products')
+        .maybeSingle();
 
-    if (configRow?.value && typeof configRow.value === 'object') {
-      const products = configRow.value as Record<string, { stock: number }>;
-      if (products[productId]) {
-        products[productId].stock = (products[productId].stock ?? 0) + 1;
-        await supabase
-          .from('admin_config')
-          .update({ value: products, updated_at: new Date().toISOString() })
-          .eq('key', 'products');
+      if (configRow?.value && typeof configRow.value === 'object') {
+        const products = configRow.value as Record<string, { stock: number }>;
+        let touched = false;
+        for (const [pid, n] of returnedByProduct) {
+          if (products[pid]) {
+            products[pid].stock = (products[pid].stock ?? 0) + n;
+            touched = true;
+          }
+        }
+        if (touched) {
+          await supabase
+            .from('admin_config')
+            .update({ value: products, updated_at: new Date().toISOString() })
+            .eq('key', 'products');
+        }
       }
     }
 

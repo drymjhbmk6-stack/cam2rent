@@ -1255,6 +1255,56 @@ WBW-Box/-Vorschlag und Verfügbarkeit automatisch nachziehen (alles liest live a
     (scanbar via Seriennummer — die `applyScan`-Logik referenziert `'camera'`
     hart), die weiteren `camera::1..` (manuell). `groupItems` fasst alle
     `type:'camera'` zu EINER Gruppe → „Kamera 0/N"-Counter.
+
+#### Echtes Multi-Unit-Datenmodell — beliebig viele Kameras, gemischte Modelle (Stand 2026-05-18)
+**Löst das obige Komma-String-Pflaster ab.** Der `product_name`-Split blieb
+als Legacy-Fallback erhalten; neue Buchungen tracken jede Kamera als eigenes
+physisches Exemplar (eigene Seriennr + eigener Wert), auch verschiedene Modelle
+in einer Buchung.
+- **Spalte `bookings.cameras JSONB`** (Migration `supabase/supabase-bookings-cameras.sql`):
+  ein Eintrag pro Kamera `{product_id,product_name,unit_id|null}`. NULL ⇒
+  `lib/booking-cameras.ts:resolveBookingCameras()` leitet es aus
+  `product_name`-Split + `product_id` + `unit_id` ab (erste Kamera = `unit_id`)
+  → Altbuchungen verhalten sich exakt wie bisher. `unit_id`/`product_name`
+  bleiben synchron befüllt (erste Kamera / Komma-Join) für unangetasteten
+  Legacy-Code. Helper: `resolveBookingCameras`, `desiredFromBooking`,
+  `buildCameraSkeleton`, `countBookingCameras`.
+- **Race-sichere RPC `assign_free_camera_units`** (`supabase/supabase-camera-unit-assignment.sql`,
+  selber Advisory-Lock-Key wie `assign_free_unit`; letztere zählt jetzt auch
+  `cameras[]` als belegt). `lib/camera-unit-assignment.ts:assignCamerasToBooking()`
+  schreibt das Skelett, füllt pro `product_id` die Slots, synct
+  `unit_id`=erste Kamera. Verdrahtet (statt Einzel-`assignUnitToBooking`) in
+  confirm-cart (Primär + Webhook-Race-Recovery), confirm-booking,
+  manual-booking (Admin-Komma-Liste, vom Admin gewählte `unit_id` = 1. Kamera),
+  stripe-webhook (Single + Cart).
+- **Verfügbarkeit**: `/api/availability/[productId]` zweite Query
+  `.contains('cameras',[{product_id}])` + Zählung via `resolveBookingCameras`
+  pro Produkt → gemischte Modelle blockieren ihr eigenes Produkt korrekt
+  (kein Doppelbuchen mehr). `lib/unit-assignment.findFreeUnit` belegt =
+  `unit_id` ODER `cameras[].unit_id` (modellübergreifend, kein product_id-
+  Filter). `availability-gantt`: pro Kamera ein Overlay-Eintrag mit deren
+  `unit_id`, gruppiert nach deren Produkt.
+- **WBW/Seriennr** (`booking/[id]` GET): `cameras_resolved[]` mit Seriennr je
+  Unit; `computeLiabilitySummary` → `resolveCamWbw` pro Kamera über DEREN
+  `unit_id` (Asset→Inventar-Unit→Inventar-Schnitt je Produkt→Kaution),
+  `total_wbw`=Σ Zeilen. Override-Pfad unverändert.
+- **Vertrag/Packliste**: `generate-contract` pro Kamera eigene Zeile mit
+  eigener Seriennr (`resolveSerial`) + eigenem WBW (Floor = Kaution/Kamera).
+  Packliste-Route + PDF: `data.cameras[]` → richtige Seriennr je Kamera-Seite.
+  Rechnung unverändert (zeigt nur Namen). Legacy ohne `bookingId`/`cameras` →
+  alte Split-Pfade.
+- **Scan/Pack/Übergabe**: `ScanLookup.cameraSlots[]` (Slot+Seriennr+unit_id je
+  Kamera), `applyScan` matcht jeden Kamera-Code auf seinen Slot;
+  `ScannedUnits.cameraUnitIds[]` (`cameraUnitId` weiter back-compat geparst),
+  `applyScannedUnits` substituiert pro Kamera in `cameras[]` nach Produkt +
+  flippt `product_units`-Status. packen/uebergabe senden `cameraUnitIds[]`.
+- **Retoure**: `return-booking` erhöht Stock pro Kamera-**Modell** so oft wie
+  Kameras dieses Modells in der Buchung (statt 1×).
+- **Schaden**: Spalte `damage_reports.camera_unit_id` (Migration
+  `supabase/supabase-damage-reports-camera-unit.sql`) als Daten-Fundament
+  angelegt. **Offen (Folge-Change):** dedizierter Pro-Kamera-Schaden-Modal
+  analog `AccessoryDamageModal` — bewusst NICHT halbfertig mitgeliefert.
+
 #### Verfügbarkeits-Unterzählung bei Multi-Kamera-/Mengen-Buchungen (Stand 2026-05-18)
 Gleicher Concat-Name-Effekt traf die Verfügbarkeit — eine 2-Kamera-Buchung (1 Zeile) zählte als 1 Einheit, ein 2er-Bestand zeigte fälschlich noch „verfügbar" → Kunde konnte überbuchen.
 - **Fix Kunden-Kalender** `app/api/availability/[productId]/route.ts`: `product_name` mitselektiert; pro überlappender Buchung `bookedCount += max(1, product_name.split(',').filter().length)` statt `bookedCount++` (gleiche Comma-Split-Konvention wie WBW/Invoice/Pack/Contract).
@@ -2259,6 +2309,17 @@ Zusätzlich zum bestehenden file-hash-Check (byte-identische Datei) erkennt das 
 **Audit-Aktionen:** `beleg.dismiss_duplicate`, `beleg.scan_duplicates`. `beleg.ocr` enthält jetzt `duplicate_kind: 'strict'|'soft'|null` in changes.
 
 ### Noch offen
+- **Multi-Kamera-Migrationen auszuführen (3, idempotent):**
+  `supabase/supabase-bookings-cameras.sql` (Spalte `bookings.cameras JSONB`),
+  `supabase/supabase-camera-unit-assignment.sql` (RPC `assign_free_camera_units`
+  + `assign_free_unit`-Update inkl. cameras[]-Belegung),
+  `supabase/supabase-damage-reports-camera-unit.sql` (`damage_reports.camera_unit_id`).
+  Ohne die Migrationen läuft alles über den defensiven Legacy-Fallback
+  (`resolveBookingCameras` aus `product_name`/`unit_id`) — gemischte Modelle
+  / echtes Multi-Unit-Tracking greifen erst NACH den Migrationen. RPC fehlt ⇒
+  `assignCamerasToBooking` no-op (Buchung ok, nur keine Kamera-Zuweisung).
+  Empfohlen ASAP ausführen. **Folge-Change offen:** Pro-Kamera-Schaden-Modal
+  (analog `AccessoryDamageModal`) — Spalte ist da, UI fehlt bewusst.
 - **Buchungsnummer-Counter-Migration auszuführen:** `supabase/supabase-booking-id-counter.sql` (idempotent). Legt Tabelle `booking_id_counter` + RPC `next_booking_counter` an, seedet aus existierenden `bookings.id`-Suffixen. Ohne Migration läuft `generateBookingId()` über den Fallback (COUNT-Kandidat + SELECT-Verifikation gegen `bookings.id` mit Suffix-Increment-Loop) — sequenziell sicher, aber NICHT parallel-sicher. Mit Migration zusätzlich parallel-sicher via atomarem `INSERT ON CONFLICT`. Empfohlen ASAP ausführen.
 - **Belege-Duplikat-Migration auszuführen:** `supabase/supabase-belege-content-dedup.sql` (idempotent). Drei neue Spalten auf `belege`. Ohne Migration laufen OCR/Anlage/PATCH per defensivem Retry weiter (Verdacht-Flag wird einfach nicht persistiert), Dismiss-Endpoint liefert 503, Festschreiben blockt nichts. Nach Migration sofort einmal „🔍 Duplikate scannen" auf `/admin/buchhaltung/belege` klicken — markiert die bereits eingebuchten Duplikate.
 - **Wiederbeschaffungswert-Migration auszuführen:** `supabase/supabase-assets-replacement-value-estimate.sql` (idempotent). Legt Spalte `assets.replacement_value_estimate` an. Ohne Migration laufen GWG-Anlage und Anlagen-POST per defensivem Retry weiter ohne die Spalte; Vertrag und Zubehör-Schaden-Modal fallen dann auf den Buchwert zurueck (bei GWG = 0 EUR — fuehrt zu falschen Vorschlaegen).
