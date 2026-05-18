@@ -754,17 +754,64 @@ export async function PATCH(
       }
     }
 
-    // Mutation — neue Units ZUERST zuweisen (alte bleiben vorerst 'rented'),
-    // damit ein Race bei der RPC sauber zurueckgerollt werden kann.
+    // Mutation — DELTA-basiert. Bestehende Units der Buchung bleiben fuer
+    // unveraenderte/reduzierte Positionen erhalten (kein Churn, kein
+    // Self-Kollision: nur den ECHTEN Zuwachs neu zuweisen). Sonst wuerde die
+    // RPC fuer ein Teil, dessen einziges Exemplar diese Buchung selbst haelt,
+    // „kein freies Exemplar" melden, obwohl sich gar nichts geaendert hat.
     const oldUnitIds: string[] = Array.isArray(booking.accessory_unit_ids)
       ? (booking.accessory_unit_ids as string[]).filter(Boolean)
       : [];
-    const assignRes = await assignAccessoryUnitsToBooking(
-      id,
-      newItems,
-      String(booking.rental_from),
-      String(booking.rental_to),
-    );
+
+    // Bestehende Unit→Accessory-Zuordnung laden
+    let unitAcc: { id: string; accessory_id: string }[] = [];
+    if (oldUnitIds.length > 0) {
+      const { data: ua } = await supabase
+        .from('accessory_units')
+        .select('id, accessory_id')
+        .in('id', oldUnitIds);
+      unitAcc = (ua ?? []) as { id: string; accessory_id: string }[];
+    }
+    const unitsByAcc = new Map<string, string[]>();
+    for (const u of unitAcc) {
+      const arr = unitsByAcc.get(u.accessory_id) ?? [];
+      arr.push(u.id);
+      unitsByAcc.set(u.accessory_id, arr);
+    }
+    const resolvableOld = new Set(unitAcc.map((u) => u.id));
+
+    const newQtyMap = new Map(newItems.map((i) => [i.accessory_id, i.qty]));
+    const allAccIds = new Set<string>([...unitsByAcc.keys(), ...newItems.map((i) => i.accessory_id)]);
+
+    const keptUnitIds: string[] = [];
+    const releaseUnitIds: string[] = [];
+    const deltaItems: { accessory_id: string; qty: number }[] = [];
+    for (const accId of allAccIds) {
+      const existing = unitsByAcc.get(accId) ?? [];
+      const want = newQtyMap.get(accId) ?? 0;
+      const oQ = oldQty.get(accId) ?? 0;
+      const keep = existing.slice(0, want);
+      keptUnitIds.push(...keep);
+      releaseUnitIds.push(...existing.slice(keep.length));
+      // Nur bei echtem Zuwachs (oder neu hinzugefuegt) Units nachfordern —
+      // exakt das Delta, das die Verfuegbarkeitspruefung oben validiert hat.
+      const assignQty = oQ === 0 ? want : (want > oQ ? want - oQ : 0);
+      if (assignQty > 0) deltaItems.push({ accessory_id: accId, qty: assignQty });
+    }
+    // Alte Unit-IDs ohne aufloesbares Accessory (geloeschte Unit-Row) freigeben
+    for (const uid of oldUnitIds) {
+      if (!resolvableOld.has(uid)) releaseUnitIds.push(uid);
+    }
+
+    const assignRes = deltaItems.length > 0
+      ? await assignAccessoryUnitsToBooking(
+          id,
+          deltaItems,
+          String(booking.rental_from),
+          String(booking.rental_to),
+        )
+      : { assigned: {} as Record<string, string[]>, missing: [] as string[] };
+
     if (assignRes.missing.length > 0) {
       // Race zwischen Pruefung und RPC — frisch zugewiesene Units freigeben,
       // Array auf alten Stand zuruecksetzen, Buchung bleibt unveraendert.
@@ -773,19 +820,27 @@ export async function PATCH(
         try { await releaseAccessoryUnitsFromBooking(id, fresh); } catch { /* best-effort */ }
       }
       await supabase.from('bookings').update({ accessory_unit_ids: oldUnitIds }).eq('id', id);
+      const { data: missAcc } = await supabase
+        .from('accessories')
+        .select('id, name')
+        .in('id', assignRes.missing);
+      const nameMap = new Map((missAcc ?? []).map((a) => [a.id as string, a.name as string]));
+      const missNames = assignRes.missing.map((mid) => nameMap.get(mid) ?? mid);
       return NextResponse.json(
-        { error: `Exemplar wurde zwischenzeitlich vergeben: ${assignRes.missing.join(', ')}. Änderung wurde NICHT gespeichert.` },
+        { error: `Im Mietzeitraum nicht genug freie Exemplare: ${missNames.join(', ')}. Änderung wurde NICHT gespeichert.` },
         { status: 409 },
       );
     }
-    const newUnitIds = Object.values(assignRes.assigned).flat();
+    const freshUnitIds = Object.values(assignRes.assigned).flat();
+    const finalUnitIds = [...keptUnitIds, ...freshUnitIds];
 
-    // Alte Units freigeben (nur Status, schont Units in anderen Buchungen)
-    if (oldUnitIds.length > 0) {
+    // Ueberzaehlige / entfernte Units freigeben (nur Status, schont Units in
+    // anderen aktiven Buchungen)
+    if (releaseUnitIds.length > 0) {
       try {
-        await releaseAccessoryUnitsFromBooking(id, oldUnitIds);
+        await releaseAccessoryUnitsFromBooking(id, releaseUnitIds);
       } catch (e) {
-        console.error('[booking-accessory-edit] release old units failed:', e);
+        console.error('[booking-accessory-edit] release surplus units failed:', e);
       }
     }
 
@@ -802,7 +857,7 @@ export async function PATCH(
     const upd: Record<string, unknown> = {
       accessory_items: newItems,
       accessories: [...new Set(newItems.map((i) => i.accessory_id))],
-      accessory_unit_ids: newUnitIds,
+      accessory_unit_ids: finalUnitIds,
       notes: `${existingNotes}${noteLine}`,
     };
     if (priceValid) upd.price_total = newPrice;
