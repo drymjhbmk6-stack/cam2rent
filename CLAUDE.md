@@ -1177,6 +1177,26 @@ WBW-Box/-Vorschlag und Verfügbarkeit automatisch nachziehen (alles liest live a
   gleichnamige Einträge (z.B. zwei „Selfi-Stick"). Neue Prop `options`
   (id/name/kind/compat) ersetzt `accessoryList` nur in dieser Komponente;
   `LiabilitySection` nutzt weiterhin unverändert `accessoryList`.
+- **Set-Teile weich behandelt (Stand 2026-05-18, Fix):** Symptom — Set
+  hinzufügen → 409 „nicht genug freie Exemplare: Extra Akku, 64 GB,
+  Selfi-Stick, …" obwohl im Shop buchbar. Ursache: Set-Bestandteile sind oft
+  set-only Accessories ohne eigene `accessory_units`/mit `available_qty=0`
+  (es gibt teils gleichnamige Dubletten — eine kundenseitige + eine
+  interne/Set-Variante). Die harte Pre-Check- **und** die
+  Unit-Assign-`missing`-Logik lehnten diese ab, während der **Kunden-Set-Flow
+  sie nie hart prüft** (`confirm-cart`: `assignAccessoryUnitsToBooking` für
+  Sets ist non-blocking; Set-Verfügbarkeit ist Set-Ebene/soft laut
+  Architektur-Regel). Fix: nur **direkt gewählte Einzel-Accessories**
+  (`directExpanded`, = rawSelection ohne Set-IDs, via `resolveAccessoryItems`)
+  werden hart auf Verfügbarkeit geprüft und bei fehlenden Units hart
+  abgelehnt (`missingDirect`). Set-expandierte Teile werden weich behandelt:
+  Units werden best-effort zugewiesen wo vorhanden, fehlende Set-Teil-Units
+  blockieren die Änderung NICHT (kein Rollback, `accessory_unit_ids` =
+  kept+fresh-partial) — exakt wie eine Set-Buchung im Shop. 409-Meldung für
+  direkte Items zeigt jetzt `Name (benötigt X, frei Y)`. Reine
+  Accessory-Edits ohne Set: `directRaw == rawSelection` → Verhalten 1:1 wie
+  zuvor, keine Regression. Überbuchen einzeln gewählter Accessories bleibt
+  hart verhindert.
 - **Mutation near-atomar:** neue Units zuerst via
   `assignAccessoryUnitsToBooking` (alte bleiben vorerst `rented`); bei
   `missing>0` (Race) → frische Units freigeben + `accessory_unit_ids` auf alt

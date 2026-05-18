@@ -727,14 +727,16 @@ export async function PATCH(
     // Speicherung) nur mit echten Accessories. Konsistent mit dem Verhalten
     // "Set-Teile werden eigenstaendige Positionen".
     const rawIds = rawSelection.map((i) => i.accessory_id);
+    const selectedSetIds = new Set<string>();
     if (rawIds.length > 0) {
       const [accChk, setChk] = await Promise.all([
         supabase.from('accessories').select('id').in('id', rawIds),
         supabase.from('sets').select('id').in('id', rawIds),
       ]);
+      for (const s of setChk.data ?? []) selectedSetIds.add(s.id as string);
       const known = new Set<string>([
         ...((accChk.data ?? []).map((a) => a.id as string)),
-        ...((setChk.data ?? []).map((s) => s.id as string)),
+        ...selectedSetIds,
       ]);
       const unknown = rawIds.filter((i) => !known.has(i));
       if (unknown.length > 0) {
@@ -742,6 +744,30 @@ export async function PATCH(
           { error: `Unbekanntes Zubehör/Set: ${unknown.join(', ')}` },
           { status: 422 },
         );
+      }
+    }
+
+    // Direkt gewählte Einzel-Accessories (KEINE Sets). Nur DIESE werden hart
+    // auf Verfügbarkeit geprüft + bei fehlenden Units hart abgelehnt. Set-
+    // Teile werden — wie im Kunden-Buchungsflow (confirm-cart: Set-Reservierung
+    // non-blocking, Set-Verfügbarkeit auf Set-Ebene) — weich behandelt: sie
+    // werden zugewiesen wo möglich, blockieren die Änderung aber nicht, wenn
+    // ein Set-Bestandteil kein Einzel-Exemplar hat (genau wie eine normale
+    // Set-Buchung im Shop, die solche Teile auch nicht hart prüft).
+    const directRaw = rawSelection.filter((r) => !selectedSetIds.has(r.accessory_id));
+    const directExpanded = new Map<string, number>();
+    if (directRaw.length > 0) {
+      try {
+        const dResolved = await resolveAccessoryItems(supabase, directRaw);
+        for (const r of dResolved) {
+          if (!r.accessory_id) continue;
+          directExpanded.set(
+            r.accessory_id,
+            (directExpanded.get(r.accessory_id) ?? 0) + (r.qty || 0),
+          );
+        }
+      } catch (e) {
+        console.error('[booking-accessory-edit] resolve direct selection failed:', e);
       }
     }
 
@@ -835,13 +861,17 @@ export async function PATCH(
           { status: 503 },
         );
       }
+      // Nur DIREKT gewählte Einzel-Accessories hart prüfen — Set-Teile sind
+      // bewusst ausgenommen (Set-Ebene/soft, wie der Shop-Buchungsflow).
       const blocked: string[] = [];
-      for (const it of newItems) {
-        const requiredDelta = it.qty - (oldExpanded.get(it.accessory_id) ?? 0);
-        if (requiredDelta <= 0) continue; // bereits über Buchung/Set gedeckt
-        const av = availMap.get(it.accessory_id);
+      for (const [accId, wantQty] of directExpanded) {
+        const requiredDelta = wantQty - (oldExpanded.get(accId) ?? 0);
+        if (requiredDelta <= 0) continue; // bereits über Buchung gedeckt
+        const av = availMap.get(accId);
         // Kein Eintrag in availMap = Bulk/nicht-trackbar → nicht blockieren.
-        if (av && av.remaining < requiredDelta) blocked.push(av.name);
+        if (av && av.remaining < requiredDelta) {
+          blocked.push(`${av.name} (benötigt ${requiredDelta}, frei ${av.remaining})`);
+        }
       }
       if (blocked.length > 0) {
         return NextResponse.json(
@@ -885,7 +915,11 @@ export async function PATCH(
         )
       : { assigned: {} as Record<string, string[]>, missing: [] as string[] };
 
-    if (assignRes.missing.length > 0) {
+    // Fehlende Units NUR bei DIREKT gewählten Accessories hart ablehnen.
+    // Set-Bestandteile ohne Einzel-Exemplar werden — wie eine normale
+    // Set-Buchung im Shop — weich behandelt (best-effort, blockiert nicht).
+    const missingDirect = assignRes.missing.filter((mid) => directExpanded.has(mid));
+    if (missingDirect.length > 0) {
       // Race zwischen Pruefung und RPC — frisch zugewiesene Units freigeben,
       // Array auf alten Stand zuruecksetzen, Buchung bleibt unveraendert.
       const fresh = Object.values(assignRes.assigned).flat();
@@ -896,9 +930,9 @@ export async function PATCH(
       const { data: missAcc } = await supabase
         .from('accessories')
         .select('id, name')
-        .in('id', assignRes.missing);
+        .in('id', missingDirect);
       const nameMap = new Map((missAcc ?? []).map((a) => [a.id as string, a.name as string]));
-      const missNames = assignRes.missing.map((mid) => nameMap.get(mid) ?? mid);
+      const missNames = missingDirect.map((mid) => nameMap.get(mid) ?? mid);
       return NextResponse.json(
         { error: `Im Mietzeitraum nicht genug freie Exemplare: ${missNames.join(', ')}. Änderung wurde NICHT gespeichert.` },
         { status: 409 },
