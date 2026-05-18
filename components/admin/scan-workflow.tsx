@@ -131,12 +131,31 @@ export function expandItems(b: ScanWorkflowInput): PackItem[] {
     if (it.isFromSet && it.setName) usedSetNames.add(it.setName);
   }
   const out: PackItem[] = [];
-  out.push({
-    key: 'camera',
-    type: 'camera',
-    label: b.productName,
-    subLabel: b.serialNumber ? `Seriennummer: ${b.serialNumber}` : 'Kamera',
-  });
+  // Mehrere Kameras (Warenkorb-Buchung): productName ist kommagetrennt
+  // ("OSMO Action 5 Pro , OSMO Action 5 Pro"). Pro Kamera ein Slot. Der
+  // erste behaelt key 'camera' (scanbar, Seriennummer), die weiteren sind
+  // manuell abzuhaken — alle gruppieren als EIN "Kamera N/M"-Block.
+  const cameraNames = (b.productName ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (cameraNames.length <= 1) {
+    out.push({
+      key: 'camera',
+      type: 'camera',
+      label: b.productName,
+      subLabel: b.serialNumber ? `Seriennummer: ${b.serialNumber}` : 'Kamera',
+    });
+  } else {
+    cameraNames.forEach((nm, i) => {
+      out.push({
+        key: i === 0 ? 'camera' : `camera::${i}`,
+        type: 'camera',
+        label: nm,
+        subLabel: i === 0 && b.serialNumber ? `Seriennummer: ${b.serialNumber}` : 'Kamera',
+      });
+    });
+  }
   for (const it of items) {
     if (!it.isFromSet && usedSetNames.has(it.name)) continue;
     const parts = Array.isArray(it.included_parts) && it.included_parts.length > 0

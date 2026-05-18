@@ -1196,6 +1196,31 @@ WBW-Box/-Vorschlag und Verfügbarkeit automatisch nachziehen (alles liest live a
 - **Nebeneffekt (gewollt):** geänderte Set-Teile verlieren das „(aus Set: …)"-
   Label (flache Positionen). Werte/WBW pro Position bleiben korrekt.
 
+### Multi-Kamera-Buchungen + In-App-PDF-Viewer (Stand 2026-05-18)
+- **Mehrere Kameras pro Buchung** sind als kommagetrennter `bookings.product_name`
+  gespeichert (z.B. „OSMO Action 5 Pro , OSMO Action 5 Pro"), `product_id` bleibt
+  einzeln. Die Rechnung splittete das schon (`lib/invoice-pdf.tsx` →
+  `productName.split(',')`), WBW + Pack/Übergabe NICHT → nur 1 Kamera sichtbar.
+  Fixes:
+  - **WBW** (`computeLiabilitySummary`, `app/api/admin/booking/[id]/route.ts`):
+    `cameraCount = product_name.split(',').filter` → `cameraLine.qty = count`,
+    `total_value = cameraValue * count` (bei `liability_override` = 1). `cameraValue`
+    bleibt der Lookup über das einzelne `product_id`/`unit_id` (Annahme: gleiches
+    Modell ×N — der Concat-Name impliziert das).
+  - **Pack/Übergabe** (`expandItems` in `components/admin/scan-workflow.tsx`):
+    pro kommagetrennter Kamera ein PackItem; der erste behält `key:'camera'`
+    (scanbar via Seriennummer — die `applyScan`-Logik referenziert `'camera'`
+    hart), die weiteren `camera::1..` (manuell). `groupItems` fasst alle
+    `type:'camera'` zu EINER Gruppe → „Kamera 0/N"-Counter.
+- **In-App-PDF-Viewer** `app/admin/pdf-viewer/page.tsx` (`?u=<rel /api-Pfad>&t=`):
+  In der iOS-PWA öffneten `target="_blank"`-Links auf `/api/...`-PDFs eine
+  chrome-lose Vollbildansicht OHNE Zurück → App musste geschlossen werden.
+  Viewer ist eine normale App-Route (iframe + eigener Zurück-Button via
+  `router.back()`, „Neuer Tab"-Fallback). `u` muss mit `/api/` beginnen (kein
+  Open-Redirect). `/admin/buchungen/[id]` leitet Rechnung/Mietvertrag (2×) +
+  Rücksendeetikett über den Viewer; externe Sendcloud-`label_url` bleibt
+  `target="_blank"`.
+
 ### WBW-Finalisierung mit PDF-E-Mail an den Mieter (Stand 2026-05-16)
 Beim Versandfertigmachen legt der Admin die **finalen** Wiederbeschaffungswerte der tatsaechlich mitgelieferten Ausruestung fest. Diese werden als rechtlich relevantes PDF generiert, in Storage abgelegt und automatisch per E-Mail an den Mieter geschickt. Laut Mietvertrag ist ab dann ausschliesslich der per E-Mail mitgeteilte finale WBW massgeblich.
 - **Vertrags-Passus** (in `lib/contracts/contract-template.tsx`, immer gerendert, NICHT DB-overridable, bereits gespeicherte Vertrags-PDFs bleiben unberuehrt): „Die ausgewiesenen Wiederbeschaffungswerte stellen eine vorläufige Schätzung … Maßgeblich … ist ausschließlich der in dieser E-Mail ausgewiesene finale Wiederbeschaffungswert."

@@ -414,11 +414,16 @@ async function computeLiabilitySummary(
     cameraSource = productDeposit > 0 ? 'product_deposit' : 'unknown';
   }
 
+  // Mehrere Kameras (Warenkorb-Buchung): product_name ist kommagetrennt.
+  // Bei Override ist es ein einzelner Katalogname → count 1.
+  const cameraCount = cameraOverridden
+    ? 1
+    : Math.max(1, String(cameraName).split(',').map((s) => s.trim()).filter(Boolean).length);
   const cameraLine: Line = {
     name: cameraName,
-    qty: 1,
+    qty: cameraCount,
     unit_value: cameraValue,
-    total_value: cameraValue,
+    total_value: cameraValue * cameraCount,
     source: cameraSource,
   };
 
