@@ -956,8 +956,10 @@ export async function PATCH(
     const newSorted = camPicks.map((c) => c.product_id).sort().join(',');
     const cameraChanged = existSorted !== newSorted;
 
-    const normHaftung = (v: unknown): 'standard' | 'premium' | null =>
-      v === 'standard' ? 'standard' : v === 'premium' ? 'premium' : null;
+    // bookings.haftung ist NOT NULL — „keine Haftung" ist der String 'none'
+    // (so speichern es auch confirm-cart / manual-booking), niemals null.
+    const normHaftung = (v: unknown): 'none' | 'standard' | 'premium' =>
+      v === 'standard' ? 'standard' : v === 'premium' ? 'premium' : 'none';
     const effHaftung = bookingEdit.haftung !== undefined
       ? normHaftung(bookingEdit.haftung)
       : normHaftung(booking.haftung);
@@ -1156,7 +1158,7 @@ export async function PATCH(
     const parts: string[] = [];
     if (periodChanged) parts.push(`Zeitraum ${rentalFrom}–${rentalTo}`);
     if (cameraChanged) parts.push(`Kamera → ${camPicks.map((c) => c.name).join(', ')}`);
-    if (bookingEdit.haftung !== undefined) parts.push(`Haftung → ${effHaftung ?? 'keine'}`);
+    if (bookingEdit.haftung !== undefined) parts.push(`Haftung → ${effHaftung === 'none' ? 'keine' : effHaftung}`);
     if (bookingEdit.delivery_mode !== undefined || bookingEdit.shipping_method !== undefined || shipOverrideValid) {
       parts.push(`Versand → ${deliveryMode === 'abholung' ? 'Abholung' : `${shipMethod === 'express' ? 'Express' : 'Standard'} ${shippingPrice.toFixed(2).replace('.', ',')} €`}`);
     }
