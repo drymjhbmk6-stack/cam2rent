@@ -43,13 +43,24 @@ const PACK_RESET_FIELDS = {
  * geaendert wird — die 4-Augen-Signaturen wuerden sonst den ALTEN Inhalt
  * bescheinigen. Packliste-PDF/HTML liest live aus accessory_items und zieht
  * automatisch nach. Gibt die zu mergenden Update-Felder zurueck (leer wenn
- * nie gepackt) und loescht best-effort das Pack-Foto.
+ * nichts zurueckgesetzt wird) und loescht best-effort das Pack-Foto.
+ *
+ * WICHTIG: Ein bereits ABGESCHLOSSENER Pack-Vorgang (pack_status='checked',
+ * d.h. Packer + Kontrolleur haben unterschrieben / 4-Augen erledigt) wird
+ * NICHT zurueckgesetzt. Die unterschriebene Packliste ist der Nachweis
+ * dessen, was physisch tatsaechlich gepackt wurde — eine spaetere
+ * Buchungs-Aenderung darf diesen abgeschlossenen Nachweis nicht
+ * rueckwirkend loeschen. Nur ein UNFERTIGER Snapshot ('packed' /
+ * Zwischenstand) wird zurueckgesetzt, weil er sonst falschen Inhalt
+ * bescheinigen wuerde. Die neue Komposition fliesst ueber die live
+ * gerenderte Packliste-PDF/HTML ohnehin nach.
  */
 async function resetPackWorkflow(
   supabase: ReturnType<typeof createServiceClient>,
   booking: { pack_status?: unknown; pack_photo_url?: unknown },
 ): Promise<Record<string, unknown>> {
-  if (!booking.pack_status) return {};
+  const ps = booking.pack_status;
+  if (!ps || ps === 'checked') return {};
   if (booking.pack_photo_url) {
     await supabase.storage
       .from('packing-photos')
@@ -784,8 +795,9 @@ export async function PATCH(
     };
     if (priceValid) upd.price_total = newPrice;
 
-    const packWasStarted = !!booking.pack_status;
-    Object.assign(upd, await resetPackWorkflow(supabase, booking));
+    const packResetFields = await resetPackWorkflow(supabase, booking);
+    const packWasStarted = Object.keys(packResetFields).length > 0;
+    Object.assign(upd, packResetFields);
 
     const { error: upErr } = await supabase.from('bookings').update(upd).eq('id', id);
     if (upErr) {
@@ -1189,8 +1201,9 @@ export async function PATCH(
       shipping_method: shipMethod,
       notes: `${existingNotes}${noteLine}`,
     };
-    const packWasStarted = !!booking.pack_status;
-    Object.assign(upd, await resetPackWorkflow(supabase, booking));
+    const packResetFields = await resetPackWorkflow(supabase, booking);
+    const packWasStarted = Object.keys(packResetFields).length > 0;
+    Object.assign(upd, packResetFields);
 
     // Kamera-/Zeitraum-Aenderung: Kamera-Skelett neu (unit_id=null erzwingt
     // Neuzuweisung), Legacy-Felder synchron halten.

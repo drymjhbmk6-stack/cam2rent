@@ -1289,11 +1289,17 @@ WBW-Box/-Vorschlag und Verfügbarkeit automatisch nachziehen (alles liest live a
   (`unitsByAcc`), NICHT auf `accessory_items` (Set-ID-behaftet): pro Accessory
   bis `want` behalten, Überzähliges freigeben, `assignQty = want − keep.length`
   neu zuweisen (keine Self-Kollision mit eigenen rented-Units).
-- **Pack-Workflow-Reset:** war die Buchung schon gepackt/kontrolliert
-  (`pack_status` gesetzt), werden bei der Änderung alle `pack_*`-Snapshot-Felder
-  + 4-Augen-Signaturen genullt + `packing-photos`-Foto best-effort gelöscht
-  (analog `versand/[id]/pack-reset`), sonst würden sie den ALTEN Inhalt
-  bescheinigen. Packliste-PDF/HTML (`/api/packlist/[bookingId]`) liest live aus
+- **Pack-Workflow-Reset:** war die Buchung schon mitten im Packen
+  (`pack_status='packed'` — Packer hat unterschrieben, Kontrolleur fehlt
+  noch / Zwischenstand), werden bei der Änderung alle `pack_*`-Snapshot-
+  Felder + 4-Augen-Signaturen genullt + `packing-photos`-Foto best-effort
+  gelöscht (analog `versand/[id]/pack-reset`), sonst würden sie den ALTEN
+  Inhalt bescheinigen. **Ein bereits ABGESCHLOSSENER Pack-Vorgang
+  (`pack_status='checked'`, beide Unterschriften / 4-Augen erledigt) bleibt
+  unberührt** (Stand 2026-05-19) — die unterschriebene Packliste ist der
+  rechtliche Nachweis dessen, was physisch gepackt wurde; eine spätere
+  Buchungs-Änderung darf den abgeschlossenen Snapshot nicht rückwirkend
+  löschen. Packliste-PDF/HTML (`/api/packlist/[bookingId]`) liest live aus
   `accessory_items` → zieht automatisch nach, kein Reset nötig. Audit-Feld
   `pack_workflow_reset`.
 - **`resolved_items`** wurde additiv um optionales `accessory_id` erweitert
