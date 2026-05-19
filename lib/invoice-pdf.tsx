@@ -12,6 +12,7 @@ import {
 } from '@react-pdf/renderer';
 import { BUSINESS } from '@/lib/business-config';
 import { fmtEuro, isoToDE } from '@/lib/format-utils';
+import type { InvoiceLine } from '@/lib/invoice-lines';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -36,6 +37,12 @@ export interface InvoiceData {
   /** Optional: Map accessory_id -> Name (vom Aufrufer resolvt, damit der
    *  PDF-Code keine ID-Slugs wie "akku-abc123" zeigt). */
   accessoryNames?: Record<string, string>;
+  /** Kamera-Positionen mit Einzelpreis (Katalogpreis fuer die Mietdauer).
+   *  Wenn gesetzt, wird daraus die Positionstabelle gebaut. */
+  cameraLines?: InvoiceLine[];
+  /** Zubehoer-Positionen mit Einzelpreis (Katalogpreis). Wenn gesetzt, wird
+   *  daraus die Positionstabelle gebaut. */
+  accessoryLines?: InvoiceLine[];
   priceRental: number;
   priceAccessories: number;
   priceHaftung: number;
@@ -204,10 +211,11 @@ const s = StyleSheet.create({
     borderBottomWidth: 0.5,
     borderBottomColor: C.grayLine,
   },
-  colPos: { width: 28, fontSize: 10 },
+  colPos: { width: 26, fontSize: 10 },
   colDesc: { flex: 1, fontSize: 10 },
-  colDays: { width: 50, fontSize: 10, textAlign: 'center' },
-  colTotal: { width: 75, fontSize: 10, textAlign: 'right' },
+  colDays: { width: 42, fontSize: 10, textAlign: 'center' },
+  colUnit: { width: 72, fontSize: 10, textAlign: 'right' },
+  colTotal: { width: 72, fontSize: 10, textAlign: 'right' },
 
   // Summen
   sumRow: {
@@ -281,92 +289,104 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
     pos: number;
     description: string;
     subline?: string;
-    qty: string;
-    total: number;
+    qty: number;
+    unitPrice: number;
+    lineTotal: number;
   }
 
   const items: LineItem[] = [];
   let pos = 1;
 
-  // Kameras
-  const cameras = data.productName.split(',').map((n) => n.trim());
-  const rentalPerCamera = cameras.length > 1 ? data.priceRental / cameras.length : data.priceRental;
+  const daysLabel = `${data.days} ${data.days === 1 ? 'Tag' : 'Tage'}`;
 
-  for (const cam of cameras) {
-    items.push({
-      pos: pos++,
-      description: cam,
-      subline: `Kamera-Miete (${data.days} ${data.days === 1 ? 'Tag' : 'Tage'})`,
-      qty: String(data.days),
-      total: rentalPerCamera,
-    });
-  }
-
-  // Zubehör (qty-aware). Wenn accessoryItems mitgegeben wurden, nutzen wir die
-  // echten Stueckzahlen. Sonst: Legacy-Fallback (string[] mit qty=1 pro Eintrag).
-  const accItemsForInvoice: { accessory_id: string; qty: number }[] =
-    data.accessoryItems && data.accessoryItems.length > 0
-      ? data.accessoryItems
-      : data.accessories.map((id) => ({ accessory_id: id, qty: 1 }));
-  if (accItemsForInvoice.length > 0) {
-    const totalUnits = accItemsForInvoice.reduce((s, i) => s + i.qty, 0);
-    for (const item of accItemsForInvoice) {
-      const resolvedName = data.accessoryNames?.[item.accessory_id]
-        ?? item.accessory_id.replace(/-[a-z0-9]{6,}$/, '').split('-').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-      const linePrice = data.priceAccessories > 0 && totalUnits > 0
-        ? (data.priceAccessories * item.qty) / totalUnits
-        : 0;
+  if (
+    (data.cameraLines && data.cameraLines.length > 0) ||
+    (data.accessoryLines && data.accessoryLines.length > 0)
+  ) {
+    // Neuer Pfad: echte Katalogpreise pro Position (Einzelpreis x Menge).
+    for (const c of data.cameraLines ?? []) {
       items.push({
         pos: pos++,
-        description: resolvedName,
-        subline: 'Zubehör',
-        qty: String(item.qty),
-        total: linePrice,
+        description: c.name,
+        subline: `Kamera-Miete (${daysLabel})`,
+        qty: c.qty,
+        unitPrice: c.unitPrice,
+        lineTotal: c.lineTotal,
       });
+    }
+    for (const a of data.accessoryLines ?? []) {
+      items.push({
+        pos: pos++,
+        description: a.name,
+        subline: 'Zubehör',
+        qty: a.qty,
+        unitPrice: a.unitPrice,
+        lineTotal: a.lineTotal,
+      });
+    }
+  } else {
+    // Fallback (Altaufrufer ohne cameraLines/accessoryLines): grobe Aufteilung
+    // wie frueher, damit nichts kaputtgeht.
+    const cameras = data.productName.split(',').map((n) => n.trim()).filter(Boolean);
+    const rentalPerCamera = cameras.length > 0 ? data.priceRental / cameras.length : data.priceRental;
+    for (const cam of cameras) {
+      items.push({
+        pos: pos++,
+        description: cam,
+        subline: `Kamera-Miete (${daysLabel})`,
+        qty: 1,
+        unitPrice: rentalPerCamera,
+        lineTotal: rentalPerCamera,
+      });
+    }
+    const accItemsForInvoice: { accessory_id: string; qty: number }[] =
+      data.accessoryItems && data.accessoryItems.length > 0
+        ? data.accessoryItems
+        : data.accessories.map((id) => ({ accessory_id: id, qty: 1 }));
+    if (accItemsForInvoice.length > 0) {
+      const totalUnits = accItemsForInvoice.reduce((s, i) => s + i.qty, 0);
+      for (const item of accItemsForInvoice) {
+        const resolvedName = data.accessoryNames?.[item.accessory_id]
+          ?? item.accessory_id.replace(/-[a-z0-9]{6,}$/, '').split('-').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+        const lineTotal = data.priceAccessories > 0 && totalUnits > 0
+          ? (data.priceAccessories * item.qty) / totalUnits
+          : 0;
+        items.push({
+          pos: pos++,
+          description: resolvedName,
+          subline: 'Zubehör',
+          qty: item.qty,
+          unitPrice: item.qty > 0 ? lineTotal / item.qty : lineTotal,
+          lineTotal,
+        });
+      }
     }
   }
 
-  // Haftungsschutz wird NICHT mehr als POS-Zeile aufgefuehrt — er erscheint
-  // unten als eigene Summenzeile nach dem Rabatt (analog zur Checkout-
-  // Zusammenfassung, damit Bestellung und Rechnung gleich strukturiert sind).
+  // Haftungsschutz + Versand sind KEINE Positionszeilen — sie erscheinen unten
+  // im Summen-Block (nach Zwischensumme + Rabatt), damit der Kunde von oben
+  // nach unten nachrechnen kann, wie der Gesamtbetrag zustande kommt.
   const hLabel = haftungLabel(data.haftung);
-
-  // Versand / Abholung
-  if (data.deliveryMode === 'abholung') {
-    items.push({
-      pos: pos++,
-      description: 'Selbstabholung',
-      qty: '1',
-      total: 0,
-    });
-  } else if (data.shippingPrice > 0) {
-    items.push({
-      pos: pos++,
-      description: data.shippingMethod === 'express' ? 'Express-Versand' : 'Standard-Versand',
-      subline: 'Hin- und Rücksendung',
-      qty: '1',
-      total: data.shippingPrice,
-    });
-  } else {
-    items.push({
-      pos: pos++,
-      description: 'Standard-Versand (kostenlos)',
-      qty: '1',
-      total: 0,
-    });
-  }
 
   // Steuerberechnung
   const isRegel = data.taxMode === 'regelbesteuerung';
   const taxRate = data.taxRate ?? 19;
   const netAmount = isRegel ? data.priceTotal / (1 + taxRate / 100) : data.priceTotal;
   const taxAmount = isRegel ? data.priceTotal - netAmount : 0;
-  const discountAmount = data.discountAmount ?? 0;
-  // Zwischensumme zeigt nur Miete + Zubehoer + Versand (OHNE Haftungsschutz),
-  // damit die Rechnung dieselbe Aufteilung wie die Checkout-Zusammenfassung
-  // hat. Haftungsschutz erscheint weiter unten als eigene Summenzeile.
-  const subtotalBeforeDiscount = Math.max(0, data.priceTotal + discountAmount - (data.priceHaftung || 0));
-  const showSummaryBlock = discountAmount > 0 || (data.priceHaftung || 0) > 0;
+
+  // ── Summen-Block (Reihenfolge: Zwischensumme -> Rabatt -> Haftung ->
+  //    Versand -> Gesamtbetrag) ──
+  // Zwischensumme = Summe aller Positionen zu Katalogpreisen (vor Rabatt).
+  const zwischensumme = Math.round(items.reduce((sum, it) => sum + it.lineTotal, 0) * 100) / 100;
+  const haftung = data.priceHaftung || 0;
+  const versand = data.deliveryMode === 'abholung' ? 0 : (data.shippingPrice || 0);
+  // Der Gesamtbetrag MUSS exakt dem bezahlten Betrag entsprechen. Der Rabatt
+  // ergibt sich als Differenz, damit die Rechnung immer aufgeht (bei normalem
+  // Gutschein = exakt der Coupon-Rabatt; bei Set-Bundle/manueller Anpassung
+  // schluckt diese Zeile die Differenz).
+  const reduktion = Math.round((zwischensumme + haftung + versand - data.priceTotal) * 100) / 100;
+  const rabatt = reduktion > 0.005 ? reduktion : 0;
+  const aufpreis = reduktion < -0.005 ? -reduktion : 0;
 
   const isUnpaid = data.paymentStatus === 'unpaid' || data.paymentMethod === 'Ausstehend';
   const verwendungszweck = `${invoiceNumber} ${data.customerName}`;
@@ -444,7 +464,8 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
           <Text style={[s.tableHeaderText, s.colPos]}>Pos</Text>
           <Text style={[s.tableHeaderText, s.colDesc]}>Beschreibung</Text>
           <Text style={[s.tableHeaderText, s.colDays]}>Menge</Text>
-          <Text style={[s.tableHeaderText, s.colTotal]}>Netto</Text>
+          <Text style={[s.tableHeaderText, s.colUnit]}>Einzelpreis</Text>
+          <Text style={[s.tableHeaderText, s.colTotal]}>Gesamt</Text>
         </View>
 
         {items.map((item, i) => (
@@ -457,40 +478,62 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
               )}
             </View>
             <Text style={s.colDays}>{item.qty}</Text>
-            <Text style={[s.colTotal, item.total === 0 ? { color: C.grayMid } : { color: C.black }]}>
-              {item.total > 0 ? fmtEuro(item.total) : '–'}
+            <Text style={[s.colUnit, item.unitPrice === 0 ? { color: C.grayMid } : { color: C.black }]}>
+              {item.unitPrice > 0 ? fmtEuro(item.unitPrice) : '–'}
+            </Text>
+            <Text style={[s.colTotal, item.lineTotal === 0 ? { color: C.grayMid } : { color: C.black }]}>
+              {item.lineTotal > 0 ? fmtEuro(item.lineTotal) : '–'}
             </Text>
           </View>
         ))}
 
-        {/* ── Zwischensumme + Rabatt + Haftungsschutz (vor Steuern + Gesamt) ──
-            Reihenfolge spiegelt die Checkout-Zusammenfassung wider:
-              Zwischensumme (Miete + Zubehoer + Versand, OHNE Haftung)
-              Rabatt (falls vorhanden)
-              Haftungsschutz (falls > 0)
-            So sieht der Kunde Rechnung 1:1 wie die Bestellaufstellung. */}
-        {showSummaryBlock && (
-          <View style={{ marginTop: 6 }}>
-            <View style={s.sumRow}>
-              <Text style={s.sumLabel}>Zwischensumme:</Text>
-              <Text style={s.sumValue}>{fmtEuro(subtotalBeforeDiscount)}</Text>
-            </View>
-            {discountAmount > 0 && (
-              <View style={s.sumRow}>
-                <Text style={s.sumLabel}>
-                  Rabatt{data.couponCode ? ` (${data.couponCode})` : ''}:
-                </Text>
-                <Text style={s.sumValue}>-{fmtEuro(discountAmount)}</Text>
-              </View>
-            )}
-            {hLabel && (data.priceHaftung || 0) > 0 && (
-              <View style={s.sumRow}>
-                <Text style={s.sumLabel}>{hLabel}:</Text>
-                <Text style={s.sumValue}>{fmtEuro(data.priceHaftung)}</Text>
-              </View>
-            )}
+        {/* ── Zusammenfassung: Zwischensumme -> Rabatt -> Haftungsschutz ->
+            Versand -> Gesamtbetrag. So kann der Kunde von oben nach unten
+            nachrechnen, wie der Endpreis zustande kommt. ── */}
+        <View style={{ marginTop: 6 }}>
+          <View style={s.sumRow}>
+            <Text style={s.sumLabel}>Zwischensumme:</Text>
+            <Text style={s.sumValue}>{fmtEuro(zwischensumme)}</Text>
           </View>
-        )}
+          {rabatt > 0 && (
+            <View style={s.sumRow}>
+              <Text style={s.sumLabel}>
+                Rabatt{data.couponCode ? ` (${data.couponCode})` : ''}:
+              </Text>
+              <Text style={s.sumValue}>-{fmtEuro(rabatt)}</Text>
+            </View>
+          )}
+          {aufpreis > 0 && (
+            <View style={s.sumRow}>
+              <Text style={s.sumLabel}>Anpassung:</Text>
+              <Text style={s.sumValue}>+{fmtEuro(aufpreis)}</Text>
+            </View>
+          )}
+          {hLabel && haftung > 0 && (
+            <View style={s.sumRow}>
+              <Text style={s.sumLabel}>{hLabel}:</Text>
+              <Text style={s.sumValue}>{fmtEuro(haftung)}</Text>
+            </View>
+          )}
+          {data.deliveryMode === 'abholung' ? (
+            <View style={s.sumRow}>
+              <Text style={s.sumLabel}>Selbstabholung:</Text>
+              <Text style={s.sumValue}>0,00 €</Text>
+            </View>
+          ) : versand > 0 ? (
+            <View style={s.sumRow}>
+              <Text style={s.sumLabel}>
+                {data.shippingMethod === 'express' ? 'Express-Versand' : 'Standard-Versand'}:
+              </Text>
+              <Text style={s.sumValue}>{fmtEuro(versand)}</Text>
+            </View>
+          ) : (
+            <View style={s.sumRow}>
+              <Text style={s.sumLabel}>Versand (kostenlos):</Text>
+              <Text style={s.sumValue}>0,00 €</Text>
+            </View>
+          )}
+        </View>
 
         {/* ── Summen ── */}
         {isRegel ? (

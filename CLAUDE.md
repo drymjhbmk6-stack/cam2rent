@@ -537,9 +537,11 @@ Optionales kleines Referenzbild pro `included_parts`-Zeile, anklickbar → Light
   - Tabelle ohne farbigen Header, schwarze Unterstreichung, keine Zebra-Streifen
   - Gesamtbetrag rechtsbündig (12pt fett), kein Balken
   - Steuerhinweis als einfacher Text direkt unter Gesamtbetrag
-  - Abholung/Versand als Position in der Tabelle (auch bei 0 €)
   - Bei unbezahlt: Bankdaten (ohne Box) + QR-Codes nebeneinander (Banking + PayPal, Schwarz/Weiß)
   - Payment-Status-Erkennung: `UNPAID` in payment_intent_id ODER `payment_status` Spalte ODER "Überweisung ausstehend" in Notizen
+  - **Positionen zu echten Katalogpreisen (Stand 2026-05-19):** Frueher verteilte das PDF den schon rabattierten `priceAccessories` proportional auf die Zeilen → sinnlose Einzelpreise (Stativ 7,90 € erschien als 2,23 €, Floating Stick 9,90 €×2 als 4,45 €). Jetzt: neuer Shared-Helper `lib/invoice-lines.ts` → `computeInvoiceLines(supabase, booking)` baut die Zeilen aus echten Katalogpreisen. Kamera = `price_rental / Anzahl Kameras` (gleiche Modellnamen zu 1 Zeile gruppiert, Menge=Stück). Zubehoer = `verifyAccessoryPrice()` (`lib/booking/verify-accessory-price.ts`, gleiche Logik wie Checkout: flat→`price`, sonst `price*Tage`) → pro Position `unit_price`/`qty`/`line_total`. Tabelle hat neue Spalte **Einzelpreis** (`colUnit`): `Pos | Beschreibung | Menge | Einzelpreis | Gesamt`. Versand + Haftungsschutz sind KEINE Positionszeilen mehr.
+  - **Summen-Block (Reihenfolge):** Zwischensumme (Σ Positionen, Katalog, vor Rabatt) → Rabatt (mit Coupon-Code-Label) → Haftungsschutz → Versand → Gesamtbetrag. **Gesamtbetrag = `booking.price_total` (unveraendert, == bezahlter Betrag).** Der Rabatt ergibt sich als Differenz `zwischensumme + haftung + versand − price_total` → bei normalem Gutschein exakt der Coupon-Rabatt, bei Set-Bundle/manueller Preis-Anpassung schluckt die Zeile die Differenz, sodass die Rechnung IMMER aufgeht. Falls Katalog < bezahlt (manueller Aufpreis): Zeile „Anpassung: +X“ statt negativem Rabatt.
+  - **3 Aufrufer** nutzen den Helper: `/api/invoice/[bookingId]`, `/api/admin/booking/[id]/send-email`, `lib/email.ts` (Buchungsbestaetigung, laedt Booking defensiv per `bookingId`). `InvoiceData` hat zwei neue optionale Felder `cameraLines`/`accessoryLines`; ohne sie greift im PDF der alte Fallback-Pfad (keine Regression fuer Altaufrufer).
 - **Mietvertrag-PDF** (`lib/contracts/contract-template.tsx`):
   - React-PDF Template mit 19 Paragraphen
   - Dynamischer Seitenumbruch (eine Page mit `wrap`), kein festes Seitenlayout mehr

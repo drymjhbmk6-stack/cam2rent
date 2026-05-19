@@ -3,6 +3,7 @@ import { renderToBuffer, type DocumentProps } from '@react-pdf/renderer';
 import { createElement, type ReactElement } from 'react';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { InvoicePDF, type InvoiceData } from '@/lib/invoice-pdf';
+import { computeInvoiceLines } from '@/lib/invoice-lines';
 import { LegalDocumentPDF } from '@/lib/legal-pdf';
 import { BUSINESS } from '@/lib/business-config';
 import { createServiceClient } from '@/lib/supabase';
@@ -226,9 +227,31 @@ export async function sendBookingConfirmation(data: BookingEmailData, contractPd
   const invoiceDate = new Date().toLocaleDateString('de-DE', {
     day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Europe/Berlin',
   });
+  // Echte Katalog-Positionen aus der Buchung laden (Einzelpreis x Menge).
+  // Defensiv: schlaegt das fehl, greift im PDF der Fallback-Pfad.
+  let cameraLines: InvoiceData['cameraLines'];
+  let accessoryLines: InvoiceData['accessoryLines'];
+  try {
+    const sb = createServiceClient();
+    const { data: bk } = await sb
+      .from('bookings')
+      .select('product_name, price_rental, price_accessories, days, accessory_items, accessories')
+      .eq('id', data.bookingId)
+      .maybeSingle();
+    if (bk) {
+      const lines = await computeInvoiceLines(sb, bk);
+      cameraLines = lines.cameraLines;
+      accessoryLines = lines.accessoryLines;
+    }
+  } catch (err) {
+    console.error('[email] computeInvoiceLines fehlgeschlagen:', err);
+  }
+
   const invoiceData: InvoiceData = {
     bookingId: data.bookingId,
     invoiceDate,
+    cameraLines,
+    accessoryLines,
     customerName: data.customerName,
     customerEmail: data.customerEmail,
     productName: data.productName,

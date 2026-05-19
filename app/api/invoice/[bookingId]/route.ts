@@ -9,6 +9,7 @@ import { InvoicePDF, type InvoiceData } from '@/lib/invoice-pdf';
 import { ensureBusinessConfig } from '@/lib/load-business-config';
 import { BUSINESS } from '@/lib/business-config';
 import { normalizeAccessoryItems } from '@/lib/booking-accessories';
+import { computeInvoiceLines } from '@/lib/invoice-lines';
 import QRCode from 'qrcode';
 
 export async function GET(
@@ -89,17 +90,9 @@ export async function GET(
 
   const invoiceNumber = booking.id.replace(/^(C2R|BK)-/, 'RE-');
 
-  // Zubehoer qty-aware laden + Namen aufloesen
+  // Zubehoer qty-aware (Legacy-Fallback-Felder) + echte Katalog-Positionen
   const accItems = normalizeAccessoryItems(booking.accessory_items, booking.accessories);
-  let accessoryNamesMap: Record<string, string> = {};
-  if (accItems.length > 0) {
-    const accIds = accItems.map((i) => i.accessory_id);
-    const { data: accRows } = await supabase
-      .from('accessories')
-      .select('id, name')
-      .in('id', accIds);
-    accessoryNamesMap = Object.fromEntries((accRows ?? []).map((a) => [a.id, a.name ?? a.id]));
-  }
+  const { cameraLines, accessoryLines } = await computeInvoiceLines(supabase, booking);
 
   const data: InvoiceData = {
     bookingId: booking.id,
@@ -117,7 +110,8 @@ export async function GET(
     haftung: booking.haftung ?? 'none',
     accessories: Array.isArray(booking.accessories) ? booking.accessories : [],
     accessoryItems: accItems,
-    accessoryNames: accessoryNamesMap,
+    cameraLines,
+    accessoryLines,
     priceRental: booking.price_rental ?? 0,
     priceAccessories: booking.price_accessories ?? 0,
     priceHaftung: booking.price_haftung ?? 0,

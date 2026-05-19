@@ -4,6 +4,7 @@ import { renderToBuffer, type DocumentProps } from '@react-pdf/renderer';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
 import { InvoicePDF, type InvoiceData } from '@/lib/invoice-pdf';
+import { computeInvoiceLines } from '@/lib/invoice-lines';
 import { LegalDocumentPDF } from '@/lib/legal-pdf';
 import { ensureBusinessConfig } from '@/lib/load-business-config';
 import { BUSINESS } from '@/lib/business-config';
@@ -101,6 +102,8 @@ export async function POST(
         const raw = booking.created_at ? new Date(booking.created_at) : new Date();
         const invoiceDate = raw.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Europe/Berlin' });
 
+        const { cameraLines, accessoryLines } = await computeInvoiceLines(supabase, booking);
+
         const invoiceData: InvoiceData = {
           bookingId: booking.id,
           invoiceNumber,
@@ -116,6 +119,8 @@ export async function POST(
           shippingMethod: booking.shipping_method ?? undefined,
           haftung: booking.haftung ?? 'none',
           accessories: Array.isArray(booking.accessories) ? booking.accessories : [],
+          cameraLines,
+          accessoryLines,
           priceRental: booking.price_rental ?? 0,
           priceAccessories: booking.price_accessories ?? 0,
           priceHaftung: booking.price_haftung ?? 0,
