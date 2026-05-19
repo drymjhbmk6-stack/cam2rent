@@ -86,7 +86,7 @@ export async function assignCamerasToBooking(
     wantByProduct.set(c.product_id, (wantByProduct.get(c.product_id) ?? 0) + 1);
   }
 
-  for (const [productId, want] of wantByProduct) {
+  for (const productId of wantByProduct.keys()) {
     const { data, error } = await supabase.rpc('assign_free_camera_units', {
       p_product_id: productId,
       p_rental_from: rentalFrom,
@@ -99,19 +99,19 @@ export async function assignCamerasToBooking(
         `[camera-unit-assignment] RPC fehlgeschlagen fuer ${productId}:`,
         error.message,
       );
-      result.missing.push({ product_id: productId, requested: want, assigned: 0 });
+      // Kein missing.push hier — die finale cameras-Auswertung unten
+      // erkennt unbefuellte Slots ohnehin (RPC-Fehler => Slot bleibt leer).
       continue;
     }
 
     const ids = Array.isArray(data) ? (data as string[]) : [];
     if (ids.length > 0) result.assigned[productId] = ids;
-    if (ids.length < want) {
-      result.missing.push({
-        product_id: productId,
-        requested: want,
-        assigned: ids.length,
-      });
-    }
+    // KEIN `ids.length < want`-Vergleich: `ids` zaehlt nur NEU vergebene
+    // Einheiten. Slots mit bereits gesetzter unit_id (vorab via body.unit_id
+    // bei manuellen Buchungen oder durch einen vorherigen idempotenten
+    // Re-Sync-Aufruf, z.B. Stripe-Webhook) liefern korrekt `[]` zurueck —
+    // das ist KEIN Fehlschlag. `missing` wird unten aus dem echten
+    // Endzustand von `bookings.cameras` ermittelt.
   }
 
   // Legacy `unit_id` deterministisch = erste Kamera (cameras[0].unit_id)
@@ -127,6 +127,23 @@ export async function assignCamerasToBooking(
       .from('bookings')
       .update({ unit_id: firstUnit })
       .eq('id', bookingId);
+  }
+
+  // `missing` aus dem tatsaechlichen Endzustand: ein Slot gilt nur dann als
+  // nicht zugewiesen, wenn er nach dem RPC-Lauf KEINE unit_id hat. Damit
+  // verschwinden Fehlalarme bei vorab gesetzter Seriennummer / idempotentem
+  // Re-Sync (Slot war schon gefuellt, RPC hatte nichts Neues zu tun).
+  const wantFinal = new Map<string, number>();
+  const filledFinal = new Map<string, number>();
+  for (const c of finalCams) {
+    if (!c.product_id) continue;
+    wantFinal.set(c.product_id, (wantFinal.get(c.product_id) ?? 0) + 1);
+    if (c.unit_id) filledFinal.set(c.product_id, (filledFinal.get(c.product_id) ?? 0) + 1);
+  }
+  result.missing = [];
+  for (const [pid, req] of wantFinal) {
+    const got = filledFinal.get(pid) ?? 0;
+    if (got < req) result.missing.push({ product_id: pid, requested: req, assigned: got });
   }
 
   return result;

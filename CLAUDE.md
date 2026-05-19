@@ -1421,6 +1421,19 @@ in einer Buchung.
   confirm-cart (Primär + Webhook-Race-Recovery), confirm-booking,
   manual-booking (Admin-Komma-Liste, vom Admin gewählte `unit_id` = 1. Kamera),
   stripe-webhook (Single + Cart).
+- **Fehlalarm „N Kamera-Einheit(en) konnten nicht zugewiesen werden" gefixt (Stand 2026-05-19):**
+  `assignCamerasToBooking` meldete `missing`, sobald die RPC **0 NEU**
+  vergebene Einheiten zurückgab. Die RPC füllt aber nur Slots mit leerer
+  `unit_id` — bei vorab gesetzter Seriennummer (manuelle Buchung schreibt
+  `body.unit_id` ins Skelett, bevor `assignCamerasToBooking` läuft) oder bei
+  idempotentem Re-Sync (Stripe-Webhook nach confirm-cart) ist der Slot schon
+  gefüllt → RPC liefert korrekt `[]`, war aber fälschlich als „missing"
+  gewertet (Buchung/Kalender trotzdem korrekt → Fehlalarm). Fix: `missing`
+  wird jetzt aus dem **tatsächlichen Endzustand** von `bookings.cameras`
+  berechnet (Slots ohne `unit_id` nach dem RPC-Lauf), nicht aus der Anzahl
+  neu vergebener IDs. RPC-Fehler-Pfad pusht kein `missing` mehr separat —
+  der leere Slot wird von der Endzustand-Auswertung ohnehin erfasst. Rein
+  additiv, kein Verhaltenswechsel bei echten Engpässen.
 - **Verfügbarkeit**: `/api/availability/[productId]` zweite Query
   `.contains('cameras',[{product_id}])` + Zählung via `resolveBookingCameras`
   pro Produkt → gemischte Modelle blockieren ihr eigenes Produkt korrekt
