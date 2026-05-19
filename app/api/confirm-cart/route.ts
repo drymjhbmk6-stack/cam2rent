@@ -146,7 +146,21 @@ export async function POST(req: NextRequest) {
         { status: 202 }
       );
     }
-    if (intent.status !== 'succeeded') {
+
+    // Idempotency-Check VOR Status-Check. Wenn der Stripe-Webhook die Buchung
+    // bereits angelegt hat (Webhook bestaetigt seinerseits succeeded), antworten
+    // wir idempotent — auch wenn der Stripe-Redirect dem Client einen anderen
+    // Status meldet. Bekannter Edge-Case bei 3DS-Kreditkarten: der Webhook ist
+    // schneller als der Browser-Redirect, und manche Karten liefern beim Return
+    // einen failed-Status, obwohl die Zahlung tatsaechlich erfolgreich war.
+    const supabase = createServiceClient();
+    const { data: existingRows } = await supabase
+      .from('bookings')
+      .select('id')
+      .like('payment_intent_id', `${payment_intent_id}%`);
+    const bookingsAlreadyExist = (existingRows?.length ?? 0) > 0;
+
+    if (intent.status !== 'succeeded' && !bookingsAlreadyExist) {
       return NextResponse.json(
         { error: 'Zahlung nicht abgeschlossen.' },
         { status: 400 }
@@ -163,14 +177,6 @@ export async function POST(req: NextRequest) {
         { status: 403 }
       );
     }
-
-    const supabase = createServiceClient();
-
-    // 2. Idempotency: check if bookings already exist for this payment intent
-    const { data: existingRows } = await supabase
-      .from('bookings')
-      .select('id')
-      .like('payment_intent_id', `${payment_intent_id}%`);
 
     if (existingRows && existingRows.length > 0) {
       // Buchungen existieren bereits — Vertrag und Follow-up-Mail laufen jetzt in

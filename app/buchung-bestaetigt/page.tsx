@@ -29,37 +29,86 @@ function clearContractSignature() {
 
 function SingleBookingConfirmed({
   paymentIntentId,
+  initialStatus,
 }: {
   paymentIntentId: string;
+  initialStatus: string | null;
 }) {
   const [bookingId, setBookingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [confirmed, setConfirmed] = useState(false);
 
   useEffect(() => {
     const contractSignature = readContractSignature();
+    let cancelled = false;
 
-    fetch('/api/confirm-booking', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        payment_intent_id: paymentIntentId,
-        contractSignature,
-      }),
-    })
-      .then((r) => r.json())
-      .then((data) => {
+    async function runConfirm(): Promise<{ found: boolean; processing?: boolean; errMsg?: string }> {
+      try {
+        const r = await fetch('/api/confirm-booking', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            payment_intent_id: paymentIntentId,
+            contractSignature,
+          }),
+        });
+        const data = await r.json();
         if (data.booking_id) {
-          setBookingId(data.booking_id);
-          clearContractSignature();
-        } else if (data.processing) {
-          // Async-Zahlung (PayPal, Klarna, SEPA) — Webhook traegt Buchung nach
-          setError(data.message ?? 'Zahlung wird verarbeitet. Du bekommst gleich eine Bestaetigung.');
-        } else if (data.error) {
-          setError(typeof data.error === 'string' ? data.error : 'Unbekannter Fehler');
+          if (!cancelled) {
+            setBookingId(data.booking_id);
+            clearContractSignature();
+          }
+          return { found: true };
         }
-      })
-      .catch(() => setError('Verbindungsfehler. Deine Buchung läuft trotzdem im Hintergrund.'));
-  }, [paymentIntentId]);
+        if (data.processing) {
+          return { found: false, processing: true, errMsg: data.message ?? 'Zahlung wird verarbeitet. Du bekommst gleich eine Bestaetigung.' };
+        }
+        return { found: false, errMsg: typeof data.error === 'string' ? data.error : 'Unbekannter Fehler' };
+      } catch {
+        return { found: false, errMsg: 'Verbindungsfehler. Deine Buchung läuft trotzdem im Hintergrund.' };
+      }
+    }
+
+    (async () => {
+      const first = await runConfirm();
+      if (cancelled) return;
+      if (first.found) {
+        setConfirmed(true);
+        return;
+      }
+      // Stripe-Redirect-Status 'failed' + Server hat (noch) keine Buchung:
+      // Webhook ist eventuell noch unterwegs. Einmaliger Retry nach 1.5 s.
+      if (initialStatus === 'failed') {
+        await new Promise((res) => setTimeout(res, 1500));
+        if (cancelled) return;
+        const second = await runConfirm();
+        if (cancelled) return;
+        if (!second.found) {
+          if (second.errMsg) setError(second.errMsg);
+        }
+        setConfirmed(true);
+        return;
+      }
+      if (first.errMsg) setError(first.errMsg);
+      setConfirmed(true);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [paymentIntentId, initialStatus]);
+
+  // Echter Failed-Case: Stripe-Redirect meldete 'failed' UND der Server hat
+  // (auch nach Retry) keine Buchung gefunden → klare Fehler-Seite.
+  if (confirmed && !bookingId && initialStatus === 'failed') {
+    return <PaymentFailed />;
+  }
+
+  // Neutraler Lade-Screen, solange wir bei 'failed' noch pruefen — sonst sieht
+  // der Kunde fuer 1-2 s "Buchung bestaetigt" + Spinner.
+  if (!confirmed && initialStatus === 'failed' && !bookingId) {
+    return <CheckingStatus />;
+  }
 
   return <SuccessCard bookingIds={bookingId ? [bookingId] : null} error={error} />;
 }
@@ -68,16 +117,19 @@ function SingleBookingConfirmed({
 
 function CartBookingConfirmed({
   paymentIntentId,
+  initialStatus,
 }: {
   paymentIntentId: string;
+  initialStatus: string | null;
 }) {
   const { items, clearCart } = useCart();
   const { user, loading: authLoading } = useAuth();
   const [bookingIds, setBookingIds] = useState<string[] | null>(null);
   const [confirmed, setConfirmed] = useState(false);
+  const [retried, setRetried] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleConfirm = useCallback(async () => {
+  const handleConfirm = useCallback(async (): Promise<{ found: boolean; errMsg?: string }> => {
     // Read checkout context saved before payment
     let context: Record<string, unknown> | null = null;
     try {
@@ -110,53 +162,96 @@ function CartBookingConfirmed({
     const contractSignature = readContractSignature()
       ?? (context?.contractSignature as ReturnType<typeof readContractSignature>);
 
-    const res = await fetch('/api/confirm-cart', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        payment_intent_id: paymentIntentId,
-        items: cartItems.length ? cartItems : [],
-        customerName: context?.customerName ?? '',
-        customerEmail: context?.customerEmail ?? '',
-        userId: context?.userId ?? null,
-        deliveryMode: context?.deliveryMode ?? 'versand',
-        shippingMethod: context?.shippingMethod ?? 'standard',
-        shippingPrice: context?.shippingPrice ?? 0,
-        discountAmount: context?.discountAmount ?? 0,
-        couponCode: context?.couponCode ?? '',
-        productDiscount: context?.productDiscount ?? 0,
-        durationDiscount: context?.durationDiscount ?? 0,
-        loyaltyDiscount: context?.loyaltyDiscount ?? 0,
-        referralCode: context?.referralCode ?? '',
-        shippingAddress,
-        contractSignature,
-      }),
-    });
-    const data = await res.json();
+    try {
+      const res = await fetch('/api/confirm-cart', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          payment_intent_id: paymentIntentId,
+          items: cartItems.length ? cartItems : [],
+          customerName: context?.customerName ?? '',
+          customerEmail: context?.customerEmail ?? '',
+          userId: context?.userId ?? null,
+          deliveryMode: context?.deliveryMode ?? 'versand',
+          shippingMethod: context?.shippingMethod ?? 'standard',
+          shippingPrice: context?.shippingPrice ?? 0,
+          discountAmount: context?.discountAmount ?? 0,
+          couponCode: context?.couponCode ?? '',
+          productDiscount: context?.productDiscount ?? 0,
+          durationDiscount: context?.durationDiscount ?? 0,
+          loyaltyDiscount: context?.loyaltyDiscount ?? 0,
+          referralCode: context?.referralCode ?? '',
+          shippingAddress,
+          contractSignature,
+        }),
+      });
+      const data = await res.json();
 
-    if (data.booking_ids) {
-      setBookingIds(data.booking_ids);
-      clearCart();
-      sessionStorage.removeItem('cam2rent_checkout_context');
-      clearContractSignature();
-    } else if (data.processing) {
-      // Async-Zahlung (PayPal, Klarna, SEPA) — Webhook traegt Buchung nach.
-      // Cart leeren wir hier NICHT — falls Buchung doch nicht durchkommt,
-      // soll der Kunde sie nochmal abschicken koennen.
-      setError(data.message ?? 'Zahlung wird verarbeitet. Du bekommst gleich eine Bestaetigung.');
-    } else if (data.error) {
-      setError(typeof data.error === 'string' ? data.error : 'Unbekannter Fehler');
+      if (data.booking_ids) {
+        setBookingIds(data.booking_ids);
+        clearCart();
+        sessionStorage.removeItem('cam2rent_checkout_context');
+        clearContractSignature();
+        return { found: true };
+      }
+      if (data.processing) {
+        // Async-Zahlung (PayPal, Klarna, SEPA) — Webhook traegt Buchung nach.
+        // Cart leeren wir hier NICHT — falls Buchung doch nicht durchkommt,
+        // soll der Kunde sie nochmal abschicken koennen.
+        return { found: false, errMsg: data.message ?? 'Zahlung wird verarbeitet. Du bekommst gleich eine Bestaetigung.' };
+      }
+      if (data.error) {
+        return { found: false, errMsg: typeof data.error === 'string' ? data.error : 'Unbekannter Fehler' };
+      }
+      return { found: false };
+    } catch {
+      return { found: false, errMsg: 'Verbindungsfehler. Deine Buchung läuft trotzdem im Hintergrund.' };
     }
   }, [paymentIntentId, items, clearCart, user]);
 
   useEffect(() => {
     if (confirmed) return;
     if (authLoading) return;
-    setConfirmed(true);
-    handleConfirm().catch(() =>
-      setError('Verbindungsfehler. Deine Buchung läuft trotzdem im Hintergrund.'),
-    );
-  }, [confirmed, authLoading, handleConfirm]);
+
+    let cancelled = false;
+    (async () => {
+      const first = await handleConfirm();
+      if (cancelled) return;
+      if (first.found) {
+        setConfirmed(true);
+        return;
+      }
+      // Stripe-Redirect-Status 'failed' + Server hat (noch) keine Buchung:
+      // Webhook ist eventuell noch unterwegs. Einmaliger Retry nach 1.5 s.
+      if (initialStatus === 'failed' && !retried) {
+        setRetried(true);
+        await new Promise((res) => setTimeout(res, 1500));
+        if (cancelled) return;
+        const second = await handleConfirm();
+        if (cancelled) return;
+        if (!second.found && second.errMsg) setError(second.errMsg);
+        setConfirmed(true);
+        return;
+      }
+      if (first.errMsg) setError(first.errMsg);
+      setConfirmed(true);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [confirmed, authLoading, handleConfirm, initialStatus, retried]);
+
+  // Echter Failed-Case: Stripe-Redirect meldete 'failed' UND der Server hat
+  // (auch nach Retry) keine Buchung gefunden → klare Fehler-Seite.
+  if (confirmed && !bookingIds && initialStatus === 'failed') {
+    return <PaymentFailed />;
+  }
+
+  // Neutraler Lade-Screen, solange wir bei 'failed' noch pruefen.
+  if (!confirmed && initialStatus === 'failed' && !bookingIds) {
+    return <CheckingStatus />;
+  }
 
   return <SuccessCard bookingIds={bookingIds} error={error} />;
 }
@@ -289,6 +384,26 @@ function SuccessCard({
   );
 }
 
+// ─── Neutral checking status (waiting on webhook race) ─────────────────────────
+
+function CheckingStatus() {
+  return (
+    <div className="min-h-screen bg-brand-bg dark:bg-brand-black flex items-center justify-center px-4">
+      <div className="bg-white dark:bg-brand-dark rounded-card shadow-card p-8 sm:p-12 max-w-md w-full text-center">
+        <div className="flex items-center justify-center mb-6">
+          <div className="w-12 h-12 border-2 border-accent-blue border-t-transparent rounded-full animate-spin" />
+        </div>
+        <h1 className="font-heading font-bold text-xl text-brand-black dark:text-white mb-2">
+          Zahlung wird gepr&uuml;ft&hellip;
+        </h1>
+        <p className="font-body text-sm text-brand-steel dark:text-gray-400">
+          Einen Moment, wir gleichen den Zahlungsstatus mit der Bank ab.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // ─── Failed payment ───────────────────────────────────────────────────────────
 
 function PaymentFailed() {
@@ -353,22 +468,20 @@ function BookingConfirmedContent() {
   const paymentIntentId = searchParams.get('payment_intent');
   const fromCart = searchParams.get('from') === 'cart';
 
-  // PayPal/Klarna/SEPA koennen 'pending' zurueckgeben (asynchrone Zahlung).
-  // In dem Fall ist das Geld evtl. schon geflossen, aber Stripe-Webhook traegt
-  // die Buchung erst kurz danach ein. Wir lassen den Confirm-Pfad trotzdem
-  // laufen — confirm-cart/confirm-booking pruefen intent.status server-seitig
-  // und greifen bei Race auf den idempotenten Pfad zurueck.
-  // Nur bei explizit 'failed' oder fehlendem paymentIntent zeigen wir die
-  // Failed-Seite (mit Recovery-Hinweis fuer den Fall dass doch abgebucht wurde).
-  if (!paymentIntentId || status === 'failed') {
+  // Ohne payment_intent kann der Server nichts pruefen → echte Failed-Seite.
+  // Bei 'failed' fragen wir trotzdem den Server: Webhook und Charge sind
+  // gelegentlich schon durch, waehrend der Browser-Redirect failed meldet
+  // (typisch bei 3DS-Karten). confirm-cart/confirm-booking sind idempotent
+  // und antworten mit booking_id wenn die Buchung tatsaechlich existiert.
+  if (!paymentIntentId) {
     return <PaymentFailed />;
   }
 
   if (fromCart) {
-    return <CartBookingConfirmed paymentIntentId={paymentIntentId} />;
+    return <CartBookingConfirmed paymentIntentId={paymentIntentId} initialStatus={status} />;
   }
 
-  return <SingleBookingConfirmed paymentIntentId={paymentIntentId} />;
+  return <SingleBookingConfirmed paymentIntentId={paymentIntentId} initialStatus={status} />;
 }
 
 export default function BookingConfirmedPage() {
