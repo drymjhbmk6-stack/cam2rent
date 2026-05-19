@@ -695,7 +695,7 @@ export async function PATCH(
 ) {
   const { id } = await params;
   const body = await req.json();
-  const { status, cancellation_reason, customer_email, verification_gate, liability_override } = body as {
+  const { status, cancellation_reason, customer_email, verification_gate, liability_override, tracking_number } = body as {
     status?: string;
     cancellation_reason?: string;
     customer_email?: string;
@@ -704,6 +704,7 @@ export async function PATCH(
       camera_product_id?: string | null;
       accessories?: { id: string; qty: number }[] | null;
     } | null;
+    tracking_number?: string | null;
   };
 
   const supabase = createServiceClient();
@@ -1445,6 +1446,14 @@ export async function PATCH(
   // E-Mail aktualisieren
   if (customer_email !== undefined) {
     updates.customer_email = customer_email || null;
+  }
+
+  // Trackingnummer manuell korrigieren (z.B. falsch erfasst / nachgetragen).
+  // Leerer Wert → null. Tracking-URL bleibt unberührt (kann separat falsch
+  // sein — der Admin entscheidet bewusst).
+  if (tracking_number !== undefined) {
+    const tn = typeof tracking_number === 'string' ? tracking_number.trim().slice(0, 100) : '';
+    updates.tracking_number = tn || null;
   }
 
   // Manuelle Haftungs-Box-Anpassung (intern). null = zuruecksetzen auf

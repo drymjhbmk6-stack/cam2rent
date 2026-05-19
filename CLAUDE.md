@@ -322,7 +322,8 @@ geändert** (CLAUDE.md-Doku-Pflicht erfüllt). Eine Datei:
 
 ### Buchungsdetails (`/admin/buchungen/[id]`)
 - **Kunden-E-Mail editierbar:** Stift-Icon neben E-Mail in Kundendaten → Inline-Bearbeitung (Enter=Speichern, Escape=Abbrechen), wird auch angezeigt wenn noch keine E-Mail hinterlegt ist
-- **PATCH-Endpoint:** `PATCH /api/admin/booking/[id]` akzeptiert `{ status?, customer_email? }` — Status und E-Mail unabhängig voneinander änderbar
+- **Trackingnummer editierbar (Stand 2026-05-19):** Stift-Icon neben „Trackingnummer" in der Section „Versand & Tracking" → Inline-Bearbeitung (Enter=Speichern, Escape=Abbrechen), analog zur E-Mail. Leerer Wert → `null`. `tracking_url` bleibt bewusst unberührt (Admin korrigiert nur die Nummer; der „Sendung verfolgen"-Link kann separat falsch sein). Keine Migration (bestehende Spalte `bookings.tracking_number`).
+- **PATCH-Endpoint:** `PATCH /api/admin/booking/[id]` akzeptiert `{ status?, customer_email?, tracking_number? }` — alle unabhängig voneinander änderbar (`tracking_number` getrimmt, max 100 Z., leer → null; Audit `booking.update`)
 - **Stornieren mit Begründung:** "Stornieren"-Button öffnet Modal mit Pflicht-Freitext → Grund wird in Buchungsnotizen gespeichert
 - **Endgültig löschen:** "Endgültig löschen"-Button mit Admin-Passwort-Abfrage (Passwort: Admin) → löscht Buchung + Verträge + E-Mail-Logs aus DB
 - **DELETE-Endpoint:** `DELETE /api/admin/booking/[id]` mit `{ password }` im Body

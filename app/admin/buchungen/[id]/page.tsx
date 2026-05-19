@@ -207,6 +207,9 @@ export default function BuchungDetailPage() {
   const [editingEmail, setEditingEmail] = useState(false);
   const [emailDraft, setEmailDraft] = useState('');
   const [emailSaving, setEmailSaving] = useState(false);
+  const [editingTracking, setEditingTracking] = useState(false);
+  const [trackingDraft, setTrackingDraft] = useState('');
+  const [trackingSaving, setTrackingSaving] = useState(false);
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [emailSending, setEmailSending] = useState(false);
@@ -665,6 +668,23 @@ export default function BuchungDetailPage() {
     } catch { alert('Netzwerkfehler.'); } finally { setStatusUpdating(false); }
   }
 
+  async function saveTracking() {
+    if (!booking) return;
+    setTrackingSaving(true);
+    try {
+      const next = trackingDraft.trim();
+      const res = await fetch(`/api/admin/booking/${booking.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tracking_number: next }),
+      });
+      if (!res.ok) throw new Error('Fehler');
+      setBooking({ ...booking, tracking_number: next || null });
+      setEditingTracking(false);
+    } catch { alert('Trackingnummer konnte nicht gespeichert werden.'); }
+    finally { setTrackingSaving(false); }
+  }
+
   return (
     <div className="min-h-screen bg-brand-bg">
       <div className="max-w-5xl mx-auto px-6 py-8">
@@ -880,7 +900,49 @@ export default function BuchungDetailPage() {
               {booking.delivery_mode === 'versand' ? (
                 <div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <InfoRow label="Trackingnummer" value={booking.tracking_number || '\u2013'} />
+                    <div>
+                      <p className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider mb-1">Trackingnummer</p>
+                      {editingTracking ? (
+                        <div className="flex gap-2 items-center">
+                          <input
+                            type="text"
+                            value={trackingDraft}
+                            onChange={e => setTrackingDraft(e.target.value)}
+                            placeholder="Trackingnummer"
+                            className="flex-1 px-2.5 py-1.5 text-sm font-body rounded-lg border border-brand-border bg-brand-card text-brand-black focus:outline-none focus:border-accent-cyan"
+                            autoFocus
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') { e.preventDefault(); saveTracking(); }
+                              if (e.key === 'Escape') setEditingTracking(false);
+                            }}
+                          />
+                          <button
+                            onClick={saveTracking}
+                            disabled={trackingSaving}
+                            className="px-2.5 py-1.5 text-xs font-heading font-semibold rounded-lg bg-accent-cyan text-white hover:bg-accent-cyan/80 disabled:opacity-40"
+                          >
+                            {trackingSaving ? '...' : 'OK'}
+                          </button>
+                          <button
+                            onClick={() => setEditingTracking(false)}
+                            className="px-2.5 py-1.5 text-xs font-heading font-semibold rounded-lg bg-brand-border text-brand-muted hover:bg-brand-border/80"
+                          >
+                            \u2715
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-body text-brand-black break-all">{booking.tracking_number || '\u2013'}</span>
+                          <button
+                            onClick={() => { setTrackingDraft(booking.tracking_number || ''); setEditingTracking(true); }}
+                            className="text-brand-muted hover:text-accent-cyan transition-colors"
+                            title="Trackingnummer bearbeiten"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                          </button>
+                        </div>
+                      )}
+                    </div>
                     <InfoRow label="Versandt am" value={booking.shipped_at ? fmtDateTime(booking.shipped_at) : '\u2013'} />
                     {booking.tracking_url && (
                       <div>
