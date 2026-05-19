@@ -4,15 +4,15 @@ import { logAudit } from '@/lib/audit';
 import { sendCancellationConfirmation, sendAdminCancellationNotification, sendAndLog } from '@/lib/email';
 import { releaseAccessoryUnitsFromBooking } from '@/lib/accessory-unit-assignment';
 import { getStripe, buildPaymentDescription } from '@/lib/stripe';
-import { DEFAULT_HAFTUNG, getEigenbeteiligung, calcHaftungTieredPrice, type HaftungConfig } from '@/lib/price-config';
+import { DEFAULT_HAFTUNG, DEFAULT_SHIPPING, getEigenbeteiligung, calcHaftungTieredPrice, type HaftungConfig } from '@/lib/price-config';
 import { computeReplacementValue, loadReplacementValueConfig } from '@/lib/replacement-value';
 import { getInventarWbwByLegacyUnitIds, getInventarWbwForBookingAccessories, getInventarWbwAverageByLegacyProductId } from '@/lib/inventar/wbw-bridge';
-import { resolveBookingCameras, buildCameraSkeleton } from '@/lib/booking-cameras';
+import { resolveBookingCameras, buildCameraSkeleton, type DesiredCamera } from '@/lib/booking-cameras';
 import { getProducts } from '@/lib/get-products';
 import { parseWeightToGrams, computePackWeightKg } from '@/lib/pack-weight';
 import { resolveAccessoryItems, applyAccessoryComposition, type ResolvedItem } from '@/lib/booking-accessory-apply';
 import { getPriceForDays } from '@/data/products';
-import { shippingConfig, calcShipping } from '@/data/shipping';
+import { calcShipping } from '@/data/shipping';
 import { assignCamerasToBooking } from '@/lib/camera-unit-assignment';
 import { assignUnitToBooking } from '@/lib/unit-assignment';
 import { createAdminNotification } from '@/lib/admin-notifications';
@@ -830,7 +830,11 @@ export async function PATCH(
       rental_from?: string;
       rental_to?: string;
       camera_product_id?: string | null;
+      cameras?: { product_id?: string }[] | null;
       haftung?: 'none' | 'standard' | 'premium' | null;
+      delivery_mode?: 'versand' | 'abholung' | null;
+      shipping_method?: 'standard' | 'express' | null;
+      shipping_override?: number | null;
       items?: { id?: string; accessory_id?: string; qty?: number }[] | null;
       reason?: string;
       new_price_total?: number | null;
@@ -890,11 +894,67 @@ export async function PATCH(
     const periodChanged = rentalFrom !== String(booking.rental_from) || rentalTo !== String(booking.rental_to);
 
     const curProductId = booking.product_id ? String(booking.product_id) : '';
-    const camChangeReq = typeof bookingEdit.camera_product_id === 'string' && bookingEdit.camera_product_id.trim();
-    const newProductId = camChangeReq ? (bookingEdit.camera_product_id as string).trim() : curProductId;
-    const cameraChanged = !!camChangeReq && newProductId !== curProductId;
+    const catalog = await getProducts();
 
-    const cameraCount = Math.max(1, resolveBookingCameras(booking).length || 1);
+    // Pro-Kamera-Modelle. Vorrang: body.cameras[] (jede Kamera ihr eigenes
+    // Modell). Sonst Einzel-camera_product_id auf ALLE Kameras (Legacy).
+    // Sonst die bestehende Kamera-Liste der Buchung.
+    const existingCams = resolveBookingCameras(booking);
+    const existingCamCount = Math.max(1, existingCams.length || 1);
+    type CamPick = { product_id: string; name: string };
+    let camPicks: CamPick[];
+    const camsBody = Array.isArray(bookingEdit.cameras) ? bookingEdit.cameras : null;
+    if (camsBody && camsBody.length > 0) {
+      const picks: CamPick[] = [];
+      for (const c of camsBody) {
+        const pid = String(c?.product_id ?? '').trim();
+        const p = catalog.find((x) => x.id === pid);
+        if (!pid || !p) {
+          return NextResponse.json(
+            { error: 'Mindestens eine gewählte Kamera ist nicht im Katalog.' },
+            { status: 422 },
+          );
+        }
+        picks.push({ product_id: pid, name: p.name });
+      }
+      camPicks = picks;
+    } else {
+      const single = typeof bookingEdit.camera_product_id === 'string' && bookingEdit.camera_product_id.trim()
+        ? bookingEdit.camera_product_id.trim()
+        : '';
+      const base = existingCams.length > 0
+        ? existingCams.map((c) => (c.product_id ?? curProductId) || '')
+        : Array(existingCamCount).fill(curProductId);
+      camPicks = base.map((pid) => {
+        const finalPid = single || pid || curProductId;
+        const p = catalog.find((x) => x.id === finalPid);
+        return {
+          product_id: finalPid,
+          name: p?.name ?? String(booking.product_name ?? finalPid).split(',')[0].trim(),
+        };
+      });
+    }
+    const cameraCount = Math.max(1, camPicks.length);
+    const newProductId = camPicks[0]?.product_id || curProductId;
+
+    // Gewuenschte Stueckzahl pro distinct Modell
+    const wantByPid = new Map<string, { name: string; qty: number }>();
+    for (const c of camPicks) {
+      const e = wantByPid.get(c.product_id);
+      if (e) e.qty += 1;
+      else wantByPid.set(c.product_id, { name: c.name, qty: 1 });
+    }
+    const desiredCameras: DesiredCamera[] = [...wantByPid.entries()].map(
+      ([pid, v]) => ({ product_id: pid, product_name: v.name, qty: v.qty }),
+    );
+
+    // Hat sich die Kamera-Zusammensetzung (Modelle als Multiset) geaendert?
+    const existSorted = existingCams
+      .map((c) => (c.product_id ?? curProductId) || '')
+      .sort()
+      .join(',');
+    const newSorted = camPicks.map((c) => c.product_id).sort().join(',');
+    const cameraChanged = existSorted !== newSorted;
 
     const normHaftung = (v: unknown): 'standard' | 'premium' | null =>
       v === 'standard' ? 'standard' : v === 'premium' ? 'premium' : null;
@@ -915,30 +975,38 @@ export async function PATCH(
           : (Array.isArray(booking.accessories) ? booking.accessories as string[] : []).map((a) => ({ accessory_id: a, qty: 1 }))))
       .filter((r) => r.accessory_id);
 
-    // ── Katalog + Verfuegbarkeit (Kamera) ──────────────────────────────
-    const catalog = await getProducts();
-    const effProduct = catalog.find((p) => p.id === newProductId);
-    if (cameraChanged && !effProduct) {
-      return NextResponse.json({ error: 'Gewählte Kamera ist nicht im Katalog.' }, { status: 422 });
-    }
-    if ((cameraChanged || periodChanged) && effProduct) {
-      const reserved = await reservedCameraCount(
-        supabase, newProductId, rentalFrom, rentalTo, id, booking.is_test === true,
-      );
-      if (reserved + cameraCount > effProduct.stock) {
-        return NextResponse.json(
-          {
-            error: `${effProduct.name} ist im Zeitraum nicht ausreichend verfügbar (benötigt ${cameraCount}, frei ${Math.max(0, effProduct.stock - reserved)}). Änderung wurde NICHT gespeichert.`,
-          },
-          { status: 409 },
+    // ── Verfuegbarkeit pro Modell ──────────────────────────────────────
+    if (cameraChanged || periodChanged) {
+      for (const [pid, v] of wantByPid) {
+        const prod = catalog.find((p) => p.id === pid);
+        if (!prod) {
+          return NextResponse.json({ error: 'Gewählte Kamera ist nicht im Katalog.' }, { status: 422 });
+        }
+        const reserved = await reservedCameraCount(
+          supabase, pid, rentalFrom, rentalTo, id, booking.is_test === true,
         );
+        if (reserved + v.qty > prod.stock) {
+          return NextResponse.json(
+            {
+              error: `${prod.name} ist im Zeitraum nicht ausreichend verfügbar (benötigt ${v.qty}, frei ${Math.max(0, prod.stock - reserved)}). Änderung wurde NICHT gespeichert.`,
+            },
+            { status: 409 },
+          );
+        }
       }
     }
 
-    // ── Preis neu berechnen ────────────────────────────────────────────
+    // ── Preis neu berechnen (Summe je Kamera-Modell) ───────────────────
     let priceRental = Number(booking.price_rental ?? 0);
-    if (effProduct) {
-      priceRental = Math.round(getPriceForDays(effProduct, days) * cameraCount * 100) / 100;
+    {
+      let sum = 0;
+      let allFound = true;
+      for (const c of camPicks) {
+        const p = catalog.find((x) => x.id === c.product_id);
+        if (!p) { allFound = false; break; }
+        sum += getPriceForDays(p, days);
+      }
+      if (allFound) priceRental = Math.round(sum * 100) / 100;
     }
 
     const { data: hCfgRow } = await supabase
@@ -980,17 +1048,51 @@ export async function PATCH(
       priceAccessories = Math.round(priceAccessories * 100) / 100;
     }
 
-    const deliveryMode = (booking.delivery_mode as string) === 'abholung' ? 'abholung' : 'versand';
-    const shipMethod = (booking.shipping_method as string) === 'express' ? 'express' : 'standard';
-    const subtotal = priceRental + priceAccessories + priceHaftung;
-    const shippingPrice = Math.round(
-      calcShipping(subtotal, shipMethod, deliveryMode, shippingConfig).price * 100,
-    ) / 100;
+    // Lieferart/Versandart: Body hat Vorrang, sonst Bestand der Buchung.
+    const deliveryMode: 'versand' | 'abholung' =
+      bookingEdit.delivery_mode === 'abholung' ? 'abholung'
+      : bookingEdit.delivery_mode === 'versand' ? 'versand'
+      : (booking.delivery_mode as string) === 'abholung' ? 'abholung' : 'versand';
+    const shipMethod: 'standard' | 'express' =
+      bookingEdit.shipping_method === 'express' ? 'express'
+      : bookingEdit.shipping_method === 'standard' ? 'standard'
+      : (booking.shipping_method as string) === 'express' ? 'express' : 'standard';
 
-    const discountTotal =
-      Number(booking.discount_amount ?? 0) +
-      Number(booking.duration_discount ?? 0) +
-      Number(booking.loyalty_discount ?? 0);
+    // Versandpreise aus derselben DB-Quelle wie der Kunden-Checkout
+    // (admin_config key 'shipping'), NICHT statisch raten.
+    const { data: shipCfgRow } = await supabase
+      .from('admin_config')
+      .select('value')
+      .eq('key', 'shipping')
+      .maybeSingle();
+    const shipCfg = (shipCfgRow?.value as typeof DEFAULT_SHIPPING) ?? DEFAULT_SHIPPING;
+
+    const subtotal = priceRental + priceAccessories + priceHaftung;
+
+    // Manueller Versand-Override (z. B. 0 € = kostenlos) hat Vorrang.
+    const shipOverrideProvided =
+      bookingEdit.shipping_override !== undefined && bookingEdit.shipping_override !== null;
+    const shipOverrideVal = shipOverrideProvided ? Number(bookingEdit.shipping_override) : null;
+    const shipOverrideValid =
+      shipOverrideProvided && shipOverrideVal !== null && Number.isFinite(shipOverrideVal) && shipOverrideVal >= 0;
+    const shippingPrice = shipOverrideValid
+      ? Math.round((shipOverrideVal as number) * 100) / 100
+      : Math.round(calcShipping(subtotal, shipMethod, deliveryMode, shipCfg).price * 100) / 100;
+
+    // Rabatt proportional zum neuen Subtotal skalieren — sonst bliebe ein
+    // absoluter Rabatt stehen, wenn die Bestellung kleiner wird
+    // (verzerrte Differenz / Ueber-Erstattung).
+    const oldSubtotal =
+      Number(booking.price_rental ?? 0) +
+      Number(booking.price_accessories ?? 0) +
+      Number(booking.price_haftung ?? 0);
+    const discScale = oldSubtotal > 0 ? Math.min(1, Math.max(0, subtotal / oldSubtotal)) : 1;
+    const scaledDiscountAmount = Math.round(Number(booking.discount_amount ?? 0) * discScale * 100) / 100;
+    const scaledDurationDiscount = Math.round(Number(booking.duration_discount ?? 0) * discScale * 100) / 100;
+    const scaledLoyaltyDiscount = Math.round(Number(booking.loyalty_discount ?? 0) * discScale * 100) / 100;
+    let discountTotal =
+      Math.round((scaledDiscountAmount + scaledDurationDiscount + scaledLoyaltyDiscount) * 100) / 100;
+    if (discountTotal > subtotal) discountTotal = subtotal;
     const computedTotal = Math.max(0, Math.round((subtotal + shippingPrice - discountTotal) * 100) / 100);
 
     const overrideProvided =
@@ -1016,7 +1118,11 @@ export async function PATCH(
           price_accessories: priceAccessories,
           price_haftung: priceHaftung,
           shipping_price: shippingPrice,
+          shipping_overridden: shipOverrideValid,
+          delivery_mode: deliveryMode,
+          shipping_method: shipMethod,
           discount_total: Math.round(discountTotal * 100) / 100,
+          discount_scaled: discScale < 0.9995,
           computed_total: computedTotal,
           final_total: finalTotal,
           old_total: oldTotal,
@@ -1049,8 +1155,11 @@ export async function PATCH(
     const dateStr = new Date().toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' });
     const parts: string[] = [];
     if (periodChanged) parts.push(`Zeitraum ${rentalFrom}–${rentalTo}`);
-    if (cameraChanged) parts.push(`Kamera → ${effProduct?.name ?? newProductId}`);
+    if (cameraChanged) parts.push(`Kamera → ${camPicks.map((c) => c.name).join(', ')}`);
     if (bookingEdit.haftung !== undefined) parts.push(`Haftung → ${effHaftung ?? 'keine'}`);
+    if (bookingEdit.delivery_mode !== undefined || bookingEdit.shipping_method !== undefined || shipOverrideValid) {
+      parts.push(`Versand → ${deliveryMode === 'abholung' ? 'Abholung' : `${shipMethod === 'express' ? 'Express' : 'Standard'} ${shippingPrice.toFixed(2).replace('.', ',')} €`}`);
+    }
     if (itemsProvided) parts.push('Zubehör/Set angepasst');
     let noteLine = `Bestellbearbeitung (${dateStr}): ${reason}`;
     if (parts.length > 0) noteLine += ` [${parts.join(', ')}]`;
@@ -1070,6 +1179,11 @@ export async function PATCH(
       price_haftung: priceHaftung,
       shipping_price: shippingPrice,
       price_total: finalTotal,
+      discount_amount: scaledDiscountAmount,
+      duration_discount: scaledDurationDiscount,
+      loyalty_discount: scaledLoyaltyDiscount,
+      delivery_mode: deliveryMode,
+      shipping_method: shipMethod,
       notes: `${existingNotes}${noteLine}`,
     };
     const packWasStarted = !!booking.pack_status;
@@ -1078,13 +1192,10 @@ export async function PATCH(
     // Kamera-/Zeitraum-Aenderung: Kamera-Skelett neu (unit_id=null erzwingt
     // Neuzuweisung), Legacy-Felder synchron halten.
     if (cameraChanged || periodChanged) {
-      const camName = effProduct?.name ?? String(booking.product_name ?? newProductId).split(',')[0].trim();
       upd.product_id = newProductId;
-      upd.product_name = Array(cameraCount).fill(camName).join(', ');
+      upd.product_name = camPicks.map((c) => c.name).join(', ');
       upd.unit_id = null;
-      upd.cameras = buildCameraSkeleton([
-        { product_id: newProductId || null, product_name: camName, qty: cameraCount },
-      ]);
+      upd.cameras = buildCameraSkeleton(desiredCameras);
     }
 
     let { error: upErr } = await supabase.from('bookings').update(upd).eq('id', id);
@@ -1107,10 +1218,9 @@ export async function PATCH(
     if (cameraChanged || periodChanged) {
       try {
         if (!camerasColumnMissing) {
-          const camName = effProduct?.name ?? String(booking.product_name ?? newProductId).split(',')[0].trim();
           const camRes = await assignCamerasToBooking(
             id,
-            [{ product_id: newProductId || null, product_name: camName, qty: cameraCount }],
+            desiredCameras,
             rentalFrom,
             rentalTo,
           );

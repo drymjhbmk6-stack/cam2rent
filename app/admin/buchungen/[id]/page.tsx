@@ -1720,7 +1720,11 @@ interface EditPreview {
   price_accessories: number;
   price_haftung: number;
   shipping_price: number;
+  shipping_overridden?: boolean;
+  delivery_mode?: 'versand' | 'abholung';
+  shipping_method?: 'standard' | 'express';
   discount_total: number;
+  discount_scaled?: boolean;
   computed_total: number;
   final_total: number;
   old_total: number;
@@ -1744,10 +1748,25 @@ function BookingEditSection({
   const curHaftung: 'none' | 'standard' | 'premium' =
     booking.haftung === 'standard' ? 'standard' : booking.haftung === 'premium' ? 'premium' : 'none';
 
+  const camCount = Math.max(1, (booking.cameras_resolved?.length ?? 0) || 1);
+  const initialCamRows = (): string[] => {
+    const cr = booking.cameras_resolved;
+    if (cr && cr.length > 0) return cr.map((c) => c.product_id || booking.product_id);
+    return Array(camCount).fill(booking.product_id);
+  };
+  const curDelivery: 'versand' | 'abholung' =
+    booking.delivery_mode === 'abholung' ? 'abholung' : 'versand';
+  const curShipMethod: 'standard' | 'express' =
+    booking.shipping_method === 'express' ? 'express' : 'standard';
+
   const [editing, setEditing] = useState(false);
   const [rentalFrom, setRentalFrom] = useState(String(booking.rental_from).slice(0, 10));
   const [rentalTo, setRentalTo] = useState(String(booking.rental_to).slice(0, 10));
-  const [cameraId, setCameraId] = useState(booking.product_id);
+  const [camRows, setCamRows] = useState<string[]>(initialCamRows());
+  const [deliveryMode, setDeliveryMode] = useState<'versand' | 'abholung'>(curDelivery);
+  const [shipMethod, setShipMethod] = useState<'standard' | 'express'>(curShipMethod);
+  const [shipOverrideOn, setShipOverrideOn] = useState(false);
+  const [shipOverrideVal, setShipOverrideVal] = useState(String(booking.shipping_price ?? 0));
   const [haftung, setHaftung] = useState<'none' | 'standard' | 'premium'>(curHaftung);
   const [rows, setRows] = useState<{ id: string; qty: number }[]>(
     leafRows.map((r) => ({ id: r.accessory_id as string, qty: r.qty })),
@@ -1765,7 +1784,11 @@ function BookingEditSection({
   function start() {
     setRentalFrom(String(booking.rental_from).slice(0, 10));
     setRentalTo(String(booking.rental_to).slice(0, 10));
-    setCameraId(booking.product_id);
+    setCamRows(initialCamRows());
+    setDeliveryMode(curDelivery);
+    setShipMethod(curShipMethod);
+    setShipOverrideOn(false);
+    setShipOverrideVal(String(booking.shipping_price ?? 0));
     setHaftung(curHaftung);
     setRows(leafRows.map((r) => ({ id: r.accessory_id as string, qty: r.qty })));
     setAccChanged(false);
@@ -1783,12 +1806,18 @@ function BookingEditSection({
     const body: Record<string, unknown> = {
       rental_from: rentalFrom,
       rental_to: rentalTo,
-      camera_product_id: cameraId,
+      cameras: camRows.map((pid) => ({ product_id: pid })),
+      delivery_mode: deliveryMode,
+      shipping_method: shipMethod,
       haftung,
       reason: reason.trim(),
       settle,
       dry_run: dryRun,
     };
+    if (shipOverrideOn) {
+      const s = Number(shipOverrideVal.replace(',', '.'));
+      if (Number.isFinite(s) && s >= 0) body.shipping_override = s;
+    }
     // Zubehör/Set nur senden, wenn wirklich geändert — sonst behält der
     // Server die aktuelle Komposition (Set bleibt als Set bepreist).
     if (accChanged) {
@@ -1919,22 +1948,76 @@ function BookingEditSection({
         </div>
 
         <div>
-          <label className="block text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider mb-1">Kamera</label>
-          <select
-            value={cameraId}
-            onChange={(e) => { setCameraId(e.target.value); setPreview(null); }}
-            className="w-full text-base border border-brand-border rounded-lg px-2 py-2"
-          >
-            {!productList.some((p) => p.id === cameraId) && (
-              <option value={cameraId}>{booking.product_name}</option>
-            )}
-            {productList.map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
+          <label className="block text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider mb-1">
+            Kamera{camRows.length > 1 ? `s (${camRows.length})` : ''}
+          </label>
+          <div className="space-y-2">
+            {camRows.map((pid, i) => (
+              <select
+                key={i}
+                value={pid}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setCamRows((rs) => rs.map((p, j) => (j === i ? v : p)));
+                  setPreview(null);
+                }}
+                className="w-full text-base border border-brand-border rounded-lg px-2 py-2"
+              >
+                {!productList.some((p) => p.id === pid) && (
+                  <option value={pid}>{booking.product_name}</option>
+                )}
+                {productList.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
             ))}
-          </select>
-          <p className="text-xs text-brand-muted mt-1">
-            {Math.max(1, (booking.cameras_resolved?.length ?? 0) || 1)}× — bei Mehrfach-Kameras wird das Modell für alle übernommen.
-          </p>
+          </div>
+          {camRows.length > 1 && (
+            <p className="text-xs text-brand-muted mt-1">
+              Jede Kamera einzeln wählbar — verschiedene Modelle möglich.
+            </p>
+          )}
+        </div>
+
+        <div>
+          <label className="block text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider mb-1">Lieferart / Versand</label>
+          <div className="flex gap-2">
+            <select
+              value={deliveryMode}
+              onChange={(e) => { setDeliveryMode(e.target.value as 'versand' | 'abholung'); setPreview(null); }}
+              className="flex-1 text-base border border-brand-border rounded-lg px-2 py-2"
+            >
+              <option value="versand">Versand</option>
+              <option value="abholung">Abholung</option>
+            </select>
+            <select
+              value={shipMethod}
+              onChange={(e) => { setShipMethod(e.target.value as 'standard' | 'express'); setPreview(null); }}
+              disabled={deliveryMode === 'abholung'}
+              className="flex-1 text-base border border-brand-border rounded-lg px-2 py-2 disabled:opacity-50"
+            >
+              <option value="standard">Standard</option>
+              <option value="express">Express (immer 12,99 €)</option>
+            </select>
+          </div>
+          <label className="flex items-center gap-2 mt-2 text-xs text-brand-muted">
+            <input
+              type="checkbox"
+              checked={shipOverrideOn}
+              onChange={(e) => { setShipOverrideOn(e.target.checked); setPreview(null); }}
+            />
+            Versandkosten manuell setzen (z.B. 0 € = kostenlos)
+          </label>
+          {shipOverrideOn && (
+            <input
+              type="text"
+              inputMode="decimal"
+              value={shipOverrideVal}
+              onChange={(e) => { setShipOverrideVal(e.target.value); setPreview(null); }}
+              placeholder="z.B. 0"
+              className="w-full text-base border border-brand-border rounded-lg px-2 py-2 mt-1"
+            />
+          )}
         </div>
 
         <div>
@@ -2049,8 +2132,20 @@ function BookingEditSection({
             <div className="flex justify-between"><span className="text-brand-steel">Miete</span><span>{fmtEuro(preview.price_rental)}</span></div>
             {preview.price_accessories > 0 && <div className="flex justify-between"><span className="text-brand-steel">Zubehör/Sets</span><span>{fmtEuro(preview.price_accessories)}</span></div>}
             {preview.price_haftung > 0 && <div className="flex justify-between"><span className="text-brand-steel">Haftungsschutz</span><span>{fmtEuro(preview.price_haftung)}</span></div>}
-            {preview.shipping_price > 0 && <div className="flex justify-between"><span className="text-brand-steel">Versand</span><span>{fmtEuro(preview.shipping_price)}</span></div>}
-            {preview.discount_total > 0 && <div className="flex justify-between text-green-600"><span>Rabatte</span><span>-{fmtEuro(preview.discount_total)}</span></div>}
+            <div className="flex justify-between">
+              <span className="text-brand-steel">
+                Versand{preview.delivery_mode === 'abholung'
+                  ? ' (Abholung)'
+                  : ` (${preview.shipping_method === 'express' ? 'Express' : 'Standard'}${preview.shipping_overridden ? ', manuell' : ''})`}
+              </span>
+              <span>{fmtEuro(preview.shipping_price)}</span>
+            </div>
+            {preview.discount_total > 0 && (
+              <div className="flex justify-between text-green-600">
+                <span>Rabatte{preview.discount_scaled ? ' (anteilig)' : ''}</span>
+                <span>-{fmtEuro(preview.discount_total)}</span>
+              </div>
+            )}
             <div className="flex justify-between pt-1 border-t border-brand-border"><span className="text-brand-steel">Alt</span><span>{fmtEuro(preview.old_total)}</span></div>
             <div className="flex justify-between font-heading font-bold text-brand-black"><span>Neu</span><span>{fmtEuro(preview.final_total)}</span></div>
             <div className="flex justify-between font-heading font-bold pt-1 border-t border-brand-border">

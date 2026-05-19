@@ -1303,6 +1303,37 @@ WBW-Box/-Vorschlag und Verfügbarkeit automatisch nachziehen (alles liest live a
 - **Nebeneffekt (gewollt):** geänderte Set-Teile verlieren das „(aus Set: …)"-
   Label (flache Positionen). Werte/WBW pro Position bleiben korrekt.
 
+#### Versand-DB-Quelle + Multi-Kamera-Modelle + Rabatt-Skalierung (Stand 2026-05-19)
+Drei Korrekturen am `booking_edit`-Zweig (`app/api/admin/booking/[id]/route.ts`)
++ `BookingEditSection` (`app/admin/buchungen/[id]/page.tsx`), keine Migration:
+- **Versandpreis aus DB statt statisch.** Vorher `calcShipping(...,
+  shippingConfig)` mit dem fest in `data/shipping.ts` hinterlegten Objekt →
+  falsch, sobald der Admin unter `/admin/einstellungen?tab=versand` andere
+  Preise gesetzt hat. Jetzt: `admin_config`-Key `shipping` laden (gleiches
+  Pattern wie `confirm-cart`), Fallback `DEFAULT_SHIPPING` (`lib/price-config`).
+  `shippingConfig`-Import entfernt.
+- **Lieferart/Versandart editierbar + manueller Override.** Body um
+  `delivery_mode`, `shipping_method`, `shipping_override` erweitert; UI hat
+  zwei Selects + Checkbox „Versandkosten manuell" (z. B. 0 € = kostenlos).
+  `delivery_mode`/`shipping_method` werden in `upd` mitgeschrieben. Erklärt
+  den 12,99-€-Fall: die Buchung stand auf Express (Express ignoriert den
+  Gratis-Schwellwert).
+- **Multi-Kamera: pro Kamera ein eigenes Modell.** Body um
+  `cameras: {product_id}[]` erweitert (`camera_product_id` bleibt
+  Legacy-Fallback). Preis = Σ `getPriceForDays(p, days)` je Kamera,
+  Verfügbarkeit **pro distinct Modell** (`reservedCameraCount`),
+  `desiredCameras: DesiredCamera[]` → `buildCameraSkeleton` +
+  `assignCamerasToBooking`. UI: ein Dropdown pro Kamera (Anzahl aus
+  `cameras_resolved`). Defensiver Fallback auf Ein-Modell ohne die
+  `supabase-bookings-cameras.sql`/`-camera-unit-assignment.sql`-Migrationen.
+- **Rabatt schrumpft proportional.** `discScale = clamp(newSubtotal /
+  oldSubtotal, 0, 1)`; `discount_amount`/`duration_discount`/
+  `loyalty_discount` skaliert in `upd` zurückgeschrieben (Rechnung/EÜR
+  konsistent). Manueller `new_price_total`-Override bleibt vorrangig.
+- Preview liefert zusätzlich `delivery_mode`, `shipping_method`,
+  `shipping_overridden`, `discount_scaled`; Note + Audit dokumentieren die
+  Versand-/Rabatt-Anpassung.
+
 ### Komplette Bestellbearbeitung mit Nachzahlung/Erstattung (Stand 2026-05-19)
 Neue Section „Bestellung bearbeiten" auf `/admin/buchungen/[id]` (über der
 schlankeren „Zubehör der Buchung bearbeiten"-Section, die für reine
