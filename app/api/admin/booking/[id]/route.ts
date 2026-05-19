@@ -1198,20 +1198,35 @@ export async function PATCH(
       upd.cameras = buildCameraSkeleton(desiredCameras);
     }
 
-    let { error: upErr } = await supabase.from('bookings').update(upd).eq('id', id);
+    // Update mit defensivem Strip fehlender Spalten: ist eine Migration noch
+    // nicht durch (z. B. supabase-bookings-cameras.sql), liefert PostgREST
+    // „Could not find the 'X' column … in the schema cache" (PGRST204). Die
+    // betroffene Spalte wird entfernt und erneut versucht (max. 6 Runden) —
+    // ein fehlendes optionales Feld darf das Speichern NIE hart killen.
+    const updTry: Record<string, unknown> = { ...upd };
     let camerasColumnMissing = false;
-    if (upErr && 'cameras' in upd && /cameras/i.test(upErr.message || '')) {
-      // Migration supabase-bookings-cameras.sql noch nicht durch → ohne
-      // cameras erneut (Legacy-Einzelpfad uebernimmt die Unit-Zuweisung).
-      camerasColumnMissing = true;
-      const { cameras: _c, ...rest } = upd;
-      void _c;
-      const retry = await supabase.from('bookings').update(rest).eq('id', id);
-      upErr = retry.error;
+    let upErr: { message?: string; code?: string } | null = null;
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const r = await supabase.from('bookings').update(updTry).eq('id', id);
+      upErr = r.error;
+      if (!upErr) break;
+      const msg = upErr.message || '';
+      const m = msg.match(/Could not find the '([^']+)' column/i);
+      const col = m?.[1];
+      if (col && col in updTry) {
+        if (col === 'cameras') camerasColumnMissing = true;
+        delete updTry[col];
+        console.warn(`[booking-edit] Spalte '${col}' fehlt (Migration ausstehend) — wird übersprungen`);
+        continue;
+      }
+      break;
     }
     if (upErr) {
       console.error('[booking-edit] update failed:', upErr);
-      return NextResponse.json({ error: 'Speichern fehlgeschlagen.' }, { status: 500 });
+      return NextResponse.json(
+        { error: `Speichern fehlgeschlagen: ${upErr.message || upErr.code || 'unbekannter DB-Fehler'}` },
+        { status: 500 },
+      );
     }
 
     // Kamera-Units neu zuweisen
