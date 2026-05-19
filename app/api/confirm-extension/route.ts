@@ -8,6 +8,7 @@ import { calcHaftungTieredPrice, DEFAULT_HAFTUNG } from '@/lib/price-config';
 import { sendExtensionConfirmation } from '@/lib/email';
 import { createAdminNotification } from '@/lib/admin-notifications';
 import { getStripe } from '@/lib/stripe';
+import { snapshotInvoiceVersion } from '@/lib/invoice-versions';
 
 /**
  * POST /api/confirm-extension
@@ -206,6 +207,13 @@ export async function POST(req: NextRequest) {
     console.error('Extension update error:', updateError);
     return NextResponse.json({ error: 'Buchung konnte nicht aktualisiert werden: ' + updateError.message }, { status: 500 });
   }
+
+  // Rechnung intern versionieren (non-blocking — darf die Verlängerung nie kippen).
+  await snapshotInvoiceVersion(supabase, bookingId, {
+    reason: `Verlängerung um ${additionalDays} ${additionalDays === 1 ? 'Tag' : 'Tage'}`,
+    triggerSource: 'extension',
+    previousBooking: booking as Record<string, unknown>,
+  }).catch((e) => console.error('[confirm-extension] snapshot failed:', e));
 
   // Send confirmation email (fire-and-forget)
   const customerName = user.user_metadata?.full_name || user.email?.split('@')[0] || 'Kunde';

@@ -775,6 +775,7 @@ export default function BuchungDetailPage() {
             {booking.status === 'confirmed' && (
               <WbwFinalizePanel booking={booking} onChanged={fetchBooking} />
             )}
+            <InvoiceVersionsPanel bookingId={booking.id} />
 
             {/* Preisaufstellung */}
             <Section title="Preisaufstellung">
@@ -2629,6 +2630,137 @@ function WbwFinalizePanel({ booking, onChanged }: { booking: BookingDetail; onCh
               </div>
             </div>
           </div>
+        )}
+      </div>
+    </Section>
+  );
+}
+
+interface InvoiceVersionRow {
+  id: string;
+  version: number;
+  isCurrent: boolean;
+  gross: number;
+  reason: string | null;
+  triggerSource: string;
+  createdAt: string;
+  sentAt: string | null;
+  sentTo: string | null;
+  pdfUrl: string | null;
+}
+
+function InvoiceVersionsPanel({ bookingId }: { bookingId: string }) {
+  const [versions, setVersions] = useState<InvoiceVersionRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [migrationPending, setMigrationPending] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ t: 'ok' | 'err'; m: string } | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/admin/booking/${bookingId}/invoice-versions`);
+      const d = await res.json().catch(() => ({}));
+      setMigrationPending(!!d.migrationPending);
+      setVersions(Array.isArray(d.versions) ? d.versions : []);
+    } catch {
+      setVersions([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [bookingId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function sendCurrent() {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const res = await fetch(`/api/admin/booking/${bookingId}/invoice-versions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || 'Fehlgeschlagen.');
+      if (d.success === false) {
+        setMsg({ t: 'err', m: d.error || 'E-Mail fehlgeschlagen.' });
+      } else {
+        setMsg({ t: 'ok', m: `Angepasste Rechnung an ${d.sentTo} gesendet.` });
+        await load();
+      }
+    } catch (e) {
+      setMsg({ t: 'err', m: e instanceof Error ? e.message : 'Fehlgeschlagen.' });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Nichts anzeigen, solange nur die Erst-Fassung (v1) existiert oder gar
+  // keine — erst ab einer echten Anpassung ist der Bereich relevant.
+  if (loading) return null;
+  if (migrationPending) return null;
+  if (versions.length < 2) return null;
+
+  const current = versions.find((v) => v.isCurrent) ?? versions[versions.length - 1];
+  const isAdjustment = current.version >= 2;
+
+  return (
+    <Section title="Rechnungsversionen">
+      <div className="space-y-4">
+        <p className="text-xs text-brand-muted leading-relaxed">
+          Jede Fassung der Rechnung wird intern archiviert. Die aktuelle
+          Fassung kannst du dem Kunden als angepasste Rechnung schicken.
+        </p>
+
+        <div className="bg-brand-bg rounded-lg divide-y divide-brand-border">
+          {versions.map((v) => (
+            <div key={v.id} className="flex items-center gap-3 p-3">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-heading font-semibold text-brand-black">
+                  {v.version === 1 ? 'Ursprüngliche Rechnung' : `Anpassung Nr. ${v.version}`}
+                  {v.isCurrent && (
+                    <span className="ml-2 text-[10px] font-body uppercase tracking-wide text-green-700 bg-green-100 rounded px-1.5 py-0.5">aktuell</span>
+                  )}
+                </p>
+                <p className="text-[11px] text-brand-muted">
+                  {fmtDateTime(v.createdAt)} · {fmtEuro(v.gross)}
+                  {v.reason ? ` · ${v.reason}` : ''}
+                </p>
+                <p className="text-[11px] text-brand-muted">
+                  {v.sentAt ? `An Kunden gesendet: ${fmtDateTime(v.sentAt)} (${v.sentTo || '—'})` : 'Noch nicht an Kunden gesendet'}
+                </p>
+              </div>
+              {v.pdfUrl && (
+                <a
+                  href={v.pdfUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 py-1.5 rounded-btn border border-brand-border text-xs font-heading font-semibold text-brand-black hover:bg-white transition-colors shrink-0"
+                >
+                  PDF
+                </a>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {msg && (
+          <p className={`text-xs ${msg.t === 'ok' ? 'text-green-600' : 'text-red-600'}`}>{msg.m}</p>
+        )}
+
+        {isAdjustment && (
+          <button
+            type="button"
+            onClick={sendCurrent}
+            disabled={busy}
+            className="px-4 py-2 rounded-btn bg-brand-black text-white text-sm font-heading font-semibold hover:bg-brand-dark transition-colors disabled:opacity-50"
+          >
+            {busy
+              ? 'Wird gesendet…'
+              : current.sentAt
+                ? 'Angepasste Rechnung erneut senden'
+                : 'Angepasste Rechnung an Kunden senden'}
+          </button>
         )}
       </div>
     </Section>

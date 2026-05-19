@@ -5,12 +5,9 @@ import { renderToBuffer, type DocumentProps } from '@react-pdf/renderer';
 import { createElement, type ReactElement } from 'react';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
-import { InvoicePDF, type InvoiceData } from '@/lib/invoice-pdf';
+import { InvoicePDF } from '@/lib/invoice-pdf';
 import { ensureBusinessConfig } from '@/lib/load-business-config';
-import { BUSINESS } from '@/lib/business-config';
-import { normalizeAccessoryItems } from '@/lib/booking-accessories';
-import { computeInvoiceLines } from '@/lib/invoice-lines';
-import QRCode from 'qrcode';
+import { buildInvoiceData } from '@/lib/build-invoice-data';
 
 export async function GET(
   _req: NextRequest,
@@ -57,102 +54,7 @@ export async function GET(
     return NextResponse.json({ error: 'Buchung nicht gefunden.' }, { status: 404 });
   }
 
-  // Format invoice date from created_at or today
-  const raw = booking.created_at ? new Date(booking.created_at) : new Date();
-  const invoiceDate = raw.toLocaleDateString('de-DE', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    timeZone: 'Europe/Berlin',
-  });
-
-  // Fetch tax config
-  const { data: taxSettings } = await supabase
-    .from('admin_settings')
-    .select('key, value')
-    .in('key', ['tax_mode', 'tax_rate', 'ust_id']);
-
-  const taxMap: Record<string, string> = {};
-  for (const s of taxSettings ?? []) taxMap[s.key] = s.value;
-
-  // Kundenadresse aus Profil laden
-  let customerAddress = booking.shipping_address ?? '';
-  if (!customerAddress && booking.user_id) {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('address_street, address_zip, address_city')
-      .eq('id', booking.user_id)
-      .maybeSingle();
-    if (profile?.address_street) {
-      customerAddress = `${profile.address_street}, ${profile.address_zip} ${profile.address_city}`;
-    }
-  }
-
-  const invoiceNumber = booking.id.replace(/^(C2R|BK)-/, 'RE-');
-
-  // Zubehoer qty-aware (Legacy-Fallback-Felder) + echte Katalog-Positionen
-  const accItems = normalizeAccessoryItems(booking.accessory_items, booking.accessories);
-  const { cameraLines, accessoryLines } = await computeInvoiceLines(supabase, booking);
-
-  const data: InvoiceData = {
-    bookingId: booking.id,
-    invoiceNumber,
-    invoiceDate,
-    customerName: booking.customer_name ?? '',
-    customerEmail: booking.customer_email ?? '',
-    customerAddress,
-    productName: booking.product_name ?? '',
-    rentalFrom: booking.rental_from ?? '',
-    rentalTo: booking.rental_to ?? '',
-    days: booking.days ?? 1,
-    deliveryMode: booking.delivery_mode ?? 'versand',
-    shippingMethod: booking.shipping_method ?? undefined,
-    haftung: booking.haftung ?? 'none',
-    accessories: Array.isArray(booking.accessories) ? booking.accessories : [],
-    accessoryItems: accItems,
-    cameraLines,
-    accessoryLines,
-    priceRental: booking.price_rental ?? 0,
-    priceAccessories: booking.price_accessories ?? 0,
-    priceHaftung: booking.price_haftung ?? 0,
-    shippingPrice: booking.shipping_price ?? 0,
-    discountAmount:
-      (booking.discount_amount ?? 0)
-      + (booking.duration_discount ?? 0)
-      + (booking.loyalty_discount ?? 0),
-    couponCode: booking.coupon_code ?? undefined,
-    priceTotal: booking.price_total ?? 0,
-    deposit: booking.deposit ?? 0,
-    taxMode: (taxMap['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer',
-    taxRate: parseFloat(taxMap['tax_rate'] || '19'),
-    ustId: taxMap['ust_id'] || '',
-    paymentMethod: booking.payment_intent_id?.startsWith('MANUAL') ? 'Ueberweisung' : booking.payment_intent_id?.startsWith('PENDING') ? 'Ausstehend' : 'Stripe',
-    stripePaymentId: booking.payment_intent_id?.startsWith('pi_') ? booking.payment_intent_id : undefined,
-    paymentStatus: booking.payment_intent_id?.includes('UNPAID') ? 'unpaid'
-      : booking.payment_status === 'unpaid' ? 'unpaid'
-      : (booking.notes && typeof booking.notes === 'string' && booking.notes.includes('Überweisung ausstehend')) ? 'unpaid'
-      : undefined,
-  };
-
-  // EPC QR-Code für Banking generieren
-  try {
-    const epcData = [
-      'BCD',           // Service Tag
-      '002',           // Version
-      '1',             // Character set (UTF-8)
-      'SCT',           // Identification
-      BUSINESS.bic,    // BIC
-      BUSINESS.owner,  // Empfaenger
-      BUSINESS.iban,   // IBAN (ohne Leerzeichen)
-      `EUR${data.priceTotal.toFixed(2)}`, // Betrag
-      '',              // Purpose Code
-      '',              // Structured Reference
-      `${invoiceNumber} ${data.customerName}`, // Verwendungszweck
-    ].join('\n');
-    data.qrCodeDataUrl = await QRCode.toDataURL(epcData, { width: 200, margin: 1, color: { dark: '#000000', light: '#ffffff' } });
-  } catch (qrErr) {
-    console.error('QR-Code Fehler:', qrErr);
-  }
+  const data = await buildInvoiceData(supabase, booking);
 
   const pdfBuffer = await renderToBuffer(
     createElement(InvoicePDF, { data }) as ReactElement<DocumentProps>

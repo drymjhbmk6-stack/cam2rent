@@ -19,6 +19,7 @@ import { createAdminNotification } from '@/lib/admin-notifications';
 import { buildBookingAdjustmentEmail } from '@/lib/booking-adjustment-email';
 import { getSiteUrl } from '@/lib/env-mode';
 import { RESERVING_BOOKING_STATUSES } from '@/lib/booking-statuses';
+import { snapshotInvoiceVersion } from '@/lib/invoice-versions';
 
 const PACK_RESET_FIELDS = {
   pack_status: null,
@@ -806,6 +807,14 @@ export async function PATCH(
       request: req,
     });
 
+    // Rechnung intern versionieren (non-blocking — darf den Edit nie kippen).
+    await snapshotInvoiceVersion(supabase, id, {
+      reason,
+      triggerSource: 'accessory_edit',
+      previousBooking: booking as Record<string, unknown>,
+      request: req,
+    }).catch((e) => console.error('[booking-accessory-edit] snapshot failed:', e));
+
     return NextResponse.json({ success: true });
   }
 
@@ -1285,6 +1294,14 @@ export async function PATCH(
       },
       request: req,
     });
+
+    // Rechnung intern versionieren (non-blocking — darf den Edit nie kippen).
+    await snapshotInvoiceVersion(supabase, id, {
+      reason,
+      triggerSource: 'booking_edit',
+      previousBooking: booking as Record<string, unknown>,
+      request: req,
+    }).catch((e) => console.error('[booking-edit] snapshot failed:', e));
 
     return NextResponse.json({
       success: true,

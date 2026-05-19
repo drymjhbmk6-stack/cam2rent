@@ -876,6 +876,71 @@ export async function sendWbwConfirmation(data: WbwConfirmationEmailData) {
   });
 }
 
+// ─── Angepasste Rechnung (Rechnungsanpassung an den Kunden) ──────────────────
+
+export interface InvoiceAdjustmentEmailData {
+  bookingId: string;
+  customerName: string;
+  customerEmail: string;
+  version: number;
+  reason?: string;
+  pdfBuffer: Buffer;
+}
+
+export async function sendInvoiceAdjustment(data: InvoiceAdjustmentEmailData) {
+  const subject = stripSubject(`Angepasste Rechnung zu deiner Buchung ${data.bookingId}`);
+  const firstName = (data.customerName || '').trim().split(/\s+/)[0] || 'dort';
+  const html = `
+<!DOCTYPE html>
+<html lang="de">
+<head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#f5f5f0;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f0;padding:40px 16px;">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+
+        <tr><td style="background:#0f172a;border-radius:12px 12px 0 0;padding:20px 32px;">
+          <table cellpadding="0" cellspacing="0" border="0" role="presentation"><tr>
+            <td valign="middle" style="padding-right:12px;"><img src="https://cam2rent.de/favicon/icon-dark-64.png" width="40" height="40" alt="" style="display:block;border-radius:8px;border:0;"></td>
+            <td valign="middle">
+              <p style="margin:0;font-size:22px;font-weight:700;color:#ffffff;line-height:1.1;">cam<span style="color:#06b6d4;">2</span>rent</p>
+              <p style="margin:4px 0 0;font-size:12px;color:#94a3b8;letter-spacing:1px;line-height:1.2;">clever mieten statt kaufen</p>
+            </td>
+          </tr></table>
+        </td></tr>
+
+        <tr><td style="background:#ffffff;padding:32px;border-radius:0 0 12px 12px;">
+          <p style="margin:0 0 18px;font-size:15px;color:#374151;line-height:1.6;">
+            Hallo ${h(firstName)},<br><br>
+            zu deiner Buchung <strong>${h(data.bookingId)}</strong> gibt es eine
+            angepasste Rechnung. Sie ersetzt die vorherige Fassung — im Anhang
+            findest du das aktuelle Rechnungs-PDF (Anpassung Nr. ${h(String(data.version))}).
+          </p>
+          ${data.reason ? `<p style="margin:0 0 18px;font-size:14px;color:#374151;line-height:1.6;">Grund der Anpassung: ${h(data.reason)}</p>` : ''}
+          <p style="margin:0;font-size:14px;color:#374151;line-height:1.6;">
+            Bei Fragen erreichst du uns jederzeit unter
+            <a href="mailto:${h(BUSINESS.emailKontakt)}" style="color:#06b6d4;">${h(BUSINESS.emailKontakt)}</a>.<br><br>
+            ${h(BUSINESS.name)} – ${h(BUSINESS.owner)}<br>
+            <a href="${h(BUSINESS.url)}" style="color:#06b6d4;">${h(BUSINESS.url)}</a>
+          </p>
+        </td></tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+  await sendAndLog({
+    to: data.customerEmail,
+    subject,
+    html,
+    bookingId: data.bookingId,
+    emailType: 'invoice_adjustment',
+    attachments: [{ filename: `Rechnungsanpassung-${data.bookingId}-v${data.version}.pdf`, content: data.pdfBuffer }],
+  });
+}
+
 // ─── Damage report types ──────────────────────────────────────────────────────
 
 export interface DamageEmailData {

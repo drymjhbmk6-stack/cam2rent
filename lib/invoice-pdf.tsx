@@ -61,6 +61,13 @@ export interface InvoiceData {
   paymentMethod?: string;
   stripePaymentId?: string;
   paymentStatus?: string;
+  /** Versionsnummer der Rechnung. >= 2 => angepasste Fassung. Bei 1/undefined
+   *  ganz normale Erst-Rechnung (Titel "Rechnung"). */
+  adjustmentVersion?: number;
+  /** Grund der Anpassung (z.B. "Zubehör geändert"). */
+  adjustmentReason?: string;
+  /** Datum der vorherigen Fassung (DD.MM.YYYY) — fuer den Ersetzt-Hinweis. */
+  replacesDate?: string;
 }
 
 // ─── Colors (nur Schwarz/Weiß/Grau) ─────────────────────────────────────────
@@ -126,6 +133,12 @@ const s = StyleSheet.create({
     fontSize: 10,
     color: C.grayMid,
     marginTop: 2,
+  },
+  headerAdjustNote: {
+    fontSize: 8,
+    color: C.grayMid,
+    marginTop: 3,
+    maxWidth: 240,
   },
   headerLine: {
     borderBottomWidth: 0.5,
@@ -410,8 +423,17 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
             <Text style={s.headerBrand}>cam2rent</Text>
           </View>
           <View style={s.headerRight}>
-            <Text style={s.headerTitle}>Rechnung</Text>
+            <Text style={s.headerTitle}>
+              {(data.adjustmentVersion ?? 1) >= 2 ? 'Rechnungsanpassung' : 'Rechnung'}
+            </Text>
             <Text style={s.headerInvoiceNr}>{invoiceNumber}</Text>
+            {(data.adjustmentVersion ?? 1) >= 2 && (
+              <Text style={s.headerAdjustNote}>
+                Anpassung Nr. {data.adjustmentVersion}
+                {data.replacesDate ? ` · ersetzt die Fassung vom ${data.replacesDate}` : ' · ersetzt die vorherige Fassung'}
+                {data.adjustmentReason ? `\nGrund: ${data.adjustmentReason}` : ''}
+              </Text>
+            )}
           </View>
         </View>
         <View style={s.headerLine} />

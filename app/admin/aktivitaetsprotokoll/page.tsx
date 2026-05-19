@@ -28,6 +28,8 @@ const ACTION_LABELS: Record<string, string> = {
   'booking.resend_payment_link': 'Zahlungs-Link erneut gesendet',
   'booking.wbw_finalize': 'Wiederbeschaffungswerte finalisiert',
   'booking.wbw_resend': 'WBW-E-Mail erneut gesendet',
+  'booking.invoice_version': 'Rechnungsfassung archiviert',
+  'booking.invoice_send': 'Angepasste Rechnung an Kunden gesendet',
   // Kunden
   'customer.block': 'Kunde gesperrt',
   'customer.unblock': 'Kunde entsperrt',
