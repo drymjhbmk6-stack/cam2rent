@@ -56,6 +56,7 @@ export default function StripeAbgleichTab() {
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
   const [importingFees, setImportingFees] = useState(false);
   const [refundModal, setRefundModal] = useState<StripeTx | null>(null);
+  const [refundReducesIncome, setRefundReducesIncome] = useState(false);
   const [refundMode, setRefundMode] = useState<'full' | 'partial'>('full');
   const [refundAmount, setRefundAmount] = useState('');
   const [refundNote, setRefundNote] = useState('');
@@ -129,6 +130,7 @@ export default function StripeAbgleichTab() {
 
   function openRefundModal(tx: StripeTx) {
     setRefundModal(tx);
+    setRefundReducesIncome(false);
     setRefundMode('full');
     setRefundAmount(tx.amount.toFixed(2).replace('.', ','));
     setRefundNote(tx.reconciliation_note || '');
@@ -138,8 +140,9 @@ export default function StripeAbgleichTab() {
     if (!refundModal) return;
     const note = refundNote.trim();
     if (note.length < 3) { showToast('Kommentar erforderlich (mind. 3 Zeichen).', 'err'); return; }
+    const reducesIncome = !!refundModal.booking_id && refundReducesIncome;
     let amount: number | undefined;
-    if (refundMode === 'partial') {
+    if (reducesIncome && refundMode === 'partial') {
       amount = parseFloat(refundAmount.replace(',', '.'));
       if (!(amount > 0)) { showToast('Erstattungsbetrag muss größer als 0 sein.', 'err'); return; }
     }
@@ -148,13 +151,15 @@ export default function StripeAbgleichTab() {
       const res = await fetch('/api/admin/buchhaltung/stripe-reconciliation/refund', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transaction_id: refundModal.id, mode: refundMode, amount, note }),
+        body: JSON.stringify({ transaction_id: refundModal.id, scope: refundMode, amount, reduces_income: reducesIncome, note }),
       });
       if (res.ok) {
         const json = await res.json();
         showToast(
           json.target === 'booking'
-            ? 'Erstattung der Buchung gutgeschrieben (wird in EÜR + DATEV abgezogen)'
+            ? (reducesIncome
+                ? 'Erstattung erfasst — Einnahme der Buchung gemindert (EÜR + DATEV)'
+                : 'Als Überzahlung/Fehlbuchung markiert — Buchungsbetrag bleibt')
             : 'Als Fehlbuchung markiert',
           'ok',
         );
@@ -465,31 +470,52 @@ export default function StripeAbgleichTab() {
               <div>Buchung: <span style={{ color: refundModal.booking_id ? '#06b6d4' : '#64748b', fontWeight: 600 }}>{refundModal.booking_id || 'keine (nicht zugeordnet)'}</span></div>
             </div>
 
-            <div style={{ marginBottom: 16, fontSize: 13, color: '#94a3b8', background: '#0f172a', border: '1px solid #1e293b', borderRadius: 8, padding: '10px 12px' }}>
-              {refundModal.booking_id
-                ? 'Die Erstattung wird der verknüpften Buchung gutgeschrieben und in EÜR + DATEV vom Einkommen abgezogen.'
-                : 'Diese Zahlung ist keiner Buchung zugeordnet — sie zählt ohnehin nicht als Einnahme. Die Markierung dokumentiert die Fehlbuchung. Die Stripe-Gebühr bleibt als Ausgabe (wird von Stripe bei Rückerstattung nicht erstattet).'}
-            </div>
+            {!refundModal.booking_id && (
+              <div style={{ marginBottom: 16, fontSize: 13, color: '#94a3b8', background: '#0f172a', border: '1px solid #1e293b', borderRadius: 8, padding: '10px 12px' }}>
+                Diese Zahlung ist keiner Buchung zugeordnet — sie zählt ohnehin nicht als Einnahme. Die Markierung dokumentiert die Fehlbuchung. Die Stripe-Gebühr bleibt als Ausgabe (wird von Stripe bei Rückerstattung nicht erstattet).
+              </div>
+            )}
 
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, color: '#e2e8f0', marginBottom: 8, cursor: 'pointer' }}>
-                <input type="radio" checked={refundMode === 'full'} onChange={() => setRefundMode('full')} />
-                Komplette Fehlbuchung / voll erstattet
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, color: '#e2e8f0', cursor: 'pointer' }}>
-                <input type="radio" checked={refundMode === 'partial'} onChange={() => setRefundMode('partial')} />
-                Teilerstattung
-              </label>
-              {refundMode === 'partial' && (
-                <input
-                  value={refundAmount}
-                  onChange={(e) => setRefundAmount(e.target.value)}
-                  inputMode="decimal"
-                  placeholder="Erstattungsbetrag in € (z.B. 3,95)"
-                  style={{ ...inputStyle, marginTop: 10 }}
-                />
-              )}
-            </div>
+            {refundModal.booking_id && (
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 14, color: '#e2e8f0', marginBottom: 10, cursor: 'pointer' }}>
+                  <input type="radio" checked={!refundReducesIncome} onChange={() => setRefundReducesIncome(false)} style={{ marginTop: 3 }} />
+                  <span>
+                    <strong>Stripe-Überzahlung / Fehlbuchung korrigiert</strong>
+                    <div style={{ fontSize: 12, color: '#94a3b8' }}>Stripe hat zu viel eingezogen, der Buchungs-/Rechnungsbetrag war bereits korrekt. <strong>Kein Einnahme-Abzug</strong> (setzt einen evtl. zuvor erfassten Abzug auf 0 zurück).</div>
+                  </span>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 14, color: '#e2e8f0', cursor: 'pointer' }}>
+                  <input type="radio" checked={refundReducesIncome} onChange={() => setRefundReducesIncome(true)} style={{ marginTop: 3 }} />
+                  <span>
+                    <strong>Echte Erstattung — Einnahme mindern</strong>
+                    <div style={{ fontSize: 12, color: '#94a3b8' }}>Die Buchung war korrekt berechnet, der Kunde bekommt Geld zurück. Wird in EÜR + DATEV vom Einkommen abgezogen.</div>
+                  </span>
+                </label>
+
+                {refundReducesIncome && (
+                  <div style={{ marginTop: 12, paddingLeft: 24 }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, color: '#e2e8f0', marginBottom: 8, cursor: 'pointer' }}>
+                      <input type="radio" checked={refundMode === 'full'} onChange={() => setRefundMode('full')} />
+                      Voll erstattet (Einnahme der Buchung → 0)
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, color: '#e2e8f0', cursor: 'pointer' }}>
+                      <input type="radio" checked={refundMode === 'partial'} onChange={() => setRefundMode('partial')} />
+                      Teilerstattung
+                    </label>
+                    {refundMode === 'partial' && (
+                      <input
+                        value={refundAmount}
+                        onChange={(e) => setRefundAmount(e.target.value)}
+                        inputMode="decimal"
+                        placeholder="Einnahmemindernder Gesamtbetrag in € (z.B. 3,95)"
+                        style={{ ...inputStyle, marginTop: 10 }}
+                      />
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
             <div style={{ marginBottom: 20 }}>
               <label style={{ display: 'block', fontSize: 13, color: '#94a3b8', fontWeight: 600, marginBottom: 8 }}>
