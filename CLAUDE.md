@@ -2294,6 +2294,7 @@ Vorbild: `/admin/social/zeitplan` (Posts) + `/admin/social/plan` (Bulk-Generator
 - **`supabase-migrationen-status-check.sql`** — Read-only SQL-Script im Repo-Root. Listet je Migration "ERLEDIGT" oder "OFFEN". Nach jedem Deploy neuer Migrationen einfach nochmal laufen lassen und erledigte manuell nach `erledigte supabase/` verschieben.
 
 ### Ausgeführte Migrationen (erledigt)
+- ~~`supabase-invoice-versions.sql`~~ (Rechnungs-Versionierung / `invoice_versions` — am 2026-05-19 ausgeführt, Datei nach `erledigte supabase/` verschoben)
 - ~~`supabase-accessories-included-parts-images.sql`~~ (Bild pro Zubehör-Bestandteil — am 2026-05-16 ausgeführt, Datei nach `erledigte supabase/` verschoben)
 - ~~`supabase-bookings-liability-override.sql`~~ (manuelle Kamera-/Zubehör-Anpassung der internen Haftungs-Box — am 2026-05-16 ausgeführt, Datei nach `erledigte supabase/` verschoben)
 - ~~`supabase-bookings-wbw-finalized.sql`~~ (WBW-Finalisierung + PDF-E-Mail — am 2026-05-16 ausgeführt, Datei nach `erledigte supabase/` verschoben)
@@ -2422,7 +2423,6 @@ Zusätzlich zum bestehenden file-hash-Check (byte-identische Datei) erkennt das 
 **Audit-Aktionen:** `beleg.dismiss_duplicate`, `beleg.scan_duplicates`. `beleg.ocr` enthält jetzt `duplicate_kind: 'strict'|'soft'|null` in changes.
 
 ### Noch offen
-- **Rechnungs-Versionierung-Migration auszuführen:** `supabase/supabase-invoice-versions.sql` (idempotent). Legt Tabelle `invoice_versions` + Indizes + RLS an. Ohne Migration läuft alles weiter (non-blocking: Buchungsänderungen funktionieren normal, es entstehen nur keine Archiv-Einträge; die GET-Route liefert `migrationPending`, die Admin-Section bleibt ausgeblendet, POST-Senden gibt 503). Nach der Migration entstehen Versionen ab der nächsten rechnungsrelevanten Änderung (Lazy-Baseline v1 aus dem Vorher-Zustand). Empfohlen ASAP ausführen.
 - **Bestellbearbeitungs-Migration auszuführen:** `supabase/supabase-bookings-edit-adjustment.sql` (idempotent). Legt `bookings.adjustment_payment_link_id/amount/status/note` an. Ohne Migration läuft die komplette Bestellbearbeitung weiter (Zahlungslink/Refund werden ausgeführt, Doku landet in `notes`), nur die strukturierten `adjustment_*`-Felder + der Webhook-Status-Sync („Nachzahlung bezahlt") greifen erst nach der Migration. Empfohlen ASAP ausführen.
 - **Multi-Kamera-Migrationen auszuführen (3, idempotent):**
   `supabase/supabase-bookings-cameras.sql` (Spalte `bookings.cameras JSONB`),
