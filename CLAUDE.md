@@ -310,11 +310,13 @@ geändert** (CLAUDE.md-Doku-Pflicht erfüllt). Eine Datei:
   (>4 Einträge). Defensiver Fallback: einzeiliger Text ohne ` | `/URL →
   Rohtext wie bisher. Schreibt nichts zurück.
 - **`Collapsible`** (neue lokale Sub-Komponente, CSS-hide statt unmount →
-  Formular-State bleibt beim Zuklappen erhalten): bündelt die 5 schweren
-  Panels (LiabilitySection, BookingEditSection, BookingAccessoryEditSection,
-  WbwFinalizePanel, InvoiceVersionsPanel) in einen **zugeklappten** Block
-  „Bearbeiten & Werkzeuge" nach dem Mietvertrag. Jede bestehende
-  Render-Bedingung 1:1 mitgenommen.
+  Formular-State bleibt beim Zuklappen erhalten): bündelt die schweren
+  Panels (LiabilitySection, BookingEditSection, WbwFinalizePanel,
+  InvoiceVersionsPanel) in einen **zugeklappten** Block „Bearbeiten &
+  Werkzeuge" nach dem Mietvertrag. Jede bestehende Render-Bedingung 1:1
+  mitgenommen. (`BookingAccessoryEditSection` wurde am 2026-05-19 entfernt
+  — siehe Konsolidierungs-Notiz im Abschnitt „Zubehör einer bestehenden
+  Buchung echt bearbeiten".)
 - **Rechte Spalte** (Kundendaten/Aktionen/Dokumente) ist auf Desktop
   `lg:sticky lg:top-6` (Grid bekam `items-start`/`self-start`).
 - Modals/Toast unverändert außerhalb von Grid/Collapsible. `tsc`+`next lint`
@@ -1205,6 +1207,17 @@ Der Admin kann in dieser Box pro Buchung eine **andere Katalog-Kamera und/oder e
 - **UI** (`LiabilitySection` in `/admin/buchungen/[id]`): „Bearbeiten"-Button + Badge „manuell angepasst" + „Auf automatisch zuruecksetzen". Edit-Modus: zwei unabhaengige Checkboxen („Kamera ueberschreiben" → Katalog-Dropdown, „Zubehoer ueberschreiben" → editierbare Zeilenliste mit Dropdown + Menge + Hinzufuegen/Entfernen). Page laedt zusaetzlich `/api/products` + `/api/admin/accessories` fuer die Dropdowns.
 
 ### Zubehör einer bestehenden Buchung echt bearbeiten (Stand 2026-05-18)
+> **UI entfernt (Stand 2026-05-19):** Die eigenständige Sektion „Zubehör der
+> Buchung bearbeiten" (`BookingAccessoryEditSection`) wurde aus
+> `/admin/buchungen/[id]` ausgebaut, weil „Bestellung bearbeiten"
+> (`BookingEditSection` / `booking_edit`-Branch) funktional Obermenge ist
+> (nutzt intern denselben `applyAccessoryComposition`-Helper). Der unten
+> beschriebene PATCH-Branch `accessory_edit` **bleibt im Backend bestehen**
+> (kein UI-Einstieg, harmless, ggf. von externen Tools nutzbar) — die
+> Beschreibung unten dokumentiert weiter das API-Verhalten. Für reine
+> No-Payment-Zubehöränderungen läuft alles über „Bestellung bearbeiten"
+> mit `settle:'none'`.
+
 Eigene Sektion „Zubehör der Buchung bearbeiten" auf `/admin/buchungen/[id]` —
 **unabhängig** von der reinen Anzeige-`liability_override`-Box (die bleibt 1:1
 für WBW-/Kamera-Korrektur ohne Buchungsänderung). Hier ändert der Admin die
