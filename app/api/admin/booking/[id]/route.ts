@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { logAudit } from '@/lib/audit';
-import { sendCancellationConfirmation, sendAdminCancellationNotification, sendAndLog } from '@/lib/email';
+import { sendCancellationConfirmation, sendAdminCancellationNotification, sendAndLog, sendShippingConfirmation } from '@/lib/email';
+import { buildTrackingUrl, isAllowedCarrier, type TrackingCarrier } from '@/lib/tracking-url';
 import { releaseAccessoryUnitsFromBooking } from '@/lib/accessory-unit-assignment';
 import { getStripe, buildPaymentDescription } from '@/lib/stripe';
 import { DEFAULT_HAFTUNG, DEFAULT_SHIPPING, getEigenbeteiligung, calcHaftungTieredPrice, type HaftungConfig } from '@/lib/price-config';
@@ -706,7 +707,17 @@ export async function PATCH(
 ) {
   const { id } = await params;
   const body = await req.json();
-  const { status, cancellation_reason, customer_email, verification_gate, liability_override, tracking_number } = body as {
+  const {
+    status,
+    cancellation_reason,
+    customer_email,
+    verification_gate,
+    liability_override,
+    tracking_number,
+    tracking_carrier,
+    return_tracking_number,
+    return_tracking_carrier,
+  } = body as {
     status?: string;
     cancellation_reason?: string;
     customer_email?: string;
@@ -716,6 +727,9 @@ export async function PATCH(
       accessories?: { id: string; qty: number }[] | null;
     } | null;
     tracking_number?: string | null;
+    tracking_carrier?: string | null;
+    return_tracking_number?: string | null;
+    return_tracking_carrier?: string | null;
   };
 
   const supabase = createServiceClient();
@@ -1461,12 +1475,112 @@ export async function PATCH(
     updates.customer_email = customer_email || null;
   }
 
-  // Trackingnummer manuell korrigieren (z.B. falsch erfasst / nachgetragen).
-  // Leerer Wert → null. Tracking-URL bleibt unberührt (kann separat falsch
-  // sein — der Admin entscheidet bewusst).
-  if (tracking_number !== undefined) {
-    const tn = typeof tracking_number === 'string' ? tracking_number.trim().slice(0, 100) : '';
-    updates.tracking_number = tn || null;
+  // Trackingnummer (Hin) + Carrier manuell korrigieren. Bei einer Aenderung
+  // an Nummer ODER Carrier wird die tracking_url automatisch neu gebaut
+  // (DHL/DPD je nach Carrier). Trackingnummer leer → URL ebenfalls null.
+  // Falls fuer eine vorhandene Nummer kein Carrier gesetzt ist, klemmen wir
+  // auf DHL (Backwards-Compat mit Buchungen vor Migration).
+  let trackingMailHint: {
+    productName: string;
+    customerName: string;
+    customerEmail: string;
+    rentalFrom: string;
+    rentalTo: string;
+    trackingNumber: string;
+    trackingUrl: string;
+    carrier: string;
+  } | null = null;
+  if (tracking_number !== undefined || tracking_carrier !== undefined) {
+    // Aktuelle Werte laden, damit eine Aenderung nur eines Feldes (z.B. nur
+    // Carrier) den jeweils anderen Wert erhaelt.
+    const { data: cur } = await supabase
+      .from('bookings')
+      .select('tracking_number, tracking_carrier, customer_email, customer_name, product_name, rental_from, rental_to, delivery_mode')
+      .eq('id', id)
+      .maybeSingle();
+
+    const newNumber =
+      tracking_number === undefined
+        ? (cur?.tracking_number as string | null) ?? null
+        : typeof tracking_number === 'string'
+          ? tracking_number.trim().slice(0, 100) || null
+          : null;
+
+    let newCarrier: TrackingCarrier | null;
+    if (tracking_carrier === undefined) {
+      newCarrier = isAllowedCarrier(cur?.tracking_carrier) ? cur!.tracking_carrier : null;
+    } else if (tracking_carrier === null || tracking_carrier === '') {
+      newCarrier = null;
+    } else if (isAllowedCarrier(tracking_carrier)) {
+      newCarrier = tracking_carrier;
+    } else {
+      return NextResponse.json(
+        { error: 'Carrier muss DHL oder DPD sein.' },
+        { status: 422 },
+      );
+    }
+
+    updates.tracking_number = newNumber;
+    updates.tracking_carrier = newCarrier;
+    updates.tracking_url = newNumber ? buildTrackingUrl(newCarrier ?? 'DHL', newNumber) : null;
+
+    // Versandbestaetigungs-Mail an den Kunden, wenn die korrigierte Nummer
+    // mit dem neuen Carrier-Link an die Kunden-Mail rausgehen soll. Nur wenn
+    // (a) eine Nummer existiert, (b) eine Kunden-Mail hinterlegt ist und
+    // (c) der Versand-Modus tatsaechlich 'versand' ist. Tatsaechlich
+    // versendet wird nach dem DB-Update (siehe unten — fire-and-forget).
+    if (
+      newNumber &&
+      cur?.customer_email &&
+      (cur.delivery_mode ?? 'versand') === 'versand'
+    ) {
+      trackingMailHint = {
+        productName: cur.product_name ?? '',
+        customerName: cur.customer_name ?? '',
+        customerEmail: cur.customer_email,
+        rentalFrom: cur.rental_from ?? '',
+        rentalTo: cur.rental_to ?? '',
+        trackingNumber: newNumber,
+        trackingUrl: updates.tracking_url as string,
+        carrier: newCarrier ?? 'DHL',
+      };
+    }
+  }
+
+  // Trackingnummer (Retoure) + Carrier. Reines internes Tracking — kein
+  // Mail-Versand an den Kunden (das Ruecksende-Etikett-PDF hat er bereits;
+  // die Tracking-Nummer entsteht erst beim Etikett-Erzeugen).
+  if (return_tracking_number !== undefined || return_tracking_carrier !== undefined) {
+    const { data: cur } = await supabase
+      .from('bookings')
+      .select('return_tracking_number, return_tracking_carrier')
+      .eq('id', id)
+      .maybeSingle();
+
+    const newNumber =
+      return_tracking_number === undefined
+        ? (cur?.return_tracking_number as string | null) ?? null
+        : typeof return_tracking_number === 'string'
+          ? return_tracking_number.trim().slice(0, 100) || null
+          : null;
+
+    let newCarrier: TrackingCarrier | null;
+    if (return_tracking_carrier === undefined) {
+      newCarrier = isAllowedCarrier(cur?.return_tracking_carrier) ? cur!.return_tracking_carrier : null;
+    } else if (return_tracking_carrier === null || return_tracking_carrier === '') {
+      newCarrier = null;
+    } else if (isAllowedCarrier(return_tracking_carrier)) {
+      newCarrier = return_tracking_carrier;
+    } else {
+      return NextResponse.json(
+        { error: 'Carrier muss DHL oder DPD sein.' },
+        { status: 422 },
+      );
+    }
+
+    updates.return_tracking_number = newNumber;
+    updates.return_tracking_carrier = newCarrier;
+    updates.return_tracking_url = newNumber ? buildTrackingUrl(newCarrier ?? 'DHL', newNumber) : null;
   }
 
   // Manuelle Haftungs-Box-Anpassung (intern). null = zuruecksetzen auf
@@ -1567,6 +1681,40 @@ export async function PATCH(
     }
   }
 
+  // Defensiver Fallback: Migration supabase-bookings-tracking-carrier-return.sql
+  // noch nicht durch → die vier neuen Spalten (tracking_carrier, return_tracking_*)
+  // einmalig droppen und Update erneut versuchen, damit die uebrigen Updates
+  // (Status, E-Mail, Trackingnummer alt) trotzdem durchlaufen.
+  if (
+    error &&
+    /tracking_carrier|return_tracking/i.test(error.message || '') &&
+    ('tracking_carrier' in updates ||
+      'return_tracking_number' in updates ||
+      'return_tracking_url' in updates ||
+      'return_tracking_carrier' in updates)
+  ) {
+    const {
+      tracking_carrier: _tc,
+      return_tracking_number: _rn,
+      return_tracking_url: _ru,
+      return_tracking_carrier: _rc,
+      ...rest
+    } = updates;
+    void _tc; void _rn; void _ru; void _rc;
+    if (Object.keys(rest).length > 0) {
+      let retry = supabase.from('bookings').update(rest).eq('id', id);
+      if (preStatus !== null) retry = retry.eq('status', preStatus);
+      const r = await retry.select('id').maybeSingle();
+      updated = r.data;
+      error = r.error;
+    } else {
+      return NextResponse.json(
+        { error: 'Tracking-Anpassung nicht moeglich — Migration steht noch aus.' },
+        { status: 503 },
+      );
+    }
+  }
+
   if (error) {
     console.error('Booking update error:', error);
     return NextResponse.json({ error: 'Aktualisierung fehlgeschlagen.' }, { status: 500 });
@@ -1579,6 +1727,16 @@ export async function PATCH(
       { error: `Status hat sich zwischenzeitlich geändert (war: ${preStatus}). Bitte Buchung neu laden.` },
       { status: 409 },
     );
+  }
+
+  // Versand-Mail mit korrigiertem Tracking-Link an den Kunden (non-blocking).
+  // trackingMailHint wird nur gesetzt, wenn Hin-Tracking geaendert wurde und
+  // alle Voraussetzungen passen (Nummer + Mail + delivery_mode='versand').
+  if (trackingMailHint) {
+    sendShippingConfirmation({
+      bookingId: id,
+      ...trackingMailHint,
+    }).catch((err) => console.error('[booking-update] shipping confirmation re-send failed:', err));
   }
 
   // Bei Stornierung: Stripe-Link deaktivieren, Zubehoer freigeben, Mails raus.
@@ -1663,6 +1821,15 @@ export async function PATCH(
   if (status === 'cancelled') action = 'booking.cancel';
   else if (verification_gate) action = 'booking.verification_gate';
   else if (customer_email !== undefined && !status) action = 'booking.email_updated';
+  else if (
+    !status &&
+    (tracking_number !== undefined ||
+      tracking_carrier !== undefined ||
+      return_tracking_number !== undefined ||
+      return_tracking_carrier !== undefined)
+  ) {
+    action = 'booking.tracking_update';
+  }
 
   await logAudit({
     action,

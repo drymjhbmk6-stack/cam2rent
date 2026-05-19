@@ -37,6 +37,10 @@ interface BookingDetail {
   customer_email: string | null;
   tracking_number: string | null;
   tracking_url: string | null;
+  tracking_carrier: string | null;
+  return_tracking_number: string | null;
+  return_tracking_url: string | null;
+  return_tracking_carrier: string | null;
   shipped_at: string | null;
   return_condition: string | null;
   return_notes: string | null;
@@ -209,7 +213,12 @@ export default function BuchungDetailPage() {
   const [emailSaving, setEmailSaving] = useState(false);
   const [editingTracking, setEditingTracking] = useState(false);
   const [trackingDraft, setTrackingDraft] = useState('');
+  const [trackingCarrierDraft, setTrackingCarrierDraft] = useState<'DHL' | 'DPD'>('DHL');
   const [trackingSaving, setTrackingSaving] = useState(false);
+  const [editingReturnTracking, setEditingReturnTracking] = useState(false);
+  const [returnTrackingDraft, setReturnTrackingDraft] = useState('');
+  const [returnTrackingCarrierDraft, setReturnTrackingCarrierDraft] = useState<'DHL' | 'DPD'>('DHL');
+  const [returnTrackingSaving, setReturnTrackingSaving] = useState(false);
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [emailSending, setEmailSending] = useState(false);
@@ -668,21 +677,63 @@ export default function BuchungDetailPage() {
     } catch { alert('Netzwerkfehler.'); } finally { setStatusUpdating(false); }
   }
 
+  function buildTrackingUrlClient(carrier: 'DHL' | 'DPD', number: string): string {
+    const clean = number.trim();
+    if (carrier === 'DPD') return `https://www.dpd.com/de/de/empfangen/sendungsverfolgung/?parcelId=${clean}`;
+    return `https://www.dhl.de/de/privatkunden/pakete-empfangen/verfolgen.html?piececode=${clean}`;
+  }
+
   async function saveTracking() {
     if (!booking) return;
     setTrackingSaving(true);
     try {
       const next = trackingDraft.trim();
+      const carrier = trackingCarrierDraft;
       const res = await fetch(`/api/admin/booking/${booking.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tracking_number: next }),
+        body: JSON.stringify({ tracking_number: next, tracking_carrier: carrier }),
       });
       if (!res.ok) throw new Error('Fehler');
-      setBooking({ ...booking, tracking_number: next || null });
+      setBooking({
+        ...booking,
+        tracking_number: next || null,
+        tracking_carrier: next ? carrier : null,
+        tracking_url: next ? buildTrackingUrlClient(carrier, next) : null,
+      });
       setEditingTracking(false);
     } catch { alert('Trackingnummer konnte nicht gespeichert werden.'); }
     finally { setTrackingSaving(false); }
+  }
+
+  async function saveReturnTracking() {
+    if (!booking) return;
+    setReturnTrackingSaving(true);
+    try {
+      const next = returnTrackingDraft.trim();
+      const carrier = returnTrackingCarrierDraft;
+      const res = await fetch(`/api/admin/booking/${booking.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ return_tracking_number: next, return_tracking_carrier: carrier }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        if (res.status === 503) {
+          alert(data?.error ?? 'Migration fuer Retoure-Tracking steht noch aus.');
+          return;
+        }
+        throw new Error('Fehler');
+      }
+      setBooking({
+        ...booking,
+        return_tracking_number: next || null,
+        return_tracking_carrier: next ? carrier : null,
+        return_tracking_url: next ? buildTrackingUrlClient(carrier, next) : null,
+      });
+      setEditingReturnTracking(false);
+    } catch { alert('Rueckgabe-Trackingnummer konnte nicht gespeichert werden.'); }
+    finally { setReturnTrackingSaving(false); }
   }
 
   return (
@@ -903,38 +954,59 @@ export default function BuchungDetailPage() {
                     <div>
                       <p className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider mb-1">Trackingnummer</p>
                       {editingTracking ? (
-                        <div className="flex gap-2 items-center">
-                          <input
-                            type="text"
-                            value={trackingDraft}
-                            onChange={e => setTrackingDraft(e.target.value)}
-                            placeholder="Trackingnummer"
-                            className="flex-1 px-2.5 py-1.5 text-sm font-body rounded-lg border border-brand-border bg-brand-card text-brand-black focus:outline-none focus:border-accent-cyan"
-                            autoFocus
-                            onKeyDown={e => {
-                              if (e.key === 'Enter') { e.preventDefault(); saveTracking(); }
-                              if (e.key === 'Escape') setEditingTracking(false);
-                            }}
-                          />
-                          <button
-                            onClick={saveTracking}
-                            disabled={trackingSaving}
-                            className="px-2.5 py-1.5 text-xs font-heading font-semibold rounded-lg bg-accent-cyan text-white hover:bg-accent-cyan/80 disabled:opacity-40"
-                          >
-                            {trackingSaving ? '...' : 'OK'}
-                          </button>
-                          <button
-                            onClick={() => setEditingTracking(false)}
-                            className="px-2.5 py-1.5 text-xs font-heading font-semibold rounded-lg bg-brand-border text-brand-muted hover:bg-brand-border/80"
-                          >
-                            \u2715
-                          </button>
+                        <div className="flex flex-col gap-2">
+                          <div className="flex gap-2 items-center">
+                            <select
+                              value={trackingCarrierDraft}
+                              onChange={e => setTrackingCarrierDraft(e.target.value as 'DHL' | 'DPD')}
+                              className="px-2 py-1.5 text-sm font-body rounded-lg border border-brand-border bg-brand-card text-brand-black focus:outline-none focus:border-accent-cyan"
+                              title="Versanddienstleister"
+                            >
+                              <option value="DHL">DHL</option>
+                              <option value="DPD">DPD</option>
+                            </select>
+                            <input
+                              type="text"
+                              value={trackingDraft}
+                              onChange={e => setTrackingDraft(e.target.value)}
+                              placeholder="Trackingnummer"
+                              className="flex-1 min-w-0 px-2.5 py-1.5 text-sm font-body rounded-lg border border-brand-border bg-brand-card text-brand-black focus:outline-none focus:border-accent-cyan"
+                              autoFocus
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') { e.preventDefault(); saveTracking(); }
+                                if (e.key === 'Escape') setEditingTracking(false);
+                              }}
+                            />
+                            <button
+                              onClick={saveTracking}
+                              disabled={trackingSaving}
+                              className="px-2.5 py-1.5 text-xs font-heading font-semibold rounded-lg bg-accent-cyan text-white hover:bg-accent-cyan/80 disabled:opacity-40"
+                            >
+                              {trackingSaving ? '...' : 'OK'}
+                            </button>
+                            <button
+                              onClick={() => setEditingTracking(false)}
+                              className="px-2.5 py-1.5 text-xs font-heading font-semibold rounded-lg bg-brand-border text-brand-muted hover:bg-brand-border/80"
+                            >
+                              {'\u2715'}
+                            </button>
+                          </div>
+                          <p className="text-xs font-body text-brand-muted">
+                            Tracking-Link wird automatisch neu erzeugt. Kunde bekommt eine neue Versand-E-Mail mit korrigiertem Link.
+                          </p>
                         </div>
                       ) : (
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-body text-brand-black break-all">{booking.tracking_number || '\u2013'}</span>
+                          {booking.tracking_carrier && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-heading font-bold bg-brand-bg text-brand-steel">{booking.tracking_carrier}</span>
+                          )}
                           <button
-                            onClick={() => { setTrackingDraft(booking.tracking_number || ''); setEditingTracking(true); }}
+                            onClick={() => {
+                              setTrackingDraft(booking.tracking_number || '');
+                              setTrackingCarrierDraft((booking.tracking_carrier as 'DHL' | 'DPD') || 'DHL');
+                              setEditingTracking(true);
+                            }}
                             className="text-brand-muted hover:text-accent-cyan transition-colors"
                             title="Trackingnummer bearbeiten"
                           >
@@ -958,6 +1030,81 @@ export default function BuchungDetailPage() {
                     )}
                     <InfoRow label="Rückgabe" value={booking.returned_at ? fmtDateTime(booking.returned_at) : 'Noch nicht zurück'} />
                     {booking.return_condition && <InfoRow label="Zustand" value={booking.return_condition} />}
+                    {/* Retoure-Trackingnummer (intern). Sichtbar, wenn das Ruecksende-
+                        Etikett erzeugt wurde — sonst hat der Admin keine Nummer zum
+                        Eintragen. Editierbar wie das Hin-Tracking, baut tracking_url
+                        automatisch je nach Carrier. */}
+                    {booking.return_label_url && (
+                      <div>
+                        <p className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider mb-1">Rückgabe-Trackingnummer</p>
+                        {editingReturnTracking ? (
+                          <div className="flex flex-col gap-2">
+                            <div className="flex gap-2 items-center">
+                              <select
+                                value={returnTrackingCarrierDraft}
+                                onChange={e => setReturnTrackingCarrierDraft(e.target.value as 'DHL' | 'DPD')}
+                                className="px-2 py-1.5 text-sm font-body rounded-lg border border-brand-border bg-brand-card text-brand-black focus:outline-none focus:border-accent-cyan"
+                                title="Versanddienstleister"
+                              >
+                                <option value="DHL">DHL</option>
+                                <option value="DPD">DPD</option>
+                              </select>
+                              <input
+                                type="text"
+                                value={returnTrackingDraft}
+                                onChange={e => setReturnTrackingDraft(e.target.value)}
+                                placeholder="Trackingnummer"
+                                className="flex-1 min-w-0 px-2.5 py-1.5 text-sm font-body rounded-lg border border-brand-border bg-brand-card text-brand-black focus:outline-none focus:border-accent-cyan"
+                                autoFocus
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') { e.preventDefault(); saveReturnTracking(); }
+                                  if (e.key === 'Escape') setEditingReturnTracking(false);
+                                }}
+                              />
+                              <button
+                                onClick={saveReturnTracking}
+                                disabled={returnTrackingSaving}
+                                className="px-2.5 py-1.5 text-xs font-heading font-semibold rounded-lg bg-accent-cyan text-white hover:bg-accent-cyan/80 disabled:opacity-40"
+                              >
+                                {returnTrackingSaving ? '...' : 'OK'}
+                              </button>
+                              <button
+                                onClick={() => setEditingReturnTracking(false)}
+                                className="px-2.5 py-1.5 text-xs font-heading font-semibold rounded-lg bg-brand-border text-brand-muted hover:bg-brand-border/80"
+                              >
+                                {'✕'}
+                              </button>
+                            </div>
+                            <p className="text-xs font-body text-brand-muted">
+                              Nur interne Anzeige — der Kunde bekommt keine E-Mail.
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-body text-brand-black break-all">{booking.return_tracking_number || '–'}</span>
+                              {booking.return_tracking_carrier && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-heading font-bold bg-brand-bg text-brand-steel">{booking.return_tracking_carrier}</span>
+                              )}
+                              <button
+                                onClick={() => {
+                                  setReturnTrackingDraft(booking.return_tracking_number || '');
+                                  setReturnTrackingCarrierDraft((booking.return_tracking_carrier as 'DHL' | 'DPD') || 'DHL');
+                                  setEditingReturnTracking(true);
+                                }}
+                                className="text-brand-muted hover:text-accent-cyan transition-colors"
+                                title="Rückgabe-Trackingnummer bearbeiten"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                              </button>
+                            </div>
+                            {booking.return_tracking_url && (
+                              <a href={booking.return_tracking_url} target="_blank" rel="noopener noreferrer" className="text-xs font-body text-accent-blue hover:underline break-all">Retoure verfolgen</a>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                   {booking.return_notes && (
                     <div className="mt-3 pt-3 border-t border-brand-border">

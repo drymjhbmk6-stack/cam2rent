@@ -2,16 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { sendShippingConfirmation } from '@/lib/email';
 import { logAudit } from '@/lib/audit';
-
-// Träger-spezifische Tracking-URLs
-function buildTrackingUrl(carrier: string, trackingNumber: string): string {
-  const clean = trackingNumber.trim();
-  if (carrier === 'DPD') {
-    return `https://www.dpd.com/de/de/empfangen/sendungsverfolgung/?parcelId=${clean}`;
-  }
-  // DHL (Standard)
-  return `https://www.dhl.de/de/privatkunden/pakete-empfangen/verfolgen.html?piececode=${clean}`;
-}
+import { buildTrackingUrl, isAllowedCarrier } from '@/lib/tracking-url';
 
 /**
  * POST /api/admin/ship-booking
@@ -69,17 +60,35 @@ export async function POST(req: NextRequest) {
     }
 
     const trackingUrl = buildTrackingUrl(carrier, trackingNumber);
+    const carrierForDb = isAllowedCarrier(carrier) ? carrier : null;
 
-    // Status auf shipped setzen + Tracking speichern
-    const { error: updateError } = await supabase
+    // Status auf shipped setzen + Tracking speichern. tracking_carrier ist neu
+    // (Migration supabase-bookings-tracking-carrier-return.sql) — bei fehlender
+    // Migration wird das Update einmal ohne diese Spalte wiederholt, damit der
+    // Versand nicht hart abbricht.
+    let updateError = (await supabase
       .from('bookings')
       .update({
         status: 'shipped',
         tracking_number: trackingNumber.trim(),
         tracking_url: trackingUrl,
+        tracking_carrier: carrierForDb,
         shipped_at: new Date().toISOString(),
       })
-      .eq('id', bookingId);
+      .eq('id', bookingId)).error;
+
+    if (updateError && /tracking_carrier/i.test(updateError.message || '')) {
+      const retry = await supabase
+        .from('bookings')
+        .update({
+          status: 'shipped',
+          tracking_number: trackingNumber.trim(),
+          tracking_url: trackingUrl,
+          shipped_at: new Date().toISOString(),
+        })
+        .eq('id', bookingId);
+      updateError = retry.error;
+    }
 
     if (updateError) {
       console.error('Supabase update error:', updateError);
