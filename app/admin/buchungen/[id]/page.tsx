@@ -712,7 +712,45 @@ export default function BuchungDetailPage() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Auf einen Blick — die wichtigsten Fakten zuerst (mobil ganz oben) */}
+        <div className="bg-white rounded-xl border border-brand-border p-5 mb-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-x-4 gap-y-4">
+            <div>
+              <p className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider mb-1">Status</p>
+              <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-heading font-semibold" style={{ color: sc.color, backgroundColor: sc.bg, border: `1px solid ${sc.color}30` }}>{sc.label}</span>
+            </div>
+            <div className="col-span-2 sm:col-span-1">
+              <p className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider mb-1">Produkt</p>
+              <p className="text-sm font-body text-brand-black">{booking.product_name}</p>
+              {booking.serial_number && <p className="text-xs font-mono text-blue-600">{booking.serial_number}</p>}
+            </div>
+            <div>
+              <p className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider mb-1">Zeitraum</p>
+              <p className="text-sm font-body text-brand-black">{fmtDate(booking.rental_from)} – {fmtDate(booking.rental_to)}</p>
+              <p className="text-xs font-body text-brand-muted">{booking.days} Tag{booking.days !== 1 ? 'e' : ''}{booking.delivery_mode === 'versand' ? ' · Versand' : ' · Abholung'}</p>
+            </div>
+            <div className="col-span-2 sm:col-span-1">
+              <p className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider mb-1">Kunde</p>
+              <p className="text-sm font-body text-brand-black truncate">{booking.customer_name || customer?.full_name || '–'}</p>
+              {(booking.customer_email || customer?.email) && (
+                <a href={`mailto:${booking.customer_email || customer?.email}`} className="text-xs font-body text-accent-blue hover:underline break-all">{booking.customer_email || customer?.email}</a>
+              )}
+            </div>
+            <div>
+              <p className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider mb-1">Gesamt</p>
+              <p className="text-sm font-heading font-bold text-brand-black">{fmtEuro(booking.price_total)}</p>
+            </div>
+            {booking.deposit > 0 && (
+              <div>
+                <p className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider mb-1">Kaution</p>
+                <p className="text-sm font-body text-brand-black">{fmtEuro(booking.deposit)}</p>
+                <DepositBadge status={booking.deposit_status} />
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
           {/* ═══ Left column: 2/3 ═══ */}
           <div className="lg:col-span-2 space-y-6">
 
@@ -737,45 +775,10 @@ export default function BuchungDetailPage() {
               )}
               {booking.notes && (
                 <div className="mt-4 pt-4 border-t border-brand-border">
-                  <InfoRow label="Notizen" value={booking.notes} />
+                  <NotesPanel notes={booking.notes} />
                 </div>
               )}
             </Section>
-
-            {/* Wiederbeschaffung & Haftung (intern) */}
-            {booking.liability_summary && (
-              <LiabilitySection
-                summary={booking.liability_summary}
-                bookingId={booking.id}
-                productId={booking.product_id}
-                accessoryItems={booking.accessory_items ?? null}
-                productList={productList}
-                accessoryList={accessoryList}
-                onSaved={fetchBooking}
-              />
-            )}
-            {!['cancelled', 'completed', 'returned'].includes(booking.status) && (
-              <BookingEditSection
-                booking={booking}
-                productList={productList}
-                options={accessoryEditOptions}
-                onSaved={fetchBooking}
-              />
-            )}
-            {!['cancelled', 'completed', 'returned'].includes(booking.status) && (
-              <BookingAccessoryEditSection
-                bookingId={booking.id}
-                resolvedItems={booking.resolved_items ?? []}
-                accessoryItems={booking.accessory_items ?? null}
-                priceTotal={booking.price_total}
-                options={accessoryEditOptions}
-                onSaved={fetchBooking}
-              />
-            )}
-            {booking.status === 'confirmed' && (
-              <WbwFinalizePanel booking={booking} onChanged={fetchBooking} />
-            )}
-            <InvoiceVersionsPanel bookingId={booking.id} />
 
             {/* Preisaufstellung */}
             <Section title="Preisaufstellung">
@@ -986,6 +989,47 @@ export default function BuchungDetailPage() {
               )}
             </Section>
 
+            {/* Bearbeiten & Werkzeuge — zugeklappt, gleiche Funktion wie zuvor */}
+            <Collapsible
+              title="Bearbeiten & Werkzeuge"
+              subtitle="Bestellung/Zubehör bearbeiten, Haftung, finale Werte, Rechnungsversionen"
+              defaultOpen={false}
+            >
+              {booking.liability_summary && (
+                <LiabilitySection
+                  summary={booking.liability_summary}
+                  bookingId={booking.id}
+                  productId={booking.product_id}
+                  accessoryItems={booking.accessory_items ?? null}
+                  productList={productList}
+                  accessoryList={accessoryList}
+                  onSaved={fetchBooking}
+                />
+              )}
+              {!['cancelled', 'completed', 'returned'].includes(booking.status) && (
+                <BookingEditSection
+                  booking={booking}
+                  productList={productList}
+                  options={accessoryEditOptions}
+                  onSaved={fetchBooking}
+                />
+              )}
+              {!['cancelled', 'completed', 'returned'].includes(booking.status) && (
+                <BookingAccessoryEditSection
+                  bookingId={booking.id}
+                  resolvedItems={booking.resolved_items ?? []}
+                  accessoryItems={booking.accessory_items ?? null}
+                  priceTotal={booking.price_total}
+                  options={accessoryEditOptions}
+                  onSaved={fetchBooking}
+                />
+              )}
+              {booking.status === 'confirmed' && (
+                <WbwFinalizePanel booking={booking} onChanged={fetchBooking} />
+              )}
+              <InvoiceVersionsPanel bookingId={booking.id} />
+            </Collapsible>
+
             {/* E-Mail-Verlauf */}
             {emails.length > 0 && (
               <Section title="E-Mail-Verlauf">
@@ -1028,7 +1072,7 @@ export default function BuchungDetailPage() {
           </div>
 
           {/* ═══ Right column: 1/3 ═══ */}
-          <div className="space-y-6">
+          <div className="space-y-6 lg:sticky lg:top-6 self-start">
 
             {/* Kundendaten */}
             <Section title="Kundendaten">
@@ -1531,6 +1575,138 @@ function PriceRow({ label, amount }: { label: string; amount: number }) {
     <div className="flex justify-between items-center">
       <span className="text-sm font-body text-brand-steel">{label}</span>
       <span className="text-sm font-body text-brand-black">{fmtEuro(amount)}</span>
+    </div>
+  );
+}
+
+// Einklappbarer Sammel-Block. Kinder werden per CSS versteckt (nicht
+// unmounten), damit halb ausgefuellte Edit-Formulare beim Zuklappen
+// erhalten bleiben.
+function Collapsible({
+  title, subtitle, defaultOpen = false, children,
+}: {
+  title: string;
+  subtitle?: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="bg-white rounded-xl border border-brand-border overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between gap-3 px-5 py-4 text-left hover:bg-brand-bg/60 transition-colors"
+      >
+        <div className="min-w-0">
+          <span className="font-heading font-bold text-base text-brand-black">{title}</span>
+          {subtitle && <p className="text-xs font-body text-brand-muted mt-0.5">{subtitle}</p>}
+        </div>
+        <svg
+          className={`w-4 h-4 text-brand-muted shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
+          fill="none" stroke="currentColor" viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      <div className={open ? 'px-5 pb-5 space-y-6 border-t border-brand-border' : 'hidden'}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// Zerlegt das frei-Text-Feld booking.notes in lesbare Bloecke:
+// Zahlungslink -> Button, Stornogrund -> hervorgehobene Box,
+// alles andere -> Aenderungsverlauf-Liste. Reine Anzeige, schreibt
+// nichts zurueck. Faellt bei unbekanntem Format auf Rohtext zurueck.
+function NotesPanel({ notes }: { notes: string }) {
+  const [showAll, setShowAll] = useState(false);
+  const URL_RE = /(https?:\/\/[^\s|]+)/;
+  const segments = notes.split(' | ').map((s) => s.trim()).filter(Boolean);
+
+  // Fallback: einzeiliger Freitext ohne Trenner/Link -> wie bisher.
+  if (segments.length <= 1 && !URL_RE.test(notes)) {
+    return (
+      <div>
+        <p className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider mb-1">Notizen</p>
+        <p className="text-sm font-body text-brand-black whitespace-pre-line">{notes}</p>
+      </div>
+    );
+  }
+
+  const links: { caption: string; url: string }[] = [];
+  const stornoTexts: string[] = [];
+  const history: string[] = [];
+
+  for (const seg of segments) {
+    const m = seg.match(URL_RE);
+    if (m) {
+      const url = m[1];
+      const caption = seg.replace(url, '').replace(/[:\s]+$/, '').trim() || 'Zahlungslink';
+      links.push({ caption, url });
+      continue;
+    }
+    if (/^(stornierungsgrund|storniert|stornogrund|storno)\b/i.test(seg)) {
+      stornoTexts.push(seg.replace(/^[^:]*:\s*/, '').trim() || seg);
+      continue;
+    }
+    history.push(seg);
+  }
+
+  const VISIBLE = 4;
+  const shownHistory = showAll ? history : history.slice(0, VISIBLE);
+
+  return (
+    <div className="space-y-3">
+      <p className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider">Notizen</p>
+
+      {stornoTexts.length > 0 && (
+        <div className="p-3 rounded-lg bg-amber-50 border border-amber-200">
+          <p className="text-xs font-heading font-semibold text-amber-800 uppercase tracking-wider mb-1">Stornogrund</p>
+          {stornoTexts.map((t, i) => (
+            <p key={i} className="text-sm font-body text-amber-900 whitespace-pre-line">{t}</p>
+          ))}
+        </div>
+      )}
+
+      {links.map((l, i) => (
+        <div key={i}>
+          <p className="text-xs font-body text-brand-muted mb-1">{l.caption}</p>
+          <a
+            href={l.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-heading font-semibold bg-blue-600 text-white rounded-btn hover:bg-blue-700 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 010 5.656l-3 3a4 4 0 01-5.656-5.656l1.5-1.5m6.656-1.828a4 4 0 010-5.656l3-3a4 4 0 015.656 5.656l-1.5 1.5" /></svg>
+            Zahlungslink öffnen
+          </a>
+        </div>
+      ))}
+
+      {history.length > 0 && (
+        <div>
+          <p className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider mb-1.5">Änderungsverlauf</p>
+          <ul className="space-y-1.5">
+            {shownHistory.map((h, i) => (
+              <li key={i} className="text-sm font-body text-brand-black flex gap-2">
+                <span className="text-brand-muted shrink-0">•</span>
+                <span className="whitespace-pre-line">{h}</span>
+              </li>
+            ))}
+          </ul>
+          {history.length > VISIBLE && (
+            <button
+              type="button"
+              onClick={() => setShowAll((v) => !v)}
+              className="mt-2 text-xs font-heading font-semibold text-accent-blue hover:underline"
+            >
+              {showAll ? 'weniger anzeigen' : `weitere anzeigen (${history.length - VISIBLE})`}
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

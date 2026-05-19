@@ -292,6 +292,34 @@ Wenn eine Buchung vor Ablauf der 14-tägigen Widerrufsfrist beginnt, muss der Ku
 - **Rechnungsvorschau:** HTML-Vorschau mit QR-Codes (Banking + PayPal) bei "Nicht bezahlt"
 - Vertrag nachträglich unterschreiben: `/admin/buchungen/[id]/vertrag-unterschreiben`
 
+### Buchungsdetail-Seite vereinfacht + neu geordnet (Stand 2026-05-19)
+`/admin/buchungen/[id]` war mit ~15 gestapelten Blöcken überladen (mobil
+endloser Scroll, „Notizen" eine unlesbare Wand aus Stripe-Link +
+`Zubehör-Anpassung (…)`-Strings). Reine Layout-/Anzeige-Umordnung —
+**keine Funktion, kein Handler, kein API-Call, kein Notiz-Schreibpfad
+geändert** (CLAUDE.md-Doku-Pflicht erfüllt). Eine Datei:
+`app/admin/buchungen/[id]/page.tsx`.
+- **Neue Kompaktkarte „Auf einen Blick"** ganz oben (über dem 2/3+1/3-Grid,
+  volle Breite, mobil zuerst): Status, Produkt+Seriennr., Zeitraum,
+  Kunde+E-Mail, Gesamt, Kaution+`DepositBadge`. Read-only, nutzt nur
+  vorhandene Werte/State.
+- **Notizen als `NotesPanel`** (neue lokale Sub-Komponente, reine Anzeige):
+  `notes.split(' | ')` → Zahlungslink wird Button „Zahlungslink öffnen"
+  (`target=_blank rel=noopener`), `Stornierungsgrund:`/`Storniert…` → amber
+  Stornogrund-Box, Rest → Änderungsverlauf-Liste mit „weitere anzeigen"
+  (>4 Einträge). Defensiver Fallback: einzeiliger Text ohne ` | `/URL →
+  Rohtext wie bisher. Schreibt nichts zurück.
+- **`Collapsible`** (neue lokale Sub-Komponente, CSS-hide statt unmount →
+  Formular-State bleibt beim Zuklappen erhalten): bündelt die 5 schweren
+  Panels (LiabilitySection, BookingEditSection, BookingAccessoryEditSection,
+  WbwFinalizePanel, InvoiceVersionsPanel) in einen **zugeklappten** Block
+  „Bearbeiten & Werkzeuge" nach dem Mietvertrag. Jede bestehende
+  Render-Bedingung 1:1 mitgenommen.
+- **Rechte Spalte** (Kundendaten/Aktionen/Dokumente) ist auf Desktop
+  `lg:sticky lg:top-6` (Grid bekam `items-start`/`self-start`).
+- Modals/Toast unverändert außerhalb von Grid/Collapsible. `tsc`+`next lint`
+  für die Datei: 0 Fehler.
+
 ### Buchungsdetails (`/admin/buchungen/[id]`)
 - **Kunden-E-Mail editierbar:** Stift-Icon neben E-Mail in Kundendaten → Inline-Bearbeitung (Enter=Speichern, Escape=Abbrechen), wird auch angezeigt wenn noch keine E-Mail hinterlegt ist
 - **PATCH-Endpoint:** `PATCH /api/admin/booking/[id]` akzeptiert `{ status?, customer_email? }` — Status und E-Mail unabhängig voneinander änderbar
