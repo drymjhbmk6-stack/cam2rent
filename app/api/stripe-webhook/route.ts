@@ -329,6 +329,23 @@ export async function POST(req: NextRequest) {
         }
       }
     }
+
+    // Nachzahlung aus einer Bestellbearbeitung (booking_edit). Die Buchung
+    // wurde bereits geaendert (sofort wirksam) — hier nur den Zahlungsstatus
+    // nachfuehren, damit der Admin sieht, dass die Differenz beglichen ist.
+    if (meta.booking_type === 'price_adjustment' && meta.booking_id) {
+      const supabase = createServiceClient();
+      const r = await supabase
+        .from('bookings')
+        .update({ adjustment_status: 'paid' })
+        .eq('id', meta.booking_id)
+        .eq('adjustment_status', 'pending_payment');
+      if (r.error && /adjustment_status/i.test(r.error.message || '')) {
+        console.warn('[Webhook] adjustment_status-Spalte fehlt (Migration ausstehend).');
+      } else {
+        console.log(`[Webhook] Nachzahlung fuer ${meta.booking_id} als bezahlt markiert.`);
+      }
+    }
   }
 
   return NextResponse.json({ received: true });

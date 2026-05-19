@@ -1272,6 +1272,55 @@ WBW-Box/-Vorschlag und Verfügbarkeit automatisch nachziehen (alles liest live a
 - **Nebeneffekt (gewollt):** geänderte Set-Teile verlieren das „(aus Set: …)"-
   Label (flache Positionen). Werte/WBW pro Position bleiben korrekt.
 
+### Komplette Bestellbearbeitung mit Nachzahlung/Erstattung (Stand 2026-05-19)
+Neue Section „Bestellung bearbeiten" auf `/admin/buchungen/[id]` (über der
+schlankeren „Zubehör der Buchung bearbeiten"-Section, die für reine
+Zubehör-Quick-Edits bleibt). Ändert **Mietzeitraum, Kamera, Set/Zubehör und
+Haftungsschutz** in einem Vorgang; Preisdifferenz wird abgewickelt.
+- **Wirksamkeit:** Änderung greift SOFORT auf die echte Buchung (Packliste,
+  Vertragsdaten-Quelle, Verfügbarkeit, WBW). Zahlung wird separat verfolgt
+  (nicht blockierend) — robust auch für bereits versendete Buchungen.
+- **Nachzahlung (diff > 0):** Stripe-Zahlungslink über die Differenz wird
+  erzeugt, automatisch per E-Mail an den Kunden geschickt
+  (`lib/booking-adjustment-email.ts`, emailType `payment_link`) und im Admin
+  in `notes`/Antwort angezeigt. `stripe-webhook` markiert bei Zahlung
+  `adjustment_status='paid'` (metadata `booking_type:'price_adjustment'`).
+- **Erstattung (diff < 0):** Auto-Stripe-Teilrefund nur wenn
+  `payment_intent_id` mit `pi_` beginnt (idempotencyKey
+  `booking-edit-refund:<id>:<cents>`), sonst `adjustment_status='refund_pending'`
+  + `payment_failed`-Notification (manuell). **WICHTIG:** die
+  `bookings.refund_amount`-Spalte wird NICHT angefasst — der gesenkte
+  `price_total` reduziert das EÜR/DATEV-Einkommen bereits; `refund_amount`
+  würde DOPPELT abziehen (gehört dem Stripe-Abgleich-Erstattungs-Feature).
+- **Mietvertrag** bleibt das signierte Original — Änderung wird in
+  `bookings.notes` + Audit (`booking.edit`) dokumentiert (analog
+  accessory_edit). Pack-Workflow-Snapshot wird zurückgesetzt
+  (`resetPackWorkflow`-Helper, jetzt geteilt mit accessory_edit).
+- **Backend:** neuer früh-zurückkehrender PATCH-Zweig `booking_edit` in
+  `app/api/admin/booking/[id]/route.ts`. Body
+  `{ rental_from?, rental_to?, camera_product_id?, haftung?, items?,
+  reason, new_price_total?, settle:'auto'|'none', dry_run? }`.
+  `dry_run:true` → Preis-Breakdown + diff + Settlement-Plan ohne Mutation
+  (UI „Vorschau berechnen"). `items` wird nur gesendet wenn der Admin
+  Zubehör/Set wirklich ändert — sonst behält der Server die aktuelle
+  Komposition (Set bleibt als Set bepreist; sonst würde ein Set in
+  Einzelteile aufgelöst, gleiches Nebeneffekt wie accessory_edit).
+- **Verfügbarkeit hart:** Kamera via `reservedCameraCount()`
+  (spiegelt `/api/availability`, multi-cam-aware, exkl. dieser Buchung) gegen
+  `product.stock`; Zubehör via geteiltem `applyAccessoryComposition`
+  (`lib/booking-accessory-apply.ts` — aus accessory_edit extrahiert, beide
+  Zweige nutzen es jetzt). Konflikt → 409, **keine Mutation**.
+- **Preis-Recompute:** Miete `getPriceForDays × cameraCount`, Haftung
+  `calcHaftungTieredPrice` (aus `admin_settings.haftung_config`),
+  Zubehör/Sets aus DB-Preis × Tage/flat, Versand `calcShipping`,
+  bestehende Rabatte (discount/duration/loyalty) bleiben abgezogen. Admin
+  kann den Gesamtpreis manuell überschreiben (`new_price_total`).
+- **Migration:** `supabase/supabase-bookings-edit-adjustment.sql` (idempotent)
+  legt `bookings.adjustment_payment_link_id/amount/status/note` an.
+  Defensiver Fallback: fehlt die Migration, läuft alles weiter (Doku nur in
+  `notes`, Zahlungslink/Refund werden trotzdem ausgeführt, Webhook-Status-
+  Update wird still übersprungen).
+
 ### Multi-Kamera-Buchungen + In-App-PDF-Viewer (Stand 2026-05-18)
 - **Mehrere Kameras pro Buchung** sind als kommagetrennter `bookings.product_name`
   gespeichert (z.B. „OSMO Action 5 Pro , OSMO Action 5 Pro"), `product_id` bleibt
@@ -2342,6 +2391,7 @@ Zusätzlich zum bestehenden file-hash-Check (byte-identische Datei) erkennt das 
 **Audit-Aktionen:** `beleg.dismiss_duplicate`, `beleg.scan_duplicates`. `beleg.ocr` enthält jetzt `duplicate_kind: 'strict'|'soft'|null` in changes.
 
 ### Noch offen
+- **Bestellbearbeitungs-Migration auszuführen:** `supabase/supabase-bookings-edit-adjustment.sql` (idempotent). Legt `bookings.adjustment_payment_link_id/amount/status/note` an. Ohne Migration läuft die komplette Bestellbearbeitung weiter (Zahlungslink/Refund werden ausgeführt, Doku landet in `notes`), nur die strukturierten `adjustment_*`-Felder + der Webhook-Status-Sync („Nachzahlung bezahlt") greifen erst nach der Migration. Empfohlen ASAP ausführen.
 - **Multi-Kamera-Migrationen auszuführen (3, idempotent):**
   `supabase/supabase-bookings-cameras.sql` (Spalte `bookings.cameras JSONB`),
   `supabase/supabase-camera-unit-assignment.sql` (RPC `assign_free_camera_units`

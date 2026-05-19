@@ -1,116 +1,109 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { logAudit } from '@/lib/audit';
-import { sendCancellationConfirmation, sendAdminCancellationNotification } from '@/lib/email';
-import { assignAccessoryUnitsToBooking, releaseAccessoryUnitsFromBooking } from '@/lib/accessory-unit-assignment';
-import { computeAccessoryAvailability } from '@/lib/accessory-availability';
-import { getStripe } from '@/lib/stripe';
-import { DEFAULT_HAFTUNG, getEigenbeteiligung, type HaftungConfig } from '@/lib/price-config';
+import { sendCancellationConfirmation, sendAdminCancellationNotification, sendAndLog } from '@/lib/email';
+import { releaseAccessoryUnitsFromBooking } from '@/lib/accessory-unit-assignment';
+import { getStripe, buildPaymentDescription } from '@/lib/stripe';
+import { DEFAULT_HAFTUNG, getEigenbeteiligung, calcHaftungTieredPrice, type HaftungConfig } from '@/lib/price-config';
 import { computeReplacementValue, loadReplacementValueConfig } from '@/lib/replacement-value';
 import { getInventarWbwByLegacyUnitIds, getInventarWbwForBookingAccessories, getInventarWbwAverageByLegacyProductId } from '@/lib/inventar/wbw-bridge';
-import { resolveBookingCameras } from '@/lib/booking-cameras';
+import { resolveBookingCameras, buildCameraSkeleton } from '@/lib/booking-cameras';
 import { getProducts } from '@/lib/get-products';
 import { parseWeightToGrams, computePackWeightKg } from '@/lib/pack-weight';
+import { resolveAccessoryItems, applyAccessoryComposition, type ResolvedItem } from '@/lib/booking-accessory-apply';
+import { getPriceForDays } from '@/data/products';
+import { shippingConfig, calcShipping } from '@/data/shipping';
+import { assignCamerasToBooking } from '@/lib/camera-unit-assignment';
+import { assignUnitToBooking } from '@/lib/unit-assignment';
+import { createAdminNotification } from '@/lib/admin-notifications';
+import { buildBookingAdjustmentEmail } from '@/lib/booking-adjustment-email';
+import { getSiteUrl } from '@/lib/env-mode';
+import { RESERVING_BOOKING_STATUSES } from '@/lib/booking-statuses';
 
-type ResolvedItem = { id: string; name: string; qty: number; accessory_id?: string; isFromSet?: boolean; setName?: string; included_parts?: string[] };
+const PACK_RESET_FIELDS = {
+  pack_status: null,
+  pack_packed_by: null,
+  pack_packed_by_user_id: null,
+  pack_packed_at: null,
+  pack_packed_signature: null,
+  pack_packed_items: null,
+  pack_packed_condition: null,
+  pack_checked_by: null,
+  pack_checked_by_user_id: null,
+  pack_checked_at: null,
+  pack_checked_signature: null,
+  pack_checked_items: null,
+  pack_checked_notes: null,
+  pack_photo_url: null,
+} as const;
 
 /**
- * Loest eine Liste { accessory_id, qty } in benannte Positionen auf.
- * Sets werden expandiert (Container-Zeile + Sub-Items mit isFromSet).
- * Wird sowohl fuer die echte Buchung (Packliste/Vertrag) als auch fuer
- * die manuell ueberschriebene interne Haftungs-Box genutzt.
+ * Pack-Workflow-Snapshot zuruecksetzen, wenn die Buchungs-Komposition
+ * geaendert wird — die 4-Augen-Signaturen wuerden sonst den ALTEN Inhalt
+ * bescheinigen. Packliste-PDF/HTML liest live aus accessory_items und zieht
+ * automatisch nach. Gibt die zu mergenden Update-Felder zurueck (leer wenn
+ * nie gepackt) und loescht best-effort das Pack-Foto.
  */
-async function resolveAccessoryItems(
+async function resetPackWorkflow(
   supabase: ReturnType<typeof createServiceClient>,
-  rawItems: { accessory_id: string; qty: number }[],
-): Promise<ResolvedItem[]> {
-  const resolved: ResolvedItem[] = [];
-  if (rawItems.length === 0) return resolved;
+  booking: { pack_status?: unknown; pack_photo_url?: unknown },
+): Promise<Record<string, unknown>> {
+  if (!booking.pack_status) return {};
+  if (booking.pack_photo_url) {
+    await supabase.storage
+      .from('packing-photos')
+      .remove([booking.pack_photo_url as string])
+      .catch(() => { /* best-effort */ });
+  }
+  return { ...PACK_RESET_FIELDS };
+}
 
-  const allIds = [...new Set(rawItems.map((r) => r.accessory_id))];
-  type AccLookup = { name: string; included_parts: string[] };
-  const accLookup: Record<string, AccLookup> = {};
-  let accs: Array<{ id: string; name: string; included_parts?: string[] | null }> | null = null;
-
-  // Zwei Versuche: erst inkl. included_parts (neue Migration), bei
-  // fehlender Spalte ohne — kein 500 wenn Migration noch aussteht.
-  const accFull = await supabase.from('accessories').select('id, name, included_parts').in('id', allIds);
-  if (accFull.error && /column .*included_parts/i.test(accFull.error.message)) {
-    const accFallback = await supabase.from('accessories').select('id, name').in('id', allIds);
-    accs = accFallback.data ?? [];
-  } else {
-    accs = accFull.data ?? [];
+/**
+ * Zaehlt, wieviele physische Kameras des Produkts im Zeitraum bereits durch
+ * ANDERE reservierende Buchungen belegt sind (Multi-Kamera-aware, Legacy-
+ * Fallback ueber product_name-Split). Spiegelt /api/availability — wird als
+ * harter Pre-Check vor einer Mietzeitraum-/Kamera-Aenderung genutzt.
+ */
+async function reservedCameraCount(
+  supabase: ReturnType<typeof createServiceClient>,
+  productId: string,
+  from: string,
+  to: string,
+  excludeBookingId: string,
+  isTest: boolean,
+): Promise<number> {
+  const sel = 'id, product_id, product_name, unit_id, cameras, status';
+  let q1 = supabase
+    .from('bookings')
+    .select(sel)
+    .eq('product_id', productId)
+    .in('status', [...RESERVING_BOOKING_STATUSES])
+    .neq('id', excludeBookingId)
+    .lte('rental_from', to)
+    .gte('rental_to', from);
+  let q2 = supabase
+    .from('bookings')
+    .select(sel)
+    .contains('cameras', [{ product_id: productId }])
+    .in('status', [...RESERVING_BOOKING_STATUSES])
+    .neq('id', excludeBookingId)
+    .lte('rental_from', to)
+    .gte('rental_to', from);
+  if (!isTest) {
+    q1 = q1.not('is_test', 'is', true);
+    q2 = q2.not('is_test', 'is', true);
   }
-  const { data: sets } = await supabase.from('sets').select('id, name, accessory_items').in('id', allIds);
-
-  for (const a of accs ?? []) {
-    accLookup[a.id] = {
-      name: a.name as string,
-      included_parts: Array.isArray(a.included_parts) ? a.included_parts as string[] : [],
-    };
+  const [r1, r2] = await Promise.all([q1, q2]);
+  const byId = new Map<string, Record<string, unknown>>();
+  for (const b of [...(r1.data ?? []), ...(r2.error ? [] : r2.data ?? [])]) {
+    byId.set((b as { id: string }).id, b as Record<string, unknown>);
   }
-  const setMap: Record<string, { name: string; items: { accessory_id: string; qty: number }[] }> = {};
-  for (const s of sets ?? []) {
-    setMap[s.id] = {
-      name: s.name as string,
-      items: Array.isArray(s.accessory_items) ? (s.accessory_items as { accessory_id: string; qty: number }[]) : [],
-    };
+  let count = 0;
+  for (const b of byId.values()) {
+    const cams = resolveBookingCameras(b);
+    count += cams.filter((c) => (c.product_id ?? (b.product_id as string | null)) === productId).length;
   }
-
-  // Set-Sub-Item-Namen separat nachladen (wenn nicht schon im accLookup)
-  const setSubIds = new Set<string>();
-  for (const setInfo of Object.values(setMap)) {
-    for (const it of setInfo.items) {
-      if (!accLookup[it.accessory_id]) setSubIds.add(it.accessory_id);
-    }
-  }
-  if (setSubIds.size > 0) {
-    const subFull = await supabase
-      .from('accessories')
-      .select('id, name, included_parts')
-      .in('id', [...setSubIds]);
-    let subRows: Array<{ id: string; name: string; included_parts?: string[] | null }> = subFull.data ?? [];
-    if (subFull.error && /column .*included_parts/i.test(subFull.error.message)) {
-      const subFallback = await supabase.from('accessories').select('id, name').in('id', [...setSubIds]);
-      subRows = subFallback.data ?? [];
-    }
-    for (const a of subRows) {
-      accLookup[a.id] = {
-        name: a.name as string,
-        included_parts: Array.isArray(a.included_parts) ? a.included_parts as string[] : [],
-      };
-    }
-  }
-
-  for (const item of rawItems) {
-    const setInfo = setMap[item.accessory_id];
-    if (setInfo) {
-      // Set-Container-Zeile zur Orientierung, dann Sub-Items expandiert
-      resolved.push({ id: item.accessory_id, name: setInfo.name, qty: item.qty });
-      for (const sub of setInfo.items) {
-        const subAcc = accLookup[sub.accessory_id];
-        resolved.push({
-          id: sub.accessory_id,
-          accessory_id: sub.accessory_id,
-          name: subAcc?.name ?? sub.accessory_id,
-          qty: (sub.qty || 1) * item.qty,
-          isFromSet: true,
-          setName: setInfo.name,
-          included_parts: subAcc?.included_parts && subAcc.included_parts.length > 0 ? subAcc.included_parts : undefined,
-        });
-      }
-    } else {
-      const acc = accLookup[item.accessory_id];
-      resolved.push({
-        id: item.accessory_id,
-        accessory_id: item.accessory_id,
-        name: acc?.name ?? item.accessory_id,
-        qty: item.qty,
-        included_parts: acc?.included_parts && acc.included_parts.length > 0 ? acc.included_parts : undefined,
-      });
-    }
-  }
-  return resolved;
+  return count;
 }
 
 /**
@@ -755,248 +748,20 @@ export async function PATCH(
       );
     }
 
-    // Items sanitisieren + Duplikate (gleiche accessory_id) zusammenfassen
-    const cleaned = accessoryEdit.items
-      .filter((x) => x && typeof x.accessory_id === 'string' && x.accessory_id.trim())
-      .map((x) => ({
-        accessory_id: (x.accessory_id as string).trim().slice(0, 100),
-        qty: Math.min(99, Math.max(1, Math.round(Number(x.qty) || 1))),
-      }))
-      .slice(0, 50);
-    const mergedMap = new Map<string, number>();
-    for (const it of cleaned) {
-      mergedMap.set(it.accessory_id, Math.min(99, (mergedMap.get(it.accessory_id) ?? 0) + it.qty));
-    }
-    const rawSelection = [...mergedMap.entries()].map(([accessory_id, qty]) => ({ accessory_id, qty }));
-
-    // IDs muessen existierende Accessories ODER Sets sein. Sets sind erlaubt
-    // und werden unten in ihre Einzelteile (x gewaehlte Menge) expandiert —
-    // danach arbeitet die gesamte Pipeline (Verfuegbarkeit, Unit-Zuweisung,
-    // Speicherung) nur mit echten Accessories. Konsistent mit dem Verhalten
-    // "Set-Teile werden eigenstaendige Positionen".
-    const rawIds = rawSelection.map((i) => i.accessory_id);
-    const selectedSetIds = new Set<string>();
-    if (rawIds.length > 0) {
-      const [accChk, setChk] = await Promise.all([
-        supabase.from('accessories').select('id').in('id', rawIds),
-        supabase.from('sets').select('id').in('id', rawIds),
-      ]);
-      for (const s of setChk.data ?? []) selectedSetIds.add(s.id as string);
-      const known = new Set<string>([
-        ...((accChk.data ?? []).map((a) => a.id as string)),
-        ...selectedSetIds,
-      ]);
-      const unknown = rawIds.filter((i) => !known.has(i));
-      if (unknown.length > 0) {
-        return NextResponse.json(
-          { error: `Unbekanntes Zubehör/Set: ${unknown.join(', ')}` },
-          { status: 422 },
-        );
-      }
-    }
-
-    // Direkt gewählte Einzel-Accessories (KEINE Sets). Nur DIESE werden hart
-    // auf Verfügbarkeit geprüft + bei fehlenden Units hart abgelehnt. Set-
-    // Teile werden — wie im Kunden-Buchungsflow (confirm-cart: Set-Reservierung
-    // non-blocking, Set-Verfügbarkeit auf Set-Ebene) — weich behandelt: sie
-    // werden zugewiesen wo möglich, blockieren die Änderung aber nicht, wenn
-    // ein Set-Bestandteil kein Einzel-Exemplar hat (genau wie eine normale
-    // Set-Buchung im Shop, die solche Teile auch nicht hart prüft).
-    const directRaw = rawSelection.filter((r) => !selectedSetIds.has(r.accessory_id));
-    const directExpanded = new Map<string, number>();
-    if (directRaw.length > 0) {
-      try {
-        const dResolved = await resolveAccessoryItems(supabase, directRaw);
-        for (const r of dResolved) {
-          if (!r.accessory_id) continue;
-          directExpanded.set(
-            r.accessory_id,
-            (directExpanded.get(r.accessory_id) ?? 0) + (r.qty || 0),
-          );
-        }
-      } catch (e) {
-        console.error('[booking-accessory-edit] resolve direct selection failed:', e);
-      }
-    }
-
-    // Sets -> Einzelteile aufloesen. resolveAccessoryItems expandiert Sets
-    // (Leaf-Zeilen tragen accessory_id, Set-Container-Zeilen nicht). Ohne
-    // Set in der Auswahl ist das Ergebnis identisch zur Rohauswahl ->
-    // keine Verhaltensaenderung fuer reine Accessory-Edits.
-    let newItems = rawSelection;
-    if (rawSelection.length > 0) {
-      const expandedResolved = await resolveAccessoryItems(supabase, rawSelection);
-      const expMap = new Map<string, number>();
-      for (const r of expandedResolved) {
-        if (!r.accessory_id) continue; // Set-Container-Zeile droppen
-        expMap.set(
-          r.accessory_id,
-          Math.min(99, (expMap.get(r.accessory_id) ?? 0) + (r.qty || 0)),
-        );
-      }
-      newItems = [...expMap.entries()]
-        .map(([accessory_id, qty]) => ({ accessory_id, qty }))
-        .slice(0, 50);
-    }
-
-    // Roh-Bestand fuer Audit-Log (kann Set-IDs enthalten — nur Doku)
-    const oldItemsArr: { accessory_id: string; qty: number }[] =
-      Array.isArray(booking.accessory_items) && booking.accessory_items.length > 0
-        ? (booking.accessory_items as { accessory_id: string; qty: number }[])
-        : (Array.isArray(booking.accessories) ? (booking.accessories as string[]) : []).map((a) => ({ accessory_id: a, qty: 1 }));
-
-    const oldUnitIds: string[] = Array.isArray(booking.accessory_unit_ids)
-      ? (booking.accessory_unit_ids as string[]).filter(Boolean)
-      : [];
-
-    // Bestehende Unit→Accessory-Zuordnung laden (das ist die WAHRHEIT ueber
-    // den Ist-Bestand der Buchung — NICHT accessory_items, das bei
-    // Set-Buchungen nur die Set-ID enthaelt).
-    let unitAcc: { id: string; accessory_id: string }[] = [];
-    if (oldUnitIds.length > 0) {
-      const { data: ua } = await supabase
-        .from('accessory_units')
-        .select('id, accessory_id')
-        .in('id', oldUnitIds);
-      unitAcc = (ua ?? []) as { id: string; accessory_id: string }[];
-    }
-    const unitsByAcc = new Map<string, string[]>();
-    for (const u of unitAcc) {
-      const arr = unitsByAcc.get(u.accessory_id) ?? [];
-      arr.push(u.id);
-      unitsByAcc.set(u.accessory_id, arr);
-    }
-    const resolvableOld = new Set(unitAcc.map((u) => u.id));
-
-    // Ist-Komposition der Buchung EXPANDIERT (Sets → Einzelteile). Das ist
-    // die Wahrheit, was die Buchung bereits reserviert hat — bei einer
-    // Set-Buchung enthaelt accessory_items nur die Set-ID, die Einzelteile
-    // sind aber faktisch ueber das Set gebucht. Diese Menge ist KEINE neue
-    // Reservierung und darf weder blockieren noch neu Units anfordern.
-    const oldExpanded = new Map<string, number>();
-    try {
-      const resolvedOld = await resolveAccessoryItems(supabase, oldItemsArr);
-      for (const r of resolvedOld) {
-        if (!r.accessory_id) continue; // Set-Container-Zeile überspringen
-        oldExpanded.set(r.accessory_id, (oldExpanded.get(r.accessory_id) ?? 0) + (r.qty || 0));
-      }
-    } catch (e) {
-      console.error('[booking-accessory-edit] resolve old composition failed:', e);
-    }
-
-    // Verfuegbarkeit HART pruefen — nur fuer den ECHTEN Zuwachs gegenueber
-    // der bereits gebuchten (expandierten) Komposition. Diese Buchung wird
-    // zusaetzlich aus der Zaehlung ausgeschlossen. In-process (kein
-    // HTTP-Self-Fetch — hinter Cloudflare/Firewall unzuverlaessig).
-    if (newItems.length > 0) {
-      const dm = (booking.delivery_mode as string) || 'versand';
-      const availMap = new Map<string, { name: string; remaining: number }>();
-      try {
-        const avail = await computeAccessoryAvailability({
-          from: String(booking.rental_from),
-          to: String(booking.rental_to),
-          productId: booking.product_id ? String(booking.product_id) : null,
-          deliveryMode: dm,
-          excludeBookingId: id,
-        });
-        for (const a of avail.accessories) {
-          availMap.set(a.id, { name: a.name, remaining: a.available_qty_remaining });
-        }
-      } catch (e) {
-        console.error('[booking-accessory-edit] availability check failed:', e);
-        return NextResponse.json(
-          { error: 'Verfügbarkeit konnte nicht geprüft werden. Bitte erneut versuchen.' },
-          { status: 503 },
-        );
-      }
-      // Nur DIREKT gewählte Einzel-Accessories hart prüfen — Set-Teile sind
-      // bewusst ausgenommen (Set-Ebene/soft, wie der Shop-Buchungsflow).
-      const blocked: string[] = [];
-      for (const [accId, wantQty] of directExpanded) {
-        const requiredDelta = wantQty - (oldExpanded.get(accId) ?? 0);
-        if (requiredDelta <= 0) continue; // bereits über Buchung gedeckt
-        const av = availMap.get(accId);
-        // Kein Eintrag in availMap = Bulk/nicht-trackbar → nicht blockieren.
-        if (av && av.remaining < requiredDelta) {
-          blocked.push(`${av.name} (benötigt ${requiredDelta}, frei ${av.remaining})`);
-        }
-      }
-      if (blocked.length > 0) {
-        return NextResponse.json(
-          { error: `Im Mietzeitraum nicht genug freie Exemplare: ${blocked.join(', ')}. Änderung wurde NICHT gespeichert.` },
-          { status: 409 },
-        );
-      }
-    }
-
-    // Mutation — bestehende Units pro Accessory behalten (bis zur neuen
-    // Menge), nur den echten Fehlbestand ueber die bereits gebuchte
-    // (expandierte) Menge hinaus neu zuweisen, Ueberzaehliges freigeben.
-    const newQtyMap = new Map(newItems.map((i) => [i.accessory_id, i.qty]));
-    const allAccIds = new Set<string>([...unitsByAcc.keys(), ...newItems.map((i) => i.accessory_id)]);
-
-    const keptUnitIds: string[] = [];
-    const releaseUnitIds: string[] = [];
-    const deltaItems: { accessory_id: string; qty: number }[] = [];
-    for (const accId of allAccIds) {
-      const existing = unitsByAcc.get(accId) ?? [];
-      const want = newQtyMap.get(accId) ?? 0;
-      const keep = existing.slice(0, want);
-      keptUnitIds.push(...keep);
-      releaseUnitIds.push(...existing.slice(keep.length));
-      // Bereits gedeckt = max(echte Units, ueber Set/Buchung reservierte Menge)
-      const baseline = Math.max(keep.length, oldExpanded.get(accId) ?? 0);
-      const assignQty = Math.max(0, want - baseline); // nur echter Zuwachs
-      if (assignQty > 0) deltaItems.push({ accessory_id: accId, qty: assignQty });
-    }
-    // Alte Unit-IDs ohne aufloesbares Accessory (geloeschte Unit-Row) freigeben
-    for (const uid of oldUnitIds) {
-      if (!resolvableOld.has(uid)) releaseUnitIds.push(uid);
-    }
-
-    const assignRes = deltaItems.length > 0
-      ? await assignAccessoryUnitsToBooking(
-          id,
-          deltaItems,
-          String(booking.rental_from),
-          String(booking.rental_to),
-        )
-      : { assigned: {} as Record<string, string[]>, missing: [] as string[] };
-
-    // Fehlende Units NUR bei DIREKT gewählten Accessories hart ablehnen.
-    // Set-Bestandteile ohne Einzel-Exemplar werden — wie eine normale
-    // Set-Buchung im Shop — weich behandelt (best-effort, blockiert nicht).
-    const missingDirect = assignRes.missing.filter((mid) => directExpanded.has(mid));
-    if (missingDirect.length > 0) {
-      // Race zwischen Pruefung und RPC — frisch zugewiesene Units freigeben,
-      // Array auf alten Stand zuruecksetzen, Buchung bleibt unveraendert.
-      const fresh = Object.values(assignRes.assigned).flat();
-      if (fresh.length > 0) {
-        try { await releaseAccessoryUnitsFromBooking(id, fresh); } catch { /* best-effort */ }
-      }
-      await supabase.from('bookings').update({ accessory_unit_ids: oldUnitIds }).eq('id', id);
-      const { data: missAcc } = await supabase
-        .from('accessories')
-        .select('id, name')
-        .in('id', missingDirect);
-      const nameMap = new Map((missAcc ?? []).map((a) => [a.id as string, a.name as string]));
-      const missNames = missingDirect.map((mid) => nameMap.get(mid) ?? mid);
-      return NextResponse.json(
-        { error: `Im Mietzeitraum nicht genug freie Exemplare: ${missNames.join(', ')}. Änderung wurde NICHT gespeichert.` },
-        { status: 409 },
-      );
-    }
-    const freshUnitIds = Object.values(assignRes.assigned).flat();
-    const finalUnitIds = [...keptUnitIds, ...freshUnitIds];
-
-    // Ueberzaehlige / entfernte Units freigeben (nur Status, schont Units in
-    // anderen aktiven Buchungen)
-    if (releaseUnitIds.length > 0) {
-      try {
-        await releaseAccessoryUnitsFromBooking(id, releaseUnitIds);
-      } catch (e) {
-        console.error('[booking-accessory-edit] release surplus units failed:', e);
-      }
+    const applied = await applyAccessoryComposition({
+      supabase,
+      bookingId: id,
+      rentalFrom: String(booking.rental_from),
+      rentalTo: String(booking.rental_to),
+      productId: booking.product_id ? String(booking.product_id) : null,
+      deliveryMode: (booking.delivery_mode as string) || 'versand',
+      rawItems: accessoryEdit.items,
+      currentItems: (booking.accessory_items as { accessory_id: string; qty: number }[] | null) ?? null,
+      currentAccessories: (booking.accessories as string[] | null) ?? null,
+      currentUnitIds: (booking.accessory_unit_ids as string[] | null) ?? null,
+    });
+    if (!applied.ok) {
+      return NextResponse.json({ error: applied.error }, { status: applied.status });
     }
 
     const priceProvided =
@@ -1010,42 +775,15 @@ export async function PATCH(
     const existingNotes = booking.notes ? `${booking.notes} | ` : '';
 
     const upd: Record<string, unknown> = {
-      accessory_items: newItems,
-      accessories: [...new Set(newItems.map((i) => i.accessory_id))],
-      accessory_unit_ids: finalUnitIds,
+      accessory_items: applied.newItems,
+      accessories: applied.accessories,
+      accessory_unit_ids: applied.accessory_unit_ids,
       notes: `${existingNotes}${noteLine}`,
     };
     if (priceValid) upd.price_total = newPrice;
 
-    // Pack-Workflow zuruecksetzen, falls schon gepackt/kontrolliert — die
-    // 4-Augen-Snapshots + Signaturen wuerden sonst den ALTEN Inhalt
-    // bescheinigen. Packliste-PDF/HTML liest live aus accessory_items und
-    // zieht automatisch nach; nur der digitale Pack-Status muss neu.
     const packWasStarted = !!booking.pack_status;
-    if (packWasStarted) {
-      Object.assign(upd, {
-        pack_status: null,
-        pack_packed_by: null,
-        pack_packed_by_user_id: null,
-        pack_packed_at: null,
-        pack_packed_signature: null,
-        pack_packed_items: null,
-        pack_packed_condition: null,
-        pack_checked_by: null,
-        pack_checked_by_user_id: null,
-        pack_checked_at: null,
-        pack_checked_signature: null,
-        pack_checked_items: null,
-        pack_checked_notes: null,
-        pack_photo_url: null,
-      });
-      if (booking.pack_photo_url) {
-        await supabase.storage
-          .from('packing-photos')
-          .remove([booking.pack_photo_url as string])
-          .catch(() => { /* best-effort */ });
-      }
-    }
+    Object.assign(upd, await resetPackWorkflow(supabase, booking));
 
     const { error: upErr } = await supabase.from('bookings').update(upd).eq('id', id);
     if (upErr) {
@@ -1058,8 +796,8 @@ export async function PATCH(
       entityType: 'booking',
       entityId: id,
       changes: {
-        old_items: oldItemsArr,
-        new_items: newItems,
+        old_items: applied.oldItems,
+        new_items: applied.newItems,
         price_old: booking.price_total ?? null,
         price_new: priceValid ? newPrice : null,
         reason,
@@ -1069,6 +807,493 @@ export async function PATCH(
     });
 
     return NextResponse.json({ success: true });
+  }
+
+  // ── Komplette Bestellbearbeitung ───────────────────────────────────────
+  // Mietzeitraum / Kamera / Set+Zubehoer / Haftungsschutz in einem Vorgang.
+  // Wirkt SOFORT auf die echte Buchung (Packliste, Vertragsdaten-Quelle,
+  // Verfuegbarkeit, WBW). Preisdifferenz: Nachzahlung per Stripe-Zahlungslink
+  // (automatisch per E-Mail) oder Rueckerstattung (Auto-Refund nur bei pi_,
+  // sonst vorgemerkt). Mietvertrag-PDF bleibt das signierte Original — die
+  // Aenderung wird in notes + Audit dokumentiert. Eigenstaendiger Zweig.
+  const bookingEdit = (body as {
+    booking_edit?: {
+      rental_from?: string;
+      rental_to?: string;
+      camera_product_id?: string | null;
+      haftung?: 'none' | 'standard' | 'premium' | null;
+      items?: { id?: string; accessory_id?: string; qty?: number }[] | null;
+      reason?: string;
+      new_price_total?: number | null;
+      settle?: 'auto' | 'none';
+      dry_run?: boolean;
+    };
+  }).booking_edit;
+  if (bookingEdit !== undefined) {
+    if (!bookingEdit || typeof bookingEdit !== 'object') {
+      return NextResponse.json({ error: 'Ungültige Anfrage.' }, { status: 422 });
+    }
+    const dryRun = bookingEdit.dry_run === true;
+    const reason = typeof bookingEdit.reason === 'string' ? bookingEdit.reason.trim() : '';
+    if (!dryRun && reason.length < 10) {
+      return NextResponse.json(
+        { error: 'Bitte einen Grund mit mindestens 10 Zeichen angeben.' },
+        { status: 422 },
+      );
+    }
+
+    const { data: booking } = await supabase
+      .from('bookings')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+    if (!booking) {
+      return NextResponse.json({ error: 'Buchung nicht gefunden.' }, { status: 404 });
+    }
+    const TERMINAL = ['cancelled', 'completed', 'returned'];
+    if (TERMINAL.includes(booking.status)) {
+      return NextResponse.json(
+        { error: `Buchung im Status „${booking.status}" kann nicht mehr bearbeitet werden.` },
+        { status: 409 },
+      );
+    }
+
+    // ── Effektive Werte bestimmen ──────────────────────────────────────
+    const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+    const rentalFrom = (typeof bookingEdit.rental_from === 'string' && bookingEdit.rental_from.trim())
+      ? bookingEdit.rental_from.trim()
+      : String(booking.rental_from);
+    const rentalTo = (typeof bookingEdit.rental_to === 'string' && bookingEdit.rental_to.trim())
+      ? bookingEdit.rental_to.trim()
+      : String(booking.rental_to);
+    if (!dateRe.test(rentalFrom) || !dateRe.test(rentalTo)) {
+      return NextResponse.json({ error: 'Ungültiges Datum (Format YYYY-MM-DD).' }, { status: 422 });
+    }
+    const dFrom = new Date(`${rentalFrom}T00:00:00Z`);
+    const dTo = new Date(`${rentalTo}T00:00:00Z`);
+    if (isNaN(dFrom.getTime()) || isNaN(dTo.getTime()) || dTo < dFrom) {
+      return NextResponse.json({ error: 'Enddatum muss nach dem Startdatum liegen.' }, { status: 422 });
+    }
+    const days = Math.round((dTo.getTime() - dFrom.getTime()) / 86400000) + 1;
+    if (days < 1 || days > 365) {
+      return NextResponse.json({ error: 'Mietdauer muss zwischen 1 und 365 Tagen liegen.' }, { status: 422 });
+    }
+    const periodChanged = rentalFrom !== String(booking.rental_from) || rentalTo !== String(booking.rental_to);
+
+    const curProductId = booking.product_id ? String(booking.product_id) : '';
+    const camChangeReq = typeof bookingEdit.camera_product_id === 'string' && bookingEdit.camera_product_id.trim();
+    const newProductId = camChangeReq ? (bookingEdit.camera_product_id as string).trim() : curProductId;
+    const cameraChanged = !!camChangeReq && newProductId !== curProductId;
+
+    const cameraCount = Math.max(1, resolveBookingCameras(booking).length || 1);
+
+    const normHaftung = (v: unknown): 'standard' | 'premium' | null =>
+      v === 'standard' ? 'standard' : v === 'premium' ? 'premium' : null;
+    const effHaftung = bookingEdit.haftung !== undefined
+      ? normHaftung(bookingEdit.haftung)
+      : normHaftung(booking.haftung);
+
+    // Roh-Auswahl (Accessories + Sets). Wenn items nicht uebergeben →
+    // aktuelle Komposition beibehalten (accessory_items kann Set-IDs tragen).
+    const itemsProvided = Array.isArray(bookingEdit.items);
+    const rawSelection: { accessory_id: string; qty: number }[] = (itemsProvided
+      ? (bookingEdit.items as { id?: string; accessory_id?: string; qty?: number }[]).map((x) => ({
+          accessory_id: String(x.accessory_id ?? x.id ?? '').trim(),
+          qty: Math.min(99, Math.max(1, Math.round(Number(x.qty) || 1))),
+        }))
+      : (Array.isArray(booking.accessory_items) && booking.accessory_items.length > 0
+          ? (booking.accessory_items as { accessory_id: string; qty: number }[])
+          : (Array.isArray(booking.accessories) ? booking.accessories as string[] : []).map((a) => ({ accessory_id: a, qty: 1 }))))
+      .filter((r) => r.accessory_id);
+
+    // ── Katalog + Verfuegbarkeit (Kamera) ──────────────────────────────
+    const catalog = await getProducts();
+    const effProduct = catalog.find((p) => p.id === newProductId);
+    if (cameraChanged && !effProduct) {
+      return NextResponse.json({ error: 'Gewählte Kamera ist nicht im Katalog.' }, { status: 422 });
+    }
+    if ((cameraChanged || periodChanged) && effProduct) {
+      const reserved = await reservedCameraCount(
+        supabase, newProductId, rentalFrom, rentalTo, id, booking.is_test === true,
+      );
+      if (reserved + cameraCount > effProduct.stock) {
+        return NextResponse.json(
+          {
+            error: `${effProduct.name} ist im Zeitraum nicht ausreichend verfügbar (benötigt ${cameraCount}, frei ${Math.max(0, effProduct.stock - reserved)}). Änderung wurde NICHT gespeichert.`,
+          },
+          { status: 409 },
+        );
+      }
+    }
+
+    // ── Preis neu berechnen ────────────────────────────────────────────
+    let priceRental = Number(booking.price_rental ?? 0);
+    if (effProduct) {
+      priceRental = Math.round(getPriceForDays(effProduct, days) * cameraCount * 100) / 100;
+    }
+
+    const { data: hCfgRow } = await supabase
+      .from('admin_settings')
+      .select('value')
+      .eq('key', 'haftung_config')
+      .maybeSingle();
+    const hCfg: HaftungConfig = (hCfgRow?.value as HaftungConfig) ?? DEFAULT_HAFTUNG;
+    let priceHaftung = 0;
+    if (effHaftung === 'standard') priceHaftung = calcHaftungTieredPrice(hCfg.standard, hCfg.standardIncrement, days);
+    else if (effHaftung === 'premium') priceHaftung = calcHaftungTieredPrice(hCfg.premium, hCfg.premiumIncrement, days);
+    priceHaftung = Math.round(priceHaftung * 100) / 100;
+
+    // Accessories/Sets bepreisen — Set als Set-Preis, Accessory als
+    // Accessory-Preis (pro-Tag oder flat), jeweils × qty.
+    let priceAccessories = 0;
+    if (rawSelection.length > 0) {
+      const ids = [...new Set(rawSelection.map((r) => r.accessory_id))];
+      const [accRes, setRes] = await Promise.all([
+        supabase.from('accessories').select('id, price, pricing_mode').in('id', ids),
+        supabase.from('sets').select('id, price, pricing_mode').in('id', ids),
+      ]);
+      const accMap = new Map<string, { price: number; flat: boolean }>();
+      for (const a of accRes.data ?? []) {
+        accMap.set(a.id as string, { price: Number(a.price ?? 0), flat: (a.pricing_mode as string) === 'flat' });
+      }
+      const setMap = new Map<string, { price: number; flat: boolean }>();
+      for (const s of setRes.data ?? []) {
+        setMap.set(s.id as string, { price: Number(s.price ?? 0), flat: (s.pricing_mode as string) === 'flat' });
+      }
+      for (const r of rawSelection) {
+        const s = setMap.get(r.accessory_id);
+        const a = accMap.get(r.accessory_id);
+        const def = s ?? a;
+        if (!def) continue;
+        const line = def.flat ? def.price : def.price * Math.max(1, days);
+        priceAccessories += line * r.qty;
+      }
+      priceAccessories = Math.round(priceAccessories * 100) / 100;
+    }
+
+    const deliveryMode = (booking.delivery_mode as string) === 'abholung' ? 'abholung' : 'versand';
+    const shipMethod = (booking.shipping_method as string) === 'express' ? 'express' : 'standard';
+    const subtotal = priceRental + priceAccessories + priceHaftung;
+    const shippingPrice = Math.round(
+      calcShipping(subtotal, shipMethod, deliveryMode, shippingConfig).price * 100,
+    ) / 100;
+
+    const discountTotal =
+      Number(booking.discount_amount ?? 0) +
+      Number(booking.duration_discount ?? 0) +
+      Number(booking.loyalty_discount ?? 0);
+    const computedTotal = Math.max(0, Math.round((subtotal + shippingPrice - discountTotal) * 100) / 100);
+
+    const overrideProvided =
+      bookingEdit.new_price_total !== undefined && bookingEdit.new_price_total !== null;
+    const overrideVal = overrideProvided ? Math.max(0, Number(bookingEdit.new_price_total)) : null;
+    const overrideValid = overrideProvided && overrideVal !== null && Number.isFinite(overrideVal);
+    const finalTotal = overrideValid ? (overrideVal as number) : computedTotal;
+
+    const oldTotal = Number(booking.price_total ?? 0);
+    const diff = Math.round((finalTotal - oldTotal) * 100) / 100;
+    const isStripePI = typeof booking.payment_intent_id === 'string'
+      && (booking.payment_intent_id as string).startsWith('pi_');
+    const settlement = diff > 0.005 ? 'payment_link' : diff < -0.005 ? 'refund' : 'none';
+
+    if (dryRun) {
+      return NextResponse.json({
+        preview: {
+          days,
+          camera_count: cameraCount,
+          camera_changed: cameraChanged,
+          period_changed: periodChanged,
+          price_rental: priceRental,
+          price_accessories: priceAccessories,
+          price_haftung: priceHaftung,
+          shipping_price: shippingPrice,
+          discount_total: Math.round(discountTotal * 100) / 100,
+          computed_total: computedTotal,
+          final_total: finalTotal,
+          old_total: oldTotal,
+          diff,
+          settlement,
+          is_stripe_payment: isStripePI,
+        },
+      });
+    }
+
+    // ── Mutation ───────────────────────────────────────────────────────
+    // Zubehoer/Sets near-atomar anwenden (Verfuegbarkeit gegen den NEUEN
+    // Zeitraum, Units neu zuweisen). Schreibt accessory_unit_ids ggf. schon.
+    const applied = await applyAccessoryComposition({
+      supabase,
+      bookingId: id,
+      rentalFrom,
+      rentalTo,
+      productId: newProductId || null,
+      deliveryMode,
+      rawItems: rawSelection,
+      currentItems: (booking.accessory_items as { accessory_id: string; qty: number }[] | null) ?? null,
+      currentAccessories: (booking.accessories as string[] | null) ?? null,
+      currentUnitIds: (booking.accessory_unit_ids as string[] | null) ?? null,
+    });
+    if (!applied.ok) {
+      return NextResponse.json({ error: applied.error }, { status: applied.status });
+    }
+
+    const dateStr = new Date().toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' });
+    const parts: string[] = [];
+    if (periodChanged) parts.push(`Zeitraum ${rentalFrom}–${rentalTo}`);
+    if (cameraChanged) parts.push(`Kamera → ${effProduct?.name ?? newProductId}`);
+    if (bookingEdit.haftung !== undefined) parts.push(`Haftung → ${effHaftung ?? 'keine'}`);
+    if (itemsProvided) parts.push('Zubehör/Set angepasst');
+    let noteLine = `Bestellbearbeitung (${dateStr}): ${reason}`;
+    if (parts.length > 0) noteLine += ` [${parts.join(', ')}]`;
+    noteLine += ` — Gesamt ${oldTotal.toFixed(2).replace('.', ',')} € → ${finalTotal.toFixed(2).replace('.', ',')} €`;
+    const existingNotes = booking.notes ? `${booking.notes} | ` : '';
+
+    const upd: Record<string, unknown> = {
+      rental_from: rentalFrom,
+      rental_to: rentalTo,
+      days,
+      haftung: effHaftung,
+      accessory_items: applied.newItems,
+      accessories: applied.accessories,
+      accessory_unit_ids: applied.accessory_unit_ids,
+      price_rental: priceRental,
+      price_accessories: priceAccessories,
+      price_haftung: priceHaftung,
+      shipping_price: shippingPrice,
+      price_total: finalTotal,
+      notes: `${existingNotes}${noteLine}`,
+    };
+    const packWasStarted = !!booking.pack_status;
+    Object.assign(upd, await resetPackWorkflow(supabase, booking));
+
+    // Kamera-/Zeitraum-Aenderung: Kamera-Skelett neu (unit_id=null erzwingt
+    // Neuzuweisung), Legacy-Felder synchron halten.
+    if (cameraChanged || periodChanged) {
+      const camName = effProduct?.name ?? String(booking.product_name ?? newProductId).split(',')[0].trim();
+      upd.product_id = newProductId;
+      upd.product_name = Array(cameraCount).fill(camName).join(', ');
+      upd.unit_id = null;
+      upd.cameras = buildCameraSkeleton([
+        { product_id: newProductId || null, product_name: camName, qty: cameraCount },
+      ]);
+    }
+
+    let { error: upErr } = await supabase.from('bookings').update(upd).eq('id', id);
+    let camerasColumnMissing = false;
+    if (upErr && 'cameras' in upd && /cameras/i.test(upErr.message || '')) {
+      // Migration supabase-bookings-cameras.sql noch nicht durch → ohne
+      // cameras erneut (Legacy-Einzelpfad uebernimmt die Unit-Zuweisung).
+      camerasColumnMissing = true;
+      const { cameras: _c, ...rest } = upd;
+      void _c;
+      const retry = await supabase.from('bookings').update(rest).eq('id', id);
+      upErr = retry.error;
+    }
+    if (upErr) {
+      console.error('[booking-edit] update failed:', upErr);
+      return NextResponse.json({ error: 'Speichern fehlgeschlagen.' }, { status: 500 });
+    }
+
+    // Kamera-Units neu zuweisen
+    if (cameraChanged || periodChanged) {
+      try {
+        if (!camerasColumnMissing) {
+          const camName = effProduct?.name ?? String(booking.product_name ?? newProductId).split(',')[0].trim();
+          const camRes = await assignCamerasToBooking(
+            id,
+            [{ product_id: newProductId || null, product_name: camName, qty: cameraCount }],
+            rentalFrom,
+            rentalTo,
+          );
+          const missingCount = camRes.missing.reduce((s, m) => s + (m.requested - m.assigned), 0);
+          if (missingCount > 0) {
+            await supabase
+              .from('bookings')
+              .update({ notes: `${(upd.notes as string)} | ⚠ ${missingCount} Kamera-Einheit(en) konnten nicht zugewiesen werden — bitte manuell prüfen` })
+              .eq('id', id);
+            await createAdminNotification(supabase, {
+              type: 'payment_failed',
+              title: `Kamera-Zuweisung unvollständig (${id})`,
+              message: `Nach Bestellbearbeitung fehlen ${missingCount} Kamera-Einheit(en).`,
+              link: `/admin/buchungen/${id}`,
+            }).catch(() => { /* best-effort */ });
+          }
+        } else if (newProductId) {
+          await assignUnitToBooking(id, newProductId, rentalFrom, rentalTo).catch(() => null);
+        }
+      } catch (e) {
+        console.error('[booking-edit] camera reassignment failed:', e);
+      }
+    }
+
+    // ── Preisdifferenz abwickeln ───────────────────────────────────────
+    const settle = bookingEdit.settle === 'none' ? 'none' : 'auto';
+    let paymentUrl: string | null = null;
+    let adjustmentStatus: string | null = null;
+
+    const writeAdjustment = async (fields: Record<string, unknown>) => {
+      const r = await supabase.from('bookings').update(fields).eq('id', id);
+      if (r.error && /adjustment_/i.test(r.error.message || '')) {
+        // Migration supabase-bookings-edit-adjustment.sql noch nicht durch —
+        // Info steckt bereits in notes; Spalten-Update still ueberspringen.
+        console.warn('[booking-edit] adjustment columns missing, skipped:', r.error.message);
+      }
+    };
+
+    if (settle === 'auto' && diff > 0.005) {
+      // Nachzahlung per Stripe-Zahlungslink (+ E-Mail an Kunden)
+      try {
+        const stripe = await getStripe();
+        const siteUrl = await getSiteUrl();
+        const cents = Math.round(diff * 100);
+        const prodName = String(upd.product_name ?? booking.product_name ?? '').slice(0, 200);
+        const sProd = await stripe.products.create({
+          name: `Nachzahlung Buchung ${id}`.slice(0, 250),
+          metadata: { booking_id: id, booking_type: 'price_adjustment' },
+        });
+        const sPrice = await stripe.prices.create({
+          product: sProd.id, unit_amount: cents, currency: 'eur',
+        });
+        const description = buildPaymentDescription({
+          bookingId: id, productName: prodName, rentalFrom, rentalTo,
+        });
+        const pl = await stripe.paymentLinks.create({
+          line_items: [{ price: sPrice.id, quantity: 1 }],
+          metadata: { booking_id: id, booking_type: 'price_adjustment' },
+          payment_intent_data: {
+            description,
+            metadata: { booking_id: id, booking_type: 'price_adjustment' },
+          },
+          after_completion: {
+            type: 'redirect',
+            redirect: { url: `${siteUrl}/buchung-bestaetigt?from=adjustment&booking_id=${id}` },
+          },
+          allow_promotion_codes: false,
+          payment_method_types: ['card', 'paypal'],
+        });
+        paymentUrl = pl.url;
+        adjustmentStatus = 'pending_payment';
+        await writeAdjustment({
+          adjustment_payment_link_id: pl.id,
+          adjustment_amount: diff,
+          adjustment_status: 'pending_payment',
+          adjustment_note: `Nachzahlung ${diff.toFixed(2)} € — ${reason}`.slice(0, 500),
+          notes: `${upd.notes as string} | Zahlungslink Nachzahlung: ${pl.url}`,
+        });
+        if (booking.customer_email) {
+          const mail = buildBookingAdjustmentEmail({
+            bookingId: id,
+            customerName: booking.customer_name ?? null,
+            productName: prodName,
+            rentalFrom,
+            rentalTo,
+            diffAmount: diff,
+            newTotal: finalTotal,
+            reason,
+            paymentUrl: pl.url,
+          });
+          await sendAndLog({
+            to: booking.customer_email,
+            subject: mail.subject,
+            html: mail.html,
+            text: mail.text,
+            bookingId: id,
+            emailType: 'payment_link',
+          }).catch((e) => console.error('[booking-edit] adjustment mail failed:', e));
+        }
+      } catch (stripeErr) {
+        console.error('[booking-edit] Stripe-Zahlungslink fehlgeschlagen:', stripeErr);
+        adjustmentStatus = 'payment_link_failed';
+        await createAdminNotification(supabase, {
+          type: 'payment_failed',
+          title: `Nachzahlungs-Link fehlgeschlagen (${id})`,
+          message: `Buchung wurde geändert, aber der Stripe-Zahlungslink über ${diff.toFixed(2)} € konnte nicht erstellt werden. Bitte manuell einfordern.`,
+          link: `/admin/buchungen/${id}`,
+        }).catch(() => { /* best-effort */ });
+      }
+    } else if (settle === 'auto' && diff < -0.005) {
+      // Rueckerstattung. WICHTIG: refund_amount-Spalte NICHT anfassen — der
+      // gesenkte price_total reduziert das Einkommen in EUeR/DATEV bereits;
+      // refund_amount wuerde DOPPELT abziehen (gehoert der Stripe-Abgleich-
+      // Erstattung). Hier nur Geldfluss + adjustment_*-Doku.
+      const refundCents = Math.round(-diff * 100);
+      if (isStripePI) {
+        try {
+          const stripe = await getStripe();
+          await stripe.refunds.create(
+            { payment_intent: booking.payment_intent_id as string, amount: refundCents },
+            { idempotencyKey: `booking-edit-refund:${id}:${refundCents}` },
+          );
+          adjustmentStatus = 'refunded';
+          await writeAdjustment({
+            adjustment_amount: diff,
+            adjustment_status: 'refunded',
+            adjustment_note: `Erstattung ${(-diff).toFixed(2)} € (Stripe) — ${reason}`.slice(0, 500),
+            notes: `${upd.notes as string} | Stripe-Erstattung ${(-diff).toFixed(2)} € ausgeführt`,
+          });
+        } catch (refundErr) {
+          console.error('[booking-edit] Stripe-Refund fehlgeschlagen:', refundErr);
+          adjustmentStatus = 'refund_pending';
+          await writeAdjustment({
+            adjustment_amount: diff,
+            adjustment_status: 'refund_pending',
+            adjustment_note: `Erstattung ${(-diff).toFixed(2)} € fehlgeschlagen — manuell ausführen — ${reason}`.slice(0, 500),
+            notes: `${upd.notes as string} | ⚠ Stripe-Erstattung ${(-diff).toFixed(2)} € fehlgeschlagen — manuell`,
+          });
+          await createAdminNotification(supabase, {
+            type: 'payment_failed',
+            title: `Erstattung fehlgeschlagen (${id})`,
+            message: `Erstattung über ${(-diff).toFixed(2)} € konnte nicht ausgeführt werden. Bitte manuell erstatten.`,
+            link: `/admin/buchungen/${id}`,
+          }).catch(() => { /* best-effort */ });
+        }
+      } else {
+        adjustmentStatus = 'refund_pending';
+        await writeAdjustment({
+          adjustment_amount: diff,
+          adjustment_status: 'refund_pending',
+          adjustment_note: `Erstattung ${(-diff).toFixed(2)} € manuell ausführen (Buchung nicht über Stripe bezahlt) — ${reason}`.slice(0, 500),
+          notes: `${upd.notes as string} | Erstattung ${(-diff).toFixed(2)} € manuell ausführen (keine Stripe-Zahlung)`,
+        });
+        await createAdminNotification(supabase, {
+          type: 'payment_failed',
+          title: `Erstattung manuell ausführen (${id})`,
+          message: `Buchung geändert — Erstattung über ${(-diff).toFixed(2)} € manuell ausführen (Zahlung lief nicht über Stripe).`,
+          link: `/admin/buchungen/${id}`,
+        }).catch(() => { /* best-effort */ });
+      }
+    }
+
+    await logAudit({
+      action: 'booking.edit',
+      entityType: 'booking',
+      entityId: id,
+      changes: {
+        period_old: `${booking.rental_from}–${booking.rental_to}`,
+        period_new: `${rentalFrom}–${rentalTo}`,
+        camera_old: curProductId,
+        camera_new: newProductId,
+        haftung_old: booking.haftung ?? null,
+        haftung_new: effHaftung,
+        items_changed: itemsProvided,
+        price_old: oldTotal,
+        price_new: finalTotal,
+        diff,
+        settlement: settle === 'none' ? 'none' : settlement,
+        reason,
+        pack_workflow_reset: packWasStarted,
+      },
+      request: req,
+    });
+
+    return NextResponse.json({
+      success: true,
+      diff,
+      settlement: settle === 'none' ? 'none' : settlement,
+      adjustment_status: adjustmentStatus,
+      payment_url: paymentUrl,
+      new_total: finalTotal,
+    });
   }
 
   const updates: Record<string, unknown> = {};

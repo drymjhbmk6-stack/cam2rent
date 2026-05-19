@@ -66,6 +66,11 @@ interface BookingDetail {
   wbw_finalized_at?: string | null;
   wbw_email_sent_at?: string | null;
   wbw_final?: { name: string; serial: string | null; value: number }[] | null;
+  cameras_resolved?: { product_id: string | null; product_name: string; unit_id: string | null; serial_number: string | null }[] | null;
+  adjustment_status?: string | null;
+  adjustment_amount?: number | null;
+  adjustment_payment_link_id?: string | null;
+  adjustment_note?: string | null;
 }
 
 interface LiabilityLine {
@@ -746,6 +751,14 @@ export default function BuchungDetailPage() {
                 accessoryItems={booking.accessory_items ?? null}
                 productList={productList}
                 accessoryList={accessoryList}
+                onSaved={fetchBooking}
+              />
+            )}
+            {!['cancelled', 'completed', 'returned'].includes(booking.status) && (
+              <BookingEditSection
+                booking={booking}
+                productList={productList}
+                options={accessoryEditOptions}
                 onSaved={fetchBooking}
               />
             )}
@@ -1518,6 +1531,398 @@ function PriceRow({ label, amount }: { label: string; amount: number }) {
       <span className="text-sm font-body text-brand-steel">{label}</span>
       <span className="text-sm font-body text-brand-black">{fmtEuro(amount)}</span>
     </div>
+  );
+}
+
+interface EditPreview {
+  days: number;
+  camera_count: number;
+  camera_changed: boolean;
+  period_changed: boolean;
+  price_rental: number;
+  price_accessories: number;
+  price_haftung: number;
+  shipping_price: number;
+  discount_total: number;
+  computed_total: number;
+  final_total: number;
+  old_total: number;
+  diff: number;
+  settlement: 'payment_link' | 'refund' | 'none';
+  is_stripe_payment: boolean;
+}
+
+function BookingEditSection({
+  booking, productList, options, onSaved,
+}: {
+  booking: BookingDetail;
+  productList: { id: string; name: string }[];
+  options: { id: string; name: string; kind: 'accessory' | 'set'; compat: string }[];
+  onSaved: () => void;
+}) {
+  const setOptions = options.filter((o) => o.kind === 'set');
+  const accOptions = options.filter((o) => o.kind === 'accessory');
+  const leafRows = (booking.resolved_items ?? []).filter((r) => !!r.accessory_id);
+
+  const curHaftung: 'none' | 'standard' | 'premium' =
+    booking.haftung === 'standard' ? 'standard' : booking.haftung === 'premium' ? 'premium' : 'none';
+
+  const [editing, setEditing] = useState(false);
+  const [rentalFrom, setRentalFrom] = useState(String(booking.rental_from).slice(0, 10));
+  const [rentalTo, setRentalTo] = useState(String(booking.rental_to).slice(0, 10));
+  const [cameraId, setCameraId] = useState(booking.product_id);
+  const [haftung, setHaftung] = useState<'none' | 'standard' | 'premium'>(curHaftung);
+  const [rows, setRows] = useState<{ id: string; qty: number }[]>(
+    leafRows.map((r) => ({ id: r.accessory_id as string, qty: r.qty })),
+  );
+  const [accChanged, setAccChanged] = useState(false);
+  const [reason, setReason] = useState('');
+  const [settle, setSettle] = useState<'auto' | 'none'>('auto');
+  const [overrideOn, setOverrideOn] = useState(false);
+  const [overrideVal, setOverrideVal] = useState(String(booking.price_total ?? 0));
+  const [preview, setPreview] = useState<EditPreview | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [done, setDone] = useState<string | null>(null);
+
+  function start() {
+    setRentalFrom(String(booking.rental_from).slice(0, 10));
+    setRentalTo(String(booking.rental_to).slice(0, 10));
+    setCameraId(booking.product_id);
+    setHaftung(curHaftung);
+    setRows(leafRows.map((r) => ({ id: r.accessory_id as string, qty: r.qty })));
+    setAccChanged(false);
+    setReason('');
+    setSettle('auto');
+    setOverrideOn(false);
+    setOverrideVal(String(booking.price_total ?? 0));
+    setPreview(null);
+    setErr('');
+    setDone(null);
+    setEditing(true);
+  }
+
+  function buildBody(dryRun: boolean) {
+    const body: Record<string, unknown> = {
+      rental_from: rentalFrom,
+      rental_to: rentalTo,
+      camera_product_id: cameraId,
+      haftung,
+      reason: reason.trim(),
+      settle,
+      dry_run: dryRun,
+    };
+    // Zubehör/Set nur senden, wenn wirklich geändert — sonst behält der
+    // Server die aktuelle Komposition (Set bleibt als Set bepreist).
+    if (accChanged) {
+      body.items = rows.filter((r) => r.id).map((r) => ({ id: r.id, qty: r.qty }));
+    }
+    if (overrideOn) {
+      const n = Number(overrideVal.replace(',', '.'));
+      if (Number.isFinite(n) && n >= 0) body.new_price_total = n;
+    }
+    return body;
+  }
+
+  async function runPreview() {
+    setBusy(true);
+    setErr('');
+    setDone(null);
+    try {
+      const res = await fetch(`/api/admin/booking/${booking.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ booking_edit: buildBody(true) }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || 'Vorschau fehlgeschlagen.');
+      setPreview(d.preview as EditPreview);
+    } catch (e) {
+      setPreview(null);
+      setErr(e instanceof Error ? e.message : 'Vorschau fehlgeschlagen.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function save() {
+    if (reason.trim().length < 10) {
+      setErr('Bitte einen Grund mit mindestens 10 Zeichen angeben.');
+      return;
+    }
+    setBusy(true);
+    setErr('');
+    try {
+      const res = await fetch(`/api/admin/booking/${booking.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ booking_edit: buildBody(false) }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || 'Speichern fehlgeschlagen.');
+      let msg = 'Buchung aktualisiert.';
+      if (d.settlement === 'payment_link') {
+        msg = d.payment_url
+          ? `Buchung aktualisiert. Zahlungslink über ${fmtEuro(d.diff)} wurde dem Kunden per E-Mail geschickt.`
+          : `Buchung aktualisiert. Nachzahlung über ${fmtEuro(d.diff)} — Zahlungslink konnte nicht erstellt werden, bitte prüfen.`;
+      } else if (d.settlement === 'refund') {
+        msg = d.adjustment_status === 'refunded'
+          ? `Buchung aktualisiert. ${fmtEuro(-d.diff)} wurden automatisch erstattet.`
+          : `Buchung aktualisiert. Erstattung über ${fmtEuro(-d.diff)} muss manuell ausgeführt werden (siehe Benachrichtigung).`;
+      }
+      setDone(msg);
+      setEditing(false);
+      onSaved();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Speichern fehlgeschlagen.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!editing) {
+    return (
+      <Section title="Bestellung bearbeiten">
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs text-brand-muted leading-relaxed">
+              Mietzeitraum, Kamera, Set/Zubehör und Haftungsschutz ändern.
+              Wirkt sofort auf die echte Buchung. Preisdifferenz: Nachzahlung
+              per Zahlungslink oder Rückerstattung.
+            </p>
+            <button
+              type="button"
+              onClick={start}
+              className="text-xs text-accent-blue font-heading font-semibold whitespace-nowrap"
+            >
+              Bearbeiten
+            </button>
+          </div>
+          {done && (
+            <p className="text-xs text-green-700 bg-green-50 rounded-lg p-2">{done}</p>
+          )}
+          {booking.adjustment_status && (
+            <p className="text-xs text-brand-muted bg-brand-bg-soft rounded-lg p-2">
+              Letzte Anpassung:{' '}
+              {booking.adjustment_status === 'pending_payment' && 'Nachzahlung offen (Zahlungslink verschickt)'}
+              {booking.adjustment_status === 'paid' && 'Nachzahlung bezahlt'}
+              {booking.adjustment_status === 'refunded' && 'Erstattung ausgeführt'}
+              {booking.adjustment_status === 'refund_pending' && '⚠ Erstattung manuell ausführen'}
+              {booking.adjustment_status === 'payment_link_failed' && '⚠ Zahlungslink fehlgeschlagen'}
+              {booking.adjustment_amount != null && ` (${fmtEuro(booking.adjustment_amount)})`}
+            </p>
+          )}
+        </div>
+      </Section>
+    );
+  }
+
+  return (
+    <Section title="Bestellung bearbeiten">
+      <div className="space-y-4">
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider mb-1">Von</label>
+            <input
+              type="date"
+              value={rentalFrom}
+              onChange={(e) => { setRentalFrom(e.target.value); setPreview(null); }}
+              className="w-full text-base border border-brand-border rounded-lg px-2 py-2"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider mb-1">Bis</label>
+            <input
+              type="date"
+              value={rentalTo}
+              onChange={(e) => { setRentalTo(e.target.value); setPreview(null); }}
+              className="w-full text-base border border-brand-border rounded-lg px-2 py-2"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider mb-1">Kamera</label>
+          <select
+            value={cameraId}
+            onChange={(e) => { setCameraId(e.target.value); setPreview(null); }}
+            className="w-full text-base border border-brand-border rounded-lg px-2 py-2"
+          >
+            {!productList.some((p) => p.id === cameraId) && (
+              <option value={cameraId}>{booking.product_name}</option>
+            )}
+            {productList.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+          <p className="text-xs text-brand-muted mt-1">
+            {Math.max(1, (booking.cameras_resolved?.length ?? 0) || 1)}× — bei Mehrfach-Kameras wird das Modell für alle übernommen.
+          </p>
+        </div>
+
+        <div>
+          <label className="block text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider mb-1">Haftungsschutz</label>
+          <select
+            value={haftung}
+            onChange={(e) => { setHaftung(e.target.value as 'none' | 'standard' | 'premium'); setPreview(null); }}
+            className="w-full text-base border border-brand-border rounded-lg px-2 py-2"
+          >
+            <option value="none">Keine Haftungsbegrenzung</option>
+            <option value="standard">Standard-Haftungsschutz</option>
+            <option value="premium">Premium-Haftungsschutz</option>
+          </select>
+        </div>
+
+        <div className="space-y-2">
+          <label className="block text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider">Set / Zubehör</label>
+          {rows.map((row, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <select
+                value={row.id}
+                onChange={(e) => { setRows((rs) => rs.map((r, j) => (j === i ? { ...r, id: e.target.value } : r))); setAccChanged(true); setPreview(null); }}
+                className="flex-1 min-w-0 text-base border border-brand-border rounded-lg px-2 py-2"
+              >
+                <option value="">— wählen —</option>
+                {setOptions.length > 0 && (
+                  <optgroup label="Sets (werden in Einzelteile aufgelöst)">
+                    {setOptions.map((o) => (
+                      <option key={o.id} value={o.id}>{o.name} — {o.compat}</option>
+                    ))}
+                  </optgroup>
+                )}
+                <optgroup label="Zubehör">
+                  {accOptions.map((o) => (
+                    <option key={o.id} value={o.id}>{o.name} — {o.compat}</option>
+                  ))}
+                </optgroup>
+              </select>
+              <input
+                type="number"
+                min={1}
+                max={99}
+                value={row.qty}
+                onChange={(e) => { setRows((rs) => rs.map((r, j) => (j === i ? { ...r, qty: Math.max(1, Math.min(99, Number(e.target.value) || 1)) } : r))); setAccChanged(true); setPreview(null); }}
+                className="w-16 text-base border border-brand-border rounded-lg px-2 py-2"
+              />
+              <button
+                type="button"
+                onClick={() => { setRows((rs) => rs.filter((_, j) => j !== i)); setAccChanged(true); setPreview(null); }}
+                className="text-red-500 text-sm px-2 py-2 hover:bg-red-50 rounded-lg"
+                aria-label="Zeile entfernen"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={() => { setRows((rs) => [...rs, { id: '', qty: 1 }]); setAccChanged(true); setPreview(null); }}
+            className="text-sm text-accent-blue font-heading font-semibold"
+          >
+            + Set / Zubehör hinzufügen
+          </button>
+          {!accChanged && (
+            <p className="text-xs text-brand-muted">Unverändert — Set-Preise bleiben erhalten. Beim Bearbeiten werden Sets in Einzelteile aufgelöst.</p>
+          )}
+        </div>
+
+        <div>
+          <label className="block text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider mb-1">
+            Grund der Änderung (Pflicht, min. 10 Zeichen)
+          </label>
+          <textarea
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            rows={2}
+            className="w-full text-base border border-brand-border rounded-lg px-3 py-2"
+            placeholder="z.B. Kunde verlängert um 3 Tage und tauscht auf Premium-Haftung"
+          />
+        </div>
+
+        <div className="rounded-lg border border-brand-border p-3 space-y-2">
+          <label className="flex items-center gap-2 text-sm font-heading font-semibold text-brand-black">
+            <input type="checkbox" checked={overrideOn} onChange={(e) => { setOverrideOn(e.target.checked); setPreview(null); }} />
+            Gesamtpreis manuell überschreiben
+          </label>
+          {overrideOn && (
+            <input
+              type="number"
+              min={0}
+              step="0.01"
+              value={overrideVal}
+              onChange={(e) => { setOverrideVal(e.target.value); setPreview(null); }}
+              className="w-40 text-base border border-brand-border rounded-lg px-3 py-2"
+            />
+          )}
+          <div className="flex flex-wrap gap-4 pt-1">
+            <label className="flex items-center gap-2 text-sm font-body text-brand-black">
+              <input type="radio" name="settle" checked={settle === 'auto'} onChange={() => setSettle('auto')} />
+              Differenz automatisch abwickeln (Zahlungslink / Erstattung)
+            </label>
+            <label className="flex items-center gap-2 text-sm font-body text-brand-black">
+              <input type="radio" name="settle" checked={settle === 'none'} onChange={() => setSettle('none')} />
+              Nur ändern, keine Zahlung
+            </label>
+          </div>
+        </div>
+
+        {preview && (
+          <div className="rounded-lg bg-brand-bg-soft p-3 space-y-1 text-sm">
+            <p className="font-heading font-semibold text-brand-black mb-1">Vorschau ({preview.days} {preview.days === 1 ? 'Tag' : 'Tage'})</p>
+            <div className="flex justify-between"><span className="text-brand-steel">Miete</span><span>{fmtEuro(preview.price_rental)}</span></div>
+            {preview.price_accessories > 0 && <div className="flex justify-between"><span className="text-brand-steel">Zubehör/Sets</span><span>{fmtEuro(preview.price_accessories)}</span></div>}
+            {preview.price_haftung > 0 && <div className="flex justify-between"><span className="text-brand-steel">Haftungsschutz</span><span>{fmtEuro(preview.price_haftung)}</span></div>}
+            {preview.shipping_price > 0 && <div className="flex justify-between"><span className="text-brand-steel">Versand</span><span>{fmtEuro(preview.shipping_price)}</span></div>}
+            {preview.discount_total > 0 && <div className="flex justify-between text-green-600"><span>Rabatte</span><span>-{fmtEuro(preview.discount_total)}</span></div>}
+            <div className="flex justify-between pt-1 border-t border-brand-border"><span className="text-brand-steel">Alt</span><span>{fmtEuro(preview.old_total)}</span></div>
+            <div className="flex justify-between font-heading font-bold text-brand-black"><span>Neu</span><span>{fmtEuro(preview.final_total)}</span></div>
+            <div className="flex justify-between font-heading font-bold pt-1 border-t border-brand-border">
+              <span>{preview.diff > 0 ? 'Nachzahlung' : preview.diff < 0 ? 'Erstattung' : 'Differenz'}</span>
+              <span className={preview.diff > 0 ? 'text-red-600' : preview.diff < 0 ? 'text-green-700' : ''}>
+                {fmtEuro(Math.abs(preview.diff))}
+              </span>
+            </div>
+            {settle === 'auto' && preview.diff > 0.005 && (
+              <p className="text-xs text-brand-muted">→ Kunde erhält einen Stripe-Zahlungslink per E-Mail.</p>
+            )}
+            {settle === 'auto' && preview.diff < -0.005 && (
+              <p className="text-xs text-brand-muted">
+                → {preview.is_stripe_payment ? 'Automatische Stripe-Erstattung.' : 'Manuelle Erstattung nötig (keine Stripe-Zahlung).'}
+              </p>
+            )}
+          </div>
+        )}
+
+        {err && <p className="text-xs text-red-600">{err}</p>}
+
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={runPreview}
+            disabled={busy}
+            className="px-4 py-2 rounded-lg border border-brand-border text-sm font-heading font-semibold disabled:opacity-50"
+          >
+            {busy ? '…' : 'Vorschau berechnen'}
+          </button>
+          <button
+            type="button"
+            onClick={save}
+            disabled={busy || reason.trim().length < 10}
+            className="px-4 py-2 rounded-btn bg-brand-black text-white text-sm font-heading font-semibold hover:bg-brand-dark transition-colors disabled:opacity-50"
+          >
+            {busy ? 'Speichert…' : 'Übernehmen'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setEditing(false)}
+            disabled={busy}
+            className="px-4 py-2 rounded-lg border border-brand-border text-sm font-heading font-semibold"
+          >
+            Abbrechen
+          </button>
+        </div>
+      </div>
+    </Section>
   );
 }
 
