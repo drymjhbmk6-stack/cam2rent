@@ -74,36 +74,63 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // Buchung verknüpfen
-      const { data: booking } = await supabase
-        .from('bookings')
-        .select('id')
-        .eq('payment_intent_id', pi.id)
+      // Stripe-Source-Felder, die bei jedem Sync aktualisiert werden duerfen.
+      const stripeFields = {
+        stripe_payment_intent_id: pi.id,
+        stripe_charge_id: chargeId,
+        amount,
+        fee,
+        net,
+        currency: pi.currency?.toUpperCase() || 'EUR',
+        status: pi.status,
+        payment_method: typeof pi.payment_method === 'string' ? pi.payment_method : null,
+        stripe_created_at: new Date(pi.created * 1000).toISOString(),
+        synced_at: new Date().toISOString(),
+        is_test: testMode,
+      };
+
+      // Existierende Row pruefen: user-gesetzte States (manual / refunded) muessen
+      // erhalten bleiben — vorher hat der Sync bei jedem Lauf `booking_id` +
+      // `match_status` blind ueberschrieben und damit manuelle Verknuepfungen
+      // sowie Erstattungs-Markierungen ausgeloescht.
+      const { data: existing } = await supabase
+        .from('stripe_transactions')
+        .select('id, match_status')
+        .eq('stripe_payment_intent_id', pi.id)
         .maybeSingle();
 
-      // Upsert in stripe_transactions
-      const { error } = await supabase
-        .from('stripe_transactions')
-        .upsert(
-          {
-            stripe_payment_intent_id: pi.id,
-            stripe_charge_id: chargeId,
-            amount,
-            fee,
-            net,
-            currency: pi.currency?.toUpperCase() || 'EUR',
-            status: pi.status,
-            payment_method: typeof pi.payment_method === 'string' ? pi.payment_method : null,
-            booking_id: booking?.id || null,
-            match_status: booking?.id ? 'matched' : 'unmatched',
-            stripe_created_at: new Date(pi.created * 1000).toISOString(),
-            synced_at: new Date().toISOString(),
-            is_test: testMode,
-          },
-          { onConflict: 'stripe_payment_intent_id' }
-        );
+      const userSet =
+        existing && (existing.match_status === 'manual' || existing.match_status === 'refunded');
 
-      if (!error) synced++;
+      if (userSet && existing) {
+        // Nur Stripe-Source-Felder refreshen, Link/Status NICHT antasten.
+        const { error } = await supabase
+          .from('stripe_transactions')
+          .update(stripeFields)
+          .eq('id', existing.id);
+        if (!error) synced++;
+      } else {
+        // Auto-Match ueber bookings.payment_intent_id (unveraenderte Logik fuer
+        // erstmals-erfasste oder bisher `matched`/`unmatched`-Eintraege).
+        const { data: booking } = await supabase
+          .from('bookings')
+          .select('id')
+          .eq('payment_intent_id', pi.id)
+          .maybeSingle();
+
+        const { error } = await supabase
+          .from('stripe_transactions')
+          .upsert(
+            {
+              ...stripeFields,
+              booking_id: booking?.id || null,
+              match_status: booking?.id ? 'matched' : 'unmatched',
+            },
+            { onConflict: 'stripe_payment_intent_id' }
+          );
+
+        if (!error) synced++;
+      }
     }
 
     hasMore = paymentIntents.has_more;
