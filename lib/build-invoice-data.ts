@@ -85,6 +85,11 @@ export async function buildInvoiceData(
       ((booking.discount_amount as number) ?? 0)
       + ((booking.duration_discount as number) ?? 0)
       + ((booking.loyalty_discount as number) ?? 0),
+    // Einzel-Komponenten zusaetzlich durchreichen, damit das PDF einen
+    // Hinweistext mit der Aufschluesselung unter der Rabatt-Zeile rendern kann.
+    couponDiscount: (booking.discount_amount as number) ?? 0,
+    durationDiscount: (booking.duration_discount as number) ?? 0,
+    loyaltyDiscount: (booking.loyalty_discount as number) ?? 0,
     couponCode: (booking.coupon_code as string) ?? undefined,
     priceTotal: (booking.price_total as number) ?? 0,
     deposit: (booking.deposit as number) ?? 0,

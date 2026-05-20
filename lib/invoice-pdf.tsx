@@ -50,6 +50,14 @@ export interface InvoiceData {
   /** Gesamt-Rabatt (Produkt-/Aktions-Rabatt + Gutschein + Mietdauer- + Loyalitaets-Rabatt).
    *  Wird als eigene Zeile vor dem Gesamtbetrag angezeigt. priceTotal ist bereits nach Abzug. */
   discountAmount?: number;
+  /** Optional: Aufschluesselung des Rabatts in seine Komponenten. Wenn
+   *  vorhanden, wird unter der Rabatt-Zeile ein kleiner Hinweistext angezeigt,
+   *  damit der Kunde sieht, wie sich der Gesamt-Rabatt zusammensetzt. Ein
+   *  evtl. verbleibender Differenz-Anteil (Set-Bundle / manuelle Anpassung)
+   *  wird automatisch als "Set-Bundle"-Komponente ergaenzt. */
+  couponDiscount?: number;     // Aktions-/Coupon-Rabatt (booking.discount_amount)
+  durationDiscount?: number;   // Mietdauer-Rabatt (booking.duration_discount)
+  loyaltyDiscount?: number;    // Stammkunden-Rabatt (booking.loyalty_discount)
   /** Optional: Gutschein-Code zur Beschriftung der Rabatt-Zeile */
   couponCode?: string;
   priceTotal: number;
@@ -401,6 +409,27 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
   const rabatt = reduktion > 0.005 ? reduktion : 0;
   const aufpreis = reduktion < -0.005 ? -reduktion : 0;
 
+  // Rabatt-Prozent (gegen die Katalog-Zwischensumme), und Aufschluesselung in
+  // Komponenten. Set-Bundle/Anpassung = Differenz zwischen Gesamt-Rabatt und
+  // den explizit gespeicherten Rabatt-Komponenten (= "Rest", den der Bundle-
+  // Preis automatisch erzeugt).
+  const rabattProzent = zwischensumme > 0 ? Math.round((rabatt / zwischensumme) * 100) : 0;
+  const couponPart = Math.max(0, Math.round((data.couponDiscount ?? 0) * 100) / 100);
+  const durationPart = Math.max(0, Math.round((data.durationDiscount ?? 0) * 100) / 100);
+  const loyaltyPart = Math.max(0, Math.round((data.loyaltyDiscount ?? 0) * 100) / 100);
+  const explicitSum = Math.round((couponPart + durationPart + loyaltyPart) * 100) / 100;
+  const bundlePart = Math.max(0, Math.round((rabatt - explicitSum) * 100) / 100);
+  const rabattParts: { label: string; value: number }[] = [];
+  if (couponPart > 0) {
+    rabattParts.push({
+      label: data.couponCode ? `Gutschein ${data.couponCode}` : 'Aktion / Gutschein',
+      value: couponPart,
+    });
+  }
+  if (durationPart > 0) rabattParts.push({ label: 'Mietdauer', value: durationPart });
+  if (loyaltyPart > 0) rabattParts.push({ label: 'Stammkunde', value: loyaltyPart });
+  if (bundlePart > 0.01) rabattParts.push({ label: 'Set-Bundle / Anpassung', value: bundlePart });
+
   const isUnpaid = data.paymentStatus === 'unpaid' || data.paymentMethod === 'Ausstehend';
   const verwendungszweck = `${invoiceNumber} ${data.customerName}`;
 
@@ -518,12 +547,21 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
             <Text style={s.sumValue}>{fmtEuro(zwischensumme)}</Text>
           </View>
           {rabatt > 0 && (
-            <View style={s.sumRow}>
-              <Text style={s.sumLabel}>
-                Rabatt{data.couponCode ? ` (${data.couponCode})` : ''}:
-              </Text>
-              <Text style={s.sumValue}>-{fmtEuro(rabatt)}</Text>
-            </View>
+            <>
+              <View style={s.sumRow}>
+                <Text style={s.sumLabel}>
+                  Rabatt{rabattProzent > 0 ? ` (${rabattProzent} %)` : ''}{data.couponCode ? ` (${data.couponCode})` : ''}:
+                </Text>
+                <Text style={s.sumValue}>-{fmtEuro(rabatt)}</Text>
+              </View>
+              {rabattParts.length > 0 && (
+                <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: -1, marginBottom: 2 }}>
+                  <Text style={{ fontSize: 8, color: C.grayMid, width: 207, textAlign: 'right' }}>
+                    {rabattParts.map((p) => `${p.label}: -${fmtEuro(p.value)}`).join('  ·  ')}
+                  </Text>
+                </View>
+              )}
+            </>
           )}
           {aufpreis > 0 && (
             <View style={s.sumRow}>
