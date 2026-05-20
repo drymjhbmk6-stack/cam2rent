@@ -2183,9 +2183,18 @@ export default function BuchenPage() {
                             accessoryItems: finalAccessoryItems,
                             haftung,
                             priceRental: breakdown.rentalPrice,
-                            priceAccessories: selectedSet ? setPrice : breakdown.accessoryPrice,
+                            // Set-Preis + zusaetzlich gewaehltes Einzel-Zubehoer
+                            // addieren (`breakdown.accessoryPrice` enthaelt nur
+                            // die Einzel-Zubehoere ohne Set). Vorher: nur setPrice
+                            // verwendet → Stativ etc. wurden im Warenkorb,
+                            // Checkout und Mietvertrag mit 0 € bepreist.
+                            priceAccessories: selectedSet
+                              ? setPrice + breakdown.accessoryPrice
+                              : breakdown.accessoryPrice,
                             priceHaftung: breakdown.haftungPrice,
-                            subtotal: breakdown.rentalPrice + (selectedSet ? setPrice : breakdown.accessoryPrice) + breakdown.haftungPrice,
+                            subtotal: breakdown.rentalPrice
+                              + (selectedSet ? setPrice + breakdown.accessoryPrice : breakdown.accessoryPrice)
+                              + breakdown.haftungPrice,
                             deposit: product.deposit,
                             deliveryMode,
                             shippingMethod: deliveryMode === 'versand' ? shippingMethod : 'standard',
