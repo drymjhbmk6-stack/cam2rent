@@ -83,6 +83,8 @@ const ACTION_LABELS: Record<string, string> = {
   'env_mode.change': 'Test-/Live-Modus gewechselt',
   'email_template.update': 'E-Mail-Vorlage angepasst',
   'email_template.reset': 'E-Mail-Vorlage zurückgesetzt',
+  'availability_alert.resolve': 'Verfügbarkeits-Alert als erledigt markiert',
+  'availability_alert.reopen': 'Verfügbarkeits-Alert wieder geöffnet',
   // Legacy (Unterstrich-Namen, falls noch im Bestand)
   booking_cancelled: 'Buchung storniert',
   booking_confirmed: 'Buchung bestätigt',
@@ -137,6 +139,7 @@ const ENTITY_LABELS: Record<string, string> = {
   reel: 'Reel',
   customer_ugc: 'Kundenmaterial',
   email_template: 'E-Mail-Vorlage',
+  availability_alert: 'Verfügbarkeits-Alert',
   nachricht: 'Konversation',
 };
 

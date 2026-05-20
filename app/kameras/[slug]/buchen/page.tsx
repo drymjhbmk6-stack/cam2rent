@@ -514,6 +514,17 @@ export default function BuchenPage() {
   const [availableSets, setAvailableSets] = useState<RentalSet[]>([]);
   const [selectedSet, setSelectedSet] = useState<RentalSet | null>(null);
 
+  // Basis-Set-Gate: Wenn fuer DIESE Kamera kein Basis-Set definiert ist (oder
+  // das Basis-Set im gewaehlten Zeitraum ausgebucht ist), darf die Buchung
+  // nicht weitergehen. Modal zeigt Hinweis, Admin wird per Telemetrie-Endpoint
+  // alarmiert (Push + Dashboard-Banner). Reportiert pro Session+Kamera+Zeitraum
+  // nur einmal, damit wir den Admin nicht mit Doppel-Pushes zuspammen.
+  const [basicSetBlock, setBasicSetBlock] = useState<{
+    reason: 'no_basic_set' | 'basic_set_unavailable';
+    setName?: string;
+  } | null>(null);
+  const reportedBlockRef = useRef<Set<string>>(new Set());
+
 
   // Tax config
   const [taxMode, setTaxMode] = useState<'kleinunternehmer' | 'regelbesteuerung'>('kleinunternehmer');
@@ -548,12 +559,15 @@ export default function BuchenPage() {
   }, []);
 
   useEffect(() => {
-    fetch('/api/sets?available=true')
+    // Frueher: nur `available=true`-Sets laden. Damit verschwanden ausgebuchte
+    // Sets komplett aus der Liste. Jetzt: alle laden + auf Kompatibilitaet
+    // fuer diese Kamera filtern; das `available`-Flag wird pro Set ausgewertet
+    // und in der Render-Logik als Greyout dargestellt (analog Zubehoer-Verhalten).
+    fetch('/api/sets')
       .then((r) => r.json())
       .then((data) => {
         if (Array.isArray(data?.sets)) {
           const pid = product?.id;
-          // Nur Sets anzeigen die für diese Kamera kompatibel sind
           const compatible = data.sets.filter((s: RentalSet & { product_ids?: string[] }) => {
             if (!s.product_ids?.length) return true; // Keine Einschränkung = alle Kameras
             return pid ? s.product_ids.includes(pid) : true;
@@ -622,6 +636,75 @@ export default function BuchenPage() {
     // accessories bereits via setAccessories([]) im Radio-Handler.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [range, deliveryMode, product?.id]);
+
+  // ── Basis-Set-Gate ─────────────────────────────────────────────────────────
+  // Pruefen, ob fuer DIESE Kamera ein Basis-Set existiert und im gewuenschten
+  // Zeitraum buchbar ist. Wenn nein → Modal anzeigen + (einmalig pro
+  // camera+from+to) Telemetrie an /api/availability-alerts senden.
+  useEffect(() => {
+    if (!product?.id || !range?.from) {
+      setBasicSetBlock(null);
+      return;
+    }
+    if (availableSets.length === 0) {
+      // Sets noch nicht geladen — abwarten.
+      return;
+    }
+    const rentalFrom = format(range.from, 'yyyy-MM-dd');
+    const rentalTo = format(range.to ?? range.from, 'yyyy-MM-dd');
+    const basicSets = availableSets.filter((s) => {
+      const list = (s as RentalSet & { basic_for_product_ids?: string[] }).basic_for_product_ids;
+      return Array.isArray(list) && list.includes(product.id);
+    });
+
+    function isSetAvailableForPeriod(s: RentalSet): boolean {
+      const items = (s as RentalSet & { accessory_items?: { accessory_id: string; qty: number }[] }).accessory_items ?? [];
+      if (items.length === 0) return s.available !== false;
+      return items.every((item) => {
+        const av = accAvailability[item.accessory_id];
+        // Wenn fuer ein Item noch keine Verfuegbarkeits-Info da ist, optimistisch true
+        // (Wert wird sich nachladen). Greift sonst frueh und zeigt das Modal falsch.
+        if (!av) return true;
+        return av.compatible && av.remaining >= item.qty;
+      });
+    }
+
+    let nextBlock: { reason: 'no_basic_set' | 'basic_set_unavailable'; setName?: string } | null = null;
+    if (basicSets.length === 0) {
+      nextBlock = { reason: 'no_basic_set' };
+    } else {
+      const anyAvail = basicSets.some(isSetAvailableForPeriod);
+      if (!anyAvail) {
+        nextBlock = { reason: 'basic_set_unavailable', setName: basicSets[0].name };
+      }
+    }
+
+    setBasicSetBlock(nextBlock);
+
+    if (nextBlock) {
+      const key = `${product.id}|${rentalFrom}|${rentalTo}|${nextBlock.reason}`;
+      if (!reportedBlockRef.current.has(key)) {
+        reportedBlockRef.current.add(key);
+        const payload: Record<string, unknown> = {
+          alert_type: nextBlock.reason,
+          product_id: product.id,
+          product_name: product.name,
+          rental_from: rentalFrom,
+          rental_to: rentalTo,
+        };
+        if (nextBlock.reason === 'basic_set_unavailable' && basicSets.length > 0) {
+          payload.set_id = basicSets[0].id;
+          payload.set_name = basicSets[0].name;
+        }
+        // Fire-and-forget — Telemetrie darf den UI-Flow nicht blockieren.
+        fetch('/api/availability-alerts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        }).catch(() => {});
+      }
+    }
+  }, [product?.id, product?.name, range, availableSets, accAvailability]);
 
   const toggleAccessory = useCallback((id: string) => {
     setAccessories((prev) =>
@@ -1111,12 +1194,17 @@ export default function BuchenPage() {
                 <div className="mt-8 flex justify-end">
                   <button
                     type="button"
-                    disabled={!range?.from}
+                    disabled={!range?.from || !!basicSetBlock}
                     onClick={() => { if (returnToSummary) { setStep(4); setReturnToSummary(false); } else setStep(2); }}
                     className="px-8 py-3 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold text-sm rounded-[10px] hover:bg-brand-dark transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     Weiter: Zubehör
                   </button>
+                  {basicSetBlock && (
+                    <p className="text-xs text-status-error mt-2 text-right">
+                      Buchung aktuell nicht möglich — siehe Hinweis oben.
+                    </p>
+                  )}
                 </div>
               </div>
             )}
@@ -1149,37 +1237,74 @@ export default function BuchenPage() {
                         const price = breakdown
                           ? set.pricingMode === 'perDay' ? set.price * breakdown.days : set.price
                           : set.price;
-                        // Verfügbarkeit: Nur Lagerbestand prüfen, nicht Kompatibilität
-                        // (Sets sind bereits per product_ids für diese Kamera gefiltert)
+                        // Verfuegbarkeit: Pro Sub-Item gegen accAvailability pruefen.
+                        // Frueher wurden ausgebuchte Sets via `return null` versteckt
+                        // — jetzt werden sie ausgegraut angezeigt (analog Zubehoer),
+                        // damit der Kunde sieht WAS aktuell nicht buchbar ist.
                         const setItems: { accessory_id: string; qty: number }[] = (set as unknown as { accessory_items?: { accessory_id: string; qty: number }[] }).accessory_items ?? [];
                         const setUnavailable = setItems.length > 0 && setItems.some((item) => {
                           const av = accAvailability[item.accessory_id];
                           return av && av.remaining < item.qty;
                         });
-                        if (setUnavailable) return null;
+                        const isBasic = Array.isArray((set as RentalSet & { basic_for_product_ids?: string[] }).basic_for_product_ids)
+                          && (set as RentalSet & { basic_for_product_ids?: string[] }).basic_for_product_ids!.includes(product.id);
                         return (
-                          <div key={set.id} className={`transition-colors ${isSelected ? 'bg-accent-blue-soft/30' : 'bg-white dark:bg-gray-900'}`}>
-                            <label className="flex items-center gap-3 px-4 py-3 cursor-pointer">
-                              <input type="radio" name="rentalSet" checked={isSelected} onChange={() => { setSelectedSet(set); setAccessories([]); setAccessoryQty({}); }} className="sr-only" />
+                          <div
+                            key={set.id}
+                            className={`transition-colors ${
+                              setUnavailable
+                                ? 'bg-brand-bg dark:bg-gray-800 opacity-60'
+                                : isSelected
+                                  ? 'bg-accent-blue-soft/30'
+                                  : 'bg-white dark:bg-gray-900'
+                            }`}
+                            title={setUnavailable ? 'Im gewählten Zeitraum ausgebucht' : undefined}
+                          >
+                            <label className={`flex items-center gap-3 px-4 py-3 ${setUnavailable ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
+                              <input
+                                type="radio"
+                                name="rentalSet"
+                                checked={isSelected}
+                                disabled={setUnavailable}
+                                onChange={() => {
+                                  if (setUnavailable) return;
+                                  setSelectedSet(set);
+                                  setAccessories([]);
+                                  setAccessoryQty({});
+                                }}
+                                className="sr-only"
+                              />
                               <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${isSelected ? 'border-accent-blue' : 'border-brand-border dark:border-gray-700'}`}>
                                 {isSelected && <div className="w-2 h-2 rounded-full bg-accent-blue" />}
                               </div>
                               {set.image_url && (
                                 // eslint-disable-next-line @next/next/no-img-element
-                                <img src={set.image_url} alt={set.name} className="w-16 h-12 object-contain rounded-lg bg-white dark:bg-gray-900 border border-brand-border dark:border-gray-700 flex-shrink-0" />
+                                <img src={set.image_url} alt={set.name} className={`w-16 h-12 object-contain rounded-lg bg-white dark:bg-gray-900 border border-brand-border dark:border-gray-700 flex-shrink-0 ${setUnavailable ? 'grayscale' : ''}`} />
                               )}
                               <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <span className="font-heading font-semibold text-sm text-brand-black dark:text-gray-100">{set.name}</span>
-                                  {set.badge && (
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className={`font-heading font-semibold text-sm ${setUnavailable ? 'text-brand-muted dark:text-gray-500' : 'text-brand-black dark:text-gray-100'}`}>{set.name}</span>
+                                  {isBasic && (
+                                    <span className="px-1.5 py-0.5 rounded-full text-[10px] font-heading font-semibold bg-status-success/20 text-status-success border border-status-success/30">
+                                      Basis-Set
+                                    </span>
+                                  )}
+                                  {set.badge && !setUnavailable && (
                                     <span className={`px-1.5 py-0.5 rounded-full text-xs font-heading font-semibold ${set.badgeColor}`}>{set.badge}</span>
+                                  )}
+                                  {setUnavailable && (
+                                    <span className="px-1.5 py-0.5 rounded-full text-[10px] font-heading font-semibold bg-status-error/15 text-status-error">
+                                      Im Zeitraum ausgebucht
+                                    </span>
                                   )}
                                 </div>
                                 {set.includedItems.length > 0 && (
-                                  <p className="text-xs text-brand-muted dark:text-gray-500 mt-0.5">{set.includedItems.join(' · ')}</p>
+                                  <p className={`text-xs mt-0.5 ${setUnavailable ? 'text-brand-muted/70 dark:text-gray-600' : 'text-brand-muted dark:text-gray-500'}`}>{set.includedItems.join(' · ')}</p>
                                 )}
                               </div>
-                              <span className="font-heading font-semibold text-sm text-accent-blue flex-shrink-0">+{fmt(price)} €</span>
+                              <span className={`font-heading font-semibold text-sm flex-shrink-0 ${setUnavailable ? 'text-brand-muted dark:text-gray-500 line-through' : 'text-accent-blue'}`}>
+                                +{fmt(price)} €
+                              </span>
                             </label>
                           </div>
                         );
@@ -1379,7 +1504,7 @@ export default function BuchenPage() {
                   <button
                     type="button"
                     onClick={() => { if (returnToSummary) { setStep(4); setReturnToSummary(false); } else setStep(3); }}
-                    disabled={availableSets.length > 0 && !selectedSet}
+                    disabled={(availableSets.length > 0 && !selectedSet) || !!basicSetBlock}
                     className="px-8 py-3 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold text-sm rounded-[10px] hover:bg-brand-dark transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     Weiter: Haftung
@@ -2328,6 +2453,59 @@ export default function BuchenPage() {
           </div>
         </div>
       </div>
+
+      {/* Basis-Set-Block Modal — Buchung nicht moeglich (kein Basis-Set ODER
+          Basis-Set im gewuenschten Zeitraum ausgebucht). Telemetrie an
+          /api/availability-alerts wurde bereits gefeuert (einmal pro Session+
+          Kombi); hier nur noch die Anzeige fuer den Kunden + Close-Button. */}
+      {basicSetBlock && (
+        <div
+          className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="basic-set-block-title"
+        >
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl max-w-md w-full p-6 border border-brand-border dark:border-gray-700">
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-status-error/15 flex items-center justify-center">
+                <svg className="w-5 h-5 text-status-error" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+              </div>
+              <div className="flex-1 min-w-0">
+                <h2 id="basic-set-block-title" className="font-heading font-bold text-lg text-brand-black dark:text-gray-100">
+                  Buchung aktuell nicht möglich
+                </h2>
+                <p className="text-sm text-brand-steel dark:text-gray-300 mt-2">
+                  {basicSetBlock.reason === 'no_basic_set'
+                    ? `Für diese Kamera (${product?.name ?? ''}) ist gerade kein Basis-Set hinterlegt. Bitte versuche es später erneut oder melde dich bei unserem Support — wir kümmern uns schnellstmöglich darum.`
+                    : `Das benötigte Basis-Set${basicSetBlock.setName ? ` "${basicSetBlock.setName}"` : ''} ist im gewählten Zeitraum leider ausgebucht. Bitte wähle einen anderen Zeitraum, versuche es später erneut, oder melde dich bei unserem Support.`}
+                </p>
+                <div className="mt-4 p-3 bg-brand-bg dark:bg-gray-800 rounded-lg">
+                  <p className="text-xs text-brand-muted dark:text-gray-400">
+                    Unser Team wurde automatisch benachrichtigt und prüft die Situation.
+                  </p>
+                </div>
+                <div className="mt-5 flex flex-col sm:flex-row gap-2">
+                  <a
+                    href="/kontakt"
+                    className="flex-1 px-4 py-2.5 bg-accent-blue text-white font-heading font-semibold text-sm rounded-[10px] hover:bg-accent-blue/90 transition-colors text-center"
+                  >
+                    Support kontaktieren
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => setBasicSetBlock(null)}
+                    className="px-4 py-2.5 bg-brand-bg dark:bg-gray-800 text-brand-black dark:text-gray-100 font-heading font-semibold text-sm rounded-[10px] hover:bg-brand-border dark:hover:bg-gray-700 transition-colors"
+                  >
+                    Zeitraum ändern
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Auth-Gate Modal — vor dem Mietvertrag anmelden/registrieren.
           Bewusst KEIN `!user`-Check hier: sobald signInWithPassword die

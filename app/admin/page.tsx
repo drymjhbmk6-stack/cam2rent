@@ -15,6 +15,7 @@ import {
   WidgetEditOverlay,
   WidgetAddPanel,
 } from '@/components/admin/DashboardWidgets';
+import AvailabilityAlertsBanner from '@/components/admin/AvailabilityAlertsBanner';
 
 // ─── Theme ───────────────────────────────────────────────────────
 
@@ -137,6 +138,9 @@ export default function AdminDashboardPage() {
 
   return (
     <div style={{ padding: '28px 24px', maxWidth: 1200, margin: '0 auto' }}>
+      {/* Verfuegbarkeits-Alerts (Basis-Set fehlt / ausgebucht). Nur sichtbar
+          wenn offene Cases vorliegen — sonst kein Layout-Shift. */}
+      <AvailabilityAlertsBanner />
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28, flexWrap: 'wrap', gap: 12 }}>
         <div>

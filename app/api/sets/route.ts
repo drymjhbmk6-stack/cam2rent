@@ -34,21 +34,59 @@ function computeAvailability(
 }
 
 /**
+ * Saeubert basic_for_product_ids: erlaubt nur IDs, die auch in product_ids
+ * stehen (Subset-Constraint). Verhindert dass Admin ein Basis-Set fuer eine
+ * Kamera markiert, die das Set gar nicht enthaelt.
+ */
+function sanitizeBasicFor(basicFor: unknown, productIds: string[]): string[] {
+  if (!Array.isArray(basicFor)) return [];
+  const allowed = new Set(productIds);
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const id of basicFor) {
+    if (typeof id !== 'string') continue;
+    if (!allowed.has(id)) continue;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
+/**
  * GET /api/sets — Alle Sets aus DB.
  */
 export async function GET(req: NextRequest) {
   try {
     const supabase = createServiceClient();
 
-    const [setsRes, accRes] = await Promise.all([
-      supabase
+    // Defensiv: basic_for_product_ids ist eine neue Spalte (Migration
+    // supabase-sets-basic-for-products.sql). Bei fehlender Migration liefert
+    // PostgREST einen Spalten-Fehler; dann faellt der Code auf das Select ohne
+    // die Spalte zurueck und behandelt basic_for_product_ids als leeres Array.
+    let basicForSupported = true;
+    type SetRow = {
+      id: string; name: string | null; description: string | null;
+      badge: string | null; badge_color: string | null;
+      pricing_mode: string | null; price: number | null;
+      available: boolean | null; sort_order: number | null;
+      accessory_items: unknown; product_ids: unknown;
+      basic_for_product_ids?: unknown; image_url: string | null;
+    };
+    let setsRes: { data: SetRow[] | null; error: { message: string } | null } = await supabase
+      .from('sets')
+      .select('id, name, description, badge, badge_color, pricing_mode, price, available, sort_order, accessory_items, product_ids, basic_for_product_ids, image_url')
+      .order('sort_order', { ascending: true });
+    if (setsRes.error && /basic_for_product_ids|column|schema cache|PGRST/i.test(setsRes.error.message)) {
+      basicForSupported = false;
+      setsRes = await supabase
         .from('sets')
         .select('id, name, description, badge, badge_color, pricing_mode, price, available, sort_order, accessory_items, product_ids, image_url')
-        .order('sort_order', { ascending: true }),
-      supabase
-        .from('accessories')
-        .select('id, name, available, available_qty'),
-    ]);
+        .order('sort_order', { ascending: true });
+    }
+    const accRes = await supabase
+      .from('accessories')
+      .select('id, name, available, available_qty');
 
     if (setsRes.error) throw setsRes.error;
 
@@ -56,7 +94,7 @@ export async function GET(req: NextRequest) {
       (accRes.data ?? []).map((a) => [a.id, { name: a.name, available: a.available, available_qty: a.available_qty }])
     );
 
-    const allSets: (RentalSet & { accessory_items: AccessoryItem[]; product_ids: string[] })[] =
+    const allSets: (RentalSet & { accessory_items: AccessoryItem[]; product_ids: string[]; basic_for_product_ids: string[] })[] =
       (setsRes.data ?? []).map((r) => {
         const rawItems: AccessoryItem[] = Array.isArray(r.accessory_items) ? r.accessory_items : [];
         const items = aggregateItems(rawItems);
@@ -78,6 +116,11 @@ export async function GET(req: NextRequest) {
           ([name, qty]) => (qty > 1 ? `${qty}x ${name}` : name),
         );
 
+        const productIds = Array.isArray(r.product_ids) ? r.product_ids : [];
+        const rawBasic = (r as { basic_for_product_ids?: unknown }).basic_for_product_ids;
+        const basicFor = basicForSupported && Array.isArray(rawBasic)
+          ? (rawBasic as string[]).filter((id) => productIds.includes(id))
+          : [];
         return {
           id: r.id,
           name: r.name ?? r.id,
@@ -90,7 +133,8 @@ export async function GET(req: NextRequest) {
           price: Number(r.price ?? 0),
           available,
           accessory_items: items,
-          product_ids: Array.isArray(r.product_ids) ? r.product_ids : [],
+          product_ids: productIds,
+          basic_for_product_ids: basicFor,
           image_url: r.image_url ?? null,
         };
       });
@@ -114,10 +158,11 @@ export async function POST(req: NextRequest) {
   }
   try {
     const body = await req.json();
-    const { name, description, badge, badge_color, pricing_mode, price, available, accessory_items, product_ids } = body as {
+    const { name, description, badge, badge_color, pricing_mode, price, available, accessory_items, product_ids, basic_for_product_ids } = body as {
       name: string; description?: string; badge?: string; badge_color?: string;
       pricing_mode?: string; price?: number; available?: boolean;
       accessory_items?: AccessoryItem[]; product_ids?: string[];
+      basic_for_product_ids?: string[];
     };
 
     if (!name?.trim()) return NextResponse.json({ error: 'name erforderlich.' }, { status: 400 });
@@ -140,16 +185,25 @@ export async function POST(req: NextRequest) {
       computedAvailable = computeAvailability(items, accMap);
     }
 
-    const { data, error } = await supabase.from('sets').insert({
+    const cleanProductIds = product_ids ?? [];
+    const cleanBasicFor = sanitizeBasicFor(basic_for_product_ids, cleanProductIds);
+    const insertRow: Record<string, unknown> = {
       id, name: name.trim(), description: description ?? null, badge: badge ?? null,
       badge_color: badge_color ?? null, pricing_mode: pricing_mode ?? 'perDay',
       price: parseFloat(String(price)) || 0, available: computedAvailable,
-      accessory_items: items, product_ids: product_ids ?? [],
+      accessory_items: items, product_ids: cleanProductIds,
+      basic_for_product_ids: cleanBasicFor,
       sort_order, updated_at: new Date().toISOString(),
-    }).select().single();
+    };
 
-    if (error) throw error;
-    return NextResponse.json({ set: data });
+    let inserted = await supabase.from('sets').insert(insertRow).select().single();
+    if (inserted.error && /basic_for_product_ids|column|schema cache|PGRST/i.test(inserted.error.message)) {
+      // Migration noch nicht durch — Spalte droppen und nochmal versuchen.
+      delete insertRow.basic_for_product_ids;
+      inserted = await supabase.from('sets').insert(insertRow).select().single();
+    }
+    if (inserted.error) throw inserted.error;
+    return NextResponse.json({ set: inserted.data });
   } catch (err) {
     console.error('POST /api/sets error:', err);
     return NextResponse.json({ error: 'Fehler beim Erstellen des Sets.' }, { status: 500 });
@@ -165,10 +219,11 @@ export async function PATCH(req: NextRequest) {
   }
   try {
     const body = await req.json();
-    const { id, pricing_mode, price, available, name, description, badge, badge_color, accessory_items, product_ids } = body as {
+    const { id, pricing_mode, price, available, name, description, badge, badge_color, accessory_items, product_ids, basic_for_product_ids } = body as {
       id: string; pricing_mode?: string; price?: number; available?: boolean;
       name?: string; description?: string; badge?: string; badge_color?: string;
       accessory_items?: AccessoryItem[]; product_ids?: string[];
+      basic_for_product_ids?: string[];
     };
 
     if (!id) return NextResponse.json({ error: 'id fehlt.' }, { status: 400 });
@@ -183,6 +238,24 @@ export async function PATCH(req: NextRequest) {
     if (badge !== undefined) updates.badge = badge || null;
     if (badge_color !== undefined) updates.badge_color = badge_color || null;
     if (product_ids !== undefined) updates.product_ids = product_ids;
+
+    // basic_for_product_ids muss Teilmenge der effektiven product_ids sein.
+    // Wenn product_ids im selben Save geaendert wird, nutzen wir den neuen
+    // Wert; sonst Lookup auf die aktuelle DB-Zeile.
+    if (basic_for_product_ids !== undefined) {
+      let effectiveProductIds: string[] = [];
+      if (product_ids !== undefined) {
+        effectiveProductIds = product_ids;
+      } else {
+        const { data: row } = await supabase
+          .from('sets')
+          .select('product_ids')
+          .eq('id', id)
+          .maybeSingle();
+        effectiveProductIds = Array.isArray(row?.product_ids) ? row!.product_ids : [];
+      }
+      updates.basic_for_product_ids = sanitizeBasicFor(basic_for_product_ids, effectiveProductIds);
+    }
 
     if (accessory_items !== undefined) {
       const aggregated = aggregateItems(accessory_items);
@@ -199,8 +272,14 @@ export async function PATCH(req: NextRequest) {
       if (available !== undefined) updates.available = available;
     }
 
-    const { error } = await supabase.from('sets').update(updates).eq('id', id);
-    if (error) throw error;
+    let upd = await supabase.from('sets').update(updates).eq('id', id);
+    if (upd.error && /basic_for_product_ids|column|schema cache|PGRST/i.test(upd.error.message)) {
+      // Migration ausstehend — Update ohne die neue Spalte wiederholen.
+      const fallback = { ...updates };
+      delete fallback.basic_for_product_ids;
+      upd = await supabase.from('sets').update(fallback).eq('id', id);
+    }
+    if (upd.error) throw upd.error;
     return NextResponse.json({ success: true, available: updates.available });
   } catch (err) {
     console.error('PATCH /api/sets error:', err);

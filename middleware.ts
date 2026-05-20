@@ -155,6 +155,7 @@ const PATH_PERMISSIONS: PermRule[] = [
   { prefix: '/admin/nachrichten', perm: 'kunden' },
   { prefix: '/admin/bewertungen', perm: 'kunden' },
   { prefix: '/admin/warteliste', perm: 'kunden' },
+  { prefix: '/admin/verfuegbarkeit-alerts', perm: 'tagesgeschaeft' },
   { prefix: '/admin/preise/kameras', perm: 'katalog' },
   { prefix: '/admin/sets', perm: 'katalog' },
   { prefix: '/admin/zubehoer', perm: 'katalog' },
@@ -212,6 +213,7 @@ const API_PATH_PERMISSIONS: PermRule[] = [
   { prefix: '/api/admin/label', perm: 'tagesgeschaeft' },
   { prefix: '/api/admin/handover', perm: 'tagesgeschaeft' },
   { prefix: '/api/admin/scan-lookup', perm: 'tagesgeschaeft' },
+  { prefix: '/api/admin/availability-alerts', perm: 'tagesgeschaeft' },
   // Kunden & Kommunikation
   { prefix: '/api/admin/kunden', perm: 'kunden' },
   { prefix: '/api/admin/customer', perm: 'kunden' },

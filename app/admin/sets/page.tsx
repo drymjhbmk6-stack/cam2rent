@@ -23,6 +23,11 @@ interface AdminSet {
   available: boolean;
   accessory_items: AccessoryItem[];
   product_ids: string[];
+  /**
+   * Kameras (product_ids), fuer die dieses Set das Pflicht-Basis-Set ist.
+   * Subset von product_ids. Leer = kein Basis-Set fuer keine Kamera.
+   */
+  basic_for_product_ids?: string[];
   includedItems: string[];
   image_url?: string | null;
 }
@@ -54,7 +59,8 @@ const STATIC_IDS = new Set(['basic', 'fahrrad', 'ski', 'motorrad', 'taucher', 'v
 function emptyNew() {
   return {
     name: '', description: '', badge: '', pricing_mode: 'flat' as 'perDay' | 'flat',
-    price: 0, accessory_items: [] as AccessoryItem[], product_ids: [] as string[], available: true,
+    price: 0, accessory_items: [] as AccessoryItem[], product_ids: [] as string[],
+    basic_for_product_ids: [] as string[], available: true,
   };
 }
 
@@ -80,6 +86,7 @@ export default function AdminSetsPage() {
     name: string; description: string; badge: string; badge_color: string;
     pricing_mode: 'perDay' | 'flat'; price: string;
     accessory_items: AccessoryItem[]; product_ids: string[];
+    basic_for_product_ids: string[];
     available: boolean;
   }>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
@@ -149,6 +156,7 @@ export default function AdminSetsPage() {
         price: String(set.price),
         accessory_items: set.accessory_items ?? [],
         product_ids: set.product_ids ?? [],
+        basic_for_product_ids: set.basic_for_product_ids ?? [],
         available: set.available,
       },
     }));
@@ -170,8 +178,27 @@ export default function AdminSetsPage() {
   }
 
   function toggleProduct(id: string, productId: string) {
-    const current = editState[id]?.product_ids ?? [];
-    setEdit(id, 'product_ids', current.includes(productId)
+    const e = editState[id];
+    if (!e) return;
+    const current = e.product_ids ?? [];
+    const nextIds = current.includes(productId)
+      ? current.filter((p) => p !== productId)
+      : [...current, productId];
+    setEdit(id, 'product_ids', nextIds);
+    // Wenn Kamera entfernt wird, muss sie auch aus basic_for_product_ids raus
+    // (Subset-Constraint). Schaltet sich also automatisch ab.
+    const currentBasic = e.basic_for_product_ids ?? [];
+    const nextBasic = currentBasic.filter((p) => nextIds.includes(p));
+    if (nextBasic.length !== currentBasic.length) {
+      setEdit(id, 'basic_for_product_ids', nextBasic);
+    }
+  }
+
+  function toggleBasicFor(id: string, productId: string) {
+    const e = editState[id];
+    if (!e) return;
+    const current = e.basic_for_product_ids ?? [];
+    setEdit(id, 'basic_for_product_ids', current.includes(productId)
       ? current.filter((p) => p !== productId)
       : [...current, productId]
     );
@@ -201,6 +228,7 @@ export default function AdminSetsPage() {
           available: e.available,
           accessory_items: e.accessory_items,
           product_ids: e.product_ids,
+          basic_for_product_ids: e.basic_for_product_ids,
         }),
       });
       if (!res.ok) throw new Error();
@@ -217,6 +245,7 @@ export default function AdminSetsPage() {
         available: newAvail ?? e.available,
         accessory_items: e.accessory_items,
         product_ids: e.product_ids,
+        basic_for_product_ids: e.basic_for_product_ids,
       } : s));
 
       setSavedId(id);
@@ -259,6 +288,7 @@ export default function AdminSetsPage() {
           available: set.available,
           accessory_items: set.accessory_items ?? [],
           product_ids: set.product_ids ?? [],
+          basic_for_product_ids: set.basic_for_product_ids ?? [],
         }),
       });
       if (!res.ok) { const d = await res.json(); alert(d.error ?? 'Fehler beim Duplizieren.'); return; }
@@ -276,6 +306,7 @@ export default function AdminSetsPage() {
         available: created.available,
         accessory_items: set.accessory_items ?? [],
         product_ids: set.product_ids ?? [],
+        basic_for_product_ids: set.basic_for_product_ids ?? [],
         includedItems: (set.accessory_items ?? []).map((item) => {
           const acc = accMap.get(item.accessory_id);
           return acc ? `${acc.name}${item.qty > 1 ? ` ×${item.qty}` : ''}` : item.accessory_id;
@@ -294,11 +325,22 @@ export default function AdminSetsPage() {
     setNewSet((f) => ({ ...f, accessory_items: [...f.accessory_items, { accessory_id: accessories[0].id, qty: 1 }] }));
   }
   function toggleNewProduct(productId: string) {
+    setNewSet((f) => {
+      const nextIds = f.product_ids.includes(productId)
+        ? f.product_ids.filter((id) => id !== productId)
+        : [...f.product_ids, productId];
+      // Basis-Set-Markierung muss Subset von product_ids bleiben.
+      const nextBasic = f.basic_for_product_ids.filter((id) => nextIds.includes(id));
+      return { ...f, product_ids: nextIds, basic_for_product_ids: nextBasic };
+    });
+  }
+
+  function toggleNewBasicFor(productId: string) {
     setNewSet((f) => ({
       ...f,
-      product_ids: f.product_ids.includes(productId)
-        ? f.product_ids.filter((id) => id !== productId)
-        : [...f.product_ids, productId],
+      basic_for_product_ids: f.basic_for_product_ids.includes(productId)
+        ? f.basic_for_product_ids.filter((id) => id !== productId)
+        : [...f.basic_for_product_ids, productId],
     }));
   }
 
@@ -320,6 +362,7 @@ export default function AdminSetsPage() {
           available: newSet.available,
           accessory_items: newSet.accessory_items,
           product_ids: newSet.product_ids,
+          basic_for_product_ids: newSet.basic_for_product_ids,
         }),
       });
       if (!res.ok) { const d = await res.json(); alert(d.error ?? 'Fehler.'); return; }
@@ -332,6 +375,7 @@ export default function AdminSetsPage() {
         pricingMode: set.pricing_mode, price: Number(set.price),
         available: set.available, accessory_items: newSet.accessory_items,
         product_ids: newSet.product_ids,
+        basic_for_product_ids: newSet.basic_for_product_ids,
         includedItems: newSet.accessory_items.map((item) => {
           const acc = accMap.get(item.accessory_id);
           return acc ? `${acc.name}${item.qty > 1 ? ` ×${item.qty}` : ''}` : item.accessory_id;
@@ -386,7 +430,7 @@ export default function AdminSetsPage() {
             <NewSetForm
               newSet={newSet} setNewSet={setNewSet}
               accessories={accessories} products={products} accMap={accMap}
-              addItem={addNewItem} toggleProduct={toggleNewProduct}
+              addItem={addNewItem} toggleProduct={toggleNewProduct} toggleBasicFor={toggleNewBasicFor}
               badgeOptions={BADGE_OPTIONS} setBadgeOptions={setBadgeOptions}
             />
             <div className="flex justify-end mt-5 gap-2">
@@ -696,6 +740,67 @@ export default function AdminSetsPage() {
                         </div>
                       )}
 
+                      {/* Basis-Set fuer ausgewaehlte Kameras */}
+                      <div className="bg-white rounded-xl border border-brand-border p-4">
+                        <label className="flex items-start gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={(e.basic_for_product_ids?.length ?? 0) > 0}
+                            onChange={(ev) => {
+                              if (!ev.target.checked) {
+                                setEdit(set.id, 'basic_for_product_ids', []);
+                              } else {
+                                // Alle aktuell ausgewaehlten Kameras vorbelegen
+                                setEdit(set.id, 'basic_for_product_ids', [...e.product_ids]);
+                              }
+                            }}
+                            className="mt-0.5 w-4 h-4 accent-accent-blue cursor-pointer"
+                          />
+                          <div className="flex-1">
+                            <p className="text-xs font-heading font-semibold text-brand-black">
+                              Als Basis-Set markieren (Pflicht-Set für ausgewählte Kameras)
+                            </p>
+                            <p className="text-xs font-body text-brand-muted mt-0.5">
+                              Wenn aktiv: Kunden müssen dieses Set für die gewählten Kameras zwingend mitbuchen.
+                              Ist es im Zeitraum ausgebucht, wird der Kunde geblockt und der Admin alarmiert.
+                            </p>
+                          </div>
+                        </label>
+                        {(e.basic_for_product_ids?.length ?? 0) > 0 && (
+                          <div className="mt-3 pt-3 border-t border-brand-border">
+                            <p className="text-xs font-heading font-semibold text-brand-muted mb-2">Pflicht für diese Kameras:</p>
+                            {e.product_ids.length === 0 ? (
+                              <p className="text-xs font-body text-status-error">
+                                Wähle zuerst oben mindestens eine passende Kamera aus.
+                              </p>
+                            ) : (
+                              <div className="flex flex-wrap gap-2">
+                                {e.product_ids.map((pid) => {
+                                  const p = products[pid];
+                                  if (!p) return null;
+                                  const checked = e.basic_for_product_ids.includes(pid);
+                                  return (
+                                    <button
+                                      key={pid}
+                                      type="button"
+                                      onClick={() => toggleBasicFor(set.id, pid)}
+                                      className={`px-2.5 py-1 rounded-full text-xs font-heading font-semibold border transition-colors ${
+                                        checked
+                                          ? 'bg-accent-blue text-white border-accent-blue'
+                                          : 'bg-white text-brand-muted border-brand-border hover:border-accent-blue'
+                                      }`}
+                                    >
+                                      {checked && <span className="mr-1">✓</span>}
+                                      {p.name}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
                       {/* Aktionen */}
                       <div className="flex justify-end gap-2 pt-1">
                         <button onClick={() => setExpandedId(null)}
@@ -730,7 +835,7 @@ export default function AdminSetsPage() {
 
 function NewSetForm({
   newSet, setNewSet, accessories, products, accMap,
-  addItem, toggleProduct,
+  addItem, toggleProduct, toggleBasicFor,
   badgeOptions, setBadgeOptions,
 }: {
   newSet: ReturnType<typeof emptyNew>;
@@ -740,6 +845,7 @@ function NewSetForm({
   accMap: Map<string, Accessory>;
   addItem: () => void;
   toggleProduct: (id: string) => void;
+  toggleBasicFor: (id: string) => void;
   badgeOptions: typeof DEFAULT_BADGE_OPTIONS;
   setBadgeOptions: React.Dispatch<React.SetStateAction<typeof DEFAULT_BADGE_OPTIONS>>;
 }) {
@@ -857,6 +963,65 @@ function NewSetForm({
           </div>
         </div>
       )}
+
+      {/* Basis-Set fuer ausgewaehlte Kameras */}
+      <div className="bg-brand-bg rounded-xl p-4">
+        <label className="flex items-start gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={newSet.basic_for_product_ids.length > 0}
+            onChange={(ev) => {
+              if (!ev.target.checked) {
+                setNewSet((f) => ({ ...f, basic_for_product_ids: [] }));
+              } else {
+                setNewSet((f) => ({ ...f, basic_for_product_ids: [...f.product_ids] }));
+              }
+            }}
+            className="mt-0.5 w-4 h-4 accent-accent-blue cursor-pointer"
+          />
+          <div className="flex-1">
+            <p className="text-xs font-heading font-semibold text-brand-black">
+              Als Basis-Set markieren (Pflicht-Set für ausgewählte Kameras)
+            </p>
+            <p className="text-xs font-body text-brand-muted mt-0.5">
+              Kunden müssen dieses Set für die gewählten Kameras zwingend mitbuchen.
+            </p>
+          </div>
+        </label>
+        {newSet.basic_for_product_ids.length > 0 && (
+          <div className="mt-3 pt-3 border-t border-brand-border">
+            <p className="text-xs font-heading font-semibold text-brand-muted mb-2">Pflicht für diese Kameras:</p>
+            {newSet.product_ids.length === 0 ? (
+              <p className="text-xs font-body text-status-error">
+                Wähle zuerst oben mindestens eine passende Kamera aus.
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {newSet.product_ids.map((pid) => {
+                  const p = products[pid];
+                  if (!p) return null;
+                  const checked = newSet.basic_for_product_ids.includes(pid);
+                  return (
+                    <button
+                      key={pid}
+                      type="button"
+                      onClick={() => toggleBasicFor(pid)}
+                      className={`px-2.5 py-1 rounded-full text-xs font-heading font-semibold border transition-colors ${
+                        checked
+                          ? 'bg-accent-blue text-white border-accent-blue'
+                          : 'bg-white text-brand-muted border-brand-border hover:border-accent-blue'
+                      }`}
+                    >
+                      {checked && <span className="mr-1">✓</span>}
+                      {p.name}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

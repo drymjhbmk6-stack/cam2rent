@@ -26,6 +26,14 @@ export interface RentalSet {
   available: boolean;
   /** Set-Bild URL (optional) */
   image_url?: string | null;
+  /**
+   * Welche Kameras (product_ids) haben dieses Set als PFLICHT-Basis-Set?
+   * Muss eine Teilmenge von product_ids sein. Wird in der Sets-API + im
+   * Admin-UI validiert; leeres Array = kein Basis-Set fuer keine Kamera.
+   */
+  basic_for_product_ids?: string[];
+  /** Liste der Sub-Items als Datenbasis fuer Verfuegbarkeits-Check (von API gesetzt). */
+  product_ids?: string[];
 }
 
 // ─── Statische Set-Definitionen ───────────────────────────────────────────────

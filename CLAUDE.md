@@ -2263,6 +2263,73 @@ Erster Tech-Debt-/Reliability-Pass mit `engineering:tech-debt` + `engineering:co
 > `isMissingTableError`-Varianten (afa-cron nur `42P01`; andere zusaetzlich
 > `PGRST205/PGRST202`) sind absichtlich — nicht vereinheitlichen.
 
+### Basis-Set-Pflicht + Verfuegbarkeits-Alerts (Stand 2026-05-20)
+Pro Kamera muss ein Basis-Set hinterlegt sein, das der Kunde beim Buchen
+automatisch mitnehmen muss. Fehlt es oder ist es im gewuenschten Zeitraum
+ausgebucht, wird die Buchung im Wizard hart geblockt + ein Admin-Alarm
+(Push + Dashboard-Banner + Detail-Seite) ausgeloest.
+
+- **Schema:** `sets.basic_for_product_ids TEXT[] DEFAULT '{}'` (Migration
+  `supabase-sets-basic-for-products.sql`, GIN-Index). Eintraege MUESSEN
+  Teilmenge von `product_ids` sein — API + UI sanitisieren das. Tabelle
+  `availability_alerts` (Migration `supabase-availability-alerts.sql`) mit
+  Typen `no_basic_set | basic_set_unavailable | set_unavailable |
+  accessory_unavailable`, Dedupe-Index auf Kombi+offen, RLS service-role.
+- **Sets-Admin** (`/admin/sets`): Checkbox „Als Basis-Set markieren" + Pill-
+  Auswahl der Kameras (Subset der oben gewaehlten `product_ids`). Kommt aus
+  `product_ids` entfernt → fliegt automatisch aus `basic_for_product_ids`.
+  Im NewSetForm + Edit-Panel gleich.
+- **Sets-API** (`app/api/sets/route.ts`): GET liefert `basic_for_product_ids`
+  pro Set; POST/PATCH akzeptieren das Feld, validieren als Subset, schreiben
+  defensiv mit Migration-Fallback (Spalte droppen + Retry, falls Migration
+  ausstehend).
+- **Buchungs-Wizard** (`app/kameras/[slug]/buchen/page.tsx`): Sets-Loader
+  ruft `/api/sets` (vorher `?available=true` — filterte ausgebuchte Sets
+  komplett raus). Set-Liste rendert ausgebuchte Sets **ausgegraut** mit Pill
+  „Im Zeitraum ausgebucht" statt sie zu verstecken. Neuer Effekt prueft pro
+  Kamera+Zeitraum den Basis-Set-Status: kein Basis-Set definiert → Block
+  `no_basic_set`, Basis-Set im Zeitraum ausgebucht → Block
+  `basic_set_unavailable`. Block setzt `basicSetBlock`-State, das blockiert
+  „Weiter: Zubehoer" + „Weiter: Haftung" und zeigt ein Modal („Buchung
+  aktuell nicht moeglich — Support / Zeitraum aendern"). Telemetrie wird
+  fire-and-forget einmal pro Session+Kamera+Zeitraum+Typ via `useRef<Set>`
+  gespammelt-frei an `/api/availability-alerts` gesendet.
+- **Telemetrie** `POST /api/availability-alerts` (oeffentlich, Rate-Limit
+  20/h pro IP): saeubert Inputs, dedupliziert 24h-Fenster auf
+  Kombi (alert_type+product_id+set_id+accessory_id+rental_from+rental_to)
+  mit `resolved_at IS NULL`. Bei Dedupe-Treffer wird `occurrence_count` + 1
+  und `last_seen_at = now()` gesetzt. Beim ersten Auftreten in 24h feuert
+  `createAdminNotification` mit Typ `availability_alert` (Permission
+  `tagesgeschaeft`, rotes Warnsymbol). Defensiver Fallback bei fehlender
+  Migration → kein Persist, kein 500.
+- **Admin-API** `GET/POST /api/admin/availability-alerts`: Liste der
+  offenen Alerts (max 100, sortiert nach `last_seen_at`), POST mit
+  `{id, action: 'resolve'|'reopen', note?}` zum Markieren als erledigt.
+  Audit-Log `availability_alert.resolve` / `.reopen`.
+- **Dashboard** (`/admin`): Neue Komponente `AvailabilityAlertsBanner`
+  (sticky-rot oben, sichtbar nur wenn offene Alerts), 60s-Polling mit
+  Backoff bei Fehlern + Visibility-Pause (analog NotificationDropdown).
+  Zeigt Top-3 mit „weitere anzeigen", Link auf Detailseite.
+- **Detailseite** `/admin/verfuegbarkeit-alerts`: Liste aller offenen/
+  erledigten Alerts mit Lade-Hint pro Typ (z.B. „Im Admin unter Sets ein
+  Set als Basis-Set fuer diese Kamera markieren"), Resolve-Button mit
+  optionalem Kommentar, Reopen, Quick-Link „Sets oeffnen" bei
+  `no_basic_set`. Permission `tagesgeschaeft` (UI + API).
+- **Bekannte Limitierung (bewusst):** `set_unavailable` und
+  `accessory_unavailable` werden vom Wizard heute NICHT gefeuert — nur
+  `no_basic_set` + `basic_set_unavailable`. Andere Set-/Zubehoer-
+  Ausbuchungen erscheinen normal im Kalender + Gantt-View, fuer die gibt
+  es kein Hard-Block-Szenario. Die Alert-Typen sind im Schema vorbereitet,
+  falls spaeter ergaenzt werden soll. Notification-Banner zeigt aber
+  selbstverstaendlich alle vier Typen, sobald sie eingetragen sind.
+- **Go-Live TODO:**
+  1. Migrationen `supabase-sets-basic-for-products.sql` +
+     `supabase-availability-alerts.sql` ausfuehren.
+  2. Unter `/admin/sets` fuer jede Kamera mindestens ein Set als Basis-Set
+     markieren (Checkbox + Kamera-Pill anhaken). Ohne diesen Schritt
+     greift das Hard-Gate beim naechsten Kunden-Versuch und der Admin
+     bekommt einen Push.
+
 ## Offene Punkte
 
 ### Reel-Workflow-Refactor (in Arbeit, Stand 2026-04-27)

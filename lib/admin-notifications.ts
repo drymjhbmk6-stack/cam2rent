@@ -28,6 +28,7 @@ const TYPE_TO_PERMISSION: Record<string, PermissionKey> = {
   beleg_ready: 'finanzen',
   beleg_failed: 'finanzen',
   beleg_duplicate: 'finanzen',
+  availability_alert: 'tagesgeschaeft',
 };
 
 /**
