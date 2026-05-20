@@ -118,10 +118,21 @@ lesen sie weiterhin.
     und `deleteMirror` (Delete) rufen jetzt `syncAccessoryQty` nach der
     Mutation — vorher blieb `accessories.available_qty` nach dem Loeschen
     einer Inventar-Einheit stale (Gantt zeigte „1 Stueck" obwohl 0 aktiv).
-    Backfill-Endpoint synct zusaetzlich nach dem Mirror-Schritt **alle**
-    `accessories`-Bestaende einmal global → heilt Alt-Drift per Button-Klick
-    (Response-Feld `qty_resynced`). Sammel-Zubehoer (`is_bulk=true`) wird
-    in `syncAccessoryQty` selbst uebersprungen.
+    Sammel-Zubehoer (`is_bulk=true`) wird in `syncAccessoryQty` selbst
+    uebersprungen.
+  - **Bestands-Drift-Check (Stand 2026-05-20):** Neuer Endpoint
+    `GET /api/admin/accessories/resync-qty` liefert eine **Dry-Run-Preview**
+    aller Nicht-Bulk-Zubehoere, deren `available_qty` von der gezaehlten
+    `accessory_units`-Menge abweicht (inkl. `has_inventar`-Flag: ist eine
+    `migration_audit`-Bruecke `accessories → produkte` vorhanden?).
+    `POST {ids:[...]}` wendet `syncAccessoryQty` gezielt auf die ausgewaehlten
+    Eintraege an. UI: Button **„Bestände prüfen"** auf `/admin/inventar` oeffnet
+    Modal mit Drift-Tabelle (aktuell/tatsaechlich/diff/inventar-flag).
+    Default-Auswahl haakt nur Eintraege mit Inventar-Verknuepfung an —
+    historisch manuell auf 1 gesetztes Zubehoer ohne Exemplar-Tracking wird
+    NICHT stillschweigend auf 0 gesetzt. Backfill-Mirror-Endpoint macht
+    bewusst **keinen** globalen Resync mehr (war zu aggressiv, haette
+    Legacy-Zubehoer ohne Exemplare auf 0 gesetzt).
 - **`supabase/recovery-after-drop.sql`** — Notfall: legt alte Tabellen wieder an,
   falls doch mal gedroppt wurde.
 

@@ -154,6 +154,7 @@ export default function InventarPage() {
             </Link>
             <BackfillCodesButton />
             <BackfillMirrorsButton />
+            <ResyncQtyButton />
             <Link href="/admin/inventar/neu" className="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-900 rounded font-semibold">
               + Manuell anlegen
             </Link>
@@ -372,7 +373,6 @@ function BackfillMirrorsButton() {
         if (data.accessories_restored > 0) parts.push(`${data.accessories_restored} Zubehör wiederhergestellt`);
         parts.push(`${data.mirrored} gespiegelt`);
         if (data.skipped > 0) parts.push(`${data.skipped} übersprungen`);
-        if (data.qty_resynced > 0) parts.push(`${data.qty_resynced} Bestände synchronisiert`);
         setResult(parts.join(' · '));
       }
     } catch (err) {
@@ -395,5 +395,195 @@ function BackfillMirrorsButton() {
         {busy ? 'Spiegele…' : 'Mirror-Backfill'}
       </button>
     </div>
+  );
+}
+
+interface DriftRow {
+  id: string;
+  name: string;
+  current_qty: number;
+  unit_count: number;
+  diff: number;
+  has_inventar: boolean;
+}
+
+function ResyncQtyButton() {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [applying, setApplying] = useState(false);
+  const [drift, setDrift] = useState<DriftRow[] | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [result, setResult] = useState<string | null>(null);
+
+  async function openPreview() {
+    setOpen(true);
+    setLoading(true);
+    setResult(null);
+    try {
+      const res = await fetch('/api/admin/accessories/resync-qty');
+      const data = await res.json();
+      if (!res.ok) {
+        setResult(`Fehler: ${data.error ?? 'unbekannt'}`);
+        setDrift([]);
+      } else {
+        setDrift(data.rows as DriftRow[]);
+        // Default-Auswahl: nur Eintraege, die VOR Migration auch im Inventar
+        // existieren — bei diesen ist der Unit-Count autoritativ.
+        const safe = new Set<string>(
+          (data.rows as DriftRow[]).filter((r) => r.has_inventar).map((r) => r.id),
+        );
+        setSelected(safe);
+      }
+    } catch (err) {
+      setResult(`Netzwerk-Fehler: ${(err as Error).message}`);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function apply() {
+    if (selected.size === 0) return;
+    if (!confirm(`${selected.size} Zubehör-Bestand jetzt anpassen?`)) return;
+    setApplying(true);
+    try {
+      const res = await fetch('/api/admin/accessories/resync-qty', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: Array.from(selected) }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setResult(`Fehler: ${data.error ?? 'unbekannt'}`);
+      } else {
+        setResult(`${data.applied} angepasst${data.errors?.length ? ` · ${data.errors.length} Fehler` : ''}`);
+        setOpen(false);
+        setTimeout(() => window.location.reload(), 1200);
+      }
+    } catch (err) {
+      setResult(`Netzwerk-Fehler: ${(err as Error).message}`);
+    } finally {
+      setApplying(false);
+    }
+  }
+
+  function toggle(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  return (
+    <>
+      <button
+        onClick={openPreview}
+        title="Zeigt Zubehöre an, deren Lagerbestand (available_qty) nicht mit den Exemplaren übereinstimmt. Nichts wird ohne Bestätigung geändert."
+        className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded text-sm"
+      >
+        Bestände prüfen
+      </button>
+      {result && !open && <span className="text-xs text-slate-400">{result}</span>}
+
+      {open && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => !applying && setOpen(false)}>
+          <div className="bg-slate-900 border border-slate-700 rounded-xl max-w-4xl w-full max-h-[85vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-slate-700 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-heading text-slate-100">Bestands-Drift prüfen</h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Vergleich zwischen <code className="text-slate-300">accessories.available_qty</code> und gezählten aktiven Exemplaren.
+                  Sammel-Zubehör (Bulk) ist ausgenommen.
+                </p>
+              </div>
+              <button onClick={() => !applying && setOpen(false)} className="text-slate-500 hover:text-slate-300 text-xl">×</button>
+            </div>
+
+            <div className="overflow-auto flex-1">
+              {loading ? (
+                <div className="p-8 text-center text-slate-400">Lade Drift…</div>
+              ) : !drift || drift.length === 0 ? (
+                <div className="p-8 text-center text-emerald-400">✓ Keine Drift gefunden — alle Bestände stimmen.</div>
+              ) : (
+                <>
+                  <div className="px-5 py-3 bg-amber-500/10 border-b border-amber-500/30 text-xs text-amber-200">
+                    <strong>Hinweis:</strong> Zubehör <em>ohne Inventar-Verknüpfung</em> (graue Zeilen) ist evtl. nur historisch
+                    angelegt, ohne dass je Exemplare erfasst wurden. Wenn du das anhakst, fällt es auf <strong>0 Stück</strong>.
+                    Default-Auswahl haakt nur Einträge an, deren Inventar-Welt vorhanden ist.
+                  </div>
+                  <table className="w-full text-sm">
+                    <thead className="bg-slate-800 text-slate-400 text-xs uppercase">
+                      <tr>
+                        <th className="px-4 py-2 text-left">
+                          <input
+                            type="checkbox"
+                            checked={drift.length > 0 && selected.size === drift.length}
+                            onChange={(e) => {
+                              if (e.target.checked) setSelected(new Set(drift.map((r) => r.id)));
+                              else setSelected(new Set());
+                            }}
+                          />
+                        </th>
+                        <th className="px-4 py-2 text-left">Zubehör</th>
+                        <th className="px-4 py-2 text-right">Aktuell</th>
+                        <th className="px-4 py-2 text-right">Tatsächlich</th>
+                        <th className="px-4 py-2 text-right">Differenz</th>
+                        <th className="px-4 py-2 text-center">Inventar</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {drift.map((row) => {
+                        const isSafe = row.has_inventar;
+                        return (
+                          <tr key={row.id} className={`border-t border-slate-800 ${!isSafe ? 'bg-slate-900/50 text-slate-500' : 'text-slate-200'}`}>
+                            <td className="px-4 py-2">
+                              <input type="checkbox" checked={selected.has(row.id)} onChange={() => toggle(row.id)} />
+                            </td>
+                            <td className="px-4 py-2 font-mono text-xs">{row.name}</td>
+                            <td className="px-4 py-2 text-right tabular-nums">{row.current_qty}</td>
+                            <td className="px-4 py-2 text-right tabular-nums">{row.unit_count}</td>
+                            <td className={`px-4 py-2 text-right tabular-nums font-semibold ${row.diff < 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                              {row.diff > 0 ? `+${row.diff}` : row.diff}
+                            </td>
+                            <td className="px-4 py-2 text-center">
+                              {isSafe
+                                ? <span className="text-emerald-400 text-xs">✓ verknüpft</span>
+                                : <span className="text-amber-400 text-xs">⚠ ohne Inventar</span>}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </>
+              )}
+            </div>
+
+            <div className="px-5 py-3 border-t border-slate-700 flex items-center justify-between gap-3">
+              <span className="text-xs text-slate-400">
+                {drift && drift.length > 0 && `${selected.size} von ${drift.length} ausgewählt`}
+              </span>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setOpen(false)}
+                  disabled={applying}
+                  className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded text-sm"
+                >
+                  Abbrechen
+                </button>
+                <button
+                  onClick={apply}
+                  disabled={applying || selected.size === 0}
+                  className="px-3 py-1.5 bg-cyan-500 hover:bg-cyan-400 disabled:bg-slate-700 disabled:text-slate-500 text-slate-900 rounded text-sm font-semibold"
+                >
+                  {applying ? 'Wende an…' : `${selected.size} anpassen`}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
