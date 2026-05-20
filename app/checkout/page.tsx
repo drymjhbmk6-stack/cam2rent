@@ -17,7 +17,7 @@ import { calcDiscount, type Coupon } from '@/data/coupons';
 import { calcShipping, shippingConfig } from '@/data/shipping';
 import type { ShippingMethod } from '@/data/shipping';
 import type { ShippingPriceConfig, DurationDiscount, LoyaltyDiscount, ProductDiscount } from '@/lib/price-config';
-import { calcDurationDiscount, calcLoyaltyDiscount, getDiscountMatchesForItem, calcItemDiscountTotal, calcCartLevelDiscount } from '@/lib/price-config';
+import { calcDurationDiscount, calcLoyaltyDiscount, getDiscountMatchesForItem, calcItemDiscountTotal, calcCartLevelDiscount, hasActiveNotCombinableDiscount } from '@/lib/price-config';
 import { useAccessories } from '@/components/AccessoriesProvider';
 import { getAccessoryPrice } from '@/data/accessories';
 import { BUSINESS } from '@/lib/business-config';
@@ -456,16 +456,28 @@ export default function CheckoutPage() {
   // productDiscountLabel für zukünftige Nutzung
   void productDiscountAmount;
 
+  // Wenn eine greifende Aktion `not_combinable=true` hat, werden Mietdauer-
+  // und Stammkunden-Rabatte deaktiviert — der Admin hat die Aktion als
+  // exklusiv markiert (z.B. 50%-Aktion soll genau 50% bedeuten, nicht mehr).
+  const actionBlocksAutoDiscounts = hasActiveNotCombinableDiscount(
+    cartTotalNetItems,
+    itemDiscountAmount,
+    cartLevelDiscountAmount,
+    productDiscounts,
+  );
+
   // Duration discount: based on max rental days across all items
   const maxDays = items.reduce((m, it) => Math.max(m, it.days), 0);
   const durationMatch = calcDurationDiscount(maxDays, durationDiscounts);
-  const durationDiscountAmount = durationMatch
+  const durationDiscountAmount = !actionBlocksAutoDiscounts && durationMatch
     ? Math.round((cartTotal - productDiscountAmount) * durationMatch.discount_percent) / 100
     : 0;
 
   // Loyalty discount: applied on remainder after product + duration discount
   const afterPrevDiscounts = cartTotal - productDiscountAmount - durationDiscountAmount;
-  const loyaltyMatch = user ? calcLoyaltyDiscount(userBookingCount, loyaltyDiscounts) : null;
+  const loyaltyMatch = !actionBlocksAutoDiscounts && user
+    ? calcLoyaltyDiscount(userBookingCount, loyaltyDiscounts)
+    : null;
   const loyaltyDiscountAmount = loyaltyMatch
     ? Math.round(afterPrevDiscounts * loyaltyMatch.discount_percent) / 100
     : 0;

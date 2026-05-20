@@ -578,6 +578,17 @@ Buchungen im Status `pending_verification` (Express-Signup ohne Ausweis) oder `a
 ### Preise
 30-Tage-Preistabelle pro Produkt + Formel für 31+ Tage, alles in admin_config
 
+### Aktion `not_combinable` — analog zu Coupons (Stand 2026-05-20)
+Aktionen in `admin_settings.product_discounts` (JSON-Array) haben jetzt ein optionales `not_combinable: boolean`-Feld. Default `false` — bestehende Aktionen verhalten sich wie bisher.
+
+**Wirkung:** Wenn eine Aktion mit `not_combinable=true` greift (egal ob Item-Level via `getDiscountMatchesForItem` oder Cart-Level via `applies_to_cart`), werden **Mietdauer-Rabatt + Stammkunden-Rabatt** für die ganze Buchung auf 0 gesetzt. Coupon-Rabatte sind unabhaengig (haben eigenen `not_combinable`-Schalter).
+
+**Hintergrund:** Vorher stapelten alle vier Rabatt-Schichten seriell (Aktion → Mietdauer → Loyalty → Coupon). Eine „50 %-Aktion" auf einen Stammkunden ergab in Wirklichkeit ~64 % Rabatt (50 % Aktion + ~28 % Loyalty auf den Rest). Mit dem Schalter kann der Admin eine Aktion als **exklusiv** markieren — 50 % bedeutet dann genau 50 %.
+
+- **Helper:** `hasActiveNotCombinableDiscount(cartTotalNetItems, itemDiscountAmount, cartLevelDiscountAmount, productDiscounts)` in `lib/price-config.ts`. Genutzt im Checkout (`app/checkout/page.tsx:471`) zur einheitlichen Auswertung. Kartoffel-Level: hoechste Aktion gewinnt — wenn die `not_combinable` ist, greift's. Item-Level: greift jede aktive `not_combinable`-Aktion, sobald irgendein Item-Rabatt > 0.
+- **Admin-UI:** Checkbox „Nicht mit Mietdauer- und Stammkunden-Rabatt kombinierbar" in `/admin/rabatte` direkt unter „Auf Warenkorb-Gesamt anwenden" (Aktion-Editor).
+- **Server:** Keine Migration, kein API-Change — das JSON-Array wird ueber `/api/admin/config?key=product_discounts` generisch gespeichert. `confirm-cart` nimmt die vom Frontend errechneten Werte; der bestehende ~70 %-Plausibilitaets-Floor (Sweep 7 #10) bleibt aktiv.
+
 ### Kaution & Haftungsschutz
 - Gegenseitig ausschließend pro Produkt
 - Globaler Modus in `admin_settings.deposit_mode`: 'kaution' | 'haftung' (kein 'both' mehr)

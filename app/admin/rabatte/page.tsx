@@ -581,6 +581,25 @@ export default function AdminRabattePage() {
                       </div>
                     </label>
                   </div>
+
+                  {/* Not-combinable Toggle */}
+                  <div style={{ marginTop: 4, padding: 10, borderRadius: 8, background: '#0f172a', border: '1px solid #1e293b' }}>
+                    <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
+                      <input type="checkbox" checked={!!d.not_combinable}
+                        onChange={(e) => {
+                          const a = [...productDiscounts];
+                          a[i] = { ...a[i], not_combinable: e.target.checked };
+                          setProductDiscounts(a);
+                        }}
+                        style={{ width: 16, height: 16, accentColor: S.cyan, marginTop: 2 }} />
+                      <div>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: '#e2e8f0' }}>Nicht mit Mietdauer- und Stammkunden-Rabatt kombinierbar</span>
+                        <p style={{ fontSize: 11, color: '#64748b', margin: '2px 0 0 0' }}>
+                          Wenn aktiviert, deaktiviert diese Aktion automatisch den Mietdauer- und Stammkunden-Rabatt — z.B. damit eine „50 %-Aktion&ldquo; exakt 50 % bedeutet und nicht durch andere Rabatte zusätzlich vergünstigt wird.
+                        </p>
+                      </div>
+                    </label>
+                  </div>
                   </>)}
                 </div>
               );

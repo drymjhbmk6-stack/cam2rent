@@ -285,9 +285,57 @@ export interface ProductDiscount {
   set_ids?: string[];
   /** Wenn true, gilt der Rabatt auf den Warenkorb-Gesamtbetrag statt pro Item. */
   applies_to_cart?: boolean;
+  /** Wenn true, deaktiviert eine greifende Aktion die automatischen Kunden-
+   *  Rabatte (Mietdauer + Stammkunde). Analog zu `coupons.not_combinable`.
+   *  Default false → bestehende Aktionen verhalten sich wie bisher. */
+  not_combinable?: boolean;
   valid_from: string | null;
   valid_until: string | null;
   active: boolean;
+}
+
+/**
+ * Prueft, ob unter den greifenden Aktionen (Item-Level + Cart-Level) mindestens
+ * eine mit `not_combinable=true` ist. Wenn ja, sollen Mietdauer- und Loyalty-
+ * Rabatte nicht zusaetzlich oben drauf stapeln. Wird vom Checkout / Warenkorb /
+ * Produkt-Buchungs-Seite identisch ausgewertet, damit Preisvorschau und
+ * tatsaechlich gezahlter Betrag exakt uebereinstimmen.
+ */
+export function hasActiveNotCombinableDiscount(
+  cartTotalNetItems: number,
+  itemDiscountAmount: number,
+  cartLevelDiscountAmount: number,
+  productDiscounts: ProductDiscount[],
+): boolean {
+  if (itemDiscountAmount <= 0 && cartLevelDiscountAmount <= 0) return false;
+  const now = new Date();
+  // Cart-Level: die hoechste applies_to_cart-Aktion gewinnt — wenn sie greift
+  // und not_combinable=true ist, gilt es.
+  if (cartLevelDiscountAmount > 0) {
+    let bestAmount = 0;
+    let bestNotCombinable = false;
+    for (const d of productDiscounts) {
+      if (!d.applies_to_cart) continue;
+      if (!isWithinValidity(d, now)) continue;
+      const amount = calcDiscountValue(d, cartTotalNetItems);
+      if (amount > bestAmount) {
+        bestAmount = amount;
+        bestNotCombinable = !!d.not_combinable;
+      }
+    }
+    if (bestAmount > 0 && bestNotCombinable) return true;
+  }
+  // Item-Level: wenn irgendeine aktive Item-Aktion not_combinable ist UND
+  // Item-Rabatte greifen, dann gilt es. (Wir kennen hier den exakten Match
+  // nicht pro Item — konservativ: greift jede aktive not_combinable-Item-Aktion.)
+  if (itemDiscountAmount > 0) {
+    for (const d of productDiscounts) {
+      if (d.applies_to_cart) continue;
+      if (!isWithinValidity(d, now)) continue;
+      if (d.not_combinable) return true;
+    }
+  }
+  return false;
 }
 
 /**
