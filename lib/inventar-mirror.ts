@@ -15,6 +15,7 @@
  * alte Tabelle nur synchronisiert (Status, label).
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { syncAccessoryQty } from './sync-accessory-qty';
 
 const STATUS_INVENTAR_TO_PRODUCT_UNITS: Record<string, 'available' | 'rented' | 'maintenance' | 'retired'> = {
   verfuegbar: 'available',
@@ -357,6 +358,12 @@ export async function mirrorAccessoryToLegacy(
     if (auditErr) console.error('[inventar-mirror] audit insert fehlgeschlagen:', auditErr.message);
   });
 
+  // accessories.available_qty mitziehen, damit Shop/Gantt nicht stale bleiben.
+  // Bulk-Accessories werden im Helper selbst uebersprungen.
+  await syncAccessoryQty(supabase, legacyAccessoryId).catch((e) => {
+    console.error('[inventar-mirror] syncAccessoryQty nach insert fehlgeschlagen:', e);
+  });
+
   return newId;
 }
 
@@ -399,6 +406,20 @@ export async function deleteMirror(
   for (const alteTabelle of ['product_units', 'accessory_units'] as const) {
     const legacyId = await findExistingMirror(supabase, inventarUnitId, alteTabelle);
     if (!legacyId) continue;
+
+    // Fuer accessory_units: accessory_id VOR dem Delete merken, damit wir
+    // anschliessend syncAccessoryQty aufrufen koennen (sonst bleibt
+    // accessories.available_qty stale → Gantt/Shop zeigen 1 Stueck obwohl 0).
+    let accessoryId: string | null = null;
+    if (alteTabelle === 'accessory_units') {
+      const { data: row } = await supabase
+        .from('accessory_units')
+        .select('accessory_id')
+        .eq('id', legacyId)
+        .maybeSingle();
+      accessoryId = (row as { accessory_id?: string } | null)?.accessory_id ?? null;
+    }
+
     await supabase.from(alteTabelle).delete().eq('id', legacyId);
     await supabase.from('migration_audit')
       .delete()
@@ -406,5 +427,11 @@ export async function deleteMirror(
       .eq('alte_id', legacyId)
       .eq('neue_tabelle', 'inventar_units')
       .eq('neue_id', inventarUnitId);
+
+    if (accessoryId) {
+      await syncAccessoryQty(supabase, accessoryId).catch((e) => {
+        console.error('[inventar-mirror] syncAccessoryQty nach delete fehlgeschlagen:', e);
+      });
+    }
   }
 }

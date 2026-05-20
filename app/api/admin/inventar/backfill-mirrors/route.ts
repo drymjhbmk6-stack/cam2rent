@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { mirrorInventarToLegacy, ensureAccessoryListing } from '@/lib/inventar-mirror';
+import { syncAccessoryQty } from '@/lib/sync-accessory-qty';
 import { logAudit } from '@/lib/audit';
 
 /**
@@ -75,11 +76,28 @@ export async function POST(req: NextRequest) {
     else skipped++;
   }
 
+  // ── 4) accessories.available_qty einmal global resync ────────────────────
+  // Heilt Drift-Bestand (z.B. Inventar-Einheit geloescht, aber available_qty
+  // blieb auf 1 stehen). syncAccessoryQty zaehlt aktive accessory_units und
+  // skippt Sammel-Zubehoer (is_bulk=true) automatisch.
+  let qtyResynced = 0;
+  try {
+    const { data: allAccessories } = await supabase
+      .from('accessories')
+      .select('id');
+    for (const a of (allAccessories ?? []) as Array<{ id: string }>) {
+      await syncAccessoryQty(supabase, a.id);
+      qtyResynced++;
+    }
+  } catch (err) {
+    console.error('[backfill-mirrors] available_qty resync failed:', err);
+  }
+
   await logAudit({
     action: 'inventar.backfill_mirrors',
     entityType: 'inventar_unit',
     entityId: 'bulk',
-    changes: { mirrored, skipped, accessories_restored: accessoriesRestored, total: (units ?? []).length },
+    changes: { mirrored, skipped, accessories_restored: accessoriesRestored, qty_resynced: qtyResynced, total: (units ?? []).length },
     request: req,
   });
 
@@ -88,5 +106,6 @@ export async function POST(req: NextRequest) {
     mirrored,
     skipped,
     accessories_restored: accessoriesRestored,
+    qty_resynced: qtyResynced,
   });
 }

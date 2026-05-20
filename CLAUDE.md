@@ -114,6 +114,14 @@ lesen sie weiterhin.
   (Button „Mirror-Backfill" auf `/admin/inventar`) — synct die alten Tabellen
   aus der neuen Welt, damit Buchungs-RPCs Daten finden. Das ist der
   **unterstuetzte Reparaturweg**, NICHT der Drop.
+  - **Bestands-Sync (Stand 2026-05-20):** `mirrorAccessoryToLegacy` (Insert)
+    und `deleteMirror` (Delete) rufen jetzt `syncAccessoryQty` nach der
+    Mutation — vorher blieb `accessories.available_qty` nach dem Loeschen
+    einer Inventar-Einheit stale (Gantt zeigte „1 Stueck" obwohl 0 aktiv).
+    Backfill-Endpoint synct zusaetzlich nach dem Mirror-Schritt **alle**
+    `accessories`-Bestaende einmal global → heilt Alt-Drift per Button-Klick
+    (Response-Feld `qty_resynced`). Sammel-Zubehoer (`is_bulk=true`) wird
+    in `syncAccessoryQty` selbst uebersprungen.
 - **`supabase/recovery-after-drop.sql`** — Notfall: legt alte Tabellen wieder an,
   falls doch mal gedroppt wurde.
 

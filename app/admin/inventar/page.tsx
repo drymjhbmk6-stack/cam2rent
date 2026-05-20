@@ -372,6 +372,7 @@ function BackfillMirrorsButton() {
         if (data.accessories_restored > 0) parts.push(`${data.accessories_restored} Zubehör wiederhergestellt`);
         parts.push(`${data.mirrored} gespiegelt`);
         if (data.skipped > 0) parts.push(`${data.skipped} übersprungen`);
+        if (data.qty_resynced > 0) parts.push(`${data.qty_resynced} Bestände synchronisiert`);
         setResult(parts.join(' · '));
       }
     } catch (err) {
