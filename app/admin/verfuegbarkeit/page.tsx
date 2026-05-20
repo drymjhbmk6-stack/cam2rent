@@ -69,6 +69,7 @@ interface GanttSimpleBooking {
   rental_to: string;
   customer_name: string;
   delivery_mode: string;
+  status?: string;
   /** Anzahl belegter Exemplare dieser Buchung (qty-aware). Sets/Legacy = 1. */
   qty?: number;
 }
@@ -82,7 +83,18 @@ interface GanttSet {
   bookings: GanttSimpleBooking[];
 }
 
-type DayCellType = 'free' | 'booked' | 'buffer-hin' | 'buffer-rueck' | 'maintenance' | 'retired' | 'blocked' | 'past';
+type DayCellType =
+  | 'free'
+  | 'booked'
+  | 'booked-pending'
+  | 'buffer-hin'
+  | 'buffer-hin-pending'
+  | 'buffer-rueck'
+  | 'buffer-rueck-pending'
+  | 'maintenance'
+  | 'retired'
+  | 'blocked'
+  | 'past';
 
 interface DayCellInfo {
   type: DayCellType;
@@ -267,69 +279,49 @@ export default function AdminVerfuegbarkeitPage() {
     // Buchungen für diese Unit prüfen
     const unitBookings = product.bookings.filter((b) => b.unit_id === unit.id);
     for (const b of unitBookings) {
-      const bMode = b.delivery_mode ?? 'versand';
-      const before = bMode === 'abholung' ? buf.abholung_before : buf.versand_before;
-      const after = bMode === 'abholung' ? buf.abholung_after : buf.versand_after;
-
-      // Puffertage berechnen
-      const fromDate = new Date(b.rental_from);
-      const toDate = new Date(b.rental_to);
-      const bufferStart = new Date(fromDate);
-      bufferStart.setDate(bufferStart.getDate() - before);
-      const bufferEnd = new Date(toDate);
-      bufferEnd.setDate(bufferEnd.getDate() + after);
-
-      const bufStartStr = bufferStart.toISOString().split('T')[0];
-      const bufEndStr = bufferEnd.toISOString().split('T')[0];
-
-      // Innerhalb der Buchung
-      if (dateStr >= b.rental_from && dateStr <= b.rental_to) {
-        return { type: 'booked', booking: b };
-      }
-
-      // Puffer davor (Hinversand / Abholung)
-      if (dateStr >= bufStartStr && dateStr < b.rental_from) {
-        const label = bMode === 'abholung' ? 'Abholung' : 'Hinversand';
-        return { type: 'buffer-hin', booking: b, bufferLabel: label };
-      }
-
-      // Puffer danach (Rückversand / Rückgabe)
-      if (dateStr > b.rental_to && dateStr <= bufEndStr) {
-        const label = bMode === 'abholung' ? 'Rückgabe' : 'Rückversand';
-        return { type: 'buffer-rueck', booking: b, bufferLabel: label };
-      }
+      const hit = matchBookingDay(b, dateStr, buf);
+      if (hit) return hit;
     }
 
     // Auch nicht zugeordnete Buchungen prüfen (Fallback wenn keine Units zugeordnet)
     const unassignedBookings = product.bookings.filter((b) => !b.unit_id);
     for (const b of unassignedBookings) {
-      const bMode = b.delivery_mode ?? 'versand';
-      const before = bMode === 'abholung' ? buf.abholung_before : buf.versand_before;
-      const after = bMode === 'abholung' ? buf.abholung_after : buf.versand_after;
-
-      const fromDate = new Date(b.rental_from);
-      const toDate = new Date(b.rental_to);
-      const bufferStart = new Date(fromDate);
-      bufferStart.setDate(bufferStart.getDate() - before);
-      const bufferEnd = new Date(toDate);
-      bufferEnd.setDate(bufferEnd.getDate() + after);
-      const bufStartStr = bufferStart.toISOString().split('T')[0];
-      const bufEndStr = bufferEnd.toISOString().split('T')[0];
-
-      if (dateStr >= b.rental_from && dateStr <= b.rental_to) {
-        return { type: 'booked', booking: b };
-      }
-      if (dateStr >= bufStartStr && dateStr < b.rental_from) {
-        const label = bMode === 'abholung' ? 'Abholung' : 'Hinversand';
-        return { type: 'buffer-hin', booking: b, bufferLabel: label };
-      }
-      if (dateStr > b.rental_to && dateStr <= bufEndStr) {
-        const label = bMode === 'abholung' ? 'Rückgabe' : 'Rückversand';
-        return { type: 'buffer-rueck', booking: b, bufferLabel: label };
-      }
+      const hit = matchBookingDay(b, dateStr, buf);
+      if (hit) return hit;
     }
 
     return { type: isPast ? 'past' : 'free' };
+  }
+
+  function matchBookingDay(b: GanttBooking, dateStr: string, buf: BufferDays): DayCellInfo | null {
+    const bMode = b.delivery_mode ?? 'versand';
+    const before = bMode === 'abholung' ? buf.abholung_before : buf.versand_before;
+    const after = bMode === 'abholung' ? buf.abholung_after : buf.versand_after;
+
+    const fromDate = new Date(b.rental_from);
+    const toDate = new Date(b.rental_to);
+    const bufferStart = new Date(fromDate);
+    bufferStart.setDate(bufferStart.getDate() - before);
+    const bufferEnd = new Date(toDate);
+    bufferEnd.setDate(bufferEnd.getDate() + after);
+
+    const bufStartStr = bufferStart.toISOString().split('T')[0];
+    const bufEndStr = bufferEnd.toISOString().split('T')[0];
+
+    const isPending = b.status === 'awaiting_payment';
+
+    if (dateStr >= b.rental_from && dateStr <= b.rental_to) {
+      return { type: isPending ? 'booked-pending' : 'booked', booking: b };
+    }
+    if (dateStr >= bufStartStr && dateStr < b.rental_from) {
+      const label = bMode === 'abholung' ? 'Abholung' : 'Hinversand';
+      return { type: isPending ? 'buffer-hin-pending' : 'buffer-hin', booking: b, bufferLabel: label };
+    }
+    if (dateStr > b.rental_to && dateStr <= bufEndStr) {
+      const label = bMode === 'abholung' ? 'Rückgabe' : 'Rückversand';
+      return { type: isPending ? 'buffer-rueck-pending' : 'buffer-rueck', booking: b, bufferLabel: label };
+    }
+    return null;
   }
 
   // Zellenfarbe — kräftige, gut unterscheidbare Farben auf dunklem Hintergrund
@@ -338,8 +330,11 @@ export default function AdminVerfuegbarkeitPage() {
       switch (info.type) {
         case 'free': return { background: '#065f46', color: '#6ee7b7' };           // kräftiges Grün
         case 'booked': return { background: '#1d4ed8', color: '#ffffff' };          // kräftiges Blau
+        case 'booked-pending': return { background: '#7c3aed', color: '#ffffff' }; // Lila (Zahlung offen)
         case 'buffer-hin': return { background: '#a16207', color: '#fef3c7' };      // kräftiges Gelb/Gold
+        case 'buffer-hin-pending': return { background: '#6d28d9', color: '#ddd6fe' }; // Lila (Hinversand, Zahlung offen)
         case 'buffer-rueck': return { background: '#c2410c', color: '#fed7aa' };    // kräftiges Orange
+        case 'buffer-rueck-pending': return { background: '#5b21b6', color: '#ddd6fe' }; // Lila (Rückversand, Zahlung offen)
         case 'maintenance': return { background: '#991b1b', color: '#fca5a5' };     // kräftiges Rot
         case 'retired': return { background: '#374151', color: '#9ca3af' };         // Grau
         case 'blocked': return { background: '#7f1d1d', color: '#fca5a5' };         // Dunkelrot
@@ -373,7 +368,8 @@ export default function AdminVerfuegbarkeitPage() {
     };
 
     if (info.booking) {
-      content = `${info.booking.id}${info.booking.is_test ? ' [TEST]' : ''}\n${info.booking.customer_name || 'Unbekannt'}\n${fmtDate(info.booking.rental_from)} – ${fmtDate(info.booking.rental_to)}\n${info.booking.delivery_mode === 'abholung' ? 'Abholung' : 'Versand'}`;
+      const pendingPrefix = info.booking.status === 'awaiting_payment' ? '⏳ Zahlung ausstehend\n' : '';
+      content = `${pendingPrefix}${info.booking.id}${info.booking.is_test ? ' [TEST]' : ''}\n${info.booking.customer_name || 'Unbekannt'}\n${fmtDate(info.booking.rental_from)} – ${fmtDate(info.booking.rental_to)}\n${info.booking.delivery_mode === 'abholung' ? 'Abholung' : 'Versand'}`;
       if (info.bufferLabel) content = `${info.bufferLabel}\n${content}`;
     } else if (info.type === 'maintenance') {
       content = 'Wartung';
@@ -475,6 +471,7 @@ export default function AdminVerfuegbarkeitPage() {
               <div className="flex flex-wrap gap-4 text-[11px] font-body font-semibold mb-2" style={{ color: '#cbd5e1' }}>
                 <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#065f46' }} /> Frei</span>
                 <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#1d4ed8' }} /> Gebucht</span>
+                <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#7c3aed' }} /> ⏳ Zahlung offen</span>
                 <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#a16207' }} /> Hinversand</span>
                 <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#c2410c' }} /> Rückversand</span>
                 <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#991b1b' }} /> Wartung</span>
@@ -605,13 +602,14 @@ export default function AdminVerfuegbarkeitPage() {
                                         }}
                                       >
                                         <div className="text-[9px] leading-tight truncate px-0.5" style={{ color: cs.color }}>
-                                          {info.type === 'booked' && info.booking && (
+                                          {(info.type === 'booked' || info.type === 'booked-pending') && info.booking && (
                                             <span title={info.booking.customer_name}>
+                                              {info.type === 'booked-pending' && '⏳ '}
                                               {info.booking.customer_name?.split(' ')[0]?.slice(0, 6) || '…'}
                                             </span>
                                           )}
-                                          {info.type === 'buffer-hin' && <span style={{ fontSize: '8px' }}>▼ HIN</span>}
-                                          {info.type === 'buffer-rueck' && <span style={{ fontSize: '8px' }}>▲ RÜ</span>}
+                                          {(info.type === 'buffer-hin' || info.type === 'buffer-hin-pending') && <span style={{ fontSize: '8px' }}>▼ HIN</span>}
+                                          {(info.type === 'buffer-rueck' || info.type === 'buffer-rueck-pending') && <span style={{ fontSize: '8px' }}>▲ RÜ</span>}
                                           {info.type === 'maintenance' && <span style={{ fontSize: '8px' }}>⚠</span>}
                                         </div>
                                       </td>
@@ -710,8 +708,10 @@ export default function AdminVerfuegbarkeitPage() {
                                 onMouseEnter={(e) => {
                                   if (info.type === 'past' || info.count === 0) { setTooltip(null); return; }
                                   const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                                  const names = info.bookings.map((b) => b.customer_name || '–').join(', ');
-                                  setTooltip({ x: rect.left + rect.width / 2, y: rect.top - 8, content: `${info.count} von ${info.total} belegt\n${names}` });
+                                  const names = info.bookings.map((b) => `${b.status === 'awaiting_payment' ? '⏳ ' : ''}${b.customer_name || '–'}`).join(', ');
+                                  const pendingCount = info.bookings.reduce((n, b) => n + (b.status === 'awaiting_payment' ? (b.qty ?? 1) : 0), 0);
+                                  const pendingLine = pendingCount > 0 ? `\n${pendingCount} davon Zahlung ausstehend` : '';
+                                  setTooltip({ x: rect.left + rect.width / 2, y: rect.top - 8, content: `${info.count} von ${info.total} belegt${pendingLine}\n${names}` });
                                 }}
                                 onMouseLeave={() => setTooltip(null)}
                                 style={{ background: bg, color, boxShadow: d.isToday ? 'inset 0 0 0 1.5px #f59e0b' : 'none' }}>
@@ -815,7 +815,7 @@ export default function AdminVerfuegbarkeitPage() {
                                 onMouseEnter={(e) => {
                                   if (isPast || !isBooked) { setTooltip(null); return; }
                                   const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                                  const names = matchedBookings.map((b) => b.customer_name || '–').join(', ');
+                                  const names = matchedBookings.map((b) => `${b.status === 'awaiting_payment' ? '⏳ ' : ''}${b.customer_name || '–'}`).join(', ');
                                   setTooltip({ x: rect.left + rect.width / 2, y: rect.top - 8, content: `${s.name}\n${names}` });
                                 }}
                                 onMouseLeave={() => setTooltip(null)}

@@ -504,7 +504,7 @@ Optionales kleines Referenzbild pro `included_parts`-Zeile, anklickbar → Light
   - Puffertage werden auch für nicht-zugeordnete Buchungen (ohne `unit_id`) angezeigt
   - **API:** `GET /api/admin/availability-gantt?from=YYYY-MM-DD&to=YYYY-MM-DD` (Zeitraum-basiert, max 24 Monate)
 - **Kameras-Tab:** Pro Kameratyp aufklappbarer Bereich mit allen Units als Zeilen
-  - Farbcodiert: Grün=frei, Blau=gebucht, Gold=Hinversand, Orange=Rückversand, Rot=Wartung, Grau=ausgemustert
+  - Farbcodiert: Grün=frei, Blau=gebucht, **Lila=Zahlung offen (`awaiting_payment`)**, Gold=Hinversand, Orange=Rückversand, Rot=Wartung, Grau=ausgemustert
   - Hover-Tooltip: Buchungs-ID, Kundenname, Zeitraum, Lieferart
   - Klick auf gebuchte Zelle → öffnet `/admin/buchungen/[id]` in neuem Tab
 - **Zubehör-Tab:** Pro Zubehörteil ein Kalender mit einer Zeile (aggregiert, nicht pro Stück)
@@ -513,6 +513,7 @@ Optionales kleines Referenzbild pro `included_parts`-Zeile, anklickbar → Light
   - Set-Buchungen werden auf Einzelzubehör aufgelöst (über `sets.accessory_items`)
 - **Sets-Tab:** Pro Set ein Kalender mit einer Zeile
   - Grün=frei, Blau=gebucht (mit Anzahl)
+- **`awaiting_payment` im Gantt (Stand 2026-05-20):** Buchungen mit Status „Warte auf Zahlung" (Stripe-Payment-Link offen, noch nicht bezahlt) tauchten vorher NICHT im Live-Kalender auf — der Slot sah fälschlich „frei" aus, obwohl der `awaiting-payment-cancel`-Cron erst nach Deadline storniert und parallele Doppelbuchung möglich war. `app/api/admin/availability-gantt/route.ts` nimmt `'awaiting_payment'` jetzt in den Status-Filter mit auf; UI rendert diese Buchungen **lila** (`#7c3aed`, passt zum Status-Badge in `/admin/buchungen`) statt blau, inkl. lila Puffer-Varianten für Hin-/Rückversand (`#6d28d9` / `#5b21b6`). Tooltip zeigt „⏳ Zahlung ausstehend"-Hinweis, Cell-Content prefixt mit ⏳. Im Zubehör-/Set-Tab zählen Pending-Buchungen wie bisher zur Belegung (sie blockieren den Bestand korrekt); Tooltip listet sie zusätzlich mit ⏳-Prefix + Zeile „N davon Zahlung ausstehend". Sobald `stripe-webhook` den Status auf `confirmed` flippt, wird die Buchung beim nächsten Gantt-Reload normal blau angezeigt — keine Migration nötig.
 - **API (alt):** `GET /api/admin/availability-gantt?month=YYYY-MM` → rückwärtskompatibel, liefert products[], accessories[], sets[]
 - **Availability-API** (`/api/availability/[productId]`): Nutzt weiterhin `product.stock` für Shop-seitige Verfügbarkeitsprüfung
 

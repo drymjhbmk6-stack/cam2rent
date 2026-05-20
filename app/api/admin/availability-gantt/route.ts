@@ -84,7 +84,7 @@ export async function GET(req: NextRequest) {
     supabase
       .from('bookings')
       .select('id, product_id, product_name, rental_from, rental_to, days, status, delivery_mode, customer_name, unit_id, cameras, accessories, accessory_items, accessory_unit_ids, is_test')
-      .in('status', ['confirmed', 'shipped', 'picked_up', 'completed'])
+      .in('status', ['awaiting_payment', 'confirmed', 'shipped', 'picked_up', 'completed'])
       .lte('rental_from', extLast)
       .gte('rental_to', extFirst),
     supabase
@@ -245,7 +245,7 @@ export async function GET(req: NextRequest) {
 
   interface AccBookingLite {
     id: string; rental_from: string; rental_to: string;
-    customer_name: string; delivery_mode: string;
+    customer_name: string; delivery_mode: string; status: string;
   }
 
   // Pro Buchung qty-aware aufloesen — gleiche Prioritaet wie der
@@ -269,6 +269,7 @@ export async function GET(req: NextRequest) {
       rental_to: b.rental_to,
       customer_name: b.customer_name,
       delivery_mode: b.delivery_mode,
+      status: b.status,
     };
 
     const accQty = new Map<string, number>();
@@ -326,6 +327,7 @@ export async function GET(req: NextRequest) {
         rental_to: b.rental_to,
         customer_name: b.customer_name,
         delivery_mode: b.delivery_mode,
+        status: b.status,
         qty: b.qty,
       })),
     };
@@ -347,6 +349,7 @@ export async function GET(req: NextRequest) {
         rental_to: b.rental_to,
         customer_name: b.customer_name,
         delivery_mode: b.delivery_mode,
+        status: b.status,
       })),
     };
   });
