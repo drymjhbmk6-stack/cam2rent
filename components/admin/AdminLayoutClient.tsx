@@ -7,6 +7,7 @@ import NotificationDropdown from '@/components/admin/NotificationDropdown';
 import EnvModeBadge from '@/components/admin/EnvModeBadge';
 import AdminScanFab from '@/components/admin/AdminScanFab';
 import { useAutoLogout } from '@/hooks/useAutoLogout';
+import { NotificationsProvider } from '@/contexts/NotificationsContext';
 
 // 30 Minuten Inaktivität für Admin
 const ADMIN_TIMEOUT_MS = 30 * 60 * 1000;
@@ -817,6 +818,7 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
   const closeSidebar = () => setSidebarOpen(false);
 
   return (
+    <NotificationsProvider>
     <div className="min-h-screen flex" style={{ background: '#0a0f1e' }}>
       {/* Mobile header with hamburger — respektiert iOS Safe-Area-Top */}
       <div
@@ -910,5 +912,6 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
           Blog, QR-Druck, Scan-Detail-Seite selbst). */}
       <AdminScanFab />
     </div>
+    </NotificationsProvider>
   );
 }

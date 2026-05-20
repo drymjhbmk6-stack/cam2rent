@@ -1,17 +1,8 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-
-type Notification = {
-  id: string;
-  type: string;
-  title: string;
-  message: string | null;
-  link: string | null;
-  is_read: boolean;
-  created_at: string;
-};
+import { useNotifications, type Notification } from '@/contexts/NotificationsContext';
 
 /** Typ-Icon je nach Benachrichtigungsart */
 function TypeIcon({ type }: { type: string }) {
@@ -150,74 +141,13 @@ function timeAgo(dateStr: string): string {
 
 export default function NotificationDropdown({ position = 'sidebar' }: { position?: 'sidebar' | 'mobile' }) {
   const [open, setOpen] = useState(false);
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
-  // Backoff-Zaehler: bei Fehlern (Supabase 522, Netz weg, etc.) verdoppeln
-  // wir das Poll-Intervall schrittweise — statt die toten Server mit
-  // 30s-Requests zu ueberfluten. Reset auf 30s bei Erfolg.
-  const failureCountRef = useRef(0);
-  const nextPollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const fetchNotifications = useCallback(async (): Promise<boolean> => {
-    // Nicht pollen wenn der Tab im Hintergrund ist — spart Supabase-Budget
-    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
-      return true; // nicht als Fehler werten
-    }
-    try {
-      // Request-Timeout 8s — sonst stapeln sich bei Supabase-Ausfall die Calls
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
-      const res = await fetch('/api/admin/notifications', { signal: controller.signal });
-      clearTimeout(timeoutId);
-      if (!res.ok) return false;
-      const data = await res.json();
-      setNotifications(data.notifications || []);
-      setUnreadCount(data.unreadCount || 0);
-      return true;
-    } catch {
-      return false;
-    }
-  }, []);
-
-  // Adaptives Polling: 30s normal, bei Fehlern exponentiell bis 5 Min
-  useEffect(() => {
-    let mounted = true;
-
-    async function tick() {
-      if (!mounted) return;
-      const ok = await fetchNotifications();
-      if (!mounted) return;
-      if (ok) {
-        failureCountRef.current = 0;
-      } else {
-        failureCountRef.current = Math.min(failureCountRef.current + 1, 4);
-      }
-      // 30s, 60s, 120s, 240s, 300s
-      const nextDelay = Math.min(30000 * Math.pow(2, failureCountRef.current), 300000);
-      nextPollTimeoutRef.current = setTimeout(tick, nextDelay);
-    }
-
-    tick();
-
-    // Bei Sichtbarkeits-Wechsel sofort neu pollen (resettet auch Backoff)
-    function onVisibilityChange() {
-      if (document.visibilityState === 'visible') {
-        failureCountRef.current = 0;
-        if (nextPollTimeoutRef.current) clearTimeout(nextPollTimeoutRef.current);
-        tick();
-      }
-    }
-    document.addEventListener('visibilitychange', onVisibilityChange);
-
-    return () => {
-      mounted = false;
-      if (nextPollTimeoutRef.current) clearTimeout(nextPollTimeoutRef.current);
-      document.removeEventListener('visibilitychange', onVisibilityChange);
-    };
-  }, [fetchNotifications]);
+  // Geteilter Notification-State + Mutationen aus dem Provider.
+  // Polling + Backoff lebt zentral im Provider — beide Glocken (Mobile-Header
+  // + Sidebar-Footer) sehen damit immer denselben Counter und sind synchron.
+  const { notifications, unreadCount, markAsRead, markAllRead } = useNotifications();
 
   // Dropdown schliessen bei Klick ausserhalb
   useEffect(() => {
@@ -232,28 +162,9 @@ export default function NotificationDropdown({ position = 'sidebar' }: { positio
     }
   }, [open]);
 
-  async function markAllRead() {
-    await fetch('/api/admin/notifications', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ markAllRead: true }),
-    });
-    setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
-    setUnreadCount(0);
-  }
-
   async function handleNotificationClick(notification: Notification) {
-    // Als gelesen markieren
     if (!notification.is_read) {
-      await fetch('/api/admin/notifications', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids: [notification.id] }),
-      });
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === notification.id ? { ...n, is_read: true } : n))
-      );
-      setUnreadCount((prev) => Math.max(0, prev - 1));
+      await markAsRead(notification.id);
     }
 
     // Navigieren — Sweep 9 M5: client-side validieren gegen Legacy-Notifications

@@ -227,7 +227,8 @@ Zwei Lücken im Inventar/Zubehör-Flow geschlossen:
 - **DB-Tabelle:** `admin_notifications` (id, type, title, message, link, is_read, created_at)
 - **API:** GET/PATCH `/api/admin/notifications`, POST `/api/admin/notifications/create`
 - **Helper:** `createAdminNotification(supabase, { type, title, message?, link? })` in `lib/admin-notifications.ts`
-- **UI:** `NotificationDropdown` in Admin-Sidebar + Mobile-Header, pollt alle 30s
+- **UI:** `NotificationDropdown` in Admin-Sidebar-Footer + Mobile-Header, pollt mit Visibility-Pause + adaptivem Backoff (30 s → max 5 min bei Fehlern)
+- **State-Sync (Stand 2026-05-20):** Beide Glocken (Mobile-Header + Sidebar-Footer) lesen aus einem gemeinsamen `NotificationsProvider` (`contexts/NotificationsContext.tsx`), der den State (`notifications`, `unreadCount`) und das Polling **einmal zentral** haelt. Mutationen (`markAsRead(id)` / `markAllRead()`) gehen ueber den Provider mit Optimistic Update — beide Counter sind sofort identisch, kein 30-s-Polling-Delay mehr. Frueher hatte jede `<NotificationDropdown>`-Instanz ihren eigenen `useState(unreadCount)` + eigenes Polling, dadurch waren die Counter auseinandergelaufen. Wrapper sitzt in `AdminLayoutClient` um den Layout-Tree (nicht auf Login/Blog/QR-/Scan-Standalone-Seiten, die haben kein Admin-Shell).
 - **11 Events angeschlossen:**
   - `new_booking`: confirm-booking, confirm-cart, manual-booking, confirm-extension
   - `booking_cancelled`: cancel-booking, cron/auto-cancel
