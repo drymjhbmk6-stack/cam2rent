@@ -57,6 +57,8 @@ const ACTION_LABELS: Record<string, string> = {
   'stripe.sync_run': 'Stripe-Sync ausgeführt',
   'stripe.manual_match': 'Stripe manuell verknüpft',
   'stripe.import_fees': 'Stripe-Gebühren importiert',
+  'stripe.refund': 'Stripe-Erstattung erfasst',
+  'stripe.mark_duplicate': 'Stripe-Doppelzahlung markiert',
   // Reels
   'reel.generate': 'Reel generiert',
   'reel.update': 'Reel aktualisiert',

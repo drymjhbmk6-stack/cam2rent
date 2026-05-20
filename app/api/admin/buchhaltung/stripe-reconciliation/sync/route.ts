@@ -110,36 +110,80 @@ export async function POST(req: NextRequest) {
           .eq('id', existing.id);
         if (!error) synced++;
       } else {
-        // Auto-Match — zwei Stufen + Doppelzahlungs-Schutz:
-        //  Stufe 1: exakter Lookup ueber bookings.payment_intent_id (Stripe-Webhook
-        //           hat den richtigen PI eingetragen). Standard-Pfad.
-        //  Stufe 2: Fallback per Stripe-Receipt-Email + Betrag — gilt nur fuer
-        //           Buchungen, deren payment_intent_id noch auf PENDING-/AWAITING-/
-        //           MANUAL-UNPAID-Praefix steht oder leer ist (= Webhook lief nicht
-        //           durch oder Buchung wurde noch nicht bezahlt-flagged). Eindeutig
-        //           → matchen + bookings.payment_intent_id korrigieren.
-        //  Schutz:  Findet einer der Lookups eine Buchung, die bereits durch eine
-        //           ANDERE stripe_transactions-Row (match_status matched/manual)
-        //           bedient ist, wird der aktuelle PI als unmatched gelassen +
-        //           reconciliation_note "Moegliche Doppelzahlung" gesetzt. So
-        //           erkennt der Admin den Erstattungs-Fall ohne falsche Verknuepfung.
+        // ── Auto-Match-Kaskade ─────────────────────────────────────────────
+        // Vier Stufen + Doppelzahlungs-Schutz. Sobald eine Stufe trifft → fertig.
+        //  1) bookings.payment_intent_id exact                 — Standard-Pfad
+        //  2) intent.metadata.pre_booking_id exact             — checkout-intent schreibt
+        //                                                        die geplante Buchungs-ID rein
+        //  3) pi.receipt_email + Betrag ±0.50 EUR              — nur fuer Buchungen mit
+        //                                                        PENDING/AWAITING/MANUAL-UNPAID-
+        //                                                        Praefix oder leerer PI
+        //                                                        (= Webhook lief nicht durch).
+        //                                                        Bei Treffer: bookings.payment_intent_id
+        //                                                        wird auf den echten PI korrigiert.
+        //  4) metadata.user_id + Betrag cent-exakt + 7d-Fenster — sehr defensiv (nur eindeutig).
+        //
+        // Doppelzahlungs-Schutz: findet einer der Lookups eine Buchung, die bereits
+        // durch eine ANDERE verknuepfte stripe_transactions-Row bedient ist, wird
+        // dieser PI als unmatched gelassen + reconciliation_note "Moegliche
+        // Doppelzahlung" gesetzt. Die UI-Detection im GET-Endpoint erkennt das
+        // zusaetzlich und bietet den Quick-Button "Als Doppelzahlung erfassen".
         let booking: { id: string } | null = null;
-        let matchSource: 'pi' | 'email_amount' | null = null;
+        let matchSource: 'pi' | 'pre_booking_id' | 'email_amount' | 'metadata_user' | null = null;
         let duplicateNote: string | null = null;
 
-        // Stufe 1: PI-Lookup
-        const { data: pmDirect } = await supabase
-          .from('bookings')
-          .select('id')
-          .eq('payment_intent_id', pi.id)
-          .maybeSingle();
-        if (pmDirect?.id) {
-          booking = pmDirect;
-          matchSource = 'pi';
+        // Helper: bereits-verknuepft-Check (existiert eine andere matched/manual
+        // stripe_transactions-Row fuer diese Buchung?)
+        async function hasOtherLink(bookingId: string): Promise<{ pi: string } | null> {
+          const { data: other } = await supabase
+            .from('stripe_transactions')
+            .select('stripe_payment_intent_id')
+            .eq('booking_id', bookingId)
+            .neq('stripe_payment_intent_id', pi.id)
+            .in('match_status', ['matched', 'manual'])
+            .limit(1)
+            .maybeSingle();
+          return other?.stripe_payment_intent_id ? { pi: other.stripe_payment_intent_id } : null;
         }
 
-        // Stufe 2: Email + Betrag (nur wenn Stufe 1 nichts gefunden hat)
+        // Stufe 1: PI-Lookup
+        {
+          const { data: b } = await supabase
+            .from('bookings')
+            .select('id')
+            .eq('payment_intent_id', pi.id)
+            .maybeSingle();
+          if (b?.id) {
+            booking = b;
+            matchSource = 'pi';
+          }
+        }
+
+        // Stufe 2: Metadata pre_booking_id
         if (!booking) {
+          const preBookingId = typeof pi.metadata?.pre_booking_id === 'string'
+            ? pi.metadata.pre_booking_id.trim()
+            : '';
+          if (preBookingId) {
+            const { data: b } = await supabase
+              .from('bookings')
+              .select('id')
+              .eq('id', preBookingId)
+              .maybeSingle();
+            if (b?.id) {
+              const other = await hasOtherLink(b.id);
+              if (!other) {
+                booking = b;
+                matchSource = 'pre_booking_id';
+              } else {
+                duplicateNote = `Moegliche Doppelzahlung: Buchung ${b.id} wurde bereits ueber ${other.pi} bezahlt — pruefe Erstattung.`;
+              }
+            }
+          }
+        }
+
+        // Stufe 3: Email + Betrag (nur Buchungen mit PENDING/AWAITING/MANUAL-UNPAID PI)
+        if (!booking && !duplicateNote) {
           const receiptEmail = (pi.receipt_email ?? '').toString().trim().toLowerCase();
           if (receiptEmail) {
             const { data: candidates } = await supabase
@@ -164,17 +208,44 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        // Doppelzahlungs-Schutz: gibt es bereits eine ANDERE verknuepfte
-        // Stripe-Tx fuer diese Buchung?
-        if (booking) {
-          const { data: otherTxs } = await supabase
-            .from('stripe_transactions')
-            .select('stripe_payment_intent_id, match_status')
-            .eq('booking_id', booking.id)
-            .neq('stripe_payment_intent_id', pi.id)
-            .in('match_status', ['matched', 'manual']);
-          if (otherTxs && otherTxs.length > 0) {
-            duplicateNote = `Moegliche Doppelzahlung: Buchung wurde bereits ueber ${otherTxs[0].stripe_payment_intent_id} bezahlt — pruefe Erstattung.`;
+        // Stufe 4: Heuristik metadata.user_id + Betrag cent-exakt + 7d-Fenster
+        if (!booking && !duplicateNote) {
+          const userId = typeof pi.metadata?.user_id === 'string'
+            ? pi.metadata.user_id.trim()
+            : '';
+          if (userId) {
+            const intentCreatedMs = pi.created * 1000;
+            const fromMs = intentCreatedMs - 7 * 24 * 60 * 60 * 1000;
+            const toMs = intentCreatedMs + 7 * 24 * 60 * 60 * 1000;
+            const { data: candidates } = await supabase
+              .from('bookings')
+              .select('id, price_total, created_at')
+              .eq('user_id', userId)
+              .gte('created_at', new Date(fromMs).toISOString())
+              .lte('created_at', new Date(toMs).toISOString())
+              .limit(20);
+
+            const exactAmount = (candidates ?? []).filter(
+              (b) => Math.abs(Number(b.price_total ?? 0) - amount) < 0.01,
+            );
+            if (exactAmount.length === 1) {
+              const other = await hasOtherLink(exactAmount[0].id);
+              if (!other) {
+                booking = { id: exactAmount[0].id };
+                matchSource = 'metadata_user';
+              } else {
+                duplicateNote = `Moegliche Doppelzahlung: Buchung ${exactAmount[0].id} wurde bereits ueber ${other.pi} bezahlt — pruefe Erstattung.`;
+              }
+            }
+          }
+        }
+
+        // Doppelzahlungs-Schutz auch fuer den email_amount-Pfad: wenn die
+        // gefundene Buchung bereits eine andere verknuepfte Tx hat → abbrechen.
+        if (booking && matchSource === 'email_amount') {
+          const other = await hasOtherLink(booking.id);
+          if (other) {
+            duplicateNote = `Moegliche Doppelzahlung: Buchung wurde bereits ueber ${other.pi} bezahlt — pruefe Erstattung.`;
             booking = null;
             matchSource = null;
           }

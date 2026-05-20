@@ -18,6 +18,10 @@ interface StripeTx {
   match_status: string;
   stripe_created_at: string;
   reconciliation_note?: string | null;
+  /** Vom GET-Endpoint berechnet: ID der Buchung, deren matched Tx denselben
+   *  Betrag im selben Zeitfenster hat → wahrscheinlich Doppelzahlung. */
+  duplicate_of_booking_id?: string | null;
+  duplicate_of_tx_id?: string | null;
 }
 
 interface ReconciliationData {
@@ -28,6 +32,7 @@ interface ReconciliationData {
     unmatched_stripe: number;
     unmatched_booking: number;
     total_fees: number;
+    duplicates?: number;
   };
 }
 
@@ -134,6 +139,42 @@ export default function StripeAbgleichTab() {
     setRefundMode('full');
     setRefundAmount(tx.amount.toFixed(2).replace('.', ','));
     setRefundNote(tx.reconciliation_note || '');
+  }
+
+  // Markiert die Tx mit einem Klick als Doppelzahlung der erkannten Buchung
+  // (verknuepft + match_status='refunded', kein Einkommens-Abzug). Stripe-
+  // Refund auslesen bleibt manuell — entweder im Stripe-Dashboard erledigen
+  // oder ueber den existierenden "Erstattung erfassen"-Workflow Stripe-Refunds
+  // anlegen.
+  const [duplicateProcessing, setDuplicateProcessing] = useState<string | null>(null);
+  async function handleMarkDuplicate(tx: StripeTx) {
+    if (!tx.duplicate_of_booking_id) return;
+    const ok = window.confirm(
+      `Diese Zahlung als Doppelzahlung von Buchung ${tx.duplicate_of_booking_id} markieren?\n\n`
+      + `Die Buchung selbst bleibt unveraendert (keine Einnahme-Minderung). `
+      + `Bitte die Erstattung anschliessend im Stripe-Dashboard ausloesen.`,
+    );
+    if (!ok) return;
+    setDuplicateProcessing(tx.id);
+    try {
+      const res = await fetch('/api/admin/buchhaltung/stripe-reconciliation/mark-duplicate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          transaction_id: tx.id,
+          original_booking_id: tx.duplicate_of_booking_id,
+        }),
+      });
+      if (res.ok) {
+        showToast('Als Doppelzahlung erfasst', 'ok');
+        fetchData(range);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        showToast(err.error || 'Fehler beim Erfassen', 'err');
+      }
+    } finally {
+      setDuplicateProcessing(null);
+    }
   }
 
   async function handleRefund() {
@@ -342,6 +383,20 @@ export default function StripeAbgleichTab() {
                     <td style={{ padding: '10px 8px', color: '#10b981', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{formatCurrency(tx.net)}</td>
                     <td style={{ padding: '10px 8px', textAlign: 'center' }}>
                       <StatusBadge status={tx.match_status} />
+                      {tx.duplicate_of_booking_id && tx.match_status === 'unmatched' && (
+                        <div style={{
+                          marginTop: 4,
+                          display: 'inline-block',
+                          padding: '2px 8px',
+                          borderRadius: 999,
+                          background: 'rgba(239,68,68,0.15)',
+                          color: '#fca5a5',
+                          fontSize: 11,
+                          fontWeight: 700,
+                        }} title={`Gleiche Summe + gleiches Zeitfenster wie eine bereits verknuepfte Zahlung von Buchung ${tx.duplicate_of_booking_id}`}>
+                          🔄 Doppelzahlung von {tx.duplicate_of_booking_id}
+                        </div>
+                      )}
                       {tx.reconciliation_note && (
                         <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4, maxWidth: 180, marginLeft: 'auto', marginRight: 'auto', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={tx.reconciliation_note}>
                           {tx.reconciliation_note}
@@ -350,6 +405,26 @@ export default function StripeAbgleichTab() {
                     </td>
                     <td style={{ padding: '10px 8px', textAlign: 'center' }}>
                       <div style={{ display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap' }}>
+                        {tx.match_status === 'unmatched' && tx.duplicate_of_booking_id && (
+                          <button
+                            onClick={() => handleMarkDuplicate(tx)}
+                            disabled={duplicateProcessing === tx.id}
+                            style={{
+                              padding: '4px 10px',
+                              borderRadius: 6,
+                              background: 'rgba(239,68,68,0.12)',
+                              border: '1px solid #b91c1c',
+                              color: '#fecaca',
+                              cursor: duplicateProcessing === tx.id ? 'wait' : 'pointer',
+                              fontSize: 12,
+                              fontWeight: 700,
+                              opacity: duplicateProcessing === tx.id ? 0.6 : 1,
+                            }}
+                            title={`Verknuepft mit Buchung ${tx.duplicate_of_booking_id} + markiert als Erstattung (kein Einnahme-Abzug). Stripe-Refund bitte separat ausloesen.`}
+                          >
+                            {duplicateProcessing === tx.id ? '…' : '🔄 Als Doppelzahlung'}
+                          </button>
+                        )}
                         {tx.match_status === 'unmatched' && (
                           <button
                             onClick={async () => {

@@ -42,10 +42,46 @@ export async function GET(req: NextRequest) {
     booking_id: string | null; amount: number; fee: number; net: number;
     match_status: string; reconciliation_note?: string | null;
   };
+  type TxRowOut = TxRow & {
+    duplicate_of_booking_id?: string | null;
+    duplicate_of_tx_id?: string | null;
+  };
   const transactions = (data ?? []) as unknown as TxRow[];
   const matched = transactions.filter(t => t.match_status === 'matched' || t.match_status === 'manual').length;
   const unmatchedStripe = transactions.filter(t => t.match_status === 'unmatched').length;
   const totalFees = transactions.reduce((sum, t) => sum + (t.fee || 0), 0);
+
+  // ── Doppelzahlungs-Detection ─────────────────────────────────────────────
+  // Pro unmatched-Transaktion pruefen, ob im selben/angrenzenden Zeitraum eine
+  // verknuepfte Transaktion mit gleichem Betrag (cent-exakt) zur gleichen
+  // Buchung existiert. Wenn ja → die unmatched Tx ist sehr wahrscheinlich eine
+  // Doppelzahlung dieser Buchung (Kunde hat zweimal bezahlt). Die UI zeigt
+  // dann einen Quick-Action-Button „Als Doppelzahlung erfassen".
+  // Detection ist defensiv: nur bei klarer Eindeutigkeit (genau eine matched
+  // Tx mit gleichem Betrag, derselbe Tag ±3 Tage).
+  const unmatched = transactions.filter(t => t.match_status === 'unmatched');
+  const linked = transactions.filter(t => t.booking_id && (t.match_status === 'matched' || t.match_status === 'manual'));
+  const duplicateMap = new Map<string, { booking_id: string; tx_id: string }>();
+  for (const orphan of unmatched) {
+    const orphanTime = new Date(orphan.stripe_created_at).getTime();
+    const sameAmount = linked.filter((l) => {
+      if (Math.abs(Number(l.amount ?? 0) - Number(orphan.amount ?? 0)) > 0.005) return false;
+      const linkedTime = new Date(l.stripe_created_at).getTime();
+      const diffDays = Math.abs(linkedTime - orphanTime) / (24 * 60 * 60 * 1000);
+      return diffDays <= 3;
+    });
+    if (sameAmount.length === 1 && sameAmount[0].booking_id) {
+      duplicateMap.set(orphan.id, {
+        booking_id: sameAmount[0].booking_id,
+        tx_id: sameAmount[0].id,
+      });
+    }
+  }
+  const transactionsOut: TxRowOut[] = transactions.map((t) => {
+    const dup = duplicateMap.get(t.id);
+    if (!dup) return t;
+    return { ...t, duplicate_of_booking_id: dup.booking_id, duplicate_of_tx_id: dup.tx_id };
+  });
 
   // Buchungen ohne Stripe prüfen
   let unmatchedBooking = 0;
@@ -62,13 +98,14 @@ export async function GET(req: NextRequest) {
   }
 
   return NextResponse.json({
-    transactions,
+    transactions: transactionsOut,
     summary: {
       total: transactions.length,
       matched,
       unmatched_stripe: unmatchedStripe,
       unmatched_booking: unmatchedBooking,
       total_fees: totalFees,
+      duplicates: duplicateMap.size,
     },
   });
 }
