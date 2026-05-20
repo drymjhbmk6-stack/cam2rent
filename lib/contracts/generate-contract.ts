@@ -8,6 +8,7 @@ import { isTestMode } from '@/lib/env-mode';
 import { computeReplacementValue, loadReplacementValueConfig } from '@/lib/replacement-value';
 import { getInventarWbwAverageByLegacyAccessoryIds, getInventarWbwAverageByLegacyProductId } from '@/lib/inventar/wbw-bridge';
 import { resolveBookingCameras, type BookingCamera } from '@/lib/booking-cameras';
+import { verifyAccessoryPrice } from '@/lib/booking/verify-accessory-price';
 
 /**
  * Lädt die aktuelle Haftungs-Konfiguration aus admin_settings.
@@ -422,6 +423,28 @@ export async function generateContractPDF(opts: {
     ? opts.accessoryItems.map((i) => ({ id: i.accessory_id, qty: i.qty }))
     : opts.accessories.map((id) => ({ id, qty: 1 }));
 
+  // Pro Zubehor-Position den echten Mietpreis fuer die Mietdauer laden — sonst
+  // landet Stativ/Akku/Set im Vertrag mit "0,00 EUR", was den Kunden verwirrt
+  // und juristisch unsauber ist (Vertrags-Spalte "Preis" muss stimmen).
+  // Nutzt denselben Helper wie die Rechnung (Set-IDs werden als ein Item mit
+  // Set-Preis behandelt). Bei DB-Fehler bleibt es bei 0 — defensiver Fallback.
+  const accessoryPriceMap = new Map<string, number>();
+  if (accessoryEntries.length > 0) {
+    try {
+      const sb = createServiceClient();
+      const check = await verifyAccessoryPrice(sb, {
+        items: accessoryEntries.map((e) => ({ accessory_id: e.id, qty: e.qty })),
+        days: Math.max(1, opts.rentalDays),
+        reportedTotal: 0,
+      });
+      for (const d of check.details) {
+        accessoryPriceMap.set(d.accessory_id, d.line_total);
+      }
+    } catch (err) {
+      console.error('[generate-contract] accessory price lookup failed:', err);
+    }
+  }
+
   // Seriennummer einer Kamera-Einheit auflösen (inventar_units bevorzugt,
   // Fallback product_units). Pro Kamera einzeln aufgerufen.
   const resolveSerial = async (unitId: string | null): Promise<string> => {
@@ -516,12 +539,15 @@ export async function generateContractPDF(opts: {
             // Zubehoer: Wert pro Stueck × qty.
             const unitValue = info?.replacementValue ?? 0;
             const lineValue = unitValue * entry.qty;
+            // Echter Mietpreis pro Zeile (Set-Preis bzw. Zubehoer-Stueckpreis ×
+            // Tage × qty) statt hartcodierter 0 — siehe accessoryPriceMap.
+            const linePrice = accessoryPriceMap.get(entry.id) ?? 0;
             return {
               position: camCount + i + 1,
               bezeichnung: entry.qty > 1 ? `${entry.qty}x ${baseName}` : baseName,
               seriennr: '',
               tage: opts.rentalDays,
-              preis: 0,
+              preis: linePrice,
               wiederbeschaffungswert: lineValue,
             };
           }),
