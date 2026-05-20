@@ -20,23 +20,32 @@ export type ResolvedItem = {
  * Wird sowohl fuer die echte Buchung (Packliste/Vertrag) als auch fuer
  * die manuell ueberschriebene interne Haftungs-Box genutzt.
  *
+ * Optional: `skipUpgradeGroups` → ein Set von upgrade_group-Werten. Set-
+ * Sub-Items deren Accessory in einer dieser Gruppen liegt werden beim
+ * Expandieren uebersprungen. Beispiel: Set enthaelt "128 GB" (upgrade_group
+ * "Speicher"), Buchung hat zusaetzlich "256 GB" (gleiche Gruppe) direkt
+ * gewaehlt → die 128 GB aus dem Set wird weggelassen, damit nur die
+ * Upgrade-Variante in der Stueckliste/Packliste/Rechnung steht.
+ *
  * (Aus app/api/admin/booking/[id]/route.ts extrahiert, damit GET-Handler,
  *  accessory_edit und booking_edit dieselbe Aufloesung nutzen.)
  */
 export async function resolveAccessoryItems(
   supabase: SB,
   rawItems: { accessory_id: string; qty: number }[],
+  options?: { skipUpgradeGroups?: Set<string> },
 ): Promise<ResolvedItem[]> {
   const resolved: ResolvedItem[] = [];
   if (rawItems.length === 0) return resolved;
 
   const allIds = [...new Set(rawItems.map((r) => r.accessory_id))];
-  type AccLookup = { name: string; included_parts: string[] };
+  type AccLookup = { name: string; included_parts: string[]; upgrade_group: string | null };
   const accLookup: Record<string, AccLookup> = {};
-  let accs: Array<{ id: string; name: string; included_parts?: string[] | null }> | null = null;
+  let accs: Array<{ id: string; name: string; included_parts?: string[] | null; upgrade_group?: string | null }> | null = null;
 
-  const accFull = await supabase.from('accessories').select('id, name, included_parts').in('id', allIds);
-  if (accFull.error && /column .*included_parts/i.test(accFull.error.message)) {
+  const accFull = await supabase.from('accessories').select('id, name, included_parts, upgrade_group').in('id', allIds);
+  if (accFull.error && /column .*(included_parts|upgrade_group)/i.test(accFull.error.message)) {
+    // Defensive: fehlende Spalte → Fallback auf id+name
     const accFallback = await supabase.from('accessories').select('id, name').in('id', allIds);
     accs = accFallback.data ?? [];
   } else {
@@ -48,6 +57,7 @@ export async function resolveAccessoryItems(
     accLookup[a.id] = {
       name: a.name as string,
       included_parts: Array.isArray(a.included_parts) ? (a.included_parts as string[]) : [],
+      upgrade_group: (a.upgrade_group as string | null) ?? null,
     };
   }
   const setMap: Record<string, { name: string; items: { accessory_id: string; qty: number }[] }> = {};
@@ -67,10 +77,10 @@ export async function resolveAccessoryItems(
   if (setSubIds.size > 0) {
     const subFull = await supabase
       .from('accessories')
-      .select('id, name, included_parts')
+      .select('id, name, included_parts, upgrade_group')
       .in('id', [...setSubIds]);
-    let subRows: Array<{ id: string; name: string; included_parts?: string[] | null }> = subFull.data ?? [];
-    if (subFull.error && /column .*included_parts/i.test(subFull.error.message)) {
+    let subRows: Array<{ id: string; name: string; included_parts?: string[] | null; upgrade_group?: string | null }> = subFull.data ?? [];
+    if (subFull.error && /column .*(included_parts|upgrade_group)/i.test(subFull.error.message)) {
       const subFallback = await supabase.from('accessories').select('id, name').in('id', [...setSubIds]);
       subRows = subFallback.data ?? [];
     }
@@ -78,16 +88,24 @@ export async function resolveAccessoryItems(
       accLookup[a.id] = {
         name: a.name as string,
         included_parts: Array.isArray(a.included_parts) ? (a.included_parts as string[]) : [],
+        upgrade_group: (a.upgrade_group as string | null) ?? null,
       };
     }
   }
 
+  const skipGroups = options?.skipUpgradeGroups;
   for (const item of rawItems) {
     const setInfo = setMap[item.accessory_id];
     if (setInfo) {
       resolved.push({ id: item.accessory_id, name: setInfo.name, qty: item.qty });
       for (const sub of setInfo.items) {
         const subAcc = accLookup[sub.accessory_id];
+        // Konflikt-Skip: Sub-Item liegt in einer Upgrade-Gruppe, die der
+        // Aufrufer als bereits "anders besetzt" markiert hat (z.B. der Kunde
+        // hat 256 GB direkt gewaehlt → die 128 GB aus dem Set wird weggelassen).
+        if (skipGroups && subAcc?.upgrade_group && skipGroups.has(subAcc.upgrade_group)) {
+          continue;
+        }
         resolved.push({
           id: sub.accessory_id,
           accessory_id: sub.accessory_id,
@@ -201,10 +219,37 @@ export async function applyAccessoryComposition(
     }
   }
 
-  // Sets -> Einzelteile aufloesen.
+  // Konflikt-Erkennung Upgrade-Gruppen: Wenn der Admin ein Set hinzufuegt
+  // UND parallel ein Einzel-Accessory in derselben Upgrade-Gruppe (z.B.
+  // "Speicher": Set enthaelt 128 GB, Buchung hat 256 GB direkt gewaehlt),
+  // wird das Set-Sub-Item beim Expandieren uebersprungen. So bekommt der
+  // Admin den 2-Schritt-Workflow (Set rein → speichern → 128 GB raus)
+  // automatisch erspart.
+  const skipUpgradeGroups = new Set<string>();
+  const directAccIds = directRaw.map((r) => r.accessory_id);
+  if (directAccIds.length > 0 && selectedSetIds.size > 0) {
+    try {
+      const { data: directAccs } = await supabase
+        .from('accessories')
+        .select('id, upgrade_group')
+        .in('id', directAccIds);
+      for (const a of directAccs ?? []) {
+        const g = (a.upgrade_group as string | null) ?? null;
+        if (g) skipUpgradeGroups.add(g);
+      }
+    } catch {
+      // upgrade_group-Spalte fehlt → kein Skip, kein Abbruch (Default-Verhalten).
+    }
+  }
+
+  // Sets -> Einzelteile aufloesen (mit Upgrade-Gruppen-Konflikt-Filter).
   let newItems = rawSelection;
   if (rawSelection.length > 0) {
-    const expandedResolved = await resolveAccessoryItems(supabase, rawSelection);
+    const expandedResolved = await resolveAccessoryItems(
+      supabase,
+      rawSelection,
+      skipUpgradeGroups.size > 0 ? { skipUpgradeGroups } : undefined,
+    );
     const expMap = new Map<string, number>();
     for (const r of expandedResolved) {
       if (!r.accessory_id) continue;
