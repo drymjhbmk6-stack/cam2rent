@@ -188,7 +188,7 @@ export async function collectWeeklyReportData(now: Date = new Date()): Promise<W
     supabase.from('invoices')
       .select('amount_gross, due_date, payment_status')
       .eq('is_test', false)
-      .in('payment_status', ['unpaid', 'overdue'])
+      .in('payment_status', ['open', 'overdue'])
       .limit(2000),
   ]);
 

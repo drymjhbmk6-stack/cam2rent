@@ -20,7 +20,10 @@ import { logAudit } from '@/lib/audit';
  *    (a) Status in ('pending_verification', 'awaiting_payment') hat, ODER
  *    (b) payment_intent_id mit `PENDING-` beginnt, ODER
  *    (c) payment_intent_id `MANUAL-UNPAID` enthaelt
- *  - Setzt sie auf status='sent', payment_status='unpaid', paid_at=NULL.
+ *  - Setzt sie auf status='open', payment_status='open', paid_at=NULL.
+ *    (CHECK-Constraint erlaubt nur 'paid','open','overdue','cancelled',
+ *    'partially_paid' fuer status; 'open','paid','overdue','cancelled',
+ *    'partial' fuer payment_status — 'unpaid'/'sent' sind nicht zulaessig.)
  *  - Idempotent (mehrfaches Ausfuehren = no-op).
  *
  * Antwort: { checked, updated, ids }.
@@ -91,8 +94,8 @@ export async function POST(req: NextRequest) {
   const { error: updateErr } = await supabase
     .from('invoices')
     .update({
-      status: 'sent',
-      payment_status: 'unpaid',
+      status: 'open',
+      payment_status: 'open',
       paid_at: null,
     })
     .in('id', toFix);

@@ -68,14 +68,18 @@ export async function storeInvoiceForBooking(
   //    hat die Zahlung noch nicht bestaetigt (Payment-Link, 3DS, etc.)
   // Ohne den Status-Check landeten `pending_verification`-Buchungen bisher
   // ueber den Backfill faelschlich als "paid" in der invoices-Tabelle.
+  //
+  // CHECK-Constraint auf invoices.status erlaubt nur ('paid','open','overdue',
+  // 'cancelled','partially_paid'); payment_status nur ('open','paid','overdue',
+  // 'cancelled','partial'). 'unpaid'/'sent' sind NICHT erlaubt — daher 'open'.
   const piId = (booking.payment_intent_id ?? '').toString();
   const bookingStatus = (booking.status ?? '').toString().toLowerCase();
   const isExplicitUnpaid = /MANUAL-UNPAID/i.test(piId);
   const isPendingPrefix = /^PENDING-/i.test(piId);
   const isAwaitingStatus = bookingStatus === 'awaiting_payment' || bookingStatus === 'pending_verification';
   const isUnpaid = isExplicitUnpaid || isPendingPrefix || isAwaitingStatus;
-  const paymentStatus = isUnpaid ? 'unpaid' : 'paid';
-  const status = isUnpaid ? 'sent' : 'paid';
+  const paymentStatus = isUnpaid ? 'open' : 'paid';
+  const status = isUnpaid ? 'open' : 'paid';
 
   // payment_method aus payment_intent_id ableiten
   const paymentMethod = piId.startsWith('pi_')
