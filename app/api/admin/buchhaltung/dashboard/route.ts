@@ -95,7 +95,11 @@ export async function GET(req: NextRequest) {
         invoice_date: inv.invoice_date,
         customer_name: inv.sent_to_email || '',
         gross_amount: inv.gross_amount || 0,
-        status: inv.status || 'paid',
+        // Defensiver Fallback: NULL nicht mehr als "paid" interpretieren — eine
+        // Rechnung ohne expliziten Status gilt als offen, bis sie als bezahlt
+        // markiert wurde (sonst sahen pending_verification-Buchungen faelschlich
+        // bezahlt aus, siehe sync-status-Endpoint).
+        status: inv.status || 'open',
       }));
 
       const { data: openInvoices } = await supabase

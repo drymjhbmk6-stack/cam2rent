@@ -264,6 +264,34 @@ export default function RechnungenTab() {
         >
           Rechnungen nachtragen
         </button>
+        <button
+          type="button"
+          onClick={async () => {
+            if (!confirm('Rechnungs-Status mit Buchungs-Status synchronisieren?\n\nSetzt Rechnungen, deren Buchung noch "Warte auf Freigabe" / "Warte auf Zahlung" / PENDING / MANUAL-UNPAID ist, zurueck auf "Offen". Idempotent.')) return;
+            try {
+              const res = await fetch('/api/admin/buchhaltung/invoices/sync-status', { method: 'POST' });
+              const j = await res.json();
+              if (!res.ok) throw new Error(j.error || 'Fehler');
+              setToast({
+                msg: j.updated > 0
+                  ? `${j.updated} Rechnung${j.updated === 1 ? '' : 'en'} korrigiert · ${j.checked} geprueft`
+                  : `Alle ${j.checked} bezahlten Rechnungen sind konsistent — nichts zu korrigieren`,
+                type: 'ok',
+              });
+              fetchInvoices();
+            } catch (e) {
+              setToast({ msg: e instanceof Error ? e.message : 'Synchronisation fehlgeschlagen', type: 'err' });
+            }
+          }}
+          style={{
+            padding: '8px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600,
+            background: '#1e293b', color: '#cbd5e1', border: '1px solid #334155',
+            cursor: 'pointer',
+          }}
+          title="Repariert Rechnungen, die faelschlich als bezahlt markiert sind, obwohl die zugehoerige Buchung noch nicht bezahlt wurde."
+        >
+          Status synchronisieren
+        </button>
       </div>
 
       {/* Tabelle */}

@@ -536,6 +536,19 @@ Optionales kleines Referenzbild pro `included_parts`-Zeile, anklickbar → Light
 - **API (alt):** `GET /api/admin/availability-gantt?month=YYYY-MM` → rückwärtskompatibel, liefert products[], accessories[], sets[]
 - **Availability-API** (`/api/availability/[productId]`): Nutzt weiterhin `product.stock` für Shop-seitige Verfügbarkeitsprüfung
 
+### Rechnungs-Status spiegelt Buchungs-Status (Stand 2026-05-20)
+Buchungen im Status `pending_verification` (Express-Signup ohne Ausweis) oder `awaiting_payment` (Stripe-Payment-Link noch nicht bezahlt) wurden in der Buchhaltungs-Welt faelschlich als „bezahlt" gefuehrt. Im Dashboard-Cockpit „Letzte 10 Rechnungen" sowie in `/admin/buchhaltung/rechnungen` standen sie mit gruenem **Bezahlt**-Badge, obwohl der Kunde noch keinen Cent ueberwiesen hatte. Drei aufeinander aufbauende Ursachen, alle gefixt:
+
+- **`lib/buchhaltung/store-invoice.ts`** pruefte nur den `MANUAL-UNPAID`-Prefix. Express-Signup-Buchungen tragen aber `payment_intent_id = 'PENDING-<bookingId>'` (`app/api/create-pending-booking/route.ts`), und `awaiting_payment`-Buchungen koennen je nach Pfad mit oder ohne `pi_*`-Prefix entstehen. Beide rutschten als „paid" durch. Neue Logik: `isUnpaid = isExplicitUnpaid || isPendingPrefix || isAwaitingStatus` — der Buchungs-Status (`status`) ist jetzt das endgueltige Sicherheitsnetz. Plus: `payment_method` zeigt fuer `PENDING-` jetzt **„Zahlung ausstehend"** statt fallthrough auf „Stripe".
+- **Backfill-Endpoint** (`POST /api/admin/buchhaltung/invoices/backfill`) laeuft ueber alle Buchungen mit `price_total > 0 AND status != 'cancelled'`. Da `pending_verification` + `awaiting_payment` nicht ausgeschlossen sind (bewusst — die Idee ist, dass jede Buchung eine Rechnung bekommt), zog er die fehlerhaften Status-Werte ueber `storeInvoiceForBooking` in die DB. Mit dem Lib-Fix oben heilt jeder neue Backfill automatisch — der ist idempotent ueber `invoice_number`, aber bestehende falsch-bezahlte Rows muessen separat synchronisiert werden (siehe sync-status).
+- **Dashboard-Fallback** in `app/api/admin/buchhaltung/dashboard/route.ts:98` defaultete `inv.status || 'paid'` — ein NULL-Status wurde im UI als „Bezahlt" angezeigt. Geaendert auf `|| 'open'`: eine Rechnung gilt ohne expliziten Bezahlt-Status als offen.
+
+**Heilen-Endpoint** `POST /api/admin/buchhaltung/invoices/sync-status` (`app/api/admin/buchhaltung/invoices/sync-status/route.ts`, Permission `finanzen`): laedt alle `invoices` mit `status='paid' OR payment_status='paid'`, joint die zugehoerigen `bookings.status` + `payment_intent_id`, filtert auf alle drei Symptome (awaiting-status / PENDING-prefix / MANUAL-UNPAID) und setzt sie mit Bulk-UPDATE auf `status='sent', payment_status='unpaid', paid_at=NULL`. Idempotent (mehrfaches Ausfuehren = no-op). Audit-Log `invoice.sync_status` mit `{checked, updated, ids[]}` (ids auf erste 50 begrenzt). Antwort `{checked, updated, ids}`.
+
+**UI-Trigger** `/admin/buchhaltung?tab=rechnungen` → Button **„Status synchronisieren"** direkt neben „Rechnungen nachtragen". Confirm-Dialog erklaert das Verhalten, Toast-Feedback nach Abschluss.
+
+**Daten-Konsequenz** beim einmaligen Lauf: bisher faelschlich bezahlte Rechnungen flippen auf „Offen" zurueck → `openAmount` im Cockpit steigt, `paidCount` sinkt entsprechend. EÜR / DATEV ziehen ihre Werte aus `bookings.price_total` (nicht aus `invoices.status`), bleiben also unveraendert.
+
 ### Admin-Navigation
 - **AdminBackLink** (`components/admin/AdminBackLink.tsx`): Einheitliche "Zurück zu..."- Komponente auf allen 40 Admin-Seiten
   - Detail-Seiten: Fester Link zur Elternseite (`href` prop)

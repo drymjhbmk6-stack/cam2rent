@@ -42,6 +42,8 @@ const ACTION_LABELS: Record<string, string> = {
   // Rechnungen/Buchhaltung
   'invoice.mark_paid': 'Rechnung als bezahlt markiert',
   'invoice.send': 'Rechnung versendet',
+  'invoice.backfill': 'Rechnungen nachgetragen (Backfill)',
+  'invoice.sync_status': 'Rechnungs-Status mit Buchungs-Status synchronisiert',
   'credit_note.create_draft': 'Gutschrift-Entwurf erstellt',
   'credit_note.approve': 'Gutschrift freigegeben',
   'credit_note.reject': 'Gutschrift abgelehnt',

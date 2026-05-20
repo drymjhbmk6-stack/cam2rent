@@ -59,10 +59,21 @@ export async function storeInvoiceForBooking(
   const net = isRegel ? Math.round((gross / (1 + taxRate / 100)) * 100) / 100 : gross;
   const tax = isRegel ? Math.round((gross - net) * 100) / 100 : 0;
 
-  // Zahlstatus: MANUAL-UNPAID = wartet auf Ueberweisung. Sonst (Stripe,
-  // MANUAL-bezahlt) als paid markieren — der Customer hat ja bezahlt.
+  // Zahlstatus: Eine Buchung gilt nur dann als bezahlt, wenn weder der
+  // payment_intent_id-Prefix noch der Buchungs-Status auf "Zahlung steht noch
+  // aus" hindeuten. Konkret unbezahlt:
+  //  - MANUAL-UNPAID-...  → manuelle Buchung mit Ueberweisung, noch nicht eingegangen
+  //  - PENDING-...        → Express-Signup / verificationDeferred, Stripe lief nie
+  //  - Booking-Status awaiting_payment / pending_verification → Stripe-Webhook
+  //    hat die Zahlung noch nicht bestaetigt (Payment-Link, 3DS, etc.)
+  // Ohne den Status-Check landeten `pending_verification`-Buchungen bisher
+  // ueber den Backfill faelschlich als "paid" in der invoices-Tabelle.
   const piId = (booking.payment_intent_id ?? '').toString();
-  const isUnpaid = /MANUAL-UNPAID/i.test(piId);
+  const bookingStatus = (booking.status ?? '').toString().toLowerCase();
+  const isExplicitUnpaid = /MANUAL-UNPAID/i.test(piId);
+  const isPendingPrefix = /^PENDING-/i.test(piId);
+  const isAwaitingStatus = bookingStatus === 'awaiting_payment' || bookingStatus === 'pending_verification';
+  const isUnpaid = isExplicitUnpaid || isPendingPrefix || isAwaitingStatus;
   const paymentStatus = isUnpaid ? 'unpaid' : 'paid';
   const status = isUnpaid ? 'sent' : 'paid';
 
@@ -73,7 +84,9 @@ export async function storeInvoiceForBooking(
       ? 'Überweisung ausstehend'
       : piId.startsWith('MANUAL-')
         ? 'Bar / Sonstige'
-        : 'Stripe';
+        : piId.startsWith('PENDING-')
+          ? 'Zahlung ausstehend'
+          : 'Stripe';
 
   const invoiceDate = (booking.created_at ?? new Date().toISOString()).slice(0, 10);
 
