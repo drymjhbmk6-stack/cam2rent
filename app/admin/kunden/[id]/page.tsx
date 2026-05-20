@@ -150,6 +150,23 @@ export default function KundenDetailPage() {
   const [idBackSignedUrl, setIdBackSignedUrl] = useState<string | null>(null);
   const [idImagesLoading, setIdImagesLoading] = useState(false);
 
+  // ─── Nachrichten-State: Compose-Modal + Inline-Reply pro Conversation ───
+  const [composeOpen, setComposeOpen] = useState(false);
+  const [composeSubject, setComposeSubject] = useState('');
+  const [composeBody, setComposeBody] = useState('');
+  const [composeBookingId, setComposeBookingId] = useState<string>('');
+  const [composeSending, setComposeSending] = useState(false);
+  const [composeError, setComposeError] = useState<string | null>(null);
+  const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
+  const [replySending, setReplySending] = useState<Record<string, boolean>>({});
+  const [convActionLoading, setConvActionLoading] = useState<Record<string, boolean>>({});
+  const [toast, setToast] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
+
+  function showToast(kind: 'success' | 'error', text: string) {
+    setToast({ kind, text });
+    window.setTimeout(() => setToast(null), 4500);
+  }
+
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
@@ -297,6 +314,116 @@ export default function KundenDetailPage() {
       // ignore
     }
     setNoteSaving(false);
+  }
+
+  function openCompose() {
+    setComposeSubject('');
+    setComposeBody('');
+    setComposeBookingId('');
+    setComposeError(null);
+    setComposeOpen(true);
+  }
+
+  async function handleSendNewMessage() {
+    const subject = composeSubject.trim();
+    const body = composeBody.trim();
+    if (subject.length < 3) {
+      setComposeError('Betreff muss mindestens 3 Zeichen lang sein.');
+      return;
+    }
+    if (subject.length > 200) {
+      setComposeError('Betreff darf maximal 200 Zeichen lang sein.');
+      return;
+    }
+    if (body.length < 1) {
+      setComposeError('Nachricht darf nicht leer sein.');
+      return;
+    }
+    if (body.length > 5000) {
+      setComposeError('Nachricht darf maximal 5000 Zeichen lang sein.');
+      return;
+    }
+    setComposeSending(true);
+    setComposeError(null);
+    try {
+      const res = await fetch('/api/admin/nachrichten', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customer_id: customerId,
+          subject,
+          body,
+          booking_id: composeBookingId || null,
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setComposeError(json?.error ?? 'Nachricht konnte nicht gesendet werden.');
+        return;
+      }
+      setComposeOpen(false);
+      setActiveTab('nachrichten');
+      showToast('success', 'Nachricht gesendet — Kunde wurde per E-Mail benachrichtigt.');
+      fetchData();
+    } catch {
+      setComposeError('Netzwerk- oder Server-Fehler. Bitte erneut versuchen.');
+    } finally {
+      setComposeSending(false);
+    }
+  }
+
+  async function handleSendReply(conversationId: string) {
+    const draft = (replyDrafts[conversationId] ?? '').trim();
+    if (!draft) {
+      showToast('error', 'Antwort darf nicht leer sein.');
+      return;
+    }
+    if (draft.length > 5000) {
+      showToast('error', 'Antwort ist zu lang (max. 5000 Zeichen).');
+      return;
+    }
+    setReplySending((prev) => ({ ...prev, [conversationId]: true }));
+    try {
+      const res = await fetch(`/api/admin/nachrichten/${conversationId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body: draft }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showToast('error', json?.error ?? 'Antwort konnte nicht gesendet werden.');
+        return;
+      }
+      setReplyDrafts((prev) => ({ ...prev, [conversationId]: '' }));
+      showToast('success', 'Antwort gesendet — Kunde wurde per E-Mail benachrichtigt.');
+      fetchData();
+    } catch {
+      showToast('error', 'Netzwerk- oder Server-Fehler. Bitte erneut versuchen.');
+    } finally {
+      setReplySending((prev) => ({ ...prev, [conversationId]: false }));
+    }
+  }
+
+  async function handleToggleConversation(conversationId: string, closed: boolean) {
+    setConvActionLoading((prev) => ({ ...prev, [conversationId]: true }));
+    try {
+      const res = await fetch(`/api/admin/nachrichten/${conversationId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ closed }),
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        showToast('error', json?.error ?? 'Aktualisierung fehlgeschlagen.');
+        return;
+      }
+      showToast('success', closed ? 'Konversation geschlossen.' : 'Konversation wieder geöffnet.');
+      fetchData();
+    } catch {
+      showToast('error', 'Netzwerk- oder Server-Fehler.');
+    } finally {
+      setConvActionLoading((prev) => ({ ...prev, [conversationId]: false }));
+    }
   }
 
   if (loading) {
@@ -850,6 +977,28 @@ export default function KundenDetailPage() {
       {/* ───── Tab: Nachrichten ───── */}
       {activeTab === 'nachrichten' && (
         <div>
+          <div style={{
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            marginBottom: 16, gap: 12, flexWrap: 'wrap',
+          }}>
+            <div style={{ fontSize: 13, color: '#94a3b8' }}>
+              {conversations.length === 0
+                ? 'Noch keine Konversationen — sende dem Kunden die erste Nachricht.'
+                : `${conversations.length} Konversation${conversations.length === 1 ? '' : 'en'}.`}
+            </div>
+            <button
+              type="button"
+              onClick={openCompose}
+              style={{
+                padding: '10px 18px', background: '#06b6d4', color: '#0a0a0a',
+                border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 14,
+                cursor: 'pointer',
+              }}
+            >
+              ✉ Neue Nachricht senden
+            </button>
+          </div>
+
           {conversations.length === 0 ? (
             <div style={{
               background: '#111827', borderRadius: 12, border: '1px solid #1e293b',
@@ -859,63 +1008,157 @@ export default function KundenDetailPage() {
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {conversations.map((conv) => (
-                <div key={conv.id} style={{
-                  background: '#111827', borderRadius: 12, border: '1px solid #1e293b',
-                  padding: 20,
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-                    <h3 style={{ fontSize: 15, fontWeight: 700, color: '#e2e8f0', margin: 0 }}>
-                      {conv.subject || 'Konversation'}
-                    </h3>
-                    {conv.closed && (
-                      <span style={{
-                        display: 'inline-block', padding: '2px 8px', borderRadius: 4,
-                        fontSize: 11, fontWeight: 600, color: '#64748b', background: '#64748b14',
-                      }}>
-                        Geschlossen
-                      </span>
-                    )}
-                    <span style={{ fontSize: 12, color: '#64748b', marginLeft: 'auto' }}>
-                      {fmtDate(conv.created_at)}
-                    </span>
-                  </div>
-
-                  {/* Chat messages */}
-                  <div style={{
-                    maxHeight: 400, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8,
+              {conversations.map((conv) => {
+                const replyValue = replyDrafts[conv.id] ?? '';
+                const sendingReply = !!replySending[conv.id];
+                const togglingConv = !!convActionLoading[conv.id];
+                return (
+                  <div key={conv.id} style={{
+                    background: '#111827', borderRadius: 12, border: '1px solid #1e293b',
+                    padding: 20,
                   }}>
-                    {conv.messages.map((msg) => {
-                      const isAdmin = msg.sender_type === 'admin';
-                      return (
-                        <div
-                          key={msg.id}
-                          style={{
-                            display: 'flex',
-                            justifyContent: isAdmin ? 'flex-end' : 'flex-start',
-                          }}
-                        >
-                          <div style={{
-                            maxWidth: '75%',
-                            padding: '10px 14px',
-                            borderRadius: 12,
-                            background: isAdmin ? '#06b6d420' : '#1e293b',
-                            borderBottomRightRadius: isAdmin ? 4 : 12,
-                            borderBottomLeftRadius: isAdmin ? 12 : 4,
-                          }}>
-                            <div style={{ fontSize: 10, color: '#64748b', marginBottom: 4, fontWeight: 600 }}>
-                              {isAdmin ? 'Admin' : 'Kunde'} — {fmtDateTime(msg.created_at)}
-                            </div>
-                            <div style={{ fontSize: 14, color: '#e2e8f0', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
-                              {msg.body}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+                      <h3 style={{ fontSize: 15, fontWeight: 700, color: '#e2e8f0', margin: 0 }}>
+                        {conv.subject || 'Konversation'}
+                      </h3>
+                      {conv.closed && (
+                        <span style={{
+                          display: 'inline-block', padding: '2px 8px', borderRadius: 4,
+                          fontSize: 11, fontWeight: 600, color: '#64748b', background: '#64748b14',
+                        }}>
+                          Geschlossen
+                        </span>
+                      )}
+                      {conv.booking_id && (
+                        <span style={{
+                          display: 'inline-block', padding: '2px 8px', borderRadius: 4,
+                          fontSize: 11, fontWeight: 600, color: '#06b6d4', background: '#06b6d414',
+                        }}>
+                          Bezug: {conv.booking_id}
+                        </span>
+                      )}
+                      <span style={{ fontSize: 12, color: '#64748b', marginLeft: 'auto' }}>
+                        {fmtDate(conv.created_at)}
+                      </span>
+                    </div>
+
+                    {/* Chat messages */}
+                    <div style={{
+                      maxHeight: 400, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8,
+                    }}>
+                      {conv.messages.map((msg) => {
+                        const isAdmin = msg.sender_type === 'admin';
+                        return (
+                          <div
+                            key={msg.id}
+                            style={{
+                              display: 'flex',
+                              justifyContent: isAdmin ? 'flex-end' : 'flex-start',
+                            }}
+                          >
+                            <div style={{
+                              maxWidth: '75%',
+                              padding: '10px 14px',
+                              borderRadius: 12,
+                              background: isAdmin ? '#06b6d420' : '#1e293b',
+                              borderBottomRightRadius: isAdmin ? 4 : 12,
+                              borderBottomLeftRadius: isAdmin ? 12 : 4,
+                            }}>
+                              <div style={{ fontSize: 10, color: '#64748b', marginBottom: 4, fontWeight: 600 }}>
+                                {isAdmin ? 'Admin' : 'Kunde'} — {fmtDateTime(msg.created_at)}
+                              </div>
+                              <div style={{ fontSize: 14, color: '#e2e8f0', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+                                {msg.body}
+                              </div>
                             </div>
                           </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Inline-Reply ODER geschlossen-Hinweis */}
+                    <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #1e293b' }}>
+                      {conv.closed ? (
+                        <div style={{
+                          display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+                          padding: '10px 14px', background: '#0f172a', borderRadius: 8,
+                          fontSize: 13, color: '#94a3b8',
+                        }}>
+                          <span>Konversation geschlossen — Kunde kann nicht mehr darauf antworten.</span>
+                          <button
+                            type="button"
+                            disabled={togglingConv}
+                            onClick={() => handleToggleConversation(conv.id, false)}
+                            style={{
+                              marginLeft: 'auto',
+                              padding: '6px 14px', background: 'transparent',
+                              border: '1px solid #06b6d4', color: '#06b6d4',
+                              borderRadius: 6, fontSize: 12, fontWeight: 600,
+                              cursor: togglingConv ? 'wait' : 'pointer',
+                              opacity: togglingConv ? 0.6 : 1,
+                            }}
+                          >
+                            {togglingConv ? '…' : 'Wieder öffnen'}
+                          </button>
                         </div>
-                      );
-                    })}
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          <textarea
+                            value={replyValue}
+                            onChange={(e) => setReplyDrafts((prev) => ({ ...prev, [conv.id]: e.target.value }))}
+                            placeholder="Antwort an den Kunden schreiben…"
+                            rows={3}
+                            maxLength={5000}
+                            style={{
+                              width: '100%',
+                              padding: '10px 12px',
+                              background: '#0f172a',
+                              border: '1px solid #1e293b',
+                              borderRadius: 8,
+                              color: '#e2e8f0',
+                              fontSize: 16,
+                              fontFamily: 'inherit',
+                              resize: 'vertical',
+                              boxSizing: 'border-box',
+                            }}
+                          />
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                            <button
+                              type="button"
+                              disabled={togglingConv}
+                              onClick={() => handleToggleConversation(conv.id, true)}
+                              style={{
+                                padding: '6px 12px', background: 'transparent',
+                                border: '1px solid #334155', color: '#94a3b8',
+                                borderRadius: 6, fontSize: 12, fontWeight: 600,
+                                cursor: togglingConv ? 'wait' : 'pointer',
+                                opacity: togglingConv ? 0.6 : 1,
+                              }}
+                            >
+                              Schließen
+                            </button>
+                            <button
+                              type="button"
+                              disabled={sendingReply || !replyValue.trim()}
+                              onClick={() => handleSendReply(conv.id)}
+                              style={{
+                                padding: '8px 18px',
+                                background: sendingReply || !replyValue.trim() ? '#1e293b' : '#06b6d4',
+                                color: sendingReply || !replyValue.trim() ? '#64748b' : '#0a0a0a',
+                                border: 'none', borderRadius: 8,
+                                fontWeight: 700, fontSize: 14,
+                                cursor: sendingReply || !replyValue.trim() ? 'not-allowed' : 'pointer',
+                              }}
+                            >
+                              {sendingReply ? 'Sende…' : 'Antworten'}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -1037,6 +1280,169 @@ export default function KundenDetailPage() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ───── Compose-Modal: Neue Nachricht an Kunden ───── */}
+      {composeOpen && (
+        <div
+          onClick={() => !composeSending && setComposeOpen(false)}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)',
+            display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
+            zIndex: 1000, padding: '40px 16px', overflowY: 'auto',
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#111827', borderRadius: 12, border: '1px solid #1e293b',
+              padding: 24, maxWidth: 600, width: '100%',
+              display: 'flex', flexDirection: 'column', gap: 14,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#e2e8f0' }}>
+                Neue Nachricht an {customer.full_name || 'den Kunden'}
+              </h3>
+              <button
+                type="button"
+                disabled={composeSending}
+                onClick={() => setComposeOpen(false)}
+                aria-label="Schließen"
+                style={{
+                  background: 'transparent', border: 'none', color: '#94a3b8',
+                  fontSize: 22, cursor: composeSending ? 'wait' : 'pointer',
+                  padding: 0, lineHeight: 1,
+                }}
+              >
+                ×
+              </button>
+            </div>
+            <div style={{ fontSize: 12, color: '#64748b' }}>
+              Der Kunde bekommt die Nachricht in seiner Inbox (<code>/konto/nachrichten</code>) und
+              zusätzlich eine E-Mail-Benachrichtigung.
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>
+                Betreff
+              </label>
+              <input
+                type="text"
+                value={composeSubject}
+                onChange={(e) => setComposeSubject(e.target.value)}
+                maxLength={200}
+                placeholder="Worum geht es?"
+                style={{
+                  width: '100%', padding: '10px 12px',
+                  background: '#0f172a', border: '1px solid #1e293b',
+                  borderRadius: 8, color: '#e2e8f0', fontSize: 16,
+                  fontFamily: 'inherit', boxSizing: 'border-box',
+                }}
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>
+                Bezug zu Buchung (optional)
+              </label>
+              <select
+                value={composeBookingId}
+                onChange={(e) => setComposeBookingId(e.target.value)}
+                style={{
+                  width: '100%', padding: '10px 12px',
+                  background: '#0f172a', border: '1px solid #1e293b',
+                  borderRadius: 8, color: '#e2e8f0', fontSize: 16,
+                  fontFamily: 'inherit', boxSizing: 'border-box',
+                }}
+              >
+                <option value="">— Kein Bezug —</option>
+                {bookings.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.id} · {b.product_name} · {fmtDate(b.rental_from)}–{fmtDate(b.rental_to)}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>
+                Nachricht
+              </label>
+              <textarea
+                value={composeBody}
+                onChange={(e) => setComposeBody(e.target.value)}
+                rows={6}
+                maxLength={5000}
+                placeholder="Hallo …"
+                style={{
+                  width: '100%', padding: '10px 12px',
+                  background: '#0f172a', border: '1px solid #1e293b',
+                  borderRadius: 8, color: '#e2e8f0', fontSize: 16,
+                  fontFamily: 'inherit', resize: 'vertical',
+                  boxSizing: 'border-box',
+                }}
+              />
+              <div style={{ fontSize: 11, color: '#64748b', marginTop: 4, textAlign: 'right' }}>
+                {composeBody.length} / 5000
+              </div>
+            </div>
+
+            {composeError && (
+              <div style={{
+                padding: '10px 12px', background: '#7f1d1d33', border: '1px solid #7f1d1d',
+                borderRadius: 8, color: '#fca5a5', fontSize: 13,
+              }}>
+                {composeError}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
+              <button
+                type="button"
+                disabled={composeSending}
+                onClick={() => setComposeOpen(false)}
+                style={{
+                  padding: '10px 16px', background: 'transparent',
+                  border: '1px solid #334155', color: '#94a3b8',
+                  borderRadius: 8, fontSize: 14, fontWeight: 600,
+                  cursor: composeSending ? 'wait' : 'pointer',
+                }}
+              >
+                Abbrechen
+              </button>
+              <button
+                type="button"
+                disabled={composeSending}
+                onClick={handleSendNewMessage}
+                style={{
+                  padding: '10px 20px', background: '#06b6d4', color: '#0a0a0a',
+                  border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 700,
+                  cursor: composeSending ? 'wait' : 'pointer',
+                  opacity: composeSending ? 0.7 : 1,
+                }}
+              >
+                {composeSending ? 'Sende…' : 'Nachricht senden'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ───── Toast ───── */}
+      {toast && (
+        <div style={{
+          position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
+          padding: '12px 20px', borderRadius: 10,
+          background: toast.kind === 'success' ? '#065f46' : '#7f1d1d',
+          border: `1px solid ${toast.kind === 'success' ? '#10b981' : '#dc2626'}`,
+          color: toast.kind === 'success' ? '#a7f3d0' : '#fecaca',
+          fontSize: 14, fontWeight: 600,
+          boxShadow: '0 10px 30px rgba(0,0,0,0.4)',
+          zIndex: 1100, maxWidth: '90vw',
+        }}>
+          {toast.text}
         </div>
       )}
     </div>

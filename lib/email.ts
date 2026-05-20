@@ -1295,6 +1295,11 @@ export interface MessageNotificationData {
   customerEmail: string;
   subject: string;
   messagePreview: string;
+  /**
+   * true = Admin initiiert die Konversation (Subject "Neue Nachricht von cam2rent: …").
+   * false/undefined = Antwort auf eine vom Kunden gestartete Nachricht (Default).
+   */
+  isInitial?: boolean;
 }
 
 export async function sendNewMessageNotificationToAdmin(data: MessageNotificationData) {
@@ -1349,7 +1354,14 @@ export async function sendNewMessageNotificationToAdmin(data: MessageNotificatio
 
 export async function sendNewMessageNotificationToCustomer(data: MessageNotificationData) {
   const safeSubject = (data.subject ?? '').replace(/[\r\n\u2028\u2029]/g, ' ').slice(0, 200);
-  const subject = `Antwort auf deine Nachricht: ${safeSubject}`;
+  const isInitial = !!data.isInitial;
+  const subject = isInitial
+    ? `Neue Nachricht von cam2rent: ${safeSubject}`
+    : `Antwort auf deine Nachricht: ${safeSubject}`;
+  const headerLabel = isInitial ? 'Neue Nachricht von cam2rent' : 'Neue Antwort auf deine Nachricht';
+  const introLine = isInitial
+    ? 'das cam2rent Team hat dir eine Nachricht geschickt:'
+    : 'das cam2rent Team hat auf deine Nachricht geantwortet:';
 
   const html = `<!DOCTYPE html>
 <html lang="de">
@@ -1368,12 +1380,12 @@ export async function sendNewMessageNotificationToCustomer(data: MessageNotifica
           </tr></table>
         </td></tr>
         <tr><td style="background:#eff6ff;border-left:4px solid #3b82f6;padding:20px 32px;">
-          <p style="margin:0;font-size:17px;font-weight:700;color:#1d4ed8;">Neue Antwort auf deine Nachricht</p>
+          <p style="margin:0;font-size:17px;font-weight:700;color:#1d4ed8;">${h(headerLabel)}</p>
         </td></tr>
         <tr><td style="background:#ffffff;padding:32px;">
           <p style="margin:0 0 16px;font-size:15px;color:#374151;">
             Hallo ${h(data.customerName)},<br><br>
-            das cam2rent Team hat auf deine Nachricht geantwortet:
+            ${h(introLine)}
           </p>
           <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:24px;">
             <tr><td style="padding:16px 20px;">

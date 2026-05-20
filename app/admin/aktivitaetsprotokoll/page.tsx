@@ -73,6 +73,11 @@ const ACTION_LABELS: Record<string, string> = {
   'newsletter.update_subscriber': 'Newsletter-Abonnent geändert',
   'newsletter.delete_subscriber': 'Newsletter-Abonnent gelöscht',
   'customer_push.send': 'Push an Kunden gesendet',
+  // Nachrichten / Konversationen
+  'nachricht.start': 'Nachricht an Kunden initiiert',
+  'nachricht.reply': 'Auf Kundennachricht geantwortet',
+  'nachricht.close': 'Konversation geschlossen',
+  'nachricht.reopen': 'Konversation wieder geöffnet',
   // Einstellungen
   'settings.update': 'Einstellungen geändert',
   'env_mode.change': 'Test-/Live-Modus gewechselt',
@@ -132,6 +137,7 @@ const ENTITY_LABELS: Record<string, string> = {
   reel: 'Reel',
   customer_ugc: 'Kundenmaterial',
   email_template: 'E-Mail-Vorlage',
+  nachricht: 'Konversation',
 };
 
 function humanizeAction(action: string): string {
