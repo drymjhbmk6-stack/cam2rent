@@ -133,3 +133,30 @@ export function getBlockedShippingDates(year: number, month: number): Set<string
 
   return blocked;
 }
+
+/**
+ * Gibt eine Map aller gesetzlichen Feiertage (Berlin) eines Jahres zurück:
+ * "YYYY-MM-DD" → Feiertagsname.
+ */
+export function getGermanHolidayMap(year: number): Map<string, string> {
+  const fmt = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+  const easter = easterSunday(year);
+
+  const entries: [Date, string][] = [
+    [new Date(year, 0, 1), 'Neujahr'],
+    [new Date(year, 2, 8), 'Internationaler Frauentag'],
+    [addDays(easter, -2), 'Karfreitag'],
+    [addDays(easter, 1), 'Ostermontag'],
+    [new Date(year, 4, 1), 'Tag der Arbeit'],
+    [addDays(easter, 39), 'Christi Himmelfahrt'],
+    [addDays(easter, 50), 'Pfingstmontag'],
+    [new Date(year, 9, 3), 'Tag der Deutschen Einheit'],
+    [new Date(year, 9, 31), 'Reformationstag'],
+    [new Date(year, 11, 25), '1. Weihnachtstag'],
+    [new Date(year, 11, 26), '2. Weihnachtstag'],
+  ];
+
+  return new Map(entries.map(([d, name]) => [fmt(d), name]));
+}

@@ -199,6 +199,7 @@ const API_PATH_PERMISSIONS: PermRule[] = [
   { prefix: '/api/admin/booking', perm: 'tagesgeschaeft' },
   { prefix: '/api/admin/alle-buchungen', perm: 'tagesgeschaeft' },
   { prefix: '/api/admin/auftragskalender', perm: 'tagesgeschaeft' },
+  { prefix: '/api/admin/calendar-notes', perm: 'tagesgeschaeft' },
   { prefix: '/api/admin/manual-booking', perm: 'tagesgeschaeft' },
   { prefix: '/api/admin/update-booking-status', perm: 'tagesgeschaeft' },
   { prefix: '/api/admin/approve-booking', perm: 'tagesgeschaeft' },
