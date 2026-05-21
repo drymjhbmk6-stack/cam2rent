@@ -1549,6 +1549,52 @@ Haftungsschutz** in einem Vorgang; Preisdifferenz wird abgewickelt.
   `notes`, Zahlungslink/Refund werden trotzdem ausgeführt, Webhook-Status-
   Update wird still übersprungen).
 
+### Verkauf von Zubehör — Speicherkarten etc. (Stand 2026-05-21)
+Admin-seitiges Verkaufs-Tool: ein Zubehör (typisch eine gebrauchte
+Speicherkarte, die nicht zurück in den Verleih soll) an einen Kunden
+**verkaufen** statt vermieten. Der Kunde bekommt Rechnung + Stripe-Zahlungslink
+per E-Mail. Kein Kunden-Self-Service.
+
+- **Modell:** Ein Verkauf ist eine `bookings`-Row mit `booking_type='kauf'` und
+  den verkauften Artikeln in `sale_items` JSONB (`[{name,qty,unit_price}]`).
+  Dadurch fließt er automatisch in Buchhaltung (EÜR/DATEV), `invoices`-Anlage
+  und den `awaiting_payment`+Webhook-Flow ein. Migration
+  `supabase/supabase-bookings-verkauf.sql` (idempotent): `booking_type TEXT
+  NOT NULL DEFAULT 'miete'` + CHECK(`miete`|`kauf`) + `sale_items JSONB`.
+- **Keine Miet-Kollision:** Verkaufszeilen tragen `product_id=''`,
+  `accessory_items=null`, `unit_id=null`, `delivery_mode=null` → sie tauchen
+  NICHT in Kamera-/Zubehör-Verfügbarkeit, Gantt oder Versand-Liste auf.
+  `alle-buchungen` (Miet-Buchungsliste) + der `awaiting-payment-cancel`-Cron
+  filtern `booking_type='kauf'` zusätzlich explizit raus (defensiver Retry
+  ohne die Spalte, falls Migration aussteht — der Cron würde Verkäufe sonst
+  sofort stornieren, weil `rental_from`=Verkaufsdatum).
+- **`lib/verkauf.ts`** — `createSale()` (Stripe Product+Price+Payment-Link →
+  `bookings`-Insert `status='awaiting_payment'`, `payment_intent_id='PENDING-…'`
+  → `storeInvoiceForBooking` → `dispatchSaleInvoice`) + `dispatchSaleInvoice()`
+  (Rechnung-PDF via `buildInvoiceData`+`InvoicePDF` → E-Mail mit Zahlungslink,
+  emailType `kauf_rechnung`). Payment-Link-Muster aus `lib/booking-approve.ts`.
+- **Rechnung:** `buildInvoiceData` hat einen frühen `booking_type==='kauf'`-
+  Zweig (Positionen aus `sale_items`, kein Mietzeitraum/Haftung/Versand/
+  Kaution). `lib/invoice-pdf.tsx` bekam ein `isKauf`-Flag: Meta zeigt
+  „Kaufdatum" statt „Leistungszeitraum", Positions-Subline „Verkaufsartikel",
+  keine Haftungs-/Versand-Summenzeilen, Unbezahlt-Block verweist auf den
+  Zahlungslink (keine Bank-QR).
+- **Webhook:** `checkout.session.completed` mit `metadata.booking_type='kauf'`
+  → Buchung `awaiting_payment`→`confirmed`, `payment_intent_id` auf echte
+  `pi_…`, `invoices`-Row auf bezahlt, `new_booking`-Notification.
+- **APIs:** `GET/POST /api/admin/verkauf` (Liste / anlegen; `?customer_id=`
+  liefert die Buchungen eines Kunden mit aufgelösten Artikel-Namen für die
+  Artikelauswahl). `POST /api/admin/verkauf/[id]` mit `action`
+  `resend|cancel|mark_paid`. Permission `tagesgeschaeft`.
+- **UI:** `/admin/verkauf` (Liste, Sidebar-Gruppe „Tagesgeschäft") +
+  `/admin/verkauf/neu` (Kunde aus DB wählen → optional Artikel aus einer
+  früheren Buchung übernehmen → Preise manuell → „Rechnung schicken").
+- **Bewusst nicht automatisiert:** Das verkaufte Exemplar muss der Admin
+  separat unter `/admin/inventar` bzw. `/admin/zubehoer` als verkauft/
+  ausgemustert markieren (Exemplar-Status `retired` bzw. Bulk-Bestand senken).
+- **Go-Live TODO:** Migration `supabase/supabase-bookings-verkauf.sql`
+  ausführen. Ohne Migration liefert `POST /api/admin/verkauf` 503.
+
 ### Multi-Kamera-Buchungen + In-App-PDF-Viewer (Stand 2026-05-18)
 - **Mehrere Kameras pro Buchung** sind als kommagetrennter `bookings.product_name`
   gespeichert (z.B. „OSMO Action 5 Pro , OSMO Action 5 Pro"), `product_id` bleibt
@@ -2734,6 +2780,7 @@ Die Beleg-Detailseite (`/admin/buchhaltung/belege/[id]`) hatte alle Positions-Fe
   Cron-Erweiterung (mehrere IMAP-Logins) — aktuell pollt der Cron ein Postfach.
 - **Tracking-Carrier + Retoure-Tracking Migration auszuführen:** `supabase/supabase-bookings-tracking-carrier-return.sql` (idempotent). Legt vier neue Spalten an: `tracking_carrier`, `return_tracking_number`, `return_tracking_url`, `return_tracking_carrier` (CHECK auf DHL/DPD, NULL erlaubt). Ohne Migration läuft der bestehende Hin-Versand-Workflow (ship-booking) per defensivem Retry weiter (tracking_carrier wird gedroppt). Die neue Trackingnummer-Bearbeitung in `/admin/buchungen/[id]` antwortet bei fehlender Spalte mit 503; Retoure-Tracking-Edit wird komplett geblockt. Empfohlen ASAP ausführen.
 - **Bestellbearbeitungs-Migration auszuführen:** `supabase/supabase-bookings-edit-adjustment.sql` (idempotent). Legt `bookings.adjustment_payment_link_id/amount/status/note` an. Ohne Migration läuft die komplette Bestellbearbeitung weiter (Zahlungslink/Refund werden ausgeführt, Doku landet in `notes`), nur die strukturierten `adjustment_*`-Felder + der Webhook-Status-Sync („Nachzahlung bezahlt") greifen erst nach der Migration. Empfohlen ASAP ausführen.
+- **Verkauf-Migration auszuführen:** `supabase/supabase-bookings-verkauf.sql` (idempotent). Legt `bookings.booking_type` (DEFAULT `miete`) + `bookings.sale_items` JSONB an. Ohne Migration liefert `POST /api/admin/verkauf` 503; die Miet-Ansichten laufen per defensivem Fallback unverändert weiter. Empfohlen ASAP ausführen, damit das Verkaufs-Tool nutzbar ist.
 - **Multi-Kamera-Migrationen auszuführen (3, idempotent):**
   `supabase/supabase-bookings-cameras.sql` (Spalte `bookings.cameras JSONB`),
   `supabase/supabase-camera-unit-assignment.sql` (RPC `assign_free_camera_units`

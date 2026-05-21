@@ -346,6 +346,44 @@ export async function POST(req: NextRequest) {
         console.log(`[Webhook] Nachzahlung fuer ${meta.booking_id} als bezahlt markiert.`);
       }
     }
+
+    // Verkauf (booking_type='kauf'): Kunde hat den Zahlungslink bezahlt.
+    // Buchung auf 'confirmed' flippen + Rechnung als bezahlt markieren.
+    if (meta.booking_type === 'kauf' && meta.booking_id) {
+      const supabase = createServiceClient();
+      const { data: updated } = await supabase
+        .from('bookings')
+        .update({
+          status: 'confirmed',
+          payment_intent_id: (session.payment_intent as string) ?? session.id,
+        })
+        .eq('id', meta.booking_id)
+        .eq('status', 'awaiting_payment')
+        .select('id, customer_name, price_total')
+        .maybeSingle();
+      if (updated) {
+        await supabase
+          .from('invoices')
+          .update({
+            status: 'paid',
+            payment_status: 'paid',
+            paid_at: new Date().toISOString(),
+            payment_method: 'Kreditkarte via Stripe',
+          })
+          .eq('booking_id', meta.booking_id);
+        try {
+          await createAdminNotification(supabase, {
+            type: 'new_booking',
+            title: `Verkauf bezahlt (${meta.booking_id})`,
+            message: `${updated.customer_name ?? 'Kunde'} · ${Number(updated.price_total ?? 0).toFixed(2)} €`,
+            link: '/admin/verkauf',
+          });
+        } catch (e) {
+          console.error('[Webhook] Verkauf-Notification fehlgeschlagen:', e);
+        }
+        console.log(`[Webhook] Verkauf ${meta.booking_id} nach Zahlung bestätigt.`);
+      }
+    }
   }
 
   return NextResponse.json({ received: true });

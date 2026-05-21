@@ -12,6 +12,7 @@ import QRCode from 'qrcode';
 import { BUSINESS } from '@/lib/business-config';
 import { normalizeAccessoryItems } from '@/lib/booking-accessories';
 import { computeInvoiceLines } from '@/lib/invoice-lines';
+import type { InvoiceLine } from '@/lib/invoice-lines';
 import type { InvoiceData } from '@/lib/invoice-pdf';
 
 export async function buildInvoiceData(
@@ -49,15 +50,73 @@ export async function buildInvoiceData(
   }
 
   const bookingId = booking.id as string;
-  const invoiceNumber = bookingId.replace(/^(C2R|BK)-/, 'RE-');
+  const invoiceNumber = bookingId.replace(/^(TEST-C2R|C2R|BK)-/, 'RE-');
+
+  const taxMode = (taxMap['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung') || 'kleinunternehmer';
+  const taxRate = parseFloat(taxMap['tax_rate'] || '19');
+  const ustId = taxMap['ust_id'] || '';
+  const piId = booking.payment_intent_id as string | undefined;
+  const paymentMethod = piId?.startsWith('MANUAL')
+    ? 'Ueberweisung'
+    : piId?.startsWith('PENDING')
+      ? 'Ausstehend'
+      : 'Stripe';
+
+  // ── Verkauf (booking_type='kauf') ───────────────────────────────────────
+  // Eine Verkaufszeile hat keinen Mietzeitraum, keinen Haftungsschutz und
+  // keinen Versand. Die Positionen liegen in sale_items, nicht in
+  // accessory_items — daher eigener, frueh zurueckkehrender Pfad.
+  if (booking.booking_type === 'kauf') {
+    const rawSaleItems = Array.isArray(booking.sale_items)
+      ? (booking.sale_items as Array<{ name?: string; qty?: number; unit_price?: number }>)
+      : [];
+    const saleLines: InvoiceLine[] = rawSaleItems.map((it) => {
+      const qty = Math.max(1, Math.floor(Number(it.qty) || 1));
+      const unitPrice = Math.max(0, Number(it.unit_price) || 0);
+      return {
+        name: String(it.name ?? 'Artikel'),
+        qty,
+        unitPrice,
+        lineTotal: Math.round(unitPrice * qty * 100) / 100,
+      };
+    });
+    return {
+      bookingId,
+      invoiceNumber,
+      invoiceDate,
+      customerName: (booking.customer_name as string) ?? '',
+      customerEmail: (booking.customer_email as string) ?? '',
+      customerAddress,
+      productName: (booking.product_name as string) ?? '',
+      rentalFrom: '',
+      rentalTo: '',
+      days: 1,
+      deliveryMode: 'abholung',
+      haftung: 'none',
+      accessories: [],
+      cameraLines: [],
+      accessoryLines: saleLines,
+      isKauf: true,
+      priceRental: 0,
+      priceAccessories: (booking.price_total as number) ?? 0,
+      priceHaftung: 0,
+      shippingPrice: 0,
+      priceTotal: (booking.price_total as number) ?? 0,
+      deposit: 0,
+      taxMode,
+      taxRate,
+      ustId,
+      paymentMethod,
+      stripePaymentId: piId?.startsWith('pi_') ? piId : undefined,
+      paymentStatus: paymentMethod === 'Ausstehend' || piId?.includes('UNPAID') ? 'unpaid' : undefined,
+    };
+  }
 
   const accItems = normalizeAccessoryItems(booking.accessory_items, booking.accessories);
   const { cameraLines, accessoryLines } = await computeInvoiceLines(
     supabase,
     booking as Parameters<typeof computeInvoiceLines>[1],
   );
-
-  const piId = booking.payment_intent_id as string | undefined;
 
   const data: InvoiceData = {
     bookingId,

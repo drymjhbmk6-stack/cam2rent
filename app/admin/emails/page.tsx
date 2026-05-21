@@ -75,6 +75,7 @@ const TYPE_LABELS: Record<string, { label: string; color: string; bg: string }> 
   payment_link: { label: 'Zahlungs-Link', color: '#0ea5e9', bg: '#0ea5e914' },
   contract_signed: { label: 'Vertrag unterschrieben', color: '#10b981', bg: '#10b98114' },
   manual_documents: { label: 'Dokumente (manuell)', color: '#8b5cf6', bg: '#8b5cf614' },
+  kauf_rechnung: { label: 'Verkaufsrechnung', color: '#06b6d4', bg: '#06b6d414' },
   weekly_report: { label: 'Wochenbericht', color: '#06b6d4', bg: '#06b6d414' },
   verification_reminder: { label: 'Verifizierungs-Erinnerung', color: '#f59e0b', bg: '#f59e0b14' },
   verification_reminder_manual: { label: 'Verifizierungs-Erinnerung (manuell)', color: '#f59e0b', bg: '#f59e0b14' },

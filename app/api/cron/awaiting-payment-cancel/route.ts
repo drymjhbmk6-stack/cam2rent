@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { createServiceClient } from '@/lib/supabase';
 import { verifyCronAuth } from '@/lib/cron-auth';
 import { isTestMode } from '@/lib/env-mode';
@@ -99,15 +100,41 @@ async function handle(req: NextRequest) {
     }
   } catch { /* default */ }
 
-  // Offene awaiting_payment-Buchungen laden
-  const { data: pending, error } = await supabase
+  // Offene awaiting_payment-Buchungen laden. Untypisierter Handle, weil die
+  // neue Spalte booking_type (noch) nicht im generierten Schema-Typ ist.
+  const sb = supabase as unknown as SupabaseClient;
+  interface PendingRow {
+    id: string;
+    rental_from: string;
+    delivery_mode: string | null;
+    customer_email: string | null;
+    customer_name: string | null;
+    product_name: string | null;
+    price_total: number | null;
+    stripe_payment_link_id: string | null;
+    created_at: string;
+    booking_type?: string;
+  }
+  type QResult = { data: PendingRow[] | null; error: { message: string } | null };
+  const selectCols = 'id, rental_from, delivery_mode, customer_email, customer_name, product_name, price_total, stripe_payment_link_id, created_at';
+  let pendingRes = (await sb
     .from('bookings')
-    .select('id, rental_from, delivery_mode, customer_email, customer_name, product_name, price_total, stripe_payment_link_id, created_at')
+    .select(`${selectCols}, booking_type`)
     .eq('status', 'awaiting_payment')
-    .order('rental_from', { ascending: true });
+    .order('rental_from', { ascending: true })) as unknown as QResult;
+  if (pendingRes.error && /booking_type/i.test(pendingRes.error.message || '')) {
+    pendingRes = (await sb
+      .from('bookings')
+      .select(selectCols)
+      .eq('status', 'awaiting_payment')
+      .order('rental_from', { ascending: true })) as unknown as QResult;
+  }
+  if (pendingRes.error) return NextResponse.json({ error: pendingRes.error.message }, { status: 500 });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  if (!pending || pending.length === 0) return NextResponse.json({ checked: 0, cancelled: 0, rules });
+  // Verkäufe (booking_type='kauf') werden NIE auto-storniert — sie haben
+  // kein echtes rental_from, die Deadline läge sofort in der Vergangenheit.
+  const pending = (pendingRes.data ?? []).filter((b) => b.booking_type !== 'kauf');
+  if (pending.length === 0) return NextResponse.json({ checked: 0, cancelled: 0, rules });
 
   const nowMs = Date.now();
   const stripe = await getStripe();

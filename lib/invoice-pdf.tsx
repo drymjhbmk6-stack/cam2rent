@@ -43,6 +43,9 @@ export interface InvoiceData {
   /** Zubehoer-Positionen mit Einzelpreis (Katalogpreis). Wenn gesetzt, wird
    *  daraus die Positionstabelle gebaut. */
   accessoryLines?: InvoiceLine[];
+  /** Verkauf statt Miete: kein Mietzeitraum, kein Haftungsschutz, kein
+   *  Versand. Positionen kommen aus accessoryLines (= verkaufte Artikel). */
+  isKauf?: boolean;
   priceRental: number;
   priceAccessories: number;
   priceHaftung: number;
@@ -339,7 +342,7 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
       items.push({
         pos: pos++,
         description: a.name,
-        subline: 'Zubehör',
+        subline: data.isKauf ? 'Verkaufsartikel' : 'Zubehör',
         qty: a.qty,
         unitPrice: a.unitPrice,
         lineTotal: a.lineTotal,
@@ -504,9 +507,18 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
             <Text style={s.metaValue}>{data.bookingId}</Text>
           </View>
           <View style={s.metaCol}>
-            <Text style={s.metaLabel}>Leistungszeitraum</Text>
-            <Text style={s.metaValue}>{isoToDE(data.rentalFrom)} – {isoToDE(data.rentalTo)}</Text>
-            <Text style={s.metaSub}>({data.days} {data.days === 1 ? 'Tag' : 'Tage'})</Text>
+            {data.isKauf ? (
+              <>
+                <Text style={s.metaLabel}>Kaufdatum</Text>
+                <Text style={s.metaValue}>{data.invoiceDate}</Text>
+              </>
+            ) : (
+              <>
+                <Text style={s.metaLabel}>Leistungszeitraum</Text>
+                <Text style={s.metaValue}>{isoToDE(data.rentalFrom)} – {isoToDE(data.rentalTo)}</Text>
+                <Text style={s.metaSub}>({data.days} {data.days === 1 ? 'Tag' : 'Tage'})</Text>
+              </>
+            )}
           </View>
         </View>
 
@@ -569,29 +581,32 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
               <Text style={s.sumValue}>+{fmtEuro(aufpreis)}</Text>
             </View>
           )}
-          {hLabel && haftung > 0 && (
+          {/* Haftungsschutz + Versand entfallen bei einem Verkauf. */}
+          {!data.isKauf && hLabel && haftung > 0 && (
             <View style={s.sumRow}>
               <Text style={s.sumLabel}>{hLabel}:</Text>
               <Text style={s.sumValue}>{fmtEuro(haftung)}</Text>
             </View>
           )}
-          {data.deliveryMode === 'abholung' ? (
-            <View style={s.sumRow}>
-              <Text style={s.sumLabel}>Selbstabholung:</Text>
-              <Text style={s.sumValue}>0,00 €</Text>
-            </View>
-          ) : versand > 0 ? (
-            <View style={s.sumRow}>
-              <Text style={s.sumLabel}>
-                {data.shippingMethod === 'express' ? 'Express-Versand' : 'Standard-Versand'}:
-              </Text>
-              <Text style={s.sumValue}>{fmtEuro(versand)}</Text>
-            </View>
-          ) : (
-            <View style={s.sumRow}>
-              <Text style={s.sumLabel}>Versand (kostenlos):</Text>
-              <Text style={s.sumValue}>0,00 €</Text>
-            </View>
+          {!data.isKauf && (
+            data.deliveryMode === 'abholung' ? (
+              <View style={s.sumRow}>
+                <Text style={s.sumLabel}>Selbstabholung:</Text>
+                <Text style={s.sumValue}>0,00 €</Text>
+              </View>
+            ) : versand > 0 ? (
+              <View style={s.sumRow}>
+                <Text style={s.sumLabel}>
+                  {data.shippingMethod === 'express' ? 'Express-Versand' : 'Standard-Versand'}:
+                </Text>
+                <Text style={s.sumValue}>{fmtEuro(versand)}</Text>
+              </View>
+            ) : (
+              <View style={s.sumRow}>
+                <Text style={s.sumLabel}>Versand (kostenlos):</Text>
+                <Text style={s.sumValue}>0,00 €</Text>
+              </View>
+            )
           )}
         </View>
 
@@ -632,6 +647,17 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
 
         {/* ── Zahlungsstatus ── */}
         {isUnpaid ? (
+          data.isKauf ? (
+          <View wrap={false}>
+            <Text style={{ fontSize: 11, fontFamily: 'Helvetica-Bold', color: C.black, marginBottom: 4 }}>
+              Zahlung ausstehend
+            </Text>
+            <Text style={{ fontSize: 10, color: C.dark }}>
+              Bitte begleiche den Gesamtbetrag bequem über den Zahlungslink, den
+              wir dir per E-Mail zugeschickt haben.
+            </Text>
+          </View>
+          ) : (
           <View wrap={false}>
             <Text style={{ fontSize: 11, fontFamily: 'Helvetica-Bold', color: C.black, marginBottom: 4 }}>
               Zahlung ausstehend
@@ -693,6 +719,7 @@ export function InvoicePDF({ data }: { data: InvoiceData }) {
               )}
             </View>
           </View>
+          )
         ) : (
           <Text style={{ fontSize: 11, fontFamily: 'Helvetica-Bold', color: C.black }}>
             Bezahlt

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { createServiceClient } from '@/lib/supabase';
 
 /**
@@ -15,28 +16,44 @@ export async function GET(req: NextRequest) {
   const limit = parseInt(searchParams.get('limit') ?? '100', 10);
 
   const supabase = createServiceClient();
+  // Untypisierter Handle: die neue Spalte booking_type ist (noch) nicht im
+  // generierten Schema-Typ — ein dynamischer Select damit waere sonst als
+  // GenericStringError typisiert.
+  const sb = supabase as unknown as SupabaseClient;
 
-  let query = supabase
-    .from('bookings')
-    .select(
-      'id, product_name, rental_from, rental_to, days, price_total, deposit, status, delivery_mode, shipping_method, customer_email, customer_name, tracking_number, created_at, user_id, deposit_intent_id, deposit_status, suspicious, suspicious_reasons, original_rental_to, extended_at, contract_signed, contract_signed_at, is_test'
-    )
-    .order('created_at', { ascending: false })
-    .limit(limit);
+  const COLS = 'id, product_name, rental_from, rental_to, days, price_total, deposit, status, delivery_mode, shipping_method, customer_email, customer_name, tracking_number, created_at, user_id, deposit_intent_id, deposit_status, suspicious, suspicious_reasons, original_rental_to, extended_at, contract_signed, contract_signed_at, is_test';
 
-  if (status !== 'all') {
-    query = query.eq('status', status);
+  interface BookingRow {
+    id: string;
+    user_id: string | null;
+    booking_type?: string;
+    [k: string]: unknown;
+  }
+  type QResult = { data: BookingRow[] | null; error: { message: string } | null };
+
+  const runQuery = (cols: string) => {
+    let q = sb
+      .from('bookings')
+      .select(cols)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (status !== 'all') q = q.eq('status', status);
+    return q;
+  };
+
+  let res = (await runQuery(`${COLS}, booking_type`)) as unknown as QResult;
+  if (res.error && /booking_type/i.test(res.error.message || '')) {
+    res = (await runQuery(COLS)) as unknown as QResult;
   }
 
-  const { data, error } = await query;
-
-  if (error) {
-    console.error('Supabase error:', error);
+  if (res.error) {
+    console.error('Supabase error:', res.error);
     return NextResponse.json({ error: 'Buchungen konnten nicht geladen werden.' }, { status: 500 });
   }
 
-  // Blacklist-Status für Buchungen mit user_id anhängen
-  const bookings = data ?? [];
+  // Verkäufe (booking_type='kauf') gehören nicht in die Miet-Buchungsliste —
+  // sie werden unter /admin/verkauf verwaltet.
+  const bookings = (res.data ?? []).filter((b) => b.booking_type !== 'kauf');
   const userIds = [...new Set(bookings.map((b) => b.user_id).filter(Boolean))];
 
   const blacklistMap = new Map<string, boolean>();
