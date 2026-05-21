@@ -2753,6 +2753,28 @@ Zusätzlich zum bestehenden file-hash-Check (byte-identische Datei) erkennt das 
 ### Belege: Positionen inline bearbeiten (Stand 2026-05-21)
 Die Beleg-Detailseite (`/admin/buchhaltung/belege/[id]`) hatte alle Positions-Felder hart auf `disabled` — eine fehlerhafte OCR-Analyse (Bezeichnung, Menge, Netto, MwSt %) liess sich gar nicht über die UI korrigieren, obwohl `PATCH /api/admin/beleg-positionen/[id]` das längst unterstützt. Jetzt: pro Position ein **„✏ Bearbeiten"-Button** in der Sub-Zeile (sichtbar nur wenn Beleg nicht festgeschrieben und Position nicht `locked`). Klick → Felder Bezeichnung/Menge/Einzel-Netto/MwSt % werden editierbar (cyan Rahmen), **Einzel-Brutto bleibt read-only und wird live aus Netto × MwSt berechnet** (das Datenmodell speichert Netto + MwSt-Satz, Brutto ist abgeleitet — eine Amazon-Rechnung mit eigener USt-Rundung kann daher 1 Cent abweichen, für Kleinunternehmer/EÜR irrelevant). „Speichern" schickt die Korrektur an die bestehende API (`recomputeBelegSummen` aktualisiert die Beleg-Summen), „Abbrechen" verwirft. Validierung clientseitig (Bezeichnung nicht leer, Netto ≥ 0, Menge ≥ 1, MwSt 0–100). Eine Position gleichzeitig editierbar. Audit: `beleg_position.update` (bereits vorhanden).
 
+### Belege: Bundle-Verknüpfung — mehrere Inventar-Stücke + WBW auf einmal (Stand 2026-05-21)
+Bundle-Einkäufe (z.B. 3 Akkus + Ladestation für 49,99 € als EINE Beleg-Position)
+liessen sich bisher nur Stück für Stück verknüpfen, und der anteilige
+Beleg-Kaufpreis taugte nicht als Wiederbeschaffungswert. Neu: pro Beleg-Position
+(klassifiziert als `afa|gwg|verbrauch`) ein Button **„🔗 Inventar verknüpfen"**
+in der Sub-Zeile → Modal `components/admin/InventarVerknuepfModal.tsx`.
+- Modal lädt freie Inventar-Stücke (`GET /api/admin/inventar?beleg_status=beleg_fehlt`),
+  Suchfeld, Checkbox-Liste, pro Zeile ein WBW-Feld + ein „Wert für alle
+  Gewählten"-Feld. Mengen-Cap = `position.menge − bereits verknüpft`.
+- **`POST /api/admin/beleg-positionen/[id]/verknuepfen`** (neu): Body
+  `{ items: [{inventar_unit_id, wbw?}] }`. Verknüpft alle Stücke in einem Rutsch
+  (`inventar_verknuepfung`, `stueck_anteil=1`), setzt `kaufpreis_netto`/
+  `kaufdatum` aus der Position (Brutto bei Kleinunternehmer) und — falls `wbw`
+  angegeben — `wiederbeschaffungswert=wbw, wbw_manuell_gesetzt=true` (manueller
+  Override, der die Kaufpreis-basierte WBW-Formel umgeht). Ohne `wbw`: gleiche
+  Init wie die Einzel-Verknüpfung. Mengen-Limit wird serverseitig geprüft (409).
+  Funktioniert auch bei festgeschriebenen Belegen (Verknüpfen ist kein
+  inhaltlicher Beleg-Edit). Audit: `inventar.verknuepfen_bulk`.
+- Hinweis bleibt: eine „Bundle Menge 1"-Position kann nur 1 Stück aufnehmen —
+  der Beleg muss die echte Stückzahl als `menge` führen (bzw. in mehrere
+  Positionen aufgeteilt sein).
+
 ### Noch offen
 - **Inbound-E-Mail Go-Live (IMAP-Polling):**
   1. Migration `supabase/supabase-inbound-email.sql` ausführen. Ohne Migration

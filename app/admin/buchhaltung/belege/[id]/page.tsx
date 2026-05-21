@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import InventarVerknuepfModal from '@/components/admin/InventarVerknuepfModal';
 import { shrinkImageFileIfNeeded } from '@/lib/shrink-image-client';
 import { formatCurrency } from '@/lib/format-utils';
 
@@ -115,6 +116,9 @@ export default function BelegDetailPage() {
     { bezeichnung: '', menge: '', einzelpreis_netto: '', mwst_satz: '' },
   );
   const [savingPos, setSavingPos] = useState(false);
+  const [verknuepfFor, setVerknuepfFor] = useState<
+    { id: string; label: string; menge: number; linked: number } | null
+  >(null);
 
   async function reload() {
     setLoading(true);
@@ -766,33 +770,49 @@ export default function BelegDetailPage() {
                     <span>Gesamt brutto: <span className="text-slate-300 font-mono">{fmtEuro(Number(p.gesamt_brutto))}</span></span>
                     {p.kategorie && <span>Kategorie: <span className="text-slate-300">{p.kategorie}</span></span>}
                   </div>
-                  {!isLocked && !p.locked && (
-                    isEditing ? (
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => saveEditPos(p.id)}
-                          disabled={savingPos}
-                          className="px-3 py-1 bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-700 text-slate-900 rounded text-xs font-semibold"
-                        >
-                          {savingPos ? 'Speichert…' : 'Speichern'}
-                        </button>
-                        <button
-                          onClick={cancelEditPos}
-                          disabled={savingPos}
-                          className="px-3 py-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-slate-200 rounded text-xs"
-                        >
-                          Abbrechen
-                        </button>
-                      </div>
-                    ) : (
+                  <div className="flex gap-2 items-center">
+                    {['afa', 'gwg', 'verbrauch'].includes(p.klassifizierung) && !isEditing && (
                       <button
-                        onClick={() => startEditPos(p)}
+                        onClick={() => setVerknuepfFor({
+                          id: p.id,
+                          label: p.bezeichnung,
+                          menge: Number(p.menge) || 1,
+                          linked: links.length,
+                        })}
+                        title="Mehrere Inventar-Stücke auf einmal mit dieser Position verknüpfen — optional mit Wiederbeschaffungswert pro Stück."
                         className="px-3 py-1 border border-slate-700 hover:border-cyan-600 hover:text-cyan-300 text-slate-400 rounded text-xs"
                       >
-                        ✏ Bearbeiten
+                        🔗 Inventar verknüpfen
                       </button>
-                    )
-                  )}
+                    )}
+                    {!isLocked && !p.locked && (
+                      isEditing ? (
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => saveEditPos(p.id)}
+                            disabled={savingPos}
+                            className="px-3 py-1 bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-700 text-slate-900 rounded text-xs font-semibold"
+                          >
+                            {savingPos ? 'Speichert…' : 'Speichern'}
+                          </button>
+                          <button
+                            onClick={cancelEditPos}
+                            disabled={savingPos}
+                            className="px-3 py-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-slate-200 rounded text-xs"
+                          >
+                            Abbrechen
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => startEditPos(p)}
+                          className="px-3 py-1 border border-slate-700 hover:border-cyan-600 hover:text-cyan-300 text-slate-400 rounded text-xs"
+                        >
+                          ✏ Bearbeiten
+                        </button>
+                      )
+                    )}
+                  </div>
                 </div>
 
                 {/* Details (KI, Notizen, Verknüpfungen) */}
@@ -921,6 +941,17 @@ export default function BelegDetailPage() {
           </div>
         )}
       </div>
+
+      {verknuepfFor && (
+        <InventarVerknuepfModal
+          positionId={verknuepfFor.id}
+          positionLabel={verknuepfFor.label}
+          positionMenge={verknuepfFor.menge}
+          alreadyLinked={verknuepfFor.linked}
+          onClose={() => setVerknuepfFor(null)}
+          onDone={() => reload()}
+        />
+      )}
     </div>
   );
 }
