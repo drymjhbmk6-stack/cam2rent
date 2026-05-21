@@ -327,6 +327,19 @@ export default function BelegDetailPage() {
     setBusy(false);
   }
 
+  async function handleDismissOcrError() {
+    setBusy(true);
+    setError(null);
+    const res = await fetch(`/api/admin/belege/${belegId}/dismiss-ocr-error`, { method: 'POST' });
+    if (!res.ok) {
+      setError((await res.json()).error ?? 'Konnte Hinweis nicht ausblenden');
+      setBusy(false);
+      return;
+    }
+    await reload();
+    setBusy(false);
+  }
+
   async function handleDismissDuplicate() {
     if (!confirm('Wirklich kein Duplikat? Der Beleg kann danach festgeschrieben werden.')) return;
     setBusy(true);
@@ -446,6 +459,14 @@ export default function BelegDetailPage() {
                 className="px-3 py-1.5 bg-rose-500 hover:bg-rose-400 disabled:bg-slate-700 text-slate-900 rounded text-sm font-semibold"
               >
                 {busy ? 'Läuft…' : '🔄 OCR neu starten'}
+              </button>
+              <button
+                onClick={handleDismissOcrError}
+                disabled={busy}
+                className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 text-slate-100 rounded text-sm font-semibold"
+                title="Hinweis ausblenden — nutze das, wenn du die Belegdaten manuell erfasst hast."
+              >
+                {busy ? 'Läuft…' : '✓ Hinweis ausblenden (manuell erfasst)'}
               </button>
             </div>
           </div>
