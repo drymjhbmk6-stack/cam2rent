@@ -11,6 +11,7 @@ interface Conversation {
   last_message_at: string;
   closed: boolean;
   source: 'account' | 'email';
+  inbox_address?: string | null;
   unread_count: number;
   customer: { full_name: string; email: string };
   last_message: { body: string; sender_type: string; created_at: string } | null;
@@ -50,7 +51,7 @@ export default function AdminNachrichtenPage() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [convInfo, setConvInfo] = useState<{ subject: string; closed: boolean; source?: 'account' | 'email'; customer: { full_name: string; email: string } } | null>(null);
+  const [convInfo, setConvInfo] = useState<{ subject: string; closed: boolean; source?: 'account' | 'email'; inbox_address?: string | null; customer: { full_name: string; email: string } } | null>(null);
   const [htmlOpen, setHtmlOpen] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [msgLoading, setMsgLoading] = useState(false);
@@ -263,6 +264,7 @@ export default function AdminNachrichtenPage() {
                   <p style={{ margin: '2px 0 0', fontSize: 11, color: '#64748b' }}>
                     {convInfo.customer.full_name}
                     {convInfo.customer.email ? ` · ${convInfo.customer.email}` : ''}
+                    {convInfo.inbox_address ? ` · an: ${convInfo.inbox_address}` : ''}
                   </p>
                 </div>
                 <button

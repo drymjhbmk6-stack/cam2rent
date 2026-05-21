@@ -458,3 +458,77 @@ export async function getUserBySession(
   if (!user || !user.is_active) return null;
   return sanitizeUser(user as AdminUserRow);
 }
+
+// ============================================================
+// Mitarbeiter-Postfach-Adresse (inbox_address)
+// ------------------------------------------------------------
+// Bewusst NICHT in SELECT_COLS / sanitizeUser aufgenommen: faellt die
+// Migration supabase-inbound-email-per-employee.sql aus, wuerde sonst der
+// gesamte Login-Pfad brechen. Diese Helper sind defensiv (Schema-Fehler →
+// no-op) und werden nur vom Nachrichten-/Mitarbeiter-Feature genutzt.
+// ============================================================
+
+const INBOX_SCHEMA_ERROR = /column|schema cache|PGRST|does not exist/i;
+
+/** Map admin_user_id → inbox_address fuer alle Mitarbeiter (defensiv, {} bei fehlender Migration). */
+export async function getInboxAddressMap(): Promise<Record<string, string>> {
+  try {
+    const supabase = createServiceClient();
+    const { data, error } = await supabase
+      .from('admin_users')
+      .select('id, inbox_address');
+    if (error) return {};
+    const map: Record<string, string> = {};
+    for (const r of data ?? []) {
+      const row = r as { id: string; inbox_address: string | null };
+      if (row.inbox_address) map[row.id] = row.inbox_address;
+    }
+    return map;
+  } catch {
+    return {};
+  }
+}
+
+/** Setzt/loescht die Postfach-Adresse eines Mitarbeiters. Wirft bei Duplikat. */
+export async function setInboxAddress(id: string, address: string | null): Promise<void> {
+  const normalized = address && address.trim()
+    ? address.trim().toLowerCase().slice(0, 120)
+    : null;
+  const supabase = createServiceClient();
+  const { error } = await supabase
+    .from('admin_users')
+    .update({ inbox_address: normalized })
+    .eq('id', id);
+  if (error) {
+    if (error.code === '23505') {
+      throw new Error('Diese Postfach-Adresse ist bereits einem anderen Mitarbeiter zugeordnet.');
+    }
+    if (INBOX_SCHEMA_ERROR.test(error.message ?? '')) {
+      throw new Error('Migration ausstehend: supabase-inbound-email-per-employee.sql.');
+    }
+    throw new Error(error.message);
+  }
+}
+
+/** Findet den Mitarbeiter, dessen inbox_address in der Empfaengerliste vorkommt. */
+export async function findAdminUserByInboxAddress(
+  addresses: string[],
+): Promise<{ id: string; inbox_address: string } | null> {
+  const lowered = [...new Set(addresses.map((a) => a.trim().toLowerCase()).filter(Boolean))];
+  if (lowered.length === 0) return null;
+  try {
+    const supabase = createServiceClient();
+    const { data, error } = await supabase
+      .from('admin_users')
+      .select('id, inbox_address')
+      .in('inbox_address', lowered)
+      .limit(1)
+      .maybeSingle();
+    if (error || !data) return null;
+    const row = data as { id: string; inbox_address: string | null };
+    if (!row.inbox_address) return null;
+    return { id: row.id, inbox_address: row.inbox_address };
+  } catch {
+    return null;
+  }
+}

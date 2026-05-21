@@ -10,6 +10,7 @@ import { getCurrentAdminUser } from '@/lib/admin-auth';
  */
 export async function GET() {
   const supabase = createServiceClient();
+  const me = await getCurrentAdminUser();
 
   // Select inkl. E-Mail-Kanal-Felder; faellt bei fehlender Migration auf das
   // alte Schema zurueck (dann verhalten sich alle Konversationen wie 'account').
@@ -24,11 +25,13 @@ export async function GET() {
     source?: string | null;
     customer_email?: string | null;
     customer_name?: string | null;
+    assigned_admin_user_id?: string | null;
+    inbox_address?: string | null;
   }> | null = null;
 
   const full = await supabase
     .from('conversations')
-    .select('id, customer_id, subject, booking_id, last_message_at, closed, created_at, source, customer_email, customer_name')
+    .select('id, customer_id, subject, booking_id, last_message_at, closed, created_at, source, customer_email, customer_name, assigned_admin_user_id, inbox_address')
     .order('last_message_at', { ascending: false });
 
   if (full.error) {
@@ -42,6 +45,15 @@ export async function GET() {
     conversations = fallback.data;
   } else {
     conversations = full.data;
+  }
+
+  // Sichtbarkeit: Owner sieht alle Konversationen. Mitarbeiter sehen nur die
+  // ihrem Postfach zugeordneten + unzugeordnete (allgemeine kontakt@-Mails +
+  // Konto-Nachrichten ohne Zuordnung).
+  if (me && me.role !== 'owner') {
+    conversations = (conversations ?? []).filter(
+      (c) => !c.assigned_admin_user_id || c.assigned_admin_user_id === me.id,
+    );
   }
 
   // Enrich with customer info and unread counts
@@ -117,6 +129,7 @@ export async function GET() {
     return {
       ...conv,
       source: conv.source ?? 'account',
+      inbox_address: conv.inbox_address ?? null,
       customer,
       unread_count: unreadMap[conv.id] || 0,
       last_message: lastMsg ? {

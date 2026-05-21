@@ -295,6 +295,21 @@ Cron alle 3 Min neue Mails per IMAP direkt aus dem Google-Workspace-Postfach
   (Permission `kunden`, Signed-URL 5 Min).
 - **E-Mail-Typen:** `inbound_received` + `inbound_reply` in `email_log` +
   `/admin/emails`-Katalog. Audit: `inbound_email.received`, `nachricht.email_reply`.
+- **Pro-Mitarbeiter-Zuordnung** (Migration `supabase/supabase-inbound-email-per-employee.sql`):
+  Jeder Mitarbeiter kann unter `/admin/einstellungen/mitarbeiter` eine eigene
+  Postfach-Adresse (`admin_users.inbox_address`, typisch ein **Alias** des
+  Support-Postfachs) bekommen. `processInboundEmail` matcht das An-/Cc-/
+  Delivered-To-Feld der Mail gegen `inbox_address` (`findAdminUserByInboxAddress`)
+  und setzt `conversations.assigned_admin_user_id` + `conversations.inbox_address`.
+  In `/admin/nachrichten` sieht ein **Mitarbeiter nur seine eigenen +
+  unzugeordnete** Konversationen, der **Owner alle** (Filter im GET +
+  Ownership-Check im Detail-/Attachment-Endpoint). Admin-Antwort geht bei
+  zugeordneter Konversation **von der Mitarbeiter-Adresse** raus (`sendAndLog`
+  bekam optionales `from`; nur akzeptiert wenn auf `@cam2rent.de`). `inbox_address`
+  ist bewusst NICHT Teil des Login-kritischen `SELECT_COLS` in `lib/admin-users.ts`
+  — die Helper `getInboxAddressMap`/`setInboxAddress`/`findAdminUserByInboxAddress`
+  sind defensiv (fehlende Migration → no-op). Conversation-Insert im Cron retryt
+  ohne die beiden Felder, falls nur diese Migration aussteht.
 - **Go-Live TODO:** siehe „Noch offen".
 
 ### Buchungsflow
@@ -2708,6 +2723,15 @@ Die Beleg-Detailseite (`/admin/buchhaltung/belege/[id]`) hatte alle Positions-Fe
   Hinweis: Der erste Cron-Lauf „stellt scharf" — er importiert den
   Postfach-Bestand NICHT rückwirkend, sondern erfasst nur ab dann eingehende
   Mails. Eine Test-Mail nach dem zweiten Lauf bestätigt das Setup.
+- **Pro-Mitarbeiter-Postfächer Go-Live:** Migration
+  `supabase/supabase-inbound-email-per-employee.sql` ausführen. Dann pro
+  Mitarbeiter in Google Workspace einen **Alias** `name@cam2rent.de` am
+  Support-Konto anlegen (kostenlos, bis 30 Aliase) und dieselbe Adresse unter
+  `/admin/einstellungen/mitarbeiter` im Feld „Postfach-Adresse" eintragen.
+  Ohne die Migration läuft die Basis-Inbound-Funktion weiter (alle
+  Konversationen unzugeordnet, für alle sichtbar). Echte separate
+  Google-Konten statt Aliasen wären auch möglich, brauchen aber eine
+  Cron-Erweiterung (mehrere IMAP-Logins) — aktuell pollt der Cron ein Postfach.
 - **Tracking-Carrier + Retoure-Tracking Migration auszuführen:** `supabase/supabase-bookings-tracking-carrier-return.sql` (idempotent). Legt vier neue Spalten an: `tracking_carrier`, `return_tracking_number`, `return_tracking_url`, `return_tracking_carrier` (CHECK auf DHL/DPD, NULL erlaubt). Ohne Migration läuft der bestehende Hin-Versand-Workflow (ship-booking) per defensivem Retry weiter (tracking_carrier wird gedroppt). Die neue Trackingnummer-Bearbeitung in `/admin/buchungen/[id]` antwortet bei fehlender Spalte mit 503; Retoure-Tracking-Edit wird komplett geblockt. Empfohlen ASAP ausführen.
 - **Bestellbearbeitungs-Migration auszuführen:** `supabase/supabase-bookings-edit-adjustment.sql` (idempotent). Legt `bookings.adjustment_payment_link_id/amount/status/note` an. Ohne Migration läuft die komplette Bestellbearbeitung weiter (Zahlungslink/Refund werden ausgeführt, Doku landet in `notes`), nur die strukturierten `adjustment_*`-Felder + der Webhook-Status-Sync („Nachzahlung bezahlt") greifen erst nach der Migration. Empfohlen ASAP ausführen.
 - **Multi-Kamera-Migrationen auszuführen (3, idempotent):**

@@ -126,6 +126,8 @@ export async function sendAndLog(opts: {
   attachments?: { filename: string; content: Buffer }[];
   replyTo?: string;
   headers?: Record<string, string>;
+  /** Abweichende Absenderadresse (muss auf der verifizierten Domain liegen). */
+  from?: string;
 }): Promise<string | null | undefined> {
   // Admin-Overrides (Subject + Einleitungs-HTML) werden vor allem anderen
   // angewendet — damit auch der Preview-Capture-Pfad und das DB-Log die
@@ -152,7 +154,7 @@ export async function sendAndLog(opts: {
       ? `[TEST → urspruenglich: ${opts.to}] ${overriddenSubject}`
       : overriddenSubject;
     const result = await resend.emails.send({
-      from: `${BUSINESS.name} <${fromEmail}>`,
+      from: `${BUSINESS.name} <${opts.from ?? fromEmail}>`,
       replyTo: opts.replyTo ?? ADMIN_EMAIL,
       to: finalTo,
       subject: finalSubject,
@@ -1431,6 +1433,8 @@ export async function sendInboundReply(data: {
   body: string;
   bookingId?: string | null;
   inReplyToMessageId?: string | null;
+  /** Postfach-Adresse des zustaendigen Mitarbeiters (Absender der Antwort). */
+  fromAddress?: string;
 }): Promise<string | null | undefined> {
   const cleanSubject = stripSubject(data.subject) || '(kein Betreff)';
   const subject = /^re:/i.test(cleanSubject) ? cleanSubject : `Re: ${cleanSubject}`;
@@ -1475,6 +1479,13 @@ export async function sendInboundReply(data: {
     headers['References'] = data.inReplyToMessageId;
   }
 
+  // Absenderadresse nur uebernehmen, wenn sie auf der verifizierten Domain
+  // liegt — sonst lehnt Resend den Versand ab. Fallback: sendAndLog-Default.
+  const from =
+    data.fromAddress && data.fromAddress.toLowerCase().endsWith(`@${BUSINESS.domain}`)
+      ? data.fromAddress.toLowerCase()
+      : undefined;
+
   return sendAndLog({
     to: data.customerEmail,
     subject,
@@ -1483,6 +1494,7 @@ export async function sendInboundReply(data: {
     bookingId: data.bookingId ?? null,
     emailType: 'inbound_reply',
     headers,
+    from,
   });
 }
 

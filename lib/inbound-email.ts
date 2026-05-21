@@ -10,11 +10,12 @@
  */
 
 import crypto from 'node:crypto';
-import type { ParsedMail } from 'mailparser';
+import type { ParsedMail, AddressObject } from 'mailparser';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createAdminNotification } from '@/lib/admin-notifications';
 import { logAudit } from '@/lib/audit';
 import { detectFileType } from '@/lib/file-type-check';
+import { findAdminUserByInboxAddress } from '@/lib/admin-users';
 
 // ─── Typen ──────────────────────────────────────────────────────────────────
 
@@ -26,12 +27,27 @@ export interface InboundAttachment {
 export interface ParsedInboundEmail {
   from: string;
   fromName: string;
+  /** Alle Empfaengeradressen (To + Cc + Delivered-To) — fuer die Mitarbeiter-Zuordnung. */
+  recipients: string[];
   subject: string;
   text: string;
   html: string;
   messageId: string | null;
   inReplyTo: string | null;
   attachments: InboundAttachment[];
+}
+
+/** Sammelt alle E-Mail-Adressen aus einem mailparser-AddressObject. */
+function collectAddresses(obj: AddressObject | AddressObject[] | undefined): string[] {
+  if (!obj) return [];
+  const list = Array.isArray(obj) ? obj : [obj];
+  const out: string[] = [];
+  for (const ao of list) {
+    for (const v of ao.value ?? []) {
+      if (v.address) out.push(v.address.trim().toLowerCase());
+    }
+  }
+  return out;
 }
 
 // ─── Mailparser-Output -> ParsedInboundEmail ────────────────────────────────
@@ -62,9 +78,22 @@ export function parseImapMessage(parsed: ParsedMail): ParsedInboundEmail | null 
     });
   }
 
+  const recipients = [...collectAddresses(parsed.to), ...collectAddresses(parsed.cc)];
+  // Gmail/IMAP setzt zusaetzlich "Delivered-To" — bei Alias-Postfaechern oft
+  // die zuverlaessigste Quelle fuer die tatsaechliche Zustelladresse.
+  const deliveredTo = parsed.headers?.get('delivered-to');
+  if (typeof deliveredTo === 'string') {
+    recipients.push(deliveredTo.trim().toLowerCase());
+  } else if (Array.isArray(deliveredTo)) {
+    for (const d of deliveredTo) {
+      if (typeof d === 'string') recipients.push(d.trim().toLowerCase());
+    }
+  }
+
   return {
     from,
     fromName,
+    recipients: [...new Set(recipients.filter(Boolean))],
     subject: typeof parsed.subject === 'string' ? parsed.subject : '',
     text: typeof parsed.text === 'string' ? parsed.text : '',
     html: typeof parsed.html === 'string' ? parsed.html : '',
@@ -246,31 +275,46 @@ export async function processInboundEmail(
     if (c) conversationId = c.id;
   }
 
+  // ─── Mitarbeiter-Zuordnung ueber das An-Feld ────────────────────────────
+  const routed = await findAdminUserByInboxAddress(mail.recipients);
+  const assignedAdminUserId = routed?.id ?? null;
+  const inboxAddress = routed?.inbox_address ?? null;
+
   const now = new Date().toISOString();
 
   // ─── Konversation anlegen falls keine gefunden ──────────────────────────
   let createdConversation = false;
   if (!conversationId) {
-    const { data: conv, error: convErr } = await supabase
+    const baseRow = {
+      customer_id: customerId,
+      customer_email: mail.from,
+      customer_name: customerName,
+      subject,
+      booking_id: bookingId,
+      source: 'email',
+      email_message_id: mail.messageId,
+      closed: false,
+      last_message_at: now,
+    };
+    // Mit Mitarbeiter-Zuordnung versuchen; fehlt die per-employee-Migration,
+    // ohne die beiden Felder erneut (Basis-Inbound funktioniert trotzdem).
+    let convRes = await supabase
       .from('conversations')
-      .insert({
-        customer_id: customerId,
-        customer_email: mail.from,
-        customer_name: customerName,
-        subject,
-        booking_id: bookingId,
-        source: 'email',
-        email_message_id: mail.messageId,
-        closed: false,
-        last_message_at: now,
-      })
+      .insert({ ...baseRow, assigned_admin_user_id: assignedAdminUserId, inbox_address: inboxAddress })
       .select('id')
       .single();
-    if (convErr || !conv) {
-      if (SCHEMA_ERROR.test(convErr?.message ?? '')) return { status: 'migration_pending' };
-      return { status: 'error', message: convErr?.message ?? 'Konversation fehlgeschlagen.' };
+    if (convRes.error && SCHEMA_ERROR.test(convRes.error.message)) {
+      convRes = await supabase
+        .from('conversations')
+        .insert(baseRow)
+        .select('id')
+        .single();
     }
-    conversationId = conv.id;
+    if (convRes.error || !convRes.data) {
+      if (SCHEMA_ERROR.test(convRes.error?.message ?? '')) return { status: 'migration_pending' };
+      return { status: 'error', message: convRes.error?.message ?? 'Konversation fehlgeschlagen.' };
+    }
+    conversationId = convRes.data.id;
     createdConversation = true;
   }
 
@@ -372,7 +416,7 @@ export async function processInboundEmail(
     entityType: 'nachricht',
     entityId: conversationId ?? undefined,
     entityLabel: subject,
-    changes: { from: mail.from, booking_id: bookingId, attachments: attachmentCount },
+    changes: { from: mail.from, booking_id: bookingId, attachments: attachmentCount, assigned_to: inboxAddress },
   });
 
   return { status: 'created', conversationId: conversationId! };

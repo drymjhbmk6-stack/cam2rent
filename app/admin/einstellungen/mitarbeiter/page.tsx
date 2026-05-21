@@ -50,6 +50,7 @@ interface AdminUser {
   is_active: boolean;
   created_at: string;
   last_login_at: string | null;
+  inbox_address?: string | null;
 }
 
 function fmtDate(iso: string | null): string {
@@ -79,6 +80,7 @@ export default function MitarbeiterPage() {
   const [newPassword, setNewPassword] = useState('');
   const [newRole, setNewRole] = useState<'owner' | 'employee'>('employee');
   const [newPerms, setNewPerms] = useState<PermissionKey[]>([]);
+  const [newInbox, setNewInbox] = useState('');
   const [saving, setSaving] = useState(false);
 
   // Editor-Zustaende pro User
@@ -90,6 +92,7 @@ export default function MitarbeiterPage() {
   const [editPerms, setEditPerms] = useState<PermissionKey[]>([]);
   const [editActive, setEditActive] = useState(true);
   const [editPassword, setEditPassword] = useState('');
+  const [editInbox, setEditInbox] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -130,6 +133,7 @@ export default function MitarbeiterPage() {
           password: newPassword,
           role: newRole,
           permissions: newPerms,
+          inbox_address: newInbox.trim() || null,
         }),
       });
       const data = await res.json();
@@ -137,8 +141,9 @@ export default function MitarbeiterPage() {
         setErr(data?.error ?? 'Fehler beim Anlegen.');
         return;
       }
+      if (data?.warning) setErr(data.warning);
       setShowNew(false);
-      setNewName(''); setNewEmail(''); setNewUsername(''); setNewPassword(''); setNewRole('employee'); setNewPerms([]);
+      setNewName(''); setNewEmail(''); setNewUsername(''); setNewPassword(''); setNewRole('employee'); setNewPerms([]); setNewInbox('');
       await load();
     } finally {
       setSaving(false);
@@ -154,6 +159,7 @@ export default function MitarbeiterPage() {
     setEditPerms(u.permissions);
     setEditActive(u.is_active);
     setEditPassword('');
+    setEditInbox(u.inbox_address ?? '');
     setErr('');
   }
 
@@ -168,6 +174,7 @@ export default function MitarbeiterPage() {
         role: editRole,
         permissions: editPerms,
         is_active: editActive,
+        inbox_address: editInbox.trim() || null,
       };
       if (editPassword) patch.password = editPassword;
       const res = await fetch(`/api/admin/employees/${id}`, {
@@ -258,6 +265,7 @@ export default function MitarbeiterPage() {
             <Input label="E-Mail" type="email" value={newEmail} onChange={setNewEmail} placeholder="max@cam2rent.de" />
             <Input label="Benutzername (optional, für kürzeren Login)" value={newUsername} onChange={setNewUsername} placeholder="z.B. max" />
             <Input label="Start-Passwort (mind. 8 Zeichen)" type="text" value={newPassword} onChange={setNewPassword} placeholder="Kann später geändert werden" />
+            <Input label="Postfach-Adresse für Kunden-E-Mails (optional)" type="email" value={newInbox} onChange={setNewInbox} placeholder="z.B. max@cam2rent.de" />
             <div>
               <label className="block text-xs font-heading font-semibold mb-1" style={{ color: '#94a3b8' }}>Rolle</label>
               <select
@@ -332,6 +340,13 @@ export default function MitarbeiterPage() {
                     onChange={setEditPassword}
                     placeholder="Optional"
                   />
+                  <Input
+                    label="Postfach-Adresse für Kunden-E-Mails"
+                    type="email"
+                    value={editInbox}
+                    onChange={setEditInbox}
+                    placeholder="z.B. max@cam2rent.de"
+                  />
                   <div>
                     <label className="block text-xs font-heading font-semibold mb-1" style={{ color: '#94a3b8' }}>Rolle</label>
                     <select
@@ -401,6 +416,9 @@ export default function MitarbeiterPage() {
                     {u.email}
                     {u.username && (
                       <span style={{ color: '#06b6d4', marginLeft: 8 }}>· @{u.username}</span>
+                    )}
+                    {u.inbox_address && (
+                      <span style={{ color: '#38bdf8', marginLeft: 8 }}>· 📧 {u.inbox_address}</span>
                     )}
                   </div>
                   <div className="text-xs mt-2" style={{ color: '#64748b' }}>

@@ -6,6 +6,7 @@ import {
   deleteAllSessionsForUser,
   getAdminUserById,
   hasPermission,
+  setInboxAddress,
   PERMISSION_KEYS,
   type PermissionKey,
   updateAdminUser,
@@ -49,6 +50,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     permissions?: string[];
     is_active?: boolean;
     password?: string;
+    inbox_address?: string | null;
   } | null;
   if (!body) return NextResponse.json({ error: 'Ungültige Anfrage.' }, { status: 400 });
 
@@ -121,6 +123,10 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
 
   try {
     const updated = await updateAdminUser(id, patch);
+    // Postfach-Adresse separat pflegen (siehe Kommentar in lib/admin-users.ts).
+    if (body.inbox_address !== undefined) {
+      await setInboxAddress(id, body.inbox_address);
+    }
     // Sicherheits-Invalidierung: bei Deaktivierung, Passwort-Wechsel, Rollen-/
     // Permission-Aenderung muessen alle bestehenden Sessions sofort enden,
     // damit ein deaktivierter oder herabgestufter Mitarbeiter nicht mit alter

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { getCurrentAdminUser } from '@/lib/admin-auth';
 
 /**
  * GET /api/admin/message-attachment-url?id=<message_attachment-id>
@@ -18,12 +19,34 @@ export async function GET(req: NextRequest) {
   const supabase = createServiceClient();
   const { data: att } = await supabase
     .from('message_attachments')
-    .select('storage_path')
+    .select('storage_path, message_id')
     .eq('id', id)
     .maybeSingle();
 
   if (!att) {
     return NextResponse.json({ error: 'Anhang nicht gefunden.' }, { status: 404 });
+  }
+
+  // Mitarbeiter duerfen nur Anhaenge aus ihnen zugeordneten (oder
+  // unzugeordneten) Konversationen oeffnen; Owner alles. Faellt die
+  // per-employee-Migration aus, degradiert die Pruefung offen (wie zuvor).
+  const me = await getCurrentAdminUser();
+  if (me && me.role !== 'owner') {
+    const { data: msg } = await supabase
+      .from('messages')
+      .select('conversation_id')
+      .eq('id', att.message_id)
+      .maybeSingle();
+    if (msg) {
+      const { data: conv } = await supabase
+        .from('conversations')
+        .select('assigned_admin_user_id')
+        .eq('id', msg.conversation_id)
+        .maybeSingle();
+      if (conv?.assigned_admin_user_id && conv.assigned_admin_user_id !== me.id) {
+        return NextResponse.json({ error: 'Keine Berechtigung.' }, { status: 403 });
+      }
+    }
   }
 
   const { data, error } = await supabase.storage

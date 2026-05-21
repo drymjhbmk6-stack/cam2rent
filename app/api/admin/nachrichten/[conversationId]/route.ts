@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { sendNewMessageNotificationToCustomer, sendInboundReply } from '@/lib/email';
 import { logAudit } from '@/lib/audit';
+import { getCurrentAdminUser } from '@/lib/admin-auth';
 
 const SCHEMA_ERROR = /column|schema cache|PGRST|does not exist/i;
 
@@ -15,6 +16,8 @@ interface ConvRow {
   source?: string | null;
   customer_email?: string | null;
   customer_name?: string | null;
+  assigned_admin_user_id?: string | null;
+  inbox_address?: string | null;
 }
 
 /** Konversation laden — mit Fallback auf das alte Schema ohne E-Mail-Felder. */
@@ -24,7 +27,7 @@ async function loadConversation(
 ): Promise<ConvRow | null> {
   const full = await supabase
     .from('conversations')
-    .select('id, customer_id, subject, booking_id, closed, created_at, source, customer_email, customer_name')
+    .select('id, customer_id, subject, booking_id, closed, created_at, source, customer_email, customer_name, assigned_admin_user_id, inbox_address')
     .eq('id', conversationId)
     .maybeSingle();
   if (!full.error) return full.data as ConvRow | null;
@@ -35,6 +38,19 @@ async function loadConversation(
     .eq('id', conversationId)
     .maybeSingle();
   return (fallback.data as ConvRow | null) ?? null;
+}
+
+/**
+ * Darf der aktuelle Admin diese Konversation sehen/bearbeiten?
+ * Owner: alles. Mitarbeiter: nur eigene (assigned_admin_user_id) + unzugeordnete.
+ */
+function mayAccess(
+  me: { id: string; role: string } | null,
+  conv: ConvRow,
+): boolean {
+  if (!me) return false;
+  if (me.role === 'owner') return true;
+  return !conv.assigned_admin_user_id || conv.assigned_admin_user_id === me.id;
 }
 
 /**
@@ -51,6 +67,11 @@ export async function GET(
   const conv = await loadConversation(supabase, conversationId);
   if (!conv) {
     return NextResponse.json({ error: 'Konversation nicht gefunden.' }, { status: 404 });
+  }
+
+  const me = await getCurrentAdminUser();
+  if (!mayAccess(me, conv)) {
+    return NextResponse.json({ error: 'Keine Berechtigung für diese Konversation.' }, { status: 403 });
   }
 
   // Nachrichten — mit Fallback ohne body_html/email_message_id.
@@ -165,6 +186,11 @@ export async function POST(
     return NextResponse.json({ error: 'Konversation nicht gefunden.' }, { status: 404 });
   }
 
+  const me = await getCurrentAdminUser();
+  if (!mayAccess(me, conv)) {
+    return NextResponse.json({ error: 'Keine Berechtigung für diese Konversation.' }, { status: 403 });
+  }
+
   const isEmailThread = (conv.source ?? 'account') === 'email';
 
   // Platzhalter-sender_id (Admin-Cookie-Auth, kein Supabase-Auth-User).
@@ -222,6 +248,7 @@ export async function POST(
           body: body.trim(),
           bookingId: conv.booking_id,
           inReplyToMessageId: inReplyTo,
+          fromAddress: conv.inbox_address ?? undefined,
         });
         if (resendId) {
           await supabase
