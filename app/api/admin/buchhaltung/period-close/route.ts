@@ -60,6 +60,11 @@ export async function GET(req: NextRequest) {
   const supabase = createServiceClient();
   const { from, to } = periodToRange(period);
 
+  // Datumsgrenzen in Berlin-Zeit (wie reports/euer). Auf dem UTC-Server wuerde
+  // ein nackter Datums-String sonst als UTC-Mitternacht interpretiert.
+  const fromIso = getBerlinDayStartFromDateString(from) ?? `${from}T00:00:00Z`;
+  const toIso = getBerlinDayEndFromDateString(to) ?? `${to}T23:59:59Z`;
+
   // Lock-Status
   const { data: lockSetting } = await supabase
     .from('admin_settings')
@@ -73,8 +78,6 @@ export async function GET(req: NextRequest) {
   let stripeUnmatched = 0;
   let stripeTotal = 0;
   try {
-    const fromIso = getBerlinDayStartFromDateString(from) ?? `${from}T00:00:00Z`;
-    const toIso = getBerlinDayEndFromDateString(to) ?? `${to}T23:59:59Z`;
     const { data: txs } = await supabase
       .from('stripe_transactions')
       .select('id, match_status')
@@ -105,37 +108,113 @@ export async function GET(req: NextRequest) {
     // Tabelle fehlt
   }
 
-  // Schritt 3: EUER-Snapshot
+  // Schritt 3: EUER-Snapshot — spiegelt exakt die EÜR-Berechnung
+  // (reports/euer/route.ts), damit der Wizard-Vorschauwert dem EÜR-Bericht
+  // entspricht. Einnahmen aus bookings (nicht invoices), Ausgaben aus
+  // expenses-Tabelle UND beleg_positionen der neuen Buchhaltungs-Welt.
   let revenue = 0;
   let expenses = 0;
   let invoiceCount = 0;
   let expenseCount = 0;
+
+  // Einnahmen: realisierter Netto-Umsatz pro Buchung (Rabatt + Erstattung
+  // abgezogen — Wasserfall analog reports/euer).
   try {
-    const { data: invs } = await supabase
-      .from('invoices')
-      .select('gross_amount')
+    const bookingCols = 'price_rental, price_accessories, price_haftung, shipping_price, discount_amount, duration_discount, loyalty_discount, refund_amount';
+    const buildQuery = (cols: string) => supabase
+      .from('bookings')
+      .select(cols)
       .eq('is_test', false)
       .neq('status', 'cancelled')
-      .gte('invoice_date', from)
-      .lte('invoice_date', to);
-    revenue = (invs ?? []).reduce((s, i) => s + (i.gross_amount || 0), 0);
-    invoiceCount = (invs ?? []).length;
+      .gte('created_at', fromIso)
+      .lte('created_at', toIso);
+    let { data: bookings, error: bErr } = await buildQuery(bookingCols);
+    if (bErr && /refund_amount|column|schema cache|PGRST/i.test(bErr.message)) {
+      // Migration supabase-bookings-refund.sql noch nicht durch
+      ({ data: bookings, error: bErr } = await buildQuery(bookingCols.replace(', refund_amount', '')));
+    }
+    type BRow = {
+      price_rental: number | null; price_accessories: number | null;
+      price_haftung: number | null; shipping_price: number | null;
+      discount_amount: number | null; duration_discount: number | null;
+      loyalty_discount: number | null; refund_amount: number | null;
+    };
+    const rows = (bookings ?? []) as unknown as BRow[];
+    let acc = 0;
+    for (const b of rows) {
+      const r = Number(b.price_rental ?? 0);
+      const a = Number(b.price_accessories ?? 0);
+      const h = Number(b.price_haftung ?? 0);
+      const s = Number(b.shipping_price ?? 0);
+      const d = Number(b.discount_amount ?? 0) + Number(b.duration_discount ?? 0) + Number(b.loyalty_discount ?? 0);
+      const base = r + a;
+      let rentalNet = r;
+      let accNet = a;
+      if (d > 0 && base > 0) {
+        rentalNet = Math.max(0, r - Math.min(r, Math.round(d * (r / base) * 100) / 100));
+        accNet = Math.max(0, a - Math.min(a, Math.round(d * (a / base) * 100) / 100));
+      }
+      let refundLeft = Number(b.refund_amount ?? 0);
+      const applyRefund = (val: number): number => {
+        if (refundLeft <= 0 || val <= 0) return val;
+        const c = Math.min(val, refundLeft);
+        refundLeft = Math.round((refundLeft - c) * 100) / 100;
+        return Math.round((val - c) * 100) / 100;
+      };
+      rentalNet = applyRefund(rentalNet);
+      accNet = applyRefund(accNet);
+      const hNet = applyRefund(h);
+      const sNet = applyRefund(s);
+      acc += rentalNet + accNet + hNet + sNet;
+    }
+    revenue = Math.round(acc * 100) / 100;
+    invoiceCount = rows.length;
   } catch {
-    // ignore
+    // bookings-Tabelle fehlt
   }
+
+  // Ausgaben Quelle 1: expenses-Tabelle (Spalte gross_amount).
   try {
     const { data: exps } = await supabase
       .from('expenses')
-      .select('amount')
+      .select('gross_amount')
       .eq('is_test', false)
       .is('deleted_at', null)
       .gte('expense_date', from)
       .lte('expense_date', to);
-    expenses = (exps ?? []).reduce((s, e) => s + (e.amount || 0), 0);
-    expenseCount = (exps ?? []).length;
+    expenses += (exps ?? []).reduce((s, e) => s + (e.gross_amount || 0), 0);
+    expenseCount += (exps ?? []).length;
   } catch {
     // ignore
   }
+
+  // Ausgaben Quelle 2: beleg_positionen der neuen Buchhaltungs-Welt
+  // (festgeschrieben, klassifiziert als ausgabe/verbrauch/gwg — analog
+  // reports/euer). AfA-Positionen erzeugen separate Asset-Eintraege und
+  // werden hier NICHT mitgezaehlt.
+  try {
+    const { data: belegPos } = await supabase
+      .from('beleg_positionen')
+      .select('gesamt_brutto, beleg:belege!inner(beleg_datum, status, is_test)')
+      .in('klassifizierung', ['ausgabe', 'verbrauch', 'gwg']);
+    type RawPos = { gesamt_brutto: number | null; beleg: unknown };
+    for (const pos of ((belegPos ?? []) as unknown as RawPos[])) {
+      const belegRaw = pos.beleg;
+      const beleg = (Array.isArray(belegRaw) ? belegRaw[0] : belegRaw) as
+        | { beleg_datum: string; status: string; is_test: boolean }
+        | null
+        | undefined;
+      if (!beleg) continue;
+      if (beleg.status !== 'festgeschrieben') continue;
+      if (beleg.is_test) continue;
+      if (beleg.beleg_datum < from || beleg.beleg_datum > to) continue;
+      expenses += Number(pos.gesamt_brutto || 0);
+      expenseCount += 1;
+    }
+  } catch {
+    // beleg_positionen-Tabelle fehlt
+  }
+  expenses = Math.round(expenses * 100) / 100;
 
   // Berechne Status pro Schritt
   const steps = {
