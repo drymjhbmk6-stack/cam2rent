@@ -30,6 +30,7 @@ export async function POST(req: NextRequest) {
   const supabase = createServiceClient();
   const testMode = await isTestMode();
   let imported = 0;
+  let updated = 0;
 
   // Zahlungsgebühren aus stripe_transactions laden — Berlin-TZ-bewusst
   const fromIso = getBerlinDayStartFromDateString(from) ?? `${from}T00:00:00Z`;
@@ -42,15 +43,32 @@ export async function POST(req: NextRequest) {
     .lte('stripe_created_at', toIso);
 
   for (const tx of transactions || []) {
-    // Idempotenz: bereits importiert? → überspringen
+    // Beschreibung: Buchungsnummer bevorzugen (lesbar), sonst PaymentIntent-ID
+    const description = tx.booking_id
+      ? `Stripe-Gebühren von der Bestellung ${tx.booking_id}`
+      : `Stripe-Gebühr für ${tx.stripe_payment_intent_id.slice(0, 20)}...`;
+
+    // Idempotenz: bereits importiert? → ggf. alte Beschreibung heilen, dann überspringen
     const { data: existing } = await supabase
       .from('expenses')
-      .select('id')
+      .select('id, description')
       .eq('source_type', 'stripe_fee')
       .eq('source_id', tx.id)
       .maybeSingle();
 
-    if (existing) continue;
+    if (existing) {
+      // Selbstheilung: nur auto-generierte Beschreibungen aktualisieren,
+      // manuell umbenannte Einträge bleiben unangetastet.
+      const isAutoDescription = (existing.description || '').startsWith('Stripe-Gebühr');
+      if (tx.booking_id && isAutoDescription && existing.description !== description) {
+        const { error: updErr } = await supabase
+          .from('expenses')
+          .update({ description })
+          .eq('id', existing.id);
+        if (!updErr) updated++;
+      }
+      continue;
+    }
 
     // Effektive Gebühr ermitteln:
     // Stripe-Rückerstattungs-Balance-Transaktionen hängen an der REFUND-ID
@@ -91,7 +109,7 @@ export async function POST(req: NextRequest) {
     const { error } = await supabase.from('expenses').insert({
       expense_date: tx.stripe_created_at ? tx.stripe_created_at.split('T')[0] : from,
       category: 'stripe_fees',
-      description: `Stripe-Gebühr für ${tx.stripe_payment_intent_id.slice(0, 20)}...`,
+      description,
       vendor: 'Stripe',
       net_amount: effectiveFee,
       tax_amount: 0,
@@ -111,6 +129,7 @@ export async function POST(req: NextRequest) {
       from,
       to,
       imported,
+      updated,
       paymentFees: (transactions || []).length,
     },
     request: req,
@@ -118,6 +137,7 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({
     imported,
+    updated,
     total: (transactions || []).length,
   });
 }

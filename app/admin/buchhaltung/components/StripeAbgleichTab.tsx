@@ -241,7 +241,10 @@ export default function StripeAbgleichTab() {
       });
       if (res.ok) {
         const result = await res.json();
-        showToast(`${result.imported} Stripe-Gebühren als Ausgaben verbucht`, 'ok');
+        const msg = result.updated
+          ? `${result.imported} Stripe-Gebühren verbucht, ${result.updated} Beschreibungen aktualisiert`
+          : `${result.imported} Stripe-Gebühren als Ausgaben verbucht`;
+        showToast(msg, 'ok');
       } else {
         const err = await res.json();
         showToast(err.error || 'Fehler', 'err');

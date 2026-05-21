@@ -887,6 +887,11 @@ Der Stripe-Abgleich wird jetzt zusaetzlich zum manuellen „Synchronisieren"-But
   0 * * * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/stripe-sync
   ```
 
+### Stripe-Gebühren-Ausgaben: lesbare Beschreibung mit Bestellnummer (Stand 2026-05-21)
+Der „Gebühren als Ausgaben"-Button im Stripe-Abgleich (`POST /api/admin/buchhaltung/stripe-reconciliation/import-fees`) erzeugte `expenses`-Einträge mit der Beschreibung `Stripe-Gebühr für pi_3TZQsa…` (PaymentIntent-ID abgeschnitten) — in der Ausgaben-Liste schwer zuzuordnen. Jetzt: ist die `stripe_transactions.booking_id` gesetzt (= Buchungsnummer wie `C2R-2621-003`, da `bookings.id` der Text-PK ist), lautet die Beschreibung `Stripe-Gebühren von der Bestellung C2R-2621-003`. Ohne Buchungszuordnung bleibt der `pi_…`-Fallback.
+- **Selbstheilung bestehender Einträge:** Der Idempotenz-Check (`source_type='stripe_fee'` + `source_id=tx.id`) lädt jetzt auch `description` mit. Existiert der Eintrag bereits, trägt aber noch eine auto-generierte Beschreibung (Prefix `Stripe-Gebühr`) und die Buchung ist inzwischen verknüpft → `description` wird auf die Bestellnummer-Variante aktualisiert. Manuell umbenannte Einträge (Prefix passt nicht) bleiben unangetastet. Bedeutet: ein erneuter Klick auf „Gebühren als Ausgaben" heilt die Altbestand-Beschreibungen.
+- API-Antwort + Audit (`stripe.import_fees`) liefern zusätzlich `updated`; das UI-Toast zeigt „N Stripe-Gebühren verbucht, M Beschreibungen aktualisiert".
+
 ### Push-Notifications (Admin-PWA, Stand 2026-04-17)
 Web-Push-Notifications für die Admin-PWA. Alle Events, die `createAdminNotification()` triggern (neue Buchung, Stornierung, Schaden, Nachricht, Bewertung), erzeugen automatisch auch eine Push-Notification — auch wenn die PWA gerade nicht offen ist.
 
