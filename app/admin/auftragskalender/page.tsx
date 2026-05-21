@@ -217,7 +217,7 @@ export default function AuftragskalenderPage() {
     : [];
 
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-900 px-4 py-6 md:px-8">
+    <div className="ak-root min-h-screen bg-slate-100 text-slate-900 px-4 py-6 md:px-8">
       <div className="max-w-7xl mx-auto">
         <AdminBackLink href="/admin" label="Zurück zum Dashboard" />
 

@@ -268,5 +268,32 @@
 .admin-dark .border-b { border-color: #1e293b; }
 .admin-dark .border-t { border-color: #1e293b; }
 
+/* ── Auftragskalender: bewusst HELLES Theme ─────────────────────────────────
+   Der Auftragskalender (/admin/auftragskalender) soll wie ein klassischer
+   Kalender hell sein. Die .admin-dark-Overrides oben würden bg-white, bg-red-50
+   usw. per !important dunkel färben — hier gezielt für .ak-root mit höherer
+   Spezifität (+ !important) auf hell zurückgesetzt.
+   ────────────────────────────────────────────────────────────────────────── */
+.admin-dark .ak-root.min-h-screen        { min-height: 100vh !important; }
+.admin-dark .ak-root h1,
+.admin-dark .ak-root h2                   { color: #0f172a !important; }
+.admin-dark .ak-root .bg-white,
+.admin-dark .ak-root .bg-white.rounded-xl { background-color: #ffffff !important; }
+.admin-dark .ak-root .bg-red-50          { background-color: #fef2f2 !important; }
+.admin-dark .ak-root .bg-amber-50        { background-color: #fffbeb !important; }
+.admin-dark .ak-root .border-b           { border-color: #e2e8f0 !important; }
+.admin-dark .ak-root .border-t           { border-color: #e2e8f0 !important; }
+.admin-dark .ak-root .text-amber-700     { color: #b45309 !important; }
+.admin-dark .ak-root .text-red-700       { color: #b91c1c !important; }
+.admin-dark .ak-root input:not([type="checkbox"]):not([type="radio"]),
+.admin-dark .ak-root textarea {
+  background-color: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 8px !important;
+  color: #0f172a !important;
+}
+.admin-dark .ak-root input::placeholder,
+.admin-dark .ak-root textarea::placeholder { color: #94a3b8 !important; }
+
 
 
