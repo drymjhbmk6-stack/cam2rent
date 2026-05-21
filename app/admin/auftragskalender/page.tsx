@@ -36,13 +36,23 @@ interface CalendarNote {
 type ViewMode = 'monat' | 'agenda';
 
 // ============================================================
-// Konstanten / Helfer
+// Farben (dunkelblaues Admin-Theme)
 // ============================================================
 
+const C = {
+  card: '#1e293b',
+  panel: '#0f172a',
+  cellNormal: '#1e293b',
+  cellOther: '#162133',
+  cellSpecial: '#3a2530',
+  cellToday: '#1e3a52',
+  border: '#334155',
+};
+
 const STATUS_STYLE: Record<string, { bg: string; label: string }> = {
-  awaiting_payment: { bg: '#7c3aed', label: 'Zahlung offen' },
-  confirmed: { bg: '#0891b2', label: 'Bestätigt' },
-  shipped: { bg: '#d97706', label: 'Versendet' },
+  awaiting_payment: { bg: '#8b5cf6', label: 'Zahlung offen' },
+  confirmed: { bg: '#0ea5b7', label: 'Bestätigt' },
+  shipped: { bg: '#e0961f', label: 'Versendet' },
   picked_up: { bg: '#ea580c', label: 'Abgeholt' },
   returned: { bg: '#64748b', label: 'Zurückgegeben' },
   completed: { bg: '#16a34a', label: 'Abgeschlossen' },
@@ -92,7 +102,7 @@ export default function AuftragskalenderPage() {
 
   const [view, setView] = useState<ViewMode>('monat');
   const [year, setYear] = useState(now.getFullYear());
-  const [month, setMonth] = useState(now.getMonth()); // 0-11
+  const [month, setMonth] = useState(now.getMonth());
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [notes, setNotes] = useState<CalendarNote[]>([]);
   const [loading, setLoading] = useState(true);
@@ -108,16 +118,14 @@ export default function AuftragskalenderPage() {
     localStorage.setItem('admin_auftragskalender_view', view);
   }, [view]);
 
-  // 42-Tage-Raster (6 Wochen, Montag-basiert)
   const gridStart = useMemo(() => {
     const first = `${year}-${pad(month + 1)}-01`;
-    const dow = dObjOf(first).getDay(); // 0=So..6=Sa
-    const offset = (dow + 6) % 7; // Montag = 0
+    const dow = dObjOf(first).getDay();
+    const offset = (dow + 6) % 7;
     return addD(first, -offset);
   }, [year, month]);
   const gridEnd = useMemo(() => addD(gridStart, 41), [gridStart]);
 
-  // Feiertage für alle vom Raster berührten Jahre
   const holidayMap = useMemo(() => {
     const map = new Map<string, string>();
     const years = new Set([dObjOf(gridStart).getFullYear(), dObjOf(gridEnd).getFullYear()]);
@@ -216,37 +224,42 @@ export default function AuftragskalenderPage() {
     ? notes.filter((n) => n.note_date === noteModalDate)
     : [];
 
+  const navBtn =
+    'px-3 py-1.5 rounded text-sm text-slate-200 transition';
+  const navBtnStyle = { background: '#1e293b', border: `1px solid ${C.border}` };
+
   return (
-    <div className="ak-root min-h-screen bg-slate-100 text-slate-900 px-4 py-6 md:px-8">
+    <div className="px-4 py-6 md:px-8 text-slate-200">
       <div className="max-w-7xl mx-auto">
         <AdminBackLink href="/admin" label="Zurück zum Dashboard" />
 
         {/* Kopfzeile */}
         <div className="flex flex-wrap items-center justify-between gap-4 mt-4 mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">Auftragskalender</h1>
-            <p className="text-sm text-slate-500 mt-1">
+            <h1 className="text-2xl font-bold text-slate-100">Auftragskalender</h1>
+            <p className="text-sm text-slate-400 mt-1">
               Übersicht aller Aufträge — wann was raus muss und wann was zurückkommt.
             </p>
           </div>
-          <div className="flex rounded-lg overflow-hidden border border-slate-300">
+          <div
+            className="flex rounded-lg overflow-hidden"
+            style={{ border: `1px solid ${C.border}` }}
+          >
             <button
               onClick={() => setView('monat')}
               className={`px-4 py-2 text-sm font-medium transition ${
-                view === 'monat'
-                  ? 'bg-cyan-600 text-white'
-                  : 'bg-white text-slate-600 hover:bg-slate-50'
+                view === 'monat' ? 'bg-cyan-600 text-white' : 'text-slate-400 hover:text-white'
               }`}
+              style={view === 'monat' ? undefined : { background: '#1e293b' }}
             >
               📅 Monat
             </button>
             <button
               onClick={() => setView('agenda')}
               className={`px-4 py-2 text-sm font-medium transition ${
-                view === 'agenda'
-                  ? 'bg-cyan-600 text-white'
-                  : 'bg-white text-slate-600 hover:bg-slate-50'
+                view === 'agenda' ? 'bg-cyan-600 text-white' : 'text-slate-400 hover:text-white'
               }`}
+              style={view === 'agenda' ? undefined : { background: '#1e293b' }}
             >
               ✓ To-do-Liste
             </button>
@@ -256,34 +269,25 @@ export default function AuftragskalenderPage() {
         {/* Steuerung */}
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <div className="flex items-center gap-2">
-            <button
-              onClick={goPrev}
-              className="px-3 py-1.5 rounded bg-white border border-slate-300 hover:bg-slate-50 text-sm"
-            >
+            <button onClick={goPrev} className={navBtn} style={navBtnStyle}>
               ‹ Zurück
             </button>
-            <button
-              onClick={goToday}
-              className="px-3 py-1.5 rounded bg-white border border-slate-300 hover:bg-slate-50 text-sm"
-            >
+            <button onClick={goToday} className={navBtn} style={navBtnStyle}>
               Heute
             </button>
-            <button
-              onClick={goNext}
-              className="px-3 py-1.5 rounded bg-white border border-slate-300 hover:bg-slate-50 text-sm"
-            >
+            <button onClick={goNext} className={navBtn} style={navBtnStyle}>
               Weiter ›
             </button>
-            <span className="ml-2 text-lg font-semibold">
+            <span className="ml-2 text-lg font-semibold text-slate-100">
               {MONTHS[month]} {year}
             </span>
           </div>
-          <label className="flex items-center gap-2 text-sm text-slate-500 cursor-pointer">
+          <label className="flex items-center gap-2 text-sm text-slate-400 cursor-pointer">
             <input
               type="checkbox"
               checked={showTest}
               onChange={(e) => setShowTest(e.target.checked)}
-              className="accent-cyan-600"
+              className="accent-cyan-500"
             />
             Test-Buchungen anzeigen
           </label>
@@ -291,25 +295,33 @@ export default function AuftragskalenderPage() {
 
         {/* Kennzahlen */}
         <div className="flex flex-wrap gap-3 mb-5 text-sm">
-          <span className="px-3 py-1.5 rounded-lg bg-white border border-slate-200">
-            <strong>{stats.total}</strong> Aufträge im Monat
-          </span>
-          <span className="px-3 py-1.5 rounded-lg bg-white border border-slate-200">
-            📤 <strong>{stats.shipCount}</strong> Versand/Übergabe
-          </span>
-          <span className="px-3 py-1.5 rounded-lg bg-white border border-slate-200">
-            📥 <strong>{stats.returnCount}</strong> Rückgaben erwartet
-          </span>
+          {[
+            { label: 'Aufträge im Monat', value: stats.total, icon: '' },
+            { label: 'Versand/Übergabe', value: stats.shipCount, icon: '📤' },
+            { label: 'Rückgaben erwartet', value: stats.returnCount, icon: '📥' },
+          ].map((k) => (
+            <span
+              key={k.label}
+              className="px-3 py-1.5 rounded-lg text-slate-300"
+              style={{ background: C.card, border: `1px solid ${C.border}` }}
+            >
+              {k.icon && `${k.icon} `}
+              <strong className="text-slate-100">{k.value}</strong> {k.label}
+            </span>
+          ))}
         </div>
 
         {error && (
-          <div className="mb-4 rounded-lg bg-red-100 border border-red-300 text-red-800 px-4 py-3 text-sm">
+          <div
+            className="mb-4 rounded-lg px-4 py-3 text-sm text-red-200"
+            style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.4)' }}
+          >
             {error}
           </div>
         )}
 
         {loading ? (
-          <div className="py-20 text-center text-slate-400">Lädt …</div>
+          <div className="py-20 text-center text-slate-500">Lädt …</div>
         ) : view === 'monat' ? (
           <MonthView
             gridStart={gridStart}
@@ -335,7 +347,7 @@ export default function AuftragskalenderPage() {
         )}
 
         {/* Legende */}
-        <div className="mt-6 flex flex-wrap gap-4 text-xs text-slate-500">
+        <div className="mt-6 flex flex-wrap gap-x-4 gap-y-2 text-xs text-slate-400">
           {Object.entries(STATUS_STYLE).map(([k, v]) => (
             <span key={k} className="flex items-center gap-1.5">
               <span className="inline-block w-3 h-3 rounded" style={{ background: v.bg }} />
@@ -343,10 +355,15 @@ export default function AuftragskalenderPage() {
             </span>
           ))}
           <span className="flex items-center gap-1.5">
-            <span className="inline-block w-3 h-3 rounded bg-red-100 border border-red-300" />
+            <span
+              className="inline-block w-3 h-3 rounded"
+              style={{ background: C.cellSpecial, border: '1px solid rgba(248,113,113,0.5)' }}
+            />
             Sonn-/Feiertag
           </span>
-          <span className="flex items-center gap-1.5">📦 Versand · 🤝 Abholung · 📤 raus · 📥 zurück · 📝 Notiz</span>
+          <span className="flex items-center gap-1.5">
+            📦 Versand · 🤝 Abholung · 📤 raus · 📥 zurück · 📝 Notiz
+          </span>
         </div>
       </div>
 
@@ -364,11 +381,11 @@ export default function AuftragskalenderPage() {
 }
 
 // ============================================================
-// Monatsansicht (Wochenzeilen mit Buchungsbalken)
+// Monatsansicht
 // ============================================================
 
-const HEADER_H = 46;
-const LANE_H = 22;
+const HEADER_H = 44;
+const LANE_H = 24;
 
 function MonthView({
   gridStart,
@@ -390,18 +407,23 @@ function MonthView({
   onDayClick: (day: string) => void;
 }) {
   const weeks = [0, 1, 2, 3, 4, 5];
-
   const noteCount = (day: string) => notes.filter((n) => n.note_date === day).length;
 
   return (
-    <div className="rounded-xl overflow-hidden border border-slate-200 bg-white shadow-sm">
+    <div
+      className="rounded-xl overflow-hidden"
+      style={{ background: C.card, border: `1px solid ${C.border}` }}
+    >
       {/* Wochentag-Kopf */}
-      <div className="grid grid-cols-7 bg-slate-50 border-b border-slate-200">
+      <div
+        className="grid grid-cols-7"
+        style={{ background: C.panel, borderBottom: `1px solid ${C.border}` }}
+      >
         {WEEKDAYS.map((w, i) => (
           <div
             key={w}
             className={`px-2 py-2 text-xs font-semibold text-center ${
-              i === 6 ? 'text-red-500' : 'text-slate-500'
+              i === 6 ? 'text-red-400' : 'text-slate-400'
             }`}
           >
             {w}
@@ -455,8 +477,11 @@ function MonthView({
         return (
           <div
             key={w}
-            className="relative border-b border-slate-200 last:border-b-0"
-            style={{ minHeight: rowHeight }}
+            className="relative"
+            style={{
+              minHeight: rowHeight,
+              borderBottom: w < 5 ? `1px solid ${C.border}` : 'none',
+            }}
           >
             {/* Hintergrund-Zellen */}
             <div className="grid grid-cols-7 absolute inset-0">
@@ -470,37 +495,50 @@ function MonthView({
                 const isSpecial = isSunday || !!holiday;
                 const { ship, ret } = dayActions(day);
                 const nCount = noteCount(day);
+
+                const bg = isToday
+                  ? C.cellToday
+                  : isSpecial
+                  ? C.cellSpecial
+                  : isOtherMonth
+                  ? C.cellOther
+                  : C.cellNormal;
+
+                const numCls = isToday
+                  ? 'text-slate-900'
+                  : isOtherMonth
+                  ? 'text-slate-600'
+                  : isSpecial
+                  ? 'text-red-300'
+                  : 'text-slate-300';
+
                 return (
                   <button
                     key={d}
                     onClick={() => onDayClick(day)}
                     title="Klicken, um eine Notiz hinzuzufügen"
-                    className={`text-left border-r border-slate-200 last:border-r-0 transition group ${
-                      isSpecial
-                        ? 'bg-red-50 hover:bg-red-100'
-                        : isOtherMonth
-                        ? 'bg-slate-50 hover:bg-slate-100'
-                        : 'bg-white hover:bg-slate-50'
-                    } ${isToday ? 'ring-2 ring-amber-400 ring-inset' : ''}`}
+                    className="text-left transition group hover:brightness-125"
+                    style={{
+                      background: bg,
+                      borderRight: d < 6 ? `1px solid ${C.border}` : 'none',
+                    }}
                   >
-                    <div className="flex items-center justify-between px-1.5 pt-1">
+                    <div className="flex items-center justify-between px-1.5 pt-1.5">
                       <span
-                        className={`text-xs font-semibold flex items-center justify-center ${
+                        className={`text-xs font-semibold flex items-center justify-center ${numCls}`}
+                        style={
                           isToday
-                            ? 'bg-amber-400 text-white rounded-full w-5 h-5'
-                            : isOtherMonth
-                            ? 'text-slate-300'
-                            : isSpecial
-                            ? 'text-red-500'
-                            : 'text-slate-700'
-                        }`}
+                            ? { background: '#fbbf24', borderRadius: '9999px', width: 20, height: 20 }
+                            : undefined
+                        }
                       >
                         {dObj.getDate()}
                       </span>
                       <span className="flex gap-1 items-center">
                         {nCount > 0 && (
                           <span
-                            className="text-[10px] px-1 rounded bg-amber-100 text-amber-800 border border-amber-300"
+                            className="text-[10px] px-1 rounded"
+                            style={{ background: 'rgba(245,158,11,0.22)', color: '#fcd34d' }}
                             title={`${nCount} Notiz(en)`}
                           >
                             📝{nCount}
@@ -508,7 +546,8 @@ function MonthView({
                         )}
                         {ship > 0 && (
                           <span
-                            className="text-[10px] px-1 rounded bg-amber-100 text-amber-700"
+                            className="text-[10px] px-1 rounded"
+                            style={{ background: 'rgba(245,158,11,0.22)', color: '#fbbf24' }}
                             title={`${ship}× Versand/Übergabe`}
                           >
                             📤{ship}
@@ -516,19 +555,20 @@ function MonthView({
                         )}
                         {ret > 0 && (
                           <span
-                            className="text-[10px] px-1 rounded bg-emerald-100 text-emerald-700"
+                            className="text-[10px] px-1 rounded"
+                            style={{ background: 'rgba(16,185,129,0.22)', color: '#34d399' }}
                             title={`${ret}× Rückgabe erwartet`}
                           >
                             📥{ret}
                           </span>
                         )}
-                        <span className="text-[10px] text-slate-300 opacity-0 group-hover:opacity-100 transition">
+                        <span className="text-[11px] text-slate-500 opacity-0 group-hover:opacity-100 transition">
                           +
                         </span>
                       </span>
                     </div>
                     {holiday && (
-                      <div className="px-1.5 mt-0.5 text-[10px] leading-tight text-red-500 truncate">
+                      <div className="px-1.5 mt-0.5 text-[10px] leading-tight text-red-300 truncate">
                         {holiday}
                       </div>
                     )}
@@ -561,10 +601,10 @@ function MonthView({
                   }`}
                   className="absolute text-left px-1.5 text-[11px] leading-[18px] font-medium text-white truncate hover:brightness-110 shadow-sm transition"
                   style={{
-                    left: `calc(${(startCol / 7) * 100}% + 2px)`,
-                    width: `calc(${(span / 7) * 100}% - 4px)`,
+                    left: `calc(${(startCol / 7) * 100}% + 3px)`,
+                    width: `calc(${(span / 7) * 100}% - 6px)`,
                     top: HEADER_H + lane * LANE_H,
-                    height: LANE_H - 3,
+                    height: LANE_H - 5,
                     background: st.bg,
                     borderRadius: `${roundLeft ? 6 : 0}px ${roundRight ? 6 : 0}px ${
                       roundRight ? 6 : 0
@@ -586,7 +626,7 @@ function MonthView({
 }
 
 // ============================================================
-// Agenda-Ansicht (To-do-Liste pro Tag)
+// Agenda-Ansicht
 // ============================================================
 
 function AgendaView({
@@ -627,7 +667,10 @@ function AgendaView({
 
   if (days.length === 0) {
     return (
-      <div className="py-16 text-center text-slate-400 rounded-xl border border-slate-200 bg-white">
+      <div
+        className="py-16 text-center text-slate-500 rounded-xl"
+        style={{ background: C.card, border: `1px solid ${C.border}` }}
+      >
         Keine anstehenden Aufgaben in diesem Monat.
       </div>
     );
@@ -644,38 +687,42 @@ function AgendaView({
         return (
           <div
             key={day}
-            className={`rounded-xl border overflow-hidden bg-white ${
-              isToday ? 'border-amber-400' : 'border-slate-200'
-            } ${isPast ? 'opacity-70' : ''}`}
+            className="rounded-xl overflow-hidden"
+            style={{
+              background: C.card,
+              border: `1px solid ${isToday ? '#fbbf24' : C.border}`,
+              opacity: isPast ? 0.7 : 1,
+            }}
           >
             <div
-              className={`flex items-center justify-between px-4 py-2 text-sm font-semibold ${
-                isToday
-                  ? 'bg-amber-50 text-amber-800'
+              className="flex items-center justify-between px-4 py-2 text-sm font-semibold"
+              style={{
+                background: isToday
+                  ? 'rgba(251,191,36,0.15)'
                   : isSunday || holiday
-                  ? 'bg-red-50 text-red-700'
-                  : 'bg-slate-50 text-slate-700'
-              }`}
+                  ? 'rgba(248,113,113,0.12)'
+                  : C.panel,
+                color: isToday ? '#fcd34d' : isSunday || holiday ? '#fca5a5' : '#cbd5e1',
+              }}
             >
               <span>
                 {WEEKDAYS[(dObj.getDay() + 6) % 7]}, {pad(dObj.getDate())}.{' '}
                 {MONTHS[dObj.getMonth()]}
                 {isToday && ' — heute'}
-                {holiday && (
-                  <span className="ml-2 font-normal text-red-600">· {holiday}</span>
-                )}
+                {holiday && <span className="ml-2 font-normal text-red-300">· {holiday}</span>}
               </span>
               <button
                 onClick={() => onDayClick(day)}
-                className="text-xs font-medium px-2 py-1 rounded bg-white border border-slate-300 hover:bg-slate-50 text-slate-600"
+                className="text-xs font-medium px-2 py-1 rounded text-slate-200"
+                style={{ background: '#1e293b', border: `1px solid ${C.border}` }}
               >
                 + Notiz
               </button>
             </div>
-            <div className="divide-y divide-slate-100">
+            <div>
               {dayNotes.length > 0 && (
-                <div className="px-4 py-3">
-                  <div className="text-xs font-semibold mb-2 text-amber-700">
+                <div className="px-4 py-3" style={{ borderTop: `1px solid ${C.border}` }}>
+                  <div className="text-xs font-semibold mb-2" style={{ color: '#fcd34d' }}>
                     📝 Notizen ({dayNotes.length})
                   </div>
                   <div className="space-y-1.5">
@@ -683,7 +730,12 @@ function AgendaView({
                       <button
                         key={n.id}
                         onClick={() => onDayClick(day)}
-                        className="w-full text-left rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-900 hover:bg-amber-100 transition whitespace-pre-wrap"
+                        className="w-full text-left rounded-lg px-3 py-2 text-sm whitespace-pre-wrap transition hover:brightness-125"
+                        style={{
+                          background: 'rgba(245,158,11,0.13)',
+                          border: '1px solid rgba(245,158,11,0.35)',
+                          color: '#fde68a',
+                        }}
                       >
                         {n.text}
                       </button>
@@ -694,7 +746,7 @@ function AgendaView({
               {ship.length > 0 && (
                 <AgendaGroup
                   title={`📤 Raus / Übergabe (${ship.length})`}
-                  accent="text-amber-700"
+                  accent="#fbbf24"
                   items={ship}
                   onOpen={onOpen}
                 />
@@ -702,7 +754,7 @@ function AgendaView({
               {ret.length > 0 && (
                 <AgendaGroup
                   title={`📥 Rückgabe erwartet (${ret.length})`}
-                  accent="text-emerald-700"
+                  accent="#34d399"
                   items={ret}
                   onOpen={onOpen}
                 />
@@ -727,8 +779,10 @@ function AgendaGroup({
   onOpen: (id: string) => void;
 }) {
   return (
-    <div className="px-4 py-3">
-      <div className={`text-xs font-semibold mb-2 ${accent}`}>{title}</div>
+    <div className="px-4 py-3" style={{ borderTop: `1px solid ${C.border}` }}>
+      <div className="text-xs font-semibold mb-2" style={{ color: accent }}>
+        {title}
+      </div>
       <div className="space-y-2">
         {items.map((b) => {
           const st = statusStyle(b.status);
@@ -736,7 +790,8 @@ function AgendaGroup({
             <button
               key={b.id}
               onClick={() => onOpen(b.id)}
-              className="w-full flex flex-wrap items-center gap-2 text-left rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 px-3 py-2 transition"
+              className="w-full flex flex-wrap items-center gap-2 text-left rounded-lg px-3 py-2 transition hover:brightness-125"
+              style={{ background: C.panel, border: `1px solid ${C.border}` }}
             >
               <span
                 className="text-[10px] px-1.5 py-0.5 rounded font-medium text-white"
@@ -744,24 +799,18 @@ function AgendaGroup({
               >
                 {st.label}
               </span>
-              <span className="text-sm">
+              <span className="text-sm text-slate-200">
                 {b.delivery_mode === 'abholung' ? '🤝' : '📦'}{' '}
-                {b.is_test && (
-                  <span className="text-pink-600 font-semibold">[TEST] </span>
-                )}
+                {b.is_test && <span className="text-pink-400 font-semibold">[TEST] </span>}
                 <strong>{b.product_name ?? 'Buchung'}</strong>
               </span>
-              <span className="text-sm text-slate-500">
-                · {b.customer_name ?? 'Gast'}
-              </span>
-              <span className="text-xs text-slate-400 ml-auto">
+              <span className="text-sm text-slate-400">· {b.customer_name ?? 'Gast'}</span>
+              <span className="text-xs text-slate-500 ml-auto">
                 Miete {fmtPeriod(b)}
                 {b.shipping_method === 'express' && (
-                  <span className="ml-2 text-amber-600">Express</span>
+                  <span className="ml-2 text-amber-400">Express</span>
                 )}
-                {b.tracking_number && (
-                  <span className="ml-2 text-cyan-600">Tracking ✓</span>
-                )}
+                {b.tracking_number && <span className="ml-2 text-cyan-400">Tracking ✓</span>}
               </span>
             </button>
           );
@@ -863,41 +912,52 @@ function NoteModal({
     }
   }
 
+  const inputStyle = {
+    background: C.panel,
+    border: `1px solid ${C.border}`,
+    color: '#e2e8f0',
+  };
+
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-xl bg-white shadow-xl overflow-hidden"
+        className="w-full max-w-md rounded-xl overflow-hidden"
+        style={{ background: C.card, border: `1px solid ${C.border}` }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="px-5 py-3 border-b border-slate-200 bg-slate-50">
-          <h2 className="font-semibold text-slate-900">
+        <div className="px-5 py-3" style={{ background: C.panel, borderBottom: `1px solid ${C.border}` }}>
+          <h2 className="font-semibold text-slate-100">
             Notizen — {WEEKDAYS[(dObj.getDay() + 6) % 7]}, {pad(dObj.getDate())}.{' '}
             {MONTHS[dObj.getMonth()]} {dObj.getFullYear()}
           </h2>
-          {holidayName && (
-            <p className="text-xs text-red-600 mt-0.5">{holidayName}</p>
-          )}
+          {holidayName && <p className="text-xs text-red-300 mt-0.5">{holidayName}</p>}
         </div>
 
         <div className="px-5 py-4 max-h-[60vh] overflow-y-auto">
           {err && (
-            <div className="mb-3 rounded bg-red-100 border border-red-300 text-red-800 px-3 py-2 text-sm">
+            <div
+              className="mb-3 rounded px-3 py-2 text-sm text-red-200"
+              style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.4)' }}
+            >
               {err}
             </div>
           )}
 
-          {/* Vorhandene Notizen */}
           {notes.length === 0 ? (
-            <p className="text-sm text-slate-400 mb-4">Noch keine Notizen für diesen Tag.</p>
+            <p className="text-sm text-slate-500 mb-4">Noch keine Notizen für diesen Tag.</p>
           ) : (
             <div className="space-y-2 mb-4">
               {notes.map((n) => (
                 <div
                   key={n.id}
-                  className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2"
+                  className="rounded-lg px-3 py-2"
+                  style={{
+                    background: 'rgba(245,158,11,0.13)',
+                    border: '1px solid rgba(245,158,11,0.35)',
+                  }}
                 >
                   {editId === n.id ? (
                     <div className="space-y-2">
@@ -905,13 +965,14 @@ function NoteModal({
                         value={editText}
                         onChange={(e) => setEditText(e.target.value)}
                         rows={3}
-                        className="w-full text-base rounded border border-slate-300 px-2 py-1.5 text-slate-900"
+                        className="w-full text-base rounded px-2 py-1.5"
+                        style={inputStyle}
                       />
                       <div className="flex gap-2">
                         <button
                           onClick={() => saveEdit(n.id)}
                           disabled={busy}
-                          className="px-3 py-1 text-sm rounded bg-cyan-600 text-white hover:bg-cyan-700 disabled:opacity-50"
+                          className="px-3 py-1 text-sm rounded bg-cyan-600 text-white hover:bg-cyan-500 disabled:opacity-50"
                         >
                           Speichern
                         </button>
@@ -920,7 +981,8 @@ function NoteModal({
                             setEditId(null);
                             setEditText('');
                           }}
-                          className="px-3 py-1 text-sm rounded bg-white border border-slate-300 hover:bg-slate-50"
+                          className="px-3 py-1 text-sm rounded text-slate-200"
+                          style={{ background: '#1e293b', border: `1px solid ${C.border}` }}
                         >
                           Abbrechen
                         </button>
@@ -928,7 +990,7 @@ function NoteModal({
                     </div>
                   ) : (
                     <div className="flex items-start justify-between gap-2">
-                      <p className="text-sm text-amber-900 whitespace-pre-wrap flex-1">
+                      <p className="text-sm whitespace-pre-wrap flex-1" style={{ color: '#fde68a' }}>
                         {n.text}
                       </p>
                       <div className="flex gap-1 shrink-0">
@@ -937,7 +999,7 @@ function NoteModal({
                             setEditId(n.id);
                             setEditText(n.text);
                           }}
-                          className="text-xs text-slate-500 hover:text-slate-800 px-1"
+                          className="text-xs text-slate-400 hover:text-slate-100 px-1"
                           title="Bearbeiten"
                         >
                           ✏️
@@ -945,7 +1007,7 @@ function NoteModal({
                         <button
                           onClick={() => deleteNote(n.id)}
                           disabled={busy}
-                          className="text-xs text-red-500 hover:text-red-700 px-1 disabled:opacity-50"
+                          className="text-xs text-red-400 hover:text-red-300 px-1 disabled:opacity-50"
                           title="Löschen"
                         >
                           ✕
@@ -958,30 +1020,32 @@ function NoteModal({
             </div>
           )}
 
-          {/* Neue Notiz */}
-          <label className="block text-xs font-semibold text-slate-500 mb-1">
-            Neue Notiz
-          </label>
+          <label className="block text-xs font-semibold text-slate-400 mb-1">Neue Notiz</label>
           <textarea
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             rows={3}
             placeholder="z. B. Kamera-Wartung, Urlaub, Sondertermin …"
-            className="w-full text-base rounded border border-slate-300 px-2 py-1.5 text-slate-900"
+            className="w-full text-base rounded px-2 py-1.5"
+            style={inputStyle}
           />
         </div>
 
-        <div className="px-5 py-3 border-t border-slate-200 bg-slate-50 flex justify-between">
+        <div
+          className="px-5 py-3 flex justify-between"
+          style={{ background: C.panel, borderTop: `1px solid ${C.border}` }}
+        >
           <button
             onClick={onClose}
-            className="px-4 py-1.5 text-sm rounded bg-white border border-slate-300 hover:bg-slate-100"
+            className="px-4 py-1.5 text-sm rounded text-slate-200"
+            style={{ background: '#1e293b', border: `1px solid ${C.border}` }}
           >
             Schließen
           </button>
           <button
             onClick={addNote}
             disabled={busy || !draft.trim()}
-            className="px-4 py-1.5 text-sm rounded bg-cyan-600 text-white hover:bg-cyan-700 disabled:opacity-50"
+            className="px-4 py-1.5 text-sm rounded bg-cyan-600 text-white hover:bg-cyan-500 disabled:opacity-50"
           >
             Notiz hinzufügen
           </button>
