@@ -254,8 +254,9 @@ gemeinsame Inbox für Konto-Nachrichten + echte E-Mails).
 
 **Warum IMAP statt Webhook:** Resend Inbound hätte eine zweite Domain
 (`inbound.cam2rent.de`) gebraucht → Resend Pro (20 $/Mon). Stattdessen holt ein
-Cron alle 3 Min neue Mails per IMAP direkt aus dem Google-Workspace-Postfach
-`kontakt@cam2rent.de` — kostenlos, keine MX-Änderung, Postfach bleibt unberührt.
+Cron alle 3 Min neue Mails per IMAP direkt aus dem Support-Postfach
+`kontakt@cam2rent.de` (liegt bei All-Inkl, IMAP-Server `wXXXXXX.kasserver.com`)
+— kostenlos, keine MX-Änderung, Postfach bleibt unberührt.
 - **Migration `supabase/supabase-inbound-email.sql`** (idempotent): `conversations.customer_id`
   wird **nullable** (Sender ohne Kundenkonto erlaubt) + neue Spalten `customer_email`,
   `customer_name`, `source TEXT DEFAULT 'account' CHECK (account|email)`,
@@ -265,9 +266,10 @@ Cron alle 3 Min neue Mails per IMAP direkt aus dem Google-Workspace-Postfach
   unverändert — `auth.uid() = customer_id` matcht NULL nie, E-Mail-Konversationen
   ohne Konto sind admin-only.
 - **Cron `GET/POST /api/cron/inbound-email-poll`** (`verifyCronAuth` +
-  `acquireCronLock`): verbindet per `imapflow` mit `imap.gmail.com`, holt neue
-  Mails seit der zuletzt verarbeiteten UID (Zustand in
-  `admin_settings.inbound_email_imap_state` — verändert NICHT den Gmail-Lesestatus),
+  `acquireCronLock`): verbindet per `imapflow` mit dem IMAP-Server aus
+  `INBOUND_IMAP_HOST` (All-Inkl `wXXXXXX.kasserver.com`; Default `imap.gmail.com`),
+  holt neue Mails seit der zuletzt verarbeiteten UID (Zustand in
+  `admin_settings.inbound_email_imap_state` — verändert NICHT den Lesestatus),
   parst mit `mailparser`. Erster Lauf „stellt scharf" (Bestand wird nicht
   rückwirkend importiert). Automatisierte Mails (Newsletter/Bounce/Auto-Reply per
   Header `List-*`/`Auto-Submitted`/`Precedence`) + Mails von `@cam2rent.de`
@@ -2797,11 +2799,12 @@ in der Sub-Zeile → Modal `components/admin/InventarVerknuepfModal.tsx`.
      fällt defensiv auf das alte Schema zurück.
   2. Supabase Storage-Bucket `email-attachments` anlegen (privat, ~25 MB,
      MIME-Allowlist leer lassen — siehe Kommentar in der Migration).
-  3. Im Google-Konto `kontakt@cam2rent.de`: 2-Faktor aktivieren → **App-Passwort**
-     erzeugen (Google-Konto → Sicherheit → App-Passwörter) + IMAP im
-     Gmail-Postfach aktivieren (Einstellungen → Weiterleitung & POP/IMAP).
+  3. Postfach `kontakt@cam2rent.de` liegt bei All-Inkl: im KAS den IMAP-Server
+     ablesen (`wXXXXXX.kasserver.com`). IMAP ist bei All-Inkl standardmäßig aktiv,
+     kein 2-Faktor/App-Passwort nötig — das normale Postfach-Passwort genügt.
   4. Coolify-Env: `INBOUND_IMAP_USER=kontakt@cam2rent.de` +
-     `INBOUND_IMAP_PASSWORD=<App-Passwort>` (optional `INBOUND_IMAP_HOST`/`PORT`).
+     `INBOUND_IMAP_PASSWORD=<Postfach-Passwort>` +
+     `INBOUND_IMAP_HOST=wXXXXXX.kasserver.com` (Port 993 = Default).
   5. Hetzner-Crontab (alle 3 Min):
      ```
      */3 * * * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/inbound-email-poll
@@ -2811,13 +2814,13 @@ in der Sub-Zeile → Modal `components/admin/InventarVerknuepfModal.tsx`.
   Mails. Eine Test-Mail nach dem zweiten Lauf bestätigt das Setup.
 - **Pro-Mitarbeiter-Postfächer Go-Live:** Migration
   `supabase/supabase-inbound-email-per-employee.sql` ausführen. Dann pro
-  Mitarbeiter in Google Workspace einen **Alias** `name@cam2rent.de` am
-  Support-Konto anlegen (kostenlos, bis 30 Aliase) und dieselbe Adresse unter
-  `/admin/einstellungen/mitarbeiter` im Feld „Postfach-Adresse" eintragen.
-  Ohne die Migration läuft die Basis-Inbound-Funktion weiter (alle
-  Konversationen unzugeordnet, für alle sichtbar). Echte separate
-  Google-Konten statt Aliasen wären auch möglich, brauchen aber eine
-  Cron-Erweiterung (mehrere IMAP-Logins) — aktuell pollt der Cron ein Postfach.
+  Mitarbeiter im All-Inkl-KAS `name@cam2rent.de` als **E-Mail-Weiterleitung**
+  auf `kontakt@cam2rent.de` anlegen (im Hosting-Paket enthalten) und dieselbe
+  Adresse unter `/admin/einstellungen/mitarbeiter` im Feld „Postfach-Adresse"
+  eintragen. Ohne die Migration läuft die Basis-Inbound-Funktion weiter (alle
+  Konversationen unzugeordnet, für alle sichtbar). Separate echte Postfächer
+  pro Mitarbeiter wären auch möglich, brauchen aber eine Cron-Erweiterung
+  (mehrere IMAP-Logins) — aktuell pollt der Cron ein Postfach.
 - **Tracking-Carrier + Retoure-Tracking Migration auszuführen:** `supabase/supabase-bookings-tracking-carrier-return.sql` (idempotent). Legt vier neue Spalten an: `tracking_carrier`, `return_tracking_number`, `return_tracking_url`, `return_tracking_carrier` (CHECK auf DHL/DPD, NULL erlaubt). Ohne Migration läuft der bestehende Hin-Versand-Workflow (ship-booking) per defensivem Retry weiter (tracking_carrier wird gedroppt). Die neue Trackingnummer-Bearbeitung in `/admin/buchungen/[id]` antwortet bei fehlender Spalte mit 503; Retoure-Tracking-Edit wird komplett geblockt. Empfohlen ASAP ausführen.
 - **Bestellbearbeitungs-Migration auszuführen:** `supabase/supabase-bookings-edit-adjustment.sql` (idempotent). Legt `bookings.adjustment_payment_link_id/amount/status/note` an. Ohne Migration läuft die komplette Bestellbearbeitung weiter (Zahlungslink/Refund werden ausgeführt, Doku landet in `notes`), nur die strukturierten `adjustment_*`-Felder + der Webhook-Status-Sync („Nachzahlung bezahlt") greifen erst nach der Migration. Empfohlen ASAP ausführen.
 - **Verkauf-Migration auszuführen:** `supabase/supabase-bookings-verkauf.sql` (idempotent). Legt `bookings.booking_type` (DEFAULT `miete`) + `bookings.sale_items` JSONB an. Ohne Migration liefert `POST /api/admin/verkauf` 503; die Miet-Ansichten laufen per defensivem Fallback unverändert weiter. Empfohlen ASAP ausführen, damit das Verkaufs-Tool nutzbar ist.
