@@ -812,6 +812,15 @@ Vorher griff der Sync-Auto-Match ausschliesslich ueber `bookings.payment_intent_
 - **Endpoint `mark-duplicate`** verknuepft die Tx mit der Original-Buchung (`booking_id`), setzt `match_status='refunded'`, schreibt einen Standard-Notiz-Text als `reconciliation_note` und haengt eine Audit-Zeile an `bookings.refund_note`. **Kein** Einkommens-Abzug (`bookings.refund_amount` bleibt unberuehrt) — eine Doppelzahlung ist netto-null, der Rechnungsbetrag der Buchung war korrekt. Den **Stripe-Refund selbst loest der Admin manuell aus** (im Stripe-Dashboard oder ueber den existierenden „Erstattung erfassen"-Workflow). Bewusst getrennt, damit Geldfluss-Aktionen explizit bleiben.
 - Audit: `stripe.mark_duplicate` (Entity `booking`).
 
+### Stripe-Abgleich: stuendlicher Auto-Sync per Cron (Stand 2026-05-21)
+Der Stripe-Abgleich wird jetzt zusaetzlich zum manuellen „Synchronisieren"-Button automatisch jede Stunde synchronisiert.
+- **Geteilte Kernlogik** `lib/buchhaltung/stripe-sync.ts` → `runStripeSync({ from, to })` — die komplette PaymentIntent-Lade- + Auto-Match-Kaskaden-Logik wurde aus `app/api/admin/buchhaltung/stripe-reconciliation/sync/route.ts` extrahiert (Route ist jetzt duenner Wrapper: `checkAdminAuth` → `runStripeSync` → `logAudit`). Verhalten 1:1 unveraendert.
+- **Cron** `GET/POST /api/cron/stripe-sync` (`verifyCronAuth` + `acquireCronLock('stripe-sync')`): synchronisiert den **aktuellen Monat** (Berlin-TZ, `from = YYYY-MM-01`, `to = heute`) — analog zum „Aktueller Monat"-Default im UI. Laeuft in Test- UND Live-Modus (Stripe-Read, kein Spend; `runStripeSync` nutzt intern `isTestMode()`). Audit `stripe.sync_run` mit `source:'cron'`.
+- **Hetzner-Crontab (stuendlich):**
+  ```
+  0 * * * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/stripe-sync
+  ```
+
 ### Push-Notifications (Admin-PWA, Stand 2026-04-17)
 Web-Push-Notifications für die Admin-PWA. Alle Events, die `createAdminNotification()` triggern (neue Buchung, Stornierung, Schaden, Nachricht, Bewertung), erzeugen automatisch auch eine Push-Notification — auch wenn die PWA gerade nicht offen ist.
 
@@ -2670,6 +2679,9 @@ Zusätzlich zum bestehenden file-hash-Check (byte-identische Datei) erkennt das 
     5 * * * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/awaiting-payment-cancel
     ```
   Storniert `awaiting_payment`-Buchungen deren Deadline (siehe Regeln oben) erreicht ist. Deaktiviert den Stripe Payment Link via `stripe.paymentLinks.update(id, {active:false})`, setzt Status `cancelled`, schickt Storno-Mail. Grace-Period: 1h nach Buchungs-Erstellung.
+- **Cron-Eintrag stripe-sync in Hetzner-Crontab eintragen (stuendlicher Stripe-Abgleich):**
+  `0 * * * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/stripe-sync`
+  Synchronisiert jede Stunde automatisch den aktuellen Monat (= manueller „Synchronisieren"-Button im Stripe-Abgleich-Tab). Ohne den Crontab-Eintrag bleibt nur der manuelle Button.
 - **Cron-Eintrag reels-generate in Hetzner-Crontab eintragen:**
   `0 * * * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/reels-generate`
   Generiert stündlich Reels aus dem `social_reel_plan`-Redaktionsplan. Wochentag + Zeitfenster werden aus `admin_settings.reels_settings` (Auto-Generierungs-Card in `/admin/social/reels/einstellungen`) geladen. Im Test-Modus automatisch deaktiviert (kein OpenAI/Pexels-Spend).
