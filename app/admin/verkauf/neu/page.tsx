@@ -81,7 +81,17 @@ export default function VerkaufNeu() {
   const selectedBooking = bookings.find((b) => b.id === selectedBookingId);
 
   function addLine(name = '', qty = 1) {
-    setLines((prev) => [...prev, { name, qty: String(qty), unit_price: '' }]);
+    setLines((prev) => {
+      // Wenn die letzte Zeile noch komplett leer ist, diese befüllen statt
+      // eine zusätzliche Zeile anzuhängen (z.B. die anfängliche Leerzeile).
+      const last = prev[prev.length - 1];
+      if (name && last && !last.name.trim() && !last.unit_price.trim()) {
+        return prev.map((l, i) =>
+          i === prev.length - 1 ? { name, qty: String(qty), unit_price: '' } : l,
+        );
+      }
+      return [...prev, { name, qty: String(qty), unit_price: '' }];
+    });
   }
   function updateLine(idx: number, patch: Partial<SaleLine>) {
     setLines((prev) => prev.map((l, i) => (i === idx ? { ...l, ...patch } : l)));
@@ -167,8 +177,10 @@ export default function VerkaufNeu() {
     );
   }
 
+  // Kein w-full hier — sonst kollidiert es in der Positions-Zeile mit
+  // flex-1 / w-16. Breite wird pro Feld explizit gesetzt.
   const inputCls =
-    'w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-base text-white placeholder-slate-600 focus:outline-none focus:border-cyan-600';
+    'rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-base text-white placeholder-slate-600 focus:outline-none focus:border-cyan-600';
   const cardCls = 'rounded-xl bg-slate-900/50 border border-slate-800 p-5';
   const labelCls = 'text-xs uppercase tracking-wider text-slate-500 mb-1.5 block';
 
@@ -190,7 +202,7 @@ export default function VerkaufNeu() {
           <select
             value={customerId}
             onChange={(e) => selectCustomer(e.target.value)}
-            className={inputCls}
+            className={`${inputCls} w-full`}
           >
             <option value="">— Kunde wählen —</option>
             {customers.map((c) => (
@@ -205,7 +217,7 @@ export default function VerkaufNeu() {
               <input
                 value={customerName}
                 onChange={(e) => setCustomerName(e.target.value)}
-                className={inputCls}
+                className={`${inputCls} w-full`}
                 placeholder="Name des Kunden"
               />
             </div>
@@ -214,7 +226,7 @@ export default function VerkaufNeu() {
               <input
                 value={customerEmail}
                 onChange={(e) => setCustomerEmail(e.target.value)}
-                className={inputCls}
+                className={`${inputCls} w-full`}
                 placeholder="kunde@example.de"
                 inputMode="email"
               />
@@ -238,7 +250,7 @@ export default function VerkaufNeu() {
               <select
                 value={selectedBookingId}
                 onChange={(e) => setSelectedBookingId(e.target.value)}
-                className={inputCls}
+                className={`${inputCls} w-full`}
               >
                 <option value="">— Buchung wählen —</option>
                 {bookings.map((b) => (
@@ -278,22 +290,22 @@ export default function VerkaufNeu() {
                 <input
                   value={line.name}
                   onChange={(e) => updateLine(idx, { name: e.target.value })}
-                  className={`${inputCls} flex-1`}
+                  className={`${inputCls} flex-1 min-w-0`}
                   placeholder="Artikel (z.B. SD-Karte 128 GB)"
                 />
                 <input
                   value={line.qty}
                   onChange={(e) => updateLine(idx, { qty: e.target.value.replace(/[^0-9]/g, '') })}
-                  className={`${inputCls} w-16 text-center`}
+                  className={`${inputCls} w-16 shrink-0 text-center`}
                   inputMode="numeric"
                   placeholder="1"
                   aria-label="Menge"
                 />
-                <div className="relative w-28">
+                <div className="relative w-28 shrink-0">
                   <input
                     value={line.unit_price}
                     onChange={(e) => updateLine(idx, { unit_price: e.target.value })}
-                    className={`${inputCls} pr-7 text-right`}
+                    className={`${inputCls} w-full pr-7 text-right`}
                     inputMode="decimal"
                     placeholder="0,00"
                     aria-label="Einzelpreis"
