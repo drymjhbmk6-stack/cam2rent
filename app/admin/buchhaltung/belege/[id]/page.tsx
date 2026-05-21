@@ -109,6 +109,13 @@ export default function BelegDetailPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Inline-Bearbeitung einer Position (Netto / MwSt / Menge / Bezeichnung)
+  const [editPosId, setEditPosId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<{ bezeichnung: string; menge: string; einzelpreis_netto: string; mwst_satz: string }>(
+    { bezeichnung: '', menge: '', einzelpreis_netto: '', mwst_satz: '' },
+  );
+  const [savingPos, setSavingPos] = useState(false);
+
   async function reload() {
     setLoading(true);
     const res = await fetch(`/api/admin/belege/${belegId}`);
@@ -173,6 +180,50 @@ export default function BelegDetailPage() {
       body: JSON.stringify(update),
     });
     if (res.ok) reload();
+  }
+
+  function startEditPos(p: Position) {
+    setEditPosId(p.id);
+    setEditDraft({
+      bezeichnung: p.bezeichnung,
+      menge: String(p.menge),
+      einzelpreis_netto: Number(p.einzelpreis_netto).toFixed(2).replace('.', ','),
+      mwst_satz: String(p.mwst_satz),
+    });
+    setError(null);
+  }
+
+  function cancelEditPos() {
+    setEditPosId(null);
+    setError(null);
+  }
+
+  async function saveEditPos(posId: string) {
+    const netto = parseFloat(editDraft.einzelpreis_netto.replace(',', '.'));
+    const menge = parseInt(editDraft.menge, 10);
+    const mwst = parseFloat(editDraft.mwst_satz.replace(',', '.'));
+    if (!editDraft.bezeichnung.trim()) { setError('Bezeichnung darf nicht leer sein.'); return; }
+    if (!Number.isFinite(netto) || netto < 0) { setError('Ungültiger Netto-Preis.'); return; }
+    if (!Number.isFinite(menge) || menge < 1) { setError('Ungültige Menge (mindestens 1).'); return; }
+    if (!Number.isFinite(mwst) || mwst < 0 || mwst > 100) { setError('Ungültiger MwSt-Satz (0–100).'); return; }
+    setSavingPos(true);
+    setError(null);
+    const res = await fetch(`/api/admin/beleg-positionen/${posId}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        bezeichnung: editDraft.bezeichnung.trim(),
+        menge,
+        einzelpreis_netto: netto,
+        mwst_satz: mwst,
+      }),
+    });
+    if (res.ok) {
+      setEditPosId(null);
+      await reload();
+    } else {
+      setError((await res.json().catch(() => ({}))).error ?? 'Speichern fehlgeschlagen');
+    }
+    setSavingPos(false);
   }
 
   async function applyKi() {
@@ -618,7 +669,10 @@ export default function BelegDetailPage() {
             {positionen.map((p) => {
               const links = linksByPosition[p.id] ?? [];
               const ki = p.ki_vorschlag;
-              const einzelBrutto = Number(p.einzelpreis_netto) * (1 + Number(p.mwst_satz) / 100);
+              const isEditing = editPosId === p.id;
+              const draftNetto = isEditing ? parseFloat(editDraft.einzelpreis_netto.replace(',', '.')) : Number(p.einzelpreis_netto);
+              const draftMwst = isEditing ? parseFloat(editDraft.mwst_satz.replace(',', '.')) : Number(p.mwst_satz);
+              const einzelBrutto = (Number.isFinite(draftNetto) ? draftNetto : 0) * (1 + (Number.isFinite(draftMwst) ? draftMwst : 0) / 100);
               const hasDetails = (p.kategorie || ki || p.notizen || links.length > 0 || p.folgekosten_asset_id);
               return (
               <div key={p.id} className="rounded border border-slate-800 bg-slate-900/40">
@@ -626,10 +680,11 @@ export default function BelegDetailPage() {
                 <div className="p-2 space-y-2 md:grid md:grid-cols-12 md:gap-2 md:items-center md:space-y-0">
                   {/* Bezeichnung: volle Breite auf Mobile, 4/12 auf Desktop */}
                   <input
-                    value={p.bezeichnung}
-                    disabled
+                    value={isEditing ? editDraft.bezeichnung : p.bezeichnung}
+                    disabled={!isEditing}
+                    onChange={(e) => setEditDraft((d) => ({ ...d, bezeichnung: e.target.value }))}
                     aria-label="Bezeichnung"
-                    className="w-full md:col-span-4 bg-[#111827] border border-slate-700 rounded px-2 py-1.5 text-sm disabled:opacity-90"
+                    className={`w-full md:col-span-4 bg-[#111827] border rounded px-2 py-1.5 text-sm disabled:opacity-90 ${isEditing ? 'border-cyan-600' : 'border-slate-700'}`}
                   />
                   {/* Mobile: Mini-Labels uebers Feld; md:contents loest den Wrapper im Grid auf */}
                   <div className="grid grid-cols-4 gap-2 md:contents">
@@ -638,28 +693,35 @@ export default function BelegDetailPage() {
                     <label className="md:hidden text-[10px] uppercase tracking-wider text-slate-500 col-span-1 text-right">Brutto</label>
                     <label className="md:hidden text-[10px] uppercase tracking-wider text-slate-500 col-span-1 text-center">MwSt</label>
                     <input
-                      value={p.menge}
-                      disabled
+                      value={isEditing ? editDraft.menge : p.menge}
+                      disabled={!isEditing}
+                      onChange={(e) => setEditDraft((d) => ({ ...d, menge: e.target.value }))}
+                      inputMode="numeric"
                       aria-label="Menge"
-                      className="col-span-1 md:col-span-1 bg-[#111827] border border-slate-700 rounded px-2 py-1.5 text-sm text-center disabled:opacity-90"
+                      className={`col-span-1 md:col-span-1 bg-[#111827] border rounded px-2 py-1.5 text-sm text-center disabled:opacity-90 ${isEditing ? 'border-cyan-600' : 'border-slate-700'}`}
                     />
                     <input
-                      value={Number(p.einzelpreis_netto).toFixed(2)}
-                      disabled
+                      value={isEditing ? editDraft.einzelpreis_netto : Number(p.einzelpreis_netto).toFixed(2)}
+                      disabled={!isEditing}
+                      onChange={(e) => setEditDraft((d) => ({ ...d, einzelpreis_netto: e.target.value }))}
+                      inputMode="decimal"
                       aria-label="Einzelpreis netto"
-                      className="col-span-1 md:col-span-2 bg-[#111827] border border-slate-700 rounded px-2 py-1.5 text-sm text-right disabled:opacity-90"
+                      className={`col-span-1 md:col-span-2 bg-[#111827] border rounded px-2 py-1.5 text-sm text-right disabled:opacity-90 ${isEditing ? 'border-cyan-600' : 'border-slate-700'}`}
                     />
                     <input
                       value={einzelBrutto.toFixed(2)}
                       disabled
                       aria-label="Einzelpreis brutto"
+                      title={isEditing ? 'Wird automatisch aus Netto × MwSt berechnet' : undefined}
                       className="col-span-1 md:col-span-2 bg-[#111827] border border-slate-700 rounded px-2 py-1.5 text-sm text-right disabled:opacity-90"
                     />
                     <input
-                      value={p.mwst_satz}
-                      disabled
+                      value={isEditing ? editDraft.mwst_satz : p.mwst_satz}
+                      disabled={!isEditing}
+                      onChange={(e) => setEditDraft((d) => ({ ...d, mwst_satz: e.target.value }))}
+                      inputMode="decimal"
                       aria-label="MwSt-Satz"
-                      className="col-span-1 md:col-span-1 bg-[#111827] border border-slate-700 rounded px-2 py-1.5 text-sm text-center disabled:opacity-90"
+                      className={`col-span-1 md:col-span-1 bg-[#111827] border rounded px-2 py-1.5 text-sm text-center disabled:opacity-90 ${isEditing ? 'border-cyan-600' : 'border-slate-700'}`}
                     />
                   </div>
                   <div className="flex justify-end md:col-span-2">
@@ -676,11 +738,40 @@ export default function BelegDetailPage() {
                   </div>
                 </div>
 
-                {/* Sub-Zeile: Summen + Details */}
-                <div className="px-3 pb-2 text-xs text-slate-500 flex flex-wrap gap-x-4">
-                  <span>Gesamt netto: <span className="text-slate-300 font-mono">{fmtEuro(Number(p.gesamt_netto))}</span></span>
-                  <span>Gesamt brutto: <span className="text-slate-300 font-mono">{fmtEuro(Number(p.gesamt_brutto))}</span></span>
-                  {p.kategorie && <span>Kategorie: <span className="text-slate-300">{p.kategorie}</span></span>}
+                {/* Sub-Zeile: Summen + Bearbeiten */}
+                <div className="px-3 pb-2 flex flex-wrap items-center justify-between gap-2">
+                  <div className="text-xs text-slate-500 flex flex-wrap gap-x-4">
+                    <span>Gesamt netto: <span className="text-slate-300 font-mono">{fmtEuro(Number(p.gesamt_netto))}</span></span>
+                    <span>Gesamt brutto: <span className="text-slate-300 font-mono">{fmtEuro(Number(p.gesamt_brutto))}</span></span>
+                    {p.kategorie && <span>Kategorie: <span className="text-slate-300">{p.kategorie}</span></span>}
+                  </div>
+                  {!isLocked && !p.locked && (
+                    isEditing ? (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => saveEditPos(p.id)}
+                          disabled={savingPos}
+                          className="px-3 py-1 bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-700 text-slate-900 rounded text-xs font-semibold"
+                        >
+                          {savingPos ? 'Speichert…' : 'Speichern'}
+                        </button>
+                        <button
+                          onClick={cancelEditPos}
+                          disabled={savingPos}
+                          className="px-3 py-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-slate-200 rounded text-xs"
+                        >
+                          Abbrechen
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => startEditPos(p)}
+                        className="px-3 py-1 border border-slate-700 hover:border-cyan-600 hover:text-cyan-300 text-slate-400 rounded text-xs"
+                      >
+                        ✏ Bearbeiten
+                      </button>
+                    )
+                  )}
                 </div>
 
                 {/* Details (KI, Notizen, Verknüpfungen) */}
