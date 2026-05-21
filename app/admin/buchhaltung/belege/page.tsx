@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
+import BelegDokumentVorschau from '@/components/admin/BelegDokumentVorschau';
 import { formatCurrency, fmtDate as fmtDateCanonical } from '@/lib/format-utils';
 
 interface Beleg {
@@ -75,6 +76,7 @@ export default function BelegeListePage() {
   // Default: neueste oben — Datum absteigend.
   const [sortKey, setSortKey] = useState<SortKey>('beleg_datum');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const [previewBelegId, setPreviewBelegId] = useState<string | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -311,6 +313,7 @@ export default function BelegeListePage() {
                   <SortHeader label="Brutto" k="summe_brutto" align="right" />
                   <SortHeader label="Klassif." k="klassifizierung" />
                   <SortHeader label="Status" k="status" />
+                  <th className="px-3 py-2 text-xs font-semibold text-slate-400 whitespace-nowrap">Beleg</th>
                 </tr>
               </thead>
               <tbody>
@@ -362,6 +365,19 @@ export default function BelegeListePage() {
                         {STATUS_LABEL[b.status]}
                       </span>
                     </td>
+                    <td
+                      className="px-3 py-2 text-center"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <button
+                        onClick={() => setPreviewBelegId(b.id)}
+                        title="Rechnung ansehen"
+                        aria-label="Rechnung ansehen"
+                        className="text-slate-400 hover:text-cyan-300 text-base"
+                      >
+                        👁
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -369,6 +385,40 @@ export default function BelegeListePage() {
           </div>
         )}
       </div>
+
+      {previewBelegId && (
+        <div
+          className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"
+          onClick={() => setPreviewBelegId(null)}
+        >
+          <div
+            className="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-2xl max-h-[88vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-3 border-b border-slate-800 flex items-center justify-between">
+              <h2 className="font-semibold text-white text-sm">Rechnung ansehen</h2>
+              <div className="flex items-center gap-3">
+                <Link
+                  href={`/admin/buchhaltung/belege/${previewBelegId}`}
+                  className="text-cyan-400 hover:text-cyan-300 text-xs"
+                >
+                  Zum Beleg →
+                </Link>
+                <button
+                  onClick={() => setPreviewBelegId(null)}
+                  className="text-slate-500 hover:text-slate-300 text-xl leading-none"
+                  aria-label="Schließen"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+            <div className="p-3 overflow-y-auto">
+              <BelegDokumentVorschau belegId={previewBelegId} height={620} />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

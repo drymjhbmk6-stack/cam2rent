@@ -2793,6 +2793,20 @@ in der Sub-Zeile → Modal `components/admin/InventarVerknuepfModal.tsx`.
   der Beleg muss die echte Stückzahl als `menge` führen (bzw. in mehrere
   Positionen aufgeteilt sein).
 
+### Belege: Rechnungs-Dokument-Vorschau (Stand 2026-05-21)
+Das hochgeladene Rechnungs-Dokument (Anhang) ließ sich bisher nur per Klick in
+einem neuen Tab öffnen — keine Vorschau. Neue Komponente
+`components/admin/BelegDokumentVorschau.tsx` bettet das Dokument ein (PDF im
+`<iframe>`, Bilder als `<img>`, Mehrfach-Anhänge per Umschalt-Buttons). Lädt die
+Signed-URL über den bestehenden `GET /api/admin/belege/[id]/anhaenge/[anhangId]?signed=1`.
+Zwei Einsatzorte:
+- **Beleg-Detailseite** (`/admin/buchhaltung/belege/[id]`): Vorschau inline in
+  der „Anhänge"-Sektion (bekommt `anhaenge` als Prop → kein Extra-Fetch).
+- **Belege-Liste** (`/admin/buchhaltung/belege`): neue Spalte „Beleg" mit
+  Augen-Icon pro Zeile → Klick öffnet ein Popup mit der Vorschau (`stopPropagation`
+  gegen den Row-Klick; lädt die Anhänge selbst über die Detail-API). Popup hat
+  einen „Zum Beleg →"-Link.
+
 ### Noch offen
 - **Inbound-E-Mail Go-Live (IMAP-Polling):**
   1. Migration `supabase/supabase-inbound-email.sql` ausführen. Ohne Migration

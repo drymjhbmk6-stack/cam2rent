@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import InventarVerknuepfModal from '@/components/admin/InventarVerknuepfModal';
+import BelegDokumentVorschau from '@/components/admin/BelegDokumentVorschau';
 import { shrinkImageFileIfNeeded } from '@/lib/shrink-image-client';
 import { formatCurrency } from '@/lib/format-utils';
 
@@ -666,6 +667,12 @@ export default function BelegDetailPage() {
               + Anhang hinzufügen
               <input type="file" className="hidden" onChange={handleUploadAnhang} accept="application/pdf,image/*" />
             </label>
+          )}
+          {anhaenge.length > 0 && (
+            <div className="mt-3 pt-3 border-t border-slate-800">
+              <div className="text-xs uppercase tracking-wider text-slate-500 mb-2">Vorschau</div>
+              <BelegDokumentVorschau belegId={belegId} anhaenge={anhaenge} />
+            </div>
           )}
         </section>
 
