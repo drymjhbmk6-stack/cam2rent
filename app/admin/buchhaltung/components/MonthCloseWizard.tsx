@@ -29,6 +29,23 @@ interface Props {
   onNavigate?: (tab: string, sub?: string) => void;
 }
 
+/**
+ * Liest eine fetch-Response defensiv als JSON. Eine leere Antwort (z.B. weil
+ * gerade ein Coolify-Redeploy laeuft und der Container neu startet) ergibt eine
+ * verstaendliche Meldung statt eines kryptischen "Unexpected end of JSON input".
+ */
+async function parseJsonSafe(res: Response): Promise<Record<string, unknown>> {
+  const text = await res.text();
+  if (!text.trim()) {
+    throw new Error('Der Server lieferte eine leere Antwort — vermutlich läuft gerade ein Deployment. Bitte einen Moment warten und erneut versuchen.');
+  }
+  try {
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    throw new Error(`Server-Antwort nicht lesbar (HTTP ${res.status}) — vermutlich läuft gerade ein Deployment. Bitte gleich erneut versuchen.`);
+  }
+}
+
 function getPreviousMonth(): string {
   const berlinNow = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });
   const [yStr, mStr] = berlinNow.split('-');
@@ -52,12 +69,11 @@ export default function MonthCloseWizard({ initialPeriod, onClose, onNavigate }:
     setError(null);
     try {
       const res = await fetch(`/api/admin/buchhaltung/period-close?period=${p}`);
+      const json = await parseJsonSafe(res);
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || `HTTP ${res.status}`);
+        throw new Error((json.error as string) || `HTTP ${res.status}`);
       }
-      const json: PeriodStatus = await res.json();
-      setStatus(json);
+      setStatus(json as unknown as PeriodStatus);
       // Kein Auto-Sprung mehr — der Wizard startet immer bei Schritt 1,
       // damit jeder Schritt durchlaufen und gesehen wird.
     } catch (e) {
@@ -81,11 +97,11 @@ export default function MonthCloseWizard({ initialPeriod, onClose, onNavigate }:
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ period, confirm: true }),
       });
-      const json = await res.json();
+      const json = await parseJsonSafe(res);
       if (res.ok) {
         await fetchStatus(period);
       } else {
-        setError(json.error || 'Fehler');
+        setError((json.error as string) || `Fehler (HTTP ${res.status})`);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Fehler');
