@@ -603,6 +603,17 @@ Optionales kleines Referenzbild pro `included_parts`-Zeile, anklickbar → Light
 - **API (alt):** `GET /api/admin/availability-gantt?month=YYYY-MM` → rückwärtskompatibel, liefert products[], accessories[], sets[]
 - **Availability-API** (`/api/availability/[productId]`): Nutzt weiterhin `product.stock` für Shop-seitige Verfügbarkeitsprüfung
 
+### Auftragskalender (`/admin/auftragskalender`, Stand 2026-05-21)
+Planungs-/Auftragskalender — zeigt **alle Aufträge** mit Mietzeitraum + Versand/Abholung, damit der Admin sieht „wann muss ich was machen". Ergänzt den bestehenden Verfügbarkeits-Gantt (`/admin/verfuegbarkeit`, fokussiert auf frei-vs-belegt) — der Auftragskalender ist auftrags- statt unit-zentriert. Neuer Sidebar-Eintrag unter „Tagesgeschäft" direkt nach „Kalender".
+- **API:** `GET /api/admin/auftragskalender?from=YYYY-MM-DD&to=YYYY-MM-DD` (Permission `tagesgeschaeft`). Lädt Buchungen im Zeitraum (Status `awaiting_payment|confirmed|shipped|picked_up|returned|completed`, `cancelled` raus), berechnet pro Buchung zwei Aktions-Tage anhand `admin_settings.booking_buffer_days`:
+  - `ship_date` — Versand-/Übergabe-Tag: bei `delivery_mode='versand'` = `rental_from − versand_before`, bei `abholung` = `rental_from`.
+  - `return_date` — Rückgabe-erwartet-Tag: `versand` = `rental_to + versand_after`, `abholung` = `rental_to + abholung_after`.
+  Bereich wird um `maxBuffer` erweitert, damit Rand-Aktionen mitgeladen werden.
+- **Seite:** Client-Component mit zwei umschaltbaren Ansichten (Präferenz in `localStorage.admin_auftragskalender_view`):
+  - **Monat** — 6-Wochen-Raster (Montag-basiert), Buchungen als farbige Balken über `rental_from..rental_to` mit Lane-Zuweisung pro Woche, Statusfarbe (awaiting_payment lila / confirmed cyan / shipped amber / picked_up orange / returned grau / completed grün). Pro Tag Aktions-Badges (📤 N Versand / 📥 N Rückgabe). Balken-Klick → `/admin/buchungen/[id]`.
+  - **To-do-Liste** (Agenda) — pro Tag des Monats mit Aktionen je eine Karte, Gruppen „📤 Raus/Übergabe" + „📥 Rückgabe erwartet", heute hervorgehoben, vergangene Tage gedimmt.
+- Test-Buchungen werden mit `[TEST]`-Präfix + pink-dashed Rahmen angezeigt, per Checkbox aus-/einblendbar. Monatsnavigation (Zurück/Heute/Weiter) + Kennzahlen (Aufträge / Versand / Rückgaben im Monat).
+
 ### Rechnungs-Status spiegelt Buchungs-Status (Stand 2026-05-20)
 Buchungen im Status `pending_verification` (Express-Signup ohne Ausweis) oder `awaiting_payment` (Stripe-Payment-Link noch nicht bezahlt) wurden in der Buchhaltungs-Welt faelschlich als „bezahlt" gefuehrt. Im Dashboard-Cockpit „Letzte 10 Rechnungen" sowie in `/admin/buchhaltung/rechnungen` standen sie mit gruenem **Bezahlt**-Badge, obwohl der Kunde noch keinen Cent ueberwiesen hatte. Drei aufeinander aufbauende Ursachen, alle gefixt:
 

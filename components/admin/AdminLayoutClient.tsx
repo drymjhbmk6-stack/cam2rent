@@ -144,6 +144,7 @@ const TAGESGESCHAEFT_ITEMS: NavItem[] = [
   { href: '/admin/buchungen/neu', label: 'Manuelle Buchung', exact: true, icon: iconPlus, perm: 'tagesgeschaeft' },
   { href: '/admin/verkauf', label: 'Verkäufe', icon: iconCart, perm: 'tagesgeschaeft' },
   { href: '/admin/verfuegbarkeit', label: 'Kalender', icon: iconCalendar, perm: 'tagesgeschaeft' },
+  { href: '/admin/auftragskalender', label: 'Auftragskalender', icon: iconCalendar, perm: 'tagesgeschaeft' },
   { href: '/admin/versand', label: 'Versand', icon: iconTruck, perm: 'tagesgeschaeft' },
   { href: '/admin/retouren', label: 'Retouren', icon: iconReturn, perm: 'tagesgeschaeft' },
   { href: '/admin/verfuegbarkeit-alerts', label: 'Verfügbarkeits-Alerts', icon: iconWarning, perm: 'tagesgeschaeft' },
