@@ -10,6 +10,11 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
+
+// sharp wird absichtlich nur dynamisch geladen (in outputFileTracingExcludes,
+// optional zur Laufzeit). typeof import('sharp') liefert den callable Typ,
+// ohne eine statische Build-Abhaengigkeit zu erzeugen.
+type SharpFn = typeof import('sharp');
 import { createServiceClient } from '@/lib/supabase';
 
 export type InvoiceKind = 'rental_camera' | 'rental_accessory' | 'office_equipment' | 'tool' | 'other';
@@ -60,9 +65,10 @@ export type InvoiceMimeType =
 // Overhead, also raw <= 3,932,160 Bytes. Wir zielen auf 3,5 MB raw fuer Puffer.
 const MAX_RAW_IMAGE_BYTES = 3_500_000;
 
-async function loadSharp(): Promise<typeof import('sharp').default | null> {
+async function loadSharp(): Promise<SharpFn | null> {
   try {
-    return (await import('sharp')).default;
+    const mod = await import('sharp');
+    return (mod as unknown as { default: SharpFn }).default;
   } catch {
     return null;
   }

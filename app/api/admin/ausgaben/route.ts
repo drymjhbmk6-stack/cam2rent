@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
   const lieferantId = sp.get('lieferant_id');
 
   const filtered = (data ?? []).filter((p) => {
-    const beleg = (p as { beleg: { beleg_datum: string; quelle: string; is_test: boolean; lieferant: { id: string } | null } | null }).beleg;
+    const beleg = (p as unknown as { beleg: { beleg_datum: string; quelle: string; is_test: boolean; lieferant: { id: string } | null } | null }).beleg;
     if (!beleg) return false;
     if (!includeTest && beleg.is_test) return false;
     if (from && beleg.beleg_datum < from) return false;

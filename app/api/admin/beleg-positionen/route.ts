@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
   let results = data ?? [];
   if (lieferantId || fromDate || toDate) {
     results = results.filter((r) => {
-      const beleg = (r as { beleg: { beleg_datum: string; lieferant_id: string | null } | null }).beleg;
+      const beleg = (r as unknown as { beleg: { beleg_datum: string; lieferant_id: string | null } | null }).beleg;
       if (!beleg) return false;
       if (lieferantId && beleg.lieferant_id !== lieferantId) return false;
       if (fromDate && beleg.beleg_datum < fromDate) return false;
