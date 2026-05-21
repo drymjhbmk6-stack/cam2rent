@@ -130,7 +130,21 @@ export async function GET() {
       .eq('key', 'period_locks')
       .maybeSingle();
 
-    const locks = (lockSetting?.value || {}) as Record<string, { locked_at: string }>;
+    // admin_settings.value kann period_locks als Objekt ODER als JSON-String
+    // enthalten — String wuerde sonst beim Property-Zugriff stillschweigend
+    // 'nicht gesperrt' liefern (locks[key] auf einem String ist undefined).
+    const rawLocks = lockSetting?.value;
+    let locks: Record<string, { locked_at: string }> = {};
+    if (typeof rawLocks === 'string') {
+      try {
+        const parsed = JSON.parse(rawLocks);
+        if (parsed && typeof parsed === 'object') locks = parsed;
+      } catch {
+        // ungueltiger String → leeres Objekt
+      }
+    } else if (rawLocks && typeof rawLocks === 'object') {
+      locks = rawLocks as Record<string, { locked_at: string }>;
+    }
     const prevLocked = !!locks[prevKey];
 
     // Heute = im aktuellen Monat. Wenn der Vormonat nicht abgeschlossen ist und wir

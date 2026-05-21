@@ -36,6 +36,28 @@ function validatePeriod(period: string | null): string | null {
   return period;
 }
 
+/**
+ * `admin_settings.value` kann `period_locks` je nach Schreibpfad/Spaltentyp
+ * als bereits geparstes Objekt ODER als JSON-String enthalten. Diese Funktion
+ * normalisiert beides auf ein echtes Objekt — sonst wirft `locks[period] = ...`
+ * einen "Cannot create property '2026-04' on string"-TypeError, und ein
+ * String-Wert wuerde beim Lesen stillschweigend als "nicht gesperrt"
+ * interpretiert (locks['2026-04'] auf einem String ist undefined).
+ */
+function parseLocks(raw: unknown): Record<string, LockEntry> {
+  if (!raw) return {};
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' ? (parsed as Record<string, LockEntry>) : {};
+    } catch {
+      return {};
+    }
+  }
+  if (typeof raw === 'object') return raw as Record<string, LockEntry>;
+  return {};
+}
+
 function periodToRange(period: string): { from: string; to: string } {
   const [yearStr, monthStr] = period.split('-');
   const year = parseInt(yearStr, 10);
@@ -71,7 +93,7 @@ export async function GET(req: NextRequest) {
     .select('value')
     .eq('key', 'period_locks')
     .maybeSingle();
-  const locks = (lockSetting?.value || {}) as Record<string, LockEntry>;
+  const locks = parseLocks(lockSetting?.value);
   const lock = locks[period] || null;
 
   // Schritt 1: Stripe-Abgleich
@@ -294,7 +316,7 @@ export async function POST(req: NextRequest) {
         { status: 500 },
       );
     }
-    const locks = (lockSetting?.value || {}) as Record<string, LockEntry>;
+    const locks = parseLocks(lockSetting?.value);
 
     if (locks[period] && !locks[period].unlocked_at) {
       return NextResponse.json({ error: 'Periode ist bereits abgeschlossen' }, { status: 409 });
@@ -355,7 +377,7 @@ export async function DELETE(req: NextRequest) {
     .select('value')
     .eq('key', 'period_locks')
     .maybeSingle();
-  const locks = (lockSetting?.value || {}) as Record<string, LockEntry>;
+  const locks = parseLocks(lockSetting?.value);
 
   if (!locks[period]) {
     return NextResponse.json({ error: 'Periode ist nicht gesperrt' }, { status: 404 });
