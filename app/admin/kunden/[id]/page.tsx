@@ -146,6 +146,7 @@ export default function KundenDetailPage() {
   const [blockLoading, setBlockLoading] = useState(false);
   const [blacklistReason, setBlacklistReason] = useState('');
   const [verifyLoading, setVerifyLoading] = useState(false);
+  const [reminderLoading, setReminderLoading] = useState(false);
   const [idFrontSignedUrl, setIdFrontSignedUrl] = useState<string | null>(null);
   const [idBackSignedUrl, setIdBackSignedUrl] = useState<string | null>(null);
   const [idImagesLoading, setIdImagesLoading] = useState(false);
@@ -255,6 +256,27 @@ export default function KundenDetailPage() {
       return;
     }
     fetchData();
+  }
+
+  async function handleSendReminder() {
+    setReminderLoading(true);
+    try {
+      const res = await fetch('/api/admin/send-verification-reminder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customerId }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showToast('error', body.error ?? 'Erinnerung konnte nicht gesendet werden.');
+        return;
+      }
+      showToast('success', 'Erinnerungs-E-Mail wurde an den Kunden gesendet.');
+    } catch {
+      showToast('error', 'Erinnerung konnte nicht gesendet werden.');
+    } finally {
+      setReminderLoading(false);
+    }
   }
 
   async function handleBlock(blocked: boolean) {
@@ -718,6 +740,31 @@ export default function KundenDetailPage() {
                   </div>
                 );
               })()}
+
+              {/* Erinnerungs-Mail — wenn Kunde noch nicht verifiziert ist */}
+              {customer.verification_status !== 'verified' && (
+                <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #1e293b' }}>
+                  <p style={{ fontSize: 13, color: '#64748b', margin: '0 0 10px' }}>
+                    Schicke dem Kunden eine Erinnerung mit Link zur Konto-Verifizierung.
+                  </p>
+                  <button
+                    onClick={handleSendReminder}
+                    disabled={reminderLoading}
+                    style={{
+                      padding: '10px 24px', borderRadius: 8, fontSize: 14, fontWeight: 700,
+                      background: '#1e293b', color: '#06b6d4', border: '1px solid #06b6d440',
+                      cursor: reminderLoading ? 'not-allowed' : 'pointer',
+                      opacity: reminderLoading ? 0.5 : 1,
+                      display: 'flex', alignItems: 'center', gap: 8,
+                    }}
+                  >
+                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                    {reminderLoading ? 'Wird gesendet...' : 'Verifizierungs-Erinnerung senden'}
+                  </button>
+                </div>
+              )}
 
               {customer.verification_status === 'verified' && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#10b981', fontSize: 14 }}>

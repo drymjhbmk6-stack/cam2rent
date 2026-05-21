@@ -37,6 +37,7 @@ const ACTION_LABELS: Record<string, string> = {
   'customer.anonymize': 'Kunde anonymisiert',
   'customer.verify': 'Kunde verifiziert',
   'customer.reject_verification': 'Verifizierung abgelehnt',
+  'customer.verification_reminder': 'Verifizierungs-Erinnerung gesendet',
   'customer.set_tester': 'Als Tester-Konto markiert',
   'customer.unset_tester': 'Tester-Status entfernt',
   // Rechnungen/Buchhaltung

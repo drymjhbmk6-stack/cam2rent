@@ -75,6 +75,7 @@ const TYPE_LABELS: Record<string, { label: string; color: string; bg: string }> 
   manual_documents: { label: 'Dokumente (manuell)', color: '#8b5cf6', bg: '#8b5cf614' },
   weekly_report: { label: 'Wochenbericht', color: '#06b6d4', bg: '#06b6d414' },
   verification_reminder: { label: 'Verifizierungs-Erinnerung', color: '#f59e0b', bg: '#f59e0b14' },
+  verification_reminder_manual: { label: 'Verifizierungs-Erinnerung (manuell)', color: '#f59e0b', bg: '#f59e0b14' },
   verification_auto_cancel: { label: 'Verifizierung: Auto-Storno', color: '#dc2626', bg: '#dc262614' },
   verification_rejected: { label: 'Verifizierung: Abgelehnt', color: '#ef4444', bg: '#ef444414' },
   ugc_approved: { label: 'Kundenmaterial: Freigabe + Gutschein', color: '#10b981', bg: '#10b98114' },
