@@ -254,64 +254,83 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  if (!(await checkAdminAuth())) {
-    return NextResponse.json({ error: 'Nicht autorisiert.' }, { status: 401 });
-  }
-
-  let body: { period?: string; confirm?: boolean; force?: boolean };
+  // Gesamter Handler in try/catch — eine unbehandelte Exception wuerde sonst
+  // einen 500 mit leerem Body liefern, und der Wizard zeigt nur ein
+  // kryptisches "Unexpected end of JSON input" statt der echten Ursache.
   try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: 'Ungueltiges JSON' }, { status: 400 });
+    if (!(await checkAdminAuth())) {
+      return NextResponse.json({ error: 'Nicht autorisiert.' }, { status: 401 });
+    }
+
+    let body: { period?: string; confirm?: boolean; force?: boolean };
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json({ error: 'Ungueltiges JSON' }, { status: 400 });
+    }
+
+    const period = validatePeriod(body.period || null);
+    if (!period) {
+      return NextResponse.json({ error: 'period im Format YYYY-MM erforderlich' }, { status: 400 });
+    }
+    if (!body.confirm) {
+      return NextResponse.json({ error: 'confirm:true erforderlich' }, { status: 400 });
+    }
+
+    const supabase = createServiceClient();
+    const me = await getCurrentAdminUser();
+
+    // Aktuellen Lock-Stand laden. Der Lese-Fehler wird ausgewertet — sonst
+    // wuerde bei einem stillen Fehler `locks` auf {} fallen und der folgende
+    // Upsert ALLE bereits abgeschlossenen Monate ueberschreiben (Datenverlust).
+    const { data: lockSetting, error: loadErr } = await supabase
+      .from('admin_settings')
+      .select('value')
+      .eq('key', 'period_locks')
+      .maybeSingle();
+    if (loadErr) {
+      return NextResponse.json(
+        { error: `Lock-Stand konnte nicht geladen werden: ${loadErr.message}` },
+        { status: 500 },
+      );
+    }
+    const locks = (lockSetting?.value || {}) as Record<string, LockEntry>;
+
+    if (locks[period] && !locks[period].unlocked_at) {
+      return NextResponse.json({ error: 'Periode ist bereits abgeschlossen' }, { status: 409 });
+    }
+
+    // Soft-Lock setzen
+    locks[period] = {
+      locked_at: new Date().toISOString(),
+      locked_by: me?.name || me?.email || 'admin',
+    };
+
+    const { error } = await supabase
+      .from('admin_settings')
+      .upsert({ key: 'period_locks', value: locks }, { onConflict: 'key' });
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    await logAudit({
+      action: 'period.close',
+      entityType: 'period',
+      entityId: period,
+      entityLabel: `Monatsabschluss ${period}`,
+      changes: { locked_at: locks[period].locked_at },
+      request: req,
+    });
+
+    return NextResponse.json({ ok: true, lock: locks[period] });
+  } catch (e) {
+    console.error('[period-close POST] Unerwarteter Fehler:', e);
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : 'Interner Fehler beim Monatsabschluss' },
+      { status: 500 },
+    );
   }
-
-  const period = validatePeriod(body.period || null);
-  if (!period) {
-    return NextResponse.json({ error: 'period im Format YYYY-MM erforderlich' }, { status: 400 });
-  }
-  if (!body.confirm) {
-    return NextResponse.json({ error: 'confirm:true erforderlich' }, { status: 400 });
-  }
-
-  const supabase = createServiceClient();
-  const me = await getCurrentAdminUser();
-
-  // Aktuellen Lock-Stand laden
-  const { data: lockSetting } = await supabase
-    .from('admin_settings')
-    .select('value')
-    .eq('key', 'period_locks')
-    .maybeSingle();
-  const locks = (lockSetting?.value || {}) as Record<string, LockEntry>;
-
-  if (locks[period] && !locks[period].unlocked_at) {
-    return NextResponse.json({ error: 'Periode ist bereits abgeschlossen' }, { status: 409 });
-  }
-
-  // Soft-Lock setzen
-  locks[period] = {
-    locked_at: new Date().toISOString(),
-    locked_by: me?.name || me?.email || 'admin',
-  };
-
-  const { error } = await supabase
-    .from('admin_settings')
-    .upsert({ key: 'period_locks', value: locks }, { onConflict: 'key' });
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  await logAudit({
-    action: 'period.close',
-    entityType: 'period',
-    entityId: period,
-    entityLabel: `Monatsabschluss ${period}`,
-    changes: { locked_at: locks[period].locked_at },
-    request: req,
-  });
-
-  return NextResponse.json({ ok: true, lock: locks[period] });
 }
 
 export async function DELETE(req: NextRequest) {
