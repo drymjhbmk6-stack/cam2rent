@@ -517,60 +517,66 @@ function MonthView({
                     key={d}
                     onClick={() => onDayClick(day)}
                     title="Klicken, um eine Notiz hinzuzufügen"
-                    className="text-left transition group hover:brightness-125"
+                    className="relative text-left transition group hover:brightness-125"
                     style={{
                       background: bg,
                       borderRight: d < 6 ? `1px solid ${C.border}` : 'none',
                     }}
                   >
-                    <div className="flex items-center justify-between px-1.5 pt-1.5">
-                      <span
-                        className={`text-xs font-semibold flex items-center justify-center ${numCls}`}
-                        style={
-                          isToday
-                            ? { background: '#fbbf24', borderRadius: '9999px', width: 20, height: 20 }
-                            : undefined
-                        }
-                      >
-                        {dObj.getDate()}
-                      </span>
-                      <span className="flex gap-1 items-center">
-                        {nCount > 0 && (
-                          <span
-                            className="text-[10px] px-1 rounded"
-                            style={{ background: 'rgba(245,158,11,0.22)', color: '#fcd34d' }}
-                            title={`${nCount} Notiz(en)`}
-                          >
-                            📝{nCount}
-                          </span>
-                        )}
-                        {ship > 0 && (
-                          <span
-                            className="text-[10px] px-1 rounded"
-                            style={{ background: 'rgba(245,158,11,0.22)', color: '#fbbf24' }}
-                            title={`${ship}× Versand/Übergabe`}
-                          >
-                            📤{ship}
-                          </span>
-                        )}
-                        {ret > 0 && (
-                          <span
-                            className="text-[10px] px-1 rounded"
-                            style={{ background: 'rgba(16,185,129,0.22)', color: '#34d399' }}
-                            title={`${ret}× Rückgabe erwartet`}
-                          >
-                            📥{ret}
-                          </span>
-                        )}
-                        <span className="text-[11px] text-slate-500 opacity-0 group-hover:opacity-100 transition">
-                          +
+                    {/* Datum — oben links in der Ecke */}
+                    <span
+                      className={`absolute top-1 left-1.5 text-xs font-semibold flex items-center justify-center ${numCls}`}
+                      style={
+                        isToday
+                          ? { background: '#fbbf24', borderRadius: '9999px', width: 20, height: 20 }
+                          : undefined
+                      }
+                    >
+                      {dObj.getDate()}
+                    </span>
+
+                    {/* Aktions-Badges — oben rechts */}
+                    <span className="absolute top-1 right-1.5 flex gap-1 items-center">
+                      {nCount > 0 && (
+                        <span
+                          className="text-[10px] px-1 rounded"
+                          style={{ background: 'rgba(245,158,11,0.22)', color: '#fcd34d' }}
+                          title={`${nCount} Notiz(en)`}
+                        >
+                          📝{nCount}
                         </span>
+                      )}
+                      {ship > 0 && (
+                        <span
+                          className="text-[10px] px-1 rounded"
+                          style={{ background: 'rgba(245,158,11,0.22)', color: '#fbbf24' }}
+                          title={`${ship}× Versand/Übergabe`}
+                        >
+                          📤{ship}
+                        </span>
+                      )}
+                      {ret > 0 && (
+                        <span
+                          className="text-[10px] px-1 rounded"
+                          style={{ background: 'rgba(16,185,129,0.22)', color: '#34d399' }}
+                          title={`${ret}× Rückgabe erwartet`}
+                        >
+                          📥{ret}
+                        </span>
+                      )}
+                      <span className="text-[11px] text-slate-500 opacity-0 group-hover:opacity-100 transition">
+                        +
                       </span>
-                    </div>
+                    </span>
+
+                    {/* Feiertagsname — unter dem Datum */}
                     {holiday && (
-                      <div className="px-1.5 mt-0.5 text-[10px] leading-tight text-red-300 truncate">
+                      <span
+                        className="absolute left-1.5 text-[10px] leading-tight text-red-300 truncate"
+                        style={{ top: 22, maxWidth: 'calc(100% - 12px)' }}
+                      >
                         {holiday}
-                      </div>
+                      </span>
                     )}
                   </button>
                 );
