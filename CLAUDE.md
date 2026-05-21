@@ -255,7 +255,7 @@ gemeinsame Inbox für Konto-Nachrichten + echte E-Mails).
 **Warum IMAP statt Webhook:** Resend Inbound hätte eine zweite Domain
 (`inbound.cam2rent.de`) gebraucht → Resend Pro (20 $/Mon). Stattdessen holt ein
 Cron alle 3 Min neue Mails per IMAP direkt aus dem Support-Postfach
-`kontakt@cam2rent.de` (liegt bei All-Inkl, IMAP-Server `wXXXXXX.kasserver.com`)
+`kontakt@cam2rent.de` (liegt bei All-Inkl, IMAP-Server `w0203d93.kasserver.com`)
 — kostenlos, keine MX-Änderung, Postfach bleibt unberührt.
 - **Migration `supabase/supabase-inbound-email.sql`** (idempotent): `conversations.customer_id`
   wird **nullable** (Sender ohne Kundenkonto erlaubt) + neue Spalten `customer_email`,
@@ -267,7 +267,7 @@ Cron alle 3 Min neue Mails per IMAP direkt aus dem Support-Postfach
   ohne Konto sind admin-only.
 - **Cron `GET/POST /api/cron/inbound-email-poll`** (`verifyCronAuth` +
   `acquireCronLock`): verbindet per `imapflow` mit dem IMAP-Server aus
-  `INBOUND_IMAP_HOST` (All-Inkl `wXXXXXX.kasserver.com`; Default `imap.gmail.com`),
+  `INBOUND_IMAP_HOST` (All-Inkl `w0203d93.kasserver.com`; Default `imap.gmail.com`),
   holt neue Mails seit der zuletzt verarbeiteten UID (Zustand in
   `admin_settings.inbound_email_imap_state` — verändert NICHT den Lesestatus),
   parst mit `mailparser`. Erster Lauf „stellt scharf" (Bestand wird nicht
@@ -2800,11 +2800,11 @@ in der Sub-Zeile → Modal `components/admin/InventarVerknuepfModal.tsx`.
   2. Supabase Storage-Bucket `email-attachments` anlegen (privat, ~25 MB,
      MIME-Allowlist leer lassen — siehe Kommentar in der Migration).
   3. Postfach `kontakt@cam2rent.de` liegt bei All-Inkl: im KAS den IMAP-Server
-     ablesen (`wXXXXXX.kasserver.com`). IMAP ist bei All-Inkl standardmäßig aktiv,
+     ablesen (`w0203d93.kasserver.com`). IMAP ist bei All-Inkl standardmäßig aktiv,
      kein 2-Faktor/App-Passwort nötig — das normale Postfach-Passwort genügt.
   4. Coolify-Env: `INBOUND_IMAP_USER=kontakt@cam2rent.de` +
      `INBOUND_IMAP_PASSWORD=<Postfach-Passwort>` +
-     `INBOUND_IMAP_HOST=wXXXXXX.kasserver.com` (Port 993 = Default).
+     `INBOUND_IMAP_HOST=w0203d93.kasserver.com` (Port 993 = Default).
   5. Hetzner-Crontab (alle 3 Min):
      ```
      */3 * * * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/inbound-email-poll
