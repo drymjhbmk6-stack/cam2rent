@@ -11,17 +11,43 @@ import { getCurrentAdminUser } from '@/lib/admin-auth';
 export async function GET() {
   const supabase = createServiceClient();
 
-  const { data: conversations, error } = await supabase
+  // Select inkl. E-Mail-Kanal-Felder; faellt bei fehlender Migration auf das
+  // alte Schema zurueck (dann verhalten sich alle Konversationen wie 'account').
+  let conversations: Array<{
+    id: string;
+    customer_id: string | null;
+    subject: string;
+    booking_id: string | null;
+    last_message_at: string;
+    closed: boolean;
+    created_at: string;
+    source?: string | null;
+    customer_email?: string | null;
+    customer_name?: string | null;
+  }> | null = null;
+
+  const full = await supabase
     .from('conversations')
-    .select('id, customer_id, subject, booking_id, last_message_at, closed, created_at')
+    .select('id, customer_id, subject, booking_id, last_message_at, closed, created_at, source, customer_email, customer_name')
     .order('last_message_at', { ascending: false });
 
-  if (error) {
-    return NextResponse.json({ conversations: [] });
+  if (full.error) {
+    const fallback = await supabase
+      .from('conversations')
+      .select('id, customer_id, subject, booking_id, last_message_at, closed, created_at')
+      .order('last_message_at', { ascending: false });
+    if (fallback.error) {
+      return NextResponse.json({ conversations: [] });
+    }
+    conversations = fallback.data;
+  } else {
+    conversations = full.data;
   }
 
   // Enrich with customer info and unread counts
-  const customerIds = [...new Set((conversations ?? []).map((c) => c.customer_id))];
+  const customerIds = [
+    ...new Set((conversations ?? []).map((c) => c.customer_id).filter((id): id is string => !!id)),
+  ];
   const profileMap: Record<string, { full_name: string; email: string }> = {};
 
   if (customerIds.length > 0) {
@@ -80,9 +106,18 @@ export async function GET() {
 
   const enriched = (conversations ?? []).map((conv) => {
     const lastMsg = lastMsgMap.get(conv.id);
+    const fromProfile = conv.customer_id ? profileMap[conv.customer_id] : undefined;
+    const customer = fromProfile ?? {
+      full_name:
+        conv.customer_name ||
+        conv.customer_email?.split('@')[0] ||
+        'Unbekannt',
+      email: conv.customer_email || '',
+    };
     return {
       ...conv,
-      customer: profileMap[conv.customer_id] || { full_name: 'Unbekannt', email: '' },
+      source: conv.source ?? 'account',
+      customer,
       unread_count: unreadMap[conv.id] || 0,
       last_message: lastMsg ? {
         body: lastMsg.body.substring(0, 100),

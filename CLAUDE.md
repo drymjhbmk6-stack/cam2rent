@@ -246,6 +246,45 @@ Drei zusaetzliche Notification-Typen feuern, sobald frisch generierter KI-Conten
 - **`reel_ready`** (pink, Film-Icon) — aus `lib/reels/orchestrator.ts` direkt nach dem critical-update wenn `newStatus === 'pending_review'`. Im `'rendered'`-Modus (preview_required=false) keine Push, weil dann Auto-Publish greift. Link auf `/admin/social/reels/[id]`.
 - **Permission-Mapping** in `lib/admin-notifications.ts` → `TYPE_TO_PERMISSION`: alle drei auf `'content'` gemappt. Mitarbeiter mit Content-Permission kriegen die Push, Owner sowieso. Mitarbeiter ohne Content-Bereich (z.B. nur `tagesgeschaeft`) werden nicht gestoert.
 
+### Eingehende Kunden-E-Mails — Resend Inbound (Stand 2026-05-21)
+Echte E-Mails von Kunden landen jetzt in `/admin/nachrichten` — gethreaded an
+Buchung/Kunde, mit Push, und der Admin antwortet direkt aus dem Tool als echte
+E-Mail. Dockt an das bestehende `conversations`/`messages`-Modell an (eine
+gemeinsame Inbox für Konto-Nachrichten + echte E-Mails).
+- **Migration `supabase/supabase-inbound-email.sql`** (idempotent): `conversations.customer_id`
+  wird **nullable** (Sender ohne Kundenkonto erlaubt) + neue Spalten `customer_email`,
+  `customer_name`, `source TEXT DEFAULT 'account' CHECK (account|email)`,
+  `email_message_id`. `messages` bekommt `body_html`, `email_message_id`,
+  `email_in_reply_to` + Partial-Unique-Index auf `email_message_id` (Dedupe gegen
+  doppelte Webhook-Zustellung). Neue Tabelle `message_attachments` (RLS
+  service-role-only). Bestehende RLS unverändert — `auth.uid() = customer_id`
+  matcht NULL nie, E-Mail-Konversationen ohne Konto sind admin-only.
+- **Webhook `POST /api/inbound-email`** (öffentlich, Svix-Signaturprüfung via
+  `RESEND_INBOUND_WEBHOOK_SECRET`, Rate-Limit 200/h). Provider-spezifisches
+  (Signatur + Payload-Parsing) ist in `lib/inbound-email.ts` gekapselt →
+  Provider-Wechsel berührt nur diese Datei. Threading-Reihenfolge:
+  `In-Reply-To`/`References` → Buchungsnummer im Betreff (`C2R-YYWW-NNN`-Regex)
+  → offene Konversation gleicher `customer_email` → neue Konversation
+  `source='email'`. Absender-E-Mail wird gegen `auth.users` aufgelöst — Treffer
+  setzt `customer_id` (Thread erscheint dann auch im `/konto` des Kunden).
+  Anhänge: Magic-Byte-Check (`lib/file-type-check.ts`), Bucket `email-attachments`,
+  nicht erkannte Typen als `application/octet-stream` (kein Inline-Render).
+  Feuert `new_message`-Notification (Permission `kunden`, bereits gemappt).
+- **Admin-Antwort:** `POST /api/admin/nachrichten/[conversationId]` sendet bei
+  `source='email'` eine **echte E-Mail** via `sendInboundReply()` (`lib/email.ts`)
+  — `In-Reply-To`/`References` aus der letzten Kundenmail, `Reply-To` =
+  `inbound@inbound.cam2rent.de` (env `INBOUND_EMAIL_ADDRESS`), damit
+  Kundenantworten wieder im Webhook landen. Bei `source='account'` unverändert
+  `sendNewMessageNotificationToCustomer`. `sendAndLog()` akzeptiert jetzt
+  optional `replyTo` + `headers` und gibt die Resend-Message-ID zurück.
+- **Admin-UI** (`/admin/nachrichten`): Kanal-Badge (📧 E-Mail / 💬 Konto),
+  HTML-Mailinhalt per Button in sandboxed `<iframe sandbox="">` (kein JS),
+  Anhänge als Download-Links über `GET /api/admin/message-attachment-url?id=`
+  (Permission `kunden`, Signed-URL 5 Min).
+- **E-Mail-Typen:** `inbound_received` + `inbound_reply` in `email_log` +
+  `/admin/emails`-Katalog. Audit: `inbound_email.received`, `nachricht.email_reply`.
+- **Go-Live TODO:** siehe „Noch offen".
+
 ### Buchungsflow
 5 Steps (Versand → Zubehör → Haftung → Zusammenfassung → Zahlung)
 - **Sets gefiltert** nach `product_ids` (Kamera-Kompatibilität) — nur passende Sets werden angezeigt
@@ -2637,6 +2676,21 @@ Zusätzlich zum bestehenden file-hash-Check (byte-identische Datei) erkennt das 
 Die Beleg-Detailseite (`/admin/buchhaltung/belege/[id]`) hatte alle Positions-Felder hart auf `disabled` — eine fehlerhafte OCR-Analyse (Bezeichnung, Menge, Netto, MwSt %) liess sich gar nicht über die UI korrigieren, obwohl `PATCH /api/admin/beleg-positionen/[id]` das längst unterstützt. Jetzt: pro Position ein **„✏ Bearbeiten"-Button** in der Sub-Zeile (sichtbar nur wenn Beleg nicht festgeschrieben und Position nicht `locked`). Klick → Felder Bezeichnung/Menge/Einzel-Netto/MwSt % werden editierbar (cyan Rahmen), **Einzel-Brutto bleibt read-only und wird live aus Netto × MwSt berechnet** (das Datenmodell speichert Netto + MwSt-Satz, Brutto ist abgeleitet — eine Amazon-Rechnung mit eigener USt-Rundung kann daher 1 Cent abweichen, für Kleinunternehmer/EÜR irrelevant). „Speichern" schickt die Korrektur an die bestehende API (`recomputeBelegSummen` aktualisiert die Beleg-Summen), „Abbrechen" verwirft. Validierung clientseitig (Bezeichnung nicht leer, Netto ≥ 0, Menge ≥ 1, MwSt 0–100). Eine Position gleichzeitig editierbar. Audit: `beleg_position.update` (bereits vorhanden).
 
 ### Noch offen
+- **Inbound-E-Mail Go-Live (Resend Inbound):**
+  1. Migration `supabase/supabase-inbound-email.sql` ausführen. Ohne Migration
+     liefert der Webhook `/api/inbound-email` 503 „Migration ausstehend",
+     `/admin/nachrichten` fällt defensiv auf das alte Schema zurück (alle
+     Konversationen als `account`).
+  2. Supabase Storage-Bucket `email-attachments` anlegen (privat, ~25 MB,
+     MIME-Allowlist leer lassen — siehe Kommentar in der Migration).
+  3. In Resend: Domain `inbound.cam2rent.de` anlegen → die MX-Records bei
+     Cloudflare DNS eintragen.
+  4. Resend Inbound Routing → Webhook-Ziel `https://cam2rent.de/api/inbound-email`.
+  5. Coolify-Env `RESEND_INBOUND_WEBHOOK_SECRET` (Svix-Signing-Secret aus
+     Resend) hinterlegen. Optional `INBOUND_EMAIL_ADDRESS`
+     (Default `inbound@inbound.cam2rent.de`).
+  6. Google Workspace: Auto-Weiterleitung `kontakt@cam2rent.de` →
+     `inbound@inbound.cam2rent.de` einrichten.
 - **Tracking-Carrier + Retoure-Tracking Migration auszuführen:** `supabase/supabase-bookings-tracking-carrier-return.sql` (idempotent). Legt vier neue Spalten an: `tracking_carrier`, `return_tracking_number`, `return_tracking_url`, `return_tracking_carrier` (CHECK auf DHL/DPD, NULL erlaubt). Ohne Migration läuft der bestehende Hin-Versand-Workflow (ship-booking) per defensivem Retry weiter (tracking_carrier wird gedroppt). Die neue Trackingnummer-Bearbeitung in `/admin/buchungen/[id]` antwortet bei fehlender Spalte mit 503; Retoure-Tracking-Edit wird komplett geblockt. Empfohlen ASAP ausführen.
 - **Bestellbearbeitungs-Migration auszuführen:** `supabase/supabase-bookings-edit-adjustment.sql` (idempotent). Legt `bookings.adjustment_payment_link_id/amount/status/note` an. Ohne Migration läuft die komplette Bestellbearbeitung weiter (Zahlungslink/Refund werden ausgeführt, Doku landet in `notes`), nur die strukturierten `adjustment_*`-Felder + der Webhook-Status-Sync („Nachzahlung bezahlt") greifen erst nach der Migration. Empfohlen ASAP ausführen.
 - **Multi-Kamera-Migrationen auszuführen (3, idempotent):**

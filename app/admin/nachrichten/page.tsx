@@ -5,22 +5,32 @@ import AdminBackLink from '@/components/admin/AdminBackLink';
 
 interface Conversation {
   id: string;
-  customer_id: string;
+  customer_id: string | null;
   subject: string;
   booking_id: string | null;
   last_message_at: string;
   closed: boolean;
+  source: 'account' | 'email';
   unread_count: number;
   customer: { full_name: string; email: string };
   last_message: { body: string; sender_type: string; created_at: string } | null;
+}
+
+interface MessageAttachment {
+  id: string;
+  filename: string;
+  mime_type: string | null;
+  size_bytes: number | null;
 }
 
 interface Message {
   id: string;
   sender_type: 'customer' | 'admin';
   body: string;
+  body_html?: string | null;
   read: boolean;
   created_at: string;
+  attachments?: MessageAttachment[];
 }
 
 function timeAgo(dateStr: string) {
@@ -40,7 +50,8 @@ export default function AdminNachrichtenPage() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [convInfo, setConvInfo] = useState<{ subject: string; closed: boolean; customer: { full_name: string; email: string } } | null>(null);
+  const [convInfo, setConvInfo] = useState<{ subject: string; closed: boolean; source?: 'account' | 'email'; customer: { full_name: string; email: string } } | null>(null);
+  const [htmlOpen, setHtmlOpen] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [msgLoading, setMsgLoading] = useState(false);
   const [replyText, setReplyText] = useState('');
@@ -59,6 +70,7 @@ export default function AdminNachrichtenPage() {
   useEffect(() => {
     if (!selectedId) return;
     setMsgLoading(true);
+    setHtmlOpen({});
     fetch(`/api/admin/nachrichten/${selectedId}`)
       .then((r) => r.json())
       .then((d) => {
@@ -188,9 +200,19 @@ export default function AdminNachrichtenPage() {
               >
                 <div style={{ display: 'flex', alignItems: 'start', justifyContent: 'space-between', gap: 8 }}>
                   <div style={{ minWidth: 0, flex: 1 }}>
-                    <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#e2e8f0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {conv.customer.full_name}
-                    </p>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{
+                        flexShrink: 0, fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
+                        ...(conv.source === 'email'
+                          ? { background: '#0ea5e91f', color: '#38bdf8' }
+                          : { background: '#6366f11f', color: '#a5b4fc' }),
+                      }}>
+                        {conv.source === 'email' ? '📧 E-Mail' : '💬 Konto'}
+                      </span>
+                      <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#e2e8f0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {conv.customer.full_name}
+                      </p>
+                    </div>
                     <p style={{ margin: '2px 0 0', fontSize: 12, color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {conv.subject}
                     </p>
@@ -227,9 +249,20 @@ export default function AdminNachrichtenPage() {
               {/* Chat header */}
               <div style={{ padding: '14px 20px', borderBottom: '1px solid #1e293b', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div>
-                  <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#e2e8f0' }}>{convInfo.subject}</p>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{
+                      fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
+                      ...(convInfo.source === 'email'
+                        ? { background: '#0ea5e91f', color: '#38bdf8' }
+                        : { background: '#6366f11f', color: '#a5b4fc' }),
+                    }}>
+                      {convInfo.source === 'email' ? '📧 E-Mail' : '💬 Konto'}
+                    </span>
+                    <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#e2e8f0' }}>{convInfo.subject}</p>
+                  </div>
                   <p style={{ margin: '2px 0 0', fontSize: 11, color: '#64748b' }}>
-                    {convInfo.customer.full_name} &middot; {convInfo.customer.email}
+                    {convInfo.customer.full_name}
+                    {convInfo.customer.email ? ` · ${convInfo.customer.email}` : ''}
                   </p>
                 </div>
                 <button
@@ -261,6 +294,59 @@ export default function AdminNachrichtenPage() {
                           ),
                         }}>
                           <p style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{msg.body}</p>
+
+                          {msg.body_html && (
+                            <div style={{ marginTop: 6 }}>
+                              <button
+                                onClick={() => setHtmlOpen((p) => ({ ...p, [msg.id]: !p[msg.id] }))}
+                                style={{
+                                  background: 'transparent', border: '1px solid currentColor', borderRadius: 6,
+                                  color: 'inherit', fontSize: 10, fontWeight: 600, padding: '3px 8px',
+                                  cursor: 'pointer', opacity: 0.85,
+                                }}
+                              >
+                                {htmlOpen[msg.id] ? 'HTML-Ansicht ausblenden' : 'HTML-Ansicht anzeigen'}
+                              </button>
+                              {htmlOpen[msg.id] && (
+                                <iframe
+                                  // Sandbox ohne allow-scripts/allow-same-origin: neutralisiert
+                                  // eingebettetes JS in der eingegangenen E-Mail.
+                                  sandbox=""
+                                  srcDoc={msg.body_html}
+                                  title="E-Mail-HTML"
+                                  style={{
+                                    marginTop: 6, width: '100%', minWidth: 320, height: 360,
+                                    border: 'none', borderRadius: 8, background: '#fff',
+                                  }}
+                                />
+                              )}
+                            </div>
+                          )}
+
+                          {msg.attachments && msg.attachments.length > 0 && (
+                            <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                              {msg.attachments.map((att) => (
+                                <a
+                                  key={att.id}
+                                  href={`/api/admin/message-attachment-url?id=${att.id}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  style={{
+                                    display: 'flex', alignItems: 'center', gap: 6, fontSize: 11,
+                                    color: 'inherit', textDecoration: 'underline', opacity: 0.9,
+                                  }}
+                                >
+                                  📎 {att.filename}
+                                  {att.size_bytes != null && (
+                                    <span style={{ opacity: 0.6 }}>
+                                      ({Math.round(att.size_bytes / 1024)} KB)
+                                    </span>
+                                  )}
+                                </a>
+                              ))}
+                            </div>
+                          )}
+
                           <p style={{ margin: '4px 0 0', fontSize: 10, opacity: 0.7 }}>
                             {new Date(msg.created_at).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                           </p>
@@ -277,7 +363,7 @@ export default function AdminNachrichtenPage() {
                 <div style={{ padding: '12px 20px', borderTop: '1px solid #1e293b', display: 'flex', gap: 8 }}>
                   <input
                     type="text"
-                    placeholder="Antwort schreiben..."
+                    placeholder={convInfo.source === 'email' ? 'E-Mail-Antwort schreiben...' : 'Antwort schreiben...'}
                     value={replyText}
                     onChange={(e) => setReplyText(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleReply()}

@@ -226,6 +226,7 @@ const API_PATH_PERMISSIONS: PermRule[] = [
   { prefix: '/api/admin/damage-photo-url', perm: 'tagesgeschaeft' },
   { prefix: '/api/admin/waitlist', perm: 'kunden' },
   { prefix: '/api/admin/nachrichten', perm: 'kunden' },
+  { prefix: '/api/admin/message-attachment-url', perm: 'kunden' },
   { prefix: '/api/admin/reviews', perm: 'kunden' },
   // Katalog
   { prefix: '/api/admin/accessories', perm: 'katalog' },

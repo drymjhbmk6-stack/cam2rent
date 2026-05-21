@@ -25,6 +25,14 @@ export const ADMIN_EMAIL =
   process.env.ADMIN_EMAIL ?? BUSINESS.emailKontakt;
 
 /**
+ * Inbound-Adresse fuer Kundenantworten. Liegt auf der Resend-Inbound-
+ * Subdomain — Antworten auf System-Mails landen so direkt im Webhook
+ * /api/inbound-email statt nur in einem Postfach.
+ */
+export const INBOUND_EMAIL_ADDRESS =
+  process.env.INBOUND_EMAIL_ADDRESS ?? 'inbound@inbound.cam2rent.de';
+
+/**
  * HTML-Escaping für Werte, die direkt in E-Mail-Templates interpoliert werden.
  * Verhindert XSS, wenn ein Kundenname (oder Produktname, Notizen, etc.)
  * bösartige HTML-Tags enthält.
@@ -112,7 +120,10 @@ export async function renderEmailPreview<T>(
   return { subject: store.subject ?? '', html: store.html ?? '' };
 }
 
-/** Sendet eine Email via Resend und loggt das Ergebnis */
+/**
+ * Sendet eine Email via Resend und loggt das Ergebnis.
+ * Gibt die Resend-Message-ID zurueck (oder null/undefined im Preview-/Fehlerfall).
+ */
 export async function sendAndLog(opts: {
   to: string;
   subject: string;
@@ -121,7 +132,9 @@ export async function sendAndLog(opts: {
   bookingId?: string | null;
   emailType: string;
   attachments?: { filename: string; content: Buffer }[];
-}) {
+  replyTo?: string;
+  headers?: Record<string, string>;
+}): Promise<string | null | undefined> {
   // Admin-Overrides (Subject + Einleitungs-HTML) werden vor allem anderen
   // angewendet — damit auch der Preview-Capture-Pfad und das DB-Log die
   // tatsaechlich versendete Variante sehen.
@@ -148,12 +161,13 @@ export async function sendAndLog(opts: {
       : overriddenSubject;
     const result = await resend.emails.send({
       from: `${BUSINESS.name} <${fromEmail}>`,
-      replyTo: ADMIN_EMAIL,
+      replyTo: opts.replyTo ?? ADMIN_EMAIL,
       to: finalTo,
       subject: finalSubject,
       html: overriddenHtml,
       text: opts.text,
       attachments: opts.attachments,
+      headers: opts.headers,
     });
     // Resend liefert bei API-Fehlern (Rate-Limit, ungueltige Adresse, Outage) einen
     // Response-Body { data: null, error: {...} } und wirft NICHT — also explizit pruefen,
@@ -169,6 +183,7 @@ export async function sendAndLog(opts: {
       status: 'sent',
       resendMessageId: result.data?.id,
     });
+    return result.data?.id ?? null;
   } catch (err) {
     await logEmail({
       bookingId: opts.bookingId,
@@ -1405,6 +1420,78 @@ export async function sendNewMessageNotificationToCustomer(data: MessageNotifica
 </html>`;
 
   await sendAndLog({ to: data.customerEmail, subject, html, emailType: 'message_customer' });
+}
+
+/**
+ * Antwort des Admins auf eine per E-Mail eingegangene Kundenanfrage.
+ * Geht als ECHTE E-Mail raus (im Gegensatz zu sendNewMessageNotificationToCustomer,
+ * das nur "du hast eine neue Nachricht, logg dich ein" verschickt).
+ *
+ * Setzt In-Reply-To/References fuer sauberes Threading im Kundenpostfach und
+ * Reply-To auf die Inbound-Subdomain, damit Kundenantworten wieder im
+ * Webhook /api/inbound-email landen. Gibt die Resend-Message-ID zurueck.
+ */
+export async function sendInboundReply(data: {
+  customerEmail: string;
+  customerName: string;
+  subject: string;
+  body: string;
+  bookingId?: string | null;
+  inReplyToMessageId?: string | null;
+}): Promise<string | null | undefined> {
+  const cleanSubject = stripSubject(data.subject) || '(kein Betreff)';
+  const subject = /^re:/i.test(cleanSubject) ? cleanSubject : `Re: ${cleanSubject}`;
+  const safeBody = h(data.body).replace(/\n/g, '<br>');
+
+  const html = `<!DOCTYPE html>
+<html lang="de">
+<head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#f5f5f0;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f0;padding:40px 16px;">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+        <tr><td style="background:#0a0a0a;border-radius:12px 12px 0 0;padding:20px 32px;">
+          <table cellpadding="0" cellspacing="0" border="0" role="presentation"><tr>
+            <td valign="middle" style="padding-right:12px;"><img src="https://cam2rent.de/favicon/icon-dark-64.png" width="40" height="40" alt="" style="display:block;border-radius:8px;border:0;"></td>
+            <td valign="middle">
+              <p style="margin:0;font-size:22px;font-weight:700;color:#ffffff;line-height:1.1;">Cam<span style="color:#3b82f6;">2</span>Rent</p>
+              <p style="margin:4px 0 0;font-size:12px;color:#9ca3af;letter-spacing:1px;line-height:1.2;">clever mieten statt kaufen</p>
+            </td>
+          </tr></table>
+        </td></tr>
+        <tr><td style="background:#ffffff;padding:32px;">
+          <p style="margin:0 0 16px;font-size:15px;color:#374151;">Hallo ${h(data.customerName)},</p>
+          <div style="font-size:14px;color:#374151;line-height:1.6;">${safeBody}</div>
+          <p style="margin:24px 0 0;font-size:13px;color:#6b7280;">
+            Du kannst direkt auf diese E-Mail antworten.<br>
+            Viele Gruesse<br>dein cam2rent Team
+          </p>
+        </td></tr>
+        <tr><td style="background:#f5f5f0;border-radius:0 0 12px 12px;padding:20px 32px;text-align:center;">
+          <p style="margin:0;font-size:11px;color:#9ca3af;">${h(BUSINESS.name)} &middot; ${h(BUSINESS.slogan)} &middot; <a href="${BUSINESS.url}" style="color:#9ca3af;">${h(BUSINESS.domain)}</a></p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+  const headers: Record<string, string> = {};
+  if (data.inReplyToMessageId) {
+    headers['In-Reply-To'] = data.inReplyToMessageId;
+    headers['References'] = data.inReplyToMessageId;
+  }
+
+  return sendAndLog({
+    to: data.customerEmail,
+    subject,
+    html,
+    text: data.body,
+    bookingId: data.bookingId ?? null,
+    emailType: 'inbound_reply',
+    replyTo: INBOUND_EMAIL_ADDRESS,
+    headers,
+  });
 }
 
 // ─── Extension confirmation ────────────────────────────────────────────────

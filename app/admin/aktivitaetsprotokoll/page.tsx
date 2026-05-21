@@ -81,6 +81,8 @@ const ACTION_LABELS: Record<string, string> = {
   // Nachrichten / Konversationen
   'nachricht.start': 'Nachricht an Kunden initiiert',
   'nachricht.reply': 'Auf Kundennachricht geantwortet',
+  'nachricht.email_reply': 'Per E-Mail auf Kundenanfrage geantwortet',
+  'inbound_email.received': 'Kunden-E-Mail empfangen',
   'nachricht.close': 'Konversation geschlossen',
   'nachricht.reopen': 'Konversation wieder geöffnet',
   // Einstellungen
