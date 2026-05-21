@@ -25,14 +25,6 @@ export const ADMIN_EMAIL =
   process.env.ADMIN_EMAIL ?? BUSINESS.emailKontakt;
 
 /**
- * Inbound-Adresse fuer Kundenantworten. Liegt auf der Resend-Inbound-
- * Subdomain — Antworten auf System-Mails landen so direkt im Webhook
- * /api/inbound-email statt nur in einem Postfach.
- */
-export const INBOUND_EMAIL_ADDRESS =
-  process.env.INBOUND_EMAIL_ADDRESS ?? 'inbound@inbound.cam2rent.de';
-
-/**
  * HTML-Escaping für Werte, die direkt in E-Mail-Templates interpoliert werden.
  * Verhindert XSS, wenn ein Kundenname (oder Produktname, Notizen, etc.)
  * bösartige HTML-Tags enthält.
@@ -1427,9 +1419,10 @@ export async function sendNewMessageNotificationToCustomer(data: MessageNotifica
  * Geht als ECHTE E-Mail raus (im Gegensatz zu sendNewMessageNotificationToCustomer,
  * das nur "du hast eine neue Nachricht, logg dich ein" verschickt).
  *
- * Setzt In-Reply-To/References fuer sauberes Threading im Kundenpostfach und
- * Reply-To auf die Inbound-Subdomain, damit Kundenantworten wieder im
- * Webhook /api/inbound-email landen. Gibt die Resend-Message-ID zurueck.
+ * Setzt In-Reply-To/References fuer sauberes Threading im Kundenpostfach.
+ * Reply-To bleibt der sendAndLog-Default (ADMIN_EMAIL = Support-Postfach),
+ * damit Kundenantworten dort landen und vom IMAP-Cron erfasst werden.
+ * Gibt die Resend-Message-ID zurueck.
  */
 export async function sendInboundReply(data: {
   customerEmail: string;
@@ -1489,7 +1482,6 @@ export async function sendInboundReply(data: {
     text: data.body,
     bookingId: data.bookingId ?? null,
     emailType: 'inbound_reply',
-    replyTo: INBOUND_EMAIL_ADDRESS,
     headers,
   });
 }

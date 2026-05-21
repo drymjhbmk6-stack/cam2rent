@@ -1,80 +1,31 @@
 /**
- * Inbound-E-Mail-Verarbeitung (Resend Inbound).
+ * Inbound-E-Mail-Verarbeitung (IMAP-Polling des Support-Postfachs).
  *
- * Diese Datei kapselt ALLES, was provider-spezifisch ist: Webhook-
- * Signaturpruefung (Svix-Schema, das Resend nutzt) und das Parsen des
- * Payloads. Ein spaeterer Provider-Wechsel (Postmark/Mailgun) beruehrt
- * nur diese Datei — der Webhook-Handler in app/api/inbound-email bleibt
- * unveraendert.
+ * Echte Kunden-E-Mails werden per Cron (app/api/cron/inbound-email-poll)
+ * via IMAP aus dem Google-Workspace-Postfach abgeholt, mit `mailparser`
+ * geparst und hier in das conversations/messages-Modell geschrieben.
+ *
+ * Diese Datei kapselt alles Transport-/Format-Spezifische — ein Wechsel
+ * des Abrufwegs beruehrt nur den Cron + parseImapMessage().
  */
 
 import crypto from 'node:crypto';
+import type { ParsedMail } from 'mailparser';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { createAdminNotification } from '@/lib/admin-notifications';
+import { logAudit } from '@/lib/audit';
+import { detectFileType } from '@/lib/file-type-check';
 
-// ─── Webhook-Signaturpruefung (Svix-Schema) ─────────────────────────────────
-
-/**
- * Verifiziert die Svix-Webhook-Signatur, die Resend mitschickt.
- *
- * Signiert wird `${svix-id}.${svix-timestamp}.${rawBody}` per HMAC-SHA256.
- * Das Secret hat das Format `whsec_<base64>` — der base64-Teil ist der
- * eigentliche Schluessel. Der `svix-signature`-Header enthaelt ein oder
- * mehrere leerzeichengetrennte `v1,<base64sig>`-Eintraege.
- */
-export function verifyInboundSignature(
-  rawBody: string,
-  headers: {
-    svixId: string | null;
-    svixTimestamp: string | null;
-    svixSignature: string | null;
-  },
-  secret: string,
-): boolean {
-  const { svixId, svixTimestamp, svixSignature } = headers;
-  if (!svixId || !svixTimestamp || !svixSignature || !secret) return false;
-
-  // Replay-Schutz: Timestamp darf nicht mehr als 5 Min abweichen.
-  const ts = Number(svixTimestamp);
-  if (!Number.isFinite(ts)) return false;
-  const ageSec = Math.abs(Date.now() / 1000 - ts);
-  if (ageSec > 300) return false;
-
-  const secretBytes = secret.startsWith('whsec_')
-    ? Buffer.from(secret.slice(6), 'base64')
-    : Buffer.from(secret, 'utf8');
-
-  const signedContent = `${svixId}.${svixTimestamp}.${rawBody}`;
-  const expected = crypto
-    .createHmac('sha256', secretBytes)
-    .update(signedContent)
-    .digest('base64');
-  const expectedBuf = Buffer.from(expected);
-
-  // Header kann mehrere Signaturen enthalten (Key-Rotation).
-  for (const part of svixSignature.split(' ')) {
-    const sig = part.includes(',') ? part.split(',')[1] : part;
-    if (!sig) continue;
-    const sigBuf = Buffer.from(sig);
-    if (
-      sigBuf.length === expectedBuf.length &&
-      crypto.timingSafeEqual(sigBuf, expectedBuf)
-    ) {
-      return true;
-    }
-  }
-  return false;
-}
-
-// ─── Payload-Parsing ────────────────────────────────────────────────────────
+// ─── Typen ──────────────────────────────────────────────────────────────────
 
 export interface InboundAttachment {
   filename: string;
-  contentBase64: string;
+  content: Buffer;
 }
 
 export interface ParsedInboundEmail {
   from: string;
   fromName: string;
-  to: string;
   subject: string;
   text: string;
   html: string;
@@ -83,114 +34,62 @@ export interface ParsedInboundEmail {
   attachments: InboundAttachment[];
 }
 
-/** "Max Mustermann <max@example.de>" -> { email, name } */
-export function parseEmailAddress(raw: unknown): { email: string; name: string } {
-  const str = typeof raw === 'string' ? raw.trim() : '';
-  if (!str) return { email: '', name: '' };
-  const match = str.match(/^(.*?)<([^>]+)>$/);
-  if (match) {
-    return {
-      name: match[1].trim().replace(/^["']|["']$/g, ''),
-      email: match[2].trim().toLowerCase(),
-    };
-  }
-  return { email: str.toLowerCase(), name: '' };
-}
-
-function readHeader(headers: unknown, name: string): string | null {
-  const want = name.toLowerCase();
-  if (Array.isArray(headers)) {
-    for (const h of headers) {
-      if (h && typeof h === 'object' && 'name' in h && 'value' in h) {
-        if (String((h as { name: unknown }).name).toLowerCase() === want) {
-          return String((h as { value: unknown }).value);
-        }
-      }
-    }
-  } else if (headers && typeof headers === 'object') {
-    for (const [k, v] of Object.entries(headers as Record<string, unknown>)) {
-      if (k.toLowerCase() === want) return String(v);
-    }
-  }
-  return null;
-}
+// ─── Mailparser-Output -> ParsedInboundEmail ────────────────────────────────
 
 /**
- * Parst den Resend-Inbound-Webhook-Payload. Tolerant gegenueber leichten
- * Schema-Abweichungen (Resend Inbound ist jung). Gibt null zurueck, wenn
- * keine Absenderadresse ermittelbar ist.
+ * Wandelt das von `mailparser.simpleParser()` erzeugte ParsedMail-Objekt in
+ * unsere interne Struktur um. Gibt null zurueck, wenn keine Absenderadresse
+ * ermittelbar ist.
  */
-export function parseInboundPayload(json: unknown): ParsedInboundEmail | null {
-  if (!json || typeof json !== 'object') return null;
-  const root = json as Record<string, unknown>;
-  // Resend wrappt die Nutzdaten in `data`.
-  const data = (root.data && typeof root.data === 'object'
-    ? (root.data as Record<string, unknown>)
-    : root) as Record<string, unknown>;
-
-  const fromRaw = data.from ?? data.sender ?? '';
-  const { email: from, name: fromName } = parseEmailAddress(
-    typeof fromRaw === 'string' ? fromRaw : '',
-  );
+export function parseImapMessage(parsed: ParsedMail): ParsedInboundEmail | null {
+  const fromAddr = parsed.from?.value?.[0];
+  const from = (fromAddr?.address ?? '').trim().toLowerCase();
   if (!from || !from.includes('@')) return null;
 
-  const toRaw = data.to;
-  const to = Array.isArray(toRaw)
-    ? parseEmailAddress(String(toRaw[0] ?? '')).email
-    : parseEmailAddress(typeof toRaw === 'string' ? toRaw : '').email;
+  const fromName = (fromAddr?.name ?? '').trim() || from.split('@')[0];
 
-  const headers = data.headers;
-  const messageId =
-    (typeof data.message_id === 'string' ? data.message_id : null) ??
-    readHeader(headers, 'Message-ID') ??
-    readHeader(headers, 'Message-Id');
   const inReplyTo =
-    (typeof data.in_reply_to === 'string' ? data.in_reply_to : null) ??
-    readHeader(headers, 'In-Reply-To') ??
-    readHeader(headers, 'References');
+    parsed.inReplyTo ??
+    (Array.isArray(parsed.references) ? parsed.references[0] : parsed.references) ??
+    null;
 
   const attachments: InboundAttachment[] = [];
-  const rawAtt = data.attachments;
-  if (Array.isArray(rawAtt)) {
-    for (const a of rawAtt) {
-      if (!a || typeof a !== 'object') continue;
-      const att = a as Record<string, unknown>;
-      const content = att.content;
-      let base64 = '';
-      if (typeof content === 'string') {
-        base64 = content;
-      } else if (
-        content &&
-        typeof content === 'object' &&
-        Array.isArray((content as { data?: unknown }).data)
-      ) {
-        // Node-Buffer-JSON-Form { type: 'Buffer', data: [...] }
-        base64 = Buffer.from(
-          (content as { data: number[] }).data,
-        ).toString('base64');
-      }
-      if (!base64) continue;
-      attachments.push({
-        filename:
-          typeof att.filename === 'string' && att.filename.trim()
-            ? att.filename.trim()
-            : 'anhang',
-        contentBase64: base64,
-      });
-    }
+  for (const a of parsed.attachments ?? []) {
+    if (!a.content || !Buffer.isBuffer(a.content)) continue;
+    attachments.push({
+      filename: (a.filename || 'anhang').slice(0, 255),
+      content: a.content,
+    });
   }
 
   return {
     from,
     fromName,
-    to,
-    subject: typeof data.subject === 'string' ? data.subject : '',
-    text: typeof data.text === 'string' ? data.text : '',
-    html: typeof data.html === 'string' ? data.html : '',
-    messageId: messageId ? messageId.trim() : null,
-    inReplyTo: inReplyTo ? inReplyTo.trim() : null,
+    subject: typeof parsed.subject === 'string' ? parsed.subject : '',
+    text: typeof parsed.text === 'string' ? parsed.text : '',
+    html: typeof parsed.html === 'string' ? parsed.html : '',
+    messageId: parsed.messageId ? parsed.messageId.trim() : null,
+    inReplyTo: inReplyTo ? String(inReplyTo).trim() : null,
     attachments,
   };
+}
+
+/**
+ * Erkennt automatisierte Massen-E-Mails (Newsletter, Bounce, Auto-Reply).
+ * Echte Kundenanfragen tragen diese Header nicht — so bleibt die Inbox sauber.
+ */
+export function isAutomatedEmail(parsed: ParsedMail): boolean {
+  const headers = parsed.headers;
+  const get = (name: string): string => {
+    const v = headers?.get(name);
+    return typeof v === 'string' ? v.toLowerCase() : '';
+  };
+  if (headers?.has('list-unsubscribe') || headers?.has('list-id')) return true;
+  const autoSub = get('auto-submitted');
+  if (autoSub && autoSub !== 'no') return true;
+  const precedence = get('precedence');
+  if (['bulk', 'list', 'junk', 'auto_reply'].includes(precedence)) return true;
+  return false;
 }
 
 // ─── Threading-Helfer ───────────────────────────────────────────────────────
@@ -217,4 +116,264 @@ export function htmlToPlainText(html: string): string {
     .replace(/&#x27;/gi, "'")
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+}
+
+// ─── DB-Verarbeitung ────────────────────────────────────────────────────────
+
+// Platzhalter-sender_id fuer E-Mail-Sender ohne Kundenkonto.
+const EMAIL_SENDER_PLACEHOLDER = '00000000-0000-0000-0000-000000000001';
+const MAX_ATTACHMENTS = 10;
+const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
+const SCHEMA_ERROR = /column|schema cache|PGRST|does not exist|relation .* does not exist/i;
+
+const EXT_BY_TYPE: Record<string, string> = {
+  pdf: 'pdf', jpeg: 'jpg', png: 'png', webp: 'webp', gif: 'gif', heic: 'heic', heif: 'heif',
+};
+const MIME_BY_TYPE: Record<string, string> = {
+  pdf: 'application/pdf', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp',
+  gif: 'image/gif', heic: 'image/heic', heif: 'image/heif',
+};
+
+export type InboundResult =
+  | { status: 'created'; conversationId: string }
+  | { status: 'duplicate' }
+  | { status: 'migration_pending' }
+  | { status: 'error'; message: string };
+
+/**
+ * Schreibt eine geparste eingehende E-Mail in conversations/messages.
+ * Idempotent ueber messages.email_message_id (Unique-Index).
+ */
+export async function processInboundEmail(
+  supabase: SupabaseClient,
+  mail: ParsedInboundEmail,
+): Promise<InboundResult> {
+  // ─── Dedupe ueber Message-ID ────────────────────────────────────────────
+  if (mail.messageId) {
+    const { data: existing } = await supabase
+      .from('messages')
+      .select('id')
+      .eq('email_message_id', mail.messageId)
+      .maybeSingle();
+    if (existing) return { status: 'duplicate' };
+  }
+
+  const subject = (mail.subject || '(kein Betreff)').slice(0, 200);
+  const bodyText = mail.text.trim() || htmlToPlainText(mail.html) || '(kein Textinhalt)';
+  const bodyHtml = mail.html.trim() || null;
+
+  // ─── Kundenzuordnung ueber Absender-E-Mail ──────────────────────────────
+  let customerId: string | null = null;
+  let customerName = mail.fromName;
+  try {
+    const { data } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+    const authUser = data?.users?.find((u) => u.email?.toLowerCase() === mail.from);
+    if (authUser) {
+      customerId = authUser.id;
+      const metaName = authUser.user_metadata?.full_name;
+      if (typeof metaName === 'string' && metaName.trim()) customerName = metaName.trim();
+    }
+  } catch {
+    // Auth-Lookup best-effort
+  }
+
+  // ─── Buchungs-Verknuepfung ──────────────────────────────────────────────
+  let bookingId: string | null = null;
+  const subjectBookingId = extractBookingId(subject);
+  if (subjectBookingId) {
+    const { data: b } = await supabase
+      .from('bookings')
+      .select('id')
+      .eq('id', subjectBookingId)
+      .maybeSingle();
+    if (b) bookingId = b.id;
+  }
+  if (!bookingId) {
+    const { data: b } = await supabase
+      .from('bookings')
+      .select('id')
+      .ilike('customer_email', mail.from)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (b) bookingId = b.id;
+  }
+
+  // ─── Threading: bestehende Konversation finden ──────────────────────────
+  let conversationId: string | null = null;
+
+  if (mail.inReplyTo) {
+    const { data: m } = await supabase
+      .from('messages')
+      .select('conversation_id')
+      .eq('email_message_id', mail.inReplyTo)
+      .limit(1)
+      .maybeSingle();
+    if (m) conversationId = m.conversation_id;
+    if (!conversationId) {
+      const { data: c } = await supabase
+        .from('conversations')
+        .select('id')
+        .eq('email_message_id', mail.inReplyTo)
+        .limit(1)
+        .maybeSingle();
+      if (c) conversationId = c.id;
+    }
+  }
+
+  if (!conversationId && bookingId) {
+    const { data: c } = await supabase
+      .from('conversations')
+      .select('id')
+      .eq('booking_id', bookingId)
+      .eq('source', 'email')
+      .order('last_message_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (c) conversationId = c.id;
+  }
+
+  if (!conversationId) {
+    const { data: c } = await supabase
+      .from('conversations')
+      .select('id')
+      .eq('source', 'email')
+      .ilike('customer_email', mail.from)
+      .eq('closed', false)
+      .order('last_message_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (c) conversationId = c.id;
+  }
+
+  const now = new Date().toISOString();
+
+  // ─── Konversation anlegen falls keine gefunden ──────────────────────────
+  let createdConversation = false;
+  if (!conversationId) {
+    const { data: conv, error: convErr } = await supabase
+      .from('conversations')
+      .insert({
+        customer_id: customerId,
+        customer_email: mail.from,
+        customer_name: customerName,
+        subject,
+        booking_id: bookingId,
+        source: 'email',
+        email_message_id: mail.messageId,
+        closed: false,
+        last_message_at: now,
+      })
+      .select('id')
+      .single();
+    if (convErr || !conv) {
+      if (SCHEMA_ERROR.test(convErr?.message ?? '')) return { status: 'migration_pending' };
+      return { status: 'error', message: convErr?.message ?? 'Konversation fehlgeschlagen.' };
+    }
+    conversationId = conv.id;
+    createdConversation = true;
+  }
+
+  // ─── Nachricht einfuegen ────────────────────────────────────────────────
+  const { data: msg, error: msgErr } = await supabase
+    .from('messages')
+    .insert({
+      conversation_id: conversationId,
+      sender_type: 'customer',
+      sender_id: customerId ?? EMAIL_SENDER_PLACEHOLDER,
+      body: bodyText.slice(0, 50000),
+      body_html: bodyHtml,
+      email_message_id: mail.messageId,
+      email_in_reply_to: mail.inReplyTo,
+      read: false,
+    })
+    .select('id')
+    .single();
+
+  if (msgErr || !msg) {
+    if (msgErr?.code === '23505') {
+      // Race-Duplikat — eben angelegte leere Konversation zuruecknehmen.
+      if (createdConversation && conversationId) {
+        await supabase.from('conversations').delete().eq('id', conversationId);
+      }
+      return { status: 'duplicate' };
+    }
+    if (SCHEMA_ERROR.test(msgErr?.message ?? '')) return { status: 'migration_pending' };
+    return { status: 'error', message: msgErr?.message ?? 'Nachricht fehlgeschlagen.' };
+  }
+
+  // ─── Anhaenge in Storage ablegen ────────────────────────────────────────
+  let attachmentCount = 0;
+  for (const att of mail.attachments.slice(0, MAX_ATTACHMENTS)) {
+    try {
+      if (att.content.length === 0 || att.content.length > MAX_ATTACHMENT_BYTES) continue;
+      const detected = detectFileType(att.content);
+      // Erkannte PDFs/Bilder bekommen ihren echten MIME-Typ; alles andere
+      // wird als octet-stream gespeichert (Signed-URL erzwingt Download).
+      const safeMime = detected
+        ? MIME_BY_TYPE[detected] ?? 'application/octet-stream'
+        : 'application/octet-stream';
+      const ext = detected ? EXT_BY_TYPE[detected] ?? 'bin' : 'bin';
+
+      const parts = new Intl.DateTimeFormat('en-CA', {
+        year: 'numeric', month: '2-digit', timeZone: 'Europe/Berlin',
+      }).formatToParts(new Date());
+      const yyyy = parts.find((p) => p.type === 'year')?.value ?? '1970';
+      const mm = parts.find((p) => p.type === 'month')?.value ?? '01';
+      const storagePath = `${yyyy}/${mm}/${crypto.randomUUID()}.${ext}`;
+
+      const { error: upErr } = await supabase.storage
+        .from('email-attachments')
+        .upload(storagePath, att.content, { contentType: safeMime, upsert: false });
+      if (upErr) continue;
+
+      await supabase.from('message_attachments').insert({
+        message_id: msg.id,
+        storage_path: storagePath,
+        filename: att.filename,
+        mime_type: safeMime,
+        size_bytes: att.content.length,
+      });
+      attachmentCount++;
+    } catch {
+      // einzelne Anhaenge best-effort
+    }
+  }
+
+  // ─── last_message_at aktualisieren ──────────────────────────────────────
+  await supabase
+    .from('conversations')
+    .update({ last_message_at: now })
+    .eq('id', conversationId);
+
+  // ─── Admin-Benachrichtigung (Push an Mitarbeiter mit kunden-Permission) ──
+  await createAdminNotification(supabase, {
+    type: 'new_message',
+    title: `Neue E-Mail von ${customerName}`,
+    message: subject,
+    link: '/admin/nachrichten',
+  });
+
+  // ─── email_log + Audit ──────────────────────────────────────────────────
+  try {
+    await supabase.from('email_log').insert({
+      booking_id: bookingId,
+      customer_email: mail.from,
+      email_type: 'inbound_received',
+      subject,
+      status: 'sent',
+    });
+  } catch {
+    // Log best-effort
+  }
+
+  await logAudit({
+    action: 'inbound_email.received',
+    entityType: 'nachricht',
+    entityId: conversationId ?? undefined,
+    entityLabel: subject,
+    changes: { from: mail.from, booking_id: bookingId, attachments: attachmentCount },
+  });
+
+  return { status: 'created', conversationId: conversationId! };
 }
