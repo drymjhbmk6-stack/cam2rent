@@ -54,18 +54,35 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   } | null;
   if (!body) return NextResponse.json({ error: 'Ungültige Anfrage.' }, { status: 400 });
 
+  // Echte Aenderungen ermitteln — das Bearbeiten-Formular schickt role +
+  // permissions IMMER mit, auch unveraendert. Ohne diesen Vergleich wuerde
+  // jeder Speichern-Vorgang die Sessions des Accounts zuruecksetzen (d.h. ein
+  // Owner, der seinen eigenen Account bearbeitet, loggt sich selbst aus).
+  const filteredPermsInput =
+    body.permissions !== undefined
+      ? body.permissions.filter((p): p is PermissionKey =>
+          (PERMISSION_KEYS as readonly string[]).includes(p),
+        )
+      : undefined;
+  const roleChanged = body.role !== undefined && body.role !== target.role;
+  const activeChanged = body.is_active !== undefined && body.is_active !== target.is_active;
+  const permsChanged =
+    filteredPermsInput !== undefined &&
+    (filteredPermsInput.length !== target.permissions.length ||
+      [...filteredPermsInput].sort().join(',') !== [...target.permissions].sort().join(','));
+
   // Privesc-Schutz (Sweep 7 Vuln 1): Nicht-Owner duerfen sich nicht selbst die
   // Permissions erweitern oder die Rolle aendern — sonst waere mit
   // `mitarbeiter_verwalten` allein bereits Self-Privesc auf alle 9 Permissions
   // moeglich (de facto Owner-Aequivalent).
   if (me?.id === id && me?.role !== 'owner') {
-    if (body.permissions !== undefined) {
+    if (permsChanged) {
       return NextResponse.json(
         { error: 'Du kannst deine eigenen Berechtigungen nicht ändern.' },
         { status: 403 }
       );
     }
-    if (body.role !== undefined && body.role !== me.role) {
+    if (roleChanged) {
       return NextResponse.json(
         { error: 'Du kannst deine eigene Rolle nicht ändern.' },
         { status: 403 }
@@ -95,11 +112,11 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   }
 
   // Rolle/Aktiv-Aenderung an Owner: letzten Owner schuetzen
-  if (body.role !== undefined || body.is_active !== undefined) {
+  if (roleChanged || activeChanged) {
     if (target.role === 'owner') {
       const owners = await countOwners();
-      const willDemote = body.role !== undefined && body.role !== 'owner';
-      const willDeactivate = body.is_active === false;
+      const willDemote = roleChanged && body.role !== 'owner';
+      const willDeactivate = activeChanged && body.is_active === false;
       if (owners <= 1 && (willDemote || willDeactivate)) {
         return NextResponse.json(
           { error: 'Der letzte aktive Owner kann nicht herabgestuft oder deaktiviert werden.' },
@@ -108,17 +125,15 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       }
     }
     // Nur Owner duerfen einen anderen zu Owner machen
-    if (body.role === 'owner' && me?.role !== 'owner') {
+    if (roleChanged && body.role === 'owner' && me?.role !== 'owner') {
       return NextResponse.json({ error: 'Nur Owner dürfen Owner ernennen.' }, { status: 403 });
     }
-    if (body.role !== undefined) patch.role = body.role;
-    if (body.is_active !== undefined) patch.is_active = body.is_active;
+    if (roleChanged) patch.role = body.role;
+    if (activeChanged) patch.is_active = body.is_active;
   }
 
-  if (body.permissions !== undefined) {
-    patch.permissions = body.permissions.filter((p): p is PermissionKey =>
-      (PERMISSION_KEYS as readonly string[]).includes(p)
-    );
+  if (permsChanged) {
+    patch.permissions = filteredPermsInput;
   }
 
   try {
