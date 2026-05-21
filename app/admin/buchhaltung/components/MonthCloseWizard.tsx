@@ -58,10 +58,8 @@ export default function MonthCloseWizard({ initialPeriod, onClose, onNavigate }:
       }
       const json: PeriodStatus = await res.json();
       setStatus(json);
-      // Spring zum ersten unfertigen Schritt
-      if (!json.steps.stripe.complete) setActiveStep(1);
-      else if (!json.steps.purchases.complete) setActiveStep(2);
-      else setActiveStep(3);
+      // Kein Auto-Sprung mehr — der Wizard startet immer bei Schritt 1,
+      // damit jeder Schritt durchlaufen und gesehen wird.
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Fehler');
     } finally {
@@ -203,11 +201,20 @@ export default function MonthCloseWizard({ initialPeriod, onClose, onNavigate }:
                       )}
                     </div>
                   </div>
-                  {status.steps.stripe.unmatched > 0 && (
+                  {status.steps.stripe.unmatched > 0 ? (
                     <button onClick={() => navigateToTab('stripe')} style={primaryBtnStyle}>
                       Zum Stripe-Abgleich →
                     </button>
+                  ) : (
+                    <NothingToDo
+                      text={
+                        status.steps.stripe.total === 0
+                          ? 'Keine Stripe-Zahlungen in diesem Monat — nichts zu tun.'
+                          : 'Alle Stripe-Zahlungen sind einer Buchung zugeordnet — nichts zu tun.'
+                      }
+                    />
                   )}
+                  <StepNav onNext={() => setActiveStep(2)} />
                 </div>
               )}
 
@@ -228,11 +235,14 @@ export default function MonthCloseWizard({ initialPeriod, onClose, onNavigate }:
                       )}
                     </div>
                   </div>
-                  {!status.steps.purchases.complete && (
+                  {!status.steps.purchases.complete ? (
                     <button onClick={() => navigateToTab('ausgaben', 'einkauf')} style={primaryBtnStyle}>
                       Zu Lieferanten-Rechnungen →
                     </button>
+                  ) : (
+                    <NothingToDo text="Alle Eingangsrechnungen sind klassifiziert — nichts zu tun." />
                   )}
+                  <StepNav onBack={() => setActiveStep(1)} onNext={() => setActiveStep(3)} />
                 </div>
               )}
 
@@ -248,9 +258,16 @@ export default function MonthCloseWizard({ initialPeriod, onClose, onNavigate }:
                     <SummaryBlock label="Ausgaben" value={fmtEuro(status.steps.euer.expenses)} sub={`${status.steps.euer.expenseCount} Belege`} color="#f59e0b" />
                     <SummaryBlock label="Gewinn" value={fmtEuro(status.steps.euer.profit)} sub="vor Steuern" color="#06b6d4" />
                   </div>
-                  <button onClick={() => navigateToTab('reports', 'analyse')} style={secondaryBtnStyle}>
-                    Detaillierte EÜR ansehen →
-                  </button>
+                  <NothingToDo text="Reine Sichtprüfung — hier musst du nichts eintragen." variant="info" />
+                  <div style={{ marginTop: 12 }}>
+                    <button
+                      onClick={() => window.open('/admin/buchhaltung?tab=reports&sub=analyse', '_blank')}
+                      style={secondaryBtnStyle}
+                    >
+                      Detaillierte EÜR in neuem Tab ansehen →
+                    </button>
+                  </div>
+                  <StepNav onBack={() => setActiveStep(2)} onNext={() => setActiveStep(4)} />
                 </div>
               )}
 
@@ -291,6 +308,7 @@ export default function MonthCloseWizard({ initialPeriod, onClose, onNavigate }:
                       </p>
                     </div>
                   )}
+                  <StepNav onBack={() => setActiveStep(3)} />
                 </div>
               )}
             </>
@@ -344,6 +362,43 @@ function SummaryBlock({ label, value, sub, color }: { label: string; value: stri
       <div style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>{label}</div>
       <div style={{ fontSize: 18, fontWeight: 800, color, marginBottom: 2 }}>{value}</div>
       <div style={{ fontSize: 11, color: '#64748b' }}>{sub}</div>
+    </div>
+  );
+}
+
+function StepNav({ onBack, onNext }: { onBack?: () => void; onNext?: () => void }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginTop: 20, paddingTop: 16, borderTop: '1px solid #1e293b' }}>
+      {onBack ? (
+        <button onClick={onBack} style={secondaryBtnStyle}>← Zurück</button>
+      ) : (
+        <span />
+      )}
+      {onNext ? (
+        <button onClick={onNext} style={primaryBtnStyle}>Weiter →</button>
+      ) : (
+        <span />
+      )}
+    </div>
+  );
+}
+
+function NothingToDo({ text, variant = 'ok' }: { text: string; variant?: 'ok' | 'info' }) {
+  const ok = variant === 'ok';
+  return (
+    <div
+      style={{
+        background: ok ? 'rgba(16,185,129,0.10)' : 'rgba(6,182,212,0.10)',
+        border: `1px solid ${ok ? 'rgba(16,185,129,0.4)' : 'rgba(6,182,212,0.4)'}`,
+        borderRadius: 10,
+        padding: 12,
+        color: ok ? '#6ee7b7' : '#67e8f9',
+        fontSize: 13,
+        fontWeight: 600,
+      }}
+    >
+      {ok ? '✓ ' : 'ℹ '}
+      {text}
     </div>
   );
 }
