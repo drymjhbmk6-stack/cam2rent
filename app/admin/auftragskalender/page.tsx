@@ -523,16 +523,31 @@ function MonthView({
                       borderRight: d < 6 ? `1px solid ${C.border}` : 'none',
                     }}
                   >
-                    {/* Datum — oben links in der Ecke */}
+                    {/* Datum oben links — Feiertagsname direkt rechts daneben */}
                     <span
-                      className={`absolute top-1 left-1.5 text-xs font-semibold flex items-center justify-center ${numCls}`}
-                      style={
-                        isToday
-                          ? { background: '#fbbf24', borderRadius: '9999px', width: 20, height: 20 }
-                          : undefined
-                      }
+                      className="absolute top-1 left-1.5 flex items-center gap-1.5"
+                      style={{
+                        maxWidth:
+                          nCount > 0 || ship > 0 || ret > 0
+                            ? 'calc(100% - 70px)'
+                            : 'calc(100% - 12px)',
+                      }}
                     >
-                      {dObj.getDate()}
+                      <span
+                        className={`text-xs font-semibold flex items-center justify-center shrink-0 ${numCls}`}
+                        style={
+                          isToday
+                            ? { background: '#fbbf24', borderRadius: '9999px', width: 20, height: 20 }
+                            : undefined
+                        }
+                      >
+                        {dObj.getDate()}
+                      </span>
+                      {holiday && (
+                        <span className="text-[10px] leading-tight text-red-300 truncate">
+                          {holiday}
+                        </span>
+                      )}
                     </span>
 
                     {/* Aktions-Badges — oben rechts */}
@@ -569,15 +584,6 @@ function MonthView({
                       </span>
                     </span>
 
-                    {/* Feiertagsname — unter dem Datum */}
-                    {holiday && (
-                      <span
-                        className="absolute left-1.5 text-[10px] leading-tight text-red-300 truncate"
-                        style={{ top: 22, maxWidth: 'calc(100% - 12px)' }}
-                      >
-                        {holiday}
-                      </span>
-                    )}
                   </button>
                 );
               })}
