@@ -202,6 +202,7 @@ function statusLabel(status: string): { label: string; color: string } {
     awaiting_payment: { label: 'Warte auf Zahlung', color: C.purple },
     confirmed: { label: 'Bestätigt', color: C.yellow },
     shipped: { label: 'Versendet', color: C.blue },
+    delivered: { label: 'Zugestellt', color: C.green },
     picked_up: { label: 'Abgeholt', color: C.green },
     completed: { label: 'Abgeschlossen', color: C.green },
     cancelled: { label: 'Storniert', color: C.red },

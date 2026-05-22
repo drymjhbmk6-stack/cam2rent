@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
     .from('bookings')
     .select('unit_id')
     .eq('product_id', productId)
-    .in('status', ['confirmed', 'shipped', 'active', 'pending_verification', 'awaiting_payment'])
+    .in('status', ['confirmed', 'shipped', 'delivered', 'picked_up', 'active', 'pending_verification', 'awaiting_payment'])
     .not('unit_id', 'is', null)
     .lte('rental_from', bTo)
     .gte('rental_to', bFrom);

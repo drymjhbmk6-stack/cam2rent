@@ -48,7 +48,7 @@ BEGIN
     AND NOT EXISTS (
       SELECT 1 FROM bookings b
       WHERE b.unit_id = u.id
-        AND b.status IN ('confirmed', 'shipped', 'active')
+        AND b.status IN ('confirmed', 'shipped', 'delivered', 'picked_up', 'active')
         AND b.id <> p_booking_id
         AND b.rental_from <= p_rental_to
         AND b.rental_to >= p_rental_from

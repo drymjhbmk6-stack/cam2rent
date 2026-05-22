@@ -36,7 +36,7 @@ export async function findFreeUnit(
   let bookingQuery = supabase
     .from('bookings')
     .select('unit_id, cameras')
-    .in('status', ['confirmed', 'shipped', 'active'])
+    .in('status', ['confirmed', 'shipped', 'delivered', 'picked_up', 'active'])
     .lte('rental_from', rentalTo)
     .gte('rental_to', rentalFrom);
   bookingQuery = isTest

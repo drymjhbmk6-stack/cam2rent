@@ -1625,7 +1625,7 @@ export async function PATCH(
   // gegen parallele Aktionen wie Stripe-Webhook oder Doppel-Klick auf Storno).
   let preStatus: string | null = null;
   if (status) {
-    const allowed = ['pending_verification', 'awaiting_payment', 'confirmed', 'shipped', 'picked_up', 'completed', 'cancelled', 'damaged'];
+    const allowed = ['pending_verification', 'awaiting_payment', 'confirmed', 'shipped', 'delivered', 'picked_up', 'completed', 'cancelled', 'damaged'];
     if (!allowed.includes(status)) {
       return NextResponse.json({ error: 'Ungültiger Status.' }, { status: 400 });
     }

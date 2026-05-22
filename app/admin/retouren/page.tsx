@@ -68,7 +68,7 @@ export default function AdminRetourenPage() {
   }
 
   const pendingReturns = bookings
-    .filter((b) => b.status === 'shipped' || (b.status === 'confirmed' && b.delivery_mode === 'abholung'))
+    .filter((b) => b.status === 'shipped' || b.status === 'delivered' || (b.status === 'confirmed' && b.delivery_mode === 'abholung'))
     .sort((a, b) => new Date(a.rental_to).getTime() - new Date(b.rental_to).getTime());
 
   const completedReturns = bookings

@@ -95,6 +95,7 @@ export async function GET(req: NextRequest) {
       'awaiting_payment',
       'confirmed',
       'shipped',
+      'delivered',
       'picked_up',
       'returned',
       'completed',

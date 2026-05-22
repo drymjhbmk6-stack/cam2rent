@@ -156,13 +156,14 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }
   awaiting_payment: { label: 'Warte auf Zahlung', color: '#8b5cf6', bg: '#8b5cf614' },
   confirmed: { label: 'Bestätigt', color: '#06b6d4', bg: '#06b6d414' },
   shipped: { label: 'Versendet', color: '#10b981', bg: '#10b98114' },
+  delivered: { label: 'Zugestellt', color: '#22c55e', bg: '#22c55e14' },
   picked_up: { label: 'Abgeholt', color: '#10b981', bg: '#10b98114' },
   completed: { label: 'Abgeschlossen', color: '#64748b', bg: '#64748b14' },
   cancelled: { label: 'Storniert', color: '#ef4444', bg: '#ef444414' },
   damaged: { label: 'Beschädigt', color: '#f97316', bg: '#f9731614' },
 };
 
-const ALL_STATUSES = ['pending_verification', 'awaiting_payment', 'confirmed', 'shipped', 'picked_up', 'completed', 'cancelled', 'damaged'];
+const ALL_STATUSES = ['pending_verification', 'awaiting_payment', 'confirmed', 'shipped', 'delivered', 'picked_up', 'completed', 'cancelled', 'damaged'];
 
 function fmtDate(iso: string) {
   if (!iso) return '–';
@@ -760,7 +761,7 @@ export default function BuchungDetailPage() {
           </div>
           <div className="flex items-center gap-2">
             {booking.status === 'shipped' && (
-              <button onClick={() => quickStatusChange('completed', 'Zugestellt / Abgeschlossen')} disabled={statusUpdating} className="px-4 py-2 text-sm font-heading font-semibold bg-green-600 text-white rounded-btn hover:bg-green-700 transition-colors disabled:opacity-40">
+              <button onClick={() => quickStatusChange('delivered', 'Zugestellt')} disabled={statusUpdating} className="px-4 py-2 text-sm font-heading font-semibold bg-green-600 text-white rounded-btn hover:bg-green-700 transition-colors disabled:opacity-40">
                 Als zugestellt markieren
               </button>
             )}
@@ -1123,9 +1124,9 @@ export default function BuchungDetailPage() {
                   <div className="mt-4 pt-4 border-t border-brand-border flex flex-wrap gap-2">
                     {booking.status === 'confirmed' && <Link href="/admin/versand" className="px-3 py-1.5 text-xs font-heading font-semibold bg-brand-black text-white rounded-btn hover:bg-brand-dark transition-colors">Zum Versand</Link>}
                     {booking.status === 'shipped' && (
-                      <button onClick={() => quickStatusChange('completed', 'Zugestellt / Abgeschlossen')} disabled={statusUpdating} className="px-3 py-1.5 text-xs font-heading font-semibold bg-green-600 text-white rounded-btn hover:bg-green-700 transition-colors disabled:opacity-40">Als zugestellt markieren</button>
+                      <button onClick={() => quickStatusChange('delivered', 'Zugestellt')} disabled={statusUpdating} className="px-3 py-1.5 text-xs font-heading font-semibold bg-green-600 text-white rounded-btn hover:bg-green-700 transition-colors disabled:opacity-40">Als zugestellt markieren</button>
                     )}
-                    {(booking.status === 'shipped' || booking.status === 'picked_up') && <Link href="/admin/retouren" className="px-3 py-1.5 text-xs font-heading font-semibold bg-cyan-600 text-white rounded-btn hover:bg-cyan-700 transition-colors">Rückgabe prüfen</Link>}
+                    {(booking.status === 'shipped' || booking.status === 'delivered' || booking.status === 'picked_up') && <Link href="/admin/retouren" className="px-3 py-1.5 text-xs font-heading font-semibold bg-cyan-600 text-white rounded-btn hover:bg-cyan-700 transition-colors">Rückgabe prüfen</Link>}
                   </div>
                 </div>
               ) : (
@@ -1260,6 +1261,7 @@ export default function BuchungDetailPage() {
                 <TimelineItem label="Buchung erstellt" date={fmtDateTime(booking.created_at)} status="confirmed" active />
                 {booking.contract_signed_at && <TimelineItem label="Vertrag unterschrieben" date={fmtDateTime(booking.contract_signed_at)} status="confirmed" active />}
                 {booking.shipped_at && <TimelineItem label="Versendet" date={fmtDateTime(booking.shipped_at)} status="shipped" active />}
+                {booking.status === 'delivered' && <TimelineItem label="Beim Kunden zugestellt" date="" status="shipped" active />}
                 {booking.status === 'picked_up' && <TimelineItem label="Abgeholt" date="" status="shipped" active />}
                 {booking.extended_at && <TimelineItem label="Verlängert" date={fmtDateTime(booking.extended_at)} status="confirmed" active />}
                 {booking.returned_at && <TimelineItem label="Zurückgegeben" date={fmtDateTime(booking.returned_at)} status="completed" active />}

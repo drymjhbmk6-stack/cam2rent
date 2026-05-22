@@ -103,7 +103,7 @@ export async function POST(req: NextRequest) {
       .select('*', { count: 'exact', head: true })
       .eq('product_id', booking.product_id)
       .neq('id', bookingId)
-      .in('status', ['confirmed', 'shipped'])
+      .in('status', ['confirmed', 'shipped', 'delivered', 'picked_up'])
       .lte('rental_from', newRentalTo)
       .gte('rental_to', booking.rental_to);
 

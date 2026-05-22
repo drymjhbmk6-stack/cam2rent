@@ -243,7 +243,7 @@ export default async function ScanLandingPage({ params }: PageProps) {
       supabase.from('bookings')
         .select('id, customer_name, rental_from, rental_to, status, delivery_mode')
         .eq('unit_id', productUnit.id)
-        .in('status', ['confirmed', 'shipped', 'picked_up'])
+        .in('status', ['confirmed', 'shipped', 'delivered', 'picked_up'])
         .gte('rental_to', today)
         .order('rental_from', { ascending: true })
         .limit(5),
@@ -308,7 +308,7 @@ export default async function ScanLandingPage({ params }: PageProps) {
       supabase.from('bookings')
         .select('id, customer_name, rental_from, rental_to, status, delivery_mode')
         .contains('accessory_unit_ids', [accUnit.id])
-        .in('status', ['confirmed', 'shipped', 'picked_up'])
+        .in('status', ['confirmed', 'shipped', 'delivered', 'picked_up'])
         .gte('rental_to', today)
         .order('rental_from', { ascending: true })
         .limit(5),

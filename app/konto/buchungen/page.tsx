@@ -23,7 +23,7 @@ interface Booking {
   rental_to: string;
   days: number;
   price_total: number;
-  status: 'pending_verification' | 'awaiting_payment' | 'confirmed' | 'shipped' | 'picked_up' | 'returned' | 'completed' | 'cancelled' | 'damaged';
+  status: 'pending_verification' | 'awaiting_payment' | 'confirmed' | 'shipped' | 'delivered' | 'picked_up' | 'returned' | 'completed' | 'cancelled' | 'damaged';
   delivery_mode: string;
   haftung: string;
   created_at: string;
@@ -43,6 +43,7 @@ const statusConfig: Record<string, { label: string; className: string }> = {
   awaiting_payment: { label: 'Warte auf Zahlung', className: 'bg-purple-100 text-purple-700' },
   confirmed: { label: 'Aktiv', className: 'bg-green-100 text-green-700' },
   shipped: { label: 'Unterwegs', className: 'bg-blue-100 text-blue-700' },
+  delivered: { label: 'Zugestellt', className: 'bg-green-100 text-green-700' },
   picked_up: { label: 'Abgeholt', className: 'bg-green-100 text-green-700' },
   returned: { label: 'Zurückgegeben', className: 'bg-brand-bg dark:bg-brand-black text-brand-steel dark:text-gray-400' },
   completed: { label: 'Abgeschlossen', className: 'bg-brand-bg dark:bg-brand-black text-brand-steel dark:text-gray-400' },
@@ -601,7 +602,7 @@ export default function BuchungenPage() {
 
   // Can extend: active booking, rental not ended
   function canExtend(booking: Booking) {
-    return ['confirmed', 'shipped'].includes(booking.status) && booking.rental_to >= new Date().toISOString().split('T')[0];
+    return ['confirmed', 'shipped', 'delivered', 'picked_up'].includes(booking.status) && booking.rental_to >= new Date().toISOString().split('T')[0];
   }
 
   // Can sign contract: active booking, not yet signed
@@ -756,7 +757,7 @@ export default function BuchungenPage() {
                   )}
 
                   {/* Return label */}
-                  {booking.status === 'shipped' && booking.return_label_url && (
+                  {(booking.status === 'shipped' || booking.status === 'delivered') && booking.return_label_url && (
                     <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-3">
                       <span className="text-lg leading-none">📦</span>
                       <div className="min-w-0 flex-1">
@@ -771,7 +772,7 @@ export default function BuchungenPage() {
                   )}
 
                   {/* Tracking info */}
-                  {booking.status === 'shipped' && booking.tracking_number && (
+                  {(booking.status === 'shipped' || booking.status === 'delivered') && booking.tracking_number && (
                     <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-start gap-3">
                       <span className="text-lg leading-none">📦</span>
                       <div className="min-w-0">
@@ -839,7 +840,7 @@ export default function BuchungenPage() {
                       })()}
 
                       {/* Damage report */}
-                      {(booking.status === 'shipped' || booking.status === 'completed') && (
+                      {(booking.status === 'shipped' || booking.status === 'delivered' || booking.status === 'picked_up' || booking.status === 'completed') && (
                         <Link href="/konto/reklamation" className="flex items-center gap-1.5 text-xs font-heading font-semibold text-orange-600 hover:underline">
                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" /></svg>
                           Schaden melden
@@ -847,7 +848,7 @@ export default function BuchungenPage() {
                       )}
 
                       {/* Material hochladen — UGC-Flow */}
-                      {['picked_up', 'shipped', 'returned', 'completed'].includes(booking.status) && (
+                      {['picked_up', 'shipped', 'delivered', 'returned', 'completed'].includes(booking.status) && (
                         <Link href={`/konto/buchungen/${booking.id}/material`} className="flex items-center gap-1.5 text-xs font-heading font-semibold text-amber-600 hover:underline">
                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
                           Material hochladen & Rabatt sichern

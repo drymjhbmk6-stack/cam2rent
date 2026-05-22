@@ -30,7 +30,11 @@ export default function ReklamationPage() {
       .then((r) => r.json())
       .then((data) => {
         const eligible = (data.bookings || []).filter(
-          (b: BookingOption) => b.status === 'shipped' || b.status === 'completed'
+          (b: BookingOption) =>
+            b.status === 'shipped' ||
+            b.status === 'delivered' ||
+            b.status === 'picked_up' ||
+            b.status === 'completed'
         );
         setBookings(eligible);
       })

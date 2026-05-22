@@ -18,6 +18,7 @@ export const RESERVING_BOOKING_STATUSES = [
   'awaiting_payment',     // Admin hat freigegeben, Kunde hat Zahlungslink (72h Frist)
   'confirmed',            // Bezahlt, bestätigt
   'shipped',              // Unterwegs zum Kunden
+  'delivered',            // Beim Kunden zugestellt (Versand), Rückgabe steht aus
   'picked_up',            // Kunde hat die Kamera abgeholt
   'active',               // Legacy-Alias für picked_up
 ] as const;

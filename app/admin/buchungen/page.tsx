@@ -34,7 +34,7 @@ interface Booking {
   is_test: boolean | null;
 }
 
-type StatusFilter = 'all' | 'confirmed' | 'shipped' | 'completed' | 'cancelled' | 'damaged';
+type StatusFilter = 'all' | 'confirmed' | 'shipped' | 'delivered' | 'completed' | 'cancelled' | 'damaged';
 type DateFilter = 'all' | 'today' | 'week' | 'month';
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
@@ -42,6 +42,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }
   awaiting_payment: { label: 'Warte auf Zahlung', color: '#8b5cf6', bg: '#8b5cf614' },
   confirmed: { label: 'Bestätigt', color: '#06b6d4', bg: '#06b6d414' },
   shipped: { label: 'Versendet', color: '#10b981', bg: '#10b98114' },
+  delivered: { label: 'Zugestellt', color: '#22c55e', bg: '#22c55e14' },
   picked_up: { label: 'Abgeholt', color: '#10b981', bg: '#10b98114' },
   returned: { label: 'Retourniert', color: '#8b5cf6', bg: '#8b5cf614' },
   completed: { label: 'Abgeschlossen', color: '#64748b', bg: '#64748b14' },
@@ -193,6 +194,7 @@ export default function AdminBuchungenPage() {
     all: bookings.length,
     confirmed: bookings.filter((b) => b.status === 'confirmed').length,
     shipped: bookings.filter((b) => b.status === 'shipped').length,
+    delivered: bookings.filter((b) => b.status === 'delivered').length,
     completed: bookings.filter((b) => b.status === 'completed').length,
     cancelled: bookings.filter((b) => b.status === 'cancelled').length,
     damaged: bookings.filter((b) => b.status === 'damaged').length,
@@ -202,6 +204,7 @@ export default function AdminBuchungenPage() {
     { value: 'all', label: `Alle (${counts.all})` },
     { value: 'confirmed', label: `Bestätigt (${counts.confirmed})` },
     { value: 'shipped', label: `Versendet (${counts.shipped})` },
+    { value: 'delivered', label: `Zugestellt (${counts.delivered})` },
     { value: 'completed', label: `Abgeschlossen (${counts.completed})` },
     { value: 'damaged', label: `Beschädigt (${counts.damaged})` },
     { value: 'cancelled', label: `Storniert (${counts.cancelled})` },
@@ -504,7 +507,7 @@ function ActionButtons({
     );
   }
 
-  if (booking.status === 'shipped') {
+  if (booking.status === 'shipped' || booking.status === 'delivered') {
     buttons.push(
       <Link
         key="retoure"

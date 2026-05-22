@@ -72,7 +72,7 @@ BEGIN
         AND NOT EXISTS (
           SELECT 1 FROM bookings b
           WHERE b.id <> p_booking_id
-            AND b.status IN ('confirmed', 'shipped', 'active')
+            AND b.status IN ('confirmed', 'shipped', 'delivered', 'picked_up', 'active')
             AND b.rental_from <= p_rental_to
             AND b.rental_to   >= p_rental_from
             AND COALESCE(b.is_test, false) = v_is_test
@@ -147,7 +147,7 @@ BEGIN
     AND u.status IN ('available', 'rented')
     AND NOT EXISTS (
       SELECT 1 FROM bookings b
-      WHERE b.status IN ('confirmed', 'shipped', 'active')
+      WHERE b.status IN ('confirmed', 'shipped', 'delivered', 'picked_up', 'active')
         AND b.id <> p_booking_id
         AND b.rental_from <= p_rental_to
         AND b.rental_to >= p_rental_from

@@ -239,7 +239,7 @@ export default function MaterialUploadPage() {
     );
   }
 
-  const canUpload = ['picked_up', 'shipped', 'returned', 'completed'].includes(booking.status);
+  const canUpload = ['picked_up', 'shipped', 'delivered', 'returned', 'completed'].includes(booking.status);
   const hasActiveSubmission =
     submission && ['pending', 'approved', 'featured'].includes(submission.status);
 

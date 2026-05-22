@@ -80,11 +80,11 @@ export async function GET() {
         .select('id', { count: 'exact', head: true })
         .eq('status', 'confirmed'),
 
-      // upcoming_returns: shipped bookings with rental_to in next 3 days
+      // upcoming_returns: shipped/delivered bookings with rental_to in next 3 days
       supabase
         .from('bookings')
         .select('id', { count: 'exact', head: true })
-        .eq('status', 'shipped')
+        .in('status', ['shipped', 'delivered'])
         .gte('rental_to', todayStart)
         .lte('rental_to', threeDaysLater),
 

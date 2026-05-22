@@ -420,6 +420,39 @@ geändert** (CLAUDE.md-Doku-Pflicht erfüllt). Eine Datei:
 - **Endgültig löschen:** "Endgültig löschen"-Button mit Admin-Passwort-Abfrage (Passwort: Admin) → löscht Buchung + Verträge + E-Mail-Logs aus DB
 - **DELETE-Endpoint:** `DELETE /api/admin/booking/[id]` mit `{ password }` im Body
 
+### Versand-Status `delivered` — Zugestellt ≠ Abgeschlossen (Stand 2026-05-22)
+Neuer Buchungs-Zwischenstatus `delivered` (Label „Zugestellt"). Vorher sprang
+„Als zugestellt markieren" auf `shipped` direkt auf `completed` — falsch, denn
+der Kunde hat das Paket nur **erhalten**, abgeschlossen ist die Buchung erst
+nach der Retouren-Kontrolle. Workflow Versand jetzt analog zur Abholung
+(`confirmed → picked_up → completed`): **`confirmed → shipped → delivered →
+completed`** (bzw. `damaged`). Der Button setzt `delivered`; erst die
+Rückgabe-Prüfung unter `/admin/retouren` (`return-booking`) setzt `completed`/
+`damaged`.
+- **Kein neues Spalten-Schema** — `bookings.status` ist plain TEXT. `delivered`
+  ist ein neuer Wert, kein CHECK-Constraint betroffen.
+- `delivered` blockt den Lagerbestand wie `shipped` (Kamera ist physisch beim
+  Kunden): aufgenommen in `RESERVING_BOOKING_STATUSES` (`lib/booking-statuses.ts`
+  → Kunden-Kalender + `accessory-availability`), `UTILIZATION_BOOKING_STATUSES`,
+  `findFreeUnit` (`lib/unit-assignment.ts`), `find-free-unit`-API, Gantt-Route,
+  Auftragskalender-Route+Seite, `dashboard-data` (upcoming_returns), Scan-Lookup.
+- **RPC-Migrationen angepasst** (`supabase/supabase-unit-assignment-tester-isolation.sql`
+  + `supabase/supabase-camera-unit-assignment.sql`): die race-sicheren
+  Zuweisungs-RPCs zählen `delivered` (und `picked_up`) jetzt als belegend.
+  ⚠️ `supabase-unit-assignment-tester-isolation.sql` muss **neu ausgeführt**
+  werden (idempotentes `CREATE OR REPLACE FUNCTION`) — sonst könnte eine
+  `delivered`-Kamera fälschlich an eine überlappende Buchung neu vergeben werden.
+- Status-Label-Maps + Filter ergänzt in: `/admin/buchungen` (eigener Tab
+  „Zugestellt"), `/admin/buchungen/[id]` (STATUS_CONFIG, ALL_STATUSES, Timeline,
+  „Rückgabe prüfen"-Link), `/admin/kunden/[id]`, `DashboardWidgets`,
+  `/admin/retouren` (pendingReturns), `/konto/buchungen` (Label „Zugestellt" +
+  Tracking/Rücksendeetikett/Schaden/Material/Verlängern auch bei `delivered`),
+  `/konto/buchungen/[id]/material`, `/konto/reklamation`.
+- `extend-booking` + `confirm-extension` erlauben Verlängerung auch bei
+  `delivered`/`picked_up` (Buchung läuft noch).
+- Status-Whitelist von `PATCH /api/admin/booking/[id]` + `update-booking-status`
+  um `delivered` erweitert.
+
 ### Admin-Sidebar Struktur (neu 2026-04-17)
 Komplett neu strukturiert in 9 Gruppen, damit die tägliche Arbeit schneller erreichbar ist und Blog-Unterseiten direkt aus der Sidebar navigierbar sind.
 
@@ -2853,6 +2886,7 @@ Zwei Einsatzorte:
   pro Mitarbeiter wären auch möglich, brauchen aber eine Cron-Erweiterung
   (mehrere IMAP-Logins) — aktuell pollt der Cron ein Postfach.
 - **Tracking-Carrier + Retoure-Tracking Migration auszuführen:** `supabase/supabase-bookings-tracking-carrier-return.sql` (idempotent). Legt vier neue Spalten an: `tracking_carrier`, `return_tracking_number`, `return_tracking_url`, `return_tracking_carrier` (CHECK auf DHL/DPD, NULL erlaubt). Ohne Migration läuft der bestehende Hin-Versand-Workflow (ship-booking) per defensivem Retry weiter (tracking_carrier wird gedroppt). Die neue Trackingnummer-Bearbeitung in `/admin/buchungen/[id]` antwortet bei fehlender Spalte mit 503; Retoure-Tracking-Edit wird komplett geblockt. Empfohlen ASAP ausführen.
+- **Zuweisungs-RPC neu ausführen (Versand-Status `delivered`):** `supabase/supabase-unit-assignment-tester-isolation.sql` neu ausführen (idempotentes `CREATE OR REPLACE FUNCTION` — keine Datenänderung). Die RPC zählt jetzt `delivered` + `picked_up` als belegend. Ohne erneutes Ausführen könnte eine an einen Kunden zugestellte Kamera (`delivered`) bei einer überlappenden Neubuchung fälschlich erneut zugewiesen werden. `supabase/supabase-camera-unit-assignment.sql` ist ebenfalls angepasst — wird mit den ohnehin offenen Multi-Kamera-Migrationen mit ausgeführt.
 - **Bestellbearbeitungs-Migration auszuführen:** `supabase/supabase-bookings-edit-adjustment.sql` (idempotent). Legt `bookings.adjustment_payment_link_id/amount/status/note` an. Ohne Migration läuft die komplette Bestellbearbeitung weiter (Zahlungslink/Refund werden ausgeführt, Doku landet in `notes`), nur die strukturierten `adjustment_*`-Felder + der Webhook-Status-Sync („Nachzahlung bezahlt") greifen erst nach der Migration. Empfohlen ASAP ausführen.
 - **Verkauf-Migration auszuführen:** `supabase/supabase-bookings-verkauf.sql` (idempotent). Legt `bookings.booking_type` (DEFAULT `miete`) + `bookings.sale_items` JSONB an. Ohne Migration liefert `POST /api/admin/verkauf` 503; die Miet-Ansichten laufen per defensivem Fallback unverändert weiter. Empfohlen ASAP ausführen, damit das Verkaufs-Tool nutzbar ist.
 - **Multi-Kamera-Migrationen auszuführen (3, idempotent):**

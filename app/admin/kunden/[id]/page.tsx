@@ -105,6 +105,7 @@ const BOOKING_STATUS: Record<string, { label: string; color: string; bg: string 
   awaiting_payment: { label: 'Warte auf Zahlung', color: '#8b5cf6', bg: '#8b5cf614' },
   confirmed: { label: 'Bestätigt', color: '#06b6d4', bg: '#06b6d414' },
   shipped: { label: 'Versendet', color: '#8b5cf6', bg: '#8b5cf614' },
+  delivered: { label: 'Zugestellt', color: '#22c55e', bg: '#22c55e14' },
   picked_up: { label: 'Abgeholt', color: '#10b981', bg: '#10b98114' },
   active: { label: 'Aktiv', color: '#10b981', bg: '#10b98114' },
   returned: { label: 'Zurückgegeben', color: '#64748b', bg: '#64748b14' },
