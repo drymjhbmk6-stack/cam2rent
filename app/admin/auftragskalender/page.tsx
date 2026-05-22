@@ -60,9 +60,15 @@ const STATUS_STYLE: Record<string, { bg: string; label: string }> = {
 
 const WEEKDAYS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
 
-// Farben für die Aktions-Balken (raus / zurück)
-const SHIP_BAR_COLOR = '#f59e0b';
-const RETURN_BAR_COLOR = '#10b981';
+// Farben für die Aktions-Balken — gruppiert nach Lieferart, schraffiert dargestellt.
+// Versand (Hin- + Rückversand) = amber, Abholung (Übergabe + Rückgabe) = indigo.
+const ACTION_COLORS = {
+  versand: { a: '#f59e0b', b: '#d97f08' },
+  abholung: { a: '#6366f1', b: '#4338ca' },
+};
+function stripedBg(c: { a: string; b: string }): string {
+  return `repeating-linear-gradient(45deg, ${c.a} 0, ${c.a} 7px, ${c.b} 7px, ${c.b} 14px)`;
+}
 const MONTHS = [
   'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
   'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember',
@@ -385,16 +391,16 @@ export default function AuftragskalenderPage() {
           <span className="flex items-center gap-1.5">
             <span
               className="inline-block w-3 h-3 rounded"
-              style={{ background: SHIP_BAR_COLOR }}
+              style={{ background: stripedBg(ACTION_COLORS.versand) }}
             />
-            📤 Versand/Übergabe
+            📦 Hin-/Rückversand
           </span>
           <span className="flex items-center gap-1.5">
             <span
               className="inline-block w-3 h-3 rounded"
-              style={{ background: RETURN_BAR_COLOR }}
+              style={{ background: stripedBg(ACTION_COLORS.abholung) }}
             />
-            📥 Rückversand/Rückgabe
+            🤝 Übergabe/Rückgabe
           </span>
           <span className="flex items-center gap-1.5">
             <span
@@ -659,12 +665,12 @@ function MonthView({
                 }`;
               } else if (ev.kind === 'ship') {
                 const word = isAbholung ? 'Übergabe' : 'Versand';
-                bg = SHIP_BAR_COLOR;
+                bg = stripedBg(isAbholung ? ACTION_COLORS.abholung : ACTION_COLORS.versand);
                 label = `📤 ${word} · ${cust}`;
                 tip = `📤 ${word} am ${fmtDayShort(b.ship_date)}\n${prod} · ${cust}`;
               } else {
                 const word = isAbholung ? 'Rückgabe' : 'Rückversand';
-                bg = RETURN_BAR_COLOR;
+                bg = stripedBg(isAbholung ? ACTION_COLORS.abholung : ACTION_COLORS.versand);
                 label = `📥 ${word} · ${cust}`;
                 tip = `📥 ${word} am ${fmtDayShort(b.return_date)}\n${prod} · ${cust}`;
               }
