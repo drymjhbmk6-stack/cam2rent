@@ -435,18 +435,6 @@ export default function AuftragskalenderPage() {
 const HEADER_H = 44;
 const LANE_H = 24;
 
-// Ein platzierbares Element in der Monatsansicht: entweder der Mietzeitraum
-// selbst oder ein 1-Tages-Aktionsbalken (Versand/Übergabe bzw. Rückgabe).
-interface WeekEvent {
-  key: string;
-  booking: Booking;
-  kind: 'rental' | 'ship' | 'return';
-  start: string; // auf die Woche geklemmt
-  end: string;
-  rawStart: string;
-  rawEnd: string;
-}
-
 function MonthView({
   gridStart,
   month,
@@ -495,44 +483,29 @@ function MonthView({
         const weekStart = addD(gridStart, w * 7);
         const weekEnd = addD(weekStart, 6);
 
-        const weekEvents: WeekEvent[] = [];
-        for (const b of bookings) {
-          const segs: { kind: WeekEvent['kind']; start: string; end: string }[] = [
-            { kind: 'rental', start: b.rental_from, end: b.rental_to },
-            { kind: 'ship', start: b.ship_date, end: b.ship_date },
-            { kind: 'return', start: b.return_date, end: b.return_date },
-          ];
-          for (const s of segs) {
-            if (!s.start || !s.end) continue;
-            if (s.start > weekEnd || s.end < weekStart) continue;
-            weekEvents.push({
-              key: `${b.id}-${s.kind}`,
-              booking: b,
-              kind: s.kind,
-              start: s.start < weekStart ? weekStart : s.start,
-              end: s.end > weekEnd ? weekEnd : s.end,
-              rawStart: s.start,
-              rawEnd: s.end,
-            });
-          }
-        }
-        weekEvents.sort(
-          (a, b) =>
-            a.start.localeCompare(b.start) ||
-            b.end.localeCompare(a.end) ||
-            a.kind.localeCompare(b.kind)
-        );
+        // Buchungen, deren Gesamtspanne (Versand bis Rückgabe) die Woche berührt
+        const inWeek = bookings
+          .filter((b) => b.ship_date <= weekEnd && b.return_date >= weekStart)
+          .sort(
+            (a, b) =>
+              a.ship_date.localeCompare(b.ship_date) ||
+              b.return_date.localeCompare(a.return_date)
+          );
 
-        const lanes: WeekEvent[][] = [];
+        const lanes: Booking[][] = [];
         const placed = new Map<string, number>();
-        for (const ev of weekEvents) {
+        for (const b of inWeek) {
+          const start = b.ship_date < weekStart ? weekStart : b.ship_date;
           let lane = 0;
           while (true) {
             const laneArr = lanes[lane] ?? [];
-            const conflict = laneArr.some((o) => o.start <= ev.end && o.end >= ev.start);
+            const conflict = laneArr.some((o) => {
+              const oEnd = o.return_date > weekEnd ? weekEnd : o.return_date;
+              return oEnd >= start;
+            });
             if (!conflict) {
-              lanes[lane] = [...laneArr, ev];
-              placed.set(ev.key, lane);
+              lanes[lane] = [...laneArr, b];
+              placed.set(b.id, lane);
               break;
             }
             lane++;
@@ -636,70 +609,107 @@ function MonthView({
               })}
             </div>
 
-            {/* Balken: Mietzeitraum + Versand/Übergabe + Rückversand/Rückgabe */}
-            {weekEvents.map((ev) => {
-              const b = ev.booking;
-              const lane = placed.get(ev.key) ?? 0;
-              const startCol = Math.round(
-                (dObjOf(ev.start).getTime() - dObjOf(weekStart).getTime()) / 86400000
-              );
-              const endCol = Math.round(
-                (dObjOf(ev.end).getTime() - dObjOf(weekStart).getTime()) / 86400000
-              );
-              const span = Math.max(1, endCol - startCol + 1);
-              const roundLeft = ev.rawStart >= weekStart;
-              const roundRight = ev.rawEnd <= weekEnd;
+            {/* Ein zusammenhängender Balken pro Buchung:
+                Versand/Übergabe (schraffiert) + Mietzeitraum (Statusfarbe)
+                + Rückversand/Rückgabe (schraffiert) — drei bündig anschließende Stücke. */}
+            {inWeek.map((b) => {
+              const lane = placed.get(b.id) ?? 0;
+              const isAbholung = b.delivery_mode === 'abholung';
               const cust = b.customer_name ?? 'Gast';
               const prod = b.product_name ?? 'Buchung';
-              const isAbholung = b.delivery_mode === 'abholung';
-
-              let bg: string;
-              let label: string;
-              let tip: string;
-              if (ev.kind === 'rental') {
-                const st = statusStyle(b.status);
-                bg = st.bg;
-                label = `${isAbholung ? '🤝 ' : '📦 '}${b.is_test ? '[TEST] ' : ''}${prod} · ${cust}`;
-                tip = `${prod} · ${cust}\nMiete ${fmtPeriod(b)} · ${st.label}\n${
-                  isAbholung ? 'Abholung' : 'Versand'
-                }`;
-              } else if (ev.kind === 'ship') {
-                const word = isAbholung ? 'Übergabe' : 'Versand';
-                bg = stripedBg(isAbholung ? ACTION_COLORS.abholung : ACTION_COLORS.versand);
-                label = `📤 ${word} · ${cust}`;
-                tip = `📤 ${word} am ${fmtDayShort(b.ship_date)}\n${prod} · ${cust}`;
-              } else {
-                const word = isAbholung ? 'Rückgabe' : 'Rückversand';
-                bg = stripedBg(isAbholung ? ACTION_COLORS.abholung : ACTION_COLORS.versand);
-                label = `📥 ${word} · ${cust}`;
-                tip = `📥 ${word} am ${fmtDayShort(b.return_date)}\n${prod} · ${cust}`;
-              }
-
-              return (
-                <button
-                  key={ev.key}
-                  onClick={() => onOpen(b.id)}
-                  title={tip}
-                  className="absolute text-left px-1.5 text-[11px] leading-[18px] font-medium text-white truncate hover:brightness-110 shadow-sm transition"
-                  style={{
-                    left: `calc(${(startCol / 7) * 100}% + 3px)`,
-                    width: `calc(${(span / 7) * 100}% - 6px)`,
-                    top: HEADER_H + lane * LANE_H,
-                    height: LANE_H - 5,
-                    background: bg,
-                    borderRadius: `${roundLeft ? 6 : 0}px ${roundRight ? 6 : 0}px ${
-                      roundRight ? 6 : 0
-                    }px ${roundLeft ? 6 : 0}px`,
-                    border: b.is_test
-                      ? '1px dashed #f9a8d4'
-                      : ev.kind !== 'rental'
-                      ? '1px solid rgba(255,255,255,0.2)'
-                      : 'none',
-                  }}
-                >
-                  {label}
-                </button>
+              const st = statusStyle(b.status);
+              const actionBg = stripedBg(
+                isAbholung ? ACTION_COLORS.abholung : ACTION_COLORS.versand
               );
+
+              // Versand-Stück endet am Tag vor Mietbeginn (Vorlauftage); bei Abholung
+              // fällt es auf den Mietbeginn (1 Tag). Rückgabe-Stück analog hinten.
+              const shipTo =
+                b.ship_date < b.rental_from ? addD(b.rental_from, -1) : b.rental_from;
+              const retFrom =
+                b.return_date > b.rental_to ? addD(b.rental_to, 1) : b.rental_to;
+
+              const pieces = [
+                {
+                  id: 'ship',
+                  from: b.ship_date,
+                  to: shipTo,
+                  bg: actionBg,
+                  z: 2,
+                  roundL: true,
+                  roundR: false,
+                  label: '',
+                  tip: `📤 ${isAbholung ? 'Übergabe' : 'Versand'} am ${fmtDayShort(
+                    b.ship_date
+                  )}\n${prod} · ${cust}`,
+                },
+                {
+                  id: 'rental',
+                  from: b.rental_from,
+                  to: b.rental_to,
+                  bg: st.bg,
+                  z: 1,
+                  roundL: false,
+                  roundR: false,
+                  label: `${isAbholung ? '🤝 ' : '📦 '}${b.is_test ? '[TEST] ' : ''}${prod} · ${cust}`,
+                  tip: `${prod} · ${cust}\nMiete ${fmtPeriod(b)} · ${st.label}\n${
+                    isAbholung ? 'Abholung' : 'Versand'
+                  }`,
+                },
+                {
+                  id: 'return',
+                  from: retFrom,
+                  to: b.return_date,
+                  bg: actionBg,
+                  z: 2,
+                  roundL: false,
+                  roundR: true,
+                  label: '',
+                  tip: `📥 ${isAbholung ? 'Rückgabe' : 'Rückversand'} am ${fmtDayShort(
+                    b.return_date
+                  )}\n${prod} · ${cust}`,
+                },
+              ];
+
+              return pieces.map((p) => {
+                if (p.from > weekEnd || p.to < weekStart) return null;
+                const cFrom = p.from < weekStart ? weekStart : p.from;
+                const cTo = p.to > weekEnd ? weekEnd : p.to;
+                const startCol = Math.round(
+                  (dObjOf(cFrom).getTime() - dObjOf(weekStart).getTime()) / 86400000
+                );
+                const endCol = Math.round(
+                  (dObjOf(cTo).getTime() - dObjOf(weekStart).getTime()) / 86400000
+                );
+                const span = Math.max(1, endCol - startCol + 1);
+                const roundL = p.roundL && p.from >= weekStart;
+                const roundR = p.roundR && p.to <= weekEnd;
+                // Innenkanten bündig (kein Versatz), nur Außenkanten 3px eingerückt
+                const insetL = roundL ? 3 : 0;
+                const insetR = roundR ? 3 : 0;
+                return (
+                  <button
+                    key={`${b.id}-${p.id}`}
+                    onClick={() => onOpen(b.id)}
+                    title={p.tip}
+                    className="absolute text-left px-1.5 text-[11px] leading-[18px] font-medium text-white truncate hover:brightness-110 shadow-sm transition"
+                    style={{
+                      left: `calc(${(startCol / 7) * 100}% + ${insetL}px)`,
+                      width: `calc(${(span / 7) * 100}% - ${insetL + insetR}px)`,
+                      top: HEADER_H + lane * LANE_H,
+                      height: LANE_H - 5,
+                      background: p.bg,
+                      zIndex: p.z,
+                      borderRadius: `${roundL ? 6 : 0}px ${roundR ? 6 : 0}px ${
+                        roundR ? 6 : 0
+                      }px ${roundL ? 6 : 0}px`,
+                      border: b.is_test ? '1px dashed #f9a8d4' : 'none',
+                    }}
+                  >
+                    {p.label}
+                  </button>
+                );
+              });
             })}
           </div>
         );
