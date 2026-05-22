@@ -6,7 +6,7 @@ import PriceInput from '@/components/admin/PriceInput';
 import { isAngebotActive, type Angebot, type AngebotCameraOption } from '@/data/angebote';
 
 interface ProductOption { id: string; name: string }
-interface AccessoryOption { id: string; name: string; group?: string }
+interface AccessoryOption { id: string; name: string; group?: string; compatible_product_ids: string[] }
 
 interface Draft {
   id: string; // '' = neues Angebot
@@ -104,8 +104,19 @@ export default function AdminAngebotePage() {
     fetch('/api/products').then((r) => r.json())
       .then((d) => { if (Array.isArray(d)) setProducts(d.map((p: { id: string; name: string }) => ({ id: p.id, name: p.name }))); })
       .catch(() => {});
-    fetch('/api/accessories').then((r) => r.json())
-      .then((d) => { if (Array.isArray(d)) setAccessories(d.map((a: { id: string; name: string; group?: string }) => ({ id: a.id, name: a.name, group: a.group }))); })
+    // Admin-API liefert raw DB-Zeilen inkl. compatible_product_ids, damit wir
+    // die Liste pro Kamera filtern koennen (User sieht nur die Zubehoere, die
+    // zur jeweiligen Kamera passen).
+    fetch('/api/admin/accessories').then((r) => r.json())
+      .then((d) => {
+        const rows = Array.isArray(d?.accessories) ? d.accessories : Array.isArray(d) ? d : [];
+        setAccessories(rows.map((a: { id: string; name: string; category?: string; compatible_product_ids?: string[] }) => ({
+          id: a.id,
+          name: a.name,
+          group: (a.category ?? '').toLowerCase() || undefined,
+          compatible_product_ids: Array.isArray(a.compatible_product_ids) ? a.compatible_product_ids : [],
+        })));
+      })
       .catch(() => {});
   }, [reload]);
 
@@ -229,15 +240,21 @@ export default function AdminAngebotePage() {
     reload();
   }
 
-  const accessoryGroups = (() => {
+  // Pro Kamera nur kompatibles Zubehoer im Dropdown anzeigen — sonst weiss
+  // der Admin nicht, was zur jeweiligen Kamera gehoert.
+  // Leeres compatible_product_ids = passt zu ALLEN Kameras.
+  function accessoryGroupsFor(productId: string): [string, AccessoryOption[]][] {
+    const filtered = accessories.filter(
+      (a) => a.compatible_product_ids.length === 0 || a.compatible_product_ids.includes(productId),
+    );
     const map = new Map<string, AccessoryOption[]>();
-    for (const a of accessories) {
+    for (const a of filtered) {
       const g = a.group || 'Sonstiges';
       if (!map.has(g)) map.set(g, []);
       map.get(g)!.push(a);
     }
     return [...map.entries()];
-  })();
+  }
 
   return (
     <div style={{ maxWidth: 980, margin: '0 auto', padding: '24px 16px' }}>
@@ -367,7 +384,7 @@ export default function AdminAngebotePage() {
                             onChange={(e) => { addCameraAccessory(p.id, e.target.value); e.target.value = ''; }}
                           >
                             <option value="">+ Zubehör hinzufügen…</option>
-                            {accessoryGroups.map(([g, list]) => (
+                            {accessoryGroupsFor(p.id).map(([g, list]) => (
                               <optgroup key={g} label={g}>
                                 {list.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
                               </optgroup>
