@@ -2712,6 +2712,35 @@ Fünf neue Frontend-Module, die die Startseite lebendig halten — alle nutzen v
 - **`components/home/CustomerPushPrompt.tsx`** — Dezenter Prompt unten rechts (8s Delay), aktiviert Web-Push für Endkunden. DB: `customer_push_subscriptions` (Migration `supabase-customer-push.sql`). Lib: `lib/customer-push.ts` → `sendPushToCustomers(payload, { topic? })`. Nutzt dieselben VAPID-Keys wie Admin-Push. Public-Vapid-Endpoint: `GET /api/customer-push/vapid-key`.
 - **`components/home/HomeSeoText.tsx`** (Stand 2026-05-13) — Server-Komponente am Seitenende (zwischen `AppInstallBanner` und `CtaBanner`). Lädt Markdown-Block aus `admin_settings.home_seo_text` über `getHomePageData()` und rendert ihn server-seitig via `MarkdownContent`. Versteckt sich wenn `enabled=false` oder leer. **Zweck:** SEO-Wortanzahl der Startseite > 500 Wörter heben — Inhalt landet im SSR-HTML, Crawler zählen ihn. Plus: Title + Meta-Description in `app/layout.tsx` von 42/133 auf 67/152 Zeichen verlängert (GoPro/DJI/Insta360 + Preis-Hook im Title). Admin-UI: `components/admin/HomeSeoTextAdmin.tsx` als Card im Settings-Hub unter `/admin/startseite?tab=inhalte` mit Toggle + Titel + Markdown-Textarea + **Live-Wortzähler** (rot < 300, amber 300–499, grün ≥ 500). Setting-Key: `home_seo_text = { enabled, title, markdown }`.
 
+### Promo-Banner — Kampagnen-Planung mit Zeiträumen (Stand 2026-05-22)
+Der Promo-Banner (`admin_settings.promo_banner`, der breite Aktions-Banner ganz
+oben auf der Startseite) hielt vorher nur **einen** Banner mit einem optionalen
+„automatisch deaktivieren ab"-Datum. Jetzt: eine **Liste von Banner-/Kampagnen-
+Einträgen**, jeder mit von-bis-Zeitraum (`validFrom` + `validUntil`). Der Admin kann
+mehrere Banner im Voraus anlegen — sie werden automatisch nach Datum live geschaltet.
+- **Datenmodell:** Setting `promo_banner` ist jetzt `{ banners: PromoBannerEntry[] }`
+  (JSON-String, keine DB-Migration). Eintrag = `{ id, enabled, headline, subline,
+  bgColor, ctaLabel, ctaUrl, validFrom, validUntil }`. `validFrom`/`validUntil` sind
+  ISO-Datumsstrings (`YYYY-MM-DD`) oder `''` (offen) — beide leer = Dauer-Banner.
+- **Rückwärtskompatibilität:** Das alte Flach-Objekt (`{ enabled, headline, … }`)
+  wird beim Lesen (API **und** Admin) automatisch zu `{ banners: [{ ...alt, id,
+  validFrom: '' }] }` gewrappt. Beim Speichern schreibt der Admin immer das neue
+  Format. Kein Datenverlust.
+- **API `GET /api/promo-banner`** (`revalidate=30`): filtert die Liste auf
+  aktiv = `enabled && (!validFrom || validFrom <= today) && (!validUntil ||
+  today <= validUntil)` — reiner Datumsstring-Vergleich mit `getBerlinDateString()`
+  (`lib/timezone.ts`), `validUntil` damit **inklusive** des ganzen letzten Tages.
+  Bei Überschneidung gewinnt das **späteste `validFrom`** (datierte Kampagne schlägt
+  einen Dauer-Banner). Antwort-Form unverändert (`{ banner: {...} | null }`) — das
+  Frontend `components/home/PromoBanner.tsx` ist **nicht** angefasst.
+- **Admin-UI `components/admin/PromoBannerAdmin.tsx`** (Card im Settings-Hub
+  `/admin/startseite?tab=inhalte`): Listen-Editor. Pro Banner eine Karte mit
+  Live-Vorschau, Farbe, Headline/Untertext, Button, zwei Datumsfeldern „Aktiv von" +
+  „Aktiv bis", `enabled`-Toggle, Löschen. Status-Badge pro Karte (Live / Geplant ab
+  TT.MM.JJJJ / Abgelaufen / Deaktiviert); der tatsächlich gewählte Banner zeigt
+  zusätzlich „✓ Aktuell sichtbar" + grünen Rahmen. Button „+ Banner / Kampagne
+  hinzufügen". „Speichern" schickt `{ banners }` an `POST /api/admin/settings`.
+
 ### Cloudflare-Ready IP-Extraktion (Stand 2026-05-13)
 `lib/rate-limit.ts:getClientIp(req)` ist jetzt Cloudflare-aware: liest **`cf-connecting-ip` mit Vorrang** vor `x-forwarded-for` und `x-real-ip`. Cloudflare strippt User-gefälschte `cf-connecting-ip`-Werte am Edge — der Header ist also vertrauenswürdig, sobald Cloudflare als Proxy davor steht. Funktioniert mit `Request` und `NextRequest` (Typ-Erweiterung). Backward-kompatibel: ohne Cloudflare ist der Header leer, Fallback bleibt `x-forwarded-for[0]` wie bisher.
 
