@@ -21,9 +21,9 @@ interface BufferDays {
 }
 
 const DEFAULT_BUFFER: BufferDays = {
-  versand_before: 2,
-  versand_after: 2,
-  abholung_before: 0,
+  versand_before: 3,
+  versand_after: 3,
+  abholung_before: 1,
   abholung_after: 1,
 };
 
@@ -117,7 +117,7 @@ export async function GET(req: NextRequest) {
     const isAbholung = b.delivery_mode === 'abholung';
 
     const shipDate = isAbholung
-      ? rentalFrom
+      ? addDays(rentalFrom, -buf.abholung_before)
       : addDays(rentalFrom, -buf.versand_before);
     const returnDate = isAbholung
       ? addDays(rentalTo, buf.abholung_after)
