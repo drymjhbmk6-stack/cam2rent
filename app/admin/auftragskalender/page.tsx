@@ -54,7 +54,7 @@ const STATUS_STYLE: Record<string, { bg: string; label: string }> = {
   confirmed: { bg: '#0ea5b7', label: 'Bestätigt' },
   shipped: { bg: '#e0961f', label: 'Versendet' },
   delivered: { bg: '#22c55e', label: 'Zugestellt' },
-  picked_up: { bg: '#ea580c', label: 'Abgeholt' },
+  picked_up: { bg: '#22c55e', label: 'Abgeholt' },
   returned: { bg: '#64748b', label: 'Zurückgegeben' },
   completed: { bg: '#16a34a', label: 'Abgeschlossen' },
 };
