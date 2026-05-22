@@ -164,6 +164,30 @@ export default function AuftragskalenderPage() {
     loadData();
   }, [loadData]);
 
+  // Nach dem Laden automatisch zum heutigen Tag scrollen (nur im aktuellen Monat)
+  useEffect(() => {
+    if (loading) return;
+    const heute = new Date();
+    if (year !== heute.getFullYear() || month !== heute.getMonth()) return;
+    const t = setTimeout(() => {
+      const el = document.getElementById('ak-today');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+      // Agenda-Fallback: erster Tag ab heute
+      const heuteStr = todayStr();
+      const cards = document.querySelectorAll<HTMLElement>('[data-ak-day]');
+      for (const c of cards) {
+        if ((c.dataset.akDay ?? '') >= heuteStr) {
+          c.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          break;
+        }
+      }
+    }, 120);
+    return () => clearTimeout(t);
+  }, [loading, view, year, month, bookings, notes]);
+
   const reloadNotes = useCallback(async () => {
     try {
       const res = await fetch(`/api/admin/calendar-notes?from=${gridStart}&to=${gridEnd}`);
@@ -474,9 +498,12 @@ function MonthView({
           return { ship, ret };
         };
 
+        const weekHasToday = today >= weekStart && today <= weekEnd;
+
         return (
           <div
             key={w}
+            id={weekHasToday ? 'ak-today' : undefined}
             className="relative"
             style={{
               minHeight: rowHeight,
@@ -699,6 +726,8 @@ function AgendaView({
         return (
           <div
             key={day}
+            id={isToday ? 'ak-today' : undefined}
+            data-ak-day={day}
             className="rounded-xl overflow-hidden"
             style={{
               background: C.card,
