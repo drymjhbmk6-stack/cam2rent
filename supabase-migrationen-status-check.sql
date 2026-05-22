@@ -263,18 +263,21 @@ WITH checks AS (
 
 )
 
-SELECT migration,
-       CASE WHEN done THEN 'ERLEDIGT' ELSE 'OFFEN' END AS status,
-       hinweis
-FROM checks
-UNION ALL
-SELECT migration, status, hinweis FROM info
+SELECT migration, status, hinweis
+FROM (
+  SELECT migration,
+         CASE WHEN done THEN 'ERLEDIGT' ELSE 'OFFEN' END AS status,
+         hinweis
+  FROM checks
+  UNION ALL
+  SELECT migration, status, hinweis FROM info
+) t
 ORDER BY
-  CASE
-    WHEN status='ERLEDIGT' THEN 1
-    WHEN status='OFFEN' THEN 2
-    WHEN status='MANUELL' THEN 3
-    WHEN status='NICHT AUSFUEHREN' THEN 4
+  CASE status
+    WHEN 'ERLEDIGT' THEN 1
+    WHEN 'OFFEN' THEN 2
+    WHEN 'MANUELL' THEN 3
+    WHEN 'NICHT AUSFUEHREN' THEN 4
     ELSE 5
   END,
   migration;
