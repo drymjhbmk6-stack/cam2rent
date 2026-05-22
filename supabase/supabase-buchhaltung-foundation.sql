@@ -17,45 +17,55 @@
 -- IF NOT EXISTS ist seit Postgres 9.6 vorhanden.
 -- ============================================================================
 
--- 1) Spalten ergaenzen — alle nullable, kein Default-Backfill noetig
-ALTER TABLE invoices
+-- 1) Spalten ergaenzen — alle nullable, kein Default-Backfill noetig.
+--    ALTER TABLE IF EXISTS: fehlende Legacy-Tabellen (z.B. `purchases` in
+--    DBs, die nie die Alt-Buchhaltung hatten) werden stillschweigend
+--    uebersprungen. Die Migration ist "Heute keine Wirkung" — sie darf
+--    nicht abbrechen, nur weil eine Vorbereitungs-Spalte nicht gesetzt
+--    werden kann.
+ALTER TABLE IF EXISTS invoices
   ADD COLUMN IF NOT EXISTS account_code TEXT,
   ADD COLUMN IF NOT EXISTS internal_beleg_no TEXT;
 
-ALTER TABLE expenses
+ALTER TABLE IF EXISTS expenses
   ADD COLUMN IF NOT EXISTS account_code TEXT,
   ADD COLUMN IF NOT EXISTS internal_beleg_no TEXT;
 
-ALTER TABLE credit_notes
+ALTER TABLE IF EXISTS credit_notes
   ADD COLUMN IF NOT EXISTS account_code TEXT,
   ADD COLUMN IF NOT EXISTS internal_beleg_no TEXT;
 
-ALTER TABLE purchases
+ALTER TABLE IF EXISTS purchases
   ADD COLUMN IF NOT EXISTS internal_beleg_no TEXT;
 
-ALTER TABLE purchase_items
+ALTER TABLE IF EXISTS purchase_items
   ADD COLUMN IF NOT EXISTS account_code TEXT;
 
-ALTER TABLE assets
+ALTER TABLE IF EXISTS assets
   ADD COLUMN IF NOT EXISTS account_code TEXT;
 
--- 2) Indizes fuer Belegnummer-Lookup (lueckenlose Sequenz, Audit)
-CREATE INDEX IF NOT EXISTS idx_invoices_internal_beleg_no
-  ON invoices(internal_beleg_no) WHERE internal_beleg_no IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_expenses_internal_beleg_no
-  ON expenses(internal_beleg_no) WHERE internal_beleg_no IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_credit_notes_internal_beleg_no
-  ON credit_notes(internal_beleg_no) WHERE internal_beleg_no IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_purchases_internal_beleg_no
-  ON purchases(internal_beleg_no) WHERE internal_beleg_no IS NOT NULL;
-
--- 3) Indizes fuer account_code (spaetere Konto-Aggregationen)
-CREATE INDEX IF NOT EXISTS idx_invoices_account_code
-  ON invoices(account_code) WHERE account_code IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_expenses_account_code
-  ON expenses(account_code) WHERE account_code IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_purchase_items_account_code
-  ON purchase_items(account_code) WHERE account_code IS NOT NULL;
+-- 2) Indizes fuer Belegnummer-Lookup — pro Tabelle defensiv pruefen,
+--    ob die Tabelle ueberhaupt existiert (CREATE INDEX hat kein
+--    IF-EXISTS-Pendant fuer den Target-Table).
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='invoices') THEN
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_invoices_internal_beleg_no ON invoices(internal_beleg_no) WHERE internal_beleg_no IS NOT NULL';
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_invoices_account_code ON invoices(account_code) WHERE account_code IS NOT NULL';
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='expenses') THEN
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_expenses_internal_beleg_no ON expenses(internal_beleg_no) WHERE internal_beleg_no IS NOT NULL';
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_expenses_account_code ON expenses(account_code) WHERE account_code IS NOT NULL';
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='credit_notes') THEN
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_credit_notes_internal_beleg_no ON credit_notes(internal_beleg_no) WHERE internal_beleg_no IS NOT NULL';
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='purchases') THEN
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_purchases_internal_beleg_no ON purchases(internal_beleg_no) WHERE internal_beleg_no IS NOT NULL';
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='purchase_items') THEN
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_purchase_items_account_code ON purchase_items(account_code) WHERE account_code IS NOT NULL';
+  END IF;
+END $$;
 
 -- 4) Period-Lock-Setting initialisieren (leeres Objekt) falls nicht vorhanden.
 --    Format: { "2026-04": { "locked_at": "2026-05-03T10:00:00Z", "locked_by": "owner" } }
