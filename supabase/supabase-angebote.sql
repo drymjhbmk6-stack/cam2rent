@@ -14,8 +14,10 @@
 -- inklusive des enthaltenen Zubehoers (all-in). Haftungsschutz + Versand
 -- laufen weiterhin normal obendrauf.
 --
--- camera_options:  [{ "product_id": "...", "price": 49.0 }]
--- accessory_items: [{ "accessory_id": "...", "qty": 1 }]  (gleiches Format wie sets)
+-- camera_options:  [{ "product_id": "...", "price": 49.0,
+--                     "accessory_items": [{ "accessory_id": "...", "qty": 1 }] }]
+-- Das enthaltene Zubehoer wird PRO Kamera gepflegt — verschiedene Kameras
+-- haben unterschiedliches Zubehoer (eigene Akkus, Tauchgehaeuse etc.).
 --
 -- Idempotent. Defensiver Code-Pfad in der API greift, falls die Migration
 -- noch nicht durch ist (Angebote-Features inaktiv, normaler Flow unberuehrt).
@@ -29,7 +31,6 @@ CREATE TABLE IF NOT EXISTS angebote (
   pricing_mode    TEXT NOT NULL DEFAULT 'flat' CHECK (pricing_mode IN ('flat', 'perDay')),
   fixed_days      INT,
   camera_options  JSONB NOT NULL DEFAULT '[]',
-  accessory_items JSONB NOT NULL DEFAULT '[]',
   image_url       TEXT,
   badge           TEXT,
   badge_color     TEXT,

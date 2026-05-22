@@ -12,7 +12,7 @@ import { getPriceForDays, type Product } from '@/data/products';
 import { useProducts } from '@/components/ProductsProvider';
 import { getAccessoryPrice, type Accessory } from '@/data/accessories';
 import type { RentalSet } from '@/data/sets';
-import { isAngebotActive, getAngebotCameraPrice, type Angebot } from '@/data/angebote';
+import { isAngebotActive, getAngebotCameraOption, type Angebot } from '@/data/angebote';
 import AvailabilityCalendar, { type CalendarRange } from '@/components/AvailabilityCalendar';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { shippingConfig, calcShipping, type ShippingMethod } from '@/data/shipping';
@@ -863,10 +863,10 @@ export default function BuchenPage() {
       // (kompakt, passt unter das 500-Byte-Limit pro Metadata-Value)
       // Im Angebots-Modus stammt das Zubehoer fest aus dem Angebot.
       const accessoryItemsMeta = offerMode && offer
-        ? offer.accessory_items.map((it) => `${it.accessory_id}:${it.qty}`).join(',')
+        ? offerAccessoryItems.map((it) => `${it.accessory_id}:${it.qty}`).join(',')
         : accessories.map((id) => `${id}:${accessoryQty[id] ?? 1}`).join(',');
       const accessoriesMeta = offerMode && offer
-        ? offer.accessory_items.map((it) => it.accessory_id).join(',')
+        ? offerAccessoryItems.map((it) => it.accessory_id).join(',')
         : accessories.join(',');
       // Preis-Aufschluesselung fuer die Buchungs-Metadata. Bei Set + zusaetzlich
       // gewaehltem Zubehoer werden beide Betraege addiert, damit die Komponenten-
@@ -1009,7 +1009,10 @@ export default function BuchenPage() {
 
   // ── Angebots-Modus ──────────────────────────────────────────────────────────
   // Greift nur, wenn das geladene Angebot diese Kamera enthaelt und gueltig ist.
-  const offerCameraPrice = offer ? getAngebotCameraPrice(offer, product.id) : null;
+  // Kamera-Option des Angebots fuer DIESE Kamera (Zubehoer ist pro Kamera).
+  const offerCamOpt = offer ? getAngebotCameraOption(offer, product.id) : null;
+  const offerCameraPrice = offerCamOpt ? offerCamOpt.price : null;
+  const offerAccessoryItems = offerCamOpt?.accessory_items ?? [];
   const offerActive = !!offer && offerCameraPrice !== null && isAngebotActive(offer);
   const offerMode = offerActive;
   // ?offer=… gesetzt, aber Angebot fertig geladen und ungueltig → Hinweis.
@@ -1029,7 +1032,7 @@ export default function BuchenPage() {
 
   // Angebot: enthaltenes Zubehoer im Zeitraum nicht ausreichend verfuegbar?
   const offerAccShortage = offerMode && offer
-    ? offer.accessory_items.some((it) => {
+    ? offerAccessoryItems.some((it) => {
         const av = accAvailability[it.accessory_id];
         return !!av && (!av.compatible || av.remaining < it.qty);
       })
@@ -1386,11 +1389,11 @@ export default function BuchenPage() {
                       Im Angebot enthalten
                     </p>
                     <div className="rounded-xl border border-brand-border dark:border-gray-700 overflow-hidden divide-y divide-brand-border dark:divide-gray-700">
-                      {offer.accessory_items.length === 0 ? (
+                      {offerAccessoryItems.length === 0 ? (
                         <p className="px-4 py-3 text-sm font-body text-brand-muted dark:text-gray-500">
                           Reines Kamera-Angebot — kein Zubehör enthalten.
                         </p>
-                      ) : offer.accessory_items.map((it) => {
+                      ) : offerAccessoryItems.map((it) => {
                         const acc = dbAccessories.find((a) => a.id === it.accessory_id);
                         const av = accAvailability[it.accessory_id];
                         const short = !!av && (!av.compatible || av.remaining < it.qty);
@@ -2238,13 +2241,13 @@ export default function BuchenPage() {
                 )}
 
                 {/* Block 2a: Angebots-Zubehör (read-only) */}
-                {offerMode && offer && offer.accessory_items.length > 0 && (
+                {offerMode && offer && offerAccessoryItems.length > 0 && (
                   <div className="mb-5 bg-brand-bg dark:bg-white/5 rounded-xl p-4">
                     <p className="text-xs font-body font-semibold text-brand-steel dark:text-gray-400 uppercase tracking-wider mb-2">
                       Im Angebot enthalten
                     </p>
                     <ul className="space-y-1.5">
-                      {offer.accessory_items.map((it) => {
+                      {offerAccessoryItems.map((it) => {
                         const acc = dbAccessories.find((a) => a.id === it.accessory_id);
                         return (
                           <li key={it.accessory_id} className="flex items-center gap-2 text-sm font-body text-brand-steel dark:text-gray-400">

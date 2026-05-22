@@ -9,23 +9,6 @@ function isMissingTable(msg: string | undefined): boolean {
   return !!msg && /angebote|offer_id|relation|does not exist|schema cache|PGRST/i.test(msg);
 }
 
-function sanitizeCameraOptions(input: unknown): AngebotCameraOption[] {
-  if (!Array.isArray(input)) return [];
-  const seen = new Set<string>();
-  const out: AngebotCameraOption[] = [];
-  for (const raw of input) {
-    if (!raw || typeof raw !== 'object') continue;
-    const pid = String((raw as { product_id?: unknown }).product_id ?? '').trim();
-    if (!pid || seen.has(pid)) continue;
-    const price = Number((raw as { price?: unknown }).price);
-    if (!Number.isFinite(price) || price < 0) continue;
-    seen.add(pid);
-    out.push({ product_id: pid, price: Math.round(price * 100) / 100 });
-    if (out.length >= 30) break;
-  }
-  return out;
-}
-
 function sanitizeAccessoryItems(input: unknown): AngebotAccessoryItem[] {
   if (!Array.isArray(input)) return [];
   const map = new Map<string, number>();
@@ -38,6 +21,31 @@ function sanitizeAccessoryItems(input: unknown): AngebotAccessoryItem[] {
     map.set(aid, (map.get(aid) ?? 0) + qty);
   }
   return [...map.entries()].slice(0, 50).map(([accessory_id, qty]) => ({ accessory_id, qty }));
+}
+
+/**
+ * Saeubert die Kamera-Optionen. Das enthaltene Zubehoer wird PRO Kamera
+ * gepflegt (verschiedene Kameras = unterschiedliches Zubehoer).
+ */
+function sanitizeCameraOptions(input: unknown): AngebotCameraOption[] {
+  if (!Array.isArray(input)) return [];
+  const seen = new Set<string>();
+  const out: AngebotCameraOption[] = [];
+  for (const raw of input) {
+    if (!raw || typeof raw !== 'object') continue;
+    const pid = String((raw as { product_id?: unknown }).product_id ?? '').trim();
+    if (!pid || seen.has(pid)) continue;
+    const price = Number((raw as { price?: unknown }).price);
+    if (!Number.isFinite(price) || price < 0) continue;
+    seen.add(pid);
+    out.push({
+      product_id: pid,
+      price: Math.round(price * 100) / 100,
+      accessory_items: sanitizeAccessoryItems((raw as { accessory_items?: unknown }).accessory_items),
+    });
+    if (out.length >= 30) break;
+  }
+  return out;
 }
 
 function sanitizeDate(input: unknown): string | null {
@@ -79,7 +87,6 @@ function buildRow(body: Record<string, unknown>) {
     pricing_mode: pricingMode,
     fixed_days: pricingMode === 'flat' && Number.isFinite(fixedDaysRaw) && fixedDaysRaw > 0 ? fixedDaysRaw : null,
     camera_options: sanitizeCameraOptions(body.camera_options),
-    accessory_items: sanitizeAccessoryItems(body.accessory_items),
     badge: typeof body.badge === 'string' && body.badge.trim() ? body.badge.trim() : null,
     badge_color: typeof body.badge_color === 'string' && body.badge_color.trim() ? body.badge_color.trim() : null,
     active: body.active !== false,

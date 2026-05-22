@@ -69,10 +69,6 @@ export default function AngebotePage() {
               if (cams.length === 0) return null;
               const fallbackImg = cams[0].product?.images?.[0] ?? null;
               const img = a.image_url || fallbackImg;
-              const accLines = a.accessory_items.map((it) => {
-                const name = accNames[it.accessory_id] ?? it.accessory_id;
-                return it.qty > 1 ? `${it.qty}× ${name}` : name;
-              });
               return (
                 <div key={a.id} className="bg-white dark:bg-gray-900 rounded-card shadow-card overflow-hidden flex flex-col">
                   {img && (
@@ -97,34 +93,39 @@ export default function AngebotePage() {
                         {a.pricing_mode === 'flat' && a.fixed_days ? ` · Mietdauer ${a.fixed_days} Tage` : ' · Preis pro Tag'}
                       </p>
                     )}
-                    {accLines.length > 0 && (
-                      <div className="mb-4">
-                        <p className="text-xs font-body font-semibold text-brand-steel dark:text-gray-400 uppercase tracking-wider mb-1">
-                          Im Angebot enthalten
-                        </p>
-                        <p className="text-sm font-body text-brand-black dark:text-gray-200">{accLines.join(' · ')}</p>
-                      </div>
-                    )}
-                    <div className="mt-auto space-y-2">
-                      {cams.map(({ opt, product }) => (
-                        <Link
-                          key={opt.product_id}
-                          href={`/kameras/${product!.slug}/buchen?offer=${encodeURIComponent(a.id)}`}
-                          className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-brand-border dark:border-gray-700 hover:border-accent-blue hover:bg-accent-blue-soft/30 transition-colors"
-                        >
-                          <span className="font-heading font-semibold text-sm text-brand-black dark:text-gray-100">
-                            {product!.name}
-                          </span>
-                          <span className="flex items-center gap-2">
-                            <span className="font-heading font-bold text-sm text-accent-blue">
-                              {fmtEuro(opt.price)}{a.pricing_mode === 'perDay' ? ' /Tag' : ''}
+                    <div className="mt-auto space-y-3">
+                      {cams.map(({ opt, product }) => {
+                        const accLines = opt.accessory_items.map((it) => {
+                          const name = accNames[it.accessory_id] ?? it.accessory_id;
+                          return it.qty > 1 ? `${it.qty}× ${name}` : name;
+                        });
+                        return (
+                          <Link
+                            key={opt.product_id}
+                            href={`/kameras/${product!.slug}/buchen?offer=${encodeURIComponent(a.id)}`}
+                            className="block px-4 py-3 rounded-xl border border-brand-border dark:border-gray-700 hover:border-accent-blue hover:bg-accent-blue-soft/30 transition-colors"
+                          >
+                            <span className="flex items-center justify-between gap-3">
+                              <span className="font-heading font-semibold text-sm text-brand-black dark:text-gray-100">
+                                {product!.name}
+                              </span>
+                              <span className="flex items-center gap-2">
+                                <span className="font-heading font-bold text-sm text-accent-blue">
+                                  {fmtEuro(opt.price)}{a.pricing_mode === 'perDay' ? ' /Tag' : ''}
+                                </span>
+                                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 text-accent-blue" aria-hidden="true">
+                                  <path fillRule="evenodd" d="M6.22 3.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 010-1.06z" clipRule="evenodd" />
+                                </svg>
+                              </span>
                             </span>
-                            <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 text-accent-blue" aria-hidden="true">
-                              <path fillRule="evenodd" d="M6.22 3.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 010-1.06z" clipRule="evenodd" />
-                            </svg>
-                          </span>
-                        </Link>
-                      ))}
+                            {accLines.length > 0 && (
+                              <span className="block text-xs font-body text-brand-steel dark:text-gray-400 mt-1">
+                                Inkl.: {accLines.join(' · ')}
+                              </span>
+                            )}
+                          </Link>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>

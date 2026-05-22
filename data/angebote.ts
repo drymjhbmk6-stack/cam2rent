@@ -2,20 +2,24 @@
 //
 // Ein "Angebot" ist ein kuratiertes, zeitlich begrenztes Festpreis-Buendel:
 // EINE Kamera (mehrere Kamera-Optionen mit je eigenem Preis moeglich) + fest
-// enthaltenes Zubehoer. Der Preis ersetzt die normale Kamerapreis-Berechnung
-// vollstaendig (all-in). Verwaltet im Admin-Panel (Tabelle: angebote).
+// enthaltenes Zubehoer. Das Zubehoer wird PRO Kamera gepflegt — verschiedene
+// Kameras haben unterschiedliches Zubehoer (eigene Akkus, Tauchgehaeuse etc.).
+// Der Preis ersetzt die normale Kamerapreis-Berechnung vollstaendig (all-in).
+// Verwaltet im Admin-Panel (Tabelle: angebote).
 //
 // ─────────────────────────────────────────────────────────────────────────────
+
+export interface AngebotAccessoryItem {
+  accessory_id: string;
+  qty: number;
+}
 
 export interface AngebotCameraOption {
   product_id: string;
   /** Komplettpreis fuer diese Kamera (flat = fuer fixed_days, perDay = pro Tag). */
   price: number;
-}
-
-export interface AngebotAccessoryItem {
-  accessory_id: string;
-  qty: number;
+  /** Enthaltenes Zubehoer fuer genau diese Kamera. */
+  accessory_items: AngebotAccessoryItem[];
 }
 
 export interface Angebot {
@@ -31,12 +35,25 @@ export interface Angebot {
   /** Feste Mietdauer in Tagen (nur bei pricing_mode='flat' relevant). */
   fixed_days: number | null;
   camera_options: AngebotCameraOption[];
-  accessory_items: AngebotAccessoryItem[];
   image_url: string | null;
   badge: string | null;
   badge_color: string | null;
   sort_order: number;
   active: boolean;
+}
+
+/** Normalisiert eine rohe accessory_items-Liste defensiv. */
+function normalizeAccessoryItems(input: unknown): AngebotAccessoryItem[] {
+  if (!Array.isArray(input)) return [];
+  const out: AngebotAccessoryItem[] = [];
+  for (const raw of input) {
+    if (!raw || typeof raw !== 'object') continue;
+    const aid = String((raw as { accessory_id?: unknown }).accessory_id ?? '').trim();
+    if (!aid) continue;
+    const qty = Math.floor(Number((raw as { qty?: unknown }).qty));
+    out.push({ accessory_id: aid, qty: Number.isFinite(qty) && qty > 0 ? qty : 1 });
+  }
+  return out;
 }
 
 /**
@@ -53,6 +70,15 @@ export function isAngebotActive(a: Angebot, now: Date = new Date()): boolean {
 
 /** Mappt eine rohe DB-Zeile defensiv auf das Angebot-Objekt. */
 export function mapAngebotRow(r: Record<string, unknown>): Angebot {
+  const rawCams = Array.isArray(r.camera_options) ? r.camera_options : [];
+  const camera_options: AngebotCameraOption[] = rawCams
+    .filter((c): c is Record<string, unknown> => !!c && typeof c === 'object')
+    .map((c) => ({
+      product_id: String(c.product_id ?? ''),
+      price: Number(c.price) || 0,
+      accessory_items: normalizeAccessoryItems(c.accessory_items),
+    }))
+    .filter((c) => c.product_id);
   return {
     id: String(r.id),
     name: (r.name as string) ?? '',
@@ -61,8 +87,7 @@ export function mapAngebotRow(r: Record<string, unknown>): Angebot {
     valid_until: (r.valid_until as string) ?? null,
     pricing_mode: r.pricing_mode === 'perDay' ? 'perDay' : 'flat',
     fixed_days: typeof r.fixed_days === 'number' ? r.fixed_days : null,
-    camera_options: Array.isArray(r.camera_options) ? (r.camera_options as AngebotCameraOption[]) : [],
-    accessory_items: Array.isArray(r.accessory_items) ? (r.accessory_items as AngebotAccessoryItem[]) : [],
+    camera_options,
     image_url: (r.image_url as string) ?? null,
     badge: (r.badge as string) ?? null,
     badge_color: (r.badge_color as string) ?? null,
@@ -71,9 +96,14 @@ export function mapAngebotRow(r: Record<string, unknown>): Angebot {
   };
 }
 
+/** Kamera-Option des Angebots, oder null wenn die Kamera nicht enthalten ist. */
+export function getAngebotCameraOption(a: Angebot, productId: string): AngebotCameraOption | null {
+  return a.camera_options.find((o) => o.product_id === productId) ?? null;
+}
+
 /** Preis der Kamera-Option, oder null wenn die Kamera nicht Teil des Angebots ist. */
 export function getAngebotCameraPrice(a: Angebot, productId: string): number | null {
-  const opt = a.camera_options.find((o) => o.product_id === productId);
+  const opt = getAngebotCameraOption(a, productId);
   return opt ? opt.price : null;
 }
 

@@ -215,16 +215,16 @@ export async function POST(req: NextRequest) {
           .from('angebote').select('*').eq('id', meta.offer_id.trim()).maybeSingle();
         if (offerRow) {
           offerIdToStore = String(offerRow.id);
-          const offerItems = Array.isArray(offerRow.accessory_items)
-            ? (offerRow.accessory_items as { accessory_id: string; qty: number }[])
+          // Zubehoer wird PRO Kamera gepflegt — die Kamera-Option dieser
+          // Buchung liefert das autoritative Zubehoer.
+          const cams = Array.isArray(offerRow.camera_options)
+            ? (offerRow.camera_options as { product_id: string; price: number; accessory_items?: { accessory_id: string; qty: number }[] }[])
             : [];
+          const opt = cams.find((c) => c.product_id === meta.product_id);
+          const offerItems = Array.isArray(opt?.accessory_items) ? opt!.accessory_items : [];
           accessoryItems = offerItems
             .filter((i) => i && i.accessory_id)
             .map((i) => ({ accessory_id: i.accessory_id, qty: Math.max(1, Number(i.qty) || 1) }));
-          const cams = Array.isArray(offerRow.camera_options)
-            ? (offerRow.camera_options as { product_id: string; price: number }[])
-            : [];
-          const opt = cams.find((c) => c.product_id === meta.product_id);
           const days = parseInt(meta.days, 10) || 1;
           const reportedRental = parseFloat(meta.price_rental ?? '0') || 0;
           const expectedRental = opt

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import PriceInput from '@/components/admin/PriceInput';
-import { isAngebotActive, type Angebot, type AngebotCameraOption, type AngebotAccessoryItem } from '@/data/angebote';
+import { isAngebotActive, type Angebot, type AngebotCameraOption } from '@/data/angebote';
 
 interface ProductOption { id: string; name: string }
 interface AccessoryOption { id: string; name: string; group?: string }
@@ -17,7 +17,6 @@ interface Draft {
   pricing_mode: 'flat' | 'perDay';
   fixed_days: number;
   camera_options: AngebotCameraOption[];
-  accessory_items: AngebotAccessoryItem[];
   image_url: string | null;
   badge: string;
   badge_color: string;
@@ -49,7 +48,7 @@ function dateToIso(date: string, asEnd: boolean): string | null {
 function emptyDraft(): Draft {
   return {
     id: '', name: '', description: '', validFrom: '', validUntil: '',
-    pricing_mode: 'flat', fixed_days: 7, camera_options: [], accessory_items: [],
+    pricing_mode: 'flat', fixed_days: 7, camera_options: [],
     image_url: null, badge: '', badge_color: '', active: true,
   };
 }
@@ -59,8 +58,11 @@ function toDraft(a: Angebot): Draft {
     id: a.id, name: a.name, description: a.description,
     validFrom: isoToDate(a.valid_from), validUntil: isoToDate(a.valid_until),
     pricing_mode: a.pricing_mode, fixed_days: a.fixed_days ?? 7,
-    camera_options: a.camera_options.map((c) => ({ ...c })),
-    accessory_items: a.accessory_items.map((i) => ({ ...i })),
+    camera_options: a.camera_options.map((c) => ({
+      product_id: c.product_id,
+      price: c.price,
+      accessory_items: c.accessory_items.map((i) => ({ ...i })),
+    })),
     image_url: a.image_url, badge: a.badge ?? '', badge_color: a.badge_color ?? '', active: a.active,
   };
 }
@@ -122,26 +124,40 @@ export default function AdminAngebotePage() {
         ...d,
         camera_options: has
           ? d.camera_options.filter((c) => c.product_id !== productId)
-          : [...d.camera_options, { product_id: productId, price: 0 }],
+          : [...d.camera_options, { product_id: productId, price: 0, accessory_items: [] }],
       };
     });
   }
   function setCameraPrice(productId: string, price: number) {
     setDraft((d) => d ? { ...d, camera_options: d.camera_options.map((c) => c.product_id === productId ? { ...c, price } : c) } : d);
   }
-  function addAccessory(accId: string) {
+  function addCameraAccessory(productId: string, accId: string) {
     if (!accId) return;
     setDraft((d) => {
       if (!d) return d;
-      if (d.accessory_items.some((i) => i.accessory_id === accId)) return d;
-      return { ...d, accessory_items: [...d.accessory_items, { accessory_id: accId, qty: 1 }] };
+      return {
+        ...d,
+        camera_options: d.camera_options.map((c) => {
+          if (c.product_id !== productId) return c;
+          if (c.accessory_items.some((i) => i.accessory_id === accId)) return c;
+          return { ...c, accessory_items: [...c.accessory_items, { accessory_id: accId, qty: 1 }] };
+        }),
+      };
     });
   }
-  function setAccessoryQty(accId: string, qty: number) {
+  function setCameraAccessoryQty(productId: string, accId: string, qty: number) {
     setDraft((d) => {
       if (!d) return d;
-      if (qty <= 0) return { ...d, accessory_items: d.accessory_items.filter((i) => i.accessory_id !== accId) };
-      return { ...d, accessory_items: d.accessory_items.map((i) => i.accessory_id === accId ? { ...i, qty } : i) };
+      return {
+        ...d,
+        camera_options: d.camera_options.map((c) => {
+          if (c.product_id !== productId) return c;
+          const items = qty <= 0
+            ? c.accessory_items.filter((i) => i.accessory_id !== accId)
+            : c.accessory_items.map((i) => i.accessory_id === accId ? { ...i, qty } : i);
+          return { ...c, accessory_items: items };
+        }),
+      };
     });
   }
 
@@ -162,7 +178,6 @@ export default function AdminAngebotePage() {
       pricing_mode: draft.pricing_mode,
       fixed_days: draft.pricing_mode === 'flat' ? draft.fixed_days : null,
       camera_options: draft.camera_options,
-      accessory_items: draft.accessory_items,
       badge: draft.badge.trim(),
       badge_color: draft.badge_color.trim(),
       active: draft.active,
@@ -316,63 +331,71 @@ export default function AdminAngebotePage() {
               </div>
             )}
 
-            {/* Kameras + Preis */}
+            {/* Kameras + Preis + Zubehör pro Kamera */}
             <div>
-              <label style={S.label}>Kameras & Komplettpreis</label>
+              <label style={S.label}>Kameras, Komplettpreis & Zubehör</label>
               <p style={{ fontSize: 11, color: '#64748b', marginBottom: 8 }}>
-                Preis je Kamera = {draft.pricing_mode === 'perDay' ? 'pro Tag' : `Pauschale für ${draft.fixed_days || '?'} Tage`}, inkl. enthaltenem Zubehör.
+                Preis je Kamera = {draft.pricing_mode === 'perDay' ? 'pro Tag' : `Pauschale für ${draft.fixed_days || '?'} Tage`}, inkl. dem unten je Kamera gewählten Zubehör.
               </p>
-              <div style={{ display: 'grid', gap: 6, maxHeight: 260, overflowY: 'auto' }}>
+              <div style={{ display: 'grid', gap: 8 }}>
                 {products.length === 0 && <p style={{ fontSize: 12, color: '#64748b' }}>Keine Kameras geladen.</p>}
                 {products.map((p) => {
                   const opt = draft.camera_options.find((c) => c.product_id === p.id);
                   return (
-                    <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#0a0f1e', border: '1px solid #1e293b', borderRadius: 8, padding: '8px 12px' }}>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, color: '#cbd5e1', fontSize: 13, cursor: 'pointer' }}>
-                        <input type="checkbox" checked={!!opt} onChange={() => toggleCamera(p.id)} />
-                        {p.name}
-                      </label>
+                    <div key={p.id} style={{ background: '#0a0f1e', border: `1px solid ${opt ? '#06b6d433' : '#1e293b'}`, borderRadius: 10, padding: '10px 12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, color: '#cbd5e1', fontSize: 13, cursor: 'pointer' }}>
+                          <input type="checkbox" checked={!!opt} onChange={() => toggleCamera(p.id)} />
+                          {p.name}
+                        </label>
+                        {opt && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <PriceInput value={opt.price} onChange={(v) => setCameraPrice(p.id, v)}
+                              placeholder="0,00" min={0} className="ang-price" />
+                            <span style={{ color: '#64748b', fontSize: 13 }}>€</span>
+                          </div>
+                        )}
+                      </div>
                       {opt && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <PriceInput value={opt.price} onChange={(v) => setCameraPrice(p.id, v)}
-                            placeholder="0,00" min={0}
-                            className="ang-price" />
-                          <span style={{ color: '#64748b', fontSize: 13 }}>€</span>
+                        <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #1e293b' }}>
+                          <p style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>
+                            Enthaltenes Zubehör für {p.name}
+                          </p>
+                          <select
+                            style={{ ...S.input, marginBottom: 6, fontSize: 13, padding: '8px 10px' }}
+                            value=""
+                            onChange={(e) => { addCameraAccessory(p.id, e.target.value); e.target.value = ''; }}
+                          >
+                            <option value="">+ Zubehör hinzufügen…</option>
+                            {accessoryGroups.map(([g, list]) => (
+                              <optgroup key={g} label={g}>
+                                {list.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                              </optgroup>
+                            ))}
+                          </select>
+                          {opt.accessory_items.length === 0 ? (
+                            <p style={{ fontSize: 11, color: '#64748b' }}>Kein Zubehör — reines Kamera-Angebot.</p>
+                          ) : (
+                            <div style={{ display: 'grid', gap: 4 }}>
+                              {opt.accessory_items.map((it) => (
+                                <div key={it.accessory_id} style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#111827', border: '1px solid #1e293b', borderRadius: 6, padding: '6px 10px' }}>
+                                  <span style={{ flex: 1, color: '#cbd5e1', fontSize: 13 }}>{accessoryName(it.accessory_id)}</span>
+                                  <input type="number" min={1} value={it.qty}
+                                    onChange={(e) => setCameraAccessoryQty(p.id, it.accessory_id, parseInt(e.target.value, 10) || 1)}
+                                    style={{ ...S.input, width: 56, padding: '4px 6px', fontSize: 13 }} />
+                                  <button type="button" onClick={() => setCameraAccessoryQty(p.id, it.accessory_id, 0)}
+                                    style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 12 }}>
+                                    Entfernen
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
                   );
                 })}
-              </div>
-            </div>
-
-            {/* Zubehör */}
-            <div>
-              <label style={S.label}>Enthaltenes Zubehör</label>
-              <select style={{ ...S.input, marginBottom: 8 }} value="" onChange={(e) => { addAccessory(e.target.value); e.target.value = ''; }}>
-                <option value="">+ Zubehör hinzufügen…</option>
-                {accessoryGroups.map(([g, list]) => (
-                  <optgroup key={g} label={g}>
-                    {list.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-                  </optgroup>
-                ))}
-              </select>
-              <div style={{ display: 'grid', gap: 6 }}>
-                {draft.accessory_items.length === 0 && (
-                  <p style={{ fontSize: 12, color: '#64748b' }}>Kein Zubehör — reines Kamera-Angebot.</p>
-                )}
-                {draft.accessory_items.map((it) => (
-                  <div key={it.accessory_id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#0a0f1e', border: '1px solid #1e293b', borderRadius: 8, padding: '8px 12px' }}>
-                    <span style={{ flex: 1, color: '#cbd5e1', fontSize: 13 }}>{accessoryName(it.accessory_id)}</span>
-                    <input type="number" min={1} value={it.qty}
-                      onChange={(e) => setAccessoryQty(it.accessory_id, parseInt(e.target.value, 10) || 1)}
-                      style={{ ...S.input, width: 64, padding: '6px 8px' }} />
-                    <button type="button" onClick={() => setAccessoryQty(it.accessory_id, 0)}
-                      style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 13 }}>
-                      Entfernen
-                    </button>
-                  </div>
-                ))}
               </div>
             </div>
 
@@ -440,6 +463,7 @@ export default function AdminAngebotePage() {
             const prices = a.camera_options.map((c) => c.price);
             const min = prices.length ? Math.min(...prices) : 0;
             const max = prices.length ? Math.max(...prices) : 0;
+            const accCount = a.camera_options.reduce((s, c) => s + c.accessory_items.length, 0);
             return (
               <div key={a.id} style={{ ...S.section, marginBottom: 0, padding: 16, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
                 {a.image_url && (
@@ -452,7 +476,7 @@ export default function AdminAngebotePage() {
                     <span style={{ fontSize: 11, fontWeight: 700, color: st.color, background: st.bg, borderRadius: 999, padding: '2px 8px' }}>{st.label}</span>
                   </div>
                   <p style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
-                    {a.camera_options.length} Kamera{a.camera_options.length === 1 ? '' : 's'} · {a.accessory_items.length} Zubehör ·{' '}
+                    {a.camera_options.length} Kamera{a.camera_options.length === 1 ? '' : 's'} · {accCount} Zubehör-Position{accCount === 1 ? '' : 'en'} ·{' '}
                     {min === max ? `${min.toFixed(2)} €` : `${min.toFixed(2)}–${max.toFixed(2)} €`}
                     {a.pricing_mode === 'perDay' ? ' /Tag' : ` (${a.fixed_days ?? '?'} Tage)`}
                   </p>

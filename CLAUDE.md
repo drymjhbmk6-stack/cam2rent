@@ -2593,13 +2593,18 @@ möglich) + fest enthaltenes Zubehör zum **Komplettpreis** (all-in), nur in ein
 Datumsfenster buchbar. Eigenständiges Konzept neben Sets/Aktionen — keine
 Vermischung.
 
+- **Zubehör pro Kamera**: das enthaltene Zubehör wird je Kamera-Option gepflegt
+  (`camera_options[].accessory_items`) — verschiedene Kameras haben
+  unterschiedliches Zubehör (eigene Akkus, Tauchgehäuse etc.).
 - **Migration `supabase/supabase-angebote.sql`** (idempotent): Tabelle `angebote`
   (`pricing_mode 'flat'|'perDay'`, `fixed_days`, `camera_options JSONB`
-  `[{product_id,price}]`, `accessory_items JSONB`, `valid_from`/`valid_until`
-  TIMESTAMPTZ = Verkaufs- UND Mietfenster, `badge`, `image_url`, `active`,
-  `sort_order`) + Spalte `bookings.offer_id`. RLS enabled (Service-Role-Zugriff).
+  `[{product_id,price,accessory_items:[{accessory_id,qty}]}]`,
+  `valid_from`/`valid_until` TIMESTAMPTZ = Verkaufs- UND Mietfenster, `badge`,
+  `image_url`, `active`, `sort_order`) + Spalte `bookings.offer_id`. RLS enabled
+  (Service-Role-Zugriff).
 - **`data/angebote.ts`**: Typ `Angebot` + Helper `isAngebotActive`,
-  `getAngebotCameraPrice`, `calcAngebotPrice`, `mapAngebotRow`.
+  `getAngebotCameraOption`, `getAngebotCameraPrice`, `calcAngebotPrice`,
+  `mapAngebotRow`.
 - **APIs**: `GET /api/angebote` (öffentlich, nur aktive im Fenster),
   `GET /api/angebote/[id]` (öffentlich, Einzelangebot für Buchungsflow),
   `GET/POST/PATCH/DELETE /api/admin/angebote` (Permission `preise`),
@@ -2607,9 +2612,10 @@ Vermischung.
   `/api/set-images`, Bucket `product-images`, Pfad `angebote/<id>/…`). Alle
   defensiv bei fehlender Migration (leere Liste / 503).
 - **Admin-UI** `/admin/angebote` (Sidebar-Gruppe „Preise & Aktionen"): Liste +
-  Formular — Kamera-Mehrfachauswahl mit `PriceInput` pro Kamera, einfacher
-  Zubehör-Picker (Dropdown + Mengen), Datumsfelder, `pricing_mode`+`fixed_days`,
-  Badge, Bild-Upload (nach dem Speichern), Aktiv-Toggle.
+  Formular — Kamera-Mehrfachauswahl mit `PriceInput` pro Kamera; pro gewählter
+  Kamera ein eigener Zubehör-Picker (Dropdown + Mengen). Datumsfelder,
+  `pricing_mode`+`fixed_days`, Badge, Bild-Upload (nach dem Speichern),
+  Aktiv-Toggle.
 - **Kundenseite** `/angebote` (Navbar-Link): Karten-Liste aktiver Angebote, pro
   Kamera-Option ein „Jetzt buchen"-Button → `/kameras/[slug]/buchen?offer=<id>`.
 - **Buchungsflow** (`app/kameras/[slug]/buchen/page.tsx`): „Angebots-Modus" wenn
