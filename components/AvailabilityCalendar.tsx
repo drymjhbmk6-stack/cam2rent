@@ -51,6 +51,12 @@ interface AvailabilityCalendarProps {
    * wenn nichts mehr frei ist.
    */
   extraHoldRanges?: Array<{ from: string; to: string; deliveryMode?: DeliveryMode }>;
+  /**
+   * Optionales Auswahlfenster (yyyy-MM-dd). Im Angebots-Buchungsmodus muss der
+   * Mietzeitraum komplett in das Verkaufs-/Mietfenster des Angebots fallen —
+   * Tage ausserhalb [from, to] werden nicht waehlbar.
+   */
+  allowedRange?: { from: string; to: string } | null;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -90,6 +96,7 @@ export default function AvailabilityCalendar({
   initialTo,
   onRangeChange,
   extraHoldRanges,
+  allowedRange,
 }: AvailabilityCalendarProps) {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
@@ -261,11 +268,17 @@ export default function AvailabilityCalendar({
     return parseDate(dateStr) < minDate;
   }
 
+  function isOutsideAllowedRange(dateStr: string): boolean {
+    if (!allowedRange) return false;
+    return dateStr < allowedRange.from || dateStr > allowedRange.to;
+  }
+
   function isDaySelectable(dateStr: string, info: DayInfo | undefined): boolean {
     if (!info) return false;
     const effectiveStatus = info.status === 'partial' ? 'available' : info.status;
     if (effectiveStatus !== 'available') return false;
     if (isBeforeLeadTime(dateStr)) return false;
+    if (isOutsideAllowedRange(dateStr)) return false;
     // Versand-Enddatum: gesperrt wenn Folgetag Sonn-/Feiertag
     if (deliveryMode === 'versand' && isChoosingEnd) {
       if (isBlockedEndDateForShipping(parseDate(dateStr))) return false;
@@ -474,12 +487,17 @@ export default function AvailabilityCalendar({
 
             const preLeadBlock = displayStatus === 'available' && isBeforeLeadTime(dateStr);
             if (preLeadBlock) displayStatus = 'blocked';
+            const outsideOfferBlock = displayStatus === 'available' && isOutsideAllowedRange(dateStr);
+            if (outsideOfferBlock) displayStatus = 'blocked';
             const cfg = STATUS_CONFIG[displayStatus];
 
             const dayDate = parseDate(dateStr);
             let blockReason: string | null = null;
             if (deliveryMode === 'versand' && isChoosingEnd && !selectable) {
               blockReason = getShippingBlockReason(dayDate, true);
+            }
+            if (!blockReason && outsideOfferBlock) {
+              blockReason = 'Außerhalb des Angebotszeitraums';
             }
             if (!blockReason && preLeadBlock) {
               blockReason = deliveryMode === 'abholung'

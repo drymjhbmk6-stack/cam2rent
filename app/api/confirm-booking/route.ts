@@ -196,12 +196,54 @@ export async function POST(req: NextRequest) {
     const bookingId = await generateBookingId({ isTest: bookingTestModeForId });
 
     // 4. Parse Stripe metadata
-    const accessoryItems = parseMetadataAccessoryItems(meta.accessory_items, meta.accessories);
+    let accessoryItems = parseMetadataAccessoryItems(meta.accessory_items, meta.accessories);
     // Wenn ein Set gewaehlt wurde, kommt die Set-ID als eigene meta.set_id.
     // Damit Rechnung, Mietvertrag und Packliste das Set aufloesen koennen,
     // prependen wir es als pseudo-Zubehoer mit qty=1.
     if (typeof meta.set_id === 'string' && meta.set_id.trim()) {
       accessoryItems.unshift({ accessory_id: meta.set_id.trim(), qty: 1 });
+    }
+
+    // ── Angebots-Modus ──────────────────────────────────────────────────────
+    // Bei einer Angebots-Buchung kommt das enthaltene Zubehoer autoritativ aus
+    // dem Angebot (nicht aus den Metadata vertrauen). Preis-Plausibilitaet wird
+    // gegen den hinterlegten Angebotspreis geprueft.
+    let offerIdToStore: string | null = null;
+    if (typeof meta.offer_id === 'string' && meta.offer_id.trim()) {
+      try {
+        const { data: offerRow } = await supabase
+          .from('angebote').select('*').eq('id', meta.offer_id.trim()).maybeSingle();
+        if (offerRow) {
+          offerIdToStore = String(offerRow.id);
+          const offerItems = Array.isArray(offerRow.accessory_items)
+            ? (offerRow.accessory_items as { accessory_id: string; qty: number }[])
+            : [];
+          accessoryItems = offerItems
+            .filter((i) => i && i.accessory_id)
+            .map((i) => ({ accessory_id: i.accessory_id, qty: Math.max(1, Number(i.qty) || 1) }));
+          const cams = Array.isArray(offerRow.camera_options)
+            ? (offerRow.camera_options as { product_id: string; price: number }[])
+            : [];
+          const opt = cams.find((c) => c.product_id === meta.product_id);
+          const days = parseInt(meta.days, 10) || 1;
+          const reportedRental = parseFloat(meta.price_rental ?? '0') || 0;
+          const expectedRental = opt
+            ? (offerRow.pricing_mode === 'perDay' ? opt.price * Math.max(1, days) : opt.price)
+            : null;
+          if (expectedRental === null || Math.abs(expectedRental - reportedRental) > 0.5) {
+            await createAdminNotification(supabase, {
+              type: 'payment_failed',
+              title: `Angebots-Buchung prüfen (${bookingId})`,
+              message: expectedRental === null
+                ? `Buchung ${bookingId} trägt offer_id ${offerRow.id}, aber die Kamera ${meta.product_id} ist nicht Teil des Angebots. Bitte Preis prüfen.`
+                : `Buchung ${bookingId}: Angebotspreis laut Angebot ${expectedRental.toFixed(2)} €, gezahlt wurde ${reportedRental.toFixed(2)} €. Bitte prüfen.`,
+              link: `/admin/buchungen/${bookingId}`,
+            }).catch(() => {});
+          }
+        }
+      } catch (offerErr) {
+        console.error('[confirm-booking] Angebot laden fehlgeschlagen:', offerErr);
+      }
     }
     const accessories = accessoryItems.length > 0
       ? itemsToLegacyIds(accessoryItems)
@@ -219,9 +261,11 @@ export async function POST(req: NextRequest) {
       supabase.from('admin_settings').select('key, value').in('key', ['tax_mode', 'tax_rate', 'ust_id']),
     ]);
 
-    // 4a. Preis-Plausibilitätsprüfung (Defense-in-Depth)
+    // 4a. Preis-Plausibilitätsprüfung (Defense-in-Depth).
+    // Im Angebots-Modus uebersprungen — der Angebotspreis weicht bewusst von
+    // der Preistabelle ab und wird im Angebots-Block oben separat geprueft.
     try {
-      if (meta.product_id && meta.days) {
+      if (!offerIdToStore && meta.product_id && meta.days) {
         const days = parseInt(meta.days, 10);
         const prodRow = prodResult?.data;
         if (days > 0 && prodRow?.value && typeof prodRow.value === 'object') {
@@ -319,30 +363,36 @@ export async function POST(req: NextRequest) {
     // damit manuell nachgeladen oder erstattet werden kann.
     const reportedAccPrice = Math.max(0, parseFloat(meta.price_accessories ?? '0') || 0);
     const daysParsed = parseInt(meta.days, 10) || 1;
-    const { verifyAccessoryPrice } = await import('@/lib/booking/verify-accessory-price');
-    const accCheck = await verifyAccessoryPrice(supabase, {
-      items: accessoryItems,
-      days: daysParsed,
-      reportedTotal: reportedAccPrice,
-    });
-    const finalPriceAccessories = accCheck.mismatch ? accCheck.computed : reportedAccPrice;
-    if (accCheck.mismatch) {
-      console.error('[confirm-booking] Zubehoer-Preis-Mismatch:', {
-        bookingId, reported: reportedAccPrice, computed: accCheck.computed, details: accCheck.details,
+    // Im Angebots-Modus ist das Zubehoer im Komplettpreis enthalten
+    // (price_accessories = 0) — die Recompute-Pruefung wuerde faelschlich
+    // einen Mismatch melden und wird daher uebersprungen.
+    let finalPriceAccessories = reportedAccPrice;
+    if (!offerIdToStore) {
+      const { verifyAccessoryPrice } = await import('@/lib/booking/verify-accessory-price');
+      const accCheck = await verifyAccessoryPrice(supabase, {
+        items: accessoryItems,
+        days: daysParsed,
+        reportedTotal: reportedAccPrice,
       });
-      try {
-        await createAdminNotification(supabase, {
-          type: 'payment_failed',
-          title: `Zubehoer-Preis-Mismatch (${bookingId})`,
-          message: `Frontend meldete ${reportedAccPrice.toFixed(2)} EUR fuer Zubehoer, Server-Recompute ergab ${accCheck.computed.toFixed(2)} EUR. Differenz: ${(accCheck.computed - reportedAccPrice).toFixed(2)} EUR. Stripe-Charge basiert auf dem Frontend-Wert — ggf. via Payment Link nachladen oder die Buchung manuell korrigieren.`,
-          link: `/admin/buchungen/${bookingId}`,
+      finalPriceAccessories = accCheck.mismatch ? accCheck.computed : reportedAccPrice;
+      if (accCheck.mismatch) {
+        console.error('[confirm-booking] Zubehoer-Preis-Mismatch:', {
+          bookingId, reported: reportedAccPrice, computed: accCheck.computed, details: accCheck.details,
         });
-      } catch (notifErr) {
-        console.error('[confirm-booking] Admin-Notification fehlgeschlagen:', notifErr);
+        try {
+          await createAdminNotification(supabase, {
+            type: 'payment_failed',
+            title: `Zubehoer-Preis-Mismatch (${bookingId})`,
+            message: `Frontend meldete ${reportedAccPrice.toFixed(2)} EUR fuer Zubehoer, Server-Recompute ergab ${accCheck.computed.toFixed(2)} EUR. Differenz: ${(accCheck.computed - reportedAccPrice).toFixed(2)} EUR. Stripe-Charge basiert auf dem Frontend-Wert — ggf. via Payment Link nachladen oder die Buchung manuell korrigieren.`,
+            link: `/admin/buchungen/${bookingId}`,
+          });
+        } catch (notifErr) {
+          console.error('[confirm-booking] Admin-Notification fehlgeschlagen:', notifErr);
+        }
       }
     }
 
-    const { error } = await supabase.from('bookings').insert({
+    const bookingInsert: Record<string, unknown> = {
       id: bookingId,
       payment_intent_id,
       is_test: testMode,
@@ -383,10 +433,18 @@ export async function POST(req: NextRequest) {
       ...(contractSignature?.signatureDataUrl ? { contract_signature_url: contractSignature.signatureDataUrl } : {}),
       // Nur setzen wenn true — so bleibt Insert ohne Migration ruckwaerts-kompatibel
       ...(verificationRequired ? { verification_required: true } : {}),
-    });
+      // Angebots-Verknuepfung (nur bei Angebots-Buchungen).
+      ...(offerIdToStore ? { offer_id: offerIdToStore } : {}),
+    };
 
-    if (error) {
-      console.error('Supabase insert error:', error);
+    let insertRes = await supabase.from('bookings').insert(bookingInsert);
+    // Defensiv: fehlt die offer_id-Spalte (Migration ausstehend), Insert ohne sie wiederholen.
+    if (insertRes.error && offerIdToStore && /offer_id|column|schema cache|PGRST/i.test(insertRes.error.message)) {
+      delete bookingInsert.offer_id;
+      insertRes = await supabase.from('bookings').insert(bookingInsert);
+    }
+    if (insertRes.error) {
+      console.error('Supabase insert error:', insertRes.error);
       return NextResponse.json(
         { error: 'Buchung konnte nicht gespeichert werden.' },
         { status: 500 }

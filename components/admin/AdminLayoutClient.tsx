@@ -170,6 +170,7 @@ const KATALOG_ITEMS: NavItem[] = [
 const PREISE_ITEMS: NavItem[] = [
   { href: '/admin/gutscheine', label: 'Gutscheine', icon: iconTicket, perm: 'preise' },
   { href: '/admin/rabatte', label: 'Rabatte', icon: iconDiscount, perm: 'preise' },
+  { href: '/admin/angebote', label: 'Angebote', icon: iconTicket, perm: 'preise' },
   { href: '/admin/warenkorb-erinnerung', label: 'Warenkorb-Erinnerung', icon: iconCart, perm: 'preise' },
   { href: '/admin/newsletter', label: 'Newsletter', icon: iconMail, perm: 'preise' },
 ];

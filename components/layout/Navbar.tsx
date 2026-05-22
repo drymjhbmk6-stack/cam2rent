@@ -10,6 +10,7 @@ import ThemeToggle from '@/components/ThemeToggle';
 const navLinks = [
   { href: '/', label: 'Startseite' },
   { href: '/kameras', label: 'Kameras' },
+  { href: '/angebote', label: 'Angebote' },
   { href: '/kamera-finder', label: 'Kamera-Finder' },
   { href: '/so-funktionierts', label: "So funktioniert's" },
   { href: '/blog', label: 'Blog' },

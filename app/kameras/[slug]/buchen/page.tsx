@@ -12,6 +12,7 @@ import { getPriceForDays, type Product } from '@/data/products';
 import { useProducts } from '@/components/ProductsProvider';
 import { getAccessoryPrice, type Accessory } from '@/data/accessories';
 import type { RentalSet } from '@/data/sets';
+import { isAngebotActive, getAngebotCameraPrice, type Angebot } from '@/data/angebote';
 import AvailabilityCalendar, { type CalendarRange } from '@/components/AvailabilityCalendar';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { shippingConfig, calcShipping, type ShippingMethod } from '@/data/shipping';
@@ -169,6 +170,12 @@ function calcBreakdown(
   deliveryMode: DeliveryMode,
   dynPrices?: PriceConfig | null,
   accessoryQty?: Record<string, number>,
+  /**
+   * Angebots-Modus: ersetzt die normale Kamerapreis- und Zubehoer-Berechnung
+   * durch den Komplettpreis des Angebots (all-in). Haftung + Versand laufen
+   * normal weiter, Produkt-Rabatte werden im Angebots-Modus ignoriert.
+   */
+  offerOverride?: { price: number; mode: 'flat' | 'perDay' } | null,
 ): Breakdown {
   // Inclusive day count: Mo→Mo = 1 Tag, Mo→Di = 2 Tage, Mo→So = 7 Tage
   const days = to && to.getTime() !== from.getTime()
@@ -179,18 +186,26 @@ function calcBreakdown(
   const adminProduct = dynPrices && 'adminProducts' in dynPrices && dynPrices.adminProducts
     ? (dynPrices.adminProducts as Record<string, AdminProduct>)[product.id]
     : undefined;
-  const rentalPrice = adminProduct
+  const normalRentalPrice = adminProduct
     ? calcPriceFromTable(adminProduct, days)
     : dynPrices?.products?.[product.id]
       ? calcPriceFromKeyDays(dynPrices.products[product.id], days)
       : getPriceForDays(product, days);
 
-  const accessoryPrice = accessories.reduce((sum, id) => {
-    const acc = dbAccessories.find((a) => a.id === id);
-    if (!acc) return sum;
-    const qty = accessoryQty?.[id] ?? 1;
-    return sum + getAccessoryPrice(acc, days) * qty;
-  }, 0);
+  // Im Angebots-Modus ist der Mietpreis = Komplettpreis des Angebots, das
+  // enthaltene Zubehoer ist darin eingeschlossen (accessoryPrice = 0).
+  const rentalPrice = offerOverride
+    ? (offerOverride.mode === 'perDay' ? offerOverride.price * days : offerOverride.price)
+    : normalRentalPrice;
+
+  const accessoryPrice = offerOverride
+    ? 0
+    : accessories.reduce((sum, id) => {
+        const acc = dbAccessories.find((a) => a.id === id);
+        if (!acc) return sum;
+        const qty = accessoryQty?.[id] ?? 1;
+        return sum + getAccessoryPrice(acc, days) * qty;
+      }, 0);
 
   // Haftungspreis: gestaffelt nach Wochen
   const h = dynPrices?.haftung;
@@ -213,7 +228,7 @@ function calcBreakdown(
     : undefined) ?? [];
   let productDiscount = 0;
   let productDiscountLabel: string | null = null;
-  if (productDiscounts.length > 0) {
+  if (productDiscounts.length > 0 && !offerOverride) {
     const matches = getDiscountMatchesForItem(
       product.id,
       rentalPrice,
@@ -316,6 +331,14 @@ type DeliveryMode = 'abholung' | 'versand';
 
 function fmt(n: number) {
   return n.toFixed(2).replace('.', ',');
+}
+
+/** ISO-Timestamp → lokales yyyy-MM-dd (fuer Kalender-Fenster). */
+function isoToLocalDateStr(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
 // ─── Payment step (must be inside <Elements>) ─────────────────────────────────
@@ -450,6 +473,7 @@ export default function BuchenPage() {
   const preFrom = searchParams.get('from');
   const preTo = searchParams.get('to');
   const preDelivery = searchParams.get('delivery');
+  const preOffer = searchParams.get('offer');
   const hasPreselection = !!(preFrom && preTo);
   const [step, setStep] = useState<1 | 2 | 3 | 4 | 5 | 6>(hasPreselection ? 2 : 1);
   const [returnToSummary, setReturnToSummary] = useState(false);
@@ -461,7 +485,6 @@ export default function BuchenPage() {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   }, [step]);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [isCreatingIntent, setIsCreatingIntent] = useState(false);
   const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>(
     preDelivery === 'abholung' ? 'abholung' : 'versand'
@@ -502,7 +525,7 @@ export default function BuchenPage() {
   // Stripe Payment Intent
   const [clientSecret, setClientSecret] = useState<string | null>(null);
 
-  const [intentError, setIntentError] = useState<string | null>(null); void intentError;
+  const [intentError, setIntentError] = useState<string | null>(null);
   // Dynamische Preise aus Supabase (Fallback: statische Dateiwerte)
   const [dynPrices, setDynPrices] = useState<PriceConfig | null>(null);
 
@@ -513,6 +536,10 @@ export default function BuchenPage() {
   // Sets
   const [availableSets, setAvailableSets] = useState<RentalSet[]>([]);
   const [selectedSet, setSelectedSet] = useState<RentalSet | null>(null);
+
+  // Angebots-Modus (?offer=<id>): kuratiertes Festpreis-Buendel.
+  const [offer, setOffer] = useState<Angebot | null>(null);
+  const [offerLoaded, setOfferLoaded] = useState(false);
 
   // Basis-Set-Gate: Wenn fuer DIESE Kamera kein Basis-Set definiert ist (oder
   // das Basis-Set im gewaehlten Zeitraum ausgebucht ist), darf die Buchung
@@ -604,6 +631,17 @@ export default function BuchenPage() {
       .catch(() => {});
   }, []);
 
+  // Angebot laden (Angebots-Modus). Fehlt das Angebot oder ist es ungueltig,
+  // bleibt offer=null → normaler Buchungsflow.
+  useEffect(() => {
+    if (!preOffer) { setOfferLoaded(true); return; }
+    fetch(`/api/angebote/${encodeURIComponent(preOffer)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d?.angebot) setOffer(d.angebot as Angebot); })
+      .catch(() => {})
+      .finally(() => setOfferLoaded(true));
+  }, [preOffer]);
+
   // Verfügbarkeit prüfen wenn Datum oder Liefermodus sich ändert
   useEffect(() => {
     if (!range?.from) return;
@@ -643,6 +681,12 @@ export default function BuchenPage() {
   // camera+from+to) Telemetrie an /api/availability-alerts senden.
   useEffect(() => {
     if (!product?.id || !range?.from) {
+      setBasicSetBlock(null);
+      return;
+    }
+    // Angebots-Modus: das Angebot definiert das Buendel selbst — die
+    // Basis-Set-Pflicht entfaellt.
+    if (offer && offer.camera_options.some((c) => c.product_id === product.id)) {
       setBasicSetBlock(null);
       return;
     }
@@ -704,7 +748,7 @@ export default function BuchenPage() {
         }).catch(() => {});
       }
     }
-  }, [product?.id, product?.name, range, availableSets, accAvailability]);
+  }, [product?.id, product?.name, range, availableSets, accAvailability, offer]);
 
   const toggleAccessory = useCallback((id: string) => {
     setAccessories((prev) =>
@@ -746,11 +790,17 @@ export default function BuchenPage() {
     });
   }, [dbAccessories]);
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleProceedToPayment = async () => {
     if (!breakdown || !range?.from) return;
     setIsCreatingIntent(true);
     setIntentError(null);
+
+    // Signatur fuer /buchung-bestaetigt → confirm-booking ablegen.
+    try {
+      if (contractSignature) {
+        sessionStorage.setItem('cam2rent_contract_signature', JSON.stringify(contractSignature));
+      }
+    } catch { /* sessionStorage nicht verfügbar */ }
 
     const rentalFrom = format(range.from, 'yyyy-MM-dd');
     const rentalTo = format(range.to ?? range.from, 'yyyy-MM-dd');
@@ -772,9 +822,13 @@ export default function BuchenPage() {
       // 2. Create Stripe PaymentIntent
       // Format fuer accessory_items im Stripe-Metadata: "id:qty,id:qty,..."
       // (kompakt, passt unter das 500-Byte-Limit pro Metadata-Value)
-      const accessoryItemsMeta = accessories
-        .map((id) => `${id}:${accessoryQty[id] ?? 1}`)
-        .join(',');
+      // Im Angebots-Modus stammt das Zubehoer fest aus dem Angebot.
+      const accessoryItemsMeta = offerMode && offer
+        ? offer.accessory_items.map((it) => `${it.accessory_id}:${it.qty}`).join(',')
+        : accessories.map((id) => `${id}:${accessoryQty[id] ?? 1}`).join(',');
+      const accessoriesMeta = offerMode && offer
+        ? offer.accessory_items.map((it) => it.accessory_id).join(',')
+        : accessories.join(',');
       // Preis-Aufschluesselung fuer die Buchungs-Metadata. Bei Set + zusaetzlich
       // gewaehltem Zubehoer werden beide Betraege addiert, damit die Komponenten-
       // Summe gegen intent.amount weiter aufgeht (Webhook-Plausibilitaet).
@@ -797,9 +851,10 @@ export default function BuchenPage() {
             shipping_method: deliveryMode === 'versand' ? shippingMethod : 'abholung',
             shipping_price: String(breakdown.shippingPrice),
             haftung,
-            accessories: accessories.join(','),
+            accessories: accessoriesMeta,
             accessory_items: accessoryItemsMeta,
             deposit: String(product!.deposit),
+            ...(offerMode && offer ? { offer_id: offer.id } : {}),
             // Price breakdown for booking record
             price_rental: String(breakdown.rentalPrice),
             price_accessories: String(priceAccessoriesMeta),
@@ -913,10 +968,39 @@ export default function BuchenPage() {
     );
   }
 
+  // ── Angebots-Modus ──────────────────────────────────────────────────────────
+  // Greift nur, wenn das geladene Angebot diese Kamera enthaelt und gueltig ist.
+  const offerCameraPrice = offer ? getAngebotCameraPrice(offer, product.id) : null;
+  const offerActive = !!offer && offerCameraPrice !== null && isAngebotActive(offer);
+  const offerMode = offerActive;
+  // ?offer=… gesetzt, aber Angebot fertig geladen und ungueltig → Hinweis.
+  const offerInvalid = !!preOffer && offerLoaded && !offerActive;
+  const offerOverride = offerActive && offer
+    ? { price: offerCameraPrice as number, mode: offer.pricing_mode }
+    : null;
+  // Auswahlfenster fuer den Kalender (nur wenn beide Grenzen gesetzt sind).
+  const offerAllowedRange = offerMode && offer && offer.valid_from && offer.valid_until
+    ? { from: isoToLocalDateStr(offer.valid_from), to: isoToLocalDateStr(offer.valid_until) }
+    : null;
+
   // breakdown exists as soon as a start date is picked (to=undefined → 1 Tag)
   const breakdown = range?.from
-    ? calcBreakdown(product, range.from, range.to, accessories, dbAccessories, haftung, shippingMethod, deliveryMode, dynPrices, accessoryQty)
+    ? calcBreakdown(product, range.from, range.to, accessories, dbAccessories, haftung, shippingMethod, deliveryMode, dynPrices, accessoryQty, offerOverride)
     : null;
+
+  // Angebot: enthaltenes Zubehoer im Zeitraum nicht ausreichend verfuegbar?
+  const offerAccShortage = offerMode && offer
+    ? offer.accessory_items.some((it) => {
+        const av = accAvailability[it.accessory_id];
+        return !!av && (!av.compatible || av.remaining < it.qty);
+      })
+    : false;
+  // Angebot mit fester Tagezahl: gewaehlter Zeitraum muss exakt passen.
+  const offerDaysMismatch = !!(offerMode && offer && offer.pricing_mode === 'flat' && breakdown
+    && breakdown.days !== (offer.fixed_days ?? 0));
+  // Sperren fuer "Weiter" im Angebots-Modus (Datum bei Step 1, Zubehoer bei Step 2).
+  const offerStep1Block = offerMode && offerDaysMismatch;
+  const offerStep2Block = offerMode && (offerDaysMismatch || offerAccShortage);
 
   // Haftungsoptionen dynamisch (Eigenbeteiligung je nach Produktkategorie)
   const haftungConfig = dynPrices?.haftung as HaftungConfig | undefined;
@@ -983,6 +1067,32 @@ export default function BuchenPage() {
 
           {/* ── Main card ── */}
           <div className="bg-white dark:bg-gray-900 rounded-card shadow-card p-6 sm:p-8">
+
+            {/* Angebots-Hinweis */}
+            {offerMode && offer && (
+              <div className="mb-6 p-4 rounded-xl border-2 border-accent-teal/40 bg-accent-teal-soft/40">
+                <p className="font-heading font-bold text-sm text-accent-teal">
+                  Angebot: {offer.name}
+                </p>
+                <p className="text-xs font-body text-accent-teal/90 mt-0.5">
+                  Komplettpreis inkl. enthaltenem Zubehör.
+                  {offer.pricing_mode === 'flat'
+                    ? ` Feste Mietdauer: ${offer.fixed_days} ${offer.fixed_days === 1 ? 'Tag' : 'Tage'}.`
+                    : ''}
+                  {offerAllowedRange ? ' Buchbar nur innerhalb des Angebotszeitraums.' : ''}
+                </p>
+              </div>
+            )}
+            {offerInvalid && (
+              <div className="mb-6 p-4 rounded-xl border-2 border-status-error/40 bg-red-50">
+                <p className="font-heading font-bold text-sm text-status-error">
+                  Angebot nicht verfügbar
+                </p>
+                <p className="text-xs font-body text-red-600 mt-0.5">
+                  Dieses Angebot ist abgelaufen oder gilt nicht für diese Kamera. Du kannst trotzdem normal buchen.
+                </p>
+              </div>
+            )}
 
             {/* ════ STEP 1: Abholung / Versand + Datum ════ */}
             {step === 1 && (
@@ -1093,6 +1203,7 @@ export default function BuchenPage() {
                     initialFrom={preFrom}
                     initialTo={preTo}
                     onRangeChange={handleCalendarRangeChange}
+                    allowedRange={offerAllowedRange}
                     extraHoldRanges={cartItems
                       .filter((it) => it.productId === product.id)
                       .map((it) => ({ from: it.rentalFrom, to: it.rentalTo }))}
@@ -1191,18 +1302,23 @@ export default function BuchenPage() {
                   </div>
                 )}
 
-                <div className="mt-8 flex justify-end">
+                <div className="mt-8 flex flex-col items-end gap-2">
                   <button
                     type="button"
-                    disabled={!range?.from || !!basicSetBlock}
+                    disabled={!range?.from || !!basicSetBlock || offerStep1Block}
                     onClick={() => { if (returnToSummary) { setStep(4); setReturnToSummary(false); } else setStep(2); }}
                     className="px-8 py-3 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold text-sm rounded-[10px] hover:bg-brand-dark transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     Weiter: Zubehör
                   </button>
                   {basicSetBlock && (
-                    <p className="text-xs text-status-error mt-2 text-right">
+                    <p className="text-xs text-status-error text-right">
                       Buchung aktuell nicht möglich — siehe Hinweis oben.
+                    </p>
+                  )}
+                  {offerDaysMismatch && offer && (
+                    <p className="text-xs text-status-error text-right">
+                      Dieses Angebot gilt für genau {offer.fixed_days} {offer.fixed_days === 1 ? 'Tag' : 'Tage'} — bitte wähle einen entsprechenden Zeitraum.
                     </p>
                   )}
                 </div>
@@ -1224,8 +1340,46 @@ export default function BuchenPage() {
                 </p>
 
 
+                {/* ── Angebot: enthaltenes Zubehör (read-only) ── */}
+                {offerMode && offer && (
+                  <div className="mb-6">
+                    <p className="text-xs font-body font-semibold text-brand-steel dark:text-gray-400 uppercase tracking-wider mb-2">
+                      Im Angebot enthalten
+                    </p>
+                    <div className="rounded-xl border border-brand-border dark:border-gray-700 overflow-hidden divide-y divide-brand-border dark:divide-gray-700">
+                      {offer.accessory_items.length === 0 ? (
+                        <p className="px-4 py-3 text-sm font-body text-brand-muted dark:text-gray-500">
+                          Reines Kamera-Angebot — kein Zubehör enthalten.
+                        </p>
+                      ) : offer.accessory_items.map((it) => {
+                        const acc = dbAccessories.find((a) => a.id === it.accessory_id);
+                        const av = accAvailability[it.accessory_id];
+                        const short = !!av && (!av.compatible || av.remaining < it.qty);
+                        return (
+                          <div key={it.accessory_id} className="flex items-center gap-3 px-4 py-3 bg-white dark:bg-gray-900">
+                            <svg viewBox="0 0 20 20" fill="currentColor" className={`w-4 h-4 flex-shrink-0 ${short ? 'text-status-error' : 'text-status-success'}`} aria-hidden="true">
+                              <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
+                            </svg>
+                            <span className="font-heading font-semibold text-sm text-brand-black dark:text-gray-100 flex-1">
+                              {it.qty > 1 ? `${it.qty}× ` : ''}{acc?.name ?? it.accessory_id}
+                            </span>
+                            {short && (
+                              <span className="text-xs text-status-error">Im Zeitraum nicht verfügbar</span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {offerAccShortage && (
+                      <p className="text-xs text-status-error mt-2">
+                        Mindestens ein enthaltenes Zubehör ist im gewählten Zeitraum nicht verfügbar — bitte wähle einen anderen Zeitraum.
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 {/* ── Set selection ── */}
-                {availableSets.length > 0 && (
+                {!offerMode && availableSets.length > 0 && (
                   <div className="mb-6">
                     <p className="text-xs font-body font-semibold text-brand-steel dark:text-gray-400 uppercase tracking-wider mb-2">
                       Wähle dein Set (Pflicht)
@@ -1314,7 +1468,7 @@ export default function BuchenPage() {
                 )}
 
                 {/* Upgrade-Gruppen (Radio-Buttons) */}
-                {(() => {
+                {!offerMode && (() => {
                   const upgradeGroups = [...new Set(dbAccessories.filter((a) => a.upgradeGroup).map((a) => a.upgradeGroup!))];
                   const days = breakdown?.days ?? 0;
                   return upgradeGroups.map((group) => {
@@ -1364,7 +1518,7 @@ export default function BuchenPage() {
                 })()}
 
                 {/* Normales Zubehör (Checkboxen) — nach Kategorie gruppiert */}
-                {(() => {
+                {!offerMode && (() => {
                   const filtered = dbAccessories.filter((acc) => {
                     if (acc.upgradeGroup) return false;
                     const avail = accAvailability[acc.id];
@@ -1504,13 +1658,18 @@ export default function BuchenPage() {
                   <button
                     type="button"
                     onClick={() => { if (returnToSummary) { setStep(4); setReturnToSummary(false); } else setStep(3); }}
-                    disabled={(availableSets.length > 0 && !selectedSet) || !!basicSetBlock}
+                    disabled={(!offerMode && availableSets.length > 0 && !selectedSet) || !!basicSetBlock || offerStep2Block}
                     className="px-8 py-3 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold text-sm rounded-[10px] hover:bg-brand-dark transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     Weiter: Haftung
                   </button>
-                  {availableSets.length > 0 && !selectedSet && (
+                  {!offerMode && availableSets.length > 0 && !selectedSet && (
                     <p className="text-xs text-status-error mt-2 text-right">Bitte wähle ein Set aus.</p>
+                  )}
+                  {offerStep2Block && (
+                    <p className="text-xs text-status-error mt-2 text-right">
+                      Buchung aktuell nicht möglich — siehe Hinweis oben.
+                    </p>
                   )}
                 </div>
               </div>
@@ -1912,7 +2071,9 @@ export default function BuchenPage() {
                 <div className="space-y-2.5 mb-5">
                   <div className="flex justify-between items-center text-sm font-body">
                     <span className="text-brand-steel dark:text-gray-400">
-                      Miete ({breakdown.days} {breakdown.days === 1 ? 'Tag' : 'Tage'})
+                      {offerMode && offer
+                        ? `${offer.name} (${breakdown.days} ${breakdown.days === 1 ? 'Tag' : 'Tage'}, inkl. Zubehör)`
+                        : `Miete (${breakdown.days} ${breakdown.days === 1 ? 'Tag' : 'Tage'})`}
                     </span>
                     <span className="font-semibold text-brand-black dark:text-gray-100">
                       {fmt(breakdown.rentalPrice)} €
@@ -2037,6 +2198,28 @@ export default function BuchenPage() {
                   </div>
                 )}
 
+                {/* Block 2a: Angebots-Zubehör (read-only) */}
+                {offerMode && offer && offer.accessory_items.length > 0 && (
+                  <div className="mb-5 bg-brand-bg dark:bg-white/5 rounded-xl p-4">
+                    <p className="text-xs font-body font-semibold text-brand-steel dark:text-gray-400 uppercase tracking-wider mb-2">
+                      Im Angebot enthalten
+                    </p>
+                    <ul className="space-y-1.5">
+                      {offer.accessory_items.map((it) => {
+                        const acc = dbAccessories.find((a) => a.id === it.accessory_id);
+                        return (
+                          <li key={it.accessory_id} className="flex items-center gap-2 text-sm font-body text-brand-steel dark:text-gray-400">
+                            <svg viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5 text-status-success flex-shrink-0" aria-hidden="true">
+                              <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
+                            </svg>
+                            {it.qty > 1 ? `${it.qty}× ` : ''}{acc?.name ?? it.accessory_id}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                )}
+
                 {/* Selected set or individual accessories */}
                 {/* Block 2: Set & Zubehör */}
                 {selectedSet ? (
@@ -2149,6 +2332,16 @@ export default function BuchenPage() {
                       >
                         Zurück
                       </button>
+                      {offerMode ? (
+                      <button
+                        type="button"
+                        disabled={isCreatingIntent}
+                        onClick={() => { void handleProceedToPayment(); }}
+                        className="flex items-center gap-2 px-8 py-3 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold text-sm rounded-[10px] hover:bg-brand-dark transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        {isCreatingIntent ? 'Wird verarbeitet…' : `Jetzt buchen und bezahlen — ${fmt(effectiveTotal)} €`}
+                      </button>
+                      ) : (
                       <button
                         type="button"
                         onClick={() => {
@@ -2208,7 +2401,11 @@ export default function BuchenPage() {
                         </svg>
                         In den Warenkorb — {fmt(effectiveTotal)} €
                       </button>
+                      )}
                     </div>
+                    {offerMode && intentError && (
+                      <p className="mt-3 text-sm font-body text-status-error text-right">{intentError}</p>
+                    )}
                   </div>
                 ) : (
                   <SignatureStep

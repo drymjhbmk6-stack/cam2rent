@@ -170,6 +170,7 @@ const PATH_PERMISSIONS: PermRule[] = [
   { prefix: '/admin/preise', perm: 'preise' },
   { prefix: '/admin/gutscheine', perm: 'preise' },
   { prefix: '/admin/rabatte', perm: 'preise' },
+  { prefix: '/admin/angebote', perm: 'preise' },
   { prefix: '/admin/warenkorb-erinnerung', perm: 'preise' },
   { prefix: '/admin/newsletter', perm: 'preise' },
   { prefix: '/admin/startseite', perm: 'content' },
@@ -241,6 +242,8 @@ const API_PATH_PERMISSIONS: PermRule[] = [
   { prefix: '/api/admin/purchase-items', perm: 'katalog' },
   // Rabatte & Aktionen
   { prefix: '/api/admin/coupons', perm: 'preise' },
+  { prefix: '/api/admin/angebote', perm: 'preise' },
+  { prefix: '/api/admin/angebote-images', perm: 'preise' },
   { prefix: '/api/admin/newsletter', perm: 'preise' },
   { prefix: '/api/admin/customer-push', perm: 'preise' },
   // Content

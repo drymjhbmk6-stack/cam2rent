@@ -2557,6 +2557,54 @@ ausgebucht, wird die Buchung im Wizard hart geblockt + ein Admin-Alarm
      greift das Hard-Gate beim naechsten Kunden-Versuch und der Admin
      bekommt einen Push.
 
+### Angebots-Bündel — zeitlich begrenzte Festpreis-Pakete (Stand 2026-05-22)
+Kuratierte Angebote: EINE Kamera (mehrere Kamera-Optionen mit je eigenem Preis
+möglich) + fest enthaltenes Zubehör zum **Komplettpreis** (all-in), nur in einem
+Datumsfenster buchbar. Eigenständiges Konzept neben Sets/Aktionen — keine
+Vermischung.
+
+- **Migration `supabase/supabase-angebote.sql`** (idempotent): Tabelle `angebote`
+  (`pricing_mode 'flat'|'perDay'`, `fixed_days`, `camera_options JSONB`
+  `[{product_id,price}]`, `accessory_items JSONB`, `valid_from`/`valid_until`
+  TIMESTAMPTZ = Verkaufs- UND Mietfenster, `badge`, `image_url`, `active`,
+  `sort_order`) + Spalte `bookings.offer_id`. RLS enabled (Service-Role-Zugriff).
+- **`data/angebote.ts`**: Typ `Angebot` + Helper `isAngebotActive`,
+  `getAngebotCameraPrice`, `calcAngebotPrice`, `mapAngebotRow`.
+- **APIs**: `GET /api/angebote` (öffentlich, nur aktive im Fenster),
+  `GET /api/angebote/[id]` (öffentlich, Einzelangebot für Buchungsflow),
+  `GET/POST/PATCH/DELETE /api/admin/angebote` (Permission `preise`),
+  `POST/DELETE /api/admin/angebote-images` (Bild-Upload, geklont aus
+  `/api/set-images`, Bucket `product-images`, Pfad `angebote/<id>/…`). Alle
+  defensiv bei fehlender Migration (leere Liste / 503).
+- **Admin-UI** `/admin/angebote` (Sidebar-Gruppe „Preise & Aktionen"): Liste +
+  Formular — Kamera-Mehrfachauswahl mit `PriceInput` pro Kamera, einfacher
+  Zubehör-Picker (Dropdown + Mengen), Datumsfelder, `pricing_mode`+`fixed_days`,
+  Badge, Bild-Upload (nach dem Speichern), Aktiv-Toggle.
+- **Kundenseite** `/angebote` (Navbar-Link): Karten-Liste aktiver Angebote, pro
+  Kamera-Option ein „Jetzt buchen"-Button → `/kameras/[slug]/buchen?offer=<id>`.
+- **Buchungsflow** (`app/kameras/[slug]/buchen/page.tsx`): „Angebots-Modus" wenn
+  `?offer=` gesetzt und das Angebot diese Kamera enthält + gültig ist.
+  `calcBreakdown` bekam einen `offerOverride`-Parameter (Mietpreis =
+  Angebotspreis, `accessoryPrice=0`, Produkt-Rabatte aus). Step 1: Kalender
+  bekam additiven `allowedRange`-Prop (Auswahlfenster); `flat`-Angebote
+  validieren am Gate die exakte Tagezahl. Step 2: Zubehör read-only („Im Angebot
+  enthalten"), Set-/Zubehör-Picker + Basis-Set-Gate übersprungen,
+  Verfügbarkeits-Block bei nicht verfügbarem Angebots-Zubehör. Step 5:
+  Angebots-Buchungen nutzen den **Direkt-Zahlungspfad** (`handleProceedToPayment`
+  → Step 6 PaymentStep → `/buchung-bestaetigt` → `confirm-booking`) statt des
+  Warenkorbs — der Cart-Checkout bleibt unverändert (Angebote sind nicht im Cart).
+- **Zahlungspfad**: `create-payment-intent` prüft die Preis-Plausibilität bei
+  `metadata.offer_id` gegen den Angebotspreis (statt der Preistabelle).
+  `confirm-booking` lädt bei `meta.offer_id` das Angebot serverseitig neu, setzt
+  `accessory_items` autoritativ aus dem Angebot, prüft den Angebotspreis
+  (Admin-Notification bei Abweichung) und speichert `bookings.offer_id`
+  (defensiver Insert-Retry ohne die Spalte, falls Migration aussteht).
+- **Bewusst nicht im MVP**: Cart-Checkout `/checkout`, manuelle Admin-Buchung,
+  Kombination mit Coupons/Aktionen.
+- **Go-Live TODO**: Migration `supabase/supabase-angebote.sql` ausführen — ohne
+  sie bleibt das Feature inaktiv (APIs liefern leere Listen, normaler
+  Buchungsflow unberührt).
+
 ## Offene Punkte
 
 ### Reel-Workflow-Refactor (in Arbeit, Stand 2026-04-27)
@@ -2883,6 +2931,11 @@ Zwei Einsatzorte:
   einen „Zum Beleg →"-Link.
 
 ### Noch offen
+- **Angebots-Bündel-Migration auszuführen:** `supabase/supabase-angebote.sql`
+  (idempotent). Legt Tabelle `angebote` + Spalte `bookings.offer_id` an. Ohne
+  Migration ist das Angebote-Feature inaktiv (öffentliche/Admin-APIs liefern
+  leere Listen, `/admin/angebote` zeigt einen Migrations-Hinweis, Anlegen liefert
+  503); der normale Buchungsflow ist unberührt. Empfohlen ASAP ausführen.
 - **Inbound-E-Mail Go-Live (IMAP-Polling):**
   1. Migration `supabase/supabase-inbound-email.sql` ausführen. Ohne Migration
      bricht der Cron `/api/cron/inbound-email-poll` pro Mail mit

@@ -93,7 +93,34 @@ export async function POST(req: NextRequest) {
     // Angreifer durch DOM-Manipulation 1 EUR statt 500 EUR fuer eine Buchung
     // zahlen — der Stripe-Webhook schreibt dann die Buchung mit
     // intent.amount/100 als Total.
-    if (!tester && metadata.product_id && metadata.days) {
+    // Angebots-Modus: Plausibilitaet gegen den Angebotspreis (all-in) statt
+    // der normalen Preistabelle — der Angebotspreis weicht bewusst ab.
+    let offerFloorCents: number | null = null;
+    if (!tester && metadata.offer_id && metadata.product_id) {
+      try {
+        const { data: offerRow } = await supabase
+          .from('angebote').select('*').eq('id', metadata.offer_id).maybeSingle();
+        const cams = offerRow && Array.isArray(offerRow.camera_options)
+          ? (offerRow.camera_options as { product_id: string; price: number }[])
+          : [];
+        const opt = cams.find((o) => o.product_id === metadata.product_id);
+        if (offerRow && opt) {
+          const days = Math.max(1, Number(metadata.days) || 1);
+          const offerRental = offerRow.pricing_mode === 'perDay' ? opt.price * days : opt.price;
+          offerFloorCents = Math.floor(Math.round(offerRental * 100) * 0.5);
+        }
+      } catch (offerErr) {
+        console.error('[create-payment-intent] Angebots-Plausibilität fehlgeschlagen:', offerErr);
+      }
+    }
+    if (offerFloorCents !== null) {
+      if (amountCents < offerFloorCents) {
+        console.error('[create-payment-intent] Angebots-Preis-Plausibilität verletzt:', {
+          userId: user.id, offerId: metadata.offer_id, amountCents, offerFloorCents,
+        });
+        return NextResponse.json({ error: 'Ungueltige Preisangabe.' }, { status: 400 });
+      }
+    } else if (!tester && metadata.product_id && metadata.days) {
       try {
         const days = Number(metadata.days);
         if (Number.isFinite(days) && days > 0) {
