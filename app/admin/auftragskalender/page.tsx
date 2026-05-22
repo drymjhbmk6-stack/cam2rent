@@ -60,11 +60,12 @@ const STATUS_STYLE: Record<string, { bg: string; label: string }> = {
 
 const WEEKDAYS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
 
-// Farben für die Aktions-Balken — gruppiert nach Lieferart, schraffiert dargestellt.
-// Versand (Hin- + Rückversand) = amber, Abholung (Übergabe + Rückgabe) = indigo.
+// Farben für die Aktions-Balken — gruppiert nach Lieferart, schraffiert + leicht
+// transparent dargestellt. Versand (Hin- + Rückversand) = amber, Abholung
+// (Übergabe + Rückgabe) = indigo.
 const ACTION_COLORS = {
-  versand: { a: '#f59e0b', b: '#d97f08' },
-  abholung: { a: '#6366f1', b: '#4338ca' },
+  versand: { a: 'rgba(245,158,11,0.78)', b: 'rgba(217,127,8,0.78)' },
+  abholung: { a: 'rgba(99,102,241,0.78)', b: 'rgba(67,56,202,0.78)' },
 };
 function stripedBg(c: { a: string; b: string }): string {
   return `repeating-linear-gradient(45deg, ${c.a} 0, ${c.a} 7px, ${c.b} 7px, ${c.b} 14px)`;
