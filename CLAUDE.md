@@ -2755,7 +2755,7 @@ Vorbild: `/admin/social/zeitplan` (Posts) + `/admin/social/plan` (Bulk-Generator
 **Vor jedem Push:** `npx tsc --noEmit` + `npx next lint` (siehe Regel oben). `npx next build` läuft in der Sandbox NICHT (kein Google-Fonts-Zugang).
 
 ### Check-Tool
-- **`supabase-migrationen-status-check.sql`** — Read-only SQL-Script im Repo-Root. Listet je Migration "ERLEDIGT" oder "OFFEN". Nach jedem Deploy neuer Migrationen einfach nochmal laufen lassen und erledigte manuell nach `erledigte supabase/` verschieben.
+- **`supabase-migrationen-status-check.sql`** — Read-only SQL-Script im Repo-Root. Listet je Migration `ERLEDIGT` / `OFFEN` / `MANUELL` / `NICHT AUSFUEHREN` (Backfill-/Cleanup-/Reset-Scripts werden klar markiert). Nach jedem Deploy neuer Migrationen einfach nochmal laufen lassen und erledigte manuell nach `erledigte supabase/` verschieben.
 
 ### Ausgeführte Migrationen (erledigt)
 - ~~`supabase-invoice-versions.sql`~~ (Rechnungs-Versionierung / `invoice_versions` — am 2026-05-19 ausgeführt, Datei nach `erledigte supabase/` verschoben)
