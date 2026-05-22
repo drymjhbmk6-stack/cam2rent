@@ -6,7 +6,7 @@ import PriceInput from '@/components/admin/PriceInput';
 import { isAngebotActive, type Angebot, type AngebotCameraOption } from '@/data/angebote';
 
 interface ProductOption { id: string; name: string }
-interface AccessoryOption { id: string; name: string; group?: string; compatible_product_ids: string[] }
+interface AccessoryOption { id: string; name: string; group?: string; compatible_product_ids: string[]; internal: boolean }
 
 interface Draft {
   id: string; // '' = neues Angebot
@@ -110,11 +110,12 @@ export default function AdminAngebotePage() {
     fetch('/api/admin/accessories').then((r) => r.json())
       .then((d) => {
         const rows = Array.isArray(d?.accessories) ? d.accessories : Array.isArray(d) ? d : [];
-        setAccessories(rows.map((a: { id: string; name: string; category?: string; compatible_product_ids?: string[] }) => ({
+        setAccessories(rows.map((a: { id: string; name: string; category?: string; compatible_product_ids?: string[]; internal?: boolean }) => ({
           id: a.id,
           name: a.name,
           group: (a.category ?? '').toLowerCase() || undefined,
           compatible_product_ids: Array.isArray(a.compatible_product_ids) ? a.compatible_product_ids : [],
+          internal: a.internal === true,
         })));
       })
       .catch(() => {});
@@ -386,7 +387,11 @@ export default function AdminAngebotePage() {
                             <option value="">+ Zubehör hinzufügen…</option>
                             {accessoryGroupsFor(p.id).map(([g, list]) => (
                               <optgroup key={g} label={g}>
-                                {list.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                                {list.map((a) => (
+                                  <option key={a.id} value={a.id}>
+                                    {a.name}{a.internal ? '  (intern)' : ''}
+                                  </option>
+                                ))}
                               </optgroup>
                             ))}
                           </select>
@@ -394,9 +399,14 @@ export default function AdminAngebotePage() {
                             <p style={{ fontSize: 11, color: '#64748b' }}>Kein Zubehör — reines Kamera-Angebot.</p>
                           ) : (
                             <div style={{ display: 'grid', gap: 4 }}>
-                              {opt.accessory_items.map((it) => (
+                              {opt.accessory_items.map((it) => {
+                                const acc = accessories.find((x) => x.id === it.accessory_id);
+                                return (
                                 <div key={it.accessory_id} style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#111827', border: '1px solid #1e293b', borderRadius: 6, padding: '6px 10px' }}>
-                                  <span style={{ flex: 1, color: '#cbd5e1', fontSize: 13 }}>{accessoryName(it.accessory_id)}</span>
+                                  <span style={{ flex: 1, color: '#cbd5e1', fontSize: 13 }}>
+                                    {accessoryName(it.accessory_id)}
+                                    {acc?.internal && <span style={{ marginLeft: 6, fontSize: 10, color: '#fbbf24' }}>(intern)</span>}
+                                  </span>
                                   <input type="number" min={1} value={it.qty}
                                     onChange={(e) => setCameraAccessoryQty(p.id, it.accessory_id, parseInt(e.target.value, 10) || 1)}
                                     style={{ ...S.input, width: 56, padding: '4px 6px', fontSize: 13 }} />
@@ -405,7 +415,8 @@ export default function AdminAngebotePage() {
                                     Entfernen
                                   </button>
                                 </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           )}
                         </div>
