@@ -59,6 +59,10 @@ const STATUS_STYLE: Record<string, { bg: string; label: string }> = {
 };
 
 const WEEKDAYS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+
+// Farben für die Aktions-Balken (raus / zurück)
+const SHIP_BAR_COLOR = '#f59e0b';
+const RETURN_BAR_COLOR = '#10b981';
 const MONTHS = [
   'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
   'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember',
@@ -381,12 +385,26 @@ export default function AuftragskalenderPage() {
           <span className="flex items-center gap-1.5">
             <span
               className="inline-block w-3 h-3 rounded"
+              style={{ background: SHIP_BAR_COLOR }}
+            />
+            📤 Versand/Übergabe
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span
+              className="inline-block w-3 h-3 rounded"
+              style={{ background: RETURN_BAR_COLOR }}
+            />
+            📥 Rückversand/Rückgabe
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span
+              className="inline-block w-3 h-3 rounded"
               style={{ background: C.cellSpecial, border: '1px solid rgba(248,113,113,0.5)' }}
             />
             Sonn-/Feiertag
           </span>
           <span className="flex items-center gap-1.5">
-            📦 Versand · 🤝 Abholung · 📤 raus · 📥 zurück · 📝 Notiz
+            📦 Versand · 🤝 Abholung · 📝 Notiz
           </span>
         </div>
       </div>
@@ -410,6 +428,18 @@ export default function AuftragskalenderPage() {
 
 const HEADER_H = 44;
 const LANE_H = 24;
+
+// Ein platzierbares Element in der Monatsansicht: entweder der Mietzeitraum
+// selbst oder ein 1-Tages-Aktionsbalken (Versand/Übergabe bzw. Rückgabe).
+interface WeekEvent {
+  key: string;
+  booking: Booking;
+  kind: 'rental' | 'ship' | 'return';
+  start: string; // auf die Woche geklemmt
+  end: string;
+  rawStart: string;
+  rawEnd: string;
+}
 
 function MonthView({
   gridStart,
@@ -459,44 +489,50 @@ function MonthView({
         const weekStart = addD(gridStart, w * 7);
         const weekEnd = addD(weekStart, 6);
 
-        const inWeek = bookings
-          .filter((b) => b.rental_from <= weekEnd && b.rental_to >= weekStart)
-          .sort(
-            (a, b) =>
-              a.rental_from.localeCompare(b.rental_from) ||
-              b.rental_to.localeCompare(a.rental_to)
-          );
+        const weekEvents: WeekEvent[] = [];
+        for (const b of bookings) {
+          const segs: { kind: WeekEvent['kind']; start: string; end: string }[] = [
+            { kind: 'rental', start: b.rental_from, end: b.rental_to },
+            { kind: 'ship', start: b.ship_date, end: b.ship_date },
+            { kind: 'return', start: b.return_date, end: b.return_date },
+          ];
+          for (const s of segs) {
+            if (!s.start || !s.end) continue;
+            if (s.start > weekEnd || s.end < weekStart) continue;
+            weekEvents.push({
+              key: `${b.id}-${s.kind}`,
+              booking: b,
+              kind: s.kind,
+              start: s.start < weekStart ? weekStart : s.start,
+              end: s.end > weekEnd ? weekEnd : s.end,
+              rawStart: s.start,
+              rawEnd: s.end,
+            });
+          }
+        }
+        weekEvents.sort(
+          (a, b) =>
+            a.start.localeCompare(b.start) ||
+            b.end.localeCompare(a.end) ||
+            a.kind.localeCompare(b.kind)
+        );
 
-        const lanes: Booking[][] = [];
+        const lanes: WeekEvent[][] = [];
         const placed = new Map<string, number>();
-        for (const b of inWeek) {
-          const start = b.rental_from < weekStart ? weekStart : b.rental_from;
+        for (const ev of weekEvents) {
           let lane = 0;
           while (true) {
             const laneArr = lanes[lane] ?? [];
-            const conflict = laneArr.some((o) => {
-              const oEnd = o.rental_to > weekEnd ? weekEnd : o.rental_to;
-              return oEnd >= start;
-            });
+            const conflict = laneArr.some((o) => o.start <= ev.end && o.end >= ev.start);
             if (!conflict) {
-              lanes[lane] = [...laneArr, b];
-              placed.set(b.id, lane);
+              lanes[lane] = [...laneArr, ev];
+              placed.set(ev.key, lane);
               break;
             }
             lane++;
           }
         }
         const rowHeight = HEADER_H + Math.max(1, lanes.length) * LANE_H + 8;
-
-        const dayActions = (day: string) => {
-          let ship = 0;
-          let ret = 0;
-          for (const b of bookings) {
-            if (b.ship_date === day) ship++;
-            if (b.return_date === day) ret++;
-          }
-          return { ship, ret };
-        };
 
         const weekHasToday = today >= weekStart && today <= weekEnd;
 
@@ -520,7 +556,6 @@ function MonthView({
                 const isSunday = dObj.getDay() === 0;
                 const holiday = holidayMap.get(day) ?? null;
                 const isSpecial = isSunday || !!holiday;
-                const { ship, ret } = dayActions(day);
                 const nCount = noteCount(day);
 
                 const bg = isToday
@@ -554,10 +589,7 @@ function MonthView({
                     <span
                       className="absolute top-1 left-1.5 flex items-center gap-1.5"
                       style={{
-                        maxWidth:
-                          nCount > 0 || ship > 0 || ret > 0
-                            ? 'calc(100% - 70px)'
-                            : 'calc(100% - 12px)',
+                        maxWidth: nCount > 0 ? 'calc(100% - 40px)' : 'calc(100% - 12px)',
                       }}
                     >
                       <span
@@ -577,7 +609,7 @@ function MonthView({
                       )}
                     </span>
 
-                    {/* Aktions-Badges — oben rechts */}
+                    {/* Notiz-Badge — oben rechts */}
                     <span className="absolute top-1 right-1.5 flex gap-1 items-center">
                       {nCount > 0 && (
                         <span
@@ -586,24 +618,6 @@ function MonthView({
                           title={`${nCount} Notiz(en)`}
                         >
                           📝{nCount}
-                        </span>
-                      )}
-                      {ship > 0 && (
-                        <span
-                          className="text-[10px] px-1 rounded"
-                          style={{ background: 'rgba(245,158,11,0.22)', color: '#fbbf24' }}
-                          title={`${ship}× Versand/Übergabe`}
-                        >
-                          📤{ship}
-                        </span>
-                      )}
-                      {ret > 0 && (
-                        <span
-                          className="text-[10px] px-1 rounded"
-                          style={{ background: 'rgba(16,185,129,0.22)', color: '#34d399' }}
-                          title={`${ret}× Rückgabe erwartet`}
-                        >
-                          📥{ret}
                         </span>
                       )}
                       <span className="text-[11px] text-slate-500 opacity-0 group-hover:opacity-100 transition">
@@ -616,44 +630,68 @@ function MonthView({
               })}
             </div>
 
-            {/* Buchungsbalken */}
-            {inWeek.map((b) => {
-              const lane = placed.get(b.id) ?? 0;
-              const startDay = b.rental_from < weekStart ? weekStart : b.rental_from;
-              const endDay = b.rental_to > weekEnd ? weekEnd : b.rental_to;
+            {/* Balken: Mietzeitraum + Versand/Übergabe + Rückversand/Rückgabe */}
+            {weekEvents.map((ev) => {
+              const b = ev.booking;
+              const lane = placed.get(ev.key) ?? 0;
               const startCol = Math.round(
-                (dObjOf(startDay).getTime() - dObjOf(weekStart).getTime()) / 86400000
+                (dObjOf(ev.start).getTime() - dObjOf(weekStart).getTime()) / 86400000
               );
               const endCol = Math.round(
-                (dObjOf(endDay).getTime() - dObjOf(weekStart).getTime()) / 86400000
+                (dObjOf(ev.end).getTime() - dObjOf(weekStart).getTime()) / 86400000
               );
               const span = Math.max(1, endCol - startCol + 1);
-              const st = statusStyle(b.status);
-              const roundLeft = b.rental_from >= weekStart;
-              const roundRight = b.rental_to <= weekEnd;
+              const roundLeft = ev.rawStart >= weekStart;
+              const roundRight = ev.rawEnd <= weekEnd;
+              const cust = b.customer_name ?? 'Gast';
+              const prod = b.product_name ?? 'Buchung';
+              const isAbholung = b.delivery_mode === 'abholung';
+
+              let bg: string;
+              let label: string;
+              let tip: string;
+              if (ev.kind === 'rental') {
+                const st = statusStyle(b.status);
+                bg = st.bg;
+                label = `${isAbholung ? '🤝 ' : '📦 '}${b.is_test ? '[TEST] ' : ''}${prod} · ${cust}`;
+                tip = `${prod} · ${cust}\nMiete ${fmtPeriod(b)} · ${st.label}\n${
+                  isAbholung ? 'Abholung' : 'Versand'
+                }`;
+              } else if (ev.kind === 'ship') {
+                const word = isAbholung ? 'Übergabe' : 'Versand';
+                bg = SHIP_BAR_COLOR;
+                label = `📤 ${word} · ${cust}`;
+                tip = `📤 ${word} am ${fmtDayShort(b.ship_date)}\n${prod} · ${cust}`;
+              } else {
+                const word = isAbholung ? 'Rückgabe' : 'Rückversand';
+                bg = RETURN_BAR_COLOR;
+                label = `📥 ${word} · ${cust}`;
+                tip = `📥 ${word} am ${fmtDayShort(b.return_date)}\n${prod} · ${cust}`;
+              }
+
               return (
                 <button
-                  key={b.id}
+                  key={ev.key}
                   onClick={() => onOpen(b.id)}
-                  title={`${b.product_name ?? 'Buchung'} · ${b.customer_name ?? 'Gast'}\nMiete ${fmtPeriod(b)} · ${st.label}\n${
-                    b.delivery_mode === 'abholung' ? 'Abholung' : 'Versand'
-                  }`}
+                  title={tip}
                   className="absolute text-left px-1.5 text-[11px] leading-[18px] font-medium text-white truncate hover:brightness-110 shadow-sm transition"
                   style={{
                     left: `calc(${(startCol / 7) * 100}% + 3px)`,
                     width: `calc(${(span / 7) * 100}% - 6px)`,
                     top: HEADER_H + lane * LANE_H,
                     height: LANE_H - 5,
-                    background: st.bg,
+                    background: bg,
                     borderRadius: `${roundLeft ? 6 : 0}px ${roundRight ? 6 : 0}px ${
                       roundRight ? 6 : 0
                     }px ${roundLeft ? 6 : 0}px`,
-                    border: b.is_test ? '1px dashed #f9a8d4' : 'none',
+                    border: b.is_test
+                      ? '1px dashed #f9a8d4'
+                      : ev.kind !== 'rental'
+                      ? '1px solid rgba(255,255,255,0.2)'
+                      : 'none',
                   }}
                 >
-                  {b.delivery_mode === 'abholung' ? '🤝 ' : '📦 '}
-                  {b.is_test ? '[TEST] ' : ''}
-                  {b.product_name ?? 'Buchung'} · {b.customer_name ?? 'Gast'}
+                  {label}
                 </button>
               );
             })}
