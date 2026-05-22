@@ -493,7 +493,7 @@ AKTUELLE THEMEN (bei Bedarf mal einbauen):
               className="w-full mb-3 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm"
             />
             <p className="text-xs text-slate-500 mb-3">
-              Der Post wird N Minuten nach dem Trigger auf „geplant" gesetzt. Der Cron veröffentlicht ihn dann.
+              Der Post wird N Minuten nach dem Trigger auf „geplant“ gesetzt. Der Cron veröffentlicht ihn dann.
             </p>
           </>
         )}

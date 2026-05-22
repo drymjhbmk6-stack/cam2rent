@@ -178,6 +178,7 @@ const PATH_PERMISSIONS: PermRule[] = [
   { prefix: '/admin/social', perm: 'content' },
   { prefix: '/admin/buchhaltung', perm: 'finanzen' },
   { prefix: '/admin/analytics', perm: 'berichte' },
+  { prefix: '/admin/buchungsinteresse', perm: 'berichte' },
   { prefix: '/admin/emails', perm: 'berichte' },
   { prefix: '/admin/beta-feedback', perm: 'berichte' },
   { prefix: '/admin/aktivitaetsprotokoll', perm: 'berichte' },
@@ -272,6 +273,7 @@ const API_PATH_PERMISSIONS: PermRule[] = [
   { prefix: '/api/admin/afa-buchungen', perm: 'finanzen' },
   // Berichte
   { prefix: '/api/admin/analytics', perm: 'berichte' },
+  { prefix: '/api/admin/booking-interest', perm: 'berichte' },
   { prefix: '/api/admin/email-log', perm: 'berichte' },
   { prefix: '/api/admin/email-templates', perm: 'berichte' },
   { prefix: '/api/admin/audit-log', perm: 'berichte' },

@@ -304,7 +304,7 @@ export default function ReelsEinstellungenContent() {
               Reels, Social-Posts und Blog auch im Test-Modus echt veröffentlichen
             </span>
             <span className="block text-xs text-brand-steel dark:text-gray-400 mt-1">
-              Greift in allen drei Kanälen — manuelle „Jetzt veröffentlichen"-Buttons und alle Crons
+              Greift in allen drei Kanälen — manuelle „Jetzt veröffentlichen“-Buttons und alle Crons
               (<code className="text-[10px]">reels-publish</code>, <code className="text-[10px]">social-publish</code>,{' '}
               <code className="text-[10px]">social-generate</code>, <code className="text-[10px]">blog-publish</code>,{' '}
               <code className="text-[10px]">blog-generate</code>).

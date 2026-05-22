@@ -2557,6 +2557,36 @@ ausgebucht, wird die Buchung im Wizard hart geblockt + ein Admin-Alarm
      greift das Hard-Gate beim naechsten Kunden-Versuch und der Admin
      bekommt einen Push.
 
+### Buchungsinteresse — anonyme Nachfrage-Telemetrie (Stand 2026-05-22)
+Anonyme Erfassung, welche Kamera + welches Zubehör + welcher Mietzeitraum im
+Buchungs-Wizard konfiguriert wurde — auch wenn der Kunde NICHT bucht. Zeigt im
+Admin, wonach Kunden suchen (Nachfrage-Analyse, unabhängig vom Abschluss).
+- **Migration `supabase/supabase-booking-interest.sql`** (idempotent): Tabelle
+  `booking_interest` (`product_id/name`, `set_id/name`, `accessories JSONB`
+  `[{id,name,qty}]`, `rental_from/to`, `rental_days`, `delivery_mode`,
+  `haftung`, `is_test`, `created_at`). **Bewusst KEINE Kundendaten** — keine
+  user_id, keine E-Mail, keine IP (DSGVO: reine anonyme Statistik). RLS
+  service-role-only.
+- **Erfassung:** Der Buchungs-Wizard (`app/kameras/[slug]/buchen/page.tsx`)
+  feuert beim Erreichen der **Zusammenfassung (Step 4)** eine Fire-and-Forget-
+  POST an `/api/booking-interest`. `interestReportedRef` dedupliziert pro
+  Session+Konfiguration (Kamera/Zeitraum/Lieferart/Haftung/Set/Zubehör) — eine
+  geänderte Auswahl ist ein neuer Datenpunkt, identische nicht.
+- **`POST /api/booking-interest`** (öffentlich, Rate-Limit 60/h pro IP — IP nur
+  fürs Limit, NICHT gespeichert): sanitisiert, berechnet `rental_days`,
+  schreibt eine Zeile. Defensiver Fallback bei fehlender Migration (Insert
+  übersprungen, kein 500 — Buchungs-Flow nie beeinträchtigt).
+- **`GET /api/admin/booking-interest?days=30`** (Permission `berichte`):
+  aggregiert im Zeitraum (Default 30 Tage, max 365) — Top-Kameras, Top-Zubehör
+  (gewichtet nach qty), Top-Sets, Mietdauer-Buckets (1 / 2–3 / 4–7 / 8–14 /
+  15–30 / 30+ Tage), Lieferart-Split, Haftungs-Split. `is_test`-gefiltert.
+- **Admin-Seite `/admin/buchungsinteresse`** (Sidebar-Gruppe „Berichte"):
+  Zeitraum-Pills (7/30/90 Tage), Konfigurations-Zähler, Ranking-Balken pro
+  Kategorie. Defensiver Migrations-Hinweis wenn Tabelle fehlt.
+- **Go-Live TODO:** Migration `supabase/supabase-booking-interest.sql`
+  ausführen. Ohne sie läuft der Buchungs-Flow normal weiter, die Telemetrie
+  wird nur verworfen und die Admin-Seite zeigt einen Hinweis.
+
 ### Angebots-Bündel — zeitlich begrenzte Festpreis-Pakete (Stand 2026-05-22)
 Kuratierte Angebote: EINE Kamera (mehrere Kamera-Optionen mit je eigenem Preis
 möglich) + fest enthaltenes Zubehör zum **Komplettpreis** (all-in), nur in einem
@@ -2931,6 +2961,10 @@ Zwei Einsatzorte:
   einen „Zum Beleg →"-Link.
 
 ### Noch offen
+- **Buchungsinteresse-Migration auszuführen:** `supabase/supabase-booking-interest.sql`
+  (idempotent). Legt Tabelle `booking_interest` an. Ohne Migration läuft der
+  Buchungs-Flow normal weiter (Telemetrie wird verworfen), `/admin/buchungsinteresse`
+  zeigt einen Migrations-Hinweis. Empfohlen ASAP ausführen.
 - **Angebots-Bündel-Migration auszuführen:** `supabase/supabase-angebote.sql`
   (idempotent). Legt Tabelle `angebote` + Spalte `bookings.offer_id` an. Ohne
   Migration ist das Angebote-Feature inaktiv (öffentliche/Admin-APIs liefern

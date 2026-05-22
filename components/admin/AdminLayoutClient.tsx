@@ -217,6 +217,7 @@ const FINANZEN_ITEMS: NavItem[] = [
 
 const BERICHTE_ITEMS: NavItem[] = [
   { href: '/admin/analytics', label: 'Statistiken', icon: iconChart, perm: 'berichte' },
+  { href: '/admin/buchungsinteresse', label: 'Buchungsinteresse', icon: iconChart, perm: 'berichte' },
   { href: '/admin/emails/vorlagen', label: 'E-Mail-Vorlagen', icon: iconMail, perm: 'berichte' },
   { href: '/admin/emails', label: 'E-Mail-Protokoll', exact: true, icon: iconMail, perm: 'berichte' },
   { href: '/admin/beta-feedback', label: 'Beta-Feedback', icon: iconFeedback, perm: 'berichte' },
@@ -554,7 +555,7 @@ function SidebarContent({ pathname, isDashboard, onNavClick, handleLogout, me }:
     content: ['/admin/blog', '/admin/social', '/admin/content'],
     webseite: ['/admin/startseite', '/admin/legal'],
     finanzen: ['/admin/buchhaltung'],
-    berichte: ['/admin/analytics', '/admin/emails', '/admin/beta-feedback', '/admin/aktivitaetsprotokoll', '/admin/client-errors'],
+    berichte: ['/admin/analytics', '/admin/buchungsinteresse', '/admin/emails', '/admin/beta-feedback', '/admin/aktivitaetsprotokoll', '/admin/client-errors'],
   };
 
   function groupForPath(p: string): string | null {

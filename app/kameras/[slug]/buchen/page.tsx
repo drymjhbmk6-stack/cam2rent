@@ -750,6 +750,45 @@ export default function BuchenPage() {
     }
   }, [product?.id, product?.name, range, availableSets, accAvailability, offer]);
 
+  // ── Buchungsinteresse-Telemetrie ───────────────────────────────────────────
+  // Sobald der Kunde die Zusammenfassung (Step 4) erreicht, anonym erfassen,
+  // welche Kamera + welches Zubehoer + welcher Mietzeitraum konfiguriert wurde.
+  // KEINE Kundendaten — reine Nachfrage-Analyse. Pro Konfiguration nur einmal
+  // feuern (Ref-Dedupe), damit Hin- und Her-Navigieren nicht mehrfach loggt.
+  const interestReportedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (step !== 4 || !product?.id || !range?.from) return;
+    const rentalFrom = format(range.from, 'yyyy-MM-dd');
+    const rentalTo = format(range.to ?? range.from, 'yyyy-MM-dd');
+    const accItems = accessories.map((id) => {
+      const acc = dbAccessories.find((a) => a.id === id);
+      return { id, name: acc?.name ?? id, qty: accessoryQty[id] ?? 1 };
+    });
+    const key = [
+      product.id, rentalFrom, rentalTo, deliveryMode, haftung,
+      selectedSet?.id ?? '',
+      accItems.map((a) => `${a.id}:${a.qty}`).sort().join(','),
+    ].join('|');
+    if (interestReportedRef.current.has(key)) return;
+    interestReportedRef.current.add(key);
+    // Fire-and-forget — Telemetrie darf den Buchungs-Flow nie blockieren.
+    fetch('/api/booking-interest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        product_id: product.id,
+        product_name: product.name,
+        set_id: selectedSet?.id,
+        set_name: selectedSet?.name,
+        accessories: accItems,
+        rental_from: rentalFrom,
+        rental_to: rentalTo,
+        delivery_mode: deliveryMode,
+        haftung,
+      }),
+    }).catch(() => {});
+  }, [step, product?.id, product?.name, range, accessories, accessoryQty, dbAccessories, selectedSet, deliveryMode, haftung]);
+
   const toggleAccessory = useCallback((id: string) => {
     setAccessories((prev) =>
       prev.includes(id) ? prev.filter((a) => a !== id) : [...prev, id]
