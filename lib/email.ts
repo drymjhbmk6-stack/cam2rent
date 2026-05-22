@@ -1461,7 +1461,7 @@ export async function sendInboundReply(data: {
           <div style="font-size:14px;color:#374151;line-height:1.6;">${safeBody}</div>
           <p style="margin:24px 0 0;font-size:13px;color:#6b7280;">
             Du kannst direkt auf diese E-Mail antworten.<br>
-            Viele Gruesse<br>dein cam2rent Team
+            Viele Grüße<br>dein cam2rent Team
           </p>
         </td></tr>
         <tr><td style="background:#f5f5f0;border-radius:0 0 12px 12px;padding:20px 32px;text-align:center;">
