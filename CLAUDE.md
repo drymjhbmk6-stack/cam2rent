@@ -2712,6 +2712,18 @@ Cloudflare laeuft als Proxy + Edge-Schicht vor cam2rent.de. Die „Wichtig vor C
   - Server `cam2rent` zugewiesen
   - **Coolify-Zugang bei IP-Wechsel:** DSL-Provider (Telekom/Vodafone) rotieren die IPv4 typischerweise taeglich. Wenn `http://178.104.117.135:8000/...` ploetzlich Timeout liefert, eigene IP unter https://wieistmeineip.de pruefen und die TCP/8000-Regel in Hetzner aktualisieren. IPv6 mit `/64` deckt das ganze Heim-Prefix ab (Privacy-Extensions wechseln nur die letzten 64 Bits) — IPv4 muss als `/32` exakt gesetzt werden, oder als `/24`-Block des Providers, wenn der Wechsel zu oft nervt. Alternative: SSH-Tunnel `ssh -L 8000:localhost:8000 root@178.104.117.135` braucht keinen offenen Port (SSH ist Any-IP).
 - **Wartung:** Cloudflare-IP-Ranges quartalsweise gegen https://www.cloudflare.com/ips/ pruefen — Hetzner Cloud Firewall hat keine Auto-Update. Bei Erweiterung neue Ranges manuell ergaenzen, sonst kommt der Origin nicht mehr durch.
+- **⚠️ Crons muessen Cloudflare umgehen (Stand 2026-05-22):** Bot Fight Mode /
+  Security Level fangen `curl`-Requests von der Server-IP mit einer
+  „Just a moment…"-Managed-Challenge ab — der Cron-Request erreicht die App
+  dann nie (Antwort ist HTML statt JSON). Loesung: die Cron-`curl`s sprechen
+  den Origin direkt an, statt ueber Cloudflare zu laufen. **Jede** Cron-Zeile
+  in der Hetzner-Crontab braucht `--resolve cam2rent.de:443:127.0.0.1`:
+  ```
+  */3 * * * * curl -s -X POST --resolve cam2rent.de:443:127.0.0.1 -H "x-cron-secret: $CRON_SECRET" $SITE/api/cron/inbound-email-poll
+  ```
+  curl verbindet sich so mit `127.0.0.1:443` (Coolify-Traefik auf dem Host),
+  behaelt aber SNI/Host `cam2rent.de` → TLS-Zertifikat + Routing passen,
+  Cloudflare ist nicht im Pfad. Gilt fuer ALLE Crons, nicht nur Inbound-E-Mail.
 - **Bekannte Free-Tier-Limits:** Verwaltete WAF-Regeln (Managed Ruleset, OWASP) sind Pro-only. Rate-Limit-Period + Duration sind auf 10 Sekunden gecapt (Pro: 10s/1m/5m/15m/1h/24h waehlbar). Falls cam2rent in Zukunft ueber 100k Requests/Monat geht oder eine aktive Angriffswelle erlebt, Pro-Plan in Betracht ziehen.
 - **Spaeter optional:**
   - HSTS-Max-Age auf 12 Monate hochziehen + Preload aktivieren, wenn 6 Monate stabil
@@ -2823,9 +2835,10 @@ Zwei Einsatzorte:
   4. Coolify-Env: `INBOUND_IMAP_USER=kontakt@cam2rent.de` +
      `INBOUND_IMAP_PASSWORD=<Postfach-Passwort>` +
      `INBOUND_IMAP_HOST=w0203d93.kasserver.com` (Port 993 = Default).
-  5. Hetzner-Crontab (alle 3 Min):
+  5. Hetzner-Crontab (alle 3 Min). `--resolve` ist Pflicht — siehe
+     „Cloudflare-Vollintegration" → Crons muessen Cloudflare umgehen:
      ```
-     */3 * * * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/inbound-email-poll
+     */3 * * * * curl -s -X POST --resolve cam2rent.de:443:127.0.0.1 -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/inbound-email-poll
      ```
   Hinweis: Der erste Cron-Lauf „stellt scharf" — er importiert den
   Postfach-Bestand NICHT rückwirkend, sondern erfasst nur ab dann eingehende
