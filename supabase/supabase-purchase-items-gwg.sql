@@ -12,9 +12,18 @@
 -- ueber purchase_items.asset_id + .expense_id verknuepft.
 --
 -- Idempotent.
+-- Defensiv: still uebersprungen, wenn purchase_items fehlt.
 
 DO $$
 BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema='public' AND table_name='purchase_items'
+  ) THEN
+    RAISE NOTICE 'Skip purchase_items-gwg: Tabelle purchase_items existiert nicht.';
+    RETURN;
+  END IF;
+
   -- Constraint-Name kommt von Postgres automatisch (purchase_items_classification_check),
   -- aber zur Sicherheit suchen wir ihn dynamisch.
   IF EXISTS (
