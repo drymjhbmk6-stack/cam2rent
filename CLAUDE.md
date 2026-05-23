@@ -524,14 +524,12 @@ zur Abholung").
 Kunden, daher keine Rückgabe fällig. `scan-lookup` filtert per Negation
 (`NOT IN cancelled,completed,returned`) → automatisch korrekt.
 
-**RPC-Migration `supabase/supabase-bookings-extra-statuses.sql`**
-(idempotent, `CREATE OR REPLACE FUNCTION`): aktualisiert `assign_free_unit`
-+ `assign_free_camera_units` damit beide neuen Status als belegend zählen.
-`assign_free_accessory_units` nutzt einen Negations-Filter (`NOT IN
-cancelled,completed,returned`) und ist automatisch korrekt — keine Migration
-nötig. **⚠️ Ohne diese Migration könnten Kameras, die in
-`preparing_shipment` oder `awaiting_pickup` stehen, fälschlich an
-überlappende Neubuchungen vergeben werden.**
+**RPC-Migration `erledigte supabase/supabase-bookings-extra-statuses.sql`**
+(idempotent, `CREATE OR REPLACE FUNCTION`, ausgeführt am 2026-05-23):
+aktualisiert `assign_free_unit` + `assign_free_camera_units` damit beide
+neuen Status als belegend zählen. `assign_free_accessory_units` nutzt einen
+Negations-Filter (`NOT IN cancelled,completed,returned`) und ist automatisch
+korrekt — keine Migration nötig.
 
 ### Admin-Sidebar Struktur (neu 2026-04-17)
 Komplett neu strukturiert in 9 Gruppen, damit die tägliche Arbeit schneller erreichbar ist und Blog-Unterseiten direkt aus der Sidebar navigierbar sind.
@@ -3061,14 +3059,6 @@ Zwei Einsatzorte:
   (idempotent). Legt Tabelle `booking_interest` an. Ohne Migration läuft der
   Buchungs-Flow normal weiter (Telemetrie wird verworfen), `/admin/buchungsinteresse`
   zeigt einen Migrations-Hinweis. Empfohlen ASAP ausführen.
-- **Zwei neue Buchungs-Status RPC-Patch auszuführen:**
-  `supabase/supabase-bookings-extra-statuses.sql` (idempotent, reine
-  `CREATE OR REPLACE FUNCTION`-Statements für `assign_free_unit` +
-  `assign_free_camera_units`). Ohne Migration werden die neuen Status
-  `preparing_shipment` und `awaiting_pickup` von den race-sicheren
-  RPCs NICHT als belegend gezählt → eine Kamera, die in einem dieser
-  Zwischenstadien steht, könnte einer überlappenden Neubuchung neu
-  vergeben werden. Empfohlen ASAP ausführen.
 - **Angebots-Bündel-Migration auszuführen:** `supabase/supabase-angebote.sql`
   (idempotent). Legt Tabelle `angebote` + Spalte `bookings.offer_id` an. Ohne
   Migration ist das Angebote-Feature inaktiv (öffentliche/Admin-APIs liefern
