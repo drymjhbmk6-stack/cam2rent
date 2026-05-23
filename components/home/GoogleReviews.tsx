@@ -84,11 +84,11 @@ function timeAgo(dateStr: string): string {
   return `vor ${Math.floor(days / 365)} Jahr${Math.floor(days / 365) > 1 ? 'en' : ''}`;
 }
 
-// User-bereitgestellter Bewertungs-Link mit GBP-Tracking-Parametern (funktioniert
-// für Cam2Rent — der placeId hier weicht leicht von der Places-API-ID ab, da
-// Google für writereview eine eigene Place-ID verwendet).
-const WRITE_REVIEW_URL = 'https://search.google.com/local/writereview?placeid=ChIJ4eUe5O9FqEcRllyeTvywEBE&source=g.page.m._&utm_source=gbp&laa=merchant-review-solicitation';
-const REVIEWS_VIEW_URL = 'https://search.google.com/local/reviews?placeid=ChIJ4eUe5O9FqEcRllyeThCwEBE';
+// Fallback-Links — Server liefert idealerweise einen funktionierenden
+// writeReviewUrl mit aktueller Place-ID, GBP-Tracking-Parameter werden
+// weggelassen weil sie bei Nicht-Owner zu Fehler-Seiten fuehren.
+const FALLBACK_WRITE_REVIEW_URL = 'https://search.google.com/local/writereview?placeid=ChIJ4eUe5O9FqEcRllyeTvywEBE';
+const REVIEWS_VIEW_URL = 'https://search.google.com/local/reviews?placeid=ChIJ4eUe5O9FqEcRllyeTvywEBE';
 
 export default function GoogleReviews() {
   const { products } = useProducts();
@@ -98,6 +98,7 @@ export default function GoogleReviews() {
   const [internalReviews, setInternalReviews] = useState<InternalReview[]>([]);
   const [avgRating, setAvgRating] = useState(0);
   const [totalReviews, setTotalReviews] = useState(0);
+  const [writeReviewUrl, setWriteReviewUrl] = useState<string>(FALLBACK_WRITE_REVIEW_URL);
   const [loaded, setLoaded] = useState(false);
   // Anzahl initial gezeigter Reviews; per "Mehr anzeigen" expandierbar.
   const INITIAL_SHOW = 6;
@@ -113,6 +114,10 @@ export default function GoogleReviews() {
           setGoogleReviews(googleData.reviews);
           setAvgRating(googleData.avgRating ?? 0);
           setTotalReviews(googleData.totalReviews ?? 0);
+        }
+        // Server-Override hat Vorrang, sonst Fallback bleibt.
+        if (typeof googleData?.writeReviewUrl === 'string' && /^https?:\/\//i.test(googleData.writeReviewUrl)) {
+          setWriteReviewUrl(googleData.writeReviewUrl);
         }
         if (internalData?.reviews?.length > 0) {
           setInternalReviews(internalData.reviews);
@@ -205,7 +210,7 @@ export default function GoogleReviews() {
             </button>
           )}
           <a
-            href={WRITE_REVIEW_URL}
+            href={writeReviewUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 px-6 py-3 rounded-btn bg-brand-bg dark:bg-gray-800 border border-brand-border dark:border-gray-700 text-sm font-heading font-semibold text-brand-black dark:text-gray-100 hover:border-accent-blue/50 transition-colors"

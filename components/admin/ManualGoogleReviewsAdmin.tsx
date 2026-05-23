@@ -53,19 +53,26 @@ function normalize(parsed: unknown): ManualReview[] {
 
 export default function ManualGoogleReviewsAdmin() {
   const [reviews, setReviews] = useState<ManualReview[]>([]);
+  const [reviewUrl, setReviewUrl] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
 
   useEffect(() => {
-    fetch('/api/admin/settings?key=manual_google_reviews')
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (!d) return;
-        const val = typeof d.value === 'string' ? JSON.parse(d.value) : d.value;
-        setReviews(normalize(val));
+    Promise.all([
+      fetch('/api/admin/settings?key=manual_google_reviews').then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      fetch('/api/admin/settings?key=google_review_url').then((r) => (r.ok ? r.json() : null)).catch(() => null),
+    ])
+      .then(([reviewsData, urlData]) => {
+        if (reviewsData?.value !== undefined) {
+          const val = typeof reviewsData.value === 'string' ? JSON.parse(reviewsData.value) : reviewsData.value;
+          setReviews(normalize(val));
+        }
+        if (urlData?.value !== undefined && urlData.value !== null) {
+          const raw = typeof urlData.value === 'string' ? urlData.value : '';
+          setReviewUrl(raw.replace(/^["']|["']$/g, ''));
+        }
       })
-      .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
@@ -76,18 +83,35 @@ export default function ManualGoogleReviewsAdmin() {
       const sanitized = reviews
         .map((r) => ({ ...r, author: r.author.trim(), text: r.text.trim() }))
         .filter((r) => r.author && r.text); // leere Zeilen verwerfen
-      const res = await fetch('/api/admin/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key: 'manual_google_reviews', value: sanitized }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setMsg({ type: 'err', text: data?.error ?? 'Speichern fehlgeschlagen.' });
+      const trimmedUrl = reviewUrl.trim();
+      const urlValid = trimmedUrl === '' || /^https?:\/\//i.test(trimmedUrl);
+      if (!urlValid) {
+        setMsg({ type: 'err', text: 'Link muss mit http:// oder https:// beginnen.' });
+        setSaving(false);
+        return;
+      }
+
+      // Beide Settings parallel speichern.
+      const [r1, r2] = await Promise.all([
+        fetch('/api/admin/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key: 'manual_google_reviews', value: sanitized }),
+        }),
+        fetch('/api/admin/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key: 'google_review_url', value: trimmedUrl }),
+        }),
+      ]);
+      if (!r1.ok || !r2.ok) {
+        const errData = await (r1.ok ? r2 : r1).json().catch(() => ({}));
+        setMsg({ type: 'err', text: errData?.error ?? 'Speichern fehlgeschlagen.' });
         return;
       }
       setReviews(sanitized);
-      setMsg({ type: 'ok', text: `${sanitized.length} Bewertung${sanitized.length === 1 ? '' : 'en'} gespeichert.` });
+      setReviewUrl(trimmedUrl);
+      setMsg({ type: 'ok', text: 'Gespeichert.' });
       window.setTimeout(() => setMsg(null), 3500);
     } catch {
       setMsg({ type: 'err', text: 'Netzwerkfehler.' });
@@ -122,7 +146,25 @@ export default function ManualGoogleReviewsAdmin() {
         </div>
       </div>
 
-      <div className="px-6 py-5 space-y-3">
+      <div className="px-6 py-5 space-y-5">
+        {/* Bewertungs-Link Override */}
+        <div className="rounded-lg p-4" style={{ background: '#0f172a', border: '1px solid #1e293b' }}>
+          <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
+            &quot;Bewertung auf Google schreiben&quot;-Link
+          </label>
+          <p className="text-xs text-slate-500 mb-2">
+            Wird auf der Startseite als CTA verwendet. Leer lassen für den Standard-Link aus der Place-ID.
+            Bei Problemen: in Google Business → &quot;Mehr Bewertungen erhalten&quot; → Link kopieren.
+          </p>
+          <input
+            type="url"
+            value={reviewUrl}
+            onChange={(e) => setReviewUrl(e.target.value)}
+            placeholder="https://search.google.com/local/writereview?placeid=..."
+            className={inputClass}
+          />
+        </div>
+
         {loading ? (
           <p className="text-sm text-slate-500">Lädt…</p>
         ) : reviews.length === 0 ? (

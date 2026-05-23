@@ -34,10 +34,37 @@ interface CachedData {
   fetchedAt: number;
 }
 
-// Cache nur die Google-API-Antwort. Manuelle Reviews werden bei jedem
-// Request frisch geladen (damit Admin-Edits ohne Cache-Bust sofort wirken).
+// Cache nur die Google-API-Antwort. Manuelle Reviews + Review-Link werden
+// bei jedem Request frisch geladen (damit Admin-Edits ohne Cache-Bust wirken).
 let apiCache: CachedData | null = null;
 const CACHE_DURATION = 6 * 60 * 60 * 1000; // 6 Stunden
+
+/** Default-URL zum Bewerten — Place-ID aus Env, ohne GBP-Tracking-Parameter
+ *  (die fuehren bei Nicht-Owner zu Fehler-Seiten). */
+function defaultWriteReviewUrl(placeId: string | undefined): string {
+  if (!placeId) return 'https://search.google.com/local/writereview';
+  return `https://search.google.com/local/writereview?placeid=${encodeURIComponent(placeId)}`;
+}
+
+/** Laedt den Admin-Override fuer den "Bewertung schreiben"-Link (defensiv). */
+async function loadWriteReviewUrl(): Promise<string | null> {
+  try {
+    const supabase = createServiceClient();
+    const { data } = await supabase
+      .from('admin_settings')
+      .select('value')
+      .eq('key', 'google_review_url')
+      .maybeSingle();
+    if (!data?.value) return null;
+    const raw = typeof data.value === 'string' ? data.value : JSON.stringify(data.value);
+    const trimmed = raw.trim().replace(/^["']|["']$/g, '');
+    // Nur http(s) zulassen — kein javascript:-Open-Redirect.
+    if (!/^https?:\/\//i.test(trimmed)) return null;
+    return trimmed.slice(0, 500);
+  } catch {
+    return null;
+  }
+}
 
 /** Lädt die manuell gepflegten Reviews aus admin_settings (defensiv). */
 async function loadManualReviews(): Promise<GoogleReviewData[]> {
@@ -70,6 +97,9 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const debug = searchParams.get('debug') === '1';
 
+  const placeId = process.env.GOOGLE_PLACE_ID;
+  const writeReviewUrl = (await loadWriteReviewUrl()) ?? defaultWriteReviewUrl(placeId);
+
   // Manuelle Reviews IMMER frisch laden (kein Cache).
   const manualReviews = await loadManualReviews();
 
@@ -81,13 +111,13 @@ export async function GET(req: Request) {
         avgRating: apiCache.avgRating,
         totalReviews: apiCache.totalReviews,
         fetchedAt: apiCache.fetchedAt,
+        writeReviewUrl,
       },
       { headers: { 'Cache-Control': 'public, max-age=3600, s-maxage=21600, stale-while-revalidate=86400' } },
     );
   }
 
   const apiKey = process.env.GOOGLE_PLACES_API_KEY;
-  const placeId = process.env.GOOGLE_PLACE_ID;
 
   if (!apiKey || !placeId) {
     // Keine API konfiguriert → nur manuelle Reviews ausliefern.
@@ -96,6 +126,7 @@ export async function GET(req: Request) {
         reviews: manualReviews,
         avgRating: 0,
         totalReviews: 0,
+        writeReviewUrl,
         error: apiKey || placeId ? undefined : 'Google Places nicht konfiguriert',
         debug: debug ? { hasApiKey: !!apiKey, hasPlaceId: !!placeId } : undefined,
       },
@@ -180,6 +211,7 @@ export async function GET(req: Request) {
         avgRating,
         totalReviews,
         fetchedAt: apiCache.fetchedAt,
+        writeReviewUrl,
       },
       { headers: { 'Cache-Control': 'public, max-age=3600, s-maxage=21600, stale-while-revalidate=86400' } },
     );
@@ -191,9 +223,10 @@ export async function GET(req: Request) {
         avgRating: apiCache.avgRating,
         totalReviews: apiCache.totalReviews,
         fetchedAt: apiCache.fetchedAt,
+        writeReviewUrl,
       });
     }
-    return NextResponse.json({ reviews: manualReviews, avgRating: 0, totalReviews: 0 }, { status: 200 });
+    return NextResponse.json({ reviews: manualReviews, avgRating: 0, totalReviews: 0, writeReviewUrl }, { status: 200 });
   }
 }
 
