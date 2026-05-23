@@ -52,9 +52,6 @@ const iconCalendar = (
 const iconTruck = (
   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>
 );
-const iconReturn = (
-  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" /></svg>
-);
 const iconWarning = (
   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" /></svg>
 );
@@ -145,8 +142,7 @@ const TAGESGESCHAEFT_ITEMS: NavItem[] = [
   { href: '/admin/verkauf', label: 'Verkäufe', icon: iconCart, perm: 'tagesgeschaeft' },
   { href: '/admin/verfuegbarkeit', label: 'Kalender', icon: iconCalendar, perm: 'tagesgeschaeft' },
   { href: '/admin/auftragskalender', label: 'Auftragskalender', icon: iconCalendar, perm: 'tagesgeschaeft' },
-  { href: '/admin/versand', label: 'Versand', icon: iconTruck, perm: 'tagesgeschaeft' },
-  { href: '/admin/retouren', label: 'Rückgabe & Retouren', icon: iconReturn, perm: 'tagesgeschaeft' },
+  { href: '/admin/retouren', label: 'Versand & Rückgabe', icon: iconTruck, perm: 'tagesgeschaeft' },
   { href: '/admin/verfuegbarkeit-alerts', label: 'Verfügbarkeits-Alerts', icon: iconWarning, perm: 'tagesgeschaeft' },
 ];
 

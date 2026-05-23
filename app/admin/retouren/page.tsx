@@ -5,7 +5,22 @@ import Link from 'next/link';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { fmtDate } from '@/lib/format-utils';
 
-interface ReturnBooking {
+/**
+ * Versand & Rueckgabe — kombinierte Page fuer den gesamten Fulfillment-
+ * Lebenszyklus einer Buchung.
+ *
+ * 4 Tabs:
+ *   1. Zu versenden     — confirmed | preparing_shipment | awaiting_pickup
+ *   2. Unterwegs        — shipped (Paket beim Kunden, noch nicht ueberfaellig)
+ *   3. Rueckgabe pruefen — shipped+ueberfaellig | delivered | picked_up | returned
+ *   4. Abgeschlossen    — completed | damaged
+ *
+ * Layout: schlanke Tabelle (Retouren-Layout) mit kontextabhaengiger Datums-
+ * Spalte und Aktion-Button. Pack-Workflow + Etiketten-Erstellung leben
+ * weiterhin auf der Sub-Page /admin/versand/[id]/packen (von hier verlinkt).
+ */
+
+interface FulfillmentBooking {
   id: string;
   product_name: string;
   product_id: string;
@@ -21,6 +36,8 @@ interface ReturnBooking {
   returned_at: string | null;
   return_notes: string | null;
   tracking_return: string | null;
+  tracking_number: string | null;
+  shipping_method: string | null;
   /** Override pro Buchung (NULL = aus rental_to + buffer berechnen). */
   return_due_date_override?: string | null;
   ship_date_override?: string | null;
@@ -32,32 +49,36 @@ const CONDITION_CONFIG: Record<string, { label: string; color: string; bg: strin
   beschaedigt: { label: 'Beschädigt', color: '#ef4444', bg: '#ef444422' },
 };
 
-// Default-Puffertage (überschrieben durch admin_settings.booking_buffer_days):
-// Versand braucht 3 Tage Retoure-Spielraum, Abholung 1 Tag.
-const DEFAULT_BUFFER = { versand_after: 3, abholung_after: 1 };
+const STATUS_LABEL: Record<string, string> = {
+  confirmed: 'Bestätigt',
+  preparing_shipment: 'Wird vorbereitet',
+  awaiting_pickup: 'Wartet auf Abholung',
+  shipped: 'Versendet',
+  delivered: 'Zugestellt',
+  picked_up: 'Abgeholt',
+  returned: 'Retourniert',
+  completed: 'Abgeschlossen',
+  damaged: 'Beschädigt',
+};
 
-interface BufferAfter { versand_after: number; abholung_after: number }
+const STATUS_COLOR: Record<string, string> = {
+  confirmed: '#06b6d4',
+  preparing_shipment: '#f59e0b',
+  awaiting_pickup: '#14b8a6',
+  shipped: '#10b981',
+  delivered: '#22c55e',
+  picked_up: '#10b981',
+  returned: '#8b5cf6',
+  completed: '#64748b',
+  damaged: '#f97316',
+};
 
-/**
- * Liefert das tatsächliche Rückgabe-Soll-Datum.
- * Override hat Vorrang. Sonst: rental_to + buffer (Versand 3 / Abholung 1).
- */
-function returnDueDate(
-  rentalTo: string,
-  deliveryMode: string,
-  buf: BufferAfter,
-  override?: string | null,
-): Date {
-  if (override) {
-    const m = override.match(/^(\d{4})-(\d{2})-(\d{2})/);
-    if (m) return new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10));
-  }
-  const d = new Date(rentalTo);
-  d.setHours(0, 0, 0, 0);
-  const add = deliveryMode === 'versand' ? buf.versand_after : buf.abholung_after;
-  d.setDate(d.getDate() + add);
-  return d;
-}
+// Default-Puffer (überschrieben durch admin_settings.booking_buffer_days).
+// versand_after = Versand-Retoure-Puffer (3 Tage), abholung_after = Abholung-
+// Rückgabe-Puffer (1 Tag). versand_before/abholung_before bestimmt den
+// ship_date (Versand- bzw. Übergabe-Tag vor Mietbeginn).
+const DEFAULT_BUFFER = { versand_before: 2, versand_after: 3, abholung_before: 0, abholung_after: 1 };
+interface Buffer { versand_before: number; versand_after: number; abholung_before: number; abholung_after: number }
 
 function isoDate(d: Date): string {
   const y = d.getFullYear();
@@ -66,25 +87,47 @@ function isoDate(d: Date): string {
   return `${y}-${mo}-${da}`;
 }
 
-function isOverdue(dueDate: Date) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return dueDate < today;
+function parseISODate(s: string): Date {
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10));
+  const d = new Date(s);
+  d.setHours(0, 0, 0, 0);
+  return d;
 }
 
-function daysUntilReturn(dueDate: Date) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+function returnDueDate(rentalTo: string, deliveryMode: string, buf: Buffer, override?: string | null): Date {
+  if (override) return parseISODate(override);
+  const d = parseISODate(rentalTo);
+  d.setDate(d.getDate() + (deliveryMode === 'versand' ? buf.versand_after : buf.abholung_after));
+  return d;
 }
 
-export default function AdminRetourenPage() {
-  const [bookings, setBookings] = useState<ReturnBooking[]>([]);
+function shipDate(rentalFrom: string, deliveryMode: string, buf: Buffer, override?: string | null): Date {
+  if (override) return parseISODate(override);
+  const d = parseISODate(rentalFrom);
+  d.setDate(d.getDate() - (deliveryMode === 'versand' ? buf.versand_before : buf.abholung_before));
+  return d;
+}
+
+function isOverdue(due: Date): boolean {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return due < today;
+}
+
+function daysUntil(due: Date): number {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.ceil((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+type Tab = 'versenden' | 'unterwegs' | 'rueckgabe' | 'abgeschlossen';
+
+export default function AdminVersandRueckgabePage() {
+  const [bookings, setBookings] = useState<FulfillmentBooking[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<'pending' | 'completed'>('pending');
-  // Puffertage aus admin_settings — bestimmt das tatsächliche Rückgabe-
-  // Soll-Datum (rental_to + versand_after/abholung_after).
-  const [buf, setBuf] = useState<BufferAfter>(DEFAULT_BUFFER);
+  const [tab, setTab] = useState<Tab>('versenden');
+  const [buf, setBuf] = useState<Buffer>(DEFAULT_BUFFER);
 
   useEffect(() => {
     fetchBookings();
@@ -113,7 +156,9 @@ export default function AdminRetourenPage() {
       const parsed = typeof value === 'string' ? JSON.parse(value) : value;
       if (parsed && typeof parsed === 'object') {
         setBuf({
+          versand_before: Number(parsed.versand_before ?? DEFAULT_BUFFER.versand_before),
           versand_after: Number(parsed.versand_after ?? DEFAULT_BUFFER.versand_after),
+          abholung_before: Number(parsed.abholung_before ?? DEFAULT_BUFFER.abholung_before),
           abholung_after: Number(parsed.abholung_after ?? DEFAULT_BUFFER.abholung_after),
         });
       }
@@ -122,15 +167,46 @@ export default function AdminRetourenPage() {
     }
   }
 
-  const pendingReturns = bookings
-    .filter((b) => b.status === 'shipped' || b.status === 'delivered' || b.status === 'picked_up')
-    .sort((a, b) => new Date(a.rental_to).getTime() - new Date(b.rental_to).getTime());
+  // ── Tab-Filter ─────────────────────────────────────────────────────────────
+  const versenden = bookings
+    .filter((b) => b.status === 'confirmed' || b.status === 'preparing_shipment' || b.status === 'awaiting_pickup')
+    .sort((a, b) => shipDate(a.rental_from, a.delivery_mode, buf, a.ship_date_override).getTime() - shipDate(b.rental_from, b.delivery_mode, buf, b.ship_date_override).getTime());
 
-  const completedReturns = bookings
+  const unterwegs = bookings
+    .filter((b) => b.status === 'shipped' && !isOverdue(returnDueDate(b.rental_to, b.delivery_mode, buf, b.return_due_date_override)))
+    .sort((a, b) => parseISODate(a.rental_to).getTime() - parseISODate(b.rental_to).getTime());
+
+  const rueckgabe = bookings
+    .filter((b) => {
+      // Alles was zurueck soll: shipped+ueberfaellig, delivered (zugestellt), picked_up (abgeholt), returned
+      if (b.status === 'delivered' || b.status === 'picked_up' || b.status === 'returned') return true;
+      if (b.status === 'shipped' && isOverdue(returnDueDate(b.rental_to, b.delivery_mode, buf, b.return_due_date_override))) return true;
+      return false;
+    })
+    .sort((a, b) => returnDueDate(a.rental_to, a.delivery_mode, buf, a.return_due_date_override).getTime() - returnDueDate(b.rental_to, b.delivery_mode, buf, b.return_due_date_override).getTime());
+
+  const abgeschlossen = bookings
     .filter((b) => b.status === 'completed' || b.status === 'damaged')
     .sort((a, b) => new Date(b.returned_at || b.rental_to).getTime() - new Date(a.returned_at || a.rental_to).getTime());
 
-  const displayed = tab === 'pending' ? pendingReturns : completedReturns;
+  // Ueberfaellige Versand-Auftraege (heute oder vorbei) — fuer KPI-Karte
+  const versendenUeberfaellig = versenden.filter((b) => {
+    const sd = shipDate(b.rental_from, b.delivery_mode, buf, b.ship_date_override);
+    return daysUntil(sd) <= 0;
+  });
+
+  const displayed: FulfillmentBooking[] =
+    tab === 'versenden' ? versenden
+    : tab === 'unterwegs' ? unterwegs
+    : tab === 'rueckgabe' ? rueckgabe
+    : abgeschlossen;
+
+  // ── Spalten-Konfig je Tab ──────────────────────────────────────────────────
+  const dateColLabel =
+    tab === 'versenden' ? 'Versand / Übergabe bis'
+    : tab === 'unterwegs' ? 'Rückgabe erwartet'
+    : tab === 'rueckgabe' ? 'Rückgabe bis'
+    : 'Zurück am';
 
   return (
     <div className="min-h-screen" style={{ padding: '20px 16px' }}>
@@ -138,20 +214,20 @@ export default function AdminRetourenPage() {
       {/* Header */}
       <div className="mb-6">
         <h1 className="font-heading font-bold text-2xl" style={{ color: '#e2e8f0' }}>
-          Retouren & Rückgaben
+          Versand & Rückgabe
         </h1>
         <p className="text-sm font-body mt-1" style={{ color: '#64748b' }}>
-          Ausstehende und abgeschlossene Rückgaben verwalten
+          Pakete vorbereiten, Tracking verfolgen und Rückgaben abschließen
         </p>
       </div>
 
       {/* Stat Cards */}
       <div className="grid gap-3 mb-6" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
         {[
-          { label: 'Ausstehend', value: pendingReturns.length, color: '#06b6d4' },
-          { label: 'Überfällig', value: pendingReturns.filter((b) => isOverdue(returnDueDate(b.rental_to, b.delivery_mode, buf, b.return_due_date_override))).length, color: '#ef4444' },
-          { label: 'Heute fällig', value: pendingReturns.filter((b) => daysUntilReturn(returnDueDate(b.rental_to, b.delivery_mode, buf, b.return_due_date_override)) === 0).length, color: '#f59e0b' },
-          { label: 'Abgeschlossen', value: completedReturns.length, color: '#10b981' },
+          { label: 'Zu versenden', value: versenden.length, color: versendenUeberfaellig.length > 0 ? '#f59e0b' : '#06b6d4' },
+          { label: 'Unterwegs', value: unterwegs.length, color: '#10b981' },
+          { label: 'Rückgabe prüfen', value: rueckgabe.length, color: rueckgabe.length > 0 ? '#ef4444' : '#64748b' },
+          { label: 'Abgeschlossen', value: abgeschlossen.length, color: '#64748b' },
         ].map((stat) => (
           <div key={stat.label} style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 12, padding: '16px 20px' }}>
             <p style={{ fontSize: 12, color: '#64748b', marginBottom: 4 }}>{stat.label}</p>
@@ -161,11 +237,13 @@ export default function AdminRetourenPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-6" style={{ background: '#111827', borderRadius: 12, padding: 4, display: 'inline-flex' }}>
-        {[
-          { value: 'pending' as const, label: `Ausstehend (${pendingReturns.length})` },
-          { value: 'completed' as const, label: `Abgeschlossen (${completedReturns.length})` },
-        ].map((t) => (
+      <div className="flex gap-1 mb-6 flex-wrap" style={{ background: '#111827', borderRadius: 12, padding: 4, display: 'inline-flex' }}>
+        {([
+          { value: 'versenden' as const, label: `Zu versenden (${versenden.length})` },
+          { value: 'unterwegs' as const, label: `Unterwegs (${unterwegs.length})` },
+          { value: 'rueckgabe' as const, label: `Rückgabe prüfen (${rueckgabe.length})` },
+          { value: 'abgeschlossen' as const, label: `Abgeschlossen (${abgeschlossen.length})` },
+        ]).map((t) => (
           <button
             key={t.value}
             onClick={() => setTab(t.value)}
@@ -182,14 +260,12 @@ export default function AdminRetourenPage() {
         ))}
       </div>
 
-      {/* Table */}
+      {/* Tabelle */}
       {loading ? (
-        <div className="text-center py-16" style={{ color: '#64748b' }}>Lädt...</div>
+        <div className="text-center py-16" style={{ color: '#64748b' }}>Lädt…</div>
       ) : displayed.length === 0 ? (
         <div style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 12, padding: '48px 20px', textAlign: 'center' }}>
-          <p style={{ color: '#64748b', fontSize: 14 }}>
-            {tab === 'pending' ? 'Keine ausstehenden Rückgaben.' : 'Keine abgeschlossenen Rückgaben.'}
-          </p>
+          <p style={{ color: '#64748b', fontSize: 14 }}>{emptyText(tab)}</p>
         </div>
       ) : (
         <div style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 12, overflow: 'hidden' }}>
@@ -197,7 +273,7 @@ export default function AdminRetourenPage() {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid #1e293b' }}>
-                  {['Buchung', 'Kamera', 'Kunde', 'Rückgabe bis', tab === 'completed' ? 'Zustand' : 'Status', ''].map((h) => (
+                  {['Buchung', 'Kamera', 'Kunde', dateColLabel, tab === 'abgeschlossen' ? 'Zustand' : 'Status', ''].map((h) => (
                     <th key={h} style={{ textAlign: 'left', padding: '12px 16px', fontSize: 11, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                       {h}
                     </th>
@@ -205,94 +281,235 @@ export default function AdminRetourenPage() {
                 </tr>
               </thead>
               <tbody>
-                {displayed.map((booking, idx) => {
-                  const dueDate = returnDueDate(booking.rental_to, booking.delivery_mode, buf, booking.return_due_date_override);
-                  const overdue = isOverdue(dueDate);
-                  const daysLeft = daysUntilReturn(dueDate);
-                  const cond = booking.return_condition ? CONDITION_CONFIG[booking.return_condition] : null;
-
-                  return (
-                    <tr
-                      key={booking.id}
-                      style={{ borderBottom: idx < displayed.length - 1 ? '1px solid #1e293b' : 'none' }}
-                    >
-                      <td style={{ padding: '14px 16px' }}>
-                        <p style={{ fontSize: 13, fontWeight: 600, color: '#e2e8f0', fontFamily: 'monospace' }}>{booking.id}</p>
-                        <p style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{booking.days} Tage</p>
-                      </td>
-                      <td style={{ padding: '14px 16px' }}>
-                        <p style={{ fontSize: 13, color: '#e2e8f0' }}>{booking.product_name}</p>
-                      </td>
-                      <td style={{ padding: '14px 16px' }}>
-                        <p style={{ fontSize: 13, color: '#e2e8f0' }}>{booking.customer_name || '–'}</p>
-                      </td>
-                      <td style={{ padding: '14px 16px' }}>
-                        <ReturnDueCell
-                          booking={booking}
-                          dueDate={dueDate}
-                          overdue={overdue}
-                          daysLeft={daysLeft}
-                          tab={tab}
-                          buf={buf}
-                          onSaved={fetchBookings}
-                        />
-                      </td>
-                      <td style={{ padding: '14px 16px' }}>
-                        {tab === 'completed' && cond ? (
-                          <span style={{ display: 'inline-block', padding: '4px 10px', borderRadius: 6, fontSize: 12, fontWeight: 600, background: cond.bg, color: cond.color }}>
-                            {cond.label}
-                          </span>
-                        ) : tab === 'pending' ? (
-                          <span style={{ display: 'inline-block', padding: '4px 10px', borderRadius: 6, fontSize: 12, fontWeight: 600, background: overdue ? '#ef444422' : '#06b6d422', color: overdue ? '#ef4444' : '#06b6d4' }}>
-                            {overdue ? 'Überfällig' : 'Ausstehend'}
-                          </span>
-                        ) : (
-                          <span style={{ fontSize: 13, color: '#64748b' }}>–</span>
-                        )}
-                      </td>
-                      <td style={{ padding: '14px 16px', textAlign: 'right' }}>
-                        {tab === 'pending' && (
-                          <Link
-                            href={`/admin/retouren/${booking.id}/pruefen`}
-                            style={{ display: 'inline-block', padding: '8px 16px', background: '#10b981', color: 'white', textDecoration: 'none', borderRadius: 8, fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' }}
-                          >
-                            Rückgabe prüfen
-                          </Link>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
+                {displayed.map((booking, idx) => (
+                  <BookingRow
+                    key={booking.id}
+                    booking={booking}
+                    tab={tab}
+                    buf={buf}
+                    last={idx === displayed.length - 1}
+                    onSaved={fetchBookings}
+                  />
+                ))}
               </tbody>
             </table>
           </div>
         </div>
       )}
-
     </div>
   );
 }
 
-// ─── Inline-Edit für das Rückgabe-Soll-Datum pro Buchung ─────────────────────
+function emptyText(tab: Tab): string {
+  switch (tab) {
+    case 'versenden': return 'Keine Aufträge zum Versenden oder Übergeben.';
+    case 'unterwegs': return 'Aktuell keine Pakete unterwegs.';
+    case 'rueckgabe': return 'Keine Rückgaben ausstehend.';
+    case 'abgeschlossen': return 'Keine abgeschlossenen Buchungen.';
+  }
+}
 
-function ReturnDueCell({
-  booking, dueDate, overdue, daysLeft, tab, buf, onSaved,
+// ─── Eine Tabellen-Zeile ─────────────────────────────────────────────────────
+
+function BookingRow({
+  booking, tab, buf, last, onSaved,
 }: {
-  booking: ReturnBooking;
-  dueDate: Date;
-  overdue: boolean;
-  daysLeft: number;
-  tab: 'pending' | 'completed';
-  buf: BufferAfter;
+  booking: FulfillmentBooking;
+  tab: Tab;
+  buf: Buffer;
+  last: boolean;
   onSaved: () => void;
 }) {
+  const cond = booking.return_condition ? CONDITION_CONFIG[booking.return_condition] : null;
+  const statusLabel = STATUS_LABEL[booking.status] ?? booking.status;
+  const statusColor = STATUS_COLOR[booking.status] ?? '#64748b';
+
+  return (
+    <tr style={{ borderBottom: last ? 'none' : '1px solid #1e293b' }}>
+      <td style={{ padding: '14px 16px' }}>
+        <Link
+          href={`/admin/buchungen/${booking.id}`}
+          style={{ fontSize: 13, fontWeight: 600, color: '#22d3ee', fontFamily: 'monospace', textDecoration: 'none' }}
+        >
+          {booking.id}
+        </Link>
+        <p style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{booking.days} Tag{booking.days !== 1 ? 'e' : ''}</p>
+      </td>
+      <td style={{ padding: '14px 16px' }}>
+        <p style={{ fontSize: 13, color: '#e2e8f0' }}>{booking.product_name}</p>
+      </td>
+      <td style={{ padding: '14px 16px' }}>
+        <p style={{ fontSize: 13, color: '#e2e8f0' }}>{booking.customer_name || '–'}</p>
+      </td>
+      <td style={{ padding: '14px 16px', minWidth: 200 }}>
+        {tab === 'versenden' && <ShipDateCell booking={booking} buf={buf} />}
+        {tab === 'unterwegs' && <UnterwegsCell booking={booking} buf={buf} />}
+        {tab === 'rueckgabe' && <ReturnDueCell booking={booking} buf={buf} onSaved={onSaved} />}
+        {tab === 'abgeschlossen' && booking.returned_at && (
+          <>
+            <p style={{ fontSize: 13, fontWeight: 600, color: '#e2e8f0' }}>{fmtDate(booking.returned_at)}</p>
+            <p style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>Miete bis {fmtDate(booking.rental_to)}</p>
+          </>
+        )}
+      </td>
+      <td style={{ padding: '14px 16px' }}>
+        {tab === 'abgeschlossen' && cond ? (
+          <span style={{ display: 'inline-block', padding: '4px 10px', borderRadius: 6, fontSize: 12, fontWeight: 600, background: cond.bg, color: cond.color }}>
+            {cond.label}
+          </span>
+        ) : (
+          <span style={{ display: 'inline-block', padding: '4px 10px', borderRadius: 6, fontSize: 12, fontWeight: 600, background: `${statusColor}22`, color: statusColor, border: `1px solid ${statusColor}40` }}>
+            {statusLabel}
+          </span>
+        )}
+      </td>
+      <td style={{ padding: '14px 16px', textAlign: 'right' }}>
+        <ActionButton booking={booking} tab={tab} />
+      </td>
+    </tr>
+  );
+}
+
+// ─── Datums-Zellen je Tab ────────────────────────────────────────────────────
+
+function ShipDateCell({ booking, buf }: { booking: FulfillmentBooking; buf: Buffer }) {
+  const sd = shipDate(booking.rental_from, booking.delivery_mode, buf, booking.ship_date_override);
+  const dl = daysUntil(sd);
+  const overdue = dl < 0;
+  const isOverridden = !!booking.ship_date_override;
+
+  let color = '#64748b';
+  let label = `in ${dl} Tag${dl !== 1 ? 'en' : ''}`;
+  if (overdue) { color = '#ef4444'; label = `${Math.abs(dl)} Tag${Math.abs(dl) !== 1 ? 'e' : ''} überfällig`; }
+  else if (dl === 0) { color = '#ef4444'; label = 'Heute fällig'; }
+  else if (dl <= 2) color = '#f59e0b';
+  else if (dl <= 5) color = '#22d3ee';
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+        <p style={{ fontSize: 13, fontWeight: 600, color: overdue || dl === 0 ? '#ef4444' : '#e2e8f0' }}>
+          {fmtDate(sd.toISOString())}
+        </p>
+        {isOverridden && (
+          <span title="Manuell überschrieben" style={{ fontSize: 9, padding: '1px 6px', borderRadius: 4, background: '#f59e0b22', color: '#f59e0b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            manuell
+          </span>
+        )}
+      </div>
+      <p style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
+        Mietbeginn {fmtDate(booking.rental_from)} · {booking.delivery_mode === 'versand' ? 'Versand' : 'Abholung'}
+      </p>
+      <span
+        style={{
+          display: 'inline-block', marginTop: 4, padding: '2px 8px', borderRadius: 6,
+          fontSize: 11, fontWeight: 600, background: `${color}22`, color, border: `1px solid ${color}40`,
+        }}
+      >
+        {label}
+      </span>
+    </div>
+  );
+}
+
+function UnterwegsCell({ booking, buf }: { booking: FulfillmentBooking; buf: Buffer }) {
+  const due = returnDueDate(booking.rental_to, booking.delivery_mode, buf, booking.return_due_date_override);
+  const dl = daysUntil(due);
+  let color = '#64748b';
+  let label = `Rückgabe in ${dl} Tag${dl !== 1 ? 'en' : ''}`;
+  if (dl === 0) { color = '#ef4444'; label = 'Heute zurück'; }
+  else if (dl <= 2) color = '#f59e0b';
+  else if (dl <= 5) color = '#22d3ee';
+
+  return (
+    <div>
+      <p style={{ fontSize: 13, fontWeight: 600, color: '#e2e8f0' }}>{fmtDate(due.toISOString())}</p>
+      <p style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
+        Miete bis {fmtDate(booking.rental_to)} · {booking.delivery_mode === 'versand' ? 'Versand' : 'Abholung'}
+      </p>
+      {booking.tracking_number && (
+        <p style={{ fontSize: 11, color: '#22d3ee', marginTop: 2, fontFamily: 'monospace' }}>
+          📦 {booking.tracking_number}
+        </p>
+      )}
+      <span
+        style={{
+          display: 'inline-block', marginTop: 4, padding: '2px 8px', borderRadius: 6,
+          fontSize: 11, fontWeight: 600, background: `${color}22`, color, border: `1px solid ${color}40`,
+        }}
+      >
+        {label}
+      </span>
+    </div>
+  );
+}
+
+// ─── Aktion-Button je nach Status + Lieferart ────────────────────────────────
+
+function ActionButton({ booking, tab }: { booking: FulfillmentBooking; tab: Tab }) {
+  const base = {
+    display: 'inline-block', padding: '8px 16px', textDecoration: 'none',
+    borderRadius: 8, fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' as const,
+  };
+
+  if (tab === 'versenden') {
+    if (booking.delivery_mode === 'versand') {
+      return (
+        <Link href={`/admin/versand/${booking.id}/packen`} style={{ ...base, background: '#06b6d4', color: 'white' }}>
+          📦 Packen
+        </Link>
+      );
+    }
+    return (
+      <Link href={`/admin/buchungen/${booking.id}/uebergabe`} style={{ ...base, background: '#8b5cf6', color: 'white' }}>
+        👋 Übergabe
+      </Link>
+    );
+  }
+
+  if (tab === 'unterwegs') {
+    return (
+      <Link href={`/admin/buchungen/${booking.id}`} style={{ ...base, background: 'transparent', color: '#94a3b8', border: '1px solid #334155' }}>
+        Details
+      </Link>
+    );
+  }
+
+  if (tab === 'rueckgabe') {
+    return (
+      <Link href={`/admin/retouren/${booking.id}/pruefen`} style={{ ...base, background: '#10b981', color: 'white' }}>
+        Rückgabe prüfen
+      </Link>
+    );
+  }
+
+  // abgeschlossen
+  return (
+    <Link href={`/admin/buchungen/${booking.id}`} style={{ ...base, background: 'transparent', color: '#94a3b8', border: '1px solid #334155' }}>
+      Details
+    </Link>
+  );
+}
+
+// ─── Inline-Edit für das Rückgabe-Soll-Datum pro Buchung (Rueckgabe-Tab) ─────
+
+function ReturnDueCell({
+  booking, buf, onSaved,
+}: {
+  booking: FulfillmentBooking;
+  buf: Buffer;
+  onSaved: () => void;
+}) {
+  const dueDate = returnDueDate(booking.rental_to, booking.delivery_mode, buf, booking.return_due_date_override);
+  const overdue = isOverdue(dueDate);
+  const daysLeft = daysUntil(dueDate);
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState<string>(booking.return_due_date_override?.slice(0, 10) ?? isoDate(dueDate));
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
   const isOverridden = !!booking.return_due_date_override;
 
-  // Default-Vorschlag wenn kein Override
+  // Default-Vorschlag (ohne Override)
   const defaultDateISO = isoDate(returnDueDate(booking.rental_to, booking.delivery_mode, buf, null));
 
   async function save() {
@@ -389,10 +606,21 @@ function ReturnDueCell({
     );
   }
 
+  // Farb-Staffelung: überfällig/heute → rot, 1–3 → amber, 4–7 → cyan, sonst grau.
+  let color = '#64748b';
+  if (overdue || daysLeft === 0) color = '#ef4444';
+  else if (daysLeft <= 3) color = '#f59e0b';
+  else if (daysLeft <= 7) color = '#22d3ee';
+  const label = overdue
+    ? `${Math.abs(daysLeft)} Tag${Math.abs(daysLeft) !== 1 ? 'e' : ''} überfällig`
+    : daysLeft === 0
+      ? 'Heute fällig'
+      : `in ${daysLeft} Tag${daysLeft !== 1 ? 'en' : ''}`;
+
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-        <p style={{ fontSize: 13, fontWeight: 600, color: overdue && tab === 'pending' ? '#ef4444' : '#e2e8f0' }}>
+        <p style={{ fontSize: 13, fontWeight: 600, color: overdue ? '#ef4444' : '#e2e8f0' }}>
           {fmtDate(dueDate.toISOString())}
         </p>
         {isOverridden && (
@@ -400,62 +628,26 @@ function ReturnDueCell({
             manuell
           </span>
         )}
-        {tab === 'pending' && (
-          <button
-            type="button"
-            onClick={() => setEditing(true)}
-            title="Rückgabe-Datum ändern"
-            style={{ marginLeft: 4, padding: '0 4px', background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 12 }}
-          >
-            ✏
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          title="Rückgabe-Datum ändern"
+          style={{ marginLeft: 4, padding: '0 4px', background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 12 }}
+        >
+          ✏
+        </button>
       </div>
-      {tab === 'pending' && (
-        <>
-          <p style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
-            Miete bis {fmtDate(booking.rental_to)} · {booking.delivery_mode === 'versand' ? 'Versand' : 'Abholung'}
-          </p>
-          {(() => {
-            // Farb-Staffelung der Dringlichkeit:
-            //   überfällig / heute fällig → rot
-            //   in 1–3 Tagen → amber
-            //   in 4–7 Tagen → cyan
-            //   >7 Tage → grau (Termin noch weit weg)
-            let color = '#64748b';
-            if (overdue || daysLeft === 0) color = '#ef4444';
-            else if (daysLeft <= 3) color = '#f59e0b';
-            else if (daysLeft <= 7) color = '#22d3ee';
-            const label = overdue
-              ? `${Math.abs(daysLeft)} Tag${Math.abs(daysLeft) !== 1 ? 'e' : ''} überfällig`
-              : daysLeft === 0
-                ? 'Heute fällig'
-                : `in ${daysLeft} Tag${daysLeft !== 1 ? 'en' : ''}`;
-            return (
-              <span
-                style={{
-                  display: 'inline-block',
-                  marginTop: 4,
-                  padding: '2px 8px',
-                  borderRadius: 6,
-                  fontSize: 11,
-                  fontWeight: 600,
-                  background: `${color}22`,
-                  color,
-                  border: `1px solid ${color}40`,
-                }}
-              >
-                {label}
-              </span>
-            );
-          })()}
-        </>
-      )}
-      {tab === 'completed' && booking.returned_at && (
-        <p style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
-          Zurück am {fmtDate(booking.returned_at)}
-        </p>
-      )}
+      <p style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
+        Miete bis {fmtDate(booking.rental_to)} · {booking.delivery_mode === 'versand' ? 'Versand' : 'Abholung'}
+      </p>
+      <span
+        style={{
+          display: 'inline-block', marginTop: 4, padding: '2px 8px', borderRadius: 6,
+          fontSize: 11, fontWeight: 600, background: `${color}22`, color, border: `1px solid ${color}40`,
+        }}
+      >
+        {label}
+      </span>
     </div>
   );
 }

@@ -72,6 +72,9 @@ const nextConfig: NextConfig = {
       { source: '/admin/blog/einstellungen', destination: '/admin/content/einstellungen?tab=blog', permanent: false },
       { source: '/admin/social/einstellungen', destination: '/admin/content/einstellungen?tab=posts', permanent: false },
       { source: '/admin/social/reels/einstellungen', destination: '/admin/content/einstellungen?tab=reels', permanent: false },
+      // Versand + Retouren wurden in einer Page "Versand & Rückgabe" konsolidiert.
+      // /admin/versand/[id]/packen bleibt als Sub-Page (Pack-Workflow) erhalten.
+      { source: '/admin/versand', destination: '/admin/retouren', permanent: false },
     ];
   },
   // Security-Headers (ohne CSP — dafür braucht es eine separate Analyse
