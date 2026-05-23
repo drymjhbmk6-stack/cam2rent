@@ -582,7 +582,7 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateMeta[] = [
     render: () => renderEmailPreview(sendUgcApprovedEmail, {
       to: 'max.mustermann@example.de',
       name: 'Max Mustermann',
-      code: 'UGC-MUSTER-1234',
+      code: 'C2R-CONTENT-042',
       discountPercent: 15,
       validityDays: 90,
       minOrderValue: 50,
@@ -596,7 +596,7 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateMeta[] = [
     render: () => renderEmailPreview(sendUgcFeaturedEmail, {
       to: 'max.mustermann@example.de',
       name: 'Max Mustermann',
-      code: 'BONUS-MUSTER-5678',
+      code: 'C2R-CONTENT-043',
       discountPercent: 25,
       validityDays: 180,
       minOrderValue: 50,

@@ -1410,8 +1410,9 @@ Kunden laden nach ihrer Miete Fotos/Videos hoch, erteilen granulare Nutzungsrech
 - **Kunden-UI:** `/konto/buchungen/[id]/material` — 2-stufiger Flow (Upload + Consent). Button "Material hochladen & Rabatt sichern" in `/konto/buchungen` bei Status `picked_up|shipped|returned|completed`. Zeigt bei bereits aktiver Einreichung den Status + Gutschein-Code + Widerrufs-Button.
 - **Kunden-APIs:** `POST /api/customer-ugc/upload` (FormData, Bearer-Token-Auth, Rate-Limit 5/h), `GET /api/customer-ugc/[bookingId]` (Status + Preview-URLs), `POST /api/customer-ugc/withdraw/[id]` (löscht Dateien, ausgegebene Gutscheine bleiben gültig).
 - **Admin-UI:** `/admin/kunden-material` (Sidebar in "Kunden & Kommunikation", Icon Foto-Gallery) — Status-Filter-Kacheln (Wartet/Freigegeben/Veröffentlicht/Abgelehnt/Zurückgezogen), Moderations-Modal mit Medien-Grid, Consent-Übersicht, Auto-Open via `?open=<submissionId>` aus Notification-Link. Buttons: Freigeben + Gutschein, Ablehnen (mit Begründungs-Prompt), Feature für Social/Blog/Website (mit Bonus-Gutschein), Endgültig löschen.
-- **Admin-APIs:** `GET /api/admin/customer-ugc?status=<filter>`, `GET/PATCH/DELETE /api/admin/customer-ugc/[id]`, `POST /api/admin/customer-ugc/[id]/approve` (erstellt `UGC-XXX-XXXX`-Gutschein + E-Mail), `POST .../reject` (Begründung pflicht, Dateien-Delete optional), `POST .../feature` (channel-Parameter, erstellt `BONUS-XXX-XXXX`-Gutschein + E-Mail).
-- **Lib:** `lib/customer-ugc.ts` — `loadUgcSettings()`, `createUgcCoupon()`, E-Mail-Helper `sendUgcApprovedEmail`/`sendUgcFeaturedEmail`/`sendUgcRejectedEmail` (E-Mail-Typen `ugc_approved`/`ugc_featured`/`ugc_rejected` in `TYPE_LABELS`).
+- **Admin-APIs:** `GET /api/admin/customer-ugc?status=<filter>`, `GET/PATCH/DELETE /api/admin/customer-ugc/[id]`, `POST /api/admin/customer-ugc/[id]/approve` (erstellt `C2R-CONTENT-NNN`-Gutschein + E-Mail), `POST .../reject` (Begründung pflicht, Dateien-Delete optional), `POST .../feature` (channel-Parameter, erstellt zweiten `C2R-CONTENT-NNN`-Gutschein + E-Mail).
+- **Coupon-Code-Format (Stand 2026-05-23):** `C2R-CONTENT-001`, `-002`, … durchgehend fortlaufend (kein Jahres-Reset), im Test-Modus `TEST-C2R-CONTENT-NNN`. Counter atomar via RPC `next_content_coupon_counter(p_is_test)` (Migration `supabase/supabase-content-coupon-counter.sql`, gleiche Bauart wie `next_booking_counter`), Fallback `SELECT-MAX`-Pattern wenn Migration fehlt. Approve und Feature teilen sich denselben Counter — ein Kunde mit beidem bekommt zwei aufeinanderfolgende Nummern (z.B. `-042` und `-043`). „Personalisiert" = account-gebunden: `target_type='user'`, `target_user_email`, `max_uses=1`, `once_per_customer=true` — nur der hochladende Kunde kann einlösen. **Altbestand:** Vor Umstellung ausgegebene `UGC-…`/`BONUS-…`-Codes bleiben gueltig (keine Datenmigration).
+- **Lib:** `lib/customer-ugc.ts` — `loadUgcSettings()`, `createUgcCoupon()` (Signatur ohne `prefix`/`submissionId`), `nextContentCouponCode()` (intern), E-Mail-Helper `sendUgcApprovedEmail`/`sendUgcFeaturedEmail`/`sendUgcRejectedEmail` (E-Mail-Typen `ugc_approved`/`ugc_featured`/`ugc_rejected` in `TYPE_LABELS`).
 - **Einstellungen:** `admin_settings.customer_ugc_rewards` steuert Rabatt-Prozente, Mindestbestellwerte, Gültigkeiten, max Dateien (5) + Größe (50 MB), Enabled-Flag. Default im Seed.
 - **MediaLibraryPicker:** Neuer Tab "Kundenmaterial" zeigt approved/featured Bilder (mit Social- oder Website-Consent) — Admin kann UGC direkt in Social-Posts übernehmen. Signed URLs (24h).
 - **Notifications:** `new_ugc`-Typ (amber Gallery-Icon), Link direkt auf Admin-Moderations-Modal.
@@ -1421,6 +1422,7 @@ Kunden laden nach ihrer Miete Fotos/Videos hoch, erteilen granulare Nutzungsrech
   1. SQL-Migration `supabase/supabase-customer-ugc.sql` ausführen
   2. Supabase Storage-Bucket `customer-ugc` manuell anlegen (Public OFF, 50 MB, `image/*`, `video/mp4`, `video/quicktime`, `video/webm`)
   3. Bei Bedarf Rabatt-Staffelung unter `admin_settings.customer_ugc_rewards` anpassen
+  4. Migration `supabase/supabase-content-coupon-counter.sql` ausführen (für das neue `C2R-CONTENT-NNN`-Code-Format). Ohne Migration läuft der Approve/Feature-Pfad per defensivem `SELECT-MAX`-Fallback weiter (Codes werden korrekt vergeben, nur ohne atomaren RPC-Schutz bei paralleler Last).
 
 ### Seriennummern-Scanner
 QR-/Barcode-Scanner für die Admin-PWA, nutzt native `BarcodeDetector`-API (Chrome/Edge/Safari ≥ 17), Fallback auf manuelle Texteingabe. Erkennt: QR, EAN-13/8, Code128, Code39, Code93, Codabar, DataMatrix, ITF, UPC.
@@ -3075,6 +3077,12 @@ Zwei Einsatzorte:
   einen „Zum Beleg →"-Link.
 
 ### Noch offen
+- **UGC-Content-Coupon-Counter-Migration auszuführen:** `supabase/supabase-content-coupon-counter.sql`
+  (idempotent). Legt Tabelle `content_coupon_counter` + RPC
+  `next_content_coupon_counter` an. Ohne Migration werden die neuen
+  `C2R-CONTENT-NNN`-Codes weiter ausgegeben (defensiver `SELECT-MAX`-Fallback
+  in `lib/customer-ugc.ts:nextContentCouponCode()`), aber ohne den atomaren
+  Race-Schutz bei paralleler Last. Empfohlen ASAP ausführen.
 - **Buchungsinteresse-Migration auszuführen:** `supabase/supabase-booking-interest.sql`
   (idempotent). Legt Tabelle `booking_interest` an. Ohne Migration läuft der
   Buchungs-Flow normal weiter (Telemetrie wird verworfen), `/admin/buchungsinteresse`

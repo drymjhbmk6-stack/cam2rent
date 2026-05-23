@@ -62,8 +62,6 @@ export async function POST(req: NextRequest, { params }: { params: Params }) {
   let couponCode = submission.reward_coupon_code;
   if (!couponCode && submission.customer_email) {
     couponCode = await createUgcCoupon(supabase, {
-      prefix: 'UGC',
-      submissionId: id,
       targetEmail: submission.customer_email,
       discountPercent: settings.approve_discount_percent,
       minOrderValue: settings.approve_min_order_value,

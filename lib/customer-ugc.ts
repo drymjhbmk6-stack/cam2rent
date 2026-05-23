@@ -1,7 +1,7 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { sendAndLog, escapeHtml as h } from '@/lib/email';
 import { BUSINESS } from '@/lib/business-config';
-import { getSiteUrl } from '@/lib/env-mode';
+import { getSiteUrl, isTestMode } from '@/lib/env-mode';
 
 export type UgcRewardSettings = {
   approve_discount_percent: number;
@@ -36,21 +36,97 @@ export async function loadUgcSettings(supabase: SupabaseClient): Promise<UgcRewa
   return { ...DEFAULT_UGC_SETTINGS, ...(data?.value ?? {}) };
 }
 
-function generateCouponCode(prefix: 'UGC' | 'BONUS', submissionId: string): string {
-  const short = submissionId.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(-6);
-  const random = Math.random().toString(36).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
-  return `${prefix}-${short}-${random}`;
+/**
+ * Liefert den naechsten freien UGC-Content-Coupon-Code im Format
+ * `C2R-CONTENT-NNN` (im Test-Modus mit `TEST-`-Prefix).
+ *
+ * Counter ist durchgehend fortlaufend (kein Jahres-Reset), separat pro
+ * is_test-Pool — Live- und Test-Codes stoeren sich nicht.
+ *
+ * Zwei-Strategien-Ansatz (analog `generateBookingId` in lib/booking-id.ts):
+ *   (1) Atomarer RPC `next_content_coupon_counter(p_is_test)` — race-sicher.
+ *       Setzt voraus dass `supabase-content-coupon-counter.sql` migriert ist.
+ *   (2) Fallback: SELECT-MAX-basierter Kandidat + sequentielle Verifikation
+ *       gegen `coupons.code`. Sequentiell sicher; bei paralleler Last sollte
+ *       (1) genutzt werden.
+ *
+ * `padStart(3, '0')` paddet bis 999; danach automatisch breiter (1000, …).
+ */
+async function nextContentCouponCode(supabase: SupabaseClient): Promise<string> {
+  const testMode = await isTestMode();
+  const prefix = testMode ? 'TEST-C2R-CONTENT' : 'C2R-CONTENT';
+
+  const formatCode = (n: number): string => `${prefix}-${String(n).padStart(3, '0')}`;
+
+  // ── Strategie 1: Atomarer RPC ────────────────────────────────────────────
+  try {
+    const { data: rpcData, error: rpcErr } = await supabase.rpc('next_content_coupon_counter', {
+      p_is_test: testMode,
+    });
+    if (!rpcErr && typeof rpcData === 'number' && rpcData > 0) {
+      let seqNum = rpcData;
+      for (let probe = 0; probe < 50; probe++) {
+        const candidate = formatCode(seqNum);
+        const { data: exists } = await supabase
+          .from('coupons').select('id').ilike('code', candidate).maybeSingle();
+        if (!exists) return candidate;
+        seqNum++;
+      }
+    }
+  } catch {
+    // Migration fehlt oder RPC down → Strategie 2 unten.
+  }
+
+  // ── Strategie 2: SELECT-MAX-Kandidat + sequentielle Verifikation ─────────
+  // Höchstes existierendes Suffix laden (case-insensitive Lookup, da der
+  // coupons-UNIQUE-Index UPPER(code) nutzt — siehe supabase-gutscheine.sql).
+  const { data: existing } = await supabase
+    .from('coupons')
+    .select('code')
+    .ilike('code', `${prefix}-%`)
+    .order('code', { ascending: false })
+    .limit(50);
+
+  let maxSeq = 0;
+  for (const row of existing ?? []) {
+    const m = String(row.code).match(/-(\d+)$/);
+    if (m) {
+      const n = parseInt(m[1], 10);
+      if (n > maxSeq) maxSeq = n;
+    }
+  }
+
+  let seqNum = maxSeq + 1;
+  for (let probe = 0; probe < 1000; probe++) {
+    const candidate = formatCode(seqNum);
+    const { data: exists, error: existsErr } = await supabase
+      .from('coupons').select('id').ilike('code', candidate).maybeSingle();
+    if (existsErr) {
+      // DB-Fehler beim Pruefen — zurueck zum Kandidaten ohne Verifikation,
+      // der INSERT-Pfad wird bei UNIQUE-Konflikt sauber 23505 zurueckgeben.
+      return candidate;
+    }
+    if (!exists) return candidate;
+    seqNum++;
+  }
+  return formatCode(seqNum);
 }
 
 /**
- * Erstellt einen personalisierten Gutschein fuer einen UGC-Kunden.
- * Prueft auf Existenz + kollisionsfreien Code.
+ * Erstellt einen account-gebundenen Gutschein fuer einen UGC-Kunden.
+ *
+ * Code-Format: `C2R-CONTENT-NNN` (atomar fortlaufend via RPC, siehe
+ * `nextContentCouponCode`). Approve- und Feature-Coupons teilen sich denselben
+ * Counter — ein Kunde mit Approve + Feature bekommt zwei aufeinanderfolgende
+ * Nummern (z.B. `-042` und `-043`). Das ist gewollt.
+ *
+ * „Personalisiert" = account-gebunden: `target_type='user'`,
+ * `target_user_email`, `max_uses=1`, `once_per_customer=true` — nur der
+ * hochladende Kunde kann einlösen.
  */
 export async function createUgcCoupon(
   supabase: SupabaseClient,
   opts: {
-    prefix: 'UGC' | 'BONUS';
-    submissionId: string;
     targetEmail: string;
     discountPercent: number;
     minOrderValue: number;
@@ -58,16 +134,7 @@ export async function createUgcCoupon(
     description: string;
   },
 ): Promise<string | null> {
-  let code = generateCouponCode(opts.prefix, opts.submissionId);
-  for (let i = 0; i < 5; i++) {
-    const { data: dup } = await supabase
-      .from('coupons')
-      .select('id')
-      .eq('code', code)
-      .maybeSingle();
-    if (!dup) break;
-    code = generateCouponCode(opts.prefix, opts.submissionId);
-  }
+  const code = await nextContentCouponCode(supabase);
 
   const now = new Date();
   const validUntil = new Date(now.getTime() + opts.validityDays * 24 * 60 * 60 * 1000);

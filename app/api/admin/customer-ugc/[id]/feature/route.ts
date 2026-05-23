@@ -84,8 +84,6 @@ export async function POST(req: NextRequest, { params }: { params: Params }) {
     // Coupon-Erstellung ohne Effekt bei verlorenem Race.
     if (!bonusCode && submission.customer_email) {
       bonusCode = await createUgcCoupon(supabase, {
-        prefix: 'BONUS',
-        submissionId: id,
         targetEmail: submission.customer_email,
         discountPercent: settings.feature_discount_percent,
         minOrderValue: settings.feature_min_order_value,
