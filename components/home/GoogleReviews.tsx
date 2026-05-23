@@ -1,6 +1,19 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useProducts } from '@/components/ProductsProvider';
+
+/**
+ * Kombinierte Bewertungs-Section auf der Startseite. Mergt drei Quellen:
+ *
+ * 1) Google Places API (max. 5 — Google-Limit)
+ * 2) Manuell gepflegte Google-Reviews aus `admin_settings.manual_google_reviews`
+ *    (Owner trägt zusätzliche Reviews aus Google Business ein, um über das
+ *    5er-Limit hinauszugehen — alle drei mit Google-Logo markiert)
+ * 3) Eigene Kundenbewertungen aus `/api/home-reviews` (interne Reviews-Tabelle,
+ *    gefüllt durch den DANKE-Coupon-Flow nach jeder Buchung — ohne Google-
+ *    Logo, mit Produktname als Hinweis)
+ */
 
 interface GoogleReview {
   author: string;
@@ -8,7 +21,21 @@ interface GoogleReview {
   text: string;
   date: string;
   profilePhoto?: string;
+  source?: 'api' | 'manual';
 }
+
+interface InternalReview {
+  id: string;
+  product_id: string;
+  rating: number;
+  title: string | null;
+  text: string | null;
+  created_at: string;
+}
+
+type AnyReview =
+  | { kind: 'google'; r: GoogleReview }
+  | { kind: 'internal'; r: InternalReview };
 
 function Stars({ rating }: { rating: number }) {
   return (
@@ -33,10 +60,19 @@ function GoogleLogo() {
   );
 }
 
+function CamIcon() {
+  return (
+    <svg className="w-5 h-5 text-accent-blue" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+      <circle cx="12" cy="13" r="3" />
+    </svg>
+  );
+}
+
 function timeAgo(dateStr: string): string {
   if (!dateStr) return '';
   const date = new Date(dateStr);
-  if (isNaN(date.getTime())) return dateStr; // Fallback für relative Beschreibungen von Google
+  if (isNaN(date.getTime())) return dateStr;
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
   const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
@@ -48,51 +84,77 @@ function timeAgo(dateStr: string): string {
   return `vor ${Math.floor(days / 365)} Jahr${Math.floor(days / 365) > 1 ? 'en' : ''}`;
 }
 
+// User-bereitgestellter Bewertungs-Link mit GBP-Tracking-Parametern (funktioniert
+// für Cam2Rent — der placeId hier weicht leicht von der Places-API-ID ab, da
+// Google für writereview eine eigene Place-ID verwendet).
+const WRITE_REVIEW_URL = 'https://search.google.com/local/writereview?placeid=ChIJ4eUe5O9FqEcRllyeTvywEBE&source=g.page.m._&utm_source=gbp&laa=merchant-review-solicitation';
+const REVIEWS_VIEW_URL = 'https://search.google.com/local/reviews?placeid=ChIJ4eUe5O9FqEcRllyeThCwEBE';
+
 export default function GoogleReviews() {
-  const [reviews, setReviews] = useState<GoogleReview[]>([]);
+  const { products } = useProducts();
+  const getProductName = (productId: string) => products.find((p) => p.id === productId)?.name ?? 'Kamera';
+
+  const [googleReviews, setGoogleReviews] = useState<GoogleReview[]>([]);
+  const [internalReviews, setInternalReviews] = useState<InternalReview[]>([]);
   const [avgRating, setAvgRating] = useState(0);
   const [totalReviews, setTotalReviews] = useState(0);
   const [loaded, setLoaded] = useState(false);
+  // Anzahl initial gezeigter Reviews; per "Mehr anzeigen" expandierbar.
+  const INITIAL_SHOW = 6;
+  const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
-    fetch('/api/google-reviews')
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (d?.reviews?.length > 0) {
-          setReviews(d.reviews);
-          setAvgRating(d.avgRating ?? 0);
-          setTotalReviews(d.totalReviews ?? 0);
+    Promise.all([
+      fetch('/api/google-reviews').then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      fetch('/api/home-reviews').then((r) => (r.ok ? r.json() : null)).catch(() => null),
+    ])
+      .then(([googleData, internalData]) => {
+        if (googleData?.reviews?.length > 0) {
+          setGoogleReviews(googleData.reviews);
+          setAvgRating(googleData.avgRating ?? 0);
+          setTotalReviews(googleData.totalReviews ?? 0);
+        }
+        if (internalData?.reviews?.length > 0) {
+          setInternalReviews(internalData.reviews);
         }
         setLoaded(true);
       })
       .catch(() => setLoaded(true));
   }, []);
 
-  // Nichts anzeigen wenn keine Bewertungen vorhanden
-  if (loaded && reviews.length === 0) return null;
+  // Alle Reviews mischen — Google zuerst (Vertrauens-Anker), dann interne.
+  const allReviews: AnyReview[] = [
+    ...googleReviews.map((r) => ({ kind: 'google' as const, r })),
+    ...internalReviews.map((r) => ({ kind: 'internal' as const, r })),
+  ];
+
+  if (loaded && allReviews.length === 0) return null;
   if (!loaded) return null;
 
+  const visible = expanded ? allReviews : allReviews.slice(0, INITIAL_SHOW);
+  const canExpand = !expanded && allReviews.length > INITIAL_SHOW;
+
   return (
-    <section className="py-16 sm:py-20 bg-white dark:bg-gray-900" aria-labelledby="google-reviews-heading">
+    <section className="py-16 sm:py-20 bg-white dark:bg-gray-900" aria-labelledby="reviews-heading">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="text-center mb-12">
           <h2
-            id="google-reviews-heading"
+            id="reviews-heading"
             className="font-heading font-bold text-2xl sm:text-3xl text-brand-black dark:text-gray-100 mb-3"
           >
-            Das sagen unsere Kunden auf Google
+            Das sagen unsere Kunden
           </h2>
           <p className="font-body text-brand-steel dark:text-gray-400 text-base max-w-lg mx-auto mb-6">
             {totalReviews > 0
               ? `${totalReviews} Bewertungen auf Google – überzeuge dich selbst.`
-              : 'Echte Bewertungen von unseren Kunden.'}
+              : 'Echte Bewertungen unserer Kunden.'}
           </p>
 
           {/* Google Rating Badge */}
           {avgRating > 0 && (
             <a
-              href="https://search.google.com/local/reviews?placeid=ChIJ4eUe5O9FqEcRllyeThCwEBE"
+              href={REVIEWS_VIEW_URL}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-3 px-5 py-3 rounded-full bg-brand-bg dark:bg-gray-800 border border-brand-border dark:border-gray-700 hover:border-accent-blue/50 transition-colors"
@@ -111,51 +173,39 @@ export default function GoogleReviews() {
           )}
         </div>
 
-        {/* Reviews Grid */}
+        {/* Reviews Grid — gemischt Google + eigen */}
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {reviews.slice(0, 6).map((review, i) => (
+          {visible.map((entry, i) => (
             <div
-              key={i}
+              key={entry.kind === 'google' ? `g-${i}` : `i-${entry.r.id}`}
               className="bg-brand-bg dark:bg-gray-800 rounded-card p-5 border border-brand-border/50 dark:border-gray-700/50"
             >
               <div className="flex items-center justify-between mb-3">
-                <Stars rating={review.rating} />
-                <GoogleLogo />
+                <Stars rating={entry.r.rating} />
+                {entry.kind === 'google' ? <GoogleLogo /> : <CamIcon />}
               </div>
-              {review.text && (
-                <p className="text-sm font-body text-brand-text dark:text-gray-300 leading-relaxed line-clamp-4 mb-4">
-                  &quot;{review.text}&quot;
-                </p>
+              {entry.kind === 'google' ? (
+                <GoogleCardBody review={entry.r} />
+              ) : (
+                <InternalCardBody review={entry.r} productName={getProductName(entry.r.product_id)} />
               )}
-              <div className="flex items-center gap-2">
-                {/* Sweep 8 K14: Google-Profilfotos werden NICHT mehr direkt
-                    vom googleusercontent.com-CDN geladen — DSGVO/§ 25 TTDSG-
-                    Konflikt (Drittland-Fluss vor Cookie-Consent). Fallback
-                    auf Initialen-Avatar mit Markenfarbe.
-                    Wenn echte Profilbilder gewuenscht sind, muessen sie
-                    serverseitig gespiegelt werden. */}
-                <div className="w-8 h-8 rounded-full bg-accent-blue/20 flex items-center justify-center overflow-hidden">
-                  <span className="text-xs font-heading font-bold text-accent-blue">
-                    {review.author.charAt(0).toUpperCase()}
-                  </span>
-                </div>
-                <div>
-                  <p className="text-sm font-heading font-semibold text-brand-black dark:text-gray-100">
-                    {review.author}
-                  </p>
-                  <p className="text-[11px] text-brand-muted dark:text-gray-500">
-                    {timeAgo(review.date)}
-                  </p>
-                </div>
-              </div>
             </div>
           ))}
         </div>
 
-        {/* Google Bewertung schreiben CTA */}
-        <div className="text-center mt-8">
+        {/* Mehr anzeigen + CTAs */}
+        <div className="text-center mt-8 flex flex-wrap items-center justify-center gap-3">
+          {canExpand && (
+            <button
+              type="button"
+              onClick={() => setExpanded(true)}
+              className="inline-flex items-center gap-2 px-6 py-3 rounded-btn bg-accent-blue text-white text-sm font-heading font-semibold hover:bg-blue-700 transition-colors"
+            >
+              {allReviews.length - INITIAL_SHOW} weitere Bewertungen anzeigen
+            </button>
+          )}
           <a
-            href="https://search.google.com/local/writereview?placeid=ChIJ4eUe5O9FqEcRllyeThCwEBE"
+            href={WRITE_REVIEW_URL}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 px-6 py-3 rounded-btn bg-brand-bg dark:bg-gray-800 border border-brand-border dark:border-gray-700 text-sm font-heading font-semibold text-brand-black dark:text-gray-100 hover:border-accent-blue/50 transition-colors"
@@ -166,5 +216,60 @@ export default function GoogleReviews() {
         </div>
       </div>
     </section>
+  );
+}
+
+function GoogleCardBody({ review }: { review: GoogleReview }) {
+  return (
+    <>
+      {review.text && (
+        <p className="text-sm font-body text-brand-text dark:text-gray-300 leading-relaxed line-clamp-4 mb-4">
+          &quot;{review.text}&quot;
+        </p>
+      )}
+      <div className="flex items-center gap-2">
+        {/* Sweep 8 K14: Google-Profilfotos werden NICHT mehr direkt vom
+            googleusercontent.com-CDN geladen — DSGVO/§ 25 TTDSG-Konflikt
+            (Drittland-Fluss vor Cookie-Consent). Fallback: Initialen-Avatar. */}
+        <div className="w-8 h-8 rounded-full bg-accent-blue/20 flex items-center justify-center overflow-hidden flex-shrink-0">
+          <span className="text-xs font-heading font-bold text-accent-blue">
+            {review.author.charAt(0).toUpperCase()}
+          </span>
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm font-heading font-semibold text-brand-black dark:text-gray-100 truncate">
+            {review.author}
+          </p>
+          <p className="text-[11px] text-brand-muted dark:text-gray-500">
+            {timeAgo(review.date)}
+          </p>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function InternalCardBody({ review, productName }: { review: InternalReview; productName: string }) {
+  return (
+    <>
+      {review.title && (
+        <h3 className="font-heading font-semibold text-sm text-brand-black dark:text-gray-100 mb-1">
+          {review.title}
+        </h3>
+      )}
+      {review.text && (
+        <p className="text-sm font-body text-brand-text dark:text-gray-300 leading-relaxed line-clamp-4 mb-4">
+          &quot;{review.text}&quot;
+        </p>
+      )}
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[11px] text-brand-muted dark:text-gray-500">
+          Verifizierte Buchung · {productName}
+        </p>
+        <p className="text-[11px] text-brand-muted dark:text-gray-500 flex-shrink-0">
+          {timeAgo(review.created_at)}
+        </p>
+      </div>
+    </>
   );
 }

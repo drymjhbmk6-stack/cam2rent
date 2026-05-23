@@ -7,9 +7,8 @@ import KameraFinderCta from '@/components/home/KameraFinderCta';
 import TrustBanner from '@/components/home/TrustBanner';
 import HowItWorks from '@/components/home/HowItWorks';
 import CtaBanner from '@/components/home/CtaBanner';
-import HomeReviews from '@/components/home/HomeReviews';
-import GoogleReviews from '@/components/home/GoogleReviews';
 import HomeUgc from '@/components/home/HomeUgc';
+import GoogleReviews from '@/components/home/GoogleReviews';
 import NewsletterSignup from '@/components/home/NewsletterSignup';
 import AppInstallBanner from '@/components/home/AppInstallBanner';
 import UnderConstructionBanner from '@/components/home/UnderConstructionBanner';
@@ -39,7 +38,8 @@ export default async function Home() {
       <KameraFinderCta />
       <HowItWorks />
       <HomeUgc />
-      <HomeReviews />
+      {/* GoogleReviews mischt seit 2026-05-23 Google-API + manuelle Google-
+          Reviews + interne Reviews aus dem Umfrage-Flow in einer Section. */}
       <GoogleReviews />
       <NewsletterSignup />
       <AppInstallBanner />

@@ -5,6 +5,7 @@ import AdminBackLink from '@/components/admin/AdminBackLink';
 import SeasonalActionAdmin from '@/components/admin/SeasonalActionAdmin';
 import PromoBannerAdmin from '@/components/admin/PromoBannerAdmin';
 import HomeSeoTextAdmin from '@/components/admin/HomeSeoTextAdmin';
+import ManualGoogleReviewsAdmin from '@/components/admin/ManualGoogleReviewsAdmin';
 
 // ============================================================
 // Types
@@ -632,6 +633,8 @@ export default function ShopUpdaterContent() {
               onChange={(c) => updateSectionLocal('reviews_config', { content: c })}
             />
           </SectionCard>
+
+          <ManualGoogleReviewsAdmin />
 
           <PromoBannerAdmin />
           <SeasonalActionAdmin />
