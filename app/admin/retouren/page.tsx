@@ -29,28 +29,48 @@ const CONDITION_CONFIG: Record<string, { label: string; color: string; bg: strin
   beschaedigt: { label: 'Beschädigt', color: '#ef4444', bg: '#ef444422' },
 };
 
-function isOverdue(rentalTo: string) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return new Date(rentalTo) < today;
+// Default-Puffertage (überschrieben durch admin_settings.booking_buffer_days):
+// Versand braucht 3 Tage Retoure-Spielraum, Abholung 1 Tag.
+const DEFAULT_BUFFER = { versand_after: 3, abholung_after: 1 };
+
+interface BufferAfter { versand_after: number; abholung_after: number }
+
+/**
+ * Liefert das tatsächliche Rückgabe-Soll-Datum (rental_to + Puffer).
+ * - Versand: rental_to + versand_after (Default 3 Tage)
+ * - Abholung: rental_to + abholung_after (Default 1 Tag)
+ */
+function returnDueDate(rentalTo: string, deliveryMode: string, buf: BufferAfter): Date {
+  const d = new Date(rentalTo);
+  d.setHours(0, 0, 0, 0);
+  const add = deliveryMode === 'versand' ? buf.versand_after : buf.abholung_after;
+  d.setDate(d.getDate() + add);
+  return d;
 }
 
-function daysUntilReturn(rentalTo: string) {
+function isOverdue(dueDate: Date) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const end = new Date(rentalTo);
-  end.setHours(0, 0, 0, 0);
-  const diff = Math.ceil((end.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-  return diff;
+  return dueDate < today;
+}
+
+function daysUntilReturn(dueDate: Date) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 }
 
 export default function AdminRetourenPage() {
   const [bookings, setBookings] = useState<ReturnBooking[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<'pending' | 'completed'>('pending');
+  // Puffertage aus admin_settings — bestimmt das tatsächliche Rückgabe-
+  // Soll-Datum (rental_to + versand_after/abholung_after).
+  const [buf, setBuf] = useState<BufferAfter>(DEFAULT_BUFFER);
 
   useEffect(() => {
     fetchBookings();
+    loadBuffer();
   }, []);
 
   async function fetchBookings() {
@@ -64,6 +84,23 @@ export default function AdminRetourenPage() {
       console.error('Failed to load bookings');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadBuffer() {
+    try {
+      const res = await fetch('/api/admin/settings?key=booking_buffer_days');
+      if (!res.ok) return;
+      const { value } = await res.json();
+      const parsed = typeof value === 'string' ? JSON.parse(value) : value;
+      if (parsed && typeof parsed === 'object') {
+        setBuf({
+          versand_after: Number(parsed.versand_after ?? DEFAULT_BUFFER.versand_after),
+          abholung_after: Number(parsed.abholung_after ?? DEFAULT_BUFFER.abholung_after),
+        });
+      }
+    } catch {
+      // Setting nicht ladbar → Defaults bleiben
     }
   }
 
@@ -94,8 +131,8 @@ export default function AdminRetourenPage() {
       <div className="grid gap-3 mb-6" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
         {[
           { label: 'Ausstehend', value: pendingReturns.length, color: '#06b6d4' },
-          { label: 'Überfällig', value: pendingReturns.filter((b) => isOverdue(b.rental_to)).length, color: '#ef4444' },
-          { label: 'Heute fällig', value: pendingReturns.filter((b) => daysUntilReturn(b.rental_to) === 0).length, color: '#f59e0b' },
+          { label: 'Überfällig', value: pendingReturns.filter((b) => isOverdue(returnDueDate(b.rental_to, b.delivery_mode, buf))).length, color: '#ef4444' },
+          { label: 'Heute fällig', value: pendingReturns.filter((b) => daysUntilReturn(returnDueDate(b.rental_to, b.delivery_mode, buf)) === 0).length, color: '#f59e0b' },
           { label: 'Abgeschlossen', value: completedReturns.length, color: '#10b981' },
         ].map((stat) => (
           <div key={stat.label} style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 12, padding: '16px 20px' }}>
@@ -151,8 +188,9 @@ export default function AdminRetourenPage() {
               </thead>
               <tbody>
                 {displayed.map((booking, idx) => {
-                  const overdue = isOverdue(booking.rental_to);
-                  const daysLeft = daysUntilReturn(booking.rental_to);
+                  const dueDate = returnDueDate(booking.rental_to, booking.delivery_mode, buf);
+                  const overdue = isOverdue(dueDate);
+                  const daysLeft = daysUntilReturn(dueDate);
                   const cond = booking.return_condition ? CONDITION_CONFIG[booking.return_condition] : null;
 
                   return (
@@ -172,12 +210,17 @@ export default function AdminRetourenPage() {
                       </td>
                       <td style={{ padding: '14px 16px' }}>
                         <p style={{ fontSize: 13, fontWeight: 600, color: overdue && tab === 'pending' ? '#ef4444' : '#e2e8f0' }}>
-                          {fmtDate(booking.rental_to)}
+                          {fmtDate(dueDate.toISOString())}
                         </p>
                         {tab === 'pending' && (
-                          <p style={{ fontSize: 11, color: overdue ? '#ef4444' : daysLeft <= 1 ? '#f59e0b' : '#64748b', marginTop: 2 }}>
-                            {overdue ? `${Math.abs(daysLeft)} Tag${Math.abs(daysLeft) !== 1 ? 'e' : ''} überfällig` : daysLeft === 0 ? 'Heute fällig' : `in ${daysLeft} Tag${daysLeft !== 1 ? 'en' : ''}`}
-                          </p>
+                          <>
+                            <p style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
+                              Miete bis {fmtDate(booking.rental_to)} · {booking.delivery_mode === 'versand' ? 'Versand' : 'Abholung'}
+                            </p>
+                            <p style={{ fontSize: 11, color: overdue ? '#ef4444' : daysLeft <= 1 ? '#f59e0b' : '#64748b', marginTop: 2 }}>
+                              {overdue ? `${Math.abs(daysLeft)} Tag${Math.abs(daysLeft) !== 1 ? 'e' : ''} überfällig` : daysLeft === 0 ? 'Heute fällig' : `in ${daysLeft} Tag${daysLeft !== 1 ? 'en' : ''}`}
+                            </p>
+                          </>
                         )}
                         {tab === 'completed' && booking.returned_at && (
                           <p style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
