@@ -243,8 +243,20 @@ function Wizard({ booking }: { booking: BookingDetail }) {
       const itemsArray = items
         .filter((it) => it.type !== 'return-label')
         .map((it) => ({ name: it.label, ok: !!checked[it.key] }));
+
+      // Foto vor dem Upload client-seitig komprimieren — iPhone-Fotos sind
+      // oft 3–8 MB (HEIC/JPEG), Mobile-5G/Roaming reißt während 10-MB-Uploads
+      // gerne mit "Netzwerkfehler" ab. Zielgröße ~1 MB reicht für Doku.
+      let photoToUpload = photoFile;
+      try {
+        photoToUpload = await compressPhotoIfLarge(photoFile);
+      } catch (e) {
+        // Bei Kompressionsfehler unverändert hochladen — Original ist fallback
+        console.warn('[handover] photo compression failed, uploading original:', e);
+      }
+
       const formData = new FormData();
-      formData.append('photo', photoFile);
+      formData.append('photo', photoToUpload);
       formData.append('data', JSON.stringify({
         location: location.trim(),
         condition: { tested, noDamage, otherNote: otherNote.trim() || undefined },
@@ -259,18 +271,29 @@ function Wizard({ booking }: { booking: BookingDetail }) {
         },
       }));
 
-      const res = await fetch(`/api/admin/handover/${booking.id}`, {
-        method: 'POST',
-        body: formData,
-      });
+      // Einmal Retry bei Netzwerkfehler — bei Mobile-Network-Switch reißt der
+      // erste Versuch häufig ab, der zweite kommt fast immer durch.
+      let res: Response;
+      try {
+        res = await fetch(`/api/admin/handover/${booking.id}`, { method: 'POST', body: formData });
+      } catch (firstErr) {
+        console.warn('[handover] erster fetch fehlgeschlagen, retry:', firstErr);
+        await new Promise((r) => setTimeout(r, 800));
+        res = await fetch(`/api/admin/handover/${booking.id}`, { method: 'POST', body: formData });
+      }
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setSubmitError(data?.error ?? 'Speichern fehlgeschlagen.');
+        const detail = data?.error ?? `HTTP ${res.status}`;
+        setSubmitError(`Speichern fehlgeschlagen: ${detail}`);
         return;
       }
       setStep('done');
-    } catch {
-      setSubmitError('Netzwerkfehler.');
+    } catch (e) {
+      // Echte Fetch-Exception (Network-Reset, DNS, Offline) — konkrete
+      // Meldung zeigen statt generischem "Netzwerkfehler", damit der Admin
+      // sieht ob WLAN/Mobilfunk oder etwas anderes das Problem ist.
+      const msg = e instanceof Error ? e.message : 'Unbekannter Fehler';
+      setSubmitError(`Netzwerkfehler: ${msg}. Bitte Verbindung prüfen und erneut versuchen.`);
     } finally {
       setSaving(false);
     }
@@ -794,4 +817,48 @@ function DoneView({ booking, handover }: { booking: BookingDetail; handover: Han
       </div>
     </div>
   );
+}
+
+// ─── Foto-Kompression vor Upload ─────────────────────────────────────────────
+//
+// iPhone-Fotos sind oft 3–8 MB (HEIC oder JPEG). Auf instabilem Mobilfunk
+// (Tower-Wechsel, 5G→4G, Roaming) reißt der Upload großer Bodies mit
+// "TypeError: NetworkError"/Connection-Reset gerne ab. ~1 MB als Zieldatei
+// reicht für Doku-Foto-Qualität und kommt zuverlässig durch.
+//
+// Strategie: createImageBitmap akzeptiert auch HEIC/HEIF auf iOS Safari und
+// konvertiert intern. Skaliert auf max 1920×1920 (long edge) und encodiert
+// als JPEG quality 0.85. Bei Fehler wird das Original zurückgegeben — die
+// Funktion ist non-blocking.
+async function compressPhotoIfLarge(file: File): Promise<File> {
+  // Schon klein genug → unverändert lassen
+  if (file.size <= 1.2 * 1024 * 1024) return file;
+  // Browser-Support-Check
+  if (typeof createImageBitmap !== 'function' || typeof document === 'undefined') return file;
+
+  const bitmap = await createImageBitmap(file);
+  try {
+    const MAX_DIM = 1920;
+    let width = bitmap.width;
+    let height = bitmap.height;
+    if (width > MAX_DIM || height > MAX_DIM) {
+      const ratio = Math.min(MAX_DIM / width, MAX_DIM / height);
+      width = Math.round(width * ratio);
+      height = Math.round(height * ratio);
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return file;
+    ctx.drawImage(bitmap, 0, 0, width, height);
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.85),
+    );
+    if (!blob || blob.size >= file.size) return file;
+    const baseName = file.name.replace(/\.[^.]+$/, '') || 'photo';
+    return new File([blob], `${baseName}.jpg`, { type: 'image/jpeg' });
+  } finally {
+    if (typeof bitmap.close === 'function') bitmap.close();
+  }
 }
