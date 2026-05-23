@@ -416,9 +416,39 @@ function ReturnDueCell({
           <p style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
             Miete bis {fmtDate(booking.rental_to)} · {booking.delivery_mode === 'versand' ? 'Versand' : 'Abholung'}
           </p>
-          <p style={{ fontSize: 11, color: overdue ? '#ef4444' : daysLeft <= 1 ? '#f59e0b' : '#64748b', marginTop: 2 }}>
-            {overdue ? `${Math.abs(daysLeft)} Tag${Math.abs(daysLeft) !== 1 ? 'e' : ''} überfällig` : daysLeft === 0 ? 'Heute fällig' : `in ${daysLeft} Tag${daysLeft !== 1 ? 'en' : ''}`}
-          </p>
+          {(() => {
+            // Farb-Staffelung der Dringlichkeit:
+            //   überfällig / heute fällig → rot
+            //   in 1–3 Tagen → amber
+            //   in 4–7 Tagen → cyan
+            //   >7 Tage → grau (Termin noch weit weg)
+            let color = '#64748b';
+            if (overdue || daysLeft === 0) color = '#ef4444';
+            else if (daysLeft <= 3) color = '#f59e0b';
+            else if (daysLeft <= 7) color = '#22d3ee';
+            const label = overdue
+              ? `${Math.abs(daysLeft)} Tag${Math.abs(daysLeft) !== 1 ? 'e' : ''} überfällig`
+              : daysLeft === 0
+                ? 'Heute fällig'
+                : `in ${daysLeft} Tag${daysLeft !== 1 ? 'en' : ''}`;
+            return (
+              <span
+                style={{
+                  display: 'inline-block',
+                  marginTop: 4,
+                  padding: '2px 8px',
+                  borderRadius: 6,
+                  fontSize: 11,
+                  fontWeight: 600,
+                  background: `${color}22`,
+                  color,
+                  border: `1px solid ${color}40`,
+                }}
+              >
+                {label}
+              </span>
+            );
+          })()}
         </>
       )}
       {tab === 'completed' && booking.returned_at && (
