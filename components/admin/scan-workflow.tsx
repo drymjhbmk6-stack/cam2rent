@@ -15,7 +15,7 @@
  *    Item-Liste + Scan-Feedback unter dem Kamera-Stream)
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 // ─── Datenmodell ─────────────────────────────────────────────────────────────
 
@@ -28,6 +28,8 @@ export interface ResolvedItem {
   /** Bestandteile dieses Zubehoers (z.B. "2x Sender", "1x Windschutz").
    *  Werden im Pack-Workflow als Hinweis angezeigt — kein eigener Slot. */
   included_parts?: string[];
+  /** Bilder zu included_parts, paarweise per Index (leerer String = kein Bild). */
+  included_parts_images?: string[];
 }
 
 export interface UnitCode {
@@ -44,6 +46,8 @@ export interface PackItem {
   accessoryId?: string;
   /** Bestandteile dieses Zubehoers (Anzeige-Hinweis, kein Slot). */
   includedParts?: string[];
+  /** Bilder zu includedParts, paarweise per Index (leerer String = kein Bild). */
+  includedPartsImages?: string[];
 }
 
 export interface GroupedItem {
@@ -54,6 +58,8 @@ export interface GroupedItem {
   slotKeys: string[];
   /** Bestandteile (aggregiert vom ersten Item der Gruppe). */
   includedParts?: string[];
+  /** Bilder zu includedParts, paarweise per Index. */
+  includedPartsImages?: string[];
 }
 
 export interface ScanLookup {
@@ -170,6 +176,9 @@ export function expandItems(b: ScanWorkflowInput): PackItem[] {
     const parts = Array.isArray(it.included_parts) && it.included_parts.length > 0
       ? it.included_parts
       : undefined;
+    const partsImages = parts && Array.isArray(it.included_parts_images) && it.included_parts_images.length > 0
+      ? it.included_parts_images
+      : undefined;
     for (let i = 0; i < it.qty; i++) {
       out.push({
         key: `${it.id}::${i}`,
@@ -178,6 +187,7 @@ export function expandItems(b: ScanWorkflowInput): PackItem[] {
         label: it.name,
         subLabel: it.isFromSet && it.setName ? `Im Set: ${it.setName}` : 'Zubehör',
         includedParts: parts,
+        includedPartsImages: partsImages,
       });
     }
   }
@@ -210,6 +220,7 @@ export function groupItems(items: PackItem[]): GroupedItem[] {
         subLabel: it.subLabel,
         slotKeys: [it.key],
         includedParts: it.includedParts,
+        includedPartsImages: it.includedPartsImages,
       };
       map.set(key, g);
       out.push(g);
@@ -526,81 +537,151 @@ export function ItemList({
   onDecrement: (g: GroupedItem) => void;
   compact?: boolean;
 }) {
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   return (
-    <div className="border border-slate-800 rounded-lg overflow-hidden divide-y divide-slate-800">
-      {groups.map((g) => {
-        const checkedCount = groupCheckedCount(g, checked);
-        const total = g.slotKeys.length;
-        const fullyChecked = checkedCount === total;
-        const partiallyChecked = checkedCount > 0 && !fullyChecked;
-        const showCounter = total > 1;
-        return (
-          <div
-            key={g.groupKey}
-            className={`flex items-start gap-3 ${compact ? 'px-3 py-2' : 'px-4 py-3'} ${
-              fullyChecked ? 'bg-emerald-500/5' : partiallyChecked ? 'bg-amber-500/5' : ''
-            }`}
-          >
-            <button
-              type="button"
-              onClick={() => onIncrement(g)}
-              aria-label="Abhaken"
-              className={`mt-0.5 w-6 h-6 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
-                fullyChecked ? 'border-emerald-500 bg-emerald-500 text-slate-950'
-                  : partiallyChecked ? 'border-amber-500 bg-amber-500/20 text-amber-300'
-                  : 'border-slate-600 hover:border-slate-400'
+    <>
+      <div className="border border-slate-800 rounded-lg overflow-hidden divide-y divide-slate-800">
+        {groups.map((g) => {
+          const checkedCount = groupCheckedCount(g, checked);
+          const total = g.slotKeys.length;
+          const fullyChecked = checkedCount === total;
+          const partiallyChecked = checkedCount > 0 && !fullyChecked;
+          const showCounter = total > 1;
+          const hasParts = !!(g.includedParts && g.includedParts.length > 0);
+          return (
+            <div
+              key={g.groupKey}
+              className={`flex flex-col ${compact ? 'px-3 py-2' : 'px-4 py-3'} ${
+                fullyChecked ? 'bg-emerald-500/5' : partiallyChecked ? 'bg-amber-500/5' : ''
               }`}
             >
-              {fullyChecked ? <span className="font-bold">✓</span>
-                : partiallyChecked ? <span className="text-xs font-bold">{checkedCount}</span>
-                : null}
-            </button>
-            <button
-              type="button"
-              onClick={() => onIncrement(g)}
-              className="flex-1 min-w-0 text-left"
-            >
-              <div className={`font-semibold ${compact ? 'text-sm' : ''} ${
-                fullyChecked ? 'text-emerald-300' : 'text-slate-100'
-              }`}>
-                {g.label}
-              </div>
-              {!compact && (
-                <div className="text-xs text-slate-500 mt-0.5">{g.subLabel}</div>
-              )}
-              {g.includedParts && g.includedParts.length > 0 && (
-                <div className={`mt-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 ${compact ? 'px-2 py-1' : 'px-2.5 py-1.5'}`}>
-                  <div className={`font-semibold text-amber-300 ${compact ? 'text-[10px]' : 'text-[11px]'} uppercase tracking-wider mb-0.5`}>
-                    Enthält {g.includedParts.length} {g.includedParts.length === 1 ? 'Teil' : 'Teile'}
+              <div className="flex items-start gap-3">
+                <button
+                  type="button"
+                  onClick={() => onIncrement(g)}
+                  aria-label="Abhaken"
+                  className={`mt-0.5 w-6 h-6 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
+                    fullyChecked ? 'border-emerald-500 bg-emerald-500 text-slate-950'
+                      : partiallyChecked ? 'border-amber-500 bg-amber-500/20 text-amber-300'
+                      : 'border-slate-600 hover:border-slate-400'
+                  }`}
+                >
+                  {fullyChecked ? <span className="font-bold">✓</span>
+                    : partiallyChecked ? <span className="text-xs font-bold">{checkedCount}</span>
+                    : null}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onIncrement(g)}
+                  className="flex-1 min-w-0 text-left"
+                >
+                  <div className={`font-semibold ${compact ? 'text-sm' : ''} ${
+                    fullyChecked ? 'text-emerald-300' : 'text-slate-100'
+                  }`}>
+                    {g.label}
                   </div>
-                  <div className={`text-amber-200/90 leading-snug ${compact ? 'text-[10px]' : 'text-xs'}`}>
-                    {g.includedParts.join(' · ')}
+                  {!compact && (
+                    <div className="text-xs text-slate-500 mt-0.5">{g.subLabel}</div>
+                  )}
+                </button>
+                {showCounter && (
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <span className={`text-xs font-mono tabular-nums ${
+                      fullyChecked ? 'text-emerald-400' : partiallyChecked ? 'text-amber-300' : 'text-slate-500'
+                    }`}>
+                      {checkedCount}/{total}
+                    </span>
+                    {checkedCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => onDecrement(g)}
+                        aria-label="Eins zurueck"
+                        className="w-7 h-7 rounded border border-slate-700 text-slate-400 hover:text-slate-100 hover:border-slate-500 flex items-center justify-center text-base leading-none"
+                      >
+                        −
+                      </button>
+                    )}
                   </div>
-                </div>
-              )}
-            </button>
-            {showCounter && (
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <span className={`text-xs font-mono tabular-nums ${
-                  fullyChecked ? 'text-emerald-400' : partiallyChecked ? 'text-amber-300' : 'text-slate-500'
-                }`}>
-                  {checkedCount}/{total}
-                </span>
-                {checkedCount > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => onDecrement(g)}
-                    aria-label="Eins zurueck"
-                    className="w-7 h-7 rounded border border-slate-700 text-slate-400 hover:text-slate-100 hover:border-slate-500 flex items-center justify-center text-base leading-none"
-                  >
-                    −
-                  </button>
                 )}
               </div>
-            )}
-          </div>
-        );
-      })}
+              {hasParts && (
+                <div className={`mt-1.5 ${compact ? 'ml-9' : 'ml-9'} rounded-md border border-amber-500/30 bg-amber-500/10 ${compact ? 'px-2 py-1.5' : 'px-2.5 py-2'}`}>
+                  <div className={`font-semibold text-amber-300 ${compact ? 'text-[10px]' : 'text-[11px]'} uppercase tracking-wider mb-1`}>
+                    Enthält {g.includedParts!.length} {g.includedParts!.length === 1 ? 'Teil' : 'Teile'}
+                  </div>
+                  <ul className="flex flex-col gap-1">
+                    {g.includedParts!.map((part, i) => {
+                      const img = g.includedPartsImages?.[i] || '';
+                      return (
+                        <li key={i} className="flex items-center gap-2">
+                          {img ? (
+                            <button
+                              type="button"
+                              onClick={() => setLightboxUrl(img)}
+                              aria-label={`${part} vergrößern`}
+                              className={`${compact ? 'w-8 h-8' : 'w-10 h-10'} rounded overflow-hidden border border-amber-500/40 bg-slate-900 flex-shrink-0 hover:border-amber-300 transition-colors`}
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={img} alt={part} className="w-full h-full object-cover" />
+                            </button>
+                          ) : (
+                            <span className={`${compact ? 'w-8 h-8' : 'w-10 h-10'} rounded border border-dashed border-amber-500/30 flex-shrink-0 flex items-center justify-center text-amber-500/40 text-[10px]`}>
+                              –
+                            </span>
+                          )}
+                          <span className={`text-amber-200/90 leading-snug ${compact ? 'text-[11px]' : 'text-xs'}`}>
+                            {part}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <PartImageLightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />
+    </>
+  );
+}
+
+function PartImageLightbox({ url, onClose }: { url: string | null; onClose: () => void }) {
+  useEffect(() => {
+    if (!url) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [url, onClose]);
+
+  if (!url) return null;
+  return (
+    <div
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      className="fixed inset-0 z-[100] bg-black/85 backdrop-blur-sm flex items-center justify-center p-4"
+      style={{ paddingTop: 'max(1rem, env(safe-area-inset-top))', paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
+    >
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Schließen"
+        className="absolute top-4 right-4 w-11 h-11 rounded-full bg-slate-800/90 hover:bg-slate-700 text-slate-100 flex items-center justify-center text-xl leading-none border border-slate-600"
+        style={{ top: 'max(1rem, env(safe-area-inset-top))', right: 'max(1rem, env(safe-area-inset-right))' }}
+      >
+        ✕
+      </button>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={url}
+        alt=""
+        onClick={(e) => e.stopPropagation()}
+        className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+      />
     </div>
   );
 }

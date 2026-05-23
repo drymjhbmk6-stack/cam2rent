@@ -12,6 +12,8 @@ export type ResolvedItem = {
   isFromSet?: boolean;
   setName?: string;
   included_parts?: string[];
+  /** Bilder zu included_parts, paarweise per Index (leerer String = kein Bild). */
+  included_parts_images?: string[];
 };
 
 /**
@@ -39,17 +41,24 @@ export async function resolveAccessoryItems(
   if (rawItems.length === 0) return resolved;
 
   const allIds = [...new Set(rawItems.map((r) => r.accessory_id))];
-  type AccLookup = { name: string; included_parts: string[]; upgrade_group: string | null };
+  type AccLookup = { name: string; included_parts: string[]; included_parts_images: string[]; upgrade_group: string | null };
   const accLookup: Record<string, AccLookup> = {};
-  let accs: Array<{ id: string; name: string; included_parts?: string[] | null; upgrade_group?: string | null }> | null = null;
+  type AccRow = { id: string; name: string; included_parts?: string[] | null; included_parts_images?: string[] | null; upgrade_group?: string | null };
+  let accs: AccRow[] | null = null;
 
-  const accFull = await supabase.from('accessories').select('id, name, included_parts, upgrade_group').in('id', allIds);
-  if (accFull.error && /column .*(included_parts|upgrade_group)/i.test(accFull.error.message)) {
-    // Defensive: fehlende Spalte → Fallback auf id+name
-    const accFallback = await supabase.from('accessories').select('id, name').in('id', allIds);
-    accs = accFallback.data ?? [];
+  const accFull = await supabase.from('accessories').select('id, name, included_parts, included_parts_images, upgrade_group').in('id', allIds);
+  if (accFull.error && /column .*(included_parts|included_parts_images|upgrade_group)/i.test(accFull.error.message)) {
+    // Defensive Stufe 1: Bilder-Spalte fehlt (Migration ausstehend) → ohne Bilder probieren
+    const accNoImg = await supabase.from('accessories').select('id, name, included_parts, upgrade_group').in('id', allIds);
+    if (accNoImg.error && /column .*(included_parts|upgrade_group)/i.test(accNoImg.error.message)) {
+      // Defensive Stufe 2: weitere Spalte fehlt → Fallback auf id+name
+      const accFallback = await supabase.from('accessories').select('id, name').in('id', allIds);
+      accs = (accFallback.data ?? []) as AccRow[];
+    } else {
+      accs = (accNoImg.data ?? []) as AccRow[];
+    }
   } else {
-    accs = accFull.data ?? [];
+    accs = (accFull.data ?? []) as AccRow[];
   }
   const { data: sets } = await supabase.from('sets').select('id, name, accessory_items').in('id', allIds);
 
@@ -57,6 +66,7 @@ export async function resolveAccessoryItems(
     accLookup[a.id] = {
       name: a.name as string,
       included_parts: Array.isArray(a.included_parts) ? (a.included_parts as string[]) : [],
+      included_parts_images: Array.isArray(a.included_parts_images) ? (a.included_parts_images as string[]) : [],
       upgrade_group: (a.upgrade_group as string | null) ?? null,
     };
   }
@@ -77,17 +87,26 @@ export async function resolveAccessoryItems(
   if (setSubIds.size > 0) {
     const subFull = await supabase
       .from('accessories')
-      .select('id, name, included_parts, upgrade_group')
+      .select('id, name, included_parts, included_parts_images, upgrade_group')
       .in('id', [...setSubIds]);
-    let subRows: Array<{ id: string; name: string; included_parts?: string[] | null; upgrade_group?: string | null }> = subFull.data ?? [];
-    if (subFull.error && /column .*(included_parts|upgrade_group)/i.test(subFull.error.message)) {
-      const subFallback = await supabase.from('accessories').select('id, name').in('id', [...setSubIds]);
-      subRows = subFallback.data ?? [];
+    let subRows: AccRow[] = (subFull.data ?? []) as AccRow[];
+    if (subFull.error && /column .*(included_parts|included_parts_images|upgrade_group)/i.test(subFull.error.message)) {
+      const subNoImg = await supabase
+        .from('accessories')
+        .select('id, name, included_parts, upgrade_group')
+        .in('id', [...setSubIds]);
+      if (subNoImg.error && /column .*(included_parts|upgrade_group)/i.test(subNoImg.error.message)) {
+        const subFallback = await supabase.from('accessories').select('id, name').in('id', [...setSubIds]);
+        subRows = (subFallback.data ?? []) as AccRow[];
+      } else {
+        subRows = (subNoImg.data ?? []) as AccRow[];
+      }
     }
     for (const a of subRows) {
       accLookup[a.id] = {
         name: a.name as string,
         included_parts: Array.isArray(a.included_parts) ? (a.included_parts as string[]) : [],
+        included_parts_images: Array.isArray(a.included_parts_images) ? (a.included_parts_images as string[]) : [],
         upgrade_group: (a.upgrade_group as string | null) ?? null,
       };
     }
@@ -114,6 +133,7 @@ export async function resolveAccessoryItems(
           isFromSet: true,
           setName: setInfo.name,
           included_parts: subAcc?.included_parts && subAcc.included_parts.length > 0 ? subAcc.included_parts : undefined,
+          included_parts_images: subAcc?.included_parts_images && subAcc.included_parts_images.length > 0 ? subAcc.included_parts_images : undefined,
         });
       }
     } else {
@@ -124,6 +144,7 @@ export async function resolveAccessoryItems(
         name: acc?.name ?? item.accessory_id,
         qty: item.qty,
         included_parts: acc?.included_parts && acc.included_parts.length > 0 ? acc.included_parts : undefined,
+        included_parts_images: acc?.included_parts_images && acc.included_parts_images.length > 0 ? acc.included_parts_images : undefined,
       });
     }
   }
