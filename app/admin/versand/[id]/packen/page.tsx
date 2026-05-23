@@ -275,19 +275,41 @@ function PackStep({
     }
   }
 
+  // Refs spiegeln den State synchron — handleScan wird aus einer
+  // eingefrorenen Scanner-Closure aufgerufen und würde sonst veraltete
+  // checked-/scanned-Werte sehen.
+  const checkedRef = useRef(checked);
+  const scannedCameraUnitIdsRef = useRef(scannedCameraUnitIds);
+  const scannedAccessoryUnitIdsRef = useRef(scannedAccessoryUnitIds);
+  useEffect(() => { checkedRef.current = checked; }, [checked]);
+  useEffect(() => { scannedCameraUnitIdsRef.current = scannedCameraUnitIds; }, [scannedCameraUnitIds]);
+  useEffect(() => { scannedAccessoryUnitIdsRef.current = scannedAccessoryUnitIds; }, [scannedAccessoryUnitIds]);
+
   async function handleScan(code: string) {
     const scannedSet = new Set([
-      ...scannedCameraUnitIds,
-      ...scannedAccessoryUnitIds,
+      ...scannedCameraUnitIdsRef.current,
+      ...scannedAccessoryUnitIdsRef.current,
     ]);
-    const result = await applyScan(code, booking.id, items, checked, scanLookup, scannedSet);
+    const result = await applyScan(code, booking.id, items, checkedRef.current, scanLookup, scannedSet);
     if (result.ok && result.key) {
-      setChecked((p) => applyScanResult(result, items, p));
+      setChecked((p) => {
+        const next = applyScanResult(result, items, p);
+        checkedRef.current = next;
+        return next;
+      });
       if (result.scannedUnitId) {
         if (result.scannedKind === 'camera') {
-          setScannedCameraUnitIds((p) => p.includes(result.scannedUnitId!) ? p : [...p, result.scannedUnitId!]);
+          setScannedCameraUnitIds((p) => {
+            const next = p.includes(result.scannedUnitId!) ? p : [...p, result.scannedUnitId!];
+            scannedCameraUnitIdsRef.current = next;
+            return next;
+          });
         } else if (result.scannedKind === 'accessory') {
-          setScannedAccessoryUnitIds((p) => p.includes(result.scannedUnitId!) ? p : [...p, result.scannedUnitId!]);
+          setScannedAccessoryUnitIds((p) => {
+            const next = p.includes(result.scannedUnitId!) ? p : [...p, result.scannedUnitId!];
+            scannedAccessoryUnitIdsRef.current = next;
+            return next;
+          });
         }
       }
       if (result.isSubstitute && result.substituteCode) {
@@ -504,6 +526,11 @@ function CheckStep({
     [items, checked],
   );
 
+  // Ref spiegelt checked-State synchron für race-safe Folge-Scans (Closure-
+  // Schutz im continuous-Scanner-Modus).
+  const checkedRef = useRef(checked);
+  useEffect(() => { checkedRef.current = checked; }, [checked]);
+
   function incGroup(g: GroupedItem) {
     const next = g.slotKeys.find((k) => !checked[k]);
     if (next) setChecked((p) => ({ ...p, [next]: true }));
@@ -520,9 +547,13 @@ function CheckStep({
 
   async function handleScan(code: string) {
     // CheckStep: keine Substitution mehr — Codes sind durch Step 1 gesetzt.
-    const result = await applyScan(code, booking.id, items, checked, scanLookup, new Set(), false);
+    const result = await applyScan(code, booking.id, items, checkedRef.current, scanLookup, new Set(), false);
     if (result.ok && result.key) {
-      setChecked((p) => applyScanResult(result, items, p));
+      setChecked((p) => {
+        const next = applyScanResult(result, items, p);
+        checkedRef.current = next;
+        return next;
+      });
       setScanFeedback({ type: 'ok', msg: result.message, parts: result.includedParts });
     } else if (result.alreadyChecked) {
       setScanFeedback({ type: 'warn', msg: result.message });

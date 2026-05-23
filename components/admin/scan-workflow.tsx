@@ -502,10 +502,11 @@ export async function applyScan(
  * Hintergrund: bei schnellen Folge-Scans im Continuous-Mode kann der vom
  * Server vorgeschlagene `key` zwischenzeitlich bereits abgehakt sein
  * (Scan-2 lief mit veraltetem `checked`-State). Dieser Helper erkennt das
- * und wählt stattdessen den nächsten freien Slot derselben Position (über
- * `accessoryId` für Zubehör bzw. `scannedKind='camera'` für Kameras) —
- * damit landet jeder erfolgreiche Scan immer auf einem realen freien Slot
- * und der Counter zählt zuverlässig hoch.
+ * und wählt stattdessen den nächsten freien Slot derselben Gruppe — der
+ * Match passiert über den Key-Präfix vor `'::'` (z.B. `'extra-akku::0'` →
+ * Gruppe `'extra-akku'`, `'camera::1'` → Gruppe `'camera'`). So braucht der
+ * Fallback weder `accessoryId` noch `scannedKind` und funktioniert auch
+ * dann, wenn der Server-Lookup unerwartete Werte zurückgibt.
  */
 export function applyScanResult(
   result: ScanResult,
@@ -523,16 +524,24 @@ export function applyScanResult(
     next[result.key] = true;
     return next;
   }
-  // Vorgeschlagener Slot wurde inzwischen abgehakt → race-safe den nächsten
-  // freien Slot derselben Gruppe suchen.
-  if (result.scannedKind === 'accessory' && result.accessoryId) {
-    const free = items.find(
+  // Vorgeschlagener Slot wurde inzwischen abgehakt (Race bei schnellen
+  // Folge-Scans) → nächsten freien Slot derselben Gruppe suchen. Match
+  // über Key-Präfix vor '::' (für 'camera' ohne Suffix matcht 'camera' und
+  // 'camera::N' gleichermaßen, weil split('::')[0] in beiden Fällen
+  // 'camera' liefert).
+  const prefix = result.key.split('::')[0];
+  const free = items.find((it) => it.key.split('::')[0] === prefix && !next[it.key]);
+  if (free) {
+    next[free.key] = true;
+  } else if (result.scannedKind === 'accessory' && result.accessoryId) {
+    // Fallback-Fallback: falls Präfix-Match nichts findet, über accessoryId.
+    const f2 = items.find(
       (it) => it.type === 'accessory' && it.accessoryId === result.accessoryId && !next[it.key],
     );
-    if (free) next[free.key] = true;
+    if (f2) next[f2.key] = true;
   } else if (result.scannedKind === 'camera') {
-    const free = items.find((it) => it.type === 'camera' && !next[it.key]);
-    if (free) next[free.key] = true;
+    const f2 = items.find((it) => it.type === 'camera' && !next[it.key]);
+    if (f2) next[f2.key] = true;
   }
   return next;
 }

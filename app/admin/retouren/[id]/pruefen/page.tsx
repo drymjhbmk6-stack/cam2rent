@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, use } from 'react';
+import { useEffect, useMemo, useRef, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import SerialScanner from '@/components/admin/SerialScanner';
@@ -97,6 +97,12 @@ export default function RetourenPruefenPage({ params }: { params: Promise<{ id: 
   const checkedItems = items.filter((it) => it.type !== 'return-label' && checked[it.key]).length;
   const allChecked = totalItems > 0 && checkedItems === totalItems;
 
+  // Ref spiegelt checked-State synchron — handleScan wird im continuous-
+  // Scanner-Modus aus einer eingefrorenen Closure aufgerufen und sieht
+  // sonst veraltete Werte.
+  const checkedRef = useRef(checked);
+  useEffect(() => { checkedRef.current = checked; }, [checked]);
+
   function incGroup(g: GroupedItem) {
     const next = g.slotKeys.find((k) => !checked[k]);
     if (next) setChecked((p) => ({ ...p, [next]: true }));
@@ -115,9 +121,13 @@ export default function RetourenPruefenPage({ params }: { params: Promise<{ id: 
     if (!booking || !scanLookup) return;
     // Retoure: keine Substitution — die Codes wurden in der Pack-Phase
     // festgelegt und stehen in der Buchung.
-    const result = await applyScan(code, booking.id, items, checked, scanLookup, new Set(), false);
+    const result = await applyScan(code, booking.id, items, checkedRef.current, scanLookup, new Set(), false);
     if (result.ok && result.key) {
-      setChecked((p) => applyScanResult(result, items, p));
+      setChecked((p) => {
+        const next = applyScanResult(result, items, p);
+        checkedRef.current = next;
+        return next;
+      });
       setScanFeedback({ type: 'ok', msg: result.message });
     } else if (result.alreadyChecked) {
       setScanFeedback({ type: 'warn', msg: result.message });

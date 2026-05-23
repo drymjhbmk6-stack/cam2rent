@@ -162,20 +162,42 @@ function Wizard({ booking }: { booking: BookingDetail }) {
     }
   }
 
+  // Refs spiegeln den State synchron — handleScan wird im Continuous-
+  // Scanner-Modus aus einer eingefrorenen RAF/setInterval-Closure aufgerufen
+  // und würde sonst veraltete checked-/scanned-Werte sehen. Die Refs werden
+  // bei jedem Render aktualisiert (useEffect mit dep-Watch).
+  const checkedRef = useRef(checked);
+  const scannedCameraUnitIdsRef = useRef(scannedCameraUnitIds);
+  const scannedAccessoryUnitIdsRef = useRef(scannedAccessoryUnitIds);
+  useEffect(() => { checkedRef.current = checked; }, [checked]);
+  useEffect(() => { scannedCameraUnitIdsRef.current = scannedCameraUnitIds; }, [scannedCameraUnitIds]);
+  useEffect(() => { scannedAccessoryUnitIdsRef.current = scannedAccessoryUnitIds; }, [scannedAccessoryUnitIds]);
+
   async function handleScan(code: string) {
     const scannedSet = new Set([
-      ...scannedCameraUnitIds,
-      ...scannedAccessoryUnitIds,
+      ...scannedCameraUnitIdsRef.current,
+      ...scannedAccessoryUnitIdsRef.current,
     ]);
-    const result = await applyScan(code, booking.id, items, checked, scanLookup, scannedSet);
+    const result = await applyScan(code, booking.id, items, checkedRef.current, scanLookup, scannedSet);
     if (result.ok && result.key) {
-      setChecked((p) => applyScanResult(result, items, p));
+      setChecked((p) => {
+        const next = applyScanResult(result, items, p);
+        checkedRef.current = next; // synchroner Ref-Update — schnellster Folge-Scan sieht die neue Map sofort
+        return next;
+      });
       if (result.scannedUnitId) {
         if (result.scannedKind === 'camera') {
-          setScannedCameraUnitIds((p) => p.includes(result.scannedUnitId!) ? p : [...p, result.scannedUnitId!]);
+          setScannedCameraUnitIds((p) => {
+            const next = p.includes(result.scannedUnitId!) ? p : [...p, result.scannedUnitId!];
+            scannedCameraUnitIdsRef.current = next;
+            return next;
+          });
         } else if (result.scannedKind === 'accessory') {
-          setScannedAccessoryUnitIds((p) =>
-            p.includes(result.scannedUnitId!) ? p : [...p, result.scannedUnitId!]);
+          setScannedAccessoryUnitIds((p) => {
+            const next = p.includes(result.scannedUnitId!) ? p : [...p, result.scannedUnitId!];
+            scannedAccessoryUnitIdsRef.current = next;
+            return next;
+          });
         }
       }
       setScanFeedback({ type: 'ok', msg: result.message, parts: result.includedParts });
