@@ -2576,13 +2576,17 @@ Admin, wonach Kunden suchen (Nachfrage-Analyse, unabhängig vom Abschluss).
   fürs Limit, NICHT gespeichert): sanitisiert, berechnet `rental_days`,
   schreibt eine Zeile. Defensiver Fallback bei fehlender Migration (Insert
   übersprungen, kein 500 — Buchungs-Flow nie beeinträchtigt).
-- **`GET /api/admin/booking-interest?days=30`** (Permission `berichte`):
-  aggregiert im Zeitraum (Default 30 Tage, max 365) — Top-Kameras, Top-Zubehör
-  (gewichtet nach qty), Top-Sets, Mietdauer-Buckets (1 / 2–3 / 4–7 / 8–14 /
-  15–30 / 30+ Tage), Lieferart-Split, Haftungs-Split. `is_test`-gefiltert.
+- **`GET /api/admin/booking-interest`** (Permission `berichte`): aggregiert
+  Top-Kameras, Top-Zubehör (gewichtet nach qty), Top-Sets, Mietdauer-Buckets
+  (1 / 2–3 / 4–7 / 8–14 / 15–30 / 30+ Tage), Lieferart-Split, Haftungs-Split.
+  `is_test`-gefiltert. **Zeitraum-Auswahl** (Präzedenz von oben nach unten):
+  `?from=YYYY-MM-DD&to=YYYY-MM-DD` (freier Zeitraum, inkl. ganzem to-Tag),
+  `?hours=24` (rollende N Stunden, 1–168), `?days=30` (Berlin-Tages-Buckets,
+  1–365, Default).
 - **Admin-Seite `/admin/buchungsinteresse`** (Sidebar-Gruppe „Berichte"):
-  Zeitraum-Pills (7/30/90 Tage), Konfigurations-Zähler, Ranking-Balken pro
-  Kategorie. Defensiver Migrations-Hinweis wenn Tabelle fehlt.
+  Zeitraum-Pills (24 Stunden / 7 / 30 / 90 Tage) + „Eigener Zeitraum" mit
+  zwei Datumsfeldern + Anwenden-Button. Konfigurations-Zähler, Ranking-Balken
+  pro Kategorie. Defensiver Migrations-Hinweis wenn Tabelle fehlt.
 - **Go-Live TODO:** Migration `supabase/supabase-booking-interest.sql`
   ausführen. Ohne sie läuft der Buchungs-Flow normal weiter, die Telemetrie
   wird nur verworfen und die Admin-Seite zeigt einen Hinweis.
