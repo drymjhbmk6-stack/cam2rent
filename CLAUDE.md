@@ -757,6 +757,24 @@ Buchungen im Status `pending_verification` (Express-Signup ohne Ausweis) oder `a
   - Cyan-Farbe (#06b6d4), Chevron-Icon
   - Ausnahmen: Dashboard, Login, Vertragsunterschrift (hat eigenen router.back())
 
+### Versand-/Rückgabe-Datum pro Buchung manuell setzen (Stand 2026-05-23)
+Der Admin kann pro Buchung den **Versand-/Übergabe-Tag** (vor Mietbeginn) und den **Rückgabe-Soll-Tag** (nach Mietende) individuell überschreiben — Override hat Vorrang vor den globalen Puffern aus `admin_settings.booking_buffer_days`. Wirkt durchgehend in **Kunden-Live-Kalender**, **Admin-Verfügbarkeits-Gantt**, **Auftragskalender** und **Rückgabe-Liste** — d.h. blockt automatisch im Customer-Kalender den exakt richtigen Zeitraum, sobald jemand z.B. 5 Tage Rückgabe-Puffer für Buchung X einträgt.
+
+- **Migration** `supabase/supabase-bookings-shipping-overrides.sql` (idempotent): zwei neue Spalten `bookings.ship_date_override DATE NULL` + `bookings.return_due_date_override DATE NULL`. NULL = aus Default-Puffer berechnen. Ohne Migration läuft alles über defensive Select-/Update-Retries weiter (kein Hard-Fail; reine Override-PATCHs liefern 503).
+- **Helper** `lib/booking-buffer.ts`: `loadBufferDays()` (aus admin_settings), `computeShipDate(rental_from, mode, buf, override?)`, `computeReturnDueDate(rental_to, mode, buf, override?)`, `toIsoDate()`, `sanitizeOverrideDate()`. **Eine** Wahrheitsquelle für alle vier Konsumenten.
+- **PATCH** `/api/admin/booking/[id]` akzeptiert `ship_date_override` + `return_due_date_override` als YYYY-MM-DD-String oder `null` (zurücksetzen). 422 bei Format-Fehler, defensiver Spalten-Drop-Retry bei fehlender Migration.
+- **APIs angepasst:**
+  - `/api/availability/[productId]` (Customer-Kalender) — Block-Range pro Buchung über `computeShipDate`/`computeReturnDueDate`. Override-Felder via defensivem Select-Retry. +30 Tage Margin auf der erweiterten Such-Range, damit auch weit-in-die-Zukunft-Overrides erfasst werden.
+  - `/api/admin/availability-gantt` (Admin-Verfügbarkeit) — reicht die Override-Felder pro Buchung an die UI durch.
+  - `/admin/verfuegbarkeit/page.tsx` (Gantt-Client) — `matchBookingDay()` nutzt Override mit Vorrang vor `bufferDays`.
+  - `/api/admin/auftragskalender` — `ship_date`/`return_date` werden direkt aus Override berechnet (sonst Default-Puffer). Antwort enthält zusätzlich `ship_date_overridden` + `return_date_overridden` (Flags).
+  - `/api/admin/alle-buchungen` — liefert beide Override-Felder mit (für Retouren-Liste).
+- **UI:**
+  - `/admin/buchungen/[id]` neue Section **„Versand- / Rückgabe-Termine"** (direkt sichtbar, zwischen Buchungsdaten und „Bearbeiten & Werkzeuge"-Collapsible). Zwei `<input type="date">`-Felder mit Default-Vorschlag (live aus geladenen Puffern), Speichern + „Auf Standard zurücksetzen"-Button, „manuell"-Badge wenn Override gesetzt.
+  - `/admin/retouren` — Inline-Edit pro Zeile: Stift-Icon neben dem Rückgabe-Datum öffnet kompakten Datepicker mit Speichern/Abbrechen/Standard-Reset. „manuell"-Pill (amber) zeigt overridete Buchungen.
+- **Wichtig zu verstehen:** `ship_date_override` ist konkretes Datum (DATE), kein „Anzahl Tage". Wenn Admin den Versand-Tag von „21.05." auf „19.05." vorzieht und der Mietzeitraum sich verschiebt (z.B. via `BookingEditSection`), bleibt das Override-Datum stehen — der Admin muss es manuell anpassen oder zurücksetzen. Das ist gewollt: der einmal gesetzte konkrete Termin ist die Wahrheit, kein automatisch-mitziehender Puffer.
+- **Go-Live TODO:** Migration `supabase/supabase-bookings-shipping-overrides.sql` ausführen. Bis dahin sind die UI-Felder sichtbar, das Speichern liefert aber 503 mit Hinweis auf die ausstehende Migration. Default-Verhalten (globale Puffer) läuft unverändert weiter.
+
 ### Kunden-Verifizierung
 - Kunden registrieren sich → Bestätigungs-E-Mail (Supabase Auth)
 - Auth-Callback (`/auth/callback`): Unterstützt PKCE + Token-Hash + Fallback bei In-App-Browsern

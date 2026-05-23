@@ -21,6 +21,7 @@ import { buildBookingAdjustmentEmail } from '@/lib/booking-adjustment-email';
 import { getSiteUrl } from '@/lib/env-mode';
 import { RESERVING_BOOKING_STATUSES } from '@/lib/booking-statuses';
 import { snapshotInvoiceVersion } from '@/lib/invoice-versions';
+import { sanitizeOverrideDate } from '@/lib/booking-buffer';
 
 const PACK_RESET_FIELDS = {
   pack_status: null,
@@ -717,6 +718,8 @@ export async function PATCH(
     tracking_carrier,
     return_tracking_number,
     return_tracking_carrier,
+    ship_date_override,
+    return_due_date_override,
   } = body as {
     status?: string;
     cancellation_reason?: string;
@@ -730,6 +733,8 @@ export async function PATCH(
     tracking_carrier?: string | null;
     return_tracking_number?: string | null;
     return_tracking_carrier?: string | null;
+    ship_date_override?: string | null;
+    return_due_date_override?: string | null;
   };
 
   const supabase = createServiceClient();
@@ -1620,6 +1625,31 @@ export async function PATCH(
     updates.verification_gate_passed_at = null;
   }
 
+  // Versand-/Rueckgabe-Datum Override pro Buchung. Akzeptiert YYYY-MM-DD oder
+  // leeren String/null (= zuruecksetzen). Bei fehlender Migration faengt der
+  // unten stehende defensive Retry den Schema-Fehler ab und schreibt ohne
+  // die Spalten.
+  if (ship_date_override !== undefined) {
+    try {
+      updates.ship_date_override = sanitizeOverrideDate(ship_date_override);
+    } catch (e) {
+      return NextResponse.json(
+        { error: `Versand-/Uebergabe-Datum: ${e instanceof Error ? e.message : 'ungueltig'}` },
+        { status: 422 },
+      );
+    }
+  }
+  if (return_due_date_override !== undefined) {
+    try {
+      updates.return_due_date_override = sanitizeOverrideDate(return_due_date_override);
+    } catch (e) {
+      return NextResponse.json(
+        { error: `Rueckgabe-Datum: ${e instanceof Error ? e.message : 'ungueltig'}` },
+        { status: 422 },
+      );
+    }
+  }
+
   // Status aktualisieren
   // Bei Status-Wechsel: Pre-Status laden fuer atomaren Status-Guard (Race-Schutz
   // gegen parallele Aktionen wie Stripe-Webhook oder Doppel-Klick auf Storno).
@@ -1710,6 +1740,30 @@ export async function PATCH(
     } else {
       return NextResponse.json(
         { error: 'Tracking-Anpassung nicht moeglich — Migration steht noch aus.' },
+        { status: 503 },
+      );
+    }
+  }
+
+  // Defensiver Fallback: Migration supabase-bookings-shipping-overrides.sql
+  // noch nicht durch → Override-Spalten droppen und Update neu versuchen.
+  // Bei reinem Override-Edit (kein Status, kein anderes Feld): 503.
+  if (
+    error &&
+    /ship_date_override|return_due_date_override/i.test(error.message || '') &&
+    ('ship_date_override' in updates || 'return_due_date_override' in updates)
+  ) {
+    const { ship_date_override: _sd, return_due_date_override: _rd, ...rest } = updates;
+    void _sd; void _rd;
+    if (Object.keys(rest).length > 0) {
+      let retry = supabase.from('bookings').update(rest).eq('id', id);
+      if (preStatus !== null) retry = retry.eq('status', preStatus);
+      const r = await retry.select('id').maybeSingle();
+      updated = r.data;
+      error = r.error;
+    } else {
+      return NextResponse.json(
+        { error: 'Versand-/Rueckgabe-Datum-Anpassung nicht moeglich — Migration `supabase-bookings-shipping-overrides.sql` steht noch aus.' },
         { status: 503 },
       );
     }

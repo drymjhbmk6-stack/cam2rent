@@ -22,6 +22,9 @@ interface GanttBooking {
   status: string;
   unit_id: string | null;
   is_test?: boolean;
+  /** Individuelle Override-Datumsfelder (haben Vorrang vor bufferDays). */
+  ship_date_override?: string | null;
+  return_due_date_override?: string | null;
 }
 
 interface GanttBlocked {
@@ -298,15 +301,25 @@ export default function AdminVerfuegbarkeitPage() {
     const before = bMode === 'abholung' ? buf.abholung_before : buf.versand_before;
     const after = bMode === 'abholung' ? buf.abholung_after : buf.versand_after;
 
-    const fromDate = new Date(b.rental_from);
-    const toDate = new Date(b.rental_to);
-    const bufferStart = new Date(fromDate);
-    bufferStart.setDate(bufferStart.getDate() - before);
-    const bufferEnd = new Date(toDate);
-    bufferEnd.setDate(bufferEnd.getDate() + after);
-
-    const bufStartStr = bufferStart.toISOString().split('T')[0];
-    const bufEndStr = bufferEnd.toISOString().split('T')[0];
+    // Override-Datum hat Vorrang. Format YYYY-MM-DD.
+    let bufStartStr: string;
+    if (b.ship_date_override) {
+      bufStartStr = b.ship_date_override.slice(0, 10);
+    } else {
+      const fromDate = new Date(b.rental_from);
+      const bufferStart = new Date(fromDate);
+      bufferStart.setDate(bufferStart.getDate() - before);
+      bufStartStr = bufferStart.toISOString().split('T')[0];
+    }
+    let bufEndStr: string;
+    if (b.return_due_date_override) {
+      bufEndStr = b.return_due_date_override.slice(0, 10);
+    } else {
+      const toDate = new Date(b.rental_to);
+      const bufferEnd = new Date(toDate);
+      bufferEnd.setDate(bufferEnd.getDate() + after);
+      bufEndStr = bufferEnd.toISOString().split('T')[0];
+    }
 
     const isPending = b.status === 'awaiting_payment';
 

@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase';
 import { getProducts } from '@/lib/get-products';
 import { resolveProdukteIdMap, loadInventarUnitsForProdukteBulk } from '@/lib/legacy-bridge';
 import { resolveBookingCameras } from '@/lib/booking-cameras';
+import { loadBufferDays } from '@/lib/booking-buffer';
 
 /**
  * GET /api/admin/availability-gantt?from=2025-04-16&to=2027-04-15
@@ -56,18 +57,16 @@ export async function GET(req: NextRequest) {
 
   const supabase = createServiceClient();
 
-  // Puffer-Tage laden
-  const { data: bufferSetting } = await supabase
-    .from('admin_settings')
-    .select('value')
-    .eq('key', 'booking_buffer_days')
-    .maybeSingle();
+  // Puffer-Tage laden (Default: 2/2 versand, 0/1 abholung — Customer-Default).
+  const buf = await loadBufferDays(supabase, {
+    versand_before: 2,
+    versand_after: 2,
+    abholung_before: 0,
+    abholung_after: 1,
+  });
 
-  const buf = bufferSetting?.value
-    ? (typeof bufferSetting.value === 'string' ? JSON.parse(bufferSetting.value) : bufferSetting.value)
-    : { versand_before: 2, versand_after: 2, abholung_before: 0, abholung_after: 1 };
-
-  const maxBuffer = Math.max(buf.versand_before, buf.versand_after, buf.abholung_before, buf.abholung_after, 3);
+  // +30 Tage Margin fuer eventuelle Override-Termine pro Buchung.
+  const maxBuffer = Math.max(buf.versand_before, buf.versand_after, buf.abholung_before, buf.abholung_after, 3) + 30;
 
   // Erweiterten Zeitraum berechnen (für Buchungen die über den Rand hinausragen)
   const extFirstDate = new Date(firstDay);
@@ -78,15 +77,43 @@ export async function GET(req: NextRequest) {
   extLastDate.setDate(extLastDate.getDate() + maxBuffer);
   const extLast = extLastDate.toISOString().split('T')[0];
 
+  // Buchungen mit defensivem Override-Select-Retry. Cast auf generisches
+  // Result-Type, weil Supabase-Codegen die Result-Typen nicht aus einer
+  // String-Variable ableiten kann.
+  type BookingRow = {
+    id: string; product_id?: string | null; product_name: string;
+    rental_from: string; rental_to: string; days: number;
+    status: string; delivery_mode: string; customer_name: string;
+    unit_id?: string | null; cameras?: unknown;
+    accessories?: string[] | null;
+    accessory_items?: { accessory_id: string; qty?: number }[] | null;
+    accessory_unit_ids?: string[] | null;
+    is_test?: boolean | null;
+    ship_date_override?: string | null;
+    return_due_date_override?: string | null;
+  };
+  type BookingsQResult = { data: BookingRow[] | null; error: { message: string } | null };
+  const bookingsBaseCols = 'id, product_id, product_name, rental_from, rental_to, days, status, delivery_mode, customer_name, unit_id, cameras, accessories, accessory_items, accessory_unit_ids, is_test';
+  const runBookings = async (cols: string): Promise<BookingsQResult> => {
+    const r = await supabase
+      .from('bookings')
+      .select(cols)
+      .in('status', ['awaiting_payment', 'confirmed', 'preparing_shipment', 'awaiting_pickup', 'shipped', 'delivered', 'picked_up', 'completed'])
+      .lte('rental_from', extLast)
+      .gte('rental_to', extFirst);
+    return r as unknown as BookingsQResult;
+  };
+
   // Parallele Abfragen
   const [products, bookingsResult, blockedResult, accessoriesResult, setsResult] = await Promise.all([
     getProducts(),
-    supabase
-      .from('bookings')
-      .select('id, product_id, product_name, rental_from, rental_to, days, status, delivery_mode, customer_name, unit_id, cameras, accessories, accessory_items, accessory_unit_ids, is_test')
-      .in('status', ['awaiting_payment', 'confirmed', 'preparing_shipment', 'awaiting_pickup', 'shipped', 'delivered', 'picked_up', 'completed'])
-      .lte('rental_from', extLast)
-      .gte('rental_to', extFirst),
+    (async (): Promise<BookingsQResult> => {
+      const r = await runBookings(`${bookingsBaseCols}, ship_date_override, return_due_date_override`);
+      if (r.error && /ship_date_override|return_due_date_override/i.test(r.error.message || '')) {
+        return runBookings(bookingsBaseCols);
+      }
+      return r;
+    })(),
     supabase
       .from('product_blocked_dates')
       .select('product_id, start_date, end_date, reason')
@@ -208,6 +235,10 @@ export async function GET(req: NextRequest) {
         status: b.status,
         unit_id: b._unitId,
         is_test: b.is_test ?? false,
+        // Override-Datumsfelder (NULL = aus bufferDays + delivery_mode berechnen).
+        // Frontend nutzt sie in der Puffer-Visualisierung mit Vorrang vor bufferDays.
+        ship_date_override: (b as { ship_date_override?: string | null }).ship_date_override ?? null,
+        return_due_date_override: (b as { return_due_date_override?: string | null }).return_due_date_override ?? null,
       })),
       blocked: productBlocked,
     };

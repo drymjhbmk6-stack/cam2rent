@@ -4,13 +4,12 @@ import { getProducts } from '@/lib/get-products';
 import { RESERVING_BOOKING_STATUSES } from '@/lib/booking-statuses';
 import { isTestMode } from '@/lib/env-mode';
 import { resolveBookingCameras } from '@/lib/booking-cameras';
-
-interface BufferDays {
-  versand_before: number;
-  versand_after: number;
-  abholung_before: number;
-  abholung_after: number;
-}
+import {
+  loadBufferDays,
+  computeShipDate,
+  computeReturnDueDate,
+  type BufferDays,
+} from '@/lib/booking-buffer';
 
 /**
  * GET /api/availability/[productId]?month=2026-04
@@ -52,17 +51,18 @@ export async function GET(
   const supabase = createServiceClient();
 
   // ── Puffer-Tage laden ─────────────────────────────────────────────────────
-  const { data: bufferSetting } = await supabase
-    .from('admin_settings')
-    .select('value')
-    .eq('key', 'booking_buffer_days')
-    .maybeSingle();
+  const buf: BufferDays = await loadBufferDays(supabase, {
+    versand_before: 2,
+    versand_after: 2,
+    abholung_before: 0,
+    abholung_after: 1,
+  });
 
-  const buf: BufferDays = bufferSetting?.value
-    ? (typeof bufferSetting.value === 'string' ? JSON.parse(bufferSetting.value) : bufferSetting.value)
-    : { versand_before: 2, versand_after: 2, abholung_before: 0, abholung_after: 1 };
-
-  const maxBuffer = Math.max(buf.versand_before, buf.versand_after, buf.abholung_before, buf.abholung_after);
+  // Override-Datumsfelder pro Buchung koennen weiter in die Zukunft reichen
+  // als die Default-Puffer — daher 30 Tage Margin auf jeder Seite (max
+  // realistisches Override) zusaetzlich zur globalen Puffer-Spannweite.
+  const baseBuffer = Math.max(buf.versand_before, buf.versand_after, buf.abholung_before, buf.abholung_after);
+  const maxBuffer = baseBuffer + 30;
 
   // Erweiterten Zeitraum abfragen (Monat + maxBuffer auf beiden Seiten)
   const extFirst = new Date(year, mon - 1, 1 - maxBuffer).toISOString().split('T')[0];
@@ -72,31 +72,46 @@ export async function GET(
   // Test-Buchungen (Tester-User auf Live-Seite) blocken den Kunden-Kalender NICHT.
   // Im globalen Test-Modus laufen alle Buchungen als is_test=true → dann zaehlen alle.
   const globalTest = await isTestMode();
-  const sel = 'id, rental_from, rental_to, delivery_mode, product_name, product_id, unit_id, cameras';
+  const selBase = 'id, rental_from, rental_to, delivery_mode, product_name, product_id, unit_id, cameras';
+  const sel = `${selBase}, ship_date_override, return_due_date_override`;
 
   // (a) Legacy + Gleichmodell-Mehrkamera: product_id == productId.
   // (b) Gemischte Modelle: Buchung trägt productId nur in cameras[] (ihr
   //     bookings.product_id ist eine andere/erste Kamera).
-  let q1 = supabase
-    .from('bookings')
-    .select(sel)
-    .eq('product_id', productId)
-    .in('status', [...RESERVING_BOOKING_STATUSES])
-    .lte('rental_from', extLast)
-    .gte('rental_to', extFirst);
-  let q2 = supabase
-    .from('bookings')
-    .select(sel)
-    .contains('cameras', [{ product_id: productId }])
-    .in('status', [...RESERVING_BOOKING_STATUSES])
-    .lte('rental_from', extLast)
-    .gte('rental_to', extFirst);
-  if (!globalTest) {
-    // matcht is_test=false UND is_test=NULL (defensive bei alter Buchung ohne Spalte)
-    q1 = q1.not('is_test', 'is', true);
-    q2 = q2.not('is_test', 'is', true);
+  // Cast auf generisches Result-Type weil Supabase bei String-Variable als
+  // Select-Argument die Typen nicht ableiten kann.
+  type QResult = { data: Record<string, unknown>[] | null; error: { message: string } | null };
+  const buildQ1 = async (cols: string): Promise<QResult> => {
+    let q = supabase
+      .from('bookings')
+      .select(cols)
+      .eq('product_id', productId)
+      .in('status', [...RESERVING_BOOKING_STATUSES])
+      .lte('rental_from', extLast)
+      .gte('rental_to', extFirst);
+    if (!globalTest) q = q.not('is_test', 'is', true);
+    return (await q) as unknown as QResult;
+  };
+  const buildQ2 = async (cols: string): Promise<QResult> => {
+    let q = supabase
+      .from('bookings')
+      .select(cols)
+      .contains('cameras', [{ product_id: productId }])
+      .in('status', [...RESERVING_BOOKING_STATUSES])
+      .lte('rental_from', extLast)
+      .gte('rental_to', extFirst);
+    if (!globalTest) q = q.not('is_test', 'is', true);
+    return (await q) as unknown as QResult;
+  };
+
+  let [r1, r2] = await Promise.all([buildQ1(sel), buildQ2(sel)]);
+
+  // Migration supabase-bookings-shipping-overrides.sql noch nicht durch →
+  // Override-Spalten droppen und neu fragen. Verhalten dann wie vorher
+  // (nur globale Default-Puffer).
+  if (r1.error && /ship_date_override|return_due_date_override/i.test(r1.error.message || '')) {
+    [r1, r2] = await Promise.all([buildQ1(selBase), buildQ2(selBase)]);
   }
-  const [r1, r2] = await Promise.all([q1, q2]);
 
   if (r1.error) {
     console.error('Availability bookings query error:', r1.error);
@@ -109,7 +124,7 @@ export async function GET(
   // defensiv ignorieren, q1 trägt dann das Legacy-Verhalten.
   const mergedById = new Map<string, Record<string, unknown>>();
   for (const b of [...(r1.data ?? []), ...(r2.error ? [] : r2.data ?? [])]) {
-    mergedById.set((b as { id: string }).id, b as Record<string, unknown>);
+    mergedById.set(b.id as string, b);
   }
   const bookings = [...mergedById.values()];
 
@@ -160,18 +175,24 @@ export async function GET(
           rental_from: string; rental_to: string;
           delivery_mode?: string; product_name?: string;
           product_id?: string; unit_id?: string; cameras?: unknown;
+          ship_date_override?: string | null;
+          return_due_date_override?: string | null;
         };
         const bMode = b.delivery_mode ?? 'versand';
-        const bBefore = bMode === 'abholung' ? buf.abholung_before : buf.versand_before;
-        const bAfter = bMode === 'abholung' ? buf.abholung_after : buf.versand_after;
 
-        // Effektiver Zeitraum: Puffer der bestehenden Buchung + Puffer der neuen Buchung
-        const bFrom = new Date(b.rental_from);
-        const bTo = new Date(b.rental_to);
-        bFrom.setDate(bFrom.getDate() - bBefore - viewerAfter);
-        bTo.setDate(bTo.getDate() + bAfter + viewerBefore);
-        const effFrom = bFrom.toISOString().split('T')[0];
-        const effTo = bTo.toISOString().split('T')[0];
+        // Effektiver Zeitraum: Override hat Vorrang vor globalen Puffern.
+        // Plus Viewer-Puffer (hypothetische neue Buchung braucht Versand vor
+        // dieser Buchung + Rueckgabe-Puffer nach dieser Buchung).
+        const bShip = computeShipDate(b.rental_from, bMode, buf, b.ship_date_override ?? null);
+        const bReturn = computeReturnDueDate(b.rental_to, bMode, buf, b.return_due_date_override ?? null);
+        const bFrom = new Date(bShip);
+        const bTo = new Date(bReturn);
+        bFrom.setDate(bFrom.getDate() - viewerAfter);
+        bTo.setDate(bTo.getDate() + viewerBefore);
+        // toIsoDate-aequivalent inline (Local-Date statt UTC-Shift)
+        const fmtD = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        const effFrom = fmtD(bFrom);
+        const effTo = fmtD(bTo);
 
         if (effFrom <= dateStr && effTo >= dateStr) {
           // Eine Buchung belegt so viele Einheiten DIESES Produkts wie sie

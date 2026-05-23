@@ -21,6 +21,9 @@ interface ReturnBooking {
   returned_at: string | null;
   return_notes: string | null;
   tracking_return: string | null;
+  /** Override pro Buchung (NULL = aus rental_to + buffer berechnen). */
+  return_due_date_override?: string | null;
+  ship_date_override?: string | null;
 }
 
 const CONDITION_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
@@ -36,16 +39,31 @@ const DEFAULT_BUFFER = { versand_after: 3, abholung_after: 1 };
 interface BufferAfter { versand_after: number; abholung_after: number }
 
 /**
- * Liefert das tatsächliche Rückgabe-Soll-Datum (rental_to + Puffer).
- * - Versand: rental_to + versand_after (Default 3 Tage)
- * - Abholung: rental_to + abholung_after (Default 1 Tag)
+ * Liefert das tatsächliche Rückgabe-Soll-Datum.
+ * Override hat Vorrang. Sonst: rental_to + buffer (Versand 3 / Abholung 1).
  */
-function returnDueDate(rentalTo: string, deliveryMode: string, buf: BufferAfter): Date {
+function returnDueDate(
+  rentalTo: string,
+  deliveryMode: string,
+  buf: BufferAfter,
+  override?: string | null,
+): Date {
+  if (override) {
+    const m = override.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) return new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10));
+  }
   const d = new Date(rentalTo);
   d.setHours(0, 0, 0, 0);
   const add = deliveryMode === 'versand' ? buf.versand_after : buf.abholung_after;
   d.setDate(d.getDate() + add);
   return d;
+}
+
+function isoDate(d: Date): string {
+  const y = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, '0');
+  const da = String(d.getDate()).padStart(2, '0');
+  return `${y}-${mo}-${da}`;
 }
 
 function isOverdue(dueDate: Date) {
@@ -131,8 +149,8 @@ export default function AdminRetourenPage() {
       <div className="grid gap-3 mb-6" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
         {[
           { label: 'Ausstehend', value: pendingReturns.length, color: '#06b6d4' },
-          { label: 'Überfällig', value: pendingReturns.filter((b) => isOverdue(returnDueDate(b.rental_to, b.delivery_mode, buf))).length, color: '#ef4444' },
-          { label: 'Heute fällig', value: pendingReturns.filter((b) => daysUntilReturn(returnDueDate(b.rental_to, b.delivery_mode, buf)) === 0).length, color: '#f59e0b' },
+          { label: 'Überfällig', value: pendingReturns.filter((b) => isOverdue(returnDueDate(b.rental_to, b.delivery_mode, buf, b.return_due_date_override))).length, color: '#ef4444' },
+          { label: 'Heute fällig', value: pendingReturns.filter((b) => daysUntilReturn(returnDueDate(b.rental_to, b.delivery_mode, buf, b.return_due_date_override)) === 0).length, color: '#f59e0b' },
           { label: 'Abgeschlossen', value: completedReturns.length, color: '#10b981' },
         ].map((stat) => (
           <div key={stat.label} style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 12, padding: '16px 20px' }}>
@@ -188,7 +206,7 @@ export default function AdminRetourenPage() {
               </thead>
               <tbody>
                 {displayed.map((booking, idx) => {
-                  const dueDate = returnDueDate(booking.rental_to, booking.delivery_mode, buf);
+                  const dueDate = returnDueDate(booking.rental_to, booking.delivery_mode, buf, booking.return_due_date_override);
                   const overdue = isOverdue(dueDate);
                   const daysLeft = daysUntilReturn(dueDate);
                   const cond = booking.return_condition ? CONDITION_CONFIG[booking.return_condition] : null;
@@ -209,24 +227,15 @@ export default function AdminRetourenPage() {
                         <p style={{ fontSize: 13, color: '#e2e8f0' }}>{booking.customer_name || '–'}</p>
                       </td>
                       <td style={{ padding: '14px 16px' }}>
-                        <p style={{ fontSize: 13, fontWeight: 600, color: overdue && tab === 'pending' ? '#ef4444' : '#e2e8f0' }}>
-                          {fmtDate(dueDate.toISOString())}
-                        </p>
-                        {tab === 'pending' && (
-                          <>
-                            <p style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
-                              Miete bis {fmtDate(booking.rental_to)} · {booking.delivery_mode === 'versand' ? 'Versand' : 'Abholung'}
-                            </p>
-                            <p style={{ fontSize: 11, color: overdue ? '#ef4444' : daysLeft <= 1 ? '#f59e0b' : '#64748b', marginTop: 2 }}>
-                              {overdue ? `${Math.abs(daysLeft)} Tag${Math.abs(daysLeft) !== 1 ? 'e' : ''} überfällig` : daysLeft === 0 ? 'Heute fällig' : `in ${daysLeft} Tag${daysLeft !== 1 ? 'en' : ''}`}
-                            </p>
-                          </>
-                        )}
-                        {tab === 'completed' && booking.returned_at && (
-                          <p style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
-                            Zurück am {fmtDate(booking.returned_at)}
-                          </p>
-                        )}
+                        <ReturnDueCell
+                          booking={booking}
+                          dueDate={dueDate}
+                          overdue={overdue}
+                          daysLeft={daysLeft}
+                          tab={tab}
+                          buf={buf}
+                          onSaved={fetchBookings}
+                        />
                       </td>
                       <td style={{ padding: '14px 16px' }}>
                         {tab === 'completed' && cond ? (
@@ -260,6 +269,163 @@ export default function AdminRetourenPage() {
         </div>
       )}
 
+    </div>
+  );
+}
+
+// ─── Inline-Edit für das Rückgabe-Soll-Datum pro Buchung ─────────────────────
+
+function ReturnDueCell({
+  booking, dueDate, overdue, daysLeft, tab, buf, onSaved,
+}: {
+  booking: ReturnBooking;
+  dueDate: Date;
+  overdue: boolean;
+  daysLeft: number;
+  tab: 'pending' | 'completed';
+  buf: BufferAfter;
+  onSaved: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState<string>(booking.return_due_date_override?.slice(0, 10) ?? isoDate(dueDate));
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+  const isOverridden = !!booking.return_due_date_override;
+
+  // Default-Vorschlag wenn kein Override
+  const defaultDateISO = isoDate(returnDueDate(booking.rental_to, booking.delivery_mode, buf, null));
+
+  async function save() {
+    setSaving(true);
+    setErr('');
+    try {
+      const res = await fetch(`/api/admin/booking/${booking.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ return_due_date_override: value || null }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setErr(data?.error ?? 'Speichern fehlgeschlagen.');
+        return;
+      }
+      setEditing(false);
+      onSaved();
+    } catch {
+      setErr('Netzwerkfehler.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function reset() {
+    setSaving(true);
+    setErr('');
+    try {
+      const res = await fetch(`/api/admin/booking/${booking.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ return_due_date_override: null }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setErr(data?.error ?? 'Zurücksetzen fehlgeschlagen.');
+        return;
+      }
+      setValue(defaultDateISO);
+      setEditing(false);
+      onSaved();
+    } catch {
+      setErr('Netzwerkfehler.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (editing) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <input
+          type="date"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          autoFocus
+          style={{
+            padding: '6px 8px', borderRadius: 6, border: '1px solid #334155',
+            background: '#0f172a', color: '#e2e8f0', fontSize: 13, width: 150,
+          }}
+        />
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={save}
+            disabled={saving}
+            style={{ padding: '4px 10px', borderRadius: 6, background: '#06b6d4', color: 'white', border: 'none', fontSize: 11, fontWeight: 600, cursor: 'pointer', opacity: saving ? 0.5 : 1 }}
+          >
+            {saving ? '…' : 'Speichern'}
+          </button>
+          <button
+            type="button"
+            onClick={() => { setEditing(false); setErr(''); setValue(booking.return_due_date_override?.slice(0, 10) ?? defaultDateISO); }}
+            disabled={saving}
+            style={{ padding: '4px 10px', borderRadius: 6, background: 'transparent', color: '#64748b', border: '1px solid #334155', fontSize: 11, cursor: 'pointer' }}
+          >
+            Abbrechen
+          </button>
+          {isOverridden && (
+            <button
+              type="button"
+              onClick={reset}
+              disabled={saving}
+              style={{ padding: '4px 10px', borderRadius: 6, background: 'transparent', color: '#94a3b8', border: '1px solid #334155', fontSize: 11, cursor: 'pointer' }}
+              title="Auf Standard-Puffer zurücksetzen"
+            >
+              ↺ Standard
+            </button>
+          )}
+        </div>
+        {err && <p style={{ fontSize: 10, color: '#ef4444', marginTop: 2 }}>{err}</p>}
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+        <p style={{ fontSize: 13, fontWeight: 600, color: overdue && tab === 'pending' ? '#ef4444' : '#e2e8f0' }}>
+          {fmtDate(dueDate.toISOString())}
+        </p>
+        {isOverridden && (
+          <span title="Manuell überschrieben" style={{ fontSize: 9, padding: '1px 6px', borderRadius: 4, background: '#f59e0b22', color: '#f59e0b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            manuell
+          </span>
+        )}
+        {tab === 'pending' && (
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            title="Rückgabe-Datum ändern"
+            style={{ marginLeft: 4, padding: '0 4px', background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 12 }}
+          >
+            ✏
+          </button>
+        )}
+      </div>
+      {tab === 'pending' && (
+        <>
+          <p style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
+            Miete bis {fmtDate(booking.rental_to)} · {booking.delivery_mode === 'versand' ? 'Versand' : 'Abholung'}
+          </p>
+          <p style={{ fontSize: 11, color: overdue ? '#ef4444' : daysLeft <= 1 ? '#f59e0b' : '#64748b', marginTop: 2 }}>
+            {overdue ? `${Math.abs(daysLeft)} Tag${Math.abs(daysLeft) !== 1 ? 'e' : ''} überfällig` : daysLeft === 0 ? 'Heute fällig' : `in ${daysLeft} Tag${daysLeft !== 1 ? 'en' : ''}`}
+          </p>
+        </>
+      )}
+      {tab === 'completed' && booking.returned_at && (
+        <p style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
+          Zurück am {fmtDate(booking.returned_at)}
+        </p>
+      )}
     </div>
   );
 }

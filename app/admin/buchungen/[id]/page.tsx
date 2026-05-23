@@ -75,6 +75,8 @@ interface BookingDetail {
   adjustment_amount?: number | null;
   adjustment_payment_link_id?: string | null;
   adjustment_note?: string | null;
+  ship_date_override?: string | null;
+  return_due_date_override?: string | null;
 }
 
 interface LiabilityLine {
@@ -1203,6 +1205,17 @@ export default function BuchungDetailPage() {
                 </div>
               )}
             </Section>
+
+            {/* Versand- / Rückgabe-Datum — direkt sichtbar (Alltags-Aktion) */}
+            <ShippingOverrideSection
+              bookingId={booking.id}
+              rentalFrom={booking.rental_from}
+              rentalTo={booking.rental_to}
+              deliveryMode={booking.delivery_mode}
+              shipDateOverride={booking.ship_date_override ?? null}
+              returnDueDateOverride={booking.return_due_date_override ?? null}
+              onSaved={fetchBooking}
+            />
 
             {/* Bearbeiten & Werkzeuge — zugeklappt, gleiche Funktion wie zuvor */}
             <Collapsible
@@ -3063,6 +3076,222 @@ function TimelineItem({ label, date, status, active }: { label: string; date: st
       <div className="pb-2">
         <p className="text-sm font-heading font-semibold text-brand-black">{label}</p>
         {date && <p className="text-xs font-body text-brand-muted">{date}</p>}
+      </div>
+    </div>
+  );
+}
+
+// ─── Versand- / Rückgabe-Datum Override ──────────────────────────────────────
+//
+// Erlaubt dem Admin, Versand-/Übergabe-Tag (vor Mietbeginn) und Rückgabe-
+// Soll-Tag (nach Mietende) pro Buchung manuell zu setzen. Override hat
+// Vorrang vor admin_settings.booking_buffer_days. NULL = wieder Default.
+//
+// Wird wirksam in:
+//  - Customer-Kalender (Verfügbarkeit blockiert exakt diesen Zeitraum)
+//  - Admin-Verfügbarkeits-Gantt (Puffer-Balken nutzt Override)
+//  - Auftrags-Kalender (ship_date / return_date kommen aus Override)
+//  - Rückgabe-Liste /admin/retouren (Soll-Datum = return_due_date_override)
+
+interface ShipBuf {
+  versand_before: number;
+  versand_after: number;
+  abholung_before: number;
+  abholung_after: number;
+}
+
+const SHIP_DEFAULT_BUFFER: ShipBuf = {
+  versand_before: 2, versand_after: 2,
+  abholung_before: 0, abholung_after: 1,
+};
+
+function shipAddDays(dateStr: string, n: number): string {
+  // Local-Date-Arithmetik (kein UTC-Shift), liefert YYYY-MM-DD.
+  const m = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return dateStr;
+  const d = new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10));
+  d.setDate(d.getDate() + n);
+  const y = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, '0');
+  const da = String(d.getDate()).padStart(2, '0');
+  return `${y}-${mo}-${da}`;
+}
+
+function ShippingOverrideSection({
+  bookingId,
+  rentalFrom,
+  rentalTo,
+  deliveryMode,
+  shipDateOverride,
+  returnDueDateOverride,
+  onSaved,
+}: {
+  bookingId: string;
+  rentalFrom: string;
+  rentalTo: string;
+  deliveryMode: string;
+  shipDateOverride: string | null;
+  returnDueDateOverride: string | null;
+  onSaved: () => void;
+}) {
+  const [buf, setBuf] = useState<ShipBuf>(SHIP_DEFAULT_BUFFER);
+  const [shipDate, setShipDate] = useState<string>(shipDateOverride?.slice(0, 10) ?? '');
+  const [returnDate, setReturnDate] = useState<string>(returnDueDateOverride?.slice(0, 10) ?? '');
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+
+  // Puffer laden für die Default-Vorschläge
+  useEffect(() => {
+    fetch('/api/admin/settings?key=booking_buffer_days')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d?.value) return;
+        const parsed = typeof d.value === 'string' ? JSON.parse(d.value) : d.value;
+        if (parsed && typeof parsed === 'object') setBuf({ ...SHIP_DEFAULT_BUFFER, ...parsed });
+      })
+      .catch(() => {});
+  }, []);
+
+  // Defaults aus rental_from/rental_to + delivery_mode + buffer
+  const isAbholung = deliveryMode === 'abholung';
+  const defaultShip = shipAddDays(rentalFrom, -(isAbholung ? buf.abholung_before : buf.versand_before));
+  const defaultReturn = shipAddDays(rentalTo, isAbholung ? buf.abholung_after : buf.versand_after);
+
+  // Bei externer Änderung (z.B. nach onSaved): State neu syncen
+  useEffect(() => { setShipDate(shipDateOverride?.slice(0, 10) ?? ''); }, [shipDateOverride]);
+  useEffect(() => { setReturnDate(returnDueDateOverride?.slice(0, 10) ?? ''); }, [returnDueDateOverride]);
+
+  const shipChanged = (shipDateOverride?.slice(0, 10) ?? '') !== shipDate;
+  const returnChanged = (returnDueDateOverride?.slice(0, 10) ?? '') !== returnDate;
+  const hasChanges = shipChanged || returnChanged;
+  const hasAnyOverride = !!shipDateOverride || !!returnDueDateOverride;
+
+  async function save() {
+    setSaving(true);
+    setMsg(null);
+    try {
+      const body: Record<string, unknown> = {};
+      if (shipChanged) body.ship_date_override = shipDate || null;
+      if (returnChanged) body.return_due_date_override = returnDate || null;
+      const res = await fetch(`/api/admin/booking/${bookingId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setMsg({ type: 'err', text: data?.error ?? 'Speichern fehlgeschlagen.' });
+        return;
+      }
+      setMsg({ type: 'ok', text: 'Gespeichert.' });
+      window.setTimeout(() => setMsg(null), 3000);
+      onSaved();
+    } catch (e) {
+      setMsg({ type: 'err', text: e instanceof Error ? e.message : 'Fehler beim Speichern.' });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function reset() {
+    setSaving(true);
+    setMsg(null);
+    try {
+      const res = await fetch(`/api/admin/booking/${bookingId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ship_date_override: null, return_due_date_override: null }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setMsg({ type: 'err', text: data?.error ?? 'Zurücksetzen fehlgeschlagen.' });
+        return;
+      }
+      setMsg({ type: 'ok', text: 'Auf Standard-Puffer zurückgesetzt.' });
+      window.setTimeout(() => setMsg(null), 3000);
+      onSaved();
+    } catch (e) {
+      setMsg({ type: 'err', text: e instanceof Error ? e.message : 'Fehler.' });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-brand-border p-5 mb-6">
+      <div className="flex items-start justify-between gap-3 mb-4">
+        <div>
+          <h2 className="font-heading font-semibold text-base text-brand-black">Versand- / Rückgabe-Termine</h2>
+          <p className="text-xs font-body text-brand-muted mt-1">
+            {isAbholung
+              ? 'Übergabe-Tag (vor Mietbeginn) und Rückgabe-Tag (nach Mietende) pro Buchung anpassbar. Leer = Standard-Puffer.'
+              : 'Versand-Tag (vor Mietbeginn) und Rückgabe-Soll-Tag (nach Mietende) pro Buchung anpassbar. Leer = Standard-Puffer.'}
+            {' Wirksam im Kunden-Kalender, Admin-Gantt, Auftragskalender und Rückgabe-Liste.'}
+          </p>
+        </div>
+        {hasAnyOverride && (
+          <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-heading font-semibold uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-200 flex-shrink-0">
+            manuell
+          </span>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider mb-1.5">
+            {isAbholung ? 'Übergabe-Tag' : 'Versand-Tag'}
+          </label>
+          <input
+            type="date"
+            value={shipDate}
+            onChange={(e) => setShipDate(e.target.value)}
+            className="w-full px-3 py-2 text-sm font-body border border-brand-border rounded-lg bg-white text-brand-black focus:outline-none focus:ring-2 focus:ring-accent-blue"
+          />
+          <p className="text-[11px] font-body text-brand-muted mt-1">
+            Standard: {defaultShip} ({isAbholung ? `${buf.abholung_before} Tag${buf.abholung_before !== 1 ? 'e' : ''} vor Mietbeginn` : `${buf.versand_before} Tag${buf.versand_before !== 1 ? 'e' : ''} vor Mietbeginn`})
+          </p>
+        </div>
+        <div>
+          <label className="block text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider mb-1.5">
+            {isAbholung ? 'Rückgabe-Tag' : 'Rückgabe-Soll-Tag'}
+          </label>
+          <input
+            type="date"
+            value={returnDate}
+            onChange={(e) => setReturnDate(e.target.value)}
+            className="w-full px-3 py-2 text-sm font-body border border-brand-border rounded-lg bg-white text-brand-black focus:outline-none focus:ring-2 focus:ring-accent-blue"
+          />
+          <p className="text-[11px] font-body text-brand-muted mt-1">
+            Standard: {defaultReturn} ({isAbholung ? `${buf.abholung_after} Tag${buf.abholung_after !== 1 ? 'e' : ''} nach Mietende` : `${buf.versand_after} Tag${buf.versand_after !== 1 ? 'e' : ''} nach Mietende`})
+          </p>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2 mt-4">
+        <button
+          type="button"
+          onClick={save}
+          disabled={!hasChanges || saving}
+          className="px-4 py-2 rounded-lg text-sm font-heading font-semibold text-white disabled:opacity-40 disabled:cursor-not-allowed"
+          style={{ background: '#06b6d4' }}
+        >
+          {saving ? 'Speichert…' : 'Speichern'}
+        </button>
+        {hasAnyOverride && (
+          <button
+            type="button"
+            onClick={reset}
+            disabled={saving}
+            className="px-4 py-2 rounded-lg text-sm font-heading font-semibold text-brand-muted hover:text-brand-black border border-brand-border disabled:opacity-40"
+          >
+            Auf Standard zurücksetzen
+          </button>
+        )}
+        {msg && (
+          <span className={`text-xs font-body ${msg.type === 'ok' ? 'text-emerald-600' : 'text-red-600'}`}>
+            {msg.text}
+          </span>
+        )}
       </div>
     </div>
   );
