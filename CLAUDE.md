@@ -453,6 +453,31 @@ Rückgabe-Prüfung unter `/admin/retouren` (`return-booking`) setzt `completed`/
 - Status-Whitelist von `PATCH /api/admin/booking/[id]` + `update-booking-status`
   um `delivered` erweitert.
 
+### „Rückgabe prüfen"-Einstieg auch bei Abholung + direkter Link (Stand 2026-05-23)
+Zwei UX-Lücken in der Versand/Tracking-Section von `/admin/buchungen/[id]`
+geschlossen:
+- **Abholung-Zweig hatte keinen Einstieg ins Retouren-Prüf-Tool.** Bei
+  `delivery_mode!=='versand'` zeigte die Section nur „Selbstabholung" + den
+  „Als abgeholt markieren"-Button (für `confirmed`). Sobald die Buchung auf
+  `picked_up` stand (siehe Screenshot vom 23.05.), fehlte komplett der Weg
+  zur Rückgabe-Prüfung — der Admin musste den Umweg über `/admin/retouren`
+  + Liste nehmen. Jetzt: bei `picked_up` erscheint im Selbstabholung-Block
+  derselbe cyan „Rückgabe prüfen"-Button, der schon auf Versand-Buchungen
+  läuft, und springt direkt auf `/admin/retouren/<id>/pruefen`. Die
+  Prüfer-Seite hat den vollen Workflow (Item-Scan/Abhaken, „Keine sichtbaren
+  Schäden", „Speicherkarte zurückgesetzt", „Akku geladen", Gesamtzustand
+  Gut/Gebrauchsspuren/Beschädigt, Notizen) — Personenrückgabe und
+  Versand-Rückgabe nutzen denselben Endpoint (`return-booking`).
+- **Versand-Zweig-Link sprang auf die Liste.** Vorher
+  `<Link href="/admin/retouren">` → der Admin musste die richtige Zeile
+  suchen. Jetzt direkt `/admin/retouren/<id>/pruefen`.
+- **`/admin/retouren`-Pending-Filter korrigiert:** vorher
+  `shipped | delivered | (confirmed && abholung)` — `picked_up` fehlte,
+  und `confirmed && abholung` ist semantisch falsch (Kunde hat noch nicht
+  abgeholt, da gibt es noch nichts zu prüfen). Jetzt
+  `shipped | delivered | picked_up` — konsistent mit
+  `RESERVING_BOOKING_STATUSES` und der Section-Logik in `/admin/buchungen/[id]`.
+
 ### Admin-Sidebar Struktur (neu 2026-04-17)
 Komplett neu strukturiert in 9 Gruppen, damit die tägliche Arbeit schneller erreichbar ist und Blog-Unterseiten direkt aus der Sidebar navigierbar sind.
 

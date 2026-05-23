@@ -1124,15 +1124,20 @@ export default function BuchungDetailPage() {
                     {booking.status === 'shipped' && (
                       <button onClick={() => quickStatusChange('delivered', 'Zugestellt')} disabled={statusUpdating} className="px-3 py-1.5 text-xs font-heading font-semibold bg-green-600 text-white rounded-btn hover:bg-green-700 transition-colors disabled:opacity-40">Als zugestellt markieren</button>
                     )}
-                    {(booking.status === 'shipped' || booking.status === 'delivered' || booking.status === 'picked_up') && <Link href="/admin/retouren" className="px-3 py-1.5 text-xs font-heading font-semibold bg-cyan-600 text-white rounded-btn hover:bg-cyan-700 transition-colors">Rückgabe prüfen</Link>}
+                    {(booking.status === 'shipped' || booking.status === 'delivered' || booking.status === 'picked_up') && <Link href={`/admin/retouren/${booking.id}/pruefen`} className="px-3 py-1.5 text-xs font-heading font-semibold bg-cyan-600 text-white rounded-btn hover:bg-cyan-700 transition-colors">Rückgabe prüfen</Link>}
                   </div>
                 </div>
               ) : (
                 <div>
                   <p className="text-sm font-body text-brand-muted mb-3">Selbstabholung</p>
-                  {booking.status === 'confirmed' && (
-                    <button onClick={() => quickStatusChange('picked_up', 'Abgeholt')} disabled={statusUpdating} className="px-3 py-1.5 text-xs font-heading font-semibold bg-green-600 text-white rounded-btn hover:bg-green-700 transition-colors disabled:opacity-40">Als abgeholt markieren</button>
-                  )}
+                  <div className="flex flex-wrap gap-2">
+                    {booking.status === 'confirmed' && (
+                      <button onClick={() => quickStatusChange('picked_up', 'Abgeholt')} disabled={statusUpdating} className="px-3 py-1.5 text-xs font-heading font-semibold bg-green-600 text-white rounded-btn hover:bg-green-700 transition-colors disabled:opacity-40">Als abgeholt markieren</button>
+                    )}
+                    {booking.status === 'picked_up' && (
+                      <Link href={`/admin/retouren/${booking.id}/pruefen`} className="px-3 py-1.5 text-xs font-heading font-semibold bg-cyan-600 text-white rounded-btn hover:bg-cyan-700 transition-colors">Rückgabe prüfen</Link>
+                    )}
+                  </div>
                 </div>
               )}
             </Section>
