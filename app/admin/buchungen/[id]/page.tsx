@@ -793,21 +793,21 @@ export default function BuchungDetailPage() {
               <p className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider mb-1">Status</p>
               <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-heading font-semibold" style={{ color: sc.color, backgroundColor: sc.bg, border: `1px solid ${sc.color}30` }}>{sc.label}</span>
             </div>
-            <div className="col-span-2 sm:col-span-1">
+            <div className="col-span-2 sm:col-span-1 min-w-0">
               <p className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider mb-1">Produkt</p>
-              <p className="text-sm font-body text-brand-black">{booking.product_name}</p>
-              {booking.serial_number && <p className="text-xs font-mono text-blue-600">{booking.serial_number}</p>}
+              <p className="text-sm font-body text-brand-black truncate">{booking.product_name}</p>
+              {booking.serial_number && <p className="text-xs font-mono text-blue-600 truncate">{booking.serial_number}</p>}
             </div>
             <div>
               <p className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider mb-1">Zeitraum</p>
               <p className="text-sm font-body text-brand-black">{fmtDate(booking.rental_from)} – {fmtDate(booking.rental_to)}</p>
               <p className="text-xs font-body text-brand-muted">{booking.days} Tag{booking.days !== 1 ? 'e' : ''}{booking.delivery_mode === 'versand' ? ' · Versand' : ' · Abholung'}</p>
             </div>
-            <div className="col-span-2 sm:col-span-1">
+            <div className="col-span-2 sm:col-span-1 min-w-0">
               <p className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider mb-1">Kunde</p>
               <p className="text-sm font-body text-brand-black truncate">{booking.customer_name || customer?.full_name || '–'}</p>
               {(booking.customer_email || customer?.email) && (
-                <a href={`mailto:${booking.customer_email || customer?.email}`} className="text-xs font-body text-accent-blue hover:underline break-all">{booking.customer_email || customer?.email}</a>
+                <a href={`mailto:${booking.customer_email || customer?.email}`} className="block text-xs font-body text-accent-blue hover:underline break-all">{booking.customer_email || customer?.email}</a>
               )}
             </div>
             <div>
