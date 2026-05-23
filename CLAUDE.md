@@ -2868,6 +2868,7 @@ Vorbild: `/admin/social/zeitplan` (Posts) + `/admin/social/plan` (Bulk-Generator
 - **`supabase-migrationen-status-check.sql`** — Read-only SQL-Script im Repo-Root. Listet je Migration `ERLEDIGT` / `OFFEN` / `MANUELL` / `NICHT AUSFUEHREN` (Backfill-/Cleanup-/Reset-Scripts werden klar markiert). Nach jedem Deploy neuer Migrationen einfach nochmal laufen lassen und erledigte manuell nach `erledigte supabase/` verschieben.
 
 ### Ausgeführte Migrationen (erledigt)
+- ~~`supabase-content-coupon-counter.sql`~~ (UGC-Content-Coupon-Counter `C2R-CONTENT-NNN` — am 2026-05-23 ausgeführt, Datei nach `erledigte supabase/` verschoben)
 - ~~`supabase-invoice-versions.sql`~~ (Rechnungs-Versionierung / `invoice_versions` — am 2026-05-19 ausgeführt, Datei nach `erledigte supabase/` verschoben)
 - ~~`supabase-accessories-included-parts-images.sql`~~ (Bild pro Zubehör-Bestandteil — am 2026-05-16 ausgeführt, Datei nach `erledigte supabase/` verschoben)
 - ~~`supabase-bookings-liability-override.sql`~~ (manuelle Kamera-/Zubehör-Anpassung der internen Haftungs-Box — am 2026-05-16 ausgeführt, Datei nach `erledigte supabase/` verschoben)
@@ -3077,12 +3078,6 @@ Zwei Einsatzorte:
   einen „Zum Beleg →"-Link.
 
 ### Noch offen
-- **UGC-Content-Coupon-Counter-Migration auszuführen:** `supabase/supabase-content-coupon-counter.sql`
-  (idempotent). Legt Tabelle `content_coupon_counter` + RPC
-  `next_content_coupon_counter` an. Ohne Migration werden die neuen
-  `C2R-CONTENT-NNN`-Codes weiter ausgegeben (defensiver `SELECT-MAX`-Fallback
-  in `lib/customer-ugc.ts:nextContentCouponCode()`), aber ohne den atomaren
-  Race-Schutz bei paralleler Last. Empfohlen ASAP ausführen.
 - **Buchungsinteresse-Migration auszuführen:** `supabase/supabase-booking-interest.sql`
   (idempotent). Legt Tabelle `booking_interest` an. Ohne Migration läuft der
   Buchungs-Flow normal weiter (Telemetrie wird verworfen), `/admin/buchungsinteresse`
