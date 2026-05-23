@@ -52,6 +52,8 @@ const C = {
 const STATUS_STYLE: Record<string, { bg: string; label: string }> = {
   awaiting_payment: { bg: '#8b5cf6', label: 'Zahlung offen' },
   confirmed: { bg: '#0ea5b7', label: 'Bestätigt' },
+  preparing_shipment: { bg: '#f59e0b', label: 'Wird versendet' },
+  awaiting_pickup: { bg: '#14b8a6', label: 'Warten auf Abholung' },
   shipped: { bg: '#e0961f', label: 'Versendet' },
   delivered: { bg: '#22c55e', label: 'Zugestellt' },
   picked_up: { bg: '#22c55e', label: 'Abgeholt' },

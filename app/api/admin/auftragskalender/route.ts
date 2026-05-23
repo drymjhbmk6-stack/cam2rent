@@ -94,6 +94,8 @@ export async function GET(req: NextRequest) {
     .in('status', [
       'awaiting_payment',
       'confirmed',
+      'preparing_shipment',
+      'awaiting_pickup',
       'shipped',
       'delivered',
       'picked_up',

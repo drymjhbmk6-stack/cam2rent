@@ -486,6 +486,53 @@ geschlossen:
   `picked_up` zusätzlich zu `shipped | delivered` → **„Rückgabe"** (grün,
   springt direkt auf `/admin/retouren/<id>/pruefen`).
 
+### Zwei neue Buchungs-Zwischenstatus (Stand 2026-05-23)
+`bookings.status` (plain TEXT) kennt jetzt zwei zusätzliche Werte, die der
+Admin **manuell** über das Status-Dropdown setzen kann. Sie blockieren den
+Lagerbestand wie `confirmed`, triggern aber keine neuen Buttons, Mails oder
+Workflow-Übergänge — reine Zwischenstufen für die Sichtbarkeit, was gerade
+passiert:
+- **`preparing_shipment`** (Label „Wird versendet", amber `#f59e0b`) —
+  zwischen `confirmed` und `shipped`. Paket wird gerade gepackt / fertig
+  gemacht für den Versand (Etikett gedruckt, noch nicht beim Carrier).
+- **`awaiting_pickup`** (Label „Warten auf Abholung", teal `#14b8a6`) —
+  zwischen `confirmed` und `picked_up`. Kamera liegt bereit, Kunde wurde
+  informiert, kommt aber noch nicht. Klassischer „liegt im Laden"-Zustand.
+
+**Inventar-Blockade:** Beide Status sind in `RESERVING_BOOKING_STATUSES`
+(`lib/booking-statuses.ts`) + `UTILIZATION_BOOKING_STATUSES`
+(`lib/camera-utilization.ts`) eingetragen → Shop-Kalender, `findFreeUnit`,
+`/api/availability/[productId]`, `lib/accessory-availability.ts` zählen sie
+automatisch als belegend. Dazu wurden alle anderen hartverdrahteten
+Status-Listen analog erweitert: `lib/unit-assignment.ts`,
+`/api/admin/find-free-unit`, `/api/admin/availability-gantt`,
+`/api/admin/auftragskalender`, `/api/admin/versand-buchungen` (zusätzlich
+`preparing_shipment` in der „Zu versenden"-Liste sichtbar). Status-Whitelists
+in `PATCH /api/admin/booking/[id]` + `/api/admin/update-booking-status`
+ebenfalls erweitert. `extend-booking` + `confirm-extension` erlauben
+Verlängerung auch in beiden Zwischenstadien (Mietzeit noch nicht erreicht).
+
+**Status-Label-Maps ergänzt in:** `/admin/buchungen` (STATUS_CONFIG),
+`/admin/buchungen/[id]` (STATUS_CONFIG + ALL_STATUSES, damit beide im
+Dropdown auftauchen), `/admin/kunden/[id]` (BOOKING_STATUS),
+`/admin/auftragskalender` (STATUS_STYLE), `DashboardWidgets` (statusLabel),
+`/konto/buchungen` (statusConfig — Kunde sieht „Wird versendet" / „Bereit
+zur Abholung").
+
+**Retouren-/Dashboard-Listen NICHT angefasst** (Filter prüft nur
+`shipped|delivered|picked_up`): die neuen Status sind noch nicht beim
+Kunden, daher keine Rückgabe fällig. `scan-lookup` filtert per Negation
+(`NOT IN cancelled,completed,returned`) → automatisch korrekt.
+
+**RPC-Migration `supabase/supabase-bookings-extra-statuses.sql`**
+(idempotent, `CREATE OR REPLACE FUNCTION`): aktualisiert `assign_free_unit`
++ `assign_free_camera_units` damit beide neuen Status als belegend zählen.
+`assign_free_accessory_units` nutzt einen Negations-Filter (`NOT IN
+cancelled,completed,returned`) und ist automatisch korrekt — keine Migration
+nötig. **⚠️ Ohne diese Migration könnten Kameras, die in
+`preparing_shipment` oder `awaiting_pickup` stehen, fälschlich an
+überlappende Neubuchungen vergeben werden.**
+
 ### Admin-Sidebar Struktur (neu 2026-04-17)
 Komplett neu strukturiert in 9 Gruppen, damit die tägliche Arbeit schneller erreichbar ist und Blog-Unterseiten direkt aus der Sidebar navigierbar sind.
 
@@ -3014,6 +3061,14 @@ Zwei Einsatzorte:
   (idempotent). Legt Tabelle `booking_interest` an. Ohne Migration läuft der
   Buchungs-Flow normal weiter (Telemetrie wird verworfen), `/admin/buchungsinteresse`
   zeigt einen Migrations-Hinweis. Empfohlen ASAP ausführen.
+- **Zwei neue Buchungs-Status RPC-Patch auszuführen:**
+  `supabase/supabase-bookings-extra-statuses.sql` (idempotent, reine
+  `CREATE OR REPLACE FUNCTION`-Statements für `assign_free_unit` +
+  `assign_free_camera_units`). Ohne Migration werden die neuen Status
+  `preparing_shipment` und `awaiting_pickup` von den race-sicheren
+  RPCs NICHT als belegend gezählt → eine Kamera, die in einem dieser
+  Zwischenstadien steht, könnte einer überlappenden Neubuchung neu
+  vergeben werden. Empfohlen ASAP ausführen.
 - **Angebots-Bündel-Migration auszuführen:** `supabase/supabase-angebote.sql`
   (idempotent). Legt Tabelle `angebote` + Spalte `bookings.offer_id` an. Ohne
   Migration ist das Angebote-Feature inaktiv (öffentliche/Admin-APIs liefern

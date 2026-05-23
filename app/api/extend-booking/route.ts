@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Check status
-  if (!['confirmed', 'shipped', 'delivered', 'picked_up'].includes(booking.status)) {
+  if (!['confirmed', 'preparing_shipment', 'awaiting_pickup', 'shipped', 'delivered', 'picked_up'].includes(booking.status)) {
     return NextResponse.json({ error: 'Buchung kann nicht verlängert werden.' }, { status: 400 });
   }
 
@@ -91,7 +91,7 @@ export async function POST(req: NextRequest) {
     .select('*', { count: 'exact', head: true })
     .eq('product_id', booking.product_id)
     .neq('id', bookingId) // Exclude current booking
-    .in('status', ['confirmed', 'shipped', 'delivered', 'picked_up'])
+    .in('status', ['confirmed', 'preparing_shipment', 'awaiting_pickup', 'shipped', 'delivered', 'picked_up'])
     .lte('rental_from', newRentalTo)
     .gte('rental_to', extendFrom);
 

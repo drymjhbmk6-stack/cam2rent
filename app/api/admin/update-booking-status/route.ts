@@ -21,7 +21,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: 'bookingId und status erforderlich.' }, { status: 400 });
   }
 
-  const allowed = ['confirmed', 'shipped', 'delivered', 'picked_up', 'completed', 'cancelled', 'damaged'];
+  const allowed = ['confirmed', 'preparing_shipment', 'awaiting_pickup', 'shipped', 'delivered', 'picked_up', 'completed', 'cancelled', 'damaged'];
   if (!allowed.includes(status)) {
     return NextResponse.json({ error: 'Ungültiger Status.' }, { status: 400 });
   }

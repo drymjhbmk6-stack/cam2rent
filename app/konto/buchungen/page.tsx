@@ -42,6 +42,8 @@ const statusConfig: Record<string, { label: string; className: string }> = {
   pending_verification: { label: 'Warte auf Freigabe', className: 'bg-amber-100 text-amber-700' },
   awaiting_payment: { label: 'Warte auf Zahlung', className: 'bg-purple-100 text-purple-700' },
   confirmed: { label: 'Aktiv', className: 'bg-green-100 text-green-700' },
+  preparing_shipment: { label: 'Wird versendet', className: 'bg-amber-100 text-amber-700' },
+  awaiting_pickup: { label: 'Bereit zur Abholung', className: 'bg-teal-100 text-teal-700' },
   shipped: { label: 'Unterwegs', className: 'bg-blue-100 text-blue-700' },
   delivered: { label: 'Zugestellt', className: 'bg-green-100 text-green-700' },
   picked_up: { label: 'Abgeholt', className: 'bg-green-100 text-green-700' },

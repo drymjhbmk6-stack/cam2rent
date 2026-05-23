@@ -155,6 +155,8 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }
   pending_verification: { label: 'Warte auf Freigabe', color: '#f59e0b', bg: '#f59e0b14' },
   awaiting_payment: { label: 'Warte auf Zahlung', color: '#8b5cf6', bg: '#8b5cf614' },
   confirmed: { label: 'Bestätigt', color: '#06b6d4', bg: '#06b6d414' },
+  preparing_shipment: { label: 'Wird versendet', color: '#f59e0b', bg: '#f59e0b14' },
+  awaiting_pickup: { label: 'Warten auf Abholung', color: '#14b8a6', bg: '#14b8a614' },
   shipped: { label: 'Versendet', color: '#10b981', bg: '#10b98114' },
   delivered: { label: 'Zugestellt', color: '#22c55e', bg: '#22c55e14' },
   picked_up: { label: 'Abgeholt', color: '#10b981', bg: '#10b98114' },
@@ -163,7 +165,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }
   damaged: { label: 'Beschädigt', color: '#f97316', bg: '#f9731614' },
 };
 
-const ALL_STATUSES = ['pending_verification', 'awaiting_payment', 'confirmed', 'shipped', 'delivered', 'picked_up', 'completed', 'cancelled', 'damaged'];
+const ALL_STATUSES = ['pending_verification', 'awaiting_payment', 'confirmed', 'preparing_shipment', 'awaiting_pickup', 'shipped', 'delivered', 'picked_up', 'completed', 'cancelled', 'damaged'];
 
 function fmtDate(iso: string) {
   if (!iso) return '–';

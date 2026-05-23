@@ -201,6 +201,8 @@ function statusLabel(status: string): { label: string; color: string } {
     pending_verification: { label: 'Warte auf Freigabe', color: C.yellow },
     awaiting_payment: { label: 'Warte auf Zahlung', color: C.purple },
     confirmed: { label: 'Bestätigt', color: C.yellow },
+    preparing_shipment: { label: 'Wird versendet', color: C.yellow },
+    awaiting_pickup: { label: 'Warten auf Abholung', color: C.cyan },
     shipped: { label: 'Versendet', color: C.blue },
     delivered: { label: 'Zugestellt', color: C.green },
     picked_up: { label: 'Abgeholt', color: C.green },

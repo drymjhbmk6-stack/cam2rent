@@ -16,7 +16,7 @@ interface Booking {
   customer_email: string | null;
   shipping_method: string | null;
   shipping_address: string | null;
-  status: 'confirmed' | 'shipped';
+  status: 'confirmed' | 'preparing_shipment' | 'shipped';
   tracking_number: string | null;
   tracking_url: string | null;
   shipped_at: string | null;
@@ -135,7 +135,7 @@ export default function AdminVersandPage() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const zuVersenden = bookings.filter((b) => b.status === 'confirmed');
+  const zuVersenden = bookings.filter((b) => b.status === 'confirmed' || b.status === 'preparing_shipment');
   const unterwegs = bookings.filter((b) => b.status === 'shipped' && new Date(b.rental_to) >= today);
   const rueckgabe = bookings.filter((b) => b.status === 'shipped' && new Date(b.rental_to) < today);
 

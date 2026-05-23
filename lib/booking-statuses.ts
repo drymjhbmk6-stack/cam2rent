@@ -17,6 +17,8 @@ export const RESERVING_BOOKING_STATUSES = [
   'pending_verification', // Kunde hat bezahlt, wartet auf Admin-Freigabe
   'awaiting_payment',     // Admin hat freigegeben, Kunde hat Zahlungslink (72h Frist)
   'confirmed',            // Bezahlt, bestätigt
+  'preparing_shipment',   // Paket wird gepackt / fertig gemacht für Versand
+  'awaiting_pickup',      // Kamera bereit, Kunde wurde informiert, holt noch ab
   'shipped',              // Unterwegs zum Kunden
   'delivered',            // Beim Kunden zugestellt (Versand), Rückgabe steht aus
   'picked_up',            // Kunde hat die Kamera abgeholt

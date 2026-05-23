@@ -12,6 +12,8 @@ import { type AdminProduct } from '@/lib/price-config';
  */
 export const UTILIZATION_BOOKING_STATUSES = [
   'confirmed',
+  'preparing_shipment',
+  'awaiting_pickup',
   'shipped',
   'delivered',
   'picked_up',
