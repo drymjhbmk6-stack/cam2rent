@@ -118,6 +118,18 @@ export default function SerialScanner({
   const lastDetectionRef = useRef<{ code: string; at: number } | null>(null);
   const flashTimerRef = useRef<number | null>(null);
 
+  // Stale-Closure-Schutz: der Detect-Loop (startScanning/tick) friert die
+  // Callback-Closures beim ersten Render ein und wird nur bei `open`-Wechsel
+  // neu aufgesetzt. Ohne Refs würden Continuous-Scans immer die initiale
+  // `onResult`/`onClose`-Instanz aufrufen — die wiederum mit veraltetem
+  // React-State (z.B. `checked`-Map des Aufrufers) arbeitet und damit den
+  // nächsten freien Slot fälschlich auf den bereits abgehakten setzt
+  // (Symptom: 2. Akku-Scan zeigt „ersetzt", Counter bleibt bei 1/2).
+  const onResultRef = useRef(onResult);
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onResultRef.current = onResult; }, [onResult]);
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+
   /**
    * Wird aus dem Detect-Loop bei jedem erkannten Code aufgerufen. Behandelt
    * Cooldown (gegen Mehrfacherkennung), Continuous-Mode (offen lassen) und
@@ -138,11 +150,11 @@ export default function SerialScanner({
       setFlashCode(value);
       if (flashTimerRef.current) window.clearTimeout(flashTimerRef.current);
       flashTimerRef.current = window.setTimeout(() => setFlashCode(null), FLASH_DURATION_MS);
-      onResult(value);
+      onResultRef.current(value);
     } else {
       stopScanning();
-      onResult(value);
-      onClose();
+      onResultRef.current(value);
+      onCloseRef.current();
     }
   }
 

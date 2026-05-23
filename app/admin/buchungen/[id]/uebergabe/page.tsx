@@ -10,6 +10,7 @@ import {
   groupItems,
   buildScanLookup,
   applyScan,
+  applyScanResult,
   ItemList,
   ScannerBar,
   ScannerLiveList,
@@ -168,12 +169,7 @@ function Wizard({ booking }: { booking: BookingDetail }) {
     ]);
     const result = await applyScan(code, booking.id, items, checked, scanLookup, scannedSet);
     if (result.ok && result.key) {
-      const keysToCheck = result.keys && result.keys.length > 0 ? result.keys : [result.key];
-      setChecked((p) => {
-        const next = { ...p };
-        for (const k of keysToCheck) next[k] = true;
-        return next;
-      });
+      setChecked((p) => applyScanResult(result, items, p));
       if (result.scannedUnitId) {
         if (result.scannedKind === 'camera') {
           setScannedCameraUnitIds((p) => p.includes(result.scannedUnitId!) ? p : [...p, result.scannedUnitId!]);

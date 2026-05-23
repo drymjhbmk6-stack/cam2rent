@@ -101,6 +101,11 @@ export interface ScanResult {
   message: string;
   scannedUnitId?: string;
   scannedKind?: 'camera' | 'accessory';
+  /** Bei accessory: die accessory_id der getroffenen Position. Wird vom
+   *  Helper `applyScanResult` genutzt, um race-sicher den nächsten freien
+   *  Slot derselben Position zu finden, falls der vorgeschlagene `key`
+   *  durch schnelle Folge-Scans zwischenzeitlich abgehakt wurde. */
+  accessoryId?: string;
   isSubstitute?: boolean;
   substituteCode?: string;
   /** Bestandteile des gescannten Items (z.B. "2x Sender", "Windschutz").
@@ -325,6 +330,7 @@ export async function applyScan(
       key: free.key,
       message: `✓ ${free.label}`,
       scannedKind: 'accessory',
+      accessoryId: accId,
       scannedUnitId: localUnitId,
       includedParts: free.includedParts,
     };
@@ -464,6 +470,7 @@ export async function applyScan(
           ? `✓ ${label} — ${freeBulk.length} Stück erfasst (Sammel-QR)`
           : `✓ ${label}`,
       scannedKind: 'accessory',
+      accessoryId: info.accessoryId,
       includedParts: freeBulk[0].includedParts,
     };
   }
@@ -480,11 +487,54 @@ export async function applyScan(
     key: free.key,
     message: `✓ ${free.label} ersetzt: ${info.exemplarCode ?? rawCode}`,
     scannedKind: 'accessory',
+    accessoryId: info.accessoryId,
     scannedUnitId: info.unitId,
     isSubstitute: true,
     substituteCode: info.exemplarCode ?? rawCode,
     includedParts: free.includedParts,
   };
+}
+
+/**
+ * Wendet ein `ScanResult` race-safe auf den checked-State an. Aufruf
+ * idiomatisch in `setChecked((prev) => applyScanResult(result, items, prev))`.
+ *
+ * Hintergrund: bei schnellen Folge-Scans im Continuous-Mode kann der vom
+ * Server vorgeschlagene `key` zwischenzeitlich bereits abgehakt sein
+ * (Scan-2 lief mit veraltetem `checked`-State). Dieser Helper erkennt das
+ * und wählt stattdessen den nächsten freien Slot derselben Position (über
+ * `accessoryId` für Zubehör bzw. `scannedKind='camera'` für Kameras) —
+ * damit landet jeder erfolgreiche Scan immer auf einem realen freien Slot
+ * und der Counter zählt zuverlässig hoch.
+ */
+export function applyScanResult(
+  result: ScanResult,
+  items: PackItem[],
+  prev: Record<string, boolean>,
+): Record<string, boolean> {
+  if (!result.ok) return prev;
+  const next = { ...prev };
+  if (result.keys && result.keys.length > 0) {
+    for (const k of result.keys) next[k] = true;
+    return next;
+  }
+  if (!result.key) return next;
+  if (!next[result.key]) {
+    next[result.key] = true;
+    return next;
+  }
+  // Vorgeschlagener Slot wurde inzwischen abgehakt → race-safe den nächsten
+  // freien Slot derselben Gruppe suchen.
+  if (result.scannedKind === 'accessory' && result.accessoryId) {
+    const free = items.find(
+      (it) => it.type === 'accessory' && it.accessoryId === result.accessoryId && !next[it.key],
+    );
+    if (free) next[free.key] = true;
+  } else if (result.scannedKind === 'camera') {
+    const free = items.find((it) => it.type === 'camera' && !next[it.key]);
+    if (free) next[free.key] = true;
+  }
+  return next;
 }
 
 // ─── React Hook fuer den Scan-State ──────────────────────────────────────────
