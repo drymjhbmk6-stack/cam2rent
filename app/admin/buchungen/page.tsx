@@ -332,7 +332,7 @@ export default function AdminBuchungenPage() {
                     <th className="text-left px-3 sm:px-5 py-3 text-[10px] sm:text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider">Status</th>
                     <th className="text-left px-3 sm:px-5 py-3 text-[10px] sm:text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider">Betrag</th>
                     <th className="text-left px-3 sm:px-5 py-3 text-[10px] sm:text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider hidden lg:table-cell">Erstellt</th>
-                    <th className="px-3 sm:px-5 py-3" />
+                    <th className="text-left px-3 sm:px-5 py-3 text-[10px] sm:text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider">Nächste Aktion</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -498,20 +498,20 @@ function ActionButtons({
   if (booking.status === 'confirmed' && booking.delivery_mode === 'abholung') {
     buttons.push(
       <Link
-        key="retoure"
-        href="/admin/retouren"
-        className="px-3 py-1.5 bg-green-600 text-white text-xs font-heading font-semibold rounded-btn hover:bg-green-700 transition-colors whitespace-nowrap"
+        key="uebergabe"
+        href={`/admin/buchungen/${booking.id}/uebergabe`}
+        className="px-3 py-1.5 bg-indigo-600 text-white text-xs font-heading font-semibold rounded-btn hover:bg-indigo-700 transition-colors whitespace-nowrap"
       >
-        Rückgabe
+        Übergabe
       </Link>
     );
   }
 
-  if (booking.status === 'shipped' || booking.status === 'delivered') {
+  if (booking.status === 'shipped' || booking.status === 'delivered' || booking.status === 'picked_up') {
     buttons.push(
       <Link
         key="retoure"
-        href="/admin/retouren"
+        href={`/admin/retouren/${booking.id}/pruefen`}
         className="px-3 py-1.5 bg-green-600 text-white text-xs font-heading font-semibold rounded-btn hover:bg-green-700 transition-colors whitespace-nowrap"
       >
         Rückgabe

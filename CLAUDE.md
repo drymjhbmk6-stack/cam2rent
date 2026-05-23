@@ -477,6 +477,14 @@ geschlossen:
   abgeholt, da gibt es noch nichts zu prüfen). Jetzt
   `shipped | delivered | picked_up` — konsistent mit
   `RESERVING_BOOKING_STATUSES` und der Section-Logik in `/admin/buchungen/[id]`.
+- **`/admin/buchungen`-Liste analog repariert:** Action-Spalte hatte
+  keinen Header (jetzt **„Nächste Aktion"**), bei `picked_up` keinen Button
+  und für `confirmed && abholung` einen irreführenden „Rückgabe"-Button, der
+  nach dem Retouren-Filter-Fix oben in der leeren Liste landete. Jetzt:
+  `confirmed && abholung` → **„Übergabe"** (indigo, springt auf
+  `/admin/buchungen/<id>/uebergabe`, der tatsächlichen nächsten Aktion);
+  `picked_up` zusätzlich zu `shipped | delivered` → **„Rückgabe"** (grün,
+  springt direkt auf `/admin/retouren/<id>/pruefen`).
 
 ### Admin-Sidebar Struktur (neu 2026-04-17)
 Komplett neu strukturiert in 9 Gruppen, damit die tägliche Arbeit schneller erreichbar ist und Blog-Unterseiten direkt aus der Sidebar navigierbar sind.
