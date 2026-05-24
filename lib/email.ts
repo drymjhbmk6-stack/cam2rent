@@ -7,7 +7,7 @@ import { computeInvoiceLines } from '@/lib/invoice-lines';
 import { LegalDocumentPDF } from '@/lib/legal-pdf';
 import { BUSINESS } from '@/lib/business-config';
 import { createServiceClient } from '@/lib/supabase';
-import { fmtDate, fmtEuro } from '@/lib/format-utils';
+import { fmtDate, fmtDateTime, fmtEuro } from '@/lib/format-utils';
 import { getResendFromEmail, getTestModeEmailRedirect, isTestMode, getSiteUrl } from '@/lib/env-mode';
 import { getEmailTemplateOverride, applyEmailOverride } from '@/lib/email-template-overrides';
 
@@ -1893,6 +1893,66 @@ export async function sendWeeklyReport(toEmail?: string): Promise<void> {
     html,
     emailType: "weekly_report",
     attachments: [{ filename: `cam2rent-wochenbericht-KW${data.weekNumber}-${data.year}.pdf`, content: pdfBuffer }],
+  });
+}
+
+// ─── Persönlicher Termin-Reminder ─────────────────────────────────────────────
+export interface AppointmentReminderData {
+  to: string;
+  employeeName: string;
+  appointmentTitle: string;
+  startsAt: string;        // ISO
+  minutesBefore: number;   // Vorlaufzeit
+  location?: string | null;
+  description?: string | null;
+  isAllDay: boolean;
+  isShared: boolean;       // true → Termin wurde von Kollege geteilt
+}
+
+export async function sendAppointmentReminder(data: AppointmentReminderData) {
+  const minutesLabel =
+    data.minutesBefore >= 1440 ? `${Math.round(data.minutesBefore / 1440)} Tag(e) vorher` :
+    data.minutesBefore >= 60   ? `${Math.round(data.minutesBefore / 60)} Stunde(n) vorher` :
+                                 `${data.minutesBefore} Minuten vorher`;
+
+  const sharedHint = data.isShared
+    ? '<p style="margin:0 0 12px;font-size:12px;color:#7c3aed;">📤 Termin von Kollege geteilt</p>'
+    : '';
+
+  const whenStr = data.isAllDay ? fmtDate(data.startsAt) : fmtDateTime(data.startsAt);
+
+  const subject = stripSubject(`⏰ Erinnerung: ${data.appointmentTitle} (${minutesLabel})`);
+  const html = `<!doctype html><html><body style="margin:0;font-family:-apple-system,system-ui,Segoe UI,Helvetica,Arial,sans-serif;background:#f5f5f0;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f0;padding:24px 0;"><tr><td align="center">
+<table width="600" cellpadding="0" cellspacing="0" style="background:white;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.06);">
+  <tr><td style="background:#0a0a0a;padding:16px 32px;">
+    <h1 style="margin:0;color:white;font-size:18px;font-weight:700;">cam<span style="color:#06b6d4;">2</span>rent · Erinnerung</h1>
+  </td></tr>
+  <tr><td style="padding:24px 32px;">
+    ${sharedHint}
+    <p style="margin:0 0 8px;font-size:13px;color:#6b7280;">Hallo ${h(data.employeeName || 'Kollege')},</p>
+    <p style="margin:0 0 16px;font-size:14px;color:#4b5563;">dein Termin steht ${minutesLabel} an:</p>
+    <div style="background:#f9fafb;border-left:4px solid #06b6d4;padding:14px 16px;border-radius:6px;">
+      <p style="margin:0 0 6px;font-size:16px;font-weight:700;color:#0a0a0a;">${h(data.appointmentTitle)}</p>
+      <p style="margin:0 0 4px;font-size:13px;color:#374151;">🕐 ${h(whenStr)}</p>
+      ${data.location ? `<p style="margin:0 0 4px;font-size:13px;color:#374151;">📍 ${h(data.location)}</p>` : ''}
+      ${data.description ? `<p style="margin:8px 0 0;font-size:13px;color:#4b5563;white-space:pre-wrap;">${h(data.description)}</p>` : ''}
+    </div>
+    <p style="margin:20px 0 0;font-size:12px;color:#6b7280;">
+      <a href="https://cam2rent.de/admin/mein/kalender" style="color:#06b6d4;font-weight:600;">→ Im Kalender öffnen</a>
+    </p>
+  </td></tr>
+  <tr><td style="background:#f5f5f0;padding:14px 32px;text-align:center;">
+    <p style="margin:0;font-size:11px;color:#9ca3af;">cam2rent · Persönlicher Termin-Reminder</p>
+  </td></tr>
+</table>
+</td></tr></table></body></html>`;
+
+  await sendAndLog({
+    to: data.to,
+    subject,
+    html,
+    emailType: 'appointment_reminder',
   });
 }
 

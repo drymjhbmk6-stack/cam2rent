@@ -174,3 +174,100 @@ export async function sendPushToAdmins(
 export function getVapidPublicKey(): string | null {
   return process.env.VAPID_PUBLIC_KEY || null;
 }
+
+/**
+ * Push an genau einen Mitarbeiter (z.B. persönlicher Termin-Reminder).
+ * Liefert dieselbe Diagnose-Statistik wie sendPushToAdmins. Legacy-ENV-User
+ * (id='legacy-env') hat keine Subscriptions — sendet dann an alle Legacy-
+ * Subscriptions ohne admin_user_id (Backward-Compat: Master-Passwort-Logins).
+ */
+export async function sendPushToUser(
+  adminUserId: string,
+  payload: PushPayload,
+): Promise<PushSendStats> {
+  const stats: PushSendStats = {
+    vapidConfigured: false,
+    totalSubscriptions: 0,
+    attempted: 0,
+    sent: 0,
+    failed: 0,
+    expired: 0,
+  };
+
+  if (!configureVapid()) return stats;
+  stats.vapidConfigured = true;
+
+  try {
+    const supabase = createServiceClient();
+    let query = supabase
+      .from('push_subscriptions')
+      .select('id, endpoint, p256dh, auth, admin_user_id');
+
+    if (adminUserId === 'legacy-env') {
+      query = query.is('admin_user_id', null);
+    } else {
+      query = query.eq('admin_user_id', adminUserId);
+    }
+
+    const { data: subs, error } = await query;
+
+    if (error) {
+      stats.firstError = `DB: ${error.message}`;
+      return stats;
+    }
+    if (!subs || subs.length === 0) return stats;
+
+    stats.totalSubscriptions = subs.length;
+    stats.attempted = subs.length;
+
+    const notificationPayload = JSON.stringify({
+      title: payload.title,
+      body: payload.body || '',
+      url: payload.url || '/admin',
+      tag: payload.tag,
+      icon: payload.icon || '/admin-icon-192.png',
+      badge: '/admin-icon-192.png',
+    });
+
+    const expiredIds: string[] = [];
+
+    await Promise.allSettled(
+      subs.map(async (sub) => {
+        try {
+          await webpush.sendNotification(
+            {
+              endpoint: sub.endpoint,
+              keys: { p256dh: sub.p256dh, auth: sub.auth },
+            },
+            notificationPayload
+          );
+          stats.sent += 1;
+          void supabase
+            .from('push_subscriptions')
+            .update({ last_used_at: new Date().toISOString() })
+            .eq('id', sub.id);
+        } catch (err: unknown) {
+          const status = (err as { statusCode?: number })?.statusCode;
+          const message = (err as Error)?.message || 'Unbekannter Fehler';
+          if (status === 404 || status === 410) {
+            expiredIds.push(sub.id);
+            stats.expired += 1;
+          } else {
+            stats.failed += 1;
+            if (!stats.firstError) {
+              stats.firstError = status ? `HTTP ${status}: ${message}` : message;
+            }
+          }
+        }
+      })
+    );
+
+    if (expiredIds.length > 0) {
+      await supabase.from('push_subscriptions').delete().in('id', expiredIds);
+    }
+  } catch (err) {
+    stats.firstError = (err as Error).message;
+  }
+
+  return stats;
+}

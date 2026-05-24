@@ -2724,6 +2724,98 @@ bleibt aber auf das Mietfenster (`valid_from`–`valid_until`) begrenzt.
   Angebote 1:1 weiter (defensiver Retry-Pfad); das neue UI-Feld speichert
   in dem Fall nichts.
 
+### Persönlicher Bereich pro Mitarbeiter — Notizen + Kalender mit Reminder (Stand 2026-05-24)
+Pro Mitarbeiter ein eigener „Mein Bereich" in der Sidebar (oben, über
+„Tagesgeschäft", nur sichtbar für DB-Konten — der Notfall-`legacy-env`-Login
+sieht die Gruppe nicht). Zwei Einträge: **Meine Notizen** + **Mein Kalender**.
+- **Migration `supabase/supabase-employee-personal.sql`** (idempotent): zwei
+  Tabellen `employee_notes` (id, admin_user_id FK CASCADE, title, content,
+  pinned, color, timestamps) + `employee_appointments` (admin_user_id, title,
+  description, location, starts_at, ends_at, all_day, color,
+  reminder_minutes_before, reminder_push, reminder_email, reminder_sent_at,
+  `shared_with UUID[]`). Indizes für Owner-Lookup + GIN auf `shared_with` für
+  „mit mir geteilte" + Partial-Index `pending_reminder` für effizienten
+  Cron-Scan. Trigger fürs `updated_at`. RLS service-role-only, Ownership-Check
+  läuft im App-Layer.
+- **Sharing-Modell:** Notizen sind **immer privat**. Termine können per
+  `shared_with[]` mit ausgewählten Kollegen geteilt werden — die sehen den
+  Termin read-only im eigenen Kalender und bekommen die Erinnerung mit. Nur
+  der Owner (`admin_user_id`) darf editieren/löschen.
+- **APIs unter `/api/admin/mein/*`** (keine Permission nötig — jeder
+  authentifizierte Admin darf seine eigenen Daten verwalten):
+  - `GET/POST /api/admin/mein/notizen`, `PATCH/DELETE /api/admin/mein/notizen/[id]`
+  - `GET/POST /api/admin/mein/termine?from=&to=`, `PATCH/DELETE /api/admin/mein/termine/[id]`
+  - `GET /api/admin/mein/employees` — aktive Mitarbeiter (ohne dich selbst) für
+    den Sharing-Picker (nur id/name/role)
+  - Defensiver Migrations-Fallback: API antwortet mit
+    `{ migration_pending: true }` bei fehlender Tabelle, Endpoints liefern
+    503 beim Schreiben. Legacy-ENV-User bekommt `{ legacy: true }` bzw. 403
+    beim Schreiben mit Hinweistext.
+- **Reminder-Optionen pro Termin:** 5/15/30 Min, 1/2/4 Std, 1/2 Tage vorher
+  (Whitelist `ALLOWED_REMINDERS` server- und clientseitig). Pro Termin
+  separat aktivierbar: Push-Notification + E-Mail (beide unabhängig).
+  `reminder_sent_at` wird beim Cron-Lauf gesetzt; bei Zeit-/Reminder-Edit
+  automatisch auf `null` zurückgesetzt, damit der verschobene Termin neu
+  feuert.
+- **`lib/employee-reminders.ts` → `dispatchAppointmentReminder()`:** Lädt
+  alle Empfänger (Owner + `shared_with`), filtert aktive Konten, sendet
+  parallel via `Promise.allSettled` Push + E-Mail. `legacy-env`-IDs werden
+  ausgefiltert. Liefert `{pushSent, emailSent, errors}`-Statistik.
+- **`lib/push.ts` → `sendPushToUser(userId, payload)`:** Neue Funktion neben
+  `sendPushToAdmins`. Filtert `push_subscriptions` per `admin_user_id`.
+  Bei `'legacy-env'` als ID greift sie auf Subscriptions ohne `admin_user_id`
+  zurück (Backward-Compat für Master-Passwort-Logins).
+- **`lib/email.ts` → `sendAppointmentReminder()`:** Cyan-Akzent-Mail mit
+  Termin-Titel, Berlin-Zeit, Ort, Beschreibung, Vorlaufzeit-Label
+  („5 Minuten vorher" / „2 Stunden vorher" / „1 Tag(e) vorher") + Link auf
+  `/admin/mein/kalender`. Bei geteilten Terminen Hinweis „📤 Termin von
+  Kollege geteilt". `emailType: 'appointment_reminder'`, alle User-Strings
+  via `escapeHtml`/`stripSubject`.
+- **Cron `/api/cron/appointment-reminders`** (alle 5 Min):
+  `verifyCronAuth` + `acquireCronLock('appointment-reminders')`. Lädt
+  Termine mit `reminder_minutes_before IS NOT NULL AND reminder_sent_at IS NULL`,
+  Lookback-Fenster 1 h (Cron-Ausfälle bis 1 h abfangen) + 30 s Lookahead.
+  Atomarer `reminder_sent_at`-Flip mit `is('reminder_sent_at', null)`-Guard
+  vor dem Send (Race-Schutz bei Doppel-Tick). Limit 200 Termine pro Lauf.
+- **UI:**
+  - `/admin/mein/notizen` — Karten-Grid mit Suche + Pin (sortiert pinned vor
+    nicht-pinned) + 6 Farb-Presets + Editor-Modal (Titel + Markdown-Textarea +
+    Pin-Checkbox + Farb-Picker). Karten zeigen relatives Datum
+    („vor 5 Min", „vor 3 Tagen") + Pin/Löschen-Quick-Actions.
+  - `/admin/mein/kalender` — Monat/Liste-Toggle. **Monatsansicht** mit
+    Montag-Start, 6×7-Raster, heute gelb umrandet, Termine als gefärbte
+    Balken (Owner = voll, geteilt = mit weißem Border-Left + 0.85 Opacity),
+    bis zu 3 sichtbar + „+N weitere"-Counter, Klick auf Zelle = neuer Termin
+    auf dem Tag, Klick auf Termin = Edit-Modal. **Listenansicht** = nächste
+    50 Termine ab jetzt − 30 Min. Editor-Modal mit Titel/Datum/Zeit/
+    Ganztägig/Ort/Beschreibung/Farb-Picker/Reminder-Dropdown +
+    Push/E-Mail-Checkboxen + Sharing-Liste (Multi-Select Kollegen).
+    Geteilte Termine sind read-only (disabled-Inputs + Hinweis-Banner
+    „📤 Geteilt von …").
+- **Sidebar-Integration** in `components/admin/AdminLayoutClient.tsx`: neue
+  Konstante `MEIN_BEREICH_ITEMS` + NavGroupCollapse-Block oben (vor
+  Tagesgeschäft), bedingt sichtbar `me && me.id !== 'legacy-env'`. Neuer
+  Eintrag `mein: ['/admin/mein']` in `GROUP_MATCH` → Accordion-Auto-Expand
+  beim Wechsel auf eine Persönlich-Seite, Persistenz in
+  `localStorage.admin_sidebar_open_group`.
+- **Bewusst NICHT umgesetzt:** keine In-App-Notification-Glocke (Push + Mail
+  reichen laut Anforderung), keine Integration in den Auftragskalender
+  (eigene Seite, damit der Auftragskalender 1:1 bleibt), kein Audit-Log
+  (private Daten + häufige Edits = Noise).
+- **Go-Live TODO:**
+  1. Migration `supabase/supabase-employee-personal.sql` ausführen. Ohne
+     Migration liefert die UI einen amber Migrations-Hinweis, Lese-Pfade
+     antworten mit leeren Listen, Schreibe-Pfade liefern 503.
+  2. Hetzner-Crontab (alle 5 Min, `--resolve` Pflicht — siehe
+     „Cloudflare-Vollintegration"):
+     ```
+     */5 * * * * curl -s -X POST --resolve cam2rent.de:443:127.0.0.1 -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/appointment-reminders
+     ```
+  3. Mitarbeiter müssen einmalig Web-Push aktivieren unter
+     `/admin/einstellungen` → „Push aktivieren" (für Push-Reminder).
+     E-Mail-Reminder gehen an die im Mitarbeiter-Konto hinterlegte Adresse
+     und brauchen keine zusätzliche Aktivierung.
+
 ### Angebots-Bündel — zeitlich begrenzte Festpreis-Pakete (Stand 2026-05-22)
 Kuratierte Angebote: EINE Kamera (mehrere Kamera-Optionen mit je eigenem Preis
 möglich) + fest enthaltenes Zubehör zum **Komplettpreis** (all-in), nur in einem
@@ -3185,6 +3277,16 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
      im jeweiligen `MODEL_REGISTRY` (`lib/firmware/adapters/`) ergänzen.
 
 ### Noch offen
+- **Persönlicher-Bereich-Migration + Cron:** Migration
+  `supabase/supabase-employee-personal.sql` (idempotent, legt
+  `employee_notes` + `employee_appointments` an) ausführen, sonst zeigt die
+  UI nur den Migrations-Hinweis. Plus Crontab-Eintrag (Cloudflare-Bypass mit
+  `--resolve` Pflicht):
+  ```
+  */5 * * * * curl -s -X POST --resolve cam2rent.de:443:127.0.0.1 -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/appointment-reminders
+  ```
+  Ohne Cron werden Termin-Reminder nicht gefeuert; Notizen/Termin-CRUD
+  funktioniert auch ohne den Cron. Empfohlen ASAP ausführen.
 - **Firmware-Check-Migration auszuführen:** `supabase/supabase-firmware-checks.sql`
   (idempotent). Legt Tabelle `firmware_checks` + Spalte
   `inventar_units.installed_firmware` an. Ohne Migration laufen die APIs

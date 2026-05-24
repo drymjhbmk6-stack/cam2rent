@@ -135,6 +135,11 @@ const iconFilm = (
 // Navigation groups
 // ============================================================
 
+const MEIN_BEREICH_ITEMS: NavItem[] = [
+  { href: '/admin/mein/notizen', label: 'Meine Notizen', icon: iconClipboard },
+  { href: '/admin/mein/kalender', label: 'Mein Kalender', icon: iconCalendar },
+];
+
 const TAGESGESCHAEFT_ITEMS: NavItem[] = [
   { href: '/admin/tagesgeschaeft', label: 'Übersicht', exact: true, icon: iconDashboard, perm: 'tagesgeschaeft' },
   { href: '/admin/buchungen', label: 'Buchungen', icon: iconBuchungen, perm: 'tagesgeschaeft' },
@@ -545,6 +550,7 @@ function SidebarContent({ pathname, isDashboard, onNavClick, handleLogout, me }:
   // zugehoerige Gruppe automatisch ausgeklappt; Klick auf eine andere
   // schliesst die bisherige.
   const GROUP_MATCH: Record<string, string[]> = {
+    mein: ['/admin/mein'],
     tagesgeschaeft: ['/admin/tagesgeschaeft', '/admin/buchungen', '/admin/verfuegbarkeit', '/admin/versand', '/admin/retouren', '/admin/verfuegbarkeit-alerts'],
     kunden: ['/admin/kunden-uebersicht', '/admin/kunden', '/admin/nachrichten', '/admin/warteliste', '/admin/kunden-material', '/admin/bewertungen', '/admin/schaeden'],
     katalog: ['/admin/preise/kameras', '/admin/sets', '/admin/zubehoer', '/admin/inventar', '/admin/firmware'],
@@ -637,6 +643,20 @@ function SidebarContent({ pathname, isDashboard, onNavClick, handleLogout, me }:
 
       {/* Navigation groups — Accordion: es ist immer nur eine Gruppe offen */}
       <nav className="flex-1 py-2 overflow-y-auto">
+        {me && me.id !== 'legacy-env' && (
+          <NavGroupCollapse
+            label="Mein Bereich"
+            icon={iconUsers}
+            items={MEIN_BEREICH_ITEMS}
+            matchPaths={GROUP_MATCH.mein}
+            storageKey="mein"
+            pathname={pathname}
+            onNavClick={onNavClick}
+            me={me}
+            open={openGroup === 'mein'}
+            onToggle={() => toggleGroup('mein')}
+          />
+        )}
         <NavGroupCollapse
           label="Tagesgeschäft"
           icon={iconBuchungen}
