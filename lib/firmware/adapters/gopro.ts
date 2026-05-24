@@ -66,29 +66,47 @@ async function fetchFromCatalog(device: string): Promise<FirmwareInfo> {
 }
 
 function parseCatalogResponse(json: unknown, url: string): FirmwareInfo {
-  // GoPro-Catalog-Antwort hat typischerweise die Form:
-  //   { "version": "H24.01.02.32.00", "releaseDate": "2025-04-15", ... }
-  // oder einen `firmware`-Array. Wir prüfen defensiv beide Varianten.
+  // GoPro-Catalog liefert i.d.R. eine geschachtelte Struktur:
+  //   { "version": 1, "firmware": [{ "version": "H24.01.02.32.00", ... }] }
+  // wobei `version: 1` die **Schema-Version** der API ist (nicht die
+  // Firmware). Wir akzeptieren NUR Werte, die dem GoPro-Versionsformat
+  // entsprechen — `HXX.YY.ZZ.WW.VV` (oder andere Bauarten mit Punkten).
   if (!json || typeof json !== 'object') {
     throw new Error('GoPro-API-Antwort ist kein JSON-Objekt');
   }
   const obj = json as Record<string, unknown>;
 
-  const direct = typeof obj.version === 'string' ? obj.version : null;
-  const releaseDate = typeof obj.releaseDate === 'string' ? obj.releaseDate.slice(0, 10) : undefined;
-  if (direct) {
-    return { version: direct, sourceUrl: url, releaseDate };
+  // GoPro-Versions-Pattern: beginnt mit H + 2 Ziffern (Modell-Generation)
+  // und enthält mindestens 4 punktgetrennte Segmente.
+  const looksLikeFirmware = (v: unknown): v is string =>
+    typeof v === 'string' && /^H\d{2}(?:\.\d{1,3}){3,}/i.test(v);
+
+  // Wenn das Top-Level-`version` schon ein echter Firmware-String ist (alte API-Variante)
+  if (looksLikeFirmware(obj.version)) {
+    const releaseDate = typeof obj.releaseDate === 'string' ? obj.releaseDate.slice(0, 10) : undefined;
+    return { version: obj.version as string, sourceUrl: url, releaseDate };
   }
 
+  // Verschachtelter Array-Pfad `firmware[0].version`
   const firmwareArr = Array.isArray(obj.firmware) ? obj.firmware : null;
   if (firmwareArr && firmwareArr.length > 0) {
     const first = firmwareArr[0] as Record<string, unknown>;
-    const v = typeof first.version === 'string' ? first.version : null;
-    const d = typeof first.releaseDate === 'string' ? first.releaseDate.slice(0, 10) : undefined;
-    if (v) return { version: v, sourceUrl: url, releaseDate: d };
+    if (looksLikeFirmware(first.version)) {
+      const d = typeof first.releaseDate === 'string' ? first.releaseDate.slice(0, 10) : undefined;
+      return { version: first.version as string, sourceUrl: url, releaseDate: d };
+    }
   }
 
-  throw new Error('Konnte keine Versions-Info aus der GoPro-Antwort lesen');
+  // Letzter Versuch: irgendwo im JSON ein Firmware-Pattern finden.
+  const flat = JSON.stringify(obj);
+  const match = /H\d{2}(?:\.\d{1,3}){3,}/i.exec(flat);
+  if (match) {
+    return { version: match[0], sourceUrl: url };
+  }
+
+  throw new Error(
+    'Konnte keine GoPro-Firmware-Version (Format HXX.YY.ZZ.WW.…) in der API-Antwort finden — Endpunkt-Schema hat sich vermutlich geändert',
+  );
 }
 
 export const goproAdapter: FirmwareAdapter = {

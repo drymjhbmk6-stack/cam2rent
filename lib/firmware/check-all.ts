@@ -2,7 +2,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { createServiceClient } from '@/lib/supabase';
 import { getProducts } from '@/lib/get-products';
 import { getAdapterForBrand } from './adapters';
-import type { FirmwareCheckRow } from './types';
+import { claudeAdapter } from './adapters/claude';
+import type { FirmwareCheckRow, FirmwareInfo } from './types';
 
 export interface FirmwareUpdate {
   product_id: string;
@@ -17,6 +18,50 @@ export interface FirmwareCheckSummary {
   errors: number;
   unsupported: number;
   updates: FirmwareUpdate[];
+  /** Wieviele Lookups via Claude-Web-Search-Fallback gelaufen sind. */
+  claude_fallbacks: number;
+}
+
+interface ResolveResult {
+  info: FirmwareInfo;
+  usedFallback: boolean;
+  fallbackReason: string | null;
+}
+
+/**
+ * Versucht erst den marken-spezifischen Adapter; bei `error` oder
+ * `unsupported` fällt das System auf Claude-Web-Search zurück.
+ * Wirft nur, wenn ALLE Pfade scheitern.
+ */
+async function resolveLatest(brand: string, model: string): Promise<ResolveResult> {
+  const adapter = getAdapterForBrand(brand);
+
+  // Wenn der Marken-Adapter das Modell trägt → erst dort versuchen.
+  if (adapter && adapter.supports(model)) {
+    try {
+      const info = await adapter.fetchLatest(model);
+      return { info, usedFallback: false, fallbackReason: null };
+    } catch (adapterErr) {
+      const reason = adapterErr instanceof Error ? adapterErr.message : String(adapterErr);
+      // Fallback auf Claude
+      try {
+        const info = await claudeAdapter.fetchLatest(model);
+        return { info, usedFallback: true, fallbackReason: `Marken-Adapter: ${reason}` };
+      } catch (claudeErr) {
+        const cMsg = claudeErr instanceof Error ? claudeErr.message : String(claudeErr);
+        throw new Error(
+          `Marken-Adapter fehlgeschlagen (${reason}) — Claude-Fallback ebenfalls fehlgeschlagen (${cMsg})`,
+        );
+      }
+    }
+  }
+
+  // Kein Adapter / Modell nicht im Registry → direkt Claude.
+  const reason = adapter
+    ? `Modell "${model}" im ${brand}-Adapter nicht hinterlegt`
+    : `Marke "${brand || '—'}" hat keinen spezifischen Adapter`;
+  const info = await claudeAdapter.fetchLatest(model);
+  return { info, usedFallback: true, fallbackReason: reason };
 }
 
 /**
@@ -42,7 +87,9 @@ export async function checkAllFirmware(
     byProduct.set(r.product_id, r);
   }
 
-  const summary: FirmwareCheckSummary = { checked: 0, errors: 0, unsupported: 0, updates: [] };
+  const summary: FirmwareCheckSummary = {
+    checked: 0, errors: 0, unsupported: 0, updates: [], claude_fallbacks: 0,
+  };
 
   for (const p of cameras) {
     summary.checked += 1;
@@ -50,28 +97,9 @@ export async function checkAllFirmware(
     const model = (p.model ?? p.name ?? '').trim();
     const previous = byProduct.get(p.id) ?? null;
 
-    const adapter = getAdapterForBrand(brand);
-    if (!adapter || !adapter.supports(model)) {
-      summary.unsupported += 1;
-      await upsertRow(supabase, {
-        product_id: p.id,
-        brand,
-        model,
-        status: 'unsupported',
-        latest_version: previous?.latest_version ?? null,
-        source_url: previous?.source_url ?? null,
-        release_date: previous?.release_date ?? null,
-        error_message: adapter
-          ? `Modell "${model}" ist im ${brand}-Adapter nicht hinterlegt.`
-          : `Marke "${brand || '—'}" hat noch keinen Firmware-Adapter.`,
-        last_changed_at: previous?.last_changed_at ?? null,
-        seen_version: previous?.seen_version ?? null,
-      });
-      continue;
-    }
-
     try {
-      const info = await adapter.fetchLatest(model);
+      const { info, usedFallback, fallbackReason } = await resolveLatest(brand, model);
+      if (usedFallback) summary.claude_fallbacks += 1;
       const versionChanged = previous?.latest_version !== info.version;
       const nowIso = new Date().toISOString();
       await upsertRow(supabase, {
@@ -82,7 +110,7 @@ export async function checkAllFirmware(
         latest_version: info.version,
         source_url: info.sourceUrl,
         release_date: info.releaseDate ?? null,
-        error_message: null,
+        error_message: usedFallback ? `Quelle via Claude-Web-Search (${fallbackReason})` : null,
         last_changed_at: versionChanged ? nowIso : previous?.last_changed_at ?? nowIso,
         seen_version: previous?.seen_version ?? null,
       });
@@ -112,7 +140,7 @@ export async function checkAllFirmware(
       });
     }
 
-    // Kleine Pause zwischen Hersteller-Calls — kein Hämmern.
+    // Kleine Pause zwischen Hersteller-/Claude-Calls — kein Hämmern.
     await sleep(1000);
   }
 
@@ -142,27 +170,8 @@ export async function checkOneProduct(
     .maybeSingle();
   const previous = (existing as FirmwareCheckRow | null) ?? null;
 
-  const adapter = getAdapterForBrand(brand);
-  if (!adapter || !adapter.supports(model)) {
-    const row = await upsertRow(supabase, {
-      product_id: productId,
-      brand,
-      model,
-      status: 'unsupported',
-      latest_version: previous?.latest_version ?? null,
-      source_url: previous?.source_url ?? null,
-      release_date: previous?.release_date ?? null,
-      error_message: adapter
-        ? `Modell "${model}" ist im ${brand}-Adapter nicht hinterlegt.`
-        : `Marke "${brand || '—'}" hat noch keinen Firmware-Adapter.`,
-      last_changed_at: previous?.last_changed_at ?? null,
-      seen_version: previous?.seen_version ?? null,
-    });
-    return { row, update: null };
-  }
-
   try {
-    const info = await adapter.fetchLatest(model);
+    const { info, usedFallback, fallbackReason } = await resolveLatest(brand, model);
     const versionChanged = previous?.latest_version !== info.version;
     const nowIso = new Date().toISOString();
     const row = await upsertRow(supabase, {
@@ -173,7 +182,7 @@ export async function checkOneProduct(
       latest_version: info.version,
       source_url: info.sourceUrl,
       release_date: info.releaseDate ?? null,
-      error_message: null,
+      error_message: usedFallback ? `Quelle via Claude-Web-Search (${fallbackReason})` : null,
       last_changed_at: versionChanged ? nowIso : previous?.last_changed_at ?? nowIso,
       seen_version: previous?.seen_version ?? null,
     });

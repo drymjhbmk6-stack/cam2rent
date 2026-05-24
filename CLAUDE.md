@@ -3090,12 +3090,27 @@ physischem Stück in `/admin/inventar/[id]` (Stammdaten).
   Version pro Exemplar. RLS service-role-only.
 - **Adapter-Architektur** unter `lib/firmware/`: pro Marke ein File
   (`adapters/gopro.ts`, `dji.ts`, `insta360.ts`) mit Modell-Slug-Registry.
-  GoPro nutzt die offizielle Catalog-API (`api.gopro.com/firmware/v2/catalog`),
-  DJI/Insta360 scrapen die jeweilige Downloads-Seite per Regex.
-  **Bewusst defensiv** — bei Hersteller-Markup-Änderung fällt das einzelne
-  Modell auf `status='error'`, der Cron läuft weiter und die UI zeigt den
-  Fehler. Modelle ohne Registry-Eintrag landen auf `status='unsupported'`.
-  Neue Modelle ergänzen: Eintrag im jeweiligen `MODEL_REGISTRY` hinzufügen.
+  GoPro nutzt die offizielle Catalog-API (`api.gopro.com/firmware/v2/catalog`,
+  Versionsformat-Check `HXX.YY.ZZ.WW` — sonst rutscht die Schema-Version
+  „1" als Fake-Antwort durch), DJI/Insta360 scrapen die jeweilige
+  Downloads-Seite per Regex.
+- **Claude-Web-Search-Fallback** `adapters/claude.ts` greift automatisch,
+  wenn (a) eine Marke keinen spezifischen Adapter hat, (b) das Modell
+  im Registry fehlt, oder (c) der Marken-Adapter mit einem Fehler
+  antwortet. Nutzt das Anthropic `web_search_20250305`-Tool und Sonnet
+  4.6 mit hartem JSON-Output + Host-Allowlist (gopro.com, dji.com,
+  insta360.com, sony.com, ricoh.com, akaso) + Versions-Pattern-Check
+  gegen Halluzinationen. Kosten pro Fallback: ~0,02–0,05 €. API-Key
+  aus `admin_settings.blog_settings.anthropic_api_key`. In der UI
+  erscheint die Quelle als „🔍 Quelle via Claude-Web-Search (Grund: …)"
+  unter dem Modell, damit der Admin sieht ob die Info aus dem
+  schnellen Adapter oder dem Claude-Fallback kommt. `summary.claude_fallbacks`
+  zählt die Fallback-Lookups pro Lauf.
+- **Modell-Registry erweitern** ist optional — sobald Claude verlässlich
+  greift, kann der Admin Modelle einfach hinzufügen ohne dass jemand die
+  Adapter-Slugs nachpflegen muss. Bei häufig genutzten Modellen lohnt sich
+  ein expliziter Eintrag im jeweiligen `MODEL_REGISTRY` (schneller +
+  kostenfrei).
 - **Cron `/api/cron/firmware-check`** (Pattern wie `weekly-report`):
   `verifyCronAuth` + `acquireCronLock('firmware-check')` + Skip im Test-Modus.
   Liest `admin_settings.firmware_check_config.enabled` (Default true).

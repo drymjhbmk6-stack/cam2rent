@@ -239,8 +239,14 @@ export default function FirmwareOverviewPage() {
                       </div>
                     )}
                     {r.error_message && (
-                      <div className="text-rose-300 text-xs italic mt-2">
-                        {r.error_message}
+                      <div
+                        className={
+                          r.status === 'ok'
+                            ? 'text-cyan-300/80 text-xs italic mt-2'
+                            : 'text-rose-300 text-xs italic mt-2'
+                        }
+                      >
+                        {r.status === 'ok' ? '🔍 ' : ''}{r.error_message}
                       </div>
                     )}
                     <div className="text-slate-500 text-xs">
