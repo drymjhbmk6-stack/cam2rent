@@ -3,12 +3,12 @@
 import { useEffect, useState } from 'react';
 
 /**
- * Admin-Einstellung für den wöchentlichen Firmware-Check.
+ * Admin-Einstellung für den Quartals-Firmware-Check (alle 3 Monate).
  *
  * Speichert in admin_settings.firmware_check_config:
  *   { enabled: boolean, last_run_at?: string, last_run_summary?: {...} }
  *
- * Der Cron `/api/cron/firmware-check` läuft Montag 07:00 Berlin und
+ * Der Cron `/api/cron/firmware-check` läuft am 1. jedes Quartals 07:00 Berlin und
  * prüft pro Kamera-Modell auf neue Hersteller-Firmware. Im Test-Modus
  * wird der Cron komplett übersprungen.
  */
@@ -109,10 +109,11 @@ export default function FirmwareCheckSection() {
         Firmware-Check
       </h2>
       <p className="text-sm font-body text-brand-muted dark:text-gray-400 mb-4">
-        Wöchentlicher Lauf (<strong>Montag 07:00</strong>) prüft pro Kamera-Modell die
-        Hersteller-Webseite/-API auf neue Firmware. Bei Update bekommst du eine
-        Push-Notification + die Übersicht zeigt es unter <em>Katalog → Firmware-Updates</em>.
-        Im Test-Modus läuft der Cron nicht. Crontab-Eintrag siehe CLAUDE.md.
+        Quartalslauf (<strong>1. Januar/April/Juli/Oktober, 07:00</strong>) prüft pro
+        Kamera-Modell die Hersteller-Webseite/-API auf neue Firmware. Bei Update bekommst
+        du eine Push-Notification + die Übersicht zeigt es unter
+        <em> Katalog → Firmware-Updates</em>. Im Test-Modus läuft der Cron nicht.
+        Crontab-Eintrag siehe CLAUDE.md. „Jetzt prüfen“ kannst du jederzeit manuell.
       </p>
 
       <div className="flex items-center gap-3 mb-4">

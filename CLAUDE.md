@@ -3078,10 +3078,12 @@ Zwei Einsatzorte:
   einen „Zum Beleg →"-Link.
 
 ### Firmware-Check pro Kamera-Modell + Pro-Stück-Tracking (Stand 2026-05-24)
-Wöchentlicher Cron prüft pro Kamera-Modell die Hersteller-Quelle auf neue
-Firmware. Per Inventar-Unit kann der Admin eintragen, welche Version
-installiert ist — der „🆕 Update verfügbar"-Hinweis erscheint dann pro
-physischem Stück in `/admin/inventar/[id]` (Stammdaten).
+Quartalslauf (alle 3 Monate, jeweils am 1. Jan/Apr/Jul/Okt 07:00 Berlin) prüft
+pro Kamera-Modell die Hersteller-Quelle auf neue Firmware. Per Inventar-Unit
+kann der Admin eintragen, welche Version installiert ist — der „🆕 Update
+verfügbar"-Hinweis erscheint dann pro physischem Stück in
+`/admin/inventar/[id]` (Stammdaten). „Jetzt prüfen" jederzeit manuell unter
+`/admin/firmware`.
 - **Migration `supabase/supabase-firmware-checks.sql`** (idempotent): Tabelle
   `firmware_checks` (eine Zeile pro `admin_config.products[].id`, mit
   `latest_version`, `source_url`, `release_date`, `status`,
@@ -3111,9 +3113,10 @@ physischem Stück in `/admin/inventar/[id]` (Stammdaten).
   Adapter-Slugs nachpflegen muss. Bei häufig genutzten Modellen lohnt sich
   ein expliziter Eintrag im jeweiligen `MODEL_REGISTRY` (schneller +
   kostenfrei).
-- **Cron `/api/cron/firmware-check`** (Pattern wie `weekly-report`):
-  `verifyCronAuth` + `acquireCronLock('firmware-check')` + Skip im Test-Modus.
-  Liest `admin_settings.firmware_check_config.enabled` (Default true).
+- **Cron `/api/cron/firmware-check`** (Pattern wie `weekly-report`, Schedule
+  alle 3 Monate): `verifyCronAuth` + `acquireCronLock('firmware-check')` +
+  Skip im Test-Modus. Liest `admin_settings.firmware_check_config.enabled`
+  (Default true).
   Bei erkannten Versionswechseln EINE gebündelte Notification vom Typ
   `firmware_update_available` (Permission `katalog`, cyan Pfeil-nach-oben-Icon)
   mit Link auf `/admin/firmware` und Update-Liste im Body — kein
@@ -3145,9 +3148,9 @@ physischem Stück in `/admin/inventar/[id]` (Stammdaten).
   `firmware.mark_seen` (Entity `firmware_check`).
 - **Go-Live TODO:**
   1. Migration `supabase/supabase-firmware-checks.sql` ausführen.
-  2. Crontab-Eintrag (Montag 07:00 Berlin, `--resolve` umgeht Cloudflare):
+  2. Crontab-Eintrag (alle 3 Monate am 1., 07:00 Berlin, `--resolve` umgeht Cloudflare):
      ```
-     0 7 * * 1 curl -s -X POST --resolve cam2rent.de:443:127.0.0.1 -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/firmware-check
+     0 7 1 */3 * curl -s -X POST --resolve cam2rent.de:443:127.0.0.1 -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/firmware-check
      ```
   3. Einmalig „Jetzt prüfen" laufen lassen, dann pro Modell die aktuell
      installierte Firmware-Version in den Inventar-Stammdaten eintragen

@@ -131,7 +131,8 @@ export default function FirmwareOverviewPage() {
           <div>
             <h1 className="text-2xl font-semibold">Firmware-Updates</h1>
             <p className="text-slate-400 text-sm mt-1">
-              Wöchentlicher Cron prüft pro Kamera-Modell auf neue Hersteller-Firmware.
+              Quartalslauf (alle 3 Monate) prüft pro Kamera-Modell auf neue
+              Hersteller-Firmware. „Jetzt prüfen“ geht jederzeit manuell.
             </p>
           </div>
           <button
@@ -152,7 +153,7 @@ export default function FirmwareOverviewPage() {
         {!loading && rows.length === 0 && (
           <div className="p-6 bg-[#111827] border border-slate-800 rounded text-slate-400 text-sm">
             Noch kein Firmware-Check gelaufen. Klick „Jetzt prüfen“ für den ersten Lauf —
-            oder warte auf den wöchentlichen Cron-Lauf am Montag 07:00 Uhr.
+            oder warte auf den Quartals-Cron-Lauf (1. Jan/Apr/Jul/Okt, 07:00 Uhr).
           </div>
         )}
 

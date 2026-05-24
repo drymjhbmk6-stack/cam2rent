@@ -7,11 +7,13 @@ import { checkAllFirmware } from '@/lib/firmware/check-all';
 import { createAdminNotification } from '@/lib/admin-notifications';
 
 /**
- * Wöchentlicher Firmware-Check für alle Kameras.
+ * Quartals-Firmware-Check für alle Kameras (alle 3 Monate).
  *
- * Crontab in Hetzner (Montag 07:00 Berlin, --resolve umgeht Cloudflare):
- *   0 7 * * 1 curl -s -X POST --resolve cam2rent.de:443:127.0.0.1 \
+ * Crontab in Hetzner (alle 3 Monate am 1., 07:00 Berlin, --resolve umgeht Cloudflare):
+ *   0 7 1 STAR_SLASH_3 * curl -s -X POST --resolve cam2rent.de:443:127.0.0.1 \
  *     -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/firmware-check
+ *   (STAR_SLASH_3 = das Cron-Sternchen-Slash-3, hier nur als Wort dargestellt,
+ *   weil der JS-Block-Kommentar sonst vorzeitig endet.)
  *
  * Setting in `admin_settings.firmware_check_config`:
  *   { enabled: true, last_run_at?: ISO, last_run_summary?: {...} }

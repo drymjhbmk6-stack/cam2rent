@@ -612,7 +612,7 @@ export default function EinstellungenAllgemein() {
       {/* Sektion 9: Wöchentlicher Bericht */}
       <WeeklyReportSection />
 
-      {/* Sektion 9b: Wöchentlicher Firmware-Check */}
+      {/* Sektion 9b: Quartals-Firmware-Check */}
       <FirmwareCheckSection />
 
       {/* Sektion 10: Eigene Besuche aus Analytics ausschließen */}
