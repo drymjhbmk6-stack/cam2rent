@@ -2697,6 +2697,33 @@ Admin, wonach Kunden suchen (Nachfrage-Analyse, unabhängig vom Abschluss).
   ausführen. Ohne sie läuft der Buchungs-Flow normal weiter, die Telemetrie
   wird nur verworfen und die Admin-Seite zeigt einen Hinweis.
 
+### Angebots-Bündel: Vorab-Veröffentlichung (Stand 2026-05-24)
+Optionales drittes Datumsfeld „Vorab sichtbar ab" pro Angebot. Trennt
+Sichtbarkeit/Buchbarkeit vom Mietfenster — Kunden können das Angebot also
+schon sehen + buchen, bevor das Mietfenster startet; der Mietzeitraum selbst
+bleibt aber auf das Mietfenster (`valid_from`–`valid_until`) begrenzt.
+- **Sichtbar/buchbar ab:** `published_from ?? valid_from` (untere Schranke)
+- **Sichtbar/buchbar bis:** `valid_until` (obere Schranke, unverändert)
+- **Mietzeitraum-Validierung bleibt 1:1:** der vom Kunden gewählte Zeitraum
+  muss komplett in `valid_from`…`valid_until` fallen (Kalender-`allowedRange`
+  im Wizard, `fixed_days`-Check bei Pauschal-Angeboten).
+- **Migration `supabase/supabase-angebote-published-from.sql`** (idempotent):
+  `ALTER TABLE angebote ADD COLUMN IF NOT EXISTS published_from TIMESTAMPTZ`.
+- **API:** `buildRow` in `app/api/admin/angebote/route.ts` ergänzt um
+  `published_from`. POST + PATCH retryen ohne die Spalte, falls Migration
+  ausstehend (Helper `isMissingPublishedFrom`). `data/angebote.ts:isAngebotActive`
+  + `mapAngebotRow` ergänzt — wird automatisch in `GET /api/angebote` (öffentliche
+  Liste), in `/angebote` und im Buchungs-Wizard (`offerActive`) wirksam.
+- **Admin-UI** (`/admin/angebote`): drittes Datumsfeld unter „Gültig ab/bis"
+  mit Hinweistext + sanfte amber Warnung, wenn `publishedFrom >= validFrom`
+  (Vorab-Veröffentlichung würde nicht greifen). Statusbadge zusätzlich
+  `Vorabverkauf (Miete ab TT.MM.JJJJ)` (cyan), wenn Angebot vorab sichtbar ist
+  und das Mietfenster noch nicht begonnen hat. `Geplant`-Badge zeigt jetzt
+  das Datum dazu.
+- **Go-Live TODO:** Migration ausführen. Ohne sie laufen alle bestehenden
+  Angebote 1:1 weiter (defensiver Retry-Pfad); das neue UI-Feld speichert
+  in dem Fall nichts.
+
 ### Angebots-Bündel — zeitlich begrenzte Festpreis-Pakete (Stand 2026-05-22)
 Kuratierte Angebote: EINE Kamera (mehrere Kamera-Optionen mit je eigenem Preis
 möglich) + fest enthaltenes Zubehör zum **Komplettpreis** (all-in), nur in einem
@@ -3173,6 +3200,11 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
   Migration ist das Angebote-Feature inaktiv (öffentliche/Admin-APIs liefern
   leere Listen, `/admin/angebote` zeigt einen Migrations-Hinweis, Anlegen liefert
   503); der normale Buchungsflow ist unberührt. Empfohlen ASAP ausführen.
+- **Angebots-Vorab-Veröffentlichung Migration auszuführen:**
+  `supabase/supabase-angebote-published-from.sql` (idempotent). Fügt nullable
+  Spalte `angebote.published_from TIMESTAMPTZ` hinzu. Ohne Migration läuft
+  alles 1:1 weiter (API-POST/PATCH retryen ohne die Spalte), aber das neue
+  UI-Feld „Vorab sichtbar ab" speichert nichts. Empfohlen ASAP ausführen.
 - **Inbound-E-Mail Go-Live (IMAP-Polling):**
   1. Migration `supabase/supabase-inbound-email.sql` ausführen. Ohne Migration
      bricht der Cron `/api/cron/inbound-email-poll` pro Mail mit

@@ -12,8 +12,9 @@ interface Draft {
   id: string; // '' = neues Angebot
   name: string;
   description: string;
-  validFrom: string;  // YYYY-MM-DD
-  validUntil: string; // YYYY-MM-DD
+  validFrom: string;     // YYYY-MM-DD
+  validUntil: string;    // YYYY-MM-DD
+  publishedFrom: string; // YYYY-MM-DD (optional, leer = ab validFrom sichtbar)
   pricing_mode: 'flat' | 'perDay';
   fixed_days: number;
   camera_options: AngebotCameraOption[];
@@ -47,7 +48,7 @@ function dateToIso(date: string, asEnd: boolean): string | null {
 
 function emptyDraft(): Draft {
   return {
-    id: '', name: '', description: '', validFrom: '', validUntil: '',
+    id: '', name: '', description: '', validFrom: '', validUntil: '', publishedFrom: '',
     pricing_mode: 'flat', fixed_days: 7, camera_options: [],
     image_url: null, badge: '', badge_color: '', active: true,
   };
@@ -57,6 +58,7 @@ function toDraft(a: Angebot): Draft {
   return {
     id: a.id, name: a.name, description: a.description,
     validFrom: isoToDate(a.valid_from), validUntil: isoToDate(a.valid_until),
+    publishedFrom: isoToDate(a.published_from),
     pricing_mode: a.pricing_mode, fixed_days: a.fixed_days ?? 7,
     camera_options: a.camera_options.map((c) => ({
       product_id: c.product_id,
@@ -67,11 +69,26 @@ function toDraft(a: Angebot): Draft {
   };
 }
 
+function fmtDateDe(iso: string | null): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()}`;
+}
+
 function statusBadge(a: Angebot): { label: string; color: string; bg: string } {
   if (!a.active) return { label: 'Deaktiviert', color: '#94a3b8', bg: '#33415544' };
   const now = new Date();
-  if (a.valid_from && new Date(a.valid_from) > now) return { label: 'Geplant', color: '#fbbf24', bg: '#f59e0b22' };
+  const visibleFromIso = a.published_from ?? a.valid_from;
+  if (visibleFromIso && new Date(visibleFromIso) > now) {
+    return { label: `Geplant ab ${fmtDateDe(visibleFromIso)}`, color: '#fbbf24', bg: '#f59e0b22' };
+  }
   if (a.valid_until && new Date(a.valid_until) < now) return { label: 'Abgelaufen', color: '#ef4444', bg: '#ef444422' };
+  // Vorab-Veroeffentlichung greift: sichtbar/buchbar, Mietfenster startet aber spaeter.
+  if (a.published_from && a.valid_from && new Date(a.valid_from) > now) {
+    return { label: `Vorabverkauf (Miete ab ${fmtDateDe(a.valid_from)})`, color: '#06b6d4', bg: '#06b6d422' };
+  }
   return isAngebotActive(a, now)
     ? { label: 'Aktiv', color: '#10b981', bg: '#10b98122' }
     : { label: 'Inaktiv', color: '#94a3b8', bg: '#33415544' };
@@ -187,6 +204,7 @@ export default function AdminAngebotePage() {
       description: draft.description.trim(),
       valid_from: dateToIso(draft.validFrom, false),
       valid_until: dateToIso(draft.validUntil, true),
+      published_from: dateToIso(draft.publishedFrom, false),
       pricing_mode: draft.pricing_mode,
       fixed_days: draft.pricing_mode === 'flat' ? draft.fixed_days : null,
       camera_options: draft.camera_options,
@@ -311,12 +329,12 @@ export default function AdminAngebotePage() {
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
               <div>
-                <label style={S.label}>Gültig ab</label>
+                <label style={S.label}>Gültig ab (Mietfenster-Start)</label>
                 <input type="date" style={S.input} value={draft.validFrom}
                   onChange={(e) => patchDraft({ validFrom: e.target.value })} />
               </div>
               <div>
-                <label style={S.label}>Gültig bis</label>
+                <label style={S.label}>Gültig bis (Mietfenster-Ende)</label>
                 <input type="date" style={S.input} value={draft.validUntil}
                   onChange={(e) => patchDraft({ validUntil: e.target.value })} />
               </div>
@@ -324,6 +342,27 @@ export default function AdminAngebotePage() {
             <p style={{ fontSize: 11, color: '#64748b', marginTop: -8 }}>
               Der gewählte Mietzeitraum des Kunden muss komplett in dieses Fenster fallen.
             </p>
+
+            <div>
+              <label style={S.label}>Vorab sichtbar ab (optional)</label>
+              <input
+                type="date"
+                style={{ ...S.input, maxWidth: 220 }}
+                value={draft.publishedFrom}
+                onChange={(e) => patchDraft({ publishedFrom: e.target.value })}
+                max={draft.validFrom || undefined}
+              />
+              <p style={{ fontSize: 11, color: '#64748b', marginTop: 6 }}>
+                Wenn gesetzt: Angebot erscheint im Shop und ist buchbar ab diesem Datum.
+                Der Mietzeitraum bleibt aber auf das Mietfenster oben begrenzt.
+                Leer = Sichtbarkeit beginnt mit dem Mietfenster.
+              </p>
+              {draft.publishedFrom && draft.validFrom && new Date(draft.publishedFrom) >= new Date(draft.validFrom) && (
+                <p style={{ fontSize: 11, color: '#fbbf24', marginTop: 4 }}>
+                  Hinweis: „Vorab sichtbar ab&ldquo; liegt nicht vor „Gültig ab&ldquo; — die Vorab-Veröffentlichung greift nicht.
+                </p>
+              )}
+            </div>
 
             {/* Preismodell */}
             <div>

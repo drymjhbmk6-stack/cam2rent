@@ -26,10 +26,18 @@ export interface Angebot {
   id: string;
   name: string;
   description: string;
-  /** ISO-Timestamp — Beginn des Verkaufs-/Mietfensters (null = offen). */
+  /** ISO-Timestamp — Beginn des Mietfensters (null = offen). */
   valid_from: string | null;
-  /** ISO-Timestamp — Ende des Verkaufs-/Mietfensters (null = offen). */
+  /** ISO-Timestamp — Ende des Mietfensters (null = offen). */
   valid_until: string | null;
+  /**
+   * Optional: ISO-Timestamp ab dem das Angebot sichtbar/buchbar wird —
+   * UNABHAENGIG vom Mietfenster. null = Sichtbarkeit ab `valid_from`.
+   * Beispiel: published_from=01.04., valid_from=01.05., valid_until=30.05.
+   * → Kunde sieht/bucht das Angebot ab 01.04., der Mietzeitraum muss aber
+   * weiterhin komplett innerhalb 01.05.–30.05. liegen.
+   */
+  published_from: string | null;
   /** 'flat' = Pauschale fuer fixed_days Tage, 'perDay' = Preis pro Tag. */
   pricing_mode: 'flat' | 'perDay';
   /** Feste Mietdauer in Tagen (nur bei pricing_mode='flat' relevant). */
@@ -57,13 +65,17 @@ function normalizeAccessoryItems(input: unknown): AngebotAccessoryItem[] {
 }
 
 /**
- * Ist das Angebot aktuell gueltig (aktiv + im Verkaufs-/Mietfenster)?
- * valid_from/valid_until werden inklusive End-of-Day gespeichert, daher
- * reicht ein einfacher Date-Vergleich.
+ * Ist das Angebot aktuell sichtbar/buchbar (= "aktiv" im UI/API-Sinn)?
+ * Untere Schranke: `published_from` (Vorab-Veroeffentlichung) bzw. — wenn
+ * leer — `valid_from`. Obere Schranke: `valid_until`. Beide Endpunkte werden
+ * inklusive End-of-Day gespeichert, daher reicht ein einfacher Date-Vergleich.
+ * Die Mietzeitraum-Validierung (`valid_from`..`valid_until`) ist davon
+ * getrennt und passiert im Buchungs-Wizard ueber `offerAllowedRange`.
  */
 export function isAngebotActive(a: Angebot, now: Date = new Date()): boolean {
   if (!a.active) return false;
-  if (a.valid_from && new Date(a.valid_from) > now) return false;
+  const visibleFromIso = a.published_from ?? a.valid_from;
+  if (visibleFromIso && new Date(visibleFromIso) > now) return false;
   if (a.valid_until && new Date(a.valid_until) < now) return false;
   return true;
 }
@@ -85,6 +97,7 @@ export function mapAngebotRow(r: Record<string, unknown>): Angebot {
     description: (r.description as string) ?? '',
     valid_from: (r.valid_from as string) ?? null,
     valid_until: (r.valid_until as string) ?? null,
+    published_from: (r.published_from as string) ?? null,
     pricing_mode: r.pricing_mode === 'perDay' ? 'perDay' : 'flat',
     fixed_days: typeof r.fixed_days === 'number' ? r.fixed_days : null,
     camera_options,

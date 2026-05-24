@@ -9,6 +9,15 @@ function isMissingTable(msg: string | undefined): boolean {
   return !!msg && /angebote|offer_id|relation|does not exist|schema cache|PGRST/i.test(msg);
 }
 
+/**
+ * Erkennt speziell den "published_from"-Migrations-Mismatch
+ * (Spalte noch nicht angelegt). In dem Fall lassen wir die Spalte aus dem
+ * Insert/Update-Payload weg und versuchen es nochmal.
+ */
+function isMissingPublishedFrom(msg: string | undefined): boolean {
+  return !!msg && /published_from|column|schema cache|PGRST/i.test(msg);
+}
+
 function sanitizeAccessoryItems(input: unknown): AngebotAccessoryItem[] {
   if (!Array.isArray(input)) return [];
   const map = new Map<string, number>();
@@ -84,6 +93,7 @@ function buildRow(body: Record<string, unknown>) {
     description: typeof body.description === 'string' ? body.description.trim() : null,
     valid_from: sanitizeDate(body.valid_from),
     valid_until: sanitizeDate(body.valid_until),
+    published_from: sanitizeDate(body.published_from),
     pricing_mode: pricingMode,
     fixed_days: pricingMode === 'flat' && Number.isFinite(fixedDaysRaw) && fixedDaysRaw > 0 ? fixedDaysRaw : null,
     camera_options: sanitizeCameraOptions(body.camera_options),
@@ -119,11 +129,21 @@ export async function POST(req: NextRequest) {
       .from('angebote').select('sort_order').order('sort_order', { ascending: false }).limit(1).maybeSingle();
     const sort_order = (last?.sort_order ?? 0) + 1;
 
-    const { data, error } = await supabase
+    const insertPayload: Record<string, unknown> = { id, ...row, sort_order, updated_at: new Date().toISOString() };
+    let { data, error } = await supabase
       .from('angebote')
-      .insert({ id, ...row, sort_order, updated_at: new Date().toISOString() })
+      .insert(insertPayload)
       .select()
       .single();
+    if (error && isMissingPublishedFrom(error.message) && !isMissingTable(error.message)) {
+      // Migration `published_from` noch nicht durch → ohne Spalte retryen.
+      delete (insertPayload as Record<string, unknown>).published_from;
+      ({ data, error } = await supabase
+        .from('angebote')
+        .insert(insertPayload)
+        .select()
+        .single());
+    }
     if (error) {
       if (isMissingTable(error.message)) {
         return NextResponse.json({ error: 'Migration ausstehend — bitte supabase-angebote.sql ausführen.' }, { status: 503 });
@@ -157,10 +177,18 @@ export async function PATCH(req: NextRequest) {
     }
 
     const supabase = createServiceClient();
-    const { error } = await supabase
+    const updatePayload: Record<string, unknown> = { ...row, updated_at: new Date().toISOString() };
+    let { error } = await supabase
       .from('angebote')
-      .update({ ...row, updated_at: new Date().toISOString() })
+      .update(updatePayload)
       .eq('id', id);
+    if (error && isMissingPublishedFrom(error.message) && !isMissingTable(error.message)) {
+      delete (updatePayload as Record<string, unknown>).published_from;
+      ({ error } = await supabase
+        .from('angebote')
+        .update(updatePayload)
+        .eq('id', id));
+    }
     if (error) {
       if (isMissingTable(error.message)) {
         return NextResponse.json({ error: 'Migration ausstehend — bitte supabase-angebote.sql ausführen.' }, { status: 503 });
