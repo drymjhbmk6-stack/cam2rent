@@ -1236,7 +1236,9 @@ export default function BuchenPage() {
 
                 {/* ── Kalender (Verfügbarkeit + Auswahl) ── */}
                 <p className="text-xs font-body font-semibold text-brand-steel dark:text-gray-400 uppercase tracking-wider mb-3">
-                  Miettage wählen
+                  {offerMode && offer && offer.pricing_mode === 'flat' && offer.fixed_days
+                    ? `Startdatum wählen (${offer.fixed_days} ${offer.fixed_days === 1 ? 'Tag' : 'Tage'}, Ende automatisch)`
+                    : 'Miettage wählen'}
                 </p>
                 {product?.id && (
                   <AvailabilityCalendar
@@ -1246,6 +1248,7 @@ export default function BuchenPage() {
                     initialTo={preTo}
                     onRangeChange={handleCalendarRangeChange}
                     allowedRange={offerAllowedRange}
+                    forceDays={offerMode && offer && offer.pricing_mode === 'flat' ? offer.fixed_days : null}
                     extraHoldRanges={cartItems
                       .filter((it) => it.productId === product.id)
                       .map((it) => ({ from: it.rentalFrom, to: it.rentalTo }))}

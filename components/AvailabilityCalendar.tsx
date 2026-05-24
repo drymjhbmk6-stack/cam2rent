@@ -57,6 +57,14 @@ interface AvailabilityCalendarProps {
    * Tage ausserhalb [from, to] werden nicht waehlbar.
    */
   allowedRange?: { from: string; to: string } | null;
+  /**
+   * Pauschal-Modus mit fester Tagezahl (z.B. Angebots-Bündel `pricing_mode='flat'`):
+   * der Kunde waehlt nur das Startdatum, das Enddatum wird automatisch auf
+   * `from + forceDays - 1` gesetzt. Starttage, deren errechnetes Ende ausserhalb
+   * `allowedRange` liegt oder einen blockierten Tag dazwischen haette, werden
+   * nicht waehlbar.
+   */
+  forceDays?: number | null;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -87,6 +95,13 @@ function daysBetween(from: string, to: string): number {
   return Math.round((b.getTime() - a.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 }
 
+/** Addiert N Kalendertage zu einem YYYY-MM-DD-String. */
+function addDaysIso(dateStr: string, n: number): string {
+  const d = parseDate(dateStr);
+  d.setDate(d.getDate() + n);
+  return fmtDate(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function AvailabilityCalendar({
@@ -97,6 +112,7 @@ export default function AvailabilityCalendar({
   onRangeChange,
   extraHoldRanges,
   allowedRange,
+  forceDays,
 }: AvailabilityCalendarProps) {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
@@ -279,6 +295,27 @@ export default function AvailabilityCalendar({
     if (effectiveStatus !== 'available') return false;
     if (isBeforeLeadTime(dateStr)) return false;
     if (isOutsideAllowedRange(dateStr)) return false;
+    // Pauschal-Modus (Angebot mit fester Tagezahl): der Klick ist ein Start,
+    // das Ende wird automatisch berechnet. Damit muss der gesamte berechnete
+    // Range [start, start+forceDays-1] sauber sein.
+    if (forceDays && forceDays > 0) {
+      const endStr = addDaysIso(dateStr, forceDays - 1);
+      if (allowedRange && endStr > allowedRange.to) return false;
+      // Versand-Enddatum-Regel auf das auto-berechnete Ende.
+      if (deliveryMode === 'versand' && isBlockedEndDateForShipping(parseDate(endStr))) return false;
+      // Keine gebuchten/gesperrten Tage zwischen start und end (start selbst
+      // wurde oben schon als available gepruft).
+      if (forceDays > 1) {
+        const next = addDaysIso(dateStr, 1);
+        if (next <= endStr && hasBookedDaysBetween(addDaysIso(dateStr, -1), addDaysIso(endStr, 1))) {
+          // hasBookedDaysBetween prueft strikt zwischen den Grenzen — wir
+          // erweitern fuer den Range-Check links/rechts um einen Tag, damit
+          // auch der Endtag selbst auf gebucht geprueft wird.
+          return false;
+        }
+      }
+      return true;
+    }
     // Versand-Enddatum: gesperrt wenn Folgetag Sonn-/Feiertag
     if (deliveryMode === 'versand' && isChoosingEnd) {
       if (isBlockedEndDateForShipping(parseDate(dateStr))) return false;
@@ -293,7 +330,16 @@ export default function AvailabilityCalendar({
   // 2. Klick im 1-Tag-Modus auf gleichen Tag: Auswahl aufheben
   // 2. Klick im 1-Tag-Modus auf späteren Tag: Range erweitern
   // 2. Klick im 1-Tag-Modus auf früheren Tag: Range rueckwaerts erweitern (Variante A)
+  //
+  // Pauschal-Modus (forceDays): jeder Klick setzt direkt den vollen Range
+  // (start..start+forceDays-1). Kein 1-Tag-Zwischenschritt.
   function handleDayClick(dateStr: string) {
+    if (forceDays && forceDays > 0) {
+      setRangeFrom(dateStr);
+      setRangeTo(forceDays > 1 ? addDaysIso(dateStr, forceDays - 1) : dateStr);
+      return;
+    }
+
     // Erster Klick (oder nach abgeschlossenem Range) → 1-Tag-Auswahl direkt
     if (!rangeFrom || (rangeTo && rangeFrom !== rangeTo)) {
       setRangeFrom(dateStr);
