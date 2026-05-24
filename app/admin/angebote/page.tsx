@@ -192,6 +192,24 @@ export default function AdminAngebotePage() {
     });
   }
 
+  function reorderCameraAccessory(productId: string, fromIdx: number, toIdx: number) {
+    if (fromIdx === toIdx) return;
+    setDraft((d) => {
+      if (!d) return d;
+      return {
+        ...d,
+        camera_options: d.camera_options.map((c) => {
+          if (c.product_id !== productId) return c;
+          const next = [...c.accessory_items];
+          const [moved] = next.splice(fromIdx, 1);
+          if (!moved) return c;
+          next.splice(toIdx, 0, moved);
+          return { ...c, accessory_items: next };
+        }),
+      };
+    });
+  }
+
   async function save() {
     if (!draft) return;
     setError('');
@@ -439,26 +457,15 @@ export default function AdminAngebotePage() {
                           {opt.accessory_items.length === 0 ? (
                             <p style={{ fontSize: 11, color: '#64748b' }}>Kein Zubehör — reines Kamera-Angebot.</p>
                           ) : (
-                            <div style={{ display: 'grid', gap: 4 }}>
-                              {opt.accessory_items.map((it) => {
-                                const acc = accessories.find((x) => x.id === it.accessory_id);
-                                return (
-                                <div key={it.accessory_id} style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#111827', border: '1px solid #1e293b', borderRadius: 6, padding: '6px 10px' }}>
-                                  <span style={{ flex: 1, color: '#cbd5e1', fontSize: 13 }}>
-                                    {accessoryName(it.accessory_id)}
-                                    {acc?.internal && <span style={{ marginLeft: 6, fontSize: 10, color: '#fbbf24' }}>(intern)</span>}
-                                  </span>
-                                  <input type="number" min={1} value={it.qty}
-                                    onChange={(e) => setCameraAccessoryQty(p.id, it.accessory_id, parseInt(e.target.value, 10) || 1)}
-                                    style={{ ...S.input, width: 56, padding: '4px 6px', fontSize: 13 }} />
-                                  <button type="button" onClick={() => setCameraAccessoryQty(p.id, it.accessory_id, 0)}
-                                    style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 12 }}>
-                                    Entfernen
-                                  </button>
-                                </div>
-                                );
-                              })}
-                            </div>
+                            <AccessoryRows
+                              items={opt.accessory_items}
+                              accessoryName={accessoryName}
+                              accessories={accessories}
+                              onReorder={(from, to) => reorderCameraAccessory(p.id, from, to)}
+                              onQty={(accId, qty) => setCameraAccessoryQty(p.id, accId, qty)}
+                              onRemove={(accId) => setCameraAccessoryQty(p.id, accId, 0)}
+                              inputStyle={S.input}
+                            />
                           )}
                         </div>
                       )}
@@ -601,6 +608,118 @@ export default function AdminAngebotePage() {
           reload();
         }}
       />
+    </div>
+  );
+}
+
+// ── DnD-Liste fuer Zubehoer pro Kamera ───────────────────────────────────────
+// Native HTML5-Drag-and-Drop, analog zum Sets-Editor: Drag-Handle (⋮⋮), beim
+// Ueberfahren cyan Highlight, Drop tauscht die Reihenfolge.
+function AccessoryRows({
+  items,
+  accessoryName,
+  accessories,
+  onReorder,
+  onQty,
+  onRemove,
+  inputStyle,
+}: {
+  items: AngebotCameraOption['accessory_items'];
+  accessoryName: (id: string) => string;
+  accessories: AccessoryOption[];
+  onReorder: (fromIdx: number, toIdx: number) => void;
+  onQty: (accessoryId: string, qty: number) => void;
+  onRemove: (accessoryId: string) => void;
+  inputStyle: React.CSSProperties;
+}) {
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [overIdx, setOverIdx] = useState<number | null>(null);
+
+  const handleDragStart = (idx: number) => (e: React.DragEvent) => {
+    setDragIdx(idx);
+    e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', String(idx)); } catch { /* ignore */ }
+  };
+  const handleDragEnter = (idx: number) => () => {
+    if (dragIdx !== null && dragIdx !== idx) setOverIdx(idx);
+  };
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+  const handleDragEnd = () => { setDragIdx(null); setOverIdx(null); };
+  const handleDrop = (idx: number) => (e: React.DragEvent) => {
+    e.preventDefault();
+    if (dragIdx !== null && dragIdx !== idx) onReorder(dragIdx, idx);
+    setDragIdx(null);
+    setOverIdx(null);
+  };
+
+  return (
+    <div style={{ display: 'grid', gap: 4 }}>
+      {items.map((it, idx) => {
+        const acc = accessories.find((x) => x.id === it.accessory_id);
+        const isDragging = dragIdx === idx;
+        const isOver = overIdx === idx && dragIdx !== idx;
+        return (
+          <div
+            key={it.accessory_id}
+            draggable
+            onDragStart={handleDragStart(idx)}
+            onDragEnter={handleDragEnter(idx)}
+            onDragOver={handleDragOver}
+            onDragEnd={handleDragEnd}
+            onDrop={handleDrop(idx)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              background: '#111827',
+              border: `1px solid ${isOver ? '#06b6d4' : '#1e293b'}`,
+              borderRadius: 6,
+              padding: '6px 10px',
+              opacity: isDragging ? 0.4 : 1,
+              boxShadow: isOver ? '0 0 0 2px rgba(6,182,212,0.25)' : 'none',
+              transition: 'border-color 120ms, box-shadow 120ms',
+            }}
+          >
+            <span
+              title="Ziehen zum Sortieren"
+              aria-label="Ziehen zum Sortieren"
+              style={{
+                cursor: 'grab',
+                color: '#475569',
+                fontSize: 14,
+                userSelect: 'none',
+                flexShrink: 0,
+                letterSpacing: -1,
+                lineHeight: 1,
+                padding: '4px 2px',
+              }}
+            >
+              ⋮⋮
+            </span>
+            <span style={{ flex: 1, color: '#cbd5e1', fontSize: 13 }}>
+              {accessoryName(it.accessory_id)}
+              {acc?.internal && <span style={{ marginLeft: 6, fontSize: 10, color: '#fbbf24' }}>(intern)</span>}
+            </span>
+            <input
+              type="number"
+              min={1}
+              value={it.qty}
+              onChange={(e) => onQty(it.accessory_id, parseInt(e.target.value, 10) || 1)}
+              style={{ ...inputStyle, width: 56, padding: '4px 6px', fontSize: 13 }}
+            />
+            <button
+              type="button"
+              onClick={() => onRemove(it.accessory_id)}
+              style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 12 }}
+            >
+              Entfernen
+            </button>
+          </div>
+        );
+      })}
     </div>
   );
 }
