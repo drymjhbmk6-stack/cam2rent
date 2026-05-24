@@ -1091,12 +1091,29 @@ export default function BuchenPage() {
 
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div>
-              <h1 className="font-heading font-bold text-xl sm:text-2xl text-brand-black dark:text-gray-100">
-                {product.name} mieten
-              </h1>
-              <p className="text-sm font-body text-brand-steel dark:text-gray-400 mt-0.5">
-                ab {product.pricePerDay} € / Tag
-              </p>
+              {offerMode && offer && offerCameraPrice !== null ? (
+                <>
+                  <h1 className="font-heading font-bold text-xl sm:text-2xl text-brand-black dark:text-gray-100">
+                    {offer.name}
+                  </h1>
+                  <p className="text-sm font-body text-brand-steel dark:text-gray-400 mt-0.5">
+                    {product.name}
+                    {' · '}
+                    {offer.pricing_mode === 'perDay'
+                      ? `${fmt(offerCameraPrice)} € / Tag`
+                      : `${fmt(offerCameraPrice)} € Komplettpreis (${offer.fixed_days ?? '?'} ${offer.fixed_days === 1 ? 'Tag' : 'Tage'}, inkl. Zubehör)`}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <h1 className="font-heading font-bold text-xl sm:text-2xl text-brand-black dark:text-gray-100">
+                    {product.name} mieten
+                  </h1>
+                  <p className="text-sm font-body text-brand-steel dark:text-gray-400 mt-0.5">
+                    ab {product.pricePerDay} € / Tag
+                  </p>
+                </>
+              )}
             </div>
             <StepIndicator current={step} />
           </div>
