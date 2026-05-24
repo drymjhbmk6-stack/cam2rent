@@ -115,8 +115,19 @@ export default function AvailabilityCalendar({
   forceDays,
 }: AvailabilityCalendarProps) {
   const now = new Date();
-  const [year, setYear] = useState(now.getFullYear());
-  const [month, setMonth] = useState(now.getMonth());
+  // Wenn das Auswahlfenster komplett in der Zukunft liegt (z.B. Angebots-Mietfenster
+  // startet erst in einigen Monaten), beim Oeffnen direkt auf den Start-Monat
+  // springen — sonst muesste der Kunde sich vom heutigen Monat dorthin klicken.
+  const initialMonthDate = (() => {
+    if (allowedRange?.from) {
+      const fromDate = parseDate(allowedRange.from);
+      const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      if (fromDate > todayMidnight) return fromDate;
+    }
+    return now;
+  })();
+  const [year, setYear] = useState(initialMonthDate.getFullYear());
+  const [month, setMonth] = useState(initialMonthDate.getMonth());
   const [data, setData] = useState<AvailabilityData | null>(null);
   const [loading, setLoading] = useState(true);
   const cache = useRef<Record<string, AvailabilityData>>({});
