@@ -128,6 +128,24 @@ export default function AvailabilityCalendar({
   })();
   const [year, setYear] = useState(initialMonthDate.getFullYear());
   const [month, setMonth] = useState(initialMonthDate.getMonth());
+  // Wenn `allowedRange` erst NACH dem ersten Render reinkommt (Angebot wird
+  // asynchron geladen), zog der useState-Init oben den heutigen Monat — der
+  // Kalender blieb dann auf "heute" stehen. Effekt springt einmalig auf den
+  // Mietfenster-Start, sobald dieser bekannt ist + in der Zukunft liegt. Per
+  // Ref blockieren, damit Folge-Renders die Navigation des Kunden nicht
+  // ueberschreiben.
+  const jumpedToAllowedRange = useRef(false);
+  useEffect(() => {
+    if (jumpedToAllowedRange.current || !allowedRange?.from) return;
+    const fromDate = parseDate(allowedRange.from);
+    const today = new Date();
+    const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    if (fromDate > todayMidnight) {
+      setYear(fromDate.getFullYear());
+      setMonth(fromDate.getMonth());
+    }
+    jumpedToAllowedRange.current = true;
+  }, [allowedRange?.from]);
   const [data, setData] = useState<AvailabilityData | null>(null);
   const [loading, setLoading] = useState(true);
   const cache = useRef<Record<string, AvailabilityData>>({});
