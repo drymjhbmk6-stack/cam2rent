@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import PriceInput from '@/components/admin/PriceInput';
+import UnsplashPicker from '@/components/admin/UnsplashPicker';
 import { isAngebotActive, type Angebot, type AngebotCameraOption } from '@/data/angebote';
 
 interface ProductOption { id: string; name: string }
@@ -104,6 +105,7 @@ export default function AdminAngebotePage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [unsplashOpen, setUnsplashOpen] = useState(false);
 
   const reload = useCallback(() => {
     fetch('/api/admin/angebote')
@@ -483,7 +485,7 @@ export default function AdminAngebotePage() {
             <div>
               <label style={S.label}>Bild</label>
               {draft.id ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                   {draft.image_url && (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={draft.image_url} alt="" style={{ width: 96, height: 72, objectFit: 'contain', background: '#0a0f1e', borderRadius: 8, border: '1px solid #1e293b' }} />
@@ -491,6 +493,13 @@ export default function AdminAngebotePage() {
                   <input type="file" accept="image/jpeg,image/png,image/webp"
                     onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadImage(f); }}
                     style={{ color: '#94a3b8', fontSize: 12 }} />
+                  <button
+                    type="button"
+                    onClick={() => { setError(''); setUnsplashOpen(true); }}
+                    style={{ ...S.btnGhost, padding: '6px 12px', fontSize: 12 }}
+                  >
+                    📸 Unsplash
+                  </button>
                 </div>
               ) : (
                 <p style={{ fontSize: 12, color: '#64748b' }}>Bild-Upload nach dem Speichern möglich.</p>
@@ -564,6 +573,34 @@ export default function AdminAngebotePage() {
           })}
         </div>
       )}
+
+      <UnsplashPicker
+        open={unsplashOpen}
+        onClose={() => setUnsplashOpen(false)}
+        initialQuery={draft?.name ?? ''}
+        orientation="landscape"
+        customUpload={async (img) => {
+          if (!draft?.id) throw new Error('Bitte zuerst speichern.');
+          const res = await fetch('/api/admin/angebote-images/unsplash', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              angebotId: draft.id,
+              angebotName: draft.name,
+              imageUrl: img.regular,
+              downloadLocation: img.downloadLocation,
+              alt: img.alt,
+            }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data?.error ?? 'Download fehlgeschlagen');
+          return { url: data.url as string, alt: data.alt };
+        }}
+        onSelect={(url) => {
+          patchDraft({ image_url: url });
+          reload();
+        }}
+      />
     </div>
   );
 }

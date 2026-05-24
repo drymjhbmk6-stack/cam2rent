@@ -32,6 +32,13 @@ interface UnsplashPickerProps {
   initialQuery?: string;
   /** Bild-Ausrichtung. 'squarish' für Social (1:1), 'landscape' für Blog. */
   orientation?: 'squarish' | 'landscape' | 'portrait';
+  /**
+   * Optional: eigene Upload-Logik, wenn das Bild nicht in den Standard-Bucket
+   * (blog-images) soll. Bekommt das ausgewaehlte Unsplash-Bild und muss eine
+   * fertige Storage-URL zurueckliefern. Wenn nicht gesetzt, geht der Picker
+   * den Default-Pfad ueber POST /api/admin/social/unsplash.
+   */
+  customUpload?: (img: UnsplashImage) => Promise<{ url: string; alt?: string }>;
 }
 
 export default function UnsplashPicker({
@@ -40,6 +47,7 @@ export default function UnsplashPicker({
   onSelect,
   initialQuery = '',
   orientation = 'squarish',
+  customUpload,
 }: UnsplashPickerProps) {
   const [query, setQuery] = useState(initialQuery);
   const [images, setImages] = useState<UnsplashImage[]>([]);
@@ -71,6 +79,12 @@ export default function UnsplashPicker({
     setDownloadingId(img.id);
     setError('');
     try {
+      if (customUpload) {
+        const result = await customUpload(img);
+        onSelect(result.url, result.alt ?? img.alt ?? '');
+        onClose();
+        return;
+      }
       const res = await fetch('/api/admin/social/unsplash', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
