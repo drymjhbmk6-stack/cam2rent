@@ -13,6 +13,17 @@ function fmtDate(iso: string | null): string {
   return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
+/**
+ * Fallback fuer accessory_ids, die wir nicht aufloesen koennen (geloeschtes
+ * Zubehoer). Kappt den auto-generierten Random-Suffix (`-<6-8 alphanum>`),
+ * ersetzt Bindestriche durch Leerzeichen und macht Title Case.
+ */
+function humanizeAccessoryId(id: string): string {
+  const trimmed = id.replace(/-[a-z0-9]{6,10}$/i, '');
+  const words = (trimmed || id).split(/[-_]+/).filter(Boolean);
+  return words.map((w) => w[0]?.toUpperCase() + w.slice(1)).join(' ');
+}
+
 export default function AngebotePage() {
   const { products } = useProducts();
   const [angebote, setAngebote] = useState<Angebot[]>([]);
@@ -22,18 +33,14 @@ export default function AngebotePage() {
   useEffect(() => {
     fetch('/api/angebote')
       .then((r) => r.json())
-      .then((d) => { if (Array.isArray(d?.angebote)) setAngebote(d.angebote); setLoading(false); })
-      .catch(() => setLoading(false));
-    fetch('/api/accessories')
-      .then((r) => r.json())
       .then((d) => {
-        if (Array.isArray(d)) {
-          const map: Record<string, string> = {};
-          for (const a of d) map[a.id] = a.name;
-          setAccNames(map);
+        if (Array.isArray(d?.angebote)) setAngebote(d.angebote);
+        if (d?.accessory_names && typeof d.accessory_names === 'object') {
+          setAccNames(d.accessory_names as Record<string, string>);
         }
+        setLoading(false);
       })
-      .catch(() => {});
+      .catch(() => setLoading(false));
   }, []);
 
   return (
@@ -96,7 +103,7 @@ export default function AngebotePage() {
                     <div className="mt-auto space-y-3">
                       {cams.map(({ opt, product }) => {
                         const accLines = opt.accessory_items.map((it) => {
-                          const name = accNames[it.accessory_id] ?? it.accessory_id;
+                          const name = accNames[it.accessory_id] ?? humanizeAccessoryId(it.accessory_id);
                           return it.qty > 1 ? `${it.qty}× ${name}` : name;
                         });
                         return (
