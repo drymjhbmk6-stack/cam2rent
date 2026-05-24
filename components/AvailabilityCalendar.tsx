@@ -542,6 +542,21 @@ export default function AvailabilityCalendar({
             if (deliveryMode === 'versand' && isChoosingEnd && !selectable) {
               blockReason = getShippingBlockReason(dayDate, true);
             }
+            // Pauschal-Modus (forceDays): der Klick setzt automatisch Start+Ende.
+            // Wenn der Tag deshalb nicht waehlbar ist, dem Kunden erklaeren, warum.
+            if (!blockReason && forceDays && forceDays > 0 && !selectable && displayStatus === 'available') {
+              const autoEndStr = addDaysIso(dateStr, forceDays - 1);
+              const autoEndDate = parseDate(autoEndStr);
+              if (allowedRange && autoEndStr > allowedRange.to) {
+                blockReason = `Ende fiele auf den ${autoEndDate.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })} (ausserhalb des Angebotszeitraums)`;
+              } else if (deliveryMode === 'versand') {
+                const endReason = getShippingBlockReason(autoEndDate, true);
+                if (endReason) blockReason = `Ende fiele auf einen gesperrten Tag (${endReason})`;
+              }
+              if (!blockReason) {
+                blockReason = `Ende ${autoEndDate.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })} nicht moeglich (gebuchter Tag dazwischen)`;
+              }
+            }
             if (!blockReason && outsideOfferBlock) {
               blockReason = 'Außerhalb des Angebotszeitraums';
             }
