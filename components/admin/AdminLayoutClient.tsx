@@ -161,6 +161,7 @@ const KATALOG_ITEMS: NavItem[] = [
   { href: '/admin/sets', label: 'Sets', icon: iconSets, perm: 'katalog' },
   { href: '/admin/zubehoer', label: 'Zubehör', icon: iconAccessory, perm: 'katalog' },
   { href: '/admin/inventar', label: 'Inventar', icon: iconSets, perm: 'katalog' },
+  { href: '/admin/firmware', label: 'Firmware-Updates', icon: iconCog, perm: 'katalog' },
 ];
 
 const PREISE_ITEMS: NavItem[] = [
@@ -546,7 +547,7 @@ function SidebarContent({ pathname, isDashboard, onNavClick, handleLogout, me }:
   const GROUP_MATCH: Record<string, string[]> = {
     tagesgeschaeft: ['/admin/tagesgeschaeft', '/admin/buchungen', '/admin/verfuegbarkeit', '/admin/versand', '/admin/retouren', '/admin/verfuegbarkeit-alerts'],
     kunden: ['/admin/kunden-uebersicht', '/admin/kunden', '/admin/nachrichten', '/admin/warteliste', '/admin/kunden-material', '/admin/bewertungen', '/admin/schaeden'],
-    katalog: ['/admin/preise/kameras', '/admin/sets', '/admin/zubehoer', '/admin/inventar'],
+    katalog: ['/admin/preise/kameras', '/admin/sets', '/admin/zubehoer', '/admin/inventar', '/admin/firmware'],
     preise: ['/admin/gutscheine', '/admin/rabatte', '/admin/warenkorb-erinnerung', '/admin/newsletter'],
     content: ['/admin/blog', '/admin/social', '/admin/content'],
     webseite: ['/admin/startseite', '/admin/legal'],

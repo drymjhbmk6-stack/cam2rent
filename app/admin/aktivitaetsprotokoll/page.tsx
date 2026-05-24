@@ -92,6 +92,10 @@ const ACTION_LABELS: Record<string, string> = {
   'email_template.reset': 'E-Mail-Vorlage zurückgesetzt',
   'availability_alert.resolve': 'Verfügbarkeits-Alert als erledigt markiert',
   'availability_alert.reopen': 'Verfügbarkeits-Alert wieder geöffnet',
+  // Firmware-Check
+  'firmware.check_run': 'Firmware-Check (alle Kameras) ausgeführt',
+  'firmware.check_one': 'Firmware-Check (eine Kamera) ausgeführt',
+  'firmware.mark_seen': 'Firmware-Version als gesehen markiert',
   // Legacy (Unterstrich-Namen, falls noch im Bestand)
   booking_cancelled: 'Buchung storniert',
   booking_confirmed: 'Buchung bestätigt',
@@ -147,6 +151,7 @@ const ENTITY_LABELS: Record<string, string> = {
   customer_ugc: 'Kundenmaterial',
   email_template: 'E-Mail-Vorlage',
   availability_alert: 'Verfügbarkeits-Alert',
+  firmware_check: 'Firmware-Check',
   nachricht: 'Konversation',
 };
 

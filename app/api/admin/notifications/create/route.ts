@@ -16,7 +16,7 @@ import { isAllowedNotificationLink } from '@/lib/url-allowlist';
 const ALLOWED_TYPES = new Set([
   'new_booking', 'booking_cancelled', 'new_damage', 'new_message', 'new_customer',
   'overdue_return', 'new_review', 'payment_failed', 'new_waitlist', 'blog_ready',
-  'social_ready', 'reel_ready', 'new_ugc', 'coupon_race',
+  'social_ready', 'reel_ready', 'new_ugc', 'coupon_race', 'firmware_update_available',
 ]);
 
 export async function POST(req: NextRequest) {

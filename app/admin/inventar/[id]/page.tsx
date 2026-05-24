@@ -22,6 +22,20 @@ interface Unit {
   status: string;
   beleg_status: 'verknuepft' | 'beleg_fehlt';
   notizen: string | null;
+  installed_firmware: string | null;
+}
+
+interface FirmwareCheck {
+  product_id: string;
+  brand: string;
+  model: string;
+  latest_version: string | null;
+  source_url: string | null;
+  release_date: string | null;
+  status: 'ok' | 'error' | 'unsupported';
+  error_message: string | null;
+  last_checked_at: string;
+  seen_version: string | null;
 }
 
 interface Produkt {
@@ -64,6 +78,16 @@ function fmtEuro(n: number | null): string {
   return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(Number(n));
 }
 
+/**
+ * Versions-Strings für den Update-Hinweis normalisieren — leading „v"/
+ * Whitespace raus, lowercase, damit „v02.10", „V02.10" und „02.10" als
+ * gleich gelten. Bewusst defensiv, damit ein „01.02" niemals mit „1.2"
+ * fälschlich gleichgesetzt wird (kein Zahlen-Parsing, reiner String-Cmp).
+ */
+function normalizeVersion(v: string): string {
+  return v.trim().toLowerCase().replace(/^v/, '');
+}
+
 export default function InventarDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -74,6 +98,8 @@ export default function InventarDetailPage() {
   const [produkte, setProdukte] = useState<Produkt[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [firmwareCheck, setFirmwareCheck] = useState<FirmwareCheck | null>(null);
+  const [firmwareBusy, setFirmwareBusy] = useState(false);
 
   // Produkt-Zuordnung
   const [showProduktEdit, setShowProduktEdit] = useState(false);
@@ -97,6 +123,55 @@ export default function InventarDetailPage() {
   }
 
   useEffect(() => { reload(); }, [id]);
+
+  // Firmware-Check-Zeile pro Modell laden — nur Kameras mit Produkt-Zuordnung.
+  // Nutzt die alte `admin_config.products`-id, daher koennen wir auf
+  // `unit.produkt_id` (neue Welt) nicht direkt mappen. Stattdessen muss in
+  // `firmware_checks.product_id` der Klartext-Slug der alten Welt liegen —
+  // den Resolver besorgen wir uns weiter unten ueber `/api/admin/produkte`.
+  useEffect(() => {
+    if (!unit || unit.typ !== 'kamera' || !unit.produkt) {
+      setFirmwareCheck(null);
+      return;
+    }
+    // Lookup ueber Marke + Modell, weil firmware_checks.product_id mit
+    // `admin_config.products[].id` arbeitet (Shop-Welt).
+    fetch(`/api/admin/firmware`)
+      .then((r) => (r.ok ? r.json() : { rows: [] }))
+      .then((data: { rows: FirmwareCheck[] }) => {
+        const marke = (unit.produkt?.marke ?? '').trim().toLowerCase();
+        const name = (unit.produkt?.name ?? '').trim().toLowerCase();
+        // Match auf Brand + (Modell oder vollstaendiger Name)
+        const match = data.rows.find((r) => {
+          const rBrand = r.brand.toLowerCase();
+          const rModel = r.model.toLowerCase();
+          if (rBrand !== marke) return false;
+          return rModel === name || name.includes(rModel) || rModel.includes(name);
+        });
+        setFirmwareCheck(match ?? null);
+      })
+      .catch(() => setFirmwareCheck(null));
+  }, [unit]);
+
+  async function runProductCheck() {
+    if (!firmwareCheck) return;
+    setFirmwareBusy(true);
+    try {
+      const res = await fetch('/api/admin/firmware/check-one', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ product_id: firmwareCheck.product_id }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setError(d.error ?? 'Firmware-Check fehlgeschlagen');
+      } else {
+        const d = await res.json();
+        setFirmwareCheck(d.row);
+      }
+    } finally {
+      setFirmwareBusy(false);
+    }
+  }
 
   // Produkte-Liste fuer das Zuordnungs-Dropdown laden
   useEffect(() => {
@@ -362,7 +437,99 @@ export default function InventarDetailPage() {
               onSave={(v) => patchField({ kaufdatum: v || null })}
             />
           } />
+          {unit.typ === 'kamera' && (
+            <>
+              <Row label="Firmware installiert" value={
+                <EditableInline
+                  value={unit.installed_firmware ?? ''}
+                  placeholder="z.B. v02.10"
+                  mono
+                  onSave={(v) => patchField({ installed_firmware: v.trim() || null })}
+                />
+              } />
+              {firmwareCheck && firmwareCheck.status === 'ok' && firmwareCheck.latest_version && (
+                <Row label="Aktuell verfügbar" value={
+                  <span className="flex items-center justify-end gap-2 text-sm">
+                    <span className="font-mono text-xs">{firmwareCheck.latest_version}</span>
+                    {firmwareCheck.release_date && (
+                      <span className="text-slate-500 text-xs">
+                        ({new Date(firmwareCheck.release_date).toLocaleDateString('de-DE')})
+                      </span>
+                    )}
+                    {firmwareCheck.source_url && (
+                      <a
+                        href={firmwareCheck.source_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-cyan-400 hover:text-cyan-300 text-xs"
+                      >
+                        Quelle ↗
+                      </a>
+                    )}
+                  </span>
+                } />
+              )}
+              {firmwareCheck && firmwareCheck.status === 'unsupported' && (
+                <Row label="Aktuell verfügbar" value={
+                  <span className="text-slate-500 italic text-xs">Marke/Modell vom Firmware-Check nicht unterstützt</span>
+                } />
+              )}
+              {firmwareCheck && firmwareCheck.status === 'error' && (
+                <Row label="Aktuell verfügbar" value={
+                  <span className="text-amber-400 italic text-xs">Check fehlgeschlagen — siehe /admin/firmware</span>
+                } />
+              )}
+            </>
+          )}
         </section>
+
+        {/* Firmware-Update-Hinweis */}
+        {unit.typ === 'kamera' && firmwareCheck && firmwareCheck.status === 'ok'
+          && firmwareCheck.latest_version
+          && unit.installed_firmware
+          && normalizeVersion(unit.installed_firmware) !== normalizeVersion(firmwareCheck.latest_version) && (
+          <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 rounded text-sm flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              🆕 <strong>Firmware-Update verfügbar:</strong>{' '}
+              <span className="font-mono">{unit.installed_firmware}</span> →{' '}
+              <span className="font-mono">{firmwareCheck.latest_version}</span>
+              {firmwareCheck.release_date && (
+                <span className="text-emerald-400/70 text-xs ml-2">
+                  (erschienen {new Date(firmwareCheck.release_date).toLocaleDateString('de-DE')})
+                </span>
+              )}
+            </div>
+            <div className="flex gap-2">
+              {firmwareCheck.source_url && (
+                <a
+                  href={firmwareCheck.source_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-2 py-1 bg-emerald-500 hover:bg-emerald-400 text-slate-900 rounded text-xs font-semibold"
+                >
+                  Zur Quelle
+                </a>
+              )}
+              <button
+                onClick={runProductCheck}
+                disabled={firmwareBusy}
+                className="px-2 py-1 bg-cyan-500 hover:bg-cyan-400 text-slate-900 rounded text-xs font-semibold disabled:opacity-50"
+              >
+                {firmwareBusy ? '…' : 'Neu prüfen'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Firmware-„up to date" — kein Banner, nur subtiler Hinweis */}
+        {unit.typ === 'kamera' && firmwareCheck && firmwareCheck.status === 'ok'
+          && firmwareCheck.latest_version
+          && unit.installed_firmware
+          && normalizeVersion(unit.installed_firmware) === normalizeVersion(firmwareCheck.latest_version) && (
+          <div className="p-2 text-emerald-400/70 text-xs italic">
+            ✓ Firmware aktuell — keine neuere Version bekannt
+          </div>
+        )}
 
         {/* WBW */}
         <section className="bg-[#111827] border border-slate-800 rounded p-4">

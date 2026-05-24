@@ -3077,7 +3077,75 @@ Zwei Einsatzorte:
   gegen den Row-Klick; lädt die Anhänge selbst über die Detail-API). Popup hat
   einen „Zum Beleg →"-Link.
 
+### Firmware-Check pro Kamera-Modell + Pro-Stück-Tracking (Stand 2026-05-24)
+Wöchentlicher Cron prüft pro Kamera-Modell die Hersteller-Quelle auf neue
+Firmware. Per Inventar-Unit kann der Admin eintragen, welche Version
+installiert ist — der „🆕 Update verfügbar"-Hinweis erscheint dann pro
+physischem Stück in `/admin/inventar/[id]` (Stammdaten).
+- **Migration `supabase/supabase-firmware-checks.sql`** (idempotent): Tabelle
+  `firmware_checks` (eine Zeile pro `admin_config.products[].id`, mit
+  `latest_version`, `source_url`, `release_date`, `status`,
+  `error_message`, `seen_version`) + neue Spalte
+  `inventar_units.installed_firmware TEXT NULL` für die installierte
+  Version pro Exemplar. RLS service-role-only.
+- **Adapter-Architektur** unter `lib/firmware/`: pro Marke ein File
+  (`adapters/gopro.ts`, `dji.ts`, `insta360.ts`) mit Modell-Slug-Registry.
+  GoPro nutzt die offizielle Catalog-API (`api.gopro.com/firmware/v2/catalog`),
+  DJI/Insta360 scrapen die jeweilige Downloads-Seite per Regex.
+  **Bewusst defensiv** — bei Hersteller-Markup-Änderung fällt das einzelne
+  Modell auf `status='error'`, der Cron läuft weiter und die UI zeigt den
+  Fehler. Modelle ohne Registry-Eintrag landen auf `status='unsupported'`.
+  Neue Modelle ergänzen: Eintrag im jeweiligen `MODEL_REGISTRY` hinzufügen.
+- **Cron `/api/cron/firmware-check`** (Pattern wie `weekly-report`):
+  `verifyCronAuth` + `acquireCronLock('firmware-check')` + Skip im Test-Modus.
+  Liest `admin_settings.firmware_check_config.enabled` (Default true).
+  Bei erkannten Versionswechseln EINE gebündelte Notification vom Typ
+  `firmware_update_available` (Permission `katalog`, cyan Pfeil-nach-oben-Icon)
+  mit Link auf `/admin/firmware` und Update-Liste im Body — kein
+  Push-Storm bei vielen Updates am Hersteller-Veröffentlichungstag.
+- **Übersichtsseite `/admin/firmware`**: sortiert nach „Update verfügbar",
+  Fehler, OK, Nicht unterstützt. Pro Zeile „Neu prüfen" (Einzel-Adapter-Call)
+  + „Als gesehen markieren" (setzt `seen_version=latest_version` →
+  Hinweis-Banner verschwindet bis zur nächsten Version). Oben Button
+  „Jetzt prüfen" (Full-Run synchron, ~30–60 s).
+- **Inventar-Stammdaten-Card** (`/admin/inventar/[id]`): zwei neue Zeilen
+  für Kameras — „Firmware installiert" (editierbar via `EditableInline`)
+  + „Aktuell verfügbar" (read-only mit Quelle + Datum). Update-Banner
+  direkt unter der Karte, sobald `installed_firmware != latest_version`
+  (normalisiert ohne „v"-Präfix, case-insensitiv). Wird `installed_firmware`
+  auf den aktuellen Wert gesetzt → grünes „✓ Firmware aktuell".
+- **APIs** (alle Permission `katalog`): `GET /api/admin/firmware`
+  (Liste oder Einzel via `?product_id=`), `POST /api/admin/firmware/test`
+  (Full-Check synchron), `POST /api/admin/firmware/check-one`
+  (`{product_id}`, Einzel-Modell), `PATCH /api/admin/firmware/[productId]/seen`
+  (`{version}`).
+- **Settings-Section** `FirmwareCheckSection` in
+  `components/admin/EinstellungenAllgemein.tsx` — Toggle + letzter-Lauf-
+  Summary + „Jetzt prüfen"-Button.
+- **Notification-Typ `firmware_update_available`** in 3 Files registriert:
+  `lib/admin-notifications.ts` (Permission `katalog`),
+  `components/admin/NotificationDropdown.tsx` (cyan Icon),
+  `app/api/admin/notifications/create/route.ts` (Whitelist).
+- **Audit-Aktionen:** `firmware.check_run`, `firmware.check_one`,
+  `firmware.mark_seen` (Entity `firmware_check`).
+- **Go-Live TODO:**
+  1. Migration `supabase/supabase-firmware-checks.sql` ausführen.
+  2. Crontab-Eintrag (Montag 07:00 Berlin, `--resolve` umgeht Cloudflare):
+     ```
+     0 7 * * 1 curl -s -X POST --resolve cam2rent.de:443:127.0.0.1 -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/firmware-check
+     ```
+  3. Einmalig „Jetzt prüfen" laufen lassen, dann pro Modell die aktuell
+     installierte Firmware-Version in den Inventar-Stammdaten eintragen
+     (Baseline). Modelle, die als „nicht unterstützt" angezeigt werden,
+     im jeweiligen `MODEL_REGISTRY` (`lib/firmware/adapters/`) ergänzen.
+
 ### Noch offen
+- **Firmware-Check-Migration auszuführen:** `supabase/supabase-firmware-checks.sql`
+  (idempotent). Legt Tabelle `firmware_checks` + Spalte
+  `inventar_units.installed_firmware` an. Ohne Migration laufen die APIs
+  nicht (500 beim Insert/Select), die Inventar-Stammdaten-Card zeigt
+  „Firmware installiert" nicht. Crontab-Eintrag siehe „Firmware-Check"-
+  Sektion oben. Empfohlen ASAP ausführen.
 - **Buchungsinteresse-Migration auszuführen:** `supabase/supabase-booking-interest.sql`
   (idempotent). Legt Tabelle `booking_interest` an. Ohne Migration läuft der
   Buchungs-Flow normal weiter (Telemetrie wird verworfen), `/admin/buchungsinteresse`

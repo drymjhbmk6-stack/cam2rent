@@ -5,6 +5,7 @@ import { SpecDefinitionsManager } from '@/components/admin/SpecDefinitions';
 import PushNotificationsSection from '@/components/admin/PushNotificationsSection';
 import AnalyticsOptOutSection from '@/components/admin/AnalyticsOptOutSection';
 import WeeklyReportSection from '@/components/admin/WeeklyReportSection';
+import FirmwareCheckSection from '@/components/admin/FirmwareCheckSection';
 import EnvModeSection from '@/components/admin/EnvModeSection';
 import CheckoutConfigSection from '@/components/admin/CheckoutConfigSection';
 
@@ -610,6 +611,9 @@ export default function EinstellungenAllgemein() {
 
       {/* Sektion 9: Wöchentlicher Bericht */}
       <WeeklyReportSection />
+
+      {/* Sektion 9b: Wöchentlicher Firmware-Check */}
+      <FirmwareCheckSection />
 
       {/* Sektion 10: Eigene Besuche aus Analytics ausschließen */}
       <AnalyticsOptOutSection />
