@@ -333,6 +333,17 @@ function fmt(n: number) {
   return n.toFixed(2).replace('.', ',');
 }
 
+/**
+ * Fallback fuer accessory_ids, die wir nicht aufloesen koennen (geloeschtes
+ * Zubehoer). Kappt den auto-generierten Random-Suffix (`-<6-10 alphanum>`),
+ * macht Title Case mit Leerzeichen.
+ */
+function humanizeAccessoryId(id: string): string {
+  const trimmed = id.replace(/-[a-z0-9]{6,10}$/i, '');
+  const words = (trimmed || id).split(/[-_]+/).filter(Boolean);
+  return words.map((w) => w[0]?.toUpperCase() + w.slice(1)).join(' ');
+}
+
 /** ISO-Timestamp → lokales yyyy-MM-dd (fuer Kalender-Fenster). */
 function isoToLocalDateStr(iso: string): string {
   const d = new Date(iso);
@@ -540,6 +551,9 @@ export default function BuchenPage() {
   // Angebots-Modus (?offer=<id>): kuratiertes Festpreis-Buendel.
   const [offer, setOffer] = useState<Angebot | null>(null);
   const [offerLoaded, setOfferLoaded] = useState(false);
+  // Vom Server aufgeloeste Namen der im Angebot enthaltenen Zubehoere
+  // (inkl. interne Varianten, die in /api/accessories ausgeblendet sind).
+  const [offerAccNames, setOfferAccNames] = useState<Record<string, string>>({});
 
   // Basis-Set-Gate: Wenn fuer DIESE Kamera kein Basis-Set definiert ist (oder
   // das Basis-Set im gewaehlten Zeitraum ausgebucht ist), darf die Buchung
@@ -637,7 +651,12 @@ export default function BuchenPage() {
     if (!preOffer) { setOfferLoaded(true); return; }
     fetch(`/api/angebote/${encodeURIComponent(preOffer)}`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (d?.angebot) setOffer(d.angebot as Angebot); })
+      .then((d) => {
+        if (d?.angebot) setOffer(d.angebot as Angebot);
+        if (d?.accessory_names && typeof d.accessory_names === 'object') {
+          setOfferAccNames(d.accessory_names as Record<string, string>);
+        }
+      })
       .catch(() => {})
       .finally(() => setOfferLoaded(true));
   }, [preOffer]);
@@ -1415,6 +1434,7 @@ export default function BuchenPage() {
                         </p>
                       ) : offerAccessoryItems.map((it) => {
                         const acc = dbAccessories.find((a) => a.id === it.accessory_id);
+                        const displayName = offerAccNames[it.accessory_id] ?? acc?.name ?? humanizeAccessoryId(it.accessory_id);
                         const av = accAvailability[it.accessory_id];
                         const short = !!av && (!av.compatible || av.remaining < it.qty);
                         return (
@@ -1423,7 +1443,7 @@ export default function BuchenPage() {
                               <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
                             </svg>
                             <span className="font-heading font-semibold text-sm text-brand-black dark:text-gray-100 flex-1">
-                              {it.qty > 1 ? `${it.qty}× ` : ''}{acc?.name ?? it.accessory_id}
+                              {it.qty > 1 ? `${it.qty}× ` : ''}{displayName}
                             </span>
                             {short && (
                               <span className="text-xs text-status-error">Im Zeitraum nicht verfügbar</span>
@@ -2269,12 +2289,13 @@ export default function BuchenPage() {
                     <ul className="space-y-1.5">
                       {offerAccessoryItems.map((it) => {
                         const acc = dbAccessories.find((a) => a.id === it.accessory_id);
+                        const displayName = offerAccNames[it.accessory_id] ?? acc?.name ?? humanizeAccessoryId(it.accessory_id);
                         return (
                           <li key={it.accessory_id} className="flex items-center gap-2 text-sm font-body text-brand-steel dark:text-gray-400">
                             <svg viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5 text-status-success flex-shrink-0" aria-hidden="true">
                               <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
                             </svg>
-                            {it.qty > 1 ? `${it.qty}× ` : ''}{acc?.name ?? it.accessory_id}
+                            {it.qty > 1 ? `${it.qty}× ` : ''}{displayName}
                           </li>
                         );
                       })}
