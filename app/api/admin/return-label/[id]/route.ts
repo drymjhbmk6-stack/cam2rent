@@ -138,6 +138,11 @@ export async function POST(
     return NextResponse.json({ error: 'Datei zu gross (max. 10 MB).' }, { status: 413 });
   }
 
+  // Optional: bei A4-Hochformat-PDFs nur die obere Haelfte als Etikett
+  // verwenden (DHL-Retoure-Etikett-Standard: oben Etikett, unten Mieter-
+  // Anleitung). Greift nur fuer PDFs.
+  const useTopHalfOnly = formData.get('useTopHalfOnly') === 'true';
+
   const arrayBuffer = await file.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);
 
@@ -156,11 +161,12 @@ export async function POST(
     );
   }
 
-  // Konversion zu A5-Hochformat-PDF.
+  // Konversion zu A5-Hochformat-PDF. `useTopHalfOnly` wirkt nur fuer PDFs;
+  // bei Bildern wird der Toggle ignoriert.
   let a5Pdf: Uint8Array;
   try {
     if (actualMime === 'application/pdf') {
-      a5Pdf = await resizePdfToA5Portrait(arrayBuffer);
+      a5Pdf = await resizePdfToA5Portrait(arrayBuffer, { useTopHalfOnly });
     } else {
       a5Pdf = await imageToA5PortraitPdf(arrayBuffer, actualMime);
     }
@@ -202,7 +208,11 @@ export async function POST(
     action: 'return_label.upload',
     entityType: 'booking',
     entityId: bookingId,
-    changes: { sourceMime: actualMime, sizeBytes: file.size },
+    changes: {
+      sourceMime: actualMime,
+      sizeBytes: file.size,
+      useTopHalfOnly: useTopHalfOnly && actualMime === 'application/pdf',
+    },
     request: req,
   });
 

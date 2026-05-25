@@ -19,9 +19,31 @@ const A4_LANDSCAPE: [number, number] = [841.89, 595.28]; // 297 x 210 mm
 /**
  * Skaliert die erste Seite eines PDFs in einen A5-Hochformat-Bogen ein.
  * Behaelt das Seitenverhaeltnis bei und zentriert den Inhalt.
+ *
+ * Mit `useTopHalfOnly: true` wird vorab die MediaBox der Source-Seite auf
+ * die obere Haelfte beschnitten — typischer Fall fuer DHL-Retoure-Etiketten,
+ * die als A4-Hochformat geliefert werden: oben das eigentliche Versand-
+ * Etikett, unten Mieter-Anleitung. Wir verwerfen die Anleitung und nehmen
+ * nur den Etikett-Teil.
  */
-export async function resizePdfToA5Portrait(srcBuffer: ArrayBuffer): Promise<Uint8Array> {
+export async function resizePdfToA5Portrait(
+  srcBuffer: ArrayBuffer,
+  opts: { useTopHalfOnly?: boolean } = {},
+): Promise<Uint8Array> {
   const src = await PDFDocument.load(srcBuffer);
+
+  if (opts.useTopHalfOnly) {
+    const srcPage = src.getPage(0);
+    const { width, height } = srcPage.getSize();
+    // PDF-Koordinatensystem hat origin unten-links. Obere Haelfte =
+    // y-Bereich von height/2 bis height. setMediaBox(x, y, w, h) setzt
+    // den sichtbaren Bereich auf genau diese obere Haelfte; embedPdf
+    // unten respektiert die neue MediaBox.
+    const halfH = height / 2;
+    srcPage.setMediaBox(0, halfH, width, halfH);
+    srcPage.setCropBox(0, halfH, width, halfH);
+  }
+
   const dst = await PDFDocument.create();
   const [embedded] = await dst.embedPdf(src, [0]);
 

@@ -558,6 +558,11 @@ A4-Querformat-Bogen kombiniert.
   `return-labels/<bookingId>.pdf` (Upsert) und setzt
   `bookings.return_label_url = 'return-labels/<bookingId>.pdf'`. Erneuter
   Upload überschreibt das alte Etikett. Audit `return_label.upload`.
+  Optionales Form-Feld `useTopHalfOnly=true` croppt bei PDFs vorher die
+  Source-MediaBox auf die obere Hälfte (DHL-Retoure-Etiketten kommen als
+  A4 Hochformat mit Etikett oben + Mieter-Anleitung unten — die Anleitung
+  wird so verworfen). Toggle im Upload-Modal sichtbar nur bei PDF-Datei,
+  Default ON.
 - **Retourlabel-Anzeige `GET /api/admin/return-label/[id]`** unterstützt
   zwei Quellen je nach `return_label_url`-Prefix:
   - **Neu (Storage):** relativer Pfad `return-labels/<id>.pdf` → direkt

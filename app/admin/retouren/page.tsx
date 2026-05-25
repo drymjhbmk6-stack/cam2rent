@@ -155,6 +155,10 @@ export default function AdminVersandRueckgabePage() {
   const [returnUploadFile, setReturnUploadFile] = useState<File | null>(null);
   const [returnUploading, setReturnUploading] = useState(false);
   const [returnUploadError, setReturnUploadError] = useState<string | null>(null);
+  // Toggle "Nur obere Haelfte verwenden" — DHL-Retoure-Etiketten kommen als
+  // A4 Hochformat mit Etikett oben + Mieter-Anleitung unten. Wirkt nur bei
+  // PDF-Uploads.
+  const [returnUploadTopHalfOnly, setReturnUploadTopHalfOnly] = useState(true);
 
   useEffect(() => {
     fetchBookings();
@@ -165,6 +169,7 @@ export default function AdminVersandRueckgabePage() {
     setReturnUploadModal(b);
     setReturnUploadFile(null);
     setReturnUploadError(null);
+    setReturnUploadTopHalfOnly(true);
   }
 
   async function handleReturnUpload() {
@@ -174,6 +179,10 @@ export default function AdminVersandRueckgabePage() {
     try {
       const fd = new FormData();
       fd.append('file', returnUploadFile);
+      // Nur fuer PDFs sinnvoll; Server ignoriert den Wert bei Bildern.
+      if (returnUploadFile.type === 'application/pdf' && returnUploadTopHalfOnly) {
+        fd.append('useTopHalfOnly', 'true');
+      }
       const res = await fetch(`/api/admin/return-label/${returnUploadModal.id}`, {
         method: 'POST',
         body: fd,
@@ -463,6 +472,8 @@ export default function AdminVersandRueckgabePage() {
           setFile={setReturnUploadFile}
           uploading={returnUploading}
           error={returnUploadError}
+          useTopHalfOnly={returnUploadTopHalfOnly}
+          setUseTopHalfOnly={setReturnUploadTopHalfOnly}
           onUpload={handleReturnUpload}
           onClose={() => {
             setReturnUploadModal(null);
@@ -1050,16 +1061,19 @@ function LabelModal({
 // ─── Retour-Etikett-Upload-Modal ─────────────────────────────────────────────
 
 function ReturnUploadModal({
-  booking, file, setFile, uploading, error, onUpload, onClose,
+  booking, file, setFile, uploading, error, useTopHalfOnly, setUseTopHalfOnly, onUpload, onClose,
 }: {
   booking: FulfillmentBooking;
   file: File | null;
   setFile: (f: File | null) => void;
   uploading: boolean;
   error: string | null;
+  useTopHalfOnly: boolean;
+  setUseTopHalfOnly: (v: boolean) => void;
   onUpload: () => void;
   onClose: () => void;
 }) {
+  const isPdf = file?.type === 'application/pdf';
   const btnPrimary: React.CSSProperties = {
     flex: 1, padding: '12px 16px', borderRadius: 8, fontSize: 14, fontWeight: 600,
     background: '#06b6d4', color: 'white', border: 'none', cursor: 'pointer',
@@ -1138,6 +1152,38 @@ function ReturnUploadModal({
             style={{ display: 'none' }}
           />
         </label>
+
+        {/* PDF-Crop-Toggle: nur sichtbar, wenn ein PDF gewaehlt ist.
+            DHL-Retoure-Etiketten kommen typisch als A4 Hochformat mit
+            Etikett oben + Mieter-Anleitung unten — wir verwerfen die
+            Anleitung. */}
+        {isPdf && (
+          <label
+            style={{
+              display: 'flex', alignItems: 'flex-start', gap: 10,
+              padding: 12, background: '#0f172a', border: '1px solid #334155',
+              borderRadius: 10, marginBottom: 14, cursor: 'pointer',
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={useTopHalfOnly}
+              onChange={(e) => setUseTopHalfOnly(e.target.checked)}
+              disabled={uploading}
+              style={{ marginTop: 2, accentColor: '#06b6d4', cursor: 'pointer' }}
+            />
+            <span style={{ fontSize: 12, color: '#cbd5e1', lineHeight: 1.5 }}>
+              <span style={{ fontWeight: 600, color: '#e2e8f0', display: 'block', marginBottom: 2 }}>
+                Nur obere Hälfte verwenden
+              </span>
+              <span style={{ color: '#94a3b8' }}>
+                Bei DHL-Retoure-Etiketten (A4 Hochformat) sitzt das eigentliche
+                Versandetikett auf der oberen Hälfte, die untere Hälfte enthält
+                nur die Mieter-Anleitung — die wird dann verworfen.
+              </span>
+            </span>
+          </label>
+        )}
 
         {error && (
           <div style={{ padding: 10, background: '#ef444422', border: '1px solid #ef444440', borderRadius: 8, fontSize: 12, color: '#fca5a5', marginBottom: 12 }}>
