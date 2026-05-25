@@ -21,9 +21,18 @@ import type { FirmwareAdapter, FirmwareInfo } from '../types';
 
 const MODEL = 'claude-sonnet-4-6';
 
-const SYSTEM_PROMPT = `Du recherchierst die aktuell vom Hersteller veröffentlichte Firmware-Version für eine konkrete Action-/360°-Kamera. Nutze das web_search-Tool und suche AUSSCHLIESSLICH auf der offiziellen Hersteller-Webseite (z.B. gopro.com, dji.com, insta360.com, sony.com, ricoh.com). Forum-Posts, Reviews, YouTube oder Reddit sind KEINE verlässlichen Quellen.
+const SYSTEM_PROMPT = `Du recherchierst die aktuell vom Hersteller veröffentlichte Firmware-Version für eine konkrete Action-/360°-Kamera. Nutze das web_search-Tool AKTIV — typischerweise 2-4 Suchen pro Anfrage.
 
-Antworte AUSSCHLIESSLICH mit einem einzigen JSON-Objekt in dieser Form (kein Markdown, kein Fließtext drumherum):
+Suchstrategie:
+1. Starte mit einer Suche wie: \`<modell> firmware download site:<hersteller-domain>\`
+2. Hersteller-Domains: gopro.com, dji.com, insta360.com, sony.com, ricoh.com, akaso.net
+3. Bekannte Pfade als Anker:
+   - Insta360: insta360.com/de/download/insta360-<modell>  (z.B. /insta360-x5, /insta360-ace-pro-2)
+   - DJI:      dji.com/de/downloads/products/<modell>      (z.B. /osmo-action-5-pro, /osmo-pocket-4)
+   - GoPro:    gopro.com/de/de/update/<modell>             (z.B. /hero13-black)
+4. Wenn die erste Suche keine offizielle Seite trifft, formuliere die Suche um (anderer Modellname, oder "<modell> latest firmware version").
+
+Antwort-Format — AUSSCHLIESSLICH ein einziges JSON-Objekt (kein Markdown, kein Fließtext drumherum):
 
 {
   "version": "string oder null",
@@ -31,11 +40,14 @@ Antworte AUSSCHLIESSLICH mit einem einzigen JSON-Objekt in dieser Form (kein Mar
   "release_date": "YYYY-MM-DD oder null"
 }
 
-Regeln:
-- "version" MUSS eine typische Firmware-Versionsnummer sein (z.B. "v01.00", "2.10", "H24.01.02.32.00"). Niemals nur "1" oder "neu".
-- "source_url" MUSS auf eine offizielle Hersteller-Domain zeigen.
-- Wenn du keine sichere Antwort findest oder unsicher bist: setze ALLE drei Felder auf null. Lieber kein Ergebnis als ein falsches.
-- "release_date" ist optional; setze auf null wenn nicht eindeutig.`;
+Regeln zur Validität:
+- "version" MUSS eine typische Firmware-Versionsnummer sein (Pattern \`\\d+\\.\\d+\` mind. einmal — z.B. "1.11.6", "v01.00", "2.10", "H24.01.02.32.00"). Niemals nur "1" oder "neu".
+- "source_url" MUSS auf eine offizielle Hersteller-Domain zeigen (siehe oben). Forum-Posts, Reviews, YouTube, Reddit sind NICHT verlässlich.
+- "release_date" ist optional — setze auf null wenn nicht eindeutig.
+
+Wann setzt du version null?
+- NUR wenn du nach 3-5 Web-Searches wirklich nichts auf einer Hersteller-Domain finden konntest.
+- NICHT, wenn du eine plausible Antwort von einer Hersteller-Seite hast — auch ohne 100%-Gewissheit. Eine offizielle Hersteller-Download-Seite gilt als verlässliche Quelle, übernimm die dort gelistete neueste Version.`;
 
 async function loadApiKey(): Promise<string> {
   const supabase = createServiceClient();
@@ -121,7 +133,12 @@ export const claudeAdapter: FirmwareAdapter = {
     const apiKey = await loadApiKey();
     const client = new Anthropic({ apiKey, maxRetries: 2 });
 
-    const userPrompt = `Welche aktuelle Firmware-Version hat die Kamera "${model}"? Suche auf der offiziellen Hersteller-Webseite und gib das Ergebnis als JSON zurück.`;
+    const userPrompt = `Welche aktuelle (neueste) Firmware-Version hat die Action-/360°-Kamera "${model}"?
+
+Bitte:
+1. Suche aktiv mit dem web_search-Tool auf der offiziellen Hersteller-Download-Seite.
+2. Übernimm die dort als „neueste" / „aktuell" / „latest" gekennzeichnete Versionsnummer.
+3. Antworte ausschliesslich mit dem JSON-Objekt aus dem System-Prompt.`;
 
     const response = await client.messages.create({
       model: MODEL,
@@ -131,7 +148,7 @@ export const claudeAdapter: FirmwareAdapter = {
         {
           type: 'web_search_20250305',
           name: 'web_search',
-          max_uses: 3,
+          max_uses: 5,
         } as unknown as Anthropic.Messages.ToolUnion,
       ],
       messages: [{ role: 'user', content: userPrompt }],
