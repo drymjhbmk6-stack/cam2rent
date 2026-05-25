@@ -2696,6 +2696,18 @@ ausgebucht, wird die Buchung im Wizard hart geblockt + ein Admin-Alarm
   aktuell nicht moeglich — Support / Zeitraum aendern"). Telemetrie wird
   fire-and-forget einmal pro Session+Kamera+Zeitraum+Typ via `useRef<Set>`
   gespammelt-frei an `/api/availability-alerts` gesendet.
+  - **Bug-Fix Set-Teil-Kompatibilitaet (Stand 2026-05-25):** `collectUnavailableItems`
+    wertete urspruenglich zusaetzlich zum Bestand auch `av.compatible` aus.
+    Das fuehrte zu falschen Alarmen, sobald ein set-only Zubehoer (z.B.
+    interne Ladestation oder Selfi-Stick) seine `compatible_product_ids`
+    nicht explizit fuer die Kamera gepflegt hatte — der Alarm meldete
+    „Bestandteile fehlen" obwohl Bestand reichlich vorhanden war (z.B.
+    „benoetigt 2, frei 4"). Die Kompatibilitaet vererbt sich vom Set
+    selbst (Verknuepfung ueber `basic_for_product_ids`), nicht pro
+    Bestandteil. Fix: nur `av.remaining < item.qty` blockt, das
+    `av.compatible`-Flag wird auf Set-Sub-Items ignoriert. Konsistent
+    zum 2026-05-18-Fix „Set-Teile weich behandelt" im
+    `BookingAccessoryEditSection`-Branch.
 - **Telemetrie** `POST /api/availability-alerts` (oeffentlich, Rate-Limit
   20/h pro IP): saeubert Inputs, dedupliziert 24h-Fenster auf
   Kombi (alert_type+product_id+set_id+accessory_id+rental_from+rental_to)

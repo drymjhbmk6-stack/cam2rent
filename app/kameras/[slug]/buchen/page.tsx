@@ -725,13 +725,22 @@ export default function BuchenPage() {
     // Sammelt fuer ein Set die nicht-verfuegbaren Bestandteile (Name, benoetigte
     // Menge, freie Menge). Wenn keine Verfuegbarkeits-Info vorliegt, gilt das
     // Item als verfuegbar (sonst wuerde das Modal zu frueh greifen).
+    //
+    // Wichtig: Das `compatible`-Flag auf Sub-Items wird hier bewusst NICHT
+    // ausgewertet. Set-Bestandteile sind oft set-only Zubehoer, deren
+    // `compatible_product_ids` die Kamera nicht explizit enthalten — die
+    // Kompatibilitaet vererbt sich vom Set selbst (das ueber
+    // `basic_for_product_ids` der Kamera zugeordnet ist). Sonst wuerde der
+    // Alarm „Diese Bestandteile fehlen" auch dann ausgeloest, wenn der
+    // Bestand reicht aber die Compat-Liste nicht gepflegt ist. Konsistent
+    // zum 2026-05-18-Fix „Set-Teile weich behandelt".
     function collectUnavailableItems(s: RentalSet): UnavailableItem[] {
       const items = (s as RentalSet & { accessory_items?: { accessory_id: string; qty: number }[] }).accessory_items ?? [];
       const out: UnavailableItem[] = [];
       for (const item of items) {
         const av = accAvailability[item.accessory_id];
         if (!av) continue;
-        if (!av.compatible || av.remaining < item.qty) {
+        if (av.remaining < item.qty) {
           const accName = dbAccessories.find((a) => a.id === item.accessory_id)?.name ?? item.accessory_id;
           out.push({
             accessory_id: item.accessory_id,
