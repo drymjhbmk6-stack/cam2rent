@@ -83,6 +83,8 @@ interface GanttSet {
   badge: string | null;
   available: boolean;
   accessory_items: { accessory_id: string; qty: number }[];
+  product_ids?: string[];
+  product_names?: string[];
   bookings: GanttSimpleBooking[];
 }
 
@@ -772,9 +774,29 @@ export default function AdminVerfuegbarkeitPage() {
 
               {ganttData.sets.map((s) => (
                 <div key={s.id} className="rounded-xl overflow-hidden" style={{ border: '1px solid #1e293b', background: '#0f172a' }}>
-                  <div className="px-4 py-3 flex items-center gap-3">
+                  <div className="px-4 py-3 flex flex-wrap items-center gap-x-3 gap-y-1.5">
                     <span className="font-heading font-bold text-sm" style={{ color: '#e2e8f0' }}>{s.name}</span>
                     {s.badge && <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold" style={{ background: '#1e293b', color: '#94a3b8' }}>{s.badge}</span>}
+                    {s.product_names && s.product_names.length > 0 ? (
+                      <span className="flex flex-wrap items-center gap-1">
+                        {s.product_names.map((pn) => (
+                          <span
+                            key={pn}
+                            className="text-[10px] px-2 py-0.5 rounded-full font-semibold"
+                            style={{ background: '#0c4a6e', color: '#7dd3fc' }}
+                          >
+                            {pn}
+                          </span>
+                        ))}
+                      </span>
+                    ) : (
+                      <span
+                        className="text-[10px] px-2 py-0.5 rounded-full font-semibold"
+                        style={{ background: '#1e293b', color: '#64748b' }}
+                      >
+                        Keine Kamera zugeordnet
+                      </span>
+                    )}
                     <span className="text-xs font-body" style={{ color: '#64748b' }}>({s.bookings.length} Buchungen)</span>
                   </div>
                   <div className="overflow-x-auto" data-gantt-scroll style={{ borderTop: '1px solid #1e293b' }}>

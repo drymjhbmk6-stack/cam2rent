@@ -126,7 +126,7 @@ export async function GET(req: NextRequest) {
       .order('sort_order', { ascending: true }),
     supabase
       .from('sets')
-      .select('id, name, badge, available, accessory_items, sort_order')
+      .select('id, name, badge, available, accessory_items, product_ids, sort_order')
       .order('sort_order', { ascending: true }),
   ]);
 
@@ -364,9 +364,20 @@ export async function GET(req: NextRequest) {
     };
   });
 
+  // Lookup product_id → product_name fuer die Anzeige der Kamera-Zugehoerigkeit
+  // pro Set (bei mehreren Sets mit gleichem Namen — z.B. drei "Basic Set" fuer
+  // GoPro/DJI/Insta360 — sieht der Admin so direkt welches Set zu welcher
+  // Kamera gehoert).
+  const productNameById = new Map<string, string>();
+  for (const p of products) productNameById.set(p.id, p.name);
+
   // Pro Set: Welche Buchungen nutzen es?
   const setData = allSets.map((s) => {
     const relevantBookings = bookingsBySet[s.id] ?? [];
+    const productIds: string[] = Array.isArray(s.product_ids) ? s.product_ids : [];
+    const productNames = productIds
+      .map((pid) => productNameById.get(pid))
+      .filter((n): n is string => typeof n === 'string' && n.length > 0);
 
     return {
       id: s.id,
@@ -374,6 +385,8 @@ export async function GET(req: NextRequest) {
       badge: s.badge,
       available: s.available,
       accessory_items: s.accessory_items,
+      product_ids: productIds,
+      product_names: productNames,
       bookings: relevantBookings.map((b) => ({
         id: b.id,
         rental_from: b.rental_from,
