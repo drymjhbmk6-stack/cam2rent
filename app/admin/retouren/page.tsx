@@ -155,10 +155,14 @@ export default function AdminVersandRueckgabePage() {
   const [returnUploadFile, setReturnUploadFile] = useState<File | null>(null);
   const [returnUploading, setReturnUploading] = useState(false);
   const [returnUploadError, setReturnUploadError] = useState<string | null>(null);
-  // Toggle "Nur obere Haelfte verwenden" — DHL-Retoure-Etiketten kommen als
-  // A4 Hochformat mit Etikett oben + Mieter-Anleitung unten. Wirkt nur bei
-  // PDF-Uploads.
-  const [returnUploadTopHalfOnly, setReturnUploadTopHalfOnly] = useState(true);
+  // Region: Bereich der PDF-Seite, der als Etikett genommen wird. DHL-
+  // Retoure-Etiketten haben je nach Quelle unterschiedliche Layouts
+  // (mal oben, mal links/rechts). Default 'full' — Server schneidet
+  // nichts ab und der User aktiviert das nur bei Bedarf.
+  const [returnUploadRegion, setReturnUploadRegion] = useState<'full' | 'top' | 'bottom' | 'left' | 'right'>('full');
+  // Rotation (0/90/180/270 Grad) — viele Etiketten sind intern um 90°
+  // gedreht abgespeichert, weil sie eigentlich Querformat-Layouts sind.
+  const [returnUploadRotate, setReturnUploadRotate] = useState<0 | 90 | 180 | 270>(0);
 
   useEffect(() => {
     fetchBookings();
@@ -169,7 +173,8 @@ export default function AdminVersandRueckgabePage() {
     setReturnUploadModal(b);
     setReturnUploadFile(null);
     setReturnUploadError(null);
-    setReturnUploadTopHalfOnly(true);
+    setReturnUploadRegion('full');
+    setReturnUploadRotate(0);
   }
 
   async function handleReturnUpload() {
@@ -179,9 +184,10 @@ export default function AdminVersandRueckgabePage() {
     try {
       const fd = new FormData();
       fd.append('file', returnUploadFile);
-      // Nur fuer PDFs sinnvoll; Server ignoriert den Wert bei Bildern.
-      if (returnUploadFile.type === 'application/pdf' && returnUploadTopHalfOnly) {
-        fd.append('useTopHalfOnly', 'true');
+      // Nur fuer PDFs sinnvoll; Server ignoriert die Felder bei Bildern.
+      if (returnUploadFile.type === 'application/pdf') {
+        fd.append('region', returnUploadRegion);
+        fd.append('rotate', String(returnUploadRotate));
       }
       const res = await fetch(`/api/admin/return-label/${returnUploadModal.id}`, {
         method: 'POST',
@@ -472,8 +478,10 @@ export default function AdminVersandRueckgabePage() {
           setFile={setReturnUploadFile}
           uploading={returnUploading}
           error={returnUploadError}
-          useTopHalfOnly={returnUploadTopHalfOnly}
-          setUseTopHalfOnly={setReturnUploadTopHalfOnly}
+          region={returnUploadRegion}
+          setRegion={setReturnUploadRegion}
+          rotate={returnUploadRotate}
+          setRotate={setReturnUploadRotate}
           onUpload={handleReturnUpload}
           onClose={() => {
             setReturnUploadModal(null);
@@ -1061,15 +1069,19 @@ function LabelModal({
 // ─── Retour-Etikett-Upload-Modal ─────────────────────────────────────────────
 
 function ReturnUploadModal({
-  booking, file, setFile, uploading, error, useTopHalfOnly, setUseTopHalfOnly, onUpload, onClose,
+  booking, file, setFile, uploading, error,
+  region, setRegion, rotate, setRotate,
+  onUpload, onClose,
 }: {
   booking: FulfillmentBooking;
   file: File | null;
   setFile: (f: File | null) => void;
   uploading: boolean;
   error: string | null;
-  useTopHalfOnly: boolean;
-  setUseTopHalfOnly: (v: boolean) => void;
+  region: 'full' | 'top' | 'bottom' | 'left' | 'right';
+  setRegion: (r: 'full' | 'top' | 'bottom' | 'left' | 'right') => void;
+  rotate: 0 | 90 | 180 | 270;
+  setRotate: (r: 0 | 90 | 180 | 270) => void;
   onUpload: () => void;
   onClose: () => void;
 }) {
@@ -1153,36 +1165,72 @@ function ReturnUploadModal({
           />
         </label>
 
-        {/* PDF-Crop-Toggle: nur sichtbar, wenn ein PDF gewaehlt ist.
-            DHL-Retoure-Etiketten kommen typisch als A4 Hochformat mit
-            Etikett oben + Mieter-Anleitung unten — wir verwerfen die
-            Anleitung. */}
+        {/* PDF-Bereich + Rotation — nur sichtbar wenn ein PDF gewaehlt ist.
+            Layouts variieren je DHL-Quelle (mal oben, mal links/rechts,
+            mal um 90° gedreht). Der Admin sieht das Ergebnis im PDF-
+            Viewer und kann notfalls erneut hochladen mit anderer
+            Einstellung. */}
         {isPdf && (
-          <label
+          <div
             style={{
-              display: 'flex', alignItems: 'flex-start', gap: 10,
               padding: 12, background: '#0f172a', border: '1px solid #334155',
-              borderRadius: 10, marginBottom: 14, cursor: 'pointer',
+              borderRadius: 10, marginBottom: 14,
+              display: 'flex', flexDirection: 'column', gap: 12,
             }}
           >
-            <input
-              type="checkbox"
-              checked={useTopHalfOnly}
-              onChange={(e) => setUseTopHalfOnly(e.target.checked)}
-              disabled={uploading}
-              style={{ marginTop: 2, accentColor: '#06b6d4', cursor: 'pointer' }}
-            />
-            <span style={{ fontSize: 12, color: '#cbd5e1', lineHeight: 1.5 }}>
-              <span style={{ fontWeight: 600, color: '#e2e8f0', display: 'block', marginBottom: 2 }}>
-                Nur obere Hälfte verwenden
-              </span>
-              <span style={{ color: '#94a3b8' }}>
-                Bei DHL-Retoure-Etiketten (A4 Hochformat) sitzt das eigentliche
-                Versandetikett auf der oberen Hälfte, die untere Hälfte enthält
-                nur die Mieter-Anleitung — die wird dann verworfen.
-              </span>
-            </span>
-          </label>
+            <div>
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>
+                Bereich verwenden
+              </label>
+              <select
+                value={region}
+                onChange={(e) => setRegion(e.target.value as typeof region)}
+                disabled={uploading}
+                style={{
+                  width: '100%', padding: '10px 12px', borderRadius: 8,
+                  border: '1px solid #334155', background: '#111827',
+                  color: '#e2e8f0', fontSize: 13, outline: 'none',
+                  cursor: uploading ? 'not-allowed' : 'pointer',
+                }}
+              >
+                <option value="full">Komplette Seite</option>
+                <option value="top">Nur obere Hälfte</option>
+                <option value="bottom">Nur untere Hälfte</option>
+                <option value="left">Nur linke Hälfte</option>
+                <option value="right">Nur rechte Hälfte</option>
+              </select>
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>
+                Drehung
+              </label>
+              <div style={{ display: 'flex', gap: 4 }}>
+                {([0, 90, 180, 270] as const).map((deg) => (
+                  <button
+                    key={deg}
+                    type="button"
+                    onClick={() => setRotate(deg)}
+                    disabled={uploading}
+                    style={{
+                      flex: 1, padding: '8px 4px', borderRadius: 8,
+                      border: '1px solid #334155',
+                      background: rotate === deg ? '#06b6d4' : '#111827',
+                      color: rotate === deg ? '#fff' : '#94a3b8',
+                      fontSize: 12, fontWeight: 600,
+                      cursor: uploading ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    {deg}°
+                  </button>
+                ))}
+              </div>
+            </div>
+            <p style={{ margin: 0, fontSize: 11, color: '#94a3b8', lineHeight: 1.5 }}>
+              DHL-Retoure-Etiketten haben je nach Quelle unterschiedliche
+              Layouts. Falls das Ergebnis im Viewer nicht passt, einfach
+              die Datei nochmal hochladen mit anderer Auswahl.
+            </p>
+          </div>
         )}
 
         {error && (

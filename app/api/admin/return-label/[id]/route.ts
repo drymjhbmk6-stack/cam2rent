@@ -3,7 +3,12 @@ import { createServiceClient } from '@/lib/supabase';
 import { cookies } from 'next/headers';
 import { getSendcloudKeys } from '@/lib/env-mode';
 import { isSendcloudUrl } from '@/lib/url-allowlist';
-import { resizePdfToA5Portrait, imageToA5PortraitPdf } from '@/lib/pdf/label-resize';
+import {
+  resizePdfToA5Portrait,
+  imageToA5PortraitPdf,
+  parseLabelRegion,
+  parseLabelRotation,
+} from '@/lib/pdf/label-resize';
 import { detectFileType, detectImageType } from '@/lib/file-type-check';
 import { checkAdminAuth } from '@/lib/admin-auth';
 import { logAudit } from '@/lib/audit';
@@ -138,9 +143,12 @@ export async function POST(
     return NextResponse.json({ error: 'Datei zu gross (max. 10 MB).' }, { status: 413 });
   }
 
-  // Optional: bei A4-Hochformat-PDFs nur die obere Haelfte als Etikett
-  // verwenden (DHL-Retoure-Etikett-Standard: oben Etikett, unten Mieter-
-  // Anleitung). Greift nur fuer PDFs.
+  // Optional: PDFs koennen auf einen Bereich beschnitten (oben/unten/links/
+  // rechts) und rotiert werden — DHL-Retoure-Etiketten kommen je nach Quelle
+  // in unterschiedlichen Layouts. Backward-Compat: alter `useTopHalfOnly`
+  // wirkt wie region='top'.
+  const region = parseLabelRegion(formData.get('region'));
+  const rotate = parseLabelRotation(formData.get('rotate'));
   const useTopHalfOnly = formData.get('useTopHalfOnly') === 'true';
 
   const arrayBuffer = await file.arrayBuffer();
@@ -161,12 +169,13 @@ export async function POST(
     );
   }
 
-  // Konversion zu A5-Hochformat-PDF. `useTopHalfOnly` wirkt nur fuer PDFs;
-  // bei Bildern wird der Toggle ignoriert.
+  // Konversion zu A5-Hochformat-PDF. Region/Rotate wirken nur fuer PDFs;
+  // bei Bildern werden sie ignoriert. useTopHalfOnly bleibt als Backward-
+  // Compat erhalten.
   let a5Pdf: Uint8Array;
   try {
     if (actualMime === 'application/pdf') {
-      a5Pdf = await resizePdfToA5Portrait(arrayBuffer, { useTopHalfOnly });
+      a5Pdf = await resizePdfToA5Portrait(arrayBuffer, { region, rotate, useTopHalfOnly });
     } else {
       a5Pdf = await imageToA5PortraitPdf(arrayBuffer, actualMime);
     }
@@ -211,7 +220,8 @@ export async function POST(
     changes: {
       sourceMime: actualMime,
       sizeBytes: file.size,
-      useTopHalfOnly: useTopHalfOnly && actualMime === 'application/pdf',
+      region: actualMime === 'application/pdf' ? (useTopHalfOnly && region === 'full' ? 'top' : region) : 'full',
+      rotate: actualMime === 'application/pdf' ? rotate : 0,
     },
     request: req,
   });

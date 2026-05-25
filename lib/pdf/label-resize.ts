@@ -1,4 +1,4 @@
-import { PDFDocument } from 'pdf-lib';
+import { PDFDocument, degrees } from 'pdf-lib';
 
 /**
  * PDF-Etiketten auf A5 Hochformat skalieren + zwei A5 nebeneinander auf
@@ -17,31 +17,71 @@ const A5_PORTRAIT: [number, number] = [419.53, 595.28]; // 148 x 210 mm
 const A4_LANDSCAPE: [number, number] = [841.89, 595.28]; // 297 x 210 mm
 
 /**
+ * Wo auf der Source-Seite das eigentliche Etikett sitzt. DHL-Retoure-PDFs
+ * variieren in der Praxis: mal oben (Hochformat-Layout), mal links/rechts
+ * (Querformat-Layout, im Hochformat-Papier gespeichert), seltener unten.
+ */
+export type LabelRegion = 'full' | 'top' | 'bottom' | 'left' | 'right';
+export type LabelRotation = 0 | 90 | 180 | 270;
+
+const ALLOWED_REGIONS: LabelRegion[] = ['full', 'top', 'bottom', 'left', 'right'];
+const ALLOWED_ROTATIONS: LabelRotation[] = [0, 90, 180, 270];
+
+/** Validiert/normalisiert User-Input fuer den Region-Switch. */
+export function parseLabelRegion(raw: unknown): LabelRegion {
+  if (typeof raw === 'string' && (ALLOWED_REGIONS as string[]).includes(raw)) {
+    return raw as LabelRegion;
+  }
+  return 'full';
+}
+
+/** Validiert/normalisiert User-Input fuer die Rotation. */
+export function parseLabelRotation(raw: unknown): LabelRotation {
+  const n = typeof raw === 'string' ? parseInt(raw, 10) : typeof raw === 'number' ? raw : NaN;
+  if ((ALLOWED_ROTATIONS as number[]).includes(n)) return n as LabelRotation;
+  return 0;
+}
+
+/**
  * Skaliert die erste Seite eines PDFs in einen A5-Hochformat-Bogen ein.
  * Behaelt das Seitenverhaeltnis bei und zentriert den Inhalt.
  *
- * Mit `useTopHalfOnly: true` wird vorab die MediaBox der Source-Seite auf
- * die obere Haelfte beschnitten — typischer Fall fuer DHL-Retoure-Etiketten,
- * die als A4-Hochformat geliefert werden: oben das eigentliche Versand-
- * Etikett, unten Mieter-Anleitung. Wir verwerfen die Anleitung und nehmen
- * nur den Etikett-Teil.
+ * Optionen:
+ *  - `region`: schneidet die Source-Seite vor dem Skalieren auf eine Haelfte
+ *    bzw. Spalte zu (per `setMediaBox`/`setCropBox`). Default: `full`.
+ *  - `rotate`: dreht die Source-Seite um 0/90/180/270 Grad. Hilft bei
+ *    Etiketten, die intern im Querformat gespeichert sind, aber auf einem
+ *    Hochformat-Papier liegen — nach dem Drehen liegt das Etikett dann
+ *    richtig orientiert auf dem A5-Bogen.
  */
 export async function resizePdfToA5Portrait(
   srcBuffer: ArrayBuffer,
-  opts: { useTopHalfOnly?: boolean } = {},
+  opts: {
+    region?: LabelRegion;
+    rotate?: LabelRotation;
+    /** @deprecated Verwende `region: 'top'`. */
+    useTopHalfOnly?: boolean;
+  } = {},
 ): Promise<Uint8Array> {
-  const src = await PDFDocument.load(srcBuffer);
+  const region: LabelRegion = opts.region ?? (opts.useTopHalfOnly ? 'top' : 'full');
+  const rotate: LabelRotation = opts.rotate ?? 0;
 
-  if (opts.useTopHalfOnly) {
-    const srcPage = src.getPage(0);
+  const src = await PDFDocument.load(srcBuffer);
+  const srcPage = src.getPage(0);
+
+  if (region !== 'full') {
     const { width, height } = srcPage.getSize();
-    // PDF-Koordinatensystem hat origin unten-links. Obere Haelfte =
-    // y-Bereich von height/2 bis height. setMediaBox(x, y, w, h) setzt
-    // den sichtbaren Bereich auf genau diese obere Haelfte; embedPdf
-    // unten respektiert die neue MediaBox.
-    const halfH = height / 2;
-    srcPage.setMediaBox(0, halfH, width, halfH);
-    srcPage.setCropBox(0, halfH, width, halfH);
+    let box: [number, number, number, number] = [0, 0, width, height];
+    if (region === 'top') box = [0, height / 2, width, height / 2];
+    else if (region === 'bottom') box = [0, 0, width, height / 2];
+    else if (region === 'left') box = [0, 0, width / 2, height];
+    else if (region === 'right') box = [width / 2, 0, width / 2, height];
+    srcPage.setMediaBox(box[0], box[1], box[2], box[3]);
+    srcPage.setCropBox(box[0], box[1], box[2], box[3]);
+  }
+
+  if (rotate !== 0) {
+    srcPage.setRotation(degrees(rotate));
   }
 
   const dst = await PDFDocument.create();

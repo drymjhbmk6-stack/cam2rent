@@ -558,11 +558,15 @@ A4-Querformat-Bogen kombiniert.
   `return-labels/<bookingId>.pdf` (Upsert) und setzt
   `bookings.return_label_url = 'return-labels/<bookingId>.pdf'`. Erneuter
   Upload überschreibt das alte Etikett. Audit `return_label.upload`.
-  Optionales Form-Feld `useTopHalfOnly=true` croppt bei PDFs vorher die
-  Source-MediaBox auf die obere Hälfte (DHL-Retoure-Etiketten kommen als
-  A4 Hochformat mit Etikett oben + Mieter-Anleitung unten — die Anleitung
-  wird so verworfen). Toggle im Upload-Modal sichtbar nur bei PDF-Datei,
-  Default ON.
+  Optionale Form-Felder `region` (`full|top|bottom|left|right`) + `rotate`
+  (`0|90|180|270`) für PDF-Uploads — DHL-Retoure-Etiketten haben je nach
+  Quelle unterschiedliche Layouts (mal oben, mal links/rechts, mal um 90°
+  intern gedreht weil eigentlich Querformat). Server beschneidet vor dem
+  Skalieren die Source-MediaBox (`setMediaBox` + `setCropBox`) und dreht
+  die Seite (`setRotation`); A5-Resize läuft unverändert danach. UI im
+  Upload-Modal: Region-Dropdown + 0°/90°/180°/270°-Buttons, beide sichtbar
+  nur bei PDF-Datei, Default `full`+`0°`. Der alte `useTopHalfOnly`-Boolean
+  bleibt als Backward-Compat in der Lib (= `region: 'top'`).
 - **Retourlabel-Anzeige `GET /api/admin/return-label/[id]`** unterstützt
   zwei Quellen je nach `return_label_url`-Prefix:
   - **Neu (Storage):** relativer Pfad `return-labels/<id>.pdf` → direkt
