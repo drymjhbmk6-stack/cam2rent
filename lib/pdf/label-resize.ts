@@ -32,6 +32,36 @@ export async function resizePdfToA5Portrait(srcBuffer: ArrayBuffer): Promise<Uin
 }
 
 /**
+ * Bettet ein Bild (JPG oder PNG) in einen A5-Hochformat-PDF-Bogen ein —
+ * fuers vom Admin hochgeladene Retoure-Etikett, falls es als Foto/Scan
+ * vorliegt. Seitenverhaeltnis bleibt erhalten, Bild wird zentriert.
+ */
+export async function imageToA5PortraitPdf(
+  imageBuffer: ArrayBuffer,
+  mimeType: 'image/jpeg' | 'image/png',
+): Promise<Uint8Array> {
+  const dst = await PDFDocument.create();
+  const page = dst.addPage(A5_PORTRAIT);
+
+  const img = mimeType === 'image/jpeg'
+    ? await dst.embedJpg(imageBuffer)
+    : await dst.embedPng(imageBuffer);
+
+  const [pageW, pageH] = A5_PORTRAIT;
+  const scale = Math.min(pageW / img.width, pageH / img.height);
+  const drawW = img.width * scale;
+  const drawH = img.height * scale;
+  page.drawImage(img, {
+    x: (pageW - drawW) / 2,
+    y: (pageH - drawH) / 2,
+    width: drawW,
+    height: drawH,
+  });
+
+  return dst.save();
+}
+
+/**
  * Erzeugt eine A4-Querformat-Seite mit zwei A5-Hochformat-Slots nebeneinander
  * (links = Hin-Etikett, rechts = Retour-Etikett). Beide Eingabe-PDFs werden
  * unabhaengig voneinander in ihren A5-Slot eingepasst.

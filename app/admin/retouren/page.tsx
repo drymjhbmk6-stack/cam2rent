@@ -139,30 +139,66 @@ export default function AdminVersandRueckgabePage() {
   const [tab, setTab] = useState<Tab>('versenden');
   const [buf, setBuf] = useState<Buffer>(DEFAULT_BUFFER);
 
-  // Sendcloud-Etikett-Modal — analog zur alten /admin/versand-Seite, hier
-  // dunkel gestylt + ohne Seitenwechsel direkt aus der Liste aufrufbar.
-  // labelMode unterscheidet zwischen Hin-Versand (Sendcloud /parcels mit
-  // Adresse=Kunde) und Retour (separater Endpoint mit getauschten Adressen,
-  // OHNE Sendcloud-is_return-Aufpreis).
+  // Sendcloud-Etikett-Modal nur fuer das HIN-Etikett. Das Retour-Etikett
+  // wird via separates Upload-Modal manuell hochgeladen (JPG/PNG/PDF) —
+  // siehe POST /api/admin/return-label/[id]. Server konvertiert beim Upload
+  // auf A5 Hochformat und legt das fertige PDF in Supabase-Storage ab.
   const [labelModal, setLabelModal] = useState<FulfillmentBooking | null>(null);
-  const [labelMode, setLabelMode] = useState<'outbound' | 'return'>('outbound');
   const [shippingMethods, setShippingMethods] = useState<ShippingMethod[]>([]);
   const [methodsLoading, setMethodsLoading] = useState(false);
   const [labelForm, setLabelForm] = useState<LabelForm>({ name: '', address: '', city: '', postalCode: '', email: '', methodId: 0, weightKg: 0.5 });
   const [labelCreating, setLabelCreating] = useState(false);
   const [labelResult, setLabelResult] = useState<LabelResult | null>(null);
 
+  // Retour-Etikett-Upload-Modal: File-Picker, Server konvertiert zu A5.
+  const [returnUploadModal, setReturnUploadModal] = useState<FulfillmentBooking | null>(null);
+  const [returnUploadFile, setReturnUploadFile] = useState<File | null>(null);
+  const [returnUploading, setReturnUploading] = useState(false);
+  const [returnUploadError, setReturnUploadError] = useState<string | null>(null);
+
   useEffect(() => {
     fetchBookings();
     loadBuffer();
   }, []);
 
-  async function openReturnLabelModal(b: FulfillmentBooking) {
-    return openLabelModal(b, 'return');
+  function openReturnUploadModal(b: FulfillmentBooking) {
+    setReturnUploadModal(b);
+    setReturnUploadFile(null);
+    setReturnUploadError(null);
   }
 
-  async function openLabelModal(b: FulfillmentBooking, mode: 'outbound' | 'return' = 'outbound') {
-    setLabelMode(mode);
+  async function handleReturnUpload() {
+    if (!returnUploadModal || !returnUploadFile || returnUploading) return;
+    setReturnUploading(true);
+    setReturnUploadError(null);
+    try {
+      const fd = new FormData();
+      fd.append('file', returnUploadFile);
+      const res = await fetch(`/api/admin/return-label/${returnUploadModal.id}`, {
+        method: 'POST',
+        body: fd,
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setReturnUploadError(d.error ?? 'Upload fehlgeschlagen.');
+        return;
+      }
+      const bookingId = returnUploadModal.id;
+      const dbUrl = d.returnLabelUrl as string;
+      setBookings((prev) => prev.map((b) => b.id === bookingId
+        ? { ...b, return_label_url: dbUrl }
+        : b
+      ));
+      setReturnUploadModal(null);
+      setReturnUploadFile(null);
+    } catch {
+      setReturnUploadError('Netzwerkfehler.');
+    } finally {
+      setReturnUploading(false);
+    }
+  }
+
+  async function openLabelModal(b: FulfillmentBooking) {
     setLabelModal(b);
     setLabelResult(null);
 
@@ -218,45 +254,23 @@ export default function AdminVersandRueckgabePage() {
     if (!labelModal) return;
     setLabelCreating(true);
     try {
-      if (labelMode === 'return') {
-        // Retourlabel: separater Endpoint, erzeugt normales Sendcloud-Etikett
-        // mit getauschten Adressen (Kunde=Absender, cam2rent=Empfaenger) —
-        // OHNE is_return-Aufpreis. Adressen kommen serverseitig aus der
-        // Buchung; hier nur Methode + Gewicht uebergeben.
-        const res = await fetch(`/api/admin/sendcloud-return/${labelModal.id}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            shippingMethodId: labelForm.methodId,
-            weightKg: labelForm.weightKg,
-          }),
-        });
-        const d = await res.json();
-        if (!res.ok) { alert(`Fehler: ${d.error}`); return; }
-        setLabelResult({ labelUrl: null, returnLabelUrl: d.returnLabelUrl });
-        setBookings((prev) => prev.map((b) => b.id === labelModal.id
-          ? { ...b, return_label_url: d.returnLabelUrl }
-          : b
-        ));
-      } else {
-        const res = await fetch('/api/admin/sendcloud', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            bookingId: labelModal.id,
-            shippingMethodId: labelForm.methodId,
-            customer: { name: labelForm.name, address: labelForm.address, city: labelForm.city, postalCode: labelForm.postalCode, email: labelForm.email },
-            weightKg: labelForm.weightKg,
-          }),
-        });
-        const d = await res.json();
-        if (!res.ok) { alert(`Fehler: ${d.error}`); return; }
-        setLabelResult({ labelUrl: d.labelUrl, returnLabelUrl: null });
-        setBookings((prev) => prev.map((b) => b.id === labelModal.id
-          ? { ...b, tracking_number: d.trackingNumber ?? b.tracking_number, label_url: d.labelUrl }
-          : b
-        ));
-      }
+      const res = await fetch('/api/admin/sendcloud', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bookingId: labelModal.id,
+          shippingMethodId: labelForm.methodId,
+          customer: { name: labelForm.name, address: labelForm.address, city: labelForm.city, postalCode: labelForm.postalCode, email: labelForm.email },
+          weightKg: labelForm.weightKg,
+        }),
+      });
+      const d = await res.json();
+      if (!res.ok) { alert(`Fehler: ${d.error}`); return; }
+      setLabelResult({ labelUrl: d.labelUrl, returnLabelUrl: null });
+      setBookings((prev) => prev.map((b) => b.id === labelModal.id
+        ? { ...b, tracking_number: d.trackingNumber ?? b.tracking_number, label_url: d.labelUrl }
+        : b
+      ));
     } catch { alert('Netzwerkfehler.'); }
     finally { setLabelCreating(false); }
   }
@@ -417,7 +431,7 @@ export default function AdminVersandRueckgabePage() {
                     last={idx === displayed.length - 1}
                     onSaved={fetchBookings}
                     onOpenLabel={openLabelModal}
-                    onOpenReturnLabel={openReturnLabelModal}
+                    onOpenReturnUpload={openReturnUploadModal}
                   />
                 ))}
               </tbody>
@@ -430,7 +444,6 @@ export default function AdminVersandRueckgabePage() {
       {labelModal && (
         <LabelModal
           booking={labelModal}
-          mode={labelMode}
           form={labelForm}
           setForm={setLabelForm}
           methods={shippingMethods}
@@ -439,6 +452,23 @@ export default function AdminVersandRueckgabePage() {
           result={labelResult}
           onCreate={handleCreateLabel}
           onClose={() => { setLabelModal(null); setLabelResult(null); }}
+        />
+      )}
+
+      {/* ── Retour-Etikett-Upload-Modal ─────────────────────────────────── */}
+      {returnUploadModal && (
+        <ReturnUploadModal
+          booking={returnUploadModal}
+          file={returnUploadFile}
+          setFile={setReturnUploadFile}
+          uploading={returnUploading}
+          error={returnUploadError}
+          onUpload={handleReturnUpload}
+          onClose={() => {
+            setReturnUploadModal(null);
+            setReturnUploadFile(null);
+            setReturnUploadError(null);
+          }}
         />
       )}
     </div>
@@ -457,7 +487,7 @@ function emptyText(tab: Tab): string {
 // ─── Eine Tabellen-Zeile ─────────────────────────────────────────────────────
 
 function BookingRow({
-  booking, tab, buf, last, onSaved, onOpenLabel, onOpenReturnLabel,
+  booking, tab, buf, last, onSaved, onOpenLabel, onOpenReturnUpload,
 }: {
   booking: FulfillmentBooking;
   tab: Tab;
@@ -465,7 +495,7 @@ function BookingRow({
   last: boolean;
   onSaved: () => void;
   onOpenLabel: (b: FulfillmentBooking) => void;
-  onOpenReturnLabel: (b: FulfillmentBooking) => void;
+  onOpenReturnUpload: (b: FulfillmentBooking) => void;
 }) {
   const cond = booking.return_condition ? CONDITION_CONFIG[booking.return_condition] : null;
   const statusLabel = STATUS_LABEL[booking.status] ?? booking.status;
@@ -511,7 +541,7 @@ function BookingRow({
         )}
       </td>
       <td style={{ padding: '14px 16px', textAlign: 'right' }}>
-        <ActionButton booking={booking} tab={tab} onOpenLabel={onOpenLabel} onOpenReturnLabel={onOpenReturnLabel} />
+        <ActionButton booking={booking} tab={tab} onOpenLabel={onOpenLabel} onOpenReturnUpload={onOpenReturnUpload} />
       </td>
     </tr>
   );
@@ -594,12 +624,12 @@ function UnterwegsCell({ booking, buf }: { booking: FulfillmentBooking; buf: Buf
 // ─── Aktion-Button je nach Status + Lieferart ────────────────────────────────
 
 function ActionButton({
-  booking, tab, onOpenLabel, onOpenReturnLabel,
+  booking, tab, onOpenLabel, onOpenReturnUpload,
 }: {
   booking: FulfillmentBooking;
   tab: Tab;
   onOpenLabel: (b: FulfillmentBooking) => void;
-  onOpenReturnLabel: (b: FulfillmentBooking) => void;
+  onOpenReturnUpload: (b: FulfillmentBooking) => void;
 }) {
   const base = {
     display: 'inline-block', padding: '8px 16px', textDecoration: 'none',
@@ -609,9 +639,10 @@ function ActionButton({
 
   if (tab === 'versenden') {
     if (booking.delivery_mode === 'versand') {
-      // Etikett-Stack (Hin + Retour) links, Drucken-Button (nur wenn beide da)
-      // mittig, Packen rechts. Alle Etikett-Links laufen ueber den
-      // /admin/pdf-viewer — sonst fehlt in der iOS-PWA der Zurueck-Button.
+      // Etikett-Stack: links Hin (Sendcloud) + Retour (manuell hochgeladen),
+      // mittig Drucken-Button (nur wenn beide da), rechts Packen. Alle
+      // Etikett-Links laufen durch den /admin/pdf-viewer — sonst fehlt in
+      // der iOS-PWA der Zurueck-Button.
       const labelBtn = booking.label_url ? (
         <a
           href={`/admin/pdf-viewer?u=${encodeURIComponent(`/api/admin/label/${booking.id}`)}&t=${encodeURIComponent('Versandetikett (A5)')}`}
@@ -632,21 +663,31 @@ function ActionButton({
       );
 
       const returnBtn = booking.return_label_url ? (
-        <a
-          href={`/admin/pdf-viewer?u=${encodeURIComponent(`/api/admin/return-label/${booking.id}`)}&t=${encodeURIComponent('Retourlabel (A5)')}`}
-          style={{ ...small, background: '#06b6d422', color: '#22d3ee', border: '1px solid #06b6d440' }}
-          title="Retourlabel anzeigen"
-        >
-          ↩ Retourlabel
-        </a>
+        <div style={{ display: 'inline-flex', gap: 4 }}>
+          <a
+            href={`/admin/pdf-viewer?u=${encodeURIComponent(`/api/admin/return-label/${booking.id}`)}&t=${encodeURIComponent('Retourlabel (A5)')}`}
+            style={{ ...small, background: '#06b6d422', color: '#22d3ee', border: '1px solid #06b6d440' }}
+            title="Retourlabel anzeigen"
+          >
+            ↩ Retourlabel
+          </a>
+          <button
+            type="button"
+            onClick={() => onOpenReturnUpload(booking)}
+            style={{ ...small, background: '#64748b22', color: '#94a3b8', border: '1px solid #64748b40', cursor: 'pointer', padding: '8px 8px' }}
+            title="Retourlabel ersetzen"
+          >
+            ✏
+          </button>
+        </div>
       ) : (
         <button
           type="button"
-          onClick={() => onOpenReturnLabel(booking)}
+          onClick={() => onOpenReturnUpload(booking)}
           style={{ ...small, background: '#64748b22', color: '#94a3b8', border: '1px solid #64748b40', cursor: 'pointer' }}
-          title="Retourlabel erstellen (Sendcloud-Etikett mit getauschten Adressen)"
+          title="Retourlabel hochladen (JPG, PNG oder PDF — wird serverseitig auf A5 konvertiert)"
         >
-          ↩ Retourlabel
+          ⬆ Retourlabel
         </button>
       );
 
@@ -871,10 +912,9 @@ function ReturnDueCell({
 // alten /admin/versand → Modal, nur ohne Tailwind-Klassen.
 
 function LabelModal({
-  booking, mode, form, setForm, methods, methodsLoading, creating, result, onCreate, onClose,
+  booking, form, setForm, methods, methodsLoading, creating, result, onCreate, onClose,
 }: {
   booking: FulfillmentBooking;
-  mode: 'outbound' | 'return';
   form: LabelForm;
   setForm: React.Dispatch<React.SetStateAction<LabelForm>>;
   methods: ShippingMethod[];
@@ -884,7 +924,6 @@ function LabelModal({
   onCreate: () => void;
   onClose: () => void;
 }) {
-  const isReturn = mode === 'return';
   const inputStyle: React.CSSProperties = {
     width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #334155',
     background: '#0f172a', color: '#e2e8f0', fontSize: 14, outline: 'none',
@@ -901,11 +940,7 @@ function LabelModal({
     flex: 1, padding: '12px 16px', borderRadius: 8, fontSize: 14, fontWeight: 600,
     background: 'transparent', color: '#94a3b8', border: '1px solid #334155', cursor: 'pointer',
   };
-  // Bei Retour kommen Adressen serverseitig aus bookings.shipping_address —
-  // wir validieren nur Methode + Gewicht.
-  const disabled = isReturn
-    ? (creating || !form.methodId || !form.weightKg)
-    : (creating || !form.name.trim() || !form.address.trim() || !form.postalCode.trim() || !form.city.trim() || !form.methodId);
+  const disabled = creating || !form.name.trim() || !form.address.trim() || !form.postalCode.trim() || !form.city.trim() || !form.methodId;
 
   return (
     <div
@@ -918,9 +953,9 @@ function LabelModal({
     >
       <div style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 16, padding: 24, maxWidth: 480, width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
         <h2 style={{ fontSize: 18, fontWeight: 700, color: '#e2e8f0', marginBottom: 4 }}>
-          {isReturn ? 'Retourlabel erstellen' : 'Sendcloud-Etikett erstellen'}
+          Sendcloud-Etikett erstellen
         </h2>
-        <p style={{ fontSize: 12, color: '#64748b', marginBottom: 16 }}>Buchung {booking.id}{isReturn ? ' · Absender = Kunde, Empfänger = cam2rent' : ''}</p>
+        <p style={{ fontSize: 12, color: '#64748b', marginBottom: 16 }}>Buchung {booking.id}</p>
 
         {result ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -935,60 +970,42 @@ function LabelModal({
                 📄 Versandetikett anzeigen
               </a>
             )}
-            {result.returnLabelUrl && (
-              <a
-                href={`/admin/pdf-viewer?u=${encodeURIComponent(`/api/admin/return-label/${booking.id}`)}&t=${encodeURIComponent('Retourlabel (A5)')}`}
-                style={{ ...btnSecondary, textAlign: 'center', textDecoration: 'none', display: 'block' }}
-              >
-                ↩ Retourlabel anzeigen
-              </a>
-            )}
             <button type="button" onClick={onClose} style={btnSecondary}>Schließen</button>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {isReturn ? (
-              <div style={{ padding: 12, background: '#0f172a', border: '1px solid #334155', borderRadius: 10, fontSize: 12, color: '#94a3b8' }}>
-                Absender (= Kunde) und Empfänger (= cam2rent) werden automatisch
-                aus der Buchung und den ENV-Daten gefüllt. Bitte nur Versandmethode
-                und Paketgewicht prüfen.
+            <div>
+              <label style={labelStyle}>Name *</label>
+              <input type="text" value={form.name} placeholder="Vor- und Nachname"
+                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>Straße + Hausnummer *</label>
+              <input type="text" value={form.address} placeholder="Musterstraße 12"
+                onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
+                style={inputStyle} />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 12 }}>
+              <div>
+                <label style={labelStyle}>PLZ *</label>
+                <input type="text" value={form.postalCode} placeholder="12345"
+                  onChange={(e) => setForm((f) => ({ ...f, postalCode: e.target.value }))}
+                  style={inputStyle} />
               </div>
-            ) : (
-              <>
-                <div>
-                  <label style={labelStyle}>Name *</label>
-                  <input type="text" value={form.name} placeholder="Vor- und Nachname"
-                    onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                    style={inputStyle} />
-                </div>
-                <div>
-                  <label style={labelStyle}>Straße + Hausnummer *</label>
-                  <input type="text" value={form.address} placeholder="Musterstraße 12"
-                    onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
-                    style={inputStyle} />
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 12 }}>
-                  <div>
-                    <label style={labelStyle}>PLZ *</label>
-                    <input type="text" value={form.postalCode} placeholder="12345"
-                      onChange={(e) => setForm((f) => ({ ...f, postalCode: e.target.value }))}
-                      style={inputStyle} />
-                  </div>
-                  <div>
-                    <label style={labelStyle}>Stadt *</label>
-                    <input type="text" value={form.city} placeholder="Berlin"
-                      onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))}
-                      style={inputStyle} />
-                  </div>
-                </div>
-                <div>
-                  <label style={labelStyle}>E-Mail</label>
-                  <input type="email" value={form.email} placeholder="kunde@beispiel.de"
-                    onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-                    style={inputStyle} />
-                </div>
-              </>
-            )}
+              <div>
+                <label style={labelStyle}>Stadt *</label>
+                <input type="text" value={form.city} placeholder="Berlin"
+                  onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))}
+                  style={inputStyle} />
+              </div>
+            </div>
+            <div>
+              <label style={labelStyle}>E-Mail</label>
+              <input type="email" value={form.email} placeholder="kunde@beispiel.de"
+                onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                style={inputStyle} />
+            </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 12 }}>
               <div>
                 <label style={labelStyle}>Gewicht (kg)</label>
@@ -1020,13 +1037,122 @@ function LabelModal({
                 Abbrechen
               </button>
               <button type="button" onClick={onCreate} disabled={disabled} style={{ ...btnPrimary, opacity: disabled ? 0.4 : 1 }}>
-                {creating
-                  ? (isReturn ? 'Erstelle Retourlabel…' : 'Erstelle Etikett…')
-                  : (isReturn ? 'Retourlabel erstellen' : 'Versandetikett erstellen')}
+                {creating ? 'Erstelle Etikett…' : 'Versandetikett erstellen'}
               </button>
             </div>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Retour-Etikett-Upload-Modal ─────────────────────────────────────────────
+
+function ReturnUploadModal({
+  booking, file, setFile, uploading, error, onUpload, onClose,
+}: {
+  booking: FulfillmentBooking;
+  file: File | null;
+  setFile: (f: File | null) => void;
+  uploading: boolean;
+  error: string | null;
+  onUpload: () => void;
+  onClose: () => void;
+}) {
+  const btnPrimary: React.CSSProperties = {
+    flex: 1, padding: '12px 16px', borderRadius: 8, fontSize: 14, fontWeight: 600,
+    background: '#06b6d4', color: 'white', border: 'none', cursor: 'pointer',
+  };
+  const btnSecondary: React.CSSProperties = {
+    flex: 1, padding: '12px 16px', borderRadius: 8, fontSize: 14, fontWeight: 600,
+    background: 'transparent', color: '#94a3b8', border: '1px solid #334155', cursor: 'pointer',
+  };
+  const disabled = uploading || !file;
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0] ?? null;
+    setFile(f);
+  }
+
+  return (
+    <div
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        zIndex: 100, padding: 16,
+      }}
+    >
+      <div style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 16, padding: 24, maxWidth: 440, width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
+        <h2 style={{ fontSize: 18, fontWeight: 700, color: '#e2e8f0', marginBottom: 4 }}>
+          Retourlabel hochladen
+        </h2>
+        <p style={{ fontSize: 12, color: '#64748b', marginBottom: 16 }}>
+          Buchung {booking.id} · Bild oder PDF wird auf A5 Hochformat konvertiert
+        </p>
+
+        <div style={{ padding: 12, background: '#0f172a', border: '1px solid #334155', borderRadius: 10, fontSize: 12, color: '#94a3b8', marginBottom: 14 }}>
+          Lade hier das Retoure-Versandetikett (von DHL Online-Frankierung, DHL-
+          Geschäftskundenportal o.ä.) als JPG, PNG oder PDF hoch. Wir wandeln es
+          serverseitig in ein A5-Hochformat-PDF um und können es zusammen mit dem
+          Hin-Etikett auf einen A4-Bogen drucken.
+        </div>
+
+        <label
+          htmlFor="return-label-file"
+          style={{
+            display: 'block', padding: 20, border: '2px dashed #334155',
+            borderRadius: 10, textAlign: 'center', cursor: 'pointer',
+            background: file ? '#06b6d411' : '#0f172a',
+            color: file ? '#22d3ee' : '#94a3b8',
+            fontSize: 13, marginBottom: 14,
+          }}
+        >
+          {file ? (
+            <>
+              <div style={{ fontSize: 22, marginBottom: 4 }}>📄</div>
+              <div style={{ fontWeight: 600 }}>{file.name}</div>
+              <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
+                {Math.round(file.size / 1024)} KB · {file.type || 'unbekannter Typ'}
+              </div>
+              <div style={{ fontSize: 11, color: '#06b6d4', marginTop: 6 }}>
+                Klick zum Wechseln
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize: 22, marginBottom: 4 }}>⬆</div>
+              <div>Datei wählen oder hierher ziehen</div>
+              <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
+                JPG, PNG oder PDF · max. 10 MB
+              </div>
+            </>
+          )}
+          <input
+            id="return-label-file"
+            type="file"
+            accept="image/jpeg,image/png,application/pdf"
+            onChange={handleFileChange}
+            disabled={uploading}
+            style={{ display: 'none' }}
+          />
+        </label>
+
+        {error && (
+          <div style={{ padding: 10, background: '#ef444422', border: '1px solid #ef444440', borderRadius: 8, fontSize: 12, color: '#fca5a5', marginBottom: 12 }}>
+            {error}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button type="button" onClick={onClose} disabled={uploading} style={{ ...btnSecondary, opacity: uploading ? 0.4 : 1 }}>
+            Abbrechen
+          </button>
+          <button type="button" onClick={onUpload} disabled={disabled} style={{ ...btnPrimary, opacity: disabled ? 0.4 : 1 }}>
+            {uploading ? 'Lädt hoch…' : 'Hochladen & konvertieren'}
+          </button>
+        </div>
       </div>
     </div>
   );

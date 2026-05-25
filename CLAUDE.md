@@ -525,59 +525,69 @@ integriert, kein Seitenwechsel mehr nötig.
   Der Etikett-Workflow ist der einzige Teil, der jetzt auch direkt in
   `/admin/retouren` läuft.
 
-### Eigenes Retourlabel + A5-Normalisierung + Kombi-Druck (Stand 2026-05-25)
+### Retourlabel-Upload + A5-Normalisierung + Kombi-Druck (Stand 2026-05-25)
 Drei zusammengehörige Verbesserungen am Versandetikett-Workflow. Sendcloud
-verlangt für Retoure-Etiketten (`is_return: true`) einen Aufpreis; wir
-umgehen das, indem wir das Retourlabel als **normales** Sendcloud-Etikett
-mit getauschten Adressen erzeugen (Absender = Kunde, Empfänger = cam2rent).
-Plus: alle Etiketten kommen jetzt einheitlich in A5 Hochformat raus, und
-ein Kombi-Endpoint legt Hin + Retour nebeneinander auf eine A4-Querseite —
-passend für vorgestanzte „2× A5 Hochformat"-Bögen.
-- **Sendcloud-Hin-POST entkoppelt:** `app/api/admin/sendcloud/route.ts` ruft
-  nicht mehr automatisch den zweiten `/parcels`-Call mit `is_return: true`
-  auf. Das Hin-Etikett bleibt unverändert, Sendcloud-Retoure-Aufpreis
-  entfällt. `bookings.sendcloud_return_parcel_id` + `return_label_url`
-  werden erst gesetzt, wenn der Admin den neuen „Retourlabel"-Button
-  drückt.
-- **Neuer Endpoint `POST /api/admin/sendcloud-return/[id]`**: erstellt
-  das Retourlabel als **normales** Sendcloud-Etikett mit getauschten
-  Adressen (cam2rent = Empfänger, Kunde = Absender), **OHNE**
-  `is_return: true`. Kunden-Adresse wird serverseitig aus
-  `bookings.shipping_address` geparst, cam2rent-Absender aus
-  `SENDCLOUD_SHIPPER_*`-Envs. Body nur `{ shippingMethodId, weightKg }`.
-  Audit `sendcloud.create_return_label`. Befüllt
-  `return_label_url`/`return_tracking_number`/`return_tracking_url`.
-- **A5-Normalisierung:** Neue Lib `lib/pdf/label-resize.ts` mit
-  `resizePdfToA5Portrait()` + `combineLabelsOnA4Landscape()` auf Basis
-  von `pdf-lib`. Beide Proxy-Endpoints `/api/admin/label/[id]` +
-  `/api/admin/return-label/[id]` skalieren die Sendcloud-PDF-Antwort
-  jetzt auf A5 Hochformat (148×210 mm), zentriert mit erhaltenem
-  Seitenverhältnis. Bei Skalierungsfehlern → Fallback auf Original-PDF
-  (kein Hard-Fail). Inline-Anzeige + Content-Length + no-store
-  unverändert (für den iframe-Druck im PDF-Viewer).
+verlangt für Retoure-Etiketten (`is_return: true`) einen Aufpreis pro
+Sendung — wir wollten das zuerst umgehen, indem wir das Retourlabel als
+**normales** Sendcloud-Etikett mit getauschten Adressen anlegen. Sendcloud
+verbietet das aber technisch: ohne `is_return: true` ignoriert die API die
+`from_*`-Felder und nimmt zwingend die Absender-Adresse aus dem
+Account-Profil. Ohne Sendcloud-Retoure-Abo lässt sich also auf API-Ebene
+KEIN dynamischer Absender setzen.
+
+**Endgültige Lösung:** der Admin erzeugt das Retoure-Etikett extern (DHL
+Online-Frankierung, DHL-Geschäftskundenportal, Hermes, DPD o.ä.) und
+**lädt es bei cam2rent hoch** (JPG, PNG oder PDF). Wir konvertieren beim
+Upload auf A5 Hochformat und speichern das fertige PDF in Supabase-Storage.
+Beim Drucken wird es zusammen mit dem Sendcloud-Hin-Etikett auf einen
+A4-Querformat-Bogen kombiniert.
+- **Sendcloud-Hin-POST entkoppelt:** `app/api/admin/sendcloud/route.ts`
+  ruft nicht mehr automatisch den zweiten `/parcels`-Call mit
+  `is_return: true` auf. Spart pro Versand den Sendcloud-Retoure-Aufpreis.
+  `bookings.return_label_url` bleibt leer, bis der Admin manuell hochlädt.
+- **A5-Normalisierung + Bild-Support:** Lib `lib/pdf/label-resize.ts` hat
+  jetzt `resizePdfToA5Portrait()` (PDFs) **und** `imageToA5PortraitPdf()`
+  (JPG/PNG → A5-PDF, Bild zentriert mit erhaltenem Seitenverhältnis).
+  Beide nutzen `pdf-lib`. Der Proxy `/api/admin/label/[id]` skaliert das
+  Sendcloud-Hin-Etikett weiter auf A5 (Fallback bei Skalierungsfehler →
+  Original-PDF).
+- **Retourlabel-Upload `POST /api/admin/return-label/[id]`** (multipart):
+  empfängt `file` (JPG/PNG/PDF, max 10 MB), Magic-Byte-Check via
+  `lib/file-type-check.ts` (Client-MIME wird ignoriert), konvertiert
+  serverseitig auf A5-Hochformat-PDF, lädt es in Supabase-Storage
+  `return-labels/<bookingId>.pdf` (Upsert) und setzt
+  `bookings.return_label_url = 'return-labels/<bookingId>.pdf'`. Erneuter
+  Upload überschreibt das alte Etikett. Audit `return_label.upload`.
+- **Retourlabel-Anzeige `GET /api/admin/return-label/[id]`** unterstützt
+  zwei Quellen je nach `return_label_url`-Prefix:
+  - **Neu (Storage):** relativer Pfad `return-labels/<id>.pdf` → direkt
+    aus Storage laden, schon A5.
+  - **Legacy (Sendcloud):** `https://panel.sendcloud.sc/...` aus alten
+    Buchungen vor dem 25.05. → wie bisher per Basic-Auth herunterladen
+    und auf A5 skalieren.
 - **Kombi-Endpoint `GET /api/admin/combined-labels/[id]`**: A4-Querformat
   (297×210 mm) mit Hin-Etikett **links** und Retour-Etikett **rechts**,
-  jeweils in einem A5-Slot eingepasst. Erfordert beide gesetzte
-  `label_url`/`return_label_url`. Lädt beide Sendcloud-PDFs parallel
-  und kombiniert sie in einem Rutsch via `pdf-lib`.
+  jeweils in einem A5-Slot. Retour-PDF kommt entweder aus Storage (neu)
+  oder aus Sendcloud (Legacy). Hin-Etikett bleibt Sendcloud-Proxy.
 - **UI auf `/admin/retouren`** (Tab „Zu versenden"): pro Versandbuchung
-  jetzt **drei Buttons** statt einem:
+  jetzt **drei Buttons**:
   - 📄/🏷 **Etikett** (Hin-Versand, grün wenn da, gelb wenn fehlt)
-  - ↩ **Retourlabel** (cyan wenn da, grau wenn fehlt — Klick öffnet
-    Modal mit Methode + Gewicht, Adress-Felder werden bei Retour
-    ausgeblendet weil sie serverseitig befüllt werden)
+  - ↩ **Retourlabel** (cyan + ✏-Button zum Ersetzen wenn da, grau ⬆
+    Upload-Button wenn fehlt — öffnet `ReturnUploadModal` mit File-Picker)
   - 🖨 **Drucken** (lila, sichtbar nur wenn beide Labels existieren)
-  Alle drei Links gehen jetzt durch den `/admin/pdf-viewer` — keine
-  Sackgasse mehr in der iOS-PWA. Etikett-Modal selbst hat einen
-  `labelMode: 'outbound' | 'return'`-State + passende Header-Texte +
-  Button-Beschriftungen. Direkte Sendcloud-`label_url`-Links auf
-  `/admin/buchungen/[id]` waren beim Vor-Commit bereits umgestellt;
-  die `/admin/retouren`-Liste wurde hier nachgezogen (war beim Refactor
-  vom 25.05. übersehen worden).
-- **Migration:** keine.
-- **Go-Live TODO:** `SENDCLOUD_SHIPPER_*`-Envs in Coolify hinterlegen
-  (`SENDCLOUD_SHIPPER_NAME`, `_STREET`, `_HOUSE`, `_ZIP`, `_CITY`,
-  `_EMAIL` — letztere für die Sendcloud-Pflicht-E-Mail).
+  Alle drei Links gehen durch den `/admin/pdf-viewer`. Der frühere
+  Versuch mit `labelMode: 'outbound'|'return'`-Switch im Sendcloud-Modal
+  ist komplett entfernt — Retour ist jetzt ein eigener Upload-Workflow.
+- **Storage-Bucket:** `return-labels` (privat, 10 MB, MIME-Allowlist
+  `application/pdf` + `image/jpeg` + `image/png`). Muss manuell im
+  Supabase-Dashboard angelegt werden, siehe
+  `supabase/supabase-return-labels-bucket.sql` (reines Hinweis-Skript,
+  keine echte Migration — `storage.create_bucket()` per SQL ist
+  unzuverlässig).
+- **Go-Live TODO:** Storage-Bucket `return-labels` im Supabase-Dashboard
+  anlegen. Ohne Bucket liefert der Upload-Endpoint 503 mit klarem
+  Hinweis. Alte Buchungen mit Sendcloud-Retoure-URL (vor 25.05.)
+  funktionieren weiter per Legacy-Pfad.
 
 ### „Rückgabe prüfen"-Einstieg auch bei Abholung + direkter Link (Stand 2026-05-23)
 Zwei UX-Lücken in der Versand/Tracking-Section von `/admin/buchungen/[id]`
@@ -3528,6 +3538,13 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
   nicht (500 beim Insert/Select), die Inventar-Stammdaten-Card zeigt
   „Firmware installiert" nicht. Crontab-Eintrag siehe „Firmware-Check"-
   Sektion oben. Empfohlen ASAP ausführen.
+- **Storage-Bucket `return-labels` anlegen:** Im Supabase-Dashboard ein neuer
+  privater Bucket `return-labels` (10 MB, MIME-Allowlist `application/pdf` +
+  `image/jpeg` + `image/png`). Siehe Hinweis-Skript
+  `supabase/supabase-return-labels-bucket.sql`. Ohne Bucket liefert
+  `POST /api/admin/return-label/[id]` 503 — der Retourlabel-Upload auf
+  `/admin/retouren` ist dann inaktiv. Hin-Versand-Etikett (Sendcloud) +
+  Drucken-Button (sobald beide da sind) funktionieren unverändert.
 - **Alert-Details-Migration auszuführen:** `supabase/supabase-availability-alerts-details.sql`
   (idempotent). Fügt nullable Spalte `availability_alerts.details JSONB` hinzu.
   Ohne Migration läuft die Telemetrie weiter (POST retryt ohne `details`), aber
