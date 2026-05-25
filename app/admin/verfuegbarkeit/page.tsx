@@ -160,16 +160,21 @@ export default function AdminVerfuegbarkeitPage() {
 
   useEffect(() => { loadGantt(); }, [loadGantt]);
 
-  // Zum heutigen Tag scrollen — alle overflow-Container gleichzeitig
-  const scrolledToToday = useRef(false);
+  // Zum heutigen Tag scrollen — alle overflow-Container des aktiven Tabs.
+  // Sets-/Zubehoer-Tab werden conditional gerendert und existieren beim
+  // Initial-Load noch nicht im DOM, daher pro Tab einmal scrollen, sobald
+  // er sichtbar wird.
+  const scrolledTabs = useRef<Set<Tab>>(new Set());
   useEffect(() => {
-    if (!ganttLoading && ganttData && !scrolledToToday.current) {
-      scrolledToToday.current = true;
-      setTimeout(() => {
-        scrollToTodayAll();
-      }, 200);
-    }
-  }, [ganttLoading, ganttData]);
+    if (ganttLoading || !ganttData) return;
+    if (scrolledTabs.current.has(tab)) return;
+    scrolledTabs.current.add(tab);
+    // 200ms reichen, bis die neu eingehängten data-gantt-scroll-Container
+    // im DOM sind. setTimeout-Handle wird aufgeräumt, falls der Tab vorher
+    // wieder wechselt.
+    const t = setTimeout(() => scrollToTodayAll(), 200);
+    return () => clearTimeout(t);
+  }, [ganttLoading, ganttData, tab]);
 
   function scrollToTodayAll() {
     // Alle Zellen mit dem heutigen Datum finden (über data-attribute)
