@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase';
 import { cookies } from 'next/headers';
 import { getSendcloudKeys } from '@/lib/env-mode';
 import { isSendcloudUrl } from '@/lib/url-allowlist';
+import { resizePdfToA5Portrait } from '@/lib/pdf/label-resize';
 
 export async function GET(
   _req: NextRequest,
@@ -10,7 +11,6 @@ export async function GET(
 ) {
   const { id: bookingId } = await params;
 
-  // Admin auth check
   const cookieStore = await cookies();
   const adminAuth = cookieStore.get('admin_token')?.value;
   if (!adminAuth) {
@@ -36,22 +36,27 @@ export async function GET(
   const auth = 'Basic ' + Buffer.from(`${publicKey}:${secretKey}`).toString('base64');
 
   const labelRes = await fetch(booking.return_label_url, { headers: { Authorization: auth } });
-
   if (!labelRes.ok) {
     return NextResponse.json({ error: 'Etikett konnte nicht geladen werden.' }, { status: 502 });
   }
 
-  const pdfBuffer = await labelRes.arrayBuffer();
+  const srcBuffer = await labelRes.arrayBuffer();
 
-  return new NextResponse(pdfBuffer, {
+  // Konsistent zum Hin-Etikett (label/[id]) auf A5 Hochformat skalieren.
+  let pdf: Uint8Array;
+  try {
+    pdf = await resizePdfToA5Portrait(srcBuffer);
+  } catch (e) {
+    console.error('[return-label] A5-Skalierung fehlgeschlagen, gebe Original zurueck:', e);
+    pdf = new Uint8Array(srcBuffer);
+  }
+
+  return new NextResponse(pdf as unknown as BodyInit, {
     status: 200,
     headers: {
       'Content-Type': 'application/pdf',
-      // inline + Content-Length: PDF wird im iframe des In-App-Viewers
-      // angezeigt (statt Download zu erzwingen) und der "Drucken"-Button kann
-      // iframe.contentWindow.print() aufrufen (same-origin).
       'Content-Disposition': `inline; filename="ruecksendeetikett-${bookingId}.pdf"`,
-      'Content-Length': String(pdfBuffer.byteLength),
+      'Content-Length': String(pdf.byteLength),
       'Cache-Control': 'private, no-store',
     },
   });

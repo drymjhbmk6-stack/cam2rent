@@ -103,67 +103,18 @@ export async function POST(req: NextRequest) {
     const outboundData = await outboundRes.json();
     const outParcel = outboundData.parcel;
 
-    // ── 2. Rücksendeetikett erstellen (Kunde → cam2rent) ─────────────────────
-    const shipperName = process.env.SENDCLOUD_SHIPPER_NAME ?? 'cam2rent';
-    const shipperStreet = process.env.SENDCLOUD_SHIPPER_STREET ?? '';
-    const shipperHouse = process.env.SENDCLOUD_SHIPPER_HOUSE ?? '';
-    const shipperZip = process.env.SENDCLOUD_SHIPPER_ZIP ?? '';
-    const shipperCity = process.env.SENDCLOUD_SHIPPER_CITY ?? '';
-
-    let returnParcel: { id: number; label?: { normal_printer: string[]; label_printer: string } } | null = null;
-    let returnError: string | null = null;
-
-    try {
-      const returnRes = await fetch(`${SC_BASE}/parcels`, {
-        method: 'POST',
-        headers: {
-          Authorization: authHeader,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          parcel: {
-            // Empfänger = cam2rent (Ziel der Retoure)
-            name: shipperName,
-            address: `${shipperStreet} ${shipperHouse}`.trim(),
-            city: shipperCity,
-            postal_code: shipperZip,
-            country: 'DE',
-            // Absender = Kunde (from_* Felder zwingend bei is_return)
-            from_name: customer.name,
-            from_address: customer.address,
-            from_city: customer.city,
-            from_postal_code: customer.postalCode,
-            from_country: 'DE',
-            email: customer.email,
-            weight,
-            order_number: `${bookingId}-RETURN`,
-            shipment: { id: shippingMethodId },
-            request_label: true,
-            is_return: true,
-          },
-        }),
-      });
-      if (returnRes.ok) {
-        const d = await returnRes.json();
-        returnParcel = d.parcel;
-      } else {
-        returnError = await returnRes.text();
-        console.error('Sendcloud return parcel error:', returnError);
-      }
-    } catch (e) {
-      returnError = String(e);
-      console.error('Sendcloud return parcel exception:', e);
-    }
-
-    // ── 3. In Supabase speichern ──────────────────────────────────────────────
+    // ── 2. In Supabase speichern ─────────────────────────────────────────────
+    // Wichtig: Sendcloud-Rueckversand-Label (is_return=true) wird NICHT mehr
+    // automatisch mit erstellt — kostet bei Sendcloud Aufschlag. Stattdessen
+    // bietet die UI einen separaten "Retourlabel"-Button, der ueber
+    // /api/admin/sendcloud-return ein NORMALES Sendcloud-Etikett mit
+    // getauschten Adressen erzeugt (kein is_return-Aufpreis).
     const supabase = createServiceClient();
     await supabase.from('bookings').update({
       sendcloud_parcel_id: outParcel.id,
       tracking_number: outParcel.tracking_number ?? null,
       tracking_url: outParcel.tracking_url ?? null,
       label_url: outParcel.label?.label_printer ?? outParcel.label?.normal_printer?.[0] ?? null,
-      sendcloud_return_parcel_id: returnParcel?.id ?? null,
-      return_label_url: returnParcel?.label?.label_printer ?? returnParcel?.label?.normal_printer?.[0] ?? null,
     }).eq('id', bookingId);
 
     await logAudit({
@@ -173,7 +124,6 @@ export async function POST(req: NextRequest) {
       changes: {
         parcelId: outParcel.id,
         trackingNumber: outParcel.tracking_number,
-        returnParcelId: returnParcel?.id ?? null,
       },
       request: req,
     });
@@ -183,9 +133,6 @@ export async function POST(req: NextRequest) {
       parcelId: outParcel.id,
       trackingNumber: outParcel.tracking_number,
       labelUrl: outParcel.label?.label_printer ?? outParcel.label?.normal_printer?.[0] ?? null,
-      returnParcelId: returnParcel?.id ?? null,
-      returnLabelUrl: returnParcel?.label?.label_printer ?? returnParcel?.label?.normal_printer?.[0] ?? null,
-      returnError: returnError ?? undefined,
     });
 
   } catch (err) {

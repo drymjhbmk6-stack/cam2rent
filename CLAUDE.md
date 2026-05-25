@@ -525,6 +525,60 @@ integriert, kein Seitenwechsel mehr nötig.
   Der Etikett-Workflow ist der einzige Teil, der jetzt auch direkt in
   `/admin/retouren` läuft.
 
+### Eigenes Retourlabel + A5-Normalisierung + Kombi-Druck (Stand 2026-05-25)
+Drei zusammengehörige Verbesserungen am Versandetikett-Workflow. Sendcloud
+verlangt für Retoure-Etiketten (`is_return: true`) einen Aufpreis; wir
+umgehen das, indem wir das Retourlabel als **normales** Sendcloud-Etikett
+mit getauschten Adressen erzeugen (Absender = Kunde, Empfänger = cam2rent).
+Plus: alle Etiketten kommen jetzt einheitlich in A5 Hochformat raus, und
+ein Kombi-Endpoint legt Hin + Retour nebeneinander auf eine A4-Querseite —
+passend für vorgestanzte „2× A5 Hochformat"-Bögen.
+- **Sendcloud-Hin-POST entkoppelt:** `app/api/admin/sendcloud/route.ts` ruft
+  nicht mehr automatisch den zweiten `/parcels`-Call mit `is_return: true`
+  auf. Das Hin-Etikett bleibt unverändert, Sendcloud-Retoure-Aufpreis
+  entfällt. `bookings.sendcloud_return_parcel_id` + `return_label_url`
+  werden erst gesetzt, wenn der Admin den neuen „Retourlabel"-Button
+  drückt.
+- **Neuer Endpoint `POST /api/admin/sendcloud-return/[id]`**: erstellt
+  das Retourlabel als **normales** Sendcloud-Etikett mit getauschten
+  Adressen (cam2rent = Empfänger, Kunde = Absender), **OHNE**
+  `is_return: true`. Kunden-Adresse wird serverseitig aus
+  `bookings.shipping_address` geparst, cam2rent-Absender aus
+  `SENDCLOUD_SHIPPER_*`-Envs. Body nur `{ shippingMethodId, weightKg }`.
+  Audit `sendcloud.create_return_label`. Befüllt
+  `return_label_url`/`return_tracking_number`/`return_tracking_url`.
+- **A5-Normalisierung:** Neue Lib `lib/pdf/label-resize.ts` mit
+  `resizePdfToA5Portrait()` + `combineLabelsOnA4Landscape()` auf Basis
+  von `pdf-lib`. Beide Proxy-Endpoints `/api/admin/label/[id]` +
+  `/api/admin/return-label/[id]` skalieren die Sendcloud-PDF-Antwort
+  jetzt auf A5 Hochformat (148×210 mm), zentriert mit erhaltenem
+  Seitenverhältnis. Bei Skalierungsfehlern → Fallback auf Original-PDF
+  (kein Hard-Fail). Inline-Anzeige + Content-Length + no-store
+  unverändert (für den iframe-Druck im PDF-Viewer).
+- **Kombi-Endpoint `GET /api/admin/combined-labels/[id]`**: A4-Querformat
+  (297×210 mm) mit Hin-Etikett **links** und Retour-Etikett **rechts**,
+  jeweils in einem A5-Slot eingepasst. Erfordert beide gesetzte
+  `label_url`/`return_label_url`. Lädt beide Sendcloud-PDFs parallel
+  und kombiniert sie in einem Rutsch via `pdf-lib`.
+- **UI auf `/admin/retouren`** (Tab „Zu versenden"): pro Versandbuchung
+  jetzt **drei Buttons** statt einem:
+  - 📄/🏷 **Etikett** (Hin-Versand, grün wenn da, gelb wenn fehlt)
+  - ↩ **Retourlabel** (cyan wenn da, grau wenn fehlt — Klick öffnet
+    Modal mit Methode + Gewicht, Adress-Felder werden bei Retour
+    ausgeblendet weil sie serverseitig befüllt werden)
+  - 🖨 **Drucken** (lila, sichtbar nur wenn beide Labels existieren)
+  Alle drei Links gehen jetzt durch den `/admin/pdf-viewer` — keine
+  Sackgasse mehr in der iOS-PWA. Etikett-Modal selbst hat einen
+  `labelMode: 'outbound' | 'return'`-State + passende Header-Texte +
+  Button-Beschriftungen. Direkte Sendcloud-`label_url`-Links auf
+  `/admin/buchungen/[id]` waren beim Vor-Commit bereits umgestellt;
+  die `/admin/retouren`-Liste wurde hier nachgezogen (war beim Refactor
+  vom 25.05. übersehen worden).
+- **Migration:** keine.
+- **Go-Live TODO:** `SENDCLOUD_SHIPPER_*`-Envs in Coolify hinterlegen
+  (`SENDCLOUD_SHIPPER_NAME`, `_STREET`, `_HOUSE`, `_ZIP`, `_CITY`,
+  `_EMAIL` — letztere für die Sendcloud-Pflicht-E-Mail).
+
 ### „Rückgabe prüfen"-Einstieg auch bei Abholung + direkter Link (Stand 2026-05-23)
 Zwei UX-Lücken in der Versand/Tracking-Section von `/admin/buchungen/[id]`
 geschlossen:

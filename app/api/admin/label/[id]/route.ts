@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase';
 import { cookies } from 'next/headers';
 import { getSendcloudKeys } from '@/lib/env-mode';
 import { isSendcloudUrl } from '@/lib/url-allowlist';
+import { resizePdfToA5Portrait } from '@/lib/pdf/label-resize';
 
 export async function GET(
   _req: NextRequest,
@@ -10,7 +11,6 @@ export async function GET(
 ) {
   const { id: bookingId } = await params;
 
-  // Admin auth check
   const cookieStore = await cookies();
   const adminAuth = cookieStore.get('admin_token')?.value;
   if (!adminAuth) {
@@ -28,9 +28,6 @@ export async function GET(
     return NextResponse.json({ error: 'Kein Versandetikett vorhanden.' }, { status: 404 });
   }
 
-  // Sweep 8 H8: Defense-in-Depth — Sendcloud-Credentials nur an Sendcloud-Host
-  // schicken. Falls bookings.label_url durch eine andere Schwachstelle
-  // manipuliert wurde, bleiben die Credentials safe.
   if (!isSendcloudUrl(booking.label_url)) {
     return NextResponse.json({ error: 'Label-URL ist keine Sendcloud-URL.' }, { status: 502 });
   }
@@ -39,22 +36,29 @@ export async function GET(
   const auth = 'Basic ' + Buffer.from(`${publicKey}:${secretKey}`).toString('base64');
 
   const labelRes = await fetch(booking.label_url, { headers: { Authorization: auth } });
-
   if (!labelRes.ok) {
     return NextResponse.json({ error: 'Etikett konnte nicht geladen werden.' }, { status: 502 });
   }
 
-  const pdfBuffer = await labelRes.arrayBuffer();
+  const srcBuffer = await labelRes.arrayBuffer();
 
-  return new NextResponse(pdfBuffer, {
+  // Sendcloud liefert ein "label_printer" (10×15 cm) oder "normal_printer"
+  // (A4 mit Etikett-Quadrant) — beides wird hier auf einen A5-Hochformat-Bogen
+  // normalisiert, damit der Drucker konsistent ein A5-Etikett erhaelt.
+  let pdf: Uint8Array;
+  try {
+    pdf = await resizePdfToA5Portrait(srcBuffer);
+  } catch (e) {
+    console.error('[label] A5-Skalierung fehlgeschlagen, gebe Original zurueck:', e);
+    pdf = new Uint8Array(srcBuffer);
+  }
+
+  return new NextResponse(pdf as unknown as BodyInit, {
     status: 200,
     headers: {
       'Content-Type': 'application/pdf',
-      // inline + Content-Length: PDF wird im iframe des In-App-Viewers angezeigt
-      // (statt Download zu erzwingen) und der "Drucken"-Button kann
-      // iframe.contentWindow.print() aufrufen (same-origin).
       'Content-Disposition': `inline; filename="versandetikett-${bookingId}.pdf"`,
-      'Content-Length': String(pdfBuffer.byteLength),
+      'Content-Length': String(pdf.byteLength),
       'Cache-Control': 'private, no-store',
     },
   });
