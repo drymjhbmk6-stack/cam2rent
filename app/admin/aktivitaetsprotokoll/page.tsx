@@ -85,6 +85,8 @@ const ACTION_LABELS: Record<string, string> = {
   'inbound_email.received': 'Kunden-E-Mail empfangen',
   'nachricht.close': 'Konversation geschlossen',
   'nachricht.reopen': 'Konversation wieder geöffnet',
+  'nachricht.delete': 'Konversation gelöscht',
+  'nachricht.bulk_delete': 'Mehrere Konversationen gelöscht',
   // Einstellungen
   'settings.update': 'Einstellungen geändert',
   'env_mode.change': 'Test-/Live-Modus gewechselt',

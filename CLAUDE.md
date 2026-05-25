@@ -312,6 +312,44 @@ Cron alle 3 Min neue Mails per IMAP direkt aus dem Support-Postfach
   — die Helper `getInboxAddressMap`/`setInboxAddress`/`findAdminUserByInboxAddress`
   sind defensiv (fehlende Migration → no-op). Conversation-Insert im Cron retryt
   ohne die beiden Felder, falls nur diese Migration aussteht.
+- **Spam-Filter + Loeschen (Stand 2026-05-25):** Drei Verbesserungen am
+  Admin-Inbox-Tool, alle ohne neue Migration (`conversations.deleted_at`
+  ist seit Aufgabe-6-Soft-Delete-Migration vorhanden).
+  - **`isAutomatedEmail()` erweitert** in `lib/inbound-email.ts`: zusaetzlich
+    zu den RFC-Headern (List-*, Auto-Submitted, Precedence) werden jetzt
+    DMARC-/Feedback-Header (`X-DMARC-Report`, `Feedback-Type`,
+    `Content-Type: multipart/report; report-type=feedback-report`),
+    technische Absender-Localparts (`noreply`, `no-reply`, `donotreply`,
+    `mailer-daemon`, `postmaster`, `daemon`, `dmarc-noreply`,
+    `noreply-dmarc-support`, `abuse`, `bounce`, `bounces`) und eindeutige
+    Subject-Pattern (`dmarc aggregate report`, `report domain:`,
+    `aggregate report`, `mail delivery failed`,
+    `delivery status notification`, `undelivered mail returned to sender`,
+    `undeliverable:`, `auto reply`, `out of office`, `abwesenheitsnotiz`,
+    `automatische antwort`) erkannt. Diese Mails werden im IMAP-Cron
+    weiter still geskippt — landen also gar nicht erst in der DB.
+    Konservativ gehalten, damit echte Kundenfragen mit Woertern wie
+    „Frage"/„Antwort" im Betreff nicht raus fallen.
+  - **Konversation loeschen (Einzel + Bulk):** Neuer
+    `DELETE /api/admin/nachrichten/[conversationId]` macht
+    Soft-Delete via `conversations.deleted_at = now()`, faellt bei
+    fehlender Migration auf Hard-Delete (CASCADE) zurueck. Neuer
+    `POST /api/admin/nachrichten/bulk` mit `{ action: 'delete',
+    ids: [...] }` (max 100) fuer Massenloeschung. GET-Liste filtert
+    `is('deleted_at', null)` (Retry ohne Filter wenn Spalte fehlt).
+    Frontend: Loesch-Button im Detail-Header (Confirm-Dialog),
+    Bulk-Checkbox pro Card + Sticky-Bulk-Bar oben mit Counter +
+    „Loeschen" / „Auswahl aufheben" + „Alle auswaehlen" pro Filter.
+    Audit-Aktionen `nachricht.delete` + `nachricht.bulk_delete`
+    in `ACTION_LABELS` registriert.
+  - **Mobile-Layout repariert:** Vorher war die Liste auf festen 320px,
+    der Detail-Bereich rutschte komplett aus dem iPhone-Viewport (User
+    konnte E-Mails am Handy nicht lesen). Jetzt: `useEffect` +
+    `window.matchMedia('(max-width: 767px)')` setzt `isMobile`-State.
+    Auf Mobile wird **entweder** Liste **oder** Detail angezeigt —
+    Klick auf Card oeffnet das Detail (bildschirmfuellend), ein
+    Zurueck-Pfeil (`←`) im Detail-Header schliesst es wieder. Desktop
+    bleibt 1:1 Side-by-Side wie zuvor.
 - **Go-Live TODO:** siehe „Noch offen".
 
 ### Buchungsflow

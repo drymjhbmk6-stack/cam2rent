@@ -316,3 +316,52 @@ export async function PATCH(
 
   return NextResponse.json({ success: true });
 }
+
+/**
+ * DELETE /api/admin/nachrichten/[conversationId]
+ * Soft-Delete der Konversation: setzt `deleted_at = now()` auf
+ * `conversations`. Die Nachrichten + Anhaenge bleiben physisch erhalten
+ * (Audit-Trail / Re-Open). Ein zweiter Aufruf auf eine bereits geloeschte
+ * Konversation ist no-op (200).
+ *
+ * Defensiver Fallback fuer Umgebungen ohne die Soft-Delete-Migration:
+ * Wenn `deleted_at` nicht existiert, wird hart geloescht (CASCADE auf
+ * messages + attachments via FK).
+ */
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ conversationId: string }> }
+) {
+  const { conversationId } = await params;
+  const supabase = createServiceClient();
+
+  // Soft-Delete versuchen
+  const softUpd = await supabase
+    .from('conversations')
+    .update({ deleted_at: new Date().toISOString() })
+    .eq('id', conversationId)
+    .is('deleted_at', null);
+
+  if (softUpd.error && SCHEMA_ERROR.test(softUpd.error.message)) {
+    // Migration aufgabe6 (deleted_at) nicht durch → Hard-Delete als Fallback.
+    // FK auf messages/message_attachments greift via ON DELETE CASCADE.
+    const hardDel = await supabase
+      .from('conversations')
+      .delete()
+      .eq('id', conversationId);
+    if (hardDel.error) {
+      return NextResponse.json({ error: 'Loeschen fehlgeschlagen.' }, { status: 500 });
+    }
+  } else if (softUpd.error) {
+    return NextResponse.json({ error: 'Loeschen fehlgeschlagen.' }, { status: 500 });
+  }
+
+  await logAudit({
+    action: 'nachricht.delete',
+    entityType: 'nachricht',
+    entityId: conversationId,
+    request: req,
+  });
+
+  return NextResponse.json({ success: true });
+}

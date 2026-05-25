@@ -60,6 +60,22 @@ export default function AdminNachrichtenPage() {
   const [filter, setFilter] = useState<FilterType>('all');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Bulk-Auswahl: Set von Konversations-IDs.
+  const [selection, setSelection] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+
+  // Mobile-Layout-Switch: unter 768px nur Liste ODER Detail anzeigen, dazwischen
+  // per Zurueck-Button wechseln. Auf Desktop bleibt das alte Side-by-Side.
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mql = window.matchMedia('(max-width: 767px)');
+    const update = () => setIsMobile(mql.matches);
+    update();
+    mql.addEventListener('change', update);
+    return () => mql.removeEventListener('change', update);
+  }, []);
+
   useEffect(() => {
     fetch('/api/admin/nachrichten')
       .then((r) => r.json())
@@ -132,6 +148,70 @@ export default function AdminNachrichtenPage() {
     );
   };
 
+  const handleDeleteSingle = async () => {
+    if (!selectedId) return;
+    if (!window.confirm('Diese Konversation endgültig aus der Inbox entfernen?')) return;
+    const id = selectedId;
+    const res = await fetch(`/api/admin/nachrichten/${id}`, { method: 'DELETE' });
+    if (!res.ok) {
+      window.alert('Löschen fehlgeschlagen.');
+      return;
+    }
+    setConversations((prev) => prev.filter((c) => c.id !== id));
+    setSelection((prev) => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+    setSelectedId(null);
+    setMessages([]);
+    setConvInfo(null);
+  };
+
+  const toggleSelection = (id: string) => {
+    setSelection((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAllVisible = (ids: string[]) => {
+    setSelection(new Set(ids));
+  };
+
+  const clearSelection = () => setSelection(new Set());
+
+  const handleBulkDelete = async () => {
+    if (selection.size === 0 || bulkBusy) return;
+    if (!window.confirm(`${selection.size} Konversation${selection.size !== 1 ? 'en' : ''} endgültig löschen?`)) return;
+    setBulkBusy(true);
+    try {
+      const ids = Array.from(selection);
+      const res = await fetch('/api/admin/nachrichten/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete', ids }),
+      });
+      if (!res.ok) {
+        window.alert('Bulk-Löschen fehlgeschlagen.');
+        return;
+      }
+      const deletedSet = new Set(ids);
+      setConversations((prev) => prev.filter((c) => !deletedSet.has(c.id)));
+      if (selectedId && deletedSet.has(selectedId)) {
+        setSelectedId(null);
+        setMessages([]);
+        setConvInfo(null);
+      }
+      setSelection(new Set());
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
   const filtered = conversations.filter((c) => {
     if (filter === 'unread') return c.unread_count > 0;
     if (filter === 'closed') return c.closed;
@@ -173,9 +253,93 @@ export default function AdminNachrichtenPage() {
         </div>
       </div>
 
+      {/* Bulk-Bar: sichtbar sobald mindestens eine Konversation markiert ist. */}
+      {selection.size > 0 && (
+        <div
+          style={{
+            position: 'sticky', top: 0, zIndex: 20,
+            background: 'rgba(15, 23, 42, 0.95)',
+            backdropFilter: 'blur(8px)',
+            border: '1px solid #334155',
+            borderRadius: 10,
+            padding: '10px 14px',
+            marginBottom: 12,
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8,
+          }}
+        >
+          <span style={{ fontSize: 13, color: '#e2e8f0', fontWeight: 600 }}>
+            {selection.size} ausgewählt
+          </span>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              type="button"
+              onClick={handleBulkDelete}
+              disabled={bulkBusy}
+              style={{
+                padding: '6px 12px', background: '#dc2626', color: '#fff', border: 'none',
+                borderRadius: 8, fontSize: 12, fontWeight: 700,
+                cursor: bulkBusy ? 'wait' : 'pointer', opacity: bulkBusy ? 0.6 : 1,
+              }}
+            >
+              🗑 Löschen
+            </button>
+            <button
+              type="button"
+              onClick={clearSelection}
+              disabled={bulkBusy}
+              style={{
+                padding: '6px 12px', background: 'transparent', color: '#cbd5e1',
+                border: '1px solid #334155', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+              }}
+            >
+              Auswahl aufheben
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Layout: Side-by-Side auf Desktop, gestapelter Switch list↔detail auf Mobile. */}
       <div style={{ ...cardStyle, display: 'flex', minHeight: 520, overflow: 'hidden' }}>
         {/* Conversation list */}
-        <div style={{ width: 320, flexShrink: 0, borderRight: '1px solid #1e293b', overflowY: 'auto', maxHeight: 580 }}>
+        <div
+          style={{
+            width: isMobile ? '100%' : 320,
+            flexShrink: 0,
+            borderRight: isMobile ? 'none' : '1px solid #1e293b',
+            overflowY: 'auto',
+            maxHeight: isMobile ? 'none' : 580,
+            // Auf Mobile: Liste nur sichtbar, solange keine Konversation geoeffnet ist.
+            display: isMobile && selectedId ? 'none' : 'block',
+          }}
+        >
+          {/* Auf Mobile: kleine "Auswahl" / "Alle markieren"-Leiste oben in der Liste. */}
+          {!loading && filtered.length > 0 && (
+            <div
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+                padding: '8px 14px',
+                borderBottom: '1px solid #1e293b',
+                fontSize: 11, color: '#64748b',
+              }}
+            >
+              <span>{filtered.length} Konversation{filtered.length !== 1 ? 'en' : ''}</span>
+              <button
+                type="button"
+                onClick={() => {
+                  const allIds = filtered.map((c) => c.id);
+                  const allSelected = allIds.every((id) => selection.has(id));
+                  if (allSelected) clearSelection();
+                  else selectAllVisible(allIds);
+                }}
+                style={{
+                  background: 'transparent', border: 'none', color: '#06b6d4',
+                  fontSize: 11, fontWeight: 600, cursor: 'pointer', padding: 0,
+                }}
+              >
+                {filtered.every((c) => selection.has(c.id)) ? 'Auswahl aufheben' : 'Alle auswählen'}
+              </button>
+            </div>
+          )}
           {loading ? (
             <div style={{ padding: 32, textAlign: 'center' }}>
               <div style={{ width: 20, height: 20, border: '2px solid #06b6d4', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto' }} />
@@ -186,19 +350,44 @@ export default function AdminNachrichtenPage() {
             </div>
           ) : (
             filtered.map((conv) => (
-              <button
+              <div
                 key={conv.id}
-                onClick={() => setSelectedId(conv.id)}
                 style={{
-                  display: 'block', width: '100%', textAlign: 'left', padding: '14px 16px',
-                  borderBottom: '1px solid #1e293b', cursor: 'pointer', border: 'none',
+                  position: 'relative',
+                  display: 'flex', alignItems: 'flex-start',
+                  borderBottom: '1px solid #1e293b',
                   borderLeft: selectedId === conv.id ? '3px solid #06b6d4' : '3px solid transparent',
                   background: selectedId === conv.id ? 'rgba(6,182,212,0.08)' : 'transparent',
                   transition: 'background 0.15s',
                 }}
-                onMouseEnter={(e) => { if (selectedId !== conv.id) (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.03)'; }}
-                onMouseLeave={(e) => { if (selectedId !== conv.id) (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
               >
+                {/* Bulk-Checkbox — stopPropagation, damit Klick die Konversation
+                    nicht oeffnet. Eigene Touch-Zone fuer Mobile breit genug. */}
+                <label
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    paddingLeft: 12, paddingRight: 4, alignSelf: 'stretch', cursor: 'pointer',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selection.has(conv.id)}
+                    onChange={(e) => { e.stopPropagation(); toggleSelection(conv.id); }}
+                    style={{ width: 16, height: 16, accentColor: '#06b6d4', cursor: 'pointer' }}
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setSelectedId(conv.id)}
+                  style={{
+                    flex: 1, minWidth: 0,
+                    display: 'block', textAlign: 'left', padding: '14px 16px 14px 8px',
+                    cursor: 'pointer', border: 'none', background: 'transparent', color: 'inherit',
+                  }}
+                  onMouseEnter={(e) => { if (selectedId !== conv.id) (e.currentTarget.parentElement as HTMLElement).style.background = 'rgba(255,255,255,0.03)'; }}
+                  onMouseLeave={(e) => { if (selectedId !== conv.id) (e.currentTarget.parentElement as HTMLElement).style.background = 'transparent'; }}
+                >
                 <div style={{ display: 'flex', alignItems: 'start', justifyContent: 'space-between', gap: 8 }}>
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -238,44 +427,80 @@ export default function AdminNachrichtenPage() {
                     Geschlossen
                   </span>
                 )}
-              </button>
+                </button>
+              </div>
             ))
           )}
         </div>
 
-        {/* Chat area */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        {/* Chat area — auf Mobile nur sichtbar wenn eine Konversation gewaehlt ist. */}
+        <div
+          style={{
+            flex: 1, display: isMobile && !selectedId ? 'none' : 'flex',
+            flexDirection: 'column', minWidth: 0,
+          }}
+        >
           {selectedId && convInfo ? (
             <>
               {/* Chat header */}
-              <div style={{ padding: '14px 20px', borderBottom: '1px solid #1e293b', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{
-                      fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
-                      ...(convInfo.source === 'email'
-                        ? { background: '#0ea5e91f', color: '#38bdf8' }
-                        : { background: '#6366f11f', color: '#a5b4fc' }),
-                    }}>
-                      {convInfo.source === 'email' ? '📧 E-Mail' : '💬 Konto'}
-                    </span>
-                    <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#e2e8f0' }}>{convInfo.subject}</p>
+              <div style={{ padding: '14px 20px', borderBottom: '1px solid #1e293b', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, minWidth: 0, flex: 1 }}>
+                  {/* Mobile: Zurueck-Pfeil schliesst die Detail-Ansicht und zeigt die Liste wieder. */}
+                  {isMobile && (
+                    <button
+                      type="button"
+                      onClick={() => { setSelectedId(null); setMessages([]); setConvInfo(null); }}
+                      aria-label="Zurück zur Liste"
+                      style={{
+                        background: 'transparent', border: 'none', color: '#06b6d4',
+                        cursor: 'pointer', padding: '4px 2px', fontSize: 22, lineHeight: 1, flexShrink: 0,
+                      }}
+                    >
+                      ←
+                    </button>
+                  )}
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <span style={{
+                        fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
+                        ...(convInfo.source === 'email'
+                          ? { background: '#0ea5e91f', color: '#38bdf8' }
+                          : { background: '#6366f11f', color: '#a5b4fc' }),
+                      }}>
+                        {convInfo.source === 'email' ? '📧 E-Mail' : '💬 Konto'}
+                      </span>
+                      <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#e2e8f0' }}>{convInfo.subject}</p>
+                    </div>
+                    <p style={{ margin: '2px 0 0', fontSize: 11, color: '#64748b' }}>
+                      {convInfo.customer.full_name}
+                      {convInfo.customer.email ? ` · ${convInfo.customer.email}` : ''}
+                      {convInfo.inbox_address ? ` · an: ${convInfo.inbox_address}` : ''}
+                    </p>
                   </div>
-                  <p style={{ margin: '2px 0 0', fontSize: 11, color: '#64748b' }}>
-                    {convInfo.customer.full_name}
-                    {convInfo.customer.email ? ` · ${convInfo.customer.email}` : ''}
-                    {convInfo.inbox_address ? ` · an: ${convInfo.inbox_address}` : ''}
-                  </p>
                 </div>
-                <button
-                  onClick={handleToggleClose}
-                  style={{
-                    padding: '6px 12px', borderRadius: 6, border: '1px solid #334155', cursor: 'pointer',
-                    background: 'transparent', color: convInfo.closed ? '#10b981' : '#f59e0b', fontSize: 11, fontWeight: 600,
-                  }}
-                >
-                  {convInfo.closed ? 'Wiedereröffnen' : 'Schließen'}
-                </button>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={handleToggleClose}
+                    style={{
+                      padding: '6px 12px', borderRadius: 6, border: '1px solid #334155', cursor: 'pointer',
+                      background: 'transparent', color: convInfo.closed ? '#10b981' : '#f59e0b', fontSize: 11, fontWeight: 600,
+                    }}
+                  >
+                    {convInfo.closed ? 'Wiedereröffnen' : 'Schließen'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDeleteSingle}
+                    title="Konversation aus Inbox entfernen"
+                    style={{
+                      padding: '6px 12px', borderRadius: 6, border: '1px solid #7f1d1d', cursor: 'pointer',
+                      background: 'transparent', color: '#fca5a5', fontSize: 11, fontWeight: 600,
+                    }}
+                  >
+                    🗑 Löschen
+                  </button>
+                </div>
               </div>
 
               {/* Messages */}

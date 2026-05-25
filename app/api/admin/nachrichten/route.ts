@@ -29,12 +29,17 @@ export async function GET() {
     inbox_address?: string | null;
   }> | null = null;
 
+  // Soft-Delete: Geloeschte Konversationen sind via `deleted_at` markiert
+  // und werden hier ausgefiltert. Bei fehlender Migration aufgabe6 faellt
+  // der Query unten auf die Variante ohne `deleted_at`-Filter zurueck.
   const full = await supabase
     .from('conversations')
     .select('id, customer_id, subject, booking_id, last_message_at, closed, created_at, source, customer_email, customer_name, assigned_admin_user_id, inbox_address')
+    .is('deleted_at', null)
     .order('last_message_at', { ascending: false });
 
   if (full.error) {
+    // Retry ohne deleted_at-Filter (Spalte fehlt) UND ohne die E-Mail-Felder.
     const fallback = await supabase
       .from('conversations')
       .select('id, customer_id, subject, booking_id, last_message_at, closed, created_at')

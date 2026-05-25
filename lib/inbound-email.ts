@@ -104,8 +104,15 @@ export function parseImapMessage(parsed: ParsedMail): ParsedInboundEmail | null 
 }
 
 /**
- * Erkennt automatisierte Massen-E-Mails (Newsletter, Bounce, Auto-Reply).
- * Echte Kundenanfragen tragen diese Header nicht — so bleibt die Inbox sauber.
+ * Erkennt automatisierte Massen-E-Mails (Newsletter, Bounce, Auto-Reply,
+ * DMARC-Reports). Echte Kundenanfragen tragen diese Header / Patterns nicht —
+ * so bleibt die Inbox sauber. Geskippte Mails werden im IMAP-Cron gar nicht
+ * erst persistiert.
+ *
+ * Drei Erkennungsstufen:
+ *  1. RFC-Header (List-Unsubscribe, Auto-Submitted, Precedence) — Klassiker
+ *  2. From-Adresse (noreply/postmaster/mailer-daemon/dmarc-noreply etc.)
+ *  3. Subject-Pattern (DMARC-Reports, Delivery Failed, Abwesenheitsnotiz)
  */
 export function isAutomatedEmail(parsed: ParsedMail): boolean {
   const headers = parsed.headers;
@@ -113,11 +120,65 @@ export function isAutomatedEmail(parsed: ParsedMail): boolean {
     const v = headers?.get(name);
     return typeof v === 'string' ? v.toLowerCase() : '';
   };
+
+  // 1. Klassische Auto-Submission-Header
   if (headers?.has('list-unsubscribe') || headers?.has('list-id')) return true;
   const autoSub = get('auto-submitted');
   if (autoSub && autoSub !== 'no') return true;
   const precedence = get('precedence');
   if (['bulk', 'list', 'junk', 'auto_reply'].includes(precedence)) return true;
+
+  // DMARC/Feedback-spezifische Header. report-Type ist Pflicht bei
+  // multipart/report, "Feedback-Type" trifft Abuse-/ARF-Reports.
+  if (headers?.has('x-dmarc-report') || headers?.has('feedback-type')) return true;
+  const contentType = get('content-type');
+  if (contentType.includes('report-type=') && contentType.includes('feedback-report')) return true;
+
+  // 2. From-Adresse: typische technische Absender. Localpart wird gegen eine
+  // Allowlist von Praefixen geprueft (Domain ist meist normal, z.B.
+  // dmarc-noreply@google.com oder mailer-daemon@cam2rent.de).
+  const fromAddr = parsed.from?.value?.[0]?.address?.toLowerCase() ?? '';
+  const local = fromAddr.split('@')[0] ?? '';
+  // Wichtig: 'noreply'/'no-reply'/'donotreply' als Praefix oder Wortgrenze.
+  const automatedLocalParts = [
+    'noreply', 'no-reply', 'donotreply',
+    'mailer-daemon', 'postmaster', 'daemon',
+    'dmarc-noreply', 'noreply-dmarc-support', 'noreply-dmarc',
+    'abuse', 'bounce', 'bounces',
+  ];
+  for (const pat of automatedLocalParts) {
+    if (local === pat || local.startsWith(`${pat}@`) || local.startsWith(`${pat}-`) || local.startsWith(`${pat}+`)) return true;
+  }
+
+  // 3. Subject-Pattern. Konservativ: nur eindeutige technische Subjects, damit
+  // wir keine echten Kundenfragen rausfiltern, die "Frage" oder "Antwort" im
+  // Betreff haben.
+  const subject = (typeof parsed.subject === 'string' ? parsed.subject : '').toLowerCase();
+  const automatedSubjectPatterns = [
+    'dmarc aggregate report',
+    'dmarc report',
+    'report domain:',
+    'aggregate report',
+    'forensic report',
+    'mail delivery failed',
+    'mail delivery failure',
+    'delivery status notification',
+    'undelivered mail returned to sender',
+    'undeliverable:',
+    'undeliverable mail',
+    'mail delivery subsystem',
+    'returned mail:',
+    'auto reply',
+    'auto-reply',
+    'out of office',
+    'out-of-office',
+    'abwesenheitsnotiz',
+    'automatische antwort',
+  ];
+  for (const pat of automatedSubjectPatterns) {
+    if (subject.includes(pat)) return true;
+  }
+
   return false;
 }
 
