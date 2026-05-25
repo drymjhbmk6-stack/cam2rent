@@ -2332,14 +2332,46 @@ Jede Buchungsbestätigung enthält automatisch als PDF-Anhang:
 - **ISR:** Cache wird beim Publish über `revalidateTag` invalidiert → neue Version sofort sichtbar ohne Redeploy
 - **Fallback:** Bestehende hardcoded JSX-Seiten greifen wenn DB nicht erreichbar
 
-### Feedback → Gutschein-System
-- **Umfrage-Seite** (`/umfrage/[bookingId]`): 2-Schritt-Flow
-  - Schritt 1: Rating + optionales Feedback
-  - Schritt 2 (bei 4+ Sternen): Email-Eingabe für 10% Gutschein
-- **Automatische Gutschein-Erstellung:** Code `DANKE-{BookingID}-{Random}`, 90 Tage gültig, 50€ Mindestbestellwert, personalisiert per Email
-- **Bestätigungs-Email** mit Gutschein-Code via Resend
-- **Admin:** Gutscheine erscheinen automatisch unter `/admin/gutscheine` mit Statistik-Übersicht (Im Umlauf, Aus Bewertung, Eingelöst, Gesamt)
-- **Duplikat-Schutz:** Pro Buchung max 1 Gutschein
+### Feedback → Gutschein-System (Smart-Filter Google-Reviews, Stand 2026-05-25)
+Nach abgeschlossener Buchung (3 Tage nach `rental_to`, Status `completed`) bekommt
+der Kunde die `review_request`-Mail (Cron `/api/cron/reminder-emails`). Ziel:
+**positive Kunden auf Google leiten, unzufriedene intern abfangen** — klassischer
+Reputations-Smart-Filter.
+
+- **Mail-Pitch:** Headline „Danke für dein Vertrauen!" + amber Box „Als
+  Dankeschön: 10 % Rabatt-Gutschein" + Primary-CTA „Bei Google bewerten &
+  Gutschein sichern". Kein Sterne-Picker direkt in der Mail — Klick auf den
+  CTA führt auf `/umfrage/[bookingId]?t=<HMAC-Token>`.
+- **Landing-Page Default-Modus `'choice'`** (Smart-Filter):
+  - Grosser CTA „Jetzt bei Google bewerten" → `window.open(GOOGLE_REVIEW_URL)`
+    in neuem Tab + parallel `POST /api/survey` mit `action: 'google_click'`
+  - Erfolgs-Screen zeigt **Coupon-Code direkt an** (`select-all`-Class für
+    Copy-Paste) + Hinweis, dass die Mail mit dem Code ebenfalls raus ist
+  - Backup-Link „Lieber direktes Feedback geben?" → `mode='rating'` → bisherige
+    Sterne-Umfrage. Bei ≥ 4 Sternen Reward-Screen + Coupon, bei ≤ 3 nur
+    interne Review (kein Coupon, kein Push auf Google).
+- **Endpoint `/api/survey`** hat jetzt zwei Action-Pfade über denselben
+  HMAC-Token (Sweep 7 Vuln 25 unverändert):
+  - `action: 'google_click'` — nur `ensureRewardCoupon()`, **kein**
+    Review-Eintrag (Google ist die eigentliche Bewertung)
+  - `action: 'rating'` — Review-Insert + Coupon bei ≥ 4 Sternen
+  - Action-Default: ist `rating` im Body → 'rating', sonst 'google_click'
+- **`ensureRewardCoupon(bookingId, targetEmail, customerName)`** — neuer
+  Helper im selben File, kapselt die idempotente Coupon-Erzeugung +
+  Mail-Versand. Beide Pfade rufen ihn auf. Idempotenz über
+  `coupons.description ILIKE '%Bewertung%<bookingId>%'` (1 Coupon pro
+  Buchung, egal über welchen Pfad).
+- **Coupon-Format unverändert:** `DANKE-<BookingID-Suffix>-<Random>`, 10 %,
+  90 Tage, 50 € MBW, personalisiert auf die Buchungs-E-Mail
+  (`target_user_email`, `once_per_customer`, `max_uses=1`).
+- **Sicherheits-Hinweis:** der Google-Klick triggert den Coupon ohne dass
+  wir die tatsächliche Google-Bewertung verifizieren können (kein Callback
+  von Google). Bewusster Trade-Off — ein Kunde könnte den CTA klicken ohne
+  zu bewerten. Mitigation: die Mail-Adresse ist auf die Buchung gepinnt
+  (kein fremder Code-Claim), HMAC-Token ist 90 Tage gültig + idempotent
+  pro Buchung.
+- **Admin-Sichtbarkeit:** Coupons unter `/admin/gutscheine`, interne
+  Sterne-Reviews (Backup-Pfad) unter `/admin/bewertungen`.
 
 ### Mietvertrag Testmodus
 - Wird seit Env-Toggle (siehe unten) dynamisch aus `admin_settings.environment_mode` geladen. Im Test-Modus erscheint das diagonale Wasserzeichen "MUSTER / TESTVERTRAG – NICHT GÜLTIG" auf jeder Seite, im Live-Modus nicht. Kein manueller Code-Wechsel mehr noetig — Admin schaltet einfach unter `/admin/einstellungen` um.

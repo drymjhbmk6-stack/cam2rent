@@ -534,14 +534,15 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateMeta[] = [
   // Bewertung & Warenkorb
   {
     id: 'review_request',
-    name: 'Bewertungs-Anfrage',
-    description: 'Cron-basiert: einige Tage nach Rückgabe wird der Kunde per E-Mail um eine Bewertung gebeten.',
+    name: 'Bewertungs-Anfrage (Google + Gutschein)',
+    description: 'Cron-basiert: 3 Tage nach abgeschlossener Buchung. Bittet um eine Google-Bewertung und schaltet im Gegenzug einen 10 %-Gutschein frei.',
     recipient: 'customer',
     render: () => renderEmailPreview(sendReviewRequest, {
       bookingId: DUMMY_BOOKING_ID,
       customerName: 'Max Mustermann',
       customerEmail: 'max.mustermann@example.de',
       productName: 'GoPro Hero13 Black',
+      rentalTo: '2026-05-22',
     }),
   },
   {

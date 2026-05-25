@@ -10,13 +10,19 @@ const surveyLimiter = rateLimit({ maxAttempts: 20, windowMs: 60 * 60 * 1000 }); 
 
 /**
  * POST /api/survey
- * Speichert Kundenfeedback nach Rückgabe.
- * Body: { bookingId, rating (1-5), feedback (optional text), email (optional für Gutschein) }
+ * Zwei Aktionen ueber denselben Endpoint (gleicher HMAC-Token):
+ *  - action: 'google_click' (neu, Stand 2026-05-25) — Kunde hat im Mail-CTA
+ *    den Google-Bewertungs-Button geklickt. Erzeugt Coupon + schickt Mail,
+ *    OHNE Review-Eintrag (Google ist die eigentliche Bewertung). Default,
+ *    wenn `action` fehlt und kein `rating` mitgegeben ist.
+ *  - action: 'rating' (Backup-Pfad fuer unzufriedene Kunden) — Kunde nutzt
+ *    die interne Sterne-Umfrage. Bei Rating >= 4 wird wie bisher der
+ *    Coupon erzeugt; bei <= 3 nur intern protokolliert (kein Coupon).
  *
- * Wenn Rating >= 4 UND Email mitgegeben:
- *  → Erstellt automatisch einen personalisierten Gutschein (10% Rabatt, 90 Tage gültig)
- *  → Sendet Email mit Gutschein-Code
- *  → Gutschein erscheint im Admin-Bereich unter /admin/gutscheine
+ * Body (rating):       { bookingId, rating (1-5), feedback?, token }
+ * Body (google_click): { bookingId, action: 'google_click', token }
+ *
+ * Gutscheine erscheinen im Admin-Bereich unter /admin/gutscheine.
  */
 
 const REWARD_DISCOUNT = 10; // 10% Rabatt
@@ -30,6 +36,93 @@ function generateCouponCode(bookingId: string): string {
   return `DANKE-${short}-${random}`;
 }
 
+type SupabaseClient = ReturnType<typeof createServiceClient>;
+
+interface CouponResult {
+  couponCode: string | null;
+  emailSent: boolean;
+  emailError: string | null;
+}
+
+/**
+ * Erzeugt (idempotent) den DANKE-Coupon fuer eine Buchung und sendet die
+ * Coupon-Mail an die in der Buchung hinterlegte Adresse. Wird sowohl vom
+ * Google-Klick-Pfad als auch vom Sterne-Backup-Pfad (Rating >= 4) genutzt.
+ */
+async function ensureRewardCoupon(
+  supabase: SupabaseClient,
+  bookingId: string,
+  targetEmail: string,
+  customerName: string,
+): Promise<CouponResult> {
+  let couponCode: string | null = null;
+  let emailSent = false;
+  let emailError: string | null = null;
+
+  if (!targetEmail) return { couponCode, emailSent, emailError };
+
+  // Idempotenz: pro Buchung max 1 Coupon. ILIKE-Match auf die Description-
+  // Konvention "Dankeschön für die Bewertung (Buchung <id>)".
+  const { data: existingCoupon } = await supabase
+    .from('coupons')
+    .select('code')
+    .eq('target_user_email', targetEmail)
+    .ilike('description', `%Bewertung%${bookingId}%`)
+    .maybeSingle();
+
+  if (existingCoupon) {
+    couponCode = existingCoupon.code;
+  } else {
+    let code = generateCouponCode(bookingId);
+    for (let i = 0; i < 5; i++) {
+      const { data: dup } = await supabase.from('coupons').select('id').eq('code', code).maybeSingle();
+      if (!dup) break;
+      code = generateCouponCode(bookingId);
+    }
+
+    const now = new Date();
+    const validUntil = new Date(now.getTime() + REWARD_VALIDITY_DAYS * 24 * 60 * 60 * 1000);
+
+    const { data: newCoupon, error: couponError } = await supabase
+      .from('coupons')
+      .insert({
+        code,
+        type: 'percent',
+        value: REWARD_DISCOUNT,
+        description: `Dankeschön für die Bewertung (Buchung ${bookingId})`,
+        target_type: 'user',
+        target_user_email: targetEmail,
+        valid_from: now.toISOString(),
+        valid_until: validUntil.toISOString(),
+        max_uses: 1,
+        min_order_value: REWARD_MIN_ORDER,
+        once_per_customer: true,
+        not_combinable: false,
+        active: true,
+      })
+      .select('code')
+      .single();
+
+    if (couponError) {
+      console.error('Coupon creation error:', couponError);
+    } else {
+      couponCode = newCoupon?.code ?? null;
+    }
+  }
+
+  if (couponCode) {
+    try {
+      await sendCouponEmail(targetEmail, customerName || 'Kamera-Fan', couponCode);
+      emailSent = true;
+    } catch (e) {
+      console.error('Coupon email error:', e);
+      emailError = e instanceof Error ? e.message : 'Unbekannt';
+    }
+  }
+
+  return { couponCode, emailSent, emailError };
+}
+
 export async function POST(req: NextRequest) {
   const ip = getClientIp(req);
   if (!surveyLimiter.check(ip).success) {
@@ -37,23 +130,21 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { bookingId, rating, feedback, email, token } = await req.json() as {
-      bookingId: string;
-      rating: number;
+    const body = await req.json() as {
+      bookingId?: string;
+      rating?: number;
       feedback?: string;
       email?: string;
       token?: string;
+      action?: 'google_click' | 'rating';
     };
+    const { bookingId, rating, feedback, email, token, action } = body;
 
-    if (!bookingId || !rating || rating < 1 || rating > 5) {
+    if (!bookingId) {
       return NextResponse.json({ error: 'Ungültige Daten.' }, { status: 400 });
     }
 
-    // Sweep 7 Vuln 25 — HMAC-Token-Pflicht:
-    // Vorher konnte jeder anonyme User mit erratener Booking-ID Spam-Reviews
-    // unter dem Namen echter Kunden einreichen + DANKE-Coupon-Mails an die
-    // echten Kunden ausloesen. Der Token wird beim Versand der
-    // Bewertungs-Aufforderung in den Link eingebaut.
+    // Sweep 7 Vuln 25 — HMAC-Token-Pflicht (gilt fuer beide Pfade):
     if (!token || !verifySurveyToken(bookingId, token)) {
       return NextResponse.json(
         { error: 'Ungueltiger oder fehlender Token. Bitte den Link aus der E-Mail verwenden.' },
@@ -61,20 +152,49 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Action-Default: ist `rating` da, geht's in den Sterne-Pfad; sonst
+    // Google-Klick. Explizites `action` hat Vorrang.
+    const resolvedAction: 'google_click' | 'rating' =
+      action === 'google_click' || action === 'rating'
+        ? action
+        : typeof rating === 'number' ? 'rating' : 'google_click';
+
     const supabase = createServiceClient();
 
-    // Buchung laden für Kontext
+    // Buchung laden für Kontext (Email + Name)
     const { data: booking } = await supabase
       .from('bookings')
       .select('customer_name, customer_email, product_name')
       .eq('id', bookingId)
       .maybeSingle();
 
+    const targetEmail = booking?.customer_email?.trim() || '';
+    const customerName = booking?.customer_name ?? '';
+    void email; // bewusst nicht genutzt — Ziel-Mail kommt immer aus der Buchung
+
+    // ── Pfad A: Google-Klick → nur Coupon erzeugen + Mail schicken
+    if (resolvedAction === 'google_click') {
+      const result = await ensureRewardCoupon(supabase, bookingId, targetEmail, customerName);
+      return NextResponse.json({
+        success: true,
+        action: 'google_click',
+        couponCode: result.couponCode ? result.couponCode : undefined,
+        discount: result.couponCode ? REWARD_DISCOUNT : undefined,
+        emailSent: result.emailSent,
+        emailError: result.emailError,
+      });
+    }
+
+    // ── Pfad B: Sterne-Umfrage (Backup-Pfad fuer unzufriedene Kunden)
+    if (!rating || rating < 1 || rating > 5) {
+      return NextResponse.json({ error: 'Ungültige Bewertung.' }, { status: 400 });
+    }
+
     // Survey in reviews-Tabelle speichern
     const { error } = await supabase.from('reviews').insert({
       booking_id: bookingId,
-      customer_name: booking?.customer_name ?? '',
-      customer_email: booking?.customer_email ?? '',
+      customer_name: customerName,
+      customer_email: targetEmail,
       product_name: booking?.product_name ?? '',
       rating,
       comment: feedback || null,
@@ -86,82 +206,21 @@ export async function POST(req: NextRequest) {
       console.error('Survey save error:', error);
     }
 
-    // Gutschein erstellen wenn Rating >= 4 und Email vorhanden.
-    // Ownership-Schutz: Die Ziel-E-Mail wird immer AUS DER BUCHUNG genommen.
-    // Der `email`-Param aus dem Body wird ignoriert, damit niemand fremde
-    // Gutscheine via erratener Booking-ID auf eigene E-Mail ausstellen lassen
-    // kann. Parameter bleibt akzeptiert (Form-Kompat), aber serverseitig
-    // überschrieben.
+    // Coupon nur bei Rating >= 4 (unzufriedene Kunden bekommen keinen Code)
     let couponCode: string | null = null;
     let emailSent = false;
     let emailError: string | null = null;
-    const targetEmail = booking?.customer_email?.trim() || '';
-    void email; // bewusst nicht genutzt (siehe Kommentar oben)
 
-    if (rating >= 4 && targetEmail) {
-      // Prüfen ob Buchung schon Gutschein bekommen hat (Duplikat-Schutz)
-      const { data: existingCoupon } = await supabase
-        .from('coupons')
-        .select('code')
-        .eq('target_user_email', targetEmail)
-        .ilike('description', `%Bewertung%${bookingId}%`)
-        .maybeSingle();
-
-      if (existingCoupon) {
-        couponCode = existingCoupon.code;
-      } else {
-        // Neuen Code generieren (mit Kollisionsschutz)
-        let code = generateCouponCode(bookingId);
-        for (let i = 0; i < 5; i++) {
-          const { data: dup } = await supabase.from('coupons').select('id').eq('code', code).maybeSingle();
-          if (!dup) break;
-          code = generateCouponCode(bookingId);
-        }
-
-        const now = new Date();
-        const validUntil = new Date(now.getTime() + REWARD_VALIDITY_DAYS * 24 * 60 * 60 * 1000);
-
-        const { data: newCoupon, error: couponError } = await supabase
-          .from('coupons')
-          .insert({
-            code,
-            type: 'percent',
-            value: REWARD_DISCOUNT,
-            description: `Dankeschön für die Bewertung (Buchung ${bookingId})`,
-            target_type: 'user',
-            target_user_email: targetEmail,
-            valid_from: now.toISOString(),
-            valid_until: validUntil.toISOString(),
-            max_uses: 1,
-            min_order_value: REWARD_MIN_ORDER,
-            once_per_customer: true,
-            not_combinable: false,
-            active: true,
-          })
-          .select('code')
-          .single();
-
-        if (couponError) {
-          console.error('Coupon creation error:', couponError);
-        } else {
-          couponCode = newCoupon?.code ?? null;
-        }
-      }
-
-      // Email mit Gutschein-Code senden
-      if (couponCode) {
-        try {
-          await sendCouponEmail(targetEmail, booking?.customer_name ?? 'Kamera-Fan', couponCode);
-          emailSent = true;
-        } catch (e) {
-          console.error('Coupon email error:', e);
-          emailError = e instanceof Error ? e.message : 'Unbekannt';
-        }
-      }
+    if (rating >= 4) {
+      const result = await ensureRewardCoupon(supabase, bookingId, targetEmail, customerName);
+      couponCode = result.couponCode;
+      emailSent = result.emailSent;
+      emailError = result.emailError;
     }
 
     return NextResponse.json({
       success: true,
+      action: 'rating',
       couponCode: couponCode ? couponCode : undefined,
       discount: couponCode ? REWARD_DISCOUNT : undefined,
       emailSent,

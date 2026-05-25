@@ -250,19 +250,24 @@ export async function sendReviewRequest(data: ReminderEmailData): Promise<string
   // nicht durch erratene Booking-IDs ueber Spam-Reviews missbraucht wird.
   const surveyToken = generateSurveyToken(data.bookingId);
   const reviewUrl = `${baseUrl}/umfrage/${h(data.bookingId)}?t=${h(surveyToken)}`;
-  const subject = `Wie war dein Erlebnis mit ${h(data.productName)}?`;
+  const subject = `10 % Gutschein für deine Google-Bewertung – ${h(data.productName)}`;
 
   const html = wrapLayout(`
-    <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#0a0a0a;">Wie war dein Erlebnis?</h1>
-    <p style="margin:0 0 20px;font-size:15px;color:#4b5563;">
+    <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#0a0a0a;">Danke für dein Vertrauen!</h1>
+    <p style="margin:0 0 16px;font-size:15px;color:#4b5563;">
       Hallo ${h(data.customerName)},<br><br>
-      wir hoffen, du hattest eine tolle Zeit mit deiner <strong>${h(data.productName)}</strong>!
-      Deine Meinung ist uns wichtig – teile doch deine Erfahrung mit anderen.
+      hat dir deine <strong>${h(data.productName)}</strong> gefallen?
+      Hinterlasse uns eine kurze <strong>Google-Bewertung</strong> – das hilft uns enorm
+      und anderen Kunden bei ihrer Entscheidung.
     </p>
-    <p style="margin:0 0 8px;font-size:15px;color:#4b5563;">
-      Eine Bewertung dauert nur 1 Minute und hilft anderen Abenteurern bei ihrer Entscheidung.
-    </p>
-    ${ctaButton(reviewUrl, 'Jetzt bewerten')}
+    <table cellpadding="0" cellspacing="0" style="margin:0 0 20px;background:#fef3c7;border:2px dashed #f59e0b;border-radius:10px;width:100%;">
+      <tr><td style="padding:18px 20px;text-align:center;">
+        <p style="margin:0 0 4px;font-size:13px;font-weight:600;color:#92400e;text-transform:uppercase;letter-spacing:0.8px;">Als Dankeschön</p>
+        <p style="margin:0;font-size:18px;font-weight:700;color:#78350f;">10 % Rabatt-Gutschein</p>
+        <p style="margin:6px 0 0;font-size:12px;color:#a16207;">Wird sofort nach dem Klick freigeschaltet · 90 Tage gültig · ab 50 €</p>
+      </td></tr>
+    </table>
+    ${ctaButton(reviewUrl, 'Bei Google bewerten & Gutschein sichern')}
     <p style="margin:16px 0 0;font-size:13px;color:#9ca3af;">
       Vielen Dank und bis zum nächsten Mal!<br>Dein cam2rent-Team
     </p>
