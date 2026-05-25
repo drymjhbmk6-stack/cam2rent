@@ -765,6 +765,29 @@ Ergänzung zum Punkt oben: die Bestandteile-Box in der Übergabe (`/admin/buchun
     `product_ids` + `product_names` pro Set zurück (Lookup-Map aus
     `getProducts()`, kein zusätzlicher Client-Fetch).
 - **`awaiting_payment` im Gantt (Stand 2026-05-20):** Buchungen mit Status „Warte auf Zahlung" (Stripe-Payment-Link offen, noch nicht bezahlt) tauchten vorher NICHT im Live-Kalender auf — der Slot sah fälschlich „frei" aus, obwohl der `awaiting-payment-cancel`-Cron erst nach Deadline storniert und parallele Doppelbuchung möglich war. `app/api/admin/availability-gantt/route.ts` nimmt `'awaiting_payment'` jetzt in den Status-Filter mit auf; UI rendert diese Buchungen **lila** (`#7c3aed`, passt zum Status-Badge in `/admin/buchungen`) statt blau, inkl. lila Puffer-Varianten für Hin-/Rückversand (`#6d28d9` / `#5b21b6`). Tooltip zeigt „⏳ Zahlung ausstehend"-Hinweis, Cell-Content prefixt mit ⏳. Im Zubehör-/Set-Tab zählen Pending-Buchungen wie bisher zur Belegung (sie blockieren den Bestand korrekt); Tooltip listet sie zusätzlich mit ⏳-Prefix + Zeile „N davon Zahlung ausstehend". Sobald `stripe-webhook` den Status auf `confirmed` flippt, wird die Buchung beim nächsten Gantt-Reload normal blau angezeigt — keine Migration nötig.
+- **Kamera-Filter für Sets-/Zubehör-Tab (Stand 2026-05-25):** Über den Tabs
+  steht — sichtbar nur im Sets- und Zubehör-Tab — ein „Filter nach Kamera"-
+  Dropdown mit allen Shop-Kameras (gespeist aus `useProducts()`). Default
+  „Alle Kameras". Bei aktiver Auswahl:
+  - **Sets** werden über `sets.product_ids` gefiltert — nur Sets, deren
+    `product_ids` die gewählte Kamera enthalten. Sets ohne Kamera-Zuordnung
+    fliegen raus (sie helfen keiner spezifischen Kamera).
+  - **Zubehör** wird über `accessories.compatible_product_ids` gefiltert.
+    **Leeres/fehlendes `compatible_product_ids` = mit allen Kameras
+    kompatibel → wird NIE weggefiltert** (gleiche Semantik wie im
+    Buchungsflow). Sonst muss die gewählte Kamera im Array stehen.
+  - Tab-Counter zeigen bei aktivem Filter die gefilterte Anzahl
+    („Zubehör (8)" statt „Zubehör (32)"). Leerer gefilterter Stand zeigt
+    einen freundlichen Hinweis statt der Liste.
+- **Kompatible-Kameras-Pills im Zubehör-Header (Stand 2026-05-25):**
+  Analog zu Sets zeigt jede Zubehör-Zeile rechts neben Name/Bestand/
+  Kategorie cyan Pills mit den kompatiblen Kameras
+  (`accessories.compatible_product_ids` aufgelöst zu `products.name`).
+  Zubehör ohne explizite Kompatibilität bekommt eine grüne Pill
+  „Alle Kameras". `availability-gantt`-API liefert dafür
+  `compatible_product_ids` + `compatible_product_names` pro Zubehör
+  (Lookup über die existierende `productNameById`-Map, kein zusätzlicher
+  Client-Fetch).
 - **API (alt):** `GET /api/admin/availability-gantt?month=YYYY-MM` → rückwärtskompatibel, liefert products[], accessories[], sets[]
 - **Availability-API** (`/api/availability/[productId]`): Nutzt weiterhin `product.stock` für Shop-seitige Verfügbarkeitsprüfung
 

@@ -121,7 +121,7 @@ export async function GET(req: NextRequest) {
       .gte('end_date', firstDay),
     supabase
       .from('accessories')
-      .select('id, name, category, available_qty, available, sort_order')
+      .select('id, name, category, available_qty, available, sort_order, compatible_product_ids')
       .eq('available', true)
       .order('sort_order', { ascending: true }),
     supabase
@@ -343,15 +343,31 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // Lookup product_id → product_name fuer die Anzeige der Kamera-Zugehoerigkeit
+  // pro Set/Zubehoer (bei mehreren Sets mit gleichem Namen — z.B. drei
+  // "Basic Set" fuer GoPro/DJI/Insta360 — sieht der Admin so direkt welches
+  // Set zu welcher Kamera gehoert; analog fuer Zubehoer mit eingeschraenkter
+  // Kompatibilitaet).
+  const productNameById = new Map<string, string>();
+  for (const p of products) productNameById.set(p.id, p.name);
+
   // Pro Zubehörteil: Welche Buchungen nutzen es? (inkl. Set-Auflösung, qty-aware)
   const accessoryData = allAccessories.map((acc) => {
     const relevantBookings = bookingsByAccessory[acc.id] ?? [];
+    const accCompatIds: string[] = Array.isArray(acc.compatible_product_ids)
+      ? acc.compatible_product_ids
+      : [];
+    const accCompatNames = accCompatIds
+      .map((pid) => productNameById.get(pid))
+      .filter((n): n is string => typeof n === 'string' && n.length > 0);
 
     return {
       id: acc.id,
       name: acc.name,
       category: acc.category,
       available_qty: acc.available_qty,
+      compatible_product_ids: accCompatIds,
+      compatible_product_names: accCompatNames,
       bookings: relevantBookings.map((b) => ({
         id: b.id,
         rental_from: b.rental_from,
@@ -363,13 +379,6 @@ export async function GET(req: NextRequest) {
       })),
     };
   });
-
-  // Lookup product_id → product_name fuer die Anzeige der Kamera-Zugehoerigkeit
-  // pro Set (bei mehreren Sets mit gleichem Namen — z.B. drei "Basic Set" fuer
-  // GoPro/DJI/Insta360 — sieht der Admin so direkt welches Set zu welcher
-  // Kamera gehoert).
-  const productNameById = new Map<string, string>();
-  for (const p of products) productNameById.set(p.id, p.name);
 
   // Pro Set: Welche Buchungen nutzen es?
   const setData = allSets.map((s) => {

@@ -63,6 +63,10 @@ interface GanttAccessory {
   name: string;
   category: string;
   available_qty: number;
+  /** product_ids dieser Kameras, mit denen das Zubehoer kompatibel ist.
+   *  Leeres Array = mit allen Kameras kompatibel. */
+  compatible_product_ids?: string[];
+  compatible_product_names?: string[];
   bookings: GanttSimpleBooking[];
 }
 
@@ -117,6 +121,8 @@ type Tab = 'kameras' | 'sets' | 'zubehoer';
 export default function AdminVerfuegbarkeitPage() {
   const { products: shopProducts } = useProducts();
   const [tab, setTab] = useState<Tab>('kameras');
+  // Kamera-Filter fuer Sets-/Zubehoer-Tab. Leerstring = alle Kameras.
+  const [cameraFilter, setCameraFilter] = useState<string>('');
 
   // Gantt-State — durchgehend scrollbar (3 Monate zurück + 6 Monate voraus)
   const MONTHS_BACK = 3;
@@ -425,10 +431,33 @@ export default function AdminVerfuegbarkeitPage() {
     return { type, count, total: acc.available_qty, bookings: matchedBookings };
   }
 
+  // Gefilterte Sets/Zubehoer nach Kamera-Auswahl.
+  // - Sets: matcht ueber `product_ids` (Sets ohne Kamera-Zuordnung fallen raus,
+  //   weil sie ohnehin keiner Kamera helfen).
+  // - Zubehoer: matcht ueber `compatible_product_ids` ODER leere Liste (= mit
+  //   allen Kameras kompatibel, immer anzeigen).
+  const filteredSets = useMemo(() => {
+    if (!ganttData) return [];
+    if (!cameraFilter) return ganttData.sets;
+    return ganttData.sets.filter((s) =>
+      Array.isArray(s.product_ids) && s.product_ids.includes(cameraFilter),
+    );
+  }, [ganttData, cameraFilter]);
+
+  const filteredAccessories = useMemo(() => {
+    if (!ganttData) return [];
+    if (!cameraFilter) return ganttData.accessories;
+    return ganttData.accessories.filter((a) => {
+      const ids = a.compatible_product_ids;
+      if (!Array.isArray(ids) || ids.length === 0) return true; // alle Kameras kompatibel
+      return ids.includes(cameraFilter);
+    });
+  }, [ganttData, cameraFilter]);
+
   const tabs: { key: Tab; label: string; count: number }[] = [
     { key: 'kameras', label: 'Kameras', count: ganttData?.products?.length ?? shopProducts.length },
-    { key: 'sets', label: 'Sets', count: ganttData?.sets?.length ?? 0 },
-    { key: 'zubehoer', label: 'Zubehör', count: ganttData?.accessories?.length ?? 0 },
+    { key: 'sets', label: 'Sets', count: cameraFilter ? filteredSets.length : (ganttData?.sets?.length ?? 0) },
+    { key: 'zubehoer', label: 'Zubehör', count: cameraFilter ? filteredAccessories.length : (ganttData?.accessories?.length ?? 0) },
   ];
 
   return (
@@ -457,6 +486,43 @@ export default function AdminVerfuegbarkeitPage() {
           </button>
         ))}
       </div>
+
+      {/* Kamera-Filter (nur Sets-/Zubehoer-Tab). Zeigt nur Eintraege, die zur
+          gewaehlten Kamera passen. Bei Zubehoer: leeres compatible_product_ids
+          = mit allen Kameras kompatibel, wird also nie weggefiltert. */}
+      {(tab === 'sets' || tab === 'zubehoer') && (
+        <div className="flex flex-wrap items-center gap-3 mb-4">
+          <label className="text-xs font-heading font-semibold" style={{ color: '#94a3b8' }}>
+            Filter nach Kamera:
+          </label>
+          <select
+            value={cameraFilter}
+            onChange={(e) => setCameraFilter(e.target.value)}
+            className="px-3 py-1.5 rounded-lg text-sm font-body"
+            style={{
+              background: '#0f172a',
+              color: '#e2e8f0',
+              border: '1px solid #334155',
+              minWidth: '220px',
+            }}
+          >
+            <option value="">Alle Kameras</option>
+            {shopProducts.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+          {cameraFilter && (
+            <button
+              type="button"
+              onClick={() => setCameraFilter('')}
+              className="px-2.5 py-1 rounded-lg text-xs font-heading font-semibold transition-colors hover:bg-gray-700"
+              style={{ color: '#cbd5e1', border: '1px solid #334155' }}
+            >
+              ✕ Filter zurücksetzen
+            </button>
+          )}
+        </div>
+      )}
 
       {/* ──────── Kameras Tab: Gantt-Kalender ──────── */}
       {tab === 'kameras' && (
@@ -664,6 +730,10 @@ export default function AdminVerfuegbarkeitPage() {
             </div>
           ) : !ganttData || ganttData.accessories.length === 0 ? (
             <p className="text-center py-12 text-sm" style={{ color: '#64748b' }}>Kein Zubehör vorhanden.</p>
+          ) : filteredAccessories.length === 0 ? (
+            <p className="text-center py-12 text-sm" style={{ color: '#64748b' }}>
+              Für die ausgewählte Kamera gibt es kein kompatibles Zubehör.
+            </p>
           ) : (
             <div className="space-y-3">
               {/* Legende */}
@@ -673,12 +743,35 @@ export default function AdminVerfuegbarkeitPage() {
                 <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#1d4ed8' }} /> Ausgebucht</span>
               </div>
 
-              {ganttData.accessories.map((acc) => (
+              {filteredAccessories.map((acc) => (
                 <div key={acc.id} className="rounded-xl overflow-hidden" style={{ border: '1px solid #1e293b', background: '#0f172a' }}>
-                  <div className="px-4 py-3 flex items-center gap-3">
+                  <div className="px-4 py-3 flex flex-wrap items-center gap-x-3 gap-y-1.5">
                     <span className="font-heading font-bold text-sm" style={{ color: '#e2e8f0' }}>{acc.name}</span>
                     <span className="text-xs font-body" style={{ color: '#64748b' }}>({acc.available_qty} Stück)</span>
                     <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold" style={{ background: '#1e293b', color: '#94a3b8' }}>{acc.category}</span>
+                    {/* Kompatible Kameras: leere/fehlende Liste = mit allen
+                        Kameras kompatibel (gleiche Semantik wie im Buchungs-
+                        flow). Sonst eine Pill pro kompatibler Kamera. */}
+                    {acc.compatible_product_names && acc.compatible_product_names.length > 0 ? (
+                      <span className="flex flex-wrap items-center gap-1">
+                        {acc.compatible_product_names.map((pn) => (
+                          <span
+                            key={pn}
+                            className="text-[10px] px-2 py-0.5 rounded-full font-semibold"
+                            style={{ background: '#0c4a6e', color: '#7dd3fc' }}
+                          >
+                            {pn}
+                          </span>
+                        ))}
+                      </span>
+                    ) : (
+                      <span
+                        className="text-[10px] px-2 py-0.5 rounded-full font-semibold"
+                        style={{ background: '#0f3a2a', color: '#6ee7b7' }}
+                      >
+                        Alle Kameras
+                      </span>
+                    )}
                   </div>
                   <div className="overflow-x-auto" data-gantt-scroll style={{ borderTop: '1px solid #1e293b' }}>
                     <table className="w-full text-[11px]" style={{ minWidth: `${80 + days.length * 36}px`, borderCollapse: 'collapse' }}>
@@ -765,6 +858,10 @@ export default function AdminVerfuegbarkeitPage() {
             </div>
           ) : !ganttData || ganttData.sets.length === 0 ? (
             <p className="text-center py-12 text-sm" style={{ color: '#64748b' }}>Keine Sets vorhanden.</p>
+          ) : filteredSets.length === 0 ? (
+            <p className="text-center py-12 text-sm" style={{ color: '#64748b' }}>
+              Für die ausgewählte Kamera gibt es keine Sets.
+            </p>
           ) : (
             <div className="space-y-3">
               <div className="flex flex-wrap gap-4 text-[11px] font-body font-semibold mb-2" style={{ color: '#cbd5e1' }}>
@@ -772,7 +869,7 @@ export default function AdminVerfuegbarkeitPage() {
                 <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#1d4ed8' }} /> Gebucht</span>
               </div>
 
-              {ganttData.sets.map((s) => (
+              {filteredSets.map((s) => (
                 <div key={s.id} className="rounded-xl overflow-hidden" style={{ border: '1px solid #1e293b', background: '#0f172a' }}>
                   <div className="px-4 py-3 flex flex-wrap items-center gap-x-3 gap-y-1.5">
                     <span className="font-heading font-bold text-sm" style={{ color: '#e2e8f0' }}>{s.name}</span>
