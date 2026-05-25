@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
   // GenericStringError typisiert.
   const sb = supabase as unknown as SupabaseClient;
 
-  const COLS = 'id, product_name, rental_from, rental_to, days, price_total, deposit, status, delivery_mode, shipping_method, customer_email, customer_name, tracking_number, created_at, user_id, deposit_intent_id, deposit_status, suspicious, suspicious_reasons, original_rental_to, extended_at, contract_signed, contract_signed_at, is_test, ship_date_override, return_due_date_override';
+  const COLS = 'id, product_name, rental_from, rental_to, days, price_total, deposit, status, delivery_mode, shipping_method, customer_email, customer_name, shipping_address, tracking_number, tracking_url, label_url, return_label_url, created_at, user_id, deposit_intent_id, deposit_status, suspicious, suspicious_reasons, original_rental_to, extended_at, contract_signed, contract_signed_at, is_test, ship_date_override, return_due_date_override';
 
   interface BookingRow {
     id: string;

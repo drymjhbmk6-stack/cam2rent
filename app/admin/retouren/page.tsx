@@ -16,8 +16,9 @@ import { fmtDate } from '@/lib/format-utils';
  *   4. Abgeschlossen    — completed | damaged
  *
  * Layout: schlanke Tabelle (Retouren-Layout) mit kontextabhaengiger Datums-
- * Spalte und Aktion-Button. Pack-Workflow + Etiketten-Erstellung leben
- * weiterhin auf der Sub-Page /admin/versand/[id]/packen (von hier verlinkt).
+ * Spalte und Aktion-Button. Pack-Workflow lebt weiterhin auf der Sub-Page
+ * /admin/versand/[id]/packen (von hier verlinkt). Sendcloud-Etikett-
+ * Erstellung ist direkt in diese Page integriert (Modal, dunkles Theme).
  */
 
 interface FulfillmentBooking {
@@ -37,11 +38,20 @@ interface FulfillmentBooking {
   return_notes: string | null;
   tracking_return: string | null;
   tracking_number: string | null;
+  tracking_url?: string | null;
   shipping_method: string | null;
+  shipping_address?: string | null;
+  /** Sendcloud-Etikett: gesetzt, sobald erstellt — sonst null. */
+  label_url?: string | null;
+  return_label_url?: string | null;
   /** Override pro Buchung (NULL = aus rental_to + buffer berechnen). */
   return_due_date_override?: string | null;
   ship_date_override?: string | null;
 }
+
+interface ShippingMethod { id: number; name: string; carrier: string }
+interface LabelForm { name: string; address: string; city: string; postalCode: string; email: string; methodId: number; weightKg: number }
+interface LabelResult { labelUrl: string | null; returnLabelUrl: string | null; returnError?: string }
 
 const CONDITION_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
   gut: { label: 'Gut', color: '#10b981', bg: '#10b98122' },
@@ -129,10 +139,96 @@ export default function AdminVersandRueckgabePage() {
   const [tab, setTab] = useState<Tab>('versenden');
   const [buf, setBuf] = useState<Buffer>(DEFAULT_BUFFER);
 
+  // Sendcloud-Etikett-Modal — analog zur alten /admin/versand-Seite, hier
+  // dunkel gestylt + ohne Seitenwechsel direkt aus der Liste aufrufbar.
+  const [labelModal, setLabelModal] = useState<FulfillmentBooking | null>(null);
+  const [shippingMethods, setShippingMethods] = useState<ShippingMethod[]>([]);
+  const [methodsLoading, setMethodsLoading] = useState(false);
+  const [labelForm, setLabelForm] = useState<LabelForm>({ name: '', address: '', city: '', postalCode: '', email: '', methodId: 0, weightKg: 0.5 });
+  const [labelCreating, setLabelCreating] = useState(false);
+  const [labelResult, setLabelResult] = useState<LabelResult | null>(null);
+
   useEffect(() => {
     fetchBookings();
     loadBuffer();
   }, []);
+
+  async function openLabelModal(b: FulfillmentBooking) {
+    setLabelModal(b);
+    setLabelResult(null);
+
+    // Adresse parsen: gespeichert als "Straße 12, 12345 Stadt"
+    let parsedStreet = '';
+    let parsedZip = '';
+    let parsedCity = '';
+    if (b.shipping_address) {
+      const parts = b.shipping_address.split(',');
+      parsedStreet = parts[0]?.trim() ?? '';
+      const rest = parts[1]?.trim() ?? '';
+      const zipCity = rest.match(/^(\d{5})\s+(.+)$/);
+      if (zipCity) {
+        parsedZip = zipCity[1];
+        parsedCity = zipCity[2];
+      }
+    }
+
+    // Pack-Gewicht (falls bereits gepackt) als Vorbefuellung — siehe
+    // Pack-Workflow + bookings.pack_weight_kg.
+    let prefillWeight = 0.5;
+    try {
+      const wr = await fetch(`/api/admin/booking/${b.id}`);
+      if (wr.ok) {
+        const { booking: wb } = await wr.json();
+        const w = wb?.pack_weight_kg ?? wb?.pack_weight_estimate_kg;
+        if (typeof w === 'number' && w > 0) prefillWeight = w;
+      }
+    } catch { /* Default 0.5 kg */ }
+
+    setLabelForm({
+      name: b.customer_name ?? '',
+      address: parsedStreet,
+      city: parsedCity,
+      postalCode: parsedZip,
+      email: b.customer_email ?? '',
+      methodId: shippingMethods[0]?.id ?? 0,
+      weightKg: prefillWeight,
+    });
+    if (shippingMethods.length === 0) {
+      setMethodsLoading(true);
+      try {
+        const r = await fetch('/api/admin/sendcloud?action=methods');
+        const d = await r.json();
+        setShippingMethods(d.methods ?? []);
+        setLabelForm((f) => ({ ...f, methodId: d.methods?.[0]?.id ?? 0 }));
+      } catch { /* silent */ }
+      finally { setMethodsLoading(false); }
+    }
+  }
+
+  async function handleCreateLabel() {
+    if (!labelModal) return;
+    setLabelCreating(true);
+    try {
+      const res = await fetch('/api/admin/sendcloud', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bookingId: labelModal.id,
+          shippingMethodId: labelForm.methodId,
+          customer: { name: labelForm.name, address: labelForm.address, city: labelForm.city, postalCode: labelForm.postalCode, email: labelForm.email },
+          weightKg: labelForm.weightKg,
+        }),
+      });
+      const d = await res.json();
+      if (!res.ok) { alert(`Fehler: ${d.error}`); return; }
+      setLabelResult({ labelUrl: d.labelUrl, returnLabelUrl: d.returnLabelUrl, returnError: d.returnError });
+      setBookings((prev) => prev.map((b) => b.id === labelModal.id
+        ? { ...b, tracking_number: d.trackingNumber ?? b.tracking_number, label_url: d.labelUrl, return_label_url: d.returnLabelUrl }
+        : b
+      ));
+    } catch { alert('Netzwerkfehler.'); }
+    finally { setLabelCreating(false); }
+  }
 
   async function fetchBookings() {
     setLoading(true);
@@ -289,12 +385,28 @@ export default function AdminVersandRueckgabePage() {
                     buf={buf}
                     last={idx === displayed.length - 1}
                     onSaved={fetchBookings}
+                    onOpenLabel={openLabelModal}
                   />
                 ))}
               </tbody>
             </table>
           </div>
         </div>
+      )}
+
+      {/* ── Sendcloud-Etikett-Modal (dunkel) ───────────────────────────── */}
+      {labelModal && (
+        <LabelModal
+          booking={labelModal}
+          form={labelForm}
+          setForm={setLabelForm}
+          methods={shippingMethods}
+          methodsLoading={methodsLoading}
+          creating={labelCreating}
+          result={labelResult}
+          onCreate={handleCreateLabel}
+          onClose={() => { setLabelModal(null); setLabelResult(null); }}
+        />
       )}
     </div>
   );
@@ -312,13 +424,14 @@ function emptyText(tab: Tab): string {
 // ─── Eine Tabellen-Zeile ─────────────────────────────────────────────────────
 
 function BookingRow({
-  booking, tab, buf, last, onSaved,
+  booking, tab, buf, last, onSaved, onOpenLabel,
 }: {
   booking: FulfillmentBooking;
   tab: Tab;
   buf: Buffer;
   last: boolean;
   onSaved: () => void;
+  onOpenLabel: (b: FulfillmentBooking) => void;
 }) {
   const cond = booking.return_condition ? CONDITION_CONFIG[booking.return_condition] : null;
   const statusLabel = STATUS_LABEL[booking.status] ?? booking.status;
@@ -364,7 +477,7 @@ function BookingRow({
         )}
       </td>
       <td style={{ padding: '14px 16px', textAlign: 'right' }}>
-        <ActionButton booking={booking} tab={tab} />
+        <ActionButton booking={booking} tab={tab} onOpenLabel={onOpenLabel} />
       </td>
     </tr>
   );
@@ -446,18 +559,43 @@ function UnterwegsCell({ booking, buf }: { booking: FulfillmentBooking; buf: Buf
 
 // ─── Aktion-Button je nach Status + Lieferart ────────────────────────────────
 
-function ActionButton({ booking, tab }: { booking: FulfillmentBooking; tab: Tab }) {
+function ActionButton({ booking, tab, onOpenLabel }: { booking: FulfillmentBooking; tab: Tab; onOpenLabel: (b: FulfillmentBooking) => void }) {
   const base = {
     display: 'inline-block', padding: '8px 16px', textDecoration: 'none',
     borderRadius: 8, fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' as const,
   };
+  const small = { ...base, padding: '8px 12px' };
 
   if (tab === 'versenden') {
     if (booking.delivery_mode === 'versand') {
+      // Zwei Aktionen nebeneinander: Etikett (gelb/grün je nach Stand) + Packen.
+      const labelBtn = booking.label_url ? (
+        <a
+          href={`/api/admin/label/${booking.id}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ ...small, background: '#10b98122', color: '#10b981', border: '1px solid #10b98140' }}
+          title="Sendcloud-Etikett herunterladen"
+        >
+          📄 Etikett
+        </a>
+      ) : (
+        <button
+          type="button"
+          onClick={() => onOpenLabel(booking)}
+          style={{ ...small, background: '#f59e0b22', color: '#f59e0b', border: '1px solid #f59e0b40', cursor: 'pointer' }}
+          title="Sendcloud-Etikett erstellen"
+        >
+          🏷 Etikett
+        </button>
+      );
       return (
-        <Link href={`/admin/versand/${booking.id}/packen`} style={{ ...base, background: '#06b6d4', color: 'white' }}>
-          📦 Packen
-        </Link>
+        <div style={{ display: 'inline-flex', gap: 6, justifyContent: 'flex-end' }}>
+          {labelBtn}
+          <Link href={`/admin/versand/${booking.id}/packen`} style={{ ...base, background: '#06b6d4', color: 'white' }}>
+            📦 Packen
+          </Link>
+        </div>
       );
     }
     return (
@@ -648,6 +786,161 @@ function ReturnDueCell({
       >
         {label}
       </span>
+    </div>
+  );
+}
+
+// ─── Sendcloud-Etikett-Modal (dunkel, Inline-Styles) ─────────────────────────
+// Bewusst Inline-Styles — die globalen .admin-dark-Overrides aus globals.css
+// kippen sonst bg-white/border-Klassen per !important. Markup logisch 1:1 zur
+// alten /admin/versand → Modal, nur ohne Tailwind-Klassen.
+
+function LabelModal({
+  booking, form, setForm, methods, methodsLoading, creating, result, onCreate, onClose,
+}: {
+  booking: FulfillmentBooking;
+  form: LabelForm;
+  setForm: React.Dispatch<React.SetStateAction<LabelForm>>;
+  methods: ShippingMethod[];
+  methodsLoading: boolean;
+  creating: boolean;
+  result: LabelResult | null;
+  onCreate: () => void;
+  onClose: () => void;
+}) {
+  const inputStyle: React.CSSProperties = {
+    width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #334155',
+    background: '#0f172a', color: '#e2e8f0', fontSize: 14, outline: 'none',
+  };
+  const labelStyle: React.CSSProperties = {
+    display: 'block', fontSize: 11, fontWeight: 600, color: '#94a3b8',
+    textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6,
+  };
+  const btnPrimary: React.CSSProperties = {
+    flex: 1, padding: '12px 16px', borderRadius: 8, fontSize: 14, fontWeight: 600,
+    background: '#06b6d4', color: 'white', border: 'none', cursor: 'pointer',
+  };
+  const btnSecondary: React.CSSProperties = {
+    flex: 1, padding: '12px 16px', borderRadius: 8, fontSize: 14, fontWeight: 600,
+    background: 'transparent', color: '#94a3b8', border: '1px solid #334155', cursor: 'pointer',
+  };
+  const disabled = creating || !form.name.trim() || !form.address.trim() || !form.postalCode.trim() || !form.city.trim() || !form.methodId;
+
+  return (
+    <div
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        zIndex: 100, padding: 16,
+      }}
+    >
+      <div style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 16, padding: 24, maxWidth: 480, width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
+        <h2 style={{ fontSize: 18, fontWeight: 700, color: '#e2e8f0', marginBottom: 4 }}>Sendcloud-Etikett erstellen</h2>
+        <p style={{ fontSize: 12, color: '#64748b', marginBottom: 16 }}>Buchung {booking.id}</p>
+
+        {result ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ padding: 12, background: '#10b98122', border: '1px solid #10b98140', borderRadius: 10, fontSize: 13, color: '#6ee7b7' }}>
+              ✓ Etiketten wurden erfolgreich erstellt.
+            </div>
+            {result.labelUrl && (
+              <a
+                href={`/api/admin/label/${booking.id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ ...btnPrimary, textAlign: 'center', textDecoration: 'none', display: 'block' }}
+              >
+                📄 Versandetikett herunterladen
+              </a>
+            )}
+            {result.returnLabelUrl ? (
+              <a
+                href={`/api/admin/return-label/${booking.id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ ...btnSecondary, textAlign: 'center', textDecoration: 'none', display: 'block' }}
+              >
+                📦 Rücksendeetikett herunterladen
+              </a>
+            ) : result.returnError ? (
+              <div style={{ padding: 12, background: '#ef444422', border: '1px solid #ef444440', borderRadius: 10, fontSize: 12, color: '#fca5a5' }}>
+                <strong>Rücksendeetikett fehlgeschlagen:</strong> {result.returnError}
+              </div>
+            ) : null}
+            <button type="button" onClick={onClose} style={btnSecondary}>Schließen</button>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div>
+              <label style={labelStyle}>Name *</label>
+              <input type="text" value={form.name} placeholder="Vor- und Nachname"
+                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>Straße + Hausnummer *</label>
+              <input type="text" value={form.address} placeholder="Musterstraße 12"
+                onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
+                style={inputStyle} />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 12 }}>
+              <div>
+                <label style={labelStyle}>PLZ *</label>
+                <input type="text" value={form.postalCode} placeholder="12345"
+                  onChange={(e) => setForm((f) => ({ ...f, postalCode: e.target.value }))}
+                  style={inputStyle} />
+              </div>
+              <div>
+                <label style={labelStyle}>Stadt *</label>
+                <input type="text" value={form.city} placeholder="Berlin"
+                  onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))}
+                  style={inputStyle} />
+              </div>
+            </div>
+            <div>
+              <label style={labelStyle}>E-Mail</label>
+              <input type="email" value={form.email} placeholder="kunde@beispiel.de"
+                onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                style={inputStyle} />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 12 }}>
+              <div>
+                <label style={labelStyle}>Gewicht (kg)</label>
+                <input type="number" step="0.1" min="0.1" value={form.weightKg}
+                  onChange={(e) => setForm((f) => ({ ...f, weightKg: parseFloat(e.target.value) || 0.5 }))}
+                  style={inputStyle} />
+              </div>
+              <div>
+                <label style={labelStyle}>Versandmethode *</label>
+                {methodsLoading ? (
+                  <div style={{ ...inputStyle, color: '#64748b' }}>Lädt…</div>
+                ) : (
+                  <select value={form.methodId}
+                    onChange={(e) => setForm((f) => ({ ...f, methodId: Number(e.target.value) }))}
+                    style={inputStyle}
+                  >
+                    {methods.length === 0
+                      ? <option value={0}>Keine Methoden geladen</option>
+                      : methods.map((m) => (
+                          <option key={m.id} value={m.id}>{m.carrier} – {m.name}</option>
+                        ))
+                    }
+                  </select>
+                )}
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 10, marginTop: 6 }}>
+              <button type="button" onClick={onClose} disabled={creating} style={{ ...btnSecondary, opacity: creating ? 0.4 : 1 }}>
+                Abbrechen
+              </button>
+              <button type="button" onClick={onCreate} disabled={disabled} style={{ ...btnPrimary, opacity: disabled ? 0.4 : 1 }}>
+                {creating ? 'Erstelle Etiketten…' : 'Etiketten erstellen'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

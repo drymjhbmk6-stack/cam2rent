@@ -491,6 +491,40 @@ Rückgabe-Prüfung unter `/admin/retouren` (`return-booking`) setzt `completed`/
 - Status-Whitelist von `PATCH /api/admin/booking/[id]` + `update-booking-status`
   um `delivered` erweitert.
 
+### Sendcloud-Etikett direkt in der Versand-Liste (Stand 2026-05-25)
+`/admin/retouren` ist seit dem Retouren-Refactor der Sidebar-Eintrag „Versand
+& Rückgabe" und damit die primäre Versand-Übersicht. Die alte
+`/admin/versand`-Seite (Card-Layout mit ▼-Toggle) ist nicht mehr verlinkt,
+trug aber die einzige UI fürs Sendcloud-Etikett — Benutzer mussten die URL
+auswendig wissen. Lösung: das Etikett-Modal komplett in `/admin/retouren`
+integriert, kein Seitenwechsel mehr nötig.
+- **API-Erweiterung:** `app/api/admin/alle-buchungen/route.ts` selektiert
+  jetzt zusätzlich `shipping_address`, `tracking_url`, `label_url`,
+  `return_label_url`. Strikt additiv — kein Defensive-Retry nötig, weil
+  die Spalten alle seit langem im Schema sind.
+- **UI** (`app/admin/retouren/page.tsx`): Im „Zu versenden"-Tab hat jede
+  Buchung mit `delivery_mode='versand'` jetzt zwei Action-Buttons
+  nebeneinander: links **🏷 Etikett** (gelb, öffnet Modal) bzw. **📄 Etikett**
+  (grün, Download-Link auf `/api/admin/label/<id>`, sobald `label_url`
+  gesetzt ist), rechts unverändert **📦 Packen** (Pack-Workflow).
+  Abholungs-Buchungen behalten den einen **👋 Übergabe**-Button.
+- **Modal `LabelModal`** (lokale Sub-Component): Logisch 1:1 das Modal
+  aus der alten `/admin/versand`-Seite (`openLabelModal`/`handleCreateLabel`
+  rufen denselben `/api/admin/sendcloud`-Endpoint, gleiche Adress-
+  Parsing-Logik, gleiches Pack-Gewicht-Prefill via `/api/admin/booking/<id>`),
+  aber komplett mit Inline-Styles im dunklen Retouren-Theme — die globalen
+  `.admin-dark`-Overrides aus `globals.css` würden das Tailwind-Markup
+  des alten Modals sonst per `!important` umfärben. Nach erfolgreicher
+  Erstellung zeigt das Modal die beiden Download-Buttons (Versand- +
+  Rücksendeetikett) und die Tabelle wird mit `label_url`/`return_label_url`
+  optimistisch geupdated.
+- **Alte `/admin/versand`-Seite bleibt erhalten** — sie ist weiterhin
+  unter der URL aufrufbar und enthält Zusatzfunktionen (manuelle
+  Packliste, Lieferschein-Druck, „Als versendet markieren"-Modal), die
+  in der neuen Tabellen-Ansicht bewusst nicht doppelt gepflegt werden.
+  Der Etikett-Workflow ist der einzige Teil, der jetzt auch direkt in
+  `/admin/retouren` läuft.
+
 ### „Rückgabe prüfen"-Einstieg auch bei Abholung + direkter Link (Stand 2026-05-23)
 Zwei UX-Lücken in der Versand/Tracking-Section von `/admin/buchungen/[id]`
 geschlossen:
