@@ -1118,7 +1118,7 @@ export default function BuchungDetailPage() {
                   {/* Labels */}
                   {(booking.label_url || booking.return_label_url) && (
                     <div className="mt-3 pt-3 border-t border-brand-border flex flex-wrap gap-2">
-                      {booking.label_url && <a href={booking.label_url} target="_blank" className="text-xs font-heading font-semibold text-accent-blue hover:underline">Versandlabel</a>}
+                      {booking.label_url && <a href={`/admin/pdf-viewer?u=${encodeURIComponent(`/api/admin/label/${booking.id}`)}&t=${encodeURIComponent('Versandetikett')}`} className="text-xs font-heading font-semibold text-accent-blue hover:underline">Versandlabel</a>}
                       {booking.return_label_url && <a href={`/admin/pdf-viewer?u=${encodeURIComponent(`/api/admin/return-label/${booking.id}`)}&t=${encodeURIComponent('Rücksendeetikett')}`} className="text-xs font-heading font-semibold text-accent-blue hover:underline">Rücksendeetikett</a>}
                     </div>
                   )}

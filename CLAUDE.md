@@ -1952,8 +1952,21 @@ Gleicher Concat-Name-Effekt traf die Verfügbarkeit — eine 2-Kamera-Buchung (1
   Viewer ist eine normale App-Route (iframe + eigener Zurück-Button via
   `router.back()`, „Neuer Tab"-Fallback). `u` muss mit `/api/` beginnen (kein
   Open-Redirect). `/admin/buchungen/[id]` leitet Rechnung/Mietvertrag (2×) +
-  Rücksendeetikett über den Viewer; externe Sendcloud-`label_url` bleibt
-  `target="_blank"`.
+  Versand-/Rücksendeetikett über den Viewer.
+- **Drucken-Button + Versandetikett über Viewer (Stand 2026-05-25):** Der
+  Viewer hat jetzt einen cyan „Drucken"-Button rechts oben (`iframe.contentWindow.print()`
+  via `useRef`, mit Fallback auf `window.open` falls Mobile-Safari blockt). Der
+  Button ist erst klickbar wenn das iframe geladen hat (`onLoad`-Hook setzt
+  `iframeLoaded=true`). Damit das Drucken auch wirklich greift, liefern beide
+  Etikett-Proxy-Endpoints `/api/admin/label/[id]` + `/api/admin/return-label/[id]`
+  jetzt `Content-Disposition: inline` (statt `attachment`) + `Content-Length` +
+  `Cache-Control: private, no-store` — same-origin-Anzeige im iframe, `print()`
+  funktioniert direkt. Plus: **alle** Versandetikett-Links gehen jetzt durch
+  den Viewer (`/admin/pdf-viewer?u=/api/admin/label/<id>&t=Versandetikett`) —
+  vorher öffnete `/admin/buchungen/[id]` den direkten Sendcloud-`label_url` mit
+  `target="_blank"` (Mobile-PWA-Sackgasse, Screenshot vom 25.05.). Die
+  Versand-Liste (`/admin/versand`) und das Etikett-Erstell-Modal sind ebenfalls
+  umgestellt (Card-Button + Inline-Link + Modal-Buttons für Hin-/Rücksende-Etikett).
 
 ### WBW-Finalisierung mit PDF-E-Mail an den Mieter (Stand 2026-05-16)
 Beim Versandfertigmachen legt der Admin die **finalen** Wiederbeschaffungswerte der tatsaechlich mitgelieferten Ausruestung fest. Diese werden als rechtlich relevantes PDF generiert, in Storage abgelegt und automatisch per E-Mail an den Mieter geschickt. Laut Mietvertrag ist ab dann ausschliesslich der per E-Mail mitgeteilte finale WBW massgeblich.

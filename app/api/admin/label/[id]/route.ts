@@ -50,7 +50,12 @@ export async function GET(
     status: 200,
     headers: {
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename="versandetikett-${bookingId}.pdf"`,
+      // inline + Content-Length: PDF wird im iframe des In-App-Viewers angezeigt
+      // (statt Download zu erzwingen) und der "Drucken"-Button kann
+      // iframe.contentWindow.print() aufrufen (same-origin).
+      'Content-Disposition': `inline; filename="versandetikett-${bookingId}.pdf"`,
+      'Content-Length': String(pdfBuffer.byteLength),
+      'Cache-Control': 'private, no-store',
     },
   });
 }

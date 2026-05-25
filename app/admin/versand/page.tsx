@@ -441,9 +441,9 @@ export default function AdminVersandPage() {
                                 📋 Manuelle Packliste
                               </button>
                               {b.label_url ? (
-                                <a href={`/api/admin/label/${b.id}`} target="_blank" rel="noopener noreferrer"
+                                <a href={`/admin/pdf-viewer?u=${encodeURIComponent(`/api/admin/label/${b.id}`)}&t=${encodeURIComponent('Versandetikett')}`}
                                   className="flex items-center gap-1.5 px-4 py-2 bg-green-50 border border-green-300 rounded-btn text-sm font-heading font-semibold text-green-700 hover:bg-green-100 transition-colors">
-                                  📄 Versandetikett herunterladen
+                                  📄 Versandetikett anzeigen
                                 </a>
                               ) : (
                                 <button onClick={() => openLabelModal(b)}
@@ -494,7 +494,7 @@ export default function AdminVersandPage() {
                               <span className="text-sm font-body text-brand-black">{b.tracking_number}</span>
                             ) : null}
                             {b.label_url ? (
-                              <a href={`/api/admin/label/${b.id}`} target="_blank" rel="noopener noreferrer"
+                              <a href={`/admin/pdf-viewer?u=${encodeURIComponent(`/api/admin/label/${b.id}`)}&t=${encodeURIComponent('Versandetikett')}`}
                                 className="text-xs font-heading font-semibold text-green-700 bg-green-50 border border-green-200 px-2.5 py-1 rounded-btn hover:bg-green-100 transition-colors">
                                 📄 Versandetikett
                               </a>
@@ -505,7 +505,7 @@ export default function AdminVersandPage() {
                               </button>
                             )}
                             {b.return_label_url && (
-                              <a href={`/api/admin/return-label/${b.id}`} target="_blank" rel="noopener noreferrer"
+                              <a href={`/admin/pdf-viewer?u=${encodeURIComponent(`/api/admin/return-label/${b.id}`)}&t=${encodeURIComponent('Rücksendeetikett')}`}
                                 className="text-xs font-heading font-semibold text-brand-steel bg-brand-bg border border-brand-border px-2.5 py-1 rounded-btn hover:bg-white transition-colors">
                                 ↩ Rücksendeetikett
                               </a>
@@ -650,15 +650,15 @@ export default function AdminVersandPage() {
                 Etiketten wurden erfolgreich erstellt!
               </div>
               {labelResult.labelUrl && labelModal && (
-                <a href={`/api/admin/label/${labelModal.id}`} target="_blank" rel="noopener noreferrer"
+                <a href={`/admin/pdf-viewer?u=${encodeURIComponent(`/api/admin/label/${labelModal.id}`)}&t=${encodeURIComponent('Versandetikett')}`}
                   className="flex items-center justify-center gap-2 w-full py-3 bg-brand-black text-white text-sm font-heading font-semibold rounded-btn hover:bg-brand-dark transition-colors">
-                  📄 Versandetikett herunterladen
+                  📄 Versandetikett anzeigen
                 </a>
               )}
               {labelResult.returnLabelUrl && labelModal ? (
-                <a href={`/api/admin/return-label/${labelModal.id}`} target="_blank" rel="noopener noreferrer"
+                <a href={`/admin/pdf-viewer?u=${encodeURIComponent(`/api/admin/return-label/${labelModal.id}`)}&t=${encodeURIComponent('Rücksendeetikett')}`}
                   className="flex items-center justify-center gap-2 w-full py-3 bg-white border border-brand-border text-sm font-heading font-semibold text-brand-black rounded-btn hover:bg-brand-bg transition-colors">
-                  📦 Rücksendeetikett herunterladen
+                  📦 Rücksendeetikett anzeigen
                 </a>
               ) : labelResult.returnError ? (
                 <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs font-body text-red-700">
