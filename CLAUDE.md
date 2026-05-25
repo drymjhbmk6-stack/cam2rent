@@ -2635,6 +2635,27 @@ ausgebucht, wird die Buchung im Wizard hart geblockt + ein Admin-Alarm
   `createAdminNotification` mit Typ `availability_alert` (Permission
   `tagesgeschaeft`, rotes Warnsymbol). Defensiver Fallback bei fehlender
   Migration → kein Persist, kein 500.
+- **Detail-Aufschluesselung pro `basic_set_unavailable`-Alert (Stand
+  2026-05-25):** Vorher zeigte der Admin-Banner nur den generischen
+  Hinweis „Das Basis-Set ist im Zeitraum ausgebucht. Inventar pruefen
+  oder Zubehoer nachbestellen." — ohne zu sagen welches Zubehoer im Set
+  ausgebucht ist. Jetzt: Spalte `availability_alerts.details JSONB`
+  (Migration `supabase-availability-alerts-details.sql`, idempotent) mit
+  Shape `{ unavailable_items: [{accessory_id, name, needed, remaining}] }`.
+  Der Wizard berechnet beim Trigger pro Basis-Set die nicht-verfuegbaren
+  Bestandteile (`accAvailability[item.accessory_id]` → `compatible &&
+  remaining >= qty`), reicht sie im POST mit, Server saeubert via
+  `sanitizeDetails()` (Whitelist-Shape, Zahlen geclampt, max 50 Items,
+  Names auf 200 Zeichen) und persistiert. Update-Pfad uebernimmt das
+  **neueste** `details` (Admin sieht immer den letzten Stand).
+  Push-Notification listet die fehlenden Items kurz mit „benoetigt X,
+  frei Y" — Admin sieht direkt auf dem Handy was Sache ist. UI auf
+  `/admin/verfuegbarkeit-alerts` rendert bei vorhandenem `details` eine
+  rote Box mit Item-Liste statt des generischen Hinweistexts; ohne
+  `details` (Migration noch nicht durch oder `no_basic_set`-Typ) faellt
+  es auf den alten Hinweis zurueck. POST-Endpoint hat zweistufigen
+  Migrations-Retry (Insert + Update), damit bei fehlender Spalte der
+  Alert ohne Detail-Block trotzdem angelegt wird.
 - **Admin-API** `GET/POST /api/admin/availability-alerts`: Liste der
   offenen Alerts (max 100, sortiert nach `last_seen_at`), POST mit
   `{id, action: 'resolve'|'reopen', note?}` zum Markieren als erledigt.
@@ -3293,6 +3314,12 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
   nicht (500 beim Insert/Select), die Inventar-Stammdaten-Card zeigt
   „Firmware installiert" nicht. Crontab-Eintrag siehe „Firmware-Check"-
   Sektion oben. Empfohlen ASAP ausführen.
+- **Alert-Details-Migration auszuführen:** `supabase/supabase-availability-alerts-details.sql`
+  (idempotent). Fügt nullable Spalte `availability_alerts.details JSONB` hinzu.
+  Ohne Migration läuft die Telemetrie weiter (POST retryt ohne `details`), aber
+  der Admin-Banner zeigt für ausgebuchte Basis-Sets weiter nur den generischen
+  Hinweistext statt der konkreten Item-Liste. Empfohlen ASAP ausführen, sonst
+  bleibt der Use-Case („welches Zubehör im Set fehlt?") unbeantwortet.
 - **Buchungsinteresse-Migration auszuführen:** `supabase/supabase-booking-interest.sql`
   (idempotent). Legt Tabelle `booking_interest` an. Ohne Migration läuft der
   Buchungs-Flow normal weiter (Telemetrie wird verworfen), `/admin/buchungsinteresse`

@@ -47,6 +47,35 @@ function cleanDate(s: unknown): string | null {
   return s;
 }
 
+// Strikter Sanitizer fuer das optionale `details`-JSONB. Akzeptiert nur die
+// Shape, die der Wizard heute sendet: { unavailable_items: [{accessory_id, name,
+// needed, remaining}] }. Alles andere wird verworfen, damit kein Free-Text-
+// User-Input ungefiltert in der DB landet.
+function sanitizeDetails(raw: unknown): { unavailable_items: { accessory_id: string; name: string; needed: number; remaining: number }[] } | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const items = (raw as { unavailable_items?: unknown }).unavailable_items;
+  if (!Array.isArray(items)) return null;
+  const cleaned: { accessory_id: string; name: string; needed: number; remaining: number }[] = [];
+  for (const it of items.slice(0, 50)) {
+    if (!it || typeof it !== 'object') continue;
+    const r = it as Record<string, unknown>;
+    const accessory_id = clean(r.accessory_id, 100);
+    const name = clean(r.name, 200);
+    const needed = Number(r.needed);
+    const remaining = Number(r.remaining);
+    if (!accessory_id || !name) continue;
+    if (!Number.isFinite(needed) || needed < 0) continue;
+    if (!Number.isFinite(remaining) || remaining < 0) continue;
+    cleaned.push({
+      accessory_id,
+      name,
+      needed: Math.min(999, Math.round(needed)),
+      remaining: Math.min(9999, Math.round(remaining)),
+    });
+  }
+  return cleaned.length > 0 ? { unavailable_items: cleaned } : null;
+}
+
 export async function POST(req: NextRequest) {
   const ip = getClientIp(req);
   const rl = limiter.check(`availability-alerts:${ip}`);
@@ -69,6 +98,7 @@ export async function POST(req: NextRequest) {
   const accessoryName = clean(body?.accessory_name, 200);
   const rentalFrom = cleanDate(body?.rental_from);
   const rentalTo = cleanDate(body?.rental_to);
+  const details = sanitizeDetails(body?.details);
 
   // Optional: eingeloggter Kunde → user_id mitschreiben, sonst NULL.
   const cookieStore = await cookies();
@@ -110,30 +140,54 @@ export async function POST(req: NextRequest) {
 
   if (existing?.id) {
     isFirstOccurrence = false;
-    await supabase
+    // Update: occurrence_count hoch, last_seen_at frisch — und neueste
+    // `details`-Aufschluesselung uebernehmen, damit der Admin im UI immer
+    // sieht, welche Items beim *letzten* Vorfall fehlten.
+    const updPayload: Record<string, unknown> = {
+      occurrence_count: (existing.occurrence_count ?? 0) + 1,
+      last_seen_at: new Date().toISOString(),
+    };
+    if (details) updPayload.details = details;
+    const { error: updErr } = await supabase
       .from('availability_alerts')
-      .update({
-        occurrence_count: (existing.occurrence_count ?? 0) + 1,
-        last_seen_at: new Date().toISOString(),
-      })
+      .update(updPayload)
       .eq('id', existing.id);
+    if (updErr && /details|column|schema cache|PGRST/i.test(updErr.message)) {
+      // Migration `supabase-availability-alerts-details.sql` noch nicht durch:
+      // retryen ohne `details`-Feld, Counter + Zeit trotzdem aktualisieren.
+      delete updPayload.details;
+      await supabase
+        .from('availability_alerts')
+        .update(updPayload)
+        .eq('id', existing.id);
+    }
   } else {
-    const { error } = await supabase
+    const insertPayload: Record<string, unknown> = {
+      alert_type: alertType,
+      product_id: productId,
+      product_name: productName,
+      set_id: setId,
+      set_name: setName,
+      accessory_id: accessoryId,
+      accessory_name: accessoryName,
+      rental_from: rentalFrom,
+      rental_to: rentalTo,
+      customer_user_id: customerUserId,
+      customer_email: customerEmail,
+      is_test: testMode,
+    };
+    if (details) insertPayload.details = details;
+    let { error } = await supabase
       .from('availability_alerts')
-      .insert({
-        alert_type: alertType,
-        product_id: productId,
-        product_name: productName,
-        set_id: setId,
-        set_name: setName,
-        accessory_id: accessoryId,
-        accessory_name: accessoryName,
-        rental_from: rentalFrom,
-        rental_to: rentalTo,
-        customer_user_id: customerUserId,
-        customer_email: customerEmail,
-        is_test: testMode,
-      });
+      .insert(insertPayload);
+    if (error && /details|column|schema cache|PGRST/i.test(error.message) && 'details' in insertPayload) {
+      // Migration `supabase-availability-alerts-details.sql` ausstehend — Alert
+      // ohne Detail-Aufschluesselung anlegen, damit Push + Banner trotzdem
+      // gehen.
+      delete insertPayload.details;
+      const retry = await supabase.from('availability_alerts').insert(insertPayload);
+      error = retry.error;
+    }
     if (error && /availability_alerts|relation|does not exist|schema cache|PGRST/i.test(error.message)) {
       // Migration noch nicht durch — Telemetrie verwerfen, Customer-Flow
       // soll trotzdem normal blocken (das passiert im Wizard ohnehin).
@@ -159,6 +213,12 @@ export async function POST(req: NextRequest) {
     if (setName) lines.push(`Set: ${setName}`);
     if (accessoryName) lines.push(`Zubehör: ${accessoryName}`);
     if (periodStr) lines.push(`Zeitraum: ${periodStr}`);
+    if (details && details.unavailable_items.length > 0) {
+      const fehlt = details.unavailable_items
+        .map((it) => `${it.name} (benötigt ${it.needed}, frei ${it.remaining})`)
+        .join(', ');
+      lines.push(`Fehlt: ${fehlt}`);
+    }
     if (customerEmail) lines.push(`Kunde: ${customerEmail}`);
 
     await createAdminNotification(supabase, {

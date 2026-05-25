@@ -70,6 +70,12 @@ WITH checks AS (
 
   -- ── Spalten-Migrationen ────────────────────────────────────────────────
   UNION ALL
+  SELECT 'supabase-availability-alerts-details',
+         EXISTS (SELECT 1 FROM information_schema.columns
+                 WHERE table_schema='public' AND table_name='availability_alerts'
+                   AND column_name='details'),
+         'availability_alerts.details (JSONB — Item-Aufschluesselung pro basic_set_unavailable-Alert)'
+  UNION ALL
   SELECT 'supabase-sets-basic-for-products',
          EXISTS (SELECT 1 FROM information_schema.columns
                  WHERE table_schema='public' AND table_name='sets'

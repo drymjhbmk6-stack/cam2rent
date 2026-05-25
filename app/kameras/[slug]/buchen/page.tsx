@@ -720,25 +720,46 @@ export default function BuchenPage() {
       return Array.isArray(list) && list.includes(product.id);
     });
 
+    type UnavailableItem = { accessory_id: string; name: string; needed: number; remaining: number };
+
+    // Sammelt fuer ein Set die nicht-verfuegbaren Bestandteile (Name, benoetigte
+    // Menge, freie Menge). Wenn keine Verfuegbarkeits-Info vorliegt, gilt das
+    // Item als verfuegbar (sonst wuerde das Modal zu frueh greifen).
+    function collectUnavailableItems(s: RentalSet): UnavailableItem[] {
+      const items = (s as RentalSet & { accessory_items?: { accessory_id: string; qty: number }[] }).accessory_items ?? [];
+      const out: UnavailableItem[] = [];
+      for (const item of items) {
+        const av = accAvailability[item.accessory_id];
+        if (!av) continue;
+        if (!av.compatible || av.remaining < item.qty) {
+          const accName = dbAccessories.find((a) => a.id === item.accessory_id)?.name ?? item.accessory_id;
+          out.push({
+            accessory_id: item.accessory_id,
+            name: accName,
+            needed: item.qty,
+            remaining: Math.max(0, av.remaining ?? 0),
+          });
+        }
+      }
+      return out;
+    }
+
     function isSetAvailableForPeriod(s: RentalSet): boolean {
       const items = (s as RentalSet & { accessory_items?: { accessory_id: string; qty: number }[] }).accessory_items ?? [];
       if (items.length === 0) return s.available !== false;
-      return items.every((item) => {
-        const av = accAvailability[item.accessory_id];
-        // Wenn fuer ein Item noch keine Verfuegbarkeits-Info da ist, optimistisch true
-        // (Wert wird sich nachladen). Greift sonst frueh und zeigt das Modal falsch.
-        if (!av) return true;
-        return av.compatible && av.remaining >= item.qty;
-      });
+      return collectUnavailableItems(s).length === 0;
     }
 
     let nextBlock: { reason: 'no_basic_set' | 'basic_set_unavailable'; setName?: string } | null = null;
+    let unavailableItems: UnavailableItem[] = [];
     if (basicSets.length === 0) {
       nextBlock = { reason: 'no_basic_set' };
     } else {
       const anyAvail = basicSets.some(isSetAvailableForPeriod);
       if (!anyAvail) {
         nextBlock = { reason: 'basic_set_unavailable', setName: basicSets[0].name };
+        // Items des ersten Basis-Sets melden (in der Praxis ist das meist das einzige).
+        unavailableItems = collectUnavailableItems(basicSets[0]);
       }
     }
 
@@ -758,6 +779,9 @@ export default function BuchenPage() {
         if (nextBlock.reason === 'basic_set_unavailable' && basicSets.length > 0) {
           payload.set_id = basicSets[0].id;
           payload.set_name = basicSets[0].name;
+          if (unavailableItems.length > 0) {
+            payload.details = { unavailable_items: unavailableItems };
+          }
         }
         // Fire-and-forget — Telemetrie darf den UI-Flow nicht blockieren.
         fetch('/api/availability-alerts', {
@@ -767,7 +791,7 @@ export default function BuchenPage() {
         }).catch(() => {});
       }
     }
-  }, [product?.id, product?.name, range, availableSets, accAvailability, offer]);
+  }, [product?.id, product?.name, range, availableSets, accAvailability, dbAccessories, offer]);
 
   // ── Buchungsinteresse-Telemetrie ───────────────────────────────────────────
   // Sobald der Kunde die Zusammenfassung (Step 4) erreicht, anonym erfassen,

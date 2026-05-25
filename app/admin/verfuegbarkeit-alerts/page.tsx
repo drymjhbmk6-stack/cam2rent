@@ -4,6 +4,13 @@ import { useEffect, useState, useCallback } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { fmtDateTime } from '@/lib/format-utils';
 
+interface UnavailableItem {
+  accessory_id: string;
+  name: string;
+  needed: number;
+  remaining: number;
+}
+
 interface Alert {
   id: string;
   alert_type: 'no_basic_set' | 'basic_set_unavailable' | 'set_unavailable' | 'accessory_unavailable';
@@ -21,6 +28,7 @@ interface Alert {
   last_seen_at: string;
   resolved_at: string | null;
   resolved_note: string | null;
+  details: { unavailable_items?: UnavailableItem[] } | null;
 }
 
 const TYPE_LABEL: Record<Alert['alert_type'], string> = {
@@ -189,9 +197,26 @@ export default function VerfuegbarkeitAlertsPage() {
                         {a.customer_email && <span>Kunde: {a.customer_email}</span>}
                         <span style={{ color: '#64748b' }}>Erstmals: {fmtDateTime(a.first_seen_at)} · Zuletzt: {fmtDateTime(a.last_seen_at)}</span>
                       </div>
-                      <p style={{ margin: '10px 0 0', fontSize: 12, color: '#fca5a5', fontStyle: 'italic' }}>
-                        {TYPE_HINT[a.alert_type]}
-                      </p>
+                      {a.alert_type === 'basic_set_unavailable' && a.details?.unavailable_items && a.details.unavailable_items.length > 0 ? (
+                        <div style={{ marginTop: 10, padding: '10px 12px', background: '#1f2937', border: '1px solid #7f1d1d', borderRadius: 8 }}>
+                          <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: '#fca5a5' }}>
+                            Diese Bestandteile fehlen:
+                          </p>
+                          <ul style={{ margin: '6px 0 0', paddingLeft: 18, fontSize: 12, color: '#fecaca' }}>
+                            {a.details.unavailable_items.map((it) => (
+                              <li key={it.accessory_id} style={{ marginBottom: 2 }}>
+                                <span style={{ color: '#fff', fontWeight: 600 }}>{it.name}</span>
+                                {' — '}
+                                <span>benötigt {it.needed}, frei {it.remaining}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : (
+                        <p style={{ margin: '10px 0 0', fontSize: 12, color: '#fca5a5', fontStyle: 'italic' }}>
+                          {TYPE_HINT[a.alert_type]}
+                        </p>
+                      )}
                       {a.resolved_note && (
                         <p style={{ margin: '8px 0 0', fontSize: 12, color: '#86efac' }}>
                           Lösungs-Notiz: {a.resolved_note}
