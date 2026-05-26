@@ -197,6 +197,45 @@ Fix in zwei Lagen:
   Gruppen werden aus der Anzeige entfernt. Fallback auf den alten
   String-Vergleich bleibt fuer alte API-Antworten ohne das neue Feld
   (kein Daten-Verlust bei Cache-Race).
+
+### Set-Expansion in Verfuegbarkeits-Check (Stand 2026-05-26)
+`computeAccessoryAvailability` (`lib/accessory-availability.ts`,
+`GET /api/accessory-availability`) las `accessory_items` einer Buchung
+frueher 1:1 ohne Set-Expansion. Der Buchungsflow speichert Sets aber
+als pseudo-accessory `{accessory_id: set_id, qty: 1}` — die echten
+Einzelteile (z.B. „64 GB", „Ladekabel" im Basic Set) wurden nie als
+belegt erkannt. Folge: ueberbuchbar, wenn viele Kunden dasselbe Set
+buchen → der Kunden-Live-Kalender zeigt keine Knappheit, der Admin
+merkt es erst beim Packen. Der Admin-Gantt
+(`/api/admin/availability-gantt`) hatte die Expansion schon lange,
+nur der Kunden-Pfad hinkte hinterher.
+
+Fix: zwei neue Lade-Schritte vorab — `accessories` wird ohne
+`available=true`-Filter geladen (inkl. interner Set-Defaults) und um
+`upgrade_group`/`is_upgrade_base` erweitert, plus eine Map
+`setItemsById` aus `sets`. Der Booking-Loop nutzt eine neue
+Helper-Funktion `expandBookingToAccCounts(items)`:
+  - Wenn `accessory_id` eine Set-ID ist → Einzelteile expandieren
+    (qty multipliziert mit Set-qty).
+  - Default-Item einer Upgrade-Gruppe wird **uebersprungen**, wenn
+    dieselbe Buchung in derselben Gruppe eine Nicht-Base-Variante
+    enthaelt (z.B. 64 GB im Set wird nicht gezaehlt, wenn der Kunde
+    512 GB als Upgrade gewaehlt hat) — analog zum Anzeige-Filter
+    `getFilteredSetItems`.
+  - `accessory_unit_ids`-Pfad zaehlt zusaetzlich Set-Defaults aus
+    `accessory_items` mit, falls die Buchungspipeline fuer die
+    Set-Inhalte keine Units zugewiesen hat (typischer Fall: heutige
+    `assignAccessoryUnitsToBooking` bekommt nur die Set-ID, keine
+    Inhalte).
+Defensiver Schema-Fallback bei fehlenden `upgrade_group`/
+`is_upgrade_base`-Spalten: Lade-Retry ohne die Spalten → Override
+greift einfach nicht, Set-Expansion laeuft unveraendert weiter.
+
+Konsequenz: gibt es z.B. 3 64-GB-Karten und 5 Buchungen des Basic-
+Sets ohne Upgrade, zeigt der Live-Kalender ab der 4. Buchung
+„ausgebucht". Buchungen mit gewaehltem 512-GB-Upgrade zaehlen das
+64-GB-Default NICHT mit (haben ja keinen Bedarf an einer
+64-GB-Karte).
 - **`supabase/recovery-after-drop.sql`** — Notfall: legt alte Tabellen wieder an,
   falls doch mal gedroppt wurde.
 

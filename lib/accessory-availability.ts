@@ -104,17 +104,72 @@ export async function computeAccessoryAvailability(opts: {
   const bufferedFrom = fromDate.toISOString().split('T')[0];
   const bufferedTo = toDate.toISOString().split('T')[0];
 
-  // 3. Alle Zubehörteile laden
-  const { data: allAccessories } = await supabase
+  // 3. Alle Zubehörteile laden — inkl. upgrade_group/is_upgrade_base
+  //    fuer die Set-Expansion (Default-Item wird uebersprungen wenn der
+  //    Kunde im selben accessory_items eine Upgrade-Variante hat).
+  //    Wichtig: hier KEIN `available=true`-Filter, weil interne Set-
+  //    Default-Items oft `available=false` haben, aber trotzdem
+  //    verfuegbarkeitsmaessig zaehlen sollen — sie binden physische
+  //    Stuecke aus der Speicher-/Akku-Pool-Tabelle.
+  type AccRow = {
+    id: string;
+    name: string;
+    available_qty: number | null;
+    available: boolean | null;
+    compatible_product_ids: string[] | null;
+    upgrade_group?: string | null;
+    is_upgrade_base?: boolean | null;
+  };
+  let accRes: { data: AccRow[] | null; error: { message: string } | null } = await supabase
     .from('accessories')
-    .select('id, name, available_qty, available, compatible_product_ids')
-    .eq('available', true);
+    .select('id, name, available_qty, available, compatible_product_ids, upgrade_group, is_upgrade_base');
+  if (accRes.error && /upgrade_group|is_upgrade_base|column|schema cache|PGRST/i.test(accRes.error.message)) {
+    accRes = await supabase
+      .from('accessories')
+      .select('id, name, available_qty, available, compatible_product_ids');
+  }
+  const allAccessoriesRaw = accRes.data ?? [];
 
-  if (!allAccessories) {
+  if (allAccessoriesRaw.length === 0) {
     return { accessories: [], buffer: { from: bufferedFrom, to: bufferedTo, beforeDays, afterDays } };
   }
 
-  // 4. Überlappende Buchungen laden
+  // Anzeige/Output-Liste enthaelt nur kundenseitig sichtbares Zubehoer
+  // (Set-Defaults bleiben raus, sonst tauchen sie im UI-Picker auf).
+  const allAccessories = allAccessoriesRaw.filter((a) => a.available !== false);
+
+  // Upgrade-Map: accessory_id -> { upgrade_group, is_upgrade_base } fuer die
+  // Default-Override-Logik bei Set-Expansion.
+  const upgradeInfoById = new Map<string, { group: string; isBase: boolean }>();
+  for (const a of allAccessoriesRaw) {
+    if (a.upgrade_group) {
+      upgradeInfoById.set(a.id, {
+        group: a.upgrade_group,
+        isBase: a.is_upgrade_base === true,
+      });
+    }
+  }
+
+  // 4. Set-Inhalte laden (id -> Liste der Einzel-Accessories). Brauchen wir
+  //    fuer die Expansion bei Set-Buchungen — der Buchungsflow speichert
+  //    Sets als pseudo-acc {accessory_id: set_id, qty: 1}, der Verfuegbarkeits-
+  //    Check muss die echten Einzelteile dahinter zaehlen.
+  const { data: setsData } = await supabase
+    .from('sets')
+    .select('id, accessory_items');
+  const setItemsById = new Map<string, AccessoryItemLite[]>();
+  for (const s of (setsData ?? []) as Array<{ id: string; accessory_items: unknown }>) {
+    if (!Array.isArray(s.accessory_items)) continue;
+    const items: AccessoryItemLite[] = [];
+    for (const it of s.accessory_items as Array<{ accessory_id?: string; qty?: number }>) {
+      if (!it?.accessory_id) continue;
+      const q = typeof it.qty === 'number' && it.qty > 0 ? Math.floor(it.qty) : 1;
+      items.push({ accessory_id: it.accessory_id, qty: q });
+    }
+    if (items.length > 0) setItemsById.set(s.id, items);
+  }
+
+  // 5. Überlappende Buchungen laden
   const globalTest = await isTestMode();
   let bookingsQuery = supabase
     .from('bookings')
@@ -129,7 +184,7 @@ export async function computeAccessoryAvailability(opts: {
   }
   const { data: bookings } = await bookingsQuery.returns<ReservingBooking[]>();
 
-  // 5. Unit→Accessory-Mapping vorab laden
+  // 6. Unit→Accessory-Mapping vorab laden
   const allUnitIds = new Set<string>();
   for (const b of bookings ?? []) {
     if (Array.isArray(b.accessory_unit_ids)) {
@@ -146,6 +201,58 @@ export async function computeAccessoryAvailability(opts: {
     for (const u of units ?? []) {
       unitToAcc.set(u.id as string, u.accessory_id as string);
     }
+  }
+
+  // Helper: expandiert eine Buchung in eine Map accId -> belegte qty, MIT
+  //  Set-Expansion + Upgrade-Default-Override.
+  //
+  //  Beispiel: accessory_items = [{basic_set, 1}, {512gb, 1}]
+  //   - basic_set ist eine Set-ID → wird zu seinen Items expandiert,
+  //     z.B. [{64gb, 1}, {ladekabel, 1}].
+  //   - 64gb ist ein Upgrade-Default (upgrade_group='storage',
+  //     is_upgrade_base=true), und 512gb ist im selben accessory_items
+  //     in derselben Gruppe und KEIN Base → 64gb wird uebersprungen
+  //     (das Set-Default ist durch das Upgrade ersetzt).
+  function expandBookingToAccCounts(items: AccessoryItemLite[]): Map<string, number> {
+    // 1. Welche Upgrade-Gruppen sind in dieser Buchung mit einer
+    //    Nicht-Base-Variante belegt? Pruefen sowohl direkte items als
+    //    auch Set-Inhalte.
+    const activeUpgradeGroups = new Set<string>();
+    const collectFromAcc = (accId: string) => {
+      const info = upgradeInfoById.get(accId);
+      if (info && !info.isBase) activeUpgradeGroups.add(info.group);
+    };
+    for (const it of items) {
+      if (setItemsById.has(it.accessory_id)) {
+        for (const sub of setItemsById.get(it.accessory_id) ?? []) {
+          collectFromAcc(sub.accessory_id);
+        }
+      } else {
+        collectFromAcc(it.accessory_id);
+      }
+    }
+
+    // 2. Zaehlen mit Override. Default-Items aktiver Upgrade-Gruppen
+    //    werden uebersprungen.
+    const counts = new Map<string, number>();
+    const addCount = (accId: string, qty: number) => {
+      const info = upgradeInfoById.get(accId);
+      if (info?.isBase && activeUpgradeGroups.has(info.group)) return;
+      counts.set(accId, (counts.get(accId) ?? 0) + qty);
+    };
+
+    for (const it of items) {
+      if (!it?.accessory_id || !it.qty || it.qty <= 0) continue;
+      const setSub = setItemsById.get(it.accessory_id);
+      if (setSub) {
+        for (const sub of setSub) {
+          addCount(sub.accessory_id, sub.qty * it.qty);
+        }
+      } else {
+        addCount(it.accessory_id, it.qty);
+      }
+    }
+    return counts;
   }
 
   // 6. Pro Zubehör: wie viele sind im Zeitraum gebucht?
@@ -168,31 +275,79 @@ export async function computeAccessoryAvailability(opts: {
       continue;
     }
 
-    // Prio 1: accessory_unit_ids
+    // Prio 1: accessory_unit_ids (konkret zugewiesene Exemplare) — die sind
+    //  bereits aufgeloest, keine Set-Expansion noetig. Buchungs-Pipeline
+    //  weist heute fuer Set-Inhalte KEINE Units zu (assignAccessoryUnits
+    //  bekommt nur Set-ID als pseudo-acc), daher tauchen die Set-Default-
+    //  Items hier in der Regel nicht auf — das wird in Prio 2 nachgeholt.
     if (Array.isArray(booking.accessory_unit_ids) && booking.accessory_unit_ids.length > 0) {
       for (const uid of booking.accessory_unit_ids) {
         const accId = unitToAcc.get(uid);
         if (!accId) continue;
         bookedCounts.set(accId, (bookedCounts.get(accId) ?? 0) + 1);
       }
-      continue;
-    }
-
-    // Prio 2: accessory_items (qty-aware)
-    if (Array.isArray(booking.accessory_items) && booking.accessory_items.length > 0) {
-      for (const item of booking.accessory_items) {
-        if (!item?.accessory_id) continue;
-        const q = typeof item.qty === 'number' && item.qty > 0 ? Math.floor(item.qty) : 1;
-        bookedCounts.set(item.accessory_id, (bookedCounts.get(item.accessory_id) ?? 0) + q);
+      // ZUSAETZLICH: accessory_items koennen Set-IDs enthalten, deren
+      // Inhalte NICHT als Units zugewiesen wurden. Diese Set-Defaults
+      // muessen wir trotzdem als belegt zaehlen — sonst wuerde z.B.
+      // das 64-GB-Default im "Basic Set" nie als gebucht erkannt, und
+      // der Kunden-Verfuegbarkeits-Check wuerde Ueberbuchungen zulassen.
+      if (Array.isArray(booking.accessory_items) && booking.accessory_items.length > 0) {
+        for (const it of booking.accessory_items) {
+          if (!it?.accessory_id) continue;
+          // Nur Set-Inhalte expandieren — direkte Items wurden bereits als
+          // Units oben gezaehlt. Wir verlassen uns hier auf setItemsById:
+          // Wenn die accessory_id KEIN Set ist, ueberspringen.
+          const setSub = setItemsById.get(it.accessory_id);
+          if (!setSub) continue;
+          // Active-Upgrade-Gruppen ueber alle items dieser Buchung sammeln
+          // (auch fuer direkt gewaehlte Upgrades, die nicht im Set sind).
+          const activeUpgradeGroups = new Set<string>();
+          for (const other of booking.accessory_items) {
+            if (!other?.accessory_id) continue;
+            const otherSet = setItemsById.get(other.accessory_id);
+            const collect = (aid: string) => {
+              const info = upgradeInfoById.get(aid);
+              if (info && !info.isBase) activeUpgradeGroups.add(info.group);
+            };
+            if (otherSet) {
+              for (const sub of otherSet) collect(sub.accessory_id);
+            } else {
+              collect(other.accessory_id);
+            }
+          }
+          for (const sub of setSub) {
+            const info = upgradeInfoById.get(sub.accessory_id);
+            if (info?.isBase && activeUpgradeGroups.has(info.group)) continue;
+            const qty = sub.qty * (typeof it.qty === 'number' && it.qty > 0 ? Math.floor(it.qty) : 1);
+            bookedCounts.set(sub.accessory_id, (bookedCounts.get(sub.accessory_id) ?? 0) + qty);
+          }
+        }
       }
       continue;
     }
 
-    // Prio 3: accessories[] (uralte Legacy, je 1)
+    // Prio 2: accessory_items (qty-aware) — MIT Set-Expansion und
+    //  Upgrade-Default-Override. Die Helper-Funktion macht beides:
+    //    - Wenn accessory_id eine Set-ID ist → in Einzelteile expandieren
+    //    - Wenn das expandierte Default-Item zu einer Upgrade-Gruppe gehoert,
+    //      die in derselben Buchung mit einer Upgrade-Variante belegt ist →
+    //      Default ueberspringen.
+    if (Array.isArray(booking.accessory_items) && booking.accessory_items.length > 0) {
+      const counts = expandBookingToAccCounts(booking.accessory_items);
+      for (const [accId, qty] of counts) {
+        bookedCounts.set(accId, (bookedCounts.get(accId) ?? 0) + qty);
+      }
+      continue;
+    }
+
+    // Prio 3: accessories[] (uralte Legacy, je 1) — analog mit Set-Expansion.
+    //  Hier gibts keine qty, kein upgrade-Override (es gibt kein Upgrade-
+    //  Konzept im alten string-array Format).
     if (Array.isArray(booking.accessories)) {
-      for (const accId of booking.accessories) {
-        if (!accId) continue;
-        bookedCounts.set(accId, (bookedCounts.get(accId) ?? 0) + 1);
+      const items: AccessoryItemLite[] = booking.accessories.map((id) => ({ accessory_id: id, qty: 1 }));
+      const counts = expandBookingToAccCounts(items);
+      for (const [accId, qty] of counts) {
+        bookedCounts.set(accId, (bookedCounts.get(accId) ?? 0) + qty);
       }
     }
   }
