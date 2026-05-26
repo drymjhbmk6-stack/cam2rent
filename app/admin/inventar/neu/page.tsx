@@ -54,6 +54,19 @@ export default function NeuesInventarPage() {
       .catch(() => setProdukte([]));
   }, []);
 
+  // Wechselt der Typ, wird die Produkt-Auswahl ggf. zurueckgesetzt — sonst
+  // bleibt eine Auswahl stehen, die im gefilterten Dropdown nicht mehr
+  // sichtbar ist (Kamera-Stammdaten bei Typ=Zubehoer oder umgekehrt).
+  useEffect(() => {
+    if (!produktId) return;
+    const selected = produkte.find((p) => p.id === produktId);
+    if (!selected) return;
+    const matchesTyp = typ === 'kamera'
+      ? selected.typ === 'kamera'
+      : selected.typ !== 'kamera';
+    if (!matchesTyp) setProduktId('');
+  }, [typ, produktId, produkte]);
+
   // Bezeichnung aus Produkt-Auswahl vorbelegen (nur wenn noch leer)
   useEffect(() => {
     if (!produktId || bezeichnung.trim()) return;
@@ -117,29 +130,21 @@ export default function NeuesInventarPage() {
           <select value={produktId} onChange={(e) => setProduktId(e.target.value)} className="w-full bg-[#111827] border border-slate-700 rounded px-3 py-2 text-base">
             <option value="">— Kein Produkt zugeordnet —</option>
             {(() => {
-              // Server sortiert Kameras zuerst, dann Zubehoer — hier
-              // splitten wir in zwei optgroups, damit der Admin die Kamera
-              // nicht erst an Zubehoeren mit Ziffer-Namen vorbeiscrollen muss.
-              const kameras = produkte.filter((p) => p.typ === 'kamera');
-              const zubehoer = produkte.filter((p) => p.typ !== 'kamera');
-              return (
-                <>
-                  {kameras.length > 0 && (
-                    <optgroup label="Kameras">
-                      {kameras.map((p) => (
-                        <option key={p.id} value={p.id}>{produktLabel(p)}</option>
-                      ))}
-                    </optgroup>
-                  )}
-                  {zubehoer.length > 0 && (
-                    <optgroup label="Zubehör / Sonstiges">
-                      {zubehoer.map((p) => (
-                        <option key={p.id} value={p.id}>{produktLabel(p)}</option>
-                      ))}
-                    </optgroup>
-                  )}
-                </>
-              );
+              // Dropdown nach dem "Typ"-Feld gefiltert: bei "Kamera" zeigen
+              // wir nur Kamera-Stammdaten, bei "Zubehoer"/"Verbrauch" nur
+              // Zubehoer-Stammdaten. Verbrauchsmaterial nutzt die gleichen
+              // Stammdaten wie Zubehoer (Quelle: accessories-Tabelle) —
+              // physische Klassifikation = inventar_units.typ, Stammdaten-
+              // Quelle ist davon unabhaengig.
+              const filtered = typ === 'kamera'
+                ? produkte.filter((p) => p.typ === 'kamera')
+                : produkte.filter((p) => p.typ !== 'kamera');
+              if (filtered.length === 0) {
+                return <option disabled>— Keine passenden Stammdaten —</option>;
+              }
+              return filtered.map((p) => (
+                <option key={p.id} value={p.id}>{produktLabel(p)}</option>
+              ));
             })()}
           </select>
           <p className="text-xs text-slate-500">
