@@ -1888,6 +1888,34 @@ Haftungsschutz** in einem Vorgang; Preisdifferenz wird abgewickelt.
   `notes`, Zahlungslink/Refund werden trotzdem ausgeführt, Webhook-Status-
   Update wird still übersprungen).
 
+#### Set-IDs bleiben beim Edit erhalten (Stand 2026-05-26)
+Bug-Fix: vorher löste `applyAccessoryComposition` Sets beim Speichern hart in
+Einzelteile auf (`newItems` = expandierte Blätter, Set-ID gedroppt). Folge:
+- `bookings.accessory_items` enthielt nach jedem Edit nur noch Blätter
+- die Rechnung (`lib/invoice-lines.ts` → `verifyAccessoryPrice`) berechnete
+  jedes Blatt zum Katalogpreis, weil das Set in der DB nicht mehr existierte
+- Der „Set-Bundle / Anpassung"-Rabatt-Posten in `lib/invoice-pdf.tsx` fing
+  die Differenz auf — Gesamtbetrag stimmte, aber die Einzelpreise pro Position
+  waren irreführend (z.B. „Extra Akku 10,90 €" obwohl Teil eines 0-€-Basic-Sets)
+
+Fix in zwei Dateien:
+- **`lib/booking-accessory-apply.ts`:** internes `newItems` umbenannt in
+  `expandedItems` (Blätter, weiter für Verfügbarkeits-Check + Unit-Zuweisung
+  genutzt). Rückgabe `newItems = rawSelection` (mit Set-IDs) — analog zur
+  normalen Buchungs-Wizard-Form. Bei Upgrade-Gruppen-Konflikt (Set enthält
+  128 GB + Admin wählt zusätzlich 256 GB) fällt der Code auf die alte
+  Expansion zurück, damit `skipUpgradeGroups` weiter greift.
+- **`app/admin/buchungen/[id]/page.tsx` → `BookingEditSection`:** `rows` wird
+  jetzt aus `booking.accessory_items` (roh) statt aus `booking.resolved_items`
+  (expandiert) initialisiert. Sets erscheinen als eine Zeile mit Set-Namen
+  statt als auseinandergerissene Einzelteile. Hinweistexte angepasst
+  („Sets (bleiben als Set in der Buchung)").
+
+Bestehende Buchungen mit bereits aufgelösten Blättern bleiben in dieser
+Form — die Rechnung zeigt sie weiter mit Einzelpreisen. Wer das aufräumen
+will, muss in der „Bestellung bearbeiten"-Sektion die Blätter manuell
+entfernen und das Set neu hinzufügen.
+
 ### Verkauf von Zubehör — Speicherkarten etc. (Stand 2026-05-21)
 Admin-seitiges Verkaufs-Tool: ein Zubehör (typisch eine gebrauchte
 Speicherkarte, die nicht zurück in den Verleih soll) an einen Kunden

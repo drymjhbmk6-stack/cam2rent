@@ -1962,7 +1962,24 @@ function BookingEditSection({
 }) {
   const setOptions = options.filter((o) => o.kind === 'set');
   const accOptions = options.filter((o) => o.kind === 'accessory');
-  const leafRows = (booking.resolved_items ?? []).filter((r) => !!r.accessory_id);
+  // Rohe Komposition aus accessory_items — Set-IDs bleiben als Sets sichtbar,
+  // damit der Admin sie als Block behandeln kann (statt aufgeloester Einzelteile).
+  // Fix fuer den Basic-Set-Pricing-Bug: beim Speichern wuerde der Server die
+  // Set-ID sonst verlieren und alle Sub-Items als individuelle Posten zum
+  // Katalogpreis abrechnen.
+  const initRows = (() => {
+    if (Array.isArray(booking.accessory_items) && booking.accessory_items.length > 0) {
+      return booking.accessory_items
+        .filter((r) => r && typeof r.accessory_id === 'string' && r.accessory_id)
+        .map((r) => ({ id: r.accessory_id, qty: Math.max(1, Math.min(99, Math.round(Number(r.qty) || 1))) }));
+    }
+    if (Array.isArray(booking.accessories)) {
+      return (booking.accessories as string[])
+        .filter((id) => typeof id === 'string' && id)
+        .map((id) => ({ id, qty: 1 }));
+    }
+    return [];
+  })();
 
   const curHaftung: 'none' | 'standard' | 'premium' =
     booking.haftung === 'standard' ? 'standard' : booking.haftung === 'premium' ? 'premium' : 'none';
@@ -1987,9 +2004,7 @@ function BookingEditSection({
   const [shipOverrideOn, setShipOverrideOn] = useState(false);
   const [shipOverrideVal, setShipOverrideVal] = useState(String(booking.shipping_price ?? 0));
   const [haftung, setHaftung] = useState<'none' | 'standard' | 'premium'>(curHaftung);
-  const [rows, setRows] = useState<{ id: string; qty: number }[]>(
-    leafRows.map((r) => ({ id: r.accessory_id as string, qty: r.qty })),
-  );
+  const [rows, setRows] = useState<{ id: string; qty: number }[]>(initRows);
   const [accChanged, setAccChanged] = useState(false);
   const [reason, setReason] = useState('');
   const [settle, setSettle] = useState<'auto' | 'none'>('auto');
@@ -2009,7 +2024,7 @@ function BookingEditSection({
     setShipOverrideOn(false);
     setShipOverrideVal(String(booking.shipping_price ?? 0));
     setHaftung(curHaftung);
-    setRows(leafRows.map((r) => ({ id: r.accessory_id as string, qty: r.qty })));
+    setRows(initRows);
     setAccChanged(false);
     setReason('');
     setSettle('auto');
@@ -2263,7 +2278,7 @@ function BookingEditSection({
               >
                 <option value="">— wählen —</option>
                 {setOptions.length > 0 && (
-                  <optgroup label="Sets (werden in Einzelteile aufgelöst)">
+                  <optgroup label="Sets (bleiben als Set in der Buchung)">
                     {setOptions.map((o) => (
                       <option key={o.id} value={o.id}>{o.name} — {o.compat}</option>
                     ))}
@@ -2301,7 +2316,7 @@ function BookingEditSection({
             + Set / Zubehör hinzufügen
           </button>
           {!accChanged && (
-            <p className="text-xs text-brand-muted">Unverändert — Set-Preise bleiben erhalten. Beim Bearbeiten werden Sets in Einzelteile aufgelöst.</p>
+            <p className="text-xs text-brand-muted">Unverändert — Sets bleiben als Set (0 €) in der Rechnung. Sub-Items werden beim Packen automatisch aufgelöst.</p>
           )}
         </div>
 

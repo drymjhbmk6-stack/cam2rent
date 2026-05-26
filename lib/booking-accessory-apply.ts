@@ -264,7 +264,10 @@ export async function applyAccessoryComposition(
   }
 
   // Sets -> Einzelteile aufloesen (mit Upgrade-Gruppen-Konflikt-Filter).
-  let newItems = rawSelection;
+  // expandedItems = Blaetter, intern fuer Verfuegbarkeits-Check + Unit-
+  // Zuweisung verwendet. NICHT was am Ende in bookings.accessory_items
+  // landet (siehe Plan-A unten).
+  let expandedItems: { accessory_id: string; qty: number }[] = rawSelection;
   if (rawSelection.length > 0) {
     const expandedResolved = await resolveAccessoryItems(
       supabase,
@@ -276,7 +279,7 @@ export async function applyAccessoryComposition(
       if (!r.accessory_id) continue;
       expMap.set(r.accessory_id, Math.min(99, (expMap.get(r.accessory_id) ?? 0) + (r.qty || 0)));
     }
-    newItems = [...expMap.entries()].map(([accessory_id, qty]) => ({ accessory_id, qty })).slice(0, 50);
+    expandedItems = [...expMap.entries()].map(([accessory_id, qty]) => ({ accessory_id, qty })).slice(0, 50);
   }
 
   const oldItemsArr: { accessory_id: string; qty: number }[] =
@@ -318,7 +321,7 @@ export async function applyAccessoryComposition(
   // Verfuegbarkeit HART pruefen — nur fuer den ECHTEN Zuwachs gegenueber der
   // bereits gebuchten (expandierten) Komposition. Diese Buchung wird aus der
   // Zaehlung ausgeschlossen. In-process (kein HTTP-Self-Fetch).
-  if (newItems.length > 0) {
+  if (expandedItems.length > 0) {
     const dm = deliveryMode || 'versand';
     const availMap = new Map<string, { name: string; remaining: number }>();
     try {
@@ -356,8 +359,10 @@ export async function applyAccessoryComposition(
 
   // Mutation der Unit-Zuordnung — Units behalten bis neue Menge, echten
   // Fehlbestand neu zuweisen, Ueberzaehliges freigeben.
-  const newQtyMap = new Map(newItems.map((i) => [i.accessory_id, i.qty]));
-  const allAccIds = new Set<string>([...unitsByAcc.keys(), ...newItems.map((i) => i.accessory_id)]);
+  // WICHTIG: hier wird die EXPANDIERTE Form gebraucht (Set-Teile haben ihre
+  // eigenen Unit-Pools), die rohe Form mit Set-IDs wuerde die Units verlieren.
+  const newQtyMap = new Map(expandedItems.map((i) => [i.accessory_id, i.qty]));
+  const allAccIds = new Set<string>([...unitsByAcc.keys(), ...expandedItems.map((i) => i.accessory_id)]);
 
   const keptUnitIds: string[] = [];
   const releaseUnitIds: string[] = [];
@@ -410,10 +415,22 @@ export async function applyAccessoryComposition(
     }
   }
 
+  // Plan-A: rohe Auswahl (mit Set-IDs) als bookings.accessory_items speichern
+  // — analog zum normalen Buchungs-Wizard. So bleibt die Set-Zugehoerigkeit
+  // erhalten, und die Rechnung kann das Set korrekt als 0-EUR-Posten ausweisen,
+  // statt jede Einzelposition zum Katalogpreis zu berechnen.
+  //
+  // Ausnahme: Upgrade-Gruppen-Konflikt (z.B. Set enthaelt 128 GB, Kunde waehlt
+  // zusaetzlich 256 GB im selben Upgrade-Slot). In diesem Fall fallen wir auf
+  // die alte Aufloesungs-Logik zurueck (Set in Blaetter expandiert), damit das
+  // 128 GB-Sub-Item nicht doppelt erscheint (Packliste/WBW/Unit-Zuweisung
+  // ueber `skipUpgradeGroups` haetten sonst Drift gegenueber dem in der DB
+  // gespeicherten Stand).
+  const storedItems = skipUpgradeGroups.size > 0 ? expandedItems : rawSelection;
   return {
     ok: true,
-    newItems,
-    accessories: [...new Set(newItems.map((i) => i.accessory_id))],
+    newItems: storedItems,
+    accessories: [...new Set(storedItems.map((i) => i.accessory_id))],
     accessory_unit_ids: finalUnitIds,
     oldItems: oldItemsArr,
   };
