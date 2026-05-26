@@ -18,6 +18,7 @@
  */
 
 import type { createServiceClient } from '@/lib/supabase';
+import { getBerlinHour } from '@/lib/timezone';
 
 type SB = ReturnType<typeof createServiceClient>;
 
@@ -26,6 +27,17 @@ export interface BufferDays {
   versand_after: number;
   abholung_before: number;
   abholung_after: number;
+  /**
+   * Optionaler Cutoff (Berlin-Stunde 0-23). Ab dieser Stunde gilt der heutige
+   * Tag NICHT mehr als nutzbarer Vorlauf-Tag → der effektive Vorlauf wird um
+   * +1 Tag erhoeht. `null`/`undefined` = kein Cutoff (Verhalten wie bisher).
+   *
+   * Beispiel Versand-Cutoff 12:00 und Vorlauf 3:
+   * - Buchung um 11:30 Berlin → Vorlauf = 3 Tage
+   * - Buchung um 12:01 Berlin → Vorlauf = 4 Tage (heute zaehlt nicht mehr)
+   */
+  versand_cutoff_hour?: number | null;
+  abholung_cutoff_hour?: number | null;
 }
 
 /**
@@ -40,6 +52,8 @@ export const DEFAULT_BUFFER: BufferDays = {
   versand_after: 2,
   abholung_before: 0,
   abholung_after: 1,
+  versand_cutoff_hour: null,
+  abholung_cutoff_hour: null,
 };
 
 /** Laedt die globalen Puffer aus admin_settings (defensiver Fallback). */
@@ -121,6 +135,29 @@ export function computeReturnDueDate(
   const after = deliveryMode === 'abholung' ? buf.abholung_after : buf.versand_after;
   d.setDate(d.getDate() + after);
   return d;
+}
+
+/**
+ * Effektive Vorlaufzeit fuer eine NEUE Buchung ab `now`. Beruecksichtigt
+ * den optionalen Cutoff-Hour: ist die aktuelle Berlin-Stunde >= cutoff,
+ * faellt der heutige Tag aus der Vorlaufzeit raus (+1 Tag).
+ *
+ * Beispiel Versand 3 Tage + Cutoff 12:00:
+ *  - 11:30 Berlin → 3 Tage (Buchung heute um 11:30 + 3 Tage = frueheste Miete uebermorgen+1)
+ *  - 12:01 Berlin → 4 Tage (kein voller Versandtag mehr heute → +1 Puffer)
+ */
+export function getEffectiveLeadDays(
+  buf: BufferDays,
+  deliveryMode: string | null | undefined,
+  now: Date = new Date(),
+): number {
+  const isPickup = deliveryMode === 'abholung';
+  const base = isPickup ? buf.abholung_before : buf.versand_before;
+  const cutoff = isPickup ? buf.abholung_cutoff_hour : buf.versand_cutoff_hour;
+  if (typeof cutoff !== 'number' || !Number.isFinite(cutoff)) return base;
+  const cutoffInt = Math.floor(cutoff);
+  if (cutoffInt < 0 || cutoffInt > 23) return base;
+  return getBerlinHour(now) >= cutoffInt ? base + 1 : base;
 }
 
 /** Convenience: liefert beide Daten als ISO-Strings (YYYY-MM-DD). */

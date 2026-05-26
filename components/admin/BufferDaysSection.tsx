@@ -10,11 +10,21 @@ import { useEffect, useState } from 'react';
  * Speicherung: admin_settings.booking_buffer_days
  *   { versand_before, versand_after, abholung_before, abholung_after }
  */
+function sanitizeCutoff(raw: string): number | null {
+  const s = raw.trim();
+  if (!s) return null;
+  const n = parseInt(s, 10);
+  if (!Number.isFinite(n) || n < 0 || n > 23) return null;
+  return n;
+}
+
 export default function BufferDaysSection() {
   const [versandBefore, setVersandBefore] = useState('2');
   const [versandAfter, setVersandAfter] = useState('2');
   const [abholungBefore, setAbholungBefore] = useState('0');
   const [abholungAfter, setAbholungAfter] = useState('1');
+  const [versandCutoff, setVersandCutoff] = useState('');
+  const [abholungCutoff, setAbholungCutoff] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState('');
@@ -29,6 +39,12 @@ export default function BufferDaysSection() {
           if (v.versand_after !== undefined) setVersandAfter(String(v.versand_after));
           if (v.abholung_before !== undefined) setAbholungBefore(String(v.abholung_before));
           if (v.abholung_after !== undefined) setAbholungAfter(String(v.abholung_after));
+          if (v.versand_cutoff_hour !== undefined && v.versand_cutoff_hour !== null) {
+            setVersandCutoff(String(v.versand_cutoff_hour));
+          }
+          if (v.abholung_cutoff_hour !== undefined && v.abholung_cutoff_hour !== null) {
+            setAbholungCutoff(String(v.abholung_cutoff_hour));
+          }
         }
         setLoading(false);
       })
@@ -49,6 +65,8 @@ export default function BufferDaysSection() {
             versand_after: parseInt(versandAfter) || 0,
             abholung_before: parseInt(abholungBefore) || 0,
             abholung_after: parseInt(abholungAfter) || 0,
+            versand_cutoff_hour: sanitizeCutoff(versandCutoff),
+            abholung_cutoff_hour: sanitizeCutoff(abholungCutoff),
           }),
         }),
       });
@@ -101,6 +119,20 @@ export default function BufferDaysSection() {
                 <input style={numInputStyle} type="number" min="0" max="14" value={versandAfter} onChange={(e) => setVersandAfter(e.target.value)} />
                 <span className="text-xs" style={{ color: '#94a3b8' }}>Tage nachher blockiert</span>
               </div>
+              <div className="flex items-center gap-2">
+                <input
+                  style={numInputStyle}
+                  type="number"
+                  min="0"
+                  max="23"
+                  placeholder="aus"
+                  value={versandCutoff}
+                  onChange={(e) => setVersandCutoff(e.target.value)}
+                />
+                <span className="text-xs" style={{ color: '#94a3b8' }}>
+                  Cutoff-Stunde (Berlin) — leer = aus
+                </span>
+              </div>
             </div>
           </div>
 
@@ -116,6 +148,20 @@ export default function BufferDaysSection() {
               <div className="flex items-center gap-2">
                 <input style={numInputStyle} type="number" min="0" max="14" value={abholungAfter} onChange={(e) => setAbholungAfter(e.target.value)} />
                 <span className="text-xs" style={{ color: '#94a3b8' }}>Tage nachher blockiert</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  style={numInputStyle}
+                  type="number"
+                  min="0"
+                  max="23"
+                  placeholder="aus"
+                  value={abholungCutoff}
+                  onChange={(e) => setAbholungCutoff(e.target.value)}
+                />
+                <span className="text-xs" style={{ color: '#94a3b8' }}>
+                  Cutoff-Stunde (Berlin) — leer = aus
+                </span>
               </div>
             </div>
           </div>
@@ -134,8 +180,14 @@ export default function BufferDaysSection() {
             )}
           </div>
 
-          <div className="p-3 rounded-lg text-xs" style={{ background: '#f59e0b08', border: '1px solid #f59e0b20', color: '#94a3b8' }}>
-            <strong style={{ color: '#fbbf24' }}>Beispiel Versand (2/2):</strong> Kunde mietet 10.–15. April → Kamera und Zubehör sind vom 8.–17. April blockiert (2 Tage Versandpuffer vor und nach der Miete).
+          <div className="p-3 rounded-lg text-xs space-y-2" style={{ background: '#f59e0b08', border: '1px solid #f59e0b20', color: '#94a3b8' }}>
+            <div>
+              <strong style={{ color: '#fbbf24' }}>Beispiel Versand (2/2):</strong> Kunde mietet 10.–15. April → Kamera und Zubehör sind vom 8.–17. April blockiert (2 Tage Versandpuffer vor und nach der Miete).
+            </div>
+            <div>
+              <strong style={{ color: '#fbbf24' }}>Cutoff-Stunde:</strong> ab dieser Berlin-Stunde zaehlt der heutige Tag NICHT mehr als nutzbarer Vorlauf-Tag — der Kunden-Kalender verschiebt die fruehste Miete automatisch um +1 Tag.<br />
+              Beispiel Versand 3 Tage Vorlauf + Cutoff 12: Buchung um 11:30 → frueheste Miete in 3 Tagen. Buchung um 12:01 → frueheste Miete in 4 Tagen (Paket geht heute nicht mehr raus).
+            </div>
           </div>
         </div>
       )}

@@ -499,6 +499,7 @@ Wenn eine Buchung vor Ablauf der 14-tägigen Widerrufsfrist beginnt, muss der Ku
 - **Startdatum:** Keine Sonn-/Feiertagssperre — Paket wird vorher von cam2rent verschickt. Nur 3 Tage Vorlaufzeit.
 - **Enddatum:** Gesperrt wenn **Folgetag** Sonntag oder Feiertag ist (Kunde muss am nächsten Tag Paket abgeben).
 - **Puffertage:** In `admin_settings.booking_buffer_days` konfigurierbar (versand_before/after, abholung_before/after).
+- **Cutoff-Stunde pro Modus (Stand 2026-05-26):** Optionale Felder `versand_cutoff_hour` + `abholung_cutoff_hour` (Berlin-Stunde 0-23) im selben Setting. Ist die aktuelle Berlin-Stunde ≥ Cutoff, gilt der heutige Tag NICHT mehr als nutzbarer Vorlauf-Tag → der effektive Vorlauf erhoeht sich automatisch um +1 Tag. Verhindert „26.05. 23:59 → frueheste Miete 29.05." mit 3 Tagen Vorlauf, obwohl der Versand heute nicht mehr rausgeht. Helper `getEffectiveLeadDays(buf, deliveryMode)` in `lib/booking-buffer.ts`, genutzt von `/api/availability/[productId]`. UI: zwei Eingabefelder unter „Tage vorher/nachher blockiert" in `/admin/einstellungen?tab=allgemein` → „Puffer-Tage (Verfuegbarkeit)". Leer = aus (kein Cutoff). Reine Frontend-Anzeige-Verschaerfung — wirkt nicht auf manuelle Admin-Buchungen oder serverseitige Validierung.
 - **Tooltips:** Gesperrte Tage zeigen Grund beim Hover.
 - Startdatum wird immer blau hervorgehoben + Anzeige unter Kalender.
 - **1-Tag-Buchung:** Doppelklick auf gleichen Tag = Start und Ende am selben Tag. Hinweis: "Wähle das Enddatum oder klicke erneut für 1 Tag"

@@ -8,6 +8,7 @@ import {
   loadBufferDays,
   computeShipDate,
   computeReturnDueDate,
+  getEffectiveLeadDays,
   type BufferDays,
 } from '@/lib/booking-buffer';
 
@@ -234,8 +235,12 @@ export async function GET(
 
   // Vorlaufzeit fuer die neue Buchung (ab heute): entspricht dem
   // admin-konfigurierten "Puffer vorher" fuer den aktuellen Lieferungs-Modus.
+  // Optionaler Cutoff-Hour (admin_settings.booking_buffer_days.<mode>_cutoff_hour)
+  // erhoeht den Vorlauf um +1 Tag, wenn die aktuelle Berlin-Stunde >= Cutoff ist —
+  // verhindert z.B. eine "23:59-Buchung mit 3 Tagen Versand-Vorlauf" zu akzeptieren,
+  // obwohl der Versand heute nicht mehr rausgeht.
   // Frontend rendert Tage innerhalb dieser Frist visuell als gesperrt.
-  const leadTimeDays = viewerMode === 'abholung' ? buf.abholung_before : buf.versand_before;
+  const leadTimeDays = getEffectiveLeadDays(buf, viewerMode);
 
   return NextResponse.json({
     days,
