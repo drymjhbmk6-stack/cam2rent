@@ -64,12 +64,63 @@ export async function GET() {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+  // Typ pro Produkt aus migration_audit ableiten: alte_tabelle =
+  // 'admin_config.products' → kamera, 'accessories' → zubehoer. Damit
+  // koennen wir das Dropdown sinnvoll sortieren + gruppieren (sonst rutschen
+  // Zubehoere mit Ziffer-Namen wie "128 GB" alphabetisch vor die Kameras
+  // und der Admin denkt, die Kamera ist nicht in der Liste).
+  const typByProduktId = await loadProduktTypes(supabase, (produkte ?? []).map((p) => p.id));
+
   // Anreicherung mit Kompatibilitaeten — defensiv, bei Fehlern liefern wir
   // einfach leere compatible_camera_names zurueck und das Dropdown zeigt
   // wenigstens den Namen.
   const enriched = await enrichWithCompatibility(supabase, produkte ?? []);
 
-  return NextResponse.json({ produkte: enriched });
+  // Sortieren: Kameras zuerst (alphabetisch nach Marke + Name), dann
+  // Zubehoer (alphabetisch nach Name). Unbekannter Typ landet als Zubehoer.
+  const sorted = enriched.slice().sort((a, b) => {
+    const tA = typByProduktId.get(a.id) ?? 'zubehoer';
+    const tB = typByProduktId.get(b.id) ?? 'zubehoer';
+    if (tA !== tB) return tA === 'kamera' ? -1 : 1;
+    if (tA === 'kamera') {
+      const keyA = `${a.marke ?? ''} ${a.name ?? ''}`.toLocaleLowerCase('de');
+      const keyB = `${b.marke ?? ''} ${b.name ?? ''}`.toLocaleLowerCase('de');
+      return keyA.localeCompare(keyB, 'de');
+    }
+    return (a.name ?? '').localeCompare(b.name ?? '', 'de');
+  });
+
+  const withTyp = sorted.map((p) => ({ ...p, typ: typByProduktId.get(p.id) ?? 'zubehoer' as const }));
+
+  return NextResponse.json({ produkte: withTyp });
+}
+
+/**
+ * Liest migration_audit und mappt produkt-ID → Typ. Defensiv: bei DB-Fehlern
+ * (z.B. fehlende migration_audit-Tabelle im Pre-Konsolidierung-Stand) wird
+ * eine leere Map zurueckgegeben — die Sortierung faellt dann auf den
+ * Zubehoer-Default zurueck.
+ */
+async function loadProduktTypes(
+  supabase: ReturnType<typeof createServiceClient>,
+  ids: string[],
+): Promise<Map<string, 'kamera' | 'zubehoer'>> {
+  const map = new Map<string, 'kamera' | 'zubehoer'>();
+  if (ids.length === 0) return map;
+  try {
+    const { data } = await supabase
+      .from('migration_audit')
+      .select('alte_tabelle, neue_id')
+      .eq('neue_tabelle', 'produkte')
+      .in('neue_id', ids);
+    for (const row of (data ?? []) as Array<{ alte_tabelle: string; neue_id: string }>) {
+      if (row.alte_tabelle === 'admin_config.products') map.set(row.neue_id, 'kamera');
+      else if (row.alte_tabelle === 'accessories') map.set(row.neue_id, 'zubehoer');
+    }
+  } catch {
+    /* leere Map → Default 'zubehoer' */
+  }
+  return map;
 }
 
 interface ProduktRow {

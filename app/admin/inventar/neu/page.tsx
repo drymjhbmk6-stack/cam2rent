@@ -12,6 +12,8 @@ interface Produkt {
   modell: string | null;
   ist_vermietbar: boolean;
   compatible_camera_names?: string[];
+  /** Vom Server abgeleitet ueber migration_audit — fuer das optgroup-Splitting. */
+  typ?: 'kamera' | 'zubehoer';
 }
 
 function produktLabel(p: Produkt): string {
@@ -114,9 +116,31 @@ export default function NeuesInventarPage() {
           <Label>Produkt zuordnen (Stammdaten)</Label>
           <select value={produktId} onChange={(e) => setProduktId(e.target.value)} className="w-full bg-[#111827] border border-slate-700 rounded px-3 py-2 text-base">
             <option value="">— Kein Produkt zugeordnet —</option>
-            {produkte.map((p) => (
-              <option key={p.id} value={p.id}>{produktLabel(p)}</option>
-            ))}
+            {(() => {
+              // Server sortiert Kameras zuerst, dann Zubehoer — hier
+              // splitten wir in zwei optgroups, damit der Admin die Kamera
+              // nicht erst an Zubehoeren mit Ziffer-Namen vorbeiscrollen muss.
+              const kameras = produkte.filter((p) => p.typ === 'kamera');
+              const zubehoer = produkte.filter((p) => p.typ !== 'kamera');
+              return (
+                <>
+                  {kameras.length > 0 && (
+                    <optgroup label="Kameras">
+                      {kameras.map((p) => (
+                        <option key={p.id} value={p.id}>{produktLabel(p)}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {zubehoer.length > 0 && (
+                    <optgroup label="Zubehör / Sonstiges">
+                      {zubehoer.map((p) => (
+                        <option key={p.id} value={p.id}>{produktLabel(p)}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                </>
+              );
+            })()}
           </select>
           <p className="text-xs text-slate-500">
             Verknuepft das Inventar-Stueck mit den Produkt-Stammdaten — Voraussetzung fuer Verfuegbarkeit, Mietvertrag-Wiederbeschaffungswert und Auslastungs-Auswertung.
