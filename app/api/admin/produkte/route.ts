@@ -1,10 +1,22 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { getProducts } from '@/lib/get-products';
+import { resolveProdukteIdMap } from '@/lib/legacy-bridge';
 
 /**
  * GET /api/admin/produkte → Liste aller Produkt-Stammdaten aus der neuen
  * `produkte`-Tabelle. Wird vom Inventar-Anlege-Formular fuer das
  * Produkt-Dropdown genutzt.
+ *
+ * **Lazy-Backfill aller Shop-Quellen:** Vor dem Select stellt die Route
+ * sicher, dass jede Kamera aus `admin_config.products` und jedes Zubehoer
+ * aus `accessories` einen `produkte`-Mirror hat. Damit erscheinen auch
+ * Kameras im Dropdown, fuer die noch nie ein Inventar-Eintrag / QR-Code
+ * gemacht wurde — sonst tauchen sie hier gar nicht auf, obwohl sie im
+ * Shop existieren (`/admin/preise/kameras`). `resolveProdukteIdMap` mit
+ * `autoCreate: true` ist idempotent: vorhandene Bridges werden nicht
+ * doppelt erzeugt, der Aufwand pro Request ist ein Bulk-Lookup +
+ * ggf. ein paar Inserts beim ersten Mal pro Produkt.
  *
  * Pro Produkt wird zusaetzlich `compatible_camera_names` geliefert — eine
  * Liste von Kamera-Namen, mit denen das Zubehoer kompatibel ist (aus
@@ -19,8 +31,31 @@ import { createServiceClient } from '@/lib/supabase';
  *   - `['Alle Kameras']` wenn das Zubehoer fuer alle Kameras passt
  *   - sonst eine Liste konkreter Kameranamen
  */
-export async function GET(_req: NextRequest) {
+export async function GET() {
   const supabase = createServiceClient();
+
+  // Lazy-Backfill: alle Shop-Kameras + Zubehoere idempotent in `produkte`
+  // mirroren, damit das Dropdown vollstaendig ist. Defensiv — falls eine
+  // Quelle fehlschlaegt, geben wir trotzdem die existierenden Produkte aus.
+  try {
+    const products = await getProducts();
+    const cameraIds = products.map((p) => p.id);
+    if (cameraIds.length > 0) {
+      await resolveProdukteIdMap(supabase, 'admin_config.products', cameraIds, { autoCreate: true });
+    }
+  } catch (err) {
+    console.error('[produkte GET] Lazy-Backfill Kameras fehlgeschlagen:', err);
+  }
+
+  try {
+    const { data: accs } = await supabase.from('accessories').select('id');
+    const accIds = (accs ?? []).map((a: { id: string }) => a.id);
+    if (accIds.length > 0) {
+      await resolveProdukteIdMap(supabase, 'accessories', accIds, { autoCreate: true });
+    }
+  } catch (err) {
+    console.error('[produkte GET] Lazy-Backfill Zubehoer fehlgeschlagen:', err);
+  }
 
   const { data: produkte, error } = await supabase
     .from('produkte')
