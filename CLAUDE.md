@@ -145,9 +145,22 @@ lesen sie weiterhin.
     auf 0 gesetzt hat, obwohl die Inventar-Einheiten in der neuen Welt
     `inventar_units` lebten und der Mirror in `accessory_units` leer war
     → Gantt zeigte alles als ausgebucht. UI: amber Button **„Bestand
-    wiederherstellen"** auf `/admin/inventar`. Default-Auswahl haakt nur
-    Recovery-Faelle an (`diff > 0`); Eintraege mit negativem Δ
-    (Bestand wuerde gesenkt) muss der Admin bewusst entscheiden.
+    wiederherstellen"** im Wartung-Dropdown auf `/admin/inventar`.
+    Default-Auswahl haakt nur Recovery-Faelle an (`diff > 0`); Eintraege
+    mit negativem Δ (Bestand wuerde gesenkt) muss der Admin bewusst
+    entscheiden.
+  - **Wartung-Dropdown (Stand 2026-05-26):** Die 5 selten genutzten
+    Reparatur-Tools auf `/admin/inventar` sind hinter einem **„Wartung
+    ▾"-Dropdown** zusammengefasst (Mirror-Backfill, Bestand
+    wiederherstellen, Bestaende pruefen, Codes aufraeumen, Verwaiste
+    aufraeumen). Sichtbar im Haupt-Header bleiben nur `Code-Segmente` +
+    `+ Manuell anlegen`. Header des Dropdowns erklaert: „Im Normalbetrieb
+    nicht noetig. Greifen nur bei Daten-Drift, nach Migrationen oder im
+    Recovery-Fall." Funktional unveraendert — jedes Tool behaelt sein
+    eigenes Modal + Konfirmations-Dialog. Hintergrund: der DB-Drop des
+    Hybrid-Modells bleibt aufgegeben (siehe „STRATEGIE-WECHSEL"-Notiz
+    weiter oben), aber die Tools sind nur Reparatur-Werkzeuge und
+    duerfen nicht den taeglichen Workflow visuell dominieren.
   - **`syncAccessoryQty` haertet jetzt gegen einseitige Welten
     (Stand 2026-05-26):** Helper liest zusaetzlich `inventar_units` und
     setzt `available_qty = MAX(legacy_count, inventar_count)`. Damit kann

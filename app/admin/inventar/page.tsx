@@ -152,11 +152,7 @@ export default function InventarPage() {
             <Link href="/admin/inventar/code-segmente" className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded text-sm">
               Code-Segmente
             </Link>
-            <BackfillCodesButton />
-            <BackfillMirrorsButton />
-            <RestoreQtyButton />
-            <ResyncQtyButton />
-            <CleanupOrphansButton />
+            <MaintenanceMenu />
             <Link href="/admin/inventar/neu" className="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-900 rounded font-semibold">
               + Manuell anlegen
             </Link>
@@ -264,6 +260,108 @@ export default function InventarPage() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Wartungs-Menue mit den 5 selten genutzten Reparatur-Tools.
+ * Im Normalbetrieb (taegliches Anlegen / Verwalten) braucht der Admin
+ * keinen davon — sie greifen nur bei Daten-Drift, nach Migrationen oder
+ * im Recovery-Fall. Daher zusammengefasst statt 6 graue Buttons
+ * nebeneinander zu zeigen.
+ *
+ * Wichtig: jeder der Buttons hat einen eigenen Modal-State. Sie werden
+ * weiterhin als eigenstaendige Komponenten gerendert (nur jetzt im
+ * Dropdown-Container) — der Modal-Layer ist via `fixed inset-0 z-50`
+ * sowieso vom Dropdown-Container entkoppelt.
+ */
+function MaintenanceMenu() {
+  const [open, setOpen] = useState(false);
+
+  // Klicks ausserhalb des Menus schliessen es.
+  useEffect(() => {
+    if (!open) return;
+    function onDocClick(e: MouseEvent) {
+      const target = e.target as HTMLElement | null;
+      if (target?.closest('[data-maintenance-menu-root]')) return;
+      // Wenn ein Modal eines Inneren Buttons offen ist (z-50, fixed),
+      // wollen wir das Schliessen NICHT — der Modal-Backdrop kuemmert sich
+      // selbst um den Close. Beste Heuristik: nur schliessen wenn Click
+      // nicht im Modal-Layer ist. Da unsere Modale auf z-50 sitzen und
+      // unser Dropdown auf z-40, ist ein Click auf das Modal sowieso
+      // verarbeitet, bevor er hier ankommt.
+      setOpen(false);
+    }
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [open]);
+
+  return (
+    <div className="relative" data-maintenance-menu-root>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        title="Reparatur-Tools — im Normalbetrieb nicht noetig"
+        className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded text-sm flex items-center gap-1.5"
+      >
+        Wartung
+        <span className={`transition-transform text-xs ${open ? 'rotate-180' : ''}`}>▾</span>
+      </button>
+
+      {open && (
+        <div
+          className="absolute right-0 top-full mt-1 z-40 w-72 bg-slate-900 border border-slate-700 rounded-lg shadow-2xl overflow-hidden"
+          onClick={() => setOpen(false)}
+        >
+          <div className="px-3 py-2 border-b border-slate-700 bg-slate-800/50">
+            <div className="text-xs text-slate-300 font-semibold">Reparatur-Tools</div>
+            <div className="text-[11px] text-slate-500 leading-tight mt-0.5">
+              Im Normalbetrieb nicht n&ouml;tig. Greifen nur bei Daten-Drift, nach Migrationen oder im Recovery-Fall.
+            </div>
+          </div>
+          <div className="py-1">
+            <MaintenanceMenuItem hint="Spiegelt Inventar in alte Tabellen — n&ouml;tig wenn Buchungen Stuecke nicht finden">
+              <BackfillMirrorsButton />
+            </MaintenanceMenuItem>
+            <MaintenanceMenuItem hint="Hebt available_qty auf den realen Bestand aus inventar_units — geht nie nach unten">
+              <RestoreQtyButton />
+            </MaintenanceMenuItem>
+            <MaintenanceMenuItem hint="Zeigt Drift zwischen accessories.available_qty und gez&auml;hlten Exemplaren">
+              <ResyncQtyButton />
+            </MaintenanceMenuItem>
+            <MaintenanceMenuItem hint="R&auml;umt unsaubere Kamera-Labels auf — typisch einmalig nach Migration">
+              <BackfillCodesButton />
+            </MaintenanceMenuItem>
+            <MaintenanceMenuItem hint="L&ouml;scht produkte-Karteileichen ohne aktive Inventar-Einheiten">
+              <CleanupOrphansButton />
+            </MaintenanceMenuItem>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Wrapper fuer einen Wartungs-Eintrag im Dropdown. Der Button (mit eigenem
+ * Label + State + Modal) sitzt oben in voller Breite, darunter ein dezenter
+ * Hint-Text. So bleibt das Label nicht doppelt — der vorhandene Button
+ * traegt seinen eigenen Text. Modal des Buttons liegt auf z-50 (fixed),
+ * Dropdown auf z-40 — die Modale werden nicht vom Dropdown verdeckt.
+ */
+function MaintenanceMenuItem({
+  hint, children,
+}: {
+  hint: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="px-3 py-2 hover:bg-slate-800/40 transition-colors border-b border-slate-800/60 last:border-b-0">
+      <div className="mb-1">
+        {children}
+      </div>
+      <div className="text-[11px] text-slate-500 leading-tight pl-0.5" dangerouslySetInnerHTML={{ __html: hint }} />
     </div>
   );
 }
