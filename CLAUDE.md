@@ -120,19 +120,40 @@ lesen sie weiterhin.
     einer Inventar-Einheit stale (Gantt zeigte „1 Stueck" obwohl 0 aktiv).
     Sammel-Zubehoer (`is_bulk=true`) wird in `syncAccessoryQty` selbst
     uebersprungen.
-  - **Bestands-Drift-Check (Stand 2026-05-20):** Neuer Endpoint
-    `GET /api/admin/accessories/resync-qty` liefert eine **Dry-Run-Preview**
-    aller Nicht-Bulk-Zubehoere, deren `available_qty` von der gezaehlten
-    `accessory_units`-Menge abweicht (inkl. `has_inventar`-Flag: ist eine
-    `migration_audit`-Bruecke `accessories → produkte` vorhanden?).
-    `POST {ids:[...]}` wendet `syncAccessoryQty` gezielt auf die ausgewaehlten
-    Eintraege an. UI: Button **„Bestände prüfen"** auf `/admin/inventar` oeffnet
-    Modal mit Drift-Tabelle (aktuell/tatsaechlich/diff/inventar-flag).
-    Default-Auswahl haakt nur Eintraege mit Inventar-Verknuepfung an —
-    historisch manuell auf 1 gesetztes Zubehoer ohne Exemplar-Tracking wird
-    NICHT stillschweigend auf 0 gesetzt. Backfill-Mirror-Endpoint macht
-    bewusst **keinen** globalen Resync mehr (war zu aggressiv, haette
-    Legacy-Zubehoer ohne Exemplare auf 0 gesetzt).
+  - **Bestands-Drift-Check (Stand 2026-05-20, hart gehärtet 2026-05-26):**
+    Endpoint `GET /api/admin/accessories/resync-qty` liefert eine
+    **Dry-Run-Preview** aller Nicht-Bulk-Zubehoere, deren `available_qty`
+    vom Soll abweicht. Der Sollwert ist **MAX(accessory_units,
+    inventar_units)** — beide Welten werden gezaehlt, damit der Bestand
+    nie unter den tatsaechlich existierenden Stand faellt. `POST {ids:[...]}`
+    wendet `syncAccessoryQty` gezielt auf die ausgewaehlten Eintraege an.
+    UI: Button **„Bestände prüfen"** auf `/admin/inventar` oeffnet Modal
+    mit Drift-Tabelle (Aktuell / Alt-Welt-Count / Neu-Welt-Count / Sollwert
+    / Δ / Status). Default-Auswahl haakt nur Eintraege an, die der Server
+    als `safe_to_apply` markiert — beide Welten zaehlen identisch UND der
+    Sollwert ist > 0. **Welten driften** (z.B. Inventar=3, accessory_units=0)
+    wird sichtbar als amber Hinweis ausgewiesen, aber NICHT default
+    angehakt — der Admin muss aktiv entscheiden, sollte vorher den
+    Mirror-Backfill oder die Recovery laufen lassen. Backfill-Mirror-
+    Endpoint macht bewusst **keinen** globalen Resync (war zu aggressiv).
+  - **Bestand wiederherstellen (Stand 2026-05-26):** Recovery-Endpoint
+    `GET/POST /api/admin/accessories/restore-qty-from-inventar` setzt
+    `accessories.available_qty` auf **MAX(accessory_units, inventar_units)**
+    — geht garantiert NIE nach unten. Wurde gebaut, nachdem ein User auf
+    „Bestände prüfen" geklickt hat und der damalige Algorithmus
+    (`current_qty = COUNT(accessory_units)`) den Bestand mehrerer Zubehoere
+    auf 0 gesetzt hat, obwohl die Inventar-Einheiten in der neuen Welt
+    `inventar_units` lebten und der Mirror in `accessory_units` leer war
+    → Gantt zeigte alles als ausgebucht. UI: amber Button **„Bestand
+    wiederherstellen"** auf `/admin/inventar`. Default-Auswahl haakt nur
+    Recovery-Faelle an (`diff > 0`); Eintraege mit negativem Δ
+    (Bestand wuerde gesenkt) muss der Admin bewusst entscheiden.
+  - **`syncAccessoryQty` haertet jetzt gegen einseitige Welten
+    (Stand 2026-05-26):** Helper liest zusaetzlich `inventar_units` und
+    setzt `available_qty = MAX(legacy_count, inventar_count)`. Damit kann
+    der naechste Aufruf (z.B. Mirror-Backfill, Unit-Insert, Unit-Delete)
+    NIE mehr den Bestand unter den Stand der neuen Welt druecken, auch
+    wenn der `accessory_units`-Mirror voruebergehend leer ist.
 - **`supabase/recovery-after-drop.sql`** — Notfall: legt alte Tabellen wieder an,
   falls doch mal gedroppt wurde.
 

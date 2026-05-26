@@ -154,6 +154,7 @@ export default function InventarPage() {
             </Link>
             <BackfillCodesButton />
             <BackfillMirrorsButton />
+            <RestoreQtyButton />
             <ResyncQtyButton />
             <CleanupOrphansButton />
             <Link href="/admin/inventar/neu" className="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-900 rounded font-semibold">
@@ -450,9 +451,12 @@ interface DriftRow {
   id: string;
   name: string;
   current_qty: number;
+  legacy_unit_count: number;
+  inventar_unit_count: number;
   unit_count: number;
   diff: number;
   has_inventar: boolean;
+  safe_to_apply: boolean;
 }
 
 function ResyncQtyButton() {
@@ -475,10 +479,10 @@ function ResyncQtyButton() {
         setDrift([]);
       } else {
         setDrift(data.rows as DriftRow[]);
-        // Default-Auswahl: nur Eintraege, die VOR Migration auch im Inventar
-        // existieren — bei diesen ist der Unit-Count autoritativ.
+        // Default-Auswahl: nur Eintraege, die der Server als `safe_to_apply`
+        // markiert (beide Welten zaehlen identisch, kein Bestandsverlust).
         const safe = new Set<string>(
-          (data.rows as DriftRow[]).filter((r) => r.has_inventar).map((r) => r.id),
+          (data.rows as DriftRow[]).filter((r) => r.safe_to_apply).map((r) => r.id),
         );
         setSelected(safe);
       }
@@ -556,9 +560,11 @@ function ResyncQtyButton() {
               ) : (
                 <>
                   <div className="px-5 py-3 bg-amber-500/10 border-b border-amber-500/30 text-xs text-amber-200">
-                    <strong>Hinweis:</strong> Zubehör <em>ohne Inventar-Verknüpfung</em> (graue Zeilen) ist evtl. nur historisch
-                    angelegt, ohne dass je Exemplare erfasst wurden. Wenn du das anhakst, fällt es auf <strong>0 Stück</strong>.
-                    Default-Auswahl haakt nur Einträge an, deren Inventar-Welt vorhanden ist.
+                    <strong>Hinweis:</strong> Spalten <em>Alt</em> und <em>Neu</em> zeigen die Anzahl Exemplare in der alten
+                    Welt (<code className="text-amber-100">accessory_units</code>) und in der neuen Welt
+                    (<code className="text-amber-100">inventar_units</code>). Sollwert = Maximum beider. Default-Auswahl haakt
+                    nur Einträge an, in denen beide Welten <strong>konsistent</strong> sind — sonst musst du erst per
+                    „Mirror-Backfill“ syncen oder „Bestand wiederherstellen“ laufen lassen.
                   </div>
                   <table className="w-full text-sm">
                     <thead className="bg-slate-800 text-slate-400 text-xs uppercase">
@@ -575,29 +581,36 @@ function ResyncQtyButton() {
                         </th>
                         <th className="px-4 py-2 text-left">Zubehör</th>
                         <th className="px-4 py-2 text-right">Aktuell</th>
-                        <th className="px-4 py-2 text-right">Tatsächlich</th>
-                        <th className="px-4 py-2 text-right">Differenz</th>
-                        <th className="px-4 py-2 text-center">Inventar</th>
+                        <th className="px-4 py-2 text-right" title="Anzahl Exemplare in accessory_units (alte Welt)">Alt</th>
+                        <th className="px-4 py-2 text-right" title="Anzahl Exemplare in inventar_units (neue Welt)">Neu</th>
+                        <th className="px-4 py-2 text-right">Sollwert</th>
+                        <th className="px-4 py-2 text-right">Δ</th>
+                        <th className="px-4 py-2 text-center">Status</th>
                       </tr>
                     </thead>
                     <tbody>
                       {drift.map((row) => {
-                        const isSafe = row.has_inventar;
+                        const isSafe = row.safe_to_apply;
+                        const worldsDiverge = row.legacy_unit_count !== row.inventar_unit_count;
                         return (
-                          <tr key={row.id} className={`border-t border-slate-800 ${!isSafe ? 'bg-slate-900/50 text-slate-500' : 'text-slate-200'}`}>
+                          <tr key={row.id} className={`border-t border-slate-800 ${!isSafe ? 'bg-slate-900/50 text-slate-400' : 'text-slate-200'}`}>
                             <td className="px-4 py-2">
                               <input type="checkbox" checked={selected.has(row.id)} onChange={() => toggle(row.id)} />
                             </td>
                             <td className="px-4 py-2 font-mono text-xs">{row.name}</td>
                             <td className="px-4 py-2 text-right tabular-nums">{row.current_qty}</td>
+                            <td className="px-4 py-2 text-right tabular-nums text-xs">{row.legacy_unit_count}</td>
+                            <td className="px-4 py-2 text-right tabular-nums text-xs">{row.inventar_unit_count}</td>
                             <td className="px-4 py-2 text-right tabular-nums">{row.unit_count}</td>
                             <td className={`px-4 py-2 text-right tabular-nums font-semibold ${row.diff < 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
                               {row.diff > 0 ? `+${row.diff}` : row.diff}
                             </td>
                             <td className="px-4 py-2 text-center">
-                              {isSafe
-                                ? <span className="text-emerald-400 text-xs">✓ verknüpft</span>
-                                : <span className="text-amber-400 text-xs">⚠ ohne Inventar</span>}
+                              {worldsDiverge
+                                ? <span className="text-amber-400 text-xs" title="Alte und neue Welt zaehlen unterschiedlich — erst Mirror-Backfill laufen lassen">⚠ Welten driften</span>
+                                : isSafe
+                                  ? <span className="text-emerald-400 text-xs">✓ sicher</span>
+                                  : <span className="text-slate-500 text-xs">leer</span>}
                             </td>
                           </tr>
                         );
@@ -626,6 +639,206 @@ function ResyncQtyButton() {
                   className="px-3 py-1.5 bg-cyan-500 hover:bg-cyan-400 disabled:bg-slate-700 disabled:text-slate-500 text-slate-900 rounded text-sm font-semibold"
                 >
                   {applying ? 'Wende an…' : `${selected.size} anpassen`}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+interface RestoreRow {
+  id: string;
+  name: string;
+  current_qty: number;
+  legacy_unit_count: number;
+  inventar_unit_count: number;
+  recovered_qty: number;
+  diff: number;
+  has_produkte_bridge: boolean;
+  has_inventar_units: boolean;
+}
+
+/**
+ * Recovery-Button fuer den Fall, dass `accessories.available_qty` durch
+ * einen fehlerhaften "Bestaende pruefen"-Lauf auf 0 fiel, obwohl die
+ * neue Welt (`inventar_units`) noch echte Stuecke enthaelt.
+ *
+ * Im Gegensatz zu "Bestaende pruefen" liest dieser Endpoint BEIDE Welten
+ * und setzt available_qty auf das Maximum — niemals nach unten.
+ * Default-Auswahl: nur Eintraege mit `diff > 0` (echte Recovery-Faelle).
+ */
+function RestoreQtyButton() {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [applying, setApplying] = useState(false);
+  const [rows, setRows] = useState<RestoreRow[] | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [result, setResult] = useState<string | null>(null);
+
+  async function openPreview() {
+    setOpen(true);
+    setLoading(true);
+    setResult(null);
+    try {
+      const res = await fetch('/api/admin/accessories/restore-qty-from-inventar');
+      const data = await res.json();
+      if (!res.ok) {
+        setResult(`Fehler: ${data.error ?? 'unbekannt'}`);
+        setRows([]);
+      } else {
+        const driftRows = data.rows as RestoreRow[];
+        setRows(driftRows);
+        // Default: nur Recovery-Faelle anhaken (diff > 0). Negative diffs
+        // (Bestand wird gesenkt) muss der Admin bewusst entscheiden.
+        const safe = new Set<string>(driftRows.filter((r) => r.diff > 0).map((r) => r.id));
+        setSelected(safe);
+      }
+    } catch (err) {
+      setResult(`Netzwerk-Fehler: ${(err as Error).message}`);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function apply() {
+    if (selected.size === 0) return;
+    if (!confirm(`${selected.size} Zubehör-Bestand jetzt wiederherstellen?\n\navailable_qty wird auf MAX(alte Welt, neue Welt) gesetzt — geht garantiert nie nach unten unter den existierenden Bestand.`)) return;
+    setApplying(true);
+    try {
+      const res = await fetch('/api/admin/accessories/restore-qty-from-inventar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: Array.from(selected) }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setResult(`Fehler: ${data.error ?? 'unbekannt'}`);
+      } else {
+        setResult(`${data.applied} wiederhergestellt${data.errors?.length ? ` · ${data.errors.length} Fehler` : ''}`);
+        setOpen(false);
+        setTimeout(() => window.location.reload(), 1200);
+      }
+    } catch (err) {
+      setResult(`Netzwerk-Fehler: ${(err as Error).message}`);
+    } finally {
+      setApplying(false);
+    }
+  }
+
+  function toggle(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  const recoveryCount = rows?.filter((r) => r.diff > 0).length ?? 0;
+
+  return (
+    <>
+      <button
+        onClick={openPreview}
+        title="Setzt accessories.available_qty auf MAX(accessory_units, inventar_units). Recovery-Aktion, wenn ein Bestaende-pruefen-Lauf den Bestand faelschlich auf 0 gesetzt hat."
+        className="px-3 py-2 bg-amber-500/20 border border-amber-500/40 text-amber-200 hover:bg-amber-500/30 rounded text-sm font-semibold"
+      >
+        Bestand wiederherstellen
+      </button>
+      {result && !open && <span className="text-xs text-slate-400">{result}</span>}
+
+      {open && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => !applying && setOpen(false)}>
+          <div className="bg-slate-900 border border-amber-500/40 rounded-xl max-w-4xl w-full max-h-[85vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-slate-700 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-heading text-amber-200">Bestand aus Inventar wiederherstellen</h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Liest <code className="text-slate-300">inventar_units</code> (neue Welt) UND <code className="text-slate-300">accessory_units</code> (alte Welt) und setzt
+                  <code className="text-slate-300"> accessories.available_qty</code> auf das Maximum beider. Geht nie nach unten.
+                </p>
+              </div>
+              <button onClick={() => !applying && setOpen(false)} className="text-slate-500 hover:text-slate-300 text-xl">×</button>
+            </div>
+
+            <div className="overflow-auto flex-1">
+              {loading ? (
+                <div className="p-8 text-center text-slate-400">Lade Drift…</div>
+              ) : !rows || rows.length === 0 ? (
+                <div className="p-8 text-center text-emerald-400">✓ Keine Drift gefunden — alle Bestände passen bereits zum Inventar.</div>
+              ) : (
+                <>
+                  <div className="px-5 py-3 bg-emerald-500/10 border-b border-emerald-500/30 text-xs text-emerald-200">
+                    <strong>{recoveryCount} Recovery-Fall(e):</strong> available_qty wird hochgesetzt. Diese sind <strong>per Default angehakt</strong> —
+                    es geht kein Bestand verloren. <span className="text-slate-400">Eintraege mit negativem Δ (Bestand wuerde gesenkt) bleiben uneingehakt, hier entscheidet der Admin selbst.</span>
+                  </div>
+                  <table className="w-full text-sm">
+                    <thead className="bg-slate-800 text-slate-400 text-xs uppercase">
+                      <tr>
+                        <th className="px-4 py-2 text-left">
+                          <input
+                            type="checkbox"
+                            checked={rows.length > 0 && selected.size === rows.length}
+                            onChange={(e) => {
+                              if (e.target.checked) setSelected(new Set(rows.map((r) => r.id)));
+                              else setSelected(new Set());
+                            }}
+                          />
+                        </th>
+                        <th className="px-4 py-2 text-left">Zubehör</th>
+                        <th className="px-4 py-2 text-right">Aktuell</th>
+                        <th className="px-4 py-2 text-right" title="Anzahl Exemplare in accessory_units (alte Welt)">Alt</th>
+                        <th className="px-4 py-2 text-right" title="Anzahl Exemplare in inventar_units (neue Welt)">Neu</th>
+                        <th className="px-4 py-2 text-right">Sollwert</th>
+                        <th className="px-4 py-2 text-right">Δ</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map((row) => {
+                        const isRecovery = row.diff > 0;
+                        return (
+                          <tr key={row.id} className={`border-t border-slate-800 ${isRecovery ? 'text-slate-100' : 'bg-slate-900/50 text-slate-400'}`}>
+                            <td className="px-4 py-2">
+                              <input type="checkbox" checked={selected.has(row.id)} onChange={() => toggle(row.id)} />
+                            </td>
+                            <td className="px-4 py-2 font-mono text-xs">{row.name}</td>
+                            <td className="px-4 py-2 text-right tabular-nums">{row.current_qty}</td>
+                            <td className="px-4 py-2 text-right tabular-nums text-xs">{row.legacy_unit_count}</td>
+                            <td className="px-4 py-2 text-right tabular-nums text-xs">{row.inventar_unit_count}</td>
+                            <td className="px-4 py-2 text-right tabular-nums font-semibold">{row.recovered_qty}</td>
+                            <td className={`px-4 py-2 text-right tabular-nums font-semibold ${row.diff < 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                              {row.diff > 0 ? `+${row.diff}` : row.diff}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </>
+              )}
+            </div>
+
+            <div className="px-5 py-3 border-t border-slate-700 flex items-center justify-between gap-3">
+              <span className="text-xs text-slate-400">
+                {rows && rows.length > 0 && `${selected.size} von ${rows.length} ausgewählt`}
+              </span>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setOpen(false)}
+                  disabled={applying}
+                  className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded text-sm"
+                >
+                  Abbrechen
+                </button>
+                <button
+                  onClick={apply}
+                  disabled={applying || selected.size === 0}
+                  className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 disabled:bg-slate-700 disabled:text-slate-500 text-slate-900 rounded text-sm font-semibold"
+                >
+                  {applying ? 'Stelle her…' : `${selected.size} wiederherstellen`}
                 </button>
               </div>
             </div>
