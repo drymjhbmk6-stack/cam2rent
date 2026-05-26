@@ -47,12 +47,22 @@ export function parseLabelRotation(raw: unknown): LabelRotation {
  * Behaelt das Seitenverhaeltnis bei und zentriert den Inhalt.
  *
  * Optionen:
- *  - `region`: schneidet die Source-Seite vor dem Skalieren auf eine Haelfte
- *    bzw. Spalte zu (per `setMediaBox`/`setCropBox`). Default: `full`.
- *  - `rotate`: dreht die Source-Seite um 0/90/180/270 Grad. Hilft bei
- *    Etiketten, die intern im Querformat gespeichert sind, aber auf einem
- *    Hochformat-Papier liegen — nach dem Drehen liegt das Etikett dann
- *    richtig orientiert auf dem A5-Bogen.
+ *  - `region`: schneidet die Source-Seite vor dem Skalieren auf eine
+ *    Haelfte/Spalte zu. Default: `full`.
+ *  - `rotate`: dreht die Source-Seite um 0/90/180/270 Grad **im
+ *    Uhrzeigersinn**. Hilft bei Etiketten, die im Querformat-Layout
+ *    auf Hochformat-Papier gespeichert sind.
+ *
+ * Implementierung als Multi-Pass: pdf-lib's `embedPdf` ignoriert
+ * MediaBox-Aenderungen und `/Rotate`-Properties der Source-Page (es
+ * embedded immer das urspruengliche Inhalts-Rechteck). Daher echtes
+ * Re-Rendering in einem Zwischen-PDF:
+ *   1. Crop: zeichne die Source mit negativem Offset in eine neue Page,
+ *      deren Groesse exakt dem gewuenschten Bereich entspricht. Bereich
+ *      ausserhalb der Page wird vom Viewer geclippt.
+ *   2. Rotate: zweite Page mit getauschten Dimensionen (bei 90/270),
+ *      Source mit `drawPage`-Rotation + passender Translation.
+ *   3. A5-Fit: finale Page mit dem aufbereiteten Zwischen-PDF einpassen.
  */
 export async function resizePdfToA5Portrait(
   srcBuffer: ArrayBuffer,
@@ -66,30 +76,108 @@ export async function resizePdfToA5Portrait(
   const region: LabelRegion = opts.region ?? (opts.useTopHalfOnly ? 'top' : 'full');
   const rotate: LabelRotation = opts.rotate ?? 0;
 
+  // Pass 1: Cropping (immer, region='full' = no-op).
+  const cropped = await cropPdfPage(srcBuffer, region);
+
+  // Pass 2: Rotation (nur wenn rotate != 0).
+  const rotated = rotate !== 0 ? await rotatePdfPage(cropped, rotate) : cropped;
+
+  // Pass 3: In A5-Hochformat einpassen.
+  // Konvertierung zu ArrayBuffer fuer PDFDocument.load.
+  const finalAb: ArrayBuffer = rotated.buffer.slice(
+    rotated.byteOffset,
+    rotated.byteOffset + rotated.byteLength,
+  ) as ArrayBuffer;
+  const reloaded = await PDFDocument.load(finalAb);
+  const dst = await PDFDocument.create();
+  const [embedded] = await dst.embedPdf(reloaded, [0]);
+  const dstPage = dst.addPage(A5_PORTRAIT);
+  drawEmbeddedFit(dstPage, embedded, A5_PORTRAIT);
+  return dst.save();
+}
+
+/**
+ * Erste Pass: schneidet die Source-Seite auf den gewuenschten Bereich zu.
+ * Der Trick: wir erstellen eine neue Page mit der Groesse des Zielbereichs
+ * und zeichnen die Source mit negativem Offset darauf. PDF-Viewer clippt
+ * alles ausserhalb der Page-MediaBox.
+ */
+async function cropPdfPage(
+  srcBuffer: ArrayBuffer,
+  region: LabelRegion,
+): Promise<Uint8Array> {
   const src = await PDFDocument.load(srcBuffer);
   const srcPage = src.getPage(0);
+  const { width: sw, height: sh } = srcPage.getSize();
 
-  if (region !== 'full') {
-    const { width, height } = srcPage.getSize();
-    let box: [number, number, number, number] = [0, 0, width, height];
-    if (region === 'top') box = [0, height / 2, width, height / 2];
-    else if (region === 'bottom') box = [0, 0, width, height / 2];
-    else if (region === 'left') box = [0, 0, width / 2, height];
-    else if (region === 'right') box = [width / 2, 0, width / 2, height];
-    srcPage.setMediaBox(box[0], box[1], box[2], box[3]);
-    srcPage.setCropBox(box[0], box[1], box[2], box[3]);
-  }
+  // Standard: ganze Seite (region='full' → 1:1-Kopie).
+  let cropX = 0, cropY = 0, cropW = sw, cropH = sh;
+  if (region === 'top')    { cropX = 0;     cropY = sh / 2; cropW = sw;     cropH = sh / 2; }
+  else if (region === 'bottom') { cropX = 0;     cropY = 0;      cropW = sw;     cropH = sh / 2; }
+  else if (region === 'left')   { cropX = 0;     cropY = 0;      cropW = sw / 2; cropH = sh;     }
+  else if (region === 'right')  { cropX = sw / 2; cropY = 0;      cropW = sw / 2; cropH = sh;     }
 
-  if (rotate !== 0) {
-    srcPage.setRotation(degrees(rotate));
+  const dst = await PDFDocument.create();
+  const dstPage = dst.addPage([cropW, cropH]);
+  const [embSrc] = await dst.embedPdf(src, [0]);
+  // Negative Offsets: Source-Origin (0,0) liegt links unten, wir wollen
+  // Source-Bereich [cropX..cropX+cropW] × [cropY..cropY+cropH] sichtbar
+  // → Source komplett zeichnen aber um (-cropX, -cropY) verschoben.
+  dstPage.drawPage(embSrc, {
+    x: -cropX,
+    y: -cropY,
+    width: sw,
+    height: sh,
+  });
+  return dst.save();
+}
+
+/**
+ * Zweiter Pass: dreht die Seite um 0/90/180/270 Grad im Uhrzeigersinn.
+ * pdf-lib zeichnet via Matrix T(x,y) × R(θ_CCW) — wir mappen unsere
+ * CW-Konvention auf passende (x, y, θ_CCW)-Tupel und tauschen bei
+ * Viertel-Drehungen die Page-Dimensionen.
+ */
+async function rotatePdfPage(
+  srcBuffer: Uint8Array,
+  rotate: LabelRotation,
+): Promise<Uint8Array> {
+  const srcAb: ArrayBuffer = srcBuffer.buffer.slice(
+    srcBuffer.byteOffset,
+    srcBuffer.byteOffset + srcBuffer.byteLength,
+  ) as ArrayBuffer;
+  const src = await PDFDocument.load(srcAb);
+  const srcPage = src.getPage(0);
+  const { width: sw, height: sh } = srcPage.getSize();
+
+  // Page-Dimensionen + drawPage-Parameter je nach Drehung (alles
+  // hergeleitet aus T(X,Y) × R(θ_CCW) auf die vier Source-Ecken).
+  let newW = sw, newH = sh;
+  let drawX = 0, drawY = 0, drawRotateDeg = 0;
+  if (rotate === 90) {
+    // 90° CW = pdf-lib θ_CCW = -90; Source-(0,0) → (0, sw)
+    newW = sh; newH = sw;
+    drawX = 0; drawY = sw; drawRotateDeg = -90;
+  } else if (rotate === 180) {
+    // 180°; Source-(0,0) → (sw, sh)
+    newW = sw; newH = sh;
+    drawX = sw; drawY = sh; drawRotateDeg = 180;
+  } else if (rotate === 270) {
+    // 270° CW = 90° CCW = pdf-lib θ_CCW = +90; Source-(0,0) → (sh, 0)
+    newW = sh; newH = sw;
+    drawX = sh; drawY = 0; drawRotateDeg = 90;
   }
 
   const dst = await PDFDocument.create();
-  const [embedded] = await dst.embedPdf(src, [0]);
-
-  const dstPage = dst.addPage(A5_PORTRAIT);
-  drawEmbeddedFit(dstPage, embedded, A5_PORTRAIT);
-
+  const dstPage = dst.addPage([newW, newH]);
+  const [embSrc] = await dst.embedPdf(src, [0]);
+  dstPage.drawPage(embSrc, {
+    x: drawX,
+    y: drawY,
+    width: sw,
+    height: sh,
+    rotate: degrees(drawRotateDeg),
+  });
   return dst.save();
 }
 
