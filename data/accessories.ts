@@ -80,6 +80,14 @@ export interface Accessory {
   iconId: AccessoryIconId;
 
   /**
+   * Sortier-Reihenfolge (kleiner = frueher). Wird vom Admin in
+   * /admin/zubehoer per Drag-and-Drop bzw. Stepper gepflegt und entscheidet
+   * primaer die Reihenfolge in Upgrade-Gruppen (z.B. 64 GB vor 128 GB).
+   * Optional — fehlt der Wert, wird auf Preis-Sortierung zurueckgefallen.
+   */
+  sortOrder?: number;
+
+  /**
    * Optionale Gruppe — ID aus ACCESSORY_GROUPS.
    * Ermöglicht Gruppenrabatte per Gutschein-Code.
    * Weglassen = kein Gruppenrabatt möglich für dieses Zubehör.

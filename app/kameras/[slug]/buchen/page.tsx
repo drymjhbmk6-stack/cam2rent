@@ -623,7 +623,7 @@ export default function BuchenPage() {
   useEffect(() => {
     fetch('/api/accessories')
       .then((r) => r.json())
-      .then((data: { id: string; name: string; pricingMode: string; price: number; description?: string; group?: string; upgradeGroup?: string; isUpgradeBase?: boolean; allowMultiQty?: boolean; maxQtyPerBooking?: number | null }[]) => {
+      .then((data: { id: string; name: string; pricingMode: string; price: number; description?: string; group?: string; upgradeGroup?: string; isUpgradeBase?: boolean; allowMultiQty?: boolean; maxQtyPerBooking?: number | null; sortOrder?: number }[]) => {
         if (Array.isArray(data) && data.length > 0) {
           const mapped: Accessory[] = data.map((a) => ({
             id: a.id,
@@ -638,6 +638,7 @@ export default function BuchenPage() {
             isUpgradeBase: a.isUpgradeBase,
             allowMultiQty: a.allowMultiQty ?? false,
             maxQtyPerBooking: a.maxQtyPerBooking ?? null,
+            sortOrder: typeof a.sortOrder === 'number' ? a.sortOrder : undefined,
           }));
           setDbAccessories(mapped);
         }
@@ -1674,11 +1675,44 @@ export default function BuchenPage() {
                     isUpgradeBase: boolean;
                     /** Preis fuer Sort + Aufpreis-Anzeige (Base = basePrice) */
                     price: number;
+                    /** Vom Admin gepflegte Reihenfolge — primaeres Sort-Kriterium. */
+                    sortOrder: number | undefined;
                     /** virtual=true → keine echte accessory_id, nur Render-Eintrag */
                     virtual: boolean;
                     /** Available-Info; bei virtual/Set-Base ohne dbAccessory-Eintrag = null */
                     availInfo: { remaining: number; compatible: boolean } | null;
                   };
+
+                  // Sortier-Helper: primaer sortOrder, sekundaer numerischer
+                  // Wert aus dem Namen (Speicherkarte/Akku/Watt etc.),
+                  // tertiaer Preis. Beide undefined-Faelle werden weich
+                  // behandelt.
+                  function extractNumericFromName(n: string): { value: number; unit: string } | null {
+                    const m = /(\d+(?:[.,]\d+)?)\s*(GB|TB|MB|mAh|Wh|W|cm|mm)/i.exec(n);
+                    if (!m) return null;
+                    const raw = parseFloat(m[1].replace(',', '.'));
+                    let unit = m[2].toLowerCase();
+                    let val = raw;
+                    // Speicher: TB→GB, MB→GB (auf gemeinsame Skala bringen)
+                    if (unit === 'tb') { val = raw * 1024; unit = 'gb'; }
+                    if (unit === 'mb') { val = raw / 1024; unit = 'gb'; }
+                    return { value: val, unit };
+                  }
+                  function compareUpgradeItems(a: GroupItem, b: GroupItem): number {
+                    if (a.sortOrder !== undefined && b.sortOrder !== undefined) {
+                      if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+                    } else if (a.sortOrder !== undefined) {
+                      return -1; // gepflegte sortOrder schlaegt ungepflegte
+                    } else if (b.sortOrder !== undefined) {
+                      return 1;
+                    }
+                    const na = extractNumericFromName(a.name);
+                    const nb = extractNumericFromName(b.name);
+                    if (na && nb && na.unit === nb.unit) {
+                      if (na.value !== nb.value) return na.value - nb.value;
+                    }
+                    return a.price - b.price;
+                  }
 
                   return upgradeGroups.map((group) => {
                     // Echte dbAccessories der Gruppe
@@ -1689,6 +1723,7 @@ export default function BuchenPage() {
                         name: a.name,
                         isUpgradeBase: a.isUpgradeBase ?? false,
                         price: getAccessoryPrice(a, days),
+                        sortOrder: a.sortOrder,
                         virtual: false,
                         availInfo: accAvailability[a.id] ?? null,
                       }));
@@ -1703,6 +1738,7 @@ export default function BuchenPage() {
                           name: setBase.name,
                           isUpgradeBase: true,
                           price: 0,
+                          sortOrder: undefined,
                           virtual: false,
                           availInfo: null,
                         };
@@ -1716,15 +1752,24 @@ export default function BuchenPage() {
                         name: 'Standard',
                         isUpgradeBase: true,
                         price: 0,
+                        sortOrder: undefined,
                         virtual: true,
                         availInfo: null,
                       };
                     }
 
-                    // Items zusammenfuehren (Base zuerst, dann Upgrades nach Preis)
+                    // Items zusammenfuehren — Base zuerst, dann Upgrades in
+                    // sinnvoller Reihenfolge:
+                    //  1. primaer nach `sortOrder` aus der Admin-Pflege (kleiner
+                    //     = frueher); wenn der Admin die Reihenfolge gepflegt
+                    //     hat, gewinnt das immer.
+                    //  2. sekundaer nach numerischem Wert im Namen (z.B. "128 GB"
+                    //     < "256 GB" < "1 TB"). Damit klappt auch ohne sortOrder
+                    //     die natuerliche Reihenfolge bei Speicherkarten/Akkus.
+                    //  3. tertiaer nach Preis (Fallback fuer Items ohne Zahl).
                     const upgradeItems = dbItems
                       .filter((it) => !it.isUpgradeBase)
-                      .sort((a, b) => a.price - b.price);
+                      .sort((a, b) => compareUpgradeItems(a, b));
                     const items: GroupItem[] = [baseItem, ...upgradeItems];
 
                     // Aufpreis-Basis = baseItem.price (kann 0 sein bei virtuellem

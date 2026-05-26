@@ -40,6 +40,7 @@ function dbToAccessory(db: DbAccessory): Accessory {
     allowMultiQty: db.allow_multi_qty ?? false,
     maxQtyPerBooking: db.max_qty_per_booking ?? null,
     replacementValue: db.replacement_value != null ? Number(db.replacement_value) : 0,
+    sortOrder: typeof db.sort_order === 'number' ? db.sort_order : undefined,
   };
 }
 
