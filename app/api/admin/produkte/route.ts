@@ -97,10 +97,17 @@ export async function GET() {
   // und der Admin denkt, die Kamera ist nicht in der Liste).
   const typByProduktId = await loadProduktTypes(supabase, (produkte ?? []).map((p) => p.id));
 
+  // Soft-Hide verwaister Stammdaten: wenn die Quelle (admin_config.products
+  // oder accessories) inzwischen gelöscht wurde, bleiben produkte-Row +
+  // migration_audit als Karteileiche bestehen — beim Dropdown wuerde das
+  // eine "Geist-Kamera" anzeigen. Wir blenden solche Eintraege aus.
+  const orphanProduktIds = await findOrphanProduktIds(supabase, produkte ?? []);
+  const visibleProdukte = (produkte ?? []).filter((p) => !orphanProduktIds.has(p.id));
+
   // Anreicherung mit Kompatibilitaeten — defensiv, bei Fehlern liefern wir
   // einfach leere compatible_camera_names zurueck und das Dropdown zeigt
   // wenigstens den Namen.
-  const enriched = await enrichWithCompatibility(supabase, produkte ?? []);
+  const enriched = await enrichWithCompatibility(supabase, visibleProdukte);
 
   // Sortieren: Kameras zuerst (alphabetisch nach Marke + Name), dann
   // Zubehoer (alphabetisch nach Name). Unbekannter Typ landet als Zubehoer.
@@ -147,6 +154,78 @@ async function loadProduktTypes(
     /* leere Map → Default 'zubehoer' */
   }
   return map;
+}
+
+/**
+ * Findet `produkte`-IDs, deren Legacy-Quelle inzwischen geloescht wurde:
+ *   - alte_tabelle='admin_config.products' aber `alte_id` nicht mehr im Dict
+ *   - alte_tabelle='accessories' aber accessory-Row nicht mehr da
+ *
+ * Defensiv: bei Fehlern wird eine leere Set zurueckgegeben (= nichts
+ * versteckt), damit das Dropdown niemals als Folge eines Migrations-Fehlers
+ * leer dasteht.
+ */
+async function findOrphanProduktIds(
+  supabase: ReturnType<typeof createServiceClient>,
+  produkte: Array<{ id: string }>,
+): Promise<Set<string>> {
+  const orphans = new Set<string>();
+  if (produkte.length === 0) return orphans;
+  const ids = produkte.map((p) => p.id);
+
+  // 1. migration_audit fuer diese produkte-Rows laden
+  let audit: Array<{ alte_tabelle: string; alte_id: string; neue_id: string }> = [];
+  try {
+    const { data } = await supabase
+      .from('migration_audit')
+      .select('alte_tabelle, alte_id, neue_id')
+      .eq('neue_tabelle', 'produkte')
+      .in('neue_id', ids);
+    audit = (data ?? []) as typeof audit;
+  } catch {
+    return orphans;
+  }
+  if (audit.length === 0) return orphans;
+
+  // 2. Gueltige Kamera-IDs (Object-Keys + .id-Felder aus admin_config.products)
+  const validCameraIds = new Set<string>();
+  try {
+    const { data: cfg } = await supabase
+      .from('admin_config')
+      .select('value')
+      .eq('key', 'products')
+      .maybeSingle();
+    const dict = (cfg?.value ?? {}) as Record<string, { id?: string }>;
+    for (const key of Object.keys(dict)) validCameraIds.add(key);
+    for (const entry of Object.values(dict)) if (entry?.id) validCameraIds.add(entry.id);
+  } catch {
+    /* leer = nichts ausblenden */
+  }
+
+  // 3. Gueltige Zubehoer-IDs
+  const validAccessoryIds = new Set<string>();
+  try {
+    const accIds = audit
+      .filter((a) => a.alte_tabelle === 'accessories')
+      .map((a) => a.alte_id);
+    if (accIds.length > 0) {
+      const { data } = await supabase.from('accessories').select('id').in('id', accIds);
+      for (const row of (data ?? []) as Array<{ id: string }>) validAccessoryIds.add(row.id);
+    }
+  } catch {
+    /* leer = nichts ausblenden */
+  }
+
+  // 4. Pro Audit-Eintrag pruefen, ob die Quelle noch da ist
+  for (const row of audit) {
+    if (row.alte_tabelle === 'admin_config.products') {
+      if (!validCameraIds.has(row.alte_id)) orphans.add(row.neue_id);
+    } else if (row.alte_tabelle === 'accessories') {
+      if (!validAccessoryIds.has(row.alte_id)) orphans.add(row.neue_id);
+    }
+  }
+
+  return orphans;
 }
 
 interface ProduktRow {

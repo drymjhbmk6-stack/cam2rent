@@ -155,6 +155,7 @@ export default function InventarPage() {
             <BackfillCodesButton />
             <BackfillMirrorsButton />
             <ResyncQtyButton />
+            <CleanupOrphansButton />
             <Link href="/admin/inventar/neu" className="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-900 rounded font-semibold">
               + Manuell anlegen
             </Link>
@@ -393,6 +394,53 @@ function BackfillMirrorsButton() {
         className="px-3 py-2 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:text-slate-500 text-slate-200 rounded text-sm"
       >
         {busy ? 'Spiegele…' : 'Mirror-Backfill'}
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Loescht verwaiste Stammdaten in `produkte` (Quelle in admin_config.products
+ * bzw. accessories ist weg). Soft-Hide im Dropdown greift schon — der Button
+ * ist nur fuer den Hard-Cleanup der DB. Stammdaten mit aktiven Inventar-
+ * Einheiten werden uebersprungen.
+ */
+function CleanupOrphansButton() {
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+
+  async function run() {
+    if (!confirm('Verwaiste Stammdaten endgültig löschen?\n\nBetroffen: Kameras/Zubehör, die im Shop gelöscht wurden, aber noch eine produkte-Karteileiche haben.\n\nStammdaten mit aktiven Inventar-Einheiten werden NICHT gelöscht — die behalten ihre Historie.')) return;
+    setBusy(true);
+    setResult(null);
+    try {
+      const res = await fetch('/api/admin/produkte/cleanup-orphans', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) {
+        setResult(`Fehler: ${data.error ?? 'unbekannt'}`);
+      } else {
+        const parts: string[] = [`${data.deleted} gelöscht`];
+        if (data.skipped > 0) parts.push(`${data.skipped} mit Inventar übersprungen`);
+        setResult(parts.join(' · '));
+      }
+    } catch (err) {
+      setResult(`Netzwerk-Fehler: ${(err as Error).message}`);
+    } finally {
+      setBusy(false);
+      setTimeout(() => setResult(null), 6000);
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      {result && <span className="text-xs text-slate-400">{result}</span>}
+      <button
+        onClick={run}
+        disabled={busy}
+        title="Löscht produkte-Rows, deren Shop-Quelle (Kamera oder Zubehör) inzwischen gelöscht wurde. Stammdaten mit aktiven Inventar-Einheiten werden geschont."
+        className="px-3 py-2 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:text-slate-500 text-slate-200 rounded text-sm"
+      >
+        {busy ? 'Räume auf…' : 'Verwaiste aufräumen'}
       </button>
     </div>
   );
