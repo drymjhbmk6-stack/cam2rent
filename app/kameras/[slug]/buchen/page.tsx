@@ -869,14 +869,22 @@ export default function BuchenPage() {
     });
   }, []);
 
-  // Upgrade-Gruppe: Waehlt eine Option aus und entfernt andere aus der gleichen Gruppe
-  const selectUpgrade = useCallback((accId: string, group: string) => {
+  // Upgrade-Gruppe: Waehlt eine Option aus und entfernt andere aus der gleichen Gruppe.
+  //
+  // `isBase=true` markiert die Base-Variante einer Gruppe (egal ob sie aus
+  // `dbAccessories` kommt oder aus dem Set-Inhalt `selectedSet.accessory_
+  // items_detailed` (typischer Fall: das interne Default-Item ist nicht in
+  // dbAccessories, weil `internal=true`). Klick auf die Base entfernt alle
+  // Upgrades dieser Gruppe → User kommt zur Default-Auswahl zurueck.
+  //
+  // Defensiver Fallback: wenn `isBase` weggelassen wird, alte Logik (Lookup
+  // ueber dbAccessories) — Backward-Compat mit eventuell vergessenen Aufrufern.
+  const selectUpgrade = useCallback((accId: string, group: string, isBase?: boolean) => {
     setAccessories((prev) => {
       const groupIds = dbAccessories.filter((a) => a.upgradeGroup === group).map((a) => a.id);
       const without = prev.filter((id) => !groupIds.includes(id));
-      // Base-Option = abwählen (inklusive), Upgrade-Option = hinzufügen
-      const acc = dbAccessories.find((a) => a.id === accId);
-      if (acc?.isUpgradeBase) return without;
+      const effectiveIsBase = isBase ?? dbAccessories.find((a) => a.id === accId)?.isUpgradeBase ?? false;
+      if (effectiveIsBase) return without;
       return [...without, accId];
     });
   }, [dbAccessories]);
@@ -1630,41 +1638,131 @@ export default function BuchenPage() {
                   </div>
                 )}
 
-                {/* Upgrade-Gruppen (Radio-Buttons) */}
+                {/* Upgrade-Gruppen (Radio-Buttons) — IMMER mit einer Base-
+                    Option, damit der User das Upgrade wieder abwaehlen kann.
+                    Quellen fuer das Base-Item (in Prio-Reihenfolge):
+                     1. dbAccessories: ein Item mit isUpgradeBase=true
+                     2. selectedSet.accessory_items_detailed: ein Set-Inhalt
+                        mit is_upgrade_base=true (typisch wenn das Default
+                        internal=true ist und nicht in /api/accessories)
+                     3. virtueller "Standard"-Eintrag (Fallback, falls weder
+                        dbAccessories noch das Set ein Base markieren)
+                    Auch die Upgrade-Gruppen-Liste selbst sammelt aus beiden
+                    Quellen, damit Gruppen die NUR durch ein Set-Default
+                    sichtbar sind, trotzdem erscheinen. */}
                 {!offerMode && (() => {
-                  const upgradeGroups = [...new Set(dbAccessories.filter((a) => a.upgradeGroup).map((a) => a.upgradeGroup!))];
                   const days = breakdown?.days ?? 0;
+
+                  // Set-Details als Lookup nach upgrade_group → Default-Item
+                  const setDetailed = selectedSet?.accessory_items_detailed ?? [];
+                  const setBaseByGroup = new Map<string, { id: string; name: string }>();
+                  for (const it of setDetailed) {
+                    if (it.upgrade_group && it.is_upgrade_base) {
+                      setBaseByGroup.set(it.upgrade_group, { id: it.accessory_id, name: it.name });
+                    }
+                  }
+
+                  // Gruppen-Quelle: dbAccessories ∪ Set-Default-Gruppen
+                  const upgradeGroups = [...new Set([
+                    ...dbAccessories.filter((a) => a.upgradeGroup).map((a) => a.upgradeGroup!),
+                    ...setBaseByGroup.keys(),
+                  ])];
+
+                  type GroupItem = {
+                    id: string;
+                    name: string;
+                    isUpgradeBase: boolean;
+                    /** Preis fuer Sort + Aufpreis-Anzeige (Base = basePrice) */
+                    price: number;
+                    /** virtual=true → keine echte accessory_id, nur Render-Eintrag */
+                    virtual: boolean;
+                    /** Available-Info; bei virtual/Set-Base ohne dbAccessory-Eintrag = null */
+                    availInfo: { remaining: number; compatible: boolean } | null;
+                  };
+
                   return upgradeGroups.map((group) => {
-                    const groupAccs = dbAccessories
+                    // Echte dbAccessories der Gruppe
+                    const dbItems: GroupItem[] = dbAccessories
                       .filter((a) => a.upgradeGroup === group)
-                      .sort((a, b) => getAccessoryPrice(a, days) - getAccessoryPrice(b, days));
-                    if (groupAccs.length === 0) return null;
-                    const baseAcc = groupAccs.find((a) => a.isUpgradeBase);
-                    const basePrice = baseAcc ? getAccessoryPrice(baseAcc, days) : 0;
-                    // Welche Option ist gewählt? Schaue ob eine Upgrade-Option in accessories ist
-                    const selectedId = groupAccs.find((a) => accessories.includes(a.id))?.id ?? baseAcc?.id ?? null;
+                      .map((a) => ({
+                        id: a.id,
+                        name: a.name,
+                        isUpgradeBase: a.isUpgradeBase ?? false,
+                        price: getAccessoryPrice(a, days),
+                        virtual: false,
+                        availInfo: accAvailability[a.id] ?? null,
+                      }));
+
+                    // Base aus dbAccessories? Sonst aus Set-Inhalt?
+                    let baseItem: GroupItem | null = dbItems.find((it) => it.isUpgradeBase) ?? null;
+                    if (!baseItem) {
+                      const setBase = setBaseByGroup.get(group);
+                      if (setBase) {
+                        baseItem = {
+                          id: setBase.id,
+                          name: setBase.name,
+                          isUpgradeBase: true,
+                          price: 0,
+                          virtual: false,
+                          availInfo: null,
+                        };
+                      }
+                    }
+                    if (!baseItem) {
+                      // Letzter Fallback: virtueller Standard-Eintrag, damit
+                      // der User auf jeden Fall abwaehlen kann.
+                      baseItem = {
+                        id: `__virtual_base_${group}`,
+                        name: 'Standard',
+                        isUpgradeBase: true,
+                        price: 0,
+                        virtual: true,
+                        availInfo: null,
+                      };
+                    }
+
+                    // Items zusammenfuehren (Base zuerst, dann Upgrades nach Preis)
+                    const upgradeItems = dbItems
+                      .filter((it) => !it.isUpgradeBase)
+                      .sort((a, b) => a.price - b.price);
+                    const items: GroupItem[] = [baseItem, ...upgradeItems];
+
+                    // Aufpreis-Basis = baseItem.price (kann 0 sein bei virtuellem
+                    // Eintrag — dann zeigen wir den vollen Preis als Aufpreis).
+                    const basePrice = baseItem.price;
+
+                    // Auswahl-Status: gewaehlt ist genau die accessory_id, die
+                    // in `accessories[]` steht; wenn keine Upgrade-Variante
+                    // gewaehlt ist, ist die Base aktiv.
+                    const selectedUpgradeId = upgradeItems.find((it) => accessories.includes(it.id))?.id ?? null;
+                    const baseActive = selectedUpgradeId === null;
+
+                    if (items.length <= 1) return null; // nur Base, keine Auswahl moeglich
+
                     return (
                       <div key={group} className="mb-6">
                         <p className="text-xs font-body font-semibold text-brand-steel dark:text-gray-400 uppercase tracking-wider mb-2">{group}</p>
                         <div className="rounded-xl border border-brand-border dark:border-gray-700 overflow-hidden divide-y divide-brand-border dark:divide-gray-700">
-                          {groupAccs.filter((acc) => {
-                            const avail = accAvailability[acc.id];
-                            return !avail || avail.compatible;
-                          }).map((acc) => {
-                            const isSelected = selectedId === acc.id || (acc.isUpgradeBase && !groupAccs.some((a) => !a.isUpgradeBase && accessories.includes(a.id)));
-                            const avail = accAvailability[acc.id];
-                            const isAvailable = !avail || (avail.remaining > 0 && avail.compatible);
-                            const disabled = !isAvailable && !acc.isUpgradeBase;
-                            const upgradePrice = getAccessoryPrice(acc, days) - basePrice;
+                          {items.filter((it) => {
+                            // Nicht-kompatibles Zubehoer ausblenden (gilt nur
+                            // fuer dbAccessories — Set-Base + virtueller Base
+                            // haben keine availInfo und werden immer gezeigt).
+                            if (!it.availInfo) return true;
+                            return it.availInfo.compatible;
+                          }).map((it) => {
+                            const isSelected = it.isUpgradeBase ? baseActive : selectedUpgradeId === it.id;
+                            const isAvailable = !it.availInfo || (it.availInfo.remaining > 0 && it.availInfo.compatible);
+                            const disabled = !isAvailable && !it.isUpgradeBase;
+                            const upgradePrice = it.price - basePrice;
                             return (
-                              <label key={acc.id} className={`flex items-center gap-3 px-4 py-3 transition-colors ${disabled ? 'opacity-50 cursor-not-allowed bg-brand-bg dark:bg-gray-800' : isSelected ? 'bg-accent-blue-soft/30 cursor-pointer' : 'bg-white dark:bg-gray-900 hover:bg-brand-bg dark:hover:bg-gray-800 cursor-pointer'}`}>
+                              <label key={it.id} className={`flex items-center gap-3 px-4 py-3 transition-colors ${disabled ? 'opacity-50 cursor-not-allowed bg-brand-bg dark:bg-gray-800' : isSelected ? 'bg-accent-blue-soft/30 cursor-pointer' : 'bg-white dark:bg-gray-900 hover:bg-brand-bg dark:hover:bg-gray-800 cursor-pointer'}`}>
                                 <input type="radio" name={`upgrade-${group}`} checked={isSelected} disabled={disabled}
-                                  onChange={() => !disabled && selectUpgrade(acc.id, group)} className="sr-only" />
+                                  onChange={() => !disabled && selectUpgrade(it.id, group, it.isUpgradeBase)} className="sr-only" />
                                 <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${isSelected ? 'border-accent-blue' : 'border-brand-border dark:border-gray-700'}`}>
                                   {isSelected && <div className="w-2 h-2 rounded-full bg-accent-blue" />}
                                 </div>
-                                <span className={`font-heading font-semibold text-sm flex-1 ${disabled ? 'text-brand-muted dark:text-gray-500' : 'text-brand-black dark:text-gray-100'}`}>{acc.name}</span>
-                                {acc.isUpgradeBase ? (
+                                <span className={`font-heading font-semibold text-sm flex-1 ${disabled ? 'text-brand-muted dark:text-gray-500' : 'text-brand-black dark:text-gray-100'}`}>{it.name}</span>
+                                {it.isUpgradeBase ? (
                                   <span className="text-xs font-heading font-semibold text-status-success">inklusive</span>
                                 ) : !disabled ? (
                                   <span className="font-heading font-semibold text-sm text-accent-blue">
