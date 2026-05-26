@@ -37,11 +37,37 @@ export async function GET() {
   // Lazy-Backfill: alle Shop-Kameras + Zubehoere idempotent in `produkte`
   // mirroren, damit das Dropdown vollstaendig ist. Defensiv — falls eine
   // Quelle fehlschlaegt, geben wir trotzdem die existierenden Produkte aus.
+  //
+  // Wichtig: wir sammeln die Kamera-IDs aus BEIDEN Quellen — `getProducts()`
+  // (= `Object.values(...)` mit `admin.id`-Feld) UND direkt aus den
+  // Object-Keys von `admin_config.products`. Bei einer Drift zwischen
+  // Object-Key und `id`-Feld (z.B. manueller Edit) wuerde ein reines
+  // `Object.values()` die Kamera unter einer ID listen, die dann von
+  // `loadCameraStammdaten` nicht via Key-Lookup gefunden wird — und der
+  // Backfill schlaegt stumm fehl.
   try {
-    const products = await getProducts();
-    const cameraIds = products.map((p) => p.id);
-    if (cameraIds.length > 0) {
-      await resolveProdukteIdMap(supabase, 'admin_config.products', cameraIds, { autoCreate: true });
+    const ids = new Set<string>();
+    try {
+      const products = await getProducts();
+      for (const p of products) if (p.id) ids.add(p.id);
+    } catch (e) {
+      console.warn('[produkte GET] getProducts fehlgeschlagen, fallback auf Object-Keys:', e);
+    }
+    try {
+      const { data: configRow } = await supabase
+        .from('admin_config')
+        .select('value')
+        .eq('key', 'products')
+        .maybeSingle();
+      const dict = (configRow?.value ?? {}) as Record<string, { id?: string }>;
+      for (const key of Object.keys(dict)) ids.add(key);
+      // ID-Feld der einzelnen Eintraege auch dazu, falls Drift.
+      for (const entry of Object.values(dict)) if (entry?.id) ids.add(entry.id);
+    } catch (e) {
+      console.warn('[produkte GET] Object-Key-Sammlung fehlgeschlagen:', e);
+    }
+    if (ids.size > 0) {
+      await resolveProdukteIdMap(supabase, 'admin_config.products', Array.from(ids), { autoCreate: true });
     }
   } catch (err) {
     console.error('[produkte GET] Lazy-Backfill Kameras fehlgeschlagen:', err);

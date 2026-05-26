@@ -24,6 +24,12 @@ export interface ProduktData {
 /**
  * Liest aus `admin_config.products[legacyId]` und liefert ein `ProduktData`.
  * Liefert null, wenn die Legacy-Row nicht existiert.
+ *
+ * Robust gegen Key-vs-ID-Drift: wenn `products[legacyId]` nichts liefert,
+ * wird zusaetzlich nach `.id === legacyId` in allen Eintraegen gesucht.
+ * Beim manuellen Anlegen einer Kamera in `/admin/preise/kameras/neu`
+ * koennen Object-Key und `id`-Feld theoretisch auseinanderlaufen — dieser
+ * Fallback rettet den Backfill, sonst fehlt die Kamera im Produkte-Mirror.
  */
 async function loadCameraStammdaten(
   supabase: SupabaseClient,
@@ -36,9 +42,18 @@ async function loadCameraStammdaten(
     .maybeSingle();
   const products = (data?.value ?? {}) as Record<
     string,
-    { name?: string; brand?: string; model?: string; deposit?: number; image?: string; images?: string[] }
+    { id?: string; name?: string; brand?: string; model?: string; deposit?: number; image?: string; images?: string[] }
   >;
-  const p = products[legacyId];
+  let p = products[legacyId];
+  if (!p) {
+    // Fallback: suche per id-Feld in allen Eintraegen (Key/ID-Drift-Schutz).
+    for (const entry of Object.values(products)) {
+      if (entry?.id === legacyId) {
+        p = entry;
+        break;
+      }
+    }
+  }
   if (!p) return null;
   return {
     name: p.name ?? legacyId,
