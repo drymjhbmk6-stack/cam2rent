@@ -15,6 +15,21 @@ export interface RentalSet {
   includedItems: string[];
   /** Maschinenlesbare Liste der enthaltenen Artikel mit Anzahl (aus DB) */
   accessory_items?: { accessory_id: string; qty: number }[];
+  /**
+   * Angereicherte Variante mit Name + Upgrade-Infos pro Eintrag. Wird von
+   * der Sets-API (GET /api/sets) befuellt und erlaubt dem Frontend, den
+   * Default-Eintrag einer Upgrade-Gruppe (z.B. "64 GB") aus der Anzeige
+   * auszublenden, sobald die Upgrade-Variante (z.B. "512 GB") gewaehlt
+   * ist — auch wenn das Default-Accessory `internal=true` ist und nicht in
+   * /api/accessories enthalten waere.
+   */
+  accessory_items_detailed?: {
+    accessory_id: string;
+    qty: number;
+    name: string;
+    upgrade_group: string | null;
+    is_upgrade_base: boolean;
+  }[];
   /** Optionales Badge (z.B. "Beliebt") */
   badge?: string;
   badgeColor?: string;

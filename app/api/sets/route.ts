@@ -84,14 +84,39 @@ export async function GET(req: NextRequest) {
         .select('id, name, description, badge, badge_color, pricing_mode, price, available, sort_order, accessory_items, product_ids, image_url')
         .order('sort_order', { ascending: true });
     }
-    const accRes = await supabase
+    // upgrade_group / is_upgrade_base mit-laden, damit der Frontend-Filter
+    // (getFilteredSetItems im Buchungsflow) den Default-Eintrag eines Sets
+    // (z.B. "64 GB") zuverlaessig per Upgrade-Group ausblenden kann, wenn der
+    // Kunde die Upgrade-Variante (z.B. "512 GB") aktiv waehlt. Defensiver
+    // Fallback: wenn die Spalten fehlen, faellt der Code auf den minimalen
+    // Select zurueck und liefert die Upgrade-Infos einfach nicht mit.
+    type AccRow = {
+      id: string;
+      name: string;
+      available: boolean;
+      available_qty: number;
+      upgrade_group?: string | null;
+      is_upgrade_base?: boolean | null;
+    };
+    let accRes: { data: AccRow[] | null; error: { message: string } | null } = await supabase
       .from('accessories')
-      .select('id, name, available, available_qty');
+      .select('id, name, available, available_qty, upgrade_group, is_upgrade_base');
+    if (accRes.error && /upgrade_group|is_upgrade_base|column|schema cache|PGRST/i.test(accRes.error.message)) {
+      accRes = await supabase
+        .from('accessories')
+        .select('id, name, available, available_qty');
+    }
 
     if (setsRes.error) throw setsRes.error;
 
     const accMap = new Map(
-      (accRes.data ?? []).map((a) => [a.id, { name: a.name, available: a.available, available_qty: a.available_qty }])
+      (accRes.data ?? []).map((a) => [a.id, {
+        name: a.name,
+        available: a.available,
+        available_qty: a.available_qty,
+        upgrade_group: a.upgrade_group ?? null,
+        is_upgrade_base: a.is_upgrade_base ?? false,
+      }])
     );
 
     const allSets: (RentalSet & { accessory_items: AccessoryItem[]; product_ids: string[]; basic_for_product_ids: string[] })[] =
@@ -121,6 +146,24 @@ export async function GET(req: NextRequest) {
         const basicFor = basicForSupported && Array.isArray(rawBasic)
           ? (rawBasic as string[]).filter((id) => productIds.includes(id))
           : [];
+
+        // Angereicherte Variante der accessory_items mit Name + Upgrade-Infos
+        // — fuer den Frontend-Filter, der bei aktiver Upgrade-Option den
+        // Default-Eintrag (z.B. "64 GB") aus der Anzeige nimmt. Filter laeuft
+        // ueber accessory_id + upgrade_group statt ueber Name-Vergleich; damit
+        // funktioniert er auch wenn das Base-Accessory `internal=true` ist
+        // und nicht in /api/accessories enthalten ist.
+        const accessoryItemsDetailed = items.map((it) => {
+          const acc = accMap.get(it.accessory_id);
+          return {
+            accessory_id: it.accessory_id,
+            qty: it.qty,
+            name: acc?.name ?? it.accessory_id,
+            upgrade_group: acc?.upgrade_group ?? null,
+            is_upgrade_base: acc?.is_upgrade_base ?? false,
+          };
+        });
+
         return {
           id: r.id,
           name: r.name ?? r.id,
@@ -133,6 +176,7 @@ export async function GET(req: NextRequest) {
           price: Number(r.price ?? 0),
           available,
           accessory_items: items,
+          accessory_items_detailed: accessoryItemsDetailed,
           product_ids: productIds,
           basic_for_product_ids: basicFor,
           image_url: r.image_url ?? null,

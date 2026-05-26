@@ -167,6 +167,36 @@ lesen sie weiterhin.
     der naechste Aufruf (z.B. Mirror-Backfill, Unit-Insert, Unit-Delete)
     NIE mehr den Bestand unter den Stand der neuen Welt druecken, auch
     wenn der `accessory_units`-Mirror voruebergehend leer ist.
+
+### Set-Upgrade-Filter robust gegen interne Default-Items (Stand 2026-05-26)
+Im Buchungsflow wird der Default-Eintrag einer Upgrade-Gruppe eines Sets (z.B.
+„64 GB" Speicherkarte) aus der Anzeige ausgeblendet, sobald der Kunde die
+Upgrade-Variante (z.B. „512 GB") aktiv waehlt. Vorher lief der Filter ueber
+**String-Vergleich** der Item-Namen gegen die Base-Accessory-Namen aus
+`dbAccessories`. Problem: `dbAccessories` kommt von `/api/accessories`, das
+`internal=true` raussiebt. Set-Default-Items sind typisch intern (nur als
+Set-Bestandteil sinnvoll, nicht einzeln buchbar) → `baseAcc` war `undefined`
+→ Filter griff nicht → „64 GB" blieb in der Sidebar-Anzeige sichtbar, auch
+wenn „512 GB" gewaehlt war.
+
+Fix in zwei Lagen:
+- **`GET /api/sets`** liefert zusaetzlich zu `accessory_items` ein neues
+  Feld `accessory_items_detailed` mit `[{accessory_id, qty, name,
+  upgrade_group, is_upgrade_base}]` pro Set-Eintrag. Quelle ist die
+  `accessories`-Tabelle **inkl. interner Eintraege** (Service-Role-Read,
+  kein internal-Filter — die Set-API hatte das schon vorher fuer
+  `accMap`, jetzt um die zwei Upgrade-Spalten erweitert). Defensiver
+  Schema-Fallback: fehlen `upgrade_group`/`is_upgrade_base` werden sie
+  als `null`/`false` interpretiert.
+- **`getFilteredSetItems` in `/kameras/[slug]/buchen`** filtert primaer
+  ueber `accessory_items_detailed` per `(accessory_id, upgrade_group,
+  is_upgrade_base)` — funktioniert auch wenn das Default-Accessory
+  `internal=true` ist (es liegt ja in `accessory_items_detailed` mit
+  drin, nicht in `dbAccessories`). Logik: Welche Upgrade-Gruppen hat der
+  Kunde mit einer Nicht-Base-Variante belegt? Default-Items dieser
+  Gruppen werden aus der Anzeige entfernt. Fallback auf den alten
+  String-Vergleich bleibt fuer alte API-Antworten ohne das neue Feld
+  (kein Daten-Verlust bei Cache-Race).
 - **`supabase/recovery-after-drop.sql`** — Notfall: legt alte Tabellen wieder an,
   falls doch mal gedroppt wurde.
 

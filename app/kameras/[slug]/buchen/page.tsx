@@ -1028,22 +1028,70 @@ export default function BuchenPage() {
     return total;
   }, [selectedSet, dbAccessories]);
 
-  // Set-Items filtern: Wenn ein Upgrade gewählt wurde, Base-Item ersetzen
+  // Set-Items filtern: Wenn ein Upgrade gewählt wurde, Default-Item der
+  // Upgrade-Gruppe (z.B. "64 GB" wenn 512 GB gewaehlt) aus der Anzeige
+  // entfernen.
+  //
+  // Strategie: primaer ueber `accessory_items_detailed` (mit accessory_id +
+  // upgrade_group), Fallback auf den alten String-Vergleich gegen
+  // `includedItems`. Der Fallback greift nur wenn die API noch keine
+  // detaillierten Items liefert (alte Cache-Version etc.).
+  //
+  // Warum nicht nur String-Vergleich: das Default-Accessory einer Set-
+  // Upgrade-Gruppe ist oft `internal=true` und damit nicht in `dbAccessories`
+  // (welches via /api/accessories interne raussiebt). Der frueher reine
+  // Name-Vergleich konnte das Base-Accessory dann nicht finden → 64 GB
+  // blieb sichtbar obwohl 512 GB gewaehlt war.
   const getFilteredSetItems = useCallback((): string[] => {
     if (!selectedSet) return [];
-    // Finde alle Base-Accessories deren Upgrade-Gruppe ein aktives Upgrade hat
+
+    // 1) Welche Upgrade-Gruppen wurden vom Kunden mit einer
+    //    Nicht-Base-Variante belegt? (z.B. storage → 512 GB)
+    const activeUpgradeGroups = new Set<string>();
+    for (const accId of accessories) {
+      const acc = dbAccessories.find((a) => a.id === accId);
+      if (!acc?.upgradeGroup) continue;
+      if (acc.isUpgradeBase) continue; // Base zaehlt nicht als "Upgrade gewaehlt"
+      activeUpgradeGroups.add(acc.upgradeGroup);
+    }
+
+    // 2) Primaer-Pfad: detailed-Items vorhanden? Dann ID/Group-basiert
+    //    filtern. Default-Eintrag einer aktiven Upgrade-Gruppe fliegt raus.
+    const detailed = selectedSet.accessory_items_detailed;
+    if (Array.isArray(detailed) && detailed.length > 0) {
+      // Aggregation nach Name (zur Anzeige), Default-Eintrag der aktiven
+      // Upgrade-Gruppen wird ueberspringt.
+      const nameQty = new Map<string, number>();
+      for (const it of detailed) {
+        if (it.upgrade_group && it.is_upgrade_base && activeUpgradeGroups.has(it.upgrade_group)) {
+          continue; // wird durch das vom Kunden gewaehlte Upgrade ersetzt
+        }
+        nameQty.set(it.name, (nameQty.get(it.name) ?? 0) + (it.qty ?? 1));
+      }
+      return [...nameQty.entries()].map(
+        ([name, qty]) => (qty > 1 ? `${qty}x ${name}` : name),
+      );
+    }
+
+    // 3) Fallback (Name-Vergleich gegen includedItems) — funktioniert nur
+    //    wenn beide Beteiligten public sind und die Namen exakt matchen.
+    //    Kein Daten-Verlust bei alten API-Antworten ohne detailed-Feld.
     const replacedBaseNames = new Set<string>();
     for (const accId of accessories) {
       const acc = dbAccessories.find((a) => a.id === accId);
       if (!acc?.upgradeGroup) continue;
-      // Dieses Accessory ist ein Upgrade → finde die Base der gleichen Gruppe
       const baseAcc = dbAccessories.find(
-        (a) => a.upgradeGroup === acc.upgradeGroup && a.isUpgradeBase
+        (a) => a.upgradeGroup === acc.upgradeGroup && a.isUpgradeBase,
       );
       if (baseAcc) replacedBaseNames.add(baseAcc.name);
     }
-    // Set-Items filtern: Base-Name raus wenn durch Upgrade ersetzt
-    return selectedSet.includedItems.filter((item) => !replacedBaseNames.has(item));
+    return selectedSet.includedItems.filter((item) => {
+      // Auch "Nx Name"-Eintraege filtern, indem das fuehrende "Nx " gestrippt
+      // wird (analog zur Anzeige-Aggregation in der Sidebar).
+      const m = /^(\d+)x\s+(.+)$/.exec(item);
+      const bareName = m ? m[2] : item;
+      return !replacedBaseNames.has(bareName);
+    });
   }, [selectedSet, accessories, dbAccessories]);
 
   if (!product) {
