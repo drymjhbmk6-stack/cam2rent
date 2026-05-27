@@ -581,6 +581,12 @@ export async function POST(req: NextRequest) {
     const periodGroups = groupByPeriod(r_items);
     const totalCartSubtotal = r_items.reduce((s, it) => s + it.subtotal, 0);
     const bookingIds: string[] = [];
+    // Welche Buchungen wurden von DIESEM Request frisch in die DB eingefuegt?
+    // Vuln-17-Recovery (siehe unten) uebernimmt IDs aus der DB, schickt aber
+    // KEINE Mails dafuer — die hat schon der Webhook oder ein frueherer
+    // confirm-cart-Call verschickt. Sonst entstehen Doppel-Mails (siehe
+    // CLAUDE.md → "Doppelte Buchungsmails").
+    const freshlyInsertedIds = new Set<string>();
 
     // Versand pro Gruppe vorab berechnen, damit wir den Anteil-Faktor
     // (subtotal+shipping pro Gruppe / Gesamt) kennen, ueber den intent.amount
@@ -783,6 +789,7 @@ export async function POST(req: NextRequest) {
         const { error: insErr } = await supabase.from('bookings').insert(buildInsertPayload(bookingId));
         if (!insErr) {
           insertError = null;
+          freshlyInsertedIds.add(bookingId);
           break;
         }
         if (insErr.code !== '23505') {
@@ -1176,6 +1183,13 @@ export async function POST(req: NextRequest) {
       after(async () => {
         try {
           for (let gi = 0; gi < periodGroups.length; gi++) {
+            // Doppel-Mail-Schutz: ueberspringen, wenn diese Buchung NICHT von
+            // diesem Request frisch eingefuegt wurde (Vuln-17-Recovery-Pfad).
+            // Sonst schicken Webhook/parallel-Call + dieser Call jeweils 1+1.
+            if (!freshlyInsertedIds.has(bookingIds[gi])) {
+              console.log(`[confirm-cart] Mail-Skip: ${bookingIds[gi]} wurde nicht von diesem Request angelegt (Webhook oder parallel-Call hat schon).`);
+              continue;
+            }
             const groupItems = periodGroups[gi];
             const firstItem = groupItems[0];
             const productName = groupItems.length === 1

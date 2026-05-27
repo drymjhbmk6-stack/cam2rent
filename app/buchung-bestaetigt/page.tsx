@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useState, useCallback } from 'react';
+import { Suspense, useEffect, useRef, useState, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useCart } from '@/components/CartProvider';
@@ -128,6 +128,11 @@ function CartBookingConfirmed({
   const [confirmed, setConfirmed] = useState(false);
   const [retried, setRetried] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Re-Entry-Guard: useEffect kann durch handleConfirm-Identitaetswechsel
+  // (clearCart aendert items, authLoading flippt) ein zweites Mal feuern,
+  // bevor setConfirmed(true) propagiert ist. Verhindert Doppel-confirm-cart
+  // → Doppel-Mails (siehe CLAUDE.md → "Doppelte Buchungsmails").
+  const inFlightRef = useRef(false);
 
   const handleConfirm = useCallback(async (): Promise<{ found: boolean; errMsg?: string }> => {
     // Read checkout context saved before payment
@@ -212,29 +217,38 @@ function CartBookingConfirmed({
   useEffect(() => {
     if (confirmed) return;
     if (authLoading) return;
+    // Re-Entry-Guard (siehe inFlightRef-Kommentar oben). Verhindert dass ein
+    // zweites useEffect-Feuer den Server ein zweites Mal anruft, bevor der
+    // erste Call setConfirmed(true) propagiert hat.
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
 
     let cancelled = false;
     (async () => {
-      const first = await handleConfirm();
-      if (cancelled) return;
-      if (first.found) {
-        setConfirmed(true);
-        return;
-      }
-      // Stripe-Redirect-Status 'failed' + Server hat (noch) keine Buchung:
-      // Webhook ist eventuell noch unterwegs. Einmaliger Retry nach 1.5 s.
-      if (initialStatus === 'failed' && !retried) {
-        setRetried(true);
-        await new Promise((res) => setTimeout(res, 1500));
+      try {
+        const first = await handleConfirm();
         if (cancelled) return;
-        const second = await handleConfirm();
-        if (cancelled) return;
-        if (!second.found && second.errMsg) setError(second.errMsg);
+        if (first.found) {
+          setConfirmed(true);
+          return;
+        }
+        // Stripe-Redirect-Status 'failed' + Server hat (noch) keine Buchung:
+        // Webhook ist eventuell noch unterwegs. Einmaliger Retry nach 1.5 s.
+        if (initialStatus === 'failed' && !retried) {
+          setRetried(true);
+          await new Promise((res) => setTimeout(res, 1500));
+          if (cancelled) return;
+          const second = await handleConfirm();
+          if (cancelled) return;
+          if (!second.found && second.errMsg) setError(second.errMsg);
+          setConfirmed(true);
+          return;
+        }
+        if (first.errMsg) setError(first.errMsg);
         setConfirmed(true);
-        return;
+      } finally {
+        inFlightRef.current = false;
       }
-      if (first.errMsg) setError(first.errMsg);
-      setConfirmed(true);
     })();
 
     return () => {
