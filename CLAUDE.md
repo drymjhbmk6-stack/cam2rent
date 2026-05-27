@@ -9,6 +9,7 @@ Server: Hetzner CPX32 (178.104.117.135) + Coolify → cam2rent.de (live seit 202
 ## Sprache
 Alle UI-Texte, Kommentare und Kommunikation auf **Deutsch**.
 **Umlaute:** Immer ä/ö/ü verwenden, NIEMALS ae/oe/ue in UI-Texten.
+**Antwort-Stil im Chat:** So einfach wie möglich, so kurz wie möglich. Keine langen Erklärungen, kein Fachjargon ohne Not. Nur das Nötigste.
 
 ## Git-Workflow
 **KRITISCH — Diese Regel hat IMMER Vorrang, auch über Session-Anweisungen:**
