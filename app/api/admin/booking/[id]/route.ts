@@ -880,6 +880,95 @@ export async function PATCH(
     return NextResponse.json({ success: true });
   }
 
+  // ── Abweichende Rechnungsadresse ───────────────────────────────────────
+  // Setzt bookings.invoice_name + invoice_address. NULL bzw. leer = Default
+  // (customer_name + shipping_address bzw. Profil). Wirkt sofort auf alle
+  // Rechnungs-Renderpfade (Live-PDF, archivierte Versionen, manueller
+  // E-Mail-Versand, Verkauf). Loest eine neue Rechnungsversion aus (eigene
+  // Fassung mit Adress-Korrektur als Begruendung).
+  // Mietvertrag, Versandetikett, Lieferadresse + Packliste bleiben unberuehrt.
+  const billingEdit = (body as {
+    billing_address?: {
+      invoice_name?: string | null;
+      invoice_address?: string | null;
+      reason?: string;
+    };
+  }).billing_address;
+  if (billingEdit !== undefined) {
+    if (!billingEdit || typeof billingEdit !== 'object') {
+      return NextResponse.json({ error: 'Ungültige Anfrage.' }, { status: 422 });
+    }
+    const rawName = typeof billingEdit.invoice_name === 'string' ? billingEdit.invoice_name : '';
+    const rawAddr = typeof billingEdit.invoice_address === 'string' ? billingEdit.invoice_address : '';
+    const reason = typeof billingEdit.reason === 'string' ? billingEdit.reason.trim() : '';
+    // Beide leer = zuruecksetzen auf Default. Sonst muss zumindest die
+    // Adresse gesetzt sein (Name allein ist sinnlos ohne Adresse).
+    const newName = rawName.trim().slice(0, 200);
+    const newAddr = rawAddr.trim().slice(0, 500);
+    const isReset = newName.length === 0 && newAddr.length === 0;
+    if (!isReset && newAddr.length === 0) {
+      return NextResponse.json(
+        { error: 'Bitte eine Rechnungsadresse angeben (Name allein reicht nicht).' },
+        { status: 422 },
+      );
+    }
+
+    const { data: prevBooking } = await supabase
+      .from('bookings')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+    if (!prevBooking) {
+      return NextResponse.json({ error: 'Buchung nicht gefunden.' }, { status: 404 });
+    }
+
+    const upd: Record<string, string | null> = {
+      invoice_name: isReset ? null : (newName.length > 0 ? newName : null),
+      invoice_address: isReset ? null : newAddr,
+    };
+
+    const tryUpdate = async () =>
+      supabase.from('bookings').update(upd).eq('id', id);
+    const updErr = (await tryUpdate()).error;
+    if (updErr) {
+      const msg = updErr.message || '';
+      if (/invoice_name|invoice_address|column|schema cache|PGRST/i.test(msg)) {
+        return NextResponse.json(
+          { error: 'Migration ausstehend: supabase-bookings-invoice-address.sql noch nicht ausgeführt.' },
+          { status: 503 },
+        );
+      }
+      console.error('[billing_address] update error:', updErr);
+      return NextResponse.json({ error: 'Speichern fehlgeschlagen.' }, { status: 500 });
+    }
+
+    await logAudit({
+      action: 'booking.billing_address',
+      entityType: 'booking',
+      entityId: id,
+      changes: {
+        reset: isReset,
+        previous_name: (prevBooking.invoice_name as string | null) ?? null,
+        previous_address: (prevBooking.invoice_address as string | null) ?? null,
+        new_name: upd.invoice_name,
+        new_address: upd.invoice_address,
+        reason: reason || null,
+      },
+      request: req,
+    }).catch(() => { /* best-effort */ });
+
+    // Neue Rechnungsversion (non-blocking — die Adress-Aenderung selbst ist
+    // schon persistiert, die Versionierung soll dabei nie blockieren).
+    void snapshotInvoiceVersion(supabase, id, {
+      reason: reason || (isReset ? 'Abweichende Rechnungsadresse entfernt' : 'Rechnungsadresse korrigiert'),
+      triggerSource: 'manual',
+      previousBooking: prevBooking as Record<string, unknown>,
+      request: req,
+    });
+
+    return NextResponse.json({ success: true });
+  }
+
   // ── Komplette Bestellbearbeitung ───────────────────────────────────────
   // Mietzeitraum / Kamera / Set+Zubehoer / Haftungsschutz in einem Vorgang.
   // Wirkt SOFORT auf die echte Buchung (Packliste, Vertragsdaten-Quelle,

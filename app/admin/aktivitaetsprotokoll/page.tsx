@@ -31,6 +31,7 @@ const ACTION_LABELS: Record<string, string> = {
   'booking.wbw_resend': 'WBW-E-Mail erneut gesendet',
   'booking.invoice_version': 'Rechnungsfassung archiviert',
   'booking.invoice_send': 'Angepasste Rechnung an Kunden gesendet',
+  'booking.billing_address': 'Abweichende Rechnungsadresse geändert',
   // Kunden
   'customer.block': 'Kunde gesperrt',
   'customer.unblock': 'Kunde entsperrt',

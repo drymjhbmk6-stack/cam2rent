@@ -591,6 +591,56 @@ geändert** (CLAUDE.md-Doku-Pflicht erfüllt). Eine Datei:
 - **Endgültig löschen:** "Endgültig löschen"-Button mit Admin-Passwort-Abfrage (Passwort: Admin) → löscht Buchung + Verträge + E-Mail-Logs aus DB
 - **DELETE-Endpoint:** `DELETE /api/admin/booking/[id]` mit `{ password }` im Body
 
+### Abweichende Rechnungsadresse pro Buchung (Stand 2026-05-28)
+Pro Buchung kann der Admin einen **abweichenden Rechnungsempfänger + Adresse**
+hinterlegen — typischer Fall: Kunde mietet privat, lässt die Rechnung aber an
+seine Firma adressieren. Die Lieferadresse (Versandetikett, Packliste),
+Mietvertrag und Übergabeprotokoll bleiben dabei unverändert auf den Original-
+Kunden.
+- **Migration `supabase/supabase-bookings-invoice-address.sql`** (idempotent,
+  additiv): `bookings.invoice_name TEXT NULL` + `bookings.invoice_address TEXT
+  NULL`. NULL = Default-Verhalten (Versandadresse → Profil-Adresse, wie zuvor).
+- **`lib/build-invoice-data.ts`** (einzige Quelle der Wahrheit fuer
+  `/api/invoice/[bookingId]`, `lib/invoice-versions.ts`, `lib/verkauf.ts`):
+  `customerName = invoice_name ?? customer_name`,
+  `customerAddress = invoice_address ?? shipping_address ?? profil`. Beide
+  Overrides werden getrimmt; leerer String = kein Override.
+- **`app/api/admin/booking/[id]/send-email`** (manueller PDF-Versand aus
+  Buchungsdetails) wendet die gleiche Override-Logik inline an, damit auch
+  per Hand verschickte PDF-Rechnungen die korrigierte Adresse zeigen.
+- **PATCH-Branch `billing_address`** auf `PATCH /api/admin/booking/[id]`:
+  Body `{ billing_address: { invoice_name, invoice_address, reason } }`.
+  Sanitisierung (Name max 200, Adresse max 500 Zeichen, getrimmt). `null`
+  bzw. beide leer = Reset auf Default. `invoice_address` ist bei nicht-Reset
+  Pflicht (Name allein reicht nicht — sonst sinnlos). Defensiver Migrations-
+  Fallback liefert 503 mit Hinweis, falls die Spalten noch nicht existieren.
+  Audit `booking.billing_address` mit altem + neuem Wert.
+- **Versionierung:** `fingerprint` in `lib/invoice-versions.ts` enthält jetzt
+  zusätzlich `customerName` + `customerAddress`. Eine Adress-Änderung erzeugt
+  damit eine **neue Rechnungsversion** (analog zu accessory_edit/booking_edit)
+  mit `triggerSource: 'manual'`. Default-Reason je nach Aktion:
+  „Rechnungsadresse korrigiert" bzw. „Abweichende Rechnungsadresse entfernt"
+  (vom Admin überschreibbar via `reason`). Erste Anpassung erzeugt lazy die
+  v1-Baseline aus dem Pre-Mutation-Zustand. **Folge des Fingerprint-Sweeps:**
+  bei bestehenden Buchungen wird die nächste Buchungs-Bearbeitung (accessory
+  / booking / address) einmalig eine zusätzliche Version anlegen, weil die
+  alten Fingerprints den Empfänger noch nicht enthielten — gewollt.
+- **UI** (`/admin/buchungen/[id]` → Collapsible „Bearbeiten & Werkzeuge" →
+  neue Section „Abweichende Rechnungsadresse" zwischen WBW-Finalisierung und
+  Rechnungsversionen): Read-Mode zeigt aktuellen Stand + Button
+  „+ Abweichende Adresse hinzufügen" bzw. „Bearbeiten" + „Auf Standard
+  zurücksetzen". Edit-Mode mit Empfängername (optional, Placeholder = aktueller
+  Kundenname), Rechnungsadresse (mehrzeilig, Pflicht), Grund (optional).
+  Toast-Feedback nach Speichern weist auf die neue Rechnungsfassung hin.
+- **Was nicht passiert:** Mietvertrag-PDF bleibt das signierte Original (keine
+  Neugenerierung). Versandetikett, Packliste, Übergabeprotokoll, Sendcloud
+  und Stripe-Daten bleiben unangetastet. `customer_name` als interner Wert
+  bleibt der Original-Kunde — die abweichende Adresse ist eine reine
+  **Rechnungsempfänger-Korrektur**, kein Auftraggeber-Wechsel.
+- **Go-Live TODO:** Migration `supabase/supabase-bookings-invoice-address.sql`
+  ausführen. Ohne sie liefert der `billing_address`-Branch 503; alle anderen
+  Rechnungs-Pfade laufen per defensivem `?? null` 1:1 wie zuvor.
+
 ### Versand-Status `delivered` — Zugestellt ≠ Abgeschlossen (Stand 2026-05-22)
 Neuer Buchungs-Zwischenstatus `delivered` (Label „Zugestellt"). Vorher sprang
 „Als zugestellt markieren" auf `shipped` direkt auf `completed` — falsch, denn
@@ -3692,6 +3742,12 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
      im jeweiligen `MODEL_REGISTRY` (`lib/firmware/adapters/`) ergänzen.
 
 ### Noch offen
+- **Abweichende-Rechnungsadresse-Migration auszuführen:**
+  `supabase/supabase-bookings-invoice-address.sql` (idempotent, additiv).
+  Legt `bookings.invoice_name` + `bookings.invoice_address` an. Ohne
+  Migration läuft alles 1:1 wie zuvor (Default-Adress-Logik greift), nur
+  der neue `billing_address`-PATCH-Branch liefert 503 mit Hinweistext
+  und die UI-Section bleibt funktionslos. Empfohlen ASAP ausführen.
 - **Persönlicher-Bereich-Migration + Cron:** Migration
   `supabase/supabase-employee-personal.sql` (idempotent, legt
   `employee_notes` + `employee_appointments` an) ausführen, sonst zeigt die

@@ -36,16 +36,32 @@ export async function buildInvoiceData(
   const taxMap: Record<string, string> = {};
   for (const s of taxSettings ?? []) taxMap[s.key] = s.value;
 
-  // Kundenadresse aus Profil laden
-  let customerAddress = (booking.shipping_address as string) ?? '';
-  if (!customerAddress && booking.user_id) {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('address_street, address_zip, address_city')
-      .eq('id', booking.user_id as string)
-      .maybeSingle();
-    if (profile?.address_street) {
-      customerAddress = `${profile.address_street}, ${profile.address_zip} ${profile.address_city}`;
+  // Rechnungsempfaenger — abweichende Rechnungsadresse hat Vorrang vor
+  // Liefer-/Profil-Adresse. invoice_name/invoice_address sind optional
+  // (Migration supabase-bookings-invoice-address.sql); fehlt die Spalte,
+  // sind beide undefined → Default-Verhalten wie zuvor.
+  const invoiceNameOverride = (booking.invoice_name as string | null | undefined) ?? null;
+  const invoiceAddressOverride = (booking.invoice_address as string | null | undefined) ?? null;
+
+  const customerName = invoiceNameOverride && invoiceNameOverride.trim().length > 0
+    ? invoiceNameOverride.trim()
+    : ((booking.customer_name as string) ?? '');
+
+  // Kundenadresse: invoice_address > shipping_address > Profil
+  let customerAddress = '';
+  if (invoiceAddressOverride && invoiceAddressOverride.trim().length > 0) {
+    customerAddress = invoiceAddressOverride.trim();
+  } else {
+    customerAddress = (booking.shipping_address as string) ?? '';
+    if (!customerAddress && booking.user_id) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('address_street, address_zip, address_city')
+        .eq('id', booking.user_id as string)
+        .maybeSingle();
+      if (profile?.address_street) {
+        customerAddress = `${profile.address_street}, ${profile.address_zip} ${profile.address_city}`;
+      }
     }
   }
 
@@ -84,7 +100,7 @@ export async function buildInvoiceData(
       bookingId,
       invoiceNumber,
       invoiceDate,
-      customerName: (booking.customer_name as string) ?? '',
+      customerName,
       customerEmail: (booking.customer_email as string) ?? '',
       customerAddress,
       productName: (booking.product_name as string) ?? '',
@@ -122,7 +138,7 @@ export async function buildInvoiceData(
     bookingId,
     invoiceNumber,
     invoiceDate,
-    customerName: (booking.customer_name as string) ?? '',
+    customerName,
     customerEmail: (booking.customer_email as string) ?? '',
     customerAddress,
     productName: (booking.product_name as string) ?? '',

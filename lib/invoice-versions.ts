@@ -34,7 +34,10 @@ function storagePath(bookingId: string, version: number): string {
 }
 
 /** Rechnungsrelevanter Fingerabdruck — aendert er sich nicht, entsteht KEINE
- *  neue Version (kein Versions-Rauschen bei Nicht-Preis-Edits). */
+ *  neue Version (kein Versions-Rauschen bei Nicht-Preis-Edits).
+ *  Enthaelt zusaetzlich Empfaenger-Name + -Adresse: eine Rechnungsadress-
+ *  Korrektur ist rechnungsrelevant (Pflichtangabe nach UStG § 14) und muss
+ *  als eigene Version archiviert werden. */
 function fingerprint(d: InvoiceData): string {
   return JSON.stringify({
     cam: (d.cameraLines ?? []).map((l) => [l.name, l.qty, l.unitPrice, l.lineTotal]),
@@ -48,6 +51,8 @@ function fingerprint(d: InvoiceData): string {
     pt: d.priceTotal,
     rf: d.rentalFrom,
     rt: d.rentalTo,
+    cn: (d.customerName ?? '').trim(),
+    ca: (d.customerAddress ?? '').trim(),
   });
 }
 

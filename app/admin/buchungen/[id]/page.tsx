@@ -77,6 +77,8 @@ interface BookingDetail {
   adjustment_note?: string | null;
   ship_date_override?: string | null;
   return_due_date_override?: string | null;
+  invoice_name?: string | null;
+  invoice_address?: string | null;
 }
 
 interface LiabilityLine {
@@ -1245,6 +1247,7 @@ export default function BuchungDetailPage() {
               {booking.status === 'confirmed' && (
                 <WbwFinalizePanel booking={booking} onChanged={fetchBooking} />
               )}
+              <BillingAddressSection booking={booking} onSaved={fetchBooking} />
               <InvoiceVersionsPanel bookingId={booking.id} />
             </Collapsible>
 
@@ -3025,6 +3028,182 @@ function InvoiceVersionsPanel({ bookingId }: { bookingId: string }) {
                 ? 'Angepasste Rechnung erneut senden'
                 : 'Angepasste Rechnung an Kunden senden'}
           </button>
+        )}
+      </div>
+    </Section>
+  );
+}
+
+function BillingAddressSection({
+  booking,
+  onSaved,
+}: {
+  booking: BookingDetail;
+  onSaved: () => void;
+}) {
+  const hasOverride = (
+    (booking.invoice_address ?? '').trim().length > 0 ||
+    (booking.invoice_name ?? '').trim().length > 0
+  );
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(booking.invoice_name ?? '');
+  const [addr, setAddr] = useState(booking.invoice_address ?? '');
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ t: 'ok' | 'err'; m: string } | null>(null);
+
+  function openEdit() {
+    setName(booking.invoice_name ?? '');
+    setAddr(booking.invoice_address ?? '');
+    setReason('');
+    setMsg(null);
+    setEditing(true);
+  }
+
+  async function save(reset = false) {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const res = await fetch(`/api/admin/booking/${booking.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          billing_address: reset
+            ? { invoice_name: null, invoice_address: null, reason: reason.trim() || undefined }
+            : { invoice_name: name.trim() || null, invoice_address: addr.trim(), reason: reason.trim() || undefined },
+        }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || 'Fehlgeschlagen.');
+      setMsg({ t: 'ok', m: reset ? 'Rechnungsadresse zurückgesetzt.' : 'Rechnungsadresse gespeichert. Eine neue Rechnungsfassung wird erzeugt.' });
+      setEditing(false);
+      onSaved();
+    } catch (e) {
+      setMsg({ t: 'err', m: e instanceof Error ? e.message : 'Fehlgeschlagen.' });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Section title="Abweichende Rechnungsadresse">
+      <div className="space-y-3">
+        <p className="text-xs text-brand-muted leading-relaxed">
+          Optional: ein anderer Empfänger und/oder eine andere Anschrift auf
+          der Rechnung. Wirkt nur auf die Rechnung — Liefer-/Abholadresse,
+          Mietvertrag und Versandetikett bleiben unverändert.
+        </p>
+
+        {!editing && (
+          <div className="bg-brand-bg rounded-lg p-3 border border-brand-border">
+            {hasOverride ? (
+              <>
+                <p className="text-[10px] uppercase tracking-wide text-brand-muted font-heading mb-1">
+                  Wird auf der Rechnung verwendet
+                </p>
+                <p className="text-sm font-body text-brand-black whitespace-pre-line">
+                  {(booking.invoice_name ?? '').trim() || booking.customer_name || '—'}
+                </p>
+                <p className="text-sm font-body text-brand-black whitespace-pre-line">
+                  {booking.invoice_address}
+                </p>
+              </>
+            ) : (
+              <p className="text-sm font-body text-brand-muted">
+                Keine abweichende Rechnungsadresse hinterlegt. Es wird die
+                Versand-/Profil-Adresse verwendet.
+              </p>
+            )}
+            <div className="flex gap-2 mt-3">
+              <button
+                onClick={openEdit}
+                className="text-xs font-body px-3 py-1.5 rounded bg-accent-blue text-white hover:bg-blue-700"
+              >
+                {hasOverride ? 'Bearbeiten' : '+ Abweichende Adresse hinzufügen'}
+              </button>
+              {hasOverride && (
+                <button
+                  onClick={() => save(true)}
+                  disabled={busy}
+                  className="text-xs font-body px-3 py-1.5 rounded border border-brand-border text-brand-muted hover:bg-brand-bg disabled:opacity-50"
+                >
+                  Auf Standard zurücksetzen
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {editing && (
+          <div className="bg-brand-bg rounded-lg p-3 border border-brand-border space-y-3">
+            <div>
+              <label className="block text-[10px] uppercase tracking-wide text-brand-muted font-heading mb-1">
+                Empfängername (optional)
+              </label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder={booking.customer_name ?? ''}
+                maxLength={200}
+                className="w-full text-base font-body px-3 py-2 rounded border border-brand-border bg-white"
+              />
+              <p className="text-[11px] text-brand-muted mt-1">
+                Leer = aktueller Kundenname ({booking.customer_name || '—'}).
+              </p>
+            </div>
+            <div>
+              <label className="block text-[10px] uppercase tracking-wide text-brand-muted font-heading mb-1">
+                Rechnungsadresse *
+              </label>
+              <textarea
+                value={addr}
+                onChange={(e) => setAddr(e.target.value)}
+                placeholder="Straße Nr.&#10;PLZ Stadt"
+                rows={3}
+                maxLength={500}
+                className="w-full text-base font-body px-3 py-2 rounded border border-brand-border bg-white"
+              />
+              <p className="text-[11px] text-brand-muted mt-1">
+                Mehrzeilig erlaubt. Z.B. „Firma GmbH, Musterstraße 1, 12345 Berlin&ldquo;.
+              </p>
+            </div>
+            <div>
+              <label className="block text-[10px] uppercase tracking-wide text-brand-muted font-heading mb-1">
+                Grund (optional)
+              </label>
+              <input
+                type="text"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="z.B. Kunde wünscht Rechnung an Arbeitgeber"
+                maxLength={200}
+                className="w-full text-sm font-body px-3 py-2 rounded border border-brand-border bg-white"
+              />
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => save(false)}
+                disabled={busy || addr.trim().length === 0}
+                className="text-sm font-body px-4 py-2 rounded bg-accent-blue text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                {busy ? 'Speichern…' : 'Speichern'}
+              </button>
+              <button
+                onClick={() => setEditing(false)}
+                disabled={busy}
+                className="text-sm font-body px-4 py-2 rounded border border-brand-border text-brand-muted hover:bg-white disabled:opacity-50"
+              >
+                Abbrechen
+              </button>
+            </div>
+          </div>
+        )}
+
+        {msg && (
+          <p className={`text-xs font-body ${msg.t === 'ok' ? 'text-green-700' : 'text-red-600'}`}>
+            {msg.m}
+          </p>
         )}
       </div>
     </Section>

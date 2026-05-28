@@ -85,16 +85,28 @@ export async function POST(
         const taxMap: Record<string, string> = {};
         for (const s of taxSettings ?? []) taxMap[s.key] = s.value;
 
-        // Kundenadresse
-        let customerAddress = booking.shipping_address ?? '';
-        if (!customerAddress && booking.user_id) {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('address_street, address_zip, address_city')
-            .eq('id', booking.user_id)
-            .maybeSingle();
-          if (profile?.address_street) {
-            customerAddress = `${profile.address_street}, ${profile.address_zip} ${profile.address_city}`;
+        // Rechnungsempfaenger — invoice_name/invoice_address (abweichende
+        // Rechnungsadresse) haben Vorrang vor customer_name/shipping_address.
+        const invoiceNameOverride: string | null = booking.invoice_name ?? null;
+        const invoiceAddressOverride: string | null = booking.invoice_address ?? null;
+        const recipientName = invoiceNameOverride && invoiceNameOverride.trim().length > 0
+          ? invoiceNameOverride.trim()
+          : (booking.customer_name ?? '');
+
+        let customerAddress = '';
+        if (invoiceAddressOverride && invoiceAddressOverride.trim().length > 0) {
+          customerAddress = invoiceAddressOverride.trim();
+        } else {
+          customerAddress = booking.shipping_address ?? '';
+          if (!customerAddress && booking.user_id) {
+            const { data: profile } = await supabase
+              .from('profiles')
+              .select('address_street, address_zip, address_city')
+              .eq('id', booking.user_id)
+              .maybeSingle();
+            if (profile?.address_street) {
+              customerAddress = `${profile.address_street}, ${profile.address_zip} ${profile.address_city}`;
+            }
           }
         }
 
@@ -108,7 +120,7 @@ export async function POST(
           bookingId: booking.id,
           invoiceNumber,
           invoiceDate,
-          customerName: booking.customer_name ?? '',
+          customerName: recipientName,
           customerEmail: booking.customer_email ?? to,
           customerAddress,
           productName: booking.product_name ?? '',
