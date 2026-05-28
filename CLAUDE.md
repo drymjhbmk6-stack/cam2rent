@@ -199,6 +199,27 @@ Fix in zwei Lagen:
   String-Vergleich bleibt fuer alte API-Antworten ohne das neue Feld
   (kein Daten-Verlust bei Cache-Race).
 
+**Filter greift jetzt auch in Packliste/Übergabe/Retoure (Stand 2026-05-28):**
+Der Anzeige-Filter im Kunden-Wizard war eine Sache, die **Server-Auflösung**
+von `resolved_items` (gelesen von `/admin/buchungen/[id]`-Übergabe,
+`/admin/versand/[id]/packen`, `/admin/retouren/[id]/pruefen`,
+Druck-Packliste-HTML) und das Packliste-PDF (`/api/packlist/[bookingId]`)
+hatten die Filterung nicht — eine Buchung mit Basic Set + 512-GB-Upgrade
+zeigte die set-interne 128-GB-Karte trotzdem in Pack- und Übergabe-Listen.
+Fix: GET `/api/admin/booking/[id]` baut jetzt `skipUpgradeGroups` aus den
+**direkt gewählten** (Nicht-Set-) Accessory-IDs der Buchung (Lookup ihrer
+`upgrade_group`) — gleiche Vorgehensweise wie `applyAccessoryComposition`
+— und reicht sie an `resolveAccessoryItems` durch (das den Skip-Param
+bereits seit dem Sets-im-Edit-Branch 2026-05-18 kennt). Greift nur, wenn
+die Buchung sowohl ein Set ALS AUCH ein direktes Accessory enthält
+(sonst kein Skip → keine Regression bei reinen Set- oder reinen
+Einzel-Bookings). Packliste-PDF (`/api/packlist/[bookingId]`) hat eine
+eigene, einfachere Auflösungs-Logik — dort wurde dieselbe Skip-Mechanik
+inline ergänzt (Helper-Refactor bewusst vermieden, weil die PDF-Route
+auch sonst nicht das `isFromSet`/Container-Modell von
+`resolveAccessoryItems` mitbringt). Defensiv bei fehlender
+`upgrade_group`-Spalte: kein Skip, Default-Verhalten 1:1 wie zuvor.
+
 ### Set-Expansion in Verfuegbarkeits-Check (Stand 2026-05-26)
 `computeAccessoryAvailability` (`lib/accessory-availability.ts`,
 `GET /api/accessory-availability`) las `accessory_items` einer Buchung

@@ -200,7 +200,37 @@ export async function GET(
     ? (booking.accessory_items as { accessory_id: string; qty: number }[])
     : (Array.isArray(booking.accessories) ? booking.accessories as string[] : []).map((aid) => ({ accessory_id: aid, qty: 1 }));
 
-  const resolved = await resolveAccessoryItems(supabase, rawItems);
+  // Set-Default in Upgrade-Gruppe ausblenden, wenn der Kunde in derselben
+  // Gruppe eine Upgrade-Variante direkt gewaehlt hat (z.B. Basic-Set enthaelt
+  // 128 GB, Buchung hat 512 GB als eigenes Item → 128 GB faellt aus Packliste/
+  // Uebergabe/Retoure raus). Gleiche Logik wie applyAccessoryComposition.
+  const skipUpgradeGroups = new Set<string>();
+  if (rawItems.length > 0) {
+    const rawIds = [...new Set(rawItems.map((r) => r.accessory_id))];
+    try {
+      const { data: setRows } = await supabase.from('sets').select('id').in('id', rawIds);
+      const setIds = new Set((setRows ?? []).map((s) => s.id as string));
+      const directAccIds = rawIds.filter((id) => !setIds.has(id));
+      if (directAccIds.length > 0 && setIds.size > 0) {
+        const { data: directAccs } = await supabase
+          .from('accessories')
+          .select('id, upgrade_group')
+          .in('id', directAccIds);
+        for (const a of directAccs ?? []) {
+          const g = (a.upgrade_group as string | null) ?? null;
+          if (g) skipUpgradeGroups.add(g);
+        }
+      }
+    } catch {
+      // upgrade_group-Spalte fehlt → kein Skip, Default-Verhalten.
+    }
+  }
+
+  const resolved = await resolveAccessoryItems(
+    supabase,
+    rawItems,
+    skipUpgradeGroups.size > 0 ? { skipUpgradeGroups } : undefined,
+  );
   booking.resolved_items = resolved;
 
   // Zubehoer-Exemplar-Codes laden — fuer den Scanner-Workflow auf der Pack-

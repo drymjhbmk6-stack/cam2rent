@@ -97,19 +97,25 @@ export async function GET(
 
   if (rawItems.length > 0) {
     const allIds = [...new Set(rawItems.map((r) => r.accessory_id))];
-    type AccLookup = { name: string; included_parts: string[] };
+    type AccLookup = { name: string; included_parts: string[]; upgrade_group: string | null };
     const accLookup: Record<string, AccLookup> = {};
 
-    const accFull = await supabase.from('accessories').select('id, name, included_parts').in('id', allIds);
-    let accs: Array<{ id: string; name: string; included_parts?: string[] | null }> = accFull.data ?? [];
-    if (accFull.error && /column .*included_parts/i.test(accFull.error.message)) {
-      const accFallback = await supabase.from('accessories').select('id, name').in('id', allIds);
-      accs = accFallback.data ?? [];
+    const accFull = await supabase.from('accessories').select('id, name, included_parts, upgrade_group').in('id', allIds);
+    let accs: Array<{ id: string; name: string; included_parts?: string[] | null; upgrade_group?: string | null }> = accFull.data ?? [];
+    if (accFull.error && /column .*(included_parts|upgrade_group)/i.test(accFull.error.message)) {
+      const accNoUg = await supabase.from('accessories').select('id, name, included_parts').in('id', allIds);
+      if (accNoUg.error && /column .*included_parts/i.test(accNoUg.error.message)) {
+        const accFallback = await supabase.from('accessories').select('id, name').in('id', allIds);
+        accs = accFallback.data ?? [];
+      } else {
+        accs = accNoUg.data ?? [];
+      }
     }
     for (const a of accs) {
       accLookup[a.id] = {
         name: a.name as string,
         included_parts: Array.isArray(a.included_parts) ? a.included_parts as string[] : [],
+        upgrade_group: (a.upgrade_group as string | null) ?? null,
       };
     }
     const { data: sets } = await supabase.from('sets').select('id, name, accessory_items').in('id', allIds);
@@ -129,25 +135,52 @@ export async function GET(
     if (setSubIds.size > 0) {
       const subFull = await supabase
         .from('accessories')
-        .select('id, name, included_parts')
+        .select('id, name, included_parts, upgrade_group')
         .in('id', [...setSubIds]);
-      let subRows: Array<{ id: string; name: string; included_parts?: string[] | null }> = subFull.data ?? [];
-      if (subFull.error && /column .*included_parts/i.test(subFull.error.message)) {
-        const subFallback = await supabase.from('accessories').select('id, name').in('id', [...setSubIds]);
-        subRows = subFallback.data ?? [];
+      let subRows: Array<{ id: string; name: string; included_parts?: string[] | null; upgrade_group?: string | null }> = subFull.data ?? [];
+      if (subFull.error && /column .*(included_parts|upgrade_group)/i.test(subFull.error.message)) {
+        const subNoUg = await supabase
+          .from('accessories')
+          .select('id, name, included_parts')
+          .in('id', [...setSubIds]);
+        if (subNoUg.error && /column .*included_parts/i.test(subNoUg.error.message)) {
+          const subFallback = await supabase.from('accessories').select('id, name').in('id', [...setSubIds]);
+          subRows = subFallback.data ?? [];
+        } else {
+          subRows = subNoUg.data ?? [];
+        }
       }
       for (const a of subRows) {
         accLookup[a.id] = {
           name: a.name as string,
           included_parts: Array.isArray(a.included_parts) ? a.included_parts as string[] : [],
+          upgrade_group: (a.upgrade_group as string | null) ?? null,
         };
       }
     }
+
+    // Set-Default-Skip: wenn der Kunde in derselben Upgrade-Gruppe eine
+    // Variante direkt gewaehlt hat (Beispiel 512 GB vs. Set-128 GB), das
+    // Set-Default-Item aus der Packliste auslassen. Konsistent zum
+    // Anzeige-Filter im Buchungsflow und zu applyAccessoryComposition.
+    const skipUpgradeGroups = new Set<string>();
+    const directAccIdsLocal = rawItems
+      .map((r) => r.accessory_id)
+      .filter((id) => !setMap[id]);
+    const hasSet = rawItems.some((r) => !!setMap[r.accessory_id]);
+    if (hasSet && directAccIdsLocal.length > 0) {
+      for (const id of directAccIdsLocal) {
+        const g = accLookup[id]?.upgrade_group ?? null;
+        if (g) skipUpgradeGroups.add(g);
+      }
+    }
+
     for (const item of rawItems) {
       const setInfo = setMap[item.accessory_id];
       if (setInfo) {
         for (const sub of setInfo.items) {
           const subAcc = accLookup[sub.accessory_id];
+          if (subAcc?.upgrade_group && skipUpgradeGroups.has(subAcc.upgrade_group)) continue;
           resolvedItems.push({
             name: subAcc?.name ?? sub.accessory_id,
             qty: (sub.qty || 1) * item.qty,
