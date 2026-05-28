@@ -637,9 +637,8 @@ Kunden.
   und Stripe-Daten bleiben unangetastet. `customer_name` als interner Wert
   bleibt der Original-Kunde — die abweichende Adresse ist eine reine
   **Rechnungsempfänger-Korrektur**, kein Auftraggeber-Wechsel.
-- **Go-Live TODO:** Migration `supabase/supabase-bookings-invoice-address.sql`
-  ausführen. Ohne sie liefert der `billing_address`-Branch 503; alle anderen
-  Rechnungs-Pfade laufen per defensivem `?? null` 1:1 wie zuvor.
+- **Migration:** `supabase-bookings-invoice-address.sql` (am 2026-05-28
+  ausgeführt, Datei nach `erledigte supabase/` verschoben).
 
 ### Versand-Status `delivered` — Zugestellt ≠ Abgeschlossen (Stand 2026-05-22)
 Neuer Buchungs-Zwischenstatus `delivered` (Label „Zugestellt"). Vorher sprang
@@ -3452,6 +3451,7 @@ Vorbild: `/admin/social/zeitplan` (Posts) + `/admin/social/plan` (Bulk-Generator
 - **`supabase-migrationen-status-check.sql`** — Read-only SQL-Script im Repo-Root. Listet je Migration `ERLEDIGT` / `OFFEN` / `MANUELL` / `NICHT AUSFUEHREN` (Backfill-/Cleanup-/Reset-Scripts werden klar markiert). Nach jedem Deploy neuer Migrationen einfach nochmal laufen lassen und erledigte manuell nach `erledigte supabase/` verschieben.
 
 ### Ausgeführte Migrationen (erledigt)
+- ~~`supabase-bookings-invoice-address.sql`~~ (Abweichende Rechnungsadresse pro Buchung — am 2026-05-28 ausgeführt, Datei nach `erledigte supabase/` verschoben)
 - ~~`supabase-content-coupon-counter.sql`~~ (UGC-Content-Coupon-Counter `C2R-CONTENT-NNN` — am 2026-05-23 ausgeführt, Datei nach `erledigte supabase/` verschoben)
 - ~~`supabase-invoice-versions.sql`~~ (Rechnungs-Versionierung / `invoice_versions` — am 2026-05-19 ausgeführt, Datei nach `erledigte supabase/` verschoben)
 - ~~`supabase-accessories-included-parts-images.sql`~~ (Bild pro Zubehör-Bestandteil — am 2026-05-16 ausgeführt, Datei nach `erledigte supabase/` verschoben)
@@ -3742,12 +3742,6 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
      im jeweiligen `MODEL_REGISTRY` (`lib/firmware/adapters/`) ergänzen.
 
 ### Noch offen
-- **Abweichende-Rechnungsadresse-Migration auszuführen:**
-  `supabase/supabase-bookings-invoice-address.sql` (idempotent, additiv).
-  Legt `bookings.invoice_name` + `bookings.invoice_address` an. Ohne
-  Migration läuft alles 1:1 wie zuvor (Default-Adress-Logik greift), nur
-  der neue `billing_address`-PATCH-Branch liefert 503 mit Hinweistext
-  und die UI-Section bleibt funktionslos. Empfohlen ASAP ausführen.
 - **Persönlicher-Bereich-Migration + Cron:** Migration
   `supabase/supabase-employee-personal.sql` (idempotent, legt
   `employee_notes` + `employee_appointments` an) ausführen, sonst zeigt die
