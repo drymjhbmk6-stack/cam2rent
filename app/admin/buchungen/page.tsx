@@ -36,6 +36,34 @@ interface Booking {
 
 type StatusFilter = 'all' | 'confirmed' | 'shipped' | 'delivered' | 'completed' | 'cancelled' | 'damaged';
 type DateFilter = 'all' | 'today' | 'week' | 'month';
+type SortKey = 'action' | 'id' | 'customer' | 'product' | 'period' | 'status' | 'amount' | 'created';
+
+// Niedrigere Zahl = dringender / braucht früher eine Aktion.
+const STATUS_ACTION_PRIORITY: Record<string, number> = {
+  damaged: 0,
+  pending_verification: 1,
+  awaiting_payment: 2,
+  confirmed: 3,
+  preparing_shipment: 3,
+  awaiting_pickup: 3,
+  shipped: 4,
+  delivered: 4,
+  picked_up: 4,
+  returned: 5,
+  completed: 9,
+  cancelled: 9,
+};
+
+// Buchung, deren Aktion am ehesten ansteht. Bei laufender Miete zählt die
+// Rückgabe (rental_to), sonst der Mietbeginn (rental_from).
+function getActionInfo(b: Booking): { priority: number; date: number } {
+  const priority = STATUS_ACTION_PRIORITY[b.status] ?? 6;
+  const active = b.status === 'shipped' || b.status === 'delivered' || b.status === 'picked_up';
+  const ref = active ? b.rental_to : b.rental_from;
+  return { priority, date: new Date(ref).getTime() || 0 };
+}
+
+const TERMINAL_STATUSES = new Set(['completed', 'cancelled']);
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
   pending_verification: { label: 'Warte auf Freigabe', color: '#f59e0b', bg: '#f59e0b14' },
@@ -74,6 +102,9 @@ export default function AdminBuchungenPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [dateFilter, setDateFilter] = useState<DateFilter>('all');
   const [search, setSearch] = useState('');
+  const [hideFinished, setHideFinished] = useState(true);
+  const [sortKey, setSortKey] = useState<SortKey>('action');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [confirmModal, setConfirmModal] = useState<{
     open: boolean;
@@ -155,6 +186,16 @@ export default function AdminBuchungenPage() {
     }
   }
 
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      // Sinnvolle Default-Richtung pro Spalte
+      setSortDir(key === 'amount' || key === 'created' ? 'desc' : 'asc');
+    }
+  }
+
   // Filtered bookings
   const filtered = useMemo(() => {
     let result = bookings;
@@ -162,6 +203,9 @@ export default function AdminBuchungenPage() {
     // Status filter
     if (statusFilter !== 'all') {
       result = result.filter((b) => b.status === statusFilter);
+    } else if (hideFinished) {
+      // Nur in der "Alle"-Ansicht ausblenden — bei explizitem Tab nicht.
+      result = result.filter((b) => !TERMINAL_STATUSES.has(b.status));
     }
 
     // Date filter
@@ -190,7 +234,59 @@ export default function AdminBuchungenPage() {
     }
 
     return result;
-  }, [bookings, statusFilter, dateFilter, search]);
+  }, [bookings, statusFilter, dateFilter, search, hideFinished]);
+
+  // Sortierte Buchungen
+  const sorted = useMemo(() => {
+    const dir = sortDir === 'asc' ? 1 : -1;
+    const list = [...filtered];
+
+    if (sortKey === 'action') {
+      // Dringlichkeit: Aktion-Priorität, dann fälliges Datum. Terminale
+      // Buchungen (abgeschlossen/storniert) immer ans Ende.
+      list.sort((a, b) => {
+        const ia = getActionInfo(a);
+        const ib = getActionInfo(b);
+        if (ia.priority !== ib.priority) return (ia.priority - ib.priority) * dir;
+        if (ia.date !== ib.date) return (ia.date - ib.date) * dir;
+        return a.id.localeCompare(b.id);
+      });
+      return list;
+    }
+
+    list.sort((a, b) => {
+      let cmp = 0;
+      switch (sortKey) {
+        case 'id':
+          cmp = a.id.localeCompare(b.id);
+          break;
+        case 'customer':
+          cmp = (a.customer_name ?? '').localeCompare(b.customer_name ?? '', 'de');
+          break;
+        case 'product':
+          cmp = (a.product_name ?? '').localeCompare(b.product_name ?? '', 'de');
+          break;
+        case 'period':
+          cmp = (new Date(a.rental_from).getTime() || 0) - (new Date(b.rental_from).getTime() || 0);
+          break;
+        case 'status': {
+          const la = STATUS_CONFIG[a.status]?.label ?? a.status;
+          const lb = STATUS_CONFIG[b.status]?.label ?? b.status;
+          cmp = la.localeCompare(lb, 'de');
+          break;
+        }
+        case 'amount':
+          cmp = (a.price_total ?? 0) - (b.price_total ?? 0);
+          break;
+        case 'created':
+          cmp = (new Date(a.created_at).getTime() || 0) - (new Date(b.created_at).getTime() || 0);
+          break;
+      }
+      if (cmp === 0) cmp = a.id.localeCompare(b.id);
+      return cmp * dir;
+    });
+    return list;
+  }, [filtered, sortKey, sortDir]);
 
   const counts = {
     all: bookings.length,
@@ -301,6 +397,19 @@ export default function AdminBuchungenPage() {
               </div>
             </div>
           </div>
+
+          {/* Abgeschlossene/stornierte ausblenden (nur in der "Alle"-Ansicht) */}
+          {statusFilter === 'all' && (
+            <label className="flex items-center gap-2 text-xs font-body text-brand-steel cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={hideFinished}
+                onChange={(e) => setHideFinished(e.target.checked)}
+                className="w-4 h-4 rounded border-brand-border text-accent-blue focus:ring-accent-blue"
+              />
+              Abgeschlossene &amp; stornierte Buchungen ausblenden
+            </label>
+          )}
         </div>
 
         {/* Content */}
@@ -327,18 +436,18 @@ export default function AdminBuchungenPage() {
               <table className="w-full min-w-[600px]">
                 <thead>
                   <tr className="border-b border-brand-border bg-brand-bg">
-                    <th className="text-left px-3 sm:px-5 py-3 text-[10px] sm:text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider">Nr.</th>
-                    <th className="text-left px-3 sm:px-5 py-3 text-[10px] sm:text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider">Kunde</th>
-                    <th className="text-left px-3 sm:px-5 py-3 text-[10px] sm:text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider hidden md:table-cell">Produkt</th>
-                    <th className="text-left px-3 sm:px-5 py-3 text-[10px] sm:text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider hidden lg:table-cell">Zeitraum</th>
-                    <th className="text-left px-3 sm:px-5 py-3 text-[10px] sm:text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider">Status</th>
-                    <th className="text-left px-3 sm:px-5 py-3 text-[10px] sm:text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider">Betrag</th>
-                    <th className="text-left px-3 sm:px-5 py-3 text-[10px] sm:text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider hidden lg:table-cell">Erstellt</th>
-                    <th className="text-left px-3 sm:px-5 py-3 text-[10px] sm:text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider">Nächste Aktion</th>
+                    <SortHeader label="Nr." sortField="id" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                    <SortHeader label="Kunde" sortField="customer" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                    <SortHeader label="Produkt" sortField="product" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="hidden md:table-cell" />
+                    <SortHeader label="Zeitraum" sortField="period" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="hidden lg:table-cell" />
+                    <SortHeader label="Status" sortField="status" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                    <SortHeader label="Betrag" sortField="amount" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                    <SortHeader label="Erstellt" sortField="created" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="hidden lg:table-cell" />
+                    <SortHeader label="Nächste Aktion" sortField="action" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((booking) => (
+                  {sorted.map((booking) => (
                     <tr
                       key={booking.id}
                       onClick={() => router.push(`/admin/buchungen/${booking.id}`)}
@@ -471,6 +580,38 @@ export default function AdminBuchungenPage() {
         </div>
       )}
     </div>
+  );
+}
+
+function SortHeader({
+  label,
+  sortField,
+  sortKey,
+  sortDir,
+  onSort,
+  className = '',
+}: {
+  label: string;
+  sortField: SortKey;
+  sortKey: SortKey;
+  sortDir: 'asc' | 'desc';
+  onSort: (key: SortKey) => void;
+  className?: string;
+}) {
+  const active = sortKey === sortField;
+  return (
+    <th className={`text-left px-3 sm:px-5 py-3 ${className}`}>
+      <button
+        type="button"
+        onClick={() => onSort(sortField)}
+        className={`inline-flex items-center gap-1 text-[10px] sm:text-xs font-heading font-semibold uppercase tracking-wider transition-colors ${
+          active ? 'text-accent-blue' : 'text-brand-muted hover:text-brand-steel'
+        }`}
+      >
+        {label}
+        <span className="text-[9px] leading-none">{active ? (sortDir === 'asc' ? '▲' : '▼') : '↕'}</span>
+      </button>
+    </th>
   );
 }
 
