@@ -171,6 +171,32 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }
 
 const ALL_STATUSES = ['pending_verification', 'awaiting_payment', 'confirmed', 'preparing_shipment', 'awaiting_pickup', 'shipped', 'delivered', 'picked_up', 'completed', 'cancelled', 'damaged'];
 
+type TabId = 'uebersicht' | 'versand' | 'dokumente' | 'bearbeiten' | 'verlauf';
+const TABS: { id: TabId; label: string }[] = [
+  { id: 'uebersicht', label: 'Übersicht' },
+  { id: 'versand', label: 'Versand & Rückgabe' },
+  { id: 'dokumente', label: 'Dokumente & E-Mail' },
+  { id: 'bearbeiten', label: 'Bearbeiten' },
+  { id: 'verlauf', label: 'Status & Verlauf' },
+];
+
+type NextActionTone = 'amber' | 'cyan' | 'indigo' | 'green' | 'rose';
+type NextAction = {
+  hint: string;
+  label: string;
+  href?: string;
+  onClick?: () => void;
+  disabled?: boolean;
+  tone: NextActionTone;
+};
+const TONE_BTN: Record<NextActionTone, string> = {
+  amber: 'bg-amber-500 hover:bg-amber-600',
+  cyan: 'bg-cyan-600 hover:bg-cyan-700',
+  indigo: 'bg-indigo-600 hover:bg-indigo-700',
+  green: 'bg-green-600 hover:bg-green-700',
+  rose: 'bg-rose-600 hover:bg-rose-700',
+};
+
 function fmtDate(iso: string) {
   if (!iso) return '–';
   const [y, m, d] = iso.split('T')[0].split('-');
@@ -232,9 +258,23 @@ export default function BuchungDetailPage() {
   const [emailToast, setEmailToast] = useState<{ msg: string; type: 'ok' | 'err' } | null>(null);
   const [emailRecipient, setEmailRecipient] = useState('');
   const [emailAttachments, setEmailAttachments] = useState<{ rechnung: boolean; vertrag: boolean; agb: boolean; widerruf: boolean; haftung: boolean; datenschutz: boolean; impressum: boolean }>({ rechnung: true, vertrag: true, agb: false, widerruf: false, haftung: false, datenschutz: false, impressum: false });
+  const [activeTab, setActiveTab] = useState<TabId>('uebersicht');
   useEffect(() => {
     fetchBooking();
   }, [bookingId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Aktiven Reiter aus URL-Hash wiederherstellen (reload-/teilbar)
+  useEffect(() => {
+    const h = (typeof window !== 'undefined' ? window.location.hash.replace('#', '') : '') as TabId;
+    if (TABS.some((t) => t.id === h)) setActiveTab(h);
+  }, []);
+
+  function switchTab(id: TabId) {
+    setActiveTab(id);
+    if (typeof window !== 'undefined') {
+      try { window.history.replaceState(null, '', `#${id}`); } catch { /* ignore */ }
+    }
+  }
 
   async function fetchBooking() {
     setLoading(true);
@@ -372,6 +412,19 @@ export default function BuchungDetailPage() {
       setEmailSending(false);
       setTimeout(() => setEmailToast(null), 4000);
     }
+  }
+
+  async function handleApproveBooking() {
+    if (!booking) return;
+    if (!confirm('Buchung freigeben und Zahlungslink an den Kunden senden?')) return;
+    setStatusUpdating(true);
+    try {
+      const res = await fetch('/api/admin/approve-booking', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bookingId: booking.id }) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      alert('Zahlungslink wurde an den Kunden gesendet!');
+      window.location.reload();
+    } catch (err) { alert(`Fehler: ${err instanceof Error ? err.message : 'Unbekannt'}`); } finally { setStatusUpdating(false); }
   }
 
   async function handleRegenerateContract() {
@@ -743,6 +796,36 @@ export default function BuchungDetailPage() {
     finally { setReturnTrackingSaving(false); }
   }
 
+  // ─── Nächste-Aktion-Logik: der nächste echte Arbeitsschritt je Status ───
+  const isVersand = booking.delivery_mode === 'versand';
+  const nextAction: NextAction | null = (() => {
+    switch (booking.status) {
+      case 'pending_verification':
+        return { hint: 'Buchung wartet auf Freigabe', label: 'Freigeben + Zahlungslink senden', onClick: handleApproveBooking, disabled: statusUpdating, tone: 'amber' };
+      case 'awaiting_payment':
+        if (booking.stripe_payment_link_id && booking.customer_email)
+          return { hint: 'Warte auf Zahlung des Kunden', label: '✉ Zahlungslink erneut senden', onClick: handleResendPaymentLink, disabled: emailSending, tone: 'amber' };
+        return { hint: 'Warte auf Zahlung — Zahlungslink oder Kunden-E-Mail fehlt', label: 'Status & Verlauf öffnen', onClick: () => switchTab('verlauf'), tone: 'amber' };
+      case 'confirmed':
+        return isVersand
+          ? { hint: 'Versandfertig — Paket packen', label: '📦 Paket packen', href: `/admin/versand/${booking.id}/packen`, tone: 'cyan' }
+          : { hint: 'Kunde holt ab — Übergabe vorbereiten', label: '📝 Übergabe vorbereiten', href: `/admin/buchungen/${booking.id}/uebergabe`, tone: 'indigo' };
+      case 'preparing_shipment':
+        return { hint: 'Versand in Vorbereitung — Pack-Workflow fortsetzen', label: '📦 Pack-Workflow öffnen', href: `/admin/versand/${booking.id}/packen`, tone: 'cyan' };
+      case 'awaiting_pickup':
+        return { hint: 'Liegt zur Abholung bereit', label: '📝 Übergabe vorbereiten', href: `/admin/buchungen/${booking.id}/uebergabe`, tone: 'indigo' };
+      case 'shipped':
+        return { hint: 'Unterwegs zum Kunden', label: 'Als zugestellt markieren', onClick: () => quickStatusChange('delivered', 'Zugestellt'), disabled: statusUpdating, tone: 'green' };
+      case 'delivered':
+      case 'picked_up':
+        return { hint: 'Beim Kunden — Rückgabe steht aus', label: '↩ Rückgabe prüfen', href: `/admin/retouren/${booking.id}/pruefen`, tone: 'green' };
+      case 'damaged':
+        return { hint: 'Schaden gemeldet — Abwicklung offen', label: 'Zur Schadensabwicklung', href: '/admin/schaeden', tone: 'rose' };
+      default:
+        return null; // completed / cancelled — keine offene Aktion
+    }
+  })();
+
   return (
     <div className="min-h-screen bg-brand-bg">
       <div className="max-w-5xl mx-auto px-6 py-8">
@@ -765,19 +848,10 @@ export default function BuchungDetailPage() {
             </div>
             <p className="text-sm font-body text-brand-muted mt-1">Erstellt am {fmtDateTime(booking.created_at)}</p>
           </div>
-          <div className="flex items-center gap-2">
-            {booking.status === 'shipped' && (
-              <button onClick={() => quickStatusChange('delivered', 'Zugestellt')} disabled={statusUpdating} className="px-4 py-2 text-sm font-heading font-semibold bg-green-600 text-white rounded-btn hover:bg-green-700 transition-colors disabled:opacity-40">
-                Als zugestellt markieren
-              </button>
-            )}
-            {booking.status === 'confirmed' && booking.delivery_mode === 'abholung' && (
-              <button onClick={() => quickStatusChange('picked_up', 'Abgeholt')} disabled={statusUpdating} className="px-4 py-2 text-sm font-heading font-semibold bg-green-600 text-white rounded-btn hover:bg-green-700 transition-colors disabled:opacity-40">
-                Als abgeholt markieren
-              </button>
-            )}
-          </div>
         </div>
+
+        {/* ═══ Nächste Aktion — immer ganz oben sichtbar, über den Reitern ═══ */}
+        <NextActionBar action={nextAction} statusLabel={sc.label} statusColor={sc.color} />
 
         {/* Suspicious warning */}
         {booking.suspicious && (
@@ -828,9 +902,25 @@ export default function BuchungDetailPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-          {/* ═══ Left column: 2/3 ═══ */}
-          <div className="lg:col-span-2 space-y-6">
+        {/* ═══ Reiter-Navigation ═══ */}
+        <div className="mb-6 border-b border-brand-border overflow-x-auto">
+          <nav className="flex gap-1 min-w-max">
+            {TABS.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => switchTab(t.id)}
+                className={`px-4 py-2.5 text-sm font-heading font-semibold whitespace-nowrap border-b-2 -mb-px transition-colors ${activeTab === t.id ? 'border-accent-cyan text-accent-cyan' : 'border-transparent text-brand-muted hover:text-brand-black'}`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </nav>
+        </div>
+
+        <div className="space-y-6">
+
+            {/* ── Reiter: Übersicht ── */}
+            {activeTab === 'uebersicht' && (<>
 
             {/* Buchungsdaten */}
             <Section title="Buchungsdaten">
@@ -952,6 +1042,11 @@ export default function BuchungDetailPage() {
                 </Section>
               );
             })()}
+
+            </>)}
+
+            {/* ── Reiter: Versand & Rückgabe ── */}
+            {activeTab === 'versand' && (<>
 
             {/* Versand & Tracking */}
             <Section title="Versand & Tracking">
@@ -1148,6 +1243,11 @@ export default function BuchungDetailPage() {
               )}
             </Section>
 
+            </>)}
+
+            {/* ── Reiter: Dokumente & E-Mail ── */}
+            {activeTab === 'dokumente' && (<>
+
             {/* Mietvertrag */}
             <Section title="Mietvertrag">
               {booking.contract_signed ? (
@@ -1208,7 +1308,12 @@ export default function BuchungDetailPage() {
               )}
             </Section>
 
-            {/* Versand- / Rückgabe-Datum — direkt sichtbar (Alltags-Aktion) */}
+            </>)}
+
+            {/* ── Reiter: Versand & Rückgabe (Termine) ── */}
+            {activeTab === 'versand' && (<>
+
+            {/* Versand- / Rückgabe-Datum */}
             <ShippingOverrideSection
               bookingId={booking.id}
               rentalFrom={booking.rental_from}
@@ -1219,11 +1324,16 @@ export default function BuchungDetailPage() {
               onSaved={fetchBooking}
             />
 
-            {/* Bearbeiten & Werkzeuge — zugeklappt, gleiche Funktion wie zuvor */}
+            </>)}
+
+            {/* ── Reiter: Bearbeiten ── */}
+            {activeTab === 'bearbeiten' && (<>
+
+            {/* Bearbeiten & Werkzeuge */}
             <Collapsible
               title="Bearbeiten & Werkzeuge"
               subtitle="Bestellung/Zubehör bearbeiten, Haftung, finale Werte, Rechnungsversionen"
-              defaultOpen={false}
+              defaultOpen={true}
             >
               {booking.liability_summary && (
                 <LiabilitySection
@@ -1251,6 +1361,11 @@ export default function BuchungDetailPage() {
               <InvoiceVersionsPanel bookingId={booking.id} />
             </Collapsible>
 
+            </>)}
+
+            {/* ── Reiter: Dokumente & E-Mail (Verlauf) ── */}
+            {activeTab === 'dokumente' && (<>
+
             {/* E-Mail-Verlauf */}
             {emails.length > 0 && (
               <Section title="E-Mail-Verlauf">
@@ -1276,6 +1391,11 @@ export default function BuchungDetailPage() {
               </Section>
             )}
 
+            </>)}
+
+            {/* ── Reiter: Status & Verlauf ── */}
+            {activeTab === 'verlauf' && (<>
+
             {/* Statusverlauf */}
             <Section title="Statusverlauf">
               <div className="space-y-4">
@@ -1291,10 +1411,11 @@ export default function BuchungDetailPage() {
                 {booking.status === 'damaged' && <TimelineItem label="Beschädigt gemeldet" date="" status="damaged" active />}
               </div>
             </Section>
-          </div>
 
-          {/* ═══ Right column: 1/3 ═══ */}
-          <div className="space-y-6 lg:sticky lg:top-6 self-start">
+            </>)}
+
+            {/* ── Reiter: Übersicht (Kundendaten) ── */}
+            {activeTab === 'uebersicht' && (<>
 
             {/* Kundendaten */}
             <Section title="Kundendaten">
@@ -1380,6 +1501,11 @@ export default function BuchungDetailPage() {
               </div>
             </Section>
 
+            </>)}
+
+            {/* ── Reiter: Status & Verlauf (Aktionen) ── */}
+            {activeTab === 'verlauf' && (<>
+
             {/* Aktionen */}
             <Section title="Aktionen">
               <div className="space-y-4">
@@ -1453,6 +1579,11 @@ export default function BuchungDetailPage() {
               </div>
             </Section>
 
+            </>)}
+
+            {/* ── Reiter: Dokumente & E-Mail (PDFs/Versand) ── */}
+            {activeTab === 'dokumente' && (<>
+
             {/* Dokumente */}
             <Section title="Dokumente">
               <div className="space-y-2">
@@ -1518,7 +1649,9 @@ export default function BuchungDetailPage() {
                 <Link href="/admin/schaeden" className="block w-full text-center px-4 py-2 text-sm font-heading font-semibold bg-orange-500 text-white rounded-btn hover:bg-orange-600 transition-colors">Schadensbericht erstellen</Link>
               </div>
             </Section>
-          </div>
+
+            </>)}
+
         </div>
 
         {/* ═══ Zubehör-Schaden-Modal ═══ */}
@@ -1719,6 +1852,47 @@ export default function BuchungDetailPage() {
 }
 
 /* ─── Sub-components ──────────────────────────────────────────── */
+
+function NextActionBar({ action, statusLabel, statusColor }: { action: NextAction | null; statusLabel: string; statusColor: string }) {
+  // Terminal-Status (abgeschlossen/storniert) — keine offene Aktion
+  if (!action) {
+    return (
+      <div className="mb-6 rounded-xl border border-brand-border bg-white px-5 py-4 flex items-center gap-3">
+        <span className="inline-flex w-9 h-9 items-center justify-center rounded-full flex-shrink-0" style={{ backgroundColor: `${statusColor}1a`, color: statusColor }}>
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+        </span>
+        <div>
+          <p className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider">Nächste Aktion</p>
+          <p className="text-sm font-body text-brand-black">Keine offene Aktion — Buchung ist „{statusLabel}“.</p>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="mb-6 rounded-xl border border-accent-cyan/40 bg-accent-cyan/5 px-5 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <div className="min-w-0">
+        <p className="text-xs font-heading font-semibold text-accent-cyan uppercase tracking-wider">Nächste Aktion</p>
+        <p className="text-sm font-body text-brand-black mt-0.5">{action.hint}</p>
+      </div>
+      {action.href ? (
+        <Link
+          href={action.href}
+          className={`flex-shrink-0 inline-flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-heading font-semibold text-white rounded-btn transition-colors ${TONE_BTN[action.tone]}`}
+        >
+          {action.label}
+        </Link>
+      ) : (
+        <button
+          onClick={action.onClick}
+          disabled={action.disabled}
+          className={`flex-shrink-0 inline-flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-heading font-semibold text-white rounded-btn transition-colors disabled:opacity-40 ${TONE_BTN[action.tone]}`}
+        >
+          {action.label}
+        </button>
+      )}
+    </div>
+  );
+}
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (

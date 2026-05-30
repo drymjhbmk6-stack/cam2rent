@@ -570,6 +570,42 @@ Wenn eine Buchung vor Ablauf der 14-tägigen Widerrufsfrist beginnt, muss der Ku
 - **Rechnungsvorschau:** HTML-Vorschau mit QR-Codes (Banking + PayPal) bei "Nicht bezahlt"
 - Vertrag nachträglich unterschreiben: `/admin/buchungen/[id]/vertrag-unterschreiben`
 
+### Buchungsdetail-Seite auf Reiter umgestellt (Stand 2026-05-30)
+`/admin/buchungen/[id]` war trotz der 2026-05-19-Umordnung weiterhin ein
+langer Scroll mit allen Blöcken untereinander. Jetzt **Reiter-Navigation
+(Tabs)** + ein **immer sichtbarer „Nächste Aktion"-Button** ganz oben.
+Reine Layout-/Anzeige-Umstrukturierung — **keine Funktion, kein Handler,
+kein API-Call geändert**. Eine Datei: `app/admin/buchungen/[id]/page.tsx`.
+- **Immer sichtbar (über den Reitern):** Header (ID/Status/erstellt),
+  neue **`NextActionBar`** (prominente Karte mit Kontext-Button), die
+  „Auf einen Blick"-Karte. Der „Nächste Aktion"-Button leitet je
+  `status` (+ `delivery_mode`) zum nächsten echten Arbeitsschritt:
+  `pending_verification` → Freigeben+Zahlungslink (`handleApproveBooking`),
+  `awaiting_payment` → Zahlungslink erneut senden, `confirmed`+Versand →
+  📦 Paket packen (`/admin/versand/[id]/packen`), `confirmed`+Abholung /
+  `awaiting_pickup` → 📝 Übergabe vorbereiten (`/uebergabe`),
+  `preparing_shipment` → Pack-Workflow, `shipped` → Als zugestellt
+  markieren, `delivered`/`picked_up` → ↩ Rückgabe prüfen
+  (`/admin/retouren/[id]/pruefen`), `damaged` → Schadensabwicklung;
+  terminal (`completed`/`cancelled`) → ruhige „keine offene Aktion"-Karte.
+  Die alten Header-Quick-Buttons (shipped→delivered, abholung→picked_up)
+  sind in die NextActionBar aufgegangen.
+- **5 Reiter** (`activeTab`-State, im URL-Hash persistiert via `switchTab`
+  → reload-/teilbar): **Übersicht** (Buchungsdaten, Preisaufstellung,
+  Zubehör & Set, Kundendaten), **Versand & Rückgabe** (Versand & Tracking,
+  Versand-/Rückgabe-Termine), **Dokumente & E-Mail** (Mietvertrag,
+  E-Mail-Verlauf, Dokumente/PDFs/E-Mail senden), **Bearbeiten**
+  (das „Bearbeiten & Werkzeuge"-`Collapsible` mit LiabilitySection,
+  BookingEditSection, WbwFinalizePanel, BillingAddressSection,
+  InvoiceVersionsPanel — jetzt `defaultOpen`), **Status & Verlauf**
+  (Statusverlauf-Timeline, Aktionen: Status ändern/Stornieren/Löschen).
+- **Technisch:** das alte 2/3+1/3-Grid (Left/Right column) ist durch
+  einen einspaltigen `space-y-6`-Container ersetzt; jede bestehende
+  `<Section>` ist 1:1 erhalten und nur in `{activeTab === 'x' && (<>…</>)}`-
+  Fragmente gruppiert (Boundary-Insertion, kein Section-Inhalt verändert).
+  Modals (Storno/Löschen/E-Mail/Zubehör-Schaden) + alle Sub-Komponenten
+  unverändert. `tsc`+`next lint` für die Datei: 0 Fehler.
+
 ### Buchungsdetail-Seite vereinfacht + neu geordnet (Stand 2026-05-19)
 `/admin/buchungen/[id]` war mit ~15 gestapelten Blöcken überladen (mobil
 endloser Scroll, „Notizen" eine unlesbare Wand aus Stripe-Link +
