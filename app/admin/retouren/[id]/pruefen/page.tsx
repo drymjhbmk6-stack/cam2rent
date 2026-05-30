@@ -30,6 +30,7 @@ interface BookingDetail {
   status?: string;
   serial_number?: string | null;
   unit_id?: string | null;
+  cameras_resolved?: { product_name: string; serial_number: string | null; unit_id: string | null; product_id?: string | null }[];
   resolved_items?: ResolvedItem[];
   unit_codes?: UnitCode[];
 }
@@ -41,6 +42,18 @@ function bookingToScanInput(b: BookingDetail) {
     resolvedItems: b.resolved_items,
     unitCodes: b.unit_codes,
     unitId: b.unit_id ?? null,
+    // Multi-Kamera / Kamera-Einheit aus der neuen Inventar-Welt: gleiche
+    // Auflösung wie Pack-/Übergabe-Scanner. Ohne das Feld fällt der Lookup auf
+    // b.unit_id (nur Kamera 0) zurück — der Retoure-Scan würde dann mit
+    // „passt nicht zu dieser Buchung" abbrechen, weil hier keine Substitution
+    // erlaubt ist.
+    cameras: Array.isArray(b.cameras_resolved) && b.cameras_resolved.length > 0
+      ? b.cameras_resolved.map((c) => ({
+          product_name: c.product_name,
+          serial_number: c.serial_number,
+          unit_id: c.unit_id,
+        }))
+      : undefined,
     // In der Retoure ist das Rücksendeetikett kein Punkt mehr — der Kunde hat
     // es schon benutzt.
     skipReturnLabel: true,
