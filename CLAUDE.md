@@ -168,6 +168,24 @@ lesen sie weiterhin.
     der naechste Aufruf (z.B. Mirror-Backfill, Unit-Insert, Unit-Delete)
     NIE mehr den Bestand unter den Stand der neuen Welt druecken, auch
     wenn der `accessory_units`-Mirror voruebergehend leer ist.
+  - **Mirror-Drift pro Zubehoer sichtbar machen + ausmustern
+    (Stand 2026-05-28):** Wenn `accessories.available_qty` (Gantt-Total)
+    groesser ist als der echte Inventar-Bestand, lebt typischerweise eine
+    verwaiste Zeile in `accessory_units` weiter (z.B. Inventar-Loeschung
+    vor dem 2026-05-20-Sync-Fix). Auf der Zubehoer-Edit-Modal-Karte
+    (`/admin/zubehoer`) erscheint dann automatisch ein amber
+    Drift-Banner mit den drei Counts (Shop / Alt-Welt / Neu-Welt) +
+    Button **„Mirror-Zeilen anzeigen"**. Modal listet alle
+    `accessory_units`-Zeilen mit Exemplar-Code, Status und
+    Inventar-Match (rot = ohne Pendant). Pro aktiver Zeile Button
+    **„Ausmustern"** → ruft den bestehenden
+    `PUT /api/admin/accessory-units` mit `status='retired'`, was
+    automatisch `syncAccessoryQty` triggert → `available_qty` faellt
+    auf den Inventar-Stand. **Kein Loeschen**: die Zeile bleibt in der
+    DB, der QR-Code bleibt scanbar (Etikett auf alter Karte funktioniert
+    weiter, falls das Stueck doch wieder auftaucht). Endpoint
+    `GET /api/admin/accessories/legacy-mirror?accessory_id=...` ist
+    rein lesend, Bulk-Zubehoer wird ignoriert (manuelle Mengenpflege).
 
 ### Set-Upgrade-Filter robust gegen interne Default-Items (Stand 2026-05-26)
 Im Buchungsflow wird der Default-Eintrag einer Upgrade-Gruppe eines Sets (z.B.

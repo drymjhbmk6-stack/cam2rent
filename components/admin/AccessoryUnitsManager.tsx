@@ -143,6 +143,164 @@ export default function AccessoryUnitsManager({ accessoryId, onCountChanged }: P
         Der Lagerbestand für den Shop wird automatisch aus den aktiven Inventar-Einheiten berechnet.
         Mietverträge und Schadensabwicklung greifen ebenfalls dort.
       </p>
+
+      <LegacyMirrorPanel accessoryId={accessoryId} />
+    </div>
+  );
+}
+
+interface LegacyMirrorUnit {
+  id: string;
+  exemplar_code: string;
+  status: string;
+  notes: string | null;
+  created_at: string | null;
+  inventar_match: boolean;
+}
+
+interface LegacyMirrorResponse {
+  accessory: { id: string; name: string; available_qty: number; is_bulk: boolean };
+  accessory_units: LegacyMirrorUnit[];
+  inventar_codes: Array<{ id: string; code: string; status: string; bezeichnung: string | null }>;
+  counts: { mirror_active: number; inventar_active: number; available_qty: number };
+  drift: boolean;
+}
+
+/**
+ * Zeigt bei Welten-Drift (Mirror in alter Welt != Inventar in neuer Welt
+ * oder available_qty unstimmig) die rohen accessory_units-Zeilen mit
+ * Match-Indikator. Pro Zeile kann der Admin Status auf 'retired' setzen —
+ * der Code (= QR-Etikett) bleibt erhalten, faellt aber aus dem
+ * Verfuegbarkeits-Zaehler raus.
+ */
+function LegacyMirrorPanel({ accessoryId }: { accessoryId: string }) {
+  const [data, setData] = useState<LegacyMirrorResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [msg, setMsg] = useState<{ t: 'ok' | 'err'; m: string } | null>(null);
+
+  const load = () => {
+    setLoading(true);
+    fetch(`/api/admin/accessories/legacy-mirror?accessory_id=${encodeURIComponent(accessoryId)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: LegacyMirrorResponse | null) => setData(d))
+      .catch(() => setData(null))
+      .finally(() => setLoading(false));
+  };
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, [accessoryId]);
+
+  if (loading || !data || data.accessory.is_bulk) return null;
+  if (!data.drift) return null;
+
+  async function retire(unitId: string) {
+    setBusyId(unitId);
+    setMsg(null);
+    try {
+      const res = await fetch('/api/admin/accessory-units', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: unitId, status: 'retired' }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || 'Fehlgeschlagen.');
+      setMsg({ t: 'ok', m: 'Als ausgemustert markiert. Bestand wird automatisch neu berechnet.' });
+      load();
+    } catch (e) {
+      setMsg({ t: 'err', m: e instanceof Error ? e.message : 'Fehlgeschlagen.' });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <div className="mt-4 rounded-xl border border-amber-300 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-500/10 p-4">
+      <div className="flex items-start justify-between gap-2 flex-wrap">
+        <div>
+          <h3 className="font-heading font-bold text-sm text-amber-900 dark:text-amber-100">
+            ⚠ Welten-Drift erkannt
+          </h3>
+          <p className="text-xs font-body text-amber-900/80 dark:text-amber-200/80 mt-1 leading-relaxed">
+            Shop-Bestand: <strong>{data.counts.available_qty}</strong> ·
+            Alt-Welt (Mirror aktiv): <strong>{data.counts.mirror_active}</strong> ·
+            Neu-Welt (Inventar aktiv): <strong>{data.counts.inventar_active}</strong>.
+            {data.counts.mirror_active > data.counts.inventar_active && (
+              <>
+                {' '}Überzählige Mirror-Zeilen ohne Inventar-Pendant kannst du <strong>ausmustern</strong>
+                {' '}— der Code bleibt scanbar, zählt aber nicht mehr als verfügbar.
+              </>
+            )}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className="text-[11px] font-heading font-semibold px-3 py-1.5 rounded bg-amber-600 text-white hover:bg-amber-700 whitespace-nowrap"
+        >
+          {open ? 'Schließen' : 'Mirror-Zeilen anzeigen'}
+        </button>
+      </div>
+
+      {open && (
+        <div className="mt-3 space-y-2">
+          {data.accessory_units.length === 0 && (
+            <p className="text-xs font-body text-amber-900/80 dark:text-amber-200/80">
+              Keine accessory_units-Zeilen vorhanden.
+            </p>
+          )}
+          {data.accessory_units.map((u) => {
+            const isActive = u.status === 'available' || u.status === 'rented';
+            const isOrphan = isActive && !u.inventar_match;
+            return (
+              <div
+                key={u.id}
+                className={`flex items-center justify-between gap-3 rounded-lg px-3 py-2 border ${
+                  isOrphan
+                    ? 'bg-red-50 dark:bg-red-500/10 border-red-300 dark:border-red-500/40'
+                    : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700'
+                }`}
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="font-mono text-xs text-slate-900 dark:text-slate-100 truncate">
+                    {u.exemplar_code || '(leer)'}
+                  </p>
+                  <p className="text-[10px] text-slate-600 dark:text-slate-400 mt-0.5">
+                    Status: <strong>{u.status}</strong>
+                    {' · '}
+                    Inventar: {u.inventar_match ? (
+                      <span className="text-emerald-700 dark:text-emerald-300">vorhanden</span>
+                    ) : (
+                      <span className="text-red-700 dark:text-red-300">nicht gefunden</span>
+                    )}
+                    {u.notes && ` · ${u.notes}`}
+                  </p>
+                </div>
+                {isActive ? (
+                  <button
+                    type="button"
+                    onClick={() => retire(u.id)}
+                    disabled={busyId === u.id}
+                    className="text-[11px] font-heading font-semibold px-2.5 py-1.5 rounded border border-red-400 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-500/20 disabled:opacity-50 whitespace-nowrap"
+                  >
+                    {busyId === u.id ? '…' : 'Ausmustern'}
+                  </button>
+                ) : (
+                  <span className="text-[10px] font-body text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                    ausgemustert
+                  </span>
+                )}
+              </div>
+            );
+          })}
+          {msg && (
+            <p className={`text-xs font-body ${msg.t === 'ok' ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-600 dark:text-red-300'}`}>
+              {msg.m}
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
