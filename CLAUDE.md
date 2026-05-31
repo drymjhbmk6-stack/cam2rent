@@ -549,6 +549,23 @@ Wenn eine Buchung vor Ablauf der 14-tägigen Widerrufsfrist beginnt, muss der Ku
 - **Sofortmaßnahme bei stale Stock:** `/admin/preise/kameras/[id]` öffnen + speichern synct den Config-`stock` an `bridge.active` (Live-Inventarzählung). Seit Schicht 1 ist der Config-Wert aber ohnehin nicht mehr lasttragend.
 - **Wichtig:** Bereits bestehende Doppelbuchungen werden NICHT automatisch aufgelöst — die müssen manuell storniert/umgebucht werden. Die Fixes verhindern nur NEUE Überbuchungen.
 
+### Warenkorb-Reservierungen (Cart-Holds, Stand 2026-05-31)
+Sobald ein **eingeloggter** Kunde eine Kamera in den Warenkorb legt, wird der gewählte Mietzeitraum (inkl. Puffer) **serverseitig für 30 Minuten für ALLE anderen Kunden reserviert**. Läuft die Buchung nicht durch, verfällt der Hold automatisch (`expires_at`) und gibt den Zeitraum wieder frei. Behebt: ein offener Warenkorb konnte vorher zwei Kunden parallel denselben Slot bis zur Zahlung durchlaufen lassen (Überbuchungs-Race), und ein nie abgeschickter Warenkorb blockierte nie etwas für andere (Browser-only-Hold).
+- **Migration `supabase/supabase-cart-holds.sql`** (idempotent): Tabelle `cart_holds` (user_id, cart_item_id, product_id, rental_from/to, delivery_mode, is_test, expires_at default now()+30min). Unique-Index `(user_id, cart_item_id)` → Upsert-Ziel. RLS service-role-only.
+- **`lib/cart-holds.ts`:** `syncCartHolds()` (Upsert pro Cart-Item mit gleitender 30-Min-Frist + Cleanup verwaister Holds), `releaseUserCartHolds()`, `loadActiveHoldsForProduct()` (fremde, nicht-abgelaufene Holds; eigene via `excludeUserId` raus; Test-Isolation), `holdsToBlockedDayCount()`/`getHoldBlockedDays()` (Puffer-Expansion analog Kalender, 1 Hold = 1 Einheit). Alle Helper sind defensive No-Ops bei fehlender Migration.
+- **Anlegen:** läuft über den bestehenden `POST /api/cart/sync` (CartProvider feuert ihn ohnehin bei jeder Cart-Änderung, 2 s debounced, nur eingeloggt). Leerer Warenkorb → alle Holds des Users freigeben. `is_test` aus `isUserTester`.
+- **Wirkung im Kalender:** `/api/availability/[productId]` zählt fremde Holds als belegt mit (`heldCount` pro Tag), ermittelt die eigene User-ID aus dem Session-Cookie (`excludeUserId`) → der Kunde sieht seinen eigenen Warenkorb nicht als ausgebucht; die client-seitige `extraHoldRanges`-Logik bleibt dafür zuständig.
+- **Harte Sperre:** `findCameraOverbookingConflict` (`lib/camera-availability-check.ts`) zählt fremde Holds ebenfalls mit (`excludeUserId` durchgereicht von `create-payment-intent` + `checkout-intent`) → ein Hold blockt auch den Checkout, nicht nur die Anzeige.
+- **Freigabe:** `confirm-cart` + `confirm-booking` rufen `releaseUserCartHolds(user)` nach erfolgreichem Schreiben (echte Buchung ersetzt den Hold).
+- **Cleanup-Cron `/api/cron/cart-holds-cleanup`** (alle 15 Min): löscht abgelaufene Holds (reine Hygiene, Lese-Filter ignorieren sie schon). `verifyCronAuth` + `acquireCronLock`.
+- **Nur eingeloggte:** anonyme Besucher erzeugen keinen Hold (Checkout verlangt ohnehin Login). Bewusste Entscheidung gegen Bot-Missbrauch.
+- **Go-Live TODO:**
+  1. Migration `supabase/supabase-cart-holds.sql` ausführen. Ohne sie läuft alles wie vorher (Helper sind No-Ops, kein Hold-Layer).
+  2. Crontab (alle 15 Min, `--resolve` Pflicht wegen Cloudflare):
+     ```
+     */15 * * * * curl -s -X POST --resolve cam2rent.de:443:127.0.0.1 -H "x-cron-secret: $CRON_SECRET" https://cam2rent.de/api/cron/cart-holds-cleanup
+     ```
+
 ### Kalender-Logik (Versand)
 - **Startdatum:** Keine Sonn-/Feiertagssperre — Paket wird vorher von cam2rent verschickt. Nur 3 Tage Vorlaufzeit.
 - **Enddatum:** Gesperrt wenn **Folgetag** Sonntag oder Feiertag ist (Kunde muss am nächsten Tag Paket abgeben).

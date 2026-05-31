@@ -10,6 +10,7 @@ import {
 } from '@/lib/booking-buffer';
 import { isTestMode } from '@/lib/env-mode';
 import { getProductById } from '@/lib/get-products';
+import { loadActiveHoldsForProduct, holdsToBlockedDayCount } from '@/lib/cart-holds';
 
 /**
  * Harte, serverseitige Ueberbuchungs-Sperre fuer Kameras.
@@ -52,6 +53,9 @@ export async function findCameraOverbookingConflict(
     deliveryMode?: 'versand' | 'abholung';
     /** Diese Buchung bei der Zaehlung ausschliessen (z.B. bei Bearbeitung). */
     excludeBookingId?: string | null;
+    /** Eigene Warenkorb-Holds dieses Users nicht mitzaehlen (sonst blockiert
+     *  sich der Kunde selbst, weil seine Cart-Reservierung schon existiert). */
+    excludeUserId?: string | null;
   },
 ): Promise<AvailabilityConflict | null> {
   const { productId, rentalFrom, rentalTo } = args;
@@ -149,6 +153,18 @@ export async function findCameraOverbookingConflict(
   }
   const bookings = [...mergedById.values()];
 
+  // Warenkorb-Reservierungen FREMDER Kunden (eigene ausgeschlossen) — blocken
+  // den Zeitraum ebenfalls, damit zwei Kunden nicht parallel denselben Slot
+  // bis zur Zahlung durchlaufen koennen.
+  const otherHolds = await loadActiveHoldsForProduct(supabase, {
+    productId,
+    fromIso: extFrom,
+    toIso: extTo,
+    excludeUserId: args.excludeUserId ?? null,
+    globalTest,
+  });
+  const holdDayCount = holdsToBlockedDayCount(otherHolds, buf);
+
   // Belegte Einheiten pro angefragtem Tag zaehlen. Bestehende Buchungen
   // belegen die Kamera physisch ueber [ship .. return] (inkl. ihrer eigenen
   // Puffer / Override-Termine).
@@ -169,6 +185,7 @@ export async function findCameraOverbookingConflict(
         bookedCount += resolveBookingCameras(bRaw).filter((c) => c.product_id === productId).length;
       }
     }
+    bookedCount += holdDayCount.get(cur) ?? 0;
     if (bookedCount >= totalStock) {
       return {
         productId,

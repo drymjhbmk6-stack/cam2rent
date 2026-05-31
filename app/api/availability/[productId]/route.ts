@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createServerClient } from '@supabase/ssr';
+import { cookies } from 'next/headers';
 import { createServiceClient } from '@/lib/supabase';
 import { getProducts } from '@/lib/get-products';
 import { RESERVING_BOOKING_STATUSES } from '@/lib/booking-statuses';
 import { isTestMode } from '@/lib/env-mode';
 import { resolveBookingCameras } from '@/lib/booking-cameras';
+import { getHoldBlockedDays } from '@/lib/cart-holds';
 import {
   loadBufferDays,
   computeShipDate,
@@ -73,6 +76,28 @@ export async function GET(
   // Test-Buchungen (Tester-User auf Live-Seite) blocken den Kunden-Kalender NICHT.
   // Im globalen Test-Modus laufen alle Buchungen als is_test=true → dann zaehlen alle.
   const globalTest = await isTestMode();
+
+  // Eigene User-ID (falls eingeloggt) — eigene Warenkorb-Holds duerfen den
+  // eigenen Kalender NICHT als belegt anzeigen. Anonyme Besucher: kein Ausschluss.
+  let viewerUserId: string | null = null;
+  try {
+    const cookieStore = await cookies();
+    const supabaseAuth = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() { return cookieStore.getAll(); },
+          setAll() { /* read-only in dieser GET-Route */ },
+        },
+      },
+    );
+    const { data: { user } } = await supabaseAuth.auth.getUser();
+    viewerUserId = user?.id ?? null;
+  } catch {
+    viewerUserId = null;
+  }
+
   const selBase = 'id, rental_from, rental_to, delivery_mode, product_name, product_id, unit_id, cameras';
   const sel = `${selBase}, ship_date_override, return_due_date_override`;
 
@@ -141,6 +166,19 @@ export async function GET(
     console.error('Availability blocked query error:', blockErr);
     // Nicht-kritisch: weiter ohne blocked dates
   }
+
+  // ── Warenkorb-Reservierungen FREMDER Kunden als belegt zaehlen ─────────────
+  // Eine Kamera im Warenkorb eines anderen Kunden blockt ihren Zeitraum (inkl.
+  // Puffer) fuer 30 Min. Eigene Holds werden ausgeschlossen (viewerUserId).
+  // Defensiv: fehlende Migration → leere Map, kein Fehler.
+  const holdBlockedDays = await getHoldBlockedDays(supabase, {
+    productId,
+    fromIso: extFirst,
+    toIso: extLast,
+    excludeUserId: viewerUserId,
+    globalTest,
+    buf,
+  });
 
   // ── Pro Tag berechnen ──────────────────────────────────────────────────────
   const today = new Date();
@@ -217,7 +255,10 @@ export async function GET(
       }
     }
 
-    const available = Math.max(0, totalStock - bookedCount - blockedCount);
+    // Warenkorb-Reservierungen fremder Kunden an diesem Tag.
+    const heldCount = holdBlockedDays.get(dateStr) ?? 0;
+
+    const available = Math.max(0, totalStock - bookedCount - blockedCount - heldCount);
 
     let status: 'available' | 'partial' | 'booked' | 'blocked';
     if (blockedCount >= totalStock) {

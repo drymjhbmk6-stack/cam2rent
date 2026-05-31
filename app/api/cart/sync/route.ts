@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
+import { syncCartHolds, releaseUserCartHolds, type CartHoldItem } from '@/lib/cart-holds';
+import { isUserTester } from '@/lib/tester-mode';
 
 /**
  * POST /api/cart/sync
@@ -36,14 +38,37 @@ export async function POST(req: NextRequest) {
     const email = user.email;
     const supabase = createServiceClient();
 
-    // Wenn Warenkorb leer: Eintrag löschen
+    // Wenn Warenkorb leer: Eintrag löschen + alle Holds des Users freigeben
     if (!items || items.length === 0) {
       await supabase
         .from('abandoned_carts')
         .delete()
         .eq('user_id', userId)
         .eq('recovered', false);
+      await releaseUserCartHolds(supabase, userId);
       return NextResponse.json({ ok: true });
+    }
+
+    // ── Warenkorb-Reservierungen (Holds) synchronisieren ──────────────────
+    // Jede Kamera im Warenkorb blockt ihren Zeitraum 30 Min fuer andere Kunden.
+    // Gleitende Frist: jeder Sync (Cart-Aenderung, alle 2s debounced clientseitig)
+    // setzt expires_at neu. Best-effort — fehlende Migration ist kein Fehler.
+    try {
+      const holdItems: CartHoldItem[] = (items as Array<Record<string, unknown>>)
+        .filter((it) => it && typeof it === 'object')
+        .map((it) => ({
+          cartItemId: String(it.id ?? ''),
+          productId: String(it.productId ?? ''),
+          productName: typeof it.productName === 'string' ? it.productName : null,
+          rentalFrom: String(it.rentalFrom ?? ''),
+          rentalTo: String(it.rentalTo ?? ''),
+          deliveryMode: it.deliveryMode === 'abholung' ? 'abholung' : 'versand',
+        }))
+        .filter((it) => it.cartItemId && it.productId && it.rentalFrom && it.rentalTo);
+      const isTest = await isUserTester(userId);
+      await syncCartHolds(supabase, userId, holdItems, { isTest });
+    } catch (holdErr) {
+      console.error('[cart/sync] Hold-Sync fehlgeschlagen:', holdErr);
     }
 
     // Prüfen ob schon ein aktiver Eintrag existiert

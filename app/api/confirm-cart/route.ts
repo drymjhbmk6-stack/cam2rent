@@ -10,6 +10,7 @@ import { DEFAULT_SHIPPING, type ShippingPriceConfig, calcPriceFromTable, type Ad
 import { assignCamerasToBooking } from '@/lib/camera-unit-assignment';
 import { desiredFromBooking, resolveBookingCameras } from '@/lib/booking-cameras';
 import { assignAccessoryUnitsToBooking } from '@/lib/accessory-unit-assignment';
+import { releaseUserCartHolds } from '@/lib/cart-holds';
 import { createAdminNotification } from '@/lib/admin-notifications';
 import { generateContractPDF } from '@/lib/contracts/generate-contract';
 import { storeContract } from '@/lib/contracts/store-contract';
@@ -1022,6 +1023,9 @@ export async function POST(req: NextRequest) {
           .update({ booking_count: (profile.booking_count ?? 0) + periodGroups.length })
           .eq('id', r_userId);
       }
+      // Warenkorb-Reservierungen freigeben — die echte Buchung existiert jetzt.
+      releaseUserCartHolds(supabase, r_userId)
+        .catch((err: unknown) => console.error('Cart-Hold release error:', err));
     }
 
     // 7. Referral verarbeiten

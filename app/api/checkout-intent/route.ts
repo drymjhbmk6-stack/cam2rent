@@ -95,6 +95,7 @@ export async function POST(req: NextRequest) {
         rentalFrom: it.rentalFrom,
         rentalTo: it.rentalTo,
         deliveryMode: it.deliveryMode === 'abholung' ? 'abholung' : 'versand',
+        excludeUserId: userId,
       });
       if (conflict) {
         return NextResponse.json(
