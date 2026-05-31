@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useCart } from '@/components/CartProvider';
 import { fmtDate, fmtEuro } from '@/lib/format-utils';
 import { calcShipping, shippingConfig as defaultShippingConfig, type ShippingConfig } from '@/data/shipping';
-import { getDiscountMatchesForItem, calcItemDiscountTotal, calcCartLevelDiscount, type ProductDiscount } from '@/lib/price-config';
+import { getDiscountMatchesForItem, calcItemDiscountTotal, calcCartLevelDiscount, getWinningCartLevelDiscount, type ProductDiscount } from '@/lib/price-config';
 
 export default function WarenkorbPage() {
   const { items, removeItem, cartTotal, itemCount } = useCart();
@@ -78,7 +78,9 @@ export default function WarenkorbPage() {
     const cartTotalNetItems = items.reduce((s, it) => s + it.priceRental + it.priceAccessories, 0) - itemDisc;
     const cartLevelDisc = calcCartLevelDiscount(cartTotalNetItems, productDiscounts);
     if (cartLevelDisc > bestAmount) {
-      const cartMatch = productDiscounts.find((d) => d.applies_to_cart);
+      // Den Namen der tatsaechlich greifenden (gueltigen, hoechsten) Cart-Aktion
+      // nehmen — nicht die erste applies_to_cart-Aktion (koennte abgelaufen sein).
+      const cartMatch = getWinningCartLevelDiscount(cartTotalNetItems, productDiscounts);
       if (cartMatch?.name) bestLabel = cartMatch.name;
     }
     return {

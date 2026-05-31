@@ -16,7 +16,7 @@ import { isAngebotActive, getAngebotCameraOption, type Angebot } from '@/data/an
 import AvailabilityCalendar, { type CalendarRange } from '@/components/AvailabilityCalendar';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { shippingConfig, calcShipping, type ShippingMethod } from '@/data/shipping';
-import { calcPriceFromKeyDays, calcPriceFromTable, calcHaftungTieredPrice, getEigenbeteiligung, getDiscountMatchesForItem, calcItemDiscountTotal, calcCartLevelDiscount, type PriceConfig, type AdminProduct, type HaftungConfig, type ProductDiscount } from '@/lib/price-config';
+import { calcPriceFromKeyDays, calcPriceFromTable, calcHaftungTieredPrice, getEigenbeteiligung, getDiscountMatchesForItem, calcItemDiscountTotal, calcCartLevelDiscount, getWinningCartLevelDiscount, type PriceConfig, type AdminProduct, type HaftungConfig, type ProductDiscount } from '@/lib/price-config';
 import { fmtEuro } from '@/lib/format-utils';
 import SignatureStep, { type SignatureResult } from '@/components/booking/SignatureStep';
 import { getStripePromise } from '@/lib/stripe-client';
@@ -244,8 +244,9 @@ function calcBreakdown(
       const best = [...matches].sort((a, b) => b.amount - a.amount)[0];
       productDiscountLabel = best.discount.name ?? null;
     } else if (cartLevel > 0) {
-      // Fallback: ersten passenden Cart-Level-Discount nehmen
-      const cartLevelMatch = productDiscounts.find((d) => d.applies_to_cart);
+      // Den Namen der tatsaechlich greifenden (gueltigen, hoechsten) Cart-Aktion
+      // nehmen — nicht die erste applies_to_cart-Aktion (koennte abgelaufen sein).
+      const cartLevelMatch = getWinningCartLevelDiscount(rentalPrice + accessoryPrice - itemDisc, productDiscounts);
       productDiscountLabel = cartLevelMatch?.name ?? null;
     }
   }

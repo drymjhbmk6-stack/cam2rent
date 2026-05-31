@@ -359,6 +359,35 @@ export function calcCartLevelDiscount(
   return Math.min(best, cartTotal);
 }
 
+/**
+ * Liefert die Cart-Level-Aktion, die tatsaechlich greift (gueltig + hoechster
+ * Betrag) — analog zu `calcCartLevelDiscount`. Wird fuer das Label im
+ * Warenkorb / Buchungsflow gebraucht: vorher wurde ueber
+ * `discounts.find(d => d.applies_to_cart)` die ERSTE Cart-Aktion genommen,
+ * unabhaengig von Gueltigkeit. Dadurch zeigte z.B. eine abgelaufene Aktion
+ * (Release50) als Name, obwohl der Betrag von einer anderen aktiven Aktion
+ * (Festival25) stammte.
+ */
+export function getWinningCartLevelDiscount(
+  cartTotal: number,
+  discounts: ProductDiscount[],
+): ProductDiscount | null {
+  if (cartTotal <= 0) return null;
+  const now = new Date();
+  let best: ProductDiscount | null = null;
+  let bestAmount = 0;
+  for (const d of discounts) {
+    if (!d.applies_to_cart) continue;
+    if (!isWithinValidity(d, now)) continue;
+    const amount = calcDiscountValue(d, cartTotal);
+    if (amount > bestAmount) {
+      bestAmount = amount;
+      best = d;
+    }
+  }
+  return best;
+}
+
 export const DEFAULT_PRODUCT_DISCOUNTS: ProductDiscount[] = [];
 
 export type DiscountTarget = 'rental' | 'accessories';
