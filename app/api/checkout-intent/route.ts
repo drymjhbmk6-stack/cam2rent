@@ -8,6 +8,7 @@ import { getStripe, buildPaymentDescription } from '@/lib/stripe';
 import { getCheckoutConfig } from '@/lib/checkout-config';
 import { generateBookingId } from '@/lib/booking-id';
 import { isUserTester, getTesterStripe } from '@/lib/tester-mode';
+import { findCameraOverbookingConflict } from '@/lib/camera-availability-check';
 
 const checkoutLimiter = rateLimit({ maxAttempts: 10, windowMs: 60 * 1000 }); // 10 pro Min
 

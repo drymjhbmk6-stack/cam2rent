@@ -114,12 +114,22 @@ export async function getProducts(): Promise<Product[]> {
     return [];
   }
 
-  // hasUnits ableiten: Welches Produkt hat mindestens ein aktives physisches
-  // Stueck? Wir bevorzugen die neue Welt (inventar_units), fallen bei Bedarf
-  // auf die alte product_units zurueck — so funktioniert die Logik vor wie
-  // nach der Buchhaltungs-Konsolidierung. Ausgemusterte Stuecke zaehlen nicht,
-  // sonst waere die Waitlist nutzlos, sobald alte Kameras verkauft werden.
+  // ── ECHTEN Lagerbestand pro Produkt LIVE zaehlen ──────────────────────────
+  // KRITISCH: Der gespeicherte `admin.stock`-Wert in admin_config.products ist
+  // nur ein Cache und kann veralten (z.B. stand bei der Insta360 X5 dauerhaft
+  // auf 3, obwohl real nur 1 Exemplar existiert → Kalender erlaubte 3 parallele
+  // Buchungen → Ueberbuchung). Deshalb wird `stock` hier IMMER aus den echten
+  // physischen Einheiten abgeleitet, damit die Verfuegbarkeit nie mehr Kameras
+  // anbieten kann, als es gibt.
   //
+  // Quelle der Wahrheit ist die neue Welt (inventar_units). Nur wenn ein Produkt
+  // dort GAR NICHT existiert, faellt die Zaehlung auf die alte Welt
+  // (product_units) zurueck — und erst wenn auch dort nichts ist, bleibt der
+  // Config-Wert als letzter Fallback (Pre-Inventory-Altbestand). Die beiden
+  // Welten werden NICHT summiert (Mirror wuerde sonst doppelt zaehlen).
+  const newWorldCount = new Map<string, number>(); // legacyId → aktive inventar_units
+  const oldWorldCount = new Map<string, number>(); // legacyId → aktive product_units
+
   // 1) Neue Welt: migration_audit liefert legacy-id → produkte.id, dann
   //    inventar_units gegen aktive Stuecke abfragen.
   try {
@@ -137,22 +147,26 @@ export async function getProducts(): Promise<Product[]> {
     if (produktIdToLegacy.size > 0) {
       const { data: invRows } = await supabase
         .from('inventar_units')
-        .select('produkt_id')
+        .select('produkt_id, tracking_mode, bestand')
         .eq('typ', 'kamera')
         .neq('status', 'ausgemustert');
 
-      for (const row of (invRows ?? []) as Array<{ produkt_id: string | null }>) {
+      for (const row of (invRows ?? []) as Array<{ produkt_id: string | null; tracking_mode?: string | null; bestand?: number | null }>) {
         if (!row.produkt_id) continue;
         const legacyId = produktIdToLegacy.get(row.produkt_id);
-        if (legacyId) productsWithUnits.add(legacyId);
+        if (!legacyId) continue;
+        // Kameras sind normalerweise individual-getrackt (1 Zeile = 1 Stueck);
+        // Bulk-Bestand defensiv ueber `bestand` aufsummieren.
+        const n = row.tracking_mode === 'bulk' ? Math.max(0, row.bestand ?? 0) : 1;
+        newWorldCount.set(legacyId, (newWorldCount.get(legacyId) ?? 0) + n);
       }
     }
   } catch {
     // migration_audit oder inventar_units fehlen — okay, Fallback unten greift.
   }
 
-  // 2) Alte Welt als Fallback: product_units. Wichtig fuer Pre-Migration und
-  //    fuer Produkte, die noch keinen migration_audit-Eintrag haben.
+  // 2) Alte Welt: product_units. Fuer Pre-Migration und Produkte ohne
+  //    migration_audit-Eintrag.
   try {
     const { data: unitRows } = await supabase
       .from('product_units')
@@ -161,17 +175,40 @@ export async function getProducts(): Promise<Product[]> {
 
     if (unitRows) {
       for (const row of unitRows) {
-        if (row.product_id) productsWithUnits.add(row.product_id);
+        if (row.product_id) {
+          oldWorldCount.set(row.product_id, (oldWorldCount.get(row.product_id) ?? 0) + 1);
+        }
       }
     }
   } catch {
-    // best-effort — hasUnits bleibt fuer Produkte ohne Match `false`.
+    // best-effort — Fallback auf Config-Stock.
   }
 
-  // AdminProducts → Product konvertieren
-  const result: Product[] = Object.values(adminProducts).map((admin) =>
-    adminToProduct(admin, undefined, kautionTiers, productsWithUnits.has(admin.id)),
-  );
+  // Effektiven Bestand pro Produkt bestimmen (neue Welt hat Vorrang, kein
+  // Summieren). productsWithUnits steuert weiterhin `hasUnits` (Waitlist-UI).
+  const resolvedStock = new Map<string, number>();
+  for (const [id, n] of newWorldCount) {
+    resolvedStock.set(id, n);
+    if (n > 0) productsWithUnits.add(id);
+  }
+  for (const [id, n] of oldWorldCount) {
+    if (!resolvedStock.has(id)) {
+      resolvedStock.set(id, n);
+      if (n > 0) productsWithUnits.add(id);
+    }
+  }
+
+  // AdminProducts → Product konvertieren. `stock` aus echter Zaehlung, sonst
+  // Config-Wert (nur fuer Produkte ohne jegliche Einheiten-Erfassung).
+  const result: Product[] = Object.values(adminProducts).map((admin) => {
+    const liveStock = resolvedStock.has(admin.id) ? resolvedStock.get(admin.id)! : admin.stock;
+    return adminToProduct(
+      { ...admin, stock: liveStock },
+      undefined,
+      kautionTiers,
+      productsWithUnits.has(admin.id),
+    );
+  });
 
   return result;
 }

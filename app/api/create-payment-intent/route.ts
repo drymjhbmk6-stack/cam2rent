@@ -6,6 +6,7 @@ import { createServiceClient } from '@/lib/supabase';
 import { getStripe, buildPaymentDescription } from '@/lib/stripe';
 import { isUserTester, getTesterStripe } from '@/lib/tester-mode';
 import { calcPriceFromTable, type AdminProduct } from '@/lib/price-config';
+import { findCameraOverbookingConflict } from '@/lib/camera-availability-check';
 
 const paymentLimiter = rateLimit({ maxAttempts: 10, windowMs: 60 * 1000 }); // 10 pro Min
 
