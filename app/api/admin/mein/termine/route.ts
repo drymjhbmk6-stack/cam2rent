@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { randomUUID } from 'crypto';
 import { createServiceClient } from '@/lib/supabase';
 import { getCurrentAdminUser } from '@/lib/admin-auth';
+import { utcToBerlinLocalInput, berlinLocalInputToUTC } from '@/lib/timezone';
 
 export const dynamic = 'force-dynamic';
 
@@ -8,6 +10,47 @@ const TITLE_MAX = 200;
 const TEXT_MAX = 5_000;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ALLOWED_REMINDERS = new Set([5, 15, 30, 60, 120, 240, 1440, 2880]); // 5min … 2 Tage
+const RECURRENCES = new Set(['daily', 'weekly', 'biweekly', 'monthly']);
+const MAX_OCCURRENCES = 52;
+
+function isMissingSeriesColumn(err: { code?: string; message?: string } | null): boolean {
+  if (!err) return false;
+  return /series_id|column|schema cache/i.test(err.message ?? '');
+}
+
+// Wiederholung wall-clock-stabil: vom Berlin-Local-Start aus Kalendereinheiten
+// addieren, dann zurück nach UTC. So bleibt 09:00 auch über die Sommer-/Winter-
+// zeit-Umstellung 09:00 (kein ms-Offset-Drift).
+function shiftStartUtc(baseUtcIso: string, recurrence: string, n: number): string | null {
+  const local = utcToBerlinLocalInput(baseUtcIso); // "YYYY-MM-DDTHH:mm"
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(local);
+  if (!m) return null;
+  let y = Number(m[1]);
+  let mo = Number(m[2]) - 1;
+  let d = Number(m[3]);
+  const hh = m[4];
+  const mi = m[5];
+  if (recurrence === 'monthly') {
+    // setUTCMonth-Logik manuell, damit Monatsüberlauf sauber rollt.
+    const total = mo + n;
+    y += Math.floor(total / 12);
+    mo = ((total % 12) + 12) % 12;
+    const ref = new Date(Date.UTC(y, mo, 1));
+    ref.setUTCDate(d);
+    y = ref.getUTCFullYear();
+    mo = ref.getUTCMonth();
+    d = ref.getUTCDate();
+  } else {
+    const days = recurrence === 'daily' ? n : recurrence === 'weekly' ? 7 * n : 14 * n; // biweekly
+    const ref = new Date(Date.UTC(y, mo, d));
+    ref.setUTCDate(ref.getUTCDate() + days);
+    y = ref.getUTCFullYear();
+    mo = ref.getUTCMonth();
+    d = ref.getUTCDate();
+  }
+  const pad = (x: number) => String(x).padStart(2, '0');
+  return berlinLocalInputToUTC(`${y}-${pad(mo + 1)}-${pad(d)}T${hh}:${mi}`);
+}
 
 function isMissingTable(err: { code?: string; message?: string } | null): boolean {
   if (!err) return false;
@@ -49,7 +92,7 @@ export async function GET(req: NextRequest) {
   const supabase = createServiceClient();
   let query = supabase
     .from('employee_appointments')
-    .select('id, admin_user_id, title, description, location, starts_at, ends_at, all_day, color, reminder_minutes_before, reminder_push, reminder_email, reminder_sent_at, shared_with, created_at, updated_at')
+    .select('*')
     .or(`admin_user_id.eq.${me.id},shared_with.cs.{${me.id}}`)
     .order('starts_at', { ascending: true })
     .limit(500);
@@ -110,6 +153,8 @@ export async function POST(req: NextRequest) {
     reminder_push?: boolean;
     reminder_email?: boolean;
     shared_with?: string[];
+    recurrence?: string;
+    recurrence_count?: number;
   };
   try {
     body = await req.json();
@@ -134,13 +179,25 @@ export async function POST(req: NextRequest) {
 
   const shared = sanitizeShared(body.shared_with).filter((id) => id !== me.id);
 
-  const insertPayload = {
+  // Wiederholung: jede Instanz wird als eigene Zeile materialisiert (eigener
+  // Reminder/Push). series_id gruppiert sie fürs Serien-Löschen.
+  const recurrence = typeof body.recurrence === 'string' && RECURRENCES.has(body.recurrence)
+    ? body.recurrence
+    : null;
+  let count = 1;
+  if (recurrence) {
+    const raw = Number(body.recurrence_count);
+    count = Number.isFinite(raw) ? Math.min(MAX_OCCURRENCES, Math.max(2, Math.round(raw))) : 2;
+  }
+
+  const durationMs = endsAt ? new Date(endsAt).getTime() - new Date(startsAt).getTime() : null;
+  const seriesId = recurrence ? randomUUID() : null;
+
+  const common = {
     admin_user_id: me.id,
     title,
     description: body.description ? String(body.description).slice(0, TEXT_MAX) : null,
     location: body.location ? String(body.location).slice(0, 200) : null,
-    starts_at: startsAt,
-    ends_at: endsAt,
     all_day: !!body.all_day,
     color: body.color ? String(body.color).slice(0, 32) : null,
     reminder_minutes_before: reminderMinutes,
@@ -149,12 +206,29 @@ export async function POST(req: NextRequest) {
     shared_with: shared,
   };
 
+  const rows: Record<string, unknown>[] = [];
+  for (let i = 0; i < count; i++) {
+    const occStart = i === 0 || !recurrence ? startsAt : shiftStartUtc(startsAt, recurrence, i);
+    if (!occStart) continue;
+    const occEnd = durationMs !== null ? new Date(new Date(occStart).getTime() + durationMs).toISOString() : null;
+    rows.push({ ...common, starts_at: occStart, ends_at: occEnd, series_id: seriesId });
+  }
+
   const supabase = createServiceClient();
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('employee_appointments')
-    .insert(insertPayload)
-    .select('*')
-    .single();
+    .insert(rows)
+    .select('*');
+
+  // Migration für series_id steht aus → Zeilen ohne die Spalte einfügen
+  // (Serie wird dann als unabhängige Termine angelegt, ohne Gruppen-Löschen).
+  if (error && isMissingSeriesColumn(error) && !isMissingTable(error)) {
+    const fallbackRows = rows.map(({ series_id: _omit, ...rest }) => rest); // eslint-disable-line @typescript-eslint/no-unused-vars
+    ({ data, error } = await supabase
+      .from('employee_appointments')
+      .insert(fallbackRows)
+      .select('*'));
+  }
 
   if (error) {
     if (isMissingTable(error)) {
@@ -167,5 +241,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Termin konnte nicht gespeichert werden.' }, { status: 500 });
   }
 
-  return NextResponse.json({ appointment: { ...data, is_owner: true, owner_name: null } });
+  const created = data ?? [];
+  return NextResponse.json({
+    appointment: created[0] ? { ...created[0], is_owner: true, owner_name: null } : null,
+    series_count: created.length,
+  });
 }

@@ -102,7 +102,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   return NextResponse.json({ appointment: { ...data, is_owner: true, owner_name: null } });
 }
 
-export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const me = await getCurrentAdminUser();
   if (!me) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   if (me.id === 'legacy-env') return NextResponse.json({ error: 'Mitarbeiter-Konto erforderlich.' }, { status: 403 });
@@ -111,6 +111,31 @@ export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: str
   if (!UUID_RE.test(id)) return NextResponse.json({ error: 'ID ungültig.' }, { status: 400 });
 
   const supabase = createServiceClient();
+
+  // ?scope=series → alle Termine der gleichen Serie löschen (nur eigene).
+  if (req.nextUrl.searchParams.get('scope') === 'series') {
+    const { data: row } = await supabase
+      .from('employee_appointments')
+      .select('series_id')
+      .eq('id', id)
+      .eq('admin_user_id', me.id)
+      .maybeSingle();
+    const seriesId = (row as { series_id?: string | null } | null)?.series_id ?? null;
+    if (seriesId) {
+      const { error } = await supabase
+        .from('employee_appointments')
+        .delete()
+        .eq('series_id', seriesId)
+        .eq('admin_user_id', me.id);
+      if (error) {
+        console.error('mein/termine DELETE series error:', error);
+        return NextResponse.json({ error: 'Serie löschen fehlgeschlagen.' }, { status: 500 });
+      }
+      return NextResponse.json({ ok: true, scope: 'series' });
+    }
+    // keine series_id → wie Einzel-Löschen weiter unten
+  }
+
   const { error } = await supabase
     .from('employee_appointments')
     .delete()

@@ -3283,6 +3283,27 @@ sieht die Gruppe nicht). Zwei Einträge: **Meine Notizen** + **Mein Kalender**.
   `reminder_sent_at` wird beim Cron-Lauf gesetzt; bei Zeit-/Reminder-Edit
   automatisch auf `null` zurückgesetzt, damit der verschobene Termin neu
   feuert.
+- **Termin-Serien (Stand 2026-05-31):** Beim Neuanlegen kann der Mitarbeiter
+  eine Wiederholung wählen (`täglich | wöchentlich | alle 2 Wochen | monatlich`)
+  + Anzahl Termine (2–52). **Ansatz: jede Instanz wird serverseitig als eigene
+  `employee_appointments`-Zeile materialisiert** — dadurch greift die bestehende
+  Reminder-/Push-Pipeline pro Termin unverändert, jede Wiederholung feuert ihre
+  eigene Push-/E-Mail-Erinnerung (kein Cron-Umbau nötig). Migration
+  `supabase/supabase-employee-appointments-series.sql` (idempotent): Spalte
+  `employee_appointments.series_id UUID NULL` + Partial-Index. Eine Serie teilt
+  sich eine `series_id`. **Wall-clock-stabil:** `shiftStartUtc()` in
+  `app/api/admin/mein/termine/route.ts` rechnet vom Berlin-Local-Start aus
+  Kalendereinheiten (kein ms-Offset-Drift über Sommer-/Winterzeit), `ends_at`
+  folgt mit konstanter Dauer. Monatsüberlauf rollt via `setUTCDate`. Cap 52.
+  POST gibt `{ appointment: firstRow, series_count }` zurück. Defensiver
+  Fallback: fehlt die `series_id`-Spalte (Migration aus), werden die Zeilen
+  ohne sie eingefügt (Serie = unabhängige Termine, kein Gruppen-Löschen). GET
+  selektiert jetzt `*` (statt expliziter Liste), damit `series_id` ohne
+  Migration einfach fehlt statt zu brechen. Serie löschen:
+  `DELETE /api/admin/mein/termine/[id]?scope=series` löscht alle Zeilen gleicher
+  `series_id` des Owners. UI: „Wiederholung"-Select + Anzahl-Feld im Neu-Dialog,
+  🔁-Badge in der Liste + Detail, „🔁 Ganze Serie löschen"-Button neben dem
+  Einzel-Löschen. Bearbeiten gilt immer nur für die einzelne Instanz.
 - **`lib/employee-reminders.ts` → `dispatchAppointmentReminder()`:** Lädt
   alle Empfänger (Owner + `shared_with`), filtert aktive Konten, sendet
   parallel via `Promise.allSettled` Push + E-Mail. `legacy-env`-IDs werden
@@ -3830,6 +3851,12 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
   ```
   Ohne Cron werden Termin-Reminder nicht gefeuert; Notizen/Termin-CRUD
   funktioniert auch ohne den Cron. Empfohlen ASAP ausführen.
+- **Termin-Serien-Migration auszuführen:** `supabase/supabase-employee-appointments-series.sql`
+  (idempotent, additiv). Fügt `employee_appointments.series_id UUID NULL` +
+  Index hinzu. Ohne Migration funktioniert das Anlegen einer Serie weiterhin
+  (Zeilen werden ohne `series_id` eingefügt → unabhängige Termine, jeder mit
+  eigenem Reminder/Push), nur das Gruppen-Löschen „Ganze Serie löschen" greift
+  dann nicht. Empfohlen ASAP ausführen.
 - **Notizen-To-do-Migration auszuführen:** `supabase/supabase-employee-notes-checklist.sql`
   (idempotent, additiv). Fügt `employee_notes.checklist JSONB DEFAULT '[]'`
   hinzu. Ohne Migration läuft die Notiz-Funktion 1:1 weiter (Text-Notizen

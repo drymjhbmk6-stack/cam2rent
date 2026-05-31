@@ -19,6 +19,7 @@ interface Appointment {
   reminder_email: boolean;
   reminder_sent_at: string | null;
   shared_with: string[];
+  series_id: string | null;
   is_owner: boolean;
   owner_name: string | null;
 }
@@ -39,6 +40,14 @@ const REMINDER_OPTIONS = [
   { value: '240', label: '4 Stunden vorher' },
   { value: '1440', label: '1 Tag vorher' },
   { value: '2880', label: '2 Tage vorher' },
+];
+
+const RECURRENCE_OPTIONS = [
+  { value: '', label: 'Keine Wiederholung' },
+  { value: 'daily', label: 'Täglich' },
+  { value: 'weekly', label: 'Wöchentlich' },
+  { value: 'biweekly', label: 'Alle 2 Wochen' },
+  { value: 'monthly', label: 'Monatlich' },
 ];
 
 const COLOR_PRESETS: { value: string; label: string; bg: string }[] = [
@@ -278,6 +287,9 @@ export default function MeinKalenderPage() {
                         {a.shared_with.length > 0 && (
                           <span style={{ fontSize: 10, color: '#a78bfa' }}>👥 {a.shared_with.length} geteilt</span>
                         )}
+                        {a.series_id && (
+                          <span style={{ fontSize: 10, color: '#22d3ee' }}>🔁 Serie</span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -335,11 +347,14 @@ function AppointmentEditModal({ appointment, initialDate, employees, onClose, on
   const [reminderPush, setReminderPush] = useState(appointment?.reminder_push ?? true);
   const [reminderEmail, setReminderEmail] = useState(appointment?.reminder_email ?? false);
   const [shared, setShared] = useState<string[]>(appointment?.shared_with ?? []);
+  const [recurrence, setRecurrence] = useState('');
+  const [recurrenceCount, setRecurrenceCount] = useState('8');
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   const canEdit = appointment ? appointment.is_owner : true;
   const isNew = !appointment;
+  const isSeries = !!appointment?.series_id;
 
   async function save() {
     setSaving(true);
@@ -360,6 +375,8 @@ function AppointmentEditModal({ appointment, initialDate, employees, onClose, on
         reminder_push: reminderPush,
         reminder_email: reminderEmail,
         shared_with: shared,
+        // Wiederholung nur beim Neuanlegen (materialisiert N Einzeltermine)
+        ...(isNew && recurrence ? { recurrence, recurrence_count: parseInt(recurrenceCount, 10) || 2 } : {}),
       };
 
       const url = appointment ? `/api/admin/mein/termine/${appointment.id}` : '/api/admin/mein/termine';
@@ -379,11 +396,15 @@ function AppointmentEditModal({ appointment, initialDate, employees, onClose, on
     }
   }
 
-  async function del() {
+  async function del(scope: 'single' | 'series' = 'single') {
     if (!appointment) return;
-    if (!confirm(`Termin "${appointment.title}" wirklich löschen?`)) return;
+    const msg = scope === 'series'
+      ? `Die GANZE Serie von "${appointment.title}" wirklich löschen?`
+      : `Termin "${appointment.title}" wirklich löschen?`;
+    if (!confirm(msg)) return;
     setSaving(true);
-    const res = await fetch(`/api/admin/mein/termine/${appointment.id}`, { method: 'DELETE' });
+    const url = `/api/admin/mein/termine/${appointment.id}${scope === 'series' ? '?scope=series' : ''}`;
+    const res = await fetch(url, { method: 'DELETE' });
     if (res.ok) onSaved();
     else { setErr('Löschen fehlgeschlagen.'); setSaving(false); }
   }
@@ -468,6 +489,34 @@ function AppointmentEditModal({ appointment, initialDate, employees, onClose, on
           </div>
         )}
 
+        {isNew && (
+          <>
+            <Field label="Wiederholung">
+              <select value={recurrence} onChange={(e) => setRecurrence(e.target.value)} style={inputStyle}>
+                {RECURRENCE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </Field>
+            {recurrence && (
+              <Field label="Anzahl Termine (inkl. erstem)">
+                <input
+                  type="number" min={2} max={52} value={recurrenceCount}
+                  onChange={(e) => setRecurrenceCount(e.target.value)}
+                  style={inputStyle}
+                />
+                <p style={{ fontSize: 11, color: '#64748b', margin: '4px 0 0' }}>
+                  Jeder Termin der Serie bekommt eine eigene Erinnerung/Push. Max. 52.
+                </p>
+              </Field>
+            )}
+          </>
+        )}
+
+        {isSeries && (
+          <div style={{ background: '#0e7490', color: '#cffafe', padding: '8px 12px', borderRadius: 6, marginBottom: 12, fontSize: 13 }}>
+            🔁 Teil einer Terminserie. Änderungen gelten nur für diesen Termin.
+          </div>
+        )}
+
         {employees.length > 0 && (
           <Field label={`Teilen mit Kollegen (${shared.length} gewählt)`}>
             <div style={{ maxHeight: 140, overflowY: 'auto', background: '#1e293b', border: '1px solid #334155', borderRadius: 6, padding: 8 }}>
@@ -495,9 +544,16 @@ function AppointmentEditModal({ appointment, initialDate, employees, onClose, on
 
         <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', flexWrap: 'wrap', marginTop: 12 }}>
           {canEdit && appointment && (
-            <button onClick={del} disabled={saving} style={{ background: '#7f1d1d', color: '#fecaca', border: 0, padding: '8px 16px', borderRadius: 6, cursor: 'pointer' }}>
-              🗑 Löschen
-            </button>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button onClick={() => del('single')} disabled={saving} style={{ background: '#7f1d1d', color: '#fecaca', border: 0, padding: '8px 16px', borderRadius: 6, cursor: 'pointer' }}>
+                🗑 Löschen
+              </button>
+              {isSeries && (
+                <button onClick={() => del('series')} disabled={saving} style={{ background: '#991b1b', color: '#fecaca', border: '1px solid #ef4444', padding: '8px 16px', borderRadius: 6, cursor: 'pointer' }}>
+                  🔁 Ganze Serie löschen
+                </button>
+              )}
+            </div>
           )}
           <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
             <button onClick={onClose} disabled={saving} style={{ background: 'transparent', color: '#94a3b8', border: '1px solid #475569', padding: '8px 16px', borderRadius: 6, cursor: 'pointer' }}>
