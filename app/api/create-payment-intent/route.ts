@@ -88,6 +88,34 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // ── Harte Ueberbuchungs-Sperre (Server-seitig) ──────────────────────────
+    // Verhindert, dass eine Buchung entsteht, wenn die Kamera im gewaehlten
+    // Zeitraum bereits voll belegt ist (veralteter Browser-Tab, paralleler
+    // Buchungsversuch, Direkt-/Angebotslink, der den Live-Kalender umgeht).
+    // Daten kommen aus metadata. Verlaengerungen (eigene Pruefung) ausgenommen.
+    if (
+      metadata.type !== 'extension' &&
+      metadata.product_id &&
+      metadata.rental_from &&
+      metadata.rental_to
+    ) {
+      const conflict = await findCameraOverbookingConflict(supabase, {
+        productId: metadata.product_id,
+        rentalFrom: metadata.rental_from,
+        rentalTo: metadata.rental_to,
+        deliveryMode: metadata.delivery_mode === 'abholung' ? 'abholung' : 'versand',
+      });
+      if (conflict) {
+        return NextResponse.json(
+          {
+            error: 'Diese Kamera ist im gewählten Zeitraum leider nicht mehr verfügbar. Bitte wähle einen anderen Zeitraum.',
+            code: 'NOT_AVAILABLE',
+          },
+          { status: 409 },
+        );
+      }
+    }
+
     // ── Sweep 7 Vuln 10 — Preis-Plausibilitaetspruefung ──
     // checkout-intent (Cart-Flow) hat diesen Check bereits. Single-Buchungen
     // gingen aber bisher ohne Plausibilitaetspruefung durch. Damit konnte ein

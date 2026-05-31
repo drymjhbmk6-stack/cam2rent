@@ -77,6 +77,37 @@ export async function POST(req: NextRequest) {
 
     const supabase = createServiceClient();
 
+    // ── Harte Ueberbuchungs-Sperre (Server-seitig, gegen Manipulation) ──────
+    // Jeder Warenkorb-Artikel wird gegen den echten Live-Bestand geprueft. Ist
+    // eine Kamera im gewaehlten Zeitraum voll belegt → 409, bevor gezahlt werden
+    // kann (fangt veraltete Tabs + parallele Buchungen + Direktlinks ab).
+    const overbookItems = (checkoutContext?.items as Array<{
+      productId?: string;
+      productName?: string;
+      rentalFrom?: string;
+      rentalTo?: string;
+      deliveryMode?: string;
+    }> | undefined) ?? [];
+    for (const it of overbookItems) {
+      if (!it.productId || !it.rentalFrom || !it.rentalTo) continue;
+      const conflict = await findCameraOverbookingConflict(supabase, {
+        productId: it.productId,
+        rentalFrom: it.rentalFrom,
+        rentalTo: it.rentalTo,
+        deliveryMode: it.deliveryMode === 'abholung' ? 'abholung' : 'versand',
+      });
+      if (conflict) {
+        return NextResponse.json(
+          {
+            error: `"${it.productName ?? 'Diese Kamera'}" ist im gewählten Zeitraum leider nicht mehr verfügbar. Bitte passe deinen Warenkorb an.`,
+            code: 'NOT_AVAILABLE',
+            productId: it.productId,
+          },
+          { status: 409 },
+        );
+      }
+    }
+
     // ── Preis-Plausibilitätsprüfung (Defense gegen Client-Manipulation) ──
     // Der Client liefert amountCents — der Server rechnet aus den DB-Produkten
     // nach, ob das plausibel ist. Schutz gegen "Client schickt 1 € statt 500 €".
