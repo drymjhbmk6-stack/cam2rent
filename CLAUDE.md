@@ -1244,6 +1244,22 @@ Aktionen in `admin_settings.product_discounts` (JSON-Array) haben jetzt ein opti
 - **Admin-UI:** Checkbox „Nicht mit Mietdauer- und Stammkunden-Rabatt kombinierbar" in `/admin/rabatte` direkt unter „Auf Warenkorb-Gesamt anwenden" (Aktion-Editor).
 - **Server:** Keine Migration, kein API-Change — das JSON-Array wird ueber `/api/admin/config?key=product_discounts` generisch gespeichert. `confirm-cart` nimmt die vom Frontend errechneten Werte; der bestehende ~70 %-Plausibilitaets-Floor (Sweep 7 #10) bleibt aktiv.
 
+#### Cart-Level-Aktionsname zeigte abgelaufene Aktion (Stand 2026-05-31)
+Im Warenkorb (`app/warenkorb/page.tsx`) und im Einzel-Buchungsflow
+(`app/kameras/[slug]/buchen/page.tsx`) wurde der **Name** der greifenden
+Cart-Level-Aktion (`applies_to_cart=true`) ueber
+`productDiscounts.find(d => d.applies_to_cart)` ermittelt — also die ERSTE
+Cart-Aktion im Array, **ohne Gueltigkeitspruefung**. Folge: bei zwei
+Cart-Aktionen (z.B. abgelaufene „Release50" zuerst im Array + aktive
+„Festival25") zeigte das Label „Release50", obwohl der Rabattbetrag korrekt
+von „Festival25" stammte (`calcCartLevelDiscount` filtert Gueltigkeit, der
+`find`-Label-Pfad nicht). Fix: neuer Helper `getWinningCartLevelDiscount(cartTotal,
+discounts)` in `lib/price-config.ts` spiegelt die Auswahllogik von
+`calcCartLevelDiscount` (gueltig via `isWithinValidity` + hoechster Betrag) und
+liefert die tatsaechlich greifende Aktion fuer das Label. Betraege unveraendert,
+keine Migration. Item-Level-Labels waren nie betroffen (laufen ueber das
+validity-gefilterte `getDiscountMatchesForItem`).
+
 ### Kaution & Haftungsschutz
 - Gegenseitig ausschließend pro Produkt
 - Globaler Modus in `admin_settings.deposit_mode`: 'kaution' | 'haftung' (kein 'both' mehr)
