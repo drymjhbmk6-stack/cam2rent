@@ -3302,6 +3302,22 @@ sieht die Gruppe nicht). Zwei Einträge: **Meine Notizen** + **Mein Kalender**.
     nicht-pinned) + 6 Farb-Presets + Editor-Modal (Titel + Markdown-Textarea +
     Pin-Checkbox + Farb-Picker). Karten zeigen relatives Datum
     („vor 5 Min", „vor 3 Tagen") + Pin/Löschen-Quick-Actions.
+    - **To-do-Liste pro Notiz (Stand 2026-05-31):** Jede Notiz kann zusätzlich
+      zum Freitext-Inhalt eine abhakbare Checkliste führen. Migration
+      `supabase/supabase-employee-notes-checklist.sql` (idempotent, additiv):
+      Spalte `employee_notes.checklist JSONB NOT NULL DEFAULT '[]'` mit Shape
+      `[{id,text,done}]`. Editor-Modal hat einen Listen-Editor (Punkt
+      hinzufügen via Enter/Button, Text inline editierbar, Haken, ✕-Entfernen).
+      Karten rendern die Checkliste mit Fortschritts-Badge („✓ 2/5 erledigt")
+      und **direkt abhakbaren Checkboxen** (PATCH `checklist` mit Optimistic
+      Update, Rollback bei Fehler) — kein Modal nötig fürs Abhaken. Suche
+      matcht auch Checklisten-Text. Eine reine To-do-Notiz (ohne Titel/Inhalt)
+      ist speicherbar. API (`route.ts` + `[id]/route.ts`): `sanitizeChecklist`
+      (max 200 Punkte × 500 Zeichen, leere Punkte raus) in POST/PATCH,
+      defensiver Spalten-Fehlt-Fallback (`isMissingChecklistColumn` → Retry
+      ohne `checklist`), GET lädt defensiv ohne die Spalte wenn Migration
+      ausstehend. Ohne Migration läuft alles wie zuvor (Checkliste leer,
+      reine Text-Notizen).
   - `/admin/mein/kalender` — Monat/Liste-Toggle. **Monatsansicht** mit
     Montag-Start, 6×7-Raster, heute gelb umrandet, Termine als gefärbte
     Balken (Owner = voll, geteilt = mit weißem Border-Left + 0.85 Opacity),
@@ -3808,6 +3824,11 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
   ```
   Ohne Cron werden Termin-Reminder nicht gefeuert; Notizen/Termin-CRUD
   funktioniert auch ohne den Cron. Empfohlen ASAP ausführen.
+- **Notizen-To-do-Migration auszuführen:** `supabase/supabase-employee-notes-checklist.sql`
+  (idempotent, additiv). Fügt `employee_notes.checklist JSONB DEFAULT '[]'`
+  hinzu. Ohne Migration läuft die Notiz-Funktion 1:1 weiter (Text-Notizen
+  ohne Checkliste, defensive API-Fallbacks), die To-do-Liste speichert dann
+  aber nichts. Empfohlen ASAP ausführen.
 - **Firmware-Check-Migration auszuführen:** `supabase/supabase-firmware-checks.sql`
   (idempotent). Legt Tabelle `firmware_checks` + Spalte
   `inventar_units.installed_firmware` an. Ohne Migration laufen die APIs

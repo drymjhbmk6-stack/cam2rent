@@ -3,14 +3,31 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 
+interface ChecklistItem {
+  id: string;
+  text: string;
+  done: boolean;
+}
+
 interface Note {
   id: string;
   title: string;
   content: string;
   pinned: boolean;
   color: string | null;
+  checklist: ChecklistItem[];
   created_at: string;
   updated_at: string;
+}
+
+function newChecklistItem(text = ''): ChecklistItem {
+  return {
+    id: (typeof crypto !== 'undefined' && crypto.randomUUID)
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    text,
+    done: false,
+  };
 }
 
 const COLOR_PRESETS: { value: string; label: string; bg: string }[] = [
@@ -52,7 +69,7 @@ export default function MeineNotizenPage() {
       if (json.legacy) setWarn('Du bist mit dem Notfall-Login angemeldet. Bitte mit Mitarbeiter-Konto einloggen, um persönliche Notizen zu nutzen.');
       else if (json.migration_pending) setWarn('Die Migration supabase-employee-personal.sql ist noch nicht eingespielt — Notizen können noch nicht gespeichert werden.');
       else setWarn(null);
-      setNotes(json.notes ?? []);
+      setNotes((json.notes ?? []).map((n: Note) => ({ ...n, checklist: Array.isArray(n.checklist) ? n.checklist : [] })));
     } finally {
       setLoading(false);
     }
@@ -64,9 +81,25 @@ export default function MeineNotizenPage() {
     const q = search.trim().toLowerCase();
     if (!q) return notes;
     return notes.filter((n) =>
-      n.title.toLowerCase().includes(q) || n.content.toLowerCase().includes(q),
+      n.title.toLowerCase().includes(q) ||
+      n.content.toLowerCase().includes(q) ||
+      n.checklist.some((it) => it.text.toLowerCase().includes(q)),
     );
   }, [notes, search]);
+
+  async function handleToggleChecklistItem(note: Note, itemId: string) {
+    const nextChecklist = note.checklist.map((it) =>
+      it.id === itemId ? { ...it, done: !it.done } : it,
+    );
+    // Optimistic
+    setNotes((prev) => prev.map((n) => (n.id === note.id ? { ...n, checklist: nextChecklist } : n)));
+    const res = await fetch(`/api/admin/mein/notizen/${note.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ checklist: nextChecklist }),
+    });
+    if (!res.ok) void load(); // Rollback bei Fehler
+  }
 
   async function handleTogglePin(note: Note) {
     const res = await fetch(`/api/admin/mein/notizen/${note.id}`, {
@@ -147,9 +180,34 @@ export default function MeineNotizenPage() {
                     {note.title}
                   </h3>
                 )}
-                <p style={{ margin: 0, fontSize: 13, color: '#cbd5e1', whiteSpace: 'pre-wrap', flex: 1, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 6, WebkitBoxOrient: 'vertical' }}>
-                  {note.content || <em style={{ color: '#64748b' }}>(leer)</em>}
-                </p>
+                {(note.content || note.checklist.length === 0) && (
+                  <p style={{ margin: 0, fontSize: 13, color: '#cbd5e1', whiteSpace: 'pre-wrap', flex: note.checklist.length === 0 ? 1 : undefined, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 6, WebkitBoxOrient: 'vertical' }}>
+                    {note.content || <em style={{ color: '#64748b' }}>(leer)</em>}
+                  </p>
+                )}
+                {note.checklist.length > 0 && (
+                  <div style={{ flex: 1, marginTop: note.content ? 8 : 0 }} onClick={(e) => e.stopPropagation()}>
+                    <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>
+                      ✓ {note.checklist.filter((it) => it.done).length}/{note.checklist.length} erledigt
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 3, maxHeight: 160, overflowY: 'auto' }}>
+                      {note.checklist.slice(0, 8).map((it) => (
+                        <label key={it.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 13, cursor: 'pointer', color: it.done ? '#64748b' : '#cbd5e1' }}>
+                          <input
+                            type="checkbox"
+                            checked={it.done}
+                            onChange={() => handleToggleChecklistItem(note, it.id)}
+                            style={{ marginTop: 2, cursor: 'pointer', flexShrink: 0 }}
+                          />
+                          <span style={{ textDecoration: it.done ? 'line-through' : 'none', wordBreak: 'break-word' }}>{it.text}</span>
+                        </label>
+                      ))}
+                      {note.checklist.length > 8 && (
+                        <span style={{ fontSize: 11, color: '#64748b' }}>+ {note.checklist.length - 8} weitere…</span>
+                      )}
+                    </div>
+                  </div>
+                )}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, fontSize: 11, color: '#94a3b8' }}>
                   <span>{fmtRelative(note.updated_at)}</span>
                   <div style={{ display: 'flex', gap: 6 }} onClick={(e) => e.stopPropagation()}>
@@ -195,19 +253,29 @@ function NoteEditModal({ note, onClose, onSaved }: {
   const [content, setContent] = useState(note?.content ?? '');
   const [pinned, setPinned] = useState(note?.pinned ?? false);
   const [color, setColor] = useState(note?.color ?? 'default');
+  const [checklist, setChecklist] = useState<ChecklistItem[]>(note?.checklist ?? []);
+  const [newItemText, setNewItemText] = useState('');
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  function addItem() {
+    const t = newItemText.trim();
+    if (!t) return;
+    setChecklist((prev) => [...prev, newChecklistItem(t)]);
+    setNewItemText('');
+  }
 
   async function save() {
     setSaving(true);
     setErr(null);
     try {
+      const cleanChecklist = checklist.filter((it) => it.text.trim());
       const url = note ? `/api/admin/mein/notizen/${note.id}` : '/api/admin/mein/notizen';
       const method = note ? 'PATCH' : 'POST';
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, content, pinned, color }),
+        body: JSON.stringify({ title, content, pinned, color, checklist: cleanChecklist }),
       });
       const json = await res.json();
       if (!res.ok) { setErr(json.error ?? 'Fehler'); return; }
@@ -247,6 +315,56 @@ function NoteEditModal({ note, onClose, onSaved }: {
           style={{ width: '100%', padding: '10px 12px', borderRadius: 6, border: '1px solid #334155', background: '#1e293b', color: '#e2e8f0', fontSize: 16, fontFamily: 'inherit', resize: 'vertical', marginBottom: 12 }}
         />
 
+        <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>
+          ✓ To-do-Liste {checklist.length > 0 && `(${checklist.filter((it) => it.done).length}/${checklist.length})`}
+        </label>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
+          {checklist.map((it) => (
+            <div key={it.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input
+                type="checkbox"
+                checked={it.done}
+                onChange={() => setChecklist((prev) => prev.map((x) => (x.id === it.id ? { ...x, done: !x.done } : x)))}
+                style={{ cursor: 'pointer', flexShrink: 0 }}
+              />
+              <input
+                type="text"
+                value={it.text}
+                onChange={(e) => setChecklist((prev) => prev.map((x) => (x.id === it.id ? { ...x, text: e.target.value } : x)))}
+                maxLength={500}
+                style={{ flex: 1, padding: '7px 10px', borderRadius: 6, border: '1px solid #334155', background: '#1e293b', color: it.done ? '#64748b' : '#e2e8f0', fontSize: 15, textDecoration: it.done ? 'line-through' : 'none' }}
+              />
+              <button
+                type="button"
+                onClick={() => setChecklist((prev) => prev.filter((x) => x.id !== it.id))}
+                title="Punkt entfernen"
+                style={{ background: 'transparent', border: 0, color: '#f87171', cursor: 'pointer', fontSize: 16, flexShrink: 0 }}
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+          <input
+            type="text"
+            value={newItemText}
+            onChange={(e) => setNewItemText(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addItem(); } }}
+            placeholder="Neuen Punkt hinzufügen…"
+            maxLength={500}
+            style={{ flex: 1, padding: '8px 12px', borderRadius: 6, border: '1px solid #334155', background: '#1e293b', color: '#e2e8f0', fontSize: 16 }}
+          />
+          <button
+            type="button"
+            onClick={addItem}
+            disabled={!newItemText.trim()}
+            style={{ background: '#334155', color: '#e2e8f0', border: 0, padding: '8px 16px', borderRadius: 6, fontWeight: 700, cursor: 'pointer', opacity: newItemText.trim() ? 1 : 0.5 }}
+          >
+            + Hinzufügen
+          </button>
+        </div>
+
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12, alignItems: 'center' }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#cbd5e1', fontSize: 14 }}>
             <input type="checkbox" checked={pinned} onChange={(e) => setPinned(e.target.checked)} />
@@ -281,7 +399,7 @@ function NoteEditModal({ note, onClose, onSaved }: {
           </button>
           <button
             onClick={save}
-            disabled={saving || (!title.trim() && !content.trim())}
+            disabled={saving || (!title.trim() && !content.trim() && checklist.filter((it) => it.text.trim()).length === 0)}
             style={{ background: '#06b6d4', color: '#0a0a0a', border: 0, padding: '8px 18px', borderRadius: 6, fontWeight: 700, cursor: 'pointer', opacity: saving ? 0.5 : 1 }}
           >
             {saving ? 'Speichert…' : 'Speichern'}
