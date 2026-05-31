@@ -259,6 +259,7 @@ export default function BuchungDetailPage() {
   const [emailRecipient, setEmailRecipient] = useState('');
   const [emailAttachments, setEmailAttachments] = useState<{ rechnung: boolean; vertrag: boolean; agb: boolean; widerruf: boolean; haftung: boolean; datenschutz: boolean; impressum: boolean }>({ rechnung: true, vertrag: true, agb: false, widerruf: false, haftung: false, datenschutz: false, impressum: false });
   const [activeTab, setActiveTab] = useState<TabId>('uebersicht');
+  const [wbwGateStatus, setWbwGateStatus] = useState<string | null>(null);
   useEffect(() => {
     fetchBooking();
   }, [bookingId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -449,8 +450,29 @@ export default function BuchungDetailPage() {
     }
   }
 
+  function handleWbwGateDone(status: string, emailFailed: boolean) {
+    setBooking((prev) => (prev ? { ...prev, status, wbw_finalized: true } : prev));
+    setNewStatus(status);
+    setWbwGateStatus(null);
+    fetchBooking();
+    if (emailFailed) {
+      alert('WBW gespeichert & Status gesetzt, aber die E-Mail an den Mieter ist fehlgeschlagen. Bitte unter „Bearbeiten" → Wiederbeschaffungswerte erneut senden.');
+    }
+  }
+
   async function handleStatusUpdate() {
     if (!booking || newStatus === booking.status) return;
+    // Beim Wechsel auf Abholung/Versand muss die WBW-Liste an den Mieter raus.
+    // Sind die Werte noch nicht finalisiert, öffnet sich das WBW-Fenster — der
+    // Statuswechsel passiert erst nach dem Versand der Liste.
+    if (
+      (newStatus === 'awaiting_pickup' || newStatus === 'shipped') &&
+      !booking.wbw_finalized &&
+      buildWbwRows(booking).length > 0
+    ) {
+      setWbwGateStatus(newStatus);
+      return;
+    }
     if (!confirm(`Status wirklich auf "${STATUS_CONFIG[newStatus]?.label || newStatus}" ändern?`)) return;
     setStatusUpdating(true);
     try {
@@ -1695,6 +1717,16 @@ export default function BuchungDetailPage() {
           </div>
         )}
 
+        {/* ═══ WBW-Gate-Modal (Statuswechsel auf Abholung/Versand) ═══ */}
+        {wbwGateStatus && booking && (
+          <WbwStatusGateModal
+            booking={booking}
+            targetStatus={wbwGateStatus}
+            onClose={() => setWbwGateStatus(null)}
+            onDone={handleWbwGateDone}
+          />
+        )}
+
         {/* ═══ Löschen-Modal ═══ */}
         {showDeleteModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowDeleteModal(false)}>
@@ -2881,26 +2913,29 @@ function LiabilitySection({
   );
 }
 
+// Vorschlagszeilen aus der internen Haftungs-Berechnung (Kamera + Zubehoer).
+// Geteilt zwischen WbwFinalizePanel (manuell) und WbwStatusGateModal (Auto-Versand
+// beim Statuswechsel auf Abholung/Versand).
+type WbwRow = { name: string; serial: string | null; value: string };
+function buildWbwRows(booking: BookingDetail): WbwRow[] {
+  const sum = booking.liability_summary;
+  if (!sum) return [];
+  const camList = sum.cameras && sum.cameras.length > 0 ? sum.cameras : [sum.camera];
+  const rows: WbwRow[] = camList.map((c, i) => ({
+    name: c.name,
+    serial: i === 0 ? (booking.serial_number || null) : null,
+    value: String(c.total_value || ''),
+  }));
+  for (const a of sum.accessories) {
+    rows.push({ name: a.name, serial: null, value: String(a.total_value || '') });
+  }
+  return rows;
+}
+
 function WbwFinalizePanel({ booking, onChanged }: { booking: BookingDetail; onChanged: () => void }) {
   const finalized = !!booking.wbw_finalized;
 
-  // Vorschlagszeilen aus der internen Haftungs-Berechnung (Kamera + Zubehoer).
-  const initialRows = (() => {
-    const sum = booking.liability_summary;
-    if (!sum) return [] as { name: string; serial: string | null; value: string }[];
-    const camList = sum.cameras && sum.cameras.length > 0 ? sum.cameras : [sum.camera];
-    const rows: { name: string; serial: string | null; value: string }[] = camList.map((c, i) => ({
-      name: c.name,
-      serial: i === 0 ? (booking.serial_number || null) : null,
-      value: String(c.total_value || ''),
-    }));
-    for (const a of sum.accessories) {
-      rows.push({ name: a.name, serial: null, value: String(a.total_value || '') });
-    }
-    return rows;
-  })();
-
-  const [rows, setRows] = useState(initialRows);
+  const [rows, setRows] = useState<WbwRow[]>(() => buildWbwRows(booking));
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ t: 'ok' | 'err'; m: string } | null>(null);
@@ -3074,6 +3109,133 @@ function WbwFinalizePanel({ booking, onChanged }: { booking: BookingDetail; onCh
         )}
       </div>
     </Section>
+  );
+}
+
+// Pflicht-Fenster beim Statuswechsel auf "Warten auf Abholung" / "Versendet":
+// finalisiert die WBW-Liste (leere Felder → 0 €), schickt sie per E-Mail an den
+// Mieter und setzt erst danach den Buchungsstatus.
+function WbwStatusGateModal({
+  booking,
+  targetStatus,
+  onClose,
+  onDone,
+}: {
+  booking: BookingDetail;
+  targetStatus: string;
+  onClose: () => void;
+  onDone: (newStatus: string, emailFailed: boolean) => void;
+}) {
+  const [rows, setRows] = useState<WbwRow[]>(() => buildWbwRows(booking));
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const total = rows.reduce((s, r) => s + (Number(r.value) || 0), 0);
+  const targetLabel = STATUS_CONFIG[targetStatus]?.label || targetStatus;
+
+  async function confirm() {
+    setBusy(true);
+    setErr(null);
+    try {
+      // 1. WBW finalisieren + per E-Mail an den Mieter senden (leer → 0 €).
+      const res = await fetch(`/api/admin/booking/${booking.id}/finalize-wbw`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: rows.map((r) => ({ name: r.name, serial: r.serial, value: Number(r.value) || 0 })),
+        }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || 'WBW-Finalisierung fehlgeschlagen.');
+      const emailFailed = d.success === false;
+
+      // 2. Status setzen (WBW ist jetzt finalisiert/persistiert).
+      const sres = await fetch(`/api/admin/booking/${booking.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: targetStatus }),
+      });
+      if (!sres.ok) {
+        const sd = await sres.json().catch(() => ({}));
+        throw new Error(sd.error || 'WBW finalisiert, aber Statusänderung fehlgeschlagen.');
+      }
+      onDone(targetStatus, emailFailed);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Fehlgeschlagen.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={busy ? undefined : onClose}>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[88vh] overflow-y-auto p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
+        <div>
+          <h3 className="font-heading font-bold text-base text-brand-black">
+            Wiederbeschaffungswerte finalisieren
+          </h3>
+          <p className="text-xs text-brand-muted leading-relaxed mt-1">
+            Für den Statuswechsel auf &bdquo;{targetLabel}&ldquo; wird die WBW-Liste der
+            tatsächlich mitgelieferten Ausrüstung dem Mieter als PDF per E-Mail gesendet
+            und ist danach maßgeblich für Ersatzansprüche. Leere Felder werden als
+            <strong> 0&nbsp;€</strong> übernommen.
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          {rows.map((r, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-body text-brand-black truncate">{r.name}</p>
+                <p className="text-[11px] text-brand-muted">
+                  {r.serial ? `SN: ${r.serial}` : 'Keine Seriennummer'}
+                </p>
+              </div>
+              <input
+                type="number"
+                min={0}
+                step="0.01"
+                value={r.value}
+                placeholder="0"
+                onChange={(e) => setRows((rs) => rs.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)))}
+                className="w-28 text-base border border-brand-border rounded-lg px-2 py-2 text-right"
+              />
+              <span className="text-sm text-brand-muted">€</span>
+            </div>
+          ))}
+          {rows.length === 0 && (
+            <p className="text-xs text-red-600">Keine Positionen aus der Haftungs-Berechnung verfügbar.</p>
+          )}
+          {rows.length > 0 && (
+            <div className="pt-2 mt-1 border-t border-brand-border flex justify-between items-center">
+              <span className="text-xs font-heading font-semibold text-brand-muted">Gesamt</span>
+              <span className="text-sm font-heading font-bold text-brand-black">{fmtEuro(total)}</span>
+            </div>
+          )}
+        </div>
+
+        {err && <p className="text-xs text-red-600">{err}</p>}
+
+        <div className="flex items-center gap-2 justify-end flex-wrap">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={busy}
+            className="px-4 py-2 rounded-btn border border-brand-border text-sm font-heading font-semibold disabled:opacity-50"
+          >
+            Abbrechen
+          </button>
+          <button
+            type="button"
+            onClick={confirm}
+            disabled={busy || rows.length === 0}
+            className="px-4 py-2 rounded-btn bg-brand-black text-white text-sm font-heading font-semibold hover:bg-brand-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {busy ? 'Wird gesendet…' : 'WBW senden & Status setzen'}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

@@ -87,14 +87,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (raw.length === 0) {
       return NextResponse.json({ error: 'Keine Positionen übergeben.' }, { status: 400 });
     }
-    if (raw.some((r) => !(Number(r.value) > 0))) {
-      return NextResponse.json({ error: 'Jeder Wiederbeschaffungswert muss größer als 0 sein.' }, { status: 400 });
-    }
+    // Werte duerfen 0 sein (leeres Feld → 0 €). Negative Werte werden auf 0
+    // geklemmt, NaN ebenfalls.
     items = raw.map((it, i) => ({
       position: i + 1,
       name: String(it.name ?? '').slice(0, 200),
       serial: it.serial ? String(it.serial).slice(0, 120) : null,
-      value: Math.round(Number(it.value) * 100) / 100,
+      value: Math.max(0, Math.round((Number(it.value) || 0) * 100) / 100),
     }));
   }
 
