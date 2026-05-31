@@ -14,12 +14,25 @@ interface DateRangePickerProps {
   initialPeriod?: PeriodType;
 }
 
+// WICHTIG: NICHT ueber .toISOString() formatieren. new Date(y, m, d) erzeugt
+// lokale Mitternacht; in Berlin (Sommerzeit UTC+2) ist das 22:00 UTC des
+// Vortags → .toISOString().split('T')[0] schiebt das Datum um einen Tag zurueck.
+// Folge: der letzte Monats-/Quartalstag fiel immer raus, eine Zahlung vom
+// 31.05. landete ausserhalb des "Aktueller Monat"-Zeitraums. Stattdessen
+// direkt aus den lokalen Datum-Komponenten bauen.
+function toLocalDateStr(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 function getMonthRange(date: Date): DateRange {
   const y = date.getFullYear();
   const m = date.getMonth();
   return {
-    from: new Date(y, m, 1).toISOString().split('T')[0],
-    to: new Date(y, m + 1, 0).toISOString().split('T')[0],
+    from: toLocalDateStr(new Date(y, m, 1)),
+    to: toLocalDateStr(new Date(y, m + 1, 0)),
   };
 }
 
@@ -27,8 +40,8 @@ function getQuarterRange(date: Date): DateRange {
   const y = date.getFullYear();
   const q = Math.floor(date.getMonth() / 3);
   return {
-    from: new Date(y, q * 3, 1).toISOString().split('T')[0],
-    to: new Date(y, q * 3 + 3, 0).toISOString().split('T')[0],
+    from: toLocalDateStr(new Date(y, q * 3, 1)),
+    to: toLocalDateStr(new Date(y, q * 3 + 3, 0)),
   };
 }
 
