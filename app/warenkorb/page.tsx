@@ -241,7 +241,7 @@ export default function WarenkorbPage() {
                         </p>
                       </div>
                       <div>
-                        <p className="text-xs text-brand-muted dark:text-gray-500 mb-0.5">Rückgabe</p>
+                        <p className="text-xs text-brand-muted dark:text-gray-500 mb-0.5">Mietende</p>
                         <p className="text-sm font-medium text-brand-black dark:text-white">
                           {fmtDate(item.rentalTo)}
                         </p>
