@@ -65,6 +65,12 @@ function monthLabel(ym: string): string {
   return `${MONATS_NAMEN[idx]} ${y}`;
 }
 
+// 'YYYY-MM' → 'Mai' (nur Monatsname, ohne Jahr)
+function monthNameOnly(ym: string): string {
+  const idx = Number(ym.slice(5, 7)) - 1;
+  return idx >= 0 && idx <= 11 ? MONATS_NAMEN[idx] : ym;
+}
+
 function getSortValue(b: Beleg, key: SortKey): string | number {
   switch (key) {
     case 'beleg_nr': return b.beleg_nr ?? '';
@@ -90,9 +96,11 @@ export default function BelegeListePage() {
   const [sortKey, setSortKey] = useState<SortKey>('beleg_datum');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [previewBelegId, setPreviewBelegId] = useState<string | null>(null);
-  // null = noch nicht initialisiert (springt auf neuesten Monat), '' = Alle Monate
-  const [monthFilter, setMonthFilter] = useState<string | null>(null);
-  const monthInitRef = useRef(false);
+  // Jahr-Dropdown (null = noch nicht initialisiert → springt auf neuestes Jahr)
+  const [yearFilter, setYearFilter] = useState<string | null>(null);
+  // Monats-Reiter: 'YYYY-MM' oder '' (= alle Monate des gewaehlten Jahres)
+  const [monthFilter, setMonthFilter] = useState<string>('');
+  const initRef = useRef(false);
 
   useEffect(() => {
     const load = async () => {
@@ -176,38 +184,62 @@ export default function BelegeListePage() {
     return arr;
   }, [belege, sortKey, sortDir]);
 
-  // Verfuegbare Monate aus den geladenen Belegen (neueste zuerst) inkl. Anzahl + Summe.
-  const months = useMemo(() => {
-    const map = new Map<string, { count: number; sum: number }>();
+  // Verfuegbare Jahre aus den geladenen Belegen (neueste zuerst).
+  const years = useMemo(() => {
+    const set = new Set<string>();
     for (const b of belege) {
-      const key = (b.beleg_datum ?? '').slice(0, 7);
-      if (key.length !== 7) continue;
-      const cur = map.get(key) ?? { count: 0, sum: 0 };
-      cur.count++;
-      cur.sum += Number(b.summe_brutto ?? 0);
-      map.set(key, cur);
+      const y = (b.beleg_datum ?? '').slice(0, 4);
+      if (y.length === 4) set.add(y);
     }
-    return [...map.entries()]
-      .map(([ym, v]) => ({ ym, ...v }))
-      .sort((a, b) => b.ym.localeCompare(a.ym));
+    return [...set].sort((a, b) => b.localeCompare(a));
   }, [belege]);
 
-  // Beim ersten Laden automatisch auf den neuesten Monat springen (entstaubt die Ansicht).
+  // Beim ersten Laden auf das neueste Jahr + dessen neuesten Monat springen.
   useEffect(() => {
-    if (!monthInitRef.current && months.length > 0) {
-      monthInitRef.current = true;
-      setMonthFilter(months[0].ym);
-    }
-  }, [months]);
+    if (initRef.current || belege.length === 0) return;
+    initRef.current = true;
+    const newestYear = years[0] ?? '';
+    setYearFilter(newestYear);
+    const newestMonth = belege
+      .map((b) => (b.beleg_datum ?? '').slice(0, 7))
+      .filter((k) => k.length === 7 && k.slice(0, 4) === newestYear)
+      .sort((a, b) => b.localeCompare(a))[0] ?? '';
+    setMonthFilter(newestMonth);
+  }, [belege, years]);
 
-  // Bei aktiver Suche: Monatsfilter ignorieren (Treffer aus allen Monaten zeigen).
+  // Bei aktiver Suche: Jahr-/Monatsfilter ignorieren (Treffer aus allen Zeitraeumen).
   const searching = q.trim().length > 0;
-  const effectiveMonth = searching ? '' : (monthFilter ?? '');
+  const effYear = searching ? '' : (yearFilter ?? '');
+  const effectiveMonth = searching ? '' : monthFilter;
+
+  // Monate des gewaehlten Jahres (neueste zuerst) inkl. Anzahl.
+  const monthsForYear = useMemo(() => {
+    if (!effYear) return [];
+    const map = new Map<string, number>();
+    for (const b of belege) {
+      const key = (b.beleg_datum ?? '').slice(0, 7);
+      if (key.length !== 7 || key.slice(0, 4) !== effYear) continue;
+      map.set(key, (map.get(key) ?? 0) + 1);
+    }
+    return [...map.entries()]
+      .map(([ym, count]) => ({ ym, count }))
+      .sort((a, b) => b.ym.localeCompare(a.ym));
+  }, [belege, effYear]);
+
+  const yearCount = useMemo(
+    () => belege.filter((b) => (b.beleg_datum ?? '').slice(0, 4) === effYear).length,
+    [belege, effYear],
+  );
 
   const visibleBelege = useMemo(() => {
-    if (!effectiveMonth) return sortedBelege;
-    return sortedBelege.filter((b) => (b.beleg_datum ?? '').slice(0, 7) === effectiveMonth);
-  }, [sortedBelege, effectiveMonth]);
+    if (searching) return sortedBelege;
+    return sortedBelege.filter((b) => {
+      const d = b.beleg_datum ?? '';
+      if (effYear && d.slice(0, 4) !== effYear) return false;
+      if (effectiveMonth && d.slice(0, 7) !== effectiveMonth) return false;
+      return true;
+    });
+  }, [sortedBelege, searching, effYear, effectiveMonth]);
 
   const visibleSum = useMemo(
     () => visibleBelege.reduce((acc, b) => acc + Number(b.summe_brutto ?? 0), 0),
@@ -348,10 +380,22 @@ export default function BelegeListePage() {
             <option value="klassifiziert">Klassifiziert</option>
             <option value="festgeschrieben">Festgeschrieben</option>
           </select>
+          {!searching && years.length > 0 && (
+            <select
+              value={yearFilter ?? ''}
+              onChange={(e) => { setYearFilter(e.target.value); setMonthFilter(''); }}
+              className="bg-[#111827] border border-slate-700 rounded px-3 py-2 text-base"
+              aria-label="Jahr wählen"
+            >
+              {years.map((y) => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+          )}
         </div>
 
-        {/* Monats-Reiter — entzerrt die Liste nach Monat. Bei aktiver Suche ausgeblendet. */}
-        {!searching && months.length > 0 && (
+        {/* Monats-Reiter fuer das gewaehlte Jahr. Bei aktiver Suche ausgeblendet. */}
+        {!searching && monthsForYear.length > 0 && (
           <div className="flex gap-2 mb-4 overflow-x-auto pb-1" style={{ scrollSnapType: 'x proximity' }}>
             <button
               onClick={() => setMonthFilter('')}
@@ -362,9 +406,9 @@ export default function BelegeListePage() {
               }`}
               style={{ scrollSnapAlign: 'start' }}
             >
-              Alle ({belege.length})
+              Alle ({yearCount})
             </button>
-            {months.map((m) => (
+            {monthsForYear.map((m) => (
               <button
                 key={m.ym}
                 onClick={() => setMonthFilter(m.ym)}
@@ -375,7 +419,7 @@ export default function BelegeListePage() {
                 }`}
                 style={{ scrollSnapAlign: 'start' }}
               >
-                {monthLabel(m.ym)} ({m.count})
+                {monthNameOnly(m.ym)} ({m.count})
               </button>
             ))}
           </div>
@@ -389,7 +433,7 @@ export default function BelegeListePage() {
                 ? `${visibleBelege.length} Treffer`
                 : effectiveMonth
                   ? `${monthLabel(effectiveMonth)} · ${visibleBelege.length} Beleg(e)`
-                  : `Alle Monate · ${visibleBelege.length} Beleg(e)`}
+                  : `${effYear} · ${visibleBelege.length} Beleg(e)`}
             </span>
             <span className="text-slate-300">
               Summe brutto: <b className="text-white">{fmtEuro(visibleSum)}</b>
