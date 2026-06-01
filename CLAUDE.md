@@ -3789,6 +3789,22 @@ in der Sub-Zeile → Modal `components/admin/InventarVerknuepfModal.tsx`.
   der Beleg muss die echte Stückzahl als `menge` führen (bzw. in mehrere
   Positionen aufgeteilt sein).
 
+### Belege-Liste: Monats-Reiter + Summen-Zeile (Stand 2026-06-02)
+Die Belege-Liste (`/admin/buchhaltung/belege`) war eine lange ungeteilte
+Tabelle. Jetzt eine horizontale **Reiterleiste** oben: „Alle (N)" + ein Reiter
+pro Monat (neueste zuerst, mit Beleg-Anzahl, `monthLabel('YYYY-MM')` → „Mai 2026").
+Klick filtert die Liste client-seitig auf den Monat; beim Laden springt die
+Ansicht automatisch auf den neuesten Monat (`monthFilter`-State: `null` = noch
+nicht initialisiert, `''` = Alle). Darunter eine **Summen-Zeile** mit Anzahl +
+`Summe brutto` der aktuellen Ansicht (für die monatliche Ausgaben-Kontrolle).
+Bei aktiver Suche werden die Reiter ausgeblendet und alle Treffer
+monatsübergreifend gezeigt (`searching` → `effectiveMonth=''`). Reine
+Client-Anzeige — kein API-/Schema-Change. Einzige Backend-Anpassung:
+`limit` im GET-Fetch von 100 auf 200 (API-Max) erhöht, damit auch ältere
+Monate als Reiter erscheinen. **Hinweis:** die Monate werden aus den geladenen
+200 Belegen abgeleitet — bei mehr als 200 Belegen fehlen die ältesten Monate
+als Reiter (dann wäre serverseitige Monatsaggregation nötig).
+
 ### Belege: Rechnungs-Dokument-Vorschau (Stand 2026-05-21)
 Das hochgeladene Rechnungs-Dokument (Anhang) ließ sich bisher nur per Klick in
 einem neuen Tab öffnen — keine Vorschau. Neue Komponente
