@@ -3789,21 +3789,28 @@ in der Sub-Zeile → Modal `components/admin/InventarVerknuepfModal.tsx`.
   der Beleg muss die echte Stückzahl als `menge` führen (bzw. in mehrere
   Positionen aufgeteilt sein).
 
-### Belege-Liste: Monats-Reiter + Summen-Zeile (Stand 2026-06-02)
+### Belege-Liste: Jahr-Dropdown + Monats-Reiter + Summen-Zeile (Stand 2026-06-02)
 Die Belege-Liste (`/admin/buchhaltung/belege`) war eine lange ungeteilte
-Tabelle. Jetzt eine horizontale **Reiterleiste** oben: „Alle (N)" + ein Reiter
-pro Monat (neueste zuerst, mit Beleg-Anzahl, `monthLabel('YYYY-MM')` → „Mai 2026").
-Klick filtert die Liste client-seitig auf den Monat; beim Laden springt die
-Ansicht automatisch auf den neuesten Monat (`monthFilter`-State: `null` = noch
-nicht initialisiert, `''` = Alle). Darunter eine **Summen-Zeile** mit Anzahl +
-`Summe brutto` der aktuellen Ansicht (für die monatliche Ausgaben-Kontrolle).
-Bei aktiver Suche werden die Reiter ausgeblendet und alle Treffer
-monatsübergreifend gezeigt (`searching` → `effectiveMonth=''`). Reine
-Client-Anzeige — kein API-/Schema-Change. Einzige Backend-Anpassung:
+Tabelle. Jetzt: ein **Jahr-Dropdown** neben „Alle Status" + eine horizontale
+**Monats-Reiterleiste** unter den Filtern, die nur die Monate des gewählten
+Jahres mit reinem Monatsnamen zeigt („Alle (N)" + „Mai (9)", „April (10)" …).
+- `yearFilter`-State (`null` = noch nicht initialisiert → springt auf neuestes
+  Jahr), `monthFilter`-State (`'YYYY-MM'` oder `''` = alle Monate des Jahres).
+- Beim ersten Laden: neuestes Jahr + dessen neuester Monat. Jahrwechsel im
+  Dropdown setzt `monthFilter` auf `''` (ganzes Jahr) zurück.
+- Helper: `monthLabel('YYYY-MM')` → „Mai 2026" (Summen-Zeile bei gewähltem
+  Monat), `monthNameOnly('YYYY-MM')` → „Mai" (Reiter-Beschriftung). `years` +
+  `monthsForYear` + `yearCount` als `useMemo` aus den geladenen Belegen.
+- **Summen-Zeile** darunter zeigt Anzahl + `Summe brutto` der aktuellen Ansicht
+  (für die monatliche Ausgaben-Kontrolle); bei „Alle"-Reiter steht das Jahr.
+- Bei aktiver **Suche** werden Jahr-Dropdown + Monats-Reiter ausgeblendet und
+  alle Treffer zeitraumübergreifend gezeigt (`searching` → `effYear=''`,
+  `effectiveMonth=''`).
+Reine Client-Anzeige — kein API-/Schema-Change. Einzige Backend-Anpassung:
 `limit` im GET-Fetch von 100 auf 200 (API-Max) erhöht, damit auch ältere
-Monate als Reiter erscheinen. **Hinweis:** die Monate werden aus den geladenen
-200 Belegen abgeleitet — bei mehr als 200 Belegen fehlen die ältesten Monate
-als Reiter (dann wäre serverseitige Monatsaggregation nötig).
+Jahre/Monate erscheinen. **Hinweis:** Jahre/Monate werden aus den geladenen
+200 Belegen abgeleitet — bei mehr als 200 Belegen fehlen die ältesten als
+Auswahl (dann wäre serverseitige Aggregation nötig).
 
 ### Belege: Rechnungs-Dokument-Vorschau (Stand 2026-05-21)
 Das hochgeladene Rechnungs-Dokument (Anhang) ließ sich bisher nur per Klick in
