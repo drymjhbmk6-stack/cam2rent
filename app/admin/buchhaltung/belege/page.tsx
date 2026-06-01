@@ -52,6 +52,19 @@ type SortDir = 'asc' | 'desc';
 const fmtEuro = formatCurrency;
 const fmtDate = fmtDateCanonical;
 
+const MONATS_NAMEN = [
+  'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
+  'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember',
+];
+
+// 'YYYY-MM' → 'Mai 2026'
+function monthLabel(ym: string): string {
+  const [y, m] = ym.split('-');
+  const idx = Number(m) - 1;
+  if (!y || idx < 0 || idx > 11) return ym;
+  return `${MONATS_NAMEN[idx]} ${y}`;
+}
+
 function getSortValue(b: Beleg, key: SortKey): string | number {
   switch (key) {
     case 'beleg_nr': return b.beleg_nr ?? '';
@@ -77,6 +90,9 @@ export default function BelegeListePage() {
   const [sortKey, setSortKey] = useState<SortKey>('beleg_datum');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [previewBelegId, setPreviewBelegId] = useState<string | null>(null);
+  // null = noch nicht initialisiert (springt auf neuesten Monat), '' = Alle Monate
+  const [monthFilter, setMonthFilter] = useState<string | null>(null);
+  const monthInitRef = useRef(false);
 
   useEffect(() => {
     const load = async () => {
@@ -84,7 +100,7 @@ export default function BelegeListePage() {
       const sp = new URLSearchParams();
       if (statusFilter) sp.set('status', statusFilter);
       if (q) sp.set('q', q);
-      sp.set('limit', '100');
+      sp.set('limit', '200');
       const res = await fetch(`/api/admin/belege?${sp.toString()}`);
       const data = await res.json();
       setBelege(data.belege ?? []);
@@ -103,7 +119,7 @@ export default function BelegeListePage() {
     const sp = new URLSearchParams();
     if (statusFilter) sp.set('status', statusFilter);
     if (q) sp.set('q', q);
-    sp.set('limit', '100');
+    sp.set('limit', '200');
     const r = await fetch(`/api/admin/belege?${sp.toString()}`);
     setBelege((await r.json()).belege ?? []);
   }
@@ -159,6 +175,44 @@ export default function BelegeListePage() {
     });
     return arr;
   }, [belege, sortKey, sortDir]);
+
+  // Verfuegbare Monate aus den geladenen Belegen (neueste zuerst) inkl. Anzahl + Summe.
+  const months = useMemo(() => {
+    const map = new Map<string, { count: number; sum: number }>();
+    for (const b of belege) {
+      const key = (b.beleg_datum ?? '').slice(0, 7);
+      if (key.length !== 7) continue;
+      const cur = map.get(key) ?? { count: 0, sum: 0 };
+      cur.count++;
+      cur.sum += Number(b.summe_brutto ?? 0);
+      map.set(key, cur);
+    }
+    return [...map.entries()]
+      .map(([ym, v]) => ({ ym, ...v }))
+      .sort((a, b) => b.ym.localeCompare(a.ym));
+  }, [belege]);
+
+  // Beim ersten Laden automatisch auf den neuesten Monat springen (entstaubt die Ansicht).
+  useEffect(() => {
+    if (!monthInitRef.current && months.length > 0) {
+      monthInitRef.current = true;
+      setMonthFilter(months[0].ym);
+    }
+  }, [months]);
+
+  // Bei aktiver Suche: Monatsfilter ignorieren (Treffer aus allen Monaten zeigen).
+  const searching = q.trim().length > 0;
+  const effectiveMonth = searching ? '' : (monthFilter ?? '');
+
+  const visibleBelege = useMemo(() => {
+    if (!effectiveMonth) return sortedBelege;
+    return sortedBelege.filter((b) => (b.beleg_datum ?? '').slice(0, 7) === effectiveMonth);
+  }, [sortedBelege, effectiveMonth]);
+
+  const visibleSum = useMemo(
+    () => visibleBelege.reduce((acc, b) => acc + Number(b.summe_brutto ?? 0), 0),
+    [visibleBelege],
+  );
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) {
@@ -296,9 +350,56 @@ export default function BelegeListePage() {
           </select>
         </div>
 
+        {/* Monats-Reiter — entzerrt die Liste nach Monat. Bei aktiver Suche ausgeblendet. */}
+        {!searching && months.length > 0 && (
+          <div className="flex gap-2 mb-4 overflow-x-auto pb-1" style={{ scrollSnapType: 'x proximity' }}>
+            <button
+              onClick={() => setMonthFilter('')}
+              className={`shrink-0 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+                effectiveMonth === ''
+                  ? 'bg-cyan-500 text-slate-900 border-cyan-500'
+                  : 'bg-[#111827] text-slate-300 border-slate-700 hover:border-slate-500'
+              }`}
+              style={{ scrollSnapAlign: 'start' }}
+            >
+              Alle ({belege.length})
+            </button>
+            {months.map((m) => (
+              <button
+                key={m.ym}
+                onClick={() => setMonthFilter(m.ym)}
+                className={`shrink-0 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors whitespace-nowrap ${
+                  effectiveMonth === m.ym
+                    ? 'bg-cyan-500 text-slate-900 border-cyan-500'
+                    : 'bg-[#111827] text-slate-300 border-slate-700 hover:border-slate-500'
+                }`}
+                style={{ scrollSnapAlign: 'start' }}
+              >
+                {monthLabel(m.ym)} ({m.count})
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Summen-Zeile fuer die aktuelle Ansicht */}
+        {!loading && visibleBelege.length > 0 && (
+          <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3 text-sm">
+            <span className="text-slate-400">
+              {searching
+                ? `${visibleBelege.length} Treffer`
+                : effectiveMonth
+                  ? `${monthLabel(effectiveMonth)} · ${visibleBelege.length} Beleg(e)`
+                  : `Alle Monate · ${visibleBelege.length} Beleg(e)`}
+            </span>
+            <span className="text-slate-300">
+              Summe brutto: <b className="text-white">{fmtEuro(visibleSum)}</b>
+            </span>
+          </div>
+        )}
+
         {loading ? (
           <p className="text-slate-400">Lädt…</p>
-        ) : sortedBelege.length === 0 ? (
+        ) : visibleBelege.length === 0 ? (
           <p className="text-slate-400">Keine Belege gefunden.</p>
         ) : (
           // overflow-x-auto + min-w auf der Tabelle = horizontal scrollbar auf
@@ -317,7 +418,7 @@ export default function BelegeListePage() {
                 </tr>
               </thead>
               <tbody>
-                {sortedBelege.map((b) => (
+                {visibleBelege.map((b) => (
                   <tr
                     key={b.id}
                     className="border-t border-slate-800 hover:bg-slate-800/40 cursor-pointer"
