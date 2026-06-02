@@ -32,6 +32,14 @@ interface Stats {
   totalRevenue: number;
   avgBookingValue: number;
   lastBooking: string | null;
+  lastLogin: string | null;
+}
+
+interface LoginEntry {
+  id: string;
+  created_at: string;
+  ip: string | null;
+  user_agent: string | null;
 }
 
 interface Booking {
@@ -93,6 +101,7 @@ interface Note {
 const TABS = [
   { key: 'profil', label: 'Profil' },
   { key: 'buchungen', label: 'Buchungen' },
+  { key: 'logins', label: 'Login-Verlauf' },
   { key: 'schaeden', label: 'Schäden' },
   { key: 'nachrichten', label: 'Nachrichten' },
   { key: 'bewertungen', label: 'Bewertungen' },
@@ -123,6 +132,26 @@ const DAMAGE_STATUS: Record<string, { label: string; color: string; bg: string }
 };
 
 /* ───── Helpers ───── */
+function describeUserAgent(ua: string | null): string {
+  if (!ua) return 'Unbekanntes Gerät';
+  const s = ua.toLowerCase();
+  let device = 'Computer';
+  if (s.includes('ipad')) device = 'iPad';
+  else if (s.includes('iphone')) device = 'iPhone';
+  else if (s.includes('android')) device = s.includes('mobile') ? 'Android-Handy' : 'Android-Tablet';
+  else if (s.includes('macintosh') || s.includes('mac os')) device = 'Mac';
+  else if (s.includes('windows')) device = 'Windows-PC';
+  else if (s.includes('linux')) device = 'Linux';
+
+  let browser = '';
+  if (s.includes('edg/')) browser = 'Edge';
+  else if (s.includes('chrome/') && !s.includes('edg/')) browser = 'Chrome';
+  else if (s.includes('firefox/')) browser = 'Firefox';
+  else if (s.includes('safari/') && !s.includes('chrome/')) browser = 'Safari';
+
+  return browser ? `${device} · ${browser}` : device;
+}
+
 function retentionDate(createdAt: string) {
   const d = new Date(createdAt);
   d.setFullYear(d.getFullYear() + 10);
@@ -142,6 +171,7 @@ export default function KundenDetailPage() {
   const [damages, setDamages] = useState<Damage[]>([]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
+  const [loginHistory, setLoginHistory] = useState<LoginEntry[]>([]);
   const [notes, setNotes] = useState<Note[]>([]);
   const [activeTab, setActiveTab] = useState('profil');
   const [noteText, setNoteText] = useState('');
@@ -187,6 +217,7 @@ export default function KundenDetailPage() {
       setDamages(data.damages || []);
       setConversations(data.conversations || []);
       setReviews(data.reviews || []);
+      setLoginHistory(data.loginHistory || []);
     } catch (err) {
       console.error('Fehler beim Laden:', err);
     }
@@ -789,6 +820,7 @@ export default function KundenDetailPage() {
               <StatCard label="Gesamtumsatz" value={formatCurrency(stats.totalRevenue)} />
               <StatCard label="Durchschn. Buchungswert" value={formatCurrency(stats.avgBookingValue)} />
               <StatCard label="Letzte Buchung" value={stats.lastBooking ? fmtDate(stats.lastBooking) : '—'} />
+              <StatCard label="Letzter Login" value={stats.lastLogin ? fmtDateTime(stats.lastLogin) : '—'} />
             </div>
           )}
 
@@ -971,6 +1003,50 @@ export default function KundenDetailPage() {
                       </tr>
                     );
                   })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ───── Tab: Login-Verlauf ───── */}
+      {activeTab === 'logins' && (
+        <div style={{ background: '#111827', borderRadius: 12, border: '1px solid #1e293b', overflow: 'hidden' }}>
+          <div style={{ padding: '16px 20px', borderBottom: '1px solid #1e293b' }}>
+            <div style={{ fontSize: 13, color: '#94a3b8' }}>
+              Die letzten 10 Anmeldungen dieses Kontos. Die Aufzeichnung beginnt ab Einführung
+              dieser Funktion — frühere Logins liegen nicht vor.
+            </div>
+          </div>
+          {loginHistory.length === 0 ? (
+            <div style={{ padding: 32, textAlign: 'center', color: '#64748b' }}>
+              Noch keine Logins aufgezeichnet.
+            </div>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+                <thead>
+                  <tr style={{ textAlign: 'left', color: '#06b6d4', fontSize: 12 }}>
+                    <th style={{ padding: '12px 20px', fontWeight: 600 }}>ZEITPUNKT</th>
+                    <th style={{ padding: '12px 20px', fontWeight: 600 }}>GERÄT</th>
+                    <th style={{ padding: '12px 20px', fontWeight: 600 }}>IP-ADRESSE</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loginHistory.map((entry, i) => (
+                    <tr key={entry.id} style={{ borderTop: i === 0 ? 'none' : '1px solid #1e293b' }}>
+                      <td style={{ padding: '12px 20px', color: '#e2e8f0', whiteSpace: 'nowrap' }}>
+                        {fmtDateTime(entry.created_at)}
+                      </td>
+                      <td style={{ padding: '12px 20px', color: '#94a3b8' }}>
+                        {describeUserAgent(entry.user_agent)}
+                      </td>
+                      <td style={{ padding: '12px 20px', color: '#64748b', fontFamily: 'monospace', fontSize: 13 }}>
+                        {entry.ip || '—'}
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>

@@ -44,11 +44,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
       // claim-guest-bookings wurde Sweep 6 deaktiviert (Account-Hijack-Vehikel).
       // Gastbuchungen werden jetzt vom Admin manuell zugewiesen.
+
+      // Login-Verlauf: jeden echten Login protokollieren (fire-and-forget).
+      // Server dedupliziert (max. 1 Zeile/User je 10 Min) — 'SIGNED_IN' feuert
+      // teils mehrfach (Tab-Wechsel/Re-Validierung), das faengt der Endpoint ab.
+      if (event === 'SIGNED_IN' && session?.access_token) {
+        void fetch('/api/customer-login-track', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        }).catch(() => {});
+      }
     });
 
     return () => subscription.unsubscribe();

@@ -29,13 +29,28 @@ export async function GET(
       return NextResponse.json({ error: 'Kunde nicht gefunden.' }, { status: 404 });
     }
 
-    // 2. E-Mail aus auth.users
+    // 2. E-Mail + letzter Login aus auth.users
     let email = '';
+    let lastLogin: string | null = null;
     try {
       const { data: { user } } = await supabase.auth.admin.getUserById(customerId);
       email = user?.email || '';
+      lastLogin = user?.last_sign_in_at || null;
     } catch {
       // Fallback
+    }
+
+    // 2b. Login-Verlauf (letzte 10) aus customer_login_history.
+    // Defensiv: fehlt die Migration, liefert der Select error → leere Liste.
+    let loginHistory: Array<Record<string, unknown>> = [];
+    {
+      const { data: lh } = await supabase
+        .from('customer_login_history')
+        .select('id, created_at, ip, user_agent')
+        .eq('user_id', customerId)
+        .order('created_at', { ascending: false })
+        .limit(10);
+      loginHistory = lh || [];
     }
 
     // 3. Buchungen laden
@@ -133,7 +148,9 @@ export async function GET(
         totalRevenue,
         avgBookingValue,
         lastBooking,
+        lastLogin,
       },
+      loginHistory,
       bookings: bookings || [],
       damages,
       conversations: (conversations || []).map((conv) => ({
