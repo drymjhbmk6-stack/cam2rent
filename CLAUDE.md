@@ -1230,6 +1230,32 @@ Der Admin kann pro Buchung den **Versand-/Übergabe-Tag** (vor Mietbeginn) und d
 ### Kundenkonto
 `/app/konto/` mit horizontaler Tab-Leiste
 
+### Login-Verlauf pro Kundenkonto (Stand 2026-06-02)
+Admin sieht pro Kunde die letzten 10 Anmeldungen. Supabase `auth.users` hält nur
+`last_sign_in_at` (einen Wert) — daher eigene Historie-Tabelle.
+- **Migration `supabase/supabase-customer-login-history.sql`** (idempotent):
+  Tabelle `customer_login_history` (user_id, email, ip, user_agent, created_at) +
+  Index `(user_id, created_at DESC)`, RLS service-role-only.
+- **Erfassung zentral im `AuthProvider`** (`components/AuthProvider.tsx`):
+  `onAuthStateChange('SIGNED_IN')` feuert fire-and-forget
+  `POST /api/customer-login-track` mit dem Session-Access-Token im
+  Authorization-Header. Fängt damit ALLE Login-Pfade (Login-Seite,
+  Express-Signup, Checkout, Buchungsflow, anderer Tab).
+- **`POST /api/customer-login-track`**: löst den User ausschließlich über das
+  JWT auf (`auth.getUser(token)` — keine Spoofing-Möglichkeit), Rate-Limit
+  30/h pro IP, **serverseitiger Dedupe: max. 1 Zeile pro User je 10 Minuten**
+  (SIGNED_IN feuert bei Tab-Wechsel/Re-Validierung teils mehrfach). Defensiv:
+  fehlt die Migration → No-Op (kein 500).
+- **`GET /api/admin/customer/[id]`** liefert zusätzlich `loginHistory` (letzte
+  10, defensiv leer bei fehlender Migration) + `stats.lastLogin`
+  (`auth.users.last_sign_in_at`).
+- **UI** (`/admin/kunden/[id]`): neuer Tab „Login-Verlauf" (Zeitpunkt / Gerät
+  aus User-Agent geparst / IP) + Stat-Karte „Letzter Login" im Profil-Tab.
+- **Wichtig:** Historie beginnt ab Migration — vergangene Logins können NICHT
+  rückwirkend importiert werden (Supabase hält sie nicht vor).
+- **Go-Live TODO:** Migration `supabase/supabase-customer-login-history.sql`
+  ausführen. Ohne sie läuft alles weiter (Track-Endpoint No-Op, Admin-Tab leer).
+
 ### Preise
 30-Tage-Preistabelle pro Produkt + Formel für 31+ Tage, alles in admin_config
 
