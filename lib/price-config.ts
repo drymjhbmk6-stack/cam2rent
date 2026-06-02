@@ -147,63 +147,6 @@ export function calcPriceFromTable(product: AdminProduct, days: number): number 
   return day30Price + (days - 30) * product.perDayAfter30;
 }
 
-// ─── Defaults: products (based on data/products.ts) ──────────────────────────
-
-function buildDefaultPriceTable(prices: Partial<Record<number, number>>, fallbackPerDay: number): number[] {
-  return Array.from({ length: 30 }, (_, i) => {
-    const day = i + 1;
-    if (prices[day] !== undefined) return prices[day]!;
-    // Linear interpolation between known points
-    const known = Object.keys(prices).map(Number).sort((a, b) => a - b);
-    for (let k = 0; k < known.length - 1; k++) {
-      if (day > known[k] && day < known[k + 1]) {
-        const t = (day - known[k]) / (known[k + 1] - known[k]);
-        return Math.round(prices[known[k]]! + t * (prices[known[k + 1]]! - prices[known[k]]!));
-      }
-    }
-    return Math.round(day * fallbackPerDay);
-  });
-}
-
-export const DEFAULT_ADMIN_PRODUCTS: AdminProducts = {
-  '1': {
-    id: '1', name: 'GoPro Hero 13 Black', brand: 'GoPro', slug: 'gopro-hero-13-black',
-    shortDescription: '5.3K60, 27MP, wasserdicht bis 10m',
-    priceTable: [13,22,31,40,50,60,69,72,76,79,83,86,90,93,97,100,104,107,111,114,118,121,125,128,132,135,139,142,146,149],
-    perDayAfter30: 4, kautionTier: null, hasHaftungsoption: true, available: true, stock: 5,
-  },
-  '2': {
-    id: '2', name: 'GoPro Hero 12 Black', brand: 'GoPro', slug: 'gopro-hero-12-black',
-    shortDescription: '5.3K60, 27MP, wasserdicht bis 10m',
-    priceTable: buildDefaultPriceTable({1:10,2:17,3:24,7:55,14:80,30:120}, 10),
-    perDayAfter30: 3, kautionTier: null, hasHaftungsoption: true, available: true, stock: 3,
-  },
-  '3': {
-    id: '3', name: 'DJI Osmo Action 4', brand: 'DJI', slug: 'dji-osmo-action-4',
-    shortDescription: '4K120, großer Sensor, Dual-Screen',
-    priceTable: buildDefaultPriceTable({1:12,2:20,3:28,7:65,14:90,30:135}, 12),
-    perDayAfter30: 3, kautionTier: null, hasHaftungsoption: true, available: true, stock: 4,
-  },
-  '4': {
-    id: '4', name: 'DJI Osmo Action 5 Pro', brand: 'DJI', slug: 'dji-osmo-action-5-pro',
-    shortDescription: '4K120, 40m wasserdicht, längere Akkulaufzeit',
-    priceTable: buildDefaultPriceTable({1:14,2:24,3:33,7:75,14:100,30:150}, 14),
-    perDayAfter30: 4, kautionTier: null, hasHaftungsoption: true, available: true, stock: 2,
-  },
-  '5': {
-    id: '5', name: 'Insta360 Ace Pro 2', brand: 'Insta360', slug: 'insta360-ace-pro-2',
-    shortDescription: '8K30, Leica Objektiv, AI-Features',
-    priceTable: buildDefaultPriceTable({1:15,2:26,3:36,7:80,14:108,30:160}, 15),
-    perDayAfter30: 4, kautionTier: null, hasHaftungsoption: true, available: false, stock: 0,
-  },
-  '6': {
-    id: '6', name: 'Insta360 X4', brand: 'Insta360', slug: 'insta360-x4',
-    shortDescription: '8K30 360°, unsichtbarer Selfie-Stick',
-    priceTable: buildDefaultPriceTable({1:17,2:29,3:40,7:90,14:121,30:175}, 17),
-    perDayAfter30: 5, kautionTier: null, hasHaftungsoption: true, available: true, stock: 2,
-  },
-};
-
 // ─── Legacy compatibility (6-key format still used by API) ───────────────────
 
 export interface ProductKeyPrices {
@@ -498,21 +441,6 @@ export function calcItemDiscountTotal(
   rentalDiscount = Math.min(rentalDiscount, priceRental);
   accessoriesDiscount = Math.min(accessoriesDiscount, priceAccessories);
   return Math.min(rentalDiscount + accessoriesDiscount, priceRental + priceAccessories);
-}
-
-/**
- * Backward-Compat: Liefert den hoechsten Match (oder null). Aufrufer, die
- * nicht stacken muessen, koennen weiter dieses einfache API nutzen.
- */
-export function getActiveProductDiscount(
-  productId: string,
-  discounts: ProductDiscount[],
-  cartAccessoryIds: string[] = []
-): ProductDiscount | null {
-  // Vereinfacht: nimmt nur Rental-Targets, da das Legacy-Verhalten
-  const matches = getDiscountMatchesForItem(productId, 1, 0, cartAccessoryIds, discounts);
-  if (matches.length === 0) return null;
-  return matches.sort((a, b) => b.amount - a.amount)[0].discount;
 }
 
 // ─── PriceConfig (used by /api/prices) ───────────────────────────────────────

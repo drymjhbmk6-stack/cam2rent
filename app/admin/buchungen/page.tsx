@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import { fmtDate, fmtDateTime, fmtEuro } from '@/lib/format-utils';
+import { BOOKING_STATUS_CONFIG as STATUS_CONFIG } from '@/lib/booking-status-labels';
 
 interface Booking {
   id: string;
@@ -64,21 +65,6 @@ function getActionInfo(b: Booking): { priority: number; date: number } {
 }
 
 const TERMINAL_STATUSES = new Set(['completed', 'cancelled']);
-
-const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
-  pending_verification: { label: 'Warte auf Freigabe', color: '#f59e0b', bg: '#f59e0b14' },
-  awaiting_payment: { label: 'Warte auf Zahlung', color: '#8b5cf6', bg: '#8b5cf614' },
-  confirmed: { label: 'Bestätigt', color: '#06b6d4', bg: '#06b6d414' },
-  preparing_shipment: { label: 'Wird versendet', color: '#f59e0b', bg: '#f59e0b14' },
-  awaiting_pickup: { label: 'Warten auf Abholung', color: '#14b8a6', bg: '#14b8a614' },
-  shipped: { label: 'Versendet', color: '#10b981', bg: '#10b98114' },
-  delivered: { label: 'Zugestellt', color: '#22c55e', bg: '#22c55e14' },
-  picked_up: { label: 'Abgeholt', color: '#10b981', bg: '#10b98114' },
-  returned: { label: 'Retourniert', color: '#8b5cf6', bg: '#8b5cf614' },
-  completed: { label: 'Abgeschlossen', color: '#64748b', bg: '#64748b14' },
-  cancelled: { label: 'Storniert', color: '#ef4444', bg: '#ef444414' },
-  damaged: { label: 'Beschädigt', color: '#f97316', bg: '#f9731614' },
-};
 
 function startOfDay(d: Date) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());

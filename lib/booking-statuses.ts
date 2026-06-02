@@ -24,5 +24,3 @@ export const RESERVING_BOOKING_STATUSES = [
   'picked_up',            // Kunde hat die Kamera abgeholt
   'active',               // Legacy-Alias für picked_up
 ] as const;
-
-export type ReservingBookingStatus = typeof RESERVING_BOOKING_STATUSES[number];

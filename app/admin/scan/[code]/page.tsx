@@ -7,6 +7,7 @@ import EditAccessoryEntry from './EditAccessoryEntry';
 import EditBulkAccessoryEntry, { type BulkAccessoryFullData } from './EditBulkAccessoryEntry';
 import DeleteUnitButton from './DeleteUnitButton';
 import { buildSpecDataGridItems, type AccessorySpecs } from '@/lib/accessory-specs';
+import { fmtDate as fmtDateCanonical, fmtEuro as fmtEuroCanonical } from '@/lib/format-utils';
 
 // Niemals cachen — sonst zeigt die Page beim Aufruf einer alten URL noch
 // das Pre-Rename-Ergebnis ("Code unbekannt"), obwohl der Code zwischen-
@@ -36,10 +37,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 function fmtDate(iso: string | null) {
   if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('de-DE', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-    timeZone: 'Europe/Berlin',
-  });
+  return fmtDateCanonical(iso);
 }
 
 /**
@@ -71,7 +69,7 @@ async function resolveCompatibleCameras(
 
 function fmtEuro(n: number | null | undefined) {
   if (n == null || isNaN(n)) return '—';
-  return n.toFixed(2).replace('.', ',') + ' €';
+  return fmtEuroCanonical(n);
 }
 
 interface AssetRow {

@@ -3146,6 +3146,35 @@ Erster Tech-Debt-/Reliability-Pass mit `engineering:tech-debt` + `engineering:co
 
 **Welle 2 + 3** (Timeouts auf externe Calls, N+1-Patches, `lib/email.ts` logEmail-Catch, Permission-Mapping-Luecken) folgen in separaten Sessions, sobald gewuenscht.
 
+### Code-Aufraeumen / Verschlankung (Stand 2026-06-02)
+Konservativer Aufraeum-Durchgang — rein verhaltenserhaltend (byte-identischer
+Output), gegen die bestehenden tsc/lint-Baselines geprueft (keine neuen Fehler).
+- **Tote Leichen geloescht:** `lib/api-error.ts` (`safeError`, 0 Importe) +
+  `lib/audit-log.ts` (`logAuditEvent`, 0 Importe — live genutzt wird `lib/audit.ts`
+  → `logAudit`). `lib/beleg-numbers.ts` bleibt bewusst (Zukunfts-Infra Belegjournal).
+- **Ungenutzte Exporte entfernt:** `ReservingBookingStatus`-Typ (`booking-statuses.ts`),
+  `DEFAULT_ADMIN_PRODUCTS` + lokale `buildDefaultPriceTable` + `getActiveProductDiscount`
+  (`price-config.ts`) — alle 0 Referenzen. `DEFAULT_ADMIN_PRODUCTS` war ein
+  veralteter statischer Fallback-Katalog (Architektur: „ALLES aus DB").
+- **Status-Map zentralisiert:** neue `lib/booking-status-labels.ts`
+  (`BOOKING_STATUS_CONFIG`) ersetzt die doppelte `STATUS_CONFIG` in
+  `/admin/buchungen` (Liste) + `/admin/buchungen/[id]` (Detail). Beide nutzen die
+  identische Admin-Palette; die Detailseite gewinnt dabei das vorher fehlende
+  `returned`-Label. **Bewusst NICHT angefasst** (divergieren absichtlich):
+  `/konto/buchungen` (Kunden-Wortlaut + className), `/admin/auftragskalender`
+  (andere bg-Palette), Stripe-Abgleich (kuerzere Labels), `/admin/kunden/[id]`
+  (abweichende Farben). Haftungs-Labels (email vs. invoice-pdf) bleiben getrennt.
+- **Format-Helfer wiederverwendet (nur byte-identisch):** `app/admin/scan/[code]`
+  (`fmtDate`/`fmtEuro` delegieren an `format-utils`, Null-Guards bleiben),
+  `/admin/buchungen/[id]` (`fmtDate` nutzt `isoToDE`). Inline-Helfer ohne Berlin-TZ
+  (`/angebote`, `/admin/angebote`, `mitarbeiter`) + die Vertrags-/E-Mail-Routen
+  wurden BEWUSST gelassen (TZ-/Guard-Unterschiede bzw. hohes Blast-Radius).
+- **Pre-existing & NICHT angefasst:** 3 tsc-Fehler (`cart/sync`,
+  `camera-availability-check`) + 8 Lint-Fehler (u.a. `camera-availability-check`
+  `deliveryMode`/Date-vs-string im Ueberbuchungs-Guard) bestehen schon auf master
+  (Server-Build skippt tsc/eslint). Kandidaten fuer eine eigene, sorgfaeltige
+  Session — hier nicht spekulativ angefasst.
+
 > **`pickAssetsTable` NICHT „konsolidieren" (Stand 2026-05-17).** Die Notiz
 > stammte aus dem aufgegebenen Drop-Denkmodell (nach `assets_neu`→`assets`-Rename
 > waere es „nur noch assets"). Da der Drop tot ist (siehe „STRATEGIE-WECHSEL"),
