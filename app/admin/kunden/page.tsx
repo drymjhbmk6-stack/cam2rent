@@ -41,6 +41,7 @@ export default function KundenPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('');
   const [search, setSearch] = useState('');
+  const [letter, setLetter] = useState('');
 
   const fetchCustomers = useCallback(async () => {
     setLoading(true);
@@ -55,22 +56,46 @@ export default function KundenPage() {
     fetchCustomers();
   }, [fetchCustomers]);
 
-  // Client-side filtering
-  const filtered = customers.filter((c) => {
-    // Filter: active = not blacklisted
-    if (filter === 'active' && c.blacklisted) return false;
-    // Search
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      return (
-        (c.full_name || '').toLowerCase().includes(q) ||
-        (c.email || '').toLowerCase().includes(q) ||
-        (c.address_city || '').toLowerCase().includes(q) ||
-        (c.phone || '').toLowerCase().includes(q)
-      );
-    }
-    return true;
-  });
+  // Anfangsbuchstabe für die A–Z-Reiter (Name, sonst E-Mail; nicht A–Z → '#')
+  const firstLetter = (c: Customer): string => {
+    const base = (c.full_name || c.email || '').trim();
+    const ch = base.charAt(0).toUpperCase();
+    return ch >= 'A' && ch <= 'Z' ? ch : '#';
+  };
+
+  // Status + Suche, dann alphabetisch nach Name (leere Namen ans Ende)
+  const base = customers
+    .filter((c) => {
+      if (filter === 'active' && c.blacklisted) return false;
+      if (search.trim()) {
+        const q = search.toLowerCase();
+        return (
+          (c.full_name || '').toLowerCase().includes(q) ||
+          (c.email || '').toLowerCase().includes(q) ||
+          (c.address_city || '').toLowerCase().includes(q) ||
+          (c.phone || '').toLowerCase().includes(q)
+        );
+      }
+      return true;
+    })
+    .sort((a, b) => {
+      const an = (a.full_name || '').trim();
+      const bn = (b.full_name || '').trim();
+      if (!an && !bn) return (a.email || '').localeCompare(b.email || '', 'de');
+      if (!an) return 1;
+      if (!bn) return -1;
+      return an.localeCompare(bn, 'de', { sensitivity: 'base' });
+    });
+
+  // Vorhandene Anfangsbuchstaben (für aktive/disabled Reiter)
+  const availableLetters = new Set(base.map(firstLetter));
+
+  // Buchstaben-Filter greift nur ohne aktive Suche
+  const filtered = letter && !search.trim()
+    ? base.filter((c) => firstLetter(c) === letter)
+    : base;
+
+  const ALPHABET = ['#', ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')];
 
   return (
     <div style={{ padding: '20px 16px' }}>
@@ -139,6 +164,59 @@ export default function KundenPage() {
           ))}
         </div>
       </div>
+
+      {/* A–Z-Reiter (bei aktiver Suche ausgeblendet) */}
+      {!search.trim() && (
+        <div
+          style={{
+            display: 'flex',
+            gap: 4,
+            flexWrap: 'wrap',
+            marginBottom: 20,
+          }}
+        >
+          <button
+            onClick={() => setLetter('')}
+            style={{
+              minWidth: 34,
+              padding: '6px 10px',
+              borderRadius: 8,
+              fontSize: 13,
+              fontWeight: 700,
+              border: 'none',
+              cursor: 'pointer',
+              background: letter === '' ? '#06b6d4' : '#111827',
+              color: letter === '' ? '#0a0f1e' : '#94a3b8',
+            }}
+          >
+            Alle
+          </button>
+          {ALPHABET.map((l) => {
+            const has = availableLetters.has(l);
+            const active = letter === l;
+            return (
+              <button
+                key={l}
+                onClick={() => has && setLetter(active ? '' : l)}
+                disabled={!has}
+                style={{
+                  minWidth: 34,
+                  padding: '6px 0',
+                  borderRadius: 8,
+                  fontSize: 13,
+                  fontWeight: 700,
+                  border: 'none',
+                  cursor: has ? 'pointer' : 'default',
+                  background: active ? '#06b6d4' : has ? '#111827' : 'transparent',
+                  color: active ? '#0a0f1e' : has ? '#e2e8f0' : '#334155',
+                }}
+              >
+                {l}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Tabelle */}
       <div style={{ background: '#111827', borderRadius: 12, border: '1px solid #1e293b', overflow: 'hidden' }}>
