@@ -40,9 +40,11 @@ export async function GET(req: NextRequest) {
     });
 
     const emailMap = new Map<string, string>();
+    const lastLoginMap = new Map<string, string | null>();
     if (!usersErr && users) {
       for (const u of users) {
         emailMap.set(u.id, u.email || '');
+        lastLoginMap.set(u.id, u.last_sign_in_at || null);
       }
     }
 
@@ -76,6 +78,7 @@ export async function GET(req: NextRequest) {
       is_tester: p.is_tester || false,
       booking_count: countMap.get(p.id) || 0,
       created_at: p.created_at,
+      last_login: lastLoginMap.get(p.id) || null,
     }));
 
     return NextResponse.json({ customers });

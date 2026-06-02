@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import AdminBackLink from '@/components/admin/AdminBackLink';
-import { fmtDate } from '@/lib/format-utils';
+import { fmtDateTime } from '@/lib/format-utils';
 
 interface Customer {
   id: string;
@@ -19,6 +19,7 @@ interface Customer {
   is_tester: boolean;
   booking_count: number;
   created_at: string;
+  last_login: string | null;
 }
 
 const STATUS_LABELS: Record<string, { label: string; color: string; bg: string }> = {
@@ -150,7 +151,7 @@ export default function KundenPage() {
             <table style={{ width: '100%', minWidth: 920, borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid #1e293b' }}>
-                  {['Name', 'E-Mail', 'Stadt', 'Buchungen', 'Verifizierung', 'Status', 'Registriert'].map((h) => (
+                  {['Name', 'E-Mail', 'Stadt', 'Buchungen', 'Verifizierung', 'Status', 'Letzter Login'].map((h) => (
                     <th
                       key={h}
                       style={{
@@ -259,8 +260,8 @@ export default function KundenPage() {
                           )}
                         </div>
                       </td>
-                      <td style={{ padding: '12px 14px', fontSize: 13, color: '#64748b' }}>
-                        {fmtDate(c.created_at)}
+                      <td style={{ padding: '12px 14px', fontSize: 13, color: '#64748b', whiteSpace: 'nowrap' }}>
+                        {c.last_login ? fmtDateTime(c.last_login) : '—'}
                       </td>
                     </tr>
                   );
