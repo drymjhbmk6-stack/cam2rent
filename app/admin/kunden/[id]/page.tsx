@@ -132,6 +132,14 @@ const DAMAGE_STATUS: Record<string, { label: string; color: string; bg: string }
 };
 
 /* ───── Helpers ───── */
+// Vor-/Nachname aus dem Gesamtnamen: erstes Wort = Vorname, Rest = Nachname.
+function splitName(full: string): { vor: string; nach: string } {
+  const parts = (full || '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return { vor: '', nach: '' };
+  if (parts.length === 1) return { vor: parts[0], nach: '' };
+  return { vor: parts[0], nach: parts.slice(1).join(' ') };
+}
+
 function describeUserAgent(ua: string | null): string {
   if (!ua) return 'Unbekanntes Gerät';
   const s = ua.toLowerCase();
@@ -595,12 +603,17 @@ export default function KundenDetailPage() {
               Kundendaten
             </h2>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 20 }}>
-              <InfoField label="Name" value={customer.full_name || '—'} />
+              <InfoField label="Vorname" value={splitName(customer.full_name).vor || '—'} />
+              <InfoField label="Nachname" value={splitName(customer.full_name).nach || '—'} />
               <InfoField label="E-Mail" value={customer.email || '—'} />
               <InfoField label="Telefon" value={customer.phone || '—'} />
               <InfoField label="Adresse" value={
-                [customer.address_street, `${customer.address_zip} ${customer.address_city}`]
-                  .filter((s) => s.trim()).join(', ') || '—'
+                (customer.address_street?.trim() || customer.address_zip?.trim() || customer.address_city?.trim()) ? (
+                  <>
+                    <div>{customer.address_street?.trim() || '—'}</div>
+                    <div>{[customer.address_zip, customer.address_city].filter((s) => (s || '').trim()).join(' ') || '—'}</div>
+                  </>
+                ) : '—'
               } />
               <InfoField label="Registriert am" value={fmtDate(customer.created_at)} />
               <InfoField label="Verifizierung" value={
@@ -1576,7 +1589,7 @@ export default function KundenDetailPage() {
 }
 
 /* ───── Sub-components ───── */
-function InfoField({ label, value }: { label: string; value: string }) {
+function InfoField({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
       <div style={{
