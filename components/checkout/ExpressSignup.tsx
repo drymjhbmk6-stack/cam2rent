@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { createAuthBrowserClient } from '@/lib/supabase-auth';
+import { createAuthBrowserClient, recordCustomerLogin } from '@/lib/supabase-auth';
 
 type Mode = 'signup' | 'login';
 type Step = 'auth' | 'upload' | 'done';
@@ -199,7 +199,7 @@ export default function ExpressSignup({
       onAuthCompleted?.();
 
       const supabase = createAuthBrowserClient();
-      const { error: loginErr } = await supabase.auth.signInWithPassword({
+      const { data: loginData, error: loginErr } = await supabase.auth.signInWithPassword({
         email: trimmedEmail,
         password,
       });
@@ -207,6 +207,7 @@ export default function ExpressSignup({
         setError('Konto angelegt, aber Login fehlgeschlagen: ' + loginErr.message);
         return;
       }
+      recordCustomerLogin(loginData.session?.access_token);
 
       setInfo('');
       setStep('upload');
@@ -230,7 +231,7 @@ export default function ExpressSignup({
       onAuthCompleted?.();
 
       const supabase = createAuthBrowserClient();
-      const { error: loginErr } = await supabase.auth.signInWithPassword({
+      const { data: loginData, error: loginErr } = await supabase.auth.signInWithPassword({
         email: email.trim().toLowerCase(),
         password,
       });
@@ -238,6 +239,7 @@ export default function ExpressSignup({
         setError(loginErr.message || 'Login fehlgeschlagen.');
         return;
       }
+      recordCustomerLogin(loginData.session?.access_token);
       setInfo('Erfolgreich angemeldet.');
       setStep('done');
       onAuthenticated?.();

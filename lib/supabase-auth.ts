@@ -16,3 +16,22 @@ export function createAuthBrowserClient() {
     }
   );
 }
+
+/**
+ * Protokolliert einen ECHTEN Kunden-Login im Login-Verlauf.
+ * Wird direkt nach erfolgreichem `signInWithPassword` aufgerufen (nicht über
+ * onAuthStateChange — dessen 'SIGNED_IN' feuert bei @supabase/ssr auch bei
+ * Session-Wiederherstellung/Tab-Fokus, was Phantom-Logins erzeugen würde).
+ * Fire-and-forget; der Server dedupliziert (max. 1/User je 10 Min).
+ */
+export function recordCustomerLogin(accessToken: string | null | undefined) {
+  if (!accessToken) return;
+  try {
+    void fetch('/api/customer-login-track', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }).catch(() => {});
+  } catch {
+    /* ignore */
+  }
+}

@@ -1236,11 +1236,17 @@ Admin sieht pro Kunde die letzten 10 Anmeldungen. Supabase `auth.users` hält nu
 - **Migration `supabase/supabase-customer-login-history.sql`** (idempotent):
   Tabelle `customer_login_history` (user_id, email, ip, user_agent, created_at) +
   Index `(user_id, created_at DESC)`, RLS service-role-only.
-- **Erfassung zentral im `AuthProvider`** (`components/AuthProvider.tsx`):
-  `onAuthStateChange('SIGNED_IN')` feuert fire-and-forget
-  `POST /api/customer-login-track` mit dem Session-Access-Token im
-  Authorization-Header. Fängt damit ALLE Login-Pfade (Login-Seite,
-  Express-Signup, Checkout, Buchungsflow, anderer Tab).
+- **Erfassung an den ECHTEN Login-Punkten** (Stand 2026-06-02 korrigiert):
+  Helper `recordCustomerLogin(accessToken)` (`lib/supabase-auth.ts`) feuert
+  fire-and-forget `POST /api/customer-login-track` mit dem Session-Access-Token.
+  Aufgerufen direkt nach erfolgreichem `signInWithPassword` in `app/login`
+  + `components/checkout/ExpressSignup.tsx` (2×: Neuanlage-Auto-Login +
+  Bestandskunden-Login) — Checkout + Buchungsflow nutzen ExpressSignup, sind
+  damit abgedeckt. **NICHT** über `AuthProvider`/`onAuthStateChange('SIGNED_IN')`:
+  dieses Event feuert bei `@supabase/ssr` auch bei Session-Wiederherstellung /
+  Tab-Fokus → Phantom-Logins (Verlauf zeigte dann einen Eintrag, obwohl
+  `auth.users.last_sign_in_at` sich nicht bewegte). `delete-account` (Re-Auth)
+  wird bewusst nicht protokolliert.
 - **`POST /api/customer-login-track`**: löst den User ausschließlich über das
   JWT auf (`auth.getUser(token)` — keine Spoofing-Möglichkeit), Rate-Limit
   30/h pro IP, **serverseitiger Dedupe: max. 1 Zeile pro User je 10 Minuten**

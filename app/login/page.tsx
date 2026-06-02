@@ -3,7 +3,7 @@
 import { useState, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { createAuthBrowserClient } from '@/lib/supabase-auth';
+import { createAuthBrowserClient, recordCustomerLogin } from '@/lib/supabase-auth';
 
 // Sweep 8 H11: Open-Redirect-Schutz fuer ?redirect=...
 // Verhindert Phishing-URLs wie /login?redirect=//attacker.com/.
@@ -36,7 +36,7 @@ function LoginForm() {
     setLoading(true);
 
     const supabase = createAuthBrowserClient();
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
@@ -46,6 +46,7 @@ function LoginForm() {
     if (error) {
       setError('E-Mail oder Passwort ist falsch.');
     } else {
+      recordCustomerLogin(data.session?.access_token);
       router.push(redirectTo);
       router.refresh();
     }
