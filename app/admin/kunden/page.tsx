@@ -22,6 +22,34 @@ interface Customer {
   last_login: string | null;
 }
 
+// "vor X …" — wie lange der letzte Login her ist
+function relativeAgo(iso: string | null): string {
+  if (!iso) return '—';
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return '—';
+  const sec = Math.floor((Date.now() - then) / 1000);
+  if (sec < 60) return 'gerade eben';
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `vor ${min} Min.`;
+  const std = Math.floor(min / 60);
+  if (std < 24) return `vor ${std} Std.`;
+  const tage = Math.floor(std / 24);
+  if (tage < 30) return `vor ${tage} ${tage === 1 ? 'Tag' : 'Tagen'}`;
+  const monate = Math.floor(tage / 30);
+  if (monate < 12) return `vor ${monate} ${monate === 1 ? 'Monat' : 'Monaten'}`;
+  const jahre = Math.floor(tage / 365);
+  return `vor ${jahre} ${jahre === 1 ? 'Jahr' : 'Jahren'}`;
+}
+
+// Farbton je nach Inaktivität (frisch = grün, alt = rot)
+function agoColor(iso: string | null): string {
+  if (!iso) return '#475569';
+  const tage = (Date.now() - new Date(iso).getTime()) / 86400000;
+  if (tage < 7) return '#10b981';
+  if (tage < 30) return '#f59e0b';
+  return '#ef4444';
+}
+
 const STATUS_LABELS: Record<string, { label: string; color: string; bg: string }> = {
   none: { label: 'Nicht verifiziert', color: '#94a3b8', bg: '#94a3b814' },
   pending: { label: 'Ausstehend', color: '#f59e0b', bg: '#f59e0b14' },
@@ -226,10 +254,10 @@ export default function KundenPage() {
           <div style={{ padding: 32, textAlign: 'center', color: '#64748b' }}>Keine Kunden gefunden.</div>
         ) : (
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', minWidth: 920, borderCollapse: 'collapse' }}>
+            <table style={{ width: '100%', minWidth: 1040, borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid #1e293b' }}>
-                  {['Name', 'E-Mail', 'Stadt', 'Buchungen', 'Verifizierung', 'Status', 'Letzter Login'].map((h) => (
+                  {['Name', 'E-Mail', 'Stadt', 'Buchungen', 'Verifizierung', 'Status', 'Letzter Login', 'Login her'].map((h) => (
                     <th
                       key={h}
                       style={{
@@ -340,6 +368,9 @@ export default function KundenPage() {
                       </td>
                       <td style={{ padding: '12px 14px', fontSize: 13, color: '#64748b', whiteSpace: 'nowrap' }}>
                         {c.last_login ? fmtDateTime(c.last_login) : '—'}
+                      </td>
+                      <td style={{ padding: '12px 14px', fontSize: 13, fontWeight: 600, color: agoColor(c.last_login), whiteSpace: 'nowrap' }}>
+                        {relativeAgo(c.last_login)}
                       </td>
                     </tr>
                   );
