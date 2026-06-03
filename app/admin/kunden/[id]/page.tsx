@@ -192,6 +192,14 @@ export default function KundenDetailPage() {
   const [idBackSignedUrl, setIdBackSignedUrl] = useState<string | null>(null);
   const [idImagesLoading, setIdImagesLoading] = useState(false);
 
+  // ─── Stammdaten bearbeiten ───
+  const [editProfile, setEditProfile] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileForm, setProfileForm] = useState({
+    vorname: '', nachname: '', email: '', phone: '',
+    address_street: '', address_zip: '', address_city: '',
+  });
+
   // ─── Nachrichten-State: Compose-Modal + Inline-Reply pro Conversation ───
   const [composeOpen, setComposeOpen] = useState(false);
   const [composeSubject, setComposeSubject] = useState('');
@@ -318,6 +326,44 @@ export default function KundenDetailPage() {
       showToast('error', 'Erinnerung konnte nicht gesendet werden.');
     } finally {
       setReminderLoading(false);
+    }
+  }
+
+  function openEditProfile() {
+    if (!customer) return;
+    const { vor, nach } = splitName(customer.full_name);
+    setProfileForm({
+      vorname: vor,
+      nachname: nach,
+      email: customer.email || '',
+      phone: customer.phone || '',
+      address_street: customer.address_street || '',
+      address_zip: customer.address_zip || '',
+      address_city: customer.address_city || '',
+    });
+    setEditProfile(true);
+  }
+
+  async function handleSaveProfile() {
+    setProfileSaving(true);
+    try {
+      const res = await fetch(`/api/admin/customer/${customerId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(profileForm),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showToast('error', json?.error ?? 'Speichern fehlgeschlagen.');
+        return;
+      }
+      setEditProfile(false);
+      showToast('success', 'Kundendaten gespeichert.');
+      fetchData();
+    } catch {
+      showToast('error', 'Netzwerk- oder Server-Fehler.');
+    } finally {
+      setProfileSaving(false);
     }
   }
 
@@ -599,30 +645,83 @@ export default function KundenDetailPage() {
             background: '#111827', borderRadius: 12, border: '1px solid #1e293b',
             padding: 24, marginBottom: 20,
           }}>
-            <h2 style={{ fontSize: 16, fontWeight: 700, color: '#e2e8f0', marginBottom: 20, marginTop: 0 }}>
-              Kundendaten
-            </h2>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 20 }}>
-              <InfoField label="Vorname" value={splitName(customer.full_name).vor || '—'} />
-              <InfoField label="Nachname" value={splitName(customer.full_name).nach || '—'} />
-              <InfoField label="E-Mail" value={customer.email || '—'} />
-              <InfoField label="Telefon" value={customer.phone || '—'} />
-              <InfoField label="Adresse" value={
-                (customer.address_street?.trim() || customer.address_zip?.trim() || customer.address_city?.trim()) ? (
-                  <>
-                    <div>{customer.address_street?.trim() || '—'}</div>
-                    <div>{[customer.address_zip, customer.address_city].filter((s) => (s || '').trim()).join(' ') || '—'}</div>
-                  </>
-                ) : '—'
-              } />
-              <InfoField label="Registriert am" value={fmtDate(customer.created_at)} />
-              <InfoField label="Verifizierung" value={
-                customer.verification_status === 'verified' ? `Verifiziert am ${customer.verified_at ? fmtDate(customer.verified_at) : '—'}`
-                  : customer.verification_status === 'pending' ? 'Ausstehend'
-                  : customer.verification_status === 'rejected' ? 'Abgelehnt'
-                  : 'Nicht verifiziert'
-              } />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+              <h2 style={{ fontSize: 16, fontWeight: 700, color: '#e2e8f0', margin: 0 }}>
+                Kundendaten
+              </h2>
+              {!editProfile && (
+                <button
+                  onClick={openEditProfile}
+                  style={{
+                    padding: '6px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600,
+                    background: '#1e293b', color: '#06b6d4', border: '1px solid #06b6d440',
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+                  }}
+                >
+                  <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                  Bearbeiten
+                </button>
+              )}
             </div>
+
+            {editProfile ? (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16 }}>
+                <EditField label="Vorname" value={profileForm.vorname} onChange={(v) => setProfileForm((p) => ({ ...p, vorname: v }))} />
+                <EditField label="Nachname" value={profileForm.nachname} onChange={(v) => setProfileForm((p) => ({ ...p, nachname: v }))} />
+                <EditField label="E-Mail" value={profileForm.email} onChange={(v) => setProfileForm((p) => ({ ...p, email: v }))} type="email" />
+                <EditField label="Telefon" value={profileForm.phone} onChange={(v) => setProfileForm((p) => ({ ...p, phone: v }))} type="tel" />
+                <EditField label="Straße & Nr." value={profileForm.address_street} onChange={(v) => setProfileForm((p) => ({ ...p, address_street: v }))} />
+                <EditField label="PLZ" value={profileForm.address_zip} onChange={(v) => setProfileForm((p) => ({ ...p, address_zip: v }))} />
+                <EditField label="Stadt" value={profileForm.address_city} onChange={(v) => setProfileForm((p) => ({ ...p, address_city: v }))} />
+                <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 12, marginTop: 4 }}>
+                  <button
+                    onClick={handleSaveProfile}
+                    disabled={profileSaving}
+                    style={{
+                      padding: '10px 24px', borderRadius: 8, fontSize: 14, fontWeight: 700,
+                      background: '#06b6d4', color: '#0a0a0a', border: 'none',
+                      cursor: profileSaving ? 'not-allowed' : 'pointer', opacity: profileSaving ? 0.5 : 1,
+                    }}
+                  >
+                    {profileSaving ? 'Speichern…' : 'Speichern'}
+                  </button>
+                  <button
+                    onClick={() => setEditProfile(false)}
+                    disabled={profileSaving}
+                    style={{
+                      padding: '10px 24px', borderRadius: 8, fontSize: 14, fontWeight: 600,
+                      background: '#1e293b', color: '#94a3b8', border: '1px solid #334155', cursor: 'pointer',
+                    }}
+                  >
+                    Abbrechen
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 20 }}>
+                <InfoField label="Vorname" value={splitName(customer.full_name).vor || '—'} />
+                <InfoField label="Nachname" value={splitName(customer.full_name).nach || '—'} />
+                <InfoField label="E-Mail" value={customer.email || '—'} />
+                <InfoField label="Telefon" value={customer.phone || '—'} />
+                <InfoField label="Adresse" value={
+                  (customer.address_street?.trim() || customer.address_zip?.trim() || customer.address_city?.trim()) ? (
+                    <>
+                      <div>{customer.address_street?.trim() || '—'}</div>
+                      <div>{[customer.address_zip, customer.address_city].filter((s) => (s || '').trim()).join(' ') || '—'}</div>
+                    </>
+                  ) : '—'
+                } />
+                <InfoField label="Registriert am" value={fmtDate(customer.created_at)} />
+                <InfoField label="Verifizierung" value={
+                  customer.verification_status === 'verified' ? `Verifiziert am ${customer.verified_at ? fmtDate(customer.verified_at) : '—'}`
+                    : customer.verification_status === 'pending' ? 'Ausstehend'
+                    : customer.verification_status === 'rejected' ? 'Abgelehnt'
+                    : 'Nicht verifiziert'
+                } />
+              </div>
+            )}
           </div>
 
           {/* Ausweis-Verifizierung — immer sichtbar */}
@@ -1599,6 +1698,31 @@ function InfoField({ label, value }: { label: string; value: React.ReactNode }) 
         {label}
       </div>
       <div style={{ fontSize: 14, color: '#e2e8f0' }}>{value}</div>
+    </div>
+  );
+}
+
+function EditField({ label, value, onChange, type = 'text' }: {
+  label: string; value: string; onChange: (v: string) => void; type?: string;
+}) {
+  return (
+    <div>
+      <div style={{
+        fontSize: 11, color: '#64748b', textTransform: 'uppercase',
+        letterSpacing: '0.5px', marginBottom: 4, fontWeight: 600,
+      }}>
+        {label}
+      </div>
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        style={{
+          width: '100%', background: '#0a0f1e', border: '1px solid #1e293b',
+          borderRadius: 8, padding: '8px 12px', color: '#e2e8f0', fontSize: 16,
+          boxSizing: 'border-box',
+        }}
+      />
     </div>
   );
 }

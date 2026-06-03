@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { logAudit } from '@/lib/audit';
 
 /**
  * GET /api/admin/customer/[id]
@@ -161,6 +162,106 @@ export async function GET(
     });
   } catch (err) {
     console.error('GET /api/admin/customer/[id] error:', err);
+    return NextResponse.json({ error: 'Serverfehler.' }, { status: 500 });
+  }
+}
+
+/**
+ * PATCH /api/admin/customer/[id]
+ * Aktualisiert die Stammdaten eines Kunden (Name, Telefon, Adresse, E-Mail).
+ * Name wird als full_name in `profiles` gespeichert; E-Mail in auth.users.
+ */
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id: customerId } = await params;
+    if (!customerId) {
+      return NextResponse.json({ error: 'Kunden-ID erforderlich.' }, { status: 400 });
+    }
+
+    const body = await req.json().catch(() => ({}));
+    const supabase = createServiceClient();
+
+    // Profil muss existieren
+    const { data: existing, error: existErr } = await supabase
+      .from('profiles')
+      .select('id, full_name, phone, address_street, address_zip, address_city')
+      .eq('id', customerId)
+      .single();
+    if (existErr || !existing) {
+      return NextResponse.json({ error: 'Kunde nicht gefunden.' }, { status: 404 });
+    }
+
+    const clean = (v: unknown, max: number): string =>
+      typeof v === 'string' ? v.trim().slice(0, max) : '';
+
+    // Name kann als full_name ODER getrennt als vorname/nachname kommen
+    let fullName: string | undefined;
+    if (typeof body.full_name === 'string') {
+      fullName = clean(body.full_name, 200);
+    } else if (typeof body.vorname === 'string' || typeof body.nachname === 'string') {
+      fullName = [clean(body.vorname, 100), clean(body.nachname, 100)]
+        .filter(Boolean)
+        .join(' ');
+    }
+
+    const profileUpdate: Record<string, string> = {};
+    if (fullName !== undefined) profileUpdate.full_name = fullName;
+    if (typeof body.phone === 'string') profileUpdate.phone = clean(body.phone, 50);
+    if (typeof body.address_street === 'string') profileUpdate.address_street = clean(body.address_street, 200);
+    if (typeof body.address_zip === 'string') profileUpdate.address_zip = clean(body.address_zip, 20);
+    if (typeof body.address_city === 'string') profileUpdate.address_city = clean(body.address_city, 100);
+
+    if (Object.keys(profileUpdate).length > 0) {
+      const { error: updErr } = await supabase
+        .from('profiles')
+        .update(profileUpdate)
+        .eq('id', customerId);
+      if (updErr) {
+        console.error('PATCH customer profile update error:', updErr);
+        return NextResponse.json({ error: 'Stammdaten konnten nicht gespeichert werden.' }, { status: 500 });
+      }
+    }
+
+    // E-Mail in auth.users (nur wenn übergeben + geändert)
+    let emailChanged = false;
+    if (typeof body.email === 'string') {
+      const newEmail = clean(body.email, 200).toLowerCase();
+      if (newEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
+        const { data: { user } } = await supabase.auth.admin.getUserById(customerId);
+        const current = (user?.email || '').toLowerCase();
+        if (newEmail !== current) {
+          const { error: emailErr } = await supabase.auth.admin.updateUserById(customerId, {
+            email: newEmail,
+            email_confirm: true,
+          });
+          if (emailErr) {
+            console.error('PATCH customer email update error:', emailErr);
+            return NextResponse.json(
+              { error: 'E-Mail konnte nicht geändert werden (evtl. bereits vergeben).' },
+              { status: 409 },
+            );
+          }
+          emailChanged = true;
+        }
+      } else if (newEmail) {
+        return NextResponse.json({ error: 'Ungültige E-Mail-Adresse.' }, { status: 422 });
+      }
+    }
+
+    await logAudit({
+      action: 'customer.update',
+      entityType: 'customer',
+      entityId: customerId,
+      changes: { ...profileUpdate, ...(emailChanged ? { email: 'geändert' } : {}) },
+      request: req,
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    console.error('PATCH /api/admin/customer/[id] error:', err);
     return NextResponse.json({ error: 'Serverfehler.' }, { status: 500 });
   }
 }

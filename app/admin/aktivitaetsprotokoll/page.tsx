@@ -41,6 +41,7 @@ const ACTION_LABELS: Record<string, string> = {
   'customer.verification_reminder': 'Verifizierungs-Erinnerung gesendet',
   'customer.set_tester': 'Als Tester-Konto markiert',
   'customer.unset_tester': 'Tester-Status entfernt',
+  'customer.update': 'Kundendaten bearbeitet',
   // Rechnungen/Buchhaltung
   'invoice.mark_paid': 'Rechnung als bezahlt markiert',
   'invoice.send': 'Rechnung versendet',
