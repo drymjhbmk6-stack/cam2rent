@@ -1,94 +1,65 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
-import OpenAI from 'openai';
+import { generateBlogImageWithFallback } from '@/lib/blog-image';
 
-async function getOpenAIKey(): Promise<string | null> {
+async function getKeys(): Promise<{ openai: string | null; unsplash: string | null }> {
   const supabase = createServiceClient();
   const { data } = await supabase
     .from('admin_settings')
     .select('value')
     .eq('key', 'blog_settings')
     .single();
-  if (!data?.value) return null;
+  if (!data?.value) return { openai: null, unsplash: null };
   try {
     const settings = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
-    return settings?.openai_api_key || null;
+    return {
+      openai: settings?.openai_api_key || null,
+      unsplash: settings?.unsplash_access_key || null,
+    };
   } catch {
-    return null;
+    return { openai: null, unsplash: null };
   }
 }
 
 /**
  * POST /api/admin/blog/generate-image
- * Generiert ein Titelbild mit DALL-E 3 und speichert es in Supabase Storage.
+ * Erzeugt ein Titelbild: erst DALL-E 3, bei Fehler automatisch Unsplash.
  *
- * Body: { prompt: string, title?: string }
- * - prompt: Bild-Prompt (von Claude generiert oder manuell)
- * - title: Artikel-Titel für den Alt-Text
+ * Body: { prompt: string, title?: string, keywords?: string }
  */
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { prompt, title } = body;
+  const { prompt, title, keywords } = body;
 
   if (!prompt) {
     return NextResponse.json({ error: 'Bild-Prompt ist erforderlich.' }, { status: 400 });
   }
 
-  const apiKey = await getOpenAIKey();
-  if (!apiKey) {
+  const { openai, unsplash } = await getKeys();
+  if (!openai && !unsplash) {
     return NextResponse.json(
-      { error: 'OpenAI API Key nicht konfiguriert. Bitte unter Blog → Einstellungen hinterlegen.' },
+      { error: 'Weder OpenAI- noch Unsplash-Key konfiguriert. Bitte unter Blog → Einstellungen hinterlegen.' },
       { status: 400 },
     );
   }
 
   try {
-    const client = new OpenAI({ apiKey });
-
-    const response = await client.images.generate({
-      model: 'dall-e-3',
+    const result = await generateBlogImageWithFallback({
+      openaiKey: openai,
+      unsplashKey: unsplash,
       prompt,
-      n: 1,
-      size: '1792x1024', // Landscape für Blog-Header
-      quality: 'hd',
-      style: 'natural', // Fotorealistisch statt künstlerisch
+      title,
+      keywords,
     });
-
-    const imageUrl = response.data?.[0]?.url;
-    if (!imageUrl) {
-      return NextResponse.json({ error: 'Kein Bild generiert.' }, { status: 500 });
-    }
-
-    // Bild herunterladen
-    const imageRes = await fetch(imageUrl);
-    if (!imageRes.ok) {
-      return NextResponse.json({ error: 'Generiertes Bild konnte nicht heruntergeladen werden.' }, { status: 500 });
-    }
-
-    const buffer = Buffer.from(await imageRes.arrayBuffer());
-    const filename = `blog-ai-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.png`;
-
-    // In Supabase Storage hochladen
-    const supabase = createServiceClient();
-    const { error: uploadError } = await supabase.storage
-      .from('blog-images')
-      .upload(filename, buffer, { contentType: 'image/png', upsert: false });
-
-    if (uploadError) {
-      return NextResponse.json({ error: uploadError.message }, { status: 500 });
-    }
-
-    const { data: urlData } = supabase.storage
-      .from('blog-images')
-      .getPublicUrl(filename);
-
     return NextResponse.json({
-      url: urlData.publicUrl,
-      alt: title || 'KI-generiertes Titelbild',
+      url: result.url,
+      alt: result.alt,
       prompt,
+      source: result.source,
+      warning: result.warning ?? null,
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unbekannter Fehler';
-    return NextResponse.json({ error: `Bild-Generierung fehlgeschlagen: ${message}` }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

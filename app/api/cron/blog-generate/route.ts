@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import Anthropic from '@anthropic-ai/sdk';
 import { verifyCronAuth } from '@/lib/cron-auth';
-import OpenAI from 'openai';
+import { generateBlogImageWithFallback } from '@/lib/blog-image';
 import { isTestMode } from '@/lib/env-mode';
 import { shouldPublishInTestMode } from '@/lib/test-mode-publish';
 import { buildBlogSystemPrompt, HUMANIZER_PASS } from '@/lib/blog/system-prompt';
@@ -377,48 +377,27 @@ Antworte NUR mit dem korrigierten Artikel-Text in Markdown. Keine Erklärungen, 
       return NextResponse.json({ error: postError.message }, { status: 500 });
     }
 
-    // Titelbild generieren wenn OpenAI Key vorhanden und imagePrompt existiert
+    // Titelbild: erst DALL-E 3, bei Fehler automatisch Unsplash-Fallback.
     const openaiKey = (blogSettings.openai_api_key as string) || null;
+    const unsplashKey = (blogSettings.unsplash_access_key as string) || null;
     let imageError: string | null = null;
 
-    if (!openaiKey) {
-      imageError = 'OpenAI API Key nicht konfiguriert';
-    } else if (!parsed.imagePrompt) {
+    if (!parsed.imagePrompt) {
       imageError = 'Kein imagePrompt von Claude erhalten';
     } else if (post) {
       try {
-        const openai = new OpenAI({ apiKey: openaiKey });
-        const imgResponse = await openai.images.generate({
-          model: 'dall-e-3',
+        const result = await generateBlogImageWithFallback({
+          openaiKey,
+          unsplashKey,
           prompt: wrapImagePromptForRealism(parsed.imagePrompt),
-          n: 1,
-          size: '1792x1024',
-          quality: 'hd',
-          style: 'natural',
+          title: parsed.title,
+          keywords: Array.isArray(parsed.keywords) ? parsed.keywords.join(', ') : undefined,
         });
-        const imgUrl = imgResponse.data?.[0]?.url;
-        if (imgUrl) {
-          const imgFetch = await fetch(imgUrl);
-          if (!imgFetch.ok) {
-            throw new Error(`Bild-Download von OpenAI fehlgeschlagen: HTTP ${imgFetch.status}`);
-          }
-          const imgBuffer = Buffer.from(await imgFetch.arrayBuffer());
-          const imgFilename = `blog-ai-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.png`;
-          const { error: uploadErr } = await supabase.storage
-            .from('blog-images')
-            .upload(imgFilename, imgBuffer, { contentType: 'image/png' });
-          if (!uploadErr) {
-            const { data: imgUrlData } = supabase.storage.from('blog-images').getPublicUrl(imgFilename);
-            await supabase.from('blog_posts').update({
-              featured_image: imgUrlData.publicUrl,
-              featured_image_alt: parsed.title,
-            }).eq('id', post.id);
-          } else {
-            imageError = `Upload fehlgeschlagen: ${uploadErr.message}`;
-          }
-        } else {
-          imageError = 'DALL-E hat kein Bild zurückgegeben';
-        }
+        await supabase.from('blog_posts').update({
+          featured_image: result.url,
+          featured_image_alt: parsed.title,
+        }).eq('id', post.id);
+        if (result.warning) imageError = result.warning; // nicht-fatal, nur Hinweis
       } catch (imgErr: unknown) {
         imageError = imgErr instanceof Error ? imgErr.message : 'Unbekannter Bild-Fehler';
       }

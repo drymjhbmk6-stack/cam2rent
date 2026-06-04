@@ -202,7 +202,11 @@ export default function ArticleEditor({ postId }: { postId?: string }) {
               featured_image: imgData.url,
               featured_image_alt: imgData.alt || generatedTitle,
             }));
-            setMsg('Text + Bild generiert! Faktencheck laeuft...');
+            setMsg(
+              imgData.source === 'unsplash'
+                ? 'Text generiert! KI-Bild nicht verfügbar — Unsplash-Bild eingesetzt. Faktencheck laeuft...'
+                : 'Text + Bild generiert! Faktencheck laeuft...',
+            );
           } else {
             setMsg('Text generiert! Bild fehlgeschlagen. Faktencheck laeuft...');
           }
@@ -310,7 +314,11 @@ export default function ArticleEditor({ postId }: { postId?: string }) {
       if (imgRes.ok && imgData.url) {
         update('featured_image', imgData.url);
         update('featured_image_alt', post.title);
-        setMsg('Neues Titelbild generiert!');
+        setMsg(
+          imgData.source === 'unsplash'
+            ? 'KI-Bild nicht verfügbar — automatisch Unsplash-Bild eingesetzt.'
+            : 'Neues Titelbild generiert!',
+        );
       } else {
         setMsg(imgData.error || 'Bild-Generierung fehlgeschlagen.');
       }
