@@ -2,7 +2,6 @@ import Hero from '@/components/home/Hero';
 import PromoBanner from '@/components/home/PromoBanner';
 import HomeSeasonalAction from '@/components/home/HomeSeasonalAction';
 import ProductGrid from '@/components/home/ProductGrid';
-import HomeFresh from '@/components/home/HomeFresh';
 import KameraFinderCta from '@/components/home/KameraFinderCta';
 import TrustBanner from '@/components/home/TrustBanner';
 import HowItWorks from '@/components/home/HowItWorks';
@@ -34,7 +33,6 @@ export default async function Home() {
       <HomeSeasonalAction />
       <TrustBanner />
       <ProductGrid />
-      <HomeFresh />
       <KameraFinderCta />
       <HowItWorks />
       <HomeUgc />
