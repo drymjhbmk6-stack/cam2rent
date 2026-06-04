@@ -34,22 +34,44 @@ function isUnsplashUrl(raw: string): boolean {
   }
 }
 
-/** Baut aus Titel/Keywords einen kurzen Unsplash-Suchbegriff. */
-function deriveQuery(title?: string, keywords?: string, fallbackQuery?: string): string {
-  if (fallbackQuery && fallbackQuery.trim()) return fallbackQuery.trim();
+/**
+ * Baut mehrere Such-Kandidaten (vom spezifischsten zum generischsten).
+ * Keywords zuerst — die liefern bei Unsplash zuverlaessig Treffer, der Titel
+ * mit Fuellwoertern (z.B. "Slow Motion bei Actioncams") dagegen oft nicht.
+ */
+function buildQueryCandidates(title?: string, keywords?: string, fallbackQuery?: string): string[] {
+  const cands: string[] = [];
+  const add = (s?: string) => {
+    const t = (s ?? '').trim();
+    if (t) cands.push(t);
+  };
+
+  if (fallbackQuery) add(fallbackQuery);
+
   if (keywords && keywords.trim()) {
-    const first = keywords.split(',')[0]?.trim();
-    if (first) return first;
+    const parts = keywords.split(',').map((k) => k.trim()).filter(Boolean);
+    if (parts[0]) add(parts[0]); // erstes Keyword (z.B. "slow-motion")
+    if (parts.length > 1) add(parts.slice(0, 2).join(' '));
   }
+
   if (title && title.trim()) {
     const words = title
       .replace(/[^\p{L}\p{N}\s]/gu, ' ')
       .split(/\s+/)
-      .filter((w) => w.length > 2)
-      .slice(0, 4);
-    if (words.length) return words.join(' ');
+      .filter((w) => w.length > 2);
+    if (words[0]) add(words.slice(0, 2).join(' '));
   }
-  return 'action camera outdoor';
+
+  add('action camera'); // letzter generischer Rettungsanker
+
+  // Dedupe (case-insensitiv), Reihenfolge erhalten.
+  const seen = new Set<string>();
+  return cands.filter((c) => {
+    const key = c.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 async function uploadToBlogImages(buffer: Buffer, prefix: string): Promise<string> {
@@ -66,37 +88,38 @@ async function uploadToBlogImages(buffer: Buffer, prefix: string): Promise<strin
   return data.publicUrl;
 }
 
-/** DALL-E 3 → Storage-URL. Wirft bei Fehler. */
+/** OpenAI (gpt-image-1) → Storage-URL. Wirft bei Fehler. */
 async function generateOpenAIImage(openaiKey: string, prompt: string): Promise<string> {
   const client = new OpenAI({ apiKey: openaiKey });
+  // gpt-image-1 ist das aktuelle Modell; 'dall-e-3' existiert fuer neuere
+  // Accounts nicht mehr ("400 The model 'dall-e-3' does not exist").
+  // gpt-image-1 liefert immer b64_json (keine URL), kein 'style'-Param.
   const response = await client.images.generate({
-    model: 'dall-e-3',
+    model: 'gpt-image-1',
     prompt,
     n: 1,
-    size: '1792x1024', // Landscape für Blog-Header
-    quality: 'hd',
+    size: '1536x1024', // Landscape für Blog-Header
+    quality: 'high',
   });
-  const imageUrl = response.data?.[0]?.url;
-  if (!imageUrl) throw new Error('Kein Bild generiert.');
-  const imageRes = await fetch(imageUrl);
-  if (!imageRes.ok) throw new Error(`Bild-Download fehlgeschlagen: HTTP ${imageRes.status}`);
-  const buffer = Buffer.from(await imageRes.arrayBuffer());
+  const b64 = response.data?.[0]?.b64_json;
+  if (!b64) throw new Error('Kein Bild generiert.');
+  const buffer = Buffer.from(b64, 'base64');
   if (!isAllowedImage(buffer, ['jpeg', 'png', 'webp'])) {
     throw new Error('OpenAI lieferte kein gueltiges Bildformat.');
   }
   return uploadToBlogImages(buffer, 'blog-ai');
 }
 
-/** Unsplash-Suche → Storage-URL. Liefert null, wenn nichts gefunden/kein Key. */
-async function unsplashFallback(
-  unsplashKey: string | null,
+/** Eine Unsplash-Suche fuer GENAU einen Begriff. null = kein Treffer. */
+async function unsplashSearchOne(
+  unsplashKey: string,
   query: string,
-  alt?: string,
+  orientation: 'landscape' | '',
 ): Promise<{ url: string; alt: string } | null> {
-  if (!unsplashKey) return null;
+  const orientationParam = orientation ? `&orientation=${orientation}` : '';
   const searchUrl = `https://api.unsplash.com/search/photos?query=${encodeURIComponent(
     query,
-  )}&page=1&per_page=1&orientation=landscape`;
+  )}&page=1&per_page=1${orientationParam}`;
   const res = await fetch(searchUrl, { headers: { Authorization: `Client-ID ${unsplashKey}` } });
   if (!res.ok) return null;
   const data = await res.json();
@@ -116,7 +139,29 @@ async function unsplashFallback(
   const buffer = Buffer.from(await imgRes.arrayBuffer());
   if (!isAllowedImage(buffer, ['jpeg', 'png', 'webp'])) return null;
   const url = await uploadToBlogImages(buffer, 'blog-unsplash');
-  return { url, alt: alt || first.alt_description || query };
+  return { url, alt: first.alt_description || query };
+}
+
+/**
+ * Robuste Unsplash-Suche: probiert mehrere Begriffe (Keywords zuerst), erst
+ * Querformat, dann ohne Orientierungs-Filter. Liefert das erste Treffer-Bild.
+ */
+async function unsplashFallback(
+  unsplashKey: string | null,
+  candidates: string[],
+): Promise<{ url: string; alt: string } | null> {
+  if (!unsplashKey) return null;
+  // 1. Runde: Querformat bevorzugt (passt zum Blog-Header).
+  for (const q of candidates) {
+    const hit = await unsplashSearchOne(unsplashKey, q, 'landscape');
+    if (hit) return hit;
+  }
+  // 2. Runde: ohne Orientierungs-Filter (mehr Treffer).
+  for (const q of candidates) {
+    const hit = await unsplashSearchOne(unsplashKey, q, '');
+    if (hit) return hit;
+  }
+  return null;
 }
 
 /**
@@ -145,13 +190,13 @@ export async function generateBlogImageWithFallback(opts: {
     openaiError = 'Kein OpenAI-Key konfiguriert';
   }
 
-  // Automatischer Unsplash-Fallback
-  const query = deriveQuery(title, keywords, fallbackQuery);
-  const fb = await unsplashFallback(unsplashKey, query, title);
+  // Automatischer Unsplash-Fallback — mehrere Suchbegriffe, robust.
+  const candidates = buildQueryCandidates(title, keywords, fallbackQuery);
+  const fb = await unsplashFallback(unsplashKey, candidates);
   if (fb) {
     return {
       url: fb.url,
-      alt: fb.alt,
+      alt: fb.alt || title || candidates[0] || 'Titelbild',
       source: 'unsplash',
       warning: openaiError
         ? `KI-Bild fehlgeschlagen (${openaiError}) — automatisch Unsplash-Bild genutzt.`
@@ -160,8 +205,8 @@ export async function generateBlogImageWithFallback(opts: {
   }
 
   throw new Error(
-    openaiError
-      ? `Bild-Generierung fehlgeschlagen: ${openaiError}. Unsplash-Fallback lieferte kein Bild (Key gesetzt? Suchbegriff „${query}"?).`
-      : 'Keine Bildquelle verfügbar.',
+    !unsplashKey
+      ? `Bild-Generierung fehlgeschlagen: ${openaiError ?? 'kein KI-Bild'}. Kein Unsplash-Key hinterlegt — bitte unter Blog → Einstellungen eintragen.`
+      : `Bild-Generierung fehlgeschlagen: ${openaiError ?? 'kein KI-Bild'}. Unsplash lieferte zu „${candidates.join('", "')}" kein Bild.`,
   );
 }

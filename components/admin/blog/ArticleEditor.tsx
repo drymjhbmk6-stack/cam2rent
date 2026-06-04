@@ -193,7 +193,7 @@ export default function ArticleEditor({ postId }: { postId?: string }) {
           const imgRes = await fetch('/api/admin/blog/generate-image', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prompt: data.imagePrompt, title: generatedTitle }),
+            body: JSON.stringify({ prompt: data.imagePrompt, title: generatedTitle, keywords: tagsInput }),
           });
           const imgData = await imgRes.json();
           if (imgRes.ok && imgData.url) {
@@ -308,7 +308,7 @@ export default function ArticleEditor({ postId }: { postId?: string }) {
       const imgRes = await fetch('/api/admin/blog/generate-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: imagePrompt, title: post.title }),
+        body: JSON.stringify({ prompt: imagePrompt, title: post.title, keywords: tagsInput }),
       });
       const imgData = await imgRes.json();
       if (imgRes.ok && imgData.url) {
