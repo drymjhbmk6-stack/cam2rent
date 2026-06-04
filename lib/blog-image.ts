@@ -88,26 +88,46 @@ async function uploadToBlogImages(buffer: Buffer, prefix: string): Promise<strin
   return data.publicUrl;
 }
 
-/** OpenAI (gpt-image-1) → Storage-URL. Wirft bei Fehler. */
+// Aktuelle OpenAI-Bildmodelle, vom neuesten zum aelteren. 'dall-e-3' existiert
+// fuer neuere Accounts nicht mehr. Wir probieren der Reihe nach durch, damit
+// ein Modell-Wechsel bei OpenAI nicht alles bricht.
+const OPENAI_IMAGE_MODELS = ['gpt-image-2', 'gpt-image-1'];
+
+/** OpenAI (GPT-Image) → Storage-URL. Wirft, wenn KEIN Modell liefert. */
 async function generateOpenAIImage(openaiKey: string, prompt: string): Promise<string> {
   const client = new OpenAI({ apiKey: openaiKey });
-  // gpt-image-1 ist das aktuelle Modell; 'dall-e-3' existiert fuer neuere
-  // Accounts nicht mehr ("400 The model 'dall-e-3' does not exist").
-  // gpt-image-1 liefert immer b64_json (keine URL), kein 'style'-Param.
-  const response = await client.images.generate({
-    model: 'gpt-image-1',
-    prompt,
-    n: 1,
-    size: '1536x1024', // Landscape für Blog-Header
-    quality: 'high',
-  });
-  const b64 = response.data?.[0]?.b64_json;
-  if (!b64) throw new Error('Kein Bild generiert.');
-  const buffer = Buffer.from(b64, 'base64');
-  if (!isAllowedImage(buffer, ['jpeg', 'png', 'webp'])) {
-    throw new Error('OpenAI lieferte kein gueltiges Bildformat.');
+  let lastError = 'Kein OpenAI-Bildmodell verfügbar.';
+
+  for (const model of OPENAI_IMAGE_MODELS) {
+    try {
+      // GPT-Image-Modelle liefern immer b64_json (keine URL), kein 'style'-Param.
+      const response = await client.images.generate({
+        model,
+        prompt,
+        n: 1,
+        size: '1536x1024', // Landscape für Blog-Header
+        quality: 'high',
+      });
+      const b64 = response.data?.[0]?.b64_json;
+      if (!b64) {
+        lastError = `${model}: kein Bild zurueckgegeben`;
+        continue;
+      }
+      const buffer = Buffer.from(b64, 'base64');
+      if (!isAllowedImage(buffer, ['jpeg', 'png', 'webp'])) {
+        lastError = `${model}: kein gueltiges Bildformat`;
+        continue;
+      }
+      return uploadToBlogImages(buffer, 'blog-ai');
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : `${model}: unbekannter Fehler`;
+      // "does not exist" / "not found" → naechstes Modell probieren, sonst abbrechen.
+      if (!/does not exist|not found|unknown model|no access|unsupported/i.test(lastError)) {
+        throw new Error(lastError);
+      }
+    }
   }
-  return uploadToBlogImages(buffer, 'blog-ai');
+  throw new Error(lastError);
 }
 
 /** Eine Unsplash-Suche fuer GENAU einen Begriff. null = kein Treffer. */
