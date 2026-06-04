@@ -360,7 +360,9 @@ function computeRecommendations(answers: Answers, products: Product[]): ScoredPr
       }
 
       // --- Availability bonus ---
-      if (product.available) {
+      // Echter Bestand: hasUnits===false bedeutet keine Seriennummer im System
+      // (Marktforschung/Warteliste) — zaehlt NICHT als verfuegbar.
+      if (product.hasUnits !== false && product.available) {
         score += 10;
         reasons.push('Sofort verfügbar');
       }
@@ -440,6 +442,10 @@ function ResultsView({
             const isTop = idx === 0;
             const isBestAlt = !isTop && score < topScore * 0.7;
 
+            // Warteliste-Modus: keine Seriennummer im System (gleiche Logik wie ProductCard)
+            const waitlistMode = product.hasUnits === false;
+            const canRent = !waitlistMode && product.available;
+
             // Deduplicate reasons and take top 2
             const uniqueReasons = [...new Set(reasons.filter((r) => r !== 'Sofort verfügbar'))].slice(0, 2);
 
@@ -493,23 +499,25 @@ function ResultsView({
                     </div>
                     <span
                       className={`inline-flex items-center gap-1 text-xs font-body font-medium px-2 py-1 rounded-full ${
-                        product.available
+                        waitlistMode
+                          ? 'bg-accent-blue-soft text-accent-blue'
+                          : canRent
                           ? 'bg-green-50 text-green-700'
                           : 'bg-red-50 text-red-600'
                       }`}
                     >
                       <span
                         className={`w-1.5 h-1.5 rounded-full ${
-                          product.available ? 'bg-green-500' : 'bg-red-500'
+                          waitlistMode ? 'bg-accent-blue' : canRent ? 'bg-green-500' : 'bg-red-500'
                         }`}
                       />
-                      {product.available ? 'Verfügbar' : 'Nicht verfügbar'}
+                      {waitlistMode ? 'Demnächst verfügbar' : canRent ? 'Verfügbar' : 'Ausgebucht'}
                     </span>
                   </div>
 
                   {/* Actions */}
                   <div className="flex flex-col gap-2">
-                    {product.available && (
+                    {canRent && (
                       <Link
                         href={`/kameras/${product.slug}/buchen`}
                         className="w-full inline-flex items-center justify-center px-4 py-2.5 bg-accent-blue text-white font-heading font-semibold text-sm rounded-[10px] hover:bg-blue-600 transition-colors"
