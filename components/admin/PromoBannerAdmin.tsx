@@ -103,6 +103,14 @@ function bannerStatus(b: PromoBannerEntry, today: string): Status {
   return { label: 'Live', color: '#22c55e' };
 }
 
+// Zeitraum-Chip fuer die zugeklappte Ansicht.
+function dateRangeLabel(b: PromoBannerEntry): string {
+  if (b.validFrom && b.validUntil) return `${fmtDE(b.validFrom)} – ${fmtDE(b.validUntil)}`;
+  if (b.validFrom) return `ab ${fmtDE(b.validFrom)}`;
+  if (b.validUntil) return `bis ${fmtDE(b.validUntil)}`;
+  return 'dauerhaft';
+}
+
 // ============================================================
 // Einzelne Banner-Karte
 // ============================================================
@@ -111,12 +119,16 @@ function BannerCard({
   banner,
   status,
   isWinner,
+  expanded,
+  onToggleExpand,
   onChange,
   onDelete,
 }: {
   banner: PromoBannerEntry;
   status: Status;
   isWinner: boolean;
+  expanded: boolean;
+  onToggleExpand: () => void;
   onChange: (b: PromoBannerEntry) => void;
   onDelete: () => void;
 }) {
@@ -140,52 +152,76 @@ function BannerCard({
     >
       {/* Karten-Kopf */}
       <div className="flex items-center gap-2 flex-wrap">
-        <span
-          className="px-2 py-0.5 rounded-full text-[11px] font-semibold"
-          style={{ background: `${status.color}22`, color: status.color }}
+        <button
+          onClick={onToggleExpand}
+          className="flex items-center gap-2 flex-wrap text-left"
+          title={expanded ? 'Zuklappen' : 'Aufklappen'}
         >
-          {status.label}
-        </span>
-        {isWinner && (
+          <span
+            className="text-slate-500 text-xs transition-transform"
+            style={{ display: 'inline-block', transform: expanded ? 'rotate(90deg)' : 'none' }}
+          >
+            ▶
+          </span>
           <span
             className="px-2 py-0.5 rounded-full text-[11px] font-semibold"
-            style={{ background: '#22c55e22', color: '#22c55e' }}
+            style={{ background: `${status.color}22`, color: status.color }}
           >
-            ✓ Aktuell sichtbar
+            {status.label}
           </span>
-        )}
-        <div className="ml-auto flex items-center gap-3">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <div
-              onClick={() => update('enabled', !banner.enabled)}
-              className={`relative w-11 h-6 rounded-full transition-colors ${banner.enabled ? 'bg-green-500' : 'bg-slate-700'}`}
-            >
-              <span
-                className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${banner.enabled ? 'translate-x-5' : ''}`}
-              />
-            </div>
+          {isWinner && (
             <span
-              className="text-xs font-semibold"
-              style={{ color: banner.enabled ? '#22c55e' : '#64748b' }}
+              className="px-2 py-0.5 rounded-full text-[11px] font-semibold"
+              style={{ background: '#22c55e22', color: '#22c55e' }}
             >
-              {banner.enabled ? 'AN' : 'AUS'}
+              ✓ Aktuell sichtbar
             </span>
-          </label>
-          <button
-            onClick={() => {
-              if (confirm('Diesen Banner wirklich löschen?')) onDelete();
-            }}
-            className="text-xs text-slate-500 hover:text-red-400 transition-colors"
-            title="Banner löschen"
+          )}
+          <span
+            className="px-2 py-0.5 rounded-full text-[11px] font-medium"
+            style={{ background: '#1e293b', color: '#94a3b8' }}
           >
-            Löschen
-          </button>
+            {dateRangeLabel(banner)}
+          </span>
+        </button>
+        <div className="ml-auto flex items-center gap-3">
+          {expanded && (
+            <>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <div
+                  onClick={() => update('enabled', !banner.enabled)}
+                  className={`relative w-11 h-6 rounded-full transition-colors ${banner.enabled ? 'bg-green-500' : 'bg-slate-700'}`}
+                >
+                  <span
+                    className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${banner.enabled ? 'translate-x-5' : ''}`}
+                  />
+                </div>
+                <span
+                  className="text-xs font-semibold"
+                  style={{ color: banner.enabled ? '#22c55e' : '#64748b' }}
+                >
+                  {banner.enabled ? 'AN' : 'AUS'}
+                </span>
+              </label>
+              <button
+                onClick={() => {
+                  if (confirm('Diesen Banner wirklich löschen?')) onDelete();
+                }}
+                className="text-xs text-slate-500 hover:text-red-400 transition-colors"
+                title="Banner löschen"
+              >
+                Löschen
+              </button>
+            </>
+          )}
         </div>
       </div>
 
-      {/* Live-Vorschau */}
+      {/* Live-Vorschau — immer sichtbar */}
       <div>
-        <p className="text-xs text-slate-500 mb-2 font-semibold uppercase tracking-wide">Vorschau</p>
+        {expanded && (
+          <p className="text-xs text-slate-500 mb-2 font-semibold uppercase tracking-wide">Vorschau</p>
+        )}
         <div
           style={{ backgroundColor: banner.bgColor, color: textColor, borderRadius: 8 }}
           className="px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3"
@@ -207,6 +243,8 @@ function BannerCard({
         </div>
       </div>
 
+      {!expanded ? null : (
+      <>
       {/* Farbe */}
       <div>
         <label className="block text-xs text-slate-400 mb-2 font-semibold uppercase tracking-wide">
@@ -358,6 +396,8 @@ function BannerCard({
           „Aktiv von“ liegt nach „Aktiv bis“ — der Banner wird nie angezeigt.
         </p>
       )}
+      </>
+      )}
     </div>
   );
 }
@@ -371,6 +411,17 @@ export default function PromoBannerAdmin() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState('');
+  // Zugeklappt per Default — nur die aufgeklappten IDs werden gemerkt.
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+
+  function toggleExpand(id: string) {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   useEffect(() => {
     fetch('/api/admin/settings?key=promo_banner')
@@ -454,6 +505,8 @@ export default function PromoBannerAdmin() {
               banner={b}
               status={bannerStatus(b, today)}
               isWinner={b.id === winnerId}
+              expanded={expandedIds.has(b.id)}
+              onToggleExpand={() => toggleExpand(b.id)}
               onChange={(updated) =>
                 setBanners((prev) => prev.map((x) => (x.id === updated.id ? updated : x)))
               }
@@ -463,7 +516,11 @@ export default function PromoBannerAdmin() {
 
           {/* Hinzufügen */}
           <button
-            onClick={() => setBanners((prev) => [...prev, makeNewBanner()])}
+            onClick={() => {
+              const nb = makeNewBanner();
+              setBanners((prev) => [...prev, nb]);
+              setExpandedIds((prev) => new Set(prev).add(nb.id));
+            }}
             className="w-full py-2.5 rounded-lg text-sm font-heading font-semibold transition-colors border border-slate-700 text-slate-400 hover:border-cyan-500 hover:text-cyan-400"
           >
             + Banner / Kampagne hinzufügen
