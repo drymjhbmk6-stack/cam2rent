@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import NotificationDropdown from '@/components/admin/NotificationDropdown';
 import EnvModeBadge from '@/components/admin/EnvModeBadge';
 import AdminScanFab from '@/components/admin/AdminScanFab';
+import GlobalErrorToast from '@/components/admin/GlobalErrorToast';
 import { useAutoLogout } from '@/hooks/useAutoLogout';
 import { NotificationsProvider } from '@/contexts/NotificationsContext';
 
@@ -932,6 +933,7 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
       {/* Floating Scanner-FAB — auf allen Admin-Seiten ausser Standalone (Login,
           Blog, QR-Druck, Scan-Detail-Seite selbst). */}
       <AdminScanFab />
+      <GlobalErrorToast />
     </div>
     </NotificationsProvider>
   );
