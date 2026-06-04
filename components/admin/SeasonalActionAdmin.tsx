@@ -33,6 +33,7 @@ export default function SeasonalActionAdmin() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState('');
+  const [error, setError] = useState('');
 
   useEffect(() => {
     fetch('/api/admin/settings?key=seasonal_action')
@@ -54,16 +55,28 @@ export default function SeasonalActionAdmin() {
   async function save() {
     setSaving(true);
     setSuccess('');
+    setError('');
     try {
-      await fetch('/api/admin/settings', {
+      const res = await fetch('/api/admin/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ key: 'seasonal_action', value: JSON.stringify(cfg) }),
       });
-      setSuccess('Gespeichert!');
-      setTimeout(() => setSuccess(''), 3000);
+      if (!res.ok) {
+        let msg = `Speichern fehlgeschlagen (HTTP ${res.status}).`;
+        try {
+          const d = await res.json();
+          if (d?.error) msg = `Speichern fehlgeschlagen: ${d.error}`;
+        } catch {
+          /* Antwort ohne JSON-Body */
+        }
+        setError(msg);
+        return;
+      }
+      setSuccess('Gespeichert! Auf der Startseite bis zu 60 Sek. sichtbar.');
+      setTimeout(() => setSuccess(''), 5000);
     } catch {
-      // Fehler
+      setError('Speichern fehlgeschlagen — keine Verbindung zum Server.');
     } finally {
       setSaving(false);
     }
@@ -192,6 +205,7 @@ export default function SeasonalActionAdmin() {
               {saving ? 'Speichern…' : 'Speichern'}
             </button>
             {success && <span className="text-sm" style={{ color: '#10b981' }}>{success}</span>}
+            {error && <span className="text-sm" style={{ color: '#ef4444' }}>{error}</span>}
           </div>
         </div>
       )}
