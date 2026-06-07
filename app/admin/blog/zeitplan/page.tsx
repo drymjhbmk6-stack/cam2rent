@@ -197,6 +197,21 @@ export default function BlogZeitplanPage() {
     await updateField(id, 'scheduled_time', time);
   }
 
+  const [backfilling, setBackfilling] = useState(false);
+  async function backfillPublished() {
+    if (!confirm('Bereits veröffentlichte Beiträge wieder in den Kalender eintragen?\n\nFür jeden veröffentlichten Beitrag ohne Plan-Eintrag wird einer mit Status „Live" angelegt. Idempotent — mehrfaches Ausführen schadet nicht.')) return;
+    setBackfilling(true);
+    try {
+      const res = await fetch('/api/admin/blog/schedule/backfill-published', { method: 'POST' });
+      const json = await res.json();
+      if (!res.ok) { flash(json.error ?? 'Fehler beim Nachtragen'); return; }
+      flash(json.created > 0 ? `${json.created} veröffentlichte Beiträge nachgetragen.` : 'Nichts nachzutragen — alles schon im Kalender.');
+      loadAll();
+    } finally {
+      setBackfilling(false);
+    }
+  }
+
   async function deleteEntry(id: string) {
     if (!confirm('Eintrag wirklich löschen?')) return;
     await fetch(`/api/admin/blog/schedule?id=${id}`, { method: 'DELETE' });
@@ -672,6 +687,15 @@ export default function BlogZeitplanPage() {
           <p className="text-sm" style={{ color: '#64748b' }}>Klick auf Eintrag zum Bearbeiten · Drag &amp; Drop auf anderen Tag zum Verschieben</p>
         </div>
         <div className="flex items-center gap-3 text-xs font-heading" style={{ color: '#94a3b8' }}>
+          <button
+            onClick={backfillPublished}
+            disabled={backfilling}
+            title="Bereits veröffentlichte Beiträge wieder in den Kalender eintragen"
+            className="px-3 py-1.5 rounded-lg font-heading font-semibold"
+            style={{ background: '#22c55e20', color: '#22c55e', border: '1px solid #22c55e40', opacity: backfilling ? 0.6 : 1 }}
+          >
+            {backfilling ? 'Trägt nach…' : '↻ Veröffentlichte nachtragen'}
+          </button>
           <span>{plannedCount} geplant</span>
           <span style={{ color: '#06b6d4' }}>{generatedCount} fertig</span>
           <span style={{ color: '#22c55e' }}>{reviewedCount} gesehen</span>
