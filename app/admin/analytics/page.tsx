@@ -41,6 +41,8 @@ interface TrafficData {
   sources: { source: string; count: number; pct: number }[];
   browsers: { browser: string; count: number; pct: number }[];
   countries?: { code: string; count: number; pct: number }[];
+  de_regions?: { name: string; count: number; pct: number }[];
+  de_cities?: { name: string; count: number; pct: number }[];
   devices: { desktop: number; mobile: number; tablet: number };
   bounce_rate: number; new_visitors: number; returning_visitors: number; total_sessions: number;
 }
@@ -62,6 +64,23 @@ const regionNames = (() => {
 function countryName(code: string): string {
   if (code === 'XX') return 'Unbekannt';
   try { return regionNames?.of(code) ?? code; } catch { return code; }
+}
+
+// Cloudflare liefert Bundesländer als englische Exonyme — auf Deutsch mappen.
+const DE_BUNDESLAND: Record<string, string> = {
+  'bavaria': 'Bayern',
+  'hesse': 'Hessen',
+  'lower saxony': 'Niedersachsen',
+  'north rhine-westphalia': 'Nordrhein-Westfalen',
+  'rhineland-palatinate': 'Rheinland-Pfalz',
+  'saxony': 'Sachsen',
+  'saxony-anhalt': 'Sachsen-Anhalt',
+  'thuringia': 'Thüringen',
+  'mecklenburg-west pomerania': 'Mecklenburg-Vorpommern',
+  'mecklenburg-vorpommern': 'Mecklenburg-Vorpommern',
+};
+function bundeslandName(name: string): string {
+  return DE_BUNDESLAND[name.toLowerCase().trim()] ?? name;
 }
 
 type Tab = 'live' | 'bookings' | 'traffic' | 'customers' | 'blog';
@@ -518,6 +537,20 @@ function generateCSV(
       rows.push(['Land', 'Besucher', 'Prozent']);
       for (const c of trafficData.countries) {
         rows.push([countryName(c.code), String(c.count), `${c.pct}%`]);
+      }
+    }
+    if (trafficData?.de_regions?.length) {
+      rows.push([]);
+      rows.push(['Bundesland (DE)', 'Besucher', 'Prozent']);
+      for (const r of trafficData.de_regions) {
+        rows.push([bundeslandName(r.name), String(r.count), `${r.pct}%`]);
+      }
+    }
+    if (trafficData?.de_cities?.length) {
+      rows.push([]);
+      rows.push(['Stadt (DE)', 'Besucher', 'Prozent']);
+      for (const c of trafficData.de_cities) {
+        rows.push([c.name, String(c.count), `${c.pct}%`]);
       }
     }
   }
@@ -1465,6 +1498,48 @@ export default function AnalyticsPage() {
               ) : <div style={{ color: C.textDim }}>Laden...</div>}
             </Card>
           </div>
+
+          {/* Deutschland: Bundesländer + Städte */}
+          {((trafficData?.de_regions?.length ?? 0) > 0 || (trafficData?.de_cities?.length ?? 0) > 0) && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16, marginBottom: 20 }}>
+              <Card>
+                <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16 }}>
+                  🇩🇪 Bundesländer — {getTimeRangeLabel(filters.timeRange)}
+                  <InfoTooltip text="Top-Bundesländer deutscher Besucher (eindeutige Besucher, ermittelt über Cloudflare)." />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {(trafficData?.de_regions ?? []).map((r, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{ width: 150, fontSize: 13, color: '#cbd5e1', flexShrink: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{bundeslandName(r.name)}</div>
+                      <div style={{ flex: 1, background: C.border, borderRadius: 6, height: 22, overflow: 'hidden' }}>
+                        <div style={{ width: `${r.pct}%`, height: 22, borderRadius: 6, background: `linear-gradient(90deg, ${C.cyan}, ${C.cyan}88)`, display: 'flex', alignItems: 'center', paddingLeft: 8 }}>
+                          <span style={{ color: 'white', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>{r.count} ({r.pct}%)</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+              <Card>
+                <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16 }}>
+                  🏙 Städte (Deutschland) — {getTimeRangeLabel(filters.timeRange)}
+                  <InfoTooltip text="Top-Städte deutscher Besucher (eindeutige Besucher, ermittelt über Cloudflare)." />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {(trafficData?.de_cities ?? []).map((c, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{ width: 150, fontSize: 13, color: '#cbd5e1', flexShrink: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</div>
+                      <div style={{ flex: 1, background: C.border, borderRadius: 6, height: 22, overflow: 'hidden' }}>
+                        <div style={{ width: `${c.pct}%`, height: 22, borderRadius: 6, background: `linear-gradient(90deg, ${C.purple}, ${C.purple}88)`, display: 'flex', alignItems: 'center', paddingLeft: 8 }}>
+                          <span style={{ color: 'white', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>{c.count} ({c.pct}%)</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            </div>
+          )}
 
           {/* Visitor History */}
           <Card style={{ marginBottom: 20 }}>

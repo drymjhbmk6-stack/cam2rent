@@ -4044,6 +4044,18 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
   Migration läuft alles weiter, die Karte zeigt einen Hinweis. **Wichtig:**
   Daten beginnen ab Migration — vergangene Aufrufe haben kein Land
   (rückwirkend nicht ermittelbar). Empfohlen ASAP ausführen.
+- **Region/Stadt-Statistik (Deutschland-Drilldown):** Migration
+  `supabase/supabase-page-views-region-city.sql` (idempotent, additiv:
+  `page_views.region` + `city`) ausführen **UND** in Cloudflare den Managed
+  Transform **„Add visitor location headers"** aktivieren (Dashboard → Rules
+  → Transform Rules → Managed Transforms). Erst dann senden die Cloudflare-
+  Edges `cf-region`/`cf-region-code`/`cf-ipcity`; der Track-Endpoint schreibt
+  sie pro Aufruf mit (defensiver Strip-Loop, falls Spalten/Header fehlen →
+  Tracking bricht nie). Im Traffic-Tab erscheinen dann zwei Karten
+  „🇩🇪 Bundesländer" + „🏙 Städte (Deutschland)" (eindeutige Besucher;
+  Bundesländer von engl. Cloudflare-Namen auf Deutsch gemappt). Ohne
+  Migration/Transform bleiben die Karten leer (kein Fehler). Daten ab
+  Aktivierung — nicht rückwirkend.
 - **Notizen-Teilen+Anhänge-Migration + Bucket auszuführen:**
   `supabase/supabase-employee-notes-sharing-attachments.sql` (idempotent,
   additiv: `employee_notes.shared_with UUID[]` + `attachments JSONB`) **und**

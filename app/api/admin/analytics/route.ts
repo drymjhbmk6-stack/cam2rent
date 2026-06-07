@@ -429,12 +429,14 @@ export async function GET(req: NextRequest) {
 
   // ── TRAFFIC SOURCES ───────────────────────────────────────────────────────
   if (type === 'traffic') {
-    // country ist optional (Migration ggf. ausstehend) — vorab proben.
+    // country bzw. region/city sind optional (Migrationen ggf. ausstehend) — proben.
     const { error: countryProbe } = await supabase.from('page_views').select('country').limit(1);
     const hasCountry = !(countryProbe && /country|column|schema cache|does not exist/i.test(countryProbe.message ?? ''));
-    const trafficCols = `referrer, session_id, visitor_id, device_type, browser, created_at${hasCountry ? ', country' : ''}`;
+    const { error: regionProbe } = await supabase.from('page_views').select('region, city').limit(1);
+    const hasRegion = !(regionProbe && /region|city|column|schema cache|does not exist/i.test(regionProbe.message ?? ''));
+    const trafficCols = `referrer, session_id, visitor_id, device_type, browser, created_at${hasCountry ? ', country' : ''}${hasRegion ? ', region, city' : ''}`;
 
-    type TrafficRow = { referrer: string | null; session_id: string; visitor_id: string; device_type: string | null; browser: string | null; created_at: string; country?: string | null };
+    type TrafficRow = { referrer: string | null; session_id: string; visitor_id: string; device_type: string | null; browser: string | null; created_at: string; country?: string | null; region?: string | null; city?: string | null };
     const rows = await fetchAllRows<TrafficRow>((from, to) =>
       applyRange(supabase.from('page_views').select(trafficCols), parsed).range(from, to) as unknown as PromiseLike<{ data: TrafficRow[] | null; error: unknown }>,
     );
@@ -496,6 +498,47 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // Deutschland-Drilldown: Top-Bundesländer + Städte (eindeutige Besucher).
+    // Nur wenn region/city verfügbar sind.
+    const deRegions: { name: string; count: number; pct: number }[] = [];
+    const deCities: { name: string; count: number; pct: number }[] = [];
+    if (hasRegion) {
+      const regionVisitors = new Map<string, Set<string>>();
+      const cityVisitors = new Map<string, Set<string>>();
+      let deTotalRegion = 0;
+      let deTotalCity = 0;
+      const seenRegionVid = new Set<string>();
+      const seenCityVid = new Set<string>();
+      for (const row of rows) {
+        if ((row.country ?? '').toUpperCase() !== 'DE') continue;
+        const vid = row.visitor_id || row.session_id;
+        const region = (row.region ?? '').trim();
+        const city = (row.city ?? '').trim();
+        if (region) {
+          if (!regionVisitors.has(region)) regionVisitors.set(region, new Set());
+          regionVisitors.get(region)!.add(vid);
+          if (!seenRegionVid.has(vid)) { seenRegionVid.add(vid); deTotalRegion++; }
+        }
+        if (city) {
+          if (!cityVisitors.has(city)) cityVisitors.set(city, new Set());
+          cityVisitors.get(city)!.add(vid);
+          if (!seenCityVid.has(vid)) { seenCityVid.add(vid); deTotalCity++; }
+        }
+      }
+      const rTotal = deTotalRegion || 1;
+      Array.from(regionVisitors.entries())
+        .map(([name, set]) => ({ name, count: set.size }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 16)
+        .forEach((e) => deRegions.push({ name: e.name, count: e.count, pct: Math.round((e.count / rTotal) * 100) }));
+      const cTotal = deTotalCity || 1;
+      Array.from(cityVisitors.entries())
+        .map(([name, set]) => ({ name, count: set.size }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 12)
+        .forEach((e) => deCities.push({ name: e.name, count: e.count, pct: Math.round((e.count / cTotal) * 100) }));
+    }
+
     // Bounce rate (sessions with only 1 page view)
     const sessionPageCount = new Map<string, number>();
     for (const row of rows) {
@@ -537,6 +580,8 @@ export async function GET(req: NextRequest) {
       sources,
       browsers,
       countries,
+      de_regions: deRegions,
+      de_cities: deCities,
       devices: {
         desktop: Math.round((desktop / total) * 100),
         mobile: Math.round((mobile / total) * 100),

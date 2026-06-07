@@ -55,6 +55,15 @@ export async function POST(req: NextRequest) {
     ? cfCountry
     : null;
 
+  // Region (Bundesland) + Stadt — nur vorhanden, wenn der Cloudflare Managed
+  // Transform „Add visitor location headers" aktiv ist (sonst null).
+  const cleanGeo = (v: string | null): string | null => {
+    const s = (v ?? '').trim().slice(0, 120);
+    return s.length > 0 ? s : null;
+  };
+  const region = cleanGeo(req.headers.get('cf-region'));
+  const city = cleanGeo(req.headers.get('cf-ipcity'));
+
   try {
     const supabase = createServiceClient();
     const row: Record<string, unknown> = {
@@ -70,13 +79,24 @@ export async function POST(req: NextRequest) {
       utm_medium: body.utm_medium || null,
       utm_campaign: body.utm_campaign || null,
       country,
+      region,
+      city,
     };
     let { error } = await supabase.from('page_views').insert(row);
-    // Defensiv: country-Spalte fehlt (Migration ausstehend) → ohne sie inserten,
-    // damit Tracking nicht komplett bricht.
-    if (error && /country|column|schema cache|PGRST204/i.test(error.message)) {
-      delete row.country;
+    // Defensiv: Geo-Spalte(n) fehlen (Migration ausstehend) → die im Fehler
+    // genannte Spalte strippen und erneut versuchen. Schleife deckt jede
+    // Kombination aus fehlenden country/region/city-Spalten ab, ohne die
+    // bereits vorhandenen Geo-Felder zu verlieren.
+    let attempt = 0;
+    while (error && attempt < 3 && /column|schema cache|PGRST204/i.test(error.message)) {
+      const m = error.message.toLowerCase();
+      let changed = false;
+      for (const k of ['country', 'region', 'city'] as const) {
+        if (k in row && m.includes(k)) { delete row[k]; changed = true; }
+      }
+      if (!changed) { delete row.country; delete row.region; delete row.city; }
       ({ error } = await supabase.from('page_views').insert(row));
+      attempt++;
     }
     if (error) {
       // Mit Log (nicht stumm) — hilft Fehlerdiagnose z.B. bei fehlender Tabelle
