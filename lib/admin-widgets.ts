@@ -44,12 +44,16 @@ export const WIDGET_REGISTRY: WidgetDefinition[] = [
   { id: 'camera_utilization', label: 'Kamera-Auslastung', category: 'list' as const, defaultSize: 'medium' as const, description: 'Auslastungsrate aller Kameras' },
 
   // ── Actions (large) ──
-  { id: 'quick_actions', label: 'Schnellaktionen', category: 'action', defaultSize: 'large', description: 'Schnellzugriff auf häufig genutzte Admin-Bereiche' },
+  { id: 'action_queue',  label: 'Aufgaben',          category: 'action', defaultSize: 'large', description: 'Offene Buchungen mit Direktlink zur nächsten Aktion (Packen, Übergabe, Rückgabe prüfen ...)' },
+  { id: 'quick_actions', label: 'Schnellaktionen',   category: 'action', defaultSize: 'large', description: 'Schnellzugriff auf häufig genutzte Admin-Bereiche' },
 ];
 
 // ─── Default Layout ──────────────────────────────────────────────
 
 export const DEFAULT_LAYOUT: WidgetLayoutItem[] = [
+  // Ganz oben: Aufgaben-Liste mit Direktlinks zur nächsten Aktion
+  { widgetId: 'action_queue',      size: 'large', visible: true },
+
   // Row 1: Key metrics
   { widgetId: 'daily_bookings',    size: 'small', visible: true },
   { widgetId: 'pending_shipments', size: 'small', visible: true },
@@ -101,6 +105,13 @@ export function loadLayout(): WidgetLayoutItem[] {
         for (const m of missing) {
           parsed.push({ widgetId: m.id, size: m.defaultSize, visible: false });
         }
+      }
+      // Aufgaben-Liste ist neu + zentral wichtig: bei bestehenden Layouts ohne
+      // den Eintrag sichtbar ganz oben einfügen (statt versteckt anzuhängen).
+      if (!existingIds.has('action_queue')) {
+        const aqIdx = parsed.findIndex((w) => w.widgetId === 'action_queue');
+        if (aqIdx >= 0) parsed.splice(aqIdx, 1);
+        parsed.unshift({ widgetId: 'action_queue', size: 'large', visible: true });
       }
       // Remove widgets no longer in registry
       return parsed.filter((w) => WIDGET_REGISTRY.some((r) => r.id === w.widgetId));

@@ -116,6 +116,14 @@ function ActionsIcon() {
   );
 }
 
+function ChecklistIcon() {
+  return (
+    <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+    </svg>
+  );
+}
+
 function UtilizationIcon() {
   return (
     <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -570,6 +578,147 @@ export function QuickActionsWidget() {
   );
 }
 
+// ─── ActionQueueWidget (Aufgaben mit Direktlink) ────────────────
+
+interface QueueBooking {
+  id: string;
+  product_name: string;
+  customer_name: string;
+  status: string;
+  delivery_mode: string | null;
+  rental_from: string;
+  rental_to: string;
+}
+
+interface QueueAction {
+  label: string;
+  href: string;
+  color: string;
+  /** kleiner = dringlicher, steht weiter oben in der Liste */
+  weight: number;
+}
+
+// Spiegelt die "Nächste Aktion"-Logik der Buchungsdetailseite (NextActionBar),
+// aber rein als Navigations-Link — kein Button-Handler nötig.
+function queueActionForBooking(b: QueueBooking): QueueAction | null {
+  const isVersand = b.delivery_mode === 'versand';
+  switch (b.status) {
+    case 'pending_verification':
+      return { label: 'Freigeben', href: `/admin/buchungen/${b.id}`, color: C.yellow, weight: 1 };
+    case 'confirmed':
+      return isVersand
+        ? { label: '📦 Paket packen', href: `/admin/versand/${b.id}/packen`, color: C.cyan, weight: 2 }
+        : { label: '📝 Übergabe', href: `/admin/buchungen/${b.id}/uebergabe`, color: C.purple, weight: 2 };
+    case 'preparing_shipment':
+      return { label: '📦 Pack-Workflow', href: `/admin/versand/${b.id}/packen`, color: C.cyan, weight: 2 };
+    case 'awaiting_pickup':
+      return { label: '📝 Übergabe', href: `/admin/buchungen/${b.id}/uebergabe`, color: C.purple, weight: 2 };
+    case 'delivered':
+    case 'picked_up':
+      return { label: '↩ Rückgabe prüfen', href: `/admin/retouren/${b.id}/pruefen`, color: C.green, weight: 3 };
+    case 'shipped':
+      return { label: 'Als zugestellt markieren', href: `/admin/buchungen/${b.id}`, color: C.green, weight: 4 };
+    case 'awaiting_payment':
+      return { label: 'Zahlung ausstehend', href: `/admin/buchungen/${b.id}`, color: C.yellow, weight: 5 };
+    case 'damaged':
+      return { label: 'Schadensabwicklung', href: `/admin/buchungen/${b.id}`, color: C.red, weight: 6 };
+    default:
+      return null;
+  }
+}
+
+export function ActionQueueWidget({ data, loading }: {
+  data: { items: QueueBooking[] } | null;
+  loading: boolean;
+}) {
+  const rows = (data?.items ?? [])
+    .map((b) => ({ b, action: queueActionForBooking(b) }))
+    .filter((r): r is { b: QueueBooking; action: QueueAction } => r.action !== null)
+    .sort((x, y) => x.action.weight - y.action.weight || x.b.rental_from.localeCompare(y.b.rental_from));
+
+  return (
+    <div style={{
+      background: C.card,
+      border: `1px solid ${C.border}`,
+      borderRadius: 12,
+      padding: 20,
+      display: 'flex',
+      flexDirection: 'column',
+      height: '100%',
+      transition: 'border-color 0.15s',
+    }}
+      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = C.cyan; }}
+      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = C.border; }}
+    >
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{
+            width: 32, height: 32, borderRadius: 8, background: C.cyanDim,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.cyan,
+          }}>
+            <ChecklistIcon />
+          </div>
+          <span style={{ fontSize: 14, fontWeight: 700, color: C.text }}>Aufgaben</span>
+          {rows.length > 0 && (
+            <span style={{ fontSize: 11, fontWeight: 700, color: C.cyan, background: C.cyanDim, padding: '1px 8px', borderRadius: 10 }}>
+              {rows.length}
+            </span>
+          )}
+        </div>
+        <Link href="/admin/buchungen" style={{ fontSize: 11, color: C.cyan, textDecoration: 'none', fontWeight: 500 }}>
+          Alle Buchungen
+        </Link>
+      </div>
+
+      {/* Content */}
+      {loading ? (
+        <Spinner />
+      ) : rows.length === 0 ? (
+        <div style={{ padding: 20, textAlign: 'center', color: C.textDim, fontSize: 13 }}>
+          Alles erledigt — keine offenen Aufgaben 🎉
+        </div>
+      ) : (
+        <div style={{ flex: 1, overflowY: 'auto', maxHeight: 360 }}>
+          {rows.map(({ b, action }, idx) => (
+            <Link
+              key={b.id}
+              href={action.href}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 10,
+                padding: '10px 8px',
+                borderBottom: idx < rows.length - 1 ? `1px solid ${C.border}` : 'none',
+                borderLeft: `3px solid ${action.color}`,
+                textDecoration: 'none',
+                borderRadius: 6,
+                transition: 'background 0.12s',
+              }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = C.cardHover; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+            >
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {b.product_name || 'Buchung'}
+                </div>
+                <div style={{ fontSize: 11, color: C.textDim, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {b.customer_name} &middot; {formatDate(b.rental_from)} - {formatDate(b.rental_to)}
+                </div>
+              </div>
+              <span style={{
+                fontSize: 11, fontWeight: 700, color: action.color,
+                background: `${action.color}1a`, border: `1px solid ${action.color}40`,
+                padding: '5px 10px', borderRadius: 8, flexShrink: 0, whiteSpace: 'nowrap',
+              }}>
+                {action.label}
+              </span>
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── CameraUtilizationWidget ────────────────────────────────────
 
 interface UtilizationProduct {
@@ -686,6 +835,11 @@ export function WidgetRenderer({ widgetId, data, loading }: {
   // Quick actions doesn't need data
   if (widgetId === 'quick_actions') {
     return <QuickActionsWidget />;
+  }
+
+  // Aufgaben-Queue (Direktlinks zur nächsten Aktion)
+  if (widgetId === 'action_queue') {
+    return <ActionQueueWidget data={widgetData as { items: QueueBooking[] } | null} loading={loading} />;
   }
 
   // Camera utilization widget

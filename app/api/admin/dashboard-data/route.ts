@@ -66,6 +66,7 @@ export async function GET() {
       unreadMessagesListRes,
       recentReviewsRes,
       activityBookingsRes,
+      actionQueueRes,
     ] = await Promise.all([
       // daily_bookings: count bookings created today
       supabase
@@ -186,6 +187,15 @@ export async function GET() {
         .select('id, product_name, customer_name, status, created_at')
         .order('created_at', { ascending: false })
         .limit(20),
+
+      // action_queue: bookings die eine Admin-Aktion brauchen (packen,
+      // uebergeben, ruckgabe pruefen, freigeben ...) — Direktlink-Liste
+      supabase
+        .from('bookings')
+        .select('id, product_name, customer_name, status, delivery_mode, rental_from, rental_to')
+        .in('status', ['pending_verification', 'awaiting_payment', 'confirmed', 'preparing_shipment', 'awaiting_pickup', 'shipped', 'delivered', 'picked_up', 'damaged'])
+        .order('rental_from', { ascending: true })
+        .limit(50),
     ]);
 
     // ── Calculate revenue sums ───────────────────────────────────
@@ -267,6 +277,8 @@ export async function GET() {
       },
 
       camera_utilization: { products: utilizationProducts },
+
+      action_queue: { items: actionQueueRes.data ?? [] },
     };
 
     return NextResponse.json(data);
