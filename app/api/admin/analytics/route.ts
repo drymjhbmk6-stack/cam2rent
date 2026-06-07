@@ -39,6 +39,31 @@ function isTrackablePagePath(path: string): boolean {
   return true;
 }
 
+/**
+ * Laedt ALLE Zeilen einer Query ueber Pagination — umgeht Supabases
+ * Default-Limit von 1000 Zeilen pro Request. Ohne das fror z.B. die
+ * Seitenaufruf-Zahl bei exakt 1000 ein, sobald mehr als 1000 page_views
+ * im Zeitraum lagen (und Unique-Visitor/Session-Counts wurden unterzaehlt).
+ * `buildQuery(from, to)` muss eine frische, gefilterte Query mit `.range(from,to)`
+ * zurueckgeben.
+ */
+async function fetchAllRows<T>(
+  buildQuery: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>,
+): Promise<T[]> {
+  const PAGE = 1000;
+  const all: T[] = [];
+  let from = 0;
+  for (;;) {
+    const { data, error } = await buildQuery(from, from + PAGE - 1);
+    if (error || !data || data.length === 0) break;
+    all.push(...data);
+    if (data.length < PAGE) break;
+    from += PAGE;
+    if (from >= 2_000_000) break; // Sicherheitsnetz
+  }
+  return all;
+}
+
 export async function GET(req: NextRequest) {
   if (!await checkAdminAuth()) {
     return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 });
@@ -87,15 +112,13 @@ export async function GET(req: NextRequest) {
     const visitors = Array.from(sessionMap.values());
 
     // KPIs respektieren den Range-Filter (today/24h/7d/30d/month/year/custom).
-    const rangeQuery = applyRange(
-      supabase.from('page_views').select('session_id, visitor_id'),
-      parsed,
+    const rangeData = await fetchAllRows<{ session_id: string; visitor_id: string }>((from, to) =>
+      applyRange(supabase.from('page_views').select('session_id, visitor_id'), parsed).range(from, to),
     );
-    const { data: rangeData } = await rangeQuery;
 
-    const totalViews = rangeData?.length ?? 0;
-    const uniqueVisitors = new Set(rangeData?.map((r) => r.visitor_id)).size;
-    const sessions = new Set(rangeData?.map((r) => r.session_id)).size;
+    const totalViews = rangeData.length;
+    const uniqueVisitors = new Set(rangeData.map((r) => r.visitor_id)).size;
+    const sessions = new Set(rangeData.map((r) => r.session_id)).size;
 
     return NextResponse.json({
       active_count: visitors.length,
@@ -112,12 +135,9 @@ export async function GET(req: NextRequest) {
   // fuer den gewaehlten Range. Bei range != today/24h sind die Hourly-Buckets
   // "Stunde-des-Tages" aggregiert ueber den ganzen Bereich.
   if (type === 'today') {
-    const q = applyRange(
-      supabase.from('page_views').select('session_id, visitor_id, path, device_type, created_at'),
-      parsed,
+    const rows = await fetchAllRows<{ session_id: string; visitor_id: string; path: string; device_type: string | null; created_at: string }>((from, to) =>
+      applyRange(supabase.from('page_views').select('session_id, visitor_id, path, device_type, created_at'), parsed).range(from, to),
     );
-    const { data } = await q;
-    const rows = data ?? [];
 
     const totalViews = rows.length;
     const uniqueVisitors = new Set(rows.map((r) => r.visitor_id)).size;
@@ -170,13 +190,16 @@ export async function GET(req: NextRequest) {
     const daysRaw = parseInt(req.nextUrl.searchParams.get('days') ?? '30', 10);
     const days = Number.isFinite(daysRaw) ? Math.min(Math.max(daysRaw, 1), 400) : 30;
     const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
-    const { data } = await supabase
-      .from('page_views')
-      .select('session_id, visitor_id, created_at')
-      .gte('created_at', since);
+    const data = await fetchAllRows<{ session_id: string; visitor_id: string; created_at: string }>((from, to) =>
+      supabase
+        .from('page_views')
+        .select('session_id, visitor_id, created_at')
+        .gte('created_at', since)
+        .range(from, to),
+    );
 
     const dayMap = new Map<string, { views: number; visitors: Set<string>; sessions: Set<string> }>();
-    for (const row of data ?? []) {
+    for (const row of data) {
       // Tag in Berlin-Zeit gruppieren — sonst landen 00:30-02:00 Berlin
       // auf dem Vortag (UTC-Zeit liegt davor).
       const day = getBerlinDateKey(row.created_at);
@@ -203,10 +226,9 @@ export async function GET(req: NextRequest) {
 
   // ── FUNNEL ────────────────────────────────────────────────────────────────
   if (type === 'funnel') {
-    const viewsQ = applyRange(supabase.from('page_views').select('session_id, path'), parsed);
-    const { data } = await viewsQ;
-
-    const rows = data ?? [];
+    const rows = await fetchAllRows<{ session_id: string; path: string }>((from, to) =>
+      applyRange(supabase.from('page_views').select('session_id, path'), parsed).range(from, to),
+    );
     const allSessions = new Set(rows.map((r) => r.session_id)).size;
 
     const sessionsWithHome = new Set(rows.filter((r) => r.path === '/').map((r) => r.session_id)).size;
@@ -242,21 +264,22 @@ export async function GET(req: NextRequest) {
   // ── CUSTOMERS ────────────────────────────────────────────────────────────
   if (type === 'customers') {
     // Buchungs-bezogene KPIs respektieren den Range-Filter.
-    const bookingsQ = applyRange(
-      supabase.from('bookings').select('user_id, customer_email, price_total, status, created_at'),
-      parsed,
-    ).neq('status', 'cancelled');
-    const { data: rangeBookings } = await bookingsQ;
+    const bookings = await fetchAllRows<{ user_id: string | null; customer_email: string | null; price_total: number | null; status: string; created_at: string }>((from, to) =>
+      applyRange(
+        supabase.from('bookings').select('user_id, customer_email, price_total, status, created_at'),
+        parsed,
+      ).neq('status', 'cancelled').range(from, to),
+    );
 
     // Zusaetzlich: ALLE Buchungen fuer die korrekte "neuer-Kunde-im-Range"-Berechnung
     // (vergleicht das Erst-Booking-Datum eines Kunden gegen den Range-Start).
-    const { data: allBookings } = await supabase
-      .from('bookings')
-      .select('user_id, customer_email, created_at, status')
-      .neq('status', 'cancelled');
-
-    const bookings = rangeBookings ?? [];
-    const all = allBookings ?? [];
+    const all = await fetchAllRows<{ user_id: string | null; customer_email: string | null; created_at: string; status: string }>((from, to) =>
+      supabase
+        .from('bookings')
+        .select('user_id, customer_email, created_at, status')
+        .neq('status', 'cancelled')
+        .range(from, to),
+    );
 
     // Customer-Dedup: E-Mail (lowercase) ist primaerer Key, weil ein Kunde
     // erst als Gast (nur email) bucht und spaeter ein Konto anlegt — vorher
@@ -338,18 +361,20 @@ export async function GET(req: NextRequest) {
 
   // ── PRODUCTS ──────────────────────────────────────────────────────────────
   if (type === 'products') {
-    const viewQ = applyRange(supabase.from('page_views').select('path'), parsed).like('path', '/kameras/%');
-    const { data: viewData } = await viewQ;
+    const viewData = await fetchAllRows<{ path: string }>((from, to) =>
+      applyRange(supabase.from('page_views').select('path'), parsed).like('path', '/kameras/%').range(from, to),
+    );
 
-    const bookingQ = applyRange(
-      supabase.from('bookings').select('product_id, product_name, price_total, rental_from, rental_to, status'),
-      parsed,
-    ).neq('status', 'cancelled');
-    const { data: bookingData } = await bookingQ;
+    const bookingData = await fetchAllRows<{ product_id: string | null; product_name: string | null; price_total: number | null; rental_from: string | null; rental_to: string | null; status: string }>((from, to) =>
+      applyRange(
+        supabase.from('bookings').select('product_id, product_name, price_total, rental_from, rental_to, status'),
+        parsed,
+      ).neq('status', 'cancelled').range(from, to),
+    );
 
     // Count views per slug (skip /kameras/<slug>/buchen — ist Buchungs-Wizard, nicht Produkt-Detail)
     const viewMap = new Map<string, number>();
-    for (const row of viewData ?? []) {
+    for (const row of viewData) {
       const slug = row.path.replace('/kameras/', '').split('/')[0];
       const isWizard = isBookingWizardPath(row.path);
       if (slug && slug !== 'buchen' && !isWizard) {
@@ -360,7 +385,7 @@ export async function GET(req: NextRequest) {
     // Count bookings & revenue per product
     const bookingByIdMap = new Map<string, { count: number; revenue: number; days: number; name: string }>();
     const slugToIdMap = new Map<string, string>();
-    for (const row of bookingData ?? []) {
+    for (const row of bookingData) {
       const pid = row.product_id ?? 'unknown';
       if (!bookingByIdMap.has(pid)) bookingByIdMap.set(pid, { count: 0, revenue: 0, days: 0, name: row.product_name ?? pid });
       const b = bookingByIdMap.get(pid)!;
@@ -404,12 +429,9 @@ export async function GET(req: NextRequest) {
 
   // ── TRAFFIC SOURCES ───────────────────────────────────────────────────────
   if (type === 'traffic') {
-    const q = applyRange(
-      supabase.from('page_views').select('referrer, session_id, visitor_id, device_type, browser, created_at'),
-      parsed,
+    const rows = await fetchAllRows<{ referrer: string | null; session_id: string; visitor_id: string; device_type: string | null; browser: string | null; created_at: string }>((from, to) =>
+      applyRange(supabase.from('page_views').select('referrer, session_id, visitor_id, device_type, browser, created_at'), parsed).range(from, to),
     );
-    const { data } = await q;
-    const rows = data ?? [];
 
     // Traffic sources
     const sourceMap = new Map<string, number>();
@@ -457,13 +479,16 @@ export async function GET(req: NextRequest) {
     let newVisitors = 0;
     let returningVisitors = 0;
     if (visitorIdsInRange.size > 0) {
-      const { data: firstSeen } = await supabase
-        .from('page_views')
-        .select('visitor_id, created_at')
-        .in('visitor_id', Array.from(visitorIdsInRange))
-        .order('created_at', { ascending: true });
+      const firstSeen = await fetchAllRows<{ visitor_id: string; created_at: string }>((from, to) =>
+        supabase
+          .from('page_views')
+          .select('visitor_id, created_at')
+          .in('visitor_id', Array.from(visitorIdsInRange))
+          .order('created_at', { ascending: true })
+          .range(from, to),
+      );
       const firstByVisitor = new Map<string, string>();
-      for (const r of firstSeen ?? []) {
+      for (const r of firstSeen) {
         if (!firstByVisitor.has(r.visitor_id)) firstByVisitor.set(r.visitor_id, r.created_at);
       }
       const startMs = new Date(parsed.startISO).getTime();
@@ -493,18 +518,19 @@ export async function GET(req: NextRequest) {
 
   // ── BOOKINGS STATS ────────────────────────────────────────────────────────
   if (type === 'bookings') {
-    const rangeBookingsQ = applyRange(
-      supabase.from('bookings').select('price_total, created_at'),
-      parsed,
-    ).neq('status', 'cancelled');
-    const { data: rangeBookings } = await rangeBookingsQ;
+    const rangeBookings = await fetchAllRows<{ price_total: number | null; created_at: string }>((from, to) =>
+      applyRange(
+        supabase.from('bookings').select('price_total, created_at'),
+        parsed,
+      ).neq('status', 'cancelled').range(from, to),
+    );
 
-    const totalBookings = (rangeBookings ?? []).length;
-    const totalRevenue = (rangeBookings ?? []).reduce((s, b) => s + (b.price_total ?? 0), 0);
+    const totalBookings = rangeBookings.length;
+    const totalRevenue = rangeBookings.reduce((s, b) => s + (b.price_total ?? 0), 0);
 
     // Trend pro Berlin-Tag im Range
     const dayMap = new Map<string, { count: number; revenue: number }>();
-    for (const row of rangeBookings ?? []) {
+    for (const row of rangeBookings) {
       const day = getBerlinDateKey(row.created_at);
       if (!dayMap.has(day)) dayMap.set(day, { count: 0, revenue: 0 });
       const d = dayMap.get(day)!;
@@ -516,9 +542,10 @@ export async function GET(req: NextRequest) {
       .map(([date, d]) => ({ date, count: d.count, revenue: d.revenue }));
 
     // Conversion-Rate: Bookings im Range / Sessions im Range.
-    const viewsQ = applyRange(supabase.from('page_views').select('session_id'), parsed);
-    const { data: rangeViews } = await viewsQ;
-    const sessionCount = new Set((rangeViews ?? []).map((r) => r.session_id)).size;
+    const rangeViews = await fetchAllRows<{ session_id: string }>((from, to) =>
+      applyRange(supabase.from('page_views').select('session_id'), parsed).range(from, to),
+    );
+    const sessionCount = new Set(rangeViews.map((r) => r.session_id)).size;
     const conversionRate = sessionCount > 0 ? +((totalBookings / sessionCount) * 100).toFixed(1) : 0;
     const avgBookingValue = totalBookings > 0 ? +(totalRevenue / totalBookings).toFixed(2) : 0;
 
@@ -567,17 +594,18 @@ export async function GET(req: NextRequest) {
       .map(p => ({ title: p.title, slug: p.slug, views: p.views ?? 0, published_at: p.published_at }));
 
     // Blog Page Views aus page_views Tabelle (Range-bezogen)
-    const blogViewsQ = applyRange(
-      supabase.from('page_views').select('path, created_at'),
-      parsed,
-    ).like('path', '/blog/%').not('path', 'like', '/blog/preview/%');
-    const { data: blogViews } = await blogViewsQ;
+    const blogViews = await fetchAllRows<{ path: string; created_at: string }>((from, to) =>
+      applyRange(
+        supabase.from('page_views').select('path, created_at'),
+        parsed,
+      ).like('path', '/blog/%').not('path', 'like', '/blog/preview/%').range(from, to),
+    );
 
-    const blogPageViewsRange = blogViews?.length ?? 0;
+    const blogPageViewsRange = blogViews.length;
 
     // Views pro Tag im Range — Berlin-Tag
     const dayMap = new Map<string, number>();
-    for (const row of blogViews ?? []) {
+    for (const row of blogViews) {
       const day = getBerlinDateKey(row.created_at);
       dayMap.set(day, (dayMap.get(day) ?? 0) + 1);
     }
@@ -587,7 +615,7 @@ export async function GET(req: NextRequest) {
 
     // Top Blog-Seiten aus page_views (Range-bezogen)
     const blogPageMap = new Map<string, number>();
-    for (const row of blogViews ?? []) {
+    for (const row of blogViews) {
       const slug = row.path.replace('/blog/', '').split('?')[0];
       if (slug && slug !== '') {
         blogPageMap.set(slug, (blogPageMap.get(slug) ?? 0) + 1);
