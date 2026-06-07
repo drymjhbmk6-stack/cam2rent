@@ -150,10 +150,13 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Schedule-Einträge löschen
+    // Schedule-Einträge NICHT löschen — sie sollen im Kalender sichtbar
+    // bleiben (nur nicht mehr verschiebbar). Status auf 'published' setzen,
+    // damit auch der zugehörige Serienteil weiter als geplant/erledigt gilt
+    // und nicht auf "ungeplant" zurückspringt.
     await supabase
       .from('blog_schedule')
-      .delete()
+      .update({ status: 'published' })
       .in('id', scheduleIds);
   }
 

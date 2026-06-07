@@ -181,7 +181,15 @@ export default function BlogZeitplanPage() {
     loadAll();
   }
 
+  // Veröffentlichte Einträge sind nicht mehr verschiebbar (bleiben aber im
+  // Kalender sichtbar). Zentrale Prüfung — greift für Drag, Modal- und
+  // Inline-Datumsfeld gleichermaßen.
+  function isPublishedEntry(e: ScheduleEntry | undefined | null): boolean {
+    return !!e && (e.status === 'published' || e.blog_posts?.status === 'published');
+  }
+
   async function updateDate(id: string, date: string) {
+    if (isPublishedEntry(schedule.find(e => e.id === id))) return;
     await updateField(id, 'scheduled_date', date);
   }
 
@@ -354,13 +362,14 @@ export default function BlogZeitplanPage() {
                               const shortTitle = entry.topic.length > 30 ? entry.topic.slice(0, 28) + '…' : entry.topic;
                               const catName = entry.blog_categories?.name;
                               const catColor = entry.blog_categories?.color || '#475569';
+                              const isPublished = isPublishedEntry(entry);
                               return (
                                 <div
                                   key={entry.id}
-                                  draggable
-                                  onDragStart={e => { e.stopPropagation(); handleCalDragStart(entry.id); }}
+                                  draggable={!isPublished}
+                                  onDragStart={e => { if (isPublished) { e.preventDefault(); return; } e.stopPropagation(); handleCalDragStart(entry.id); }}
                                   onClick={() => setEditEntry(entry)}
-                                  title={entry.topic}
+                                  title={isPublished ? `${entry.topic} — veröffentlicht (nicht verschiebbar)` : entry.topic}
                                   style={{
                                     display: 'flex',
                                     flexDirection: 'column',
@@ -486,9 +495,10 @@ export default function BlogZeitplanPage() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div>
                 <label style={{ fontSize: 10, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Datum</label>
-                <input type="date" defaultValue={entry.scheduled_date}
+                <input type="date" defaultValue={entry.scheduled_date} disabled={isPublishedEntry(entry)}
                   onBlur={e => { if (e.target.value !== entry.scheduled_date) updateDate(entry.id, e.target.value); }}
-                  style={{ ...inputStyle }} />
+                  style={{ ...inputStyle, opacity: isPublishedEntry(entry) ? 0.5 : 1, cursor: isPublishedEntry(entry) ? 'not-allowed' : 'auto' }} />
+                {isPublishedEntry(entry) && <span style={{ fontSize: 10, color: '#64748b' }}>Veröffentlicht — nicht mehr verschiebbar</span>}
               </div>
               <div>
                 <label style={{ fontSize: 10, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Uhrzeit</label>
@@ -548,9 +558,10 @@ export default function BlogZeitplanPage() {
           const isToday = entry.scheduled_date === todayStr;
           const isExpanded = expandedId === entry.id;
           const postIsPublished = entry.blog_posts?.status === 'published';
+          const isPublished = isPublishedEntry(entry);
 
           return (
-            <div key={entry.id} draggable onDragStart={() => handleDragStart(index)} onDragEnter={() => handleDragEnter(index)} onDragEnd={handleDragEnd} onDragOver={(e) => e.preventDefault()}
+            <div key={entry.id} draggable={!isPublished} onDragStart={() => { if (!isPublished) handleDragStart(index); }} onDragEnter={() => handleDragEnter(index)} onDragEnd={handleDragEnd} onDragOver={(e) => e.preventDefault()}
               className="rounded-xl transition-colors"
               style={{ background: isToday ? '#06b6d408' : '#1e293b', border: `1px solid ${isToday ? '#06b6d430' : isExpanded ? '#06b6d450' : '#334155'}`, opacity: entry.status === 'skipped' ? 0.5 : 1 }}>
 
@@ -639,7 +650,7 @@ export default function BlogZeitplanPage() {
                     </div>
                   )}
                   <div className="flex items-center gap-2 mt-3 pt-3" style={{ borderTop: '1px solid #334155' }}>
-                    <input type="date" value={entry.scheduled_date} onChange={(e) => updateDate(entry.id, e.target.value)} className="px-2 py-1 rounded text-xs font-body" style={{ background: '#0f172a', border: '1px solid #334155', color: '#e2e8f0' }} />
+                    <input type="date" value={entry.scheduled_date} disabled={isPublished} onChange={(e) => updateDate(entry.id, e.target.value)} className="px-2 py-1 rounded text-xs font-body" style={{ background: '#0f172a', border: '1px solid #334155', color: '#e2e8f0', opacity: isPublished ? 0.5 : 1, cursor: isPublished ? 'not-allowed' : 'auto' }} />
                     <input type="time" value={entry.scheduled_time} onChange={(e) => updateTime(entry.id, e.target.value)} className="px-2 py-1 rounded text-xs font-body" style={{ background: '#0f172a', border: '1px solid #334155', color: '#e2e8f0' }} />
                     <button onClick={(e) => { e.stopPropagation(); deleteEntry(entry.id); }} className="px-2 py-1 rounded text-[11px] font-heading font-semibold ml-auto" style={{ background: '#ef444420', color: '#ef4444' }}>Löschen</button>
                   </div>
@@ -796,8 +807,9 @@ export default function BlogZeitplanPage() {
                           const scheduleEntry = schedule.find(e =>
                             e.topic.includes(`${series.title}`) && e.topic.includes(`Teil ${part.part_number}`)
                           );
+                          const schedPublished = isPublishedEntry(scheduleEntry);
                           const plannedDate = scheduleEntry?.scheduled_date;
-                          const plannedLabel = plannedDate
+                          const plannedLabel = plannedDate && !schedPublished
                             ? `Geplant am ${plannedDate.split('-').reverse().join('.')}`
                             : null;
                           return (
@@ -806,7 +818,11 @@ export default function BlogZeitplanPage() {
                                 <span className="font-heading font-bold mr-1.5" style={{ color: '#8b5cf6' }}>Teil {part.part_number}</span>
                                 {part.topic}
                               </span>
-                              {plannedLabel ? (
+                              {schedPublished ? (
+                                <span className="text-[10px] font-heading px-2 py-0.5 rounded shrink-0 ml-2" style={{ background: '#22c55e20', color: '#22c55e', border: '1px solid #22c55e40' }}>
+                                  Veröffentlicht
+                                </span>
+                              ) : plannedLabel ? (
                                 <span className="text-[10px] font-heading px-2 py-0.5 rounded shrink-0 ml-2" style={{ background: '#06b6d420', color: '#06b6d4', border: '1px solid #06b6d440' }}>
                                   {plannedLabel}
                                 </span>
