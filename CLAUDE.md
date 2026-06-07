@@ -4034,6 +4034,16 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
   hinzu. Ohne Migration läuft die Notiz-Funktion 1:1 weiter (Text-Notizen
   ohne Checkliste, defensive API-Fallbacks), die To-do-Liste speichert dann
   aber nichts. Empfohlen ASAP ausführen.
+- **Länder-Statistik-Migration auszuführen:** `supabase/supabase-page-views-country.sql`
+  (idempotent, additiv). Fügt `page_views.country TEXT` + Index hinzu. Der
+  Track-Endpoint schreibt ab dann den Cloudflare-Header `CF-IPCountry` (ISO-2,
+  z.B. „DE") pro Seitenaufruf mit (defensiver Insert-Retry ohne die Spalte,
+  falls Migration noch fehlt → Tracking bricht nie). Im Statistik-Tab
+  „Besucher & Marketing" zeigt eine neue „Länder"-Karte die Top-Herkunftsländer
+  (eindeutige Besucher, Flagge + dt. Name via `Intl.DisplayNames`). Ohne
+  Migration läuft alles weiter, die Karte zeigt einen Hinweis. **Wichtig:**
+  Daten beginnen ab Migration — vergangene Aufrufe haben kein Land
+  (rückwirkend nicht ermittelbar). Empfohlen ASAP ausführen.
 - **Notizen-Teilen+Anhänge-Migration + Bucket auszuführen:**
   `supabase/supabase-employee-notes-sharing-attachments.sql` (idempotent,
   additiv: `employee_notes.shared_with UUID[]` + `attachments JSONB`) **und**

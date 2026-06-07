@@ -48,9 +48,16 @@ export async function POST(req: NextRequest) {
 
   const { device_type, browser, os } = parseUserAgent(ua);
 
+  // Land aus Cloudflare-Header (cam2rent läuft hinter Cloudflare). ISO-2-Code,
+  // z.B. "DE". "XX"/"T1" (unbekannt/Tor) und Nicht-2-Buchstaben → null.
+  const cfCountry = (req.headers.get('cf-ipcountry') ?? '').toUpperCase();
+  const country = /^[A-Z]{2}$/.test(cfCountry) && cfCountry !== 'XX' && cfCountry !== 'T1'
+    ? cfCountry
+    : null;
+
   try {
     const supabase = createServiceClient();
-    const { error } = await supabase.from('page_views').insert({
+    const row: Record<string, unknown> = {
       visitor_id: body.visitor_id,
       session_id: body.session_id ?? '',
       path: body.path,
@@ -62,7 +69,15 @@ export async function POST(req: NextRequest) {
       utm_source: body.utm_source || null,
       utm_medium: body.utm_medium || null,
       utm_campaign: body.utm_campaign || null,
-    });
+      country,
+    };
+    let { error } = await supabase.from('page_views').insert(row);
+    // Defensiv: country-Spalte fehlt (Migration ausstehend) → ohne sie inserten,
+    // damit Tracking nicht komplett bricht.
+    if (error && /country|column|schema cache|PGRST204/i.test(error.message)) {
+      delete row.country;
+      ({ error } = await supabase.from('page_views').insert(row));
+    }
     if (error) {
       // Mit Log (nicht stumm) — hilft Fehlerdiagnose z.B. bei fehlender Tabelle
       console.error('[track] page_views insert failed:', error.message);

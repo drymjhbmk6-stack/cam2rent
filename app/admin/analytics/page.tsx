@@ -40,6 +40,7 @@ interface FunnelData { funnel: { step: string; count: number; pct: number }[] }
 interface TrafficData {
   sources: { source: string; count: number; pct: number }[];
   browsers: { browser: string; count: number; pct: number }[];
+  countries?: { code: string; count: number; pct: number }[];
   devices: { desktop: number; mobile: number; tablet: number };
   bounce_rate: number; new_visitors: number; returning_visitors: number; total_sessions: number;
 }
@@ -48,6 +49,20 @@ interface BookingsData {
   trend: { date: string; count: number; revenue: number }[];
 }
 interface ProductsData { products: { slug: string; views: number; bookings: number; revenue: number; utilization: number }[] }
+
+// ISO-2-Code → Flaggen-Emoji (Regional-Indicator-Symbole). "XX" = unbekannt.
+function flagEmoji(code: string): string {
+  if (code === 'XX' || !/^[A-Z]{2}$/.test(code)) return '🏳️';
+  return String.fromCodePoint(...[...code].map((c) => 0x1f1e6 + c.charCodeAt(0) - 65));
+}
+// ISO-2-Code → deutscher Ländername (Intl, ohne eigene Tabelle).
+const regionNames = (() => {
+  try { return new Intl.DisplayNames(['de'], { type: 'region' }); } catch { return null; }
+})();
+function countryName(code: string): string {
+  if (code === 'XX') return 'Unbekannt';
+  try { return regionNames?.of(code) ?? code; } catch { return code; }
+}
 
 type Tab = 'live' | 'bookings' | 'traffic' | 'customers' | 'blog';
 
@@ -496,6 +511,13 @@ function generateCSV(
       rows.push(['Browser', 'Aufrufe', 'Prozent']);
       for (const b of trafficData.browsers) {
         rows.push([b.browser, String(b.count), `${b.pct}%`]);
+      }
+    }
+    if (trafficData?.countries?.length) {
+      rows.push([]);
+      rows.push(['Land', 'Besucher', 'Prozent']);
+      for (const c of trafficData.countries) {
+        rows.push([countryName(c.code), String(c.count), `${c.pct}%`]);
       }
     }
   }
@@ -1386,6 +1408,42 @@ export default function AnalyticsPage() {
                     </div>
                   ))}
                 </div>
+              ) : <div style={{ color: C.textDim }}>Laden...</div>}
+            </Card>
+
+            {/* Länder */}
+            <Card>
+              <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16 }}>
+                Länder — {getTimeRangeLabel(filters.timeRange)}
+                <InfoTooltip text="Aus welchem Land deine Besucher kommen (ermittelt über Cloudflare). Gezählt werden eindeutige Besucher pro Land." />
+              </div>
+              {trafficData ? (
+                (trafficData.countries ?? []).length > 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {(trafficData.countries ?? []).map((c, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{ width: 130, fontSize: 13, color: '#cbd5e1', flexShrink: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          <span style={{ marginRight: 6 }}>{flagEmoji(c.code)}</span>{countryName(c.code)}
+                        </div>
+                        <div style={{ flex: 1, background: C.border, borderRadius: 6, height: 22, overflow: 'hidden' }}>
+                          <div style={{
+                            width: `${c.pct}%`, height: 22, borderRadius: 6,
+                            background: `linear-gradient(90deg, ${C.purple}, ${C.purple}88)`,
+                            display: 'flex', alignItems: 'center', paddingLeft: 8,
+                          }}>
+                            <span style={{ color: 'white', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>
+                              {c.count} ({c.pct}%)
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ color: C.textDim, fontSize: 13 }}>
+                    Noch keine Länderdaten. Werden ab jetzt für neue Besuche erfasst (Migration nötig).
+                  </div>
+                )
               ) : <div style={{ color: C.textDim }}>Laden...</div>}
             </Card>
 

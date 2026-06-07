@@ -429,8 +429,14 @@ export async function GET(req: NextRequest) {
 
   // ── TRAFFIC SOURCES ───────────────────────────────────────────────────────
   if (type === 'traffic') {
-    const rows = await fetchAllRows<{ referrer: string | null; session_id: string; visitor_id: string; device_type: string | null; browser: string | null; created_at: string }>((from, to) =>
-      applyRange(supabase.from('page_views').select('referrer, session_id, visitor_id, device_type, browser, created_at'), parsed).range(from, to),
+    // country ist optional (Migration ggf. ausstehend) — vorab proben.
+    const { error: countryProbe } = await supabase.from('page_views').select('country').limit(1);
+    const hasCountry = !(countryProbe && /country|column|schema cache|does not exist/i.test(countryProbe.message ?? ''));
+    const trafficCols = `referrer, session_id, visitor_id, device_type, browser, created_at${hasCountry ? ', country' : ''}`;
+
+    type TrafficRow = { referrer: string | null; session_id: string; visitor_id: string; device_type: string | null; browser: string | null; created_at: string; country?: string | null };
+    const rows = await fetchAllRows<TrafficRow>((from, to) =>
+      applyRange(supabase.from('page_views').select(trafficCols), parsed).range(from, to) as unknown as PromiseLike<{ data: TrafficRow[] | null; error: unknown }>,
     );
 
     // Traffic sources
@@ -461,6 +467,33 @@ export async function GET(req: NextRequest) {
       if (row.device_type === 'mobile') mobile++;
       else if (row.device_type === 'tablet') tablet++;
       else desktop++;
+    }
+
+    // Länder-Verteilung (eindeutige Besucher pro Land, aus Cloudflare-Header).
+    // Nur wenn die country-Spalte existiert.
+    const countries: { code: string; count: number; pct: number }[] = [];
+    if (hasCountry) {
+      const visitorsByCountry = new Map<string, Set<string>>();
+      let unknownVisitors = 0;
+      const seenUnknown = new Set<string>();
+      for (const row of rows) {
+        const code = (row.country ?? '').toUpperCase();
+        const vid = row.visitor_id || row.session_id;
+        if (/^[A-Z]{2}$/.test(code)) {
+          if (!visitorsByCountry.has(code)) visitorsByCountry.set(code, new Set());
+          visitorsByCountry.get(code)!.add(vid);
+        } else if (!seenUnknown.has(vid)) {
+          seenUnknown.add(vid);
+          unknownVisitors++;
+        }
+      }
+      const entries = Array.from(visitorsByCountry.entries()).map(([code, set]) => ({ code, count: set.size }));
+      if (unknownVisitors > 0) entries.push({ code: 'XX', count: unknownVisitors });
+      const totalGeo = entries.reduce((s, e) => s + e.count, 0) || 1;
+      entries.sort((a, b) => b.count - a.count);
+      for (const e of entries.slice(0, 12)) {
+        countries.push({ code: e.code, count: e.count, pct: Math.round((e.count / totalGeo) * 100) });
+      }
     }
 
     // Bounce rate (sessions with only 1 page view)
@@ -503,6 +536,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       sources,
       browsers,
+      countries,
       devices: {
         desktop: Math.round((desktop / total) * 100),
         mobile: Math.round((mobile / total) * 100),
