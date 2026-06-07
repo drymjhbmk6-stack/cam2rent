@@ -2571,6 +2571,12 @@ Vorher schickten alle Reports `${from}T00:00:00` ohne TZ-Suffix an Postgres. Auf
 
 **Aufgeräumt (Stand 2026-05-17):** Die alte `app/api/admin/buchhaltung-neu/euer/route.ts` (Refactor-Zombie, vom UI nie aufgerufen) wurde gelöscht — inkl. der jetzt toten `/api/admin/buchhaltung-neu`-Permission-Zeile in `middleware.ts`. Beseitigt nebenbei 6 vorbestehende tsc-Fehler aus dieser Datei.
 
+### Statistik-Audit Welle 2 — Blog-Tab + Test-Isolation (Stand 2026-06-07)
+Drei weitere echte Bugs in `/api/admin/analytics` gefixt:
+- **Blog-Tab „Artikel gesamt" zeigte 0 trotz vorhandener Beiträge.** Der `blog_posts`-Select listete die Spalte `views` explizit auf. `blog_posts.views` wird von KEINER Stelle geschrieben und existiert ggf. gar nicht — fehlt die Spalte, liefert PostgREST einen Fehler, `data` ist `null` (Fehler wurde ignoriert) → ALLE Artikel-Kennzahlen (gesamt/veröffentlicht/Entwürfe/Top-Artikel) standen auf 0, während „Blog-Aufrufe" (aus `page_views`) korrekt >0 zeigte. Fix: defensiver Doppel-Load — erst mit `views`, bei Fehler ohne `views` neu laden (Views dann als 0 behandelt; angezeigt wird ohnehin `topBlogPages` aus echten `page_views`).
+- **„Im Zeitplan" zeigte immer 0.** Der Count filterte `blog_schedule.status IN ('pending','scheduled')` — diese Status existieren NICHT. Der reale „noch nicht generiert"-Status ist `'planned'`. Fix: `.eq('status','planned')`.
+- **Test-Buchungen verfälschten Live-Kunden-/Umsatz-Statistik.** Die buchungsbasierten Branches (customers, bookings, products, funnel-bookingCount) filterten `is_test` nicht → im Live-Modus zählten Test-Buchungen mit (CLAUDE.md: Test-Daten dürfen nie in Live-Reports). Fix: `const testMode = await isTestMode()` einmal oben, alle vier Buchungs-Queries `.eq('is_test', testMode)` (Live → nur echte, Test → nur Test). `is_test` ist seit env-toggle-Migration auf `bookings` vorhanden. page_views-basierte Branches bleiben unberührt (kein is_test-Konzept).
+
 ### Statistik-Audit + Daten-/Filter-Fixes (Stand 2026-05-15)
 Tiefen-Audit der Statistik-Seite (`/admin/analytics` + `/api/admin/analytics`) — sechs echte Daten- und Filter-Bugs gefixt, plus Reliability:
 

@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
 import { getBerlinHour, getBerlinDateKey } from '@/lib/timezone';
 import { parseAnalyticsRange, applyRange, type ParsedRange } from '@/lib/analytics-range';
+import { isTestMode } from '@/lib/env-mode';
 
 function formatReferrer(ref: string | null): string {
   if (!ref) return 'direkt';
@@ -72,6 +73,12 @@ export async function GET(req: NextRequest) {
   const type = req.nextUrl.searchParams.get('type') ?? 'today';
   const supabase = createServiceClient();
   const parsed: ParsedRange = parseAnalyticsRange(req);
+
+  // Buchungs-basierte Kennzahlen folgen dem Env-Modus: im Live-Modus zaehlen
+  // NUR echte Buchungen (is_test=false), im Test-Modus nur Test-Buchungen.
+  // Sonst verfaelschen Test-Buchungen die Live-Kunden-/Umsatz-Statistik
+  // (CLAUDE.md: Test-Daten duerfen nie in Live-Reports auftauchen).
+  const testMode = await isTestMode();
 
   // ── LIVE ──────────────────────────────────────────────────────────────────
   if (type === 'live') {
@@ -240,7 +247,7 @@ export async function GET(req: NextRequest) {
     const bookingsQ = applyRange(
       supabase.from('bookings').select('id', { count: 'exact', head: true }),
       parsed,
-    ).neq('status', 'cancelled');
+    ).neq('status', 'cancelled').eq('is_test', testMode);
     const { count: bookingCount } = await bookingsQ;
 
     const base = allSessions || 1;
@@ -268,7 +275,7 @@ export async function GET(req: NextRequest) {
       applyRange(
         supabase.from('bookings').select('user_id, customer_email, price_total, status, created_at'),
         parsed,
-      ).neq('status', 'cancelled').range(from, to),
+      ).neq('status', 'cancelled').eq('is_test', testMode).range(from, to),
     );
 
     // Zusaetzlich: ALLE Buchungen fuer die korrekte "neuer-Kunde-im-Range"-Berechnung
@@ -278,6 +285,7 @@ export async function GET(req: NextRequest) {
         .from('bookings')
         .select('user_id, customer_email, created_at, status')
         .neq('status', 'cancelled')
+        .eq('is_test', testMode)
         .range(from, to),
     );
 
@@ -369,7 +377,7 @@ export async function GET(req: NextRequest) {
       applyRange(
         supabase.from('bookings').select('product_id, product_name, price_total, rental_from, rental_to, status'),
         parsed,
-      ).neq('status', 'cancelled').range(from, to),
+      ).neq('status', 'cancelled').eq('is_test', testMode).range(from, to),
     );
 
     // Count views per slug (skip /kameras/<slug>/buchen — ist Buchungs-Wizard, nicht Produkt-Detail)
@@ -601,7 +609,7 @@ export async function GET(req: NextRequest) {
       applyRange(
         supabase.from('bookings').select('price_total, created_at'),
         parsed,
-      ).neq('status', 'cancelled').range(from, to),
+      ).neq('status', 'cancelled').eq('is_test', testMode).range(from, to),
     );
 
     const totalBookings = rangeBookings.length;
@@ -644,13 +652,26 @@ export async function GET(req: NextRequest) {
 
   // ── BLOG ────────────────────────────────────────────────────────────────────
   if (type === 'blog') {
-    // Alle Blog-Artikel (nicht range-gefiltert — "Artikel gesamt" ist all-time)
-    const { data: allPosts } = await supabase
+    // Alle Blog-Artikel (nicht range-gefiltert — "Artikel gesamt" ist all-time).
+    // 'views' wird aktuell von keiner Stelle geschrieben und existiert ggf. NICHT
+    // als Spalte. Würde der Select mit 'views' fehlschlagen, käme `data=null`
+    // zurück und ALLE Artikel-Kennzahlen ständen auf 0 (Symptom: "Artikel gesamt
+    // 0" trotz vorhandener Beiträge). Daher defensiv: bei Fehler ohne 'views' neu laden.
+    type BlogPostRow = { id: string; title: string; slug: string; status: string; published_at: string | null; created_at: string; views?: number | null };
+    const withViews = await supabase
       .from('blog_posts')
       .select('id, title, slug, status, published_at, views, created_at')
       .order('created_at', { ascending: false });
-
-    const posts = allPosts ?? [];
+    let posts: BlogPostRow[];
+    if (withViews.error) {
+      const noViews = await supabase
+        .from('blog_posts')
+        .select('id, title, slug, status, published_at, created_at')
+        .order('created_at', { ascending: false });
+      posts = (noViews.data ?? []) as BlogPostRow[];
+    } else {
+      posts = (withViews.data ?? []) as BlogPostRow[];
+    }
     const totalPosts = posts.length;
     const publishedPosts = posts.filter(p => p.status === 'published').length;
     const draftPosts = posts.filter(p => p.status === 'draft').length;
@@ -718,11 +739,14 @@ export async function GET(req: NextRequest) {
     );
     const { count: recentComments } = await recentCommentsQ;
 
-    // Zeitplan (all-time — wartende Plan-Eintraege)
+    // Zeitplan (all-time — geplante, noch nicht generierte Themen).
+    // FIX: Status 'pending'/'scheduled' existieren in blog_schedule NICHT —
+    // der reale "noch nicht generiert"-Status ist 'planned' (vgl. schedule/
+    // blog-generate). Vorher zeigte "Im Zeitplan" deshalb immer 0.
     const { data: scheduleData } = await supabase
       .from('blog_schedule')
       .select('id, status')
-      .in('status', ['pending', 'scheduled']);
+      .eq('status', 'planned');
     const scheduledCount = scheduleData?.length ?? 0;
 
     return NextResponse.json({
