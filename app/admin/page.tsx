@@ -370,6 +370,10 @@ export default function AdminDashboardPage() {
           grid-template-columns: repeat(4, 1fr);
           gap: 16px;
         }
+        /* Grid-Zellen duerfen unter ihre Inhalts-Mindestbreite schrumpfen,
+           sonst sprengt ein breites Widget (z.B. Aufgaben-Buttons) das Layout
+           und schiebt alle Karten ueber den Bildschirmrand. */
+        .c2r-dash-grid > * { min-width: 0; }
         .c2r-span-2 { grid-column: span 2; }
         .c2r-span-4 { grid-column: span 4; }
         @media (max-width: 1024px) {

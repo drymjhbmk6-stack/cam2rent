@@ -645,17 +645,18 @@ export function ActionQueueWidget({ data, loading }: {
       display: 'flex',
       flexDirection: 'column',
       height: '100%',
+      overflow: 'hidden',
       transition: 'border-color 0.15s',
     }}
       onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = C.cyan; }}
       onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = C.border; }}
     >
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
           <div style={{
             width: 32, height: 32, borderRadius: 8, background: C.cyanDim,
-            display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.cyan,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.cyan, flexShrink: 0,
           }}>
             <ChecklistIcon />
           </div>
@@ -666,7 +667,7 @@ export function ActionQueueWidget({ data, loading }: {
             </span>
           )}
         </div>
-        <Link href="/admin/buchungen" style={{ fontSize: 11, color: C.cyan, textDecoration: 'none', fontWeight: 500 }}>
+        <Link href="/admin/buchungen" style={{ fontSize: 11, color: C.cyan, textDecoration: 'none', fontWeight: 500, flexShrink: 0, whiteSpace: 'nowrap' }}>
           Alle Buchungen
         </Link>
       </div>
