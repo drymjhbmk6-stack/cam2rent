@@ -1780,8 +1780,14 @@ function filterByTimeRange<T extends { date: string }>(data: T[], filters: Filte
       fromDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
   }
 
-  const fromStr = fromDate.toISOString().slice(0, 10);
-  const toStr = toDate.toISOString().slice(0, 10);
+  // Lokale Datums-Grenzen (YYYY-MM-DD) statt toISOString() — sonst verschiebt
+  // die UTC-Umrechnung die Grenze um einen Tag (Berlin), und der Chart zeigt
+  // am Rand einen Tag zu viel/zu wenig. Die `date`-Keys der Daten sind
+  // Berlin-Tage; der Admin-Browser läuft in Berlin → lokale Komponenten passen.
+  const toLocalDateStr = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const fromStr = toLocalDateStr(fromDate);
+  const toStr = toLocalDateStr(toDate);
 
   return data.filter(item => item.date >= fromStr && item.date <= toStr);
 }
