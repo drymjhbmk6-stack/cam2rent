@@ -1,12 +1,20 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 
 interface ChecklistItem {
   id: string;
   text: string;
   done: boolean;
+}
+
+interface Attachment {
+  id: string;
+  path: string;
+  filename: string;
+  mime: string;
+  size: number;
 }
 
 interface Note {
@@ -16,8 +24,18 @@ interface Note {
   pinned: boolean;
   color: string | null;
   checklist: ChecklistItem[];
+  attachments: Attachment[];
+  shared_with: string[];
+  is_owner: boolean;
+  owner_name: string | null;
   created_at: string;
   updated_at: string;
+}
+
+interface Employee {
+  id: string;
+  name: string;
+  role: string;
 }
 
 function newChecklistItem(text = ''): ChecklistItem {
@@ -44,6 +62,22 @@ function colorBg(color: string | null): string {
   return COLOR_PRESETS.find((c) => c.value === color)?.bg ?? '#1e293b';
 }
 
+function attachmentUrl(path: string): string {
+  return `/api/admin/mein/notizen/attachment?path=${encodeURIComponent(path)}`;
+}
+function isImage(mime: string): boolean { return mime.startsWith('image/'); }
+function isVideo(mime: string): boolean { return mime.startsWith('video/'); }
+function fileIcon(mime: string): string {
+  if (mime === 'application/pdf') return '📄';
+  if (isVideo(mime)) return '🎬';
+  return '📎';
+}
+function fmtBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
 function fmtRelative(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   if (diff < 60_000) return 'gerade';
@@ -55,11 +89,13 @@ function fmtRelative(iso: string): string {
 
 export default function MeineNotizenPage() {
   const [notes, setNotes] = useState<Note[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [warn, setWarn] = useState<string | null>(null);
   const [editing, setEditing] = useState<Note | null>(null);
   const [creating, setCreating] = useState(false);
   const [search, setSearch] = useState('');
+  const [lightbox, setLightbox] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -69,13 +105,25 @@ export default function MeineNotizenPage() {
       if (json.legacy) setWarn('Du bist mit dem Notfall-Login angemeldet. Bitte mit Mitarbeiter-Konto einloggen, um persönliche Notizen zu nutzen.');
       else if (json.migration_pending) setWarn('Die Migration supabase-employee-personal.sql ist noch nicht eingespielt — Notizen können noch nicht gespeichert werden.');
       else setWarn(null);
-      setNotes((json.notes ?? []).map((n: Note) => ({ ...n, checklist: Array.isArray(n.checklist) ? n.checklist : [] })));
+      setNotes((json.notes ?? []).map((n: Note) => ({
+        ...n,
+        checklist: Array.isArray(n.checklist) ? n.checklist : [],
+        attachments: Array.isArray(n.attachments) ? n.attachments : [],
+        shared_with: Array.isArray(n.shared_with) ? n.shared_with : [],
+      })));
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+
+  useEffect(() => {
+    fetch('/api/admin/mein/employees', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((j) => setEmployees(j.employees ?? []))
+      .catch(() => {});
+  }, []);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -91,14 +139,13 @@ export default function MeineNotizenPage() {
     const nextChecklist = note.checklist.map((it) =>
       it.id === itemId ? { ...it, done: !it.done } : it,
     );
-    // Optimistic
     setNotes((prev) => prev.map((n) => (n.id === note.id ? { ...n, checklist: nextChecklist } : n)));
     const res = await fetch(`/api/admin/mein/notizen/${note.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ checklist: nextChecklist }),
     });
-    if (!res.ok) void load(); // Rollback bei Fehler
+    if (!res.ok) void load();
   }
 
   async function handleTogglePin(note: Note) {
@@ -156,7 +203,9 @@ export default function MeineNotizenPage() {
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
-            {filtered.map((note) => (
+            {filtered.map((note) => {
+              const imgAtts = note.attachments.filter((a) => isImage(a.mime));
+              return (
               <div
                 key={note.id}
                 style={{
@@ -175,15 +224,40 @@ export default function MeineNotizenPage() {
                 {note.pinned && (
                   <span style={{ position: 'absolute', top: 8, right: 8, background: '#facc15', color: '#0a0a0a', borderRadius: 4, padding: '2px 6px', fontSize: 10, fontWeight: 700 }}>📌 PIN</span>
                 )}
+                {(note.owner_name || note.shared_with.length > 0) && (
+                  <div style={{ fontSize: 10, fontWeight: 700, color: '#67e8f9', marginBottom: 6 }}>
+                    {note.is_owner ? `👥 Geteilt (${note.shared_with.length})` : `👤 Geteilt von ${note.owner_name}`}
+                  </div>
+                )}
                 {note.title && (
                   <h3 style={{ margin: '0 0 6px', fontSize: 15, fontWeight: 700, color: '#f8fafc', paddingRight: note.pinned ? 56 : 0 }}>
                     {note.title}
                   </h3>
                 )}
-                {(note.content || note.checklist.length === 0) && (
+                {(note.content || (note.checklist.length === 0 && imgAtts.length === 0)) && (
                   <p style={{ margin: 0, fontSize: 13, color: '#cbd5e1', whiteSpace: 'pre-wrap', flex: note.checklist.length === 0 ? 1 : undefined, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 6, WebkitBoxOrient: 'vertical' }}>
                     {note.content || <em style={{ color: '#64748b' }}>(leer)</em>}
                   </p>
+                )}
+                {imgAtts.length > 0 && (
+                  <div style={{ display: 'flex', gap: 4, marginTop: 8, flexWrap: 'wrap' }} onClick={(e) => e.stopPropagation()}>
+                    {imgAtts.slice(0, 3).map((a) => (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        key={a.id}
+                        src={attachmentUrl(a.path)}
+                        alt={a.filename}
+                        onClick={() => setLightbox(attachmentUrl(a.path))}
+                        style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 6, border: '1px solid #475569' }}
+                      />
+                    ))}
+                    {note.attachments.length > imgAtts.slice(0, 3).length && (
+                      <span style={{ fontSize: 11, color: '#94a3b8', alignSelf: 'center' }}>📎 {note.attachments.length}</span>
+                    )}
+                  </div>
+                )}
+                {imgAtts.length === 0 && note.attachments.length > 0 && (
+                  <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 8 }}>📎 {note.attachments.length} Anhang/Anhänge</div>
                 )}
                 {note.checklist.length > 0 && (
                   <div style={{ flex: 1, marginTop: note.content ? 8 : 0 }} onClick={(e) => e.stopPropagation()}>
@@ -218,17 +292,20 @@ export default function MeineNotizenPage() {
                     >
                       {note.pinned ? '📌' : '📍'}
                     </button>
-                    <button
-                      onClick={() => handleDelete(note)}
-                      title="Löschen"
-                      style={{ background: 'transparent', border: 0, color: '#f87171', cursor: 'pointer', fontSize: 14 }}
-                    >
-                      🗑
-                    </button>
+                    {note.is_owner && (
+                      <button
+                        onClick={() => handleDelete(note)}
+                        title="Löschen"
+                        style={{ background: 'transparent', border: 0, color: '#f87171', cursor: 'pointer', fontSize: 14 }}
+                      >
+                        🗑
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -236,33 +313,79 @@ export default function MeineNotizenPage() {
       {(editing || creating) && (
         <NoteEditModal
           note={editing}
+          employees={employees}
           onClose={() => { setEditing(null); setCreating(false); }}
           onSaved={() => { setEditing(null); setCreating(false); void load(); }}
+          onOpenLightbox={setLightbox}
         />
+      )}
+
+      {lightbox && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: 16 }}
+          onClick={() => setLightbox(null)}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={lightbox} alt="" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: 8 }} />
+        </div>
       )}
     </div>
   );
 }
 
-function NoteEditModal({ note, onClose, onSaved }: {
+function NoteEditModal({ note, employees, onClose, onSaved, onOpenLightbox }: {
   note: Note | null;
+  employees: Employee[];
   onClose: () => void;
   onSaved: () => void;
+  onOpenLightbox: (url: string) => void;
 }) {
+  const isOwner = !note || note.is_owner;
   const [title, setTitle] = useState(note?.title ?? '');
   const [content, setContent] = useState(note?.content ?? '');
   const [pinned, setPinned] = useState(note?.pinned ?? false);
   const [color, setColor] = useState(note?.color ?? 'default');
   const [checklist, setChecklist] = useState<ChecklistItem[]>(note?.checklist ?? []);
+  const [attachments, setAttachments] = useState<Attachment[]>(note?.attachments ?? []);
+  const [sharedWith, setSharedWith] = useState<string[]>(note?.shared_with ?? []);
   const [newItemText, setNewItemText] = useState('');
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   function addItem() {
     const t = newItemText.trim();
     if (!t) return;
     setChecklist((prev) => [...prev, newChecklistItem(t)]);
     setNewItemText('');
+  }
+
+  async function handleFiles(files: FileList | null) {
+    if (!files || files.length === 0) return;
+    setUploading(true);
+    setErr(null);
+    try {
+      for (const file of Array.from(files)) {
+        const fd = new FormData();
+        fd.append('file', file);
+        const res = await fetch('/api/admin/mein/notizen/attachment', { method: 'POST', body: fd });
+        const json = await res.json();
+        if (!res.ok) { setErr(json.error ?? 'Upload fehlgeschlagen'); continue; }
+        setAttachments((prev) => [...prev, json.attachment as Attachment]);
+      }
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  }
+
+  function removeAttachment(id: string) {
+    setAttachments((prev) => prev.filter((a) => a.id !== id));
+  }
+
+  function toggleShare(empId: string) {
+    setSharedWith((prev) => prev.includes(empId) ? prev.filter((x) => x !== empId) : [...prev, empId]);
   }
 
   async function save() {
@@ -272,10 +395,12 @@ function NoteEditModal({ note, onClose, onSaved }: {
       const cleanChecklist = checklist.filter((it) => it.text.trim());
       const url = note ? `/api/admin/mein/notizen/${note.id}` : '/api/admin/mein/notizen';
       const method = note ? 'PATCH' : 'POST';
+      const payload: Record<string, unknown> = { title, content, pinned, color, checklist: cleanChecklist, attachments };
+      if (isOwner) payload.shared_with = sharedWith;
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, content, pinned, color, checklist: cleanChecklist }),
+        body: JSON.stringify(payload),
       });
       const json = await res.json();
       if (!res.ok) { setErr(json.error ?? 'Fehler'); return; }
@@ -290,13 +415,18 @@ function NoteEditModal({ note, onClose, onSaved }: {
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 16 }}
       onClick={onClose}>
-      <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 12, padding: 20, width: '100%', maxWidth: 600 }}
+      <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 12, padding: 20, width: '100%', maxWidth: 600, maxHeight: '90vh', overflowY: 'auto' }}
         onClick={(e) => e.stopPropagation()}>
-        <h2 style={{ margin: '0 0 16px', fontSize: 18, color: '#f8fafc' }}>
+        <h2 style={{ margin: '0 0 4px', fontSize: 18, color: '#f8fafc' }}>
           {note ? 'Notiz bearbeiten' : 'Neue Notiz'}
         </h2>
+        {note && !isOwner && (
+          <div style={{ background: '#155e75', color: '#cffafe', padding: '8px 12px', borderRadius: 6, fontSize: 13, margin: '8px 0 14px' }}>
+            👤 Geteilt von {note.owner_name}. Du kannst Inhalt + Anhänge bearbeiten, aber nicht löschen oder die Freigabe ändern.
+          </div>
+        )}
 
-        <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Titel</label>
+        <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4, marginTop: 12 }}>Titel</label>
         <input
           type="text"
           value={title}
@@ -310,10 +440,64 @@ function NoteEditModal({ note, onClose, onSaved }: {
         <textarea
           value={content}
           onChange={(e) => setContent(e.target.value)}
-          rows={10}
+          rows={8}
           placeholder="Was möchtest du dir merken?"
           style={{ width: '100%', padding: '10px 12px', borderRadius: 6, border: '1px solid #334155', background: '#1e293b', color: '#e2e8f0', fontSize: 16, fontFamily: 'inherit', resize: 'vertical', marginBottom: 12 }}
         />
+
+        {/* Anhänge */}
+        <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>
+          📎 Anhänge (Bilder, PDF, Videos)
+        </label>
+        {attachments.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+            {attachments.map((a) => (
+              <div key={a.id} style={{ position: 'relative', width: 86, border: '1px solid #334155', borderRadius: 8, padding: 6, background: '#1e293b' }}>
+                <button
+                  type="button"
+                  onClick={() => removeAttachment(a.id)}
+                  title="Entfernen"
+                  style={{ position: 'absolute', top: -8, right: -8, background: '#ef4444', color: '#fff', border: 0, borderRadius: '50%', width: 20, height: 20, cursor: 'pointer', fontSize: 12, lineHeight: '20px', padding: 0 }}
+                >
+                  ✕
+                </button>
+                {isImage(a.mime) ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={attachmentUrl(a.path)}
+                    alt={a.filename}
+                    onClick={() => onOpenLightbox(attachmentUrl(a.path))}
+                    style={{ width: '100%', height: 60, objectFit: 'cover', borderRadius: 4, cursor: 'pointer' }}
+                  />
+                ) : (
+                  <a href={attachmentUrl(a.path)} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 60, fontSize: 28, textDecoration: 'none' }}>
+                    {fileIcon(a.mime)}
+                  </a>
+                )}
+                <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={a.filename}>
+                  {a.filename}
+                </div>
+                <div style={{ fontSize: 9, color: '#64748b' }}>{fmtBytes(a.size)}</div>
+              </div>
+            ))}
+          </div>
+        )}
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*,application/pdf,video/*"
+          multiple
+          onChange={(e) => handleFiles(e.target.files)}
+          style={{ display: 'none' }}
+        />
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          disabled={uploading}
+          style={{ background: '#334155', color: '#e2e8f0', border: 0, padding: '8px 14px', borderRadius: 6, fontWeight: 600, cursor: 'pointer', marginBottom: 14, opacity: uploading ? 0.6 : 1 }}
+        >
+          {uploading ? 'Lädt hoch…' : '+ Datei anhängen'}
+        </button>
 
         <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>
           ✓ To-do-Liste {checklist.length > 0 && `(${checklist.filter((it) => it.done).length}/${checklist.length})`}
@@ -365,6 +549,42 @@ function NoteEditModal({ note, onClose, onSaved }: {
           </button>
         </div>
 
+        {/* Teilen — nur Besitzer */}
+        {isOwner && (
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 6 }}>
+              👥 Teilen mit Kollegen {sharedWith.length > 0 && `(${sharedWith.length})`}
+            </label>
+            {employees.length === 0 ? (
+              <p style={{ fontSize: 12, color: '#64748b', margin: 0 }}>Keine weiteren Mitarbeiter vorhanden.</p>
+            ) : (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {employees.map((emp) => {
+                  const active = sharedWith.includes(emp.id);
+                  return (
+                    <button
+                      key={emp.id}
+                      type="button"
+                      onClick={() => toggleShare(emp.id)}
+                      style={{
+                        background: active ? '#0e7490' : '#1e293b',
+                        color: active ? '#ecfeff' : '#cbd5e1',
+                        border: `1px solid ${active ? '#06b6d4' : '#475569'}`,
+                        borderRadius: 999, padding: '5px 12px', fontSize: 13, cursor: 'pointer', fontWeight: active ? 700 : 500,
+                      }}
+                    >
+                      {active ? '✓ ' : ''}{emp.name}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {sharedWith.length > 0 && (
+              <p style={{ fontSize: 11, color: '#67e8f9', margin: '6px 0 0' }}>Geteilte Kollegen dürfen die Notiz mitbearbeiten.</p>
+            )}
+          </div>
+        )}
+
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12, alignItems: 'center' }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#cbd5e1', fontSize: 14 }}>
             <input type="checkbox" checked={pinned} onChange={(e) => setPinned(e.target.checked)} />
@@ -399,7 +619,7 @@ function NoteEditModal({ note, onClose, onSaved }: {
           </button>
           <button
             onClick={save}
-            disabled={saving || (!title.trim() && !content.trim() && checklist.filter((it) => it.text.trim()).length === 0)}
+            disabled={saving || (!title.trim() && !content.trim() && checklist.filter((it) => it.text.trim()).length === 0 && attachments.length === 0)}
             style={{ background: '#06b6d4', color: '#0a0a0a', border: 0, padding: '8px 18px', borderRadius: 6, fontWeight: 700, cursor: 'pointer', opacity: saving ? 0.5 : 1 }}
           >
             {saving ? 'Speichert…' : 'Speichern'}

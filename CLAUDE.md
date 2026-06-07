@@ -3449,6 +3449,51 @@ sieht die Gruppe nicht). Zwei Einträge: **Meine Notizen** + **Mein Kalender**.
       ohne `checklist`), GET lädt defensiv ohne die Spalte wenn Migration
       ausstehend. Ohne Migration läuft alles wie zuvor (Checkliste leer,
       reine Text-Notizen).
+    - **Anhänge + Teilen pro Notiz (Stand 2026-06-07):** Notizen können jetzt
+      **Dateien anhängen** (Bilder, PDF, Videos) und mit Kollegen **geteilt**
+      werden. Migration `supabase/supabase-employee-notes-sharing-attachments.sql`
+      (idempotent, additiv): `employee_notes.shared_with UUID[] DEFAULT '{}'`
+      (GIN-Index) + `employee_notes.attachments JSONB DEFAULT '[]'` mit Shape
+      `[{id,path,filename,mime,size}]`. **Rechte-Modell:** Besitzer + alle in
+      `shared_with` dürfen **bearbeiten** (Inhalt, To-dos, Anhänge); **Löschen
+      und Freigabe-Liste ändern darf NUR der Besitzer**. Anhänge liegen im
+      privaten Bucket `employee-note-attachments` unter
+      `<admin_user_id>/<uuid>.<ext>`.
+      - **Upload/Signed-URL/Delete** `app/api/admin/mein/notizen/attachment`
+        (POST/GET/DELETE): POST = multipart `file`, Magic-Byte-Check via
+        `detectFileType` (Bild/PDF/Video, max 50 MB), Upload in den Bucket.
+        GET `?path=` = Signed-URL-Redirect (5 Min); Zugriff nur wenn der Pfad
+        mit der eigenen User-ID beginnt ODER der Pfad in einer mit mir
+        geteilten Notiz steckt (`attachments cs [{path}]` + owner/shared-`.or`).
+        DELETE `?path=` entfernt nur eigene Storage-Dateien (Präfix-Check).
+        Strikter `PATH_RE`-Check gegen Path-Traversal.
+      - **GET-Route** (`route.ts`) lädt jetzt eigene **+ geteilte** Notizen
+        (`.or(admin_user_id.eq,shared_with.cs.{me})`), reicht `is_owner`,
+        `owner_name` (bulk-nachgeladen), `shared_with`, `attachments` durch.
+        Selektiert `*` statt expliziter Spalten → fehlende Migration-Spalten
+        brechen den Read nicht. Schreib-Pfade (POST/PATCH) strippen optionale
+        Spalten (`checklist`/`shared_with`/`attachments`) defensiv bei
+        `42703`/`PGRST204` und versuchen erneut. `isMissingSharedColumn` →
+        GET fällt auf „nur eigene" zurück.
+      - **PATCH** lädt die Notiz, prüft Berechtigung (owner ODER shared) →
+        sonst 403. Inhaltsfelder dürfen beide ändern; `shared_with` nur der
+        Besitzer. **DELETE** nur Besitzer (`.eq('admin_user_id', me.id)`),
+        räumt vorher die Anhang-Dateien aus dem Storage (best-effort).
+      - **UI** (`page.tsx`): Edit-Modal hat eine Anhang-Sektion (Thumbnail-
+        Grid mit ✕-Entfernen, Bild-Klick → Lightbox, PDF/Video als Link;
+        „+ Datei anhängen" lädt sofort hoch) und — **nur für Besitzer** — eine
+        „Teilen mit Kollegen"-Pillenliste (lädt `/api/admin/mein/employees`).
+        Geteilte Nicht-Besitzer sehen ein „Geteilt von X"-Banner, können
+        bearbeiten, aber Löschen-Button + Teilen-UI sind ausgeblendet. Karten
+        zeigen Bild-Thumbnails + 📎-Anzahl + „👥 Geteilt" / „👤 Geteilt von X".
+        Reine Anzeige bleibt sonst 1:1. Ohne Migration: Read funktioniert,
+        Teilen/Anhänge persistieren nicht (defensiv gestript).
+      - **Go-Live TODO:** (1) Migration
+        `supabase/supabase-employee-notes-sharing-attachments.sql` ausführen.
+        (2) Storage-Bucket `employee-note-attachments` im Supabase-Dashboard
+        anlegen (Public OFF, ~50 MB). Ohne Bucket liefert der Upload 503 mit
+        klarem Hinweis; ohne Migration laufen Anhänge/Teilen nicht (kein
+        Hard-Fail).
   - `/admin/mein/kalender` — Monat/Liste-Toggle. **Monatsansicht** mit
     Montag-Start, 6×7-Raster, heute gelb umrandet, Termine als gefärbte
     Balken (Owner = voll, geteilt = mit weißem Border-Left + 0.85 Opacity),
@@ -3989,6 +4034,13 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
   hinzu. Ohne Migration läuft die Notiz-Funktion 1:1 weiter (Text-Notizen
   ohne Checkliste, defensive API-Fallbacks), die To-do-Liste speichert dann
   aber nichts. Empfohlen ASAP ausführen.
+- **Notizen-Teilen+Anhänge-Migration + Bucket auszuführen:**
+  `supabase/supabase-employee-notes-sharing-attachments.sql` (idempotent,
+  additiv: `employee_notes.shared_with UUID[]` + `attachments JSONB`) **und**
+  Storage-Bucket `employee-note-attachments` im Supabase-Dashboard anlegen
+  (Public OFF, ~50 MB). Ohne Migration laufen Notizen weiter, aber Teilen +
+  Anhänge persistieren nicht; ohne Bucket liefert der Anhang-Upload 503.
+  Empfohlen ASAP ausführen.
 - **Firmware-Check-Migration auszuführen:** `supabase/supabase-firmware-checks.sql`
   (idempotent). Legt Tabelle `firmware_checks` + Spalte
   `inventar_units.installed_firmware` an. Ohne Migration laufen die APIs
