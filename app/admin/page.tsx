@@ -50,11 +50,17 @@ export default function AdminDashboardPage() {
   const [showAddPanel, setShowAddPanel] = useState(false);
   const [data, setData] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
+  const [todayLabel, setTodayLabel] = useState('');
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Load layout from localStorage on mount
   useEffect(() => {
     setLayout(loadLayout());
+    // Datum erst clientseitig setzen — verhindert Hydration-Mismatch (React #418),
+    // da die Seite ggf. beim Build vorgerendert wird (eingefrorenes Datum).
+    setTodayLabel(
+      new Date().toLocaleDateString('de-DE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+    );
   }, []);
 
   // Fetch dashboard data
@@ -147,8 +153,8 @@ export default function AdminDashboardPage() {
           <h1 style={{ fontSize: 22, fontWeight: 700, color: C.text, marginBottom: 4, margin: 0 }}>
             cam<span style={{ color: C.cyan }}>2</span>rent Admin
           </h1>
-          <p style={{ fontSize: 13, color: C.textDim, margin: 0 }}>
-            {new Date().toLocaleDateString('de-DE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+          <p style={{ fontSize: 13, color: C.textDim, margin: 0, minHeight: 18 }}>
+            {todayLabel}
           </p>
         </div>
 
