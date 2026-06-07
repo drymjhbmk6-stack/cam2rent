@@ -1084,7 +1084,7 @@ export default function KundenDetailPage() {
                     return (
                       <tr
                         key={b.id}
-                        onClick={() => router.push(`/admin/buchungen?id=${b.id}`)}
+                        onClick={() => router.push(`/admin/buchungen/${b.id}`)}
                         style={{
                           borderBottom: i < bookings.length - 1 ? '1px solid #1e293b' : 'none',
                           cursor: 'pointer',
