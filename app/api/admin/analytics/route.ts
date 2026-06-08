@@ -4,6 +4,7 @@ import { checkAdminAuth } from '@/lib/admin-auth';
 import { getBerlinHour, getBerlinDateKey } from '@/lib/timezone';
 import { parseAnalyticsRange, applyRange, type ParsedRange } from '@/lib/analytics-range';
 import { isTestMode } from '@/lib/env-mode';
+import { computeCameraUtilization } from '@/lib/camera-utilization';
 
 function formatReferrer(ref: string | null): string {
   if (!ref) return 'direkt';
@@ -420,15 +421,20 @@ export async function GET(req: NextRequest) {
       if (p.slug) slugToIdMap.set(p.slug, p.id);
     }
 
-    // Auslastung gegen die Range-Tage normalisieren (vorher hartcodiert /30).
+    // Auslastung kommt aus der zentralen Lib (berücksichtigt die Anzahl aktiver
+    // Units pro Kamera + clampt auf den Zeitraum) — gleiche Quelle wie das
+    // Dashboard-Widget, statt der früheren groben „Miettage ÷ Zeitraum"-Schätzung.
     const rangeDays = Math.max(1, parsed.days);
+    const utilRows = await computeCameraUtilization(supabase, rangeDays);
+    const utilByProductId = new Map(utilRows.map((u) => [u.id, u.utilization]));
+
     const products = Array.from(viewMap.entries())
       .sort((a, b) => b[1] - a[1])
       .slice(0, 10)
       .map(([slug, views]) => {
         const productId = slugToIdMap.get(slug);
         const booking = productId ? (bookingByIdMap.get(productId) ?? { count: 0, revenue: 0, days: 0, name: slug }) : { count: 0, revenue: 0, days: 0, name: slug };
-        const utilization = Math.min(100, Math.round((booking.days / rangeDays) * 100));
+        const utilization = productId ? Math.round(utilByProductId.get(productId) ?? 0) : 0;
         return { slug, name: booking.name, views, bookings: booking.count, revenue: booking.revenue, utilization };
       });
 
@@ -563,17 +569,26 @@ export async function GET(req: NextRequest) {
     let newVisitors = 0;
     let returningVisitors = 0;
     if (visitorIdsInRange.size > 0) {
-      const firstSeen = await fetchAllRows<{ visitor_id: string; created_at: string }>((from, to) =>
-        supabase
-          .from('page_views')
-          .select('visitor_id, created_at')
-          .in('visitor_id', Array.from(visitorIdsInRange))
-          .order('created_at', { ascending: true })
-          .range(from, to),
-      );
+      // Erst-Besuch je Visitor — die ID-Liste in Batches abfragen, damit die
+      // `.in(...)`-URL bei vielen Besuchern nicht zu lang wird (sonst lieferte
+      // die Query stillschweigend nichts → 0 neu / 0 wiederkehrend).
+      const allIds = Array.from(visitorIdsInRange);
       const firstByVisitor = new Map<string, string>();
-      for (const r of firstSeen) {
-        if (!firstByVisitor.has(r.visitor_id)) firstByVisitor.set(r.visitor_id, r.created_at);
+      const CHUNK = 200;
+      for (let i = 0; i < allIds.length; i += CHUNK) {
+        const batch = allIds.slice(i, i + CHUNK);
+        const firstSeen = await fetchAllRows<{ visitor_id: string; created_at: string }>((from, to) =>
+          supabase
+            .from('page_views')
+            .select('visitor_id, created_at')
+            .in('visitor_id', batch)
+            .order('created_at', { ascending: true })
+            .range(from, to),
+        );
+        for (const r of firstSeen) {
+          const prev = firstByVisitor.get(r.visitor_id);
+          if (!prev || r.created_at < prev) firstByVisitor.set(r.visitor_id, r.created_at);
+        }
       }
       const startMs = new Date(parsed.startISO).getTime();
       const endMs = parsed.endISO ? new Date(parsed.endISO).getTime() : Date.now();
