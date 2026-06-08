@@ -67,6 +67,7 @@ export async function GET() {
       recentReviewsRes,
       activityBookingsRes,
       actionQueueRes,
+      pendingVerificationsRes,
     ] = await Promise.all([
       // daily_bookings: count bookings created today
       supabase
@@ -196,6 +197,15 @@ export async function GET() {
         .in('status', ['pending_verification', 'awaiting_payment', 'confirmed', 'preparing_shipment', 'awaiting_pickup', 'shipped', 'delivered', 'picked_up', 'damaged'])
         .order('rental_from', { ascending: true })
         .limit(50),
+
+      // pending_verifications: Kunden die einen Ausweis hochgeladen haben und
+      // auf Admin-Pruefung warten (verification_status='pending').
+      supabase
+        .from('profiles')
+        .select('id, full_name, created_at')
+        .eq('verification_status', 'pending')
+        .order('created_at', { ascending: true })
+        .limit(50),
     ]);
 
     // ── Calculate revenue sums ───────────────────────────────────
@@ -242,6 +252,26 @@ export async function GET() {
       customer_name: enrichMap[r.booking_id]?.customer_name || '',
     }));
 
+    // ── Pending-Verifizierungen aufbereiten ──────────────────────
+    // E-Mail aus auth.users nur aufloesen, wenn es wirklich offene Pruefungen
+    // gibt (kein listUsers-Call im Normalbetrieb).
+    const pendingProfiles = pendingVerificationsRes.data ?? [];
+    let pendingVerifications: Array<{ id: string; name: string; created_at: string }> = [];
+    if (pendingProfiles.length > 0) {
+      const emailMap = new Map<string, string>();
+      try {
+        const { data: { users } } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+        for (const u of users ?? []) emailMap.set(u.id, u.email || '');
+      } catch {
+        // E-Mail-Aufloesung ist best-effort — Name-Fallback reicht.
+      }
+      pendingVerifications = pendingProfiles.map((p) => ({
+        id: p.id,
+        name: (p.full_name || '').trim() || emailMap.get(p.id) || 'Kunde',
+        created_at: p.created_at,
+      }));
+    }
+
     // ── Camera Utilization (30 Tage) — zentrale Lib, gleiche Logik wie /api/admin/utilization
     const utilizationProducts = await computeCameraUtilization(supabase, 30);
 
@@ -278,7 +308,7 @@ export async function GET() {
 
       camera_utilization: { products: utilizationProducts },
 
-      action_queue: { items: actionQueueRes.data ?? [] },
+      action_queue: { items: actionQueueRes.data ?? [], verifications: pendingVerifications },
     };
 
     return NextResponse.json(data);

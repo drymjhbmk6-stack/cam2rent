@@ -627,14 +627,43 @@ function queueActionForBooking(b: QueueBooking): QueueAction | null {
   }
 }
 
+interface VerificationTask {
+  id: string;
+  name: string;
+  created_at: string;
+}
+
+interface QueueRow {
+  key: string;
+  title: string;
+  subtitle: string;
+  action: QueueAction;
+}
+
 export function ActionQueueWidget({ data, loading }: {
-  data: { items: QueueBooking[] } | null;
+  data: { items: QueueBooking[]; verifications?: VerificationTask[] } | null;
   loading: boolean;
 }) {
-  const rows = (data?.items ?? [])
+  // Kunden-Verifizierungen (höchste Priorität — Versand haengt daran)
+  const verificationRows: QueueRow[] = (data?.verifications ?? []).map((v) => ({
+    key: `verif-${v.id}`,
+    title: v.name || 'Kunde',
+    subtitle: `Ausweis hochgeladen · ${formatDate(v.created_at)}`,
+    action: { label: '✅ Verifizieren', href: `/admin/kunden/${v.id}`, color: C.purple, weight: 0 },
+  }));
+
+  const bookingRows: QueueRow[] = (data?.items ?? [])
     .map((b) => ({ b, action: queueActionForBooking(b) }))
     .filter((r): r is { b: QueueBooking; action: QueueAction } => r.action !== null)
-    .sort((x, y) => x.action.weight - y.action.weight || x.b.rental_from.localeCompare(y.b.rental_from));
+    .map(({ b, action }) => ({
+      key: b.id,
+      title: b.product_name || 'Buchung',
+      subtitle: `${b.customer_name} · ${formatDate(b.rental_from)} - ${formatDate(b.rental_to)}`,
+      action,
+    }));
+
+  const rows: QueueRow[] = [...verificationRows, ...bookingRows]
+    .sort((x, y) => x.action.weight - y.action.weight);
 
   return (
     <div style={{
@@ -681,15 +710,15 @@ export function ActionQueueWidget({ data, loading }: {
         </div>
       ) : (
         <div style={{ flex: 1, overflowY: 'auto', maxHeight: 360 }}>
-          {rows.map(({ b, action }, idx) => (
+          {rows.map((row, idx) => (
             <Link
-              key={b.id}
-              href={action.href}
+              key={row.key}
+              href={row.action.href}
               style={{
                 display: 'flex', alignItems: 'center', gap: 10,
                 padding: '10px 8px',
                 borderBottom: idx < rows.length - 1 ? `1px solid ${C.border}` : 'none',
-                borderLeft: `3px solid ${action.color}`,
+                borderLeft: `3px solid ${row.action.color}`,
                 textDecoration: 'none',
                 borderRadius: 6,
                 transition: 'background 0.12s',
@@ -699,18 +728,18 @@ export function ActionQueueWidget({ data, loading }: {
             >
               <div style={{ minWidth: 0, flex: 1 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {b.product_name || 'Buchung'}
+                  {row.title}
                 </div>
                 <div style={{ fontSize: 11, color: C.textDim, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {b.customer_name} &middot; {formatDate(b.rental_from)} - {formatDate(b.rental_to)}
+                  {row.subtitle}
                 </div>
               </div>
               <span style={{
-                fontSize: 11, fontWeight: 700, color: action.color,
-                background: `${action.color}1a`, border: `1px solid ${action.color}40`,
+                fontSize: 11, fontWeight: 700, color: row.action.color,
+                background: `${row.action.color}1a`, border: `1px solid ${row.action.color}40`,
                 padding: '5px 10px', borderRadius: 8, flexShrink: 0, whiteSpace: 'nowrap',
               }}>
-                {action.label}
+                {row.action.label}
               </span>
             </Link>
           ))}
@@ -840,7 +869,7 @@ export function WidgetRenderer({ widgetId, data, loading }: {
 
   // Aufgaben-Queue (Direktlinks zur nächsten Aktion)
   if (widgetId === 'action_queue') {
-    return <ActionQueueWidget data={widgetData as { items: QueueBooking[] } | null} loading={loading} />;
+    return <ActionQueueWidget data={widgetData as { items: QueueBooking[]; verifications?: VerificationTask[] } | null} loading={loading} />;
   }
 
   // Camera utilization widget
