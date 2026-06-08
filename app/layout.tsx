@@ -13,6 +13,7 @@ import ShopShell from '@/components/ShopShell';
 import CookieBanner from '@/components/CookieBanner';
 import ServiceWorkerRegistration from '@/components/ServiceWorkerRegistration';
 import InstallPrompt from '@/components/InstallPrompt';
+import NewsletterPopup from '@/components/home/NewsletterPopup';
 import ThemeProvider from '@/components/ThemeProvider';
 import { Suspense } from 'react';
 
@@ -115,6 +116,7 @@ export default function RootLayout({
                   <CookieBanner />
                   <ServiceWorkerRegistration />
                   <InstallPrompt />
+                  <NewsletterPopup />
                 </CartProvider>
                 </AccessoriesProvider>
                 </ProductImagesProvider>
