@@ -66,6 +66,27 @@ async function fetchAllRows<T>(
   return all;
 }
 
+// Wie fetchAllRows, meldet aber ob die erste Query einen Fehler lieferte
+// (z.B. Tabelle existiert nicht) — damit der Aufrufer zwischen "leer" und
+// "nicht vorhanden" unterscheiden kann.
+async function fetchAllRowsSafe<T>(
+  buildQuery: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>,
+): Promise<{ ok: boolean; rows: T[] }> {
+  const PAGE = 1000;
+  const all: T[] = [];
+  let from = 0;
+  for (;;) {
+    const { data, error } = await buildQuery(from, from + PAGE - 1);
+    if (error) return { ok: false, rows: all };
+    if (!data || data.length === 0) break;
+    all.push(...data);
+    if (data.length < PAGE) break;
+    from += PAGE;
+    if (from >= 2_000_000) break;
+  }
+  return { ok: true, rows: all };
+}
+
 export async function GET(req: NextRequest) {
   if (!await checkAdminAuth()) {
     return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 });
@@ -708,13 +729,34 @@ export async function GET(req: NextRequest) {
       .slice(0, 10)
       .map(p => ({ title: p.title, slug: p.slug, views: p.views ?? 0, published_at: p.published_at }));
 
-    // Blog Page Views aus page_views Tabelle (Range-bezogen)
-    const blogViews = await fetchAllRows<{ path: string; created_at: string }>((from, to) =>
+    // Blog-Aufrufe (Range-bezogen). Primaerquelle ist die `blog_views`-Tabelle
+    // (zeitgestempelte, anonyme Aufruf-Events — gleiche Datenbasis wie der
+    // kumulative blog_posts.view_count, consent-unabhaengig). Vorher kam die
+    // Zahl aus `page_views`, das aber per § 25 TTDSG nur bei Cookie-Consent
+    // befuellt wird → fast leer trotz realer Aufrufe. Fallback auf `page_views`,
+    // falls die Migration supabase-blog-views.sql noch nicht durch ist oder
+    // noch keine Events erfasst wurden (Backward-Compat).
+    let blogViews: { slug: string; created_at: string }[] = [];
+    const blogViewsRes = await fetchAllRowsSafe<{ slug: string | null; created_at: string }>((from, to) =>
       applyRange(
-        supabase.from('page_views').select('path, created_at'),
+        supabase.from('blog_views').select('slug, created_at'),
         parsed,
-      ).like('path', '/blog/%').not('path', 'like', '/blog/preview/%').range(from, to),
+      ).range(from, to),
     );
+    if (blogViewsRes.ok) {
+      // Tabelle existiert → autoritative Quelle (auch wenn fuer den Range
+      // noch 0 Events vorliegen; der Zaehler waechst ab Migration vorwaerts).
+      blogViews = blogViewsRes.rows.map((r) => ({ slug: (r.slug ?? '').split('?')[0], created_at: r.created_at }));
+    } else {
+      // Fallback: page_views (Consent-getrackte Teilmenge)
+      const legacy = await fetchAllRows<{ path: string; created_at: string }>((from, to) =>
+        applyRange(
+          supabase.from('page_views').select('path, created_at'),
+          parsed,
+        ).like('path', '/blog/%').not('path', 'like', '/blog/preview/%').range(from, to),
+      );
+      blogViews = legacy.map((r) => ({ slug: r.path.replace('/blog/', '').split('?')[0], created_at: r.created_at }));
+    }
 
     const blogPageViewsRange = blogViews.length;
 
@@ -728,10 +770,10 @@ export async function GET(req: NextRequest) {
       .sort((a, b) => a[0].localeCompare(b[0]))
       .map(([date, views]) => ({ date, views }));
 
-    // Top Blog-Seiten aus page_views (Range-bezogen)
+    // Top Blog-Seiten (Range-bezogen)
     const blogPageMap = new Map<string, number>();
     for (const row of blogViews) {
-      const slug = row.path.replace('/blog/', '').split('?')[0];
+      const slug = row.slug;
       if (slug && slug !== '') {
         blogPageMap.set(slug, (blogPageMap.get(slug) ?? 0) + 1);
       }

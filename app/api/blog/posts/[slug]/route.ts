@@ -26,5 +26,12 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
     .eq('id', data.id)
     .then(() => {});
 
+  // Zeitgestempeltes, anonymes Aufruf-Event (Statistik). Defensiv: ignoriert
+  // den Fehler, falls die Migration supabase-blog-views.sql noch fehlt.
+  supabase
+    .from('blog_views')
+    .insert({ post_id: data.id, slug })
+    .then(() => {}, () => {});
+
   return NextResponse.json({ post: data });
 }

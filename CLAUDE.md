@@ -2582,6 +2582,39 @@ Vorher schickten alle Reports `${from}T00:00:00` ohne TZ-Suffix an Postgres. Auf
 
 **Aufgeräumt (Stand 2026-05-17):** Die alte `app/api/admin/buchhaltung-neu/euer/route.ts` (Refactor-Zombie, vom UI nie aufgerufen) wurde gelöscht — inkl. der jetzt toten `/api/admin/buchhaltung-neu`-Permission-Zeile in `middleware.ts`. Beseitigt nebenbei 6 vorbestehende tsc-Fehler aus dieser Datei.
 
+### Blog-Aufrufe zeitgestempelt tracken — `blog_views` (Stand 2026-06-08)
+Die Blog-Aufrufe im Statistik-Tab (`/admin/analytics` → Blog) und die
+Per-Artikel-Views in der Blog-Liste liefen auseinander: Die Blog-Liste zeigt
+`blog_posts.view_count` (serverseitig pro Artikelaufruf hochgezählt in
+`app/blog/[slug]/page.tsx`, **consent-unabhängig** — die echten Zahlen,
+12/22/30…). Der Analytics-Blog-Tab las die „Blog-Aufrufe" aber aus der
+`page_views`-Tabelle, die per § 25 TTDSG **nur bei Cookie-Consent='all'**
+befüllt wird → „Blog-Aufrufe — Heute: 0 / Dieses Jahr: 12" trotz vieler
+realer Aufrufe.
+- **Ursache:** `view_count` ist nur ein kumulativer Integer ohne Zeitstempel
+  (nicht range-fähig); `page_views` ist range-fähig, aber consent-gated.
+- **Fix — neue Tabelle `blog_views`** (Migration `supabase/supabase-blog-views.sql`,
+  idempotent): zeitgestempelte, **anonyme** Aufruf-Events (`id, post_id, slug,
+  created_at`) — **kein** PII (keine IP, kein visitor_id, kein Cookie), damit
+  consent-frei (reine aggregierte Statistik, wie `view_count`). RLS
+  service-role-only. Sowohl `app/blog/[slug]/page.tsx` als auch
+  `app/api/blog/posts/[slug]/route.ts` schreiben parallel zum
+  `view_count`-Increment eine `blog_views`-Zeile (fire-and-forget, defensiv —
+  läuft ins Leere ohne Migration).
+- **Analytics-Blog-Branch** (`app/api/admin/analytics/route.ts`): neuer Helper
+  `fetchAllRowsSafe` (meldet `ok=false` bei fehlender Tabelle). „Blog-Aufrufe
+  — Zeitraum", Top-Artikel und Tages-Trend kommen jetzt aus `blog_views`
+  (autoritativ, sobald die Tabelle existiert — auch wenn der Range noch 0
+  Events hat; der Zähler wächst ab Migration vorwärts). **Fallback** auf den
+  alten `page_views`-`/blog/%`-Pfad nur, wenn die Tabelle fehlt (Migration
+  noch nicht durch) → keine Regression.
+- **Wichtig:** `blog_views` startet bei Migration leer; vergangene Aufrufe sind
+  nicht rückwirkend importierbar (nur der kumulative `view_count` kennt sie,
+  ohne Datum). Range-Statistiken sind also erst ab Migration vollständig.
+- **Go-Live TODO:** Migration `supabase/supabase-blog-views.sql` ausführen.
+  Ohne sie läuft alles weiter über den `page_views`-Fallback (= bisheriges
+  Verhalten).
+
 ### Statistik-Audit Welle 2 — Blog-Tab + Test-Isolation (Stand 2026-06-07)
 Drei weitere echte Bugs in `/api/admin/analytics` gefixt:
 - **Blog-Tab „Artikel gesamt" zeigte 0 trotz vorhandener Beiträge.** Der `blog_posts`-Select listete die Spalte `views` explizit auf. `blog_posts.views` wird von KEINER Stelle geschrieben und existiert ggf. gar nicht — fehlt die Spalte, liefert PostgREST einen Fehler, `data` ist `null` (Fehler wurde ignoriert) → ALLE Artikel-Kennzahlen (gesamt/veröffentlicht/Entwürfe/Top-Artikel) standen auf 0, während „Blog-Aufrufe" (aus `page_views`) korrekt >0 zeigte. Fix: defensiver Doppel-Load — erst mit `views`, bei Fehler ohne `views` neu laden (Views dann als 0 behandelt; angezeigt wird ohnehin `topBlogPages` aus echten `page_views`).
@@ -4052,6 +4085,13 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
   hinzu. Ohne Migration läuft die Notiz-Funktion 1:1 weiter (Text-Notizen
   ohne Checkliste, defensive API-Fallbacks), die To-do-Liste speichert dann
   aber nichts. Empfohlen ASAP ausführen.
+- **Blog-Aufrufe-Migration auszuführen:** `supabase/supabase-blog-views.sql`
+  (idempotent). Legt Tabelle `blog_views` (anonyme, zeitgestempelte
+  Aufruf-Events) an. Ohne Migration zeigt der Analytics-Blog-Tab weiter den
+  alten `page_views`-Fallback (consent-gated, fast leer); mit Migration werden
+  die Blog-Aufrufe ab dann korrekt + range-fähig erfasst (siehe „Blog-Aufrufe
+  zeitgestempelt tracken"). Vergangene Aufrufe nicht rückwirkend importierbar.
+  Empfohlen ASAP ausführen.
 - **Länder-Statistik-Migration auszuführen:** `supabase/supabase-page-views-country.sql`
   (idempotent, additiv). Fügt `page_views.country TEXT` + Index hinzu. Der
   Track-Endpoint schreibt ab dann den Cloudflare-Header `CF-IPCountry` (ISO-2,

@@ -90,6 +90,14 @@ export default async function BlogArticlePage({ params }: { params: Promise<{ sl
     .eq('id', post.id)
     .then(() => {});
 
+  // Zeitgestempeltes, anonymes Aufruf-Event fuer die Statistik (kein PII,
+  // consent-unabhaengig — wie view_count, nur datierbar). Defensiv: laeuft
+  // ins Leere, falls die Migration supabase-blog-views.sql noch nicht durch ist.
+  supabase
+    .from('blog_views')
+    .insert({ post_id: post.id, slug: post.slug })
+    .then(() => {}, () => {});
+
   return (
     <>
       <script
