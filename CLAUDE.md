@@ -366,6 +366,17 @@ Zwei Lücken im Inventar/Zubehör-Flow geschlossen:
 - **Features:** Komma als Dezimaltrennzeichen, 0 löschbar, `inputMode="decimal"` für Mobile-Tastatur
 - **Verwendet in:** Kamera-Editor (Kaution, Preistabelle, perDayAfter30), Haftungs-Admin
 
+### Dashboard-Aufgaben-Widget — Kunden-Verifizierung (Stand 2026-06-08)
+Das „Aufgaben"-Widget auf `/admin` (`ActionQueueWidget` in
+`components/admin/DashboardWidgets.tsx`) zeigt zusätzlich zu den Buchungs-
+Aktionen jetzt **offene Kunden-Verifizierungen** — Kunden mit hochgeladenem
+Ausweis (`profiles.verification_status='pending'`) als eigene Aufgabe mit
+Direktlink auf `/admin/kunden/[id]` (Label „✅ Verifizieren", lila, höchste
+Priorität `weight 0`, da der Versand an der Freigabe hängt).
+`GET /api/admin/dashboard-data` liefert dafür `action_queue.verifications`
+(`[{id, name, created_at}]`); die E-Mail wird nur per `listUsers` aufgelöst,
+wenn es offene Prüfungen gibt (kein Call im Normalbetrieb, Name-Fallback).
+
 ### Benachrichtigungssystem
 - **DB-Tabelle:** `admin_notifications` (id, type, title, message, link, is_read, created_at)
 - **API:** GET/PATCH `/api/admin/notifications`, POST `/api/admin/notifications/create`
