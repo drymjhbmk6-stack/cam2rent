@@ -110,6 +110,11 @@ export async function approvePendingBooking(
       },
       allow_promotion_codes: false,
       payment_method_types: ['card', 'paypal'],
+      // Nur EINE Zahlung pro Link zulassen. Sonst kann der Kunde den Link
+      // (z.B. aus zwei Mails) mehrfach bezahlen — Stripe wuerde die Karte
+      // doppelt belasten. Nach der ersten abgeschlossenen Zahlung lehnt
+      // Stripe weitere Zahlungen ab.
+      restrictions: { completed_sessions: { limit: 1 } },
     });
     paymentLink = { id: pl.id, url: pl.url };
   } catch (stripeErr) {

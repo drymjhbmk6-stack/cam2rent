@@ -124,6 +124,9 @@ export async function createSale(opts: {
       },
       allow_promotion_codes: false,
       payment_method_types: ['card', 'paypal'],
+      // Nur EINE Zahlung pro Link — verhindert Doppelbelastung, wenn der
+      // Kunde den Link mehrfach oeffnet/bezahlt.
+      restrictions: { completed_sessions: { limit: 1 } },
     });
     paymentLink = { id: pl.id, url: pl.url };
   } catch (stripeErr) {
