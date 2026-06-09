@@ -78,11 +78,11 @@ export default function EnvModeBadge() {
       title={isLive ? 'Live-Modus: echte Zahlungen' : 'Test-Modus: keine echten Kosten'}
       className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold tracking-widest uppercase rounded-full ${
         isLive
-          ? 'bg-rose-500/15 text-rose-400 border border-rose-500/40'
+          ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/40'
           : 'bg-amber-400/15 text-amber-400 border border-amber-400/40'
       }`}
     >
-      <span className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-rose-400' : 'bg-amber-400'}`} />
+      <span className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-emerald-400' : 'bg-amber-400'}`} />
       {isLive ? 'Live' : 'Test'}
     </span>
   );
