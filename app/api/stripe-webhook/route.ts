@@ -433,11 +433,14 @@ async function handleSingleBooking(
     }
   }
 
-  const testMode = await isTestMode();
+  // is_test muss den Tester-User respektieren (metadata.tester='1'), nicht nur
+  // den globalen Modus — sonst landet eine Tester-Buchung, die der Webhook
+  // (Race vor confirm-booking) anlegt, mit is_test=false und blockiert den
+  // Live-Kalender. testModeForIdSingle = isTesterSingle || isTestMode().
   const { error } = await supabase.from('bookings').insert({
     id: bookingId,
     payment_intent_id: intent.id,
-    is_test: testMode,
+    is_test: testModeForIdSingle,
     product_id: meta.product_id,
     product_name: meta.product_name,
     rental_from: meta.rental_from,
@@ -691,11 +694,13 @@ async function handleCartBooking(
     .map(([accessory_id, qty]) => ({ accessory_id, qty }));
   const allAccessories = itemsToLegacyIds(cartAccessoryItems);
 
-  const testModeCart = await isTestMode();
+  // is_test tester-bewusst setzen (siehe handleSingleBooking) — sonst blockiert
+  // eine vom Webhook-Race angelegte Tester-Cart-Buchung den Live-Kalender.
+  // testModeForIdCart = isTesterCart || isTestMode().
   const { error } = await supabase.from('bookings').insert({
     id: bookingId,
     payment_intent_id: intent.id,
-    is_test: testModeCart,
+    is_test: testModeForIdCart,
     product_id: firstItem.productId,
     product_name: productName,
     rental_from: firstItem.rentalFrom,
@@ -783,7 +788,7 @@ async function handleCartBooking(
       coupon_code: couponCode || null,
       payment_intent_id: intent.id,
       status: 'confirmed',
-      is_test: testModeCart,
+      is_test: testModeForIdCart,
       created_at: new Date().toISOString(),
     }, { taxMode: txMap['tax_mode'] as 'kleinunternehmer' | 'regelbesteuerung', taxRate: parseFloat(txMap['tax_rate'] || '19') });
   } catch (err) {
