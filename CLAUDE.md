@@ -831,6 +831,37 @@ Rückgabe-Prüfung unter `/admin/retouren` (`return-booking`) setzt `completed`/
 - Status-Whitelist von `PATCH /api/admin/booking/[id]` + `update-booking-status`
   um `delivered` erweitert.
 
+### Paketverfolgung — Live-Sendungsstatus DHL/DPD (Stand 2026-06-09)
+Eigene Admin-Übersicht `/admin/sendungen` („Paketverfolgung", Sidebar-Gruppe
+„Tagesgeschäft" nach „Versand & Rückgabe") zeigt **alle aktiven Sendungen mit
+Live-Status** — woher? Aus **Sendcloud**: beim Etikett-Erstellen
+(`/api/admin/sendcloud`) speichern wir pro Buchung `sendcloud_parcel_id`
+(Hinversand) bzw. `sendcloud_return_parcel_id` (Retoure). Sendcloud trackt den
+Carrier-Lauf (DHL/DPD) ohnehin, daher holen wir den aktuellen Status direkt von
+dort — keine separaten DHL-/DPD-API-Verträge nötig.
+- **`lib/sendcloud-tracking.ts`** → `fetchParcelStatuses(parcelIds[])`: holt
+  `GET /api/v2/parcels/{id}` parallel (Concurrency-Cap 6), mappt `status.message`
+  auf eine Kategorie (`delivered|transit|announced|problem|unknown`), 3-Min
+  In-Memory-Cache pro Parcel (Reload spamt Sendcloud nicht). Fehlende Keys /
+  einzelne Fehler → `null` (eine kaputte Sendung blockiert die Liste nicht).
+- **`GET /api/admin/sendungen`** (Permission `tagesgeschaeft`): lädt
+  Versand-Buchungen (Status `preparing_shipment|shipped|delivered|picked_up|
+  returned|confirmed`) mit Etikett, baut pro Buchung bis zu zwei Einträge
+  (Hin + Retoure), reichert sie mit dem Sendcloud-Live-Status an. Defensiver
+  Select-Retry ohne die `tracking_carrier`/`return_tracking_*`/`sendcloud_return_*`-
+  Spalten, falls deren Migration noch aussteht.
+- **Seite** `/admin/sendungen`: Status-Kacheln (Unterwegs/Angekündigt/Problem/
+  Zugestellt, klickbar als Filter) + Suche + Carrier-Filter (DHL/DPD) +
+  „Aktualisieren". Pro Sendung: Produkt (Link auf Buchung), Richtung
+  (Hinversand/Retoure), Carrier-Badge, Kunde/Buchungsnr./Zeitraum,
+  Trackingnummer, Status-Text + „Sendung verfolgen →" (Carrier-Tracking-Link).
+  Dunkles Inline-Theme (wie `/admin/verfuegbarkeit-alerts`).
+- **Grenzen:** Live-Status gibt's nur für über Sendcloud gelabelte Pakete.
+  Manuell hochgeladene Retourlabels (kein `sendcloud_return_parcel_id`) bzw.
+  Selbstversand ohne cam2rent-Etikett erscheinen mit „Kein Live-Status", aber
+  mit Tracking-Link (falls Nummer hinterlegt). Kein Webhook/Cron — Status wird
+  beim Öffnen der Seite live geholt (mit Cache).
+
 ### Sendcloud-Etikett direkt in der Versand-Liste (Stand 2026-05-25)
 `/admin/retouren` ist seit dem Retouren-Refactor der Sidebar-Eintrag „Versand
 & Rückgabe" und damit die primäre Versand-Übersicht. Die alte

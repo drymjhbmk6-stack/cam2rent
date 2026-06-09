@@ -149,6 +149,7 @@ const TAGESGESCHAEFT_ITEMS: NavItem[] = [
   { href: '/admin/verfuegbarkeit', label: 'Kalender', icon: iconCalendar, perm: 'tagesgeschaeft' },
   { href: '/admin/auftragskalender', label: 'Auftragskalender', icon: iconCalendar, perm: 'tagesgeschaeft' },
   { href: '/admin/retouren', label: 'Versand & Rückgabe', icon: iconTruck, perm: 'tagesgeschaeft' },
+  { href: '/admin/sendungen', label: 'Paketverfolgung', icon: iconTruck, perm: 'tagesgeschaeft' },
   { href: '/admin/verfuegbarkeit-alerts', label: 'Verfügbarkeits-Alerts', icon: iconWarning, perm: 'tagesgeschaeft' },
 ];
 
@@ -552,7 +553,7 @@ function SidebarContent({ pathname, isDashboard, onNavClick, handleLogout, me }:
   // schliesst die bisherige.
   const GROUP_MATCH: Record<string, string[]> = {
     mein: ['/admin/mein'],
-    tagesgeschaeft: ['/admin/tagesgeschaeft', '/admin/buchungen', '/admin/verfuegbarkeit', '/admin/versand', '/admin/retouren', '/admin/verfuegbarkeit-alerts'],
+    tagesgeschaeft: ['/admin/tagesgeschaeft', '/admin/buchungen', '/admin/verfuegbarkeit', '/admin/versand', '/admin/retouren', '/admin/sendungen', '/admin/verfuegbarkeit-alerts'],
     kunden: ['/admin/kunden-uebersicht', '/admin/kunden', '/admin/nachrichten', '/admin/warteliste', '/admin/kunden-material', '/admin/bewertungen', '/admin/schaeden'],
     katalog: ['/admin/preise/kameras', '/admin/sets', '/admin/zubehoer', '/admin/inventar', '/admin/firmware'],
     preise: ['/admin/gutscheine', '/admin/rabatte', '/admin/warenkorb-erinnerung', '/admin/newsletter'],
