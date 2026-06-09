@@ -536,7 +536,7 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateMeta[] = [
   {
     id: 'completion_confirmation',
     name: 'Abschlussbestätigung',
-    description: 'Sobald eine Buchung als „abgeschlossen" markiert wird (Rückgabe-Prüfung oder manuell) — für Abholung und Versand. Bestätigt „alles in Ordnung" und weist auf das Kundenmaterial-Programm (Rabatt) hin.',
+    description: 'Sobald eine Buchung als „abgeschlossen" markiert wird (Rückgabe-Prüfung oder manuell) — für Abholung und Versand. Bestätigt „alles in Ordnung", bittet um eine Google-Bewertung (10 %-Gutschein) und weist auf das Kundenmaterial-Programm (Rabatt) hin.',
     recipient: 'customer',
     render: () => renderEmailPreview(sendCompletionConfirmation, {
       bookingId: DUMMY_BOOKING_ID,
@@ -545,6 +545,7 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateMeta[] = [
       productName: 'GoPro Hero13 Black',
       rentalFrom: '2026-05-01',
       rentalTo: '2026-05-07',
+      reviewUrl: 'https://cam2rent.de/umfrage/BK-MUSTER-0001?t=preview',
       ugcEnabled: true,
       ugcDiscountPercent: 15,
     }),

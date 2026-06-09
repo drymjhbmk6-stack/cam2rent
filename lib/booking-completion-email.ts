@@ -1,6 +1,8 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { sendCompletionConfirmation } from '@/lib/email';
 import { loadUgcSettings } from '@/lib/customer-ugc';
+import { getSiteUrl } from '@/lib/env-mode';
+import { generateSurveyToken } from '@/lib/survey-token';
 
 /**
  * Verschickt die Abschluss-Bestätigungsmail ("alles in Ordnung" + optionaler
@@ -41,6 +43,19 @@ export async function dispatchCompletionEmail(
     // UGC-Settings für den Kundenmaterial-Block (Default: aktiv, 15 %).
     const ugc = await loadUgcSettings(supabase).catch(() => null);
 
+    // Google-Bewertungs-CTA (Smart-Filter-Link mit 10 %-Gutschein, gleicher
+    // Token-Mechanismus wie die separate Bewertungs-Mail). Defensiv: ohne
+    // SURVEY_HMAC_SECRET/ADMIN_PASSWORD wirft generateSurveyToken → dann
+    // einfach kein Bewertungs-Block, die Abschluss-Mail geht trotzdem raus.
+    let reviewUrl: string | undefined;
+    try {
+      const baseUrl = await getSiteUrl();
+      const token = generateSurveyToken(booking.id);
+      reviewUrl = `${baseUrl}/umfrage/${encodeURIComponent(booking.id)}?t=${token}`;
+    } catch (tokenErr) {
+      console.warn('[dispatchCompletionEmail] survey token unavailable, skipping review CTA:', tokenErr);
+    }
+
     await sendCompletionConfirmation({
       bookingId: booking.id,
       customerName: booking.customer_name || 'Kunde',
@@ -48,6 +63,7 @@ export async function dispatchCompletionEmail(
       productName: booking.product_name || 'Kamera',
       rentalFrom: booking.rental_from,
       rentalTo: booking.rental_to,
+      reviewUrl,
       ugcEnabled: ugc?.enabled ?? false,
       ugcDiscountPercent: ugc?.approve_discount_percent ?? 0,
     });

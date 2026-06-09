@@ -737,13 +737,20 @@ Hinweis auf das **Kundenmaterial-Programm** (Foto/Video hochladen → Rabatt-Gut
 CTA auf `/konto/buchungen/[id]/material`). Bei `condition='beschaedigt'` (→ Status
 `damaged`, nicht `completed`) wird **keine** Mail geschickt.
 - **Mail-Funktion** `sendCompletionConfirmation()` in `lib/email.ts`, emailType
-  `completion_confirmation`. Der Kundenmaterial-Block erscheint nur wenn
-  `ugcEnabled && ugcDiscountPercent>0` (aus `loadUgcSettings`, Default 15 %).
+  `completion_confirmation`. Enthält einen **Google-Bewertungs-CTA mit 10 %-Gutschein**
+  (wenn `reviewUrl` gesetzt) und den **Kundenmaterial-Block** (nur wenn
+  `ugcEnabled && ugcDiscountPercent>0`, aus `loadUgcSettings`, Default 15 %).
+- **Google-Bewertung = Smart-Filter-Link** `/umfrage/[id]?t=<HMAC-Token>` (gleicher
+  Mechanismus + 10 %-DANKE-Gutschein wie die separate `review_request`-Cron-Mail).
+  Coupon ist pro Buchung idempotent → kein Doppel-Gutschein, auch wenn der Kunde
+  beide Mails anklickt. Token via `generateSurveyToken` (`lib/survey-token.ts`);
+  fehlt `SURVEY_HMAC_SECRET`/`ADMIN_PASSWORD`, wird der Bewertungs-Block einfach
+  weggelassen (Mail geht trotzdem raus).
 - **Zentraler Versand-Helper** `lib/booking-completion-email.ts` →
   `dispatchCompletionEmail(supabase, bookingId)`: lädt Buchung, prüft
-  `status==='completed'` + E-Mail vorhanden, **Dedup über `email_log`**
-  (`email_type='completion_confirmation'` + `booking_id`) → pro Buchung nur EINE
-  Mail. Best-effort/non-blocking (fängt alle Fehler selbst).
+  `status==='completed'` + E-Mail vorhanden, baut `reviewUrl` (Survey-Token),
+  **Dedup über `email_log`** (`email_type='completion_confirmation'` + `booking_id`)
+  → pro Buchung nur EINE Mail. Best-effort/non-blocking (fängt alle Fehler selbst).
 - **Hooks (alle non-blocking):** `return-booking` (kanonischer Retouren-Pfad, nur
   bei `newStatus==='completed'`), `update-booking-status` (zusätzlich zur
   bestehenden `sendReviewRequest`), `booking/[id]` PATCH (Status→completed),

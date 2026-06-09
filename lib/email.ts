@@ -1620,6 +1620,8 @@ export interface CompletionEmailData {
   productName: string;
   rentalFrom: string;
   rentalTo: string;
+  /** Smart-Filter-Bewertungslink (/umfrage/[id]?t=token). Wenn gesetzt → Google-CTA mit 10%-Gutschein. */
+  reviewUrl?: string;
   /** Kundenmaterial-Block nur anzeigen, wenn aktiviert (Default: aus). */
   ugcEnabled?: boolean;
   /** Rabatt-Prozent für den Material-Upload (aus admin_settings.customer_ugc_rewards). */
@@ -1640,6 +1642,20 @@ export async function sendCompletionConfirmation(data: CompletionEmailData) {
   const showUgc = data.ugcEnabled === true && discount > 0;
 
   const subject = stripSubject(`Deine Miete der ${data.productName} ist abgeschlossen – ${data.bookingId}`);
+
+  const reviewBlock = data.reviewUrl ? `
+          <table width="100%" cellpadding="0" cellspacing="0" style="margin:24px 0 0;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;">
+            <tr><td style="padding:20px 24px;">
+              <p style="margin:0 0 6px;font-size:15px;font-weight:700;color:#1e3a8a;">⭐ Zufrieden? Bewerte uns bei Google – 10% Gutschein</p>
+              <p style="margin:0 0 16px;font-size:13px;color:#1e40af;line-height:1.6;">
+                Wenn dir die Miete gefallen hat, freuen wir uns riesig über eine kurze <strong>Google-Bewertung</strong>.
+                Als Dankeschön schalten wir dir sofort einen <strong>10%-Rabattgutschein</strong> (90 Tage gültig, ab 50&nbsp;€) frei.
+              </p>
+              <a href="${data.reviewUrl}" style="display:inline-block;padding:12px 24px;background:#3b82f6;color:#ffffff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">
+                Bei Google bewerten &amp; Gutschein sichern
+              </a>
+            </td></tr>
+          </table>` : '';
 
   const ugcBlock = showUgc ? `
           <table width="100%" cellpadding="0" cellspacing="0" style="margin:24px 0 0;background:#fffbeb;border:1px solid #fcd34d;border-radius:10px;">
@@ -1686,6 +1702,7 @@ export async function sendCompletionConfirmation(data: CompletionEmailData) {
               <p style="margin:0;font-size:14px;font-weight:600;color:#0a0a0a;">${fmtDate(data.rentalFrom)} – ${fmtDate(data.rentalTo)}</p>
             </td></tr>
           </table>
+          ${reviewBlock}
           ${ugcBlock}
           <p style="margin:24px 0 0;font-size:13px;color:#6b7280;line-height:1.6;">
             Bei Fragen sind wir jederzeit für dich da: <a href="mailto:${h(ADMIN_EMAIL)}" style="color:#3b82f6;">${h(ADMIN_EMAIL)}</a>.<br>
