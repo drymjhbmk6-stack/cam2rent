@@ -377,6 +377,19 @@ Priorität `weight 0`, da der Versand an der Freigabe hängt).
 (`[{id, name, created_at}]`); die E-Mail wird nur per `listUsers` aufgelöst,
 wenn es offene Prüfungen gibt (kein Call im Normalbetrieb, Name-Fallback).
 
+**„Als versendet markieren"-Button im Aufgaben-Widget (Stand 2026-06-09):**
+Buchungen im Status `preparing_shipment` („Wird versendet") zeigen im Aufgaben-
+Widget statt des Pack-Workflow-Links jetzt einen grünen **Button „🚚 Als
+versendet markieren"** (`QueueAction.kind='mark-shipped'`). Klick setzt den
+Status direkt per `PATCH /api/admin/booking/[id]` auf `shipped` (reine
+Status-Änderung — kein Tracking, keine Versand-Mail; dafür weiter der
+Sendcloud-/Versand-Flow). Die erledigte Zeile wird optimistisch lokal
+ausgeblendet (`doneIds`-State, kein Parent-Reload), Busy-/Fehler-Zustand inline.
+Rest der Zeile bleibt ein Link auf die Buchungsdetailseite. Andere Status
+behalten ihre Navigations-Links (`kind='link'`, Default). Greift zusammen mit
+dem Auto-Status-Flip nach der 4-Augen-Kontrolle (siehe „Wochentag im Datum +
+Auto-Status …").
+
 ### Benachrichtigungssystem
 - **DB-Tabelle:** `admin_notifications` (id, type, title, message, link, is_read, created_at)
 - **API:** GET/PATCH `/api/admin/notifications`, POST `/api/admin/notifications/create`

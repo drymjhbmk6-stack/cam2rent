@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useState } from 'react';
 import { formatCurrency } from '@/lib/format-utils';
 
 // ─── Theme Colors (matching admin layout) ────────────────────────
@@ -596,6 +597,8 @@ interface QueueAction {
   color: string;
   /** kleiner = dringlicher, steht weiter oben in der Liste */
   weight: number;
+  /** 'link' = Navigation (Default), 'mark-shipped' = setzt Status direkt auf 'shipped' */
+  kind?: 'link' | 'mark-shipped';
 }
 
 // Spiegelt die "Nächste Aktion"-Logik der Buchungsdetailseite (NextActionBar),
@@ -610,7 +613,9 @@ function queueActionForBooking(b: QueueBooking): QueueAction | null {
         ? { label: '📦 Paket packen', href: `/admin/versand/${b.id}/packen`, color: C.cyan, weight: 2 }
         : { label: '📝 Übergabe', href: `/admin/buchungen/${b.id}/uebergabe`, color: C.purple, weight: 2 };
     case 'preparing_shipment':
-      return { label: '📦 Pack-Workflow', href: `/admin/versand/${b.id}/packen`, color: C.cyan, weight: 2 };
+      // Paket ist gepackt + kontrolliert → nächster Schritt ist der Versand.
+      // Button setzt den Status direkt auf 'shipped' (kein Seitenwechsel).
+      return { label: '🚚 Als versendet markieren', href: `/admin/buchungen/${b.id}`, color: C.green, weight: 2, kind: 'mark-shipped' };
     case 'awaiting_pickup':
       return { label: '📝 Übergabe', href: `/admin/buchungen/${b.id}/uebergabe`, color: C.purple, weight: 2 };
     case 'delivered':
@@ -662,7 +667,33 @@ export function ActionQueueWidget({ data, loading }: {
       action,
     }));
 
+  // Lokaler State für die "Als versendet markieren"-Buttons: erledigte Zeilen
+  // werden optimistisch ausgeblendet, ohne dass der Parent neu laden muss.
+  const [doneIds, setDoneIds] = useState<Set<string>>(new Set());
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [errorId, setErrorId] = useState<string | null>(null);
+
+  async function markShipped(bookingId: string) {
+    if (busyId) return;
+    setBusyId(bookingId);
+    setErrorId(null);
+    try {
+      const res = await fetch(`/api/admin/booking/${bookingId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'shipped' }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      setDoneIds((prev) => new Set(prev).add(bookingId));
+    } catch {
+      setErrorId(bookingId);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   const rows: QueueRow[] = [...verificationRows, ...bookingRows]
+    .filter((r) => !doneIds.has(r.key))
     .sort((x, y) => x.action.weight - y.action.weight);
 
   return (
@@ -710,39 +741,70 @@ export function ActionQueueWidget({ data, loading }: {
         </div>
       ) : (
         <div style={{ flex: 1, overflowY: 'auto', maxHeight: 360 }}>
-          {rows.map((row, idx) => (
-            <Link
-              key={row.key}
-              href={row.action.href}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 10,
-                padding: '10px 8px',
-                borderBottom: idx < rows.length - 1 ? `1px solid ${C.border}` : 'none',
-                borderLeft: `3px solid ${row.action.color}`,
-                textDecoration: 'none',
-                borderRadius: 6,
-                transition: 'background 0.12s',
-              }}
-              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = C.cardHover; }}
-              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
-            >
+          {rows.map((row, idx) => {
+            const rowStyle = {
+              display: 'flex' as const, alignItems: 'center' as const, gap: 10,
+              padding: '10px 8px',
+              borderBottom: idx < rows.length - 1 ? `1px solid ${C.border}` : 'none',
+              borderLeft: `3px solid ${row.action.color}`,
+              borderRadius: 6,
+            };
+            const textBlock = (
               <div style={{ minWidth: 0, flex: 1 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {row.title}
                 </div>
-                <div style={{ fontSize: 11, color: C.textDim, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {row.subtitle}
+                <div style={{ fontSize: 11, color: errorId === row.key ? C.red : C.textDim, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {errorId === row.key ? 'Fehler — bitte erneut versuchen' : row.subtitle}
                 </div>
               </div>
-              <span style={{
-                fontSize: 11, fontWeight: 700, color: row.action.color,
-                background: `${row.action.color}1a`, border: `1px solid ${row.action.color}40`,
-                padding: '5px 10px', borderRadius: 8, flexShrink: 0, whiteSpace: 'nowrap',
-              }}>
-                {row.action.label}
-              </span>
-            </Link>
-          ))}
+            );
+
+            // Status-setzende Aktion (z.B. "Als versendet markieren") → Button,
+            // Rest der Zeile bleibt ein Link zur Buchungsdetailseite.
+            if (row.action.kind === 'mark-shipped') {
+              const busy = busyId === row.key;
+              return (
+                <div key={row.key} style={rowStyle}>
+                  <Link href={row.action.href} style={{ display: 'flex', minWidth: 0, flex: 1, textDecoration: 'none' }}>
+                    {textBlock}
+                  </Link>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => markShipped(row.key)}
+                    style={{
+                      fontSize: 11, fontWeight: 700, color: row.action.color,
+                      background: `${row.action.color}1a`, border: `1px solid ${row.action.color}40`,
+                      padding: '5px 10px', borderRadius: 8, flexShrink: 0, whiteSpace: 'nowrap',
+                      cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1,
+                    }}
+                  >
+                    {busy ? 'Wird gesetzt…' : row.action.label}
+                  </button>
+                </div>
+              );
+            }
+
+            return (
+              <Link
+                key={row.key}
+                href={row.action.href}
+                style={{ ...rowStyle, textDecoration: 'none', transition: 'background 0.12s' }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = C.cardHover; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+              >
+                {textBlock}
+                <span style={{
+                  fontSize: 11, fontWeight: 700, color: row.action.color,
+                  background: `${row.action.color}1a`, border: `1px solid ${row.action.color}40`,
+                  padding: '5px 10px', borderRadius: 8, flexShrink: 0, whiteSpace: 'nowrap',
+                }}>
+                  {row.action.label}
+                </span>
+              </Link>
+            );
+          })}
         </div>
       )}
     </div>
