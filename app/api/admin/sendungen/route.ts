@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { getCurrentAdminUser } from '@/lib/admin-auth';
-import { fetchParcelStatuses, type TrackingCategory } from '@/lib/sendcloud-tracking';
+import { fetchParcelStatuses, fetchParcelStatusesByTracking, type TrackingCategory } from '@/lib/sendcloud-tracking';
 
 /**
  * GET /api/admin/sendungen
@@ -104,14 +104,13 @@ export async function GET() {
       });
     }
 
-    // Retoure erst zeigen, wenn der Artikel tatsaechlich beim Kunden ist
-    // (Rueckweg relevant). Bei noch nicht versandten Buchungen waere die
-    // Retoure-Zeile nur Rauschen. Ein Sendcloud-Retoure-Parcel (falls je
-    // gesetzt) zeigen wir immer.
+    // Retoure: sobald ein Retourlabel existiert (Parcel-ID ODER Trackingnummer).
+    // Der Live-Status wird auch ohne gespeicherte Parcel-ID per Trackingnummer
+    // aus Sendcloud nachgeschlagen (Retourlabels werden oft direkt im
+    // Sendcloud-Panel erstellt → keine ID bei uns, aber Tracking existiert).
     const retParcel = r.sendcloud_return_parcel_id != null ? Number(r.sendcloud_return_parcel_id) : null;
     const retTracking = (r.return_tracking_number as string) ?? null;
-    const returnRelevant = ['shipped', 'delivered', 'picked_up', 'returned'].includes(String(r.status ?? ''));
-    if (retParcel || (retTracking && returnRelevant)) {
+    if (retParcel || retTracking) {
       if (retParcel) parcelIds.push(retParcel);
       entries.push({
         ...base,
@@ -126,18 +125,33 @@ export async function GET() {
     }
   }
 
-  // Live-Status fuer alle Sendcloud-Parcels holen + zuordnen.
-  const statusMap = await fetchParcelStatuses(parcelIds);
+  // Trackingnummern aller Eintraege OHNE Parcel-ID einsammeln (z.B. im
+  // Sendcloud-Panel erstellte Retourlabels) → Live-Status per Tracking holen.
+  const trackingOnly = entries
+    .filter((e) => e.parcelId == null && e.trackingNumber)
+    .map((e) => e.trackingNumber as string);
+
+  // Live-Status holen: per Parcel-ID + per Trackingnummer (parallel).
+  const [statusMap, trackingMap] = await Promise.all([
+    fetchParcelStatuses(parcelIds),
+    fetchParcelStatusesByTracking(trackingOnly),
+  ]);
+
+  const applyStatus = (e: SendungEntry, s: ReturnType<typeof statusMap.get>) => {
+    if (!s) return;
+    e.statusMessage = s.statusMessage;
+    e.category = s.category;
+    if (s.parcelId) e.parcelId = s.parcelId;
+    if (!e.carrier && s.carrier) e.carrier = s.carrier;
+    if (!e.trackingNumber && s.trackingNumber) e.trackingNumber = s.trackingNumber;
+    if (!e.trackingUrl && s.trackingUrl) e.trackingUrl = s.trackingUrl;
+  };
+
   for (const e of entries) {
     if (e.parcelId != null) {
-      const s = statusMap.get(e.parcelId);
-      if (s) {
-        e.statusMessage = s.statusMessage;
-        e.category = s.category;
-        if (!e.carrier && s.carrier) e.carrier = s.carrier;
-        if (!e.trackingNumber && s.trackingNumber) e.trackingNumber = s.trackingNumber;
-        if (!e.trackingUrl && s.trackingUrl) e.trackingUrl = s.trackingUrl;
-      }
+      applyStatus(e, statusMap.get(e.parcelId));
+    } else if (e.trackingNumber) {
+      applyStatus(e, trackingMap.get(e.trackingNumber));
     }
   }
 

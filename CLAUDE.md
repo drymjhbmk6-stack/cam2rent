@@ -856,13 +856,20 @@ dort — keine separaten DHL-/DPD-API-Verträge nötig.
   (Hinversand/Retoure), Carrier-Badge, Kunde/Buchungsnr./Zeitraum,
   Trackingnummer, Status-Text + „Sendung verfolgen →" (Carrier-Tracking-Link).
   Dunkles Inline-Theme (wie `/admin/verfuegbarkeit-alerts`).
-- **Grenzen:** Live-Status gibt's nur für über Sendcloud gelabelte Pakete.
-  Manuell hochgeladene Retourlabels (kein `sendcloud_return_parcel_id` — das
-  Feld wird aktuell NIE geschrieben, weil Retouren extern erstellt + hochgeladen
-  werden) bzw. Selbstversand ohne cam2rent-Etikett erscheinen mit „Kein
-  Live-Status" (Kategorie `unknown`), aber mit Tracking-Link (falls Nummer
+- **Live-Status auch per Trackingnummer (Stand 2026-06-09):** Retourlabels
+  werden bei cam2rent oft **direkt im Sendcloud-Panel** erstellt → wir haben
+  dann KEINE `sendcloud_return_parcel_id`, aber die `return_tracking_number`.
+  `fetchParcelStatusesByTracking()` schlägt das Parcel über
+  `GET /parcels?tracking_number=...` nach, sodass auch diese Sendungen
+  Live-Status bekommen. Der Route-Handler sammelt alle Einträge OHNE Parcel-ID
+  (aber mit Trackingnummer) ein und löst sie per Tracking-Lookup auf (parallel
+  zum ID-Lookup). Nur wenn Sendcloud die Nummer gar nicht kennt (echter
+  Fremdversand ohne Sendcloud), bleibt „Kein Live-Status".
+- **Grenzen:** Live-Status gibt's nur für Pakete, die im Sendcloud-Account
+  existieren (egal ob via API oder Panel gelabelt). Komplett externer Versand
+  ohne Sendcloud zeigt „Kein Live-Status", aber mit Tracking-Link (falls Nummer
   hinterlegt). Kein Webhook/Cron — Status wird beim Öffnen der Seite live geholt
-  (mit Cache).
+  (mit 3-Min-Cache pro Parcel/Trackingnummer).
 - **Kategorisierung + Zählung (Fix 2026-06-09):** `categorize()` mappt jetzt
   deutlich mehr Sendcloud-Meldungen (u.a. „Delivery method changed" →
   `announced`, „available for pickup" → `delivered`, diverse Transit-/Problem-
@@ -877,11 +884,10 @@ dort — keine separaten DHL-/DPD-API-Verträge nötig.
   Treffer zuerst, dann Teilstring-Regeln, sonst Originaltext als Fallback. Die
   **Kategorie** (`categorize`) wird weiterhin auf dem englischen Originaltext
   bestimmt; nur die angezeigte `statusMessage` ist deutsch.
-- **Retoure-Zeile nur wenn relevant:** Eine Retoure-Sendung wird erst gelistet,
-  wenn die Buchung im Status `shipped|delivered|picked_up|returned` ist (Artikel
-  ist beim Kunden, Rückweg zählt) — oder ein Sendcloud-Retoure-Parcel existiert.
-  Bei noch nicht versandten Buchungen (confirmed/preparing_shipment) erscheint
-  keine „Retoure / Kein Live-Status"-Zeile mehr.
+- **Retoure-Zeile:** wird gelistet, sobald ein Retourlabel existiert
+  (`sendcloud_return_parcel_id` ODER `return_tracking_number`) — unabhängig vom
+  Buchungsstatus, damit die Retoure nicht „verschwindet". Live-Status kommt über
+  die Trackingnummer (siehe oben).
 
 ### Sendcloud-Etikett direkt in der Versand-Liste (Stand 2026-05-25)
 `/admin/retouren` ist seit dem Retouren-Refactor der Sidebar-Eintrag „Versand

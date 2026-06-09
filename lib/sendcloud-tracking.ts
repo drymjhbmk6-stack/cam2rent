@@ -54,19 +54,19 @@ function categorize(message: string, statusId: number | null): TrackingCategory 
   return 'unknown';
 }
 
-async function fetchOne(parcelId: number, auth: string): Promise<ParcelStatus> {
-  const res = await fetch(`${SC_BASE}/parcels/${parcelId}`, {
-    headers: { Authorization: auth },
-  });
-  if (!res.ok) {
-    throw new Error(`Sendcloud ${res.status}`);
-  }
-  const data = await res.json();
-  const p = data.parcel ?? {};
+interface SendcloudParcel {
+  id?: number;
+  status?: { id?: number; message?: string };
+  carrier?: { code?: string };
+  tracking_number?: string;
+  tracking_url?: string;
+}
+
+function mapParcel(p: SendcloudParcel, fallbackId: number): ParcelStatus {
   const rawMessage: string = p.status?.message ?? 'Unbekannt';
   const statusId: number | null = typeof p.status?.id === 'number' ? p.status.id : null;
   return {
-    parcelId,
+    parcelId: typeof p.id === 'number' ? p.id : fallbackId,
     statusId,
     // Kategorie auf dem englischen Originaltext bestimmen, Anzeige uebersetzen.
     statusMessage: translateStatus(rawMessage),
@@ -75,6 +75,42 @@ async function fetchOne(parcelId: number, auth: string): Promise<ParcelStatus> {
     trackingNumber: p.tracking_number ?? null,
     trackingUrl: p.tracking_url ?? null,
   };
+}
+
+async function getAuth(): Promise<string | null> {
+  try {
+    const { publicKey, secretKey } = await getSendcloudKeys();
+    if (!publicKey || !secretKey) return null;
+    return 'Basic ' + Buffer.from(`${publicKey}:${secretKey}`).toString('base64');
+  } catch {
+    return null;
+  }
+}
+
+async function fetchOne(parcelId: number, auth: string): Promise<ParcelStatus> {
+  const res = await fetch(`${SC_BASE}/parcels/${parcelId}`, {
+    headers: { Authorization: auth },
+  });
+  if (!res.ok) {
+    throw new Error(`Sendcloud ${res.status}`);
+  }
+  const data = await res.json();
+  return mapParcel(data.parcel ?? {}, parcelId);
+}
+
+async function fetchByTracking(trackingNumber: string, auth: string): Promise<ParcelStatus | null> {
+  const res = await fetch(`${SC_BASE}/parcels?tracking_number=${encodeURIComponent(trackingNumber)}`, {
+    headers: { Authorization: auth },
+  });
+  if (!res.ok) {
+    throw new Error(`Sendcloud ${res.status}`);
+  }
+  const data = await res.json();
+  const parcels: SendcloudParcel[] = Array.isArray(data.parcels) ? data.parcels : [];
+  if (parcels.length === 0) return null;
+  // Bei mehreren Treffern (z.B. Hin + Retoure teilen sich selten eine Nummer)
+  // den juengsten nehmen — Sendcloud liefert i.d.R. den passendsten zuerst.
+  return mapParcel(parcels[0], 0);
 }
 
 // Sendcloud-/Carrier-Statusmeldungen ins Deutsche uebersetzen. Exakte Treffer
@@ -177,16 +213,9 @@ export async function fetchParcelStatuses(
   }
   if (toFetch.length === 0) return result;
 
-  let auth: string;
-  try {
-    const { publicKey, secretKey } = await getSendcloudKeys();
-    if (!publicKey || !secretKey) {
-      // Keine Keys konfiguriert → Status unbekannt, kein harter Fehler.
-      for (const id of toFetch) result.set(id, null);
-      return result;
-    }
-    auth = 'Basic ' + Buffer.from(`${publicKey}:${secretKey}`).toString('base64');
-  } catch {
+  const auth = await getAuth();
+  if (!auth) {
+    // Keine Keys konfiguriert → Status unbekannt, kein harter Fehler.
     for (const id of toFetch) result.set(id, null);
     return result;
   }
@@ -202,6 +231,53 @@ export async function fetchParcelStatuses(
         result.set(id, s.value);
       } else {
         result.set(id, null);
+      }
+    });
+  }
+  return result;
+}
+
+const trackingCache = new Map<string, { ts: number; data: ParcelStatus }>();
+
+/**
+ * Wie fetchParcelStatuses, aber per Trackingnummer — fuer Sendungen, deren
+ * Sendcloud-Parcel-ID wir nicht gespeichert haben (z.B. Retourlabels, die direkt
+ * im Sendcloud-Panel erstellt wurden). Sendcloud liefert das Parcel via
+ * `GET /parcels?tracking_number=...`. Liefert Map trackingNumber → Status.
+ */
+export async function fetchParcelStatusesByTracking(
+  trackingNumbers: string[],
+): Promise<Map<string, ParcelStatus | null>> {
+  const result = new Map<string, ParcelStatus | null>();
+  const unique = [...new Set(trackingNumbers.map((t) => (t || '').trim()).filter(Boolean))];
+  if (unique.length === 0) return result;
+
+  const now = Date.now();
+  const toFetch: string[] = [];
+  for (const tn of unique) {
+    const c = trackingCache.get(tn);
+    if (c && now - c.ts < CACHE_TTL_MS) result.set(tn, { ...c.data, cached: true });
+    else toFetch.push(tn);
+  }
+  if (toFetch.length === 0) return result;
+
+  const auth = await getAuth();
+  if (!auth) {
+    for (const tn of toFetch) result.set(tn, null);
+    return result;
+  }
+
+  const CONCURRENCY = 6;
+  for (let i = 0; i < toFetch.length; i += CONCURRENCY) {
+    const chunk = toFetch.slice(i, i + CONCURRENCY);
+    const settled = await Promise.allSettled(chunk.map((tn) => fetchByTracking(tn, auth)));
+    settled.forEach((s, idx) => {
+      const tn = chunk[idx];
+      if (s.status === 'fulfilled' && s.value) {
+        trackingCache.set(tn, { ts: Date.now(), data: s.value });
+        result.set(tn, s.value);
+      } else {
+        result.set(tn, null);
       }
     });
   }
