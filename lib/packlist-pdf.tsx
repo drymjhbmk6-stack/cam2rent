@@ -23,6 +23,9 @@ export interface PacklistData {
   days: number;
   deliveryMode: string;
   shippingMethod: string;
+  /** Geplanter Versand-/Übergabe-Tag (YYYY-MM-DD). Wird in Sektion 1 statt der
+   *  leeren Schreiblinie ausgegeben, wenn vorhanden. */
+  shipDate?: string | null;
   accessories: string[];
   /** Optional: Zubehoer mit Stueckzahl. Ersetzt accessories[]-Rendering. */
   accessoryItems?: { accessory_id: string; qty: number }[];
@@ -354,8 +357,14 @@ export function PacklistPDF({ data }: { data: PacklistData }) {
             {/* ── 1. Versanddatum ── */}
             <Text style={s.sectionTitle}>1. Versanddatum</Text>
             <View style={{ flexDirection: 'row', alignItems: 'flex-end', marginBottom: 4 }}>
-              <Text style={{ fontSize: 10 }}>Datum: </Text>
-              <View style={s.writeLine} />
+              <Text style={{ fontSize: 10 }}>{data.deliveryMode === 'abholung' ? 'Übergabedatum: ' : 'Versanddatum: '}</Text>
+              {data.shipDate ? (
+                <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: C.navy }}>
+                  {isoToDE(data.shipDate)}
+                </Text>
+              ) : (
+                <View style={s.writeLine} />
+              )}
             </View>
 
             <View style={s.divider} />

@@ -827,7 +827,9 @@ function DoneStep({ booking, me, onReset }: { booking: BookingDetail; me: Curren
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [resetting, setResetting] = useState(false);
   const [resetError, setResetError] = useState('');
-  const pdfUrl = `/api/packlist/${booking.id}`;
+  // Über den In-App-PDF-Viewer öffnen → eigener Zurück-Button (iOS-PWA-Sackgasse
+  // mit chrome-loser Vollbild-PDF-Ansicht vermeiden).
+  const pdfUrl = `/admin/pdf-viewer?u=${encodeURIComponent(`/api/packlist/${booking.id}`)}&t=Packliste`;
   // Workflow-Reset darf nur der Admin/Owner. Mitarbeiter sehen den Button
   // gar nicht erst (Server prueft zusaetzlich, falls jemand die UI umgeht).
   const canReset = me?.role === 'owner';
@@ -889,8 +891,6 @@ function DoneStep({ booking, me, onReset }: { booking: BookingDetail; me: Curren
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <a
           href={pdfUrl}
-          target="_blank"
-          rel="noopener noreferrer"
           className="block bg-cyan-500 text-slate-950 font-bold py-3 px-4 rounded-lg text-center hover:bg-cyan-400"
         >
           📄 Packliste-PDF öffnen / drucken

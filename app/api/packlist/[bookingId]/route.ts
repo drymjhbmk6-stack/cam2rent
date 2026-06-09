@@ -8,6 +8,7 @@ import { checkAdminAuth } from '@/lib/admin-auth';
 import { PacklistPDF, type PacklistData } from '@/lib/packlist-pdf';
 import { ensureBusinessConfig } from '@/lib/load-business-config';
 import { resolveBookingCameras } from '@/lib/booking-cameras';
+import { loadBufferDays, computeShipDate, toIsoDate } from '@/lib/booking-buffer';
 
 export async function GET(
   _req: NextRequest,
@@ -198,6 +199,25 @@ export async function GET(
     }
   }
 
+  // Geplanter Versand-/Übergabe-Tag (Override hat Vorrang vor dem globalen
+  // Puffer). Wird in Sektion 1 der Packliste statt der leeren Linie ausgegeben.
+  let shipDate: string | null = null;
+  if (booking.rental_from) {
+    try {
+      const buf = await loadBufferDays(supabase);
+      shipDate = toIsoDate(
+        computeShipDate(
+          booking.rental_from,
+          booking.delivery_mode ?? 'versand',
+          buf,
+          booking.ship_date_override ?? null,
+        ),
+      );
+    } catch {
+      shipDate = null;
+    }
+  }
+
   const data: PacklistData = {
     bookingId: booking.id,
     customerName: booking.customer_name ?? '',
@@ -209,6 +229,7 @@ export async function GET(
     days: booking.days ?? 1,
     deliveryMode: booking.delivery_mode ?? 'versand',
     shippingMethod: booking.shipping_method ?? 'standard',
+    shipDate,
     accessories: Array.isArray(booking.accessories) ? booking.accessories : [],
     resolvedItems,
     serialNumber,

@@ -2427,6 +2427,20 @@ Gleicher Concat-Name-Effekt traf die Verfügbarkeit — eine 2-Kamera-Buchung (1
   `target="_blank"` (Mobile-PWA-Sackgasse, Screenshot vom 25.05.). Die
   Versand-Liste (`/admin/versand`) und das Etikett-Erstell-Modal sind ebenfalls
   umgestellt (Card-Button + Inline-Link + Modal-Buttons für Hin-/Rücksende-Etikett).
+- **Packliste-PDF über Viewer + Versanddatum vorbefüllt (Stand 2026-06-09):**
+  Der „📄 Packliste-PDF öffnen / drucken"-Link im Pack-Workflow
+  (`/admin/versand/[id]/packen`, DoneStep) öffnete das PDF (`/api/packlist/[id]`)
+  bisher direkt mit `target="_blank"` → in der iOS-PWA chrome-lose Vollbild-PDF
+  ohne Zurück (Screenshot vom 09.06.). Jetzt geht der Link durch den In-App-Viewer
+  (`/admin/pdf-viewer?u=/api/packlist/<id>&t=Packliste`, ohne `target="_blank"` →
+  selbes Tab → `router.back()` greift). Plus: Sektion „1. Versanddatum" der
+  Packliste war eine leere Schreiblinie. Jetzt füllt
+  `/api/packlist/[bookingId]` den **geplanten Versand-/Übergabetag** vor
+  (`computeShipDate` aus `lib/booking-buffer.ts`: `rental_from − Puffer`,
+  `bookings.ship_date_override` mit Vorrang) und reicht ihn als
+  `PacklistData.shipDate` ans PDF. Label wechselt je `delivery_mode`
+  („Versanddatum" / „Übergabedatum"). Fehlt das Datum (kein `rental_from` /
+  Buffer-Fehler), bleibt die leere Schreiblinie als Fallback.
 
 ### WBW-Finalisierung mit PDF-E-Mail an den Mieter (Stand 2026-05-16)
 Beim Versandfertigmachen legt der Admin die **finalen** Wiederbeschaffungswerte der tatsaechlich mitgelieferten Ausruestung fest. Diese werden als rechtlich relevantes PDF generiert, in Storage abgelegt und automatisch per E-Mail an den Mieter geschickt. Laut Mietvertrag ist ab dann ausschliesslich der per E-Mail mitgeteilte finale WBW massgeblich.
