@@ -63,17 +63,92 @@ async function fetchOne(parcelId: number, auth: string): Promise<ParcelStatus> {
   }
   const data = await res.json();
   const p = data.parcel ?? {};
-  const statusMessage: string = p.status?.message ?? 'Unbekannt';
+  const rawMessage: string = p.status?.message ?? 'Unbekannt';
   const statusId: number | null = typeof p.status?.id === 'number' ? p.status.id : null;
   return {
     parcelId,
     statusId,
-    statusMessage,
-    category: categorize(statusMessage, statusId),
+    // Kategorie auf dem englischen Originaltext bestimmen, Anzeige uebersetzen.
+    statusMessage: translateStatus(rawMessage),
+    category: categorize(rawMessage, statusId),
     carrier: p.carrier?.code ?? null,
     trackingNumber: p.tracking_number ?? null,
     trackingUrl: p.tracking_url ?? null,
   };
+}
+
+// Sendcloud-/Carrier-Statusmeldungen ins Deutsche uebersetzen. Exakte Treffer
+// zuerst (case-insensitive), dann Teilstring-Regeln, sonst Originaltext.
+const STATUS_DE_EXACT: Record<string, string> = {
+  'ready to send': 'Versandbereit',
+  'being announced': 'Wird angekündigt',
+  'announced': 'Angekündigt',
+  'announcement failed': 'Anmeldung fehlgeschlagen',
+  'submitting data': 'Daten werden übermittelt',
+  'data received': 'Versanddaten erfasst',
+  'shipment information received': 'Versanddaten erfasst',
+  'registered': 'Registriert',
+  'no label': 'Kein Etikett',
+  'delivery method changed': 'Zustellart geändert',
+  'en route': 'Unterwegs',
+  'parcel en route': 'Unterwegs',
+  'on its way': 'Unterwegs',
+  'in transit': 'Unterwegs',
+  'shipment picked up by driver': 'Vom Fahrer abgeholt',
+  'shipment collected by carrier': 'Vom Versanddienstleister abgeholt',
+  'handed to carrier': 'An Versanddienstleister übergeben',
+  'at sorting centre': 'Im Sortierzentrum',
+  'at sorting center': 'Im Sortierzentrum',
+  'being sorted': 'Wird sortiert',
+  'sorted': 'Sortiert',
+  'out for delivery': 'In Zustellung',
+  'delivered': 'Zugestellt',
+  'delivery attempt failed': 'Zustellversuch fehlgeschlagen',
+  'available for pickup': 'Abholbereit',
+  'ready for pickup': 'Abholbereit',
+  'at pickup point': 'Im Paketshop',
+  'delivered to service point': 'An Paketshop zugestellt',
+  'awaiting customer pickup': 'Wartet auf Abholung',
+  'cancelled': 'Storniert',
+  'cancellation requested': 'Stornierung angefragt',
+  'refused by recipient': 'Vom Empfänger abgelehnt',
+  'returned to sender': 'An Absender zurückgesendet',
+  'address invalid': 'Adresse ungültig',
+  'customs': 'Im Zoll',
+  'delayed': 'Verzögert',
+  'unknown': 'Unbekannt',
+  'unknown status': 'Unbekannt',
+};
+
+const STATUS_DE_PARTIAL: [RegExp, string][] = [
+  [/delivery method changed/i, 'Zustellart geändert'],
+  [/out for delivery/i, 'In Zustellung'],
+  [/delivery attempt/i, 'Zustellversuch fehlgeschlagen'],
+  [/available for pickup|ready for pickup/i, 'Abholbereit'],
+  [/pickup point|service point/i, 'Im Paketshop'],
+  [/delivered/i, 'Zugestellt'],
+  [/returned to sender|return to sender/i, 'An Absender zurückgesendet'],
+  [/refused/i, 'Vom Empfänger abgelehnt'],
+  [/customs/i, 'Im Zoll'],
+  [/delay/i, 'Verzögert'],
+  [/sorting|sorted/i, 'Im Sortierzentrum'],
+  [/en route|in transit|on its way/i, 'Unterwegs'],
+  [/picked up|collected/i, 'Abgeholt'],
+  [/announced/i, 'Angekündigt'],
+  [/ready to send/i, 'Versandbereit'],
+  [/cancel/i, 'Storniert'],
+  [/fail|error/i, 'Fehler'],
+];
+
+export function translateStatus(message: string): string {
+  const raw = (message || '').trim();
+  if (!raw) return 'Unbekannt';
+  const exact = STATUS_DE_EXACT[raw.toLowerCase()];
+  if (exact) return exact;
+  for (const [re, de] of STATUS_DE_PARTIAL) {
+    if (re.test(raw)) return de;
+  }
+  return raw; // Fallback: unbekannte Meldung im Original zeigen.
 }
 
 /**

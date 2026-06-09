@@ -870,6 +870,13 @@ dort — keine separaten DHL-/DPD-API-Verträge nötig.
   Sendungen ohne erkannten Live-Status existieren — vorher fielen `unknown`-
   Sendungen aus allen 4 Kacheln raus (Kacheln 0, obwohl Zeilen da). So summieren
   die Kacheln immer auf die sichtbaren Zeilen.
+- **Status-Anzeige auf Deutsch (Stand 2026-06-09):** `translateStatus()` in
+  `lib/sendcloud-tracking.ts` übersetzt die englischen Sendcloud-/Carrier-
+  Meldungen ins Deutsche (z.B. „Delivery method changed" → „Zustellart geändert",
+  „Out for delivery" → „In Zustellung", „Delivered" → „Zugestellt") — exakte
+  Treffer zuerst, dann Teilstring-Regeln, sonst Originaltext als Fallback. Die
+  **Kategorie** (`categorize`) wird weiterhin auf dem englischen Originaltext
+  bestimmt; nur die angezeigte `statusMessage` ist deutsch.
 - **Retoure-Zeile nur wenn relevant:** Eine Retoure-Sendung wird erst gelistet,
   wenn die Buchung im Status `shipped|delivered|picked_up|returned` ist (Artikel
   ist beim Kunden, Rückweg zählt) — oder ein Sendcloud-Retoure-Parcel existiert.
