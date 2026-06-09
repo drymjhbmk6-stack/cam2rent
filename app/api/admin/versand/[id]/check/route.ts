@@ -83,7 +83,7 @@ export async function POST(
   const supabase = createServiceClient();
   const { data: booking } = await supabase
     .from('bookings')
-    .select('pack_status, pack_packed_by, pack_packed_by_user_id')
+    .select('pack_status, pack_packed_by, pack_packed_by_user_id, status, delivery_mode')
     .eq('id', id)
     .maybeSingle();
 
@@ -157,6 +157,13 @@ export async function POST(
     pack_checked_notes: notes || null,
     pack_photo_url: storagePath,
   };
+  // Wenn der Kontrolleur fertig ist (4-Augen abgeschlossen), Buchungsstatus
+  // automatisch auf "Wird versendet" (preparing_shipment) heben — aber nur bei
+  // Versand-Buchungen, die noch im Status confirmed stehen. So werden keine
+  // bereits weiter fortgeschrittenen oder Abholungs-Buchungen ueberschrieben.
+  if (booking.delivery_mode === 'versand' && booking.status === 'confirmed') {
+    checkBase.status = 'preparing_shipment';
+  }
   const checkPayload = packWeightKg != null
     ? { ...checkBase, pack_weight_kg: packWeightKg }
     : checkBase;

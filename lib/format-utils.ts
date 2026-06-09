@@ -41,6 +41,20 @@ export function fmtDateLong(iso: string | Date): string {
   return d.toLocaleDateString('de-DE', { day: '2-digit', month: 'long', year: 'numeric', timeZone: TZ });
 }
 
+/** ISO-String → "Mo., 14.04.2026" (Wochentag + Datum) */
+export function fmtDateWeekday(iso: string | Date): string {
+  let d: Date;
+  if (typeof iso === 'string') {
+    // Reine Datums-Strings (YYYY-MM-DD) bewusst auf Mittag-UTC ankern, damit der
+    // Wochentag nicht an der Tagesgrenze in Berlin-TZ kippt.
+    const datePart = iso.split('T')[0];
+    d = /^\d{4}-\d{2}-\d{2}$/.test(datePart) ? new Date(`${datePart}T12:00:00Z`) : new Date(iso);
+  } else {
+    d = iso;
+  }
+  return d.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric', timeZone: TZ });
+}
+
 /** ISO-String → "14.04.2026, 10:30" */
 export function fmtDateTime(iso: string | Date): string {
   const d = typeof iso === 'string' ? new Date(iso) : iso;

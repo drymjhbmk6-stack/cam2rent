@@ -6,7 +6,7 @@ import Link from 'next/link';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import AccessoryDamageModal from '@/components/admin/AccessoryDamageModal';
 import { BUSINESS } from '@/lib/business-config';
-import { fmtEuro as fmtEuroCanonical, fmtDateTime as fmtDateTimeCanonical, isoToDE, escapeHtml } from '@/lib/format-utils';
+import { fmtEuro as fmtEuroCanonical, fmtDateTime as fmtDateTimeCanonical, fmtDateWeekday as fmtDateWeekdayCanonical, isoToDE, escapeHtml } from '@/lib/format-utils';
 import { BOOKING_STATUS_CONFIG as STATUS_CONFIG } from '@/lib/booking-status-labels';
 
 interface BookingDetail {
@@ -188,6 +188,12 @@ const TONE_BTN: Record<NextActionTone, string> = {
 function fmtDate(iso: string) {
   if (!iso) return '–';
   return isoToDE(iso.split('T')[0]);
+}
+
+// Datum inkl. Wochentag fuer die Anzeige (z.B. "Mo., 15.06.2026").
+function fmtDateWd(iso: string) {
+  if (!iso) return '–';
+  return fmtDateWeekdayCanonical(iso);
 }
 
 // Null-safe Wrapper um zentralen fmtDateTime (Europe/Berlin-TZ).
@@ -887,7 +893,7 @@ export default function BuchungDetailPage() {
             </div>
             <div>
               <p className="text-xs font-heading font-semibold text-brand-muted uppercase tracking-wider mb-1">Zeitraum</p>
-              <p className="text-sm font-body text-brand-black">{fmtDate(booking.rental_from)} – {fmtDate(booking.rental_to)}</p>
+              <p className="text-sm font-body text-brand-black">{fmtDateWd(booking.rental_from)} – {fmtDateWd(booking.rental_to)}</p>
               <p className="text-xs font-body text-brand-muted">{booking.days} Tag{booking.days !== 1 ? 'e' : ''}{booking.delivery_mode === 'versand' ? ' · Versand' : ' · Abholung'}</p>
             </div>
             <div className="col-span-2 sm:col-span-1 min-w-0">
@@ -937,9 +943,9 @@ export default function BuchungDetailPage() {
                 <InfoRow label="Produkt" value={booking.product_name} />
                 {booking.serial_number && <InfoRow label="Seriennummer" value={booking.serial_number} highlight />}
                 <InfoRow label="Mietdauer" value={`${booking.days} Tag${booking.days !== 1 ? 'e' : ''}`} />
-                <InfoRow label="Von" value={fmtDate(booking.rental_from)} />
-                <InfoRow label="Bis" value={fmtDate(booking.rental_to)} />
-                {booking.extended_at && <InfoRow label="Verlängert" value={`Ursprünglich bis ${booking.original_rental_to ? fmtDate(booking.original_rental_to) : '\u2013'}`} highlight />}
+                <InfoRow label="Von" value={fmtDateWd(booking.rental_from)} />
+                <InfoRow label="Bis" value={fmtDateWd(booking.rental_to)} />
+                {booking.extended_at && <InfoRow label="Verlängert" value={`Ursprünglich bis ${booking.original_rental_to ? fmtDateWd(booking.original_rental_to) : '\u2013'}`} highlight />}
                 <InfoRow label="Lieferart" value={booking.delivery_mode === 'versand' ? 'Versand' : 'Abholung'} />
                 {booking.shipping_method && <InfoRow label="Versandart" value={booking.shipping_method === 'express' ? 'Express' : 'Standard'} />}
                 <InfoRow label="Haftungsoption" value={booking.haftung === 'standard' ? 'Standard-Haftungsschutz' : booking.haftung === 'premium' ? 'Premium-Haftungsschutz' : 'Keine Haftungsbegrenzung'} />

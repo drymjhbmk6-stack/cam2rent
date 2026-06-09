@@ -1420,6 +1420,25 @@ Packer/Kontrolleur erfassen beim Packen das ungefähre Paketgewicht; es befüllt
 
 **Sammel-Zubehör-Scan zählt jetzt die volle Menge (Stand 2026-05-18):** Sammel-Zubehör (`accessories.is_bulk=true` — Akku, Speicherkarte, Sticks etc.) hat NUR EINEN gemeinsamen QR-Code für alle physischen Stücke (siehe `/admin/zubehoer/[id]/qr-codes`: bei `is_bulk` genau 1 QR auf den Behälter). Beim Packen blieb die Position deshalb bei `1/2` hängen: der 2. Scan desselben Codes löste in `applyScan` (`components/admin/scan-workflow.tsx`) die unitId-Dedup aus (`scannedUnitIds.has(info.unitId)` → „schon abgehakt"), weil derselbe Code immer dieselbe unit_id liefert. Sichtbar als „… ersetzt"-Badge + Counter steht nicht hoch — galt für alle Positionen mit Menge > 1. Fix: `scan-lookup` liefert jetzt `isBulk` (aus `accessories.is_bulk`). In `applyScan` wird (a) die unitId-Dedup für Bulk übersprungen und (b) ein Bulk-Scan hakt **alle noch offenen Slots dieser Position** auf einmal ab (`ScanResult.keys[]`) — semantisch korrekt, weil es keinen Code pro Einzelstück gibt. Greift in Pack-Schritt 1, Kontroll-Schritt (Step 2) UND Retouren (vor dem `allowSubstitution`-Gate, da der Sammel-QR der vorgesehene Code ist, keine Substitution → kein „ersetzt"-Badge mehr). Meldung: „✓ Extra Akku — 2 Stück erfasst (Sammel-QR)". Alle 4 Consumer-Aufrufstellen (`versand/[id]/packen` ×2, `buchungen/[id]/uebergabe`, `retouren/[id]/pruefen`) setzen `result.keys` mit Vorrang vor `result.key`. Einzelstück-Zubehör (per-Exemplar-QR) bleibt 1:1 unverändert (Substitution + Dedup wie bisher).
 
+### Wochentag im Datum + Auto-Status „Wird versendet" nach Kontrolle (Stand 2026-06-09)
+Zwei kleine Workflow-Verbesserungen:
+- **Wochentag bei Mietdatum:** Neuer Helper `fmtDateWeekday()` in
+  `lib/format-utils.ts` → „Mo., 15.06.2026" (kurzer Wochentag + Datum, Berlin-TZ;
+  reine `YYYY-MM-DD`-Strings werden auf Mittag-UTC geankert, damit der Wochentag
+  nicht an der Tagesgrenze kippt). Eingesetzt in `/admin/buchungen/[id]`
+  (Übersicht-Karte „Zeitraum" + Buchungsdaten „Von"/„Bis"/„Verlängert", über
+  lokalen null-safe Wrapper `fmtDateWd`) und in `/admin/versand/[id]/packen`
+  (Bestellinfo-Card „Mietzeitraum"). Andere Datums-Stellen (Notiz-/E-Mail-Strings)
+  bleiben unverändert ohne Wochentag.
+- **Auto-Status `preparing_shipment` nach 4-Augen-Kontrolle:** Schließt der
+  Kontrolleur den Pack-Workflow ab (`POST /api/admin/versand/[id]/check` →
+  `pack_status='checked'`), wird der Buchungsstatus automatisch auf
+  „Wird versendet" (`preparing_shipment`) gehoben — aber **nur** wenn
+  `delivery_mode='versand'` UND aktueller `status='confirmed'` (kein Überschreiben
+  bereits versendeter/abgeholter/Abholungs-Buchungen). Wird in den atomaren
+  `checkBase`-Payload aufgenommen (greift damit auch im Migration-Retry ohne
+  `pack_weight_kg`), Status-Guard `.eq('pack_status','packed')` bleibt erhalten.
+
 ### Digitales Pack-Workflow (Versand) mit 4-Augen-Prinzip (Stand 2026-04-24)
 3-Schritt-Flow auf `/admin/versand/[id]/packen`: Packer haakt jedes Item digital ab + unterschreibt → Kontrolleur (zweite Person, hart erzwungen!) prüft + macht Foto + unterschreibt → System generiert Packlisten-PDF mit beiden Signaturen.
 

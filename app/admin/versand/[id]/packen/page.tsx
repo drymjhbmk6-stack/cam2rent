@@ -5,6 +5,7 @@ import Link from 'next/link';
 import SignatureCanvas from 'react-signature-canvas';
 import AdminBackLink from '@/components/admin/AdminBackLink';
 import SerialScanner from '@/components/admin/SerialScanner';
+import { fmtDateWeekday } from '@/lib/format-utils';
 import {
   expandItems,
   groupItems,
@@ -192,7 +193,7 @@ function BookingInfo({ booking }: { booking: BookingDetail }) {
       <div className="grid grid-cols-2 gap-3">
         <div>
           <div className="text-slate-500 text-xs uppercase tracking-wider mb-0.5">Mietzeitraum</div>
-          <div>{booking.rental_from} – {booking.rental_to}</div>
+          <div>{fmtDateWeekday(booking.rental_from)} – {fmtDateWeekday(booking.rental_to)}</div>
         </div>
         <div>
           <div className="text-slate-500 text-xs uppercase tracking-wider mb-0.5">Versand</div>
