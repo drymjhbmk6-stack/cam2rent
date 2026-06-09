@@ -632,13 +632,17 @@ export function useScanGroups(items: PackItem[]) {
 // ─── UI-Komponenten ──────────────────────────────────────────────────────────
 
 export function ItemList({
-  groups, checked, onIncrement, onDecrement, compact,
+  groups, checked, onIncrement, onDecrement, compact, onManualPick,
 }: {
   groups: GroupedItem[];
   checked: Record<string, boolean>;
   onIncrement: (g: GroupedItem) => void;
   onDecrement: (g: GroupedItem) => void;
   compact?: boolean;
+  /** Wenn gesetzt, erscheint pro Zubehoer-Gruppe ein "Waehlen"-Button, der den
+   *  manuellen Exemplar-Picker oeffnet (Fallback wenn Scannen nicht klappt).
+   *  Ohne die Prop ist das UI 1:1 wie zuvor (keine Regression). */
+  onManualPick?: (g: GroupedItem) => void;
 }) {
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   return (
@@ -705,6 +709,15 @@ export function ItemList({
                       </button>
                     )}
                   </div>
+                )}
+                {onManualPick && g.type === 'accessory' && (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); onManualPick(g); }}
+                    className="flex-shrink-0 px-2 py-1 rounded-md border border-cyan-500/40 bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20 text-xs font-semibold whitespace-nowrap"
+                  >
+                    📋 Wählen
+                  </button>
                 )}
               </div>
               {hasParts && (
