@@ -857,10 +857,24 @@ dort — keine separaten DHL-/DPD-API-Verträge nötig.
   Trackingnummer, Status-Text + „Sendung verfolgen →" (Carrier-Tracking-Link).
   Dunkles Inline-Theme (wie `/admin/verfuegbarkeit-alerts`).
 - **Grenzen:** Live-Status gibt's nur für über Sendcloud gelabelte Pakete.
-  Manuell hochgeladene Retourlabels (kein `sendcloud_return_parcel_id`) bzw.
-  Selbstversand ohne cam2rent-Etikett erscheinen mit „Kein Live-Status", aber
-  mit Tracking-Link (falls Nummer hinterlegt). Kein Webhook/Cron — Status wird
-  beim Öffnen der Seite live geholt (mit Cache).
+  Manuell hochgeladene Retourlabels (kein `sendcloud_return_parcel_id` — das
+  Feld wird aktuell NIE geschrieben, weil Retouren extern erstellt + hochgeladen
+  werden) bzw. Selbstversand ohne cam2rent-Etikett erscheinen mit „Kein
+  Live-Status" (Kategorie `unknown`), aber mit Tracking-Link (falls Nummer
+  hinterlegt). Kein Webhook/Cron — Status wird beim Öffnen der Seite live geholt
+  (mit Cache).
+- **Kategorisierung + Zählung (Fix 2026-06-09):** `categorize()` mappt jetzt
+  deutlich mehr Sendcloud-Meldungen (u.a. „Delivery method changed" →
+  `announced`, „available for pickup" → `delivered`, diverse Transit-/Problem-
+  Begriffe). Die Status-Kacheln zeigen zusätzlich **„Unbekannt N"**, sobald
+  Sendungen ohne erkannten Live-Status existieren — vorher fielen `unknown`-
+  Sendungen aus allen 4 Kacheln raus (Kacheln 0, obwohl Zeilen da). So summieren
+  die Kacheln immer auf die sichtbaren Zeilen.
+- **Retoure-Zeile nur wenn relevant:** Eine Retoure-Sendung wird erst gelistet,
+  wenn die Buchung im Status `shipped|delivered|picked_up|returned` ist (Artikel
+  ist beim Kunden, Rückweg zählt) — oder ein Sendcloud-Retoure-Parcel existiert.
+  Bei noch nicht versandten Buchungen (confirmed/preparing_shipment) erscheint
+  keine „Retoure / Kein Live-Status"-Zeile mehr.
 
 ### Sendcloud-Etikett direkt in der Versand-Liste (Stand 2026-05-25)
 `/admin/retouren` ist seit dem Retouren-Refactor der Sidebar-Eintrag „Versand

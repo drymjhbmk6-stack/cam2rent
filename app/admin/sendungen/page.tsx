@@ -128,7 +128,10 @@ export default function SendungenPage() {
 
         {/* Status-Kacheln (klickbar als Filter) */}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
-          {(['transit', 'announced', 'problem', 'delivered'] as Category[]).map((cat) => (
+          {([
+            'transit', 'announced', 'problem', 'delivered',
+            ...(counts.unknown > 0 ? ['unknown' as Category] : []),
+          ] as Category[]).map((cat) => (
             <button
               key={cat}
               onClick={() => setCatFilter(catFilter === cat ? '' : cat)}

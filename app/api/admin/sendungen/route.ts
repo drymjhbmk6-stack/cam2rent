@@ -104,9 +104,14 @@ export async function GET() {
       });
     }
 
+    // Retoure erst zeigen, wenn der Artikel tatsaechlich beim Kunden ist
+    // (Rueckweg relevant). Bei noch nicht versandten Buchungen waere die
+    // Retoure-Zeile nur Rauschen. Ein Sendcloud-Retoure-Parcel (falls je
+    // gesetzt) zeigen wir immer.
     const retParcel = r.sendcloud_return_parcel_id != null ? Number(r.sendcloud_return_parcel_id) : null;
     const retTracking = (r.return_tracking_number as string) ?? null;
-    if (retParcel || retTracking) {
+    const returnRelevant = ['shipped', 'delivered', 'picked_up', 'returned'].includes(String(r.status ?? ''));
+    if (retParcel || (retTracking && returnRelevant)) {
       if (retParcel) parcelIds.push(retParcel);
       entries.push({
         ...base,
