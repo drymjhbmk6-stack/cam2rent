@@ -678,10 +678,9 @@ export function ActionQueueWidget({ data, loading }: {
     setBusyId(bookingId);
     setErrorId(null);
     try {
-      const res = await fetch(`/api/admin/booking/${bookingId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'shipped' }),
+      // Setzt Status auf 'shipped' + verschickt die Versandbestaetigung an den Kunden.
+      const res = await fetch(`/api/admin/booking/${bookingId}/mark-shipped`, {
+        method: 'POST',
       });
       if (!res.ok) throw new Error(await res.text());
       setDoneIds((prev) => new Set(prev).add(bookingId));

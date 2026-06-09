@@ -807,9 +807,10 @@ export interface ShippingEmailData {
   productName: string;
   rentalFrom: string;
   rentalTo: string;
-  trackingNumber: string;
-  trackingUrl: string;
-  carrier: string;
+  // Optional: bei „Als versendet markieren" ohne erfasste Sendung leer.
+  trackingNumber?: string;
+  trackingUrl?: string;
+  carrier?: string;
 }
 
 export async function sendShippingConfirmation(data: ShippingEmailData) {
@@ -1147,6 +1148,7 @@ export async function sendDamageResolution(data: DamageResolutionEmailData) {
 // ─── Shipping confirmation ─────────────────────────────────────────────────────
 
 export function buildShippingEmail(d: ShippingEmailData): { html: string; subject: string } {
+  const hasTracking = !!(d.trackingNumber && d.trackingUrl);
   const subject = `Deine Kamera ist unterwegs! – ${d.bookingId}`;
 
   const html = `
@@ -1176,20 +1178,19 @@ export function buildShippingEmail(d: ShippingEmailData): { html: string; subjec
         <tr><td style="background:#ffffff;padding:32px;">
           <p style="margin:0 0 20px;font-size:15px;color:#374151;">
             Hallo ${h(d.customerName || 'dort')},<br><br>
-            deine <strong>${h(d.productName)}</strong> ist unterwegs zu dir.
-            Mit der Tracking-Nummer unten kannst du dein Paket jederzeit verfolgen.
+            deine <strong>${h(d.productName)}</strong> ist unterwegs zu dir.${hasTracking ? '\n            Mit der Tracking-Nummer unten kannst du dein Paket jederzeit verfolgen.' : ''}
           </p>
 
-          <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;border:2px solid #e5e7eb;border-radius:10px;margin-bottom:24px;">
+          ${hasTracking ? `<table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;border:2px solid #e5e7eb;border-radius:10px;margin-bottom:24px;">
             <tr><td style="padding:20px 24px;">
-              <p style="margin:0 0 4px;font-size:12px;color:#9ca3af;text-transform:uppercase;letter-spacing:1px;">Tracking-Nummer (${h(d.carrier)})</p>
+              <p style="margin:0 0 4px;font-size:12px;color:#9ca3af;text-transform:uppercase;letter-spacing:1px;">Tracking-Nummer${d.carrier ? ` (${h(d.carrier)})` : ''}</p>
               <p style="margin:0 0 16px;font-size:20px;font-weight:700;color:#0a0a0a;letter-spacing:2px;">${h(d.trackingNumber)}</p>
               <a href="${h(d.trackingUrl)}"
                  style="display:inline-block;background:#3b82f6;color:#ffffff;font-size:14px;font-weight:600;padding:10px 24px;border-radius:8px;text-decoration:none;">
                 Sendung verfolgen →
               </a>
             </td></tr>
-          </table>
+          </table>` : ''}
 
           <table width="100%" cellpadding="0" cellspacing="0">
             <tr>

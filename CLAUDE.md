@@ -380,15 +380,28 @@ wenn es offene Prüfungen gibt (kein Call im Normalbetrieb, Name-Fallback).
 **„Als versendet markieren"-Button im Aufgaben-Widget (Stand 2026-06-09):**
 Buchungen im Status `preparing_shipment` („Wird versendet") zeigen im Aufgaben-
 Widget statt des Pack-Workflow-Links jetzt einen grünen **Button „🚚 Als
-versendet markieren"** (`QueueAction.kind='mark-shipped'`). Klick setzt den
-Status direkt per `PATCH /api/admin/booking/[id]` auf `shipped` (reine
-Status-Änderung — kein Tracking, keine Versand-Mail; dafür weiter der
-Sendcloud-/Versand-Flow). Die erledigte Zeile wird optimistisch lokal
-ausgeblendet (`doneIds`-State, kein Parent-Reload), Busy-/Fehler-Zustand inline.
-Rest der Zeile bleibt ein Link auf die Buchungsdetailseite. Andere Status
-behalten ihre Navigations-Links (`kind='link'`, Default). Greift zusammen mit
-dem Auto-Status-Flip nach der 4-Augen-Kontrolle (siehe „Wochentag im Datum +
-Auto-Status …").
+versendet markieren"** (`QueueAction.kind='mark-shipped'`). Klick ruft den neuen
+Endpoint **`POST /api/admin/booking/[id]/mark-shipped`** auf: setzt den Status
+atomar (Pre-Status-Guard gegen Race) auf `shipped` + `shipped_at`, und
+**verschickt die Versandbestätigung an den Kunden** (`sendShippingConfirmation`,
+fire-and-forget) — mit Trackinglink, falls bereits eine Sendung an der Buchung
+hinterlegt ist (z.B. Sendcloud-Etikett → `tracking_number`/`tracking_url`),
+sonst **ohne** Tracking-Block. Akzeptiert nur Versand-Buchungen im Status
+`preparing_shipment` oder `confirmed` (sonst 409/400). Permission via Prefix
+`/api/admin/booking` → `tagesgeschaeft`. Audit `booking.ship`
+(`source: 'dashboard_quick_action'`).
+- **`sendShippingConfirmation` / `buildShippingEmail`** machen den
+  Tracking-Block jetzt optional: `trackingNumber`/`trackingUrl`/`carrier` sind
+  optional, ohne Tracking entfällt der „Sendung verfolgen"-Block + der
+  entsprechende Einleitungssatz (Rest der Mail unverändert). Bestehende Aufrufer
+  (`ship-booking`, Tracking-Edit in `/admin/buchungen/[id]`) übergeben weiter
+  Tracking und sind unberührt.
+- Die erledigte Zeile wird optimistisch lokal ausgeblendet (`doneIds`-State,
+  kein Parent-Reload), Busy-/Fehler-Zustand inline. Rest der Zeile bleibt ein
+  Link auf die Buchungsdetailseite. Andere Status behalten ihre
+  Navigations-Links (`kind='link'`, Default). Greift zusammen mit dem
+  Auto-Status-Flip nach der 4-Augen-Kontrolle (siehe „Wochentag im Datum +
+  Auto-Status …").
 
 ### Benachrichtigungssystem
 - **DB-Tabelle:** `admin_notifications` (id, type, title, message, link, is_read, created_at)
