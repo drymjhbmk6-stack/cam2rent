@@ -846,25 +846,31 @@ dort — keine separaten DHL-/DPD-API-Verträge nötig.
   einzelne Fehler → `null` (eine kaputte Sendung blockiert die Liste nicht).
 - **`GET /api/admin/sendungen`** (Permission `tagesgeschaeft`): lädt
   Versand-Buchungen (Status `preparing_shipment|shipped|delivered|picked_up|
-  returned|confirmed`) mit Etikett, baut pro Buchung bis zu zwei Einträge
-  (Hin + Retoure), reichert sie mit dem Sendcloud-Live-Status an. Defensiver
-  Select-Retry ohne die `tracking_carrier`/`return_tracking_*`/`sendcloud_return_*`-
-  Spalten, falls deren Migration noch aussteht.
+  returned|confirmed|completed`, neueste 80) und fragt für jede **direkt
+  Sendcloud per `order_number`** ab (`fetchParcelsByOrderNumber`) — Primärquelle
+  ist damit Sendcloud, nicht die DB. So erscheinen auch **Retourlabels, die im
+  Sendcloud-Panel erstellt wurden** und in unserer DB gar nicht hinterlegt sind
+  (Sendcloud setzt die Bestellnummer auf das Parcel). `is_return` unterscheidet
+  Hin-/Rückversand. **DB-Fallback:** liefert Sendcloud für eine Buchung nichts
+  (keine Keys / Fehler / kein Treffer), werden die Einträge wie bisher aus den
+  gespeicherten Tracking-Spalten gebaut + per Parcel-ID/Trackingnummer
+  aufgelöst. Defensiver Select-Retry ohne die `tracking_carrier`/
+  `return_tracking_*`/`sendcloud_return_*`-Spalten, falls deren Migration aussteht.
 - **Seite** `/admin/sendungen`: Status-Kacheln (Unterwegs/Angekündigt/Problem/
   Zugestellt, klickbar als Filter) + Suche + Carrier-Filter (DHL/DPD) +
   „Aktualisieren". Pro Sendung: Produkt (Link auf Buchung), Richtung
   (Hinversand/Retoure), Carrier-Badge, Kunde/Buchungsnr./Zeitraum,
   Trackingnummer, Status-Text + „Sendung verfolgen →" (Carrier-Tracking-Link).
   Dunkles Inline-Theme (wie `/admin/verfuegbarkeit-alerts`).
-- **Live-Status auch per Trackingnummer (Stand 2026-06-09):** Retourlabels
-  werden bei cam2rent oft **direkt im Sendcloud-Panel** erstellt → wir haben
-  dann KEINE `sendcloud_return_parcel_id`, aber die `return_tracking_number`.
-  `fetchParcelStatusesByTracking()` schlägt das Parcel über
-  `GET /parcels?tracking_number=...` nach, sodass auch diese Sendungen
-  Live-Status bekommen. Der Route-Handler sammelt alle Einträge OHNE Parcel-ID
-  (aber mit Trackingnummer) ein und löst sie per Tracking-Lookup auf (parallel
-  zum ID-Lookup). Nur wenn Sendcloud die Nummer gar nicht kennt (echter
-  Fremdversand ohne Sendcloud), bleibt „Kein Live-Status".
+- **Sendcloud-Lookup per `order_number` (Stand 2026-06-09):** Die Seite zeigte
+  vorher nur Sendungen, deren Tracking in der DB stand → im Sendcloud-Panel
+  erstellte Retouren älterer Buchungen (Tracking nie in der DB gespeichert)
+  fehlten komplett. Fix: `fetchParcelsByOrderNumber()` fragt Sendcloud pro
+  Buchungsnummer ab und liefert ALLE Parcels (Hin + Retoure), unabhängig davon
+  ob wir sie kennen. `fetchParcelStatusesByTracking()`
+  (`GET /parcels?tracking_number=...`) bleibt als DB-Fallback-Helfer für
+  Einträge ohne Parcel-ID. Nur echter Fremdversand komplett ohne Sendcloud
+  bleibt „Kein Live-Status".
 - **Grenzen:** Live-Status gibt's nur für Pakete, die im Sendcloud-Account
   existieren (egal ob via API oder Panel gelabelt). Komplett externer Versand
   ohne Sendcloud zeigt „Kein Live-Status", aber mit Tracking-Link (falls Nummer

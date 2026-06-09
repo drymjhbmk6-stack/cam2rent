@@ -19,6 +19,8 @@ export interface ParcelStatus {
   carrier: string | null;
   trackingNumber: string | null;
   trackingUrl: string | null;
+  /** Sendcloud-Retoure-Parcel (is_return) → Rückversand */
+  isReturn?: boolean;
   /** true = aus Cache, sonst frisch von Sendcloud */
   cached?: boolean;
 }
@@ -60,6 +62,7 @@ interface SendcloudParcel {
   carrier?: { code?: string };
   tracking_number?: string;
   tracking_url?: string;
+  is_return?: boolean;
 }
 
 function mapParcel(p: SendcloudParcel, fallbackId: number): ParcelStatus {
@@ -74,6 +77,7 @@ function mapParcel(p: SendcloudParcel, fallbackId: number): ParcelStatus {
     carrier: p.carrier?.code ?? null,
     trackingNumber: p.tracking_number ?? null,
     trackingUrl: p.tracking_url ?? null,
+    isReturn: !!p.is_return,
   };
 }
 
@@ -279,6 +283,60 @@ export async function fetchParcelStatusesByTracking(
       } else {
         result.set(tn, null);
       }
+    });
+  }
+  return result;
+}
+
+async function fetchByOrderNumber(orderNumber: string, auth: string): Promise<ParcelStatus[]> {
+  const res = await fetch(`${SC_BASE}/parcels?order_number=${encodeURIComponent(orderNumber)}`, {
+    headers: { Authorization: auth },
+  });
+  if (!res.ok) throw new Error(`Sendcloud ${res.status}`);
+  const data = await res.json();
+  const parcels: SendcloudParcel[] = Array.isArray(data.parcels) ? data.parcels : [];
+  return parcels.map((p) => mapParcel(p, 0));
+}
+
+const orderCache = new Map<string, { ts: number; data: ParcelStatus[] }>();
+
+/**
+ * Holt ALLE Sendcloud-Parcels pro Bestellnummer (`order_number`) — also Hin-
+ * UND Rückversand, auch Retourlabels, die direkt im Sendcloud-Panel erstellt
+ * wurden (die kennen wir in der DB nicht, aber Sendcloud setzt die
+ * Bestellnummer). Liefert Map orderNumber → ParcelStatus[]. Bei fehlenden Keys
+ * / Fehlern → leere Map (Aufrufer faellt auf DB-Daten zurueck).
+ */
+export async function fetchParcelsByOrderNumber(
+  orderNumbers: string[],
+): Promise<Map<string, ParcelStatus[]>> {
+  const result = new Map<string, ParcelStatus[]>();
+  const unique = [...new Set(orderNumbers.map((o) => (o || '').trim()).filter(Boolean))];
+  if (unique.length === 0) return result;
+
+  const now = Date.now();
+  const toFetch: string[] = [];
+  for (const on of unique) {
+    const c = orderCache.get(on);
+    if (c && now - c.ts < CACHE_TTL_MS) result.set(on, c.data);
+    else toFetch.push(on);
+  }
+  if (toFetch.length === 0) return result;
+
+  const auth = await getAuth();
+  if (!auth) return result; // keine Keys → Aufrufer nutzt DB-Fallback
+
+  const CONCURRENCY = 6;
+  for (let i = 0; i < toFetch.length; i += CONCURRENCY) {
+    const chunk = toFetch.slice(i, i + CONCURRENCY);
+    const settled = await Promise.allSettled(chunk.map((on) => fetchByOrderNumber(on, auth)));
+    settled.forEach((s, idx) => {
+      const on = chunk[idx];
+      if (s.status === 'fulfilled') {
+        orderCache.set(on, { ts: Date.now(), data: s.value });
+        result.set(on, s.value);
+      }
+      // Fehler: nicht eintragen → DB-Fallback greift
     });
   }
   return result;
