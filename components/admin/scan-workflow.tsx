@@ -414,7 +414,31 @@ export async function applyScan(
       }
     }
     if (!allowSubstitution) {
-      return { ok: false, message: `Diese Kamera passt nicht zu dieser Buchung — bitte gegen die Seriennummer der Buchung pruefen.` };
+      // Kontroll-/Retouren-Schritt: die unit_id des gescannten Codes stimmte
+      // mit keinem Buchungs-Slot ueberein. Das ist KEIN Fehler, sondern der
+      // haeufige Zwei-Welten-Fall: die Kamera lebt in der neuen inventar_units-
+      // Welt und ihre unit_id-Repraesentation weicht von der in
+      // bookings.cameras gespeicherten ab (bzw. die Buchung hatte gar keine
+      // Einheit zugewiesen und der Pack-Schritt konnte den Swap nicht
+      // persistieren). scan-lookup hat oben aber bereits ueber Produkt-ID ODER
+      // Produktname bestaetigt, dass die Kamera zu DIESER Buchung gehoert
+      // (info.matchesBooking === true — sonst waeren wir bei "wird nicht
+      // benoetigt" oben raus). Also als sauberen Treffer auf den naechsten
+      // freien Kamera-Slot werten, statt faelschlich zu blocken. Eine fremde
+      // Kamera (anderes Modell / andere Buchung) wird weiterhin durch
+      // matchesBooking=false abgefangen.
+      const camSlots = items.filter((it) => it.type === 'camera');
+      const freeCam = camSlots.find((it) => !checked[it.key]);
+      if (!freeCam) {
+        return { ok: false, alreadyChecked: true, message: `Alle Kameras schon abgehakt.` };
+      }
+      return {
+        ok: true,
+        key: freeCam.key,
+        message: `✓ Kamera (${info.serialNumber ?? rawCode})`,
+        scannedKind: 'camera',
+        scannedUnitId: info.unitId,
+      };
     }
     // Multi-Kamera-Buchung: NICHT hart auf Slot 'camera' setzen, sonst kann
     // die 2. (3. …) Kamera nie abgehakt werden (Slot 'camera::1' bleibt offen,
