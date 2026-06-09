@@ -396,6 +396,15 @@ sonst **ohne** Tracking-Block. Akzeptiert nur Versand-Buchungen im Status
   entsprechende Einleitungssatz (Rest der Mail unverändert). Bestehende Aufrufer
   (`ship-booking`, Tracking-Edit in `/admin/buchungen/[id]`) übergeben weiter
   Tracking und sind unberührt.
+- **Etikett-zuerst-Nudge:** Eine `preparing_shipment`-Buchung **ohne**
+  hinterlegte `tracking_number` zeigt im Widget statt des Versand-Buttons zuerst
+  **„🏷 Etikett erstellen"** (Link auf `/admin/retouren` = „Versand & Rückgabe",
+  wo das Sendcloud-Etikett erstellt wird). Erst wenn ein Tracking hinterlegt ist,
+  erscheint der **„🚚 Als versendet markieren"**-Button → so enthält die
+  Versandbestätigung an den Kunden zuverlässig den Trackinglink. Dafür liefert
+  `GET /api/admin/dashboard-data` `action_queue.items[].tracking_number` mit.
+  (Mark-shipped ohne Tracking bleibt jederzeit über die Buchungsdetailseite
+  möglich — der Nudge gilt nur fürs Dashboard.)
 - Die erledigte Zeile wird optimistisch lokal ausgeblendet (`doneIds`-State,
   kein Parent-Reload), Busy-/Fehler-Zustand inline. Rest der Zeile bleibt ein
   Link auf die Buchungsdetailseite. Andere Status behalten ihre

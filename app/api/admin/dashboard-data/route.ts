@@ -193,7 +193,7 @@ export async function GET() {
       // uebergeben, ruckgabe pruefen, freigeben ...) — Direktlink-Liste
       supabase
         .from('bookings')
-        .select('id, product_name, customer_name, status, delivery_mode, rental_from, rental_to')
+        .select('id, product_name, customer_name, status, delivery_mode, rental_from, rental_to, tracking_number')
         .in('status', ['pending_verification', 'awaiting_payment', 'confirmed', 'preparing_shipment', 'awaiting_pickup', 'shipped', 'delivered', 'picked_up', 'damaged'])
         .order('rental_from', { ascending: true })
         .limit(50),

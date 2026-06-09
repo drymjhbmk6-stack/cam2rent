@@ -589,6 +589,7 @@ interface QueueBooking {
   delivery_mode: string | null;
   rental_from: string;
   rental_to: string;
+  tracking_number?: string | null;
 }
 
 interface QueueAction {
@@ -614,8 +615,12 @@ function queueActionForBooking(b: QueueBooking): QueueAction | null {
         : { label: '📝 Übergabe', href: `/admin/buchungen/${b.id}/uebergabe`, color: C.purple, weight: 2 };
     case 'preparing_shipment':
       // Paket ist gepackt + kontrolliert → nächster Schritt ist der Versand.
-      // Button setzt den Status direkt auf 'shipped' (kein Seitenwechsel).
-      return { label: '🚚 Als versendet markieren', href: `/admin/buchungen/${b.id}`, color: C.green, weight: 2, kind: 'mark-shipped' };
+      // Ohne hinterlegtes Tracking zuerst zum Etikett leiten (Versand & Rückgabe),
+      // damit die Versandbestätigung an den Kunden den Trackinglink enthält.
+      // Erst wenn ein Tracking da ist → Button, der Status auf 'shipped' setzt + mailt.
+      return b.tracking_number
+        ? { label: '🚚 Als versendet markieren', href: `/admin/buchungen/${b.id}`, color: C.green, weight: 2, kind: 'mark-shipped' }
+        : { label: '🏷 Etikett erstellen', href: `/admin/retouren`, color: C.cyan, weight: 2 };
     case 'awaiting_pickup':
       return { label: '📝 Übergabe', href: `/admin/buchungen/${b.id}/uebergabe`, color: C.purple, weight: 2 };
     case 'delivered':
