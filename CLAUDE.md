@@ -729,6 +729,33 @@ Kunden.
 - **Migration:** `supabase-bookings-invoice-address.sql` (am 2026-05-28
   ausgeführt, Datei nach `erledigte supabase/` verschoben).
 
+### Abschluss-Bestätigungsmail bei `completed` (Stand 2026-06-09)
+Sobald eine Buchung als **abgeschlossen** (`status='completed'`) markiert wird —
+generisch für **Abholung UND Versand** — bekommt der Kunde eine
+Abschluss-Bestätigung („Rückgabe eingegangen, alles in Ordnung, danke") inkl.
+Hinweis auf das **Kundenmaterial-Programm** (Foto/Video hochladen → Rabatt-Gutschein,
+CTA auf `/konto/buchungen/[id]/material`). Bei `condition='beschaedigt'` (→ Status
+`damaged`, nicht `completed`) wird **keine** Mail geschickt.
+- **Mail-Funktion** `sendCompletionConfirmation()` in `lib/email.ts`, emailType
+  `completion_confirmation`. Der Kundenmaterial-Block erscheint nur wenn
+  `ugcEnabled && ugcDiscountPercent>0` (aus `loadUgcSettings`, Default 15 %).
+- **Zentraler Versand-Helper** `lib/booking-completion-email.ts` →
+  `dispatchCompletionEmail(supabase, bookingId)`: lädt Buchung, prüft
+  `status==='completed'` + E-Mail vorhanden, **Dedup über `email_log`**
+  (`email_type='completion_confirmation'` + `booking_id`) → pro Buchung nur EINE
+  Mail. Best-effort/non-blocking (fängt alle Fehler selbst).
+- **Hooks (alle non-blocking):** `return-booking` (kanonischer Retouren-Pfad, nur
+  bei `newStatus==='completed'`), `update-booking-status` (zusätzlich zur
+  bestehenden `sendReviewRequest`), `booking/[id]` PATCH (Status→completed),
+  `return-checklist` (Checkliste abgeschlossen). Dedup verhindert Doppel-Mail bei
+  mehreren Pfaden.
+- **Getrennt von der Bewertungs-Bitte:** Die `review_request`-Mail (Google + 10 %-
+  Gutschein, Cron 3 Tage nach Mietende bzw. sofort bei manueller Statusumstellung)
+  bleibt unverändert eine eigene Mail.
+- **Registriert** in `app/admin/emails/page.tsx` (`TYPE_LABELS`) + Vorlagen-
+  Übersicht `lib/email-previews.ts` (`EMAIL_TEMPLATE_CATALOG` → vorab ansehbar +
+  per Override anpassbar unter `/admin/emails/vorlagen`).
+
 ### Versand-Status `delivered` — Zugestellt ≠ Abgeschlossen (Stand 2026-05-22)
 Neuer Buchungs-Zwischenstatus `delivered` (Label „Zugestellt"). Vorher sprang
 „Als zugestellt markieren" auf `shipped` direkt auf `completed` — falsch, denn

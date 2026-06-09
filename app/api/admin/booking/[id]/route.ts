@@ -4,6 +4,7 @@ import { logAudit } from '@/lib/audit';
 import { sendCancellationConfirmation, sendAdminCancellationNotification, sendAndLog, sendShippingConfirmation } from '@/lib/email';
 import { buildTrackingUrl, isAllowedCarrier, type TrackingCarrier } from '@/lib/tracking-url';
 import { releaseAccessoryUnitsFromBooking } from '@/lib/accessory-unit-assignment';
+import { dispatchCompletionEmail } from '@/lib/booking-completion-email';
 import { getStripe, buildPaymentDescription } from '@/lib/stripe';
 import { DEFAULT_HAFTUNG, DEFAULT_SHIPPING, getEigenbeteiligung, calcHaftungTieredPrice, type HaftungConfig } from '@/lib/price-config';
 import { computeReplacementValue, loadReplacementValueConfig } from '@/lib/replacement-value';
@@ -1987,6 +1988,14 @@ export async function PATCH(
         console.warn(`[booking-cancel] Buchung ${id} storniert, aber keine Kunden-E-Mail hinterlegt — keine Mail versendet.`);
       }
     }
+  }
+
+  // Bei Abschluss: Abschluss-Bestätigung ("alles in Ordnung" + Kundenmaterial)
+  // an den Kunden, non-blocking. Dedup im Helper → keine Doppel-Mail mit dem
+  // Retouren-Prüf-Pfad.
+  if (status === 'completed') {
+    dispatchCompletionEmail(supabase, id)
+      .catch((err) => console.error('[booking-update] completion email failed:', err));
   }
 
   // Audit-Log mit passendem Action-Namen

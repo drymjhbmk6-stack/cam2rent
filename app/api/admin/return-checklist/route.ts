@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
+import { dispatchCompletionEmail } from '@/lib/booking-completion-email';
 import { logAudit } from '@/lib/audit';
 
 /**
@@ -104,6 +105,10 @@ export async function PATCH(req: NextRequest) {
       .from('bookings')
       .update({ status: 'completed' })
       .eq('id', bookingId);
+
+    // Abschluss-Bestätigung an den Kunden (non-blocking, Dedup im Helper).
+    dispatchCompletionEmail(supabase, bookingId)
+      .catch((err) => console.error('[return-checklist] completion email failed:', err));
   } else if (status === 'damage_reported') {
     updateData.status = 'damage_reported';
   } else {

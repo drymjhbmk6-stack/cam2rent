@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { sendReviewRequest } from '@/lib/email';
+import { dispatchCompletionEmail } from '@/lib/booking-completion-email';
 import { logAudit } from '@/lib/audit';
 
 /**
@@ -45,6 +46,13 @@ export async function PATCH(req: NextRequest) {
     changes: { status },
     request: req,
   });
+
+  // Nach Abschluss: Abschluss-Bestätigung ("alles in Ordnung" + Kundenmaterial),
+  // non-blocking. Dedup im Helper verhindert Doppel-Mail mit dem Retouren-Pfad.
+  if (status === 'completed') {
+    dispatchCompletionEmail(supabase, bookingId)
+      .catch((err: unknown) => console.error('Completion email error:', err));
+  }
 
   // Nach Abschluss: Bewertungsanfrage per E-Mail (non-blocking)
   if (status === 'completed') {

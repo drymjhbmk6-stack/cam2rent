@@ -1611,6 +1611,98 @@ export async function sendReviewRequest(data: {
   await sendAndLog({ to: data.customerEmail, subject, html, bookingId: data.bookingId, emailType: 'review_request' });
 }
 
+// ─── Abschluss-Bestätigung ───────────────────────────────────────────────────
+
+export interface CompletionEmailData {
+  bookingId: string;
+  customerName: string;
+  customerEmail: string;
+  productName: string;
+  rentalFrom: string;
+  rentalTo: string;
+  /** Kundenmaterial-Block nur anzeigen, wenn aktiviert (Default: aus). */
+  ugcEnabled?: boolean;
+  /** Rabatt-Prozent für den Material-Upload (aus admin_settings.customer_ugc_rewards). */
+  ugcDiscountPercent?: number;
+}
+
+/**
+ * Abschluss-Bestätigung an den Kunden, sobald eine Buchung als `completed`
+ * markiert wurde — generisch für Abholung UND Versand. Sagt „Rückgabe erhalten,
+ * alles in Ordnung" und weist (optional) auf das Kundenmaterial-Programm hin
+ * (Foto/Video hochladen → Rabatt-Gutschein). Versand läuft über den zentralen
+ * Helper `dispatchCompletionEmail` (lib/booking-completion-email.ts) mit Dedup.
+ */
+export async function sendCompletionConfirmation(data: CompletionEmailData) {
+  const BASE_URL = await getSiteUrl();
+  const materialUrl = `${BASE_URL}/konto/buchungen/${data.bookingId}/material`;
+  const discount = data.ugcDiscountPercent ?? 0;
+  const showUgc = data.ugcEnabled === true && discount > 0;
+
+  const subject = stripSubject(`Deine Miete der ${data.productName} ist abgeschlossen – ${data.bookingId}`);
+
+  const ugcBlock = showUgc ? `
+          <table width="100%" cellpadding="0" cellspacing="0" style="margin:24px 0 0;background:#fffbeb;border:1px solid #fcd34d;border-radius:10px;">
+            <tr><td style="padding:20px 24px;">
+              <p style="margin:0 0 6px;font-size:15px;font-weight:700;color:#92400e;">📸 Zeig uns deine Aufnahmen – und spar ${discount}%</p>
+              <p style="margin:0 0 16px;font-size:13px;color:#92400e;line-height:1.6;">
+                Hast du mit der <strong>${h(data.productName)}</strong> tolle Fotos oder Videos gemacht?
+                Lade dein Material hoch – wir schalten dir im Gegenzug einen <strong>${discount}%-Rabattgutschein</strong>
+                für deine nächste Miete frei. Wird dein Material auf Social Media oder unserer Website gezeigt, gibt es on-top einen weiteren Gutschein.
+              </p>
+              <a href="${materialUrl}" style="display:inline-block;padding:12px 24px;background:#f59e0b;color:#ffffff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">
+                Material hochladen &amp; Rabatt sichern
+              </a>
+            </td></tr>
+          </table>` : '';
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#f0f0f0;font-family:Arial,Helvetica,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="padding:24px 0;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;max-width:560px;width:100%;">
+        <tr><td style="background:#0a0a0a;padding:28px 32px;">
+          <span style="font-size:20px;font-weight:700;color:#fff;letter-spacing:-0.5px;">cam<span style="color:#3b82f6;">2</span>rent</span>
+        </td></tr>
+        <tr><td style="padding:32px;">
+          <h1 style="margin:0 0 8px;font-size:20px;font-weight:700;color:#0a0a0a;">Miete abgeschlossen – alles in Ordnung ✅</h1>
+          <p style="margin:0 0 24px;font-size:14px;color:#6b7280;line-height:1.6;">
+            Hallo ${h(data.customerName)},<br><br>
+            deine Rückgabe ist bei uns eingegangen und alles ist in bestem Zustand. Vielen Dank,
+            dass du die <strong style="color:#0a0a0a;">${h(data.productName)}</strong> bei uns gemietet hast –
+            wir hoffen, du hattest viel Freude damit!
+          </p>
+          <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:10px;margin-bottom:8px;">
+            <tr><td style="padding:14px 20px;border-bottom:1px solid #e5e7eb;">
+              <p style="margin:0 0 2px;font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:0.8px;">Buchungsnummer</p>
+              <p style="margin:0;font-size:14px;font-weight:600;color:#0a0a0a;">${h(data.bookingId)}</p>
+            </td></tr>
+            <tr><td style="padding:14px 20px;border-bottom:1px solid #e5e7eb;">
+              <p style="margin:0 0 2px;font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:0.8px;">Kamera</p>
+              <p style="margin:0;font-size:14px;font-weight:600;color:#0a0a0a;">${h(data.productName)}</p>
+            </td></tr>
+            <tr><td style="padding:14px 20px;">
+              <p style="margin:0 0 2px;font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:0.8px;">Mietzeitraum</p>
+              <p style="margin:0;font-size:14px;font-weight:600;color:#0a0a0a;">${fmtDate(data.rentalFrom)} – ${fmtDate(data.rentalTo)}</p>
+            </td></tr>
+          </table>
+          ${ugcBlock}
+          <p style="margin:24px 0 0;font-size:13px;color:#6b7280;line-height:1.6;">
+            Bei Fragen sind wir jederzeit für dich da: <a href="mailto:${h(ADMIN_EMAIL)}" style="color:#3b82f6;">${h(ADMIN_EMAIL)}</a>.<br>
+            Wir freuen uns auf deine nächste Miete!
+          </p>
+        </td></tr>
+        <tr><td style="background:#f5f5f0;border-radius:0 0 12px 12px;padding:20px 32px;text-align:center;">
+          <p style="margin:0;font-size:11px;color:#9ca3af;">${BUSINESS.name} &middot; ${BUSINESS.slogan} &middot; <a href="${BUSINESS.url}" style="color:#9ca3af;">${BUSINESS.domain}</a></p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>`;
+
+  await sendAndLog({ to: data.customerEmail, subject, html, bookingId: data.bookingId, emailType: 'completion_confirmation' });
+}
+
 // ─── Abandoned Cart Reminder ─────────────────────────────────────────────────
 
 export async function sendAbandonedCartReminder(data: {

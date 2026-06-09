@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase';
 import { releaseAccessoryUnitsFromBooking } from '@/lib/accessory-unit-assignment';
 import { logAudit } from '@/lib/audit';
 import { resolveBookingCameras } from '@/lib/booking-cameras';
+import { dispatchCompletionEmail } from '@/lib/booking-completion-email';
 
 /**
  * POST /api/admin/return-booking
@@ -84,6 +85,10 @@ export async function POST(req: NextRequest) {
     if (newStatus === 'completed') {
       releaseAccessoryUnitsFromBooking(bookingId)
         .catch((err) => console.error('[return-booking] accessory-unit release failed:', err));
+      // Abschluss-Bestätigung an den Kunden ("alles in Ordnung" + Kundenmaterial),
+      // non-blocking. Dedup im Helper → keine Doppel-Mail bei mehreren Pfaden.
+      dispatchCompletionEmail(supabase, bookingId)
+        .catch((err) => console.error('[return-booking] completion email failed:', err));
     }
 
     // 1b. Bei Beschädigung: automatisch Schadensmeldung erstellen

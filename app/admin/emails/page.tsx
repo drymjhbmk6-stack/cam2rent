@@ -65,6 +65,7 @@ const TYPE_LABELS: Record<string, { label: string; color: string; bg: string }> 
   inbound_received: { label: 'E-Mail empfangen', color: '#0ea5e9', bg: '#0ea5e914' },
   inbound_reply: { label: 'E-Mail-Antwort', color: '#0ea5e9', bg: '#0ea5e914' },
   extension_confirmation: { label: 'Verlängerung', color: '#06b6d4', bg: '#06b6d414' },
+  completion_confirmation: { label: 'Abschlussbestätigung', color: '#10b981', bg: '#10b98114' },
   review_request: { label: 'Bewertungsanfrage', color: '#f59e0b', bg: '#f59e0b14' },
   review_reward_coupon: { label: 'Bewertungs-Gutschein', color: '#f59e0b', bg: '#f59e0b14' },
   abandoned_cart: { label: 'Warenkorbabbruch', color: '#94a3b8', bg: '#94a3b814' },

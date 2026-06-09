@@ -30,6 +30,7 @@ import {
   sendNewMessageNotificationToCustomer,
   sendExtensionConfirmation,
   sendReviewRequest,
+  sendCompletionConfirmation,
   sendAbandonedCartReminder,
   sendVerificationRejected,
   sendWbwConfirmation,
@@ -532,6 +533,22 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateMeta[] = [
     render: () => renderEmailPreview(sendExtensionConfirmation, dummyExtension),
   },
   // Bewertung & Warenkorb
+  {
+    id: 'completion_confirmation',
+    name: 'Abschlussbestätigung',
+    description: 'Sobald eine Buchung als „abgeschlossen" markiert wird (Rückgabe-Prüfung oder manuell) — für Abholung und Versand. Bestätigt „alles in Ordnung" und weist auf das Kundenmaterial-Programm (Rabatt) hin.',
+    recipient: 'customer',
+    render: () => renderEmailPreview(sendCompletionConfirmation, {
+      bookingId: DUMMY_BOOKING_ID,
+      customerName: 'Max Mustermann',
+      customerEmail: 'max.mustermann@example.de',
+      productName: 'GoPro Hero13 Black',
+      rentalFrom: '2026-05-01',
+      rentalTo: '2026-05-07',
+      ugcEnabled: true,
+      ugcDiscountPercent: 15,
+    }),
+  },
   {
     id: 'review_request',
     name: 'Bewertungs-Anfrage (Google + Gutschein)',
