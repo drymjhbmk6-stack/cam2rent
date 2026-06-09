@@ -498,13 +498,33 @@ export async function applyScan(
       includedParts: freeBulk[0].includedParts,
     };
   }
-  if (!allowSubstitution) {
-    return { ok: false, message: `Dieses „${info.accessoryName}" passt nicht zu dieser Buchung — bitte gegen den Buchungs-Code pruefen.` };
-  }
   const slots = items.filter((it) => it.type === 'accessory' && it.accessoryId === info.accessoryId);
   const free = slots.find((it) => !checked[it.key]);
   if (!free) {
     return { ok: false, alreadyChecked: true, message: `Alle „${info.accessoryName}" schon abgehakt.` };
+  }
+  if (!allowSubstitution) {
+    // Kontroll-/Retouren-Schritt: der gescannte Exemplar-Code stand nicht in
+    // den lokal reservierten Codes (booking.unit_codes), deshalb sind wir hier
+    // gelandet. Das ist KEIN Fehler, sondern der haeufige Zwei-Welten-Fall:
+    // das Zubehoer-Stueck lebt in der neuen inventar_units-Welt (bzw. ist ein
+    // Set-Bestandteil ohne zugewiesene Legacy-accessory_units-Einheit), seine
+    // unit-id-Repraesentation steckt nicht in unit_codes. scan-lookup hat oben
+    // aber bereits bestaetigt, dass das Zubehoer zu DIESER Buchung gehoert
+    // (info.matchesBooking === true — sonst waeren wir bei "wird nicht
+    // benoetigt" raus) und es gibt einen freien Slot dieser Position. Also als
+    // sauberen Treffer werten statt faelschlich zu blocken. Fremdes Zubehoer
+    // (anderer accessory_id / andere Buchung) wird weiter ueber
+    // matchesBooking=false abgefangen.
+    return {
+      ok: true,
+      key: free.key,
+      message: `✓ ${free.label}`,
+      scannedKind: 'accessory',
+      accessoryId: info.accessoryId,
+      scannedUnitId: info.unitId,
+      includedParts: free.includedParts,
+    };
   }
   return {
     ok: true,
