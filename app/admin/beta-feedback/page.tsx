@@ -24,6 +24,8 @@ const STAR_QUESTIONS = [
 
 // Alle Fragen mit Labels + Typ für die Detail-Anzeige
 const ALL_QUESTIONS: { id: string; label: string; type: 'stars' | 'nps' | 'text' | 'choice' }[] = [
+  // Freitext aus dem Kundenkonto (/konto/feedback → /api/feedback)
+  { id: 'q_konto_feedback', label: 'Feedback aus dem Kundenkonto', type: 'text' },
   { id: 'q_design', label: 'Wie gefällt dir das Design insgesamt?', type: 'stars' },
   { id: 'q_trust', label: 'Wie vertrauenswürdig wirkt die Seite auf dich?', type: 'stars' },
   { id: 'q_first_feeling', label: 'Was war dein erster Gedanke beim Öffnen?', type: 'choice' },

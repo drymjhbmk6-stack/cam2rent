@@ -1409,6 +1409,62 @@ Admin sieht pro Kunde die letzten 10 Anmeldungen. Supabase `auth.users` hält nu
 - **Go-Live TODO:** Migration `supabase/supabase-customer-login-history.sql`
   ausführen. Ohne sie läuft alles weiter (Track-Endpoint No-Op, Admin-Tab leer).
 
+### Abweichende Liefer- + Rechnungsadresse pro Kunde (Standard + pro Buchung, Stand 2026-06-10)
+Privatkunden können eine abweichende **Lieferadresse** und/oder
+**Rechnungsadresse** hinterlegen — als dauerhaften Standard im Profil UND pro
+Buchung im Checkout überschreibbar.
+- **Migration `supabase/supabase-profiles-deviating-addresses.sql`** (idempotent):
+  8 neue Spalten auf `profiles` (`delivery_name/street/zip/city`,
+  `billing_name/street/zip/city`) + erweitertes Column-Level-`GRANT UPDATE` an
+  `authenticated` (der Kunde speichert sein Profil per Browser-Client direkt —
+  analog `supabase-profiles-rls-column-level.sql`). Leer = Hauptadresse
+  (`address_*`) gilt.
+- **Profil-UI** (`/konto/uebersicht` → ProfilEdit): zwei Toggle-Sektionen
+  „Abweichende Lieferadresse" + „Abweichende Rechnungsadresse" (Name/Straße/
+  PLZ/Stadt). Speichern läuft über den bestehenden Browser-Client-`update` mit
+  **defensivem Retry ohne die neuen Spalten**, falls die Migration noch nicht
+  durch ist (Profil-Speichern bricht nie). Toggle aus → Felder werden geleert.
+- **Per-Buchung-Override** (nur Cart-Checkout `/checkout`): die bestehende
+  Lieferadress-Eingabe ist jetzt **wirksam** (vorbefüllt aus delivery_*-Override
+  bzw. Hauptadresse) + neue Sektion „Abweichende Rechnungsadresse". Beide
+  fließen über den `checkoutContext` (sessionStorage + checkout-intent-DB-Kontext)
+  → `buchung-bestaetigt` → `confirm-cart` als `invoiceName`/`invoiceAddress` bzw.
+  `shippingAddress`.
+- **Server-Auflösung** (`lib/booking/resolve-addresses.ts`): `loadProfileAddressRow`
+  (defensiver Select-Retry), `resolveShippingAddress` (Per-Order > delivery_* >
+  Hauptadresse), `resolveInvoiceAddress` (Per-Order > billing_* > null →
+  Default-Verhalten in `lib/build-invoice-data.ts`). Verdrahtet in
+  **confirm-booking**, **confirm-cart** und **beiden Stripe-Webhook-Pfaden**
+  (Single + Cart, Race-Recovery). `bookings.shipping_address` +
+  `bookings.invoice_name`/`invoice_address` (existierende Spalten, keine neue
+  Buchungs-Migration). **Wichtige Korrektur:** confirm-cart bevorzugte vorher die
+  Profil-Hauptadresse über die im Checkout eingegebene Adresse (`profileAddress ??
+  r_shippingAddress`) — die Checkout-Eingabe wurde faktisch ignoriert. Jetzt
+  gewinnt die Per-Order-Eingabe.
+- **Einzel-Wizard** (`/kameras/[slug]/buchen`) hat **keine** Adress-Eingabe (nie
+  gehabt) → nutzt die Profil-Standards (delivery_*/billing_*) automatisch über
+  confirm-booking. Per-Order-Override gibt es dort bewusst nicht.
+- **Rechnung:** `invoice_name`/`invoice_address` greifen automatisch in
+  `lib/build-invoice-data.ts` (`customerName = invoice_name ?? customer_name`,
+  `customerAddress = invoice_address ?? shipping_address ?? Profil`) — siehe
+  „Abweichende Rechnungsadresse pro Buchung". Lieferadresse (Etikett/Packliste)
+  bleibt `shipping_address`.
+- **Go-Live TODO:** Migration `supabase/supabase-profiles-deviating-addresses.sql`
+  ausführen. Ohne sie läuft alles weiter (Profil-UI zeigt die Felder, speichert
+  sie aber nicht; Buchungen nutzen die Hauptadresse wie zuvor).
+
+### Konto-Feedback schreibt in `beta_feedback` (Fix, Stand 2026-06-10)
+`/konto/feedback` → „Feedback senden" lieferte „Feedback konnte nicht gesendet
+werden", weil `POST /api/feedback` in eine Tabelle `feedback` schrieb, die **nie
+per Migration angelegt** wurde (500 beim Insert). Fix: die Route schreibt jetzt
+in die **live existierende `beta_feedback`-Tabelle** (`answers =
+{ q_konto_feedback: <text>, source: 'konto' }`, `tester_email` = User-Mail,
+`tester_name` best-effort aus `profiles.full_name`). Konto-Feedback erscheint
+damit unter **`/admin/beta-feedback`** — die Admin-Ansicht rendert den Freitext
+über den neuen `ALL_QUESTIONS`-Eintrag `q_konto_feedback` (Typ `text`). Keine
+neue Migration nötig. NPS-/Sterne-/Choice-Auswertungen ignorieren Konto-Feedback
+(keine passenden Keys), nur der Gesamt-Zähler steigt.
+
 ### Preise
 30-Tage-Preistabelle pro Produkt + Formel für 31+ Tage, alles in admin_config
 
@@ -4234,6 +4290,12 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
      im jeweiligen `MODEL_REGISTRY` (`lib/firmware/adapters/`) ergänzen.
 
 ### Noch offen
+- **Abweichende-Adressen-Migration auszuführen:**
+  `supabase/supabase-profiles-deviating-addresses.sql` (idempotent, additiv:
+  8 Spalten `delivery_*`/`billing_*` auf `profiles` + Column-Level-GRANT).
+  Ohne sie zeigt das Profil die Felder, speichert sie aber nicht (defensiver
+  Retry ohne die Spalten), und Buchungen nutzen die Hauptadresse wie zuvor.
+  Empfohlen ASAP ausführen. Siehe „Abweichende Liefer- + Rechnungsadresse".
 - **Persönlicher-Bereich-Migration + Cron:** Migration
   `supabase/supabase-employee-personal.sql` (idempotent, legt
   `employee_notes` + `employee_appointments` an) ausführen, sonst zeigt die

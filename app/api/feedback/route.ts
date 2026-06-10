@@ -31,10 +31,28 @@ export async function POST(req: NextRequest) {
   if (!message?.trim()) return NextResponse.json({ error: 'Nachricht fehlt.' }, { status: 400 });
 
   const supabase = createServiceClient();
-  const { error } = await supabase.from('feedback').insert({
-    user_id: user.id,
-    user_email: user.email,
-    message: message.trim(),
+
+  // Name best-effort aus dem Profil aufloesen (rein fuer die Admin-Anzeige).
+  let testerName: string | null = null;
+  try {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('full_name')
+      .eq('id', user.id)
+      .maybeSingle();
+    testerName = profile?.full_name?.trim() || null;
+  } catch { /* optional */ }
+
+  // Konto-Feedback landet in der bestehenden `beta_feedback`-Tabelle (live) und
+  // erscheint damit unter /admin/beta-feedback. Eine separate `feedback`-Tabelle
+  // existiert nicht (es gab nie eine Migration) — das war die Ursache des
+  // "Feedback konnte nicht gesendet werden."-Fehlers.
+  const { error } = await supabase.from('beta_feedback').insert({
+    tester_name: testerName,
+    tester_email: user.email,
+    wants_gutschein: false,
+    answers: { q_konto_feedback: message.trim(), source: 'konto' },
+    user_agent: req.headers.get('user-agent') ?? null,
   });
 
   if (error) {

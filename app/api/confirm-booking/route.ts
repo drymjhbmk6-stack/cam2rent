@@ -12,6 +12,12 @@ import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { calcPriceFromTable, type AdminProduct } from '@/lib/price-config';
 import { parseMetadataAccessoryItems, itemsToLegacyIds } from '@/lib/booking-accessories';
 import {
+  loadProfileAddressRow,
+  resolveShippingAddress,
+  resolveInvoiceAddress,
+  type ProfileAddressRow,
+} from '@/lib/booking/resolve-addresses';
+import {
   sendBookingConfirmation,
   sendAdminNotification,
   type BookingEmailData,
@@ -253,12 +259,13 @@ export async function POST(req: NextRequest) {
     // 4a + 4b + 7: Plausibility-Produktdaten, Lieferadresse und Steuer-Settings
     // parallel laden — sie sind voneinander unabhängig. Spart 2-3 sequentielle
     // Roundtrips zu Supabase (~150-300 ms).
-    const needsAddress = Boolean(meta.user_id && meta.delivery_mode === 'versand');
-    const [prodResult, profileResult, taxResult] = await Promise.all([
+    // Profil immer laden wenn user_id vorhanden — die abweichende
+    // Rechnungsadresse (billing_*) gilt auch bei Abholung, nicht nur Versand.
+    const [prodResult, profileRow, taxResult] = await Promise.all([
       supabase.from('admin_config').select('value').eq('key', 'products').maybeSingle(),
-      needsAddress
-        ? supabase.from('profiles').select('address_street, address_zip, address_city').eq('id', meta.user_id!).maybeSingle()
-        : Promise.resolve({ data: null as null | { address_street?: string; address_zip?: string; address_city?: string } }),
+      meta.user_id
+        ? loadProfileAddressRow(supabase, meta.user_id)
+        : Promise.resolve(null as ProfileAddressRow | null),
       supabase.from('admin_settings').select('key, value').in('key', ['tax_mode', 'tax_rate', 'ust_id']),
     ]);
 
@@ -312,15 +319,13 @@ export async function POST(req: NextRequest) {
       console.error('[confirm-booking] Plausibilitätsprüfung fehlgeschlagen:', plausErr);
     }
 
-    // 4b. Lieferadresse aus Profil holen
-    let shippingAddress: string | null = null;
-    const profile = profileResult?.data;
-    if (profile?.address_street) {
-      shippingAddress = [
-        profile.address_street,
-        [profile.address_zip, profile.address_city].filter(Boolean).join(' '),
-      ].filter(Boolean).join(', ');
-    }
+    // 4b. Liefer- + Rechnungsadresse aufloesen.
+    // Lieferadresse: abweichende Standard-Lieferadresse (delivery_*) > Hauptadresse.
+    // Der Einzel-Buchungs-Wizard kennt keine Per-Order-Eingabe -> Profil-Defaults.
+    // Rechnungsadresse: abweichende Standard-Rechnungsadresse (billing_*) > Default.
+    const shippingAddress =
+      meta.delivery_mode === 'versand' ? resolveShippingAddress(profileRow) : null;
+    const invoiceOverride = resolveInvoiceAddress(profileRow);
 
     // 5. Deposit-Vorautorisierung bestätigen (falls vorhanden)
     let confirmedDepositIntentId: string | null = null;
@@ -420,6 +425,9 @@ export async function POST(req: NextRequest) {
       customer_email: meta.customer_email || null,
       customer_name: meta.customer_name || null,
       shipping_address: shippingAddress,
+      ...(invoiceOverride
+        ? { invoice_name: invoiceOverride.invoice_name, invoice_address: invoiceOverride.invoice_address }
+        : {}),
       ...(productDiscountFromMeta > 0
         ? {
             discount_amount: productDiscountFromMeta,

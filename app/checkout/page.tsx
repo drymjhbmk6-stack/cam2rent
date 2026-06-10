@@ -60,6 +60,10 @@ function PaymentForm({
   street,
   zip,
   city,
+  billingName,
+  billingStreet,
+  billingZip,
+  billingCity,
 }: {
   total: number;
   onBack: () => void;
@@ -79,6 +83,10 @@ function PaymentForm({
   street: string;
   zip: string;
   city: string;
+  billingName: string;
+  billingStreet: string;
+  billingZip: string;
+  billingCity: string;
 }) {
   const stripe = useStripe();
   const elements = useElements();
@@ -119,6 +127,10 @@ function PaymentForm({
           street,
           zip,
           city,
+          billingName,
+          billingStreet,
+          billingZip,
+          billingCity,
           contractSignature,
         })
       );
@@ -269,6 +281,13 @@ export default function CheckoutPage() {
   const [zip, setZip] = useState('');
   const [city, setCity] = useState('');
 
+  // Abweichende Rechnungsadresse (optional, pro Buchung)
+  const [billingDiffers, setBillingDiffers] = useState(false);
+  const [billingName, setBillingName] = useState('');
+  const [billingStreet, setBillingStreet] = useState('');
+  const [billingZip, setBillingZip] = useState('');
+  const [billingCity, setBillingCity] = useState('');
+
   // Shipping
   const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>('versand');
   const [shippingMethod, setShippingMethod] = useState<ShippingMethod>('standard');
@@ -403,9 +422,19 @@ export default function CheckoutPage() {
           setLastName(parts.slice(1).join(' ') ?? '');
         }
         if (data?.phone) setPhone(data.phone);
-        if (data?.address_street) setStreet(data.address_street);
-        if (data?.address_zip) setZip(data.address_zip);
-        if (data?.address_city) setCity(data.address_city);
+        // Lieferadresse: abweichende Standard-Lieferadresse (delivery_*) hat
+        // Vorrang vor der Hauptadresse — sie ist die gewuenschte Default-Lieferung.
+        setStreet(data?.delivery_street || data?.address_street || '');
+        setZip(data?.delivery_zip || data?.address_zip || '');
+        setCity(data?.delivery_city || data?.address_city || '');
+        // Abweichende Rechnungsadresse aus dem Profil vorbefuellen.
+        if (data?.billing_street || data?.billing_city) {
+          setBillingDiffers(true);
+          setBillingName(data?.billing_name ?? '');
+          setBillingStreet(data?.billing_street ?? '');
+          setBillingZip(data?.billing_zip ?? '');
+          setBillingCity(data?.billing_city ?? '');
+        }
       });
     if (user.email) setEmail(user.email);
   }, [user]);
@@ -609,6 +638,10 @@ export default function CheckoutPage() {
             street,
             zip,
             city,
+            billingName: billingDiffers ? billingName : '',
+            billingStreet: billingDiffers ? billingStreet : '',
+            billingZip: billingDiffers ? billingZip : '',
+            billingCity: billingDiffers ? billingCity : '',
             earlyServiceConsentAt: (requiresEarlyServiceConsent && acceptsEarlyService) ? new Date().toISOString() : null,
           },
         }),
@@ -965,6 +998,49 @@ export default function CheckoutPage() {
                         <input type="text" value={city} onChange={(e) => setCity(e.target.value)}
                           className={inputClass} placeholder="Berlin" autoComplete="address-level2" />
                       </div>
+                    </div>
+
+                    {/* Abweichende Rechnungsadresse */}
+                    <div className="pt-2 border-t border-brand-border dark:border-white/10">
+                      <label className="flex items-start gap-3 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={billingDiffers}
+                          onChange={(e) => setBillingDiffers(e.target.checked)}
+                          className="mt-0.5 w-4 h-4 rounded border-brand-border text-accent-blue focus:ring-accent-blue"
+                        />
+                        <span>
+                          <span className="block text-sm font-body font-medium text-brand-black dark:text-white">Abweichende Rechnungsadresse</span>
+                          <span className="block text-xs text-brand-muted dark:text-gray-500">Aktivieren, wenn die Rechnung an eine andere Adresse (z.&nbsp;B. Firma) gehen soll.</span>
+                        </span>
+                      </label>
+
+                      {billingDiffers && (
+                        <div className="mt-4 space-y-3">
+                          <div>
+                            <label className={labelClass}>Name / Firma</label>
+                            <input type="text" value={billingName} onChange={(e) => setBillingName(e.target.value)}
+                              className={inputClass} placeholder="Mustermann GmbH" autoComplete="off" />
+                          </div>
+                          <div>
+                            <label className={labelClass}>Strasse und Hausnummer</label>
+                            <input type="text" value={billingStreet} onChange={(e) => setBillingStreet(e.target.value)}
+                              className={inputClass} placeholder="Musterstrasse 42" autoComplete="off" />
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className={labelClass}>PLZ</label>
+                              <input type="text" value={billingZip} onChange={(e) => setBillingZip(e.target.value)}
+                                className={inputClass} placeholder="12345" autoComplete="off" maxLength={5} />
+                            </div>
+                            <div>
+                              <label className={labelClass}>Stadt</label>
+                              <input type="text" value={billingCity} onChange={(e) => setBillingCity(e.target.value)}
+                                className={inputClass} placeholder="Berlin" autoComplete="off" />
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1386,6 +1462,10 @@ export default function CheckoutPage() {
                       street={street}
                       zip={zip}
                       city={city}
+                      billingName={billingDiffers ? billingName : ''}
+                      billingStreet={billingDiffers ? billingStreet : ''}
+                      billingZip={billingDiffers ? billingZip : ''}
+                      billingCity={billingDiffers ? billingCity : ''}
                     />
                   </Elements>
                 )}

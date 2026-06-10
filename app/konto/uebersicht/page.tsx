@@ -13,6 +13,16 @@ interface Profile {
   address_street: string;
   address_zip: string;
   address_city: string;
+  // Abweichende Lieferadresse (optional)
+  delivery_name: string;
+  delivery_street: string;
+  delivery_zip: string;
+  delivery_city: string;
+  // Abweichende Rechnungsadresse (optional)
+  billing_name: string;
+  billing_street: string;
+  billing_zip: string;
+  billing_city: string;
 }
 
 function SectionToggle({
@@ -90,7 +100,17 @@ function ProfilEdit() {
     address_street: '',
     address_zip: '',
     address_city: '',
+    delivery_name: '',
+    delivery_street: '',
+    delivery_zip: '',
+    delivery_city: '',
+    billing_name: '',
+    billing_street: '',
+    billing_zip: '',
+    billing_city: '',
   });
+  const [deliveryDiffers, setDeliveryDiffers] = useState(false);
+  const [billingDiffers, setBillingDiffers] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -112,7 +132,17 @@ function ProfilEdit() {
             address_street: data.address_street ?? '',
             address_zip: data.address_zip ?? '',
             address_city: data.address_city ?? '',
+            delivery_name: data.delivery_name ?? '',
+            delivery_street: data.delivery_street ?? '',
+            delivery_zip: data.delivery_zip ?? '',
+            delivery_city: data.delivery_city ?? '',
+            billing_name: data.billing_name ?? '',
+            billing_street: data.billing_street ?? '',
+            billing_zip: data.billing_zip ?? '',
+            billing_city: data.billing_city ?? '',
           });
+          setDeliveryDiffers(Boolean(data.delivery_street || data.delivery_city));
+          setBillingDiffers(Boolean(data.billing_street || data.billing_city));
         } else {
           setProfile((p) => ({ ...p, full_name: user.user_metadata?.full_name ?? '' }));
         }
@@ -135,17 +165,39 @@ function ProfilEdit() {
     // beliebige Customer-INSERTs gesetzt werden). Die profiles-Row existiert
     // ohnehin bereits durch den handle_new_user-Trigger bzw. den
     // service-role-Upsert in /api/auth/express-signup.
-    const { error: dbError } = await supabase
+    const baseFields = {
+      full_name: profile.full_name,
+      phone: profile.phone,
+      address_street: profile.address_street,
+      address_zip: profile.address_zip,
+      address_city: profile.address_city,
+      updated_at: new Date().toISOString(),
+    };
+    // Abweichende Adressen: bei abgeschaltetem Toggle leeren (= Hauptadresse gilt).
+    const deviatingFields = {
+      delivery_name: deliveryDiffers ? profile.delivery_name : '',
+      delivery_street: deliveryDiffers ? profile.delivery_street : '',
+      delivery_zip: deliveryDiffers ? profile.delivery_zip : '',
+      delivery_city: deliveryDiffers ? profile.delivery_city : '',
+      billing_name: billingDiffers ? profile.billing_name : '',
+      billing_street: billingDiffers ? profile.billing_street : '',
+      billing_zip: billingDiffers ? profile.billing_zip : '',
+      billing_city: billingDiffers ? profile.billing_city : '',
+    };
+
+    let { error: dbError } = await supabase
       .from('profiles')
-      .update({
-        full_name: profile.full_name,
-        phone: profile.phone,
-        address_street: profile.address_street,
-        address_zip: profile.address_zip,
-        address_city: profile.address_city,
-        updated_at: new Date().toISOString(),
-      })
+      .update({ ...baseFields, ...deviatingFields })
       .eq('id', user.id);
+
+    // Defensiver Fallback: laeuft die Migration
+    // `supabase-profiles-deviating-addresses.sql` noch nicht, fehlen die
+    // delivery_*/billing_*-Spalten (bzw. ihr Column-GRANT) -> Update ohne sie
+    // wiederholen, damit das Profil-Speichern nicht bricht.
+    if (dbError && /column|schema cache|PGRST|permission|42703|42501/i.test(dbError.message ?? '')) {
+      const retry = await supabase.from('profiles').update(baseFields).eq('id', user.id);
+      dbError = retry.error;
+    }
 
     if (!dbError) {
       await supabase.auth.updateUser({ data: { full_name: profile.full_name } });
@@ -214,6 +266,84 @@ function ProfilEdit() {
             <label className="block text-sm font-body font-medium text-brand-black dark:text-white mb-1">Stadt</label>
             <input type="text" value={profile.address_city} onChange={handleChange('address_city')} className={inputCls} placeholder="Berlin" autoComplete="address-level2" />
           </div>
+        </div>
+
+        {/* Abweichende Lieferadresse */}
+        <div className="pt-2 border-t border-brand-border dark:border-white/10">
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={deliveryDiffers}
+              onChange={(e) => { setDeliveryDiffers(e.target.checked); setSuccess(false); }}
+              className="mt-0.5 w-4 h-4 rounded border-brand-border text-accent-blue focus:ring-accent-blue"
+            />
+            <span>
+              <span className="block text-sm font-body font-medium text-brand-black dark:text-white">Abweichende Lieferadresse</span>
+              <span className="block text-xs text-brand-muted dark:text-gray-500">Aktivieren, wenn das Paket an eine andere Adresse als oben gehen soll.</span>
+            </span>
+          </label>
+
+          {deliveryDiffers && (
+            <div className="mt-4 space-y-4">
+              <div>
+                <label className="block text-sm font-body font-medium text-brand-black dark:text-white mb-1">Name (Empfänger)</label>
+                <input type="text" value={profile.delivery_name} onChange={handleChange('delivery_name')} className={inputCls} placeholder="Max Mustermann" autoComplete="off" />
+              </div>
+              <div>
+                <label className="block text-sm font-body font-medium text-brand-black dark:text-white mb-1">Straße und Hausnummer</label>
+                <input type="text" value={profile.delivery_street} onChange={handleChange('delivery_street')} className={inputCls} placeholder="Musterstraße 42" autoComplete="off" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-body font-medium text-brand-black dark:text-white mb-1">PLZ</label>
+                  <input type="text" value={profile.delivery_zip} onChange={handleChange('delivery_zip')} className={inputCls} placeholder="12345" autoComplete="off" maxLength={5} />
+                </div>
+                <div>
+                  <label className="block text-sm font-body font-medium text-brand-black dark:text-white mb-1">Stadt</label>
+                  <input type="text" value={profile.delivery_city} onChange={handleChange('delivery_city')} className={inputCls} placeholder="Berlin" autoComplete="off" />
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Abweichende Rechnungsadresse */}
+        <div className="pt-2 border-t border-brand-border dark:border-white/10">
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={billingDiffers}
+              onChange={(e) => { setBillingDiffers(e.target.checked); setSuccess(false); }}
+              className="mt-0.5 w-4 h-4 rounded border-brand-border text-accent-blue focus:ring-accent-blue"
+            />
+            <span>
+              <span className="block text-sm font-body font-medium text-brand-black dark:text-white">Abweichende Rechnungsadresse</span>
+              <span className="block text-xs text-brand-muted dark:text-gray-500">Aktivieren, wenn die Rechnung an eine andere Adresse (z.&nbsp;B. Firma) gehen soll.</span>
+            </span>
+          </label>
+
+          {billingDiffers && (
+            <div className="mt-4 space-y-4">
+              <div>
+                <label className="block text-sm font-body font-medium text-brand-black dark:text-white mb-1">Name / Firma (Rechnungsempfänger)</label>
+                <input type="text" value={profile.billing_name} onChange={handleChange('billing_name')} className={inputCls} placeholder="Mustermann GmbH" autoComplete="off" />
+              </div>
+              <div>
+                <label className="block text-sm font-body font-medium text-brand-black dark:text-white mb-1">Straße und Hausnummer</label>
+                <input type="text" value={profile.billing_street} onChange={handleChange('billing_street')} className={inputCls} placeholder="Musterstraße 42" autoComplete="off" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-body font-medium text-brand-black dark:text-white mb-1">PLZ</label>
+                  <input type="text" value={profile.billing_zip} onChange={handleChange('billing_zip')} className={inputCls} placeholder="12345" autoComplete="off" maxLength={5} />
+                </div>
+                <div>
+                  <label className="block text-sm font-body font-medium text-brand-black dark:text-white mb-1">Stadt</label>
+                  <input type="text" value={profile.billing_city} onChange={handleChange('billing_city')} className={inputCls} placeholder="Berlin" autoComplete="off" />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-4 pt-2">

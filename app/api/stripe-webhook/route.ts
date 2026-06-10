@@ -12,6 +12,11 @@ import { getStripe, getStripeWebhookSecretOrThrow } from '@/lib/stripe';
 import { isTestMode } from '@/lib/env-mode';
 import { createAdminNotification } from '@/lib/admin-notifications';
 import { parseMetadataAccessoryItems, itemsToLegacyIds } from '@/lib/booking-accessories';
+import {
+  loadProfileAddressRow,
+  resolveShippingAddress,
+  resolveInvoiceAddress,
+} from '@/lib/booking/resolve-addresses';
 import { assignCamerasToBooking } from '@/lib/camera-unit-assignment';
 import { assignAccessoryUnitsToBooking } from '@/lib/accessory-unit-assignment';
 
@@ -417,20 +422,13 @@ async function handleSingleBooking(
     ? itemsToLegacyIds(accessoryItems)
     : (meta.accessories ? meta.accessories.split(',').filter(Boolean) : []);
 
-  // Lieferadresse aus Profil
+  // Liefer- + Rechnungsadresse aus Profil (inkl. abweichende Standard-Adressen).
   let shippingAddress: string | null = null;
-  if (meta.user_id && meta.delivery_mode === 'versand') {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('address_street, address_zip, address_city')
-      .eq('id', meta.user_id)
-      .maybeSingle();
-    if (profile?.address_street) {
-      shippingAddress = [
-        profile.address_street,
-        [profile.address_zip, profile.address_city].filter(Boolean).join(' '),
-      ].filter(Boolean).join(', ');
-    }
+  let invoiceOverride: { invoice_name: string | null; invoice_address: string | null } | null = null;
+  if (meta.user_id) {
+    const profileRow = await loadProfileAddressRow(supabase, meta.user_id);
+    if (meta.delivery_mode === 'versand') shippingAddress = resolveShippingAddress(profileRow);
+    invoiceOverride = resolveInvoiceAddress(profileRow);
   }
 
   // is_test muss den Tester-User respektieren (metadata.tester='1'), nicht nur
@@ -464,6 +462,9 @@ async function handleSingleBooking(
     customer_email: meta.customer_email || null,
     customer_name: meta.customer_name || null,
     shipping_address: shippingAddress,
+    ...(invoiceOverride
+      ? { invoice_name: invoiceOverride.invoice_name, invoice_address: invoiceOverride.invoice_address }
+      : {}),
     // Produkt-Rabatt aus Metadata (Aktion wie "Release50"). Sonst gehen die
     // Felder verloren, wenn der Webhook die Buchung schneller anlegt als
     // confirm-booking nach dem Stripe-Redirect — Rechnung + Buchungsdetail
@@ -644,23 +645,20 @@ async function handleCartBooking(
   const durationDiscount = (ctx.durationDiscount as number) ?? 0;
   const loyaltyDiscount = (ctx.loyaltyDiscount as number) ?? 0;
 
-  // Lieferadresse
+  // Liefer- + Rechnungsadresse: Per-Order-Eingabe aus dem Checkout-Kontext (ctx)
+  // hat Vorrang, sonst die abweichenden Profil-Standards bzw. Hauptadresse.
+  const ctxShipping = ctx.street
+    ? [ctx.street, [ctx.zip, ctx.city].filter(Boolean).join(' ')].filter(Boolean).join(', ')
+    : null;
+  const ctxBillingAddress = ctx.billingStreet
+    ? [ctx.billingStreet, [ctx.billingZip, ctx.billingCity].filter(Boolean).join(' ')].filter(Boolean).join(', ')
+    : null;
   let shippingAddress: string | null = null;
-  if (ctx.street) {
-    shippingAddress = [ctx.street, [ctx.zip, ctx.city].filter(Boolean).join(' ')].filter(Boolean).join(', ');
-  }
-  if (userId && deliveryMode === 'versand' && !shippingAddress) {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('address_street, address_zip, address_city')
-      .eq('id', userId)
-      .maybeSingle();
-    if (profile?.address_street) {
-      shippingAddress = [
-        profile.address_street,
-        [profile.address_zip, profile.address_city].filter(Boolean).join(' '),
-      ].filter(Boolean).join(', ');
-    }
+  let invoiceOverride: { invoice_name: string | null; invoice_address: string | null } | null = null;
+  {
+    const profileRow = userId ? await loadProfileAddressRow(supabase, userId) : null;
+    if (deliveryMode === 'versand') shippingAddress = resolveShippingAddress(profileRow, ctxShipping);
+    invoiceOverride = resolveInvoiceAddress(profileRow, ctxBillingAddress ? { name: (ctx.billingName as string) ?? null, address: ctxBillingAddress } : null);
   }
 
   // EINE Buchung für den gesamten Warenkorb. Tester-User → separater
@@ -722,6 +720,9 @@ async function handleCartBooking(
     customer_email: customerEmail,
     customer_name: customerName,
     shipping_address: shippingAddress,
+    ...(invoiceOverride
+      ? { invoice_name: invoiceOverride.invoice_name, invoice_address: invoiceOverride.invoice_address }
+      : {}),
     coupon_code: couponCode || null,
     discount_amount: discountAmount,
     duration_discount: durationDiscount,

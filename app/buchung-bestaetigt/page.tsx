@@ -5,7 +5,6 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useCart } from '@/components/CartProvider';
 import { useAuth } from '@/components/AuthProvider';
-import { createAuthBrowserClient } from '@/lib/supabase-auth';
 
 // ─── Signaturdaten aus sessionStorage lesen ──────────────────────────────────
 
@@ -123,7 +122,7 @@ function CartBookingConfirmed({
   initialStatus: string | null;
 }) {
   const { items, clearCart } = useCart();
-  const { user, loading: authLoading } = useAuth();
+  const { loading: authLoading } = useAuth();
   const [bookingIds, setBookingIds] = useState<string[] | null>(null);
   const [confirmed, setConfirmed] = useState(false);
   const [retried, setRetried] = useState(false);
@@ -142,22 +141,23 @@ function CartBookingConfirmed({
       if (raw) context = JSON.parse(raw);
     } catch {}
 
-    // Adresse aus Profil holen
-    let shippingAddress: string | null = null;
-    if (user && context?.deliveryMode === 'versand') {
-      const supabase = createAuthBrowserClient();
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('address_street, address_zip, address_city')
-        .eq('id', user.id)
-        .maybeSingle();
-      if (profile?.address_street) {
-        shippingAddress = [
-          profile.address_street,
-          [profile.address_zip, profile.address_city].filter(Boolean).join(' '),
-        ].filter(Boolean).join(', ');
-      }
-    }
+    // Per-Order-Adressen aus dem Checkout-Context (im Checkout eingegeben).
+    // Leer -> confirm-cart faellt server-seitig auf die Profil-Adresse zurueck.
+    const ctxStreet = (context?.street as string) ?? '';
+    const ctxZip = (context?.zip as string) ?? '';
+    const ctxCity = (context?.city as string) ?? '';
+    const shippingAddress =
+      context?.deliveryMode === 'versand' && ctxStreet
+        ? [ctxStreet, [ctxZip, ctxCity].filter(Boolean).join(' ')].filter(Boolean).join(', ')
+        : null;
+
+    const ctxBillStreet = (context?.billingStreet as string) ?? '';
+    const ctxBillZip = (context?.billingZip as string) ?? '';
+    const ctxBillCity = (context?.billingCity as string) ?? '';
+    const invoiceAddress = ctxBillStreet
+      ? [ctxBillStreet, [ctxBillZip, ctxBillCity].filter(Boolean).join(' ')].filter(Boolean).join(', ')
+      : null;
+    const invoiceName = invoiceAddress ? ((context?.billingName as string) ?? null) : null;
 
     // Use cart items from context (more reliable than live cart)
     const cartItems =
@@ -187,6 +187,8 @@ function CartBookingConfirmed({
           loyaltyDiscount: context?.loyaltyDiscount ?? 0,
           referralCode: context?.referralCode ?? '',
           shippingAddress,
+          invoiceName,
+          invoiceAddress,
           contractSignature,
         }),
       });
@@ -212,7 +214,7 @@ function CartBookingConfirmed({
     } catch {
       return { found: false, errMsg: 'Verbindungsfehler. Deine Buchung läuft trotzdem im Hintergrund.' };
     }
-  }, [paymentIntentId, items, clearCart, user]);
+  }, [paymentIntentId, items, clearCart]);
 
   useEffect(() => {
     if (confirmed) return;

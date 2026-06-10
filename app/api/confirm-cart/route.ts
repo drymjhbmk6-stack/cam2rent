@@ -25,6 +25,12 @@ import { getStripe } from '@/lib/stripe';
 import { isTestMode } from '@/lib/env-mode';
 import { isUserTester, getTesterStripe } from '@/lib/tester-mode';
 import { type BookingAccessoryItem, itemsToLegacyIds } from '@/lib/booking-accessories';
+import {
+  loadProfileAddressRow,
+  resolveShippingAddress,
+  resolveInvoiceAddress,
+  type ProfileAddressRow,
+} from '@/lib/booking/resolve-addresses';
 
 const confirmCartLimiter = rateLimit({ maxAttempts: 5, windowMs: 60_000 });
 
@@ -74,6 +80,8 @@ export async function POST(req: NextRequest) {
       loyaltyDiscount,
       referralCode,
       shippingAddress,
+      invoiceName,
+      invoiceAddress,
     } = body as {
       payment_intent_id: string;
       deposit_intent_id?: string;
@@ -90,6 +98,8 @@ export async function POST(req: NextRequest) {
       loyaltyDiscount?: number;
       referralCode?: string;
       shippingAddress?: string | null;
+      invoiceName?: string | null;
+      invoiceAddress?: string | null;
       contractSignature?: {
         signatureDataUrl: string | null;
         signatureMethod: 'canvas' | 'typed';
@@ -347,6 +357,8 @@ export async function POST(req: NextRequest) {
     let r_loyaltyDiscount = loyaltyDiscount;
     let r_referralCode = referralCode;
     let r_shippingAddress = shippingAddress;
+    let r_invoiceName: string | null = invoiceName ?? null;
+    let r_invoiceAddress: string | null = invoiceAddress ?? null;
     let r_earlyServiceConsentAt: string | null = null;
     let r_earlyServiceConsentIp: string | null = null;
     let r_verificationRequired = false;
@@ -382,6 +394,10 @@ export async function POST(req: NextRequest) {
           if (ctx.street) {
             r_shippingAddress = [ctx.street, [ctx.zip, ctx.city].filter(Boolean).join(' ')].filter(Boolean).join(', ');
           }
+          if (ctx.billingStreet) {
+            r_invoiceAddress = [ctx.billingStreet, [ctx.billingZip, ctx.billingCity].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+            r_invoiceName = ctx.billingName ?? r_invoiceName;
+          }
           if (ctx.earlyServiceConsentAt) r_earlyServiceConsentAt = ctx.earlyServiceConsentAt;
           if (ctx.earlyServiceConsentIp) r_earlyServiceConsentIp = ctx.earlyServiceConsentIp;
           if (ctx.verificationRequired === true) r_verificationRequired = true;
@@ -404,12 +420,13 @@ export async function POST(req: NextRequest) {
     // ── Vier voneinander unabhaengige Lookups parallel: Produkt-Plausibility,
     // Profil-Adresse, Versand-Config, Steuer-Settings. Spart 3 sequentielle
     // Roundtrips zu Supabase (~200-400 ms).
-    const needsProfileAddress = Boolean(r_userId && r_deliveryMode === 'versand');
-    const [prodResult, profileResultCart, shippingResult, taxResultCart] = await Promise.all([
+    // Profil immer laden wenn user_id vorhanden — die abweichende
+    // Rechnungsadresse (billing_*) gilt auch bei Abholung, nicht nur Versand.
+    const [prodResult, profileRowCart, shippingResult, taxResultCart] = await Promise.all([
       supabase.from('admin_config').select('value').eq('key', 'products').maybeSingle(),
-      needsProfileAddress
-        ? supabase.from('profiles').select('address_street, address_zip, address_city').eq('id', r_userId!).maybeSingle()
-        : Promise.resolve({ data: null as null | { address_street?: string; address_zip?: string; address_city?: string } }),
+      r_userId
+        ? loadProfileAddressRow(supabase, r_userId)
+        : Promise.resolve(null as ProfileAddressRow | null),
       supabase.from('admin_config').select('value').eq('key', 'shipping').maybeSingle(),
       supabase.from('admin_settings').select('key, value').in('key', ['tax_mode', 'tax_rate', 'ust_id']),
     ]);
@@ -562,15 +579,15 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Lieferadresse aus parallel geladenem Profil
-    let profileAddress: string | null = null;
-    const profileCart = profileResultCart?.data;
-    if (profileCart?.address_street) {
-      profileAddress = [
-        profileCart.address_street,
-        [profileCart.address_zip, profileCart.address_city].filter(Boolean).join(' '),
-      ].filter(Boolean).join(', ');
-    }
+    // Liefer- + Rechnungsadresse aufloesen.
+    // Lieferadresse: Per-Order-Eingabe aus dem Checkout (r_shippingAddress) >
+    // abweichende Standard-Lieferadresse (delivery_*) > Hauptadresse.
+    // Rechnungsadresse: Per-Order-Eingabe > abweichende Standard-Rechnungsadresse.
+    const resolvedShippingAddress = resolveShippingAddress(profileRowCart, r_shippingAddress);
+    const invoiceOverrideCart = resolveInvoiceAddress(
+      profileRowCart,
+      r_invoiceAddress ? { name: r_invoiceName, address: r_invoiceAddress } : null,
+    );
 
     // Versand-Config aus parallel geladenem Result
     let shippingCfg: ShippingPriceConfig = DEFAULT_SHIPPING;
@@ -764,7 +781,10 @@ export async function POST(req: NextRequest) {
         user_id: r_userId ?? null,
         customer_email: r_email,
         customer_name: r_name,
-        shipping_address: profileAddress ?? r_shippingAddress ?? null,
+        shipping_address: r_deliveryMode === 'versand' ? resolvedShippingAddress : null,
+        ...(invoiceOverrideCart
+          ? { invoice_name: invoiceOverrideCart.invoice_name, invoice_address: invoiceOverrideCart.invoice_address }
+          : {}),
         coupon_code: gi === 0 ? (r_couponCode || null) : null,
         discount_amount: groupDiscount,
         duration_discount: groupDurationDiscount,
