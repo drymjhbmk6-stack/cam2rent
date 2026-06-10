@@ -38,19 +38,19 @@ function categorize(message: string, statusId: number | null): TrackingCategory 
   if (statusId === 11) return 'delivered';
 
   // Probleme zuerst (Meldungen enthalten teils "deliver"/"return").
-  if (/fail|error|cancel|refus|problem|exception|not collected|undeliver|lost|returned to sender|return to sender|delivery attempt failed|customs|address (issue|problem)|delayed/.test(m)) {
+  if (/fail|error|cancel|refus|problem|exception|not collected|undeliver|lost|returned to sender|return to sender|delivery attempt failed|customs|address (issue|problem|invalid)|delayed|on hold|held|rejected/.test(m)) {
     return 'problem';
   }
   // Zugestellt / beim Kunden / im Shop abholbereit.
-  if (/delivered|zugestellt|abgeholt|collected by customer|picked up by customer|available for pickup|ready for pickup|at pickup point|delivered to service point/.test(m)) {
+  if (/delivered|zugestellt|abgeholt|collected by customer|picked up by customer|available for pickup|ready for pickup|at pickup point|delivered to service point|successfully delivered|delivery successful/.test(m)) {
     return 'delivered';
   }
   // Unterwegs im Carrier-Netz.
-  if (/transit|en route|unterwegs|sorting|sorted|hub|depot|out for delivery|in delivery|driver|handed to|received by carrier|carrier accepted|on its way|scanned/.test(m)) {
+  if (/transit|en route|unterwegs|sorting|sorted|hub|depot|out for delivery|in delivery|being delivered|driver|handed to|received by carrier|carrier accepted|on its way|on the way|underway|scanned|processed|parcel center|paketzentrum|transported|forwarded|loaded|arrived|departed|has left|left the|distribution|picked up|collected|shipped/.test(m)) {
     return 'transit';
   }
   // Angekuendigt / Daten erfasst / Label erstellt / Versandart geaendert.
-  if (/announced|angekuendigt|ready to send|registered|data received|pre-advice|preadvice|information received|shipment information|label|created|accepted|method changed|order processed|awaiting/.test(m)) {
+  if (/announced|angekuendigt|ready to send|versandbereit|registered|data received|pre-advice|preadvice|information received|shipment information|label|created|accepted|method changed|order processed|awaiting|en attente|pending/.test(m)) {
     return 'announced';
   }
   return 'unknown';

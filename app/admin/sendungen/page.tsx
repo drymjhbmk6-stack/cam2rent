@@ -63,8 +63,17 @@ export default function SendungenPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [carrierFilter, setCarrierFilter] = useState<'' | 'DHL' | 'DPD'>('');
-  const [catFilter, setCatFilter] = useState<'' | Category>('');
+  const [catFilters, setCatFilters] = useState<Set<Category>>(new Set());
   const [q, setQ] = useState('');
+
+  const toggleCat = (cat: Category) => {
+    setCatFilters((prev) => {
+      const next = new Set(prev);
+      if (next.has(cat)) next.delete(cat);
+      else next.add(cat);
+      return next;
+    });
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -93,14 +102,14 @@ export default function SendungenPage() {
     const needle = q.trim().toLowerCase();
     return entries.filter((e) => {
       if (carrierFilter && normCarrier(e.carrier) !== carrierFilter) return false;
-      if (catFilter && e.category !== catFilter) return false;
+      if (catFilters.size > 0 && !catFilters.has(e.category)) return false;
       if (needle) {
         const hay = `${e.customerName} ${e.productName} ${e.bookingId} ${e.trackingNumber ?? ''}`.toLowerCase();
         if (!hay.includes(needle)) return false;
       }
       return true;
     });
-  }, [entries, carrierFilter, catFilter, q]);
+  }, [entries, carrierFilter, catFilters, q]);
 
   return (
     <div style={{ minHeight: '100dvh', background: '#0a0a0a', color: '#e2e8f0', padding: '20px 16px' }}>
@@ -126,27 +135,33 @@ export default function SendungenPage() {
           </button>
         </div>
 
-        {/* Status-Kacheln (klickbar als Filter) */}
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+        {/* Status-Kacheln (Mehrfachauswahl als Filter) */}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
           {([
             'transit', 'announced', 'problem', 'delivered',
             ...(counts.unknown > 0 ? ['unknown' as Category] : []),
-          ] as Category[]).map((cat) => (
-            <button
-              key={cat}
-              onClick={() => setCatFilter(catFilter === cat ? '' : cat)}
-              style={{
-                background: catFilter === cat ? CAT_COLOR[cat] : '#111827',
-                color: catFilter === cat ? '#0a0a0a' : CAT_COLOR[cat],
-                border: `1px solid ${CAT_COLOR[cat]}55`, borderRadius: 10, padding: '8px 14px',
-                cursor: 'pointer', fontSize: 13, fontWeight: 700, display: 'flex', gap: 8, alignItems: 'center',
-              }}
-            >
-              {CAT_LABEL[cat]}
-              <span style={{ fontWeight: 800 }}>{counts[cat]}</span>
-            </button>
-          ))}
+          ] as Category[]).map((cat) => {
+            const active = catFilters.has(cat);
+            return (
+              <button
+                key={cat}
+                onClick={() => toggleCat(cat)}
+                style={{
+                  background: active ? CAT_COLOR[cat] : '#111827',
+                  color: active ? '#0a0a0a' : CAT_COLOR[cat],
+                  border: `1px solid ${CAT_COLOR[cat]}${active ? 'ff' : '55'}`, borderRadius: 10, padding: '8px 14px',
+                  cursor: 'pointer', fontSize: 13, fontWeight: 700, display: 'flex', gap: 8, alignItems: 'center',
+                }}
+              >
+                {active ? '✓ ' : ''}{CAT_LABEL[cat]}
+                <span style={{ fontWeight: 800 }}>{counts[cat]}</span>
+              </button>
+            );
+          })}
         </div>
+        <p style={{ fontSize: 11, color: '#64748b', margin: '0 0 14px' }}>
+          Mehrere Status gleichzeitig wählbar (z.B. Unterwegs + Angekündigt).
+        </p>
 
         {/* Filterzeile */}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16, alignItems: 'center' }}>
@@ -168,9 +183,9 @@ export default function SendungenPage() {
             <option value="DHL">DHL</option>
             <option value="DPD">DPD</option>
           </select>
-          {(catFilter || carrierFilter || q) && (
+          {(catFilters.size > 0 || carrierFilter || q) && (
             <button
-              onClick={() => { setCatFilter(''); setCarrierFilter(''); setQ(''); }}
+              onClick={() => { setCatFilters(new Set()); setCarrierFilter(''); setQ(''); }}
               style={{ background: 'transparent', color: '#94a3b8', border: '1px solid #334155', borderRadius: 8, padding: '8px 12px', fontSize: 13, cursor: 'pointer' }}
             >
               Filter zurücksetzen
@@ -188,10 +203,27 @@ export default function SendungenPage() {
           <p style={{ color: '#94a3b8' }}>Lädt…</p>
         ) : filtered.length === 0 ? (
           <div style={{ background: '#111827', borderRadius: 12, padding: 32, textAlign: 'center', border: '1px solid #1e293b' }}>
-            <p style={{ color: '#94a3b8', fontSize: 15, margin: 0 }}>Keine Sendungen gefunden.</p>
-            <p style={{ color: '#64748b', fontSize: 13, marginTop: 8, marginBottom: 0 }}>
-              Sendungen erscheinen hier, sobald ein Versandetikett (Sendcloud) erstellt wurde.
-            </p>
+            {entries.length > 0 ? (
+              <>
+                <p style={{ color: '#94a3b8', fontSize: 15, margin: 0 }}>Keine Treffer für die aktiven Filter.</p>
+                <p style={{ color: '#64748b', fontSize: 13, marginTop: 8, marginBottom: 12 }}>
+                  Es gibt {entries.length} Sendung{entries.length === 1 ? '' : 'en'} — sie passen nur nicht zu deiner Auswahl.
+                </p>
+                <button
+                  onClick={() => { setCatFilters(new Set()); setCarrierFilter(''); setQ(''); }}
+                  style={{ background: '#06b6d4', color: '#0a0a0a', fontWeight: 700, fontSize: 13, border: 'none', borderRadius: 8, padding: '8px 16px', cursor: 'pointer' }}
+                >
+                  Filter zurücksetzen
+                </button>
+              </>
+            ) : (
+              <>
+                <p style={{ color: '#94a3b8', fontSize: 15, margin: 0 }}>Keine Sendungen gefunden.</p>
+                <p style={{ color: '#64748b', fontSize: 13, marginTop: 8, marginBottom: 0 }}>
+                  Sendungen erscheinen hier, sobald ein Versandetikett (Sendcloud) erstellt wurde.
+                </p>
+              </>
+            )}
           </div>
         ) : (
           <div style={{ display: 'grid', gap: 10 }}>

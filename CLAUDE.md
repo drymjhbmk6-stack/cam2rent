@@ -857,8 +857,11 @@ dort — keine separaten DHL-/DPD-API-Verträge nötig.
   aufgelöst. Defensiver Select-Retry ohne die `tracking_carrier`/
   `return_tracking_*`/`sendcloud_return_*`-Spalten, falls deren Migration aussteht.
 - **Seite** `/admin/sendungen`: Status-Kacheln (Unterwegs/Angekündigt/Problem/
-  Zugestellt, klickbar als Filter) + Suche + Carrier-Filter (DHL/DPD) +
-  „Aktualisieren". Pro Sendung: Produkt (Link auf Buchung), Richtung
+  Zugestellt, **Mehrfachauswahl** als Filter — z.B. Unterwegs + Angekündigt
+  gleichzeitig, `catFilters: Set<Category>`) + Suche + Carrier-Filter (DHL/DPD) +
+  „Aktualisieren". Leerer gefilterter Stand zeigt „Keine Treffer für die aktiven
+  Filter (N Sendungen vorhanden)" + Reset-Button — abgegrenzt vom echten „keine
+  Sendungen". Pro Sendung: Produkt (Link auf Buchung), Richtung
   (Hinversand/Retoure), Carrier-Badge, Kunde/Buchungsnr./Zeitraum,
   Trackingnummer, Status-Text + „Sendung verfolgen →" (Carrier-Tracking-Link).
   Dunkles Inline-Theme (wie `/admin/verfuegbarkeit-alerts`).
