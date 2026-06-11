@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
+import { headers } from 'next/headers';
 import { createServiceClient } from '@/lib/supabase';
 import { notFound } from 'next/navigation';
+import { trackBlogView } from '@/lib/blog-view-tracking';
 import BlogArticleClient from './BlogArticleClient';
 
 interface BlogPost {
@@ -82,21 +84,17 @@ export default async function BlogArticlePage({ params }: { params: Promise<{ sl
     keywords: post.tags?.join(', '),
   };
 
-  // View-Count erhöhen (fire-and-forget, server-side)
+  // View-Count + zeitgestempeltes Aufruf-Event erhöhen (fire-and-forget,
+  // server-side). Bot vs. Mensch wird über den User-Agent getrennt gezählt
+  // (lib/blog-view-tracking.ts): view_count = Gesamt, bot_view_count = nur Bots.
   const supabase = createServiceClient();
-  supabase
-    .from('blog_posts')
-    .update({ view_count: (post as unknown as { view_count: number }).view_count + 1 })
-    .eq('id', post.id)
-    .then(() => {});
-
-  // Zeitgestempeltes, anonymes Aufruf-Event fuer die Statistik (kein PII,
-  // consent-unabhaengig — wie view_count, nur datierbar). Defensiv: laeuft
-  // ins Leere, falls die Migration supabase-blog-views.sql noch nicht durch ist.
-  supabase
-    .from('blog_views')
-    .insert({ post_id: post.id, slug: post.slug })
-    .then(() => {}, () => {});
+  const ua = (await headers()).get('user-agent');
+  trackBlogView(supabase, {
+    postId: post.id,
+    slug: post.slug,
+    userAgent: ua,
+    currentViewCount: (post as unknown as { view_count: number }).view_count ?? 0,
+  });
 
   return (
     <>

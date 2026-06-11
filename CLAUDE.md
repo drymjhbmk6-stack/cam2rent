@@ -2841,6 +2841,43 @@ realer Aufrufe.
   Ohne sie läuft alles weiter über den `page_views`-Fallback (= bisheriges
   Verhalten).
 
+### Blog-Aufrufe: Mensch vs. Bot getrennt zählen (Stand 2026-06-11)
+`blog_posts.view_count` + `blog_views` zählten JEDEN Server-Aufruf der
+Artikel-Seite (+1) **ohne Bot-Filter** — Suchmaschinen-Crawler, KI-Crawler
+(GPTBot/ClaudeBot/PerplexityBot …), Social-Vorschau-Bots, Monitoring und
+Skripte zählten als „Views" mit. Gerade bei frischen Artikeln sind die ersten
+„Views" fast nur Bots (crawlen neue URLs sofort). Jetzt wird Bot/Mensch über
+den **User-Agent** getrennt erfasst — die Gesamt-Zahl bleibt unverändert.
+- **`lib/bot-detection.ts`** → `isBotUserAgent(ua)`: konservative Regex über
+  bekannte Crawler/KI-Bots/Vorschau-Bots/Monitoring/Skript-Clients. Fehlender
+  User-Agent zählt als Bot (echte Browser senden immer einen) — hält die
+  „Mensch"-Zahl möglichst sauber.
+- **`lib/blog-view-tracking.ts`** → `trackBlogView(supabase, {postId, slug,
+  userAgent, currentViewCount})`: eine gemeinsame Funktion für beide
+  Aufruf-Pfade (`app/blog/[slug]/page.tsx` liest UA via `headers()`,
+  `app/api/blog/posts/[slug]/route.ts` via `req.headers`). Erhöht
+  `view_count` (= Gesamt, Mensch + Bot, unverändert) immer und `bot_view_count`
+  nur bei Bots → **Mensch = view_count − bot_view_count**. Schreibt das
+  datierte `blog_views`-Event mit `is_bot`. Alles fire-and-forget.
+- **Migration `supabase/supabase-blog-views-bot.sql`** (idempotent):
+  `blog_posts.bot_view_count INTEGER DEFAULT 0` + `blog_views.is_bot BOOLEAN
+  DEFAULT false` + Index + atomare RPC `increment_blog_view(p_post_id,
+  p_is_bot)` (ersetzt das bisherige racy read-modify-write von `view_count`).
+- **Defensiv ohne Migration:** RPC fehlt → Fallback auf das alte
+  `view_count`-only read-modify-write; `is_bot`-Spalte fehlt →
+  `blog_views`-Insert-Retry ohne das Feld. Tracking bricht nie.
+- **UI:** Artikelliste (`/admin/blog/artikel`) + Blog-Dashboard (`/admin/blog`)
+  zeigen pro Artikel jetzt **„👤 N · 🤖 M"** statt nur „N Views"
+  (`bot_view_count` kommt über `select('*')` durch, kein API-Change). Die
+  Analytics-„Blog-Aufrufe" (Statistik-Tab) zählen weiter Gesamt (inkl. Bots);
+  ein Bot/Mensch-Split dort wäre ein optionaler Folge-Change (`blog_views.is_bot`
+  ist die Datenbasis dafür).
+- **Wichtig:** `bot_view_count` startet bei Migration bei 0 und wächst
+  vorwärts — Bestandszahlen werden NICHT rückwirkend aufgeteilt (welche der
+  bisherigen Views Bots waren, ist nicht mehr rekonstruierbar).
+- **Go-Live TODO:** Migration `supabase/supabase-blog-views-bot.sql` ausführen.
+  Ohne sie läuft alles 1:1 wie zuvor (nur Gesamt-Zählung, UI zeigt 🤖 0).
+
 ### Statistik-Audit Welle 2 — Blog-Tab + Test-Isolation (Stand 2026-06-07)
 Drei weitere echte Bugs in `/api/admin/analytics` gefixt:
 - **Blog-Tab „Artikel gesamt" zeigte 0 trotz vorhandener Beiträge.** Der `blog_posts`-Select listete die Spalte `views` explizit auf. `blog_posts.views` wird von KEINER Stelle geschrieben und existiert ggf. gar nicht — fehlt die Spalte, liefert PostgREST einen Fehler, `data` ist `null` (Fehler wurde ignoriert) → ALLE Artikel-Kennzahlen (gesamt/veröffentlicht/Entwürfe/Top-Artikel) standen auf 0, während „Blog-Aufrufe" (aus `page_views`) korrekt >0 zeigte. Fix: defensiver Doppel-Load — erst mit `views`, bei Fehler ohne `views` neu laden (Views dann als 0 behandelt; angezeigt wird ohnehin `topBlogPages` aus echten `page_views`).
@@ -4324,6 +4361,13 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
   die Blog-Aufrufe ab dann korrekt + range-fähig erfasst (siehe „Blog-Aufrufe
   zeitgestempelt tracken"). Vergangene Aufrufe nicht rückwirkend importierbar.
   Empfohlen ASAP ausführen.
+- **Blog-Bot/Mensch-Migration auszuführen:** `supabase/supabase-blog-views-bot.sql`
+  (idempotent). Legt `blog_posts.bot_view_count` + `blog_views.is_bot` + die
+  atomare RPC `increment_blog_view` an. Ohne Migration läuft alles 1:1 wie zuvor
+  (nur Gesamt-Zählung via Fallback, UI zeigt 🤖 0). Mit Migration werden
+  Bot-Aufrufe ab dann getrennt gezählt (siehe „Blog-Aufrufe: Mensch vs. Bot
+  getrennt zählen"). `bot_view_count` startet bei 0, nicht rückwirkend
+  aufteilbar. Empfohlen ASAP ausführen.
 - **Länder-Statistik-Migration auszuführen:** `supabase/supabase-page-views-country.sql`
   (idempotent, additiv). Fügt `page_views.country TEXT` + Index hinzu. Der
   Track-Endpoint schreibt ab dann den Cloudflare-Header `CF-IPCountry` (ISO-2,

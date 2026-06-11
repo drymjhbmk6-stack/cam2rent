@@ -10,7 +10,8 @@ interface Stats {
 }
 
 interface RecentPost {
-  id: string; title: string; status: string; created_at: string; view_count: number;
+  id: string; title: string; status: string; created_at: string;
+  view_count: number; bot_view_count?: number;
 }
 
 interface GenerationStatus {
@@ -486,7 +487,9 @@ export default function BlogDashboardPage() {
                   <Link key={post.id} href={`/admin/blog/artikel/${post.id}`} className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-white/5 transition-colors">
                     <span className="font-heading text-sm truncate" style={{ color: '#e2e8f0' }}>{post.title}</span>
                     <div className="flex items-center gap-3 shrink-0 ml-4">
-                      <span className="text-xs" style={{ color: '#475569' }}>{post.view_count} Views</span>
+                      <span className="text-xs" style={{ color: '#475569' }} title="Menschen · Bots">
+                        👤 {Math.max(0, (post.view_count ?? 0) - (post.bot_view_count ?? 0))} · 🤖 {post.bot_view_count ?? 0}
+                      </span>
                       <span className="text-xs" style={{ color: '#475569' }}>{new Date(post.created_at).toLocaleDateString('de-DE')}</span>
                     </div>
                   </Link>

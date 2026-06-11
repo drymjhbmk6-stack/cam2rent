@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
+import { trackBlogView } from '@/lib/blog-view-tracking';
 
 type Ctx = { params: Promise<{ slug: string }> };
 
 /** GET /api/blog/posts/[slug] - Einzelner Blog-Post (public) */
-export async function GET(_req: NextRequest, ctx: Ctx) {
+export async function GET(req: NextRequest, ctx: Ctx) {
   const { slug } = await ctx.params;
   const supabase = createServiceClient();
 
@@ -19,19 +20,14 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
     return NextResponse.json({ error: 'Artikel nicht gefunden.' }, { status: 404 });
   }
 
-  // View-Count erhoehen (fire-and-forget)
-  supabase
-    .from('blog_posts')
-    .update({ view_count: (data.view_count ?? 0) + 1 })
-    .eq('id', data.id)
-    .then(() => {});
-
-  // Zeitgestempeltes, anonymes Aufruf-Event (Statistik). Defensiv: ignoriert
-  // den Fehler, falls die Migration supabase-blog-views.sql noch fehlt.
-  supabase
-    .from('blog_views')
-    .insert({ post_id: data.id, slug })
-    .then(() => {}, () => {});
+  // View-Count + zeitgestempeltes Event (fire-and-forget). Bot vs. Mensch
+  // getrennt gezählt über den User-Agent — siehe lib/blog-view-tracking.ts.
+  trackBlogView(supabase, {
+    postId: data.id,
+    slug,
+    userAgent: req.headers.get('user-agent'),
+    currentViewCount: data.view_count ?? 0,
+  });
 
   return NextResponse.json({ post: data });
 }

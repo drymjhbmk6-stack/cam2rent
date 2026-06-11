@@ -7,7 +7,8 @@ import AdminBackLink from '@/components/admin/AdminBackLink';
 interface Post {
   id: string; title: string; slug: string; status: string;
   category_id: string | null; ai_generated: boolean;
-  view_count: number; created_at: string; published_at: string | null;
+  view_count: number; bot_view_count?: number;
+  created_at: string; published_at: string | null;
   blog_categories?: { id: string; name: string; color: string } | null;
 }
 
@@ -54,7 +55,7 @@ export default function BlogArtikelPage() {
   function togglePost(id: string) {
     setExpandedPosts(prev => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
   }
@@ -62,7 +63,7 @@ export default function BlogArtikelPage() {
   function toggleCategory(name: string) {
     setCollapsedCategories(prev => {
       const next = new Set(prev);
-      next.has(name) ? next.delete(name) : next.add(name);
+      if (next.has(name)) next.delete(name); else next.add(name);
       return next;
     });
   }
@@ -204,7 +205,17 @@ export default function BlogArtikelPage() {
                               {post.title}
                             </span>
                             <span className="flex-shrink-0 text-xs text-slate-500 tabular-nums">
-                              {post.view_count} Views
+                              {(() => {
+                                const bot = post.bot_view_count ?? 0;
+                                const human = Math.max(0, (post.view_count ?? 0) - bot);
+                                return (
+                                  <>
+                                    <span title="Menschen (ohne erkannte Bots)">👤 {human}</span>
+                                    <span className="text-slate-600"> · </span>
+                                    <span title="Bots / Crawler" className="text-slate-600">🤖 {bot}</span>
+                                  </>
+                                );
+                              })()}
                             </span>
                             <span
                               className="flex-shrink-0 text-slate-600 text-xs transition-transform duration-150"
