@@ -360,7 +360,7 @@ export default function InventarDetailPage() {
           <Row label="Produkt" value={
             showProduktEdit ? (
               <div className="flex gap-2 items-center">
-                <select value={produktInput} onChange={(e) => setProduktInput(e.target.value)} className="bg-[#0a0f1e] border border-slate-700 rounded px-2 py-1 text-sm">
+                <select value={produktInput} onChange={(e) => setProduktInput(e.target.value)} className="bg-[#0a0f1e] border border-slate-700 rounded px-2 py-1 text-sm max-w-[16rem] truncate">
                   <option value="">— Keins —</option>
                   {produkte.map((p) => (
                     <option key={p.id} value={p.id}>{produktLabel(p)}</option>
