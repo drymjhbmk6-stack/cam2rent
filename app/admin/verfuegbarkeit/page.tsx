@@ -116,6 +116,32 @@ const MONTH_NAMES = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli
 
 type Tab = 'kameras' | 'sets' | 'zubehoer';
 
+// Gepufferte Gesamtspanne einer Buchung [Versand/Abholung … Rückversand/Rückgabe]
+// als YYYY-MM-DD-Strings. Override-Datum hat Vorrang vor bufferDays.
+function getBookingSpan(b: GanttBooking, buf: BufferDays): { start: string; end: string } {
+  const bMode = b.delivery_mode ?? 'versand';
+  const before = bMode === 'abholung' ? buf.abholung_before : buf.versand_before;
+  const after = bMode === 'abholung' ? buf.abholung_after : buf.versand_after;
+
+  let start: string;
+  if (b.ship_date_override) {
+    start = b.ship_date_override.slice(0, 10);
+  } else {
+    const d = new Date(b.rental_from);
+    d.setDate(d.getDate() - before);
+    start = d.toISOString().split('T')[0];
+  }
+  let end: string;
+  if (b.return_due_date_override) {
+    end = b.return_due_date_override.slice(0, 10);
+  } else {
+    const d = new Date(b.rental_to);
+    d.setDate(d.getDate() + after);
+    end = d.toISOString().split('T')[0];
+  }
+  return { start, end };
+}
+
 /* ─── Haupt-Komponente ──────────────────────────────────────────────────── */
 
 export default function AdminVerfuegbarkeitPage() {
@@ -266,6 +292,63 @@ export default function AdminVerfuegbarkeitPage() {
     return groups;
   }, [days]);
 
+  // Virtuelle Unit-Zuteilung pro Produkt: nicht zugeordnete Buchungen
+  // (unit_id === null) werden per Greedy-Interval-Packing auf konkrete
+  // Unit-Zeilen verteilt — jeder Eintrag belegt genau EINE freie Zeile statt
+  // (wie früher) auf allen Zeilen zu erscheinen. So stimmt der Gantt mit dem
+  // Kunden-Kalender überein (1 belegt = 1 Zeile belegt). Echte Überbuchungen,
+  // für die keine freie Zeile bleibt, landen in `leftovers` (Konflikt-Fallback).
+  const cameraAssignment = useMemo(() => {
+    const result = new Map<string, { byUnit: Map<string, GanttBooking[]>; leftovers: GanttBooking[] }>();
+    if (!ganttData) return result;
+    const buf = ganttData.bufferDays;
+    for (const product of ganttData.products) {
+      const byUnit = new Map<string, GanttBooking[]>();
+      const occupied: Record<string, { start: string; end: string }[]> = {};
+      const pushBooking = (unitId: string, b: GanttBooking) => {
+        const arr = byUnit.get(unitId);
+        if (arr) arr.push(b);
+        else byUnit.set(unitId, [b]);
+      };
+
+      // Bereits zugewiesene Buchungen seeden.
+      for (const b of product.bookings) {
+        if (!b.unit_id) continue;
+        pushBooking(b.unit_id, b);
+        (occupied[b.unit_id] ||= []).push(getBookingSpan(b, buf));
+      }
+
+      // Unzugeordnete Einträge der Reihe nach (nach Mietbeginn) auf die erste
+      // Unit-Zeile legen, deren belegte Spannen nicht überlappen.
+      const usableUnits = product.units.filter(
+        (u) => u.status !== 'retired' && u.status !== 'maintenance',
+      );
+      const leftovers: GanttBooking[] = [];
+      const unassigned = product.bookings
+        .filter((b) => !b.unit_id)
+        .slice()
+        .sort((a, b) => (a.rental_from < b.rental_from ? -1 : a.rental_from > b.rental_from ? 1 : 0));
+      for (const b of unassigned) {
+        const span = getBookingSpan(b, buf);
+        let placed = false;
+        for (const u of usableUnits) {
+          const occ = (occupied[u.id] ||= []);
+          const overlaps = occ.some((o) => o.start <= span.end && span.start <= o.end);
+          if (!overlaps) {
+            occ.push(span);
+            pushBooking(u.id, b);
+            placed = true;
+            break;
+          }
+        }
+        if (!placed) leftovers.push(b);
+      }
+
+      result.set(product.id, { byUnit, leftovers });
+    }
+    return result;
+  }, [ganttData]);
+
   function toggleProduct(productId: string) {
     setExpandedProducts((prev) => {
       const next = new Set(prev);
@@ -292,16 +375,18 @@ export default function AdminVerfuegbarkeitPage() {
       }
     }
 
-    // Buchungen für diese Unit prüfen
-    const unitBookings = product.bookings.filter((b) => b.unit_id === unit.id);
+    // Real + virtuell dieser Unit zugewiesene Buchungen prüfen
+    // (cameraAssignment verteilt unzugeordnete Buchungen auf genau eine Zeile).
+    const assignment = cameraAssignment.get(product.id);
+    const unitBookings = assignment?.byUnit.get(unit.id) ?? [];
     for (const b of unitBookings) {
       const hit = matchBookingDay(b, dateStr, buf);
       if (hit) return hit;
     }
 
-    // Auch nicht zugeordnete Buchungen prüfen (Fallback wenn keine Units zugeordnet)
-    const unassignedBookings = product.bookings.filter((b) => !b.unit_id);
-    for (const b of unassignedBookings) {
+    // Nur echte Überbuchungen (keine freie Zeile gefunden) auf allen Zeilen
+    // sichtbar machen — als Konflikt-Hinweis.
+    for (const b of assignment?.leftovers ?? []) {
       const hit = matchBookingDay(b, dateStr, buf);
       if (hit) return hit;
     }
@@ -311,28 +396,7 @@ export default function AdminVerfuegbarkeitPage() {
 
   function matchBookingDay(b: GanttBooking, dateStr: string, buf: BufferDays): DayCellInfo | null {
     const bMode = b.delivery_mode ?? 'versand';
-    const before = bMode === 'abholung' ? buf.abholung_before : buf.versand_before;
-    const after = bMode === 'abholung' ? buf.abholung_after : buf.versand_after;
-
-    // Override-Datum hat Vorrang. Format YYYY-MM-DD.
-    let bufStartStr: string;
-    if (b.ship_date_override) {
-      bufStartStr = b.ship_date_override.slice(0, 10);
-    } else {
-      const fromDate = new Date(b.rental_from);
-      const bufferStart = new Date(fromDate);
-      bufferStart.setDate(bufferStart.getDate() - before);
-      bufStartStr = bufferStart.toISOString().split('T')[0];
-    }
-    let bufEndStr: string;
-    if (b.return_due_date_override) {
-      bufEndStr = b.return_due_date_override.slice(0, 10);
-    } else {
-      const toDate = new Date(b.rental_to);
-      const bufferEnd = new Date(toDate);
-      bufferEnd.setDate(bufferEnd.getDate() + after);
-      bufEndStr = bufferEnd.toISOString().split('T')[0];
-    }
+    const { start: bufStartStr, end: bufEndStr } = getBookingSpan(b, buf);
 
     const isPending = b.status === 'awaiting_payment';
 
