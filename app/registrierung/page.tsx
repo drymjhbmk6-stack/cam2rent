@@ -107,6 +107,7 @@ function RegistrierungInner() {
         </div>
 
         <ExpressSignup
+          requireUpload
           onAuthenticated={() => {
             setDone(true);
             // Kurze Pause, damit der "Willkommen"-Screen sichtbar ist.

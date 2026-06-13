@@ -26,6 +26,7 @@ export default function ExpressSignup({
   defaultEmail,
   defaultName,
   initialMode,
+  requireUpload,
 }: {
   onAuthenticated?: () => void;
   /** Wird gefeuert, sobald die Auth-Phase fertig ist und der Upload-Step beginnt. */
@@ -33,6 +34,13 @@ export default function ExpressSignup({
   defaultEmail?: string;
   defaultName?: string;
   initialMode?: Mode;
+  /**
+   * Wenn true, ist der Ausweis-Upload Pflicht — der „Später hochladen"-Skip
+   * wird ausgeblendet. Genutzt auf der Registrierungs-Seite (dort gibt es
+   * keinen Zahlungsdruck, der Ausweis kann sofort verlangt werden). Im
+   * Checkout bleibt der Skip erhalten (verificationDeferred-Flow).
+   */
+  requireUpload?: boolean;
 }) {
   const [step, setStep] = useState<Step>('auth');
   const [mode, setMode] = useState<Mode>(initialMode ?? 'signup');
@@ -81,6 +89,10 @@ export default function ExpressSignup({
   const [backPreview, setBackPreview] = useState<string | null>(null);
   const frontRef = useRef<HTMLInputElement>(null);
   const backRef = useRef<HTMLInputElement>(null);
+  // Separate Inputs fuer Kamera (capture) vs. Galerie/Datei (ohne capture),
+  // damit der Nutzer explizit „Foto aufnehmen" oder „Aus Galerie wählen" kann.
+  const frontCamRef = useRef<HTMLInputElement>(null);
+  const backCamRef = useRef<HTMLInputElement>(null);
 
   // ─── PLZ-Autofill ────────────────────────────────────────────────────────
   // Sobald 5 Ziffern eingegeben sind, Stadt von /api/plz-lookup nachladen.
@@ -317,6 +329,72 @@ export default function ExpressSignup({
     'w-full px-4 py-3 rounded-[10px] border border-brand-border dark:border-white/10 bg-white dark:bg-brand-dark text-brand-black dark:text-white placeholder-brand-muted dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent-blue focus:border-transparent transition-colors text-base';
   const labelClass = 'block text-sm font-body font-medium text-brand-black dark:text-white mb-1';
 
+  // Eine Ausweis-Seite (Vorder-/Rückseite) mit Vorschau + zwei Quellen:
+  // Kamera (capture="environment") und Galerie/Datei (ohne capture).
+  function renderIdSide(side: 'front' | 'back') {
+    const isFront = side === 'front';
+    const preview = isFront ? frontPreview : backPreview;
+    const galleryRef = isFront ? frontRef : backRef;
+    const camRef = isFront ? frontCamRef : backCamRef;
+    return (
+      <div>
+        <label className={labelClass}>{isFront ? 'Vorderseite *' : 'Rückseite *'}</label>
+        {/* Galerie/Datei (ohne capture → Foto-Mediathek oder Datei) */}
+        <input
+          ref={galleryRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+          onChange={(e) => handleFile(side, e)}
+          className="hidden"
+        />
+        {/* Kamera (capture="environment" → Rückkamera direkt) */}
+        <input
+          ref={camRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={(e) => handleFile(side, e)}
+          className="hidden"
+        />
+        <button
+          type="button"
+          onClick={() => galleryRef.current?.click()}
+          className="w-full aspect-[4/3] rounded-[10px] border-2 border-dashed border-brand-border dark:border-white/20 hover:border-accent-blue transition-colors flex items-center justify-center overflow-hidden bg-brand-bg dark:bg-brand-black"
+        >
+          {preview ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={preview} alt={isFront ? 'Vorderseite' : 'Rückseite'} className="w-full h-full object-cover" />
+          ) : (
+            <div className="text-center px-4">
+              <svg className="w-8 h-8 mx-auto mb-1 text-brand-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+              </svg>
+              <p className="text-xs font-body text-brand-muted">Tippen zum Auswählen</p>
+            </div>
+          )}
+        </button>
+        <div className="grid grid-cols-2 gap-2 mt-2">
+          <button
+            type="button"
+            onClick={() => camRef.current?.click()}
+            className="py-2 px-2 rounded-btn border border-brand-border dark:border-white/10 text-xs font-heading font-semibold text-brand-black dark:text-white hover:border-accent-blue transition-colors flex items-center justify-center gap-1.5"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z" /></svg>
+            Foto aufnehmen
+          </button>
+          <button
+            type="button"
+            onClick={() => galleryRef.current?.click()}
+            className="py-2 px-2 rounded-btn border border-brand-border dark:border-white/10 text-xs font-heading font-semibold text-brand-black dark:text-white hover:border-accent-blue transition-colors flex items-center justify-center gap-1.5"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" /></svg>
+            Galerie
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // ─── Step: Upload ────────────────────────────────────────────────────────
   if (step === 'upload') {
     return (
@@ -337,65 +415,12 @@ export default function ExpressSignup({
         </p>
 
         <div className="grid sm:grid-cols-2 gap-4 mb-4">
-          <div>
-            <label className={labelClass}>Vorderseite *</label>
-            <input
-              ref={frontRef}
-              type="file"
-              accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
-              onChange={(e) => handleFile('front', e)}
-              className="hidden"
-            />
-            <button
-              type="button"
-              onClick={() => frontRef.current?.click()}
-              className="w-full aspect-[4/3] rounded-[10px] border-2 border-dashed border-brand-border dark:border-white/20 hover:border-accent-blue transition-colors flex items-center justify-center overflow-hidden bg-brand-bg dark:bg-brand-black"
-            >
-              {frontPreview ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={frontPreview} alt="Vorderseite" className="w-full h-full object-cover" />
-              ) : (
-                <div className="text-center px-4">
-                  <svg className="w-8 h-8 mx-auto mb-1 text-brand-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
-                  </svg>
-                  <p className="text-xs font-body text-brand-muted">Klicken zum Auswählen</p>
-                </div>
-              )}
-            </button>
-          </div>
-
-          <div>
-            <label className={labelClass}>Rückseite *</label>
-            <input
-              ref={backRef}
-              type="file"
-              accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
-              onChange={(e) => handleFile('back', e)}
-              className="hidden"
-            />
-            <button
-              type="button"
-              onClick={() => backRef.current?.click()}
-              className="w-full aspect-[4/3] rounded-[10px] border-2 border-dashed border-brand-border dark:border-white/20 hover:border-accent-blue transition-colors flex items-center justify-center overflow-hidden bg-brand-bg dark:bg-brand-black"
-            >
-              {backPreview ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={backPreview} alt="Rückseite" className="w-full h-full object-cover" />
-              ) : (
-                <div className="text-center px-4">
-                  <svg className="w-8 h-8 mx-auto mb-1 text-brand-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
-                  </svg>
-                  <p className="text-xs font-body text-brand-muted">Klicken zum Auswählen</p>
-                </div>
-              )}
-            </button>
-          </div>
+          {renderIdSide('front')}
+          {renderIdSide('back')}
         </div>
 
         <p className="text-xs text-brand-muted dark:text-gray-500 mb-4">
-          JPG, PNG, WebP oder HEIC. Max 5 MB pro Seite. Die Daten werden verschlüsselt übertragen und nur zur Identitätsprüfung gespeichert.
+          Foto mit der Kamera aufnehmen oder aus der Galerie wählen. JPG, PNG, WebP oder HEIC, max 5 MB pro Seite. Die Daten werden verschlüsselt übertragen und nur zur Identitätsprüfung gespeichert.
         </p>
 
         {error && (
@@ -418,14 +443,16 @@ export default function ExpressSignup({
           ) : 'Hochladen & weiter'}
         </button>
 
-        <button
-          type="button"
-          onClick={handleSkipUpload}
-          disabled={busy}
-          className="w-full py-2 text-xs font-body text-brand-muted hover:text-brand-black dark:hover:text-white underline transition-colors"
-        >
-          Später hochladen (Versand verzögert sich)
-        </button>
+        {!requireUpload && (
+          <button
+            type="button"
+            onClick={handleSkipUpload}
+            disabled={busy}
+            className="w-full py-2 text-xs font-body text-brand-muted hover:text-brand-black dark:hover:text-white underline transition-colors"
+          >
+            Später hochladen (Versand verzögert sich)
+          </button>
+        )}
       </div>
     );
   }
