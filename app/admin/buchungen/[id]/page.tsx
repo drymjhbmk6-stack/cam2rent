@@ -868,6 +868,23 @@ export default function BuchungDetailPage() {
         {/* ═══ Nächste Aktion — immer ganz oben sichtbar, über den Reitern ═══ */}
         <NextActionBar action={nextAction} statusLabel={sc.label} statusColor={sc.color} />
 
+        {/* Mietvertrag nicht unterschrieben — Warnung vor Übergabe/Versand */}
+        {!booking.contract_signed && !['pending_verification', 'awaiting_payment', 'cancelled', 'completed'].includes(booking.status) && (
+          <div className="mb-6 p-4 rounded-xl border-2 border-red-400 bg-red-50 flex items-start gap-3">
+            <svg className="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+            <div className="min-w-0">
+              <p className="text-sm font-heading font-semibold text-red-800">Achtung: Mietvertrag nicht unterschrieben</p>
+              <p className="text-xs font-body text-red-700 mt-0.5">
+                Für diese Buchung liegt kein unterschriebener Mietvertrag vor. Vor Übergabe oder Versand
+                den Vertrag unterschreiben lassen.
+              </p>
+              <Link href={`/admin/buchungen/${booking.id}/vertrag-unterschreiben`} className="inline-block mt-2 text-xs font-heading font-semibold text-red-700 underline">
+                Jetzt unterschreiben →
+              </Link>
+            </div>
+          </div>
+        )}
+
         {/* Suspicious warning */}
         {booking.suspicious && (
           <div className="mb-6 p-4 rounded-xl border border-amber-300 bg-amber-50 flex items-start gap-3">

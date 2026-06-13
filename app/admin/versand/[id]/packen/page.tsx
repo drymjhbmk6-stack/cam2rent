@@ -37,6 +37,7 @@ interface BookingDetail {
   cameras_resolved?: { product_name: string; serial_number: string | null; unit_id: string | null; product_id?: string | null }[];
   resolved_items?: ResolvedItem[];
   unit_codes?: UnitCode[];
+  contract_signed?: boolean | null;
   pack_status?: string | null;
   pack_packed_by?: string | null;
   pack_packed_by_user_id?: string | null;
@@ -129,6 +130,25 @@ export default function PackenPage({ params }: { params: Promise<{ id: string }>
             Buchung <span className="font-mono">{booking.id}</span> · {booking.customer_name ?? 'Unbekannt'}
           </p>
         </div>
+
+        {!booking.contract_signed && (
+          <div className="mb-6 p-4 rounded-lg bg-red-900/30 border border-red-600 flex items-start gap-3">
+            <span className="text-2xl leading-none">⚠️</span>
+            <div className="min-w-0">
+              <p className="font-bold text-red-300">Achtung: Mietvertrag nicht unterschrieben</p>
+              <p className="text-sm text-red-200/80 mt-0.5">
+                Für diese Buchung liegt kein unterschriebener Mietvertrag vor. Vor dem Versand
+                den Vertrag unterschreiben lassen.
+              </p>
+              <a
+                href={`/admin/buchungen/${booking.id}/vertrag-unterschreiben`}
+                className="inline-block mt-2 text-sm font-semibold text-red-200 underline"
+              >
+                Jetzt unterschreiben →
+              </a>
+            </div>
+          </div>
+        )}
 
         {/* Status-Indikator */}
         <Stepper status={status} />

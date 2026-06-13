@@ -36,6 +36,7 @@ interface BookingDetail {
   resolved_items?: ResolvedItem[];
   unit_codes?: UnitCode[];
   shipping_address?: string | null;
+  contract_signed?: boolean | null;
 }
 
 function bookingToScanInput(b: BookingDetail) {
@@ -310,6 +311,25 @@ function Wizard({ booking }: { booking: BookingDetail }) {
             Buchung <span className="font-mono">{booking.id}</span> · {booking.customer_name ?? 'Unbekannt'}
           </p>
         </div>
+
+        {!booking.contract_signed && (
+          <div className="mb-6 p-4 rounded-lg bg-red-900/30 border border-red-600 flex items-start gap-3">
+            <span className="text-2xl leading-none">⚠️</span>
+            <div className="min-w-0">
+              <p className="font-bold text-red-300">Achtung: Mietvertrag nicht unterschrieben</p>
+              <p className="text-sm text-red-200/80 mt-0.5">
+                Für diese Buchung liegt kein unterschriebener Mietvertrag vor. Vor der Übergabe
+                den Vertrag unterschreiben lassen.
+              </p>
+              <a
+                href={`/admin/buchungen/${booking.id}/vertrag-unterschreiben`}
+                className="inline-block mt-2 text-sm font-semibold text-red-200 underline"
+              >
+                Jetzt unterschreiben →
+              </a>
+            </div>
+          </div>
+        )}
 
         <Stepper step={step} />
         <BookingInfo booking={booking} />

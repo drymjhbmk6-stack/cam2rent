@@ -22,6 +22,7 @@ import { useAccessories } from '@/components/AccessoriesProvider';
 import { getAccessoryPrice } from '@/data/accessories';
 import { BUSINESS } from '@/lib/business-config';
 import ExpressSignup from '@/components/checkout/ExpressSignup';
+import SignatureStep, { type SignatureResult } from '@/components/booking/SignatureStep';
 
 // stripePromise wird je User initialisiert (Tester-Konto bekommt Test-Stripe-
 // Publishable-Key) — siehe getStripePromise mit userId-Parameter weiter unten.
@@ -666,6 +667,51 @@ export default function CheckoutPage() {
   const [acceptsTerms, setAcceptsTerms] = useState(false);
   const [acceptsWithdrawal, setAcceptsWithdrawal] = useState(false);
   const [acceptsEarlyService, setAcceptsEarlyService] = useState(false);
+
+  // ── Mietvertrag-Unterschrift (Pflicht vor der Zahlung) ──────────────────────
+  // Im Warenkorb-Checkout fehlte bisher die Vertragsunterschrift komplett — eine
+  // Buchung konnte ohne unterschriebenen Mietvertrag bezahlt werden. Jetzt muss
+  // der Kunde hier unterschreiben (analog Step 5 im Direkt-Buchungsflow). Eine
+  // Signatur aus dem Direkt-Flow (sessionStorage) wird uebernommen.
+  const [contractSignature, setContractSignature] = useState<SignatureResult | null>(null);
+  const [showSignModal, setShowSignModal] = useState(false);
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem('cam2rent_contract_signature');
+      if (raw) {
+        const parsed = JSON.parse(raw) as SignatureResult;
+        if (parsed?.agreedToTerms && parsed?.signerName) setContractSignature(parsed);
+      }
+    } catch { /* ignore */ }
+  }, []);
+  // Zusammengefasste Mietgegenstaende ueber alle Warenkorb-Positionen fuer die
+  // Vertrags-Vorschau (das rechtsverbindliche PDF wird pro Buchung serverseitig
+  // in confirm-cart aus den echten Daten erzeugt).
+  const contractSummary = useMemo(() => {
+    const productNames = Array.from(new Set(items.map((i) => i.productName))).join(', ');
+    const accNames = Array.from(new Set(
+      items.flatMap((i) => (i.accessories ?? []).map(
+        (accId) => ALL_ACCESSORIES.find((a) => a.id === accId)?.name ?? accId,
+      )),
+    ));
+    const froms = items.map((i) => i.rentalFrom).filter(Boolean).sort();
+    const tos = items.map((i) => i.rentalTo).filter(Boolean).sort();
+    const maxDays = items.reduce((m, i) => Math.max(m, i.days || 0), 0);
+    const depositSum = items.reduce((s, i) => s + (i.deposit || 0), 0);
+    const toDE = (iso?: string) => {
+      if (!iso) return '';
+      const [y, m, d] = iso.split('-');
+      return d ? `${d}.${m}.${y}` : iso;
+    };
+    return {
+      productName: productNames,
+      accessories: accNames,
+      rentalFrom: toDE(froms[0]),
+      rentalTo: toDE(tos[tos.length - 1]),
+      rentalDays: maxDays,
+      deposit: depositSum,
+    };
+  }, [items, ALL_ACCESSORIES]);
 
   // Prüft ob eine Buchung vor Ablauf der 14-tägigen Widerrufsfrist beginnt.
   // § 356 Abs. 4 BGB greift nur in diesem Fall — sonst ist die Zustimmung
@@ -1314,6 +1360,49 @@ export default function CheckoutPage() {
                   </div>
                 )}
 
+                {/* Mietvertrag unterschreiben (Pflicht vor der Zahlung) */}
+                {!pendingSuccess && (
+                  <div className="mb-4">
+                    {contractSignature ? (
+                      <div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-[10px] flex items-start gap-3">
+                        <svg className="w-5 h-5 text-status-success mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-heading font-semibold text-green-800 dark:text-green-300">Mietvertrag unterschrieben</p>
+                          <p className="text-xs font-body text-green-700 dark:text-green-400 mt-0.5">
+                            Unterschrieben von {contractSignature.signerName}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setShowSignModal(true)}
+                          className="text-xs font-heading font-semibold text-green-700 dark:text-green-400 underline flex-shrink-0"
+                        >
+                          Ändern
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-[10px]">
+                        <p className="text-sm font-heading font-semibold text-amber-800 dark:text-amber-300 mb-1">Mietvertrag unterschreiben</p>
+                        <p className="text-xs font-body text-amber-700 dark:text-amber-400 mb-3 leading-relaxed">
+                          Vor der Zahlung musst du den Mietvertrag digital unterschreiben.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setShowSignModal(true)}
+                          className="w-full py-3 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold text-sm rounded-btn hover:bg-brand-dark transition-colors flex items-center justify-center gap-2"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          Jetzt unterschreiben
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* AGB + Widerrufsrecht Checkboxen */}
                 {!pendingSuccess && (
                   <div className="space-y-3 mb-4">
@@ -1351,7 +1440,7 @@ export default function CheckoutPage() {
                 {!pendingSuccess && isVerified && (
                   <button
                     onClick={handleProceedToPayment}
-                    disabled={isCreatingIntent || !acceptsTerms || !acceptsWithdrawal || (requiresEarlyServiceConsent && !acceptsEarlyService)}
+                    disabled={isCreatingIntent || !contractSignature || !acceptsTerms || !acceptsWithdrawal || (requiresEarlyServiceConsent && !acceptsEarlyService)}
                     className="w-full py-4 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold rounded-btn hover:bg-brand-dark disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
                   >
                     {isCreatingIntent ? (
@@ -1379,7 +1468,7 @@ export default function CheckoutPage() {
                     </div>
                     <button
                       onClick={handleProceedToPayment}
-                      disabled={isCreatingIntent || !acceptsTerms || !acceptsWithdrawal || (requiresEarlyServiceConsent && !acceptsEarlyService)}
+                      disabled={isCreatingIntent || !contractSignature || !acceptsTerms || !acceptsWithdrawal || (requiresEarlyServiceConsent && !acceptsEarlyService)}
                       className="w-full py-4 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold rounded-btn hover:bg-brand-dark disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
                     >
                       {isCreatingIntent ? (
@@ -1402,7 +1491,7 @@ export default function CheckoutPage() {
                     </div>
                     <button
                       onClick={handlePendingBooking}
-                      disabled={isCreatingIntent || !acceptsTerms || !acceptsWithdrawal || (requiresEarlyServiceConsent && !acceptsEarlyService)}
+                      disabled={isCreatingIntent || !contractSignature || !acceptsTerms || !acceptsWithdrawal || (requiresEarlyServiceConsent && !acceptsEarlyService)}
                       className="w-full py-4 bg-accent-blue text-white font-heading font-semibold rounded-btn hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
                     >
                       {isCreatingIntent ? (
@@ -1474,6 +1563,50 @@ export default function CheckoutPage() {
           </div>
 
       </div>
+
+      {/* Mietvertrag-Unterschrift-Modal */}
+      {showSignModal && (
+        <div
+          className="fixed inset-0 z-[200] bg-black/60 flex items-start sm:items-center justify-center p-0 sm:p-4 overflow-y-auto"
+          onClick={() => setShowSignModal(false)}
+        >
+          <div
+            className="bg-white dark:bg-brand-dark w-full sm:max-w-2xl sm:rounded-card shadow-card my-0 sm:my-8"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-4 border-b border-brand-border dark:border-white/10 sticky top-0 bg-white dark:bg-brand-dark z-10">
+              <h3 className="font-heading font-semibold text-brand-black dark:text-white">Mietvertrag unterschreiben</h3>
+              <button
+                type="button"
+                onClick={() => setShowSignModal(false)}
+                aria-label="Schließen"
+                className="text-brand-steel dark:text-gray-400 hover:text-brand-black dark:hover:text-white text-2xl leading-none px-2"
+              >
+                ×
+              </button>
+            </div>
+            <div className="p-4">
+              <SignatureStep
+                customerName={`${firstName} ${lastName}`.trim() || user?.user_metadata?.full_name || user?.email || ''}
+                customerEmail={email || user?.email || ''}
+                productName={contractSummary.productName}
+                accessories={contractSummary.accessories}
+                rentalFrom={contractSummary.rentalFrom}
+                rentalTo={contractSummary.rentalTo}
+                rentalDays={contractSummary.rentalDays}
+                priceTotal={total}
+                deposit={contractSummary.deposit}
+                onSigned={(data) => {
+                  setContractSignature(data);
+                  try { sessionStorage.setItem('cam2rent_contract_signature', JSON.stringify(data)); } catch { /* ignore */ }
+                  setShowSignModal(false);
+                }}
+                onBack={() => setShowSignModal(false)}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
