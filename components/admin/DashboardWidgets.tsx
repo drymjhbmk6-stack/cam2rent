@@ -590,6 +590,11 @@ interface QueueBooking {
   rental_from: string;
   rental_to: string;
   tracking_number?: string | null;
+  // Status-Übersicht (Dashboard-Aufgaben-Widget)
+  verified?: boolean;
+  contract_signed?: boolean;
+  contract_checked?: boolean;
+  paid?: boolean;
 }
 
 interface QueueAction {
@@ -648,6 +653,40 @@ interface QueueRow {
   title: string;
   subtitle: string;
   action: QueueAction;
+  /** 4-Status-Übersicht (nur Buchungs-Zeilen, nicht Verifizierungs-Tasks). */
+  checks?: { verified: boolean; signed: boolean; checked: boolean; paid: boolean; isVersand: boolean };
+}
+
+// Kleine Status-Chips: grüner Haken = erfüllt, rotes X = noch nötig.
+// Bei Abholung sind Vertrag/Geprüft kein harter Blocker (kann bei der
+// Abholung unterschrieben werden) → amber statt rot.
+function StatusChips({ c }: { c: NonNullable<QueueRow['checks']> }) {
+  const chip = (label: string, ok: boolean, soft: boolean, okTitle: string, missTitle: string) => {
+    const color = ok ? C.green : soft ? C.yellow : C.red;
+    return (
+      <span
+        title={ok ? okTitle : missTitle}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 3,
+          fontSize: 10, fontWeight: 600, lineHeight: 1.4,
+          color, background: `${color}14`, border: `1px solid ${color}33`,
+          padding: '1px 6px', borderRadius: 6, whiteSpace: 'nowrap',
+        }}
+      >
+        <span style={{ fontWeight: 800 }}>{ok ? '✓' : soft ? '!' : '✗'}</span>{label}
+      </span>
+    );
+  };
+  // soft-Modus nur fuer Abholung + Vertrag/Geprueft
+  const softContract = !c.isVersand;
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 5 }}>
+      {chip('Ausweis', c.verified, false, 'Verifiziert', 'Ausweis/Konto noch nicht verifiziert')}
+      {chip('Vertrag', c.signed, softContract && !c.signed, 'Mietvertrag unterschrieben', softContract ? 'Noch nicht unterschrieben (bei Abholung möglich)' : 'Mietvertrag noch nicht unterschrieben')}
+      {chip('Geprüft', c.checked, softContract && !c.checked, 'Vertrag geprüft & freigegeben', softContract ? 'Noch nicht geprüft (bei Abholung möglich)' : 'Vertrag noch nicht geprüft („Alles okay")')}
+      {chip('Bezahlt', c.paid, false, 'Bezahlt', 'Noch nicht bezahlt')}
+    </div>
+  );
 }
 
 export function ActionQueueWidget({ data, loading }: {
@@ -670,6 +709,13 @@ export function ActionQueueWidget({ data, loading }: {
       title: b.product_name || 'Buchung',
       subtitle: `${b.customer_name} · ${formatDate(b.rental_from)} - ${formatDate(b.rental_to)}`,
       action,
+      checks: {
+        verified: b.verified ?? false,
+        signed: b.contract_signed ?? false,
+        checked: b.contract_checked ?? false,
+        paid: b.paid ?? false,
+        isVersand: b.delivery_mode === 'versand',
+      },
     }));
 
   // Lokaler State für die "Als versendet markieren"-Buttons: erledigte Zeilen
@@ -761,6 +807,7 @@ export function ActionQueueWidget({ data, loading }: {
                 <div style={{ fontSize: 11, color: errorId === row.key ? C.red : C.textDim, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {errorId === row.key ? 'Fehler — bitte erneut versuchen' : row.subtitle}
                 </div>
+                {row.checks && <StatusChips c={row.checks} />}
               </div>
             );
 

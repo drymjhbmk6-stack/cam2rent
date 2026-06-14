@@ -190,10 +190,12 @@ export async function GET() {
         .limit(20),
 
       // action_queue: bookings die eine Admin-Aktion brauchen (packen,
-      // uebergeben, ruckgabe pruefen, freigeben ...) — Direktlink-Liste
+      // uebergeben, ruckgabe pruefen, freigeben ...) — Direktlink-Liste.
+      // select('*') (max 50 Zeilen) ist robust gegen fehlende Migrations-
+      // Spalten (z.B. contract_locked) — fehlt eine Spalte, ist sie undefined.
       supabase
         .from('bookings')
-        .select('id, product_name, customer_name, status, delivery_mode, rental_from, rental_to, tracking_number')
+        .select('*')
         .in('status', ['pending_verification', 'awaiting_payment', 'confirmed', 'preparing_shipment', 'awaiting_pickup', 'shipped', 'delivered', 'picked_up', 'damaged'])
         .order('rental_from', { ascending: true })
         .limit(50),
@@ -275,6 +277,59 @@ export async function GET() {
     // ── Camera Utilization (30 Tage) — zentrale Lib, gleiche Logik wie /api/admin/utilization
     const utilizationProducts = await computeCameraUtilization(supabase, 30);
 
+    // ── Action-Queue-Items mit Status-Übersicht anreichern ───────────
+    // 4 Indikatoren pro Buchung fürs Dashboard-Aufgaben-Widget:
+    //  verified  = Ausweis/Konto-Gate erfüllt (oder nicht erforderlich)
+    //  contract_signed  = Mietvertrag unterschrieben
+    //  contract_checked = Vertrag freigegeben ("Alles okay" / contract_locked)
+    //  paid             = bezahlt (kein PENDING-/MANUAL-UNPAID-/awaiting-Status)
+    type AQRow = Record<string, unknown>;
+    const aqRows = (actionQueueRes.data ?? []) as AQRow[];
+
+    // Kunden-Verifizierungsstatus der beteiligten User bulk laden.
+    const aqUserIds = [...new Set(
+      aqRows.map((b) => b.user_id).filter((x): x is string => typeof x === 'string' && x.length > 0),
+    )];
+    const verifyStatusMap: Record<string, string> = {};
+    if (aqUserIds.length > 0) {
+      const { data: vprofiles } = await supabase
+        .from('profiles')
+        .select('id, verification_status')
+        .in('id', aqUserIds);
+      for (const p of vprofiles ?? []) {
+        verifyStatusMap[p.id as string] = (p.verification_status as string) ?? '';
+      }
+    }
+
+    const actionQueueItems = aqRows.map((b) => {
+      const piId = String(b.payment_intent_id ?? '');
+      const st = String(b.status ?? '').toLowerCase();
+      const isUnpaid =
+        /MANUAL-UNPAID/i.test(piId) ||
+        /^PENDING-/i.test(piId) ||
+        st === 'awaiting_payment' ||
+        st === 'pending_verification';
+      const verificationRequired = b.verification_required === true;
+      const gatePassed = !!b.verification_gate_passed_at;
+      const uid = typeof b.user_id === 'string' ? b.user_id : '';
+      const customerVerified = uid ? verifyStatusMap[uid] === 'verified' : false;
+      return {
+        id: b.id as string,
+        product_name: (b.product_name as string) ?? '',
+        customer_name: (b.customer_name as string) ?? '',
+        status: (b.status as string) ?? '',
+        delivery_mode: (b.delivery_mode as string) ?? null,
+        rental_from: (b.rental_from as string) ?? '',
+        rental_to: (b.rental_to as string) ?? '',
+        tracking_number: (b.tracking_number as string) ?? null,
+        // Status-Übersicht (4 Indikatoren)
+        verified: !verificationRequired || gatePassed || customerVerified,
+        contract_signed: b.contract_signed === true,
+        contract_checked: b.contract_locked === true,
+        paid: !isUnpaid,
+      };
+    });
+
     // ── Build response ───────────────────────────────────────────
 
     const data: Record<string, unknown> = {
@@ -308,7 +363,7 @@ export async function GET() {
 
       camera_utilization: { products: utilizationProducts },
 
-      action_queue: { items: actionQueueRes.data ?? [], verifications: pendingVerifications },
+      action_queue: { items: actionQueueItems, verifications: pendingVerifications },
     };
 
     return NextResponse.json(data);
