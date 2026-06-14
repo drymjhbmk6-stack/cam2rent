@@ -70,6 +70,7 @@ export default function KundenPage() {
   const [filter, setFilter] = useState('');
   const [search, setSearch] = useState('');
   const [letter, setLetter] = useState('');
+  const [resettingId, setResettingId] = useState<string | null>(null);
 
   const fetchCustomers = useCallback(async () => {
     setLoading(true);
@@ -79,6 +80,36 @@ export default function KundenPage() {
     setCustomers(data.customers || []);
     setLoading(false);
   }, [filter]);
+
+  // Tester-Konto zuruecksetzen → Auth-User + Profil + Ausweis-Fotos loeschen,
+  // damit man sich mit derselben E-Mail neu registrieren kann.
+  const handleResetTester = useCallback(async (c: Customer) => {
+    const ok = window.confirm(
+      `Test-Konto „${c.full_name || c.email}" zurücksetzen?\n\n` +
+      `Das Konto wird komplett gelöscht (inkl. Ausweis-Fotos). Mit der E-Mail ` +
+      `${c.email} kann man sich danach neu registrieren.\n\n` +
+      `Buchungen bleiben in der Datenbank, tauchen unter dem neuen Konto aber nicht mehr auf.`,
+    );
+    if (!ok) return;
+    setResettingId(c.id);
+    try {
+      const res = await fetch('/api/admin/kunden/reset-tester', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: c.id }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert(data?.error || 'Zurücksetzen fehlgeschlagen.');
+        return;
+      }
+      await fetchCustomers();
+    } catch {
+      alert('Netzwerkfehler beim Zurücksetzen.');
+    } finally {
+      setResettingId(null);
+    }
+  }, [fetchCustomers]);
 
   useEffect(() => {
     fetchCustomers();
@@ -363,6 +394,26 @@ export default function KundenPage() {
                             >
                               Tester
                             </span>
+                          )}
+                          {c.is_tester && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleResetTester(c); }}
+                              disabled={resettingId === c.id}
+                              title="Konto löschen, damit man sich mit dieser E-Mail neu registrieren kann"
+                              style={{
+                                padding: '3px 10px',
+                                borderRadius: 6,
+                                fontSize: 12,
+                                fontWeight: 600,
+                                color: '#f59e0b',
+                                background: '#f59e0b14',
+                                border: '1px solid #f59e0b44',
+                                cursor: resettingId === c.id ? 'default' : 'pointer',
+                                opacity: resettingId === c.id ? 0.6 : 1,
+                              }}
+                            >
+                              {resettingId === c.id ? 'Setzt zurück…' : '↻ Zurücksetzen'}
+                            </button>
                           )}
                         </div>
                       </td>

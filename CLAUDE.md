@@ -1385,6 +1385,25 @@ Der Admin kann pro Buchung den **Versand-/Übergabe-Tag** (vor Mietbeginn) und d
 ### Kundenkonto
 `/app/konto/` mit horizontaler Tab-Leiste
 
+### Test-Konto zurücksetzen (Stand 2026-06-14)
+In der Kundenliste (`/admin/kunden`) hat jede Zeile mit `is_tester=true` neben
+dem „Tester"-Badge einen amber **„↻ Zurücksetzen"**-Button. Klick (mit
+`confirm`) löscht das Konto vollständig, sodass man sich mit **derselben
+E-Mail neu registrieren** kann (frischer Test-Durchlauf).
+- **`POST /api/admin/kunden/reset-tester`** (`{ userId }`): **Owner-only**
+  (destruktiv, analog Tester-Flag-Endpoint) + **hartes Tester-Gate** —
+  `profiles.is_tester` muss `true` sein, sonst 403. Ein echtes Kundenkonto
+  kann über diesen Button NIEMALS gelöscht werden. Keine Selbst-Löschung.
+- **Was passiert:** Storage-Cleanup (`id-documents/<userId>`, `customer-ugc`),
+  best-effort Löschen leichter konto-gebundener Tabellen (`cart_holds`,
+  `customer_login_history`, `customer_push_subscriptions`,
+  `customer_ugc_submissions`), Profil-Zeile löschen, dann
+  `auth.admin.deleteUser(userId)` (gibt die E-Mail frei — kritischer Schritt).
+  Audit `customer.reset_tester`.
+- **Bewusst NICHT gelöscht:** Buchungen (FK-/Buchhaltungs-Risiko). Da der neu
+  registrierte Kunde eine neue `user_id` bekommt, tauchen alte Test-Buchungen
+  unter dem frischen Konto ohnehin nicht mehr auf.
+
 ### Login-Verlauf pro Kundenkonto (Stand 2026-06-02)
 Admin sieht pro Kunde die letzten 10 Anmeldungen. Supabase `auth.users` hält nur
 `last_sign_in_at` (einen Wert) — daher eigene Historie-Tabelle.
