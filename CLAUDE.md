@@ -380,9 +380,17 @@ Sind alle vier grün, kann für den Versand gepackt werden. `GET
 Migration → undefined=false), plus Bulk-Lookup `profiles.verification_status`
 der beteiligten `user_id`. Felder pro Item: `verified` (= `verification_required`
 falsy ODER `verification_gate_passed_at` gesetzt ODER `verification_status==='verified'`),
-`contract_signed`, `contract_checked` (= `contract_locked`), `paid` (= NICHT
-`PENDING-`/`MANUAL-UNPAID-`-Prefix und NICHT Status `awaiting_payment`/
-`pending_verification`). Reine Anzeige — keine Migration, kein Gating geändert.
+`contract_signed`, `contract_checked` (= `contract_locked`), `paid`. Reine
+Anzeige — keine Migration, kein Gating geändert.
+- **`paid`-Quelle (Stand 2026-06-14):** in dieser Reihenfolge — (1) **Stripe-Abgleich**
+  (`stripe_transactions` mit `match_status` `matched`/`manual` = echter, einer
+  Buchung zugeordneter Zahlungseingang), (2) **Buchhaltung** (`invoices.status`/
+  `payment_status` = `'paid'`), (3) **Fallback** abgeleitet aus
+  `payment_intent_id`-Prefix + Status (NICHT `PENDING-`/`MANUAL-UNPAID-` und
+  NICHT `awaiting_payment`/`pending_verification`). Bulk-Queries über die
+  action_queue-Buchungs-IDs. So werden Buchungen, die in der Buchhaltung als
+  „Bezahlt" geführt werden (aber noch einen `PENDING-`-Marker tragen), korrekt
+  grün angezeigt.
 
 ### Dashboard-Aufgaben-Widget — Kunden-Verifizierung (Stand 2026-06-08)
 Das „Aufgaben"-Widget auf `/admin` (`ActionQueueWidget` in
