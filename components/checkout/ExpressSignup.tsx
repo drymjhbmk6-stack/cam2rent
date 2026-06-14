@@ -6,7 +6,7 @@ import { createAuthBrowserClient, recordCustomerLogin } from '@/lib/supabase-aut
 import { shrinkImageFileIfNeeded } from '@/lib/shrink-image-client';
 
 type Mode = 'signup' | 'login';
-type Step = 'auth' | 'upload' | 'done';
+type Step = 'auth' | 'collect' | 'upload' | 'done';
 
 /**
  * Express-Signup / Inline-Login mit integriertem Ausweis-Upload.
@@ -156,78 +156,132 @@ export default function ExpressSignup({
     }
   }
 
-  // ─── Signup ──────────────────────────────────────────────────────────────
+  // Wird true, sobald in dieser Sitzung das Konto angelegt wurde — damit ein
+  // erneuter Klick (z.B. nach fehlgeschlagenem Upload) nicht versucht, das
+  // Konto noch einmal anzulegen, sondern nur den Ausweis hochlädt.
+  const [accountCreated, setAccountCreated] = useState(false);
+
+  // ─── Signup-Validierung (ohne Konto-Anlage) ──────────────────────────────
+  function validateSignupForm(): string | null {
+    const trimmedEmail = email.trim().toLowerCase();
+    if (!firstName.trim()) return 'Bitte gib deinen Vornamen ein.';
+    if (!lastName.trim()) return 'Bitte gib deinen Nachnamen ein.';
+    if (!trimmedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      return 'Bitte gib eine gültige E-Mail-Adresse ein.';
+    }
+    if (password.length < 8) return 'Das Passwort muss mindestens 8 Zeichen lang sein.';
+    if (!street.trim()) return 'Bitte gib Straße und Hausnummer ein.';
+    if (!/^\d{5}$/.test(zip.trim())) return 'Bitte gib eine gültige 5-stellige PLZ ein.';
+    if (!city.trim()) return 'Bitte gib deine Stadt ein.';
+    if (emailExists) return 'Unter dieser E-Mail gibt es bereits ein Konto. Bitte melde dich an.';
+    return null;
+  }
+
+  // Legt das Konto an + loggt ein. Gibt true bei Erfolg zurück, sonst false
+  // (Fehler/Hinweis ist dann bereits gesetzt). Verändert den Step NICHT.
+  async function createAccountAndLogin(): Promise<boolean> {
+    const trimmedEmail = email.trim().toLowerCase();
+    const res = await fetch('/api/auth/express-signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: trimmedEmail,
+        password,
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        phone: phone.trim() || null,
+        street: street.trim(),
+        zip: zip.trim(),
+        city: city.trim(),
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+
+    if (res.status === 429) {
+      setError(data?.message || 'Zu viele Registrierungen. Bitte später erneut versuchen.');
+      return false;
+    }
+    if (res.status === 403 && data?.error === 'feature_disabled') {
+      setError('Registrierung ist derzeit nicht möglich. Bitte versuche es später erneut.');
+      return false;
+    }
+    if (!res.ok && !data?.exists) {
+      setError(data?.message || 'Konto konnte nicht erstellt werden.');
+      return false;
+    }
+    if (data?.exists) {
+      setMode('login');
+      setInfo('Diese E-Mail ist bereits registriert. Bitte melde dich an.');
+      return false;
+    }
+
+    // Auth-Phase fertig → Eltern informieren BEVOR signIn die Session setzt.
+    onAuthCompleted?.();
+
+    const supabase = createAuthBrowserClient();
+    const { data: loginData, error: loginErr } = await supabase.auth.signInWithPassword({
+      email: trimmedEmail,
+      password,
+    });
+    if (loginErr) {
+      setError('Konto angelegt, aber Login fehlgeschlagen: ' + loginErr.message);
+      return false;
+    }
+    recordCustomerLogin(loginData.session?.access_token);
+    setInfo('');
+    return true;
+  }
+
+  // ─── Signup (Standard-Flow: Konto sofort anlegen → Upload-Step) ───────────
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault();
     setError('');
     setInfo('');
-
-    const trimmedEmail = email.trim().toLowerCase();
-    if (!firstName.trim()) return setError('Bitte gib deinen Vornamen ein.');
-    if (!lastName.trim()) return setError('Bitte gib deinen Nachnamen ein.');
-    if (!trimmedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
-      return setError('Bitte gib eine gültige E-Mail-Adresse ein.');
-    }
-    if (password.length < 8) return setError('Das Passwort muss mindestens 8 Zeichen lang sein.');
-    if (!street.trim()) return setError('Bitte gib Straße und Hausnummer ein.');
-    if (!/^\d{5}$/.test(zip.trim())) return setError('Bitte gib eine gültige 5-stellige PLZ ein.');
-    if (!city.trim()) return setError('Bitte gib deine Stadt ein.');
-    if (emailExists) return setError('Unter dieser E-Mail gibt es bereits ein Konto. Bitte melde dich an.');
+    const err = validateSignupForm();
+    if (err) { setError(err); return; }
 
     setBusy(true);
     try {
-      const res = await fetch('/api/auth/express-signup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: trimmedEmail,
-          password,
-          firstName: firstName.trim(),
-          lastName: lastName.trim(),
-          phone: phone.trim() || null,
-          street: street.trim(),
-          zip: zip.trim(),
-          city: city.trim(),
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
+      const ok = await createAccountAndLogin();
+      if (ok) setStep('upload');
+    } catch {
+      setError('Netzwerkfehler. Bitte erneut versuchen.');
+    } finally {
+      setBusy(false);
+    }
+  }
 
-      if (res.status === 429) {
-        setError(data?.message || 'Zu viele Registrierungen. Bitte später erneut versuchen.');
-        return;
-      }
-      if (res.status === 403 && data?.error === 'feature_disabled') {
-        setError('Registrierung ist derzeit nicht möglich. Bitte versuche es später erneut.');
-        return;
-      }
-      if (!res.ok && !data?.exists) {
-        setError(data?.message || 'Konto konnte nicht erstellt werden.');
-        return;
-      }
-      if (data?.exists) {
-        setMode('login');
-        setInfo('Diese E-Mail ist bereits registriert. Bitte melde dich an.');
-        return;
-      }
+  // ─── Signup im requireUpload-Modus: erst Ausweis sammeln, dann Konto ──────
+  // Klick auf „Weiter: Ausweis hochladen" legt das Konto NOCH NICHT an, sondern
+  // wechselt zum Ausweis-Schritt. Das eigentliche „Konto erstellen" passiert
+  // erst, wenn Vorder- + Rückseite gewählt sind (handleCreateAndUpload).
+  function handleSignupContinue(e: React.FormEvent) {
+    e.preventDefault();
+    setError('');
+    setInfo('');
+    const err = validateSignupForm();
+    if (err) { setError(err); return; }
+    setStep('collect');
+  }
 
-      // Auth-Phase fertig → Eltern informieren BEVOR signIn die Session setzt,
-      // sonst rendert die Eltern-Komponente uns u.U. weg und wir verlieren
-      // den Upload-Step.
-      onAuthCompleted?.();
-
-      const supabase = createAuthBrowserClient();
-      const { data: loginData, error: loginErr } = await supabase.auth.signInWithPassword({
-        email: trimmedEmail,
-        password,
-      });
-      if (loginErr) {
-        setError('Konto angelegt, aber Login fehlgeschlagen: ' + loginErr.message);
-        return;
+  async function handleCreateAndUpload() {
+    if (!frontFile || !backFile) {
+      setError('Bitte wähle Vorder- und Rückseite deines Ausweises.');
+      return;
+    }
+    setBusy(true);
+    setError('');
+    try {
+      if (!accountCreated) {
+        const ok = await createAccountAndLogin();
+        if (!ok) {
+          // E-Mail existiert / Fehler → zurück zum Formular (zeigt Hinweis).
+          setStep('auth');
+          return;
+        }
+        setAccountCreated(true);
       }
-      recordCustomerLogin(loginData.session?.access_token);
-
-      setInfo('');
-      setStep('upload');
+      await handleUpload();
     } catch {
       setError('Netzwerkfehler. Bitte erneut versuchen.');
     } finally {
@@ -428,6 +482,87 @@ export default function ExpressSignup({
     );
   }
 
+  // ─── Step: Collect (requireUpload) — Ausweis VOR der Konto-Anlage ─────────
+  if (step === 'collect') {
+    return (
+      <div className="bg-white dark:bg-brand-dark rounded-card shadow-card p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <span className="w-6 h-6 rounded-full bg-status-success text-white flex items-center justify-center text-xs font-bold">✓</span>
+          <span className="text-sm font-body text-brand-steel dark:text-gray-400">Daten</span>
+          <span className="flex-1 border-t border-brand-border dark:border-white/10 mx-2" />
+          <span className="w-6 h-6 rounded-full bg-accent-blue text-white flex items-center justify-center text-xs font-bold">2</span>
+          <span className="text-sm font-heading font-semibold text-brand-black dark:text-white">Ausweis hochladen</span>
+        </div>
+
+        <h2 className="font-heading font-bold text-lg text-brand-black dark:text-white mb-1">
+          Personalausweis hochladen
+        </h2>
+        <p className="text-sm font-body text-brand-steel dark:text-gray-400 mb-5">
+          Lade Vorder- und Rückseite deines Ausweises hoch. Erst danach kannst du dein Konto erstellen.
+        </p>
+
+        <div className="grid sm:grid-cols-2 gap-4 mb-4">
+          {renderIdSide('front')}
+          {renderIdSide('back')}
+        </div>
+
+        <p className="text-xs text-brand-muted dark:text-gray-500 mb-4">
+          Foto mit der Kamera aufnehmen oder aus der Galerie wählen. JPG, PNG, WebP oder HEIC. Die Daten werden verschlüsselt übertragen und nur zur Identitätsprüfung gespeichert.
+        </p>
+
+        {error && (
+          <div className="p-3 mb-3 rounded-[10px] bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-sm text-red-700 dark:text-red-300">
+            {error}
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={handleCreateAndUpload}
+          disabled={busy || !frontFile || !backFile}
+          className="w-full py-3 mb-2 bg-brand-black dark:bg-accent-blue text-white font-heading font-semibold rounded-btn hover:bg-brand-dark disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+        >
+          {busy ? (
+            <>
+              <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              Bitte warten…
+            </>
+          ) : accountCreated ? 'Ausweis hochladen & fertig' : 'Konto erstellen'}
+        </button>
+
+        {!frontFile || !backFile ? (
+          <p className="text-xs text-brand-muted dark:text-gray-500 text-center mb-1">
+            Bitte beide Seiten hochladen, um fortzufahren.
+          </p>
+        ) : null}
+
+        {/* Notausgang nur, wenn das Konto schon angelegt wurde aber der Upload
+            fehlschlägt — dann ist der Kunde eingeloggt und sitzt nicht fest. */}
+        {accountCreated && uploadFailed && (
+          <button
+            type="button"
+            onClick={handleSkipUpload}
+            disabled={busy}
+            className="w-full py-2 text-xs font-body text-brand-muted hover:text-brand-black dark:hover:text-white underline transition-colors"
+          >
+            Es klappt gerade nicht? Ausweis später im Konto hochladen
+          </button>
+        )}
+
+        {!accountCreated && (
+          <button
+            type="button"
+            onClick={() => { setStep('auth'); setError(''); }}
+            disabled={busy}
+            className="w-full py-2 text-xs font-body text-brand-muted hover:text-brand-black dark:hover:text-white underline transition-colors"
+          >
+            ← Zurück zu den Daten
+          </button>
+        )}
+      </div>
+    );
+  }
+
   // ─── Step: Upload ────────────────────────────────────────────────────────
   if (step === 'upload') {
     return (
@@ -546,7 +681,7 @@ export default function ExpressSignup({
         </button>
       </div>
 
-      <form onSubmit={mode === 'signup' ? handleSignup : handleLogin} className="space-y-4">
+      <form onSubmit={mode === 'login' ? handleLogin : (requireUpload ? handleSignupContinue : handleSignup)} className="space-y-4">
         {mode === 'signup' && (
           <div className="grid sm:grid-cols-2 gap-3">
             <div>
@@ -715,10 +850,12 @@ export default function ExpressSignup({
           {busy ? (
             <>
               <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              {mode === 'signup' ? 'Konto wird erstellt…' : 'Wird angemeldet…'}
+              {mode === 'signup' ? (requireUpload ? 'Weiter…' : 'Konto wird erstellt…') : 'Wird angemeldet…'}
             </>
           ) : (
-            mode === 'signup' ? 'Konto erstellen & weiter' : 'Anmelden & weiter'
+            mode === 'signup'
+              ? (requireUpload ? 'Weiter: Ausweis hochladen' : 'Konto erstellen & weiter')
+              : 'Anmelden & weiter'
           )}
         </button>
 
