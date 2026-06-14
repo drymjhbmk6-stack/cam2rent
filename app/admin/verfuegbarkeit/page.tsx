@@ -155,7 +155,6 @@ export default function AdminVerfuegbarkeitPage() {
   const MONTHS_FORWARD = 6;
   const [ganttData, setGanttData] = useState<GanttData | null>(null);
   const [ganttLoading, setGanttLoading] = useState(true);
-  const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
   const [tooltip, setTooltip] = useState<{ x: number; y: number; content: string } | null>(null);
 
   // Zeitraum berechnen
@@ -174,9 +173,6 @@ export default function AdminVerfuegbarkeitPage() {
       const res = await fetch(`/api/admin/availability-gantt?from=${rangeFrom}&to=${rangeTo}`);
       const data = await res.json();
       setGanttData(data);
-      if (data.products) {
-        setExpandedProducts(new Set(data.products.filter((p: GanttProduct) => p.units.length > 0).map((p: GanttProduct) => p.id)));
-      }
     } catch {
       setGanttData(null);
     } finally {
@@ -349,14 +345,16 @@ export default function AdminVerfuegbarkeitPage() {
     return result;
   }, [ganttData]);
 
-  function toggleProduct(productId: string) {
-    setExpandedProducts((prev) => {
-      const next = new Set(prev);
-      if (next.has(productId)) next.delete(productId);
-      else next.add(productId);
-      return next;
-    });
-  }
+  // Kameras mit Seriennummern (erscheinen als Zeilen im gemeinsamen Kalender)
+  // bzw. ohne (werden nur als Hinweis unter dem Kalender gelistet).
+  const cameraProducts = useMemo(
+    () => (ganttData?.products ?? []).filter((p) => p.units.length > 0),
+    [ganttData],
+  );
+  const emptyCameraProducts = useMemo(
+    () => (ganttData?.products ?? []).filter((p) => p.units.length === 0),
+    [ganttData],
+  );
 
   // Berechne Zellentyp für eine Unit an einem bestimmten Tag
   function getCellInfo(unit: GanttUnit, dateStr: string, product: GanttProduct, buf: BufferDays): DayCellInfo {
@@ -628,153 +626,155 @@ export default function AdminVerfuegbarkeitPage() {
                 <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#374151' }} /> Ausgemustert</span>
               </div>
 
-              {ganttData.products.map((product) => {
-                const isExpanded = expandedProducts.has(product.id);
-                const activeUnits = product.units.filter((u) => u.status !== 'retired');
-                const unitCount = activeUnits.length;
-
-                return (
-                  <div key={product.id} className="rounded-xl overflow-hidden" style={{ border: '1px solid #1e293b', background: '#0f172a' }}>
-                    {/* Produkt-Header */}
-                    <button
-                      onClick={() => toggleProduct(product.id)}
-                      className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-800/50 transition-colors"
-                    >
-                      <span className="text-xs transition-transform" style={{ color: '#64748b', transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</span>
-                      <span className="font-heading font-bold text-sm" style={{ color: '#e2e8f0' }}>{product.name}</span>
-                      <span className="text-xs font-body" style={{ color: '#64748b' }}>
-                        ({unitCount} {unitCount === 1 ? 'Kamera' : 'Kameras'})
-                      </span>
-                      {product.units.length === 0 && (
-                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-900/30 text-amber-400 font-semibold">
-                          Keine Seriennummern
-                        </span>
-                      )}
-                    </button>
-
-                    {/* Gantt-Tabelle */}
-                    {isExpanded && (
-                      <div className="overflow-x-auto" data-gantt-scroll style={{ borderTop: '1px solid #1e293b' }}>
-                        {product.units.length === 0 ? (
-                          <div className="px-4 py-6 text-center text-xs" style={{ color: '#64748b' }}>
-                            Noch keine Kameras mit Seriennummern angelegt.
-                            <br />
-                            <a href={`/admin/preise/kameras/${product.id}`} className="text-blue-400 hover:underline mt-1 inline-block">
-                              → Seriennummern im Kamera-Editor anlegen
-                            </a>
-                          </div>
-                        ) : (
-                          <table className="w-full text-[11px]" style={{ minWidth: `${180 + days.length * 34}px`, borderCollapse: 'collapse' }}>
-                            <thead>
-                              {/* Monats-Balken */}
-                              <tr>
-                                <th rowSpan={3} className="text-left px-3 py-2 font-heading font-semibold sticky left-0 z-20"
-                                  style={{ color: '#64748b', background: '#0f172a', minWidth: '160px', borderBottom: '1px solid #1e293b' }}>
-                                  Seriennummer
-                                </th>
-                                {monthGroups.map((g, gi) => (
-                                  <th key={`m-${g.label}`} colSpan={g.span}
-                                    className="text-center font-heading font-bold text-[10px] py-1.5"
+              {/* EIN gemeinsamer Kalender für ALLE Kameras. Jede Zeile = ein
+                  physisches Exemplar (Seriennummer), gruppiert nach Modell.
+                  Eine Buchung belegt nur so viele Zeilen wie Kameras sie
+                  tatsächlich enthält (Greedy-Zuteilung in cameraAssignment). */}
+              {cameraProducts.length === 0 ? (
+                <p className="text-center py-12 text-sm" style={{ color: '#64748b' }}>
+                  Noch keine Kameras mit Seriennummern angelegt.
+                </p>
+              ) : (
+                <div className="rounded-xl overflow-x-auto" data-gantt-scroll style={{ border: '1px solid #1e293b', background: '#0f172a' }}>
+                  <table className="w-full text-[11px]" style={{ minWidth: `${200 + days.length * 34}px`, borderCollapse: 'collapse' }}>
+                    <thead>
+                      {/* Monats-Balken */}
+                      <tr>
+                        <th rowSpan={3} className="text-left px-3 py-2 font-heading font-semibold sticky left-0 z-20"
+                          style={{ color: '#64748b', background: '#0f172a', minWidth: '200px', borderBottom: '1px solid #1e293b' }}>
+                          Kamera
+                        </th>
+                        {monthGroups.map((g, gi) => (
+                          <th key={`m-${g.label}`} colSpan={g.span}
+                            className="text-center font-heading font-bold text-[10px] py-1.5"
+                            style={{
+                              color: '#e2e8f0',
+                              background: gi % 2 === 0 ? '#1e293b' : '#0f172a',
+                              borderLeft: gi > 0 ? '2px solid #334155' : 'none',
+                            }}>
+                            {g.label}
+                          </th>
+                        ))}
+                      </tr>
+                      {/* KW-Balken */}
+                      <tr>
+                        {kwGroups.map((g, gi) => (
+                          <th key={`kw-${g.kw}-${gi}`} colSpan={g.span}
+                            className="text-center font-heading font-bold text-[9px] py-1"
+                            style={{
+                              color: gi % 2 === 0 ? '#94a3b8' : '#64748b',
+                              background: gi % 2 === 0 ? '#0f172a' : '#131c2e',
+                              borderLeft: gi > 0 ? '1px solid #334155' : 'none',
+                            }}>
+                            KW {g.kw}
+                          </th>
+                        ))}
+                      </tr>
+                      {/* Tage */}
+                      <tr style={{ borderBottom: '1px solid #1e293b' }}>
+                        {days.map((d) => {
+                          const kwIdx = kwGroups.findIndex((g) => g.kw === d.kw);
+                          const weekBg = kwIdx % 2 === 0 ? '#0f172a' : '#131c2e';
+                          return (
+                            <th key={d.dateStr}
+                              data-today={d.isToday || undefined}
+                              className="text-center px-0 py-1 font-heading font-semibold"
+                              style={{
+                                color: d.isToday ? '#f59e0b' : d.isWeekend ? '#475569' : '#64748b',
+                                minWidth: '34px',
+                                background: weekBg,
+                                borderBottom: d.isToday ? '2px solid #f59e0b' : '1px solid #1e293b',
+                                borderLeft: d.isFirstOfMonth ? '2px solid #334155' : 'none',
+                              }}>
+                              <div className="text-[9px]">{d.dayName}</div>
+                              <div style={{ fontWeight: d.isToday ? 800 : 600 }}>{d.day}</div>
+                            </th>
+                          );
+                        })}
+                      </tr>
+                    </thead>
+                    {cameraProducts.map((product) => {
+                      const activeUnits = product.units.filter((u) => u.status !== 'retired');
+                      return (
+                        <tbody key={product.id}>
+                          {/* Modell-Gruppenkopf — trennt die Kameratypen optisch,
+                              bleibt aber im selben (einen) Kalender. */}
+                          <tr>
+                            <td className="px-3 py-1.5 sticky left-0 z-10 font-heading font-bold whitespace-nowrap"
+                              style={{ background: '#16233f', color: '#e2e8f0', borderTop: '2px solid #1e293b' }}>
+                              {product.name}
+                              <span className="ml-1.5 text-[10px] font-normal" style={{ color: '#64748b' }}>
+                                ({activeUnits.length} {activeUnits.length === 1 ? 'Kamera' : 'Kameras'})
+                              </span>
+                            </td>
+                            <td colSpan={days.length} style={{ background: '#16233f', borderTop: '2px solid #1e293b' }} />
+                          </tr>
+                          {product.units.map((unit) => (
+                            <tr key={unit.id} style={{ borderBottom: '1px solid #1e293b/50' }}>
+                              <td className="px-3 py-1.5 font-mono font-semibold sticky left-0 z-10 whitespace-nowrap"
+                                style={{ color: unit.status === 'retired' ? '#475569' : '#cbd5e1', background: '#0f172a' }}>
+                                {unit.serial_number}
+                                {unit.label && <span className="ml-1 text-[9px] font-normal" style={{ color: '#64748b' }}>({unit.label})</span>}
+                                {unit.status === 'maintenance' && <span className="ml-1 text-[9px] text-red-400">⚠</span>}
+                                {unit.status === 'retired' && <span className="ml-1 text-[9px] text-gray-500">✕</span>}
+                              </td>
+                              {days.map((d) => {
+                                const info = getCellInfo(unit, d.dateStr, product, ganttData.bufferDays);
+                                const cs = cellStyle(info);
+                                return (
+                                  <td
+                                    key={d.dateStr}
+                                    className="px-0 py-0.5 text-center"
+                                    onMouseEnter={(e) => handleCellHover(e, info, d.dateStr)}
+                                    onMouseLeave={() => setTooltip(null)}
+                                    onClick={() => {
+                                      if (info.booking) {
+                                        window.open(`/admin/buchungen/${info.booking.id}`, '_blank');
+                                      }
+                                    }}
                                     style={{
-                                      color: '#e2e8f0',
-                                      background: gi % 2 === 0 ? '#1e293b' : '#0f172a',
-                                      borderLeft: gi > 0 ? '2px solid #334155' : 'none',
-                                    }}>
-                                    {g.label}
-                                  </th>
-                                ))}
-                              </tr>
-                              {/* KW-Balken */}
-                              <tr>
-                                {kwGroups.map((g, gi) => (
-                                  <th key={`kw-${g.kw}-${gi}`} colSpan={g.span}
-                                    className="text-center font-heading font-bold text-[9px] py-1"
-                                    style={{
-                                      color: gi % 2 === 0 ? '#94a3b8' : '#64748b',
-                                      background: gi % 2 === 0 ? '#0f172a' : '#131c2e',
-                                      borderLeft: gi > 0 ? '1px solid #334155' : 'none',
-                                    }}>
-                                    KW {g.kw}
-                                  </th>
-                                ))}
-                              </tr>
-                              {/* Tage */}
-                              <tr style={{ borderBottom: '1px solid #1e293b' }}>
-                                {days.map((d) => {
-                                  const kwIdx = kwGroups.findIndex((g) => g.kw === d.kw);
-                                  const weekBg = kwIdx % 2 === 0 ? '#0f172a' : '#131c2e';
-                                  return (
-                                    <th key={d.dateStr}
-                                      data-today={d.isToday || undefined}
-                                      className="text-center px-0 py-1 font-heading font-semibold"
-                                      style={{
-                                        color: d.isToday ? '#f59e0b' : d.isWeekend ? '#475569' : '#64748b',
-                                        minWidth: '34px',
-                                        background: weekBg,
-                                        borderBottom: d.isToday ? '2px solid #f59e0b' : '1px solid #1e293b',
-                                        borderLeft: d.isFirstOfMonth ? '2px solid #334155' : 'none',
-                                      }}>
-                                      <div className="text-[9px]">{d.dayName}</div>
-                                      <div style={{ fontWeight: d.isToday ? 800 : 600 }}>{d.day}</div>
-                                    </th>
-                                  );
-                                })}
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {product.units.map((unit) => (
-                                <tr key={unit.id} style={{ borderBottom: '1px solid #1e293b/50' }}>
-                                  <td className="px-3 py-1.5 font-mono font-semibold sticky left-0 z-10 whitespace-nowrap"
-                                    style={{ color: unit.status === 'retired' ? '#475569' : '#cbd5e1', background: '#0f172a' }}>
-                                    {unit.serial_number}
-                                    {unit.label && <span className="ml-1 text-[9px] font-normal" style={{ color: '#64748b' }}>({unit.label})</span>}
-                                    {unit.status === 'maintenance' && <span className="ml-1 text-[9px] text-red-400">⚠</span>}
-                                    {unit.status === 'retired' && <span className="ml-1 text-[9px] text-gray-500">✕</span>}
+                                      ...cs,
+                                      cursor: info.booking ? 'pointer' : 'default',
+                                      boxShadow: d.isToday ? 'inset 0 0 0 1.5px #f59e0b' : 'none',
+                                    }}
+                                  >
+                                    <div className="text-[9px] leading-tight truncate px-0.5" style={{ color: cs.color }}>
+                                      {(info.type === 'booked' || info.type === 'booked-pending') && info.booking && (
+                                        <span title={info.booking.customer_name}>
+                                          {info.type === 'booked-pending' && '⏳ '}
+                                          {info.booking.customer_name?.split(' ')[0]?.slice(0, 6) || '…'}
+                                        </span>
+                                      )}
+                                      {(info.type === 'buffer-hin' || info.type === 'buffer-hin-pending') && <span style={{ fontSize: '8px' }}>▼ HIN</span>}
+                                      {(info.type === 'buffer-rueck' || info.type === 'buffer-rueck-pending') && <span style={{ fontSize: '8px' }}>▲ RÜ</span>}
+                                      {info.type === 'maintenance' && <span style={{ fontSize: '8px' }}>⚠</span>}
+                                    </div>
                                   </td>
-                                  {days.map((d) => {
-                                    const info = getCellInfo(unit, d.dateStr, product, ganttData.bufferDays);
-                                    const cs = cellStyle(info);
-                                    return (
-                                      <td
-                                        key={d.dateStr}
-                                        className="px-0 py-0.5 text-center"
-                                        onMouseEnter={(e) => handleCellHover(e, info, d.dateStr)}
-                                        onMouseLeave={() => setTooltip(null)}
-                                        onClick={() => {
-                                          if (info.booking) {
-                                            window.open(`/admin/buchungen/${info.booking.id}`, '_blank');
-                                          }
-                                        }}
-                                        style={{
-                                          ...cs,
-                                          cursor: info.booking ? 'pointer' : 'default',
-                                          boxShadow: d.isToday ? 'inset 0 0 0 1.5px #f59e0b' : 'none',
-                                        }}
-                                      >
-                                        <div className="text-[9px] leading-tight truncate px-0.5" style={{ color: cs.color }}>
-                                          {(info.type === 'booked' || info.type === 'booked-pending') && info.booking && (
-                                            <span title={info.booking.customer_name}>
-                                              {info.type === 'booked-pending' && '⏳ '}
-                                              {info.booking.customer_name?.split(' ')[0]?.slice(0, 6) || '…'}
-                                            </span>
-                                          )}
-                                          {(info.type === 'buffer-hin' || info.type === 'buffer-hin-pending') && <span style={{ fontSize: '8px' }}>▼ HIN</span>}
-                                          {(info.type === 'buffer-rueck' || info.type === 'buffer-rueck-pending') && <span style={{ fontSize: '8px' }}>▲ RÜ</span>}
-                                          {info.type === 'maintenance' && <span style={{ fontSize: '8px' }}>⚠</span>}
-                                        </div>
-                                      </td>
-                                    );
-                                  })}
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+                                );
+                              })}
+                            </tr>
+                          ))}
+                        </tbody>
+                      );
+                    })}
+                  </table>
+                </div>
+              )}
+
+              {/* Kameras ohne Seriennummern — als Hinweis unter dem Kalender. */}
+              {emptyCameraProducts.length > 0 && (
+                <div className="rounded-xl px-4 py-3 text-xs" style={{ border: '1px solid #1e293b', background: '#0f172a', color: '#64748b' }}>
+                  <span className="font-heading font-semibold" style={{ color: '#94a3b8' }}>Ohne Seriennummern (nicht im Kalender):</span>
+                  <span className="ml-2">
+                    {emptyCameraProducts.map((p, i) => (
+                      <span key={p.id}>
+                        {i > 0 && ', '}
+                        <a href={`/admin/preise/kameras/${p.id}`} className="text-blue-400 hover:underline">{p.name}</a>
+                      </span>
+                    ))}
+                  </span>
+                </div>
+              )}
             </div>
           )}
         </>
