@@ -18,6 +18,14 @@ function isMissingSeriesColumn(err: { code?: string; message?: string } | null):
   return /series_id|column|schema cache/i.test(err.message ?? '');
 }
 
+// shared_with-Spalte fehlt (z.B. Tabelle aus einer aelteren Migration ohne
+// die Spalte) → der .or(shared_with.cs.{…})-Filter scheitert. Wird defensiv
+// abgefangen: GET laedt dann nur eigene Termine, POST fuegt ohne shared_with ein.
+function isMissingSharedColumn(err: { code?: string; message?: string } | null): boolean {
+  if (!err) return false;
+  return /shared_with/i.test(err.message ?? '');
+}
+
 // Wiederholung wall-clock-stabil: vom Berlin-Local-Start aus Kalendereinheiten
 // addieren, dann zurück nach UTC. So bleibt 09:00 auch über die Sommer-/Winter-
 // zeit-Umstellung 09:00 (kein ms-Offset-Drift).
@@ -56,10 +64,13 @@ function isMissingTable(err: { code?: string; message?: string } | null): boolea
   if (!err) return false;
   const code = err.code ?? '';
   const msg = err.message ?? '';
+  // Bewusst TABELLEN-spezifisch: NICHT das generische /does not exist/ matchen,
+  // sonst wird ein fehlender Spalten-Fehler (z.B. shared_with) faelschlich als
+  // "Tabelle fehlt" → "Migration ausstehend" klassifiziert.
   return (
     code === '42P01' ||
     code === 'PGRST205' ||
-    /employee_appointments|schema cache|does not exist/i.test(msg)
+    /could not find the table|relation\s.*does not exist/i.test(msg)
   );
 }
 
@@ -90,17 +101,26 @@ export async function GET(req: NextRequest) {
   const toStr = req.nextUrl.searchParams.get('to');
 
   const supabase = createServiceClient();
-  let query = supabase
-    .from('employee_appointments')
-    .select('*')
-    .or(`admin_user_id.eq.${me.id},shared_with.cs.{${me.id}}`)
-    .order('starts_at', { ascending: true })
-    .limit(500);
+  // eigene + mit mir geteilte Termine; Fallback (ohne shared_with) weiter unten.
+  const buildQuery = (withShared: boolean) => {
+    let q = supabase.from('employee_appointments').select('*');
+    q = withShared
+      ? q.or(`admin_user_id.eq.${me.id},shared_with.cs.{${me.id}}`)
+      : q.eq('admin_user_id', me.id);
+    q = q.order('starts_at', { ascending: true }).limit(500);
+    if (fromStr && isValidIso(fromStr)) q = q.gte('starts_at', fromStr);
+    if (toStr && isValidIso(toStr)) q = q.lte('starts_at', toStr);
+    return q;
+  };
 
-  if (fromStr && isValidIso(fromStr)) query = query.gte('starts_at', fromStr);
-  if (toStr && isValidIso(toStr)) query = query.lte('starts_at', toStr);
+  let { data, error } = await buildQuery(true);
 
-  const { data, error } = await query;
+  // Defensiv: shared_with-Spalte fehlt → nur eigene Termine laden (kein
+  // faelschliches "Migration ausstehend", da der .or-Filter sonst die Tabelle
+  // referenziert und isMissingTable greift).
+  if (error && isMissingSharedColumn(error)) {
+    ({ data, error } = await buildQuery(false) as unknown as { data: typeof data; error: typeof error });
+  }
 
   if (error) {
     if (isMissingTable(error)) {
@@ -224,6 +244,16 @@ export async function POST(req: NextRequest) {
   // (Serie wird dann als unabhängige Termine angelegt, ohne Gruppen-Löschen).
   if (error && isMissingSeriesColumn(error) && !isMissingTable(error)) {
     const fallbackRows = rows.map(({ series_id: _omit, ...rest }) => rest); // eslint-disable-line @typescript-eslint/no-unused-vars
+    ({ data, error } = await supabase
+      .from('employee_appointments')
+      .insert(fallbackRows)
+      .select('*'));
+  }
+
+  // Defensiv: shared_with-Spalte fehlt → ohne sie einfügen (Termin wird dann
+  // ohne Teilen angelegt). Greift auch, falls der series_id-Fallback noch lief.
+  if (error && isMissingSharedColumn(error) && !isMissingTable(error)) {
+    const fallbackRows = rows.map(({ shared_with: _s, series_id: _o, ...rest }) => rest); // eslint-disable-line @typescript-eslint/no-unused-vars
     ({ data, error } = await supabase
       .from('employee_appointments')
       .insert(fallbackRows)
