@@ -812,98 +812,95 @@ export default function AdminVerfuegbarkeitPage() {
                 <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#1d4ed8' }} /> Ausgebucht</span>
               </div>
 
-              {filteredAccessories.map((acc) => (
-                <div key={acc.id} className="rounded-xl overflow-hidden" style={{ border: '1px solid #1e293b', background: '#0f172a' }}>
-                  <div className="px-4 py-3 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                    <span className="font-heading font-bold text-sm" style={{ color: '#e2e8f0' }}>{acc.name}</span>
-                    <span className="text-xs font-body" style={{ color: '#64748b' }}>({acc.available_qty} Stück)</span>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold" style={{ background: '#1e293b', color: '#94a3b8' }}>{acc.category}</span>
-                    {/* Kompatible Kameras: leere/fehlende Liste = mit allen
-                        Kameras kompatibel (gleiche Semantik wie im Buchungs-
-                        flow). Sonst eine Pill pro kompatibler Kamera. */}
-                    {acc.compatible_product_names && acc.compatible_product_names.length > 0 ? (
-                      <span className="flex flex-wrap items-center gap-1">
-                        {acc.compatible_product_names.map((pn) => (
-                          <span
-                            key={pn}
-                            className="text-[10px] px-2 py-0.5 rounded-full font-semibold"
-                            style={{ background: '#0c4a6e', color: '#7dd3fc' }}
-                          >
-                            {pn}
-                          </span>
-                        ))}
-                      </span>
-                    ) : (
-                      <span
-                        className="text-[10px] px-2 py-0.5 rounded-full font-semibold"
-                        style={{ background: '#0f3a2a', color: '#6ee7b7' }}
-                      >
-                        Alle Kameras
-                      </span>
-                    )}
-                  </div>
-                  <div className="overflow-x-auto" data-gantt-scroll style={{ borderTop: '1px solid #1e293b' }}>
-                    <table className="w-full text-[11px]" style={{ minWidth: `${80 + days.length * 36}px`, borderCollapse: 'collapse' }}>
-                      <thead>
-                        <tr>
-                          <th className="text-left px-3 py-1 font-heading font-semibold sticky left-0 z-10" style={{ color: '#64748b', background: '#0f172a', minWidth: '70px' }}></th>
-                          {kwGroups.map((g, gi) => (
-                            <th key={`kw-${g.kw}-${gi}`} colSpan={g.span} className="text-center font-heading font-bold text-[9px] py-1"
-                              style={{ color: gi % 2 === 0 ? '#94a3b8' : '#64748b', background: gi % 2 === 0 ? '#0f172a' : '#131c2e', borderLeft: gi > 0 ? '1px solid #334155' : 'none' }}>
-                              KW {g.kw}
-                            </th>
-                          ))}
-                        </tr>
-                        <tr style={{ borderBottom: '1px solid #1e293b' }}>
-                          <th className="sticky left-0 z-10" style={{ background: '#0f172a' }}></th>
-                          {days.map((d) => (
-                            <th key={d.dateStr} data-today={d.isToday || undefined} className="text-center px-0 py-1 font-heading font-semibold"
-                              style={{ color: d.isToday ? '#f59e0b' : d.isWeekend ? '#475569' : '#64748b', minWidth: '34px', borderBottom: d.isToday ? '2px solid #f59e0b' : '1px solid #1e293b' }}>
-                              <div className="text-[9px]">{d.dayName}</div>
-                              <div style={{ fontWeight: d.isToday ? 800 : 600 }}>{d.day}</div>
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr>
-                          <td className="px-3 py-1.5 font-semibold sticky left-0 z-10 whitespace-nowrap text-[10px]" style={{ color: '#94a3b8', background: '#0f172a' }}>
-                            Belegt
-                          </td>
-                          {days.map((d) => {
-                            const info = getAccCellInfo(acc, d.dateStr, ganttData.bufferDays);
-                            const bg = info.type === 'past' ? '#1e293b'
-                              : info.type === 'booked' ? '#1d4ed8'
-                              : info.count > 0 ? '#a16207'
-                              : '#065f46';
-                            const color = info.type === 'past' ? '#475569'
-                              : info.type === 'booked' ? '#ffffff'
-                              : info.count > 0 ? '#fef3c7'
-                              : '#6ee7b7';
-                            return (
-                              <td key={d.dateStr} className="px-0 py-0.5 text-center"
-                                onMouseEnter={(e) => {
-                                  if (info.type === 'past' || info.count === 0) { setTooltip(null); return; }
-                                  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                                  const names = info.bookings.map((b) => `${b.status === 'awaiting_payment' ? '⏳ ' : ''}${b.customer_name || '–'}`).join(', ');
-                                  const pendingCount = info.bookings.reduce((n, b) => n + (b.status === 'awaiting_payment' ? (b.qty ?? 1) : 0), 0);
-                                  const pendingLine = pendingCount > 0 ? `\n${pendingCount} davon Zahlung ausstehend` : '';
-                                  setTooltip({ x: rect.left + rect.width / 2, y: rect.top - 8, content: `${info.count} von ${info.total} belegt${pendingLine}\n${names}` });
-                                }}
-                                onMouseLeave={() => setTooltip(null)}
-                                style={{ background: bg, color, boxShadow: d.isToday ? 'inset 0 0 0 1.5px #f59e0b' : 'none' }}>
-                                <div className="text-[9px] leading-tight font-semibold">
-                                  {info.type !== 'past' && info.count > 0 ? `${info.count}/${info.total}` : ''}
-                                </div>
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              ))}
+              {/* EIN gemeinsamer Kalender für ALLES Zubehör. Eine Zeile pro
+                  Zubehörteil, gemeinsamer Datums-Header + ein Scrollbalken. */}
+              <div className="rounded-xl overflow-x-auto" data-gantt-scroll style={{ border: '1px solid #1e293b', background: '#0f172a' }}>
+                <table className="w-full text-[11px]" style={{ minWidth: `${240 + days.length * 34}px`, borderCollapse: 'collapse' }}>
+                  <thead>
+                    {/* Monats-Balken */}
+                    <tr>
+                      <th rowSpan={3} className="text-left px-3 py-2 font-heading font-semibold sticky left-0 z-20"
+                        style={{ color: '#64748b', background: '#0f172a', minWidth: '240px', borderBottom: '1px solid #1e293b' }}>
+                        Zubehör
+                      </th>
+                      {monthGroups.map((g, gi) => (
+                        <th key={`m-${g.label}`} colSpan={g.span}
+                          className="text-center font-heading font-bold text-[10px] py-1.5"
+                          style={{ color: '#e2e8f0', background: gi % 2 === 0 ? '#1e293b' : '#0f172a', borderLeft: gi > 0 ? '2px solid #334155' : 'none' }}>
+                          {g.label}
+                        </th>
+                      ))}
+                    </tr>
+                    {/* KW-Balken */}
+                    <tr>
+                      {kwGroups.map((g, gi) => (
+                        <th key={`kw-${g.kw}-${gi}`} colSpan={g.span} className="text-center font-heading font-bold text-[9px] py-1"
+                          style={{ color: gi % 2 === 0 ? '#94a3b8' : '#64748b', background: gi % 2 === 0 ? '#0f172a' : '#131c2e', borderLeft: gi > 0 ? '1px solid #334155' : 'none' }}>
+                          KW {g.kw}
+                        </th>
+                      ))}
+                    </tr>
+                    {/* Tage */}
+                    <tr style={{ borderBottom: '1px solid #1e293b' }}>
+                      {days.map((d) => (
+                        <th key={d.dateStr} data-today={d.isToday || undefined} className="text-center px-0 py-1 font-heading font-semibold"
+                          style={{ color: d.isToday ? '#f59e0b' : d.isWeekend ? '#475569' : '#64748b', minWidth: '34px', borderBottom: d.isToday ? '2px solid #f59e0b' : '1px solid #1e293b', borderLeft: d.isFirstOfMonth ? '2px solid #334155' : 'none' }}>
+                          <div className="text-[9px]">{d.dayName}</div>
+                          <div style={{ fontWeight: d.isToday ? 800 : 600 }}>{d.day}</div>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredAccessories.map((acc) => (
+                      <tr key={acc.id} style={{ borderBottom: '1px solid #1e293b' }}>
+                        <td className="px-3 py-1.5 sticky left-0 z-10 align-top" style={{ background: '#0f172a' }}>
+                          <div className="font-heading font-bold whitespace-nowrap" style={{ color: '#e2e8f0' }}>{acc.name}</div>
+                          <div className="flex flex-wrap items-center gap-1 mt-0.5">
+                            <span className="text-[10px]" style={{ color: '#64748b' }}>{acc.available_qty} Stück</span>
+                            <span className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold" style={{ background: '#1e293b', color: '#94a3b8' }}>{acc.category}</span>
+                            {acc.compatible_product_names && acc.compatible_product_names.length > 0 ? (
+                              acc.compatible_product_names.map((pn) => (
+                                <span key={pn} className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold" style={{ background: '#0c4a6e', color: '#7dd3fc' }}>{pn}</span>
+                              ))
+                            ) : (
+                              <span className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold" style={{ background: '#0f3a2a', color: '#6ee7b7' }}>Alle Kameras</span>
+                            )}
+                          </div>
+                        </td>
+                        {days.map((d) => {
+                          const info = getAccCellInfo(acc, d.dateStr, ganttData.bufferDays);
+                          const bg = info.type === 'past' ? '#1e293b'
+                            : info.type === 'booked' ? '#1d4ed8'
+                            : info.count > 0 ? '#a16207'
+                            : '#065f46';
+                          const color = info.type === 'past' ? '#475569'
+                            : info.type === 'booked' ? '#ffffff'
+                            : info.count > 0 ? '#fef3c7'
+                            : '#6ee7b7';
+                          return (
+                            <td key={d.dateStr} className="px-0 py-0.5 text-center"
+                              onMouseEnter={(e) => {
+                                if (info.type === 'past' || info.count === 0) { setTooltip(null); return; }
+                                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                const names = info.bookings.map((b) => `${b.status === 'awaiting_payment' ? '⏳ ' : ''}${b.customer_name || '–'}`).join(', ');
+                                const pendingCount = info.bookings.reduce((n, b) => n + (b.status === 'awaiting_payment' ? (b.qty ?? 1) : 0), 0);
+                                const pendingLine = pendingCount > 0 ? `\n${pendingCount} davon Zahlung ausstehend` : '';
+                                setTooltip({ x: rect.left + rect.width / 2, y: rect.top - 8, content: `${acc.name}\n${info.count} von ${info.total} belegt${pendingLine}\n${names}` });
+                              }}
+                              onMouseLeave={() => setTooltip(null)}
+                              style={{ background: bg, color, boxShadow: d.isToday ? 'inset 0 0 0 1.5px #f59e0b' : 'none' }}>
+                              <div className="text-[9px] leading-tight font-semibold">
+                                {info.type !== 'past' && info.count > 0 ? `${info.count}/${info.total}` : ''}
+                              </div>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </>
@@ -938,101 +935,100 @@ export default function AdminVerfuegbarkeitPage() {
                 <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded" style={{ background: '#1d4ed8' }} /> Gebucht</span>
               </div>
 
-              {filteredSets.map((s) => (
-                <div key={s.id} className="rounded-xl overflow-hidden" style={{ border: '1px solid #1e293b', background: '#0f172a' }}>
-                  <div className="px-4 py-3 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                    <span className="font-heading font-bold text-sm" style={{ color: '#e2e8f0' }}>{s.name}</span>
-                    {s.badge && <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold" style={{ background: '#1e293b', color: '#94a3b8' }}>{s.badge}</span>}
-                    {s.product_names && s.product_names.length > 0 ? (
-                      <span className="flex flex-wrap items-center gap-1">
-                        {s.product_names.map((pn) => (
-                          <span
-                            key={pn}
-                            className="text-[10px] px-2 py-0.5 rounded-full font-semibold"
-                            style={{ background: '#0c4a6e', color: '#7dd3fc' }}
-                          >
-                            {pn}
-                          </span>
-                        ))}
-                      </span>
-                    ) : (
-                      <span
-                        className="text-[10px] px-2 py-0.5 rounded-full font-semibold"
-                        style={{ background: '#1e293b', color: '#64748b' }}
-                      >
-                        Keine Kamera zugeordnet
-                      </span>
-                    )}
-                    <span className="text-xs font-body" style={{ color: '#64748b' }}>({s.bookings.length} Buchungen)</span>
-                  </div>
-                  <div className="overflow-x-auto" data-gantt-scroll style={{ borderTop: '1px solid #1e293b' }}>
-                    <table className="w-full text-[11px]" style={{ minWidth: `${80 + days.length * 36}px`, borderCollapse: 'collapse' }}>
-                      <thead>
-                        <tr>
-                          <th className="text-left px-3 py-1 font-heading font-semibold sticky left-0 z-10" style={{ color: '#64748b', background: '#0f172a', minWidth: '70px' }}></th>
-                          {kwGroups.map((g, gi) => (
-                            <th key={`kw-${g.kw}-${gi}`} colSpan={g.span} className="text-center font-heading font-bold text-[9px] py-1"
-                              style={{ color: gi % 2 === 0 ? '#94a3b8' : '#64748b', background: gi % 2 === 0 ? '#0f172a' : '#131c2e', borderLeft: gi > 0 ? '1px solid #334155' : 'none' }}>
-                              KW {g.kw}
-                            </th>
-                          ))}
-                        </tr>
-                        <tr style={{ borderBottom: '1px solid #1e293b' }}>
-                          <th className="sticky left-0 z-10" style={{ background: '#0f172a' }}></th>
-                          {days.map((d) => (
-                            <th key={d.dateStr} data-today={d.isToday || undefined} className="text-center px-0 py-1 font-heading font-semibold"
-                              style={{ color: d.isToday ? '#f59e0b' : d.isWeekend ? '#475569' : '#64748b', minWidth: '34px', borderBottom: d.isToday ? '2px solid #f59e0b' : '1px solid #1e293b' }}>
-                              <div className="text-[9px]">{d.dayName}</div>
-                              <div style={{ fontWeight: d.isToday ? 800 : 600 }}>{d.day}</div>
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr>
-                          <td className="px-3 py-1.5 font-semibold sticky left-0 z-10 whitespace-nowrap text-[10px]" style={{ color: '#94a3b8', background: '#0f172a' }}>
-                            Status
-                          </td>
-                          {days.map((d) => {
-                            const today = new Date(); today.setHours(0, 0, 0, 0);
-                            const isPast = new Date(d.dateStr) < today;
-                            let isBooked = false;
-                            const matchedBookings: GanttSimpleBooking[] = [];
-                            for (const b of s.bookings) {
-                              const bMode = b.delivery_mode ?? 'versand';
-                              const before = bMode === 'abholung' ? ganttData.bufferDays.abholung_before : ganttData.bufferDays.versand_before;
-                              const after = bMode === 'abholung' ? ganttData.bufferDays.abholung_after : ganttData.bufferDays.versand_after;
-                              const fromDate = new Date(b.rental_from); fromDate.setDate(fromDate.getDate() - before);
-                              const toDate = new Date(b.rental_to); toDate.setDate(toDate.getDate() + after);
-                              if (fromDate.toISOString().split('T')[0] <= d.dateStr && toDate.toISOString().split('T')[0] >= d.dateStr) {
-                                isBooked = true;
-                                matchedBookings.push(b);
-                              }
+              {/* EIN gemeinsamer Kalender für ALLE Sets. Eine Zeile pro Set,
+                  gemeinsamer Datums-Header + ein Scrollbalken. */}
+              <div className="rounded-xl overflow-x-auto" data-gantt-scroll style={{ border: '1px solid #1e293b', background: '#0f172a' }}>
+                <table className="w-full text-[11px]" style={{ minWidth: `${240 + days.length * 34}px`, borderCollapse: 'collapse' }}>
+                  <thead>
+                    {/* Monats-Balken */}
+                    <tr>
+                      <th rowSpan={3} className="text-left px-3 py-2 font-heading font-semibold sticky left-0 z-20"
+                        style={{ color: '#64748b', background: '#0f172a', minWidth: '240px', borderBottom: '1px solid #1e293b' }}>
+                        Set
+                      </th>
+                      {monthGroups.map((g, gi) => (
+                        <th key={`m-${g.label}`} colSpan={g.span}
+                          className="text-center font-heading font-bold text-[10px] py-1.5"
+                          style={{ color: '#e2e8f0', background: gi % 2 === 0 ? '#1e293b' : '#0f172a', borderLeft: gi > 0 ? '2px solid #334155' : 'none' }}>
+                          {g.label}
+                        </th>
+                      ))}
+                    </tr>
+                    {/* KW-Balken */}
+                    <tr>
+                      {kwGroups.map((g, gi) => (
+                        <th key={`kw-${g.kw}-${gi}`} colSpan={g.span} className="text-center font-heading font-bold text-[9px] py-1"
+                          style={{ color: gi % 2 === 0 ? '#94a3b8' : '#64748b', background: gi % 2 === 0 ? '#0f172a' : '#131c2e', borderLeft: gi > 0 ? '1px solid #334155' : 'none' }}>
+                          KW {g.kw}
+                        </th>
+                      ))}
+                    </tr>
+                    {/* Tage */}
+                    <tr style={{ borderBottom: '1px solid #1e293b' }}>
+                      {days.map((d) => (
+                        <th key={d.dateStr} data-today={d.isToday || undefined} className="text-center px-0 py-1 font-heading font-semibold"
+                          style={{ color: d.isToday ? '#f59e0b' : d.isWeekend ? '#475569' : '#64748b', minWidth: '34px', borderBottom: d.isToday ? '2px solid #f59e0b' : '1px solid #1e293b', borderLeft: d.isFirstOfMonth ? '2px solid #334155' : 'none' }}>
+                          <div className="text-[9px]">{d.dayName}</div>
+                          <div style={{ fontWeight: d.isToday ? 800 : 600 }}>{d.day}</div>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredSets.map((s) => (
+                      <tr key={s.id} style={{ borderBottom: '1px solid #1e293b' }}>
+                        <td className="px-3 py-1.5 sticky left-0 z-10 align-top" style={{ background: '#0f172a' }}>
+                          <div className="font-heading font-bold whitespace-nowrap" style={{ color: '#e2e8f0' }}>{s.name}</div>
+                          <div className="flex flex-wrap items-center gap-1 mt-0.5">
+                            {s.badge && <span className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold" style={{ background: '#1e293b', color: '#94a3b8' }}>{s.badge}</span>}
+                            {s.product_names && s.product_names.length > 0 ? (
+                              s.product_names.map((pn) => (
+                                <span key={pn} className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold" style={{ background: '#0c4a6e', color: '#7dd3fc' }}>{pn}</span>
+                              ))
+                            ) : (
+                              <span className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold" style={{ background: '#1e293b', color: '#64748b' }}>Keine Kamera zugeordnet</span>
+                            )}
+                          </div>
+                        </td>
+                        {days.map((d) => {
+                          const today = new Date(); today.setHours(0, 0, 0, 0);
+                          const isPast = new Date(d.dateStr) < today;
+                          let isBooked = false;
+                          const matchedBookings: GanttSimpleBooking[] = [];
+                          for (const b of s.bookings) {
+                            const bMode = b.delivery_mode ?? 'versand';
+                            const before = bMode === 'abholung' ? ganttData.bufferDays.abholung_before : ganttData.bufferDays.versand_before;
+                            const after = bMode === 'abholung' ? ganttData.bufferDays.abholung_after : ganttData.bufferDays.versand_after;
+                            const fromDate = new Date(b.rental_from); fromDate.setDate(fromDate.getDate() - before);
+                            const toDate = new Date(b.rental_to); toDate.setDate(toDate.getDate() + after);
+                            if (fromDate.toISOString().split('T')[0] <= d.dateStr && toDate.toISOString().split('T')[0] >= d.dateStr) {
+                              isBooked = true;
+                              matchedBookings.push(b);
                             }
-                            const bg = isPast && !isBooked ? '#1e293b' : isBooked ? (isPast ? '#1e3a5f' : '#1d4ed8') : '#065f46';
-                            const color = isPast && !isBooked ? '#475569' : isBooked ? '#ffffff' : '#6ee7b7';
-                            return (
-                              <td key={d.dateStr} className="px-0 py-0.5 text-center"
-                                onMouseEnter={(e) => {
-                                  if (isPast || !isBooked) { setTooltip(null); return; }
-                                  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                                  const names = matchedBookings.map((b) => `${b.status === 'awaiting_payment' ? '⏳ ' : ''}${b.customer_name || '–'}`).join(', ');
-                                  setTooltip({ x: rect.left + rect.width / 2, y: rect.top - 8, content: `${s.name}\n${names}` });
-                                }}
-                                onMouseLeave={() => setTooltip(null)}
-                                style={{ background: bg, color, boxShadow: d.isToday ? 'inset 0 0 0 1.5px #f59e0b' : 'none' }}>
-                                <div className="text-[9px] leading-tight font-semibold">
-                                  {!isPast && isBooked ? matchedBookings.length.toString() : ''}
-                                </div>
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              ))}
+                          }
+                          const bg = isPast && !isBooked ? '#1e293b' : isBooked ? (isPast ? '#1e3a5f' : '#1d4ed8') : '#065f46';
+                          const color = isPast && !isBooked ? '#475569' : isBooked ? '#ffffff' : '#6ee7b7';
+                          return (
+                            <td key={d.dateStr} className="px-0 py-0.5 text-center"
+                              onMouseEnter={(e) => {
+                                if (isPast || !isBooked) { setTooltip(null); return; }
+                                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                const names = matchedBookings.map((b) => `${b.status === 'awaiting_payment' ? '⏳ ' : ''}${b.customer_name || '–'}`).join(', ');
+                                setTooltip({ x: rect.left + rect.width / 2, y: rect.top - 8, content: `${s.name}\n${names}` });
+                              }}
+                              onMouseLeave={() => setTooltip(null)}
+                              style={{ background: bg, color, boxShadow: d.isToday ? 'inset 0 0 0 1.5px #f59e0b' : 'none' }}>
+                              <div className="text-[9px] leading-tight font-semibold">
+                                {!isPast && isBooked ? matchedBookings.length.toString() : ''}
+                              </div>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </>
