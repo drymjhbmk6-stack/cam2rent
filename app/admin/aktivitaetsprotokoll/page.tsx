@@ -26,6 +26,8 @@ const ACTION_LABELS: Record<string, string> = {
   'booking.email_updated': 'Kunden-E-Mail geändert',
   'booking.tracking_update': 'Tracking-Daten geändert',
   'booking.reset_contract': 'Mietvertrag zurückgesetzt (Neu-Unterschrift)',
+  'booking.lock_contract': 'Mietvertrag freigegeben („Alles okay")',
+  'booking.unlock_contract': 'Mietvertrag-Freigabe aufgehoben',
   'booking.verification_gate': 'Verifizierungs-Gate',
   'booking.resend_payment_link': 'Zahlungs-Link erneut gesendet',
   'booking.wbw_finalize': 'Wiederbeschaffungswerte finalisiert',

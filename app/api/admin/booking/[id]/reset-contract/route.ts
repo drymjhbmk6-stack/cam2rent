@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { checkAdminAuth } from '@/lib/admin-auth';
 import { logAudit } from '@/lib/audit';
+import { sendContractResignRequest } from '@/lib/email';
 
 /**
  * POST /api/admin/booking/[id]/reset-contract
@@ -35,14 +36,45 @@ export async function POST(
   const { id } = await params;
   const supabase = createServiceClient();
 
-  const { data: booking, error: bookingErr } = await supabase
-    .from('bookings')
-    .select('id, contract_signed')
-    .eq('id', id)
-    .maybeSingle();
+  const baseCols = 'id, contract_signed, customer_name, customer_email, product_name, rental_from, rental_to';
+  let booking: Record<string, unknown> | null = null;
+  {
+    const r = await supabase
+      .from('bookings')
+      .select(`${baseCols}, contract_locked`)
+      .eq('id', id)
+      .maybeSingle();
+    if (r.error && /contract_locked|column/i.test(r.error.message || '')) {
+      // Defensive: Migration noch nicht durch → ohne die Lock-Spalte laden.
+      const r2 = await supabase.from('bookings').select(baseCols).eq('id', id).maybeSingle();
+      booking = (r2.data as Record<string, unknown> | null) ?? null;
+      if (r2.error || !booking) {
+        return NextResponse.json({ error: 'Buchung nicht gefunden.' }, { status: 404 });
+      }
+    } else if (r.error || !r.data) {
+      return NextResponse.json({ error: 'Buchung nicht gefunden.' }, { status: 404 });
+    } else {
+      booking = r.data as Record<string, unknown>;
+    }
+  }
 
-  if (bookingErr || !booking) {
-    return NextResponse.json({ error: 'Buchung nicht gefunden.' }, { status: 404 });
+  // Gesperrte Vertraege ("Alles okay" gesetzt) duerfen nicht zurueckgesetzt werden.
+  if ((booking as { contract_locked?: boolean }).contract_locked) {
+    return NextResponse.json(
+      { error: 'Dieser Vertrag wurde als geprüft freigegeben und ist gesperrt. Erst die Freigabe aufheben.' },
+      { status: 409 },
+    );
+  }
+
+  // E-Mail ist Pflicht: ohne Kunden-Adresse koennen wir den Kunden nicht zur
+  // Neu-Unterschrift auffordern → Reset wird abgelehnt (Admin traegt erst eine
+  // E-Mail in den Buchungsdetails nach).
+  const customerEmail = (booking as { customer_email?: string | null }).customer_email?.trim() || '';
+  if (!customerEmail) {
+    return NextResponse.json(
+      { error: 'Keine Kunden-E-Mail hinterlegt. Bitte zuerst eine E-Mail-Adresse bei der Buchung eintragen — der Kunde muss per E-Mail zur Neu-Unterschrift aufgefordert werden.' },
+      { status: 422 },
+    );
   }
 
   // 1. Storage-PDFs der vorhandenen Vertragsfassungen einsammeln + loeschen.
@@ -100,13 +132,31 @@ export async function POST(
     );
   }
 
+  // 4. Pflicht-E-Mail an den Kunden: bitte neu unterschreiben.
+  let emailSent = true;
+  let emailError: string | null = null;
+  try {
+    await sendContractResignRequest({
+      customerName: String(booking.customer_name || '').trim() || 'Kunde',
+      customerEmail,
+      bookingNumber: id,
+      productName: (booking.product_name as string) || undefined,
+      rentalFrom: (booking.rental_from as string) || undefined,
+      rentalTo: (booking.rental_to as string) || undefined,
+    });
+  } catch (err) {
+    emailSent = false;
+    emailError = err instanceof Error ? err.message : 'E-Mail-Versand fehlgeschlagen.';
+    console.error('[reset-contract] resign email failed:', err);
+  }
+
   await logAudit({
     action: 'booking.reset_contract',
     entityType: 'booking',
     entityId: id,
-    changes: { removed_agreements: agreements?.length ?? 0 },
+    changes: { removed_agreements: agreements?.length ?? 0, email_sent: emailSent },
     request: req,
   });
 
-  return NextResponse.json({ success: true });
+  return NextResponse.json({ success: true, emailSent, emailError });
 }

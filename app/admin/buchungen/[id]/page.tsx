@@ -53,6 +53,7 @@ interface BookingDetail {
   contract_signed_at: string | null;
   contract_signer_name: string | null;
   contract_signature_url: string | null;
+  contract_locked: boolean | null;
   suspicious: boolean;
   suspicious_reasons: string[];
   notes: string | null;
@@ -248,6 +249,7 @@ export default function BuchungDetailPage() {
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [resettingContract, setResettingContract] = useState(false);
+  const [lockingContract, setLockingContract] = useState(false);
   const [emailSending, setEmailSending] = useState(false);
   const [emailToast, setEmailToast] = useState<{ msg: string; type: 'ok' | 'err' } | null>(null);
   const [emailRecipient, setEmailRecipient] = useState('');
@@ -455,7 +457,11 @@ export default function BuchungDetailPage() {
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
         await fetchBooking();
-        alert('Mietvertrag zurückgesetzt. Der Kunde kann jetzt neu unterschreiben.');
+        if (data.emailSent) {
+          alert('Mietvertrag zurückgesetzt. Der Kunde wurde per E-Mail zur Neu-Unterschrift aufgefordert.');
+        } else {
+          alert('Mietvertrag zurückgesetzt — aber die E-Mail an den Kunden ist fehlgeschlagen' + (data.emailError ? `:\n${data.emailError}` : '.') + '\nBitte den Kunden manuell informieren.');
+        }
       } else {
         alert(data.error || 'Vertrag konnte nicht zurückgesetzt werden.');
       }
@@ -463,6 +469,29 @@ export default function BuchungDetailPage() {
       alert('Netzwerkfehler beim Zurücksetzen.');
     } finally {
       setResettingContract(false);
+    }
+  }
+
+  async function handleLockContract(locked: boolean) {
+    if (!booking) return;
+    if (locked && !confirm('Mietvertrag als geprüft freigeben?\n\nDanach kann der Vertrag nicht mehr zurückgesetzt werden (bis du die Freigabe wieder aufhebst).')) return;
+    setLockingContract(true);
+    try {
+      const res = await fetch(`/api/admin/booking/${bookingId}/lock-contract`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ locked }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        await fetchBooking();
+      } else {
+        alert(data.error || 'Freigabe konnte nicht gespeichert werden.');
+      }
+    } catch {
+      alert('Netzwerkfehler bei der Freigabe.');
+    } finally {
+      setLockingContract(false);
     }
   }
 
@@ -1325,23 +1354,51 @@ export default function BuchungDetailPage() {
                       <p className="text-xs font-mono text-brand-steel break-all">{agreement.contract_hash}</p>
                     </div>
                   )}
+                  {booking.contract_locked && (
+                    <div className="mt-4 flex items-center gap-2 px-3 py-2 rounded-lg bg-green-50 border border-green-200">
+                      <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-heading font-semibold bg-green-600 text-white">✓ Geprüft &amp; freigegeben</span>
+                      <span className="text-xs font-body text-green-800">Gesperrt — kann nicht zurückgesetzt werden.</span>
+                    </div>
+                  )}
                   <div className="flex flex-wrap items-center gap-3 mt-4">
                     <a href={`/admin/pdf-viewer?u=${encodeURIComponent(`/api/rental-contract/${booking.id}`)}&t=${encodeURIComponent('Mietvertrag')}`} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-heading font-semibold bg-teal-600 text-white rounded-btn hover:bg-teal-700 transition-colors">
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                       Vertrag PDF herunterladen
                     </a>
-                    <button
-                      onClick={handleResetContract}
-                      disabled={resettingContract}
-                      className="inline-flex items-center gap-2 px-4 py-2 text-sm font-heading font-semibold bg-red-50 text-red-700 border border-red-200 rounded-btn hover:bg-red-100 transition-colors disabled:opacity-40"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-                      {resettingContract ? 'Setze zurück…' : 'Vertrag zurücksetzen'}
-                    </button>
+                    {booking.contract_locked ? (
+                      <button
+                        onClick={() => handleLockContract(false)}
+                        disabled={lockingContract}
+                        className="inline-flex items-center gap-2 px-4 py-2 text-sm font-heading font-semibold bg-white text-brand-muted border border-brand-border rounded-btn hover:bg-slate-50 transition-colors disabled:opacity-40"
+                      >
+                        {lockingContract ? 'Speichere…' : 'Freigabe aufheben'}
+                      </button>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => handleLockContract(true)}
+                          disabled={lockingContract}
+                          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-heading font-semibold bg-green-600 text-white rounded-btn hover:bg-green-700 transition-colors disabled:opacity-40"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                          {lockingContract ? 'Speichere…' : 'Alles okay (freigeben)'}
+                        </button>
+                        <button
+                          onClick={handleResetContract}
+                          disabled={resettingContract}
+                          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-heading font-semibold bg-red-50 text-red-700 border border-red-200 rounded-btn hover:bg-red-100 transition-colors disabled:opacity-40"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                          {resettingContract ? 'Setze zurück…' : 'Vertrag zurücksetzen'}
+                        </button>
+                      </>
+                    )}
                   </div>
-                  <p className="text-xs font-body text-brand-muted mt-2">
-                    Zurücksetzen löscht das unterschriebene PDF — der Kunde muss neu unterschreiben (z.&nbsp;B. wenn die Unterschrift fehlt).
-                  </p>
+                  {!booking.contract_locked && (
+                    <p className="text-xs font-body text-brand-muted mt-2">
+                      Zurücksetzen löscht das unterschriebene PDF und fordert den Kunden <strong>per E-Mail</strong> zur Neu-Unterschrift auf (z.&nbsp;B. wenn die Unterschrift fehlt). Mit „Alles okay&ldquo; sperrst du den geprüften Vertrag gegen versehentliches Zurücksetzen.
+                    </p>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-3">
