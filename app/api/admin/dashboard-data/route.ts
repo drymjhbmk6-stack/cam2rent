@@ -282,9 +282,15 @@ export async function GET() {
     //  verified  = Ausweis/Konto-Gate erfüllt (oder nicht erforderlich)
     //  contract_signed  = Mietvertrag unterschrieben
     //  contract_checked = Vertrag freigegeben ("Alles okay" / contract_locked)
-    //  paid             = bezahlt (kein PENDING-/MANUAL-UNPAID-/awaiting-Status)
+    //  paid             = bezahlt — Quelle in dieser Reihenfolge:
+    //    1. Stripe-Abgleich: echter Zahlungseingang (stripe_transactions,
+    //       match_status 'matched'/'manual' → einer Buchung zugeordnet).
+    //    2. Buchhaltung: invoices.status/payment_status = 'paid'.
+    //    3. Fallback: abgeleitet aus payment_intent_id-Prefix + Status
+    //       (kein PENDING-/MANUAL-UNPAID-/awaiting-/pending_verification).
     type AQRow = Record<string, unknown>;
     const aqRows = (actionQueueRes.data ?? []) as AQRow[];
+    const aqIds = aqRows.map((b) => b.id).filter((x): x is string => typeof x === 'string' && x.length > 0);
 
     // Kunden-Verifizierungsstatus der beteiligten User bulk laden.
     const aqUserIds = [...new Set(
@@ -301,20 +307,48 @@ export async function GET() {
       }
     }
 
+    // 1. Stripe-Abgleich: welche Buchungen haben einen echten Zahlungseingang?
+    const paidViaStripe = new Set<string>();
+    // 2. Buchhaltung: welche Buchungen haben eine bezahlte Rechnung?
+    const paidViaInvoice = new Set<string>();
+    if (aqIds.length > 0) {
+      const [stripeRes, invRes] = await Promise.all([
+        supabase
+          .from('stripe_transactions')
+          .select('booking_id, match_status')
+          .in('booking_id', aqIds)
+          .in('match_status', ['matched', 'manual']),
+        supabase
+          .from('invoices')
+          .select('booking_id, status, payment_status')
+          .in('booking_id', aqIds)
+          .or('status.eq.paid,payment_status.eq.paid'),
+      ]);
+      for (const t of stripeRes.data ?? []) {
+        if (t.booking_id) paidViaStripe.add(t.booking_id as string);
+      }
+      for (const i of invRes.data ?? []) {
+        if (i.booking_id) paidViaInvoice.add(i.booking_id as string);
+      }
+    }
+
     const actionQueueItems = aqRows.map((b) => {
+      const id = b.id as string;
       const piId = String(b.payment_intent_id ?? '');
       const st = String(b.status ?? '').toLowerCase();
-      const isUnpaid =
+      const isUnpaidDerived =
         /MANUAL-UNPAID/i.test(piId) ||
         /^PENDING-/i.test(piId) ||
         st === 'awaiting_payment' ||
         st === 'pending_verification';
+      // Stripe zuerst, dann Buchhaltung, dann abgeleiteter Fallback.
+      const paid = paidViaStripe.has(id) || paidViaInvoice.has(id) || !isUnpaidDerived;
       const verificationRequired = b.verification_required === true;
       const gatePassed = !!b.verification_gate_passed_at;
       const uid = typeof b.user_id === 'string' ? b.user_id : '';
       const customerVerified = uid ? verifyStatusMap[uid] === 'verified' : false;
       return {
-        id: b.id as string,
+        id,
         product_name: (b.product_name as string) ?? '',
         customer_name: (b.customer_name as string) ?? '',
         status: (b.status as string) ?? '',
@@ -326,7 +360,7 @@ export async function GET() {
         verified: !verificationRequired || gatePassed || customerVerified,
         contract_signed: b.contract_signed === true,
         contract_checked: b.contract_locked === true,
-        paid: !isUnpaid,
+        paid,
       };
     });
 
