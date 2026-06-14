@@ -562,6 +562,30 @@ Cron alle 3 Min neue Mails per IMAP direkt aus dem Support-Postfach
   - **Cart-Checkout (`app/checkout/page.tsx`):** Im „Details"-Schritt neue Pflicht-Sektion „Mietvertrag unterschreiben" über den AGB-Checkboxen. Ohne Signatur amber Box + „Jetzt unterschreiben"-Button, der ein Modal mit `SignatureStep` öffnet (eine kombinierte Vertragsvorschau über **alle** Warenkorb-Positionen: distinct Produktnamen, aggregierte Zubehör-Namen via `useAccessories`, früheste/späteste Mietdaten, max. Tage, Summe Kaution; Preis = `total`). `onSigned` setzt `contractSignature`-State + schreibt `cam2rent_contract_signature` in sessionStorage (den `handleProceedToPayment`/`handlePendingBooking` ohnehin lesen → confirm-cart erzeugt die echten Per-Buchung-PDFs serverseitig). Alle drei „Weiter zur Zahlung"/„Buchung anfragen"-Buttons sind zusätzlich auf `!!contractSignature` gegated. Eine Signatur aus dem Direkt-Flow wird beim Mount aus sessionStorage übernommen (grüne „unterschrieben"-Box + „Ändern").
   - **Admin-Warnung vor Übergabe/Versand:** roter „⚠️ Mietvertrag nicht unterschrieben"-Banner (mit Link auf `/admin/buchungen/[id]/vertrag-unterschreiben`) wenn `booking.contract_signed` falsy ist — auf der Buchungsdetailseite (`app/admin/buchungen/[id]/page.tsx`, direkt unter der NextActionBar, ausgeblendet bei Status `pending_verification|awaiting_payment|cancelled|completed`), in der Übergabe-Seite (`uebergabe/page.tsx`) und im Versand-Pack-Workflow (`versand/[id]/packen/page.tsx`). Alle drei lesen `contract_signed` aus `GET /api/admin/booking/[id]` (war schon im Response, Interface-Feld ergänzt). Reine Anzeige-Warnung — kein harter Block.
 
+### Mietvertrag zurücksetzen → Kunde unterschreibt neu (Stand 2026-06-14)
+Hintergrund: vereinzelt wurde ein Vertrags-PDF **ohne** Unterschrift erzeugt
+(PDF-/Signatur-Glitch). Der Admin kann den Vertrag jetzt komplett zurücksetzen,
+damit der Kunde frisch unterschreiben muss.
+- **Endpoint `POST /api/admin/booking/[id]/reset-contract`** (Permission via
+  Prefix `/api/admin/booking` → `tagesgeschaeft`): löscht die
+  `rental_agreements`-Zeile(n) der Buchung (sonst blockiert der Idempotenz-Check
+  in `/api/contracts/sign` ein erneutes Unterschreiben) + das PDF im
+  `contracts`-Bucket (best-effort), setzt `bookings.contract_signed=false` +
+  `contract_signed_at=null` und **leert die zwischengespeicherte Signatur**
+  (`contract_signature_url`/`contract_signer_name`) — damit NICHT automatisch aus
+  der alten/fehlerhaften Signatur regeneriert wird (sonst würde der „Vertrag aus
+  Signatur regenerieren"-Pfad den Fehler reproduzieren). Defensiver Update-Retry
+  ohne die beiden Signatur-Spalten bei älterem Schema. Audit `booking.reset_contract`.
+- **Danach** erscheint die Buchung wieder als „nicht unterschrieben": der **Kunde**
+  sieht in `/konto/buchungen` die „Mietvertrag unterschreiben"-Maske
+  (`canSign` = Status `confirmed`/`shipped` + `!contract_signed` → `/api/contracts/sign`),
+  der **Admin** kann alternativ über das Tablet
+  (`/admin/buchungen/[id]/vertrag-unterschreiben`) unterschreiben lassen. Der rote
+  „nicht unterschrieben"-Banner (siehe oben) greift ebenfalls wieder.
+- **UI:** roter Button **„Vertrag zurücksetzen"** in der Mietvertrag-Sektion der
+  Buchungsdetails — nur sichtbar bei bereits unterschriebenem Vertrag
+  (`contract_signed`), neben „Vertrag PDF herunterladen", mit Confirm-Dialog.
+
 ### Express-Signup + verzögerte Verifizierung (Stand 2026-04-21)
 Optionaler smootherer Neukunden-Flow, zwei Admin-Toggles unter `/admin/einstellungen`:
 
