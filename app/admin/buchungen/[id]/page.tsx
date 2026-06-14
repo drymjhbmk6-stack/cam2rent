@@ -472,15 +472,15 @@ export default function BuchungDetailPage() {
     }
   }
 
-  async function handleLockContract(locked: boolean) {
+  async function handleLockContract() {
     if (!booking) return;
-    if (locked && !confirm('Mietvertrag als geprüft freigeben?\n\nDanach kann der Vertrag nicht mehr zurückgesetzt werden (bis du die Freigabe wieder aufhebst).')) return;
+    if (!confirm('Mietvertrag als geprüft freigeben?\n\nAchtung: Das ist endgültig — die Freigabe kann NICHT rückgängig gemacht werden. Der Vertrag lässt sich danach nicht mehr zurücksetzen.')) return;
     setLockingContract(true);
     try {
       const res = await fetch(`/api/admin/booking/${bookingId}/lock-contract`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ locked }),
+        body: JSON.stringify({ locked: true }),
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
@@ -1357,7 +1357,7 @@ export default function BuchungDetailPage() {
                   {booking.contract_locked && (
                     <div className="mt-4 flex items-center gap-2 px-3 py-2 rounded-lg bg-green-50 border border-green-200">
                       <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-heading font-semibold bg-green-600 text-white">✓ Geprüft &amp; freigegeben</span>
-                      <span className="text-xs font-body text-green-800">Gesperrt — kann nicht zurückgesetzt werden.</span>
+                      <span className="text-xs font-body text-green-800">Endgültig gesperrt — kann nicht zurückgesetzt werden.</span>
                     </div>
                   )}
                   <div className="flex flex-wrap items-center gap-3 mt-4">
@@ -1365,18 +1365,10 @@ export default function BuchungDetailPage() {
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                       Vertrag PDF herunterladen
                     </a>
-                    {booking.contract_locked ? (
-                      <button
-                        onClick={() => handleLockContract(false)}
-                        disabled={lockingContract}
-                        className="inline-flex items-center gap-2 px-4 py-2 text-sm font-heading font-semibold bg-white text-brand-muted border border-brand-border rounded-btn hover:bg-slate-50 transition-colors disabled:opacity-40"
-                      >
-                        {lockingContract ? 'Speichere…' : 'Freigabe aufheben'}
-                      </button>
-                    ) : (
+                    {!booking.contract_locked && (
                       <>
                         <button
-                          onClick={() => handleLockContract(true)}
+                          onClick={handleLockContract}
                           disabled={lockingContract}
                           className="inline-flex items-center gap-2 px-4 py-2 text-sm font-heading font-semibold bg-green-600 text-white rounded-btn hover:bg-green-700 transition-colors disabled:opacity-40"
                         >
@@ -1396,7 +1388,7 @@ export default function BuchungDetailPage() {
                   </div>
                   {!booking.contract_locked && (
                     <p className="text-xs font-body text-brand-muted mt-2">
-                      Zurücksetzen löscht das unterschriebene PDF und fordert den Kunden <strong>per E-Mail</strong> zur Neu-Unterschrift auf (z.&nbsp;B. wenn die Unterschrift fehlt). Mit „Alles okay&ldquo; sperrst du den geprüften Vertrag gegen versehentliches Zurücksetzen.
+                      Zurücksetzen löscht das unterschriebene PDF und fordert den Kunden <strong>per E-Mail</strong> zur Neu-Unterschrift auf (z.&nbsp;B. wenn die Unterschrift fehlt). Mit „Alles okay&ldquo; gibst du den geprüften Vertrag <strong>endgültig</strong> frei — danach ist kein Zurücksetzen mehr möglich.
                     </p>
                   )}
                 </div>

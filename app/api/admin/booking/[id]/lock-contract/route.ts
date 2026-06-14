@@ -5,12 +5,13 @@ import { logAudit } from '@/lib/audit';
 
 /**
  * POST /api/admin/booking/[id]/lock-contract
- * Body: { locked?: boolean }  (default true)
  *
  * „Alles okay"-Freigabe: markiert den geprueften Mietvertrag als gesperrt
  * (`bookings.contract_locked=true`), sodass er NICHT mehr ueber
  * /api/admin/booking/[id]/reset-contract zurueckgesetzt werden kann.
- * `{ locked: false }` hebt die Freigabe wieder auf.
+ *
+ * **Endgueltig** — die Freigabe kann NICHT mehr rueckgaengig gemacht werden
+ * (ein `{ locked: false }` im Body wird mit 409 abgelehnt).
  *
  * Permission via Prefix /api/admin/booking → tagesgeschaeft.
  */
@@ -24,7 +25,13 @@ export async function POST(
 
   const { id } = await params;
   const body = await req.json().catch(() => ({}));
-  const locked = body?.locked === undefined ? true : !!body.locked;
+  // Freigabe ist endgueltig: ein expliziter Unlock-Versuch wird abgelehnt.
+  if (body?.locked === false) {
+    return NextResponse.json(
+      { error: 'Die Freigabe kann nicht rückgängig gemacht werden.' },
+      { status: 409 },
+    );
+  }
 
   const supabase = createServiceClient();
 
@@ -37,7 +44,7 @@ export async function POST(
     return NextResponse.json({ error: 'Buchung nicht gefunden.' }, { status: 404 });
   }
   // Nur ein unterschriebener Vertrag kann freigegeben werden.
-  if (locked && !booking.contract_signed) {
+  if (!booking.contract_signed) {
     return NextResponse.json(
       { error: 'Es liegt kein unterschriebener Vertrag zum Freigeben vor.' },
       { status: 409 },
@@ -46,7 +53,7 @@ export async function POST(
 
   const { error: updErr } = await supabase
     .from('bookings')
-    .update({ contract_locked: locked })
+    .update({ contract_locked: true })
     .eq('id', id);
 
   if (updErr) {
@@ -60,11 +67,11 @@ export async function POST(
   }
 
   await logAudit({
-    action: locked ? 'booking.lock_contract' : 'booking.unlock_contract',
+    action: 'booking.lock_contract',
     entityType: 'booking',
     entityId: id,
     request: req,
   });
 
-  return NextResponse.json({ success: true, locked });
+  return NextResponse.json({ success: true, locked: true });
 }
