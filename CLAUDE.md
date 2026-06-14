@@ -1273,11 +1273,11 @@ Ergänzung zum Punkt oben: die Bestandteile-Box in der Übergabe (`/admin/buchun
   - Hover-Tooltip: Buchungs-ID, Kundenname, Zeitraum, Lieferart
   - Klick auf gebuchte Zelle → öffnet `/admin/buchungen/[id]` in neuem Tab
   - **Unzugeordnete Buchungen belegen nur EINE Unit-Zeile (Fix Stand 2026-06-12):** Eine Buchung ohne `unit_id` (kein konkretes Exemplar reserviert) wurde vorher im `getCellInfo`-Fallback auf **alle** Seriennummer-Zeilen gemalt → eine Einzel-Buchung sah aus wie „beide Kameras belegt", obwohl der Kunden-Kalender korrekt „1 von 2 frei" zeigte. Jetzt: neuer `useMemo` `cameraAssignment` in `app/admin/verfuegbarkeit/page.tsx` verteilt unzugeordnete Buchungs-Overlays per **Greedy-Interval-Packing** (gepufferte Spanne via neuem Helper `getBookingSpan`, gleiche Idee wie `findFreeUnit`) auf konkrete freie Unit-Zeilen — jeder Eintrag belegt genau **eine** Zeile. `getCellInfo` liest nur noch `cameraAssignment.byUnit.get(unit.id)`; der All-Zeilen-Fallback greift ausschließlich für echte Überbuchungen (`leftovers`, keine freie Zeile gefunden). Reine Frontend-Anzeige — kein Backend-/DB-Change. Backend (`availability-gantt`-Route) splittet Multi-Kamera-Buchungen weiterhin in einen Overlay-Eintrag pro Kamera; der Kunden-Kalender zählt unverändert.
-- **Zubehör-Tab:** Pro Zubehörteil ein Kalender mit einer Zeile (aggregiert, nicht pro Stück)
+- **Zubehör-Tab: EIN gemeinsamer Kalender (Stand 2026-06-14):** Eine einzige durchgehende Tabelle statt Karte+Tabelle pro Zubehör — eine Zeile pro Zubehörteil, gemeinsamer Monats-/KW-/Tages-Header + ein Scrollbalken. Metadaten (Bestand, Kategorie, kompatible Kameras) in der linken Sticky-Spalte. Belegungs-Logik unverändert.
   - Zeigt Belegung als "X/Y" (z.B. "3/10" belegt von gesamt)
   - Grün=alle frei, Gold=teilweise belegt, Blau=ausgebucht
   - Set-Buchungen werden auf Einzelzubehör aufgelöst (über `sets.accessory_items`)
-- **Sets-Tab:** Pro Set ein Kalender mit einer Zeile
+- **Sets-Tab: EIN gemeinsamer Kalender (Stand 2026-06-14):** Analog zum Zubehör-Tab — eine einzige Tabelle, eine Zeile pro Set, gemeinsamer Datums-Header + ein Scrollbalken. Badge + Kamera-Pills in der linken Sticky-Spalte.
   - Grün=frei, Blau=gebucht (mit Anzahl)
   - **Kamera-Zugehörigkeit im Header (Stand 2026-05-25):** Pro Set werden
     rechts neben dem Set-Namen die zugeordneten Kameras als cyan Pills
