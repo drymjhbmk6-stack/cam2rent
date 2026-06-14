@@ -1331,6 +1331,7 @@ Ergänzung zum Punkt oben: die Bestandteile-Box in der Übergabe (`/admin/buchun
   - Grün=alle frei, Gold=teilweise belegt, Blau=ausgebucht
   - Set-Buchungen werden auf Einzelzubehör aufgelöst (über `sets.accessory_items`)
 - **Sets-Tab: EIN gemeinsamer Kalender (Stand 2026-06-14):** Analog zum Zubehör-Tab — eine einzige Tabelle, eine Zeile pro Set, gemeinsamer Datums-Header + ein Scrollbalken. Badge + Kamera-Pills in der linken Sticky-Spalte.
+  - **Nach Kamera gruppiert (Stand 2026-06-14):** Sets werden wie der Kameras-Tab über `<tbody>`-Gruppenköpfe pro Kamera gruppiert (`groupedSets`-Memo aus `s.product_names`, Gruppen-Reihenfolge folgt `shopProducts`). Ein Set mit mehreren Kameras erscheint in jeder passenden Gruppe; Sets ohne Kamera-Zuordnung kommen ans Ende („Ohne Kamera-Zuordnung"). Pro (Gruppe, Set) eigener Pill-Aufklapp-State (Key `${group.label}-${s.id}`). Reine Anzeige-Gruppierung.
   - Grün=frei, Blau=gebucht (mit Anzahl)
   - **Kamera-Zugehörigkeit im Header (Stand 2026-05-25):** Pro Set werden
     rechts neben dem Set-Namen die zugeordneten Kameras als cyan Pills
