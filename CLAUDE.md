@@ -1386,6 +1386,19 @@ Der Admin kann pro Buchung den **Versand-/Übergabe-Tag** (vor Mietbeginn) und d
 ### Kundenkonto
 `/app/konto/` mit horizontaler Tab-Leiste
 
+### Auto-Logout nach Inaktivität (Stand 2026-06-14)
+Idle-basiertes automatisches Ausloggen über den Hook `hooks/useAutoLogout.ts`
+(trackt mousemove/keydown/click/scroll/touchstart, Tab-Wechsel-Check via
+`sessionStorage.cam2rent_last_activity`; Timer setzt sich bei jeder Aktivität
+zurück). Eingebunden an zwei Stellen, beide auf **1 Stunde** Inaktivität:
+- **Kunden (Shop):** `components/AuthProvider.tsx` → `SHOP_TIMEOUT_MS = 60 min`,
+  `enabled: !!user` → `supabase.auth.signOut()` + Redirect auf `/`.
+- **Admin:** `components/admin/AdminLayoutClient.tsx` → `ADMIN_TIMEOUT_MS = 60 min`
+  (am 2026-06-14 von 30 auf 60 min angehoben, damit beide gleich sind),
+  `enabled: !isLoginOrBlog` → `POST /api/admin/logout` + Redirect auf
+  `/admin/login`. Kein Warn-Dialog (silent logout; der Hook kann optional
+  `onWarning` — aktuell ungenutzt).
+
 ### Kunde sperren blockt jetzt auch das Login (Stand 2026-06-14)
 „Gesperrt" (`profiles.blacklisted=true`, gesetzt über
 `/admin/kunden/[id]` → `POST /api/admin/kunden/blacklist`) blockierte vorher

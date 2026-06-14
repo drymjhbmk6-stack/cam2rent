@@ -10,8 +10,8 @@ import GlobalErrorToast from '@/components/admin/GlobalErrorToast';
 import { useAutoLogout } from '@/hooks/useAutoLogout';
 import { NotificationsProvider } from '@/contexts/NotificationsContext';
 
-// 30 Minuten Inaktivität für Admin
-const ADMIN_TIMEOUT_MS = 30 * 60 * 1000;
+// 1 Stunde Inaktivität für Admin (gleich wie Shop/Kunden)
+const ADMIN_TIMEOUT_MS = 60 * 60 * 1000;
 
 type PermKey =
   | 'tagesgeschaeft' | 'kunden' | 'katalog' | 'preise'
