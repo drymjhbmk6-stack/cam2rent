@@ -149,6 +149,12 @@ export default function AdminVerfuegbarkeitPage() {
   const [tab, setTab] = useState<Tab>('kameras');
   // Kamera-Filter fuer Sets-/Zubehoer-Tab. Leerstring = alle Kameras.
   const [cameraFilter, setCameraFilter] = useState<string>('');
+  // Freitext-Suche (pro aktivem Tab angewendet).
+  const [search, setSearch] = useState('');
+  // Mehrfach-Auswahl-Filter (leer = alle). Pro Tab eigene Menge.
+  const [camModelFilter, setCamModelFilter] = useState<Set<string>>(new Set());
+  const [accCategoryFilter, setAccCategoryFilter] = useState<Set<string>>(new Set());
+  const [setBadgeFilter, setSetBadgeFilter] = useState<Set<string>>(new Set());
 
   // Gantt-State — durchgehend scrollbar (3 Monate zurück + 6 Monate voraus)
   const MONTHS_BACK = 3;
@@ -521,10 +527,75 @@ export default function AdminVerfuegbarkeitPage() {
     });
   }, [ganttData, cameraFilter]);
 
+  // Mehrfach-Auswahl umschalten (Chip an/aus).
+  function toggleFilter(setter: React.Dispatch<React.SetStateAction<Set<string>>>, value: string) {
+    setter((prev) => {
+      const next = new Set(prev);
+      if (next.has(value)) next.delete(value);
+      else next.add(value);
+      return next;
+    });
+  }
+
+  // Auswahl-Optionen fuer die Multi-Select-Chips pro Tab.
+  const camModelOptions = useMemo(
+    () => cameraProducts.map((p) => ({ id: p.id, name: p.name })),
+    [cameraProducts],
+  );
+  const accCategoryOptions = useMemo(() => {
+    const s = new Set<string>();
+    for (const a of ganttData?.accessories ?? []) if (a.category) s.add(a.category);
+    return [...s].sort((a, b) => a.localeCompare(b, 'de'));
+  }, [ganttData]);
+  const setBadgeOptions = useMemo(() => {
+    const s = new Set<string>();
+    for (const x of ganttData?.sets ?? []) if (x.badge) s.add(x.badge);
+    return [...s].sort((a, b) => a.localeCompare(b, 'de'));
+  }, [ganttData]);
+
+  // ── Sichtbare (gefilterte) Listen: Freitext + Multi-Select kombiniert ──
+  // Kameras: Modell-Multiselect + Freitext (Modellname ODER Seriennummer/Label).
+  const visibleCameraGroups = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const out: { product: GanttProduct; units: GanttUnit[] }[] = [];
+    for (const p of cameraProducts) {
+      if (camModelFilter.size > 0 && !camModelFilter.has(p.id)) continue;
+      const nameMatch = !q || p.name.toLowerCase().includes(q);
+      const units = p.units.filter((u) => {
+        if (!q || nameMatch) return true;
+        return (
+          (u.serial_number?.toLowerCase().includes(q) ?? false) ||
+          (u.label?.toLowerCase().includes(q) ?? false)
+        );
+      });
+      if (units.length === 0) continue;
+      out.push({ product: p, units });
+    }
+    return out;
+  }, [cameraProducts, camModelFilter, search]);
+
+  const visibleAccessories = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return filteredAccessories.filter((a) => {
+      if (accCategoryFilter.size > 0 && !accCategoryFilter.has(a.category)) return false;
+      if (q && !a.name.toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [filteredAccessories, accCategoryFilter, search]);
+
+  const visibleSets = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return filteredSets.filter((s) => {
+      if (setBadgeFilter.size > 0 && !(s.badge && setBadgeFilter.has(s.badge))) return false;
+      if (q && !s.name.toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [filteredSets, setBadgeFilter, search]);
+
   const tabs: { key: Tab; label: string; count: number }[] = [
-    { key: 'kameras', label: 'Kameras', count: ganttData?.products?.length ?? shopProducts.length },
-    { key: 'sets', label: 'Sets', count: cameraFilter ? filteredSets.length : (ganttData?.sets?.length ?? 0) },
-    { key: 'zubehoer', label: 'Zubehör', count: cameraFilter ? filteredAccessories.length : (ganttData?.accessories?.length ?? 0) },
+    { key: 'kameras', label: 'Kameras', count: ganttData ? visibleCameraGroups.length : shopProducts.length },
+    { key: 'sets', label: 'Sets', count: ganttData ? visibleSets.length : 0 },
+    { key: 'zubehoer', label: 'Zubehör', count: ganttData ? visibleAccessories.length : 0 },
   ];
 
   return (
@@ -554,42 +625,92 @@ export default function AdminVerfuegbarkeitPage() {
         ))}
       </div>
 
-      {/* Kamera-Filter (nur Sets-/Zubehoer-Tab). Zeigt nur Eintraege, die zur
-          gewaehlten Kamera passen. Bei Zubehoer: leeres compatible_product_ids
-          = mit allen Kameras kompatibel, wird also nie weggefiltert. */}
-      {(tab === 'sets' || tab === 'zubehoer') && (
-        <div className="flex flex-wrap items-center gap-3 mb-4">
-          <label className="text-xs font-heading font-semibold" style={{ color: '#94a3b8' }}>
-            Filter nach Kamera:
-          </label>
-          <select
-            value={cameraFilter}
-            onChange={(e) => setCameraFilter(e.target.value)}
-            className="px-3 py-1.5 rounded-lg text-sm font-body"
-            style={{
-              background: '#0f172a',
-              color: '#e2e8f0',
-              border: '1px solid #334155',
-              minWidth: '220px',
-            }}
-          >
-            <option value="">Alle Kameras</option>
-            {shopProducts.map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
-          {cameraFilter && (
-            <button
-              type="button"
-              onClick={() => setCameraFilter('')}
-              className="px-2.5 py-1 rounded-lg text-xs font-heading font-semibold transition-colors hover:bg-gray-700"
-              style={{ color: '#cbd5e1', border: '1px solid #334155' }}
-            >
-              ✕ Filter zurücksetzen
-            </button>
-          )}
-        </div>
-      )}
+      {/* ──────── Filter-Leiste (in jedem Tab) ──────── */}
+      {(() => {
+        // Tab-abhaengige Multi-Select-Quelle + Beschriftung.
+        const chips =
+          tab === 'kameras'
+            ? { label: 'Modell', sel: camModelFilter, set: setCamModelFilter,
+                opts: camModelOptions.map((o) => ({ value: o.id, label: o.name })) }
+            : tab === 'zubehoer'
+            ? { label: 'Kategorie', sel: accCategoryFilter, set: setAccCategoryFilter,
+                opts: accCategoryOptions.map((c) => ({ value: c, label: c })) }
+            : { label: 'Badge', sel: setBadgeFilter, set: setSetBadgeFilter,
+                opts: setBadgeOptions.map((b) => ({ value: b, label: b })) };
+        const searchPlaceholder =
+          tab === 'kameras' ? 'Modell oder Seriennummer suchen…'
+          : tab === 'zubehoer' ? 'Zubehör suchen…'
+          : 'Set suchen…';
+        const anyActive =
+          search.trim() !== '' || chips.sel.size > 0 || ((tab === 'sets' || tab === 'zubehoer') && cameraFilter !== '');
+        return (
+          <div className="mb-4 space-y-2.5">
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Freitext */}
+              <div className="relative">
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder={searchPlaceholder}
+                  className="px-3 py-1.5 rounded-lg text-sm font-body"
+                  style={{ background: '#0f172a', color: '#e2e8f0', border: '1px solid #334155', minWidth: '240px' }}
+                />
+              </div>
+              {/* Kamera-Kompatibilitaets-Filter (nur Sets/Zubehoer) */}
+              {(tab === 'sets' || tab === 'zubehoer') && (
+                <select
+                  value={cameraFilter}
+                  onChange={(e) => setCameraFilter(e.target.value)}
+                  className="px-3 py-1.5 rounded-lg text-sm font-body"
+                  style={{ background: '#0f172a', color: '#e2e8f0', border: '1px solid #334155', minWidth: '200px' }}
+                >
+                  <option value="">Alle Kameras</option>
+                  {shopProducts.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              )}
+              {anyActive && (
+                <button
+                  type="button"
+                  onClick={() => { setSearch(''); chips.set(new Set()); setCameraFilter(''); }}
+                  className="px-2.5 py-1 rounded-lg text-xs font-heading font-semibold transition-colors hover:bg-gray-700"
+                  style={{ color: '#cbd5e1', border: '1px solid #334155' }}
+                >
+                  ✕ Filter zurücksetzen
+                </button>
+              )}
+            </div>
+            {/* Multi-Select-Chips (mehrere gleichzeitig waehlbar) */}
+            {chips.opts.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[11px] font-heading font-semibold mr-1" style={{ color: '#94a3b8' }}>
+                  {chips.label}:
+                </span>
+                {chips.opts.map((o) => {
+                  const active = chips.sel.has(o.value);
+                  return (
+                    <button
+                      key={o.value}
+                      type="button"
+                      onClick={() => toggleFilter(chips.set, o.value)}
+                      className="px-2.5 py-1 rounded-full text-[11px] font-heading font-semibold transition-colors"
+                      style={
+                        active
+                          ? { background: '#0c4a6e', color: '#7dd3fc', border: '1px solid #0ea5e9' }
+                          : { background: '#0f172a', color: '#94a3b8', border: '1px solid #334155' }
+                      }
+                    >
+                      {active ? '✓ ' : ''}{o.label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* ──────── Kameras Tab: Gantt-Kalender ──────── */}
       {tab === 'kameras' && (
@@ -633,6 +754,10 @@ export default function AdminVerfuegbarkeitPage() {
               {cameraProducts.length === 0 ? (
                 <p className="text-center py-12 text-sm" style={{ color: '#64748b' }}>
                   Noch keine Kameras mit Seriennummern angelegt.
+                </p>
+              ) : visibleCameraGroups.length === 0 ? (
+                <p className="text-center py-12 text-sm" style={{ color: '#64748b' }}>
+                  Keine Treffer für die aktiven Filter.
                 </p>
               ) : (
                 <div className="rounded-xl overflow-x-auto" data-gantt-scroll style={{ border: '1px solid #1e293b', background: '#0f172a' }}>
@@ -693,8 +818,8 @@ export default function AdminVerfuegbarkeitPage() {
                         })}
                       </tr>
                     </thead>
-                    {cameraProducts.map((product) => {
-                      const activeUnits = product.units.filter((u) => u.status !== 'retired');
+                    {visibleCameraGroups.map(({ product, units }) => {
+                      const activeUnits = units.filter((u) => u.status !== 'retired');
                       return (
                         <tbody key={product.id}>
                           {/* Modell-Gruppenkopf — trennt die Kameratypen optisch,
@@ -709,7 +834,7 @@ export default function AdminVerfuegbarkeitPage() {
                             </td>
                             <td colSpan={days.length} style={{ background: '#16233f', borderTop: '2px solid #1e293b' }} />
                           </tr>
-                          {product.units.map((unit) => (
+                          {units.map((unit) => (
                             <tr key={unit.id} style={{ borderBottom: '1px solid #1e293b/50' }}>
                               <td className="px-3 py-1.5 font-mono font-semibold sticky left-0 z-10 whitespace-nowrap"
                                 style={{ color: unit.status === 'retired' ? '#475569' : '#cbd5e1', background: '#0f172a' }}>
@@ -799,9 +924,9 @@ export default function AdminVerfuegbarkeitPage() {
             </div>
           ) : !ganttData || ganttData.accessories.length === 0 ? (
             <p className="text-center py-12 text-sm" style={{ color: '#64748b' }}>Kein Zubehör vorhanden.</p>
-          ) : filteredAccessories.length === 0 ? (
+          ) : visibleAccessories.length === 0 ? (
             <p className="text-center py-12 text-sm" style={{ color: '#64748b' }}>
-              Für die ausgewählte Kamera gibt es kein kompatibles Zubehör.
+              Keine Treffer für die aktiven Filter.
             </p>
           ) : (
             <div className="space-y-3">
@@ -852,7 +977,7 @@ export default function AdminVerfuegbarkeitPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredAccessories.map((acc) => (
+                    {visibleAccessories.map((acc) => (
                       <tr key={acc.id} style={{ borderBottom: '1px solid #1e293b' }}>
                         <td className="px-3 py-1.5 sticky left-0 z-10 align-top" style={{ background: '#0f172a' }}>
                           <div className="font-heading font-bold whitespace-nowrap" style={{ color: '#e2e8f0' }}>{acc.name}</div>
@@ -924,9 +1049,9 @@ export default function AdminVerfuegbarkeitPage() {
             </div>
           ) : !ganttData || ganttData.sets.length === 0 ? (
             <p className="text-center py-12 text-sm" style={{ color: '#64748b' }}>Keine Sets vorhanden.</p>
-          ) : filteredSets.length === 0 ? (
+          ) : visibleSets.length === 0 ? (
             <p className="text-center py-12 text-sm" style={{ color: '#64748b' }}>
-              Für die ausgewählte Kamera gibt es keine Sets.
+              Keine Treffer für die aktiven Filter.
             </p>
           ) : (
             <div className="space-y-3">
@@ -975,7 +1100,7 @@ export default function AdminVerfuegbarkeitPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredSets.map((s) => (
+                    {visibleSets.map((s) => (
                       <tr key={s.id} style={{ borderBottom: '1px solid #1e293b' }}>
                         <td className="px-3 py-1.5 sticky left-0 z-10 align-top" style={{ background: '#0f172a' }}>
                           <div className="font-heading font-bold whitespace-nowrap" style={{ color: '#e2e8f0' }}>{s.name}</div>
