@@ -827,7 +827,7 @@ export default function CheckoutPage() {
           <p className="font-body text-sm text-brand-steel dark:text-gray-400 mb-5">
             Konto anlegen, Ausweis hochladen, weiter zur Zahlung — in zwei Minuten erledigt.
           </p>
-          <ExpressSignup onAuthenticated={() => setShowExpressSignup(false)} />
+          <ExpressSignup requireUpload onAuthenticated={() => setShowExpressSignup(false)} />
         </div>
       </div>
     );
