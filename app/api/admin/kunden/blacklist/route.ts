@@ -73,6 +73,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Fehler beim Aktualisieren.' }, { status: 500 });
     }
 
+    // Auth-User bannen/entbannen → blockt das LOGIN. Der profiles.blacklisted-
+    // Flag allein verhindert nur die Buchung (Payment-Intent-Check), nicht das
+    // Anmelden — Supabase Auth kennt das Profil-Flag nicht. Beim Sperren wird
+    // der Auth-User ~100 Jahre gebannt (kann sich nicht mehr einloggen, ein
+    // bestehendes Token läuft binnen ~1 h aus); beim Entsperren wieder frei.
+    let authWarning: string | null = null;
+    try {
+      const { error: banErr } = await supabase.auth.admin.updateUserById(userId, {
+        ban_duration: blacklisted ? '876000h' : 'none',
+      });
+      if (banErr) {
+        console.error('[blacklist] ban update error:', banErr);
+        authWarning = banErr.message;
+      }
+    } catch (e) {
+      console.error('[blacklist] ban update exception:', e);
+      authWarning = e instanceof Error ? e.message : 'unbekannt';
+    }
+
     await logAudit({
       action: blacklisted ? 'customer.block' : 'customer.unblock',
       entityType: 'customer',
@@ -81,7 +100,7 @@ export async function POST(req: NextRequest) {
       request: req,
     });
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, authWarning });
   } catch (err) {
     console.error('POST /api/admin/kunden/blacklist error:', err);
     return NextResponse.json({ error: 'Serverfehler.' }, { status: 500 });

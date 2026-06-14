@@ -1386,6 +1386,22 @@ Der Admin kann pro Buchung den **Versand-/Übergabe-Tag** (vor Mietbeginn) und d
 ### Kundenkonto
 `/app/konto/` mit horizontaler Tab-Leiste
 
+### Kunde sperren blockt jetzt auch das Login (Stand 2026-06-14)
+„Gesperrt" (`profiles.blacklisted=true`, gesetzt über
+`/admin/kunden/[id]` → `POST /api/admin/kunden/blacklist`) blockierte vorher
+**nur die Buchung** (Payment-Intent-Check `code:'BLACKLISTED'` in
+`create-payment-intent` + `checkout-intent`), **nicht das Anmelden** —
+Supabase Auth kennt das Profil-Flag nicht. Jetzt: der Blacklist-Endpoint
+**bannt zusätzlich den Auth-User** (`auth.admin.updateUserById(userId,
+{ ban_duration: '876000h' })`) → Login wird abgelehnt; ein bereits
+bestehendes Token läuft binnen ~1 h aus (Refresh schlägt fehl). Entsperren
+(`blacklisted=false`) setzt `ban_duration: 'none'` → Login wieder frei. Der
+Ban ist best-effort (Fehler landet als `authWarning` in der Antwort, der
+Flag wird trotzdem gesetzt; die Buchungs-Sperre greift unabhängig davon).
+**Wichtig:** Ein gesperrter Kunde, der sich mit derselben E-Mail **neu
+registriert**, bekommt eine neue `user_id` (neues, ungesperrtes Konto) —
+die Sperre hängt am Konto, nicht an der E-Mail.
+
 ### Test-Konto zurücksetzen (Stand 2026-06-14)
 In der Kundenliste (`/admin/kunden`) hat jede Zeile mit `is_tester=true` neben
 dem „Tester"-Badge einen amber **„↻ Zurücksetzen"**-Button. Klick (mit
