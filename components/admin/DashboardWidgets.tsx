@@ -653,8 +653,17 @@ interface QueueRow {
   title: string;
   subtitle: string;
   action: QueueAction;
+  /** Datum für die Sortierung (YYYY-MM-DD). Was als nächstes ansteht zuerst. */
+  sortDate: string;
   /** 4-Status-Übersicht (nur Buchungs-Zeilen, nicht Verifizierungs-Tasks). */
   checks?: { verified: boolean; signed: boolean; checked: boolean; paid: boolean; isVersand: boolean };
+}
+
+// Maßgebliches "fällig"-Datum pro Buchung: Rückgabe-Aufgaben richten sich nach
+// dem Mietende, alles davor nach dem Mietbeginn.
+function dueDateForBooking(b: QueueBooking): string {
+  const returnStatuses = ['shipped', 'delivered', 'picked_up'];
+  return (returnStatuses.includes(b.status) ? b.rental_to : b.rental_from) || b.rental_from || '';
 }
 
 // Kleine Status-Chips: grüner Haken = erfüllt, rotes X = noch nötig.
@@ -699,6 +708,7 @@ export function ActionQueueWidget({ data, loading }: {
     title: v.name || 'Kunde',
     subtitle: `Ausweis hochgeladen · ${formatDate(v.created_at)}`,
     action: { label: '✅ Verifizieren', href: `/admin/kunden/${v.id}`, color: C.purple, weight: 0 },
+    sortDate: '',
   }));
 
   const bookingRows: QueueRow[] = (data?.items ?? [])
@@ -706,9 +716,11 @@ export function ActionQueueWidget({ data, loading }: {
     .filter((r): r is { b: QueueBooking; action: QueueAction } => r.action !== null)
     .map(({ b, action }) => ({
       key: b.id,
-      title: b.product_name || 'Buchung',
-      subtitle: `${b.customer_name} · ${formatDate(b.rental_from)} - ${formatDate(b.rental_to)}`,
+      // Name + Datum fett ganz oben, Produkt darunter.
+      title: `${b.customer_name || 'Kunde'} · ${formatDate(b.rental_from)} – ${formatDate(b.rental_to)}`,
+      subtitle: b.product_name || 'Buchung',
       action,
+      sortDate: dueDateForBooking(b),
       checks: {
         verified: b.verified ?? false,
         signed: b.contract_signed ?? false,
@@ -742,9 +754,13 @@ export function ActionQueueWidget({ data, loading }: {
     }
   }
 
-  const rows: QueueRow[] = [...verificationRows, ...bookingRows]
-    .filter((r) => !doneIds.has(r.key))
-    .sort((x, y) => x.action.weight - y.action.weight);
+  // Verifizierungen bleiben oben (blockieren alles), danach die Buchungen
+  // nach Fälligkeitsdatum aufsteigend — was als nächstes ansteht zuerst.
+  const sortedBookingRows = [...bookingRows].sort((x, y) =>
+    x.sortDate < y.sortDate ? -1 : x.sortDate > y.sortDate ? 1 : 0,
+  );
+  const rows: QueueRow[] = [...verificationRows, ...sortedBookingRows]
+    .filter((r) => !doneIds.has(r.key));
 
   return (
     <div style={{
@@ -801,7 +817,7 @@ export function ActionQueueWidget({ data, loading }: {
             };
             const textBlock = (
               <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {row.title}
                 </div>
                 <div style={{ fontSize: 11, color: errorId === row.key ? C.red : C.textDim, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
