@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { createAuthBrowserClient, recordCustomerLogin } from '@/lib/supabase-auth';
+import { shrinkImageFileIfNeeded } from '@/lib/shrink-image-client';
 
 type Mode = 'signup' | 'login';
 type Step = 'auth' | 'upload' | 'done';
@@ -85,6 +86,10 @@ export default function ExpressSignup({
   // Upload-Step
   const [frontFile, setFrontFile] = useState<File | null>(null);
   const [backFile, setBackFile] = useState<File | null>(null);
+  // Wird true, sobald ein Upload fehlschlaegt/timeoutet — gibt dem Kunden eine
+  // Ausweich-Option (im Konto nachreichen), damit ein haengender Upload bei
+  // Pflicht-Upload (requireUpload) nicht in einer Sackgasse endet.
+  const [uploadFailed, setUploadFailed] = useState(false);
   const [frontPreview, setFrontPreview] = useState<string | null>(null);
   const [backPreview, setBackPreview] = useState<string | null>(null);
   const frontRef = useRef<HTMLInputElement>(null);
@@ -266,8 +271,10 @@ export default function ExpressSignup({
   function handleFile(side: 'front' | 'back', e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
-      setError('Datei zu groß (max. 5 MB).');
+    // Grosse Fotos werden vor dem Upload automatisch verkleinert
+    // (siehe handleUpload). Erst sehr grosse Dateien hart ablehnen.
+    if (file.size > 30 * 1024 * 1024) {
+      setError('Datei zu groß (max. 30 MB).');
       return;
     }
     const url = URL.createObjectURL(file);
@@ -296,25 +303,51 @@ export default function ExpressSignup({
         return;
       }
 
-      const formData = new FormData();
-      formData.append('front', frontFile);
-      formData.append('back', backFile);
+      // Grosse Handy-Fotos vor dem Upload im Browser verkleinern — sonst
+      // dauert der Upload auf mobiler Verbindung sehr lang (oder stockt).
+      // Schlaegt das Verkleinern fehl (z.B. HEIC), wird das Original genutzt.
+      let frontUp = frontFile;
+      let backUp = backFile;
+      try {
+        frontUp = await shrinkImageFileIfNeeded(frontFile, 2_500_000);
+        backUp = await shrinkImageFileIfNeeded(backFile, 2_500_000);
+      } catch { /* Original verwenden */ }
 
-      const res = await fetch('/api/upload-id', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${session.access_token}` },
-        body: formData,
-      });
+      const formData = new FormData();
+      formData.append('front', frontUp);
+      formData.append('back', backUp);
+
+      // Timeout, damit der „Wird hochgeladen…"-Spinner bei schlechter
+      // Verbindung nicht endlos dreht.
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 90_000);
+      let res: Response;
+      try {
+        res = await fetch('/api/upload-id', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${session.access_token}` },
+          body: formData,
+          signal: ctrl.signal,
+        });
+      } finally {
+        clearTimeout(timer);
+      }
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(data?.error || 'Upload fehlgeschlagen.');
+        setUploadFailed(true);
+        setError(data?.error || 'Upload fehlgeschlagen. Bitte erneut versuchen.');
         return;
       }
 
       setStep('done');
       onAuthenticated?.();
-    } catch {
-      setError('Netzwerkfehler beim Hochladen.');
+    } catch (err) {
+      setUploadFailed(true);
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        setError('Der Upload hat zu lange gedauert. Bitte prüfe deine Internetverbindung (am besten WLAN) und versuche es erneut.');
+      } else {
+        setError('Netzwerkfehler beim Hochladen. Bitte erneut versuchen.');
+      }
     } finally {
       setBusy(false);
     }
@@ -451,6 +484,19 @@ export default function ExpressSignup({
             className="w-full py-2 text-xs font-body text-brand-muted hover:text-brand-black dark:hover:text-white underline transition-colors"
           >
             Später hochladen (Versand verzögert sich)
+          </button>
+        )}
+
+        {/* Notausgang: nur wenn der Upload bei Pflicht-Upload fehlgeschlagen ist —
+            der Kunde ist bereits eingeloggt und kann den Ausweis im Konto nachreichen. */}
+        {requireUpload && uploadFailed && (
+          <button
+            type="button"
+            onClick={handleSkipUpload}
+            disabled={busy}
+            className="w-full py-2 text-xs font-body text-brand-muted hover:text-brand-black dark:hover:text-white underline transition-colors"
+          >
+            Es klappt gerade nicht? Ausweis später im Konto hochladen
           </button>
         )}
       </div>
