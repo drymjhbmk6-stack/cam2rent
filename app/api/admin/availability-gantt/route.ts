@@ -165,6 +165,18 @@ export async function GET(req: NextRequest) {
   // nach DEREN Produkt — so erscheinen gemischte Modelle auf der richtigen
   // Produkt-/Unit-Zeile (nicht nur die erste Kamera). Legacy/cameras=NULL →
   // Resolver liefert eine Kamera = altes Verhalten.
+  //
+  // WICHTIG (gemischte Modelle ohne cameras-Migration): Ist `bookings.cameras`
+  // NULL (Multi-Kamera-Migration noch nicht durch), faellt der Resolver auf den
+  // `product_name`-Komma-Split zurueck und vergibt ALLEN Kameras die EINE
+  // Legacy-`product_id` der Buchung. Eine Buchung „OSMO Action 5 Pro , DJI Osmo
+  // Nano" landet dann faelschlich komplett auf den OSMO-Zeilen (Nano leer).
+  // Korrektur: jede Kamera per NAME dem richtigen Produkt zuordnen
+  // (case-insensitive), Fallback auf die Resolver-/Legacy-product_id.
+  const pidByName = new Map<string, string>();
+  const normName = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
+  for (const p of visibleProducts) pidByName.set(normName(p.name), p.id);
+
   type GanttBooking = (typeof bookings)[number] & { _unitId: string | null };
   const bookingsByProduct: Record<string, GanttBooking[]> = {};
   for (const b of bookings) {
@@ -175,7 +187,10 @@ export async function GET(req: NextRequest) {
       continue;
     }
     for (const c of cams) {
-      const pid = c.product_id ?? b.product_id;
+      // Namens-Match hat Vorrang (korrigiert gemischte Legacy-Buchungen),
+      // sonst die Kamera-/Buchungs-product_id wie zuvor.
+      const byName = c.product_name ? pidByName.get(normName(c.product_name)) : undefined;
+      const pid = byName ?? c.product_id ?? b.product_id;
       if (!pid) continue;
       (bookingsByProduct[pid] ||= []).push({ ...b, _unitId: c.unit_id });
     }

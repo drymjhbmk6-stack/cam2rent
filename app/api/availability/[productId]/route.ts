@@ -44,6 +44,27 @@ export async function GET(
   }
   const totalStock = product.stock;
 
+  // Name→ProductId-Map aller Kameras + normalisierter Name DIESES Produkts.
+  // Gemischte Legacy-Buchungen (cameras=NULL) tragen im product_name-Komma-
+  // String mehrere Modelle, aber im Resolver bekommen alle Kameras die EINE
+  // Legacy-product_id — die Zuordnung pro Produkt muss daher über den NAMEN
+  // laufen, sonst zählt z.B. „OSMO Action 5 Pro , DJI Osmo Nano" 2× für OSMO
+  // und 0× für Nano (Über-/Unterbuchung).
+  const normName = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
+  const knownProductNames = new Set<string>();
+  for (const p of products) knownProductNames.add(normName(p.name));
+  const thisNorm = normName(product.name);
+  // Zählt eine Kamera der Buchung zu DIESEM Produkt? Name hat Vorrang
+  // (korrigiert gemischte Legacy-Buchungen), Fallback auf product_id.
+  const cameraBelongsToThisProduct = (c: { product_id: string | null; product_name: string }) => {
+    const nm = c.product_name ? normName(c.product_name) : '';
+    if (nm) {
+      if (nm === thisNorm) return true;
+      if (knownProductNames.has(nm)) return false; // gehört zu einem anderen Modell
+    }
+    return c.product_id === productId;
+  };
+
   // ── Monats-Range berechnen ─────────────────────────────────────────────────
   const [yearStr, monthStr] = month.split('-');
   const year = parseInt(yearStr, 10);
@@ -129,14 +150,32 @@ export async function GET(
     if (!globalTest) q = q.not('is_test', 'is', true);
     return (await q) as unknown as QResult;
   };
+  // (c) Gemischte Legacy-Buchungen OHNE cameras[]: das Modell steht nur im
+  //     product_name-Komma-String, die Buchungs-product_id ist ein anderes
+  //     Modell. Sonst würde die Nano-Buchung „OSMO , Nano" für den Nano-
+  //     Kalender gar nicht geladen → Nano überbuchbar. ilike fetcht Kandidaten
+  //     grob, die exakte Zuordnung macht cameraBelongsToThisProduct unten.
+  const nameNeedle = product.name.replace(/[%_\\]/g, '\\$&');
+  const buildQ3 = async (cols: string): Promise<QResult> => {
+    let q = supabase
+      .from('bookings')
+      .select(cols)
+      .ilike('product_name', `%${nameNeedle}%`)
+      .neq('product_id', productId)
+      .in('status', [...RESERVING_BOOKING_STATUSES])
+      .lte('rental_from', extLast)
+      .gte('rental_to', extFirst);
+    if (!globalTest) q = q.not('is_test', 'is', true);
+    return (await q) as unknown as QResult;
+  };
 
-  let [r1, r2] = await Promise.all([buildQ1(sel), buildQ2(sel)]);
+  let [r1, r2, r3] = await Promise.all([buildQ1(sel), buildQ2(sel), buildQ3(sel)]);
 
   // Migration supabase-bookings-shipping-overrides.sql noch nicht durch →
   // Override-Spalten droppen und neu fragen. Verhalten dann wie vorher
   // (nur globale Default-Puffer).
   if (r1.error && /ship_date_override|return_due_date_override/i.test(r1.error.message || '')) {
-    [r1, r2] = await Promise.all([buildQ1(selBase), buildQ2(selBase)]);
+    [r1, r2, r3] = await Promise.all([buildQ1(selBase), buildQ2(selBase), buildQ3(selBase)]);
   }
 
   if (r1.error) {
@@ -147,9 +186,13 @@ export async function GET(
     );
   }
   // q2 schlägt fehl wenn cameras-Spalte fehlt (Migration nicht durch) →
-  // defensiv ignorieren, q1 trägt dann das Legacy-Verhalten.
+  // defensiv ignorieren, q1+q3 tragen dann das Legacy-Verhalten.
   const mergedById = new Map<string, Record<string, unknown>>();
-  for (const b of [...(r1.data ?? []), ...(r2.error ? [] : r2.data ?? [])]) {
+  for (const b of [
+    ...(r1.data ?? []),
+    ...(r2.error ? [] : r2.data ?? []),
+    ...(r3.error ? [] : r3.data ?? []),
+  ]) {
     mergedById.set(b.id as string, b);
   }
   const bookings = [...mergedById.values()];
@@ -235,11 +278,12 @@ export async function GET(
 
         if (effFrom <= dateStr && effTo >= dateStr) {
           // Eine Buchung belegt so viele Einheiten DIESES Produkts wie sie
-          // Kameras dieses Produkts enthält (cameras[] = Wahrheit; Legacy:
-          // product_name-Split, product_id = dieses Produkt). Gemischte
-          // Modelle zählen pro Produkt korrekt — sonst Überbuchung.
+          // Kameras dieses Produkts enthält. Zuordnung primär über den NAMEN
+          // (cameraBelongsToThisProduct) — korrigiert gemischte Legacy-
+          // Buchungen (cameras=NULL), bei denen alle Kameras dieselbe
+          // Legacy-product_id tragen. Sonst Über-/Unterbuchung bei Mischmodellen.
           bookedCount += resolveBookingCameras(b).filter(
-            (c) => c.product_id === productId,
+            cameraBelongsToThisProduct,
           ).length;
         }
       }
