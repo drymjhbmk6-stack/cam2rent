@@ -582,9 +582,35 @@ damit der Kunde frisch unterschreiben muss.
   der **Admin** kann alternativ über das Tablet
   (`/admin/buchungen/[id]/vertrag-unterschreiben`) unterschreiben lassen. Der rote
   „nicht unterschrieben"-Banner (siehe oben) greift ebenfalls wieder.
+- **Pflicht-E-Mail beim Zurücksetzen (Stand 2026-06-14):** Der Reset verlangt
+  jetzt eine hinterlegte Kunden-E-Mail — fehlt sie, bricht der Endpoint mit
+  `422` ab (Admin muss erst eine Adresse bei der Buchung eintragen). Bei Erfolg
+  schickt er dem Kunden **automatisch** die Mail „Bitte Mietvertrag erneut
+  unterschreiben" (`sendContractResignRequest` in `lib/email.ts`, emailType
+  `contract_resign_request`, Link auf `/konto/buchungen`). Antwort enthält
+  `emailSent` (+ `emailError`); das UI weist auf einen Fehlversand hin
+  (Buchung ist trotzdem zurückgesetzt). Email-Typ registriert in
+  `/admin/emails` (`TYPE_LABELS`).
+- **„Alles okay"-Freigabe — sperrt gegen Zurücksetzen (Stand 2026-06-14):**
+  Neue Spalte `bookings.contract_locked BOOLEAN NOT NULL DEFAULT false`
+  (Migration `supabase/supabase-bookings-contract-locked.sql`, idempotent/
+  additiv). Endpoint **`POST /api/admin/booking/[id]/lock-contract`** Body
+  `{ locked: boolean }` (default true; Permission Prefix `/api/admin/booking`
+  → `tagesgeschaeft`). Ist `contract_locked=true`, lehnt
+  `reset-contract` mit `409` ab. UI: grüner Button **„Alles okay (freigeben)"**
+  neben „Vertrag zurücksetzen" (nur bei unterschriebenem, nicht gesperrtem
+  Vertrag); bei gesperrtem Vertrag stattdessen grüne Box „✓ Geprüft &
+  freigegeben" + „Freigabe aufheben". Audit `booking.lock_contract` /
+  `booking.unlock_contract`. Defensiver Spalten-Fallback: fehlt die Migration,
+  läuft der Reset wie bisher (kein Lock-Check greift) und der Lock-Endpoint
+  liefert `503` mit Migrations-Hinweis.
 - **UI:** roter Button **„Vertrag zurücksetzen"** in der Mietvertrag-Sektion der
-  Buchungsdetails — nur sichtbar bei bereits unterschriebenem Vertrag
-  (`contract_signed`), neben „Vertrag PDF herunterladen", mit Confirm-Dialog.
+  Buchungsdetails — nur sichtbar bei bereits unterschriebenem, nicht gesperrtem
+  Vertrag (`contract_signed && !contract_locked`), neben „Vertrag PDF
+  herunterladen", mit Confirm-Dialog.
+- **Go-Live TODO:** Migration `supabase/supabase-bookings-contract-locked.sql`
+  ausführen. Ohne sie funktioniert das Zurücksetzen (inkl. Pflicht-Mail)
+  bereits; nur die „Alles okay"-Sperre ist erst nach der Migration aktiv.
 
 ### Express-Signup + verzögerte Verifizierung (Stand 2026-04-21)
 Optionaler smootherer Neukunden-Flow, zwei Admin-Toggles unter `/admin/einstellungen`:
@@ -4428,6 +4454,12 @@ verfügbar"-Hinweis erscheint dann pro physischem Stück in
      im jeweiligen `MODEL_REGISTRY` (`lib/firmware/adapters/`) ergänzen.
 
 ### Noch offen
+- **Vertrag-Freigabe-Migration auszuführen:**
+  `supabase/supabase-bookings-contract-locked.sql` (idempotent, additiv:
+  `bookings.contract_locked BOOLEAN DEFAULT false`). Ohne sie läuft das
+  Mietvertrag-Zurücksetzen inkl. Pflicht-Mail bereits; nur die „Alles okay"-
+  Sperre (Lock-Endpoint liefert sonst 503) ist erst nach der Migration aktiv.
+  Empfohlen ASAP ausführen.
 - **Abweichende-Adressen-Migration auszuführen:**
   `supabase/supabase-profiles-deviating-addresses.sql` (idempotent, additiv:
   8 Spalten `delivery_*`/`billing_*` auf `profiles` + Column-Level-GRANT).
