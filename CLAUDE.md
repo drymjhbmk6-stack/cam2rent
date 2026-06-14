@@ -591,17 +591,19 @@ damit der Kunde frisch unterschreiben muss.
   `emailSent` (+ `emailError`); das UI weist auf einen Fehlversand hin
   (Buchung ist trotzdem zurückgesetzt). Email-Typ registriert in
   `/admin/emails` (`TYPE_LABELS`).
-- **„Alles okay"-Freigabe — sperrt gegen Zurücksetzen (Stand 2026-06-14):**
+- **„Alles okay"-Freigabe — sperrt ENDGÜLTIG gegen Zurücksetzen (Stand 2026-06-14):**
   Neue Spalte `bookings.contract_locked BOOLEAN NOT NULL DEFAULT false`
   (Migration `supabase/supabase-bookings-contract-locked.sql`, idempotent/
-  additiv). Endpoint **`POST /api/admin/booking/[id]/lock-contract`** Body
-  `{ locked: boolean }` (default true; Permission Prefix `/api/admin/booking`
-  → `tagesgeschaeft`). Ist `contract_locked=true`, lehnt
-  `reset-contract` mit `409` ab. UI: grüner Button **„Alles okay (freigeben)"**
-  neben „Vertrag zurücksetzen" (nur bei unterschriebenem, nicht gesperrtem
-  Vertrag); bei gesperrtem Vertrag stattdessen grüne Box „✓ Geprüft &
-  freigegeben" + „Freigabe aufheben". Audit `booking.lock_contract` /
-  `booking.unlock_contract`. Defensiver Spalten-Fallback: fehlt die Migration,
+  additiv). Endpoint **`POST /api/admin/booking/[id]/lock-contract`**
+  (Permission Prefix `/api/admin/booking` → `tagesgeschaeft`) setzt
+  `contract_locked=true`. **Die Freigabe ist unwiderruflich**: ein
+  `{ locked: false }` im Body wird mit `409` abgelehnt (es gibt bewusst keinen
+  Unlock-Pfad). Ist `contract_locked=true`, lehnt `reset-contract` ebenfalls mit
+  `409` ab. UI: grüner Button **„Alles okay (freigeben)"** neben „Vertrag
+  zurücksetzen" (nur bei unterschriebenem, nicht gesperrtem Vertrag), Confirm
+  weist auf die Endgültigkeit hin; bei gesperrtem Vertrag nur noch die grüne Box
+  „✓ Geprüft & freigegeben — Endgültig gesperrt" (kein Button mehr). Audit
+  `booking.lock_contract`. Defensiver Spalten-Fallback: fehlt die Migration,
   läuft der Reset wie bisher (kein Lock-Check greift) und der Lock-Endpoint
   liefert `503` mit Migrations-Hinweis.
 - **UI:** roter Button **„Vertrag zurücksetzen"** in der Mietvertrag-Sektion der
