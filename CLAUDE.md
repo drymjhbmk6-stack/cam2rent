@@ -366,6 +366,24 @@ Zwei Lücken im Inventar/Zubehör-Flow geschlossen:
 - **Features:** Komma als Dezimaltrennzeichen, 0 löschbar, `inputMode="decimal"` für Mobile-Tastatur
 - **Verwendet in:** Kamera-Editor (Kaution, Preistabelle, perDayAfter30), Haftungs-Admin
 
+### Dashboard-Aufgaben-Widget — Status-Übersicht pro Buchung (Stand 2026-06-14)
+Jede Buchungszeile im „Aufgaben"-Widget (`ActionQueueWidget`) zeigt unter
+Titel/Untertitel eine Reihe von **4 Status-Chips** (`StatusChips`): **Ausweis**
+(Konto/ID verifiziert), **Vertrag** (unterschrieben), **Geprüft** (Vertrag
+freigegeben = `contract_locked`/„Alles okay"), **Bezahlt**. Grüner Haken ✓ =
+erfüllt, rotes ✗ = noch nötig. **Bei Abholung** (`delivery_mode!=='versand'`)
+sind Vertrag/Geprüft kein harter Blocker (amber „!" statt rot, Tooltip „bei
+Abholung möglich") — der Vertrag kann bei der Übergabe unterschrieben werden.
+Sind alle vier grün, kann für den Versand gepackt werden. `GET
+/api/admin/dashboard-data` reichert `action_queue.items` dafür an: Select auf
+`bookings` ist `*` (max 50 Zeilen, robust gegen fehlende `contract_locked`-
+Migration → undefined=false), plus Bulk-Lookup `profiles.verification_status`
+der beteiligten `user_id`. Felder pro Item: `verified` (= `verification_required`
+falsy ODER `verification_gate_passed_at` gesetzt ODER `verification_status==='verified'`),
+`contract_signed`, `contract_checked` (= `contract_locked`), `paid` (= NICHT
+`PENDING-`/`MANUAL-UNPAID-`-Prefix und NICHT Status `awaiting_payment`/
+`pending_verification`). Reine Anzeige — keine Migration, kein Gating geändert.
+
 ### Dashboard-Aufgaben-Widget — Kunden-Verifizierung (Stand 2026-06-08)
 Das „Aufgaben"-Widget auf `/admin` (`ActionQueueWidget` in
 `components/admin/DashboardWidgets.tsx`) zeigt zusätzlich zu den Buchungs-
