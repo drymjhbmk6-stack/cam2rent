@@ -43,12 +43,18 @@ function RegistrierungInner() {
   const redirectTo = safeRedirect(searchParams.get('redirect'));
   const { user, loading } = useAuth();
 
-  // Bereits eingeloggte User direkt weiterleiten
+  // Sobald der Signup/Login-Flow in ExpressSignup startet, darf der
+  // „schon eingeloggt → weiterleiten"-Effekt NICHT mehr feuern — sonst
+  // springt die Seite nach dem Auto-Login direkt ins Konto und überspringt
+  // den Pflicht-Ausweis-Upload (Upload-Feld blitzt nur kurz auf).
+  const [authStarted, setAuthStarted] = useState(false);
+
+  // Bereits eingeloggte User (vor Signup-Beginn) direkt weiterleiten
   useEffect(() => {
-    if (!loading && user) {
+    if (!loading && user && !authStarted) {
       router.replace(redirectTo);
     }
-  }, [user, loading, router, redirectTo]);
+  }, [user, loading, router, redirectTo, authStarted]);
 
   const [done, setDone] = useState(false);
 
@@ -108,6 +114,7 @@ function RegistrierungInner() {
 
         <ExpressSignup
           requireUpload
+          onAuthCompleted={() => setAuthStarted(true)}
           onAuthenticated={() => {
             setDone(true);
             // Kurze Pause, damit der "Willkommen"-Screen sichtbar ist.
