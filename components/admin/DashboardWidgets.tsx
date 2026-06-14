@@ -674,12 +674,13 @@ function StatusChips({ c }: { c: NonNullable<QueueRow['checks']> }) {
     const color = ok ? C.green : soft ? C.yellow : C.red;
     return (
       <span
+        className="aq-chip"
         title={ok ? okTitle : missTitle}
         style={{
           display: 'inline-flex', alignItems: 'center', gap: 3,
           fontSize: 10, fontWeight: 600, lineHeight: 1.4,
           color, background: `${color}14`, border: `1px solid ${color}33`,
-          padding: '1px 6px', borderRadius: 6, whiteSpace: 'nowrap',
+          padding: '2px 6px', borderRadius: 6, whiteSpace: 'nowrap',
         }}
       >
         <span style={{ fontWeight: 800 }}>{ok ? '✓' : soft ? '!' : '✗'}</span>{label}
@@ -688,8 +689,10 @@ function StatusChips({ c }: { c: NonNullable<QueueRow['checks']> }) {
   };
   // soft-Modus nur fuer Abholung + Vertrag/Geprueft
   const softContract = !c.isVersand;
+  // Layout über CSS-Klasse (Media-Query), damit auf Mobile immer ein sauberer
+  // 2×2-Viererblock entsteht (Inline-Styles können keine Media-Queries).
   return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 5 }}>
+    <div className="aq-chips">
       {chip('Ausweis', c.verified, false, 'Verifiziert', 'Ausweis/Konto noch nicht verifiziert')}
       {chip('Vertrag', c.signed, softContract && !c.signed, 'Mietvertrag unterschrieben', softContract ? 'Noch nicht unterschrieben (bei Abholung möglich)' : 'Mietvertrag noch nicht unterschrieben')}
       {chip('Geprüft', c.checked, softContract && !c.checked, 'Vertrag geprüft & freigegeben', softContract ? 'Noch nicht geprüft (bei Abholung möglich)' : 'Vertrag noch nicht geprüft („Alles okay")')}
@@ -697,6 +700,16 @@ function StatusChips({ c }: { c: NonNullable<QueueRow['checks']> }) {
     </div>
   );
 }
+
+// Layout-CSS für die Status-Chips. Desktop: eine umbrechende Reihe.
+// Mobile (≤640px): fester 2×2-Viererblock.
+const AQ_CHIPS_CSS = `
+.aq-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+.aq-chip { width: auto; justify-content: flex-start; }
+@media (max-width: 640px) {
+  .aq-chips { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
+  .aq-chips .aq-chip { width: 100%; justify-content: center; }
+}`;
 
 export function ActionQueueWidget({ data, loading }: {
   data: { items: QueueBooking[]; verifications?: VerificationTask[] } | null;
@@ -777,6 +790,7 @@ export function ActionQueueWidget({ data, loading }: {
       onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = C.cyan; }}
       onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = C.border; }}
     >
+      <style>{AQ_CHIPS_CSS}</style>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, gap: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
