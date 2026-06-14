@@ -155,6 +155,10 @@ export default function AdminVerfuegbarkeitPage() {
   const [camModelFilter, setCamModelFilter] = useState<Set<string>>(new Set());
   const [accCategoryFilter, setAccCategoryFilter] = useState<Set<string>>(new Set());
   const [setBadgeFilter, setSetBadgeFilter] = useState<Set<string>>(new Set());
+  // Pro Zeile aufgeklappte Kamera-Pills (sonst auf eine Zeile geklemmt, damit
+  // alle Zeilen gleich hoch sind).
+  const [expandedAccRows, setExpandedAccRows] = useState<Set<string>>(new Set());
+  const [expandedSetRows, setExpandedSetRows] = useState<Set<string>>(new Set());
 
   // Gantt-State — durchgehend scrollbar (3 Monate zurück + 6 Monate voraus)
   const MONTHS_BACK = 3;
@@ -978,19 +982,37 @@ export default function AdminVerfuegbarkeitPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {visibleAccessories.map((acc) => (
+                    {visibleAccessories.map((acc) => {
+                      const accExpanded = expandedAccRows.has(acc.id);
+                      const manyCams = (acc.compatible_product_names?.length ?? 0) >= 2;
+                      return (
                       <tr key={acc.id} style={{ borderBottom: '1px solid #1e293b' }}>
                         <td className="px-3 py-1.5 sticky left-0 z-10 align-top" style={{ background: '#0f172a' }}>
-                          <div className="font-heading font-bold whitespace-nowrap" style={{ color: '#e2e8f0' }}>{acc.name}</div>
-                          <div className="flex flex-wrap items-center gap-1 mt-0.5">
-                            <span className="text-[10px]" style={{ color: '#64748b' }}>{acc.available_qty} Stück</span>
-                            <span className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold" style={{ background: '#1e293b', color: '#94a3b8' }}>{acc.category}</span>
-                            {acc.compatible_product_names && acc.compatible_product_names.length > 0 ? (
-                              acc.compatible_product_names.map((pn) => (
-                                <span key={pn} className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold" style={{ background: '#0c4a6e', color: '#7dd3fc' }}>{pn}</span>
-                              ))
-                            ) : (
-                              <span className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold" style={{ background: '#0f3a2a', color: '#6ee7b7' }}>Alle Kameras</span>
+                          <div className="flex items-start gap-1">
+                            <div className="min-w-0 flex-1">
+                              <div className="font-heading font-bold whitespace-nowrap" style={{ color: '#e2e8f0' }}>{acc.name}</div>
+                              <div className="flex flex-wrap items-center gap-1 mt-0.5" style={manyCams && !accExpanded ? { maxHeight: 20, overflow: 'hidden' } : undefined}>
+                                <span className="text-[10px]" style={{ color: '#64748b' }}>{acc.available_qty} Stück</span>
+                                <span className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold" style={{ background: '#1e293b', color: '#94a3b8' }}>{acc.category}</span>
+                                {acc.compatible_product_names && acc.compatible_product_names.length > 0 ? (
+                                  acc.compatible_product_names.map((pn) => (
+                                    <span key={pn} className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold whitespace-nowrap" style={{ background: '#0c4a6e', color: '#7dd3fc' }}>{pn}</span>
+                                  ))
+                                ) : (
+                                  <span className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold" style={{ background: '#0f3a2a', color: '#6ee7b7' }}>Alle Kameras</span>
+                                )}
+                              </div>
+                            </div>
+                            {manyCams && (
+                              <button
+                                type="button"
+                                onClick={() => toggleFilter(setExpandedAccRows, acc.id)}
+                                className="shrink-0 mt-3 text-[10px] leading-none px-1 py-0.5 rounded transition-colors hover:bg-slate-700"
+                                style={{ color: '#7dd3fc', border: '1px solid #334155' }}
+                                title={accExpanded ? 'Einklappen' : `Alle ${acc.compatible_product_names?.length} Kameras zeigen`}
+                              >
+                                {accExpanded ? '▴' : '▾'}
+                              </button>
                             )}
                           </div>
                         </td>
@@ -1023,7 +1045,8 @@ export default function AdminVerfuegbarkeitPage() {
                           );
                         })}
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -1101,18 +1124,36 @@ export default function AdminVerfuegbarkeitPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {visibleSets.map((s) => (
+                    {visibleSets.map((s) => {
+                      const setExpanded = expandedSetRows.has(s.id);
+                      const manyCams = (s.product_names?.length ?? 0) >= 2;
+                      return (
                       <tr key={s.id} style={{ borderBottom: '1px solid #1e293b' }}>
                         <td className="px-3 py-1.5 sticky left-0 z-10 align-top" style={{ background: '#0f172a' }}>
-                          <div className="font-heading font-bold whitespace-nowrap" style={{ color: '#e2e8f0' }}>{s.name}</div>
-                          <div className="flex flex-wrap items-center gap-1 mt-0.5">
-                            {s.badge && <span className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold" style={{ background: '#1e293b', color: '#94a3b8' }}>{s.badge}</span>}
-                            {s.product_names && s.product_names.length > 0 ? (
-                              s.product_names.map((pn) => (
-                                <span key={pn} className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold" style={{ background: '#0c4a6e', color: '#7dd3fc' }}>{pn}</span>
-                              ))
-                            ) : (
-                              <span className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold" style={{ background: '#1e293b', color: '#64748b' }}>Keine Kamera zugeordnet</span>
+                          <div className="flex items-start gap-1">
+                            <div className="min-w-0 flex-1">
+                              <div className="font-heading font-bold whitespace-nowrap" style={{ color: '#e2e8f0' }}>{s.name}</div>
+                              <div className="flex flex-wrap items-center gap-1 mt-0.5" style={manyCams && !setExpanded ? { maxHeight: 20, overflow: 'hidden' } : undefined}>
+                                {s.badge && <span className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold" style={{ background: '#1e293b', color: '#94a3b8' }}>{s.badge}</span>}
+                                {s.product_names && s.product_names.length > 0 ? (
+                                  s.product_names.map((pn) => (
+                                    <span key={pn} className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold whitespace-nowrap" style={{ background: '#0c4a6e', color: '#7dd3fc' }}>{pn}</span>
+                                  ))
+                                ) : (
+                                  <span className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold" style={{ background: '#1e293b', color: '#64748b' }}>Keine Kamera zugeordnet</span>
+                                )}
+                              </div>
+                            </div>
+                            {manyCams && (
+                              <button
+                                type="button"
+                                onClick={() => toggleFilter(setExpandedSetRows, s.id)}
+                                className="shrink-0 mt-3 text-[10px] leading-none px-1 py-0.5 rounded transition-colors hover:bg-slate-700"
+                                style={{ color: '#7dd3fc', border: '1px solid #334155' }}
+                                title={setExpanded ? 'Einklappen' : `Alle ${s.product_names?.length} Kameras zeigen`}
+                              >
+                                {setExpanded ? '▴' : '▾'}
+                              </button>
                             )}
                           </div>
                         </td>
@@ -1151,7 +1192,8 @@ export default function AdminVerfuegbarkeitPage() {
                           );
                         })}
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
