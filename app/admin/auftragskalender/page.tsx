@@ -50,6 +50,7 @@ const C = {
 };
 
 const STATUS_STYLE: Record<string, { bg: string; label: string }> = {
+  pending_verification: { bg: '#a855f7', label: 'Warte auf Freigabe' },
   awaiting_payment: { bg: '#8b5cf6', label: 'Zahlung offen' },
   confirmed: { bg: '#0ea5b7', label: 'Bestätigt' },
   preparing_shipment: { bg: '#f59e0b', label: 'Wird versendet' },

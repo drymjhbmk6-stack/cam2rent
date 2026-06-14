@@ -79,6 +79,7 @@ export async function GET(req: NextRequest) {
     .from('bookings')
     .select(cols)
     .in('status', [
+      'pending_verification',
       'awaiting_payment', 'confirmed', 'preparing_shipment', 'awaiting_pickup',
       'shipped', 'delivered', 'picked_up', 'returned', 'completed',
     ])
