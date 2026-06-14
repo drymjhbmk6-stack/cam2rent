@@ -81,13 +81,13 @@ export default function KundenPage() {
     setLoading(false);
   }, [filter]);
 
-  // Tester-Konto zuruecksetzen → Auth-User + Profil + Ausweis-Fotos loeschen,
-  // damit man sich mit derselben E-Mail neu registrieren kann.
+  // Tester-Konto zuruecksetzen → E-Mail freigeben + Profil/Ausweis-Fotos
+  // loeschen, damit man sich mit derselben E-Mail neu registrieren kann.
   const handleResetTester = useCallback(async (c: Customer) => {
     const ok = window.confirm(
       `Test-Konto „${c.full_name || c.email}" zurücksetzen?\n\n` +
-      `Das Konto wird komplett gelöscht (inkl. Ausweis-Fotos). Mit der E-Mail ` +
-      `${c.email} kann man sich danach neu registrieren.\n\n` +
+      `Das Konto wird gelöscht und die E-Mail ${c.email} wieder freigegeben — ` +
+      `man kann sich damit danach neu registrieren.\n\n` +
       `Buchungen bleiben in der Datenbank, tauchen unter dem neuen Konto aber nicht mehr auf.`,
     );
     if (!ok) return;
@@ -108,6 +108,32 @@ export default function KundenPage() {
       alert('Netzwerkfehler beim Zurücksetzen.');
     } finally {
       setResettingId(null);
+    }
+  }, [fetchCustomers]);
+
+  // Recovery: eine bereits halb-gelöschte Test-E-Mail per Adresse freigeben
+  // (Profil schon weg, Auth-User hängt noch) → erscheint nicht mehr in der Liste.
+  const handleFreeEmail = useCallback(async () => {
+    const email = window.prompt(
+      'Test-E-Mail freigeben (Recovery)\n\n' +
+      'E-Mail-Adresse eingeben, die für eine Neuregistrierung freigegeben werden soll:',
+    );
+    if (!email || !email.trim()) return;
+    try {
+      const res = await fetch('/api/admin/kunden/reset-tester', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert(data?.error || 'Freigeben fehlgeschlagen.');
+        return;
+      }
+      alert(`E-Mail freigegeben. Es kann jetzt eine Neuregistrierung mit „${email.trim()}" erfolgen.`);
+      await fetchCustomers();
+    } catch {
+      alert('Netzwerkfehler beim Freigeben.');
     }
   }, [fetchCustomers]);
 
@@ -169,6 +195,23 @@ export default function KundenPage() {
             {filtered.length} Kunden {search ? 'gefunden' : 'insgesamt'}
           </p>
         </div>
+        <button
+          onClick={handleFreeEmail}
+          title="Eine bereits gelöschte Test-E-Mail für eine Neuregistrierung freigeben"
+          style={{
+            padding: '8px 12px',
+            borderRadius: 8,
+            fontSize: 13,
+            fontWeight: 600,
+            color: '#94a3b8',
+            background: '#111827',
+            border: '1px solid #1e293b',
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          🔑 Test-E-Mail freigeben
+        </button>
       </div>
 
       {/* Search + Filter */}

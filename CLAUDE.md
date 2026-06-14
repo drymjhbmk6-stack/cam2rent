@@ -1388,21 +1388,33 @@ Der Admin kann pro Buchung den **Versand-/Übergabe-Tag** (vor Mietbeginn) und d
 ### Test-Konto zurücksetzen (Stand 2026-06-14)
 In der Kundenliste (`/admin/kunden`) hat jede Zeile mit `is_tester=true` neben
 dem „Tester"-Badge einen amber **„↻ Zurücksetzen"**-Button. Klick (mit
-`confirm`) löscht das Konto vollständig, sodass man sich mit **derselben
-E-Mail neu registrieren** kann (frischer Test-Durchlauf).
-- **`POST /api/admin/kunden/reset-tester`** (`{ userId }`): **Owner-only**
-  (destruktiv, analog Tester-Flag-Endpoint) + **hartes Tester-Gate** —
-  `profiles.is_tester` muss `true` sein, sonst 403. Ein echtes Kundenkonto
-  kann über diesen Button NIEMALS gelöscht werden. Keine Selbst-Löschung.
-- **Was passiert:** Storage-Cleanup (`id-documents/<userId>`, `customer-ugc`),
-  best-effort Löschen leichter konto-gebundener Tabellen (`cart_holds`,
-  `customer_login_history`, `customer_push_subscriptions`,
-  `customer_ugc_submissions`), Profil-Zeile löschen, dann
-  `auth.admin.deleteUser(userId)` (gibt die E-Mail frei — kritischer Schritt).
-  Audit `customer.reset_tester`.
-- **Bewusst NICHT gelöscht:** Buchungen (FK-/Buchhaltungs-Risiko). Da der neu
-  registrierte Kunde eine neue `user_id` bekommt, tauchen alte Test-Buchungen
-  unter dem frischen Konto ohnehin nicht mehr auf.
+`confirm`) gibt das Konto frei, sodass man sich mit **derselben E-Mail neu
+registrieren** kann (frischer Test-Durchlauf). Im Header gibt es zusätzlich
+einen **„🔑 Test-E-Mail freigeben"**-Button (Recovery per E-Mail-Eingabe).
+- **`POST /api/admin/kunden/reset-tester`** (`{ userId }` ODER `{ email }`):
+  **Owner-only** + **hartes Tester-Gate** — existiert ein Profil, muss
+  `is_tester=true` sein (echte Kunden haben immer ein Profil → niemals
+  treffbar); fehlt das Profil (verwaister Auth-User aus fehlgeschlagenem
+  Reset), greift der E-Mail-Recovery-Pfad. Keine Selbst-Zurücksetzung.
+- **Ansatz — KEIN Hard-Delete:** `auth.admin.deleteUser` scheitert an
+  Foreign-Keys (`bookings.user_id` → „Database error deleting user").
+  Stattdessen wird die **E-Mail umbenannt + gebannt** (analog
+  `anonymize-customer`: `reset_<id>@anonymisiert.local`, `ban_duration` ~100 J).
+  Das gibt die Originaladresse FK-frei wieder frei. **Reihenfolge:** E-Mail
+  freigeben ZUERST (kritischer Schritt, bei Fehler Abbruch ohne Profil-Löschen),
+  dann Storage-Cleanup (`id-documents/<id>`, `customer-ugc`) + leichte
+  konto-gebundene Tabellen (`cart_holds`, `customer_login_history`,
+  `customer_push_subscriptions`, `customer_ugc_submissions`) + Profil-Zeile
+  löschen (→ verschwindet aus der profil-basierten Kundenliste). Audit
+  `customer.reset_tester`.
+- **Recovery (`{ email }`):** sucht den Auth-User per `listUsers` über die
+  E-Mail. Für bereits halb-gelöschte Konten (Profil weg, Auth-User mit
+  Originaladresse hängt noch — z.B. aus dem ersten, fehlerhaften Hard-Delete-
+  Versuch). Gibt die Adresse frei.
+- **Bewusst NICHT gelöscht:** Buchungen (FK-/Buchhaltungs-Risiko). Der neu
+  registrierte Kunde bekommt eine neue `user_id` → alte Test-Buchungen tauchen
+  unter dem frischen Konto ohnehin nicht mehr auf. Verwaiste, gebannte
+  Auth-Zeilen mit geparkter Adresse bleiben (unsichtbar in der Liste).
 
 ### Login-Verlauf pro Kundenkonto (Stand 2026-06-02)
 Admin sieht pro Kunde die letzten 10 Anmeldungen. Supabase `auth.users` hält nur
