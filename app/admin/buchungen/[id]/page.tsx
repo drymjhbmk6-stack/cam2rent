@@ -247,6 +247,7 @@ export default function BuchungDetailPage() {
   const [returnTrackingSaving, setReturnTrackingSaving] = useState(false);
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
+  const [resettingContract, setResettingContract] = useState(false);
   const [emailSending, setEmailSending] = useState(false);
   const [emailToast, setEmailToast] = useState<{ msg: string; type: 'ok' | 'err' } | null>(null);
   const [emailRecipient, setEmailRecipient] = useState('');
@@ -443,8 +444,29 @@ export default function BuchungDetailPage() {
     }
   }
 
-  function handleWbwGateDone(status: string, emailFailed: boolean) {
-    setBooking((prev) => (prev ? { ...prev, status, wbw_finalized: true } : prev));
+  async function handleResetContract() {
+    if (!booking) return;
+    if (!confirm('Mietvertrag wirklich zurücksetzen?\n\nDas unterschriebene PDF wird gelöscht und der Kunde muss den Vertrag neu unterschreiben (sichtbar im Kundenkonto, oder über „Jetzt unterschreiben").')) return;
+    setResettingContract(true);
+    try {
+      const res = await fetch(`/api/admin/booking/${bookingId}/reset-contract`, {
+        method: 'POST',
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        await fetchBooking();
+        alert('Mietvertrag zurückgesetzt. Der Kunde kann jetzt neu unterschreiben.');
+      } else {
+        alert(data.error || 'Vertrag konnte nicht zurückgesetzt werden.');
+      }
+    } catch {
+      alert('Netzwerkfehler beim Zurücksetzen.');
+    } finally {
+      setResettingContract(false);
+    }
+  }
+
+  function handleWbwGateDone(status: string, emailFailed: boolean) {    setBooking((prev) => (prev ? { ...prev, status, wbw_finalized: true } : prev));
     setNewStatus(status);
     setWbwGateStatus(null);
     fetchBooking();
@@ -1303,10 +1325,23 @@ export default function BuchungDetailPage() {
                       <p className="text-xs font-mono text-brand-steel break-all">{agreement.contract_hash}</p>
                     </div>
                   )}
-                  <a href={`/admin/pdf-viewer?u=${encodeURIComponent(`/api/rental-contract/${booking.id}`)}&t=${encodeURIComponent('Mietvertrag')}`} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-heading font-semibold bg-teal-600 text-white rounded-btn hover:bg-teal-700 transition-colors mt-4">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                    Vertrag PDF herunterladen
-                  </a>
+                  <div className="flex flex-wrap items-center gap-3 mt-4">
+                    <a href={`/admin/pdf-viewer?u=${encodeURIComponent(`/api/rental-contract/${booking.id}`)}&t=${encodeURIComponent('Mietvertrag')}`} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-heading font-semibold bg-teal-600 text-white rounded-btn hover:bg-teal-700 transition-colors">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                      Vertrag PDF herunterladen
+                    </a>
+                    <button
+                      onClick={handleResetContract}
+                      disabled={resettingContract}
+                      className="inline-flex items-center gap-2 px-4 py-2 text-sm font-heading font-semibold bg-red-50 text-red-700 border border-red-200 rounded-btn hover:bg-red-100 transition-colors disabled:opacity-40"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                      {resettingContract ? 'Setze zurück…' : 'Vertrag zurücksetzen'}
+                    </button>
+                  </div>
+                  <p className="text-xs font-body text-brand-muted mt-2">
+                    Zurücksetzen löscht das unterschriebene PDF — der Kunde muss neu unterschreiben (z.&nbsp;B. wenn die Unterschrift fehlt).
+                  </p>
                 </div>
               ) : (
                 <div className="space-y-3">
