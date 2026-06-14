@@ -1411,6 +1411,13 @@ bestehendes Token läuft binnen ~1 h aus (Refresh schlägt fehl). Entsperren
 (`blacklisted=false`) setzt `ban_duration: 'none'` → Login wieder frei. Der
 Ban ist best-effort (Fehler landet als `authWarning` in der Antwort, der
 Flag wird trotzdem gesetzt; die Buchungs-Sperre greift unabhängig davon).
+- **Login-Meldung „Konto gesperrt" (Stand 2026-06-14):** Beim fehlgeschlagenen
+  Login zeigt `/login` für gesperrte Konten **„Dieses Konto wurde gesperrt…"**
+  statt des generischen „E-Mail/Passwort falsch". Erkennung: erst Client-Signale
+  des Supabase-Fehlers (`code:'user_banned'` / HTTP 403 / Message), sonst
+  autoritativ über `POST /api/auth/check-banned` (`{ email } → { banned }`,
+  Rate-Limit 10/min/IP, prüft `auth.users.banned_until` ODER
+  `profiles.blacklisted`). Wird nur NACH einem Fehlversuch aufgerufen.
 **Wichtig:** Ein gesperrter Kunde, der sich mit derselben E-Mail **neu
 registriert**, bekommt eine neue `user_id` (neues, ungesperrtes Konto) —
 die Sperre hängt am Konto, nicht an der E-Mail.

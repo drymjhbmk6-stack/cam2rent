@@ -44,7 +44,34 @@ function LoginForm() {
     setLoading(false);
 
     if (error) {
-      setError('E-Mail oder Passwort ist falsch.');
+      // Gesperrtes Konto (Auth-User gebannt → blacklist) gibt von Supabase
+      // je nach Version einen eigenen Fehler (code 'user_banned' / HTTP 403)
+      // ODER maskiert ihn als generischen Fehler. Erst Client-Signale prüfen,
+      // sonst autoritativ serverseitig nachfragen.
+      const code = (error as { code?: string }).code;
+      const status = (error as { status?: number }).status;
+      let isBanned =
+        code === 'user_banned' ||
+        status === 403 ||
+        /banned|gesperrt/i.test(error.message || '');
+      if (!isBanned) {
+        try {
+          const r = await fetch('/api/auth/check-banned', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email }),
+          });
+          if (r.ok) {
+            const d = await r.json().catch(() => ({}));
+            isBanned = !!d?.banned;
+          }
+        } catch { /* generische Meldung */ }
+      }
+      if (isBanned) {
+        setError('Dieses Konto wurde gesperrt. Bei Fragen wende dich bitte an den cam2rent-Support.');
+      } else {
+        setError('E-Mail oder Passwort ist falsch.');
+      }
     } else {
       recordCustomerLogin(data.session?.access_token);
       router.push(redirectTo);
