@@ -402,7 +402,7 @@ export default function AdminVerfuegbarkeitPage() {
     const bMode = b.delivery_mode ?? 'versand';
     const { start: bufStartStr, end: bufEndStr } = getBookingSpan(b, buf);
 
-    const isPending = b.status === 'awaiting_payment';
+    const isPending = b.status === 'awaiting_payment' || b.status === 'pending_verification';
 
     if (dateStr >= b.rental_from && dateStr <= b.rental_to) {
       return { type: isPending ? 'booked-pending' : 'booked', booking: b };
@@ -462,7 +462,8 @@ export default function AdminVerfuegbarkeitPage() {
     };
 
     if (info.booking) {
-      const pendingPrefix = info.booking.status === 'awaiting_payment' ? '⏳ Zahlung ausstehend\n' : '';
+      const pendingPrefix = info.booking.status === 'awaiting_payment' ? '⏳ Zahlung ausstehend\n'
+        : info.booking.status === 'pending_verification' ? '⏳ Wartet auf Freigabe\n' : '';
       content = `${pendingPrefix}${info.booking.id}${info.booking.is_test ? ' [TEST]' : ''}\n${info.booking.customer_name || 'Unbekannt'}\n${fmtDate(info.booking.rental_from)} – ${fmtDate(info.booking.rental_to)}\n${info.booking.delivery_mode === 'abholung' ? 'Abholung' : 'Versand'}`;
       if (info.bufferLabel) content = `${info.bufferLabel}\n${content}`;
     } else if (info.type === 'maintenance') {

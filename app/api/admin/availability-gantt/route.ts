@@ -98,7 +98,7 @@ export async function GET(req: NextRequest) {
     const r = await supabase
       .from('bookings')
       .select(cols)
-      .in('status', ['awaiting_payment', 'confirmed', 'preparing_shipment', 'awaiting_pickup', 'shipped', 'delivered', 'picked_up', 'completed'])
+      .in('status', ['pending_verification', 'awaiting_payment', 'confirmed', 'preparing_shipment', 'awaiting_pickup', 'shipped', 'delivered', 'picked_up', 'active', 'completed'])
       .lte('rental_from', extLast)
       .gte('rental_to', extFirst);
     return r as unknown as BookingsQResult;
