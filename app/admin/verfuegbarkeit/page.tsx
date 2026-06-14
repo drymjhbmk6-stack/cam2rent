@@ -597,6 +597,34 @@ export default function AdminVerfuegbarkeitPage() {
     });
   }, [filteredSets, setBadgeFilter, search]);
 
+  // Sets nach Kamera gruppieren (wie der Kameras-Tab). Ein Set erscheint unter
+  // jeder Kamera, der es zugeordnet ist (Mehrfach-Kamera-Sets stehen in mehreren
+  // Gruppen). Sets ohne Kamera-Zuordnung kommen in eine eigene Gruppe ans Ende.
+  // Gruppen-Reihenfolge folgt der Shop-Kamera-Reihenfolge.
+  const groupedSets = useMemo(() => {
+    const norm = (x: string) => x.toLowerCase().replace(/\s+/g, ' ').trim();
+    const order = new Map<string, number>();
+    shopProducts.forEach((p, i) => order.set(norm(p.name), i));
+    const NO_CAM = '__none__';
+    const groups = new Map<string, { label: string; order: number; sets: GanttSet[] }>();
+    for (const s of visibleSets) {
+      const names = s.product_names && s.product_names.length > 0 ? s.product_names : [NO_CAM];
+      for (const nm of names) {
+        let g = groups.get(nm);
+        if (!g) {
+          g = {
+            label: nm === NO_CAM ? 'Ohne Kamera-Zuordnung' : nm,
+            order: nm === NO_CAM ? 1e9 : (order.get(norm(nm)) ?? 1e8),
+            sets: [],
+          };
+          groups.set(nm, g);
+        }
+        g.sets.push(s);
+      }
+    }
+    return [...groups.values()].sort((a, b) => a.order - b.order || a.label.localeCompare(b.label, 'de'));
+  }, [visibleSets, shopProducts]);
+
   const tabs: { key: Tab; label: string; count: number }[] = [
     { key: 'kameras', label: 'Kameras', count: ganttData ? visibleCameraGroups.length : shopProducts.length },
     { key: 'sets', label: 'Sets', count: ganttData ? visibleSets.length : 0 },
@@ -1123,12 +1151,25 @@ export default function AdminVerfuegbarkeitPage() {
                       ))}
                     </tr>
                   </thead>
-                  <tbody>
-                    {visibleSets.map((s) => {
-                      const setExpanded = expandedSetRows.has(s.id);
+                  {groupedSets.map((group) => (
+                    <tbody key={group.label}>
+                      {/* Kamera-Gruppenkopf — Sets nach Kamera gruppiert, im
+                          selben (einen) Kalender. */}
+                      <tr>
+                        <td className="px-3 py-1.5 sticky left-0 z-10 font-heading font-bold whitespace-nowrap"
+                          style={{ background: '#16233f', color: '#e2e8f0', borderTop: '2px solid #1e293b' }}>
+                          {group.label}
+                          <span className="ml-1.5 text-[10px] font-normal" style={{ color: '#64748b' }}>
+                            ({group.sets.length} {group.sets.length === 1 ? 'Set' : 'Sets'})
+                          </span>
+                        </td>
+                        <td colSpan={days.length} style={{ background: '#16233f', borderTop: '2px solid #1e293b' }} />
+                      </tr>
+                      {group.sets.map((s) => {
+                      const setExpanded = expandedSetRows.has(`${group.label}-${s.id}`);
                       const manyCams = (s.product_names?.length ?? 0) >= 2;
                       return (
-                      <tr key={s.id} style={{ borderBottom: '1px solid #1e293b' }}>
+                      <tr key={`${group.label}-${s.id}`} style={{ borderBottom: '1px solid #1e293b' }}>
                         <td className="px-3 py-1.5 sticky left-0 z-10 align-top" style={{ background: '#0f172a' }}>
                           <div className="flex items-start gap-1">
                             <div className="min-w-0 flex-1">
@@ -1147,7 +1188,7 @@ export default function AdminVerfuegbarkeitPage() {
                             {manyCams && (
                               <button
                                 type="button"
-                                onClick={() => toggleFilter(setExpandedSetRows, s.id)}
+                                onClick={() => toggleFilter(setExpandedSetRows, `${group.label}-${s.id}`)}
                                 className="shrink-0 mt-3 text-[10px] leading-none px-1 py-0.5 rounded transition-colors hover:bg-slate-700"
                                 style={{ color: '#7dd3fc', border: '1px solid #334155' }}
                                 title={setExpanded ? 'Einklappen' : `Alle ${s.product_names?.length} Kameras zeigen`}
@@ -1194,7 +1235,8 @@ export default function AdminVerfuegbarkeitPage() {
                       </tr>
                       );
                     })}
-                  </tbody>
+                    </tbody>
+                  ))}
                 </table>
               </div>
             </div>
