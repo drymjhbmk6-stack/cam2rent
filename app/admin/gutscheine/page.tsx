@@ -61,11 +61,30 @@ function emptyForm(): FormData {
   };
 }
 
-function toLocal(iso: string | null): string {
+function toLocalDate(iso: string | null): string {
   if (!iso) return '';
   const d = new Date(iso);
   const p = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+// Tag-Beginn (00:00) bzw. Tag-Ende (23:59:59) als ISO — Uhrzeit fällt für
+// Gutscheine weg, der "Gültig bis"-Tag zählt voll mit (Ende des Tages).
+function dayStartISO(dateStr: string): string {
+  return new Date(`${dateStr}T00:00:00`).toISOString();
+}
+function dayEndISO(dateStr: string): string {
+  return new Date(`${dateStr}T23:59:59`).toISOString();
+}
+
+// Dauer (Tage/Wochen/Monate) ab einem Anker-Datum addieren → Tag-Ende-ISO.
+function addDurationEndISO(anchor: Date, amount: number, unit: 'days' | 'weeks' | 'months'): string {
+  const d = new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate());
+  if (unit === 'days') d.setDate(d.getDate() + amount);
+  else if (unit === 'weeks') d.setDate(d.getDate() + amount * 7);
+  else d.setMonth(d.getMonth() + amount);
+  const p = (n: number) => String(n).padStart(2, '0');
+  return dayEndISO(`${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`);
 }
 
 // ─── Customer Picker Modal ───────────────────────────────────────────────────
@@ -165,6 +184,12 @@ export default function AdminGutscheinePage() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerTarget, setPickerTarget] = useState<'new' | 'edit'>('new');
 
+  // Relative Gültigkeitsdauer (X Tage/Wochen/Monate) je Formular
+  const [duration, setDuration] = useState<Record<'new' | 'edit', { amount: string; unit: 'days' | 'weeks' | 'months' }>>({
+    new: { amount: '', unit: 'days' },
+    edit: { amount: '', unit: 'days' },
+  });
+
   useEffect(() => {
     loadCoupons();
     fetch('/api/admin/accessories').then((r) => r.json())
@@ -192,7 +217,9 @@ export default function AdminGutscheinePage() {
         body: JSON.stringify(newForm),
       });
       if (!res.ok) { const d = await res.json().catch(() => ({})); alert(`Fehler: ${d.error ?? 'Unbekannter Fehler'}`); return; }
-      setNewForm(emptyForm()); setShowNew(false); loadCoupons();
+      setNewForm(emptyForm());
+      setDuration((d) => ({ ...d, new: { amount: '', unit: 'days' } }));
+      setShowNew(false); loadCoupons();
     } catch (e) { alert(`Netzwerkfehler: ${e instanceof Error ? e.message : String(e)}`); }
     finally { setCreating(false); }
   }
@@ -410,18 +437,51 @@ export default function AdminGutscheinePage() {
           )}
         </div>
 
-        {/* Validity period */}
+        {/* Validity period — Tag-genau, ohne Uhrzeit */}
         <div>
           <label style={S.label}>Gültig ab</label>
-          <input type="datetime-local" value={toLocal(form.valid_from ?? null)}
-            onChange={(e) => setForm((f) => ({ ...f, valid_from: e.target.value ? new Date(e.target.value).toISOString() : null }))}
+          <input type="date" value={toLocalDate(form.valid_from ?? null)}
+            onChange={(e) => setForm((f) => ({ ...f, valid_from: e.target.value ? dayStartISO(e.target.value) : null }))}
             style={{ ...S.input, width: '100%' }} />
         </div>
         <div>
           <label style={S.label}>Gültig bis</label>
-          <input type="datetime-local" value={toLocal(form.valid_until ?? null)}
-            onChange={(e) => setForm((f) => ({ ...f, valid_until: e.target.value ? new Date(e.target.value).toISOString() : null }))}
+          <input type="date" value={toLocalDate(form.valid_until ?? null)}
+            min={toLocalDate(form.valid_from ?? null) || undefined}
+            onChange={(e) => setForm((f) => ({ ...f, valid_until: e.target.value ? dayEndISO(e.target.value) : null }))}
             style={{ ...S.input, width: '100%' }} />
+        </div>
+
+        {/* Relative Gültigkeitsdauer — füllt "Gültig bis" automatisch */}
+        <div style={{ gridColumn: '1 / -1' }}>
+          <label style={S.label}>oder Gültigkeit für …</label>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <input type="number" min="1" inputMode="numeric"
+              value={duration[mode].amount}
+              onChange={(e) => setDuration((d) => ({ ...d, [mode]: { ...d[mode], amount: e.target.value } }))}
+              placeholder="z.B. 30"
+              style={{ ...S.input, width: 100 }} />
+            <select value={duration[mode].unit}
+              onChange={(e) => setDuration((d) => ({ ...d, [mode]: { ...d[mode], unit: e.target.value as 'days' | 'weeks' | 'months' } }))}
+              style={{ ...S.select, minWidth: 130 }}>
+              <option value="days">Tage</option>
+              <option value="weeks">Wochen</option>
+              <option value="months">Monate</option>
+            </select>
+            <button type="button"
+              onClick={() => {
+                const amt = parseInt(duration[mode].amount, 10);
+                if (!amt || amt < 1) { alert('Bitte eine Anzahl ≥ 1 eingeben.'); return; }
+                const anchor = form.valid_from ? new Date(form.valid_from) : new Date();
+                setForm((f) => ({ ...f, valid_until: addDurationEndISO(anchor, amt, duration[mode].unit) }));
+              }}
+              style={{ padding: '10px 16px', fontSize: 13, fontWeight: 600, color: '#fff', background: '#1e293b', border: '1px solid #334155', borderRadius: 10, cursor: 'pointer' }}>
+              Setzen
+            </button>
+          </div>
+          <div style={{ fontSize: 11, color: '#64748b', marginTop: 6 }}>
+            Berechnet ab {form.valid_from ? '„Gültig ab"' : 'heute'} und trägt das Enddatum oben ein.
+          </div>
         </div>
 
         {/* Max uses + Min order */}

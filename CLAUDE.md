@@ -1627,6 +1627,18 @@ neue Migration nötig. NPS-/Sterne-/Choice-Auswertungen ignorieren Konto-Feedbac
 ### Preise
 30-Tage-Preistabelle pro Produkt + Formel für 31+ Tage, alles in admin_config
 
+### Gutschein-Gültigkeit tag-genau + relative Dauer (Stand 2026-06-15)
+`/admin/gutscheine`: „Gültig ab" / „Gültig bis" sind jetzt **reine
+Datumsfelder** (`type="date"`, keine Uhrzeit mehr — vorher `datetime-local`).
+Beim Speichern wird „Gültig ab" auf Tag-Beginn (`00:00:00`), „Gültig bis" auf
+Tag-Ende (`23:59:59`) geklemmt → der letzte Gültigkeitstag zählt voll mit
+(Redemption-Check `valid_until < now` in `validate-coupon`). Zusätzlich neuer
+Helfer **„oder Gültigkeit für X Tage/Wochen/Monate"**: Zahl + Einheit +
+„Setzen"-Button berechnet das Enddatum ab „Gültig ab" (oder heute, falls leer)
+und trägt es ins „Gültig bis"-Feld ein (Tag-Ende). Rein client-seitig — gespeichert
+wird weiterhin ein absolutes `valid_until`-ISO, **keine API-/Schema-Änderung**
+(`app/admin/gutscheine/page.tsx`).
+
 ### Aktion `not_combinable` — analog zu Coupons (Stand 2026-05-20)
 Aktionen in `admin_settings.product_discounts` (JSON-Array) haben jetzt ein optionales `not_combinable: boolean`-Feld. Default `false` — bestehende Aktionen verhalten sich wie bisher.
 
