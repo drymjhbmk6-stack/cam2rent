@@ -893,11 +893,11 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
           <span className="font-heading font-black text-base tracking-tight" style={{ color: 'white' }}>
             cam<span style={{ color: '#06b6d4' }}>2</span>rent
           </span>
-          <span className="text-xs font-heading font-semibold tracking-widest uppercase" style={{ color: '#475569' }}>
+          <span className="hidden sm:inline text-xs font-heading font-semibold tracking-widest uppercase" style={{ color: '#475569' }}>
             Admin
           </span>
         </Link>
-        <div className="ml-auto shrink-0 flex items-center gap-2">
+        <div className="ml-auto shrink-0 flex items-center gap-1.5">
           <EnvModeBadge />
           <PageRefreshButton />
           <NotificationDropdown position="mobile" />
