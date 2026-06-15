@@ -799,6 +799,31 @@ function SidebarContent({ pathname, isDashboard, onNavClick, handleLogout, me }:
   );
 }
 
+function PageRefreshButton() {
+  const [spinning, setSpinning] = useState(false);
+  return (
+    <button
+      onClick={() => {
+        setSpinning(true);
+        window.location.reload();
+      }}
+      className="p-2 rounded-lg transition-colors shrink-0"
+      style={{ color: '#06b6d4' }}
+      aria-label="Seite aktualisieren"
+      title="Seite aktualisieren"
+    >
+      <svg
+        className={`w-5 h-5${spinning ? ' animate-spin' : ''}`}
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+      </svg>
+    </button>
+  );
+}
+
 export default function AdminLayoutClient({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -874,6 +899,7 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
         </Link>
         <div className="ml-auto shrink-0 flex items-center gap-2">
           <EnvModeBadge />
+          <PageRefreshButton />
           <NotificationDropdown position="mobile" />
         </div>
       </div>
