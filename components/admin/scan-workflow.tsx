@@ -156,9 +156,10 @@ export function expandItems(b: ScanWorkflowInput): PackItem[] {
   }
   const out: PackItem[] = [];
   // Mehrere Kameras (Warenkorb-Buchung): productName ist kommagetrennt
-  // ("OSMO Action 5 Pro , OSMO Action 5 Pro"). Pro Kamera ein Slot. Der
+  // ("OSMO Action 5 Pro , DJI Osmo Nano 128 GB"). Pro Kamera ein Slot. Der
   // erste behaelt key 'camera' (scanbar, Seriennummer), die weiteren sind
-  // manuell abzuhaken — alle gruppieren als EIN "Kamera N/M"-Block.
+  // manuell abzuhaken. Die Anzeige gruppiert in groupItems pro MODELL —
+  // gleiches Modell zu einem "N/M"-Block, verschiedene Modelle getrennt.
   const camArr: { name: string; serial: string | null }[] =
     Array.isArray(b.cameras) && b.cameras.length > 0
       ? b.cameras.map((c) => ({ name: c.product_name, serial: c.serial_number ?? null }))
@@ -211,7 +212,12 @@ export function groupItems(items: PackItem[]): GroupedItem[] {
   const out: GroupedItem[] = [];
   const map = new Map<string, GroupedItem>();
   for (const it of items) {
-    const key = it.type === 'camera' ? 'camera'
+    // Kameras nach MODELL gruppieren (nicht hart auf 'camera'): bei einer
+    // gemischten Multi-Kamera-Buchung (z.B. "OSMO Action 5 Pro" + "DJI Osmo
+    // Nano 128 GB") wuerden sonst beide unter dem Namen der ERSTEN Kamera mit
+    // Zaehler 0/2 zusammengefasst — der Packer saehe zweimal dasselbe Modell.
+    // Gleiches Modell aggregiert weiter zu EINEM "0/2"-Block.
+    const key = it.type === 'camera' ? `camera::${(it.label ?? '').trim().toLowerCase()}`
               : it.type === 'return-label' ? 'return-label'
               : (it.accessoryId ?? it.key);
     const existing = map.get(key);
