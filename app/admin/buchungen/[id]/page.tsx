@@ -3034,7 +3034,11 @@ function WbwFinalizePanel({ booking, onChanged }: { booking: BookingDetail; onCh
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ t: 'ok' | 'err'; m: string } | null>(null);
 
-  const allValid = rows.length > 0 && rows.every((r) => Number(r.value) > 0);
+  // Werte duerfen 0 / leer sein (Server klemmt leer/negativ auf 0 € — analog
+  // WbwStatusGateModal). Der Finalisieren-Button haengt daher NUR daran, dass
+  // ueberhaupt Positionen da sind — frueher blockierte ein 0/leeres Feld die
+  // ganze Speicherung (Button wurde grau/unsichtbar → "Speichern fehlt").
+  const canFinalize = rows.length > 0;
 
   async function doFinalize(resend: boolean) {
     setBusy(true);
@@ -3046,7 +3050,7 @@ function WbwFinalizePanel({ booking, onChanged }: { booking: BookingDetail; onCh
         body: JSON.stringify(
           resend
             ? { resend: true }
-            : { items: rows.map((r) => ({ name: r.name, serial: r.serial, value: Number(r.value) })) },
+            : { items: rows.map((r) => ({ name: r.name, serial: r.serial, value: Number(r.value) || 0 })) },
         ),
       });
       const d = await res.json().catch(() => ({}));
@@ -3165,7 +3169,7 @@ function WbwFinalizePanel({ booking, onChanged }: { booking: BookingDetail; onCh
         <button
           type="button"
           onClick={() => setConfirmOpen(true)}
-          disabled={!allValid || busy}
+          disabled={!canFinalize || busy}
           className="px-4 py-2 rounded-btn bg-brand-black text-white text-sm font-heading font-semibold hover:bg-brand-dark transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           WBW finalisieren &amp; E-Mail senden
