@@ -64,6 +64,12 @@ function colorBg(color: string | null): string {
   return COLOR_PRESETS.find((c) => c.value === color)?.bg ?? '#06b6d4';
 }
 
+// Monats-Layout: Höhe der Tagesnummer-Zeile + Termin-Balken pro Woche.
+const MAX_LANES = 4;   // max. übereinander sichtbare Balken pro Woche
+const HEADER_H = 22;   // Platz für die Tageszahl oben
+const LANE_H = 18;     // Höhe eines Balkens
+const LANE_GAP = 2;    // Abstand zwischen Balken
+
 function fmtTime(iso: string): string {
   return new Date(iso).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Berlin' });
 }
@@ -76,24 +82,6 @@ function berlinDateKey(date: Date): string {
   // Verwendet Intl, um Berlin-Tag als YYYY-MM-DD zu bekommen
   const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Berlin', year: 'numeric', month: '2-digit', day: '2-digit' });
   return fmt.format(date);
-}
-
-// Alle Berlin-Tages-Keys von startKey bis endKey (inkl.). Reine String-Datums-
-// Arithmetik (Anker auf 12:00 UTC), damit Sommer-/Winterzeit nicht reindriftet.
-function dayKeysBetween(startKey: string, endKey: string): string[] {
-  const pad = (x: number) => String(x).padStart(2, '0');
-  const [sy, sm, sd] = startKey.split('-').map(Number);
-  const [ey, em, ed] = endKey.split('-').map(Number);
-  const endUtc = Date.UTC(ey, em - 1, ed, 12);
-  const cur = new Date(Date.UTC(sy, sm - 1, sd, 12));
-  const keys: string[] = [];
-  let guard = 0;
-  while (cur.getTime() <= endUtc && guard < 400) {
-    keys.push(`${cur.getUTCFullYear()}-${pad(cur.getUTCMonth() + 1)}-${pad(cur.getUTCDate())}`);
-    cur.setUTCDate(cur.getUTCDate() + 1);
-    guard++;
-  }
-  return keys;
 }
 
 export default function MeinKalenderPage() {
@@ -129,22 +117,6 @@ export default function MeinKalenderPage() {
 
   useEffect(() => { void load(); }, [load]);
 
-  // Map: YYYY-MM-DD -> Termine (mehrtägige Termine erscheinen an jedem Tag
-  // ihres Zeitraums; isStart markiert den ersten Tag für die Zeit-Anzeige).
-  const byDay = useMemo(() => {
-    const m = new Map<string, { a: Appointment; isStart: boolean }[]>();
-    for (const a of appointments) {
-      const startKey = berlinDateKey(new Date(a.starts_at));
-      const endKey = a.ends_at ? berlinDateKey(new Date(a.ends_at)) : startKey;
-      const keys = endKey > startKey ? dayKeysBetween(startKey, endKey) : [startKey];
-      for (const key of keys) {
-        if (!m.has(key)) m.set(key, []);
-        m.get(key)!.push({ a, isStart: key === startKey });
-      }
-    }
-    return m;
-  }, [appointments]);
-
   const monthCells = useMemo(() => {
     const first = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
     const start = new Date(first);
@@ -159,6 +131,56 @@ export default function MeinKalenderPage() {
     }
     return cells;
   }, [cursor]);
+
+  // Wochen-Layout: pro Woche werden Termine als durchgezogene Balken (über
+  // mehrere Spalten gespannt) mit Lane-Packing berechnet. Mehrtägige Termine,
+  // die über das Wochenende laufen, brechen am Wochenende in ein neues Segment.
+  const weeks = useMemo(() => {
+    return Array.from({ length: 6 }, (_, w) => {
+      const cells = monthCells.slice(w * 7, w * 7 + 7);
+      const weekStart = cells[0].key;
+      const weekEnd = cells[6].key;
+      const segs = appointments
+        .map((a) => {
+          const startKey = berlinDateKey(new Date(a.starts_at));
+          const endKey = a.ends_at ? berlinDateKey(new Date(a.ends_at)) : startKey;
+          if (endKey < weekStart || startKey > weekEnd) return null;
+          const sIdx = cells.findIndex((c) => c.key === startKey);
+          const eIdx = cells.findIndex((c) => c.key === endKey);
+          return {
+            a,
+            startCol: sIdx === -1 ? 0 : sIdx,
+            endCol: eIdx === -1 ? 6 : eIdx,
+            continuesLeft: startKey < weekStart,
+            continuesRight: endKey > weekEnd,
+            isStartSeg: startKey >= weekStart,
+          };
+        })
+        .filter((s): s is NonNullable<typeof s> => s !== null);
+      // Lange/frühe Segmente zuerst → kompaktes Lane-Packing
+      segs.sort((x, y) =>
+        x.startCol - y.startCol ||
+        (y.endCol - y.startCol) - (x.endCol - x.startCol) ||
+        new Date(x.a.starts_at).getTime() - new Date(y.a.starts_at).getTime());
+      const laneEnds: number[] = [];
+      const placed = segs.map((s) => {
+        let lane = laneEnds.findIndex((end) => s.startCol > end);
+        if (lane === -1) { lane = laneEnds.length; laneEnds.push(s.endCol); }
+        else laneEnds[lane] = s.endCol;
+        return { ...s, lane };
+      });
+      const overflowByCol = new Array(7).fill(0) as number[];
+      for (const b of placed) {
+        if (b.lane >= MAX_LANES) for (let c = b.startCol; c <= b.endCol; c++) overflowByCol[c]++;
+      }
+      return {
+        cells,
+        bars: placed.filter((b) => b.lane < MAX_LANES),
+        overflowByCol,
+        laneCount: Math.min(laneEnds.length, MAX_LANES),
+      };
+    });
+  }, [monthCells, appointments]);
 
   const today = berlinDateKey(new Date());
   const upcoming = useMemo(() => {
@@ -207,61 +229,92 @@ export default function MeinKalenderPage() {
               </h2>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, background: '#1e293b', border: '1px solid #334155', borderRadius: 8, padding: 4 }}>
-              {['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map((d) => (
-                <div key={d} style={{ padding: '6px 8px', fontSize: 11, fontWeight: 700, color: '#94a3b8', textAlign: 'center', textTransform: 'uppercase' }}>{d}</div>
-              ))}
-              {monthCells.map((cell) => {
-                const dayAppts = byDay.get(cell.key) ?? [];
-                const isToday = cell.key === today;
+            <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 8, padding: 4 }}>
+              {/* Wochentag-Kopfzeile */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', columnGap: 4, marginBottom: 4 }}>
+                {['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map((d) => (
+                  <div key={d} style={{ padding: '4px 0', fontSize: 11, fontWeight: 700, color: '#94a3b8', textAlign: 'center', textTransform: 'uppercase' }}>{d}</div>
+                ))}
+              </div>
+
+              {/* Wochen-Reihen mit durchgezogenen Termin-Balken */}
+              {weeks.map((week, wi) => {
+                const lanes = Math.max(1, week.laneCount);
+                const weekHeight = Math.max(72, HEADER_H + lanes * LANE_H + (lanes - 1) * LANE_GAP + 14);
                 return (
-                  <div
-                    key={cell.key}
-                    onClick={() => setCreatingOnDate(cell.key)}
-                    style={{
-                      minHeight: 88,
-                      background: cell.inMonth ? '#0f172a' : '#1e293b',
-                      border: isToday ? '2px solid #facc15' : '1px solid #1e293b',
-                      borderRadius: 6,
-                      padding: 4,
-                      cursor: 'pointer',
-                      opacity: cell.inMonth ? 1 : 0.5,
-                    }}
-                  >
-                    <div style={{ fontSize: 11, fontWeight: 600, color: isToday ? '#facc15' : '#94a3b8', marginBottom: 2, padding: '0 2px' }}>
-                      {cell.date.getDate()}
+                  <div key={wi} style={{ position: 'relative', marginBottom: 4 }}>
+                    {/* Tag-Hintergründe + Tageszahl */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', columnGap: 4 }}>
+                      {week.cells.map((cell, ci) => {
+                        const isToday = cell.key === today;
+                        return (
+                          <div
+                            key={cell.key}
+                            onClick={() => setCreatingOnDate(cell.key)}
+                            style={{
+                              position: 'relative',
+                              minHeight: weekHeight,
+                              background: cell.inMonth ? '#0f172a' : '#1e293b',
+                              border: isToday ? '2px solid #facc15' : '1px solid #1e293b',
+                              borderRadius: 6,
+                              padding: 4,
+                              cursor: 'pointer',
+                              opacity: cell.inMonth ? 1 : 0.5,
+                            }}
+                          >
+                            <div style={{ fontSize: 11, fontWeight: 600, color: isToday ? '#facc15' : '#94a3b8', padding: '0 2px' }}>
+                              {cell.date.getDate()}
+                            </div>
+                            {week.overflowByCol[ci] > 0 && (
+                              <div style={{ position: 'absolute', bottom: 2, left: 6, fontSize: 9, color: '#94a3b8' }}>+{week.overflowByCol[ci]}</div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
-                    {dayAppts.slice(0, 3).map(({ a, isStart }) => {
-                      const multiDay = !!a.ends_at && berlinDateKey(new Date(a.ends_at)) > berlinDateKey(new Date(a.starts_at));
-                      return (
+
+                    {/* Termin-Balken-Overlay (gleiches 7-Spalten-Raster) */}
+                    <div style={{
+                      position: 'absolute', top: HEADER_H, left: 0, right: 0,
+                      display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
+                      columnGap: 4, rowGap: LANE_GAP, gridAutoRows: `${LANE_H}px`,
+                      pointerEvents: 'none',
+                    }}>
+                      {week.bars.map((bar) => (
                         <div
-                          key={a.id}
-                          onClick={(e) => { e.stopPropagation(); setEditing(a); }}
+                          key={`${bar.a.id}-${wi}`}
+                          onClick={(e) => { e.stopPropagation(); setEditing(bar.a); }}
+                          title={`${bar.a.title}${bar.a.is_owner ? '' : ' (von ' + bar.a.owner_name + ')'}`}
                           style={{
-                            background: colorBg(a.color),
+                            gridColumn: `${bar.startCol + 1} / ${bar.endCol + 2}`,
+                            gridRow: bar.lane + 1,
+                            background: colorBg(bar.a.color),
                             color: 'white',
                             fontSize: 10,
                             fontWeight: 600,
-                            padding: '2px 5px',
-                            borderRadius: 3,
-                            marginBottom: 2,
+                            padding: '0 6px',
+                            height: LANE_H,
+                            lineHeight: `${LANE_H}px`,
                             overflow: 'hidden',
                             textOverflow: 'ellipsis',
                             whiteSpace: 'nowrap',
-                            opacity: a.is_owner ? 1 : 0.85,
-                            borderLeft: a.is_owner ? 'none' : '3px solid white',
+                            cursor: 'pointer',
+                            pointerEvents: 'auto',
+                            opacity: bar.a.is_owner ? 1 : 0.9,
+                            borderTopLeftRadius: bar.continuesLeft ? 0 : 4,
+                            borderBottomLeftRadius: bar.continuesLeft ? 0 : 4,
+                            borderTopRightRadius: bar.continuesRight ? 0 : 4,
+                            borderBottomRightRadius: bar.continuesRight ? 0 : 4,
+                            borderLeft: bar.a.is_owner ? undefined : '3px solid #fff',
+                            boxSizing: 'border-box',
                           }}
-                          title={`${a.title}${a.is_owner ? '' : ' (von ' + a.owner_name + ')'}`}
                         >
-                          {!a.all_day && isStart && <span style={{ opacity: 0.85 }}>{fmtTime(a.starts_at)} </span>}
-                          {multiDay && !isStart && <span style={{ opacity: 0.7 }}>↪ </span>}
-                          {a.title}
+                          {bar.continuesLeft && <span style={{ opacity: 0.7 }}>◂ </span>}
+                          {!bar.a.all_day && bar.isStartSeg && <span style={{ opacity: 0.85 }}>{fmtTime(bar.a.starts_at)} </span>}
+                          {bar.a.title}
                         </div>
-                      );
-                    })}
-                    {dayAppts.length > 3 && (
-                      <div style={{ fontSize: 10, color: '#94a3b8', padding: '0 2px' }}>+{dayAppts.length - 3} weitere</div>
-                    )}
+                      ))}
+                    </div>
                   </div>
                 );
               })}

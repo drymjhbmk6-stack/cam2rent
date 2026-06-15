@@ -3994,13 +3994,18 @@ sieht die Gruppe nicht). Zwei Einträge: **Meine Notizen** + **Mein Kalender**.
       werden zu reinen `type="date"`-Tagesfeldern. Beim Aktivieren der
       Checkbox + beim Speichern wird Start auf `00:00`, Ende auf `23:59` des
       jeweiligen Tages geklemmt (Ende leer → gleicher Tag wie Start). Zusätzlich
-      spiegelt die Monatsansicht jetzt **mehrtägige Termine**: ein Termin mit
-      `ends_at` an einem späteren Berlin-Tag erscheint als Balken an **jedem**
-      Tag seines Zeitraums (`dayKeysBetween`-Helper expandiert die
-      `byDay`-Map; Uhrzeit nur am Starttag, Folgetage mit „↪"-Prefix). Vorher
-      lag der Termin nur auf dem Starttag. **Reine Frontend-Änderung**
-      (`app/admin/mein/kalender/page.tsx`) — die API speichert
-      `all_day`/`starts_at`/`ends_at` ohnehin schon beliebig.
+      spiegelt die Monatsansicht mehrtägige Termine als **durchgezogenen
+      Balken**: pro Woche eine Reihe mit (a) 7 Tag-Hintergründen und (b) einem
+      absolut positionierten Termin-Overlay im selben 7-Spalten-Raster
+      (`repeat(7, minmax(0,1fr))`). Ein Balken spannt via `gridColumn`
+      `startCol/endCol+1` über mehrere Spalten = ein zusammenhängendes Element
+      (überzeichnet die Spalten-Gaps → optisch durchgezogen). Termine über das
+      Wochenende brechen am Zeilenumbruch in ein neues Segment (`◂`-Prefix für
+      „kommt von links"). Lane-Packing (Greedy, max 4 Lanes, `+N`-Overflow pro
+      Tag) stapelt überlappende Termine. `minmax(0,1fr)` statt `1fr` behebt das
+      horizontale Überlaufen (vorher waren SA/SO auf Mobile abgeschnitten).
+      **Reine Frontend-Änderung** (`app/admin/mein/kalender/page.tsx`) — die
+      API speichert `all_day`/`starts_at`/`ends_at` ohnehin schon beliebig.
 - **Sidebar-Integration** in `components/admin/AdminLayoutClient.tsx`: neue
   Konstante `MEIN_BEREICH_ITEMS` + NavGroupCollapse-Block oben (vor
   Tagesgeschäft), bedingt sichtbar `me && me.id !== 'legacy-env'`. Neuer
