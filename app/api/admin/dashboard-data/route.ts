@@ -343,10 +343,15 @@ export async function GET() {
         st === 'pending_verification';
       // Stripe zuerst, dann Buchhaltung, dann abgeleiteter Fallback.
       const paid = paidViaStripe.has(id) || paidViaInvoice.has(id) || !isUnpaidDerived;
-      const verificationRequired = b.verification_required === true;
       const gatePassed = !!b.verification_gate_passed_at;
       const uid = typeof b.user_id === 'string' ? b.user_id : '';
       const customerVerified = uid ? verifyStatusMap[uid] === 'verified' : false;
+      // „Ausweis/Konto verifiziert": grün nur wenn der Kunde tatsächlich
+      // verifiziert ist (Profil-Status 'verified') ODER der Admin das
+      // Verifizierungs-Gate freigegeben hat. Sonst rot — auch wenn die
+      // Buchung keine verzögerte Verifizierung verlangt (der Ausweis kann
+      // trotzdem fehlen, wie bei Dennis).
+      const verified = customerVerified || gatePassed;
       return {
         id,
         product_name: (b.product_name as string) ?? '',
@@ -357,7 +362,7 @@ export async function GET() {
         rental_to: (b.rental_to as string) ?? '',
         tracking_number: (b.tracking_number as string) ?? null,
         // Status-Übersicht (4 Indikatoren)
-        verified: !verificationRequired || gatePassed || customerVerified,
+        verified,
         contract_signed: b.contract_signed === true,
         contract_checked: b.contract_locked === true,
         paid,
