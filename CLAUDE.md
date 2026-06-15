@@ -378,8 +378,10 @@ Sind alle vier grün, kann für den Versand gepackt werden. `GET
 /api/admin/dashboard-data` reichert `action_queue.items` dafür an: Select auf
 `bookings` ist `*` (max 50 Zeilen, robust gegen fehlende `contract_locked`-
 Migration → undefined=false), plus Bulk-Lookup `profiles.verification_status`
-der beteiligten `user_id`. Felder pro Item: `verified` (= `verification_required`
-falsy ODER `verification_gate_passed_at` gesetzt ODER `verification_status==='verified'`),
+der beteiligten `user_id`. Felder pro Item: `verified` (= `verification_gate_passed_at`
+gesetzt ODER `profiles.verification_status==='verified'` — grün NUR wenn der Kunde
+wirklich verifiziert ist bzw. der Admin das Gate freigegeben hat; NICHT mehr grün
+nur weil die Buchung keine verzögerte Verifizierung verlangt),
 `contract_signed`, `contract_checked` (= `contract_locked`), `paid`. Reine
 Anzeige — keine Migration, kein Gating geändert.
 - **`paid`-Quelle (Stand 2026-06-14):** in dieser Reihenfolge — (1) **Stripe-Abgleich**
