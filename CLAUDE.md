@@ -3977,6 +3977,18 @@ sieht die Gruppe nicht). Zwei Einträge: **Meine Notizen** + **Mein Kalender**.
     Push/E-Mail-Checkboxen + Sharing-Liste (Multi-Select Kollegen).
     Geteilte Termine sind read-only (disabled-Inputs + Hinweis-Banner
     „📤 Geteilt von …").
+    - **Ganztägig + mehrtägige Termine (Stand 2026-06-15):** Ist „Ganztägig"
+      im Edit-Modal aktiv, **fällt die Uhrzeit weg** — die Beginn-/Ende-Felder
+      werden zu reinen `type="date"`-Tagesfeldern. Beim Aktivieren der
+      Checkbox + beim Speichern wird Start auf `00:00`, Ende auf `23:59` des
+      jeweiligen Tages geklemmt (Ende leer → gleicher Tag wie Start). Zusätzlich
+      spiegelt die Monatsansicht jetzt **mehrtägige Termine**: ein Termin mit
+      `ends_at` an einem späteren Berlin-Tag erscheint als Balken an **jedem**
+      Tag seines Zeitraums (`dayKeysBetween`-Helper expandiert die
+      `byDay`-Map; Uhrzeit nur am Starttag, Folgetage mit „↪"-Prefix). Vorher
+      lag der Termin nur auf dem Starttag. **Reine Frontend-Änderung**
+      (`app/admin/mein/kalender/page.tsx`) — die API speichert
+      `all_day`/`starts_at`/`ends_at` ohnehin schon beliebig.
 - **Sidebar-Integration** in `components/admin/AdminLayoutClient.tsx`: neue
   Konstante `MEIN_BEREICH_ITEMS` + NavGroupCollapse-Block oben (vor
   Tagesgeschäft), bedingt sichtbar `me && me.id !== 'legacy-env'`. Neuer

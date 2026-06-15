@@ -78,6 +78,24 @@ function berlinDateKey(date: Date): string {
   return fmt.format(date);
 }
 
+// Alle Berlin-Tages-Keys von startKey bis endKey (inkl.). Reine String-Datums-
+// Arithmetik (Anker auf 12:00 UTC), damit Sommer-/Winterzeit nicht reindriftet.
+function dayKeysBetween(startKey: string, endKey: string): string[] {
+  const pad = (x: number) => String(x).padStart(2, '0');
+  const [sy, sm, sd] = startKey.split('-').map(Number);
+  const [ey, em, ed] = endKey.split('-').map(Number);
+  const endUtc = Date.UTC(ey, em - 1, ed, 12);
+  const cur = new Date(Date.UTC(sy, sm - 1, sd, 12));
+  const keys: string[] = [];
+  let guard = 0;
+  while (cur.getTime() <= endUtc && guard < 400) {
+    keys.push(`${cur.getUTCFullYear()}-${pad(cur.getUTCMonth() + 1)}-${pad(cur.getUTCDate())}`);
+    cur.setUTCDate(cur.getUTCDate() + 1);
+    guard++;
+  }
+  return keys;
+}
+
 export default function MeinKalenderPage() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -111,13 +129,18 @@ export default function MeinKalenderPage() {
 
   useEffect(() => { void load(); }, [load]);
 
-  // Map: YYYY-MM-DD -> Termine
+  // Map: YYYY-MM-DD -> Termine (mehrtägige Termine erscheinen an jedem Tag
+  // ihres Zeitraums; isStart markiert den ersten Tag für die Zeit-Anzeige).
   const byDay = useMemo(() => {
-    const m = new Map<string, Appointment[]>();
+    const m = new Map<string, { a: Appointment; isStart: boolean }[]>();
     for (const a of appointments) {
-      const key = berlinDateKey(new Date(a.starts_at));
-      if (!m.has(key)) m.set(key, []);
-      m.get(key)!.push(a);
+      const startKey = berlinDateKey(new Date(a.starts_at));
+      const endKey = a.ends_at ? berlinDateKey(new Date(a.ends_at)) : startKey;
+      const keys = endKey > startKey ? dayKeysBetween(startKey, endKey) : [startKey];
+      for (const key of keys) {
+        if (!m.has(key)) m.set(key, []);
+        m.get(key)!.push({ a, isStart: key === startKey });
+      }
     }
     return m;
   }, [appointments]);
@@ -208,30 +231,34 @@ export default function MeinKalenderPage() {
                     <div style={{ fontSize: 11, fontWeight: 600, color: isToday ? '#facc15' : '#94a3b8', marginBottom: 2, padding: '0 2px' }}>
                       {cell.date.getDate()}
                     </div>
-                    {dayAppts.slice(0, 3).map((a) => (
-                      <div
-                        key={a.id}
-                        onClick={(e) => { e.stopPropagation(); setEditing(a); }}
-                        style={{
-                          background: colorBg(a.color),
-                          color: 'white',
-                          fontSize: 10,
-                          fontWeight: 600,
-                          padding: '2px 5px',
-                          borderRadius: 3,
-                          marginBottom: 2,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                          opacity: a.is_owner ? 1 : 0.85,
-                          borderLeft: a.is_owner ? 'none' : '3px solid white',
-                        }}
-                        title={`${a.title}${a.is_owner ? '' : ' (von ' + a.owner_name + ')'}`}
-                      >
-                        {!a.all_day && <span style={{ opacity: 0.85 }}>{fmtTime(a.starts_at)} </span>}
-                        {a.title}
-                      </div>
-                    ))}
+                    {dayAppts.slice(0, 3).map(({ a, isStart }) => {
+                      const multiDay = !!a.ends_at && berlinDateKey(new Date(a.ends_at)) > berlinDateKey(new Date(a.starts_at));
+                      return (
+                        <div
+                          key={a.id}
+                          onClick={(e) => { e.stopPropagation(); setEditing(a); }}
+                          style={{
+                            background: colorBg(a.color),
+                            color: 'white',
+                            fontSize: 10,
+                            fontWeight: 600,
+                            padding: '2px 5px',
+                            borderRadius: 3,
+                            marginBottom: 2,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            opacity: a.is_owner ? 1 : 0.85,
+                            borderLeft: a.is_owner ? 'none' : '3px solid white',
+                          }}
+                          title={`${a.title}${a.is_owner ? '' : ' (von ' + a.owner_name + ')'}`}
+                        >
+                          {!a.all_day && isStart && <span style={{ opacity: 0.85 }}>{fmtTime(a.starts_at)} </span>}
+                          {multiDay && !isStart && <span style={{ opacity: 0.7 }}>↪ </span>}
+                          {a.title}
+                        </div>
+                      );
+                    })}
                     {dayAppts.length > 3 && (
                       <div style={{ fontSize: 10, color: '#94a3b8', padding: '0 2px' }}>+{dayAppts.length - 3} weitere</div>
                     )}
@@ -361,14 +388,21 @@ function AppointmentEditModal({ appointment, initialDate, employees, onClose, on
     setErr(null);
     try {
       if (!title.trim()) { setErr('Titel erforderlich.'); return; }
-      if (!startsAt) { setErr('Startzeit erforderlich.'); return; }
+      if (!startsAt) { setErr(allDay ? 'Datum erforderlich.' : 'Startzeit erforderlich.'); return; }
+
+      // Ganztägig: Uhrzeit fällt weg → Start auf 00:00, Ende auf 23:59 des
+      // jeweiligen Tages klemmen (ohne Ende: gleicher Tag wie Start).
+      const startInput = allDay ? `${startsAt.slice(0, 10)}T00:00` : startsAt;
+      const endInput = allDay
+        ? `${(endsAt || startsAt).slice(0, 10)}T23:59`
+        : (endsAt || '');
 
       const payload = {
         title: title.trim(),
         description: description || null,
         location: location || null,
-        starts_at: berlinLocalInputToUTC(startsAt),
-        ends_at: endsAt ? berlinLocalInputToUTC(endsAt) : null,
+        starts_at: berlinLocalInputToUTC(startInput),
+        ends_at: endInput ? berlinLocalInputToUTC(endInput) : null,
         all_day: allDay,
         color,
         reminder_minutes_before: reminder ? parseInt(reminder, 10) : null,
@@ -428,17 +462,55 @@ function AppointmentEditModal({ appointment, initialDate, employees, onClose, on
           <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={200} disabled={!canEdit} style={inputStyle} />
         </Field>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          <Field label="Beginn *">
-            <input type="datetime-local" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} disabled={!canEdit} style={inputStyle} />
-          </Field>
-          <Field label="Ende (optional)">
-            <input type="datetime-local" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} disabled={!canEdit} style={inputStyle} />
-          </Field>
-        </div>
+        {allDay ? (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <Field label="Beginn (Tag) *">
+              <input
+                type="date"
+                value={startsAt.slice(0, 10)}
+                onChange={(e) => setStartsAt(e.target.value ? `${e.target.value}T00:00` : '')}
+                disabled={!canEdit}
+                style={inputStyle}
+              />
+            </Field>
+            <Field label="Ende (Tag, optional)">
+              <input
+                type="date"
+                value={endsAt.slice(0, 10)}
+                min={startsAt.slice(0, 10) || undefined}
+                onChange={(e) => setEndsAt(e.target.value ? `${e.target.value}T23:59` : '')}
+                disabled={!canEdit}
+                style={inputStyle}
+              />
+            </Field>
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <Field label="Beginn *">
+              <input type="datetime-local" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} disabled={!canEdit} style={inputStyle} />
+            </Field>
+            <Field label="Ende (optional)">
+              <input type="datetime-local" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} disabled={!canEdit} style={inputStyle} />
+            </Field>
+          </div>
+        )}
 
         <label style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#cbd5e1', fontSize: 14, marginBottom: 12 }}>
-          <input type="checkbox" checked={allDay} onChange={(e) => setAllDay(e.target.checked)} disabled={!canEdit} />
+          <input
+            type="checkbox"
+            checked={allDay}
+            onChange={(e) => {
+              const checked = e.target.checked;
+              setAllDay(checked);
+              // Beim Aktivieren Uhrzeit wegklemmen, damit die Tages-Felder
+              // sauber gefüllt sind (Start 00:00, Ende 23:59).
+              if (checked) {
+                if (startsAt) setStartsAt(`${startsAt.slice(0, 10)}T00:00`);
+                if (endsAt) setEndsAt(`${endsAt.slice(0, 10)}T23:59`);
+              }
+            }}
+            disabled={!canEdit}
+          />
           Ganztägig
         </label>
 
